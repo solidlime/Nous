@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ persona }} - チャット | Nous</title>
+
+  <!-- Three.js + @pixiv/three-vrm (ES Module importmap) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/",
+      "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@2/lib/three-vrm.module.min.js"
+    }
+  }
+  </script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f0f1a; color: #e8e8f0; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; }
+
+    header { background: #1a1a2e; padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #30305a; }
+    header h1 { font-size: 1.2rem; color: #b0b0ff; }
+    .persona-selector select { background: #2a2a4a; color: #e8e8f0; border: 1px solid #4040a0; padding: 6px 12px; border-radius: 6px; }
+    .header-nav {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .header-nav a {
+      color: #a0a0d0;
+      text-decoration: none;
+      font-size: 0.85rem;
+      padding: 4px 10px;
+      border-radius: 4px;
+      transition: background 0.2s, color 0.2s;
+    }
+    .header-nav a:hover {
+      background: rgba(120,120,200,0.2);
+      color: #e0e0ff;
+    }
+
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* 左パネル: VRM アバター */
+    .avatar-panel { width: 300px; background: #12122a; border-right: 1px solid #30305a; display: flex; flex-direction: column; align-items: center; padding: 16px; gap: 0; }
+    #vrm-container { position: relative; width: 268px; height: 380px; border-radius: 12px; overflow: hidden; background: linear-gradient(180deg, #0a0a20 0%, #12122e 100%); border: 1px solid #303060; flex-shrink: 0; }
+    #vrm-canvas { width: 100%; height: 100%; display: block; }
+    #vrm-loading {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: #8080b0; font-size: 0.85rem; text-align: center;
+      pointer-events: none; white-space: nowrap;
+    }
+    #vrm-progress { width: 120px; height: 3px; background: #2a2a4a; border-radius: 2px; margin-top: 8px; overflow: hidden; }
+    #vrm-progress-fill { height: 100%; width: 0%; background: #6060d0; transition: width 0.2s; border-radius: 2px; }
+
+    .emotion-display { margin-top: 12px; text-align: center; width: 100%; }
+    .emotion-display .label { font-size: 0.75rem; color: #8080b0; margin-bottom: 4px; }
+    .emotion-display .value { font-size: 1rem; color: #c8c8ff; font-weight: 600; }
+    .mood-display { margin-top: 6px; font-size: 0.8rem; color: #9090c0; }
+    .drive-bars { margin-top: 12px; width: 100%; }
+    .drive-bar-item { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 0.72rem; color: #8080b0; }
+    .drive-bar-item span { width: 48px; flex-shrink: 0; }
+    .drive-bar-item .bar { flex: 1; height: 3px; background: #2a2a4a; border-radius: 2px; overflow: hidden; }
+    .drive-bar-item .fill { height: 100%; background: #6060d0; border-radius: 2px; transition: width 0.8s ease; }
+
+    /* 右パネル: チャット */
+    .chat-panel { flex: 1; display: flex; flex-direction: column; }
+    .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .message { max-width: 80%; }
+    .message.user { align-self: flex-end; }
+    .message.assistant { align-self: flex-start; }
+    .message-meta { font-size: 0.7rem; color: #6060a0; margin-bottom: 3px; }
+    .message-meta .source-tag { background: #2a2a4a; padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+    .message-bubble { padding: 10px 14px; border-radius: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+    .message.user .message-bubble { background: #2a2a5a; color: #d0d0ff; border-radius: 12px 12px 4px 12px; }
+    .message.assistant .message-bubble { background: #1e1e3a; color: #e8e8f0; border-radius: 12px 12px 12px 4px; }
+    .typing-indicator { display: none; align-self: flex-start; padding: 10px 14px; background: #1e1e3a; border-radius: 12px; color: #6060a0; font-style: italic; font-size: 0.85rem; }
+
+    .chat-input-area { padding: 12px 16px; background: #1a1a2e; border-top: 1px solid #30305a; display: flex; gap: 10px; align-items: flex-end; }
+    .chat-input-area textarea { flex: 1; background: #2a2a4a; border: 1px solid #404070; color: #e8e8f0; padding: 10px 14px; border-radius: 8px; resize: none; min-height: 44px; max-height: 120px; font-family: inherit; font-size: 0.95rem; line-height: 1.5; }
+    .chat-input-area textarea:focus { outline: none; border-color: #7070e0; }
+    .btn { background: #4040a0; color: #e8e8f0; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; height: 44px; white-space: nowrap; }
+    .btn:hover { background: #5050c0; }
+    .btn.voice { background: #2a3060; font-size: 1.2rem; }
+    .btn.voice.active { background: #a02020; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎭 {{ persona | upper }} — チャット</h1>
+    <nav class="header-nav">
+      <a href="/dashboard">📊 ダッシュボード</a>
+      <a href="/settings">⚙️ 設定</a>
+    </nav>
+    <div class="persona-selector">
+      <select id="personaSelect" onchange="switchPersona(this.value)">
+        {% for p in personas %}
+        <option value="{{ p }}" {% if p == persona %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- 左パネル: VRM アバター -->
+    <div class="avatar-panel">
+      <div id="vrm-container">
+        <canvas id="vrm-canvas"></canvas>
+        <div id="vrm-loading">
+          VRM 読み込み中...
+          <div id="vrm-progress"><div id="vrm-progress-fill"></div></div>
+        </div>
+      </div>
+      <div class="emotion-display">
+        <div class="label">感情</div>
+        <div class="value" id="emotionDisplay">neutral</div>
+      </div>
+      <div class="mood-display" id="moodDisplay">気分: calm</div>
+      <div class="drive-bars" id="driveBars">
+        <div class="drive-bar-item"><span>好奇心</span><div class="bar"><div class="fill" id="driveCuriosity" style="width:50%"></div></div></div>
+        <div class="drive-bar-item"><span>退屈</span><div class="bar"><div class="fill" id="driveBoredom" style="width:20%"></div></div></div>
+        <div class="drive-bar-item"><span>連帯</span><div class="bar"><div class="fill" id="driveConnection" style="width:40%"></div></div></div>
+        <div class="drive-bar-item"><span>表現欲</span><div class="bar"><div class="fill" id="driveExpression" style="width:30%"></div></div></div>
+        <div class="drive-bar-item"><span>習熟</span><div class="bar"><div class="fill" id="driveMastery" style="width:60%"></div></div></div>
+      </div>
+    </div>
+
+    <!-- 右パネル: チャット -->
+    <div class="chat-panel">
+      <div class="messages" id="messages">
+        <div class="typing-indicator" id="typingIndicator">考えてる...</div>
+      </div>
+      <div class="chat-input-area">
+        <textarea id="messageInput" placeholder="メッセージを入力..." rows="1" onkeydown="handleKeydown(event)" oninput="autoResize(this)"></textarea>
+        <button class="btn" onclick="sendMessage()">送信</button>
+        <button class="btn voice" id="voiceBtn" onclick="toggleVoice()">🎙</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- チャット / アバター制御スクリプト（通常 JS） -->
+  <script>
+    const PERSONA = "{{ persona }}";
+    window.PERSONA = PERSONA;  // module script からアクセスできるよう公開
+    const WS_URL = `ws://${location.host}/ws/chat/${PERSONA}`;
+    let ws = null;
+    let recognition = null;
+    let isListening = false;
+
+    function connectWS() {
+      ws = new WebSocket(WS_URL);
+      ws.onopen = () => console.log("Chat WS connected");
+      ws.onmessage = (e) => handleWSMessage(JSON.parse(e.data));
+      ws.onclose = () => setTimeout(connectWS, 3000);
+      ws.onerror = (e) => console.error("WS error:", e);
+    }
+
+    function handleWSMessage(data) {
+      switch (data.type) {
+        case "typing":
+          document.getElementById("typingIndicator").style.display = "flex";
+          break;
+        case "message":
+          document.getElementById("typingIndicator").style.display = "none";
+          appendMessage("assistant", data.content, "web_ui");
+          if (data.emotion) updateEmotion(data.emotion, data.intensity ?? 0.8);
+          break;
+        case "avatar_update":
+          if (data.params) {
+            updateEmotion(data.params.emotion, data.params.intensity ?? 0.5);
+            if (window._vrmApplyPose) window._vrmApplyPose(data.params.emotion);
+          }
+          break;
+        case "audio_url":
+          if (data.url) playAudio(data.url);
+          break;
+        case "drive_update":
+          if (data.drives) updateDriveBars(data.drives);
+          break;
+      }
+    }
+
+    function sendMessage() {
+      const input = document.getElementById("messageInput");
+      const content = input.value.trim();
+      if (!content || !ws || ws.readyState !== WebSocket.OPEN) return;
+      appendMessage("user", content, "web_ui");
+      ws.send(JSON.stringify({ type: "message", content, user_id: "web_user" }));
+      input.value = "";
+      input.style.height = "44px";
+    }
+
+    function handleKeydown(e) {
+      // e.isComposing=true の間は IME 確定 Enter なので送信しない（日本語二重送信防止）
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); }
+    }
+
+    function autoResize(el) {
+      el.style.height = "44px";
+      el.style.height = Math.min(el.scrollHeight, 120) + "px";
+    }
+
+    function appendMessage(role, content, source) {
+      const container = document.getElementById("messages");
+      const div = document.createElement("div");
+      div.className = `message ${role}`;
+      div.innerHTML = `
+        <div class="message-meta">
+          <span class="source-tag">${source}</span>
+          ${role === "assistant" ? PERSONA : "you"}
+        </div>
+        <div class="message-bubble">${escapeHtml(content)}</div>
+      `;
+      container.insertBefore(div, document.getElementById("typingIndicator"));
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      const d = document.createElement("div");
+      d.appendChild(document.createTextNode(text));
+      return d.innerHTML;
+    }
+
+    function updateEmotion(emotion, intensity = 0.8) {
+      document.getElementById("emotionDisplay").textContent = emotion;
+      // VRM 表情を更新（Three.js モジュールから公開された関数を呼ぶ）
+      if (window._vrmApplyEmotion) window._vrmApplyEmotion(emotion, intensity);
+    }
+
+    function updateDriveBars(drives) {
+      if (drives.curiosity !== undefined) document.getElementById("driveCuriosity").style.width = `${drives.curiosity * 100}%`;
+      if (drives.boredom !== undefined) document.getElementById("driveBoredom").style.width = `${drives.boredom * 100}%`;
+      if (drives.connection !== undefined) document.getElementById("driveConnection").style.width = `${drives.connection * 100}%`;
+      if (drives.expression !== undefined) document.getElementById("driveExpression").style.width = `${drives.expression * 100}%`;
+      if (drives.mastery !== undefined) document.getElementById("driveMastery").style.width = `${drives.mastery * 100}%`;
+    }
+
+    function playAudio(url) {
+      const audio = new Audio(url);
+      audio.play().catch(e => console.warn("Audio play failed:", e));
+    }
+
+    function toggleVoice() { isListening ? stopVoice() : startVoice(); }
+
+    function startVoice() {
+      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        alert("音声入力はこのブラウザではサポートされていません"); return;
+      }
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition = new SR();
+      recognition.lang = 'ja-JP';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.onresult = (e) => {
+        document.getElementById("messageInput").value = e.results[0][0].transcript;
+        sendMessage();
+      };
+      recognition.onend = () => {
+        isListening = false;
+        document.getElementById("voiceBtn").classList.remove("active");
+      };
+      recognition.start();
+      isListening = true;
+      document.getElementById("voiceBtn").classList.add("active");
+    }
+
+    function stopVoice() {
+      if (recognition) recognition.stop();
+      isListening = false;
+      document.getElementById("voiceBtn").classList.remove("active");
+    }
+
+    function switchPersona(persona) { window.location.href = `/chat?persona=${persona}`; }
+
+    connectWS();
+  </script>
+
+  <!-- VRM ビューア（Three.js ES Module） -->
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+
+    // ── 感情 → VRM expression マッピング ──────────────────────────────────────
+    const EMOTION_MAP = {
+      // Positive / High-arousal
+      joy: 'happy', happy: 'happy', excited: 'happy', pride: 'happy',
+      confident: 'happy',
+      // Curious / Surprised
+      curious: 'surprised', curiosity: 'surprised', surprised: 'surprised',
+      interested: 'surprised',
+      // Sad / Low-energy
+      sad: 'sad', melancholy: 'sad', sorrow: 'sad', lonely: 'sad',
+      depressed: 'sad',
+      // Anxious / Negative-high-arousal
+      anxious: 'sad', frustrated: 'angry', annoyed: 'angry', angry: 'angry',
+      // Calm / Relaxed
+      relaxed: 'relaxed', calm: 'relaxed', fun: 'relaxed', content: 'relaxed',
+      serene: 'relaxed', determined: 'relaxed',
+      // Neutral
+      neutral: null, bored: null, boredom: null,
+    };
+    const ALL_EXPRS = ['happy', 'angry', 'sad', 'relaxed', 'surprised'];
+
+    // ── Three.js 初期化 ────────────────────────────────────────────────────────
+    const container = document.getElementById('vrm-container');
+    const canvas = document.getElementById('vrm-canvas');
+    const loadingEl = document.getElementById('vrm-loading');
+    const progressFill = document.getElementById('vrm-progress-fill');
+
+    const W = container.clientWidth;
+    const H = container.clientHeight;
+
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.shadowMap.enabled = true;
+
+    const scene = new THREE.Scene();
+
+    const camera = new THREE.PerspectiveCamera(28, W / H, 0.1, 20);
+    camera.position.set(0, 1.25, 1.8);
+
+    // ライト
+    const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+    scene.add(ambient);
+    const keyLight = new THREE.DirectionalLight(0xfff5e0, 1.2);
+    keyLight.position.set(1.5, 3, 2);
+    scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0xa0c0ff, 0.4);
+    fillLight.position.set(-2, 1, -1);
+    scene.add(fillLight);
+
+    // OrbitControls（マウスドラッグで回転可能）
+    const controls = new OrbitControls(camera, canvas);
+    controls.target.set(0, 1.15, 0);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.minDistance = 0.4;
+    controls.maxDistance = 4;
+    controls.update();
+
+    // ── VRM 読み込み ──────────────────────────────────────────────────────────
+    const POSE_MAP = {
+      neutral:   { leftUpperArm:{z:0.35}, rightUpperArm:{z:-0.35} },
+      happy:     { leftUpperArm:{z:0.25}, rightUpperArm:{z:-0.25}, head:{y:0.08} },
+      curious:   { leftUpperArm:{z:0.38}, rightUpperArm:{z:-0.38}, head:{y:0.15,z:-0.08} },
+      sad:       { leftUpperArm:{z:0.50}, rightUpperArm:{z:-0.50}, head:{x:0.15}, spine:{x:0.05} },
+      angry:     { leftUpperArm:{z:0.30}, rightUpperArm:{z:-0.30}, head:{x:-0.05} },
+      relaxed:   { leftUpperArm:{z:0.40}, rightUpperArm:{z:-0.40}, head:{y:-0.05} },
+      surprised: { leftUpperArm:{z:0.20}, rightUpperArm:{z:-0.20}, head:{x:-0.08} },
+    };
+    const poseState = {};
+
+    let currentVRM = null;
+    const currentExprs = {};
+    const targetExprs = {};
+    ALL_EXPRS.forEach(n => { currentExprs[n] = 0; targetExprs[n] = 0; });
+
+    const loader = new GLTFLoader();
+    loader.register(parser => new VRMLoaderPlugin(parser));
+
+    const vrmUrl = `/api/avatar/vrm/${window.PERSONA || 'nous'}/model`;
+
+    loader.load(
+      vrmUrl,
+      (gltf) => {
+        const vrm = gltf.userData.vrm;
+        if (!vrm) { loadingEl.textContent = 'VRM データなし'; return; }
+
+        // 不要頂点を削除してメモリ削減
+        VRMUtils.removeUnnecessaryVertices(gltf.scene);
+
+        // VRM 0.x は Z+ が前方なので 180° 回転
+        if (vrm.meta?.metaVersion === '0') {
+          vrm.scene.rotation.y = Math.PI;
+        }
+
+        scene.add(vrm.scene);
+        currentVRM = vrm;
+        loadingEl.style.display = 'none';
+        applyPose('neutral');
+
+        // ダッシュボードの感情取得して初期表情を適用
+        fetch(`/api/avatar/state`, {
+          headers: { 'Authorization': `Bearer ${window.PERSONA || 'nous'}` }
+        })
+        .then(r => r.json())
+        .then(d => { if (d.emotion) applyEmotion(d.emotion, d.intensity ?? 0.6); })
+        .catch(() => {});
+
+        console.log(`VRM loaded: ${vrm.meta?.name || vrm.meta?.title || 'unknown'}`);
+      },
+      (progress) => {
+        if (progress.total > 0) {
+          const pct = Math.round(progress.loaded / progress.total * 100);
+          progressFill.style.width = pct + '%';
+          if (pct < 100) loadingEl.querySelector('#vrm-progress').style.display = 'block';
+        }
+      },
+      (error) => {
+        loadingEl.innerHTML = `<span style="color:#a06060">VRM 未設定<br><small>${window.PERSONA} に .vrm ファイルを配置してね</small></span>`;
+        console.info('VRM not found (expected if no model configured):', error.message);
+      }
+    );
+
+    // ── ポーズ制御 ───────────────────────────────────────────────────────────
+    function applyPose(emotion) {
+      if (!currentVRM) return;
+      const humanoid = currentVRM.humanoid;
+      if (!humanoid) return;
+      const boneTargets = POSE_MAP[emotion] || POSE_MAP['neutral'];
+      // 全ポーズボーンのターゲット値を設定
+      const allBones = new Set([
+        ...Object.keys(POSE_MAP['neutral']),
+        ...Object.keys(boneTargets)
+      ]);
+      for (const boneName of allBones) {
+        const boneAxes = boneTargets[boneName] || {};
+        if (!poseState[boneName]) poseState[boneName] = {};
+        for (const axis of ['x', 'y', 'z']) {
+          poseState[boneName][axis] = boneAxes[axis] !== undefined ? boneAxes[axis] : 0;
+        }
+      }
+    }
+
+    // ── 表情制御 ─────────────────────────────────────────────────────────────
+    function applyEmotion(emotion, intensity = 0.8) {
+      const vrmExpr = EMOTION_MAP[emotion?.toLowerCase()] ?? null;
+      ALL_EXPRS.forEach(n => targetExprs[n] = 0);
+      if (vrmExpr) targetExprs[vrmExpr] = Math.min(1, Math.max(0, intensity));
+      applyPose(emotion);
+    }
+
+    // メインスクリプトから呼べるように公開
+    window._vrmApplyEmotion = applyEmotion;
+    window._vrmApplyPose = applyPose;
+
+    // ── VRM WebSocket（サーバー感情ブロードキャスト受信） ────────────────────
+    const persona = window.PERSONA || 'nous';
+    const vrmWsUrl = `ws://${location.host}/ws/vrm/${persona}`;
+
+    function connectVrmWS() {
+      const vws = new WebSocket(vrmWsUrl);
+      vws.onmessage = (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          if (d.emotion !== undefined) {
+            applyEmotion(d.emotion, d.intensity ?? 0.8);
+            document.getElementById('emotionDisplay').textContent = d.source_emotion || d.emotion;
+          }
+        } catch {}
+      };
+      vws.onclose = () => setTimeout(connectVrmWS, 4000);
+    }
+    connectVrmWS();
+
+    // ── アニメーションループ ──────────────────────────────────────────────────
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+
+      if (currentVRM) {
+        // 表情を滑らかに補間（lerp）
+        const lerpFactor = Math.min(1.0, delta * 5);
+        ALL_EXPRS.forEach(name => {
+          const target = targetExprs[name] ?? 0;
+          const cur = currentExprs[name] ?? 0;
+          const next = cur + (target - cur) * lerpFactor;
+          currentExprs[name] = next;
+          try { currentVRM.expressionManager?.setValue(name, next); } catch {}
+        });
+
+        // ポーズ補間
+        if (currentVRM.humanoid) {
+          const humanoid = currentVRM.humanoid;
+          for (const [boneName, axes] of Object.entries(poseState)) {
+            const node = humanoid.getNormalizedBoneNode(boneName);
+            if (!node) continue;
+            for (const [axis, target] of Object.entries(axes)) {
+              node.rotation[axis] = node.rotation[axis] + (target - node.rotation[axis]) * 0.1;
+            }
+          }
+        }
+
+        currentVRM.update(delta);
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // ── リサイズ対応 ──────────────────────────────────────────────────────────
+    const resizeObserver = new ResizeObserver(() => {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      if (w > 0 && h > 0) {
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+      }
+    });
+    resizeObserver.observe(container);
+  </script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+[project]
+name = "nous"
+version = "0.1.0"
+description = "AI character autonomous operation framework — Nous"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.24",
+    "python-multipart",
+    "jinja2>=3.1",
+    "aiofiles",
+    "websockets>=12",
+    "mcp[cli]>=1.0",
+    "fastmcp>=0.1",
+    "pydantic>=2.5",
+    "qdrant-client>=1.7",
+    "sentence-transformers>=2.6",
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "rapidfuzz>=3.5",
+    "discord.py>=2.4",
+    "apscheduler>=3.10",
+    "aiohttp>=3.9",
+    "anthropic>=0.25",
+    "openai>=1.14",
+    "pyyaml",
+    "python-dotenv",
+    "langchain-core>=0.2",
+    "tqdm",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "nous_mcp",
+    "api",
+    "agent",
+    "memory",
+    "psychology",
+    "llm",
+    "elevation",
+    "output",
+    "migrations",
+]
+

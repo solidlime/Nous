@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Nous Dashboard</title>
+  <style>
+    /* モダンダーク */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f0f1a; color: #e8e8f0; font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
+    header { background: #1a1a2e; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30305a; }
+    header h1 { color: #b0b0ff; font-size: 1.3rem; }
+    nav a { color: #8080c0; text-decoration: none; margin-left: 20px; font-size: 0.9rem; }
+    nav a:hover { color: #c0c0ff; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; padding: 24px; }
+    .card { background: #1a1a2e; border-radius: 12px; padding: 20px; border: 1px solid #30305a; }
+    .card h2 { font-size: 0.95rem; color: #8080c0; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.9rem; }
+    .stat-label { color: #6060a0; }
+    .stat-value { color: #c0c0ff; font-weight: 500; }
+    .memory-item { padding: 10px 0; border-bottom: 1px solid #20203a; font-size: 0.85rem; }
+    .memory-item:last-child { border-bottom: none; }
+    .memory-key { color: #8080b0; font-size: 0.75rem; margin-bottom: 4px; }
+    .memory-content { color: #d0d0e8; }
+    .memory-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .tag { background: #2a2a4a; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; color: #9090c0; }
+    .emotion-badge { display: inline-block; padding: 4px 12px; border-radius: 16px; font-size: 0.85rem; background: #2a2a4a; color: #c0c0ff; margin-bottom: 8px; }
+    #live2d-canvas-dash { width: 200px; height: 260px; background: #0a0a20; border-radius: 8px; }
+    .drive-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 0.8rem; color: #8080a0; }
+    .drive-bar .bar { flex: 1; height: 6px; background: #2a2a4a; border-radius: 3px; overflow: hidden; }
+    .drive-bar .fill { height: 100%; background: linear-gradient(90deg, #4040a0, #8080ff); border-radius: 3px; transition: width 0.5s; }
+    .agent-log-item { padding: 8px 0; border-bottom: 1px solid #20203a; font-size: 0.8rem; }
+    .agent-log-item:last-child { border-bottom: none; }
+    .log-time { color: #4040a0; font-size: 0.7rem; }
+    .log-action { color: #a0a0d0; }
+    .persona-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .persona-tab {
+      padding: 6px 16px;
+      border-radius: 20px;
+      border: 1px solid #404080;
+      background: transparent;
+      color: #a0a0d0;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+    .persona-tab.active {
+      background: #6060c0;
+      color: #fff;
+      border-color: #6060c0;
+    }
+    .agent-control { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+    .agent-status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 16px; font-size: 0.82rem; font-weight: 600; }
+    .agent-status-badge.running { background: #1a3a1a; color: #60c060; border: 1px solid #2a5a2a; }
+    .agent-status-badge.stopped { background: #3a1a1a; color: #c06060; border: 1px solid #5a2a2a; }
+    .agent-status-badge.not_running { background: #2a2a2a; color: #808080; border: 1px solid #404040; }
+    .agent-status-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .agent-btn { padding: 5px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.82rem; font-weight: 500; transition: background 0.2s; }
+    .agent-btn.start { background: #1a4a1a; color: #80d080; }
+    .agent-btn.start:hover { background: #206020; }
+    .agent-btn.stop { background: #4a1a1a; color: #d08080; }
+    .agent-btn.stop:hover { background: #602020; }
+    .agent-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🌌 Nous Dashboard</h1>
+    <nav>
+      <a href="/chat">💬 チャット</a>
+      <a href="/settings">⚙️ 設定</a>
+      <a href="/api/memories">📦 記憶 API</a>
+    </nav>
+  </header>
+
+  <div id="persona-tabs" class="persona-tabs" style="display:none;padding:0 24px 0">
+    <!-- JS で動的生成 -->
+  </div>
+
+  <div class="grid">
+    <!-- アバター + 感情状態 -->
+    <div class="card">
+      <h2>🎭 アバター状態</h2>
+      <div style="display:flex; gap:20px; align-items:flex-start">
+        <canvas id="live2d-canvas-dash"></canvas>
+        <div style="flex:1">
+          <div class="emotion-badge" id="dash-emotion">neutral</div>
+          <div style="font-size:0.8rem; color:#8080a0; margin-bottom:12px" id="dash-mood">気分: calm</div>
+          <div class="drive-bar"><span style="width:40px">好奇心</span><div class="bar"><div class="fill" id="dash-curiosity" style="width:50%"></div></div></div>
+          <div class="drive-bar"><span style="width:40px">退屈</span><div class="bar"><div class="fill" id="dash-boredom" style="width:20%"></div></div></div>
+          <div class="drive-bar"><span style="width:40px">連帯</span><div class="bar"><div class="fill" id="dash-connection" style="width:40%"></div></div></div>
+          <div class="drive-bar"><span style="width:40px">表現欲</span><div class="bar"><div class="fill" id="dash-expression" style="width:30%"></div></div></div>
+          <div class="drive-bar"><span style="width:40px">習熟</span><div class="bar"><div class="fill" id="dash-mastery" style="width:60%"></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 記憶統計 -->
+    <div class="card">
+      <h2>📊 記憶統計</h2>
+      <div id="memoryStats">読み込み中...</div>
+    </div>
+
+    <!-- 直近の記憶 -->
+    <div class="card" style="grid-column: span 2">
+      <h2>🕐 直近の記憶</h2>
+      <div id="recentMemories">読み込み中...</div>
+    </div>
+
+    <!-- エージェント活動ログ + 制御 -->
+    <div class="card">
+      <h2>🤖 エージェント活動</h2>
+      <div class="agent-control">
+        <span id="agent-status-badge" class="agent-status-badge not_running">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="agent-status-text">確認中...</span>
+        </span>
+        <button id="agent-start-btn" class="agent-btn start" onclick="controlAgent('start')" disabled aria-label="エージェントを起動">起動</button>
+        <button id="agent-stop-btn" class="agent-btn stop" onclick="controlAgent('stop')" disabled aria-label="エージェントを停止">停止</button>
+      </div>
+      <div id="agentLog">読み込み中...</div>
+    </div>
+  </div>
+
+  <script>
+    const WS_AVATAR_URL = `ws://${location.host}/ws/avatar`;
+    let avatarWs = null;
+
+    function connectAvatarWS() {
+      avatarWs = new WebSocket(WS_AVATAR_URL);
+      avatarWs.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.emotion) document.getElementById('dash-emotion').textContent = data.emotion;
+        if (data.mood) document.getElementById('dash-mood').textContent = `気分: ${data.mood}`;
+        if (data.drives) {
+          if (data.drives.curiosity !== undefined) document.getElementById('dash-curiosity').style.width = `${data.drives.curiosity * 100}%`;
+          if (data.drives.boredom !== undefined) document.getElementById('dash-boredom').style.width = `${data.drives.boredom * 100}%`;
+          if (data.drives.connection !== undefined) document.getElementById('dash-connection').style.width = `${data.drives.connection * 100}%`;
+          if (data.drives.expression !== undefined) document.getElementById('dash-expression').style.width = `${data.drives.expression * 100}%`;
+          if (data.drives.mastery !== undefined) document.getElementById('dash-mastery').style.width = `${data.drives.mastery * 100}%`;
+        }
+      };
+      avatarWs.onclose = () => setTimeout(connectAvatarWS, 5000);
+    }
+
+    function updateDashboard(personaData) {
+      if (!personaData) return;
+      const memory = personaData.memory || {};
+      const psychology = personaData.psychology || {};
+      const conversation = personaData.conversation || {};
+      const agent = personaData.agent || {};
+
+      document.getElementById('memoryStats').innerHTML = `
+        <div class="stat-row"><span class="stat-label">総記憶数</span><span class="stat-value">${memory.total || 0}</span></div>
+        <div class="stat-row"><span class="stat-label">昇華済み</span><span class="stat-value">${memory.elevated || 0}</span></div>
+        <div class="stat-row"><span class="stat-label">平均重要度</span><span class="stat-value">${(memory.avg_importance || 0).toFixed(2)}</span></div>
+        <div class="stat-row"><span class="stat-label">感情</span><span class="stat-value">${psychology.surface_emotion || '—'}</span></div>
+        <div class="stat-row"><span class="stat-label">気分</span><span class="stat-value">${psychology.mood || '—'}</span></div>
+        <div class="stat-row"><span class="stat-label">会話ターン数</span><span class="stat-value">${conversation.active_thread_turns || 0}</span></div>
+        <div class="stat-row"><span class="stat-label">エージェント状態</span><span class="stat-value">${agent.status || '—'}</span></div>
+      `;
+    }
+
+    async function loadAllStats() {
+      try {
+        const res = await fetch('/api/dashboard/all_stats');
+        const data = await res.json();
+        const personas = Object.keys(data.personas || {});
+
+        // タブ生成
+        const tabContainer = document.getElementById('persona-tabs');
+        if (personas.length > 1 && tabContainer) {
+          tabContainer.style.display = 'flex';
+          tabContainer.innerHTML = personas.map((p, i) =>
+            `<button class="persona-tab ${i===0?'active':''}" onclick="switchPersona('${p}', this)">${p}</button>`
+          ).join('');
+        }
+
+        // 最初のペルソナのデータを表示
+        if (personas.length > 0) {
+          updateDashboard(data.personas[personas[0]]);
+        }
+
+        // 全データをキャッシュ
+        window._allPersonaStats = data.personas;
+      } catch (e) {
+        console.error('Stats load failed:', e);
+        document.getElementById('memoryStats').textContent = 'データ取得エラー';
+      }
+    }
+
+    function switchPersona(persona, btn) {
+      // タブをアクティブに
+      document.querySelectorAll('.persona-tab').forEach(t => t.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+
+      // 選択ペルソナのデータを表示
+      const stats = window._allPersonaStats?.[persona];
+      if (stats) updateDashboard(stats);
+    }
+
+    async function loadRecentMemories() {
+      try {
+        const res = await fetch('/api/memories?limit=5&sort=recent');
+        const data = await res.json();
+        const container = document.getElementById('recentMemories');
+        if (data.memories && data.memories.length > 0) {
+          container.innerHTML = data.memories.map(m => `
+            <div class="memory-item">
+              <div class="memory-key">${m.key} · ${m.created_at ? m.created_at.slice(0, 16) : ''}</div>
+              <div class="memory-content">${m.content ? m.content.slice(0, 100) + (m.content.length > 100 ? '...' : '') : ''}</div>
+              <div class="memory-tags">${(m.tags || []).map(t => `<span class="tag">${t}</span>`).join('')}</div>
+            </div>
+          `).join('');
+        } else {
+          container.textContent = '記憶がありません';
+        }
+      } catch (e) {
+        document.getElementById('recentMemories').textContent = 'データ取得エラー';
+      }
+    }
+
+    async function loadAgentLog() {
+      try {
+        const res = await fetch('/api/agent/history?limit=5');
+        const data = await res.json();
+        const container = document.getElementById('agentLog');
+        if (data.history && data.history.length > 0) {
+          container.innerHTML = data.history.map(h => `
+            <div class="agent-log-item">
+              <div class="log-time">${h.timestamp ? h.timestamp.slice(0, 16) : ''}</div>
+              <div class="log-action">${h.action_type || ''}: ${h.summary || ''}</div>
+            </div>
+          `).join('');
+        } else {
+          container.textContent = '活動ログなし';
+        }
+      } catch (e) {
+        document.getElementById('agentLog').textContent = 'データ取得エラー';
+      }
+    }
+
+    function updateAgentStatus(status) {
+      const badge = document.getElementById('agent-status-badge');
+      const text = document.getElementById('agent-status-text');
+      const startBtn = document.getElementById('agent-start-btn');
+      const stopBtn = document.getElementById('agent-stop-btn');
+      if (!badge || !text || !startBtn || !stopBtn) return;
+
+      badge.className = `agent-status-badge ${status}`;
+      const labels = { running: '稼働中', stopped: '停止中', not_running: '未起動' };
+      text.textContent = labels[status] || status;
+
+      startBtn.disabled = (status === 'running');
+      stopBtn.disabled = (status !== 'running');
+    }
+
+    async function controlAgent(action) {
+      const startBtn = document.getElementById('agent-start-btn');
+      const stopBtn = document.getElementById('agent-stop-btn');
+      if (startBtn) startBtn.disabled = true;
+      if (stopBtn) stopBtn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/agent/${action}`, { method: 'POST' });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          console.warn(`controlAgent(${action}) エラー:`, err.detail || res.status);
+          await fetchAgentStatus();
+          return;
+        }
+        const data = await res.json();
+        updateAgentStatus(data.status || (action === 'start' ? 'running' : 'stopped'));
+      } catch (e) {
+        console.warn(`controlAgent(${action}) 例外:`, e);
+        await fetchAgentStatus();
+      }
+    }
+
+    async function fetchAgentStatus() {
+      try {
+        const res = await fetch('/api/agent/status');
+        const data = await res.json();
+        updateAgentStatus(data.status || 'not_running');
+      } catch (e) {
+        console.warn('fetchAgentStatus エラー:', e);
+      }
+    }
+
+    // 起動
+    connectAvatarWS();
+    loadAllStats();
+    loadRecentMemories();
+    loadAgentLog();
+    fetchAgentStatus();
+    setInterval(() => { loadAllStats(); loadRecentMemories(); loadAgentLog(); fetchAgentStatus(); }, 30000);
+  </script>
+</body>
+</html>

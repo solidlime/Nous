@@ -1,0 +1,42 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Data (local only)
+data/
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+
+# uv
+uv.lock
+
+# Serena
+.serena/
+
+# Claude Code local settings
+.claude/settings.local.json

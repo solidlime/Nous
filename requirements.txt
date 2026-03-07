@@ -1,0 +1,50 @@
+# Web framework & server
+fastapi>=0.110
+uvicorn[standard]>=0.24
+python-multipart
+jinja2>=3.1
+aiofiles
+websockets>=12
+
+# MCP
+mcp[cli]>=1.0
+fastmcp>=0.1
+
+# Data validation
+pydantic>=2.5
+
+# Vector store
+qdrant-client>=1.7
+
+# Embeddings & ML
+sentence-transformers>=2.6
+# PyTorch CPU-only (NAS / local dev)
+torch
+torchvision
+torchaudio
+
+# Fuzzy search
+rapidfuzz>=3.5
+
+# Discord
+discord.py>=2.4
+
+# Scheduler
+apscheduler>=3.10
+
+# HTTP
+aiohttp>=3.9
+
+# LLM clients
+anthropic>=0.25
+openai>=1.14
+
+# Config & env
+pyyaml
+python-dotenv
+
+# LangChain (document abstraction layer)
+langchain-core>=0.2
+
+# Utilities
+tqdm

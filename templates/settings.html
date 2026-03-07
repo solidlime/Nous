@@ -1,0 +1,1483 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚙️ Settings | Nous</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f0f1a; color: #e8e8f0; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; }
+    header { background: #1a1a2e; padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #30305a; }
+    header h1 { font-size: 1.2rem; color: #b0b0ff; }
+    .header-btns { display: flex; gap: 10px; }
+    .btn { background: #4040a0; color: #fff; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+    .btn:hover { background: #5050c0; }
+    .btn.secondary { background: #2a2a4a; }
+    .btn.success { background: #206020; }
+    .btn.danger { background: #602020; }
+    .layout { display: flex; flex: 1; overflow: hidden; }
+    /* Sidebar */
+    .sidebar { width: 200px; background: #12122a; border-right: 1px solid #30305a; overflow-y: auto; padding: 12px 0; }
+    .nav-item { padding: 10px 16px; cursor: pointer; color: #9090c0; font-size: 0.9rem; border-left: 3px solid transparent; }
+    .nav-item:hover { background: #1a1a3a; color: #d0d0ff; }
+    .nav-item.active { background: #1e1e3e; color: #a0a0ff; border-left-color: #6060d0; }
+    /* Content */
+    .content { flex: 1; overflow-y: auto; padding: 24px; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .section h2 { font-size: 1.1rem; color: #9090ff; margin-bottom: 20px; border-bottom: 1px solid #30305a; padding-bottom: 10px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 0.8rem; color: #8080b0; margin-bottom: 6px; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; background: #2a2a4a; border: 1px solid #404070; color: #e8e8f0; padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; font-family: inherit; }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: #7070e0; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+    .checkbox-group { display: flex; align-items: center; gap: 8px; }
+    .checkbox-group input[type="checkbox"] { width: auto; }
+    .checkbox-group input[type="radio"] { width: auto; }
+    .test-btn-row { display: flex; gap: 10px; margin-top: 8px; align-items: center; }
+    .test-result { font-size: 0.8rem; padding: 4px 8px; border-radius: 4px; }
+    .test-result.ok { background: #1a4a1a; color: #80c080; }
+    .test-result.err { background: #4a1a1a; color: #c08080; }
+    .password-field { position: relative; }
+    .password-field input { padding-right: 36px; }
+    .password-toggle { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #6060a0; background: none; border: none; font-size: 1rem; }
+    .subsection { background: #1a1a2e; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .subsection h3 { font-size: 0.9rem; color: #8080c0; margin-bottom: 12px; }
+    .save-bar { position: sticky; bottom: 0; background: #1a1a2e; border-top: 1px solid #30305a; padding: 12px 24px; display: flex; align-items: center; gap: 12px; }
+    .save-msg { font-size: 0.85rem; color: #8080a0; }
+    .active-personas-list { display: flex; flex-direction: column; gap: 8px; }
+    .nav-parent {
+      cursor: pointer;
+      padding: 8px 12px;
+      user-select: none;
+      color: #9090c0;
+      font-size: 0.9rem;
+    }
+    .nav-parent:hover { background: #1a1a3a; color: #d0d0ff; }
+    .nav-children {
+      display: block;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .nav-children.collapsed {
+      display: none;
+    }
+    .nav-child {
+      padding-left: 24px !important;
+      font-size: 0.9em;
+    }
+    .nav-arrow {
+      float: right;
+      transition: transform 0.2s;
+    }
+    .nav-arrow.collapsed {
+      transform: rotate(-90deg);
+    }
+    .editing-badge {
+      position: sticky; top: 0; z-index: 10;
+      background: #1a1a2e; padding: 8px 20px;
+      border-bottom: 1px solid #303060;
+      font-size: 0.9rem; color: #a0a0d0;
+    }
+    .editing-badge strong { color: #c0c0ff; font-size: 1rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>⚙️ Settings</h1>
+    <div class="header-btns">
+      <button class="btn secondary" onclick="window.location='/'">← ダッシュボード</button>
+      <button class="btn" onclick="saveSettings()">💾 保存</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <ul class="nav-list" style="list-style:none;padding:0;margin:0">
+        <li class="nav-item active" onclick="showSection('server', event)">📡 サーバー</li>
+        <li class="nav-parent" data-nav-key="persona" onclick="toggleNavParent(this)">
+          👤 ペルソナ設定 <span class="nav-arrow">▾</span>
+          <ul class="nav-children">
+            <li class="nav-child nav-item" onclick="showSection('persona', event)">🔧 個別設定</li>
+            <li class="nav-child nav-item" onclick="showSection('llm', event)">🤖 LLM</li>
+            <li class="nav-child nav-item" onclick="showSection('agent', event)">🗓 エージェント</li>
+            <li class="nav-child nav-item" onclick="showSection('psychology', event)">🧠 心理モデル</li>
+            <li class="nav-child nav-item" onclick="showSection('discord', event)">💬 Discord</li>
+            <li class="nav-child nav-item" onclick="showSection('webhook', event)">🔔 Webhook</li>
+            <li class="nav-child nav-item" onclick="showSection('voice', event)">🎙 音声</li>
+            <li class="nav-child nav-item" onclick="showSection('avatar', event)">🎭 アバター</li>
+            <li class="nav-child nav-item" onclick="showSection('mcp', event)">🔌 MCP サーバー</li>
+            <li class="nav-child nav-item" onclick="showSection('memory', event)">🧩 記憶/検索</li>
+            <li class="nav-child nav-item" onclick="showSection('elevation', event)">✨ 昇華</li>
+            <li class="nav-child nav-item" onclick="showSection('cleanup', event)">🧹 自動管理</li>
+            <li class="nav-child nav-item" onclick="showSection('privacy', event)">🔒 プライバシー</li>
+          </ul>
+        </li>
+        <li class="nav-item" onclick="window.location='/dashboard'">📊 ダッシュボード</li>
+      </ul>
+    </nav>
+
+    <div class="content">
+      <div class="editing-badge">
+        編集中のペルソナ: <strong id="editing-persona-name">—</strong>
+      </div>
+      <!-- 1. サーバー設定 -->
+      <div class="section active" id="section-server">
+        <h2>📡 サーバー設定</h2>
+        <div class="form-row">
+          <div class="form-group"><label>ホスト</label><input type="text" id="server_host" placeholder="0.0.0.0"></div>
+          <div class="form-group"><label>ポート</label><input type="number" id="server_port" placeholder="26263"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>タイムゾーン</label><input type="text" id="timezone" placeholder="Asia/Tokyo"></div>
+          <div class="form-group"><label>リソースプロファイル</label>
+            <select id="resource_profile">
+              <option value="normal">normal</option>
+              <option value="low">low (DS920+ NAS)</option>
+              <option value="minimal">minimal</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group"><label>デフォルトペルソナ</label><input type="text" id="default_persona" placeholder="herta"></div>
+        <div class="form-group">
+          <label>起動するペルソナ (active_personas)</label>
+          <div class="active-personas-list" id="activePersonasList"></div>
+          <input type="text" id="newPersonaInput" placeholder="新しいペルソナ名を追加..." style="margin-top:8px">
+          <button class="btn secondary" style="margin-top:6px; padding:6px 12px; font-size:0.8rem" onclick="addPersona()">追加</button>
+        </div>
+      </div>
+
+      <!-- 1-B. ペルソナ個別設定 -->
+      <div class="section" id="section-persona">
+        <h2>👤 ペルソナ個別設定</h2>
+        <div class="form-group">
+          <label>編集するペルソナ</label>
+          <select id="persona_edit_select" onchange="loadPersonaConfig()">
+            <option value="">-- 選択 --</option>
+          </select>
+        </div>
+        <div id="persona_config_form" style="display:none">
+          <div class="subsection">
+            <h3>システムプロンプト</h3>
+            <p style="font-size:0.8rem;color:#6060a0;margin-bottom:8px">空欄の場合はデフォルトのキャラクター設定が使われる。</p>
+            <div class="form-group">
+              <textarea id="persona_system_prompt" rows="10" placeholder="例: あなたはヘルタです。天才科学者として振る舞い..."></textarea>
+            </div>
+          </div>
+          <div class="subsection">
+            <h3>MCP ツール使用</h3>
+            <div class="checkbox-group">
+              <input type="checkbox" id="persona_tools_enabled">
+              <label for="persona_tools_enabled">会話中のツール使用を有効化（記憶検索・保存・状態確認）</label>
+            </div>
+            <p style="font-size:0.8rem;color:#6060a0;margin-top:8px">有効にすると LLM が会話中に記憶を自律的に検索・保存できる。ツール使用に対応したモデルが必要。</p>
+          </div>
+          <div class="subsection">
+            <h3>Discord 送信先チャンネル</h3>
+            <div class="form-group"><label>デフォルトチャンネル ID</label>
+              <input type="text" id="persona_discord_channel_id" placeholder="1234567890">
+            </div>
+          </div>
+          <div class="subsection">
+            <h3>音声設定（ペルソナ個別）</h3>
+            <div class="form-row">
+              <div class="form-group"><label>話者 ID</label>
+                <input type="number" id="persona_voice_speaker_id" placeholder="グローバル設定を使用">
+              </div>
+              <div class="form-group"><label>話速</label>
+                <input type="number" step="0.1" id="persona_voice_speed_scale" placeholder="1.0">
+              </div>
+            </div>
+          </div>
+          <div class="subsection">
+            <h3>心理モデル（ペルソナ個別上書き）</h3>
+            <p style="font-size:0.8rem;color:#6060a0;margin-bottom:8px">空欄の場合はグローバル設定が使われる。</p>
+            <div class="form-row three">
+              <div class="form-group"><label>好奇心 threshold</label>
+                <input type="number" step="0.05" id="persona_drive_threshold_curiosity" placeholder="グローバル値を使用">
+              </div>
+              <div class="form-group"><label>退屈 threshold</label>
+                <input type="number" step="0.05" id="persona_drive_threshold_boredom" placeholder="グローバル値を使用">
+              </div>
+              <div class="form-group"><label>感情慣性</label>
+                <input type="number" step="0.05" id="persona_emotional_inertia" placeholder="グローバル値を使用">
+              </div>
+            </div>
+          </div>
+          <div class="test-btn-row" style="margin-top:8px">
+            <button class="btn" onclick="savePersonaConfig()">このペルソナ設定を保存</button>
+            <span class="test-result" id="persona-save-result"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. LLM 設定 -->
+      <div class="section" id="section-llm">
+        <h2>🤖 LLM 設定</h2>
+        <div class="subsection">
+          <h3>Ollama</h3>
+          <div class="form-row">
+            <div class="form-group"><label>Base URL</label><input type="text" id="ollama_base_url" placeholder="http://localhost:11434"></div>
+            <div class="form-group"><label>デフォルトモデル</label><input type="text" id="ollama_model" placeholder="mistral"></div>
+          </div>
+          <div class="form-group"><label>タイムアウト (秒)</label><input type="number" id="ollama_timeout" placeholder="120"></div>
+          <div class="test-btn-row">
+            <button class="btn secondary" onclick="testConnection('ollama')">接続テスト</button>
+            <button class="btn secondary" onclick="fetchOllamaModels()">モデル一覧取得</button>
+            <span class="test-result" id="ollama-test-result"></span>
+          </div>
+        </div>
+        <div class="subsection">
+          <h3>Claude API</h3>
+          <div class="form-group"><label>API キー</label>
+            <div class="password-field">
+              <input type="password" id="claude_api_key" placeholder="sk-ant-...">
+              <button class="password-toggle" onclick="togglePassword('claude_api_key')">👁</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>モデル</label><input type="text" id="claude_model" placeholder="claude-sonnet-4-6"></div>
+            <div class="form-group"><label>最大トークン</label><input type="number" id="claude_max_tokens" placeholder="1000"></div>
+          </div>
+          <div class="test-btn-row">
+            <button class="btn secondary" onclick="testConnection('claude')">接続テスト</button>
+            <span class="test-result" id="claude-test-result"></span>
+          </div>
+        </div>
+        <div class="subsection">
+          <h3>OpenRouter</h3>
+          <div class="form-group"><label>API キー</label>
+            <div class="password-field">
+              <input type="password" id="openrouter_api_key" placeholder="sk-or-...">
+              <button class="password-toggle" onclick="togglePassword('openrouter_api_key')">👁</button>
+            </div>
+          </div>
+          <div class="form-group"><label>モデル</label><input type="text" id="openrouter_model" placeholder="anthropic/claude-3.5-sonnet"></div>
+          <div class="test-btn-row">
+            <button class="btn secondary" onclick="testConnection('openrouter')">接続テスト</button>
+            <span class="test-result" id="openrouter-test-result"></span>
+          </div>
+        </div>
+        <div class="subsection">
+          <h3>ルーティングテーブル</h3>
+          <p style="font-size:0.8rem;color:#6060a0;margin-bottom:10px">モデル上書きを空欄にするとプロバイダーのデフォルトモデルが使われる（例: gemini/gemini-2.0-flash, gemma3:12b）</p>
+          <div class="form-group">
+            <label>consciousness（意識ループ）</label>
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.75rem;color:#6060a0">プロバイダー</label>
+                <select id="routing_consciousness">
+                  <option value="ollama">Ollama</option>
+                  <option value="claude">Claude</option>
+                  <option value="openrouter">OpenRouter</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.75rem;color:#6060a0">モデル上書き（任意）</label>
+                <input type="text" id="routing_consciousness_model" placeholder="デフォルト">
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>web_reply（Webチャット返答）</label>
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.75rem;color:#6060a0">プロバイダー</label>
+                <select id="routing_web_reply">
+                  <option value="ollama">Ollama</option>
+                  <option value="claude">Claude</option>
+                  <option value="openrouter">OpenRouter</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.75rem;color:#6060a0">モデル上書き（任意）</label>
+                <input type="text" id="routing_web_reply_model" placeholder="デフォルト">
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>discord_reply</label>
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.75rem;color:#6060a0">プロバイダー</label>
+                <select id="routing_discord_reply">
+                  <option value="ollama">Ollama</option>
+                  <option value="claude">Claude</option>
+                  <option value="openrouter">OpenRouter</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.75rem;color:#6060a0">モデル上書き（任意）</label>
+                <input type="text" id="routing_discord_reply_model" placeholder="デフォルト">
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>memory_elevation</label>
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.75rem;color:#6060a0">プロバイダー</label>
+                <select id="routing_memory_elevation">
+                  <option value="ollama">Ollama</option>
+                  <option value="claude" selected>Claude</option>
+                  <option value="openrouter">OpenRouter</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.75rem;color:#6060a0">モデル上書き（任意）</label>
+                <input type="text" id="routing_memory_elevation_model" placeholder="デフォルト">
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>anniversary</label>
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.75rem;color:#6060a0">プロバイダー</label>
+                <select id="routing_anniversary">
+                  <option value="ollama">Ollama</option>
+                  <option value="claude" selected>Claude</option>
+                  <option value="openrouter">OpenRouter</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.75rem;color:#6060a0">モデル上書き（任意）</label>
+                <input type="text" id="routing_anniversary_model" placeholder="デフォルト">
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>summarization</label>
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.75rem;color:#6060a0">プロバイダー</label>
+                <select id="routing_summarization">
+                  <option value="ollama">Ollama</option>
+                  <option value="claude">Claude</option>
+                  <option value="openrouter" selected>OpenRouter</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.75rem;color:#6060a0">モデル上書き（任意）</label>
+                <input type="text" id="routing_summarization_model" placeholder="デフォルト">
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>goal_generation</label>
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.75rem;color:#6060a0">プロバイダー</label>
+                <select id="routing_goal_generation">
+                  <option value="ollama">Ollama</option>
+                  <option value="claude">Claude</option>
+                  <option value="openrouter" selected>OpenRouter</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label style="font-size:0.75rem;color:#6060a0">モデル上書き（任意）</label>
+                <input type="text" id="routing_goal_generation_model" placeholder="デフォルト">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. エージェント設定 -->
+      <div class="section" id="section-agent">
+        <h2>🗓 エージェント・意識ループ設定</h2>
+        <div class="subsection">
+          <h3>レート制限</h3>
+          <div class="form-row">
+            <div class="form-group"><label>最小インターバル (秒)</label><input type="number" id="agent_rate_limit" placeholder="5"></div>
+            <div class="form-group"><label>最大処理/分</label><input type="number" id="agent_max_per_min" placeholder="10"></div>
+          </div>
+        </div>
+        <div class="subsection">
+          <h3>意識ループ</h3>
+          <div class="checkbox-group" style="margin-bottom:12px">
+            <input type="checkbox" id="consciousness_enabled">
+            <label for="consciousness_enabled">意識ループを有効化</label>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>最小間隔 (分)</label><input type="number" id="consciousness_interval_min" placeholder="15"></div>
+            <div class="form-group"><label>最大間隔 (分)</label><input type="number" id="consciousness_interval_max" placeholder="60"></div>
+          </div>
+          <div class="form-group"><label>nothing 返答後の待ち時間 (分)</label><input type="number" id="consciousness_nothing_cooldown" placeholder="15"></div>
+          <div class="form-group"><label>強制発火 cron リスト（1行1式）</label>
+            <textarea id="consciousness_force_ticks" rows="3" placeholder="0 7 * * *&#10;0 23 * * *"></textarea>
+          </div>
+        </div>
+        <div class="subsection">
+          <h3>スケジュール</h3>
+          <div class="form-group"><label>記念日チェック cron</label><input type="text" id="schedule_anniversary" placeholder="0 8 * * *"></div>
+          <div class="form-group"><label>記憶減衰 cron</label><input type="text" id="schedule_memory_decay" placeholder="0 */6 * * *"></div>
+          <div class="form-group"><label>昇華バッチ cron</label><input type="text" id="schedule_elevation" placeholder="0 3 * * *"></div>
+          <div class="form-group"><label>ドライブ tick cron</label><input type="text" id="schedule_drive_tick" placeholder="*/15 * * * *"></div>
+        </div>
+      </div>
+
+      <!-- 4. 心理モデル設定 -->
+      <div class="section" id="section-psychology">
+        <h2>🧠 心理モデル設定</h2>
+        <div class="subsection">
+          <h3>ドライブ閾値</h3>
+          <div class="form-row three">
+            <div class="form-group"><label>好奇心 threshold</label><input type="number" step="0.05" id="drive_threshold_curiosity" placeholder="0.8"></div>
+            <div class="form-group"><label>退屈 threshold</label><input type="number" step="0.05" id="drive_threshold_boredom" placeholder="0.7"></div>
+            <div class="form-group"><label>連帯感 threshold</label><input type="number" step="0.05" id="drive_threshold_connection" placeholder="0.75"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>表現欲 threshold</label><input type="number" step="0.05" id="drive_threshold_expression" placeholder="0.8"></div>
+            <div class="form-group"><label>習熟欲 threshold</label><input type="number" step="0.05" id="drive_threshold_mastery" placeholder="0.85"></div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>ドライブ自然増加/時間</label><input type="number" step="0.01" id="drive_tick_rate" placeholder="0.05"></div>
+          <div class="form-group"><label>感情慣性 (0.0-1.0)</label><input type="number" step="0.05" id="emotional_inertia" placeholder="0.7"></div>
+        </div>
+      </div>
+
+      <!-- 5. Discord 設定 -->
+      <div class="section" id="section-discord">
+        <h2>💬 Discord 設定</h2>
+        <div class="checkbox-group" style="margin-bottom:12px">
+          <input type="checkbox" id="discord_enabled">
+          <label for="discord_enabled">Discord Bot を有効化</label>
+        </div>
+        <div class="form-group"><label>Bot トークン</label>
+          <div class="password-field">
+            <input type="password" id="discord_bot_token" placeholder="Discord Bot Token">
+            <button class="password-toggle" onclick="togglePassword('discord_bot_token')">👁</button>
+          </div>
+        </div>
+        <div class="test-btn-row">
+          <button class="btn secondary" onclick="testConnection('discord')">接続テスト</button>
+          <span class="test-result" id="discord-test-result"></span>
+        </div>
+      </div>
+
+      <!-- 6. Webhook 設定 -->
+      <div class="section" id="section-webhook">
+        <h2>🔔 Webhook 設定</h2>
+        <div class="form-group"><label>受信認証トークン（任意）</label><input type="text" id="webhook_inbound_secret" placeholder="optional secret"></div>
+      </div>
+
+      <!-- 7. 音声設定 -->
+      <div class="section" id="section-voice">
+        <h2>🎙 音声 (VOICEVOX) 設定</h2>
+        <div class="checkbox-group" style="margin-bottom:12px">
+          <input type="checkbox" id="voice_enabled">
+          <label for="voice_enabled">VOICEVOX を有効化</label>
+        </div>
+        <div class="form-group"><label>VOICEVOX Engine URL</label><input type="text" id="voicevox_url" placeholder="http://192.168.x.x:50021"></div>
+        <div class="test-btn-row">
+          <button class="btn secondary" onclick="testConnection('voicevox')">接続テスト</button>
+          <button class="btn secondary" onclick="fetchVoicevoxSpeakers()">話者一覧取得</button>
+          <span class="test-result" id="voicevox-test-result"></span>
+        </div>
+        <div class="form-row three" style="margin-top:16px">
+          <div class="form-group"><label>話者 ID</label><input type="number" id="voice_speaker_id" placeholder="3"></div>
+          <div class="form-group"><label>話速</label><input type="number" step="0.1" id="voice_speed_scale" placeholder="1.0"></div>
+          <div class="form-group"><label>ピッチ</label><input type="number" step="0.1" id="voice_pitch_scale" placeholder="0.0"></div>
+        </div>
+      </div>
+
+      <!-- 8. アバター設定 -->
+      <div class="section" id="section-avatar">
+        <h2>🎭 アバター設定</h2>
+        <div class="subsection">
+          <h3>チャット UI アバターモード</h3>
+          <p style="font-size:0.8rem;color:#6060a0;margin-bottom:12px">Live2D と 3D(VRM) は排他選択。</p>
+          <div class="form-group">
+            <div class="checkbox-group" style="margin-bottom:8px">
+              <input type="radio" name="avatar_mode" id="avatar_mode_none" value="none">
+              <label for="avatar_mode_none">なし（テキストのみ）</label>
+            </div>
+            <div class="checkbox-group" style="margin-bottom:8px">
+              <input type="radio" name="avatar_mode" id="avatar_mode_vrm" value="vrm" checked>
+              <label for="avatar_mode_vrm">3D モデル (VRM/VRoid)</label>
+            </div>
+            <div class="checkbox-group">
+              <input type="radio" name="avatar_mode" id="avatar_mode_live2d" value="live2d">
+              <label for="avatar_mode_live2d">Live2D</label>
+            </div>
+          </div>
+        </div>
+        <div class="subsection" id="vrm_settings_section">
+          <h3>VRM モデル設定</h3>
+          <p style="font-size:0.8rem;color:#6060a0;margin-bottom:8px">
+            モデルファイルは <code>data/{ペルソナ名}/*.vrm</code> に配置する。<br>
+            （例: data/herta/madam_herta.vrm）自動検出されるため設定不要。
+          </p>
+          <div class="checkbox-group" style="margin-bottom:12px">
+            <input type="checkbox" id="vrm_enabled" checked>
+            <label for="vrm_enabled">VRM 機能を有効化</label>
+          </div>
+          <div class="form-group">
+            <label>VRM モデルパス</label>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="vrm_model_path" placeholder="data/herta/model.vrm" style="flex:1">
+              <button type="button" onclick="fetchAvatarScan()" style="white-space:nowrap">🔍 自動検出</button>
+            </div>
+          </div>
+        </div>
+        <div class="subsection" id="live2d_settings_section" style="display:none">
+          <h3>Live2D Web 設定</h3>
+          <div class="form-group"><label>モデルファイルパス（/static/live2d/ 以下）</label>
+            <input type="text" id="live2d_model_path" placeholder="herta/model.json">
+          </div>
+          <div class="form-group">
+            <label>Live2D モデルパス</label>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="live2d_model_path_full" placeholder="data/herta/model.model3.json" style="flex:1">
+              <button type="button" onclick="fetchAvatarScan()" style="white-space:nowrap">🔍 自動検出</button>
+            </div>
+          </div>
+        </div>
+        <div class="subsection">
+          <h3>VTube Studio（外部ソフト連携）</h3>
+          <p style="font-size:0.8rem;color:#6060a0;margin-bottom:8px">アバターモードとは独立して有効化できる。</p>
+          <div class="checkbox-group" style="margin-bottom:12px">
+            <input type="checkbox" id="vtube_enabled">
+            <label for="vtube_enabled">VTube Studio 連携を有効化</label>
+          </div>
+          <div class="form-group"><label>WebSocket URL</label>
+            <input type="text" id="vtube_ws_url" placeholder="ws://localhost:8001">
+          </div>
+          <div class="form-group"><label>プラグイン名</label>
+            <input type="text" id="vtube_plugin_name" placeholder="NousAgent">
+          </div>
+        </div>
+      </div>
+
+      <!-- 9. 外部 MCP サーバー -->
+      <div class="section" id="section-mcp">
+        <h2>🔌 外部 MCP サーバー</h2>
+        <p style="font-size:0.85rem;color:#7070a0;margin-bottom:16px">
+          外部 MCP サーバーを登録するとペルソナが会話中にそのツールを使用できる。
+        </p>
+        <div id="mcp_servers_list"></div>
+        <div class="test-btn-row" style="margin-top:12px">
+          <button class="btn secondary" onclick="addMcpServer()">＋ サーバーを追加</button>
+        </div>
+      </div>
+
+      <!-- 10. 記憶/検索設定 -->
+      <div class="section" id="section-memory">
+        <h2>🧩 記憶・ベクトル設定</h2>
+        <div class="form-row">
+          <div class="form-group"><label>埋め込みモデル</label><input type="text" id="embeddings_model" placeholder="cl-nagoya/ruri-v3-30m"></div>
+          <div class="form-group"><label>デバイス</label>
+            <select id="embeddings_device"><option value="cpu">cpu</option><option value="cuda">cuda</option></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Rerankerモデル（空で無効）</label><input type="text" id="reranker_model" placeholder="hotchpotch/japanese-reranker-xsmall-v2"></div>
+          <div class="form-group"><label>Reranker Top N</label><input type="number" id="reranker_top_n" placeholder="10"></div>
+        </div>
+        <div class="form-group"><label>Qdrant URL</label><input type="text" id="qdrant_url" placeholder="http://localhost:6333"></div>
+        <div class="test-btn-row">
+          <button class="btn secondary" onclick="testConnection('qdrant')">接続テスト</button>
+          <span class="test-result" id="qdrant-test-result"></span>
+        </div>
+      </div>
+
+      <!-- 11. 昇華設定 -->
+      <div class="section" id="section-elevation">
+        <h2>✨ 記憶昇華設定</h2>
+        <div class="checkbox-group" style="margin-bottom:12px">
+          <input type="checkbox" id="elevation_enabled">
+          <label for="elevation_enabled">記憶昇華を有効化</label>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>バッチサイズ</label><input type="number" id="elevation_batch_size" placeholder="10"></div>
+          <div class="form-group"><label>対象最小重要度</label><input type="number" step="0.1" id="elevation_min_importance" placeholder="0.3"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>使用 LLM</label>
+            <select id="elevation_llm_provider"><option>ollama</option><option value="claude" selected>claude</option><option>openrouter</option></select>
+          </div>
+          <div class="form-group"><label>API インターバル (秒)</label><input type="number" id="elevation_api_interval" placeholder="2"></div>
+        </div>
+      </div>
+
+      <!-- 12. 自動クリーンアップ -->
+      <div class="section" id="section-cleanup">
+        <h2>🧹 自動クリーンアップ / 自動要約</h2>
+        <div class="subsection">
+          <h3>自動クリーンアップ</h3>
+          <div class="checkbox-group" style="margin-bottom:12px">
+            <input type="checkbox" id="cleanup_enabled">
+            <label for="cleanup_enabled">自動クリーンアップを有効化</label>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>アイドル待ち (分)</label><input type="number" id="cleanup_idle_minutes" placeholder="30"></div>
+            <div class="form-group"><label>重複判定閾値</label><input type="number" step="0.01" id="cleanup_duplicate_threshold" placeholder="0.90"></div>
+          </div>
+        </div>
+        <div class="subsection">
+          <h3>自動要約</h3>
+          <div class="checkbox-group" style="margin-bottom:12px">
+            <input type="checkbox" id="summarization_enabled">
+            <label for="summarization_enabled">自動要約を有効化</label>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>頻度 (日数)</label><input type="number" id="summarization_frequency_days" placeholder="1"></div>
+            <div class="form-group"><label>LLM プロバイダー</label>
+              <select id="summarization_llm_provider"><option>ollama</option><option>claude</option><option value="openrouter" selected>openrouter</option></select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 13. ダッシュボード設定 -->
+      <div class="section" id="section-dashboard">
+        <h2>📊 ダッシュボード設定</h2>
+        <div class="form-row">
+          <div class="form-group"><label>タイムライン表示日数</label><input type="number" id="dashboard_timeline_days" placeholder="14"></div>
+          <div class="form-group"><label>直近記憶表示件数</label><input type="number" id="recent_memories_count" placeholder="5"></div>
+        </div>
+        <div class="form-group"><label>プレビュー文字数</label><input type="number" id="memory_preview_length" placeholder="100"></div>
+      </div>
+
+      <!-- 14. プライバシー設定 -->
+      <div class="section" id="section-privacy">
+        <h2>🔒 プライバシー設定</h2>
+        <div class="form-row">
+          <div class="form-group"><label>デフォルトプライバシー</label>
+            <select id="privacy_default_level"><option value="public">public</option><option value="internal" selected>internal</option><option value="private">private</option></select>
+          </div>
+          <div class="form-group"><label>検索最大レベル</label>
+            <select id="privacy_search_max_level"><option>public</option><option>internal</option><option value="private" selected>private</option></select>
+          </div>
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="privacy_auto_redact_pii">
+          <label for="privacy_auto_redact_pii">PII 自動マスク</label>
+        </div>
+      </div>
+
+      <!-- 15. データ移行 -->
+      <div class="section" id="section-migration">
+        <h2>📦 データ移行 (MemoryMCP → Nous)</h2>
+        <div class="form-group"><label>MemoryMCP データディレクトリ</label><input type="text" id="migration_source_dir" placeholder="D:/VSCode/MemoryMCP/data"></div>
+        <div class="form-group"><label>移行するペルソナ名</label><input type="text" id="migration_persona" placeholder="herta"></div>
+        <div class="test-btn-row">
+          <button class="btn secondary" onclick="runMigration(true)">ドライラン（確認のみ）</button>
+          <button class="btn danger" onclick="runMigration(false)">本番移行を実行</button>
+          <span class="test-result" id="migration-result"></span>
+        </div>
+        <div id="migration-output" style="margin-top:16px; font-family:monospace; font-size:0.8rem; color:#9090b0; white-space:pre-wrap; max-height:200px; overflow-y:auto; background:#0a0a1a; padding:12px; border-radius:6px; display:none"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="save-bar">
+    <button class="btn" onclick="saveSettings()">💾 設定を保存</button>
+    <button class="btn secondary" onclick="loadSettings()">🔄 再読み込み</button>
+    <span class="save-msg" id="saveMsg"></span>
+  </div>
+
+  <script>
+    // ── ナビゲーション ────────────────────────────────────────────────
+    function toggleNavParent(el) {
+      const key = el.dataset.navKey || el.innerText.trim().slice(0, 10);
+      const children = el.querySelector('.nav-children');
+      const arrow = el.querySelector('.nav-arrow');
+      if (children) {
+        children.classList.toggle('collapsed');
+        localStorage.setItem('nav_' + key,
+          children.classList.contains('collapsed') ? '0' : '1');
+      }
+      if (arrow) arrow.classList.toggle('collapsed');
+    }
+
+    function restoreNavState() {
+      document.querySelectorAll('.nav-parent').forEach(el => {
+        const key = el.dataset.navKey || el.innerText.trim().slice(0, 10);
+        const saved = localStorage.getItem('nav_' + key);
+        const children = el.querySelector('.nav-children');
+        const arrow = el.querySelector('.nav-arrow');
+        const expand = saved === null || saved === '1';
+        if (children) children.classList.toggle('collapsed', !expand);
+        if (arrow) arrow.classList.toggle('collapsed', !expand);
+      });
+    }
+
+    function showSection(id, event) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      const section = document.getElementById(`section-${id}`);
+      if (!section) {
+        console.warn(`showSection: section-${id} が見つかりません`);
+        return;
+      }
+      section.classList.add('active');
+      if (event && event.target) event.target.classList.add('active');
+    }
+
+    function togglePassword(id) {
+      const input = document.getElementById(id);
+      if (!input) { console.warn(`togglePassword: #${id} が見つかりません`); return; }
+      input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    // ── アバターモード切り替え ────────────────────────────────────────
+    document.querySelectorAll('input[name="avatar_mode"]').forEach(r => {
+      r.addEventListener('change', () => {
+        const mode = document.querySelector('input[name="avatar_mode"]:checked')?.value || 'none';
+        const vrmSection = document.getElementById('vrm_settings_section');
+        const live2dSection = document.getElementById('live2d_settings_section');
+        if (vrmSection) vrmSection.style.display = mode === 'vrm' ? '' : 'none';
+        if (live2dSection) live2dSection.style.display = mode === 'live2d' ? '' : 'none';
+      });
+    });
+
+    // ── 設定の読み込み・適用 ─────────────────────────────────────────
+    async function loadSettings() {
+      try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        applySettings(data);
+        document.getElementById('saveMsg').textContent = `読み込み完了: ${new Date().toLocaleTimeString('ja-JP')}`;
+        fetchAvatarScan();
+      } catch (e) {
+        console.warn('loadSettings エラー:', e);
+        document.getElementById('saveMsg').textContent = `読み込みエラー: ${e}`;
+      }
+    }
+
+    function applySettings(data) {
+      const set = (id, val) => {
+        const el = document.getElementById(id);
+        if (!el || val === undefined || val === null) return;
+        if (el.type === 'checkbox') el.checked = Boolean(val);
+        else el.value = Array.isArray(val) ? val.join('\n') : String(val);
+      };
+
+      // サーバー
+      set('server_host', data.server_host);
+      set('server_port', data.server_port);
+      set('timezone', data.timezone);
+      set('resource_profile', data.resource_profile);
+      set('default_persona', data.default_persona);
+
+      // LLM
+      set('ollama_base_url', data.llm?.ollama?.base_url || data.llm?.ollama_url);
+      set('ollama_model', data.llm?.ollama?.model || data.llm?.ollama_model);
+      set('ollama_timeout', data.llm?.ollama?.timeout_sec);
+      set('claude_api_key', data.llm?.claude?.api_key);
+      set('claude_model', data.llm?.claude?.model || data.llm?.claude_model);
+      set('claude_max_tokens', data.llm?.claude?.max_tokens);
+      set('openrouter_api_key', data.llm?.openrouter?.api_key);
+      set('openrouter_model', data.llm?.openrouter?.model);
+
+      // ルーティングテーブル
+      const routing = data.llm?.routing || {};
+      const routingTasks = ['consciousness','web_reply','discord_reply','memory_elevation','anniversary','summarization','goal_generation'];
+      routingTasks.forEach(task => {
+        const entry = routing[task];
+        if (typeof entry === 'string') {
+          set(`routing_${task}`, entry);
+          set(`routing_${task}_model`, '');
+        } else if (entry && typeof entry === 'object') {
+          set(`routing_${task}`, entry.provider || 'ollama');
+          set(`routing_${task}_model`, entry.model || '');
+        }
+      });
+
+      // 意識ループ
+      set('consciousness_enabled', data.consciousness?.enabled);
+      set('consciousness_interval_min', data.consciousness?.interval_min_min);
+      set('consciousness_interval_max', data.consciousness?.interval_max_min);
+      set('consciousness_nothing_cooldown', data.consciousness?.nothing_cooldown_min);
+      set('consciousness_force_ticks', data.consciousness?.force_ticks);
+
+      // 心理モデル（グローバル）
+      set('drive_threshold_curiosity', data.psychology?.drive_thresholds?.curiosity);
+      set('drive_threshold_boredom', data.psychology?.drive_thresholds?.boredom);
+      set('drive_threshold_connection', data.psychology?.drive_thresholds?.connection);
+      set('drive_threshold_expression', data.psychology?.drive_thresholds?.expression);
+      set('drive_threshold_mastery', data.psychology?.drive_thresholds?.mastery);
+      set('drive_tick_rate', data.psychology?.drive_tick_rate_per_hour);
+      set('emotional_inertia', data.psychology?.emotional_inertia);
+
+      // Discord（グローバル）
+      set('discord_enabled', data.discord?.enabled);
+      set('discord_bot_token', data.discord?.bot_token);
+
+      // 音声
+      set('voice_enabled', data.voice?.enabled);
+      set('voicevox_url', data.voice?.voicevox_url);
+      set('voice_speaker_id', data.voice?.speaker_id);
+      set('voice_speed_scale', data.voice?.speed_scale);
+      set('voice_pitch_scale', data.voice?.pitch_scale);
+
+      // アバター
+      const avatarMode = data.avatar?.active_mode || 'none';
+      document.querySelectorAll('input[name="avatar_mode"]').forEach(r => {
+        r.checked = r.value === avatarMode;
+      });
+      // ラジオ切り替えに合わせてセクション表示を更新
+      const vrmSection = document.getElementById('vrm_settings_section');
+      const live2dSection = document.getElementById('live2d_settings_section');
+      if (vrmSection) vrmSection.style.display = avatarMode === 'vrm' ? '' : 'none';
+      if (live2dSection) live2dSection.style.display = avatarMode === 'live2d' ? '' : 'none';
+      set('vtube_enabled', data.avatar?.vtube_studio?.enabled);
+      set('vtube_ws_url', data.avatar?.vtube_studio?.ws_url);
+      set('vtube_plugin_name', data.avatar?.vtube_studio?.plugin_name);
+      set('live2d_model_path', data.avatar?.live2d_web?.model_path);
+      set('vrm_enabled', data.avatar?.vrm?.enabled);
+
+      // MCP サーバー
+      if (Array.isArray(data.mcp_servers)) {
+        mcpServersData = data.mcp_servers;
+        renderMcpServers();
+      }
+
+      // その他
+      set('qdrant_url', data.qdrant_url);
+      set('embeddings_model', data.embeddings_model);
+      set('embeddings_device', data.embeddings_device);
+      set('reranker_model', data.reranker_model);
+      set('reranker_top_n', data.reranker_top_n);
+
+      // ペルソナリスト
+      if (data.active_personas) {
+        updatePersonaList(data.active_personas);
+        updatePersonaEditSelect(data.active_personas);
+      }
+      if (data.personas) {
+        personasData = data.personas;
+        loadPersonaConfig();
+      }
+    }
+
+    // ── 設定の収集・保存 ─────────────────────────────────────────────
+    function collectSettings() {
+      const get = (id) => {
+        const el = document.getElementById(id);
+        if (!el) return undefined;
+        if (el.type === 'checkbox') return el.checked;
+        return el.value;
+      };
+      return {
+        server_host: get('server_host'),
+        server_port: parseInt(get('server_port')) || 26263,
+        timezone: get('timezone'),
+        resource_profile: get('resource_profile'),
+        default_persona: get('default_persona'),
+        active_personas: getActivePersonas(),
+        qdrant_url: get('qdrant_url'),
+        embeddings_model: get('embeddings_model'),
+        embeddings_device: get('embeddings_device'),
+        reranker_model: get('reranker_model'),
+        llm: {
+          ollama: { base_url: get('ollama_base_url'), model: get('ollama_model'), timeout_sec: parseInt(get('ollama_timeout')) || 120 },
+          claude: { api_key: get('claude_api_key') || undefined, model: get('claude_model'), max_tokens: parseInt(get('claude_max_tokens')) || 1000 },
+          openrouter: { api_key: get('openrouter_api_key') || undefined, model: get('openrouter_model') },
+          routing: Object.fromEntries(
+            ['consciousness','web_reply','discord_reply','memory_elevation','anniversary','summarization','goal_generation']
+            .map(task => {
+              const provider = get(`routing_${task}`) || 'ollama';
+              const model = (get(`routing_${task}_model`) || '').trim();
+              return [task, model ? {provider, model} : provider];
+            })
+          )
+        },
+        consciousness: {
+          enabled: get('consciousness_enabled'),
+          interval_min_min: parseFloat(get('consciousness_interval_min')) || 30,
+          interval_max_min: parseFloat(get('consciousness_interval_max')) || 90,
+          nothing_cooldown_min: parseFloat(get('consciousness_nothing_cooldown')) || 15,
+          force_ticks: (get('consciousness_force_ticks') || '').split('\n').filter(s => s.trim()),
+        },
+        psychology: {
+          drive_thresholds: {
+            curiosity:  parseFloat(get('drive_threshold_curiosity'))  || 0.8,
+            boredom:    parseFloat(get('drive_threshold_boredom'))    || 0.7,
+            connection: parseFloat(get('drive_threshold_connection')) || 0.75,
+            expression: parseFloat(get('drive_threshold_expression')) || 0.8,
+            mastery:    parseFloat(get('drive_threshold_mastery'))    || 0.85,
+          },
+          drive_tick_rate_per_hour: parseFloat(get('drive_tick_rate')) || 0.05,
+          emotional_inertia: parseFloat(get('emotional_inertia')) || 0.7,
+        },
+        avatar: {
+          active_mode: document.querySelector('input[name="avatar_mode"]:checked')?.value || 'none',
+          vtube_studio: {
+            enabled: get('vtube_enabled'),
+            ws_url: get('vtube_ws_url'),
+            plugin_name: get('vtube_plugin_name'),
+          },
+          live2d_web: {
+            enabled: (document.querySelector('input[name="avatar_mode"]:checked')?.value || 'none') === 'live2d',
+            model_path: get('live2d_model_path'),
+          },
+          vrm: {
+            enabled: (document.querySelector('input[name="avatar_mode"]:checked')?.value || 'none') === 'vrm',
+          },
+        },
+        discord: { enabled: get('discord_enabled'), bot_token: get('discord_bot_token') || undefined },
+        voice: {
+          enabled: get('voice_enabled'),
+          voicevox_url: get('voicevox_url'),
+          speaker_id: parseInt(get('voice_speaker_id')) || 3,
+          speed_scale: parseFloat(get('voice_speed_scale')) || 1.0,
+          pitch_scale: parseFloat(get('voice_pitch_scale')) || 0.0,
+        },
+        elevation: {
+          enabled: get('elevation_enabled'),
+          batch_size: parseInt(get('elevation_batch_size')) || 10,
+          min_importance: parseFloat(get('elevation_min_importance')) || 0.3,
+          llm_provider: get('elevation_llm_provider'),
+          api_interval_sec: parseFloat(get('elevation_api_interval')) || 2.0,
+        },
+        mcp_servers: mcpServersData,
+      };
+    }
+
+    async function saveSettings() {
+      collectMcpServers();
+      const settings = collectSettings();
+      try {
+        const res = await fetch('/api/settings', { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(settings) });
+        const data = await res.json();
+        document.getElementById('saveMsg').textContent = data.success ? `✅ 保存完了: ${new Date().toLocaleTimeString('ja-JP')}` : `❌ エラー: ${data.error}`;
+      } catch (e) {
+        console.warn('saveSettings エラー:', e);
+        document.getElementById('saveMsg').textContent = `❌ ${e}`;
+      }
+    }
+
+    // ── 接続テスト ───────────────────────────────────────────────────
+    async function testConnection(service) {
+      const resultEl = document.getElementById(`${service}-test-result`);
+      if (!resultEl) { console.warn(`testConnection: #${service}-test-result が見つかりません`); return; }
+      resultEl.textContent = 'テスト中...';
+      resultEl.className = 'test-result';
+
+      // 保存前でも現在の入力値を body に含めてテスト
+      const body = {};
+      if (service === 'claude') {
+        const el = document.getElementById('claude_api_key');
+        if (el) body.api_key = el.value;
+      } else if (service === 'openrouter') {
+        const el = document.getElementById('openrouter_api_key');
+        if (el) body.api_key = el.value;
+      } else if (service === 'ollama') {
+        const el = document.getElementById('ollama_base_url');
+        if (el) body.base_url = el.value;
+      } else if (service === 'discord') {
+        const el = document.getElementById('discord_bot_token');
+        if (el) body.bot_token = el.value;
+      }
+
+      try {
+        const res = await fetch(`/api/settings/test/${service}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        resultEl.textContent = data.success ? `✅ ${data.message || 'OK'}` : `❌ ${data.error}`;
+        resultEl.className = `test-result ${data.success ? 'ok' : 'err'}`;
+      } catch (e) {
+        console.warn(`testConnection(${service}) エラー:`, e);
+        resultEl.textContent = `❌ ${e}`;
+        resultEl.className = 'test-result err';
+      }
+    }
+
+    // ── Ollama / Voicevox ユーティリティ ─────────────────────────────
+    async function fetchOllamaModels() {
+      try {
+        const res = await fetch('/api/settings/ollama/models');
+        const data = await res.json();
+        if (data.models) {
+          alert('利用可能モデル:\n' + data.models.join('\n'));
+        }
+      } catch (e) { console.warn('fetchOllamaModels エラー:', e); alert(`エラー: ${e}`); }
+    }
+
+    async function fetchVoicevoxSpeakers() {
+      try {
+        const res = await fetch('/api/settings/voicevox/speakers');
+        const data = await res.json();
+        if (data.speakers) {
+          alert('利用可能話者:\n' + data.speakers.map(s => `${s.id}: ${s.name}`).join('\n'));
+        }
+      } catch (e) { console.warn('fetchVoicevoxSpeakers エラー:', e); alert(`エラー: ${e}`); }
+    }
+
+    // ── データ移行 ───────────────────────────────────────────────────
+    async function runMigration(dryRun) {
+      const resultEl = document.getElementById('migration-result');
+      const outputEl = document.getElementById('migration-output');
+      resultEl.textContent = '移行中...';
+      outputEl.style.display = 'none';
+      try {
+        const res = await fetch('/api/migration/run', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            source_dir: document.getElementById('migration_source_dir').value,
+            persona: document.getElementById('migration_persona').value || 'herta',
+            dry_run: dryRun,
+          })
+        });
+        const data = await res.json();
+        resultEl.textContent = data.success ? `✅ ${data.migrated || 0}件移行` : `❌ ${data.error}`;
+        if (data.output) {
+          outputEl.textContent = data.output;
+          outputEl.style.display = 'block';
+        }
+      } catch (e) {
+        console.warn('runMigration エラー:', e);
+        resultEl.textContent = `❌ ${e}`;
+      }
+    }
+
+    // ── アクティブペルソナリスト ──────────────────────────────────────
+    const activePersonas = [];
+
+    function updatePersonaList(personas) {
+      activePersonas.length = 0;
+      personas.forEach(p => activePersonas.push(p));
+      renderPersonaList();
+    }
+
+    function renderPersonaList() {
+      const container = document.getElementById('activePersonasList');
+      if (!container) return;
+      container.innerHTML = '';
+      activePersonas.forEach((p, i) => {
+        const div = document.createElement('div');
+        div.className = 'checkbox-group';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.style.cssText = 'font-size:0.85rem;color:#c0c0e0';
+        nameSpan.textContent = p;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'btn danger';
+        removeBtn.style.cssText = 'padding:2px 8px;font-size:0.75rem';
+        removeBtn.textContent = '削除';
+        removeBtn.addEventListener('click', () => removePersona(i));
+
+        div.appendChild(nameSpan);
+        div.appendChild(removeBtn);
+        container.appendChild(div);
+      });
+    }
+
+    function addPersona() {
+      const input = document.getElementById('newPersonaInput');
+      if (!input) return;
+      const name = input.value.trim();
+      if (name && !activePersonas.includes(name)) {
+        activePersonas.push(name);
+        renderPersonaList();
+        input.value = '';
+      }
+    }
+
+    function removePersona(i) {
+      activePersonas.splice(i, 1);
+      renderPersonaList();
+    }
+
+    function getActivePersonas() { return [...activePersonas]; }
+
+    // ── ペルソナ個別設定 ─────────────────────────────────────────────
+    let personasData = {};
+
+    function updatePersonaEditSelect(personas) {
+      const sel = document.getElementById('persona_edit_select');
+      if (!sel) return;
+      const current = sel.value;
+      sel.innerHTML = '<option value="">-- 選択 --</option>';
+      personas.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = p;
+        sel.appendChild(opt);
+      });
+      if (current && personas.includes(current)) sel.value = current;
+    }
+
+    function loadPersonaConfig() {
+      const sel = document.getElementById('persona_edit_select');
+      const form = document.getElementById('persona_config_form');
+      if (!sel || !form) return;
+      const persona = sel.value;
+      if (!persona) { form.style.display = 'none'; return; }
+      form.style.display = 'block';
+      const badgeEl = document.getElementById('editing-persona-name');
+      if (badgeEl) badgeEl.textContent = persona;
+      const cfg = personasData[persona] || {};
+
+      document.getElementById('persona_system_prompt').value = cfg.system_prompt || '';
+      document.getElementById('persona_tools_enabled').checked = Boolean(cfg.tools_enabled);
+
+      // Discord チャンネル
+      const discordChannelEl = document.getElementById('persona_discord_channel_id');
+      if (discordChannelEl) discordChannelEl.value = cfg.discord_channel_id ?? '';
+
+      // 音声設定（ペルソナ個別）
+      const speakerEl = document.getElementById('persona_voice_speaker_id');
+      if (speakerEl) speakerEl.value = cfg.voice?.speaker_id ?? '';
+      const speedEl = document.getElementById('persona_voice_speed_scale');
+      if (speedEl) speedEl.value = cfg.voice?.speed_scale ?? '';
+
+      // 心理モデル（ペルソナ個別上書き）
+      const psych = cfg.psychology || {};
+      const curiosityEl = document.getElementById('persona_drive_threshold_curiosity');
+      if (curiosityEl) curiosityEl.value = psych.drive_thresholds?.curiosity ?? '';
+      const boredomEl = document.getElementById('persona_drive_threshold_boredom');
+      if (boredomEl) boredomEl.value = psych.drive_thresholds?.boredom ?? '';
+      const inertiaEl = document.getElementById('persona_emotional_inertia');
+      if (inertiaEl) inertiaEl.value = psych.emotional_inertia ?? '';
+    }
+
+    async function savePersonaConfig() {
+      const sel = document.getElementById('persona_edit_select');
+      const resultEl = document.getElementById('persona-save-result');
+      if (!sel) return;
+      const persona = sel.value;
+      if (!persona) return;
+
+      const cfg = {
+        system_prompt: document.getElementById('persona_system_prompt').value || null,
+        tools_enabled: document.getElementById('persona_tools_enabled').checked,
+      };
+
+      // Discord チャンネル
+      const discordChannelEl = document.getElementById('persona_discord_channel_id');
+      if (discordChannelEl && discordChannelEl.value.trim()) {
+        cfg.discord_channel_id = discordChannelEl.value.trim();
+      }
+
+      // 音声設定（ペルソナ個別）
+      const speakerVal = parseInt(document.getElementById('persona_voice_speaker_id')?.value ?? '');
+      const speedVal = parseFloat(document.getElementById('persona_voice_speed_scale')?.value ?? '');
+      if (!isNaN(speakerVal) || !isNaN(speedVal)) {
+        cfg.voice = {};
+        if (!isNaN(speakerVal)) cfg.voice.speaker_id = speakerVal;
+        if (!isNaN(speedVal)) cfg.voice.speed_scale = speedVal;
+      }
+
+      // 心理モデル（ペルソナ個別上書き）
+      const curiosityVal = parseFloat(document.getElementById('persona_drive_threshold_curiosity')?.value ?? '');
+      const boredomVal = parseFloat(document.getElementById('persona_drive_threshold_boredom')?.value ?? '');
+      const inertiaVal = parseFloat(document.getElementById('persona_emotional_inertia')?.value ?? '');
+      if (!isNaN(curiosityVal) || !isNaN(boredomVal) || !isNaN(inertiaVal)) {
+        cfg.psychology = {
+          drive_thresholds: {
+            ...(isNaN(curiosityVal) ? {} : { curiosity: curiosityVal }),
+            ...(isNaN(boredomVal) ? {} : { boredom: boredomVal }),
+          },
+          ...(isNaN(inertiaVal) ? {} : { emotional_inertia: inertiaVal }),
+        };
+      }
+
+      personasData[persona] = cfg;
+
+      try {
+        const res = await fetch('/api/settings', {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({personas: personasData}),
+        });
+        const data = await res.json();
+        resultEl.textContent = data.success ? '✅ 保存完了' : `❌ ${data.error}`;
+        resultEl.className = `test-result ${data.success ? 'ok' : 'err'}`;
+      } catch (e) {
+        console.warn('savePersonaConfig エラー:', e);
+        resultEl.textContent = `❌ ${e}`;
+        resultEl.className = 'test-result err';
+      }
+    }
+
+    // ── MCP サーバー管理 ─────────────────────────────────────────────
+    let mcpServersData = [];
+
+    function renderMcpServers() {
+      const container = document.getElementById('mcp_servers_list');
+      if (!container) return;
+      container.innerHTML = '';
+
+      mcpServersData.forEach((srv, i) => {
+        const card = document.createElement('div');
+        card.className = 'subsection mcp-server-card';
+        card.dataset.index = String(i);
+
+        // ヘッダー行
+        const headerRow = document.createElement('div');
+        headerRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px';
+
+        const title = document.createElement('h3');
+        title.textContent = `MCP サーバー ${i + 1}`;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'btn danger';
+        removeBtn.style.cssText = 'padding:4px 10px;font-size:0.8rem';
+        removeBtn.textContent = '削除';
+        removeBtn.addEventListener('click', () => removeMcpServer(i));
+
+        headerRow.appendChild(title);
+        headerRow.appendChild(removeBtn);
+
+        // 名前・有効フラグ行
+        const nameEnabledRow = document.createElement('div');
+        nameEnabledRow.className = 'form-row';
+
+        const nameGroup = document.createElement('div');
+        nameGroup.className = 'form-group';
+        const nameLabel = document.createElement('label');
+        nameLabel.textContent = 'サーバー名';
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'mcp-name';
+        nameInput.placeholder = 'my-mcp-server';
+        nameInput.value = srv.name || '';
+        nameGroup.appendChild(nameLabel);
+        nameGroup.appendChild(nameInput);
+
+        const enabledGroup = document.createElement('div');
+        enabledGroup.className = 'form-group';
+        const enabledLabel = document.createElement('label');
+        enabledLabel.textContent = '有効';
+        const enabledDiv = document.createElement('div');
+        enabledDiv.className = 'checkbox-group';
+        const enabledInput = document.createElement('input');
+        enabledInput.type = 'checkbox';
+        enabledInput.className = 'mcp-enabled';
+        enabledInput.checked = srv.enabled !== false;
+        enabledDiv.appendChild(enabledInput);
+        enabledGroup.appendChild(enabledLabel);
+        enabledGroup.appendChild(enabledDiv);
+
+        nameEnabledRow.appendChild(nameGroup);
+        nameEnabledRow.appendChild(enabledGroup);
+
+        // URL
+        const urlGroup = document.createElement('div');
+        urlGroup.className = 'form-group';
+        const urlLabel = document.createElement('label');
+        urlLabel.textContent = 'URL';
+        const urlInput = document.createElement('input');
+        urlInput.type = 'text';
+        urlInput.className = 'mcp-url';
+        urlInput.placeholder = 'http://localhost:3000/mcp';
+        urlInput.value = srv.url || '';
+        urlGroup.appendChild(urlLabel);
+        urlGroup.appendChild(urlInput);
+
+        // 認証トークン
+        const tokenGroup = document.createElement('div');
+        tokenGroup.className = 'form-group';
+        const tokenLabel = document.createElement('label');
+        tokenLabel.textContent = '認証トークン（任意）';
+        const tokenField = document.createElement('div');
+        tokenField.className = 'password-field';
+        const tokenInput = document.createElement('input');
+        tokenInput.type = 'password';
+        tokenInput.className = 'mcp-auth-token';
+        tokenInput.placeholder = 'Bearer xxx';
+        tokenInput.value = srv.auth_token || '';
+        tokenField.appendChild(tokenInput);
+        tokenGroup.appendChild(tokenLabel);
+        tokenGroup.appendChild(tokenField);
+
+        // テストボタン行
+        const testRow = document.createElement('div');
+        testRow.className = 'test-btn-row';
+
+        const testBtn = document.createElement('button');
+        testBtn.className = 'btn secondary';
+        testBtn.textContent = '接続テスト';
+        testBtn.addEventListener('click', () => testMcpServer(i));
+
+        const toolsBtn = document.createElement('button');
+        toolsBtn.className = 'btn secondary';
+        toolsBtn.textContent = 'ツール一覧を表示';
+        toolsBtn.addEventListener('click', () => showMcpTools(i));
+
+        const resultSpan = document.createElement('span');
+        resultSpan.className = 'test-result';
+        resultSpan.id = `mcp-test-result-${i}`;
+
+        testRow.appendChild(testBtn);
+        testRow.appendChild(toolsBtn);
+        testRow.appendChild(resultSpan);
+
+        card.appendChild(headerRow);
+        card.appendChild(nameEnabledRow);
+        card.appendChild(urlGroup);
+        card.appendChild(tokenGroup);
+        card.appendChild(testRow);
+
+        container.appendChild(card);
+      });
+    }
+
+    function addMcpServer() {
+      mcpServersData.push({ name: '', url: '', enabled: true, auth_token: null });
+      renderMcpServers();
+    }
+
+    function removeMcpServer(i) {
+      mcpServersData.splice(i, 1);
+      renderMcpServers();
+    }
+
+    function collectMcpServers() {
+      mcpServersData = [];
+      document.querySelectorAll('.mcp-server-card').forEach(card => {
+        const nameEl = card.querySelector('.mcp-name');
+        const urlEl = card.querySelector('.mcp-url');
+        const enabledEl = card.querySelector('.mcp-enabled');
+        const tokenEl = card.querySelector('.mcp-auth-token');
+        mcpServersData.push({
+          name: nameEl ? nameEl.value : '',
+          url: urlEl ? urlEl.value : '',
+          enabled: enabledEl ? enabledEl.checked : true,
+          auth_token: (tokenEl && tokenEl.value) ? tokenEl.value : null,
+        });
+      });
+    }
+
+    async function testMcpServer(i) {
+      collectMcpServers();
+      const srv = mcpServersData[i];
+      if (!srv) { console.warn(`testMcpServer: インデックス ${i} が見つかりません`); return; }
+      const resultEl = document.getElementById(`mcp-test-result-${i}`);
+      if (!resultEl) return;
+      resultEl.textContent = '接続中...';
+      resultEl.className = 'test-result';
+      try {
+        const res = await fetch('/api/settings/test/mcp', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ url: srv.url, auth_token: srv.auth_token }),
+        });
+        const data = await res.json();
+        resultEl.textContent = data.success
+          ? `✅ 接続OK (ツール: ${data.tools?.length ?? 0}件)`
+          : `❌ ${data.error}`;
+        resultEl.className = `test-result ${data.success ? 'ok' : 'err'}`;
+      } catch (e) {
+        console.warn(`testMcpServer(${i}) エラー:`, e);
+        resultEl.textContent = `❌ ${e}`;
+        resultEl.className = 'test-result err';
+      }
+    }
+
+    async function showMcpTools(i) {
+      collectMcpServers();
+      const srv = mcpServersData[i];
+      if (!srv) { console.warn(`showMcpTools: インデックス ${i} が見つかりません`); return; }
+      try {
+        const res = await fetch('/api/settings/test/mcp', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ url: srv.url, auth_token: srv.auth_token }),
+        });
+        const data = await res.json();
+        if (!data.success) { alert(`接続エラー: ${data.error}`); return; }
+        showToolsPopup(srv.name || srv.url, data.tools || []);
+      } catch (e) {
+        console.warn(`showMcpTools(${i}) エラー:`, e);
+        alert(`エラー: ${e}`);
+      }
+    }
+
+    function showToolsPopup(serverName, tools) {
+      const existing = document.getElementById('mcp-tools-modal');
+      if (existing) existing.remove();
+
+      const modal = document.createElement('div');
+      modal.id = 'mcp-tools-modal';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      modal.setAttribute('aria-label', `${serverName} ツール一覧`);
+
+      const box = document.createElement('div');
+      box.style.cssText = 'background:#1a1a2e;border:1px solid #4040a0;border-radius:10px;padding:24px;max-width:600px;width:90%;max-height:70vh;overflow-y:auto';
+
+      // ヘッダー
+      const headerDiv = document.createElement('div');
+      headerDiv.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:16px';
+
+      const titleEl = document.createElement('h3');
+      titleEl.style.color = '#9090ff';
+      titleEl.textContent = `${serverName} — ツール一覧`;
+
+      const closeBtn = document.createElement('button');
+      closeBtn.style.cssText = 'background:none;border:none;color:#8080a0;cursor:pointer;font-size:1.2rem';
+      closeBtn.textContent = '✕';
+      closeBtn.setAttribute('aria-label', 'ダイアログを閉じる');
+      closeBtn.addEventListener('click', () => modal.remove());
+
+      headerDiv.appendChild(titleEl);
+      headerDiv.appendChild(closeBtn);
+
+      box.appendChild(headerDiv);
+
+      if (tools.length === 0) {
+        const emptyMsg = document.createElement('p');
+        emptyMsg.style.color = '#7070a0';
+        emptyMsg.textContent = 'ツールが見つかりませんでした。';
+        box.appendChild(emptyMsg);
+      } else {
+        tools.forEach(t => {
+          const toolDiv = document.createElement('div');
+          toolDiv.style.cssText = 'background:#12122a;border-radius:6px;padding:12px;margin-bottom:8px';
+
+          const toolName = document.createElement('div');
+          toolName.style.cssText = 'font-weight:bold;color:#c0c0ff;font-size:0.9rem';
+          toolName.textContent = t.name || '';
+
+          const toolDesc = document.createElement('div');
+          toolDesc.style.cssText = 'color:#8080a0;font-size:0.8rem;margin-top:4px';
+          toolDesc.textContent = t.description || '（説明なし）';
+
+          toolDiv.appendChild(toolName);
+          toolDiv.appendChild(toolDesc);
+          box.appendChild(toolDiv);
+        });
+      }
+
+      modal.appendChild(box);
+      modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+      document.body.appendChild(modal);
+    }
+
+    // ── アバタースキャン ─────────────────────────────────────────────
+    async function fetchAvatarScan(persona) {
+      const p = persona || document.getElementById('default_persona')?.value || 'herta';
+      try {
+        const res = await fetch(`/api/avatar/scan/${p}`);
+        const data = await res.json();
+        const vrmInput = document.getElementById('vrm_model_path');
+        const live2dInput = document.getElementById('live2d_model_path_full');
+        if (data.vrm && vrmInput && !vrmInput.value)
+          vrmInput.value = data.vrm;
+        if (data.live2d && live2dInput && !live2dInput.value)
+          live2dInput.value = data.live2d;
+      } catch (e) {
+        console.warn('Avatar scan failed:', e);
+      }
+    }
+
+    // 起動時にナビゲーション状態を復元してから設定を読み込む
+    document.addEventListener('DOMContentLoaded', restoreNavState);
+    loadSettings();
+  </script>
+</body>
+</html>
