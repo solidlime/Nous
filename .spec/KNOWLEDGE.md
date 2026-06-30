@@ -106,6 +106,36 @@
 - AI 画像生成は「デフォルトOFF」が鉄則。ユーザーが意図せず API コスト負担するリスク大
 - Irodori-TTS のような若すぎるプロジェクトは「疎結合 + 別コンテナ」でリスク限定
 
+## Group 1 実装教訓 (2026-07-01)
+
+### Dynamic Temperature
+- `emotion_temperature_scale` は `[0.0, 1.0]` にクランプ必須（実装済み: `_clamp_emotion_temperature_scale`）
+- `ChatConfig` に追加したことで、既存のシリアライゼーション (`to_sql_row` / `from_sql_row`) のカラムインデックス更新を忘れがち → v032 マイグレーションで対応
+- SQLite の `INTEGER` 型で `bool` を保存する際、`bool(row[44])` は `0`/`1` 以外の値も `True` と評価される可能性 → `bool(row[44] if row[44] is not None else 0)` でガード
+
+### Persona Portrait
+- `PortraitGenerationConfig` は **デフォルトOFFが絶対条件**。ユーザーが意図せずAPIコストを負担するリスクを回避
+- ComfyUI は別コンテナ/別マシンが前提（GPU必須）。Nous 側は URL 設定のみで疎結合
+- `auto_generate` + `emotion_threshold` の組み合わせで頻繁な再生成を防止。`generate_interval_min` + `max_monthly_budget` で二重のレート制限
+
+### Author's Note
+- `context_state` テーブルに `author_note` / `author_note_frequency` カラム追加 (v031)
+- 既存の `persona_state` アクセスパターンと異なり、`update_state()` でキー・バリュー形式で書き込む（persona_info 経由ではない）
+- `prompt.py` の `build_system_prompt()` で `getattr(turn_ctx, "author_note", None)` により `None` と空文字を区別（空文字/None の場合は注入しない）
+- `author_note_frequency` の3モード (`always` / `every_n` / `on_emotion_change`) は現状 `always` のみ完全実装。他モードは将来拡張
+
+### Voice (Irodori-TTS)
+- `IrodoriConfig` は `Settings` にネスト設定。環境変数は `NOUS__IRODORI__*` 形式
+- デフォルトOFF必須（GPUサーバー依存のため）
+- OpenAI TTS API 互換なので、Nous 側のラッパーは極薄でOK
+- 20-30秒チャンク制限あり。長文は分割して逐次送信する必要あり
+- CPU フォールバックは非実用的（Flow Matching DiT が重い）。CPU環境では VOICEVOX が現実的代替
+
+### 全般
+- これらの機能は「MCP ツールとして新規追加」ではなく「既存設定・パイプラインの拡張」として実装
+- `chat_config.py` / `settings.py` / `persona_state` の3層に分散。ドキュメントは設定変数名を追跡するのが困難
+- 環境変数による設定変更は WebUI の設定画面からも行えるため、`runtime_config.py` の `hot_reload` 対応が UX 上重要
+
 ## デプロイ判断 (2026-07-01)
 
 ### ComfyUI & Irodori-TTS: 外部サービス前提

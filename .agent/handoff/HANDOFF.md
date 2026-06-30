@@ -1,41 +1,34 @@
-# HANDOFF - 2026-07-01 05:50
-
-## 使用ツール
-OpenCode (single agent — プネウマ)
+# HANDOFF - TA03: Dynamic Temperature pipeline integration
 
 ## 完了したタスク
 
-### T11: body_state_history テーブル新設 ✅
+### TA03: EmotionDrivenSampler → Pipeline orchestrator ✅
 | タスク | 内容 | 状態 |
 |--------|------|------|
-| T11a | body_state_history テーブル作成（connection.py） | ✅ 既存 |
-| T11b | add_body_state_record / get_body_state_history / get_body_state_history_by_days（persona_repo.py） | ✅ 既存 |
-| T11c | apply_body_decay_if_needed で履歴記録（body_decay.py） | ✅ 既存 |
-| T11d | テスト追加（test_body_state_history.py） | ✅ 既存 |
-
-### 修正点
-- **ruff 3 errors fix**: 
-  - `_tools_helpers.py`: 未使用の `BodyStateRecord` インポート削除
-  - `test_body_state_history.py`: 未使用の `compute_body_state_decay` インポート削除
-  - `test_body_state_history.py`: 未使用変数 `body_dict` 削除
-
-## テスト結果
-- **1296 passed, 7 skipped, 0 failures**
-- `ruff check .` — 0 errors
-
-## 設計判断
-- T11 の実装コードは全て既に存在していた（connection.py のテーブル定義, persona_repo.py のリポジトリメソッド, body_decay.py での記録, _tools_helpers.py での表示）
-- テストファイル `test_body_state_history.py` (21 tests) も既に存在
-- 修正は ruff の 3 エラー修正のみ
+| TA03a | Orchestrator (ChatService.chat) が `turn_ctx.state_raw` から感情取得 → `EmotionDrivenSampler.compute()` → `effective_temp` 注入 | ✅ |
+| TA03b | InferenceStep.run() に `effective_temp` パラメータ追加、provider.stream() で使用 | ✅ |
+| TA03c | 統合テスト5件追加 (effective_temp差、fallback、stream伝搬、sampler計算) | ✅ |
 
 ## 変更ファイル一覧
 | ファイル | 変更 |
 |----------|------|
-| `nous/api/mcp/_tools_helpers.py` | 未使用 import `BodyStateRecord` 削除 |
-| `tests/unit/test_body_state_history.py` | 未使用 import `compute_body_state_decay` + 未使用変数 `body_dict` 削除 |
-| `.agent/memory/MEMORY.md` | T11完了を追記 |
-| `.spec/TODO.md` | T11全項目に ✅ |
+| `nous/application/chat/pipeline/inference.py` | run() に effective_temp パラメータ追加、provider.stream で使用 |
+| `nous/application/chat/service.py` | dynamic_temperature=True 時のみ effective_temp 計算・注入 |
+| `tests/unit/test_chat_pipeline.py` | TestDynamicTemperatureInference クラス追加 (5 tests) |
+| `.spec/TODO-v3.md` | TA03 完了マーク |
+| `.agent/memory/MEMORY.md` | TA03 学習記録追加 |
+
+## 設計判断
+- InferenceStep は PersonaState を直接参照しない — オーケストレータが `turn_ctx.state_raw` から emotion/intensity を抽出して計算
+- `dynamic_temperature=False` 時は `effective_temp=None` を渡し、InferenceStep 内で `config.temperature` にフォールバック
+- `turn_ctx.state_raw` は PrepareStep で既に設定済みなので、追加のサービス呼び出し不要
+
+## テスト結果
+- **test_chat_pipeline.py**: 56 passed (うち5件が新規温度テスト)
+- **test_sampling.py**: 19 passed
+- **test_chat_service.py**: 58 passed (うち7件が温度関連)
+- **ruff check**: 0 errors on modified files
 
 ## 注意点
-- `body_state_history` テーブルの `persona_id` カラム名は他のテーブルと命名が異なる（他は `persona`）が、既存の実装なので変更しない
-- T06（感情持続性の半減期×強度）と T10（autoCapture）が TODO 未完了
+- 今回 `turn_ctx.state_raw` から emotion/intensity を取得しているが、`state_raw` は `vars(state)` の dict 変換なのでキー名は PersonaState のフィールド名に依存
+- TA04 (WebUI設定) は未着手。dynamic_temperature トグル + scale スライダー + top_p 追加が必要

@@ -117,6 +117,23 @@
 - **依存**: なし
 - **担当**: @fixer
 
+## Phase B: ペルソナ動的画像生成 (B0-B2)
+
+### TB05: ComfyUI ImageGenProvider 🟢 ✅
+- [x] **TB05a**: `ComfyUIProvider` 実装（`nous/infrastructure/image_gen/comfyui.py`）
+- [x] **TB05b**: `ImageGenConfig` に `comfyui_url` 追加（`base.py`）
+- [x] **TB05c**: factory に `"comfyui"` ケース追加（`factory.py`）
+- [x] **TB05d**: テスト12件追加（healthcheck/generate/workflow/timeout/retry）
+- **依存**: なし
+- **担当**: @fixer
+
+### TB06: ComfyUI ヘルスチェック 🟢 ✅
+- [x] **TB06a**: `health_check()` メソッド実装（GET /system_stats）
+- [x] **TB06b**: 接続エラー・非200時のフォールバック
+- [x] **TB06c**: テスト3件（正常系/接続エラー/非200）
+- **依存**: TB05
+- **担当**: @fixer
+
 ---
 
 ## 実行順序（修正後）

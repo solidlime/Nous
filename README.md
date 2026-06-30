@@ -24,6 +24,10 @@
 | 🏃 **コード実行サンドボックス** | Docker 分離環境で Python/Bash を安全に実行 |
 | 💡 **Reflection & Mental Model** | LLM による高次洞察とパターン抽象化を自動実行 |
 | 🔗 **エンティティグラフ** | 人物・場所・概念の関係性を知識グラフで可視化 |
+| 🌡️ **Dynamic Temperature** | 感情駆動の温度調整で自然な会話バリエーションを実現 |
+| 🎨 **Persona Portrait** | AIによるペルソナ画像生成（ComfyUI対応・デフォルトOFF） |
+| 📝 **Author's Note** | システムプロンプトへの永続コンテキスト注入でロールの一貫性を維持 |
+| 🎤 **Voice (Irodori-TTS)** | 日本語TTS音声出力（オプション・GPUサーバー必須・デフォルトOFF） |
 
 ---
 

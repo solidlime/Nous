@@ -17,4 +17,8 @@ def get_image_gen_provider(config: ImageGenConfig) -> ImageGenProvider | None:
         if not config.stability_url:
             return None
         return StabilityProvider(api_url=config.stability_url)
+    elif config.provider == "comfyui":
+        from .comfyui import ComfyUIProvider
+
+        return ComfyUIProvider(api_url=config.comfyui_url)
     return None

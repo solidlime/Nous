@@ -148,6 +148,12 @@ class PortraitGenerationConfig(BaseModel):
     max_monthly_budget: float = 5.0
     """Monthly USD cap for cloud providers (0 = N/A for local ComfyUI)."""
 
+    healthcheck_enabled: bool = True
+    """Periodically check if ComfyUI is reachable."""
+
+    healthcheck_interval_seconds: int = 60
+    """Interval between health checks in seconds."""
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
