@@ -641,7 +641,6 @@ class TestPromptBuildStepAuthorNote:
 
         assert "[Author's Note]" not in turn_ctx.system_prompt
 
-
     @pytest.mark.asyncio
     async def test_decision_creates_memory(self):
         """決定表現を含むメッセージ -> メモリが作成される."""

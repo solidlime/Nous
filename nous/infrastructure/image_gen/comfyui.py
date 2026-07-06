@@ -24,9 +24,7 @@ class ComfyUIProvider(ImageGenProvider):
     @property
     def client(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(connect=5.0, read=180.0, write=180.0, pool=5.0)
-            )
+            self._client = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=180.0, write=180.0, pool=5.0))
         return self._client
 
     @property
@@ -72,9 +70,7 @@ class ComfyUIProvider(ImageGenProvider):
                     continue
         raise RuntimeError("ComfyUI generation failed after retries") from last_exc
 
-    async def _poll_result(
-        self, prompt_id: str, prompt: str, size: str, n: int
-    ) -> list[GeneratedImage]:
+    async def _poll_result(self, prompt_id: str, prompt: str, size: str, n: int) -> list[GeneratedImage]:
         """履歴をポーリングして生成画像を取得（最大 60 回 × 3s = 180s）。"""
         for _ in range(60):
             await asyncio.sleep(3)

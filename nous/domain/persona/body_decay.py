@@ -16,6 +16,7 @@ def _extract_body_dict(state: PersonaState) -> dict[str, float | None]:
     """Extract numeric body fields from PersonaState."""
     return {k: getattr(state, k, None) for k in ("fatigue", "warmth", "arousal", "heart_rate", "pain")}
 
+
 # 身体状態の減衰設定: decay_hours で目標値へ半減
 # fatigue: 休息で徐々に回復 (0.0 へ)
 # warmth: 常温へ (0.5 へ)

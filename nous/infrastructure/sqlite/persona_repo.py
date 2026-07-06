@@ -247,9 +247,7 @@ class SQLitePersonaRepository(PersonaRepository):
             logger.error("Failed to add body state record for '%s': %s", persona, e)
             return Failure(RepositoryError(str(e)))
 
-    def get_body_state_history(
-        self, persona: str, limit: int = 20
-    ) -> Result[list[BodyStateRecord], RepositoryError]:
+    def get_body_state_history(self, persona: str, limit: int = 20) -> Result[list[BodyStateRecord], RepositoryError]:
         """Get recent body state history records (latest first)."""
         try:
             rows = self._db.execute(

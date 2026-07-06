@@ -43,13 +43,16 @@
 - **依存**: なし
 - **担当**: @fixer
 
-### TB03: PortraitGenerationService [中]
-- [ ] `nous/application/portrait/service.py` 新設
-- [ ] `generate(scene?)` → PromptBuilder → ComfyUI → base64画像
-- [ ] レート制限 + プロンプトhashキャッシュ (TTL 5分)
-- [ ] 生成失敗時のフォールバック (感情カラーアイコン)
-- [ ] テスト
-- **依存**: TB01, TB02, TB05
+### ✅ TB03: PortraitGenerationService [中] ✅
+- [x] `nous/application/portrait/service.py` 新設
+- [x] `generate(scene?)` → PromptBuilder → ComfyUI → base64画像
+- [x] プロンプトhashキャッシュ (TTL 5分)
+- [x] 生成失敗時のフォールバック (感情カラーアイコン)
+- [x] 予算管理 (generate_count × max_monthly_budget)
+- [x] `should_auto_generate()` — emotion_threshold + interval + budget チェック
+- [x] `health_check()` — provider 委譲
+- [x] テスト (provider mock, キャッシュ, フォールバック, budget, auto_generate)
+- **依存**: TB01 ✅, TB02 ✅, TB05 ✅
 - **担当**: @fixer
 
 ### TB04: MCP ツール `persona_portrait` [小]

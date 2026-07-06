@@ -55,15 +55,19 @@ class TestBodyStateTableSchema:
     """Verify the body_state_history table exists and has correct columns."""
 
     def test_table_exists(self, sqlite_conn):
-        rows = sqlite_conn.get_memory_db().execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='body_state_history'"
-        ).fetchall()
+        rows = (
+            sqlite_conn.get_memory_db()
+            .execute("SELECT name FROM sqlite_master WHERE type='table' AND name='body_state_history'")
+            .fetchall()
+        )
         assert len(rows) == 1
 
     def test_index_exists(self, sqlite_conn):
-        rows = sqlite_conn.get_memory_db().execute(
-            "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_body_state_history_persona'"
-        ).fetchall()
+        rows = (
+            sqlite_conn.get_memory_db()
+            .execute("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_body_state_history_persona'")
+            .fetchall()
+        )
         assert len(rows) == 1
 
     def test_columns(self, sqlite_conn):
@@ -316,7 +320,9 @@ class TestBodyStateHistoryInContext:
 
         state = PersonaState(persona=PERSONA, fatigue=0.5, warmth=0.5)
         history = [
-            BodyStateRecord(fatigue=0.8, warmth=0.7, context="before_body_decay", timestamp=get_now() - timedelta(hours=24)),
+            BodyStateRecord(
+                fatigue=0.8, warmth=0.7, context="before_body_decay", timestamp=get_now() - timedelta(hours=24)
+            ),
             BodyStateRecord(fatigue=0.5, warmth=0.5, context="after_body_decay", timestamp=get_now()),
         ]
         result = _format_lightweight_response(

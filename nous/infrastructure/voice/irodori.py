@@ -61,14 +61,10 @@ class IrodoriEngine(VoiceEngine):
                 if attempt < _MAX_RETRIES - 1:
                     await asyncio.sleep(1)
                     continue
-                raise RuntimeError(
-                    f"Irodori TTS failed after {_MAX_RETRIES} attempts"
-                ) from last_exception
+                raise RuntimeError(f"Irodori TTS failed after {_MAX_RETRIES} attempts") from last_exception
             except httpx.HTTPStatusError as e:
                 # HTTP エラーはリトライしない
-                raise RuntimeError(
-                    f"Irodori TTS returned HTTP {e.response.status_code}: {e.response.text}"
-                ) from e
+                raise RuntimeError(f"Irodori TTS returned HTTP {e.response.status_code}: {e.response.text}") from e
 
         # ここには到達しない (上で必ず return か raise)
         raise RuntimeError("Unexpected state in IrodoriEngine.synthesize")  # pragma: no cover

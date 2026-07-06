@@ -148,9 +148,17 @@ class TestEmotionEmoji:
         from nous.infrastructure.voice.emotion import EMOTION_EMOJI
 
         expected_keys = {
-            "neutral", "joy", "sadness", "anger", "fear",
-            "surprise", "disgust", "excitement", "love",
-            "curiosity", "anticipation",
+            "neutral",
+            "joy",
+            "sadness",
+            "anger",
+            "fear",
+            "surprise",
+            "disgust",
+            "excitement",
+            "love",
+            "curiosity",
+            "anticipation",
         }
         assert set(EMOTION_EMOJI.keys()) == expected_keys
 
@@ -265,10 +273,12 @@ class TestIrodoriEngine:
             mock_client = MagicMock()
             success_resp = MagicMock(status_code=200, content=b"success_wav")
             success_resp.raise_for_status = MagicMock()
-            mock_client.post = AsyncMock(side_effect=[
-                httpx.ConnectError("fail"),
-                success_resp,
-            ])
+            mock_client.post = AsyncMock(
+                side_effect=[
+                    httpx.ConnectError("fail"),
+                    success_resp,
+                ]
+            )
             mock_cls.return_value.__aenter__.return_value = mock_client
 
             engine = self._make_irodori(config)

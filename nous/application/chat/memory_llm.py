@@ -504,14 +504,17 @@ async def run_context_housekeeping(ctx: AppContext, config: ChatConfig) -> dict:
     except Exception as _e:
         logger.debug("Housekeeping: failed to load inventory: %s", _e)
 
-    goals_str = "\n".join(
-        f"  - key={g['key']}: {g['content']} (importance={g.get('importance', 0.5):.2f})"
-        for g in goals_list
-    ) or "(なし)"
-    promises_str = "\n".join(
-        f"  - key={p['key']}: {p['content']} (importance={p.get('importance', 0.5):.2f})"
-        for p in interpersonal_list
-    ) or "(なし)"
+    goals_str = (
+        "\n".join(f"  - key={g['key']}: {g['content']} (importance={g.get('importance', 0.5):.2f})" for g in goals_list)
+        or "(なし)"
+    )
+    promises_str = (
+        "\n".join(
+            f"  - key={p['key']}: {p['content']} (importance={p.get('importance', 0.5):.2f})"
+            for p in interpersonal_list
+        )
+        or "(なし)"
+    )
     inventory_str = "\n".join(inv_lines) or "(なし)"
 
     prompt = _HOUSEKEEPING_PROMPT.format(

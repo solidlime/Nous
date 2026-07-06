@@ -154,9 +154,7 @@ class TestHousekeepingCriticalProtection:
             result = await run_context_housekeeping(mock_ctx, mock_config)
 
         assert isinstance(result, dict)
-        assert "goal_normal" in result.get("cancelled_goals", []), (
-            f"Low-importance goal was not cancelled: {result}"
-        )
+        assert "goal_normal" in result.get("cancelled_goals", []), f"Low-importance goal was not cancelled: {result}"
 
     @pytest.mark.asyncio
     async def test_housekeeping_skips_critical_interpersonal_goal(self):

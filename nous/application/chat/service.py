@@ -112,7 +112,9 @@ class ChatService:
 
             # Collect and stream LLM response
             full_response = ""
-            async for event in InferenceStep().run(ctx, config, messages, turn_ctx, registry, effective_temp=effective_temp):
+            async for event in InferenceStep().run(
+                ctx, config, messages, turn_ctx, registry, effective_temp=effective_temp
+            ):
                 yield event.to_sse()
                 # Collect text deltas for chat.llm_response event
                 from nous.application.chat.events import TextDeltaSSE

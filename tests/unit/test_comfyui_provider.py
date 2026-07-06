@@ -146,9 +146,7 @@ async def test_generate_retries_on_connection_error():
         img_resp.status_code = 200
         img_resp.content = b"fake_png_data"
 
-        mock_client.post = AsyncMock(
-            side_effect=[httpx.ConnectError("fail"), httpx.ConnectError("fail"), post_resp]
-        )
+        mock_client.post = AsyncMock(side_effect=[httpx.ConnectError("fail"), httpx.ConnectError("fail"), post_resp])
         mock_client.get = AsyncMock(side_effect=[completed_hist, img_resp])
         mock_client_class.return_value = mock_client
 
@@ -201,8 +199,10 @@ async def test_generate_times_out_after_180s():
 
         provider = ComfyUIProvider(api_url="http://localhost:8188")
 
-        with patch("asyncio.sleep", new=AsyncMock(return_value=None)), \
-             pytest.raises(RuntimeError, match="ComfyUI generation timed out"):
+        with (
+            patch("asyncio.sleep", new=AsyncMock(return_value=None)),
+            pytest.raises(RuntimeError, match="ComfyUI generation timed out"),
+        ):
             await provider.generate(prompt="test", n=1)
 
 

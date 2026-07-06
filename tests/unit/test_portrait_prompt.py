@@ -150,9 +150,7 @@ class TestPortraitPromptBuilder:
         for emotion, expected_adj in _EMOTION_ADJECTIVES.items():
             persona = self._make_persona(emotion=emotion)
             prompt, _ = PortraitPromptBuilder.build(persona=persona)
-            assert f"{expected_adj} expression" in prompt, (
-                f"emotion={emotion!r} expected adj={expected_adj!r}"
-            )
+            assert f"{expected_adj} expression" in prompt, f"emotion={emotion!r} expected adj={expected_adj!r}"
 
     def test_unknown_emotion_falls_back_to_calm(self) -> None:
         """Unknown emotion string uses 'calm' as fallback."""

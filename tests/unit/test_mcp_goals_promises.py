@@ -278,9 +278,7 @@ class TestGoalManage:
     async def test_list_goals_self(self, registered_tools):
         """Listing self goals should query with tags=['goal','active']."""
         tools, ctx, _ = registered_tools
-        ctx.memory_service.get_by_tags.return_value = Success(
-            [_mem("g1", content="goal 1", tags=["goal", "active"])]
-        )
+        ctx.memory_service.get_by_tags.return_value = Success([_mem("g1", content="goal 1", tags=["goal", "active"])])
         goal_manage = tools["goal_manage"]
         result = await goal_manage(operation="list", scope="self")
 
