@@ -6,6 +6,13 @@
 - 21 tests pass for body_state_history module
 - 1296 total passing, 7 skipped, ruff 0 errors
 
+## TA04: dynamic_temperature WebUI 設定 (2026-07-06)
+- `chat.py` HTML テンプレート: Temperatureスライダー直後に「動的温度調整」セクション追加 (toggle + scale slider + top_p slider)
+- `chat.js`: applyChatConfig/saveChatConfig に新フィールド3件追加、dynamic_temperature 連動で scale slider の disabled 制御
+- `routers/chat.py` の save_chat_config: field_name リストに "dynamic_temperature", "emotion_temperature_scale", "top_p" 追加
+- デザイナーが HTML/JS を担当、オーケストレータがルーター修正 + テスト検証
+- 1518 passed / 7 skipped / 0 failed, ruff 0 errors
+
 ## TA03: dynamic_temperature pipeline 統合 (2026-07-01)
 - `InferenceStep.run()` に `effective_temp: float | None = None` パラメータ追加
 - オーケストレータ (`ChatService.chat()`) が `config.dynamic_temperature=True` 時のみ `EmotionDrivenSampler.compute()` で実効温度を事前計算
