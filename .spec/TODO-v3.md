@@ -177,14 +177,14 @@
 - **担当**: @fixer
 
 ### TE02: VoiceEngine 抽象 + Irodori 実装 + 感情変換 [中]
-- [ ] TE02a: `nous/infrastructure/voice/base.py` — VoiceEngine ABC
-- [ ] TE02b: `nous/infrastructure/voice/irodori.py` — OpenAI SDK で `/v1/audio/speech`
-- [ ] TE02c: `nous/infrastructure/voice/emotion.py` — **`build_caption(persona) → str`**: context_note + 口調 + 感情 を自然言語 caption に変換。固定マッピングではなくコンテキスト駆動
-- [ ] TE02d: テキストへの絵文字注入 (joy→😊, anger→😠, 等)
-- [ ] TE02e: `nous/infrastructure/voice/factory.py`
-- [ ] TE02f: 漢字→ひらがな前処理 (`pyopenjtalk` 依存追加)
-- [ ] TE02g: チャンク分割 (100文字区切り)
-- [ ] TE02h: テスト
+- [x] TE02a: `nous/infrastructure/voice/base.py` — VoiceEngine ABC
+- [x] TE02b: `nous/infrastructure/voice/irodori.py` — OpenAI SDK で `/v1/audio/speech`
+- [x] TE02c: `nous/infrastructure/voice/emotion.py` — **`build_caption(persona) → str`**: context_note + 口調 + 感情 を自然言語 caption に変換。固定マッピングではなくコンテキスト駆動
+- [x] TE02d: テキストへの絵文字注入 (joy→😊, anger→😠, 等)
+- [x] TE02e: `nous/infrastructure/voice/factory.py`
+- [ ] TE02f: 漢字→ひらがな前処理 (`pyopenjtalk` 依存追加) ← スキップ (TE02)
+- [ ] TE02g: チャンク分割 (100文字区切り) ← スキップ (TE02)
+- [x] TE02h: テスト (26 tests)
 - **依存**: TE01
 - **担当**: @fixer
 

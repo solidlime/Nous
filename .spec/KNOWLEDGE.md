@@ -142,3 +142,13 @@
 - 両方とも **GPU 必須の重いワークロード** → Nous 本体 (CPU only でOK) とは別マシン推奨
 - Nous 側は HTTP URL 設定 (`comfyui_url`, `irodori_url`) だけで接続。非起動時は機能をフォールバック（エラー停止しない）
 - Synology NAS (24GB RAM) に Irodori-TTS は **非推奨**: GPU がないため CPU 推論のみになり、Flow Matching (32-step DiT) で 20秒音声に1分以上。チャット対話には非実用的。軽量 TTS が欲しいなら VOICEVOX (CPU, リアルタイム) が現実的
+
+## TE02: VoiceEngine 抽象 + IrodoriTTS 実装 (2026-07-06)
+- `nous/infrastructure/voice/` 新設: `base.py` (ABC), `irodori.py` (httpx), `emotion.py` (caption + emoji), `factory.py`
+- `IrodoriEngine`: POST `{url}/audio/speech` に OpenAI互換ペイロード、emotion→speedマッピング、接続エラー時2回リトライ
+- `build_caption()`: `getattr(persona, "context_note", None)` で将来の PersonaState 拡張に追従可能な柔軟設計
+- `EMOTION_EMOJI`: 11感情分の定数マッピング定義
+- `get_voice_engine()`: `IrodoriConfig.enabled` が False の場合は None を返す
+- httpx.AsyncClient モック: `mock_cls.return_value.__aenter__.return_value = mock_client` が必要（async context manager）
+- テスト26件: 全pass / ruff 0 errors
+- TE02f (漢字→ひらがな), TE02g (チャンク分割) はスキップ
