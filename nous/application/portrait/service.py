@@ -14,6 +14,7 @@ from nous.infrastructure.image_gen.base import ImageGenConfig
 from nous.infrastructure.image_gen.factory import get_image_gen_provider
 
 if TYPE_CHECKING:
+    from nous.application.event_bus import EventBus
     from nous.config.settings import PortraitGenerationConfig
     from nous.domain.persona.entities import PersonaState
     from nous.infrastructure.image_gen.base import GeneratedImage
@@ -45,8 +46,9 @@ class PortraitGenerationService:
     - Enforce monthly budget cap for cloud providers.
     """
 
-    def __init__(self, config: PortraitGenerationConfig) -> None:
+    def __init__(self, config: PortraitGenerationConfig, event_bus: EventBus | None = None) -> None:
         self._config = config
+        self._event_bus = event_bus
 
         # Convert PortraitGenerationConfig → ImageGenConfig so the factory
         # can build the right provider.
@@ -140,11 +142,21 @@ class PortraitGenerationService:
         self._generate_count += 1
         self._last_generate_time = time.monotonic()
 
-        return {
+        result = {
             "image_base64": image_b64,
             "prompt": prompt,
             "negative_prompt": negative_prompt,
         }
+
+        # ── 6. Publish event ──────────────────────────────────────────
+        if self._event_bus is not None:
+            await self._event_bus.publish("portrait.generated", {
+                "persona": persona.persona,
+                "emotion": persona.emotion,
+                "image_base64": result["image_base64"],
+            })
+
+        return result
 
     async def should_auto_generate(self, persona: PersonaState) -> bool:
         """Check whether auto-generation should trigger for this state.

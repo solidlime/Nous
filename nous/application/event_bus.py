@@ -23,6 +23,9 @@ CHAT_LLM_RESPONSE = "chat.llm_response"
 SESSION_STARTED = "session.started"
 SESSION_COMPACT = "session.compact"
 
+# Portrait generation
+PORTRAIT_GENERATED = "portrait.generated"
+
 
 class EventBus:
     """イベント購読・発行基盤。pub/subパターン。

@@ -29,6 +29,7 @@ from nous.api.mcp._tools_helpers import (  # noqa: E402, F401
     _format_state_diff,
     _parse_days_from_relative,
 )
+from nous.api.mcp._tools_irodori import _tool_irodori_tts  # noqa: E402, F401
 from nous.api.mcp._tools_item import (  # noqa: E402, F401
     _tool_item,
 )
@@ -41,6 +42,7 @@ from nous.api.mcp._tools_memory import (  # noqa: E402, F401
     _tool_memory_update,
 )
 from nous.api.mcp._tools_persona import _tool_get_context, _tool_update_context  # noqa: E402, F401
+from nous.api.mcp._tools_portrait import _tool_persona_portrait  # noqa: E402, F401
 from nous.api.mcp._tools_sandbox import (  # noqa: E402, F401
     _tool_sandbox_context,
     _tool_sandbox_execute,
@@ -69,6 +71,8 @@ TOOL_DISPATCH: dict[str, Any] = {
     "sandbox_context": _tool_sandbox_context,
     "goal_manage": _tool_goal_manage,
     "invoke_skill": _tool_invoke_skill,
+    "persona_portrait": _tool_persona_portrait,
+    "irodori_tts": _tool_irodori_tts,
 }
 
 
@@ -396,6 +400,23 @@ def register_tools(mcp: FastMCP) -> None:
         if r.get("ok"):
             return r.get("result", "(no response)")
         return f"Error: {r.get('error', 'unknown')}"
+
+    # persona_portrait
+    @_tool("persona_portrait")
+    async def persona_portrait() -> str:
+        """Generate a portrait image for the current persona.
+        Uses the configured image provider (ComfyUI / DALL-E / Stability).
+        Returns base64-encoded image + prompt metadata,
+        or fallback emoji when the provider is unavailable."""
+        p = _resolve_persona()
+        return await _tool_persona_portrait(AppContextRegistry.get(p), p)
+
+    # irodori_tts
+    @_tool("irodori_tts")
+    async def irodori_tts(text: str, voice: str | None = None) -> str:
+        """Generate TTS audio using Irodori. text: Japanese text to speak. voice: speaker name override."""
+        p = _resolve_persona()
+        return await _tool_irodori_tts(AppContextRegistry.get(p), p, text=text, voice=voice)
 
     # ── Chat builtin tool wrappers (delegate to builtin.py handlers) ──
 
