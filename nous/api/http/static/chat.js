@@ -120,6 +120,9 @@ function applyChatConfig(cfg) {
     set('chat-base-url', cfg.base_url || '');
 
     set('chat-temperature', cfg.temperature != null ? cfg.temperature : 0.7);
+    setChecked('chat-dynamic-temperature', cfg.dynamic_temperature !== false);
+    set('chat-emotion-temperature-scale', cfg.emotion_temperature_scale != null ? cfg.emotion_temperature_scale : 0.2);
+    set('chat-top-p', cfg.top_p != null ? cfg.top_p : '');
     set('chat-max-tokens', cfg.max_tokens || 2048);
     set('chat-max-tool-calls', cfg.max_tool_calls || 5);
     set('chat-system-prompt', cfg.system_prompt || '');
@@ -132,6 +135,22 @@ function applyChatConfig(cfg) {
     const tempSlider = document.getElementById('chat-temperature');
     if (tempEl && tempSlider) {
         tempEl.textContent = parseFloat(tempSlider.value).toFixed(2);
+    }
+    // Dynamic temperature control
+    const dynTempCb = document.getElementById('chat-dynamic-temperature');
+    const emotionScaleEl = document.getElementById('chat-emotion-temperature-scale');
+    if (dynTempCb && emotionScaleEl) {
+        emotionScaleEl.disabled = !dynTempCb.checked;
+        dynTempCb.addEventListener('change', function() {
+            emotionScaleEl.disabled = !this.checked;
+        });
+    }
+    // Top P display sync
+    const topPVal = document.getElementById('chat-top-p-val');
+    const topPSlider = document.getElementById('chat-top-p');
+    if (topPVal && topPSlider) {
+        var v = parseFloat(topPSlider.value);
+        topPVal.textContent = isNaN(v) ? '—' : v.toFixed(2);
     }
     onChatProviderChange();
     CHAT.mcpServers = cfg.mcp_servers || [];
@@ -241,6 +260,9 @@ async function saveChatConfig() {
         base_url: document.getElementById('chat-base-url').value.trim(),
 
         temperature: parseFloat(document.getElementById('chat-temperature').value),
+        dynamic_temperature: getChecked('chat-dynamic-temperature'),
+        emotion_temperature_scale: parseFloat(document.getElementById('chat-emotion-temperature-scale')?.value || '0.2'),
+        top_p: (function() { var v = parseFloat(document.getElementById('chat-top-p')?.value); return isNaN(v) ? null : v; })(),
         max_tokens: parseInt(document.getElementById('chat-max-tokens').value),
         max_stored_messages: parseInt(document.getElementById('chat-stored-msgs').value),
         context_max_tokens: (function() {

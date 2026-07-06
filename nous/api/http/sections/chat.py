@@ -182,6 +182,34 @@ def render_chat_tab() -> str:
                                         oninput="document.getElementById('chat-temp-val').textContent=parseFloat(this.value).toFixed(2)"
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
+                                <div style="border-top:1px solid var(--glass-border);padding-top:8px;margin-top:4px;">
+                                    <h4 style="font-size:0.82rem;font-weight:600;color:var(--text-secondary);margin:8px 0 4px;display:flex;align-items:center;gap:6px;"><i data-lucide="thermometer"></i> 動的温度調整</h4>
+                                    <div class="chat-config-row" style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+                                        <label class="chat-config-label" style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-secondary);cursor:pointer;">
+                                            <input type="checkbox" id="chat-dynamic-temperature" class="chat-config-checkbox" style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" checked
+                                                onchange="document.getElementById('chat-emotion-temperature-scale').disabled=!this.checked;" />
+                                            <span>動的温度調整を有効にする</span>
+                                        </label>
+                                    </div>
+                                    <div>
+                                        <div class="chat-field-label" style="display:flex;justify-content:space-between;">
+                                            <span>感情温度スケール</span>
+                                            <span id="chat-emotion-temp-scale-val" style="color:var(--accent-purple);">0.20</span>
+                                        </div>
+                                        <input type="range" id="chat-emotion-temperature-scale" class="chat-field-input" min="0" max="1" step="0.05" value="0.2"
+                                            oninput="document.getElementById('chat-emotion-temp-scale-val').textContent=parseFloat(this.value).toFixed(2)"
+                                            style="width:100%;accent-color:var(--accent-purple);" />
+                                    </div>
+                                    <div>
+                                        <div class="chat-field-label" style="display:flex;justify-content:space-between;">
+                                            <span>Top P</span>
+                                            <span id="chat-top-p-val" style="color:var(--accent-purple);">1.00</span>
+                                        </div>
+                                        <input type="range" id="chat-top-p" class="chat-field-input" min="0" max="1" step="0.05" value=""
+                                            oninput="var v=parseFloat(this.value);document.getElementById('chat-top-p-val').textContent=isNaN(v)?'—':v.toFixed(2)"
+                                            style="width:100%;accent-color:var(--accent-purple);" />
+                                    </div>
+                                </div>
                                 <div>
                                     <div class="chat-field-label">Max Tokens</div>
                                     <input type="number" id="chat-max-tokens" class="chat-field-input" min="1" max="32768" value="2048" />
