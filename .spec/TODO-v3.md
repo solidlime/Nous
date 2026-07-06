@@ -2,18 +2,18 @@
 
 ## Phase A: Dynamic Temperature (P0)
 
-### TA01: EmotionDrivenSampler ドメイン層 [小]
-- [ ] TA01a: `nous/domain/sampling.py` 新設 — `EmotionDrivenSampler.compute(base_temp, emotion, intensity) -> float`
-- [ ] TA01b: 感情別モディファイア辞書 + intensity スケール + clamp [0.1, 1.8]
-- [ ] TA01c: ユニットテスト (全感情カバー, edge: intensity=0, intensity=1)
+### TA01: EmotionDrivenSampler ドメイン層 [小] ✅
+- [x] TA01a: `nous/domain/sampling.py` 新設 — `EmotionDrivenSampler.compute(base_temp, emotion, intensity) -> float`
+- [x] TA01b: 感情別モディファイア辞書 + intensity スケール + clamp [0.1, 1.8]
+- [x] TA01c: ユニットテスト (全感情カバー, edge: intensity=0, intensity=1)
 - **依存**: なし
 - **担当**: @fixer
 
-### TA02: ChatConfig 拡張 [極小]
-- [ ] TA02a: `nous/domain/chat_config.py` に `dynamic_temperature: bool = True`, `emotion_temperature_scale: float = 0.2`, `top_p: float | None = None` 追加
-- [ ] TA02b: DB マイグレーション (v028_dynamic_temp) — ALTER TABLE chat_settings
-- [ ] TA02c: `LLMProvider.stream()` に top_p パラメータ追加 → Anthropic/OpenAI provider に伝搬
-- [ ] TA02d: テスト更新
+### TA02: ChatConfig 拡張 [極小] ✅
+- [x] TA02a: `nous/domain/chat_config.py` に `dynamic_temperature: bool = True`, `emotion_temperature_scale: float = 0.2`, `top_p: float | None = None` 追加
+- [x] TA02b: DB マイグレーション (v032_dynamic_temp) — ALTER TABLE chat_settings
+- [x] TA02c: `LLMProvider.stream()` に top_p パラメータ追加 → Anthropic/OpenAI provider に伝搬
+- [x] TA02d: テスト更新
 - **依存**: なし (TA01 と並列可)
 - **担当**: @fixer
 
@@ -24,10 +24,10 @@
 - **依存**: TA01, TA02
 - **担当**: @fixer (設計レビュー: @oracle)
 
-### TA04: WebUI 設定追加 [極小]
-- [ ] TA04a: `nous/api/http/static/settings.js` — Chat 設定パネルに Dynamic Temperature toggle + scale slider + top_p slider
-- [ ] TA04b: `nous/api/http/sections/chat.py` — 設定保存エンドポイントに新フィールド追加
-- [ ] TA04c: 動作確認
+### TA04: WebUI 設定追加 [極小] ✅
+- [x] TA04a: `nous/api/http/static/chat.js` + `nous/api/http/sections/chat.py` — Chat 設定パネルに Dynamic Temperature toggle + scale slider + top_p slider
+- [x] TA04b: `nous/api/http/routers/chat.py` — 設定保存エンドポイントに新フィールド追加
+- [x] TA04c: 動作確認 (ruff check 通過, 関連テスト133件通過)
 - **依存**: TA01-TA03
 - **担当**: @designer
 

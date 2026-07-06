@@ -87,6 +87,9 @@ def register_chat_routes(mcp) -> None:
             "image_gen_stability_url",
             "enable_memory_tools",
             "debug_mode",
+            "dynamic_temperature",
+            "emotion_temperature_scale",
+            "top_p",
         ):
             if field_name in body:
                 update_data[field_name] = body[field_name]
