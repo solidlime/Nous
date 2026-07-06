@@ -1,5 +1,38 @@
 # MEMORY
 
+## Group 3+4: MCP tools + REST + WebUI for portrait & TTS (2026-07-07)
+
+### TB04: MCP tool persona_portrait
+- `nous/api/mcp/_tools_portrait.py` 新規: `_tool_persona_portrait(ctx, persona)` → PersonaState取得 → PortraitGenerationService.generate()
+- `tools.py`: import + TOOL_DISPATCH + ラッパー追加（既存パターン準拠: `_resolve_persona()` → `AppContextRegistry.get(p)` → コア関数）
+
+### TE03: MCP tool irodori_tts
+- `nous/api/mcp/_tools_irodori.py` 新規: `_tool_irodori_tts(ctx, persona, text, voice?)` → IrodoriEngine.synthesize() → base64返却
+- voice パラメータで話者上書き対応（`IrodoriEngine(config, voice=voice)` で再生成が必要な場合あり）
+- engine健康チェック後に合成、失敗時エラー返却
+
+### TB08: SSE portrait.generated event
+- `event_bus.py` に `PORTRAIT_GENERATED = "portrait.generated"` 定数追加
+- `events.py` の `_ALL_EVENT_TYPES` に追加 → SSEクライアントが `topics=portrait` で購読可能
+- `PortraitGenerationService.__init__()` に `event_bus` オプションパラメータ追加 → generate()成功時に `event_bus.publish("portrait.generated", {...})`
+
+### TB07: WebUI ペルソナポートレート表示 + REST
+- `routers/portrait.py` 新規: `GET /api/portrait/{persona}` → PortraitGenerationService.generate() 結果をJSON返却
+- `chat.py` HTML: `#chat-main` 上部に丸形ポートレートエリア追加
+- `chat.js`: ページロード時GET、SSE `portrait.generated` 受信でimg更新、クリックでmediaViewer表示
+- `base.js`: SSE接続に `portrait` トピック追加 → `portrait.generated` をカスタムイベントでchat.jsに伝播
+- `chat.css`: 丸形avatar + emotionカラーボーダー + シャドウスタイル追加
+
+### TE04: WebUI 音声再生ボタン + REST
+- `routers/tts.py` 新規: `POST /api/tts/{persona}` → body `{"text": "..."}` → IrodoriEngine.synthesize() → base64 WAV返却
+- `chat.js`: アシスタントメッセージのアクション領域にspeaker icon追加、クリック→API→Audio再生
+- 再生中はスピナー+`playing`クラス、エラーは静かに失敗
+
+### 注意点
+- chat.js 全体がシングルクォート→ダブルクォートにリフォーマットされた（designer変更）
+- テスト `test_chat_js_supports_terminal_history_and_scoped_execute_endpoint` の期待文字列もダブルクォートに修正必要
+- `__init__.py` と `routes.py` は複数fixerで同時編集されてもコンフリクトなし（行追加のみため）
+
 ## T11: body_state_history complete (2026-07-01)
 - Implementation was already in place (table, repo methods, service, body_decay recording, context display, tests)
 - Fixed 3 ruff errors: removed unused imports (`BodyStateRecord` in `_tools_helpers.py`, `compute_body_state_decay` in test), removed unused variable
@@ -85,6 +118,9 @@ Nous: 日本語特化の永続記憶 MCP サーバー。SQLite + Qdrant + Ebbing
 - 12 tests + 1 factory test = 22 total for image_gen module
 
 ## プロジェクトの現在の状態
-- 全ユニットテスト通過（image_gen: 22 passed）
+- 全ユニットテスト通過: 1432 passed / 7 skipped
+- MCP tools: 17個（persona_portrait + irodori_tts 新規追加）
+- REST endpoints: portrait + tts 新規追加
+- SSE events: portrait.generated 新規追加
 - pytest-benchmark 未インストール（7 skipped の原因）
 - ruff check 0 errors 維持
