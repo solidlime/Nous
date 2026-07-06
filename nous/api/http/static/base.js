@@ -2,404 +2,616 @@
    STATE
    ================================================================= */
 const S = {
-    persona: null,
-    tab: localStorage.getItem('mmcp-tab') || 'overview',
-    refreshTimer: null,
-    charts: {},
-    mem: { page: 1, tag: '', q: '', perPage: 20 },
-    statusPoll: null,
-    dashCache: null,
-    initTime: Date.now()
+  persona: null,
+  tab: localStorage.getItem("mmcp-tab") || "overview",
+  refreshTimer: null,
+  charts: {},
+  mem: { page: 1, tag: "", q: "", perPage: 20 },
+  statusPoll: null,
+  dashCache: null,
+  initTime: Date.now(),
 };
 
-const CHART_COLORS = ['#a78bfa','#f472b6','#60a5fa','#34d399','#fbbf24','#fb923c','#f87171','#2dd4bf','#a3e635','#e879f9'];
+const CHART_COLORS = [
+  "#a78bfa",
+  "#f472b6",
+  "#60a5fa",
+  "#34d399",
+  "#fbbf24",
+  "#fb923c",
+  "#f87171",
+  "#2dd4bf",
+  "#a3e635",
+  "#e879f9",
+];
 const EMOTION_COLORS = {
-    joy:'#fbbf24', sadness:'#60a5fa', anger:'#f87171', fear:'#a78bfa',
-    surprise:'#fb923c', disgust:'#6ee7b7', love:'#ec4899', neutral:'#94a3b8',
-    anticipation:'#F59E0B', trust:'#10B981', anxiety:'#8B5CF6', excitement:'#EC4899',
-    frustration:'#DC2626', nostalgia:'#92400E', pride:'#F97316', shame:'#BE185D',
-    guilt:'#78350F', loneliness:'#1E3A5F', contentment:'#065F46', curiosity:'#0891B2',
-    awe:'#5B21B6', relief:'#34D399',
-    happiness:'#fbbf24', calm:'#2dd4bf'
+  joy: "#fbbf24",
+  sadness: "#60a5fa",
+  anger: "#f87171",
+  fear: "#a78bfa",
+  surprise: "#fb923c",
+  disgust: "#6ee7b7",
+  love: "#ec4899",
+  neutral: "#94a3b8",
+  anticipation: "#F59E0B",
+  trust: "#10B981",
+  anxiety: "#8B5CF6",
+  excitement: "#EC4899",
+  frustration: "#DC2626",
+  nostalgia: "#92400E",
+  pride: "#F97316",
+  shame: "#BE185D",
+  guilt: "#78350F",
+  loneliness: "#1E3A5F",
+  contentment: "#065F46",
+  curiosity: "#0891B2",
+  awe: "#5B21B6",
+  relief: "#34D399",
+  happiness: "#fbbf24",
+  calm: "#2dd4bf",
 };
 
 const EMOTION_BAR_COLORS = {
-    joy: 'linear-gradient(90deg,#fbbf24,#fcd34d)',
-    sadness: 'linear-gradient(90deg,#60a5fa,#93c5fd)',
-    anger: 'linear-gradient(90deg,#ef4444,#fca5a5)',
-    fear: 'linear-gradient(90deg,#a855f7,#c4b5fd)',
-    disgust: 'linear-gradient(90deg,#22c55e,#86efac)',
-    surprise: 'linear-gradient(90deg,#ec4899,#f9a8d4)',
-    love: 'linear-gradient(90deg,#fb7185,#fda4af)',
-    trust: 'linear-gradient(90deg,#14b8a6,#5eead4)',
-    anticipation: 'linear-gradient(90deg,#f97316,#fdba74)',
-    curiosity: 'linear-gradient(90deg,#6366f1,#a5b4fc)',
-    neutral: 'linear-gradient(90deg,#9ca3af,#d1d5db)',
-    excitement: 'linear-gradient(90deg,#f59e0b,#fbbf24)',
-    pride: 'linear-gradient(90deg,#818cf8,#a5b4fc)',
-    shame: 'linear-gradient(90deg,#fb7185,#fda4af)',
-    nostalgia: 'linear-gradient(90deg,#a78bfa,#c4b5fd)',
-    anxiety: 'linear-gradient(90deg,#f87171,#fca5a5)',
-    contentment: 'linear-gradient(90deg,#86efac,#bbf7d0)',
-    frustration: 'linear-gradient(90deg,#fb923c,#fdba74)',
-    loneliness: 'linear-gradient(90deg,#94a3b8,#cbd5e1)',
-    awe: 'linear-gradient(90deg,#c084fc,#e9d5ff)',
-    relief: 'linear-gradient(90deg,#6ee7b7,#a7f3d0)'
+  joy: "linear-gradient(90deg,#fbbf24,#fcd34d)",
+  sadness: "linear-gradient(90deg,#60a5fa,#93c5fd)",
+  anger: "linear-gradient(90deg,#ef4444,#fca5a5)",
+  fear: "linear-gradient(90deg,#a855f7,#c4b5fd)",
+  disgust: "linear-gradient(90deg,#22c55e,#86efac)",
+  surprise: "linear-gradient(90deg,#ec4899,#f9a8d4)",
+  love: "linear-gradient(90deg,#fb7185,#fda4af)",
+  trust: "linear-gradient(90deg,#14b8a6,#5eead4)",
+  anticipation: "linear-gradient(90deg,#f97316,#fdba74)",
+  curiosity: "linear-gradient(90deg,#6366f1,#a5b4fc)",
+  neutral: "linear-gradient(90deg,#9ca3af,#d1d5db)",
+  excitement: "linear-gradient(90deg,#f59e0b,#fbbf24)",
+  pride: "linear-gradient(90deg,#818cf8,#a5b4fc)",
+  shame: "linear-gradient(90deg,#fb7185,#fda4af)",
+  nostalgia: "linear-gradient(90deg,#a78bfa,#c4b5fd)",
+  anxiety: "linear-gradient(90deg,#f87171,#fca5a5)",
+  contentment: "linear-gradient(90deg,#86efac,#bbf7d0)",
+  frustration: "linear-gradient(90deg,#fb923c,#fdba74)",
+  loneliness: "linear-gradient(90deg,#94a3b8,#cbd5e1)",
+  awe: "linear-gradient(90deg,#c084fc,#e9d5ff)",
+  relief: "linear-gradient(90deg,#6ee7b7,#a7f3d0)",
 };
 
 const BODY_BAR_COLORS = {
-    fatigue: 'linear-gradient(90deg,#f87171,#fca5a5)',
-    warmth: 'linear-gradient(90deg,#f9a8d4,#fda4af)',
-    arousal: 'linear-gradient(90deg,#a78bfa,#c4b5fd)',
-    heart_rate: 'linear-gradient(90deg,#ef4444,#fca5a5)',
-    pain: 'linear-gradient(90deg,#f59e0b,#fcd34d)'
+  fatigue: "linear-gradient(90deg,#f87171,#fca5a5)",
+  warmth: "linear-gradient(90deg,#f9a8d4,#fda4af)",
+  arousal: "linear-gradient(90deg,#a78bfa,#c4b5fd)",
+  heart_rate: "linear-gradient(90deg,#ef4444,#fca5a5)",
+  pain: "linear-gradient(90deg,#f59e0b,#fcd34d)",
 };
 
 const BODY_LABELS = {
-    fatigue: '<i data-lucide="flame"></i> Fatigue',
-    warmth: '<i data-lucide="flower"></i> Warmth',
-    arousal: '<i data-lucide="zap"></i> Arousal',
-    heart_rate: '<i data-lucide="heart-pulse"></i> Heart',
-    pain: '<i data-lucide="activity"></i> Pain'
+  fatigue: '<i data-lucide="flame"></i> Fatigue',
+  warmth: '<i data-lucide="flower"></i> Warmth',
+  arousal: '<i data-lucide="zap"></i> Arousal',
+  heart_rate: '<i data-lucide="heart-pulse"></i> Heart',
+  pain: '<i data-lucide="activity"></i> Pain',
 };
 
 function renderBodyStateBars(bodyState) {
-    if (!bodyState) return '';
-    const keys = Object.keys(bodyState).filter(k => BODY_LABELS[k] && bodyState[k] != null);
-    if (keys.length === 0) return '';
-    let html = '<div class="mem-modal-row"><span class="mem-modal-key">Body</span><span style="display:flex;flex-direction:column;gap:6px;flex:1">';
-    keys.forEach(function(k) {
-        const val = bodyState[k];
-        const color = BODY_BAR_COLORS[k] || BODY_BAR_COLORS.fatigue;
-        const label = BODY_LABELS[k];
-        const pct = Math.round(val * 100);
-        html += '<div style="display:flex;align-items:center;gap:8px">';
-        html += '<span style="font-size:0.75rem;color:var(--text-muted);min-width:70px">' + label + '</span>';
-        html += '<div style="flex:1;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden">';
-        html += '<div style="height:100%;width:' + pct + '%;background:' + color + ';border-radius:3px"></div>';
-        html += '</div>';
-        html += '<span style="font-size:0.75rem;color:var(--text-muted);min-width:32px;text-align:right">' + pct + '%</span>';
-        html += '</div>';
-    });
-    html += '</span></div>';
-    return html;
+  if (!bodyState) return "";
+  const keys = Object.keys(bodyState).filter(
+    (k) => BODY_LABELS[k] && bodyState[k] != null,
+  );
+  if (keys.length === 0) return "";
+  let html =
+    '<div class="mem-modal-row"><span class="mem-modal-key">Body</span><span style="display:flex;flex-direction:column;gap:6px;flex:1">';
+  keys.forEach(function (k) {
+    const val = bodyState[k];
+    const color = BODY_BAR_COLORS[k] || BODY_BAR_COLORS.fatigue;
+    const label = BODY_LABELS[k];
+    const pct = Math.round(val * 100);
+    html += '<div style="display:flex;align-items:center;gap:8px">';
+    html +=
+      '<span style="font-size:0.75rem;color:var(--text-muted);min-width:70px">' +
+      label +
+      "</span>";
+    html +=
+      '<div style="flex:1;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden">';
+    html +=
+      '<div style="height:100%;width:' +
+      pct +
+      "%;background:" +
+      color +
+      ';border-radius:3px"></div>';
+    html += "</div>";
+    html +=
+      '<span style="font-size:0.75rem;color:var(--text-muted);min-width:32px;text-align:right">' +
+      pct +
+      "%</span>";
+    html += "</div>";
+  });
+  html += "</span></div>";
+  return html;
 }
 
 function renderEmotionBars(emotion, emotion_intensity) {
-    if (!emotion) return '';
-    const pct = Math.round((emotion_intensity || 0) * 100);
-    if (pct <= 0) return '';
-    const color = EMOTION_BAR_COLORS[emotion] || EMOTION_BAR_COLORS.neutral;
-    return '<div class="mem-modal-row"><span class="mem-modal-key">Emotion</span><span style="display:flex;flex-direction:column;gap:6px;flex:1">' +
-        '<div style="display:flex;align-items:center;gap:8px">' +
-        '<span style="font-size:0.75rem;color:var(--text-muted);min-width:70px;text-transform:capitalize">' + esc(emotion) + '</span>' +
-        '<div style="flex:1;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden">' +
-        '<div style="height:100%;width:' + pct + '%;background:' + color + ';border-radius:3px"></div>' +
-        '</div>' +
-        '<span style="font-size:0.75rem;color:var(--text-muted);min-width:32px;text-align:right">' + pct + '%</span>' +
-        '</div></span></div>';
+  if (!emotion) return "";
+  const pct = Math.round((emotion_intensity || 0) * 100);
+  if (pct <= 0) return "";
+  const color = EMOTION_BAR_COLORS[emotion] || EMOTION_BAR_COLORS.neutral;
+  return (
+    '<div class="mem-modal-row"><span class="mem-modal-key">Emotion</span><span style="display:flex;flex-direction:column;gap:6px;flex:1">' +
+    '<div style="display:flex;align-items:center;gap:8px">' +
+    '<span style="font-size:0.75rem;color:var(--text-muted);min-width:70px;text-transform:capitalize">' +
+    esc(emotion) +
+    "</span>" +
+    '<div style="flex:1;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden">' +
+    '<div style="height:100%;width:' +
+    pct +
+    "%;background:" +
+    color +
+    ';border-radius:3px"></div>' +
+    "</div>" +
+    '<span style="font-size:0.75rem;color:var(--text-muted);min-width:32px;text-align:right">' +
+    pct +
+    "%</span>" +
+    "</div></span></div>"
+  );
 }
 
 /* Compact emotion badges for list/card views */
 function renderEmotionBadges(emotion, emotion_intensity) {
-    if (!emotion) return '';
-    const pct = Math.round((emotion_intensity || 0) * 100);
-    const color = EMOTION_COLORS[emotion] || '#94a3b8';
-    return '<span style="font-size:0.65rem;display:inline-block;padding:1px 5px;border-radius:3px;background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;margin-right:3px">' + esc(emotion) + ' ' + pct + '%</span>';
+  if (!emotion) return "";
+  const pct = Math.round((emotion_intensity || 0) * 100);
+  const color = EMOTION_COLORS[emotion] || "#94a3b8";
+  return (
+    '<span style="font-size:0.65rem;display:inline-block;padding:1px 5px;border-radius:3px;background:' +
+    color +
+    "22;color:" +
+    color +
+    ";border:1px solid " +
+    color +
+    '44;margin-right:3px">' +
+    esc(emotion) +
+    " " +
+    pct +
+    "%</span>"
+  );
 }
 
 /* Compact body state indicator for list/card views - shows all 5 metrics */
 function renderBodyStateCompact(bodyState) {
-    if (!bodyState) return '';
-    const keys = Object.keys(bodyState).filter(function(k) { return BODY_LABELS[k] && bodyState[k] != null && bodyState[k] > 0; });
-    if (keys.length === 0) return '';
-    let html = '<span style="font-size:0.65rem;color:var(--text-muted)">';
-    keys.forEach(function(k) {
-        const val = bodyState[k];
-        const pct = Math.round(val * 100);
-        const emoji = BODY_LABELS[k].split(' ')[0];
-        html += emoji + pct + '% ';
-    });
-    html += '</span>';
-    return html;
+  if (!bodyState) return "";
+  const keys = Object.keys(bodyState).filter(function (k) {
+    return BODY_LABELS[k] && bodyState[k] != null && bodyState[k] > 0;
+  });
+  if (keys.length === 0) return "";
+  let html = '<span style="font-size:0.65rem;color:var(--text-muted)">';
+  keys.forEach(function (k) {
+    const val = bodyState[k];
+    const pct = Math.round(val * 100);
+    const emoji = BODY_LABELS[k].split(" ")[0];
+    html += emoji + pct + "% ";
+  });
+  html += "</span>";
+  return html;
 }
 
 /* =================================================================
    UTILITIES
    ================================================================= */
 function esc(s) {
-    if (!s) return '';
-    const d = document.createElement('div');
-    d.textContent = String(s);
-    return d.innerHTML.replace(/"/g, '&quot;');
+  if (!s) return "";
+  const d = document.createElement("div");
+  d.textContent = String(s);
+  return d.innerHTML.replace(/"/g, "&quot;");
 }
-function truncate(s, n) { return s && s.length > n ? s.slice(0, n) + '...' : (s || ''); }
+function truncate(s, n) {
+  return s && s.length > n ? s.slice(0, n) + "..." : s || "";
+}
 function relativeTime(iso) {
-    if (!iso) return '--';
-    const diff = Date.now() - new Date(iso).getTime();
-    if (diff < 0) return 'just now';
-    if (diff < 60000) return Math.floor(diff/1000) + 's ago';
-    if (diff < 3600000) return Math.floor(diff/60000) + 'm ago';
-    if (diff < 86400000) return Math.floor(diff/3600000) + 'h ago';
-    return Math.floor(diff/86400000) + 'd ago';
+  if (!iso) return "--";
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 0) return "just now";
+  if (diff < 60000) return Math.floor(diff / 1000) + "s ago";
+  if (diff < 3600000) return Math.floor(diff / 60000) + "m ago";
+  if (diff < 86400000) return Math.floor(diff / 3600000) + "h ago";
+  return Math.floor(diff / 86400000) + "d ago";
 }
 function fmtDate(iso) {
-    if (!iso) return '--';
-    return new Date(iso).toLocaleDateString('ja-JP', {month:'short', day:'numeric'});
+  if (!iso) return "--";
+  return new Date(iso).toLocaleDateString("ja-JP", {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 /* Persona storage helpers — write to both keys for backward compatibility */
 function getStoredPersona() {
-    return localStorage.getItem('mmcp-persona') || localStorage.getItem('selected_persona') || null;
+  return (
+    localStorage.getItem("mmcp-persona") ||
+    localStorage.getItem("selected_persona") ||
+    null
+  );
 }
 function setStoredPersona(persona) {
-    localStorage.setItem('mmcp-persona', persona);
-    localStorage.setItem('selected_persona', persona);
+  localStorage.setItem("mmcp-persona", persona);
+  localStorage.setItem("selected_persona", persona);
 }
 
 /* =================================================================
    TOAST NOTIFICATIONS
    ================================================================= */
-function toast(msg, type='info') {
-    const c = document.getElementById('toast-container');
-    const t = document.createElement('div');
-    t.className = 'toast toast-' + type;
-    t.textContent = msg;
-    c.appendChild(t);
-    setTimeout(() => t.remove(), 3200);
+function toast(msg, type = "info") {
+  const c = document.getElementById("toast-container");
+  const t = document.createElement("div");
+  t.className = "toast toast-" + type;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3200);
 }
 
 /* =================================================================
    GLASS CONFIRM / ALERT MODAL (23.6)
    ================================================================= */
 function showConfirm(message, onConfirm, onCancel) {
-    const overlay = document.createElement('div');
-    overlay.className = 'confirm-overlay';
-    overlay.innerHTML =
-        '<div class="confirm-modal">' +
-        '<h3>確認</h3>' +
-        '<p>' + esc(message).replace(/\n/g, '<br>') + '</p>' +
-        '<div class="confirm-modal-actions">' +
-        '<button class="glass-btn" id="confirm-cancel-btn">キャンセル</button>' +
-        '<button class="glass-btn glass-btn-danger" id="confirm-ok-btn">OK</button>' +
-        '</div></div>';
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('show'));
+  const overlay = document.createElement("div");
+  overlay.className = "confirm-overlay";
+  overlay.innerHTML =
+    '<div class="confirm-modal">' +
+    "<h3>確認</h3>" +
+    "<p>" +
+    esc(message).replace(/\n/g, "<br>") +
+    "</p>" +
+    '<div class="confirm-modal-actions">' +
+    '<button class="glass-btn" id="confirm-cancel-btn">キャンセル</button>' +
+    '<button class="glass-btn glass-btn-danger" id="confirm-ok-btn">OK</button>' +
+    "</div></div>";
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add("show"));
 
-    function cleanup() {
-        overlay.classList.remove('show');
-        setTimeout(() => overlay.remove(), 220);
+  function cleanup() {
+    overlay.classList.remove("show");
+    setTimeout(() => overlay.remove(), 220);
+  }
+  document.getElementById("confirm-ok-btn").onclick = function () {
+    cleanup();
+    if (onConfirm) onConfirm();
+  };
+  document.getElementById("confirm-cancel-btn").onclick = function () {
+    cleanup();
+    if (onCancel) onCancel();
+  };
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay) {
+      cleanup();
+      if (onCancel) onCancel();
     }
-    document.getElementById('confirm-ok-btn').onclick = function() { cleanup(); if (onConfirm) onConfirm(); };
-    document.getElementById('confirm-cancel-btn').onclick = function() { cleanup(); if (onCancel) onCancel(); };
-    overlay.addEventListener('click', function(e) { if (e.target === overlay) { cleanup(); if (onCancel) onCancel(); } });
-    document.addEventListener('keydown', function handler(e) {
-        if (e.key === 'Escape') { cleanup(); if (onCancel) onCancel(); document.removeEventListener('keydown', handler); }
-    });
+  });
+  document.addEventListener("keydown", function handler(e) {
+    if (e.key === "Escape") {
+      cleanup();
+      if (onCancel) onCancel();
+      document.removeEventListener("keydown", handler);
+    }
+  });
 }
 function showAlert(message) {
-    const overlay = document.createElement('div');
-    overlay.className = 'confirm-overlay';
-    overlay.innerHTML =
-        '<div class="confirm-modal">' +
-        '<h3>通知</h3>' +
-        '<p>' + esc(message).replace(/\n/g, '<br>') + '</p>' +
-        '<div class="confirm-modal-actions">' +
-        '<button class="glass-btn glass-btn-success" id="alert-ok-btn">OK</button>' +
-        '</div></div>';
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('show'));
-    function cleanup() { overlay.classList.remove('show'); setTimeout(() => overlay.remove(), 220); }
-    document.getElementById('alert-ok-btn').onclick = cleanup;
-    overlay.addEventListener('click', function(e) { if (e.target === overlay) cleanup(); });
+  const overlay = document.createElement("div");
+  overlay.className = "confirm-overlay";
+  overlay.innerHTML =
+    '<div class="confirm-modal">' +
+    "<h3>通知</h3>" +
+    "<p>" +
+    esc(message).replace(/\n/g, "<br>") +
+    "</p>" +
+    '<div class="confirm-modal-actions">' +
+    '<button class="glass-btn glass-btn-success" id="alert-ok-btn">OK</button>' +
+    "</div></div>";
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add("show"));
+  function cleanup() {
+    overlay.classList.remove("show");
+    setTimeout(() => overlay.remove(), 220);
+  }
+  document.getElementById("alert-ok-btn").onclick = cleanup;
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay) cleanup();
+  });
 }
 
 /* =================================================================
    SSE REAL-TIME EVENTS
    ================================================================= */
 function connectSSE(persona) {
-    if (S._sse) { try { S._sse.close(); } catch(_) {} }
-    S._sseBackoff = 5000;
-    const es = new EventSource('/api/events/' + encodeURIComponent(persona) + '?topics=memory,context');
-    S._sse = es;
+  if (S._sse) {
+    try {
+      S._sse.close();
+    } catch (_) {}
+  }
+  S._sseBackoff = 5000;
+  const es = new EventSource(
+    "/api/events/" +
+      encodeURIComponent(persona) +
+      "?topics=memory,context,portrait",
+  );
+  S._sse = es;
 
-    es.addEventListener('memory.created', function(e) {
-        try { const d = JSON.parse(e.data); toast('\ud83d\udcdd \u65b0\u3057\u3044\u8a18\u61b6: ' + (d.content_preview || '...').substring(0, 50), 'info'); } catch(_) {}
-    });
-    es.addEventListener('memory.updated', function(e) {
-        try { const d = JSON.parse(e.data); toast('\ud83d\udd04 \u8a18\u61b6\u66f4\u65b0: ' + (d.content_preview || '...').substring(0, 50), 'info'); } catch(_) {}
-    });
-    es.addEventListener('memory.deleted', function(e) {
-        try { const d = JSON.parse(e.data); toast('\ud83d\uddd1 \u8a18\u61b6\u524a\u9664: ' + (d.content_preview || '...').substring(0, 50), 'info'); } catch(_) {}
-    });
-    es.addEventListener('context.updated', function(e) {
-        toast('\ud83d\udc64 \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u66f4\u65b0\u3055\u308c\u307e\u3057\u305f', 'info');
-    });
-    es.onerror = function() {
-        S._sse = null;
-        var backoff = S._sseBackoff || 5000;
-        S._sseBackoff = Math.min(backoff * 2, 60000);
-        setTimeout(function() { if (S.persona) connectSSE(S.persona); }, backoff);
-    };
+  es.addEventListener("memory.created", function (e) {
+    try {
+      const d = JSON.parse(e.data);
+      toast(
+        "\ud83d\udcdd \u65b0\u3057\u3044\u8a18\u61b6: " +
+          (d.content_preview || "...").substring(0, 50),
+        "info",
+      );
+    } catch (_) {}
+  });
+  es.addEventListener("memory.updated", function (e) {
+    try {
+      const d = JSON.parse(e.data);
+      toast(
+        "\ud83d\udd04 \u8a18\u61b6\u66f4\u65b0: " +
+          (d.content_preview || "...").substring(0, 50),
+        "info",
+      );
+    } catch (_) {}
+  });
+  es.addEventListener("memory.deleted", function (e) {
+    try {
+      const d = JSON.parse(e.data);
+      toast(
+        "\ud83d\uddd1 \u8a18\u61b6\u524a\u9664: " +
+          (d.content_preview || "...").substring(0, 50),
+        "info",
+      );
+    } catch (_) {}
+  });
+  es.addEventListener("context.updated", function (e) {
+    toast(
+      "\ud83d\udc64 \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u66f4\u65b0\u3055\u308c\u307e\u3057\u305f",
+      "info",
+    );
+  });
+  es.addEventListener("portrait.generated", function (e) {
+    try {
+      const d = JSON.parse(e.data);
+      window.dispatchEvent(
+        new CustomEvent("portrait-generated", { detail: d }),
+      );
+    } catch (_) {}
+  });
+  es.onerror = function () {
+    S._sse = null;
+    var backoff = S._sseBackoff || 5000;
+    S._sseBackoff = Math.min(backoff * 2, 60000);
+    setTimeout(function () {
+      if (S.persona) connectSSE(S.persona);
+    }, backoff);
+  };
 }
 
 /* =================================================================
    API HELPER
    ================================================================= */
-async function api(path, opts={}) {
-    try {
-        const resp = await fetch(path, {
-            headers: { 'Content-Type': 'application/json', ...opts.headers },
-            ...opts
-        });
-        if (!resp.ok) {
-            const err = await resp.json().catch(() => ({error: resp.statusText}));
-            throw new Error(err.error || resp.statusText);
-        }
-        return await resp.json();
-    } catch (e) {
-        console.error('API error:', path, e);
-        throw e;
+async function api(path, opts = {}) {
+  try {
+    const resp = await fetch(path, {
+      headers: { "Content-Type": "application/json", ...opts.headers },
+      ...opts,
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: resp.statusText }));
+      throw new Error(err.error || resp.statusText);
     }
+    return await resp.json();
+  } catch (e) {
+    console.error("API error:", path, e);
+    throw e;
+  }
 }
 
 /* =================================================================
    CHART HELPERS
    ================================================================= */
 function destroyChart(id) {
-    if (S.charts[id]) { S.charts[id].destroy(); delete S.charts[id]; }
+  if (S.charts[id]) {
+    S.charts[id].destroy();
+    delete S.charts[id];
+  }
 }
-function chartOpts(extra={}) {
-    const color = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#94a3b8';
-    return {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { labels: { color, font: { size: 11 } } },
-            ...extra.plugins
-        },
-        scales: extra.scales ? Object.fromEntries(
-            Object.entries(extra.scales).map(([k,v]) => [k, { ...v, ticks: { color, ...(v.ticks||{}) }, grid: { color: 'rgba(167,139,250,0.08)', ...(v.grid||{}) } }])
-        ) : undefined
-    };
+function chartOpts(extra = {}) {
+  const color =
+    getComputedStyle(document.documentElement)
+      .getPropertyValue("--text-muted")
+      .trim() || "#94a3b8";
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color, font: { size: 11 } } },
+      ...extra.plugins,
+    },
+    scales: extra.scales
+      ? Object.fromEntries(
+          Object.entries(extra.scales).map(([k, v]) => [
+            k,
+            {
+              ...v,
+              ticks: { color, ...(v.ticks || {}) },
+              grid: { color: "rgba(167,139,250,0.08)", ...(v.grid || {}) },
+            },
+          ]),
+        )
+      : undefined,
+  };
 }
 
 /* =================================================================
    SKELETON HELPERS
    ================================================================= */
 function skeletonCard() {
-    return '<div class="glass p-6"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text" style="width:80%"></div><div class="skeleton skeleton-text" style="width:60%"></div></div>';
+  return '<div class="glass p-6"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text" style="width:80%"></div><div class="skeleton skeleton-text" style="width:60%"></div></div>';
 }
 function errorCard(msg) {
-    return '<div class="glass p-6 text-center" style="color:var(--accent-red)"><p style="font-size:1.2rem;margin-bottom:8px"><i data-lucide="alert-triangle"></i></p><p>' + esc(msg) + '</p></div>';
+  return (
+    '<div class="glass p-6 text-center" style="color:var(--accent-red)"><p style="font-size:1.2rem;margin-bottom:8px"><i data-lucide="alert-triangle"></i></p><p>' +
+    esc(msg) +
+    "</p></div>"
+  );
 }
 
 /* =================================================================
    THEME TOGGLE
    ================================================================= */
 function applyTheme() {
-    const dark = localStorage.getItem('mmcp-dark') !== 'false';
-    document.documentElement.className = dark ? 'dark' : 'light';
-    document.getElementById('dark-toggle').innerHTML = dark ? '<i data-lucide="moon"></i>' : '<i data-lucide="sun"></i>';
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-    // Re-render charts for color update
-    Object.values(S.charts).forEach(c => c.update());
+  const dark = localStorage.getItem("mmcp-dark") !== "false";
+  document.documentElement.className = dark ? "dark" : "light";
+  document.getElementById("dark-toggle").innerHTML = dark
+    ? '<i data-lucide="moon"></i>'
+    : '<i data-lucide="sun"></i>';
+  if (typeof lucide !== "undefined") lucide.createIcons();
+  // Re-render charts for color update
+  Object.values(S.charts).forEach((c) => c.update());
 }
 function toggleTheme() {
-    const isDark = document.documentElement.classList.contains('dark');
-    localStorage.setItem('mmcp-dark', isDark ? 'false' : 'true');
-    applyTheme();
+  const isDark = document.documentElement.classList.contains("dark");
+  localStorage.setItem("mmcp-dark", isDark ? "false" : "true");
+  applyTheme();
 }
 
 /* =================================================================
    SKELETON LOADING
    ================================================================= */
 function showSkeleton(tabId) {
-    const container = document.getElementById('tab-' + tabId);
-    if (!container) return;
-    const skeletons = {
-        overview: '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">'
-            + '<div class="skeleton skeleton-card glass"></div>'.repeat(4)
-            + '</div><div class="grid grid-cols-1 lg:grid-cols-2 gap-6">'
-            + '<div class="skeleton glass" style="height:200px"></div>'.repeat(2) + '</div>',
-        analytics: '<div class="skeleton skeleton-chart glass mb-6"></div>'
-            + '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">'
-            + '<div class="skeleton glass" style="height:200px"></div>'.repeat(2) + '</div>',
-        memories: '<div class="skeleton skeleton-line mb-4" style="height:48px"></div>'
-            + '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">'
-            + '<div class="skeleton skeleton-card glass"></div>'.repeat(6) + '</div>',
-        settings: '<div class="skeleton glass mb-4" style="height:160px"></div>'.repeat(3),
-        graph: '<div class="skeleton glass" style="height:600px"></div>',
-        'import-export': '<div class="skeleton glass mb-4" style="height:200px"></div>'
-            + '<div class="skeleton glass" style="height:200px"></div>',
-        personas: '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">'
-            + '<div class="skeleton skeleton-card glass"></div>'.repeat(3) + '</div>',
-        admin: '<div class="skeleton glass" style="height:300px"></div>',
-        timeline: '<div class="skeleton glass" style="height:500px"></div>'
-    };
-    /* graph / import-export / personas / chat / timeline manage their own loading state via
+  const container = document.getElementById("tab-" + tabId);
+  if (!container) return;
+  const skeletons = {
+    overview:
+      '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">' +
+      '<div class="skeleton skeleton-card glass"></div>'.repeat(4) +
+      '</div><div class="grid grid-cols-1 lg:grid-cols-2 gap-6">' +
+      '<div class="skeleton glass" style="height:200px"></div>'.repeat(2) +
+      "</div>",
+    analytics:
+      '<div class="skeleton skeleton-chart glass mb-6"></div>' +
+      '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">' +
+      '<div class="skeleton glass" style="height:200px"></div>'.repeat(2) +
+      "</div>",
+    memories:
+      '<div class="skeleton skeleton-line mb-4" style="height:48px"></div>' +
+      '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">' +
+      '<div class="skeleton skeleton-card glass"></div>'.repeat(6) +
+      "</div>",
+    settings:
+      '<div class="skeleton glass mb-4" style="height:160px"></div>'.repeat(3),
+    graph: '<div class="skeleton glass" style="height:600px"></div>',
+    "import-export":
+      '<div class="skeleton glass mb-4" style="height:200px"></div>' +
+      '<div class="skeleton glass" style="height:200px"></div>',
+    personas:
+      '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">' +
+      '<div class="skeleton skeleton-card glass"></div>'.repeat(3) +
+      "</div>",
+    admin: '<div class="skeleton glass" style="height:300px"></div>',
+    timeline: '<div class="skeleton glass" style="height:500px"></div>',
+  };
+  /* graph / import-export / personas / chat / timeline manage their own loading state via
        inner elements (#graph-loading, #persona-grid, #export-preview, #chat-messages, #tl-loading).
        Replacing their innerHTML would destroy those elements and cause
        silent failures in the corresponding load functions. */
-    if (tabId === 'graph' || tabId === 'import-export' || tabId === 'personas' || tabId === 'chat' || tabId === 'timeline' || tabId === 'activity') return;
-    const content = container.querySelector('[id$="-content"]') || container;
-    content.innerHTML = skeletons[tabId] || '<div class="skeleton skeleton-card glass"></div>';
+  if (
+    tabId === "graph" ||
+    tabId === "import-export" ||
+    tabId === "personas" ||
+    tabId === "chat" ||
+    tabId === "timeline" ||
+    tabId === "activity"
+  )
+    return;
+  const content = container.querySelector('[id$="-content"]') || container;
+  content.innerHTML =
+    skeletons[tabId] || '<div class="skeleton skeleton-card glass"></div>';
 }
 
 /* =================================================================
    TAB SWITCHING
    ================================================================= */
 function switchTab(tab) {
-    S.tab = tab;
-    localStorage.setItem('mmcp-tab', tab);
-    document.querySelectorAll('.tab-btn').forEach(b => {
-        const isActive = b.dataset.tab === tab;
-        b.classList.toggle('active', isActive);
-        b.setAttribute('aria-selected', isActive);
-    });
-    document.querySelectorAll('.tab-panel').forEach(p => {
-        const isTarget = p.id === 'tab-' + tab;
-        p.classList.toggle('active', isTarget);
-        // Skip animation on subsequent tab switches
-        if (isTarget && S._tabSwitchCount > 0) {
-            p.classList.add('no-first-anim');
-        } else if (isTarget) {
-            p.classList.remove('no-first-anim');
-        }
-    });
-    S._tabSwitchCount = (S._tabSwitchCount || 0) + 1;
-    showSkeleton(tab);
-    loadTab(tab);
-    setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 100);
+  S.tab = tab;
+  localStorage.setItem("mmcp-tab", tab);
+  document.querySelectorAll(".tab-btn").forEach((b) => {
+    const isActive = b.dataset.tab === tab;
+    b.classList.toggle("active", isActive);
+    b.setAttribute("aria-selected", isActive);
+  });
+  document.querySelectorAll(".tab-panel").forEach((p) => {
+    const isTarget = p.id === "tab-" + tab;
+    p.classList.toggle("active", isTarget);
+    // Skip animation on subsequent tab switches
+    if (isTarget && S._tabSwitchCount > 0) {
+      p.classList.add("no-first-anim");
+    } else if (isTarget) {
+      p.classList.remove("no-first-anim");
+    }
+  });
+  S._tabSwitchCount = (S._tabSwitchCount || 0) + 1;
+  showSkeleton(tab);
+  loadTab(tab);
+  setTimeout(() => {
+    if (typeof lucide !== "undefined") lucide.createIcons();
+  }, 100);
 }
 function loadTab(tab) {
-    if (!S.persona && tab !== 'settings' && tab !== 'personas') return;
-    switch(tab) {
-        case 'overview': loadOverview(); break;
-        case 'analytics': loadAnalytics(); break;
-        case 'memories': loadMemories(); break;
-        case 'graph': loadGraph(); break;
-        case 'import-export': loadImportExport(); break;
-        case 'personas': loadPersonas(); break;
-        case 'settings': loadSettings(); break;
-        case 'chat': loadChat(); break;
-        case 'activity': loadActivity(true); break;
-        case 'admin': loadAdmin(); break;
-    }
+  if (!S.persona && tab !== "settings" && tab !== "personas") return;
+  switch (tab) {
+    case "overview":
+      loadOverview();
+      break;
+    case "analytics":
+      loadAnalytics();
+      break;
+    case "memories":
+      loadMemories();
+      break;
+    case "graph":
+      loadGraph();
+      break;
+    case "import-export":
+      loadImportExport();
+      break;
+    case "personas":
+      loadPersonas();
+      break;
+    case "settings":
+      loadSettings();
+      break;
+    case "chat":
+      loadChat();
+      break;
+    case "activity":
+      loadActivity(true);
+      break;
+    case "admin":
+      loadAdmin();
+      break;
+  }
 }
 
 /* =================================================================
    MEMORY DETAIL MODAL
    ================================================================= */
 function openMemModal(mem) {
-    const overlay = document.getElementById('mem-modal-overlay');
-    const content = document.getElementById('mem-modal-content');
-    const tags = (mem.tags || []).map(t => '<span class="badge badge-purple">' + esc(t) + '</span>').join(' ');
-    var emoHtml = '';
-    if (mem.emotion) {
-        emoHtml = '<span class="badge badge-pink"><i data-lucide="smile"></i> ' + esc(mem.emotion) + (mem.emotion_intensity != null ? ' (' + (mem.emotion_intensity * 100).toFixed(0) + '%)' : '') + '</span>';
-    }
-    content.innerHTML = `
+  const overlay = document.getElementById("mem-modal-overlay");
+  const content = document.getElementById("mem-modal-content");
+  const tags = (mem.tags || [])
+    .map((t) => '<span class="badge badge-purple">' + esc(t) + "</span>")
+    .join(" ");
+  var emoHtml = "";
+  if (mem.emotion) {
+    emoHtml =
+      '<span class="badge badge-pink"><i data-lucide="smile"></i> ' +
+      esc(mem.emotion) +
+      (mem.emotion_intensity != null
+        ? " (" + (mem.emotion_intensity * 100).toFixed(0) + "%)"
+        : "") +
+      "</span>";
+  }
+  content.innerHTML = `
         <div class="mem-modal-header">
             <div>
                 <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:4px">Memory Key</div>
@@ -409,234 +621,279 @@ function openMemModal(mem) {
         </div>
         <div class="mem-modal-content">${esc(mem.content)}</div>
         <div>
-            ${tags || emoHtml ? `<div class="mem-modal-row"><span class="mem-modal-key">Tags/Emotion</span><span>${tags} ${emoHtml}</span></div>` : ''}
-            ${mem.importance != null ? `<div class="mem-modal-row"><span class="mem-modal-key">Importance</span><span style="color:var(--accent-yellow)">${(mem.importance).toFixed(2)}</span></div>` : ''}
-            ${mem.strength != null ? `<div class="mem-modal-row"><span class="mem-modal-key">Strength</span><span style="color:var(--accent-green)"><i data-lucide="zap"></i>${(mem.strength).toFixed(3)}</span></div>` : ''}
-            ${mem.privacy_level ? `<div class="mem-modal-row"><span class="mem-modal-key">Privacy</span><span>${esc(mem.privacy_level)}</span></div>` : ''}
-            ${mem.source_context ? `<div class="mem-modal-row"><span class="mem-modal-key">Source</span><span style="color:var(--text-muted)">${esc(mem.source_context)}</span></div>` : ''}
-            ${mem.created_at ? `<div class="mem-modal-row"><span class="mem-modal-key">Created</span><span><i data-lucide="calendar"></i> ${relativeTime(mem.created_at)} <span style="color:var(--text-muted);font-size:0.75rem">(${new Date(mem.created_at).toLocaleString('ja-JP')})</span></span></div>` : ''}
-            ${mem.state_snapped_at && mem.state_snapped_at !== mem.created_at ? `<div class="mem-modal-row"><span class="mem-modal-key">State</span><span><i data-lucide="camera"></i> ${relativeTime(mem.state_snapped_at)} <span style="color:var(--text-muted);font-size:0.75rem">(${new Date(mem.state_snapped_at).toLocaleString('ja-JP')})</span></span></div>` : ''}
-            ${mem.updated_at ? `<div class="mem-modal-row"><span class="mem-modal-key">Updated</span><span><i data-lucide="calendar"></i> ${relativeTime(mem.updated_at)}</span></div>` : ''}
-            ${mem.body_state ? renderBodyStateBars(mem.body_state) : ''}
-            ${mem.emotion ? renderEmotionBars(mem.emotion, mem.emotion_intensity) : ''}
+            ${tags || emoHtml ? `<div class="mem-modal-row"><span class="mem-modal-key">Tags/Emotion</span><span>${tags} ${emoHtml}</span></div>` : ""}
+            ${mem.importance != null ? `<div class="mem-modal-row"><span class="mem-modal-key">Importance</span><span style="color:var(--accent-yellow)">${mem.importance.toFixed(2)}</span></div>` : ""}
+            ${mem.strength != null ? `<div class="mem-modal-row"><span class="mem-modal-key">Strength</span><span style="color:var(--accent-green)"><i data-lucide="zap"></i>${mem.strength.toFixed(3)}</span></div>` : ""}
+            ${mem.privacy_level ? `<div class="mem-modal-row"><span class="mem-modal-key">Privacy</span><span>${esc(mem.privacy_level)}</span></div>` : ""}
+            ${mem.source_context ? `<div class="mem-modal-row"><span class="mem-modal-key">Source</span><span style="color:var(--text-muted)">${esc(mem.source_context)}</span></div>` : ""}
+            ${mem.created_at ? `<div class="mem-modal-row"><span class="mem-modal-key">Created</span><span><i data-lucide="calendar"></i> ${relativeTime(mem.created_at)} <span style="color:var(--text-muted);font-size:0.75rem">(${new Date(mem.created_at).toLocaleString("ja-JP")})</span></span></div>` : ""}
+            ${mem.state_snapped_at && mem.state_snapped_at !== mem.created_at ? `<div class="mem-modal-row"><span class="mem-modal-key">State</span><span><i data-lucide="camera"></i> ${relativeTime(mem.state_snapped_at)} <span style="color:var(--text-muted);font-size:0.75rem">(${new Date(mem.state_snapped_at).toLocaleString("ja-JP")})</span></span></div>` : ""}
+            ${mem.updated_at ? `<div class="mem-modal-row"><span class="mem-modal-key">Updated</span><span><i data-lucide="calendar"></i> ${relativeTime(mem.updated_at)}</span></div>` : ""}
+            ${mem.body_state ? renderBodyStateBars(mem.body_state) : ""}
+            ${mem.emotion ? renderEmotionBars(mem.emotion, mem.emotion_intensity) : ""}
         </div>`;
-    overlay.classList.add('show');
-    document.addEventListener('keydown', _memModalKeyHandler);
+  overlay.classList.add("show");
+  document.addEventListener("keydown", _memModalKeyHandler);
 }
 function closeMemModal() {
-    const overlay = document.getElementById('mem-modal-overlay');
-    if (!overlay || !overlay.classList.contains('show')) return;
-    overlay.classList.remove('show');
-    document.removeEventListener('keydown', _memModalKeyHandler);
+  const overlay = document.getElementById("mem-modal-overlay");
+  if (!overlay || !overlay.classList.contains("show")) return;
+  overlay.classList.remove("show");
+  document.removeEventListener("keydown", _memModalKeyHandler);
 }
-function _memModalKeyHandler(e) { if (e.key === 'Escape') closeMemModal(); }
+function _memModalKeyHandler(e) {
+  if (e.key === "Escape") closeMemModal();
+}
 
 /* =================================================================
    LAST UPDATE TIMESTAMP
    ================================================================= */
 function updateLastTime() {
-    const el = document.getElementById('last-update');
-    if (el) el.textContent = 'Last: ' + new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const el = document.getElementById("last-update");
+  if (el)
+    el.textContent =
+      "Last: " +
+      new Date().toLocaleTimeString("ja-JP", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
 }
 
 /* =================================================================
    AUTO REFRESH
    ================================================================= */
 function setAutoRefresh(sec) {
-    if (S.refreshTimer) { clearInterval(S.refreshTimer); S.refreshTimer = null; }
-    if (sec > 0) {
-        S.refreshTimer = setInterval(() => loadTab(S.tab), sec * 1000);
-    }
+  if (S.refreshTimer) {
+    clearInterval(S.refreshTimer);
+    S.refreshTimer = null;
+  }
+  if (sec > 0) {
+    S.refreshTimer = setInterval(() => loadTab(S.tab), sec * 1000);
+  }
 }
 
 /* =================================================================
    INITIALIZATION
    ================================================================= */
 async function init() {
-    // Theme
-    applyTheme();
+  // Theme
+  applyTheme();
 
-    // Load personas
-    try {
-        const data = await api('/api/personas');
-        const personas = data.personas || [];
-        const sel = document.getElementById('persona-select');
-        sel.innerHTML = '';
-        if (personas.length === 0) {
-            sel.innerHTML = '<option value="">No personas found</option>';
-            document.getElementById('overview-content').innerHTML =
-                '<div class="empty-state"><div class="empty-state-icon"><i data-lucide="user-plus"></i></div>' +
-                '<div class="empty-state-text">Personasタブでペルソナを作成してください。</div>' +
-                '<button class="empty-state-cta" onclick="switchTab(\'personas\')"><i data-lucide="user-plus"></i> ペルソナを作成</button></div>';
-            if (typeof lucide !== 'undefined') lucide.createIcons();
-            return;
-        }
-        personas.forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = p; opt.textContent = p;
-            sel.appendChild(opt);
-        });
-        // 優先度: __INITIAL_PERSONA__ > localStorage > personas[0]
-        const savedPersona = localStorage.getItem('mmcp-persona');
-        let _target = null;
-        if (window.__INITIAL_PERSONA__) {
-            _target = window.__INITIAL_PERSONA__;
-        } else if (savedPersona && personas.some(p => (p.id || p) === savedPersona)) {
-            _target = savedPersona;
-        } else {
-            _target = personas[0]?.id || personas[0];
-        }
-        S.persona = _target;
-        sel.value = _target;
-        connectSSE(_target);
-        switchTab(S.tab);
-    } catch (e) {
-        toast('Failed to load personas: ' + e.message, 'error');
+  // Load personas
+  try {
+    const data = await api("/api/personas");
+    const personas = data.personas || [];
+    const sel = document.getElementById("persona-select");
+    sel.innerHTML = "";
+    if (personas.length === 0) {
+      sel.innerHTML = '<option value="">No personas found</option>';
+      document.getElementById("overview-content").innerHTML =
+        '<div class="empty-state"><div class="empty-state-icon"><i data-lucide="user-plus"></i></div>' +
+        '<div class="empty-state-text">Personasタブでペルソナを作成してください。</div>' +
+        '<button class="empty-state-cta" onclick="switchTab(\'personas\')"><i data-lucide="user-plus"></i> ペルソナを作成</button></div>';
+      if (typeof lucide !== "undefined") lucide.createIcons();
+      return;
     }
-
-    // Event: Persona change
-    document.getElementById('persona-select').onchange = (e) => {
-        S.persona = e.target.value;
-        setStoredPersona(e.target.value);
-        connectSSE(e.target.value);
-        S.dashCache = null;
-        // Reset pagination/search without losing extended properties from memories.js
-        Object.assign(S.mem, { page: 1, tag: '', q: '', perPage: 20,
-            selectMode: false, advOpen: false, dateFrom: '', dateTo: '',
-            searchTags: [], emotion: '' });
-        if (S.mem.selected instanceof Set) S.mem.selected.clear();
-        loadTab(S.tab);
-    };
-
-    // Event: Tab switch
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    personas.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p;
+      opt.textContent = p;
+      sel.appendChild(opt);
     });
+    // 優先度: __INITIAL_PERSONA__ > localStorage > personas[0]
+    const savedPersona = localStorage.getItem("mmcp-persona");
+    let _target = null;
+    if (window.__INITIAL_PERSONA__) {
+      _target = window.__INITIAL_PERSONA__;
+    } else if (
+      savedPersona &&
+      personas.some((p) => (p.id || p) === savedPersona)
+    ) {
+      _target = savedPersona;
+    } else {
+      _target = personas[0]?.id || personas[0];
+    }
+    S.persona = _target;
+    sel.value = _target;
+    connectSSE(_target);
+    switchTab(S.tab);
+  } catch (e) {
+    toast("Failed to load personas: " + e.message, "error");
+  }
 
-    // Event: Refresh button
-    document.getElementById('refresh-btn').onclick = () => {
-        S.dashCache = null;
-        loadTab(S.tab);
-    };
-
-    // Event: Auto-refresh
-    document.getElementById('auto-refresh').onchange = (e) => {
-        setAutoRefresh(parseInt(e.target.value));
-    };
-
-    // Event: Theme toggle
-    document.getElementById('dark-toggle').onclick = toggleTheme;
-
-    // Keyboard: tab navigation
-    document.addEventListener('keydown', (e) => {
-        if (e.altKey && ((e.key >= '1' && e.key <= '9') || e.key === '0')) {
-            e.preventDefault();
-            const tabs = ['overview','analytics','memories','timeline','graph','import-export','personas','chat','settings','admin','activity'];
-            const idx = e.key === '0' ? 9 : parseInt(e.key) - 1;
-            if (idx < tabs.length) switchTab(tabs[idx]);
-        }
+  // Event: Persona change
+  document.getElementById("persona-select").onchange = (e) => {
+    S.persona = e.target.value;
+    setStoredPersona(e.target.value);
+    connectSSE(e.target.value);
+    S.dashCache = null;
+    // Reset pagination/search without losing extended properties from memories.js
+    Object.assign(S.mem, {
+      page: 1,
+      tag: "",
+      q: "",
+      perPage: 20,
+      selectMode: false,
+      advOpen: false,
+      dateFrom: "",
+      dateTo: "",
+      searchTags: [],
+      emotion: "",
     });
+    if (S.mem.selected instanceof Set) S.mem.selected.clear();
+    loadTab(S.tab);
+  };
+
+  // Event: Tab switch
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+
+  // Event: Refresh button
+  document.getElementById("refresh-btn").onclick = () => {
+    S.dashCache = null;
+    loadTab(S.tab);
+  };
+
+  // Event: Auto-refresh
+  document.getElementById("auto-refresh").onchange = (e) => {
+    setAutoRefresh(parseInt(e.target.value));
+  };
+
+  // Event: Theme toggle
+  document.getElementById("dark-toggle").onclick = toggleTheme;
+
+  // Keyboard: tab navigation
+  document.addEventListener("keydown", (e) => {
+    if (e.altKey && ((e.key >= "1" && e.key <= "9") || e.key === "0")) {
+      e.preventDefault();
+      const tabs = [
+        "overview",
+        "analytics",
+        "memories",
+        "timeline",
+        "graph",
+        "import-export",
+        "personas",
+        "chat",
+        "settings",
+        "admin",
+        "activity",
+      ];
+      const idx = e.key === "0" ? 9 : parseInt(e.key) - 1;
+      if (idx < tabs.length) switchTab(tabs[idx]);
+    }
+  });
 }
 
 /* =================================================================
    COUNT-UP ANIMATION (batched)
    ================================================================= */
 function animateCount(el, target, duration) {
-    duration = duration || 800;
-    el._animTarget = target;
-    el._animDuration = duration;
-    el._animStart = performance.now();
-    if (!S._rafRunning) {
-        S._rafRunning = true;
-        requestAnimationFrame(_batchAnimateCount);
-    }
+  duration = duration || 800;
+  el._animTarget = target;
+  el._animDuration = duration;
+  el._animStart = performance.now();
+  if (!S._rafRunning) {
+    S._rafRunning = true;
+    requestAnimationFrame(_batchAnimateCount);
+  }
 }
 function _batchAnimateCount(currentTime) {
-    let anyRunning = false;
-    document.querySelectorAll('[data-animate-count]').forEach(function(el) {
-        const target = parseFloat(el.dataset.animateCount);
-        const start = el._animStart || currentTime;
-        const duration = el._animDuration || 800;
-        const elapsed = currentTime - start;
-        const progress = Math.min(elapsed / duration, 1);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        el.textContent = Math.round(target * eased).toLocaleString();
-        if (progress < 1) anyRunning = true;
-    });
-    // Also handle elements set via animateCount function
-    document.querySelectorAll('.count-up').forEach(function(el) {
-        if (el._animTarget == null) return;
-        const start = el._animStart || currentTime;
-        const duration = el._animDuration || 800;
-        const elapsed = currentTime - start;
-        const progress = Math.min(elapsed / duration, 1);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        el.textContent = Math.round(el._animTarget * eased).toLocaleString();
-        if (progress < 1) anyRunning = true;
-    });
-    if (anyRunning) {
-        requestAnimationFrame(_batchAnimateCount);
-    } else {
-        S._rafRunning = false;
-    }
+  let anyRunning = false;
+  document.querySelectorAll("[data-animate-count]").forEach(function (el) {
+    const target = parseFloat(el.dataset.animateCount);
+    const start = el._animStart || currentTime;
+    const duration = el._animDuration || 800;
+    const elapsed = currentTime - start;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(target * eased).toLocaleString();
+    if (progress < 1) anyRunning = true;
+  });
+  // Also handle elements set via animateCount function
+  document.querySelectorAll(".count-up").forEach(function (el) {
+    if (el._animTarget == null) return;
+    const start = el._animStart || currentTime;
+    const duration = el._animDuration || 800;
+    const elapsed = currentTime - start;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(el._animTarget * eased).toLocaleString();
+    if (progress < 1) anyRunning = true;
+  });
+  if (anyRunning) {
+    requestAnimationFrame(_batchAnimateCount);
+  } else {
+    S._rafRunning = false;
+  }
 }
 
 /* =================================================================
    STAGGERED CARD ANIMATION
    ================================================================= */
 function animateCards(container) {
-    if (!container) return;
-    const cards = container.querySelectorAll('.glass');
-    cards.forEach(function(card, i) {
-        card.style.opacity = '0';
-        card.style.transform = 'translateY(16px)';
-        setTimeout(function() {
-            card.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
-            card.style.opacity = '1';
-            card.style.transform = 'translateY(0)';
-        }, i * 60);
-    });
+  if (!container) return;
+  const cards = container.querySelectorAll(".glass");
+  cards.forEach(function (card, i) {
+    card.style.opacity = "0";
+    card.style.transform = "translateY(16px)";
+    setTimeout(function () {
+      card.style.transition = "opacity 0.4s ease, transform 0.4s ease";
+      card.style.opacity = "1";
+      card.style.transform = "translateY(0)";
+    }, i * 60);
+  });
 }
 
 /* =================================================================
    MOBILE NAV TOGGLE
    ================================================================= */
 function toggleMobileNav() {
-    const nav = document.querySelector('.tab-bar');
-    if (nav) nav.classList.toggle('mobile-open');
+  const nav = document.querySelector(".tab-bar");
+  if (nav) nav.classList.toggle("mobile-open");
 }
 
 /* =================================================================
    KEYBOARD SHORTCUTS (Ctrl+F / Escape)
    ================================================================= */
-document.addEventListener('keydown', function(e) {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-        var searchInput = document.querySelector('.tab-panel.active input[data-search]');
-        if (!searchInput) searchInput = document.querySelector('.tab-panel.active input[type="text"][placeholder*="earch"]');
-        if (searchInput) { e.preventDefault(); searchInput.focus(); }
+document.addEventListener("keydown", function (e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+    var searchInput = document.querySelector(
+      ".tab-panel.active input[data-search]",
+    );
+    if (!searchInput)
+      searchInput = document.querySelector(
+        '.tab-panel.active input[type="text"][placeholder*="earch"]',
+      );
+    if (searchInput) {
+      e.preventDefault();
+      searchInput.focus();
     }
-    if (e.key === 'Escape') {
-        document.querySelectorAll('.mem-modal-overlay').forEach(function(m) {
-            m.style.display = 'none';
-            m.classList.remove('show');
-        });
-    }
+  }
+  if (e.key === "Escape") {
+    document.querySelectorAll(".mem-modal-overlay").forEach(function (m) {
+      m.style.display = "none";
+      m.classList.remove("show");
+    });
+  }
 });
 
 /* =================================================================
    ARIA LABELS ON LOAD
    ================================================================= */
-document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.tab-btn').forEach(function(btn, i) {
-        btn.setAttribute('role', 'tab');
-        btn.setAttribute('aria-label', btn.textContent.trim());
-        btn.setAttribute('tabindex', '0');
-    });
-    document.querySelectorAll('.tab-panel').forEach(function(tab) {
-        tab.setAttribute('role', 'tabpanel');
-    });
-    var tablist = document.querySelector('.tab-bar');
-    if (tablist) tablist.setAttribute('role', 'tablist');
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll(".tab-btn").forEach(function (btn, i) {
+    btn.setAttribute("role", "tab");
+    btn.setAttribute("aria-label", btn.textContent.trim());
+    btn.setAttribute("tabindex", "0");
+  });
+  document.querySelectorAll(".tab-panel").forEach(function (tab) {
+    tab.setAttribute("role", "tabpanel");
+  });
+  var tablist = document.querySelector(".tab-bar");
+  if (tablist) tablist.setAttribute("role", "tablist");
 });
 
 // Boot

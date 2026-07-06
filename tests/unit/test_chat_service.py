@@ -631,7 +631,7 @@ def test_chat_js_supports_terminal_history_and_scoped_execute_endpoint():
     """Sandbox terminal history was moved to Coding Agent panel. Chat tab JS should retain the persona-scoped sandbox execute API reference."""
     js = _read_chat_js()
 
-    assert "/api/chat/' + encodeURIComponent(S.persona) + '/sandbox/execute" in js
+    assert "/api/chat/\" + encodeURIComponent(S.persona) + \"/sandbox/execute" in js
 
 
 def test_chat_tab_renders_artifacts_tab():

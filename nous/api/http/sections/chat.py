@@ -78,6 +78,16 @@ def render_chat_tab() -> str:
 
                 <!-- Chat area -->
                 <div id="chat-main">
+                    <!-- Persona Portrait -->
+                    <div id="portrait-area">
+                        <div id="portrait-container" onclick="onPortraitClick()">
+                            <div id="portrait-placeholder">
+                                <i data-lucide="user"></i>
+                            </div>
+                            <img id="portrait-img" alt="Persona portrait" style="display:none;" />
+                        </div>
+                        <div id="portrait-status"></div>
+                    </div>
                     <div id="chat-messages">
                         <div class="chat-welcome" id="chat-welcome">
                             <div class="chat-welcome-icon"><i data-lucide="message-circle"></i></div>
