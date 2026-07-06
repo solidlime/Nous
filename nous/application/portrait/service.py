@@ -150,11 +150,14 @@ class PortraitGenerationService:
 
         # ── 6. Publish event ──────────────────────────────────────────
         if self._event_bus is not None:
-            await self._event_bus.publish("portrait.generated", {
-                "persona": persona.persona,
-                "emotion": persona.emotion,
-                "image_base64": result["image_base64"],
-            })
+            await self._event_bus.publish(
+                "portrait.generated",
+                {
+                    "persona": persona.persona,
+                    "emotion": persona.emotion,
+                    "image_base64": result["image_base64"],
+                },
+            )
 
         return result
 
