@@ -643,22 +643,13 @@ function clearChatHistory() {
         fetch('/api/chat/' + encodeURIComponent(S.persona) + '/sessions/' + encodeURIComponent(oldSid), { method: 'DELETE' })
             .catch(() => {/* ignore */});
     }
-    // Generate a new session ID (persona-scoped key)
-    const newSession = 'sess_' + Date.now();
-    const storageKey = 'chat_session_id_' + (S.persona);
-    localStorage.setItem(storageKey, newSession);
     document.getElementById('chat-status').textContent = '会話をリセットしました';
     setTimeout(() => { document.getElementById('chat-status').textContent = ''; }, 2000);
 }
 
 function getChatSessionId() {
-    const storageKey = 'chat_session_id_' + (S.persona);
-    let sid = localStorage.getItem(storageKey);
-    if (!sid) {
-        sid = 'sess_' + Date.now();
-        localStorage.setItem(storageKey, sid);
-    }
-    return sid;
+    // Fixed session ID per persona — enables cross-device sync
+    return 'main';
 }
 
 // Rollback: undo messages from keep_until onwards, optionally auto-resend
