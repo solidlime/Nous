@@ -519,6 +519,33 @@ persona_portrait(
 
 ---
 
+## 11-a. Voice Synthesis / 音声合成 (Irodori TTS)
+
+ペルソナの声で日本語テキストを音声合成する機能。`irodori.enabled=True` のとき有効。
+
+### MCP Tool
+
+```python
+# テキストを音声合成（WAV形式）
+irodori_tts(
+    text="こんにちは、元気ですか？",  # 必須: 読み上げるテキスト
+    voice="voice_name",              # 任意: 話者名（省略時は設定のデフォルト話者）
+)
+# → {"ok": True, "audio_base64": "...", "format": "wav"}
+```
+
+> **仕組み**: ペルソナの現在の感情（`emotion`）から話速を自動調整します（joy→1.1x, sadness→0.9x, anger→1.2x）。`speech_style` も反映されます。
+
+### REST API
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/tts/{persona}` | テキストを音声合成（body: `{"text": "..."}`） |
+
+> **⚠️ Enabled Check**: `irodori.enabled=False`（デフォルト）では呼び出してもエラーになります。Irodori-TTS-Server が稼働している環境でのみ有効化してください。
+
+---
+
 ## 12. Author's Note / 作者ノート
 
 Author's Note is persistent context text injected into the system prompt on every turn. Unlike memories which are retrieved dynamically, Author's Note is **always present** — ideal for role consistency, character-defining instructions, or persistent stylistic guidance.
