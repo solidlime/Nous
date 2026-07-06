@@ -25,15 +25,15 @@ numpy>=1.24.0
 
 # E2E Testing (Playwright)
 playwright>=1.40.0
-pytest-playwright>=0.4.0
+pytest-playwright>=0.8.0
 
 # Japanese tokenizer for smart search (optional, falls back to regex-based expansion)
 # janome>=0.5
-bandit>=1.7
-mypy>=1.9
+bandit>=1.9.4
+mypy>=2.1.0
 
 # Benchmarking
-pytest-benchmark>=4.0
+pytest-benchmark>=5.2.3
 
 # LLM Providers (Chat feature)
 anthropic>=0.40.0
