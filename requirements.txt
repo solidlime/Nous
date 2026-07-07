@@ -41,6 +41,10 @@ openai>=1.50.0
 # Docker SDK (sandbox sibling-container detection)
 docker>=7.0.0
 
+# Japanese NER (entity extraction)
+sudachipy>=0.6.0
+sudachidict_core>=20240716
+
 # PDF/Document Parsing (read_pdf tool)
 PyMuPDF>=1.24.0
 pdfplumber>=0.11.0
