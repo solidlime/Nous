@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from nous.application.workers.cleanup_worker import CleanupWorker
 from nous.application.workers.rebuild_worker import RebuildWorker
@@ -35,41 +37,48 @@ def _make_context(memories=None, vs=None, find_all_fails=False):
 
 
 class TestRebuildWorker:
-    def test_rebuild_fails_when_find_all_fails(self):
+    @pytest.mark.asyncio
+    async def test_rebuild_fails_when_find_all_fails(self):
         ctx = _make_context(find_all_fails=True)
         worker = RebuildWorker(ctx)
-        result = worker.rebuild()
+        result = await worker.rebuild()
         assert not result.is_ok
 
-    def test_rebuild_fails_when_vector_store_is_none(self):
+    @pytest.mark.asyncio
+    async def test_rebuild_fails_when_vector_store_is_none(self):
         ctx = _make_context(memories=[], vs=None)
         worker = RebuildWorker(ctx)
-        result = worker.rebuild()
+        result = await worker.rebuild()
         assert not result.is_ok
         assert isinstance(result.error, VectorStoreError)
 
-    def test_rebuild_empty_memories(self):
+    @pytest.mark.asyncio
+    async def test_rebuild_empty_memories(self):
         vs = MagicMock()
+        vs.upsert = AsyncMock(return_value=Success(None))
         ctx = _make_context(memories=[], vs=vs)
         worker = RebuildWorker(ctx)
-        result = worker.rebuild()
+        result = await worker.rebuild()
         assert result.is_ok
         assert result.unwrap() == 0
 
-    def test_rebuild_upserts_all_memories(self):
+    @pytest.mark.asyncio
+    async def test_rebuild_upserts_all_memories(self):
         vs = MagicMock()
-        vs.upsert.return_value = Success(None)
+        vs.upsert = AsyncMock(return_value=Success(None))
         memories = [_make_memory(f"mem_{i:03d}", f"content {i}") for i in range(3)]
         ctx = _make_context(memories=memories, vs=vs)
 
         worker = RebuildWorker(ctx)
-        result = worker.rebuild()
+        result = await worker.rebuild()
         assert result.is_ok
         assert result.unwrap() == 3
         assert vs.upsert.call_count == 3
 
-    def test_rebuild_skips_failed_upserts(self):
+    @pytest.mark.asyncio
+    async def test_rebuild_skips_failed_upserts(self):
         vs = MagicMock()
+        vs.upsert = AsyncMock()
         vs.upsert.side_effect = [
             Success(None),
             Failure(VectorStoreError("upsert error")),
@@ -79,20 +88,21 @@ class TestRebuildWorker:
         ctx = _make_context(memories=memories, vs=vs)
 
         worker = RebuildWorker(ctx)
-        result = worker.rebuild()
+        result = await worker.rebuild()
         assert result.is_ok
         assert result.unwrap() == 2  # Only 2 successful upserts
 
-    def test_rebuild_passes_correct_metadata(self):
+    @pytest.mark.asyncio
+    async def test_rebuild_passes_correct_metadata(self):
         vs = MagicMock()
-        vs.upsert.return_value = Success(None)
+        vs.upsert = AsyncMock(return_value=Success(None))
         m = _make_memory("mem_001", "hello world")
         m.importance = 0.8
         m.emotion = "joy"
         m.tags = ["tag1", "tag2"]
         ctx = _make_context(memories=[m], vs=vs)
 
-        RebuildWorker(ctx).rebuild()
+        await RebuildWorker(ctx).rebuild()
 
         call_args = vs.upsert.call_args
         assert call_args[0][0] == "test"  # persona
@@ -128,7 +138,7 @@ class TestCleanupWorker:
         ctx.memory_repo.find_all.assert_not_called()
 
     def test_cleanup_cycle_skips_when_find_all_fails(self):
-        vs = MagicMock()
+        vs = AsyncMock()
         ctx = _make_context(find_all_fails=True, vs=vs)
         worker = CleanupWorker(ctx)
         worker._cleanup_cycle()
@@ -136,7 +146,7 @@ class TestCleanupWorker:
         vs.search.assert_not_called()
 
     def test_cleanup_cycle_with_no_duplicates(self):
-        vs = MagicMock()
+        vs = AsyncMock()
         # search returns results with score below threshold
         vs.search.return_value = Success([("mem_002", 0.5)])
         memories = [_make_memory("mem_001", "unique content")]
@@ -147,7 +157,7 @@ class TestCleanupWorker:
         vs.search.assert_called_once()
 
     def test_cleanup_cycle_detects_duplicate(self):
-        vs = MagicMock()
+        vs = AsyncMock()
         # Return a near-duplicate with high score
         vs.search.return_value = Success([("mem_002", 0.99)])
         memories = [_make_memory("mem_001", "content")]
@@ -159,10 +169,10 @@ class TestCleanupWorker:
         vs.search.assert_called_once()
 
     def test_cleanup_cycle_skips_already_seen_keys(self):
-        vs = MagicMock()
+        vs = AsyncMock()
 
         # mem_001 returns mem_002 as duplicate; then mem_002 is in seen_keys
-        def fake_search(persona, content, limit):
+        async def fake_search(persona, content, limit):
             if "first" in content:
                 return Success([("mem_002", 0.99)])
             return Success([])
@@ -180,7 +190,7 @@ class TestCleanupWorker:
         assert vs.search.call_count == 1
 
     def test_cleanup_cycle_handles_failed_search(self):
-        vs = MagicMock()
+        vs = AsyncMock()
         vs.search.return_value = Failure(VectorStoreError("search error"))
         memories = [_make_memory("mem_001")]
         ctx = _make_context(memories=memories, vs=vs)

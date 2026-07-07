@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -60,18 +60,20 @@ class TestQdrantSemanticSearch:
         assert adapter.memory_repo is repo
         assert adapter.persona == ""
 
-    def test_search_failure_propagates(self):
-        vs = MagicMock()
+    @pytest.mark.asyncio
+    async def test_search_failure_propagates(self):
+        vs = AsyncMock()
         vs.search.return_value = Failure(Exception("qdrant error"))
         repo = MagicMock()
 
         adapter = QdrantSemanticSearch(vs, repo)
-        result = adapter.search("query")
+        result = await adapter.search("query")
         assert not result.is_ok
 
-    def test_search_success_with_memory(self):
+    @pytest.mark.asyncio
+    async def test_search_success_with_memory(self):
         memory = _make_memory("mem_001")
-        vs = MagicMock()
+        vs = AsyncMock()
         vs.search.return_value = Success([("mem_001", 0.9)])
 
         repo = MagicMock()
@@ -79,37 +81,43 @@ class TestQdrantSemanticSearch:
 
         adapter = QdrantSemanticSearch(vs, repo)
         adapter.persona = "test"
-        result = adapter.search("query")
+        result = await adapter.search("query")
         assert result.is_ok
         assert len(result.value) == 1
         assert result.value[0][0] is memory
         assert result.value[0][1] == pytest.approx(0.9)
 
-    def test_search_skips_missing_memory(self):
-        vs = MagicMock()
+    @pytest.mark.asyncio
+    async def test_search_skips_missing_memory(self):
+        vs = AsyncMock()
         vs.search.return_value = Success([("mem_missing", 0.9)])
 
         repo = MagicMock()
         repo.find_by_key.return_value = Success(None)  # not found
 
         adapter = QdrantSemanticSearch(vs, repo)
-        result = adapter.search("query")
+        result = await adapter.search("query")
         assert result.is_ok
         assert result.value == []
 
-    def test_search_uses_persona(self):
-        vs = MagicMock()
+    @pytest.mark.asyncio
+    async def test_search_uses_persona(self):
+        vs = AsyncMock()
         vs.search.return_value = Success([])
         repo = MagicMock()
 
         adapter = QdrantSemanticSearch(vs, repo)
         adapter.persona = "my_persona"
-        adapter.search("query")
+        await adapter.search("query")
         vs.search.assert_called_once_with("my_persona", "query", 10)
 
 
 class TestQdrantSemanticSearchDateFiltering:
     """Tests for date-based post-filtering in QdrantSemanticSearch.search()."""
+
+    @pytest.fixture
+    def vs(self):
+        return AsyncMock()
 
     def _make_naive_memory(self, key: str, content: str, days_ago: int):
         """Create a memory with a timezone-naive created_at (simulating SQLite return)."""
@@ -118,12 +126,13 @@ class TestQdrantSemanticSearchDateFiltering:
         naive_dt = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days_ago)
         return Memory(key=key, content=content, created_at=naive_dt, updated_at=naive_dt)
 
-    def test_date_from_filters_older_memories(self):
+    @pytest.mark.asyncio
+    async def test_date_from_filters_older_memories(self):
         """date_from should exclude memories created before that date."""
         old_mem = self._make_naive_memory("mem_old", "old", days_ago=10)
         new_mem = self._make_naive_memory("mem_new", "new", days_ago=1)
 
-        vs = MagicMock()
+        vs = AsyncMock()
         vs.search.return_value = Success([("mem_old", 0.8), ("mem_new", 0.9)])
 
         repo = MagicMock()
@@ -139,17 +148,18 @@ class TestQdrantSemanticSearchDateFiltering:
         from datetime import datetime
 
         date_from = datetime.now(UTC) - timedelta(days=5)
-        result = adapter.search("query", date_from=date_from)
+        result = await adapter.search("query", date_from=date_from)
         assert result.is_ok
         assert len(result.value) == 1
         assert result.value[0][0].key == "mem_new"
 
-    def test_date_to_filters_newer_memories(self):
+    @pytest.mark.asyncio
+    async def test_date_to_filters_newer_memories(self):
         """date_to should exclude memories created after that date."""
         old_mem = self._make_naive_memory("mem_old", "old", days_ago=10)
         new_mem = self._make_naive_memory("mem_new", "new", days_ago=1)
 
-        vs = MagicMock()
+        vs = AsyncMock()
         vs.search.return_value = Success([("mem_old", 0.8), ("mem_new", 0.9)])
 
         repo = MagicMock()
@@ -164,18 +174,19 @@ class TestQdrantSemanticSearchDateFiltering:
         from datetime import datetime
 
         date_to = datetime.now(UTC) - timedelta(days=5)
-        result = adapter.search("query", date_to=date_to)
+        result = await adapter.search("query", date_to=date_to)
         assert result.is_ok
         assert len(result.value) == 1
         assert result.value[0][0].key == "mem_old"
 
-    def test_date_from_and_to_together(self):
+    @pytest.mark.asyncio
+    async def test_date_from_and_to_together(self):
         """Both date_from and date_to should filter in the correct range."""
         old = self._make_naive_memory("mem_old", "old", days_ago=20)
         mid = self._make_naive_memory("mem_mid", "mid", days_ago=10)
         new = self._make_naive_memory("mem_new", "new", days_ago=1)
 
-        vs = MagicMock()
+        vs = AsyncMock()
         vs.search.return_value = Success([("mem_old", 0.7), ("mem_mid", 0.8), ("mem_new", 0.9)])
 
         repo = MagicMock()
@@ -192,14 +203,15 @@ class TestQdrantSemanticSearchDateFiltering:
 
         date_from = datetime.now(UTC) - timedelta(days=15)
         date_to = datetime.now(UTC) - timedelta(days=5)
-        result = adapter.search("query", date_from=date_from, date_to=date_to)
+        result = await adapter.search("query", date_from=date_from, date_to=date_to)
         assert result.is_ok
         assert len(result.value) == 1
         assert result.value[0][0].key == "mem_mid"
 
-    def test_date_filter_increases_fetch_limit(self):
+    @pytest.mark.asyncio
+    async def test_date_filter_increases_fetch_limit(self):
         """When date filter is active, fetch_limit should be 3x the requested limit."""
-        vs = MagicMock()
+        vs = AsyncMock()
         vs.search.return_value = Success([])
         repo = MagicMock()
 
@@ -207,28 +219,30 @@ class TestQdrantSemanticSearchDateFiltering:
         adapter.persona = "test"
         from datetime import datetime
 
-        adapter.search("query", limit=5, date_from=datetime.now(UTC))
+        await adapter.search("query", limit=5, date_from=datetime.now(UTC))
         # fetch_limit = 5 * 3 = 15
         vs.search.assert_called_once_with("test", "query", 15)
 
-    def test_date_filter_no_dates_uses_normal_limit(self):
+    @pytest.mark.asyncio
+    async def test_date_filter_no_dates_uses_normal_limit(self):
         """Without date filter, fetch_limit should equal the requested limit."""
-        vs = MagicMock()
+        vs = AsyncMock()
         vs.search.return_value = Success([])
         repo = MagicMock()
 
         adapter = QdrantSemanticSearch(vs, repo)
         adapter.persona = "test"
-        adapter.search("query", limit=5)
+        await adapter.search("query", limit=5)
         vs.search.assert_called_once_with("test", "query", 5)
 
-    def test_break_when_limit_reached_after_date_filter(self):
+    @pytest.mark.asyncio
+    async def test_break_when_limit_reached_after_date_filter(self):
         """Should break early when enough results pass the date filter (line 75)."""
         from datetime import datetime
 
         # 4 memories all within date range
         memories = [self._make_naive_memory(f"mem_{i}", f"content {i}", days_ago=i) for i in range(4)]
-        vs = MagicMock()
+        vs = AsyncMock()
         vs.search.return_value = Success([(f"mem_{i}", 0.9 - i * 0.1) for i in range(4)])
 
         repo = MagicMock()
@@ -242,7 +256,7 @@ class TestQdrantSemanticSearchDateFiltering:
         adapter = QdrantSemanticSearch(vs, repo)
         adapter.persona = "test"
         date_from = datetime.now(UTC) - timedelta(days=30)
-        result = adapter.search("query", limit=2, date_from=date_from)
+        result = await adapter.search("query", limit=2, date_from=date_from)
         assert result.is_ok
         assert len(result.value) == 2  # Should break at limit=2
 
@@ -463,12 +477,14 @@ class TestAppContextVectorStore:
             mock_engine.run_all.return_value = Success(None)
             mock_migration_engine.return_value = mock_engine
 
-            mock_mgr = MagicMock()
-            mock_mgr.health_check.return_value = True
+            mock_mgr = AsyncMock()
+            mock_mgr.connect = AsyncMock(return_value=mock_mgr)
+            mock_mgr.health_check = AsyncMock(return_value=True)
             mock_qdrant_client_manager.return_value = mock_mgr
 
             mock_vs = MagicMock()
             mock_vector_store.return_value = mock_vs
+            mock_vs.ensure_collection = AsyncMock(return_value=Success(None))
 
             ctx = AppContext(settings, "test_persona")
             # Access vector_store to trigger lazy init
@@ -492,8 +508,9 @@ class TestAppContextVectorStore:
             mock_engine.run_all.return_value = Success(None)
             mock_migration_engine.return_value = mock_engine
 
-            mock_mgr = MagicMock()
-            mock_mgr.health_check.return_value = False
+            mock_mgr = AsyncMock()
+            mock_mgr.connect = AsyncMock(return_value=mock_mgr)
+            mock_mgr.health_check = AsyncMock(return_value=False)
             mock_qdrant_client_manager.return_value = mock_mgr
 
             ctx = AppContext(settings, "test_persona")
@@ -501,7 +518,8 @@ class TestAppContextVectorStore:
             assert result is None
             ctx.close()
 
-    def test_search_engine_strength_lookup_fallback_to_default(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_search_engine_strength_lookup_fallback_to_default(self, tmp_path):
         """When get_strength fails, strength_lookup defaults to 1.0 (line 197)."""
         from nous.application.use_cases import AppContext
         from nous.config.settings import Settings
@@ -529,12 +547,13 @@ class TestAppContextVectorStore:
                     key="test_key", importance=0.5, created_at=MagicMock(), content="test content", tags=["test"]
                 )
                 se._keyword.search = MagicMock(return_value=Success([(mem, 1.0)]))
-                result = se.search(SearchQuery(text="test", top_k=5, mode="hybrid"))
+                result = await se.search(SearchQuery(text="test", top_k=5, mode="hybrid"))
                 assert result.is_ok
 
             ctx.close()
 
-    def test_search_engine_strength_lookup_none_strength(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_search_engine_strength_lookup_none_strength(self, tmp_path):
         """When get_strength returns Success(None), strength_lookup returns 1.0."""
         from nous.application.use_cases import AppContext
         from nous.config.settings import Settings
@@ -559,7 +578,7 @@ class TestAppContextVectorStore:
                     key="test_key", importance=0.5, created_at=MagicMock(), content="test content", tags=["test"]
                 )
                 se._keyword.search = MagicMock(return_value=Success([(mem, 1.0)]))
-                result = se.search(SearchQuery(text="test", top_k=5, mode="hybrid"))
+                result = await se.search(SearchQuery(text="test", top_k=5, mode="hybrid"))
                 assert result.is_ok
 
             ctx.close()

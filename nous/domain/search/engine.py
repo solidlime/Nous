@@ -73,7 +73,7 @@ class SearchEngine:
         self._chat_config = chat_config
         self._reranker = reranker
 
-    def search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
+    async def search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
         """Execute search using the specified mode.
 
         Modes:
@@ -91,13 +91,13 @@ class SearchEngine:
         if mode == "keyword":
             result = self._keyword_search(query, date_from, date_to)
         elif mode == "semantic":
-            result = self._semantic_search(query, date_from, date_to)
+            result = await self._semantic_search(query, date_from, date_to)
         elif mode == "smart":
-            result = self._smart_search(query)
+            result = await self._smart_search(query)
         elif mode == "memorag":
-            result = self._memorag_search(query)
+            result = await self._memorag_search(query)
         else:
-            result = self._hybrid_search(query, date_from, date_to)
+            result = await self._hybrid_search(query, date_from, date_to)
 
         if not result.is_ok:
             return result
@@ -131,18 +131,18 @@ class SearchEngine:
             return Failure(result.error)
         return Success(self._to_search_results(result.value, "keyword"))
 
-    def _semantic_search(
+    async def _semantic_search(
         self, query: SearchQuery, date_from=None, date_to=None
     ) -> Result[list[SearchResult], SearchError]:
         """Execute semantic-only search, falling back to keyword on unavailability or error."""
         if self._semantic is None:
             return self._keyword_search(query, date_from, date_to)
-        result = self._semantic.search(query.text, limit=query.top_k, date_from=date_from, date_to=date_to)
+        result = await self._semantic.search(query.text, limit=query.top_k, date_from=date_from, date_to=date_to)
         if not result.is_ok:
             return self._keyword_search(query, date_from, date_to)
         return Success(self._to_search_results(result.value, "semantic"))
 
-    def _hybrid_search(
+    async def _hybrid_search(
         self, query: SearchQuery, date_from=None, date_to=None
     ) -> Result[list[SearchResult], SearchError]:
         """Execute hybrid search combining FTS5, plain keyword, and semantic results with RRF fusion."""
@@ -163,7 +163,9 @@ class SearchEngine:
 
         # 3. Semantic vector search (Qdrant)
         if self._semantic is not None:
-            sem_result = self._semantic.search(query.text, limit=query.top_k, date_from=date_from, date_to=date_to)
+            sem_result = await self._semantic.search(
+                query.text, limit=query.top_k, date_from=date_from, date_to=date_to
+            )
             if sem_result.is_ok:
                 sem_results = self._to_search_results(sem_result.value, "semantic")
                 # Apply similarity_flag for high-confidence matches
@@ -226,7 +228,7 @@ class SearchEngine:
             return "smart"
         return "hybrid"
 
-    def _smart_search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
+    async def _smart_search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
         """Smart search: hybrid search with simple query expansion.
 
         Runs the original query plus extracted sub-queries, then merges
@@ -235,7 +237,7 @@ class SearchEngine:
         all_results: list[SearchResult] = []
 
         # 1. Run the original hybrid search
-        original = self._hybrid_search(query)
+        original = await self._hybrid_search(query)
         if original.is_ok:
             all_results.extend(original.value)
 
@@ -256,7 +258,7 @@ class SearchEngine:
                 vector_weight=query.vector_weight,
                 keyword_weight=query.keyword_weight,
             )
-            result = self._hybrid_search(sub)
+            result = await self._hybrid_search(sub)
             if result.is_ok:
                 all_results.extend(result.value)
 
@@ -277,7 +279,7 @@ class SearchEngine:
         deduped = sorted(seen.values(), key=lambda x: x.score, reverse=True)
         return Success(deduped[: query.top_k])
 
-    def _memorag_search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
+    async def _memorag_search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
         """MemoRAG search: Global Context → Clue generation → multi-query hybrid search.
 
         Falls back to smart search if LLM unavailable or clue generation fails.
@@ -288,7 +290,7 @@ class SearchEngine:
 
         cfg = self._memorag_config
         if self._memory_repo is None or cfg is None or not cfg.enabled:
-            return self._smart_search(query)
+            return await self._smart_search(query)
 
         # 1. Load or build ContextSnapshot
         snapshot = MemoryContextSnapshot.load(self._memory_repo)
@@ -298,7 +300,7 @@ class SearchEngine:
                 snapshot.save(self._memory_repo)
             except Exception as e:
                 logger.warning("MemoRAG: snapshot build failed: %s", e)
-                return self._smart_search(query)
+                return await self._smart_search(query)
 
         # 2. Generate clues (if LLM available)
         clues: list[str] = []
@@ -321,12 +323,12 @@ class SearchEngine:
                 logger.debug("MemoRAG: clue generation failed: %s", e)
 
         if not clues:
-            return self._smart_search(query)
+            return await self._smart_search(query)
 
         # 3. Run hybrid search for original query + each clue
         all_results: list[SearchResult] = []
 
-        original = self._hybrid_search(query)
+        original = await self._hybrid_search(query)
         if original.is_ok:
             all_results.extend(original.value)
 
@@ -345,7 +347,7 @@ class SearchEngine:
                 vector_weight=query.vector_weight,
                 keyword_weight=query.keyword_weight,
             )
-            result = self._hybrid_search(sub)
+            result = await self._hybrid_search(sub)
             if result.is_ok:
                 all_results.extend(result.value)
 

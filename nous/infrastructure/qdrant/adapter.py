@@ -33,21 +33,23 @@ class QdrantVectorStore:
         return f"{self.collection_prefix}{persona}"
 
     # ------------------------------------------------------------------
-    # Sync API
+    # Async API (all methods are async, using AsyncQdrantClient)
     # ------------------------------------------------------------------
 
-    def ensure_collection(self, persona: str) -> Result[None, VectorStoreError]:
+    async def ensure_collection(self, persona: str) -> Result[None, VectorStoreError]:
         """Create the Qdrant collection for a persona if it does not exist."""
         name = self.collection_name(persona)
         try:
             from qdrant_client.models import Distance, VectorParams
 
-            collections = self.client_manager.client.get_collections().collections
+            client = self.client_manager.client
+            collections = (await client.get_collections()).collections
             if not any(c.name == name for c in collections):
-                self.client_manager.client.create_collection(
+                dim = await self.embedding.async_dimension()
+                await client.create_collection(
                     collection_name=name,
                     vectors_config=VectorParams(
-                        size=self.embedding.dimension,
+                        size=dim,
                         distance=Distance.COSINE,
                     ),
                 )
@@ -68,7 +70,7 @@ class QdrantVectorStore:
                 logger.error("Failed to ensure collection %s: %s", name, e)
             return Failure(VectorStoreError(str(e)))
 
-    def upsert(
+    async def upsert(
         self,
         persona: str,
         key: str,
@@ -80,8 +82,8 @@ class QdrantVectorStore:
         try:
             from qdrant_client.models import PointStruct
 
-            vector = self.embedding.encode(content, is_query=False)
-            payload = {
+            vector = await self.embedding.async_encode(content, is_query=False)
+            payload: dict = {
                 "key": key,
                 "content": content,
                 "lifecycle_status": lifecycle_status,
@@ -95,7 +97,7 @@ class QdrantVectorStore:
                 vector=vector.tolist(),
                 payload=payload,
             )
-            self.client_manager.client.upsert(
+            await self.client_manager.client.upsert(
                 collection_name=self.collection_name(persona),
                 points=[point],
             )
@@ -137,182 +139,34 @@ class QdrantVectorStore:
             limit=limit,
         )
 
-    def search(self, persona: str, query: str, limit: int = 10) -> Result[list[tuple[str, float]], VectorStoreError]:
-        """Semantic search with temporal decay. Returns list of (memory_key, score)."""
-        try:
-            vector = self.embedding.encode(query, is_query=True)
-            query_request = self._build_decay_query(vector, limit)
-            response = self.client_manager.client.query_points(
-                collection_name=self.collection_name(persona),
-                **query_request.model_dump(exclude_none=True),
-            )
-            results = response.points
-            return Success([(r.payload["key"], r.score) for r in results])
-        except Exception as e:
-            logger.error("Failed to search vectors for '%s': %s", query, e)
-            return Failure(VectorStoreError(str(e)))
-
-    # ------------------------------------------------------------------
-    # Async API (embedding calls run in executor to avoid event-loop blocking)
-    # ------------------------------------------------------------------
-
-    async def async_ensure_collection(self, persona: str) -> Result[None, VectorStoreError]:
-        """Async version of :meth:`ensure_collection`."""
-        name = self.collection_name(persona)
-        try:
-            from qdrant_client.models import Distance, VectorParams
-
-            collections = self.client_manager.client.get_collections().collections
-            if not any(c.name == name for c in collections):
-                dim = await self.embedding.async_dimension()
-                self.client_manager.client.create_collection(
-                    collection_name=name,
-                    vectors_config=VectorParams(
-                        size=dim,
-                        distance=Distance.COSINE,
-                    ),
-                )
-                logger.info("Created Qdrant collection: %s", name)
-            return Success(None)
-        except Exception as e:
-            err_str = str(e)
-            if "No such file or directory" in err_str or "storage" in err_str.lower():
-                logger.error(
-                    "Failed to ensure collection %s: %s\n"
-                    "HINT: Qdrant's storage directory is missing. "
-                    "Run via `docker-compose up -d` so the ./data/qdrant volume is mounted, "
-                    "or pre-create the storage directory before starting Qdrant standalone.",
-                    name,
-                    e,
-                )
-            else:
-                logger.error("Failed to ensure collection %s: %s", name, e)
-            return Failure(VectorStoreError(str(e)))
-
-    async def async_upsert(
-        self,
-        persona: str,
-        key: str,
-        content: str,
-        metadata: dict | None = None,
-        lifecycle_status: str = "active",
-    ) -> Result[None, VectorStoreError]:
-        """Async version of :meth:`upsert`."""
-        try:
-            from qdrant_client.models import PointStruct
-
-            vector = await self.embedding.async_encode(content, is_query=False)
-            payload = {
-                "key": key,
-                "content": content,
-                "lifecycle_status": lifecycle_status,
-                "created_at": datetime.now(UTC).isoformat(),
-            }
-            if metadata:
-                payload.update(metadata)
-
-            point = PointStruct(
-                id=self._key_to_id(key),
-                vector=vector.tolist(),
-                payload=payload,
-            )
-            self.client_manager.client.upsert(
-                collection_name=self.collection_name(persona),
-                points=[point],
-            )
-            logger.info("Upserted vector for key: %s", key)
-            return Success(None)
-        except Exception as e:
-            logger.error("Failed to upsert vector for %s: %s", key, e)
-            return Failure(VectorStoreError(str(e)))
-
-    async def async_search(
+    async def search(
         self,
         persona: str,
         query: str,
         limit: int = 10,
     ) -> Result[list[tuple[str, float]], VectorStoreError]:
-        """Async version of :meth:`search` with temporal decay."""
+        """Semantic search with temporal decay. Returns list of (memory_key, score)."""
         try:
             vector = await self.embedding.async_encode(query, is_query=True)
             query_request = self._build_decay_query(vector, limit)
-            response = self.client_manager.client.query_points(
+            client = self.client_manager.client
+            response = await client.query_points(
                 collection_name=self.collection_name(persona),
                 **query_request.model_dump(exclude_none=True),
             )
-            results = response.points
-            return Success([(r.payload["key"], r.score) for r in results])
+            results = response.points if response else []
+            return Success(
+                [
+                    (r.payload.get("key", ""), r.score)  # type: ignore[union-attr]
+                    for r in results
+                    if r.payload
+                ],
+            )
         except Exception as e:
             logger.error("Failed to search vectors for '%s': %s", query, e)
             return Failure(VectorStoreError(str(e)))
 
-    async def async_upsert_batch(
-        self,
-        persona: str,
-        memories: list[tuple[str, str]],
-        batch_size: int = 64,
-    ) -> Result[int, VectorStoreError]:
-        """Async version of :meth:`upsert_batch`."""
-        if not memories:
-            return Success(0)
-        try:
-            from qdrant_client.models import PointStruct
-
-            contents = [content for _, content in memories]
-            vectors = await self.embedding.async_encode_batch(contents, is_query=False)
-            total = 0
-            for i in range(0, len(memories), batch_size):
-                batch = memories[i : i + batch_size]
-                batch_vectors = vectors[i : i + batch_size]
-                points = []
-                for (key, content), vec in zip(batch, batch_vectors, strict=True):
-                    points.append(
-                        PointStruct(
-                            id=self._key_to_id(key),
-                            vector=vec.tolist(),
-                            payload={"key": key, "content": content},
-                        )
-                    )
-                self.client_manager.client.upsert(
-                    collection_name=self.collection_name(persona),
-                    points=points,
-                )
-                total += len(points)
-            logger.info(
-                "Batch upserted %d vectors for persona: %s",
-                total,
-                persona,
-            )
-            return Success(total)
-        except Exception as e:
-            logger.error("Failed to batch upsert for '%s': %s", persona, e)
-            return Failure(VectorStoreError(str(e)))
-
-    def delete(self, persona: str, key: str) -> Result[None, VectorStoreError]:
-        """Delete a point from the vector store."""
-        try:
-            from qdrant_client.models import PointIdsList
-
-            self.client_manager.client.delete(
-                collection_name=self.collection_name(persona),
-                points_selector=PointIdsList(points=[self._key_to_id(key)]),
-            )
-            logger.info("Deleted vector for key: %s", key)
-            return Success(None)
-        except Exception as e:
-            logger.error("Failed to delete vector for %s: %s", key, e)
-            return Failure(VectorStoreError(str(e)))
-
-    def count(self, persona: str) -> Result[int, VectorStoreError]:
-        """Count points in the persona's collection."""
-        try:
-            info = self.client_manager.client.get_collection(collection_name=self.collection_name(persona))
-            return Success(info.points_count)
-        except Exception as e:
-            logger.error("Failed to count vectors for '%s': %s", persona, e)
-            return Failure(VectorStoreError(str(e)))
-
-    def upsert_batch(
+    async def upsert_batch(
         self,
         persona: str,
         memories: list[tuple[str, str]],
@@ -325,12 +179,13 @@ class QdrantVectorStore:
             from qdrant_client.models import PointStruct
 
             contents = [content for _, content in memories]
-            vectors = self.embedding.encode_batch(contents, is_query=False)
+            vectors = await self.embedding.async_encode_batch(contents, is_query=False)
+            client = self.client_manager.client
             total = 0
             for i in range(0, len(memories), batch_size):
                 batch = memories[i : i + batch_size]
                 batch_vectors = vectors[i : i + batch_size]
-                points = []
+                points: list[PointStruct] = []
                 for (key, content), vec in zip(batch, batch_vectors, strict=True):
                     points.append(
                         PointStruct(
@@ -339,7 +194,7 @@ class QdrantVectorStore:
                             payload={"key": key, "content": content},
                         )
                     )
-                self.client_manager.client.upsert(
+                await client.upsert(
                     collection_name=self.collection_name(persona),
                     points=points,
                 )
@@ -354,19 +209,45 @@ class QdrantVectorStore:
             logger.error("Failed to batch upsert for '%s': %s", persona, e)
             return Failure(VectorStoreError(str(e)))
 
-    def rebuild_collection(self, persona: str) -> Result[None, VectorStoreError]:
+    async def delete(self, persona: str, key: str) -> Result[None, VectorStoreError]:
+        """Delete a point from the vector store."""
+        try:
+            from qdrant_client.models import PointIdsList
+
+            await self.client_manager.client.delete(
+                collection_name=self.collection_name(persona),
+                points_selector=PointIdsList(points=[self._key_to_id(key)]),
+            )
+            logger.info("Deleted vector for key: %s", key)
+            return Success(None)
+        except Exception as e:
+            logger.error("Failed to delete vector for %s: %s", key, e)
+            return Failure(VectorStoreError(str(e)))
+
+    async def count(self, persona: str) -> Result[int, VectorStoreError]:
+        """Count points in the persona's collection."""
+        try:
+            info = await self.client_manager.client.get_collection(
+                collection_name=self.collection_name(persona),
+            )
+            return Success(info.points_count or 0)
+        except Exception as e:
+            logger.error("Failed to count vectors for '%s': %s", persona, e)
+            return Failure(VectorStoreError(str(e)))
+
+    async def rebuild_collection(self, persona: str) -> Result[None, VectorStoreError]:
         """Delete and recreate collection for a persona."""
         name = self.collection_name(persona)
         try:
             try:
-                self.client_manager.client.delete_collection(name)
+                await self.client_manager.client.delete_collection(name)
                 logger.info("Deleted collection: %s", name)
             except Exception:
                 logger.debug(
                     "Collection %s did not exist, skipping delete",
                     name,
                 )
-            return self.ensure_collection(persona)
+            return await self.ensure_collection(persona)
         except Exception as e:
             logger.error("Failed to rebuild collection '%s': %s", name, e)
             return Failure(VectorStoreError(str(e)))
@@ -376,10 +257,14 @@ class QdrantVectorStore:
         """Convert a memory key to a deterministic UUID-like hex string for Qdrant."""
         return hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()  # nosec B324
 
-    def reconnect(self, new_url: str | None = None, new_api_key: str | None = None) -> dict:
-        """Qdrantクライアントを再接続する。client_managerに委譲。"""
-        return self.client_manager.reconnect(new_url=new_url, new_api_key=new_api_key)
+    async def reconnect(
+        self,
+        new_url: str | None = None,
+        new_api_key: str | None = None,
+    ) -> dict:
+        """Reconnect the Qdrant client. Delegates to client_manager."""
+        return await self.client_manager.reconnect(new_url=new_url, new_api_key=new_api_key)
 
-    def get_connection_status(self) -> dict:
-        """接続状態を返す。client_managerに委譲。"""
-        return self.client_manager.get_connection_status()
+    async def get_connection_status(self) -> dict:
+        """Return connection status. Delegates to client_manager."""
+        return await self.client_manager.get_connection_status()

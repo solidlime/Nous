@@ -264,7 +264,7 @@ def register_persona_routes(mcp) -> None:
             )
             if res.is_ok:
                 if ctx.vector_store:
-                    ctx.vector_store.upsert(persona, res.value.key, msg.content)
+                    await ctx.vector_store.upsert(persona, res.value.key, msg.content)
                 imported += 1
             else:
                 skipped += 1

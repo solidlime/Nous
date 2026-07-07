@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -72,23 +73,31 @@ def run_auto_import(
 
                 ctx = AppContextRegistry.get(persona)
                 if ctx.vector_store is not None:
-                    ctx.vector_store.rebuild_collection(persona)
-                    rows = connection.get_memory_db().execute("SELECT key, content FROM memories").fetchall()
-                    memories_for_vector: list[tuple[str, str]] = [(row["key"], row["content"]) for row in rows]
-                    if memories_for_vector:
-                        upsert_result = ctx.vector_store.upsert_batch(persona, memories_for_vector)
-                        if upsert_result.is_ok:
-                            logger.info(
-                                "Vector store synced for '%s': %d points",
-                                persona,
-                                upsert_result.value,
-                            )
-                        else:
-                            logger.warning(
-                                "Vector upsert failed for '%s': %s",
-                                persona,
-                                upsert_result.error,
-                            )
+
+                    async def _sync_vector_store(
+                        _ctx=ctx,
+                        _persona=persona,
+                        _conn=connection,
+                    ) -> None:
+                        await _ctx.vector_store.rebuild_collection(_persona)  # type: ignore[misc]
+                        rows = _conn.get_memory_db().execute("SELECT key, content FROM memories").fetchall()
+                        memories_for_vector: list[tuple[str, str]] = [(row["key"], row["content"]) for row in rows]
+                        if memories_for_vector:
+                            upsert_result = await _ctx.vector_store.upsert_batch(_persona, memories_for_vector)  # type: ignore[misc]
+                            if upsert_result.is_ok:
+                                logger.info(
+                                    "Vector store synced for '%s': %d points",
+                                    _persona,
+                                    upsert_result.value,
+                                )
+                            else:
+                                logger.warning(
+                                    "Vector upsert failed for '%s': %s",
+                                    _persona,
+                                    upsert_result.error,
+                                )
+
+                    asyncio.run(_sync_vector_store())
                 else:
                     logger.info(
                         "Qdrant unavailable — skipping vector sync for '%s'",

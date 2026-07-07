@@ -172,7 +172,7 @@ async def run_auto_capture(
                     # Also upsert to vector store if available
                     if ctx.vector_store:
                         try:
-                            ctx.vector_store.upsert(persona, result.value.key, text)
+                            await ctx.vector_store.upsert(persona, result.value.key, text)
                         except Exception:
                             logger.debug("VectorStore upsert failed for auto-captured memory")
             except Exception as e:

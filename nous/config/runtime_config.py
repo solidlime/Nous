@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import threading
@@ -356,6 +357,10 @@ def register_model_reload_callbacks(config_manager: RuntimeConfigManager) -> Non
 
     def on_qdrant_change(key: str, new_value: Any) -> None:
         """Qdrant設定変更時のコールバック。"""
+        asyncio.run(_on_qdrant_change_async(key, new_value))
+
+    async def _on_qdrant_change_async(key: str, new_value: Any) -> None:
+        """Async implementation of Qdrant change handler."""
         config_manager.reload_status.set("qdrant", "loading")
         logger.info("Qdrant config changed: %s = %s", key, new_value if key != "api_key" else "***")
 
@@ -367,12 +372,12 @@ def register_model_reload_callbacks(config_manager: RuntimeConfigManager) -> Non
                     kwargs["new_url"] = new_value
                 elif key == "api_key":
                     kwargs["new_api_key"] = new_value
-                result = ctx._vector_store.reconnect(**kwargs)
+                result = await ctx._vector_store.reconnect(**kwargs)
                 results.append({"persona": persona, **result})
                 # collection_prefix 変更時はvector_storeをリセット
                 if key == "collection_prefix":
                     ctx._vector_store.collection_prefix = new_value
-                    ctx._vector_store.ensure_collection(persona)
+                    await ctx._vector_store.ensure_collection(persona)
                 # search_engine をリセット
                 ctx._search_engine = None
 

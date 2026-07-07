@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from nous.domain.memory.contradiction import ContradictionDetector
 from nous.domain.shared.errors import VectorStoreError
 from nous.domain.shared.result import Failure, Success
-
-# ---------------------------------------------------------------------------
-# Mock vector store
-# ---------------------------------------------------------------------------
 
 
 class MockVectorStore:
@@ -18,19 +16,15 @@ class MockVectorStore:
         self._results = results or []
         self._error = error
 
-    def search(self, persona: str, query: str, limit: int = 10):
+    async def search(self, persona: str, query: str, limit: int = 10):
         if self._error:
             return Failure(VectorStoreError("Connection failed"))
         return Success(self._results)
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-
 class TestContradictionDetector:
-    def test_find_no_contradictions(self):
+    @pytest.mark.asyncio
+    async def test_find_no_contradictions(self):
         """矛盾なし時は空リスト"""
         store = MockVectorStore(
             results=[
@@ -39,13 +33,14 @@ class TestContradictionDetector:
             ]
         )
         detector = ContradictionDetector(vector_store=store, threshold=0.85)
-        result = detector.find_potential_contradictions("test content", "persona1")
+        result = await detector.find_potential_contradictions("test content", "persona1")
         assert result.is_ok
         report = result.value
         assert len(report.candidates) == 0
         assert report.threshold == 0.85
 
-    def test_find_potential_contradictions(self):
+    @pytest.mark.asyncio
+    async def test_find_potential_contradictions(self):
         """類似度が閾値以上の記憶が返される"""
         store = MockVectorStore(
             results=[
@@ -55,7 +50,7 @@ class TestContradictionDetector:
             ]
         )
         detector = ContradictionDetector(vector_store=store, threshold=0.85)
-        result = detector.find_potential_contradictions("test content", "persona1")
+        result = await detector.find_potential_contradictions("test content", "persona1")
         assert result.is_ok
         report = result.value
         assert len(report.candidates) == 2
@@ -64,7 +59,8 @@ class TestContradictionDetector:
         assert report.candidates[1].memory_key == "mem_2"
         assert report.candidates[1].similarity == 0.87
 
-    def test_exclude_self(self):
+    @pytest.mark.asyncio
+    async def test_exclude_self(self):
         """自分自身は除外される"""
         store = MockVectorStore(
             results=[
@@ -73,13 +69,14 @@ class TestContradictionDetector:
             ]
         )
         detector = ContradictionDetector(vector_store=store, threshold=0.85)
-        result = detector.find_potential_contradictions("test content", "persona1", exclude_key="mem_self")
+        result = await detector.find_potential_contradictions("test content", "persona1", exclude_key="mem_self")
         assert result.is_ok
         report = result.value
         assert len(report.candidates) == 1
         assert report.candidates[0].memory_key == "mem_other"
 
-    def test_threshold_filtering(self):
+    @pytest.mark.asyncio
+    async def test_threshold_filtering(self):
         """閾値未満の結果はフィルタされる"""
         store = MockVectorStore(
             results=[
@@ -89,7 +86,7 @@ class TestContradictionDetector:
             ]
         )
         detector = ContradictionDetector(vector_store=store, threshold=0.85)
-        result = detector.find_potential_contradictions("test", "persona1")
+        result = await detector.find_potential_contradictions("test", "persona1")
         assert result.is_ok
         report = result.value
         assert len(report.candidates) == 2  # 0.85 and 0.86
@@ -98,24 +95,27 @@ class TestContradictionDetector:
         assert "mem_2" in keys
         assert "mem_3" in keys
 
-    def test_qdrant_unavailable_graceful(self):
+    @pytest.mark.asyncio
+    async def test_qdrant_unavailable_graceful(self):
         """Qdrant未接続時はgraceful degradation"""
         detector = ContradictionDetector(vector_store=None, threshold=0.85)
-        result = detector.find_potential_contradictions("test", "persona1")
+        result = await detector.find_potential_contradictions("test", "persona1")
         assert result.is_ok
         report = result.value
         assert len(report.candidates) == 0
         assert report.query_content == "test"
 
-    def test_vector_store_error_graceful(self):
+    @pytest.mark.asyncio
+    async def test_vector_store_error_graceful(self):
         """ベクトルストアエラー時もgraceful degradation"""
         store = MockVectorStore(error=True)
         detector = ContradictionDetector(vector_store=store, threshold=0.85)
-        result = detector.find_potential_contradictions("test", "persona1")
+        result = await detector.find_potential_contradictions("test", "persona1")
         assert result.is_ok
         assert len(result.value.candidates) == 0
 
-    def test_custom_threshold(self):
+    @pytest.mark.asyncio
+    async def test_custom_threshold(self):
         """カスタム閾値が正しく適用される"""
         store = MockVectorStore(
             results=[
@@ -124,7 +124,7 @@ class TestContradictionDetector:
             ]
         )
         detector = ContradictionDetector(vector_store=store, threshold=0.75)
-        result = detector.find_potential_contradictions("test", "persona1")
+        result = await detector.find_potential_contradictions("test", "persona1")
         assert result.is_ok
         assert len(result.value.candidates) == 1
         assert result.value.candidates[0].memory_key == "mem_2"
@@ -137,10 +137,11 @@ class TestContradictionDetector:
         detector_without = ContradictionDetector(vector_store=None)
         assert detector_without.available is False
 
-    def test_report_contains_query_content(self):
+    @pytest.mark.asyncio
+    async def test_report_contains_query_content(self):
         """レポートにクエリコンテンツが含まれる"""
         store = MockVectorStore(results=[])
         detector = ContradictionDetector(vector_store=store)
-        result = detector.find_potential_contradictions("my query", "persona1")
+        result = await detector.find_potential_contradictions("my query", "persona1")
         assert result.is_ok
         assert result.value.query_content == "my query"

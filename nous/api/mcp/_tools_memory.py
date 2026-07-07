@@ -38,7 +38,7 @@ async def _tool_memory_create(
 
     # ── Semantic duplicate check (same as builtin.py L128-147) ──
     if not skip_duplicate_check and content:
-        search_result = ctx.search_engine.search(SearchQuery(text=content, top_k=3))
+        search_result = await ctx.search_engine.search(SearchQuery(text=content, top_k=3))
         if search_result.is_ok and search_result.value:
             duplicates = [
                 {
@@ -76,7 +76,7 @@ async def _tool_memory_create(
     )
     if result.is_ok:
         if not defer_vector and ctx.vector_store:
-            ctx.vector_store.upsert(persona, result.value.key, content)
+            await ctx.vector_store.upsert(persona, result.value.key, content)
         await ctx.event_bus.publish(
             "memory.created",
             {
@@ -192,7 +192,7 @@ async def _tool_memory_update(
     query: search query to resolve memory_key (alternative to direct memory_key)."""
     # query から key を解決（builtin互換）
     if query and not memory_key:
-        search_result = ctx.search_engine.search(SearchQuery(text=query, top_k=1))
+        search_result = await ctx.search_engine.search(SearchQuery(text=query, top_k=1))
         if not search_result.is_ok or not search_result.value:
             return json.dumps({"ok": False, "error": f"No memory found for query: {query}"}, ensure_ascii=False)
         item = search_result.value[0]
@@ -259,7 +259,7 @@ async def _tool_memory_update(
     result = ctx.memory_service.update_memory(memory_key, **updates)
     if result.is_ok:
         if ctx.vector_store and "content" in updates:
-            ctx.vector_store.upsert(persona, memory_key, updates["content"])
+            await ctx.vector_store.upsert(persona, memory_key, updates["content"])
         await ctx.event_bus.publish(
             "memory.updated",
             {
@@ -286,7 +286,7 @@ async def _tool_memory_delete(
     key = memory_key
     content_preview = "..."
     if not key and query:
-        search_result = ctx.search_engine.search(SearchQuery(text=query, top_k=1))
+        search_result = await ctx.search_engine.search(SearchQuery(text=query, top_k=1))
         if search_result.is_ok and search_result.value:
             m = search_result.value[0].memory
             key = m.key
@@ -306,7 +306,7 @@ async def _tool_memory_delete(
     result = ctx.memory_service.delete_memory(key)
     if result.is_ok:
         if ctx.vector_store:
-            ctx.vector_store.delete(persona, key)
+            await ctx.vector_store.delete(persona, key)
         await ctx.event_bus.publish(
             "memory.deleted",
             {
@@ -355,7 +355,7 @@ async def _tool_memory_search(
         keyword_weight=keyword_weight,
     )
     ctx.search_engine.set_persona(persona)
-    result = ctx.search_engine.search(search_query)
+    result = await ctx.search_engine.search(search_query)
     if not result.is_ok:
         await ctx.event_bus.publish(
             "tool.called",

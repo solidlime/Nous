@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from nous.domain.memory.entities import Memory
 from nous.domain.search.engine import SearchEngine, SearchQuery, SearchResult
 from nous.domain.shared.result import Success
@@ -102,7 +104,8 @@ def _make_result(key: str, score: float, source: str = "keyword", content: str =
 class TestSearchEngineRerankerIntegration:
     """SearchEngine._hybrid_search should apply reranker when configured."""
 
-    def test_reranker_called_when_enabled(self):
+    @pytest.mark.asyncio
+    async def test_reranker_called_when_enabled(self):
         """When a reranker is set and enabled, _hybrid_search should call rerank."""
         from nous.domain.shared.result import Success
 
@@ -116,13 +119,14 @@ class TestSearchEngineRerankerIntegration:
         kw.search.return_value = Success([(_make_mem("key_a"), 0.5), (_make_mem("key_b"), 0.8)])
 
         engine = SearchEngine(keyword_search=kw, reranker=mock_reranker)
-        result = engine.search(SearchQuery(text="test", mode="hybrid", top_k=5))
+        result = await engine.search(SearchQuery(text="test", mode="hybrid", top_k=5))
         assert result.is_ok
 
         # reranker.rerank should have been called
         mock_reranker.rerank.assert_called_once()
 
-    def test_reranker_scores_merged_into_results(self):
+    @pytest.mark.asyncio
+    async def test_reranker_scores_merged_into_results(self):
         """Reranked scores should replace SearchResult scores after rerank."""
         from nous.domain.shared.result import Success
 
@@ -137,14 +141,15 @@ class TestSearchEngineRerankerIntegration:
         kw.search.return_value = Success([(mem_a, 0.5), (mem_b, 0.8)])
 
         engine = SearchEngine(keyword_search=kw, reranker=mock_reranker)
-        result = engine.search(SearchQuery(text="test", mode="hybrid", top_k=5))
+        result = await engine.search(SearchQuery(text="test", mode="hybrid", top_k=5))
         assert result.is_ok
         assert len(result.value) >= 2
         # key_b should now be first with higher score
         assert result.value[0].memory.key == "key_b"
         assert result.value[0].score == 0.95
 
-    def test_reranker_not_called_when_none(self):
+    @pytest.mark.asyncio
+    async def test_reranker_not_called_when_none(self):
         """When reranker is None, _hybrid_search should skip rerank."""
         from nous.domain.shared.result import Success
 
@@ -152,11 +157,12 @@ class TestSearchEngineRerankerIntegration:
         kw.search.return_value = Success([(_make_mem("key_a"), 0.5)])
 
         engine = SearchEngine(keyword_search=kw, reranker=None)
-        result = engine.search(SearchQuery(text="test", mode="hybrid", top_k=5))
+        result = await engine.search(SearchQuery(text="test", mode="hybrid", top_k=5))
         assert result.is_ok
         # Just verifies no crash
 
-    def test_reranker_not_called_when_disabled(self):
+    @pytest.mark.asyncio
+    async def test_reranker_not_called_when_disabled(self):
         """When reranker.enabled is False, _hybrid_search should skip rerank."""
         from nous.domain.shared.result import Success
 
@@ -167,7 +173,7 @@ class TestSearchEngineRerankerIntegration:
         kw.search.return_value = Success([(_make_mem("key_a"), 0.5)])
 
         engine = SearchEngine(keyword_search=kw, reranker=mock_reranker)
-        result = engine.search(SearchQuery(text="test", mode="hybrid", top_k=5))
+        result = await engine.search(SearchQuery(text="test", mode="hybrid", top_k=5))
         assert result.is_ok
         mock_reranker.rerank.assert_not_called()
 

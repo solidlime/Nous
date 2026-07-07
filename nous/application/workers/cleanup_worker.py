@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from typing import TYPE_CHECKING
@@ -36,6 +37,17 @@ class CleanupWorker:
 
     def _cleanup_cycle(self) -> None:
         """Find and flag near-duplicate memories."""
+        try:
+            asyncio.run(self._cleanup_cycle_async())
+        except RuntimeError:
+            # Already in event loop — run in a thread pool
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
+                _pool.submit(asyncio.run, self._cleanup_cycle_async()).result()
+
+    async def _cleanup_cycle_async(self) -> None:
+        """Async implementation of cleanup cycle."""
         vs = self.context.vector_store
         if vs is None:
             return
@@ -49,7 +61,7 @@ class CleanupWorker:
         for memory in memories:
             if memory.key in seen_keys:
                 continue
-            search_result = vs.search(self.context.persona, memory.content, limit=5)
+            search_result = await vs.search(self.context.persona, memory.content, limit=5)
             if not search_result.is_ok:
                 continue
             for key, score in search_result.value:

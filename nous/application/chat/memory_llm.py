@@ -282,7 +282,7 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
             content = fact.get("content", "")
             if not content:
                 continue
-            dup_check = ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
+            dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
             if dup_check.is_ok and dup_check.value:
                 top_hit = dup_check.value[0]
                 hit_score = top_hit.score if hasattr(top_hit, "score") else 0.0
@@ -316,7 +316,7 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
                 if not upd.is_ok:
                     logger.warning("MemoryLLM: goal cancel failed key=%s: %s", memory_key, upd.error)
             elif action == "create" and content:
-                dup_check = ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
+                dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
                 if dup_check.is_ok and dup_check.value:
                     top_hit = dup_check.value[0]
                     if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
@@ -353,7 +353,7 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
                 if not upd.is_ok:
                     logger.warning("MemoryLLM: interpersonal goal cancel failed key=%s: %s", memory_key, upd.error)
             elif action == "create" and content:
-                dup_check = ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
+                dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
                 if dup_check.is_ok and dup_check.value:
                     top_hit = dup_check.value[0]
                     if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:

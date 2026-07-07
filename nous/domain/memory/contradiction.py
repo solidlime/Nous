@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 class VectorSearchProtocol(Protocol):
     """Protocol for vector similarity search."""
 
-    def search(
+    async def search(
         self, persona: str, query: str, limit: int = 10
     ) -> Result[list[tuple[str, float]], VectorStoreError]: ...
 
@@ -62,7 +62,7 @@ class ContradictionDetector:
         """Whether contradiction detection is available (requires vector store)."""
         return self._vector_store is not None
 
-    def find_potential_contradictions(
+    async def find_potential_contradictions(
         self,
         content: str,
         persona: str,
@@ -82,7 +82,7 @@ class ContradictionDetector:
                 )
             )
 
-        search_result = self._vector_store.search(persona, content, limit=10)
+        search_result = await self._vector_store.search(persona, content, limit=10)
         if not search_result.is_ok:
             return Success(
                 ContradictionReport(

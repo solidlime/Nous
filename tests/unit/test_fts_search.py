@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from nous.domain.memory.entities import Memory
 from nous.domain.search.engine import SearchEngine, SearchQuery, SearchResult
@@ -102,7 +104,8 @@ class TestRRFRankerWeights:
 
 
 class TestSearchEngineFTS5Hybrid:
-    def test_hybrid_includes_fts_when_memory_repo_available(self):
+    @pytest.mark.asyncio
+    async def test_hybrid_includes_fts_when_memory_repo_available(self):
         """Hybrid search should include FTS5 results when memory_repo has search_fts."""
         mem_kw = _mem("kw_key")
         mem_fts = _mem("fts_key")
@@ -111,14 +114,14 @@ class TestSearchEngineFTS5Hybrid:
         kw = MagicMock()
         kw.search.return_value = Success([(mem_kw, 0.7)])
 
-        sem = MagicMock()
+        sem = AsyncMock()
         sem.search.return_value = Success([(mem_sem, 0.9)])
 
         memory_repo = MagicMock()
         memory_repo.search_fts.return_value = Success([(mem_fts, 0.85)])
 
         engine = SearchEngine(keyword_search=kw, semantic_search=sem, memory_repo=memory_repo)
-        result = engine.search(SearchQuery(text="hello", mode="hybrid", top_k=10))
+        result = await engine.search(SearchQuery(text="hello", mode="hybrid", top_k=10))
         assert result.is_ok
         keys = {r.memory.key for r in result.value}
         assert "kw_key" in keys
@@ -126,7 +129,8 @@ class TestSearchEngineFTS5Hybrid:
         assert "sem_key" in keys
         memory_repo.search_fts.assert_called_once()
 
-    def test_hybrid_fallback_when_no_fts(self):
+    @pytest.mark.asyncio
+    async def test_hybrid_fallback_when_no_fts(self):
         """Hybrid search should work without FTS5 (memory_repo without search_fts)."""
         mem_kw = _mem("kw_key")
         mem_sem = _mem("sem_key")
@@ -134,7 +138,7 @@ class TestSearchEngineFTS5Hybrid:
         kw = MagicMock()
         kw.search.return_value = Success([(mem_kw, 0.7)])
 
-        sem = MagicMock()
+        sem = AsyncMock()
         sem.search.return_value = Success([(mem_sem, 0.9)])
 
         memory_repo = MagicMock()
@@ -142,25 +146,26 @@ class TestSearchEngineFTS5Hybrid:
         del memory_repo.search_fts
 
         engine = SearchEngine(keyword_search=kw, semantic_search=sem, memory_repo=memory_repo)
-        result = engine.search(SearchQuery(text="hello", mode="hybrid", top_k=10))
+        result = await engine.search(SearchQuery(text="hello", mode="hybrid", top_k=10))
         assert result.is_ok
         keys = {r.memory.key for r in result.value}
         assert "kw_key" in keys
         assert "sem_key" in keys
 
-    def test_fts_search_is_labeled_fts_source(self):
+    @pytest.mark.asyncio
+    async def test_fts_search_is_labeled_fts_source(self):
         """FTS5 results should have source='fts'."""
         mem = _mem("fts_key")
         kw = MagicMock()
         kw.search.return_value = Success([(_mem("kw_key"), 0.7)])
-        sem = MagicMock()
+        sem = AsyncMock()
         sem.search.return_value = Success([])
 
         memory_repo = MagicMock()
         memory_repo.search_fts.return_value = Success([(mem, 0.85)])
 
         engine = SearchEngine(keyword_search=kw, semantic_search=sem, memory_repo=memory_repo)
-        result = engine.search(SearchQuery(text="hello", mode="hybrid", top_k=10))
+        result = await engine.search(SearchQuery(text="hello", mode="hybrid", top_k=10))
         assert result.is_ok
         fts_results = [r for r in result.value if r.source == "fts"]
         assert len(fts_results) >= 1
@@ -172,58 +177,62 @@ class TestSearchEngineFTS5Hybrid:
 
 
 class TestSimilarityFlag:
-    def test_similarity_flag_set_when_above_threshold(self):
+    @pytest.mark.asyncio
+    async def test_similarity_flag_set_when_above_threshold(self):
         """similarity_flag should be True when score >= similarity_threshold."""
         mem = _mem("sem_key")
         kw = MagicMock()
         kw.search.return_value = Success([])
-        sem = MagicMock()
+        sem = AsyncMock()
         sem.search.return_value = Success([(mem, 0.9)])
 
         engine = SearchEngine(keyword_search=kw, semantic_search=sem)
         query = SearchQuery(text="hello", mode="hybrid", top_k=10, similarity_threshold=0.85)
-        result = engine.search(query)
+        result = await engine.search(query)
         assert result.is_ok
         assert result.value[0].similarity_flag is True
 
-    def test_similarity_flag_not_set_when_below_threshold(self):
+    @pytest.mark.asyncio
+    async def test_similarity_flag_not_set_when_below_threshold(self):
         """similarity_flag should be False when score < similarity_threshold."""
         mem = _mem("sem_key")
         kw = MagicMock()
         kw.search.return_value = Success([])
-        sem = MagicMock()
+        sem = AsyncMock()
         sem.search.return_value = Success([(mem, 0.8)])
 
         engine = SearchEngine(keyword_search=kw, semantic_search=sem)
         query = SearchQuery(text="hello", mode="hybrid", top_k=10, similarity_threshold=0.85)
-        result = engine.search(query)
+        result = await engine.search(query)
         assert result.is_ok
         assert result.value[0].similarity_flag is False
 
-    def test_similarity_flag_threshold_zero_disables_flag(self):
+    @pytest.mark.asyncio
+    async def test_similarity_flag_threshold_zero_disables_flag(self):
         """threshold=0 should disable similarity_flag (never set)."""
         mem = _mem("sem_key")
         kw = MagicMock()
         kw.search.return_value = Success([])
-        sem = MagicMock()
+        sem = AsyncMock()
         sem.search.return_value = Success([(mem, 0.9)])
 
         engine = SearchEngine(keyword_search=kw, semantic_search=sem)
         query = SearchQuery(text="hello", mode="hybrid", top_k=10, similarity_threshold=0.0)
-        result = engine.search(query)
+        result = await engine.search(query)
         assert result.is_ok
         assert result.value[0].similarity_flag is False
 
-    def test_similarity_flag_only_for_semantic(self):
+    @pytest.mark.asyncio
+    async def test_similarity_flag_only_for_semantic(self):
         """Non-semantic results should never have similarity_flag set."""
         kw = MagicMock()
         kw.search.return_value = Success([(_mem("kw_key"), 0.7)])
-        sem = MagicMock()
+        sem = AsyncMock()
         sem.search.return_value = Success([])
 
         engine = SearchEngine(keyword_search=kw, semantic_search=sem)
         query = SearchQuery(text="hello", mode="hybrid", top_k=10)
-        result = engine.search(query)
+        result = await engine.search(query)
         assert result.is_ok
         assert result.value[0].similarity_flag is False
 

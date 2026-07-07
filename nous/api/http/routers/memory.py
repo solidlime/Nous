@@ -256,7 +256,7 @@ def register_memory_routes(mcp) -> None:
             mem = result.value
             if ctx.vector_store is not None:
                 with contextlib.suppress(Exception):
-                    ctx.vector_store.upsert(persona, mem.key, mem.content)
+                    await ctx.vector_store.upsert(persona, mem.key, mem.content)
             return JSONResponse(
                 {"status": "ok", "memory": _memory_to_dict(mem)},
                 status_code=201,
@@ -293,7 +293,7 @@ def register_memory_routes(mcp) -> None:
             mem = result.value
             if "content" in updates and ctx.vector_store is not None:
                 with contextlib.suppress(Exception):
-                    ctx.vector_store.upsert(persona, mem.key, mem.content)
+                    await ctx.vector_store.upsert(persona, mem.key, mem.content)
             return JSONResponse({"status": "ok", "memory": _memory_to_dict(mem)})
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
@@ -314,7 +314,7 @@ def register_memory_routes(mcp) -> None:
                 return JSONResponse({"error": str(result.error)}, status_code=404)
             if ctx.vector_store is not None:
                 with contextlib.suppress(Exception):
-                    ctx.vector_store.delete(persona, key)
+                    await ctx.vector_store.delete(persona, key)
             return JSONResponse({"status": "ok", "deleted": key})
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)

@@ -57,7 +57,7 @@ async def _search_memories(
 
     async def _run(q: str) -> list:
         try:
-            result = ctx.search_engine.search(SearchQuery(text=q, top_k=top_k))
+            result = await ctx.search_engine.search(SearchQuery(text=q, top_k=top_k))
             return result.value if result.is_ok else []
         except Exception as e:
             logger.warning("search_memory failed (query=%s): %s", q[:40], e)

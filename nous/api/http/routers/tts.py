@@ -62,10 +62,12 @@ def register_tts_routes(mcp) -> None:
                 emotion=emotion,
                 speech_style=speech_style,
             )
-            return JSONResponse({
-                "ok": True,
-                "audio_base64": base64.b64encode(audio_bytes).decode("ascii"),
-                "format": "wav",
-            })
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "audio_base64": base64.b64encode(audio_bytes).decode("ascii"),
+                    "format": "wav",
+                }
+            )
         except Exception as e:
             return JSONResponse({"ok": False, "error": str(e)}, status_code=500)

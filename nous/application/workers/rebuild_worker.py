@@ -18,7 +18,7 @@ class RebuildWorker:
     def __init__(self, context: AppContext) -> None:
         self.context = context
 
-    def rebuild(self) -> Success[int] | Failure[DomainError]:
+    async def rebuild(self) -> Success[int] | Failure[DomainError]:
         """Rebuild vector store from SQLite data. Returns count of vectors rebuilt."""
         memories_result = self.context.memory_repo.find_all()
         if not memories_result.is_ok:
@@ -30,7 +30,7 @@ class RebuildWorker:
 
         count = 0
         for memory in memories_result.value:
-            upsert_result = vs.upsert(
+            upsert_result = await vs.upsert(
                 self.context.persona,
                 memory.key,
                 memory.content,

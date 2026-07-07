@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import TYPE_CHECKING
@@ -48,10 +49,10 @@ class QdrantSemanticSearch:
         self.memory_repo = memory_repo
         self.persona: str = ""
 
-    def search(self, query: str, limit: int = 10, date_from=None, date_to=None):
+    async def search(self, query: str, limit: int = 10, date_from=None, date_to=None):
         # Fetch extra results to compensate for date post-filtering
         fetch_limit = limit * 3 if (date_from or date_to) else limit
-        result = self.vector_store.search(self.persona, query, fetch_limit)
+        result = await self.vector_store.search(self.persona, query, fetch_limit)
         if not result.is_ok:
             return Failure(SearchError(str(result.error)))
 
@@ -187,7 +188,7 @@ class AppContext:
             self._session_event_repo = None
             self._session_event_recorder = None
 
-        # Eagerly ensure Qdrant collection exists for this persona
+        # Eagerly ensure Qdrant collection exists for this persona (best-effort)
         self._init_vector_store()
 
     @property
@@ -195,21 +196,17 @@ class AppContext:
         """Lazy-init vector store. Returns None if Qdrant unavailable or collection creation fails."""
         if self._vector_store is None:
             try:
-                mgr = QdrantClientManager(self.settings.qdrant.url, self.settings.qdrant.api_key)
-                if mgr.health_check():
-                    emb = self.embedding_model
-                    vs = QdrantVectorStore(mgr, emb, self.settings.qdrant.collection_prefix)
-                    result = vs.ensure_collection(self.persona)
-                    if result.is_ok:
-                        self._vector_store = vs
-                    else:
-                        logger.warning(
-                            "VectorStore collection creation failed for '%s': %s",
-                            self.persona,
-                            result.error,
-                        )
-            except Exception as _e:
-                logger.debug("VectorStore init failed (Qdrant unavailable?): %s", _e)
+                asyncio.get_running_loop()
+                # Running inside an event loop — cannot block here.
+                # Caller should use await ctx._init_vector_store_async() explicitly.
+            except RuntimeError:
+                # No running loop — safe to call asyncio.run()
+                try:
+                    result = asyncio.run(self._init_vector_store_async())
+                    if result is not None:
+                        self._vector_store = result
+                except Exception as _e:
+                    logger.debug("VectorStore init failed (Qdrant unavailable?): %s", _e)
         return self._vector_store
 
     @property
@@ -242,23 +239,48 @@ class AppContext:
         return self._search_engine
 
     def _init_vector_store(self) -> None:
-        """Eagerly ensure Qdrant collection exists for this persona on startup."""
+        """Eagerly ensure Qdrant collection exists for this persona on startup (sync wrapper)."""
+        import concurrent.futures
+
+        try:
+            asyncio.get_running_loop()
+            # Running inside event loop — run async init in a thread to avoid
+            # "RuntimeError: asyncio.run() cannot be called from a running event loop"
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                result = pool.submit(asyncio.run, self._init_vector_store_async()).result()
+                if result is not None:
+                    self._vector_store = result
+        except RuntimeError:
+            # No running loop — run directly
+            result = asyncio.run(self._init_vector_store_async())
+            if result is not None:
+                self._vector_store = result
+
+    async def _init_vector_store_async(self) -> QdrantVectorStore | None:
+        """Async vector store initialization (connect + ensure collection)."""
         try:
             mgr = QdrantClientManager(self.settings.qdrant.url, self.settings.qdrant.api_key)
-            if mgr.health_check():
+            await mgr.connect()
+            if await mgr.health_check():
                 emb = self.embedding_model
                 vs = QdrantVectorStore(mgr, emb, self.settings.qdrant.collection_prefix)
-                result = vs.ensure_collection(self.persona)
+                result = await vs.ensure_collection(self.persona)
                 if result.is_ok:
-                    self._vector_store = vs
-                else:
-                    logger.warning(
-                        "VectorStore collection creation failed for '%s': %s",
-                        self.persona,
-                        result.error,
-                    )
+                    return vs
+                logger.warning(
+                    "VectorStore collection creation failed for '%s': %s",
+                    self.persona,
+                    result.error,
+                )
         except Exception as _e:
-            logger.debug("VectorStore eager init failed (Qdrant unavailable?): %s", _e)
+            logger.debug("VectorStore async init failed (Qdrant unavailable?): %s", _e)
+        return None
+
+    async def close_async(self) -> None:
+        """Async close: release Qdrant connection and SQLite connection."""
+        if self._vector_store is not None:
+            await self._vector_store.client_manager.close()
+        self.connection.close()
 
     def close(self) -> None:
         self.connection.close()

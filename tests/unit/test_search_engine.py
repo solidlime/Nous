@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -198,7 +198,7 @@ def _make_keyword_strategy(pairs: list[tuple[Memory, float]] | None = None, ok: 
 
 
 def _make_semantic_strategy(pairs: list[tuple[Memory, float]] | None = None, ok: bool = True):
-    strat = MagicMock()
+    strat = AsyncMock()
     if ok:
         strat.search.return_value = Success(pairs or [])
     else:
@@ -209,79 +209,88 @@ def _make_semantic_strategy(pairs: list[tuple[Memory, float]] | None = None, ok:
 
 
 class TestSearchEngineSearch:
-    def test_keyword_mode(self):
+    @pytest.mark.asyncio
+    async def test_keyword_mode(self):
         mem = _mem("k1", content="hello")
         kw = _make_keyword_strategy([(mem, 0.7)])
         engine = SearchEngine(keyword_search=kw)
-        result = engine.search(SearchQuery(text="hello", mode="keyword"))
+        result = await engine.search(SearchQuery(text="hello", mode="keyword"))
         assert result.is_ok
         assert len(result.value) == 1
         assert result.value[0].source == "keyword"
         kw.search.assert_called_once_with("hello", limit=5, date_from=None, date_to=None)
 
-    def test_semantic_mode(self):
+    @pytest.mark.asyncio
+    async def test_semantic_mode(self):
         mem = _mem("k2", content="hello")
         sem = _make_semantic_strategy([(mem, 0.9)])
         kw = _make_keyword_strategy()
         engine = SearchEngine(keyword_search=kw, semantic_search=sem)
-        result = engine.search(SearchQuery(text="hello", mode="semantic"))
+        result = await engine.search(SearchQuery(text="hello", mode="semantic"))
         assert result.is_ok
         assert len(result.value) == 1
         assert result.value[0].source == "semantic"
 
-    def test_semantic_mode_without_vector_store_falls_back_to_keyword(self):
+    @pytest.mark.asyncio
+    async def test_semantic_mode_without_vector_store_falls_back_to_keyword(self):
         kw = _make_keyword_strategy([(_mem("kw1"), 0.8)])
         engine = SearchEngine(keyword_search=kw, semantic_search=None)
-        result = engine.search(SearchQuery(text="hello", mode="semantic"))
+        result = await engine.search(SearchQuery(text="hello", mode="semantic"))
         assert result.is_ok
         assert len(result.value) == 1
         assert result.value[0].memory.key == "kw1"
 
-    def test_hybrid_mode_combines_results(self):
+    @pytest.mark.asyncio
+    async def test_hybrid_mode_combines_results(self):
         mem_kw = _mem("kw_key")
         mem_sem = _mem("sem_key")
         kw = _make_keyword_strategy([(mem_kw, 0.7)])
         sem = _make_semantic_strategy([(mem_sem, 0.8)])
         engine = SearchEngine(keyword_search=kw, semantic_search=sem)
-        result = engine.search(SearchQuery(text="hello", mode="hybrid", top_k=10))
+        result = await engine.search(SearchQuery(text="hello", mode="hybrid", top_k=10))
         assert result.is_ok
         keys = {r.memory.key for r in result.value}
         assert "kw_key" in keys
         assert "sem_key" in keys
 
-    def test_hybrid_mode_deduplicates(self):
+    @pytest.mark.asyncio
+    async def test_hybrid_mode_deduplicates(self):
         mem = _mem("shared_key")
         kw = _make_keyword_strategy([(mem, 0.7)])
         sem = _make_semantic_strategy([(mem, 0.9)])
         engine = SearchEngine(keyword_search=kw, semantic_search=sem)
-        result = engine.search(SearchQuery(text="hello", mode="hybrid", top_k=10))
+        result = await engine.search(SearchQuery(text="hello", mode="hybrid", top_k=10))
         assert result.is_ok
         assert sum(1 for r in result.value if r.memory.key == "shared_key") == 1
 
-    def test_unknown_mode_falls_back_to_hybrid(self):
+    @pytest.mark.asyncio
+    async def test_unknown_mode_falls_back_to_hybrid(self):
         mem_kw = _mem("kw_key")
         kw = _make_keyword_strategy([(mem_kw, 0.5)])
         sem = _make_semantic_strategy()
         engine = SearchEngine(keyword_search=kw, semantic_search=sem)
-        result = engine.search(SearchQuery(text="hello", mode="bogus_mode"))
+        result = await engine.search(SearchQuery(text="hello", mode="bogus_mode"))
         assert result.is_ok
 
-    def test_smart_mode_falls_back_to_hybrid(self):
+    @pytest.mark.asyncio
+    async def test_smart_mode_falls_back_to_hybrid(self):
         mem_kw = _mem("kw_key")
         kw = _make_keyword_strategy([(mem_kw, 0.5)])
         engine = SearchEngine(keyword_search=kw)
-        result = engine.search(SearchQuery(text="hello", mode="smart"))
+        result = await engine.search(SearchQuery(text="hello", mode="smart"))
         assert result.is_ok
 
-    def test_hybrid_empty_results(self):
+    @pytest.mark.asyncio
+    async def test_hybrid_empty_results(self):
         kw = _make_keyword_strategy([])
         sem = _make_semantic_strategy([])
         engine = SearchEngine(keyword_search=kw, semantic_search=sem)
-        result = engine.search(SearchQuery(text="hello", mode="hybrid"))
+        result = await engine.search(SearchQuery(text="hello", mode="hybrid"))
         assert result.is_ok
         assert result.value == []
 
-    def test_hybrid_uses_ranker_when_provided(self):
+    @pytest.mark.asyncio
+    async def test_hybrid_uses_ranker_when_provided(self):
         mem_kw = _mem("k1")
         mem_sem = _mem("k2")
         kw = _make_keyword_strategy([(mem_kw, 0.5)])
@@ -293,22 +302,24 @@ class TestSearchEngineSearch:
         ]
         ranker.rank.return_value = combined
         engine = SearchEngine(keyword_search=kw, semantic_search=sem, ranker=ranker)
-        result = engine.search(SearchQuery(text="hello", mode="hybrid"))
+        result = await engine.search(SearchQuery(text="hello", mode="hybrid"))
         assert result.is_ok
         ranker.rank.assert_called_once()
 
-    def test_keyword_failure_propagates(self):
+    @pytest.mark.asyncio
+    async def test_keyword_failure_propagates(self):
         kw = _make_keyword_strategy(ok=False)
         engine = SearchEngine(keyword_search=kw)
-        result = engine.search(SearchQuery(text="hello", mode="keyword"))
+        result = await engine.search(SearchQuery(text="hello", mode="keyword"))
         assert not result.is_ok
 
-    def test_top_k_limits_hybrid_results(self):
+    @pytest.mark.asyncio
+    async def test_top_k_limits_hybrid_results(self):
         mems = [_mem(f"key_{i}") for i in range(10)]
         pairs = [(m, float(i) / 10) for i, m in enumerate(mems)]
         kw = _make_keyword_strategy(pairs)
         engine = SearchEngine(keyword_search=kw)
-        result = engine.search(SearchQuery(text="test", mode="hybrid", top_k=3))
+        result = await engine.search(SearchQuery(text="test", mode="hybrid", top_k=3))
         assert result.is_ok
         assert len(result.value) <= 3
 
@@ -357,59 +368,65 @@ class TestSearchEngineDateRange:
         strat.search.return_value = Success(pairs or [])
         return strat
 
-    def test_date_range_none_passes_none(self):
+    @pytest.mark.asyncio
+    async def test_date_range_none_passes_none(self):
         """date_range未指定時は date_from/date_to に None が渡される。"""
         kw = self._make_kw()
         engine = SearchEngine(keyword_search=kw)
-        result = engine.search(SearchQuery(text="hello", mode="keyword"))
+        result = await engine.search(SearchQuery(text="hello", mode="keyword"))
         assert result.is_ok
         kw.search.assert_called_once_with("hello", limit=5, date_from=None, date_to=None)
 
-    def test_date_range_passes_parsed_dates_to_keyword(self):
+    @pytest.mark.asyncio
+    async def test_date_range_passes_parsed_dates_to_keyword(self):
         """date_range指定時はパース結果がキーワード検索に渡される。"""
         kw = self._make_kw()
         engine = SearchEngine(keyword_search=kw)
-        result = engine.search(SearchQuery(text="hello", mode="keyword", date_range="7d"))
+        result = await engine.search(SearchQuery(text="hello", mode="keyword", date_range="7d"))
         assert result.is_ok
         call_args = kw.search.call_args
         assert call_args.kwargs["date_from"] is not None
         assert call_args.kwargs["date_to"] is not None
 
-    def test_date_range_passes_parsed_dates_to_semantic(self):
+    @pytest.mark.asyncio
+    async def test_date_range_passes_parsed_dates_to_semantic(self):
         """date_range指定時はパース結果がセマンティック検索に渡される。"""
-        sem = self._make_kw()
+        sem = _make_semantic_strategy()
         kw = self._make_kw()
         engine = SearchEngine(keyword_search=kw, semantic_search=sem)
-        result = engine.search(SearchQuery(text="hello", mode="semantic", date_range="昨日"))
+        result = await engine.search(SearchQuery(text="hello", mode="semantic", date_range="昨日"))
         assert result.is_ok
         call_args = sem.search.call_args
         assert call_args.kwargs["date_from"] is not None
         assert call_args.kwargs["date_to"] is not None
 
-    def test_date_range_passes_to_hybrid_both_strategies(self):
+    @pytest.mark.asyncio
+    async def test_date_range_passes_to_hybrid_both_strategies(self):
         """ハイブリッドモードで両方の戦略に date_range が渡される。"""
-        sem = self._make_kw()
+        sem = _make_semantic_strategy()
         kw = self._make_kw()
         engine = SearchEngine(keyword_search=kw, semantic_search=sem)
-        result = engine.search(SearchQuery(text="hello", mode="hybrid", date_range="30d"))
+        result = await engine.search(SearchQuery(text="hello", mode="hybrid", date_range="30d"))
         assert result.is_ok
         # keyword strategy should receive parsed dates
         assert kw.search.call_args.kwargs["date_from"] is not None
         assert sem.search.call_args.kwargs["date_to"] is not None
 
-    def test_date_range_invalid_string_passes_none(self):
+    @pytest.mark.asyncio
+    async def test_date_range_invalid_string_passes_none(self):
         """パースできない文字列は None,None として扱われる（フィルタなし＝全件）。"""
         kw = self._make_kw()
         engine = SearchEngine(keyword_search=kw)
-        result = engine.search(SearchQuery(text="hello", mode="keyword", date_range="わけわからん"))
+        result = await engine.search(SearchQuery(text="hello", mode="keyword", date_range="わけわからん"))
         assert result.is_ok
         kw.search.assert_called_once_with("hello", limit=5, date_from=None, date_to=None)
 
-    def test_date_range_empty_string_passes_none(self):
+    @pytest.mark.asyncio
+    async def test_date_range_empty_string_passes_none(self):
         """空文字列は None,None として扱われる。"""
         kw = self._make_kw()
         engine = SearchEngine(keyword_search=kw)
-        result = engine.search(SearchQuery(text="hello", mode="keyword", date_range=""))
+        result = await engine.search(SearchQuery(text="hello", mode="keyword", date_range=""))
         assert result.is_ok
         kw.search.assert_called_once_with("hello", limit=5, date_from=None, date_to=None)
 
@@ -477,7 +494,7 @@ def _make_memory(key: str):
 def _make_engine(memorag_config=None, chat_config=None, memory_repo=None):
     keyword = MagicMock()
     keyword.search.return_value = Success([(_make_memory("k1"), 0.9)])
-    semantic = MagicMock()
+    semantic = AsyncMock()
     semantic.search.return_value = Success([(_make_memory("k2"), 0.8)])
     return SearchEngine(
         keyword, semantic, None, memory_repo=memory_repo, memorag_config=memorag_config, chat_config=chat_config
@@ -518,19 +535,21 @@ class TestBestSearchMode:
 
 
 class TestMemoRAGSearchFallback:
-    def test_falls_back_to_smart_when_no_memory_repo(self):
+    @pytest.mark.asyncio
+    async def test_falls_back_to_smart_when_no_memory_repo(self):
         config = MagicMock()
         config.enabled = True
         engine = _make_engine(memorag_config=config, memory_repo=None)
         query = SearchQuery(text="test", mode="memorag", top_k=5)
-        result = engine.search(query)
+        result = await engine.search(query)
         assert result.is_ok
 
-    def test_falls_back_when_memorag_disabled(self):
+    @pytest.mark.asyncio
+    async def test_falls_back_when_memorag_disabled(self):
         config = MagicMock()
         config.enabled = False
         repo = MagicMock()
         engine = _make_engine(memorag_config=config, memory_repo=repo)
         query = SearchQuery(text="test", mode="memorag", top_k=5)
-        result = engine.search(query)
+        result = await engine.search(query)
         assert result.is_ok

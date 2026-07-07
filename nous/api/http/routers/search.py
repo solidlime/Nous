@@ -54,7 +54,7 @@ def register_search_routes(mcp) -> None:
             if hasattr(ctx.search_engine, "_semantic") and ctx.search_engine._semantic is not None:
                 ctx.search_engine._semantic._persona = persona  # noqa: SLF001
 
-            result = ctx.search_engine.search(query)
+            result = await ctx.search_engine.search(query)
             if not result.is_ok:
                 return JSONResponse({"error": str(result.error)}, status_code=500)
             return JSONResponse(

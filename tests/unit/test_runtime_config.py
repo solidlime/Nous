@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from nous.config.runtime_config import SETTINGS_META, RuntimeConfigManager
+from nous.domain.shared.result import Success
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -523,7 +524,7 @@ def test_reranker_enabled_callback(tmp_data_dir: Path):
 
 def test_qdrant_reload_callback_url(tmp_data_dir: Path):
     """Qdrant URL change should trigger reconnect."""
-    from unittest.mock import MagicMock
+    from unittest.mock import AsyncMock, MagicMock
 
     from nous.application.use_cases import AppContextRegistry
     from nous.config.runtime_config import register_model_reload_callbacks
@@ -533,7 +534,7 @@ def test_qdrant_reload_callback_url(tmp_data_dir: Path):
 
     mock_ctx = MagicMock()
     mock_ctx._vector_store = MagicMock()
-    mock_ctx._vector_store.reconnect.return_value = {"status": "connected", "message": "ok"}
+    mock_ctx._vector_store.reconnect = AsyncMock(return_value={"status": "connected", "message": "ok"})
     mock_ctx._search_engine = MagicMock()
 
     AppContextRegistry._contexts["test"] = mock_ctx
@@ -549,7 +550,7 @@ def test_qdrant_reload_callback_url(tmp_data_dir: Path):
 
 def test_qdrant_reload_callback_api_key(tmp_data_dir: Path):
     """Qdrant API key change should trigger reconnect."""
-    from unittest.mock import MagicMock
+    from unittest.mock import AsyncMock, MagicMock
 
     from nous.application.use_cases import AppContextRegistry
     from nous.config.runtime_config import register_model_reload_callbacks
@@ -559,7 +560,7 @@ def test_qdrant_reload_callback_api_key(tmp_data_dir: Path):
 
     mock_ctx = MagicMock()
     mock_ctx._vector_store = MagicMock()
-    mock_ctx._vector_store.reconnect.return_value = {"status": "connected", "message": "ok"}
+    mock_ctx._vector_store.reconnect = AsyncMock(return_value={"status": "connected", "message": "ok"})
 
     AppContextRegistry._contexts["test"] = mock_ctx
 
@@ -573,7 +574,7 @@ def test_qdrant_reload_callback_api_key(tmp_data_dir: Path):
 
 def test_qdrant_collection_prefix_change(tmp_data_dir: Path):
     """Qdrant collection_prefix change should trigger reconnect and ensure_collection."""
-    from unittest.mock import MagicMock
+    from unittest.mock import AsyncMock, MagicMock
 
     from nous.application.use_cases import AppContextRegistry
     from nous.config.runtime_config import register_model_reload_callbacks
@@ -583,7 +584,8 @@ def test_qdrant_collection_prefix_change(tmp_data_dir: Path):
 
     mock_ctx = MagicMock()
     mock_ctx._vector_store = MagicMock()
-    mock_ctx._vector_store.reconnect.return_value = {"status": "connected", "message": "ok"}
+    mock_ctx._vector_store.reconnect = AsyncMock(return_value={"status": "connected", "message": "ok"})
+    mock_ctx._vector_store.ensure_collection = AsyncMock(return_value=Success(None))
     mock_ctx._search_engine = MagicMock()
 
     AppContextRegistry._contexts["test_persona"] = mock_ctx

@@ -111,7 +111,7 @@ async def maybe_run_reflection(
     recent_result = ctx.memory_service.get_recent(limit=20)
     if not recent_result.is_ok or not recent_result.value:
         # フォールバック: スマートサーチで最近記憶を取得
-        search_result = ctx.search_engine.search(SearchQuery(text="記憶 事実 出来事", top_k=20, mode="hybrid"))
+        search_result = await ctx.search_engine.search(SearchQuery(text="記憶 事実 出来事", top_k=20, mode="hybrid"))
         memories = []
         if search_result.is_ok:
             for item in search_result.value:
