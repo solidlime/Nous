@@ -7,6 +7,7 @@ import math
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from nous.domain.memory.recall_annotator import RecallAnnotator
 from nous.domain.persona.emotion_decay import apply_emotion_decay_if_needed
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.time_utils import get_now, relative_time_str
@@ -21,6 +22,43 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _RECENCY_LAMBDA = 0.5  # half-life ≈ 1.4 days
+
+RECALL_ANNOTATION_GUIDELINES = """
+## Memory Recall Annotations
+Each recalled memory includes annotations: [certainty: X, time: Y, source: Z, kind: W].
+Use these as hints for natural recall expression — not as literal text to output.
+
+(Examples below include English and Japanese phrases for multilingual reference.
+Use whichever matches your persona's natural language — never copy-paste.)
+
+### Certainty hints:
+- confident → Recall with assertion. No hedging needed.
+- tentative → Use hedging: "I think...", "たしか...", etc. in your persona's voice.
+- vague → Use stronger hedging: "I vaguely remember...", "〜だった気がする...", etc.
+- forgotten → Do NOT mention this memory (should_mention is false).
+
+### Time hints:
+- recent / days_7 → "just now", "the other day", "さっき", "この前"
+- days_30 → "a while ago", "こないだ"
+- days_90 → "a few months back", "前に"
+- years → "long ago", "昔"
+
+### Source hints:
+- user_stated → Recall with confidence (user said it directly).
+- llm_inferred → Slightly hedged (inferred, not explicitly stated).
+- reflected → Express as an insight: "Thinking about it...", "考えてみると..."
+- consolidated → Express as a summary of multiple memories.
+
+### Kind hints:
+- episodic → Include time/place context if available.
+- semantic → State as fact or preference.
+- prospective → Frame as future intention or reminder.
+
+IMPORTANT:
+- Express everything naturally in your persona's voice.
+- NEVER output the annotation labels themselves.
+- NEVER say "database", "retrieved", "record", "search result" or any technical term.
+"""
 
 
 def _compute_recency_decay(created_at: datetime | None) -> float:
@@ -103,11 +141,29 @@ async def _search_memories(
     if not top:
         return "", {"queries": queries, "results": []}, []
 
+    annotator = RecallAnnotator()
+    now = datetime.now(tz=UTC)
     lines: list[str] = []
     for _, m in top:
-        score = float(getattr(m, "importance", 0.5))
-        label = "高" if score >= 0.7 else "中" if score >= 0.4 else "低"
-        lines.append(f"-（{label}）{getattr(m, 'content', str(m))}")
+        created_at = getattr(m, "created_at", None)
+        if created_at is not None:
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=UTC)
+            age_days = max(0.0, (now - created_at).total_seconds() / 86400.0)
+        else:
+            age_days = 30.0  # default fallback
+        ann = annotator.annotate(
+            confidence=float(getattr(m, "confidence", 1.0)),
+            age_days=age_days,
+            source_type=str(getattr(m, "source_type", "user_stated")),
+            kind=str(getattr(m, "kind", "semantic")),
+        )
+        if not ann.should_mention:
+            continue
+        lines.append(
+            f"[certainty: {ann.certainty}, time: {ann.time_hint}, source: {ann.source_hint}, kind: {ann.kind_hint}] "
+            f"{getattr(m, 'content', str(m))}"
+        )
     memories_list: list[object] = [m for _, m in top]
     debug_results = [
         {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from nous.application.chat.pipeline.prepare import RECALL_ANNOTATION_GUIDELINES
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -35,7 +36,7 @@ class PromptBuildStep:
         if turn_ctx.context_section:
             parts.append(f"\n--- ペルソナ状態・コンテキスト ---\n{turn_ctx.context_section}")
         if turn_ctx.related_memories:
-            parts.append(f"\n--- 関連記憶 ---\n{turn_ctx.related_memories}")
+            parts.append(f"\n{RECALL_ANNOTATION_GUIDELINES}\n--- 関連記憶 ---\n{turn_ctx.related_memories}")
 
         skills_raw: list[dict] = []
         if config.enabled_skills:
