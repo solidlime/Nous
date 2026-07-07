@@ -128,44 +128,51 @@ class TestRRFRanker:
 
 class TestForgettingCurveRanker:
     def test_empty_strength_is_passthrough(self):
-        ranker = ForgettingCurveRanker(strength_lookup={})
+        ranker = ForgettingCurveRanker(strength_lookup=lambda k: None)
         query = SearchQuery(text="test")
         results = [_result("key_a", score=0.8), _result("key_b", score=0.5)]
-        # No strengths → returned unchanged (same content, no score modification)
+        # No strengths → returned unchanged
         ranked = ranker.rank(results, query)
         assert len(ranked) == 2
         assert ranked[0].score == pytest.approx(0.8)
         assert ranked[1].score == pytest.approx(0.5)
 
     def test_strength_adjusts_scores(self):
-        strengths = {"key_a": 1.0, "key_b": 0.2}
-        ranker = ForgettingCurveRanker(strength_lookup=strengths)
+        # stability=0 → falls back to strength multiplier
+        def lookup(k: str) -> tuple[float, float] | None:
+            return {"key_a": (1.0, 0.0), "key_b": (0.2, 0.0)}.get(k)
+
+        ranker = ForgettingCurveRanker(strength_lookup=lookup)
         query = SearchQuery(text="test")
         results = [
             _result("key_a", score=0.5),
             _result("key_b", score=0.8),
         ]
         ranked = ranker.rank(results, query)
-        # key_a: 0.5 * 1.0 = 0.5, key_b: 0.8 * 0.2 = 0.16 → key_a wins
+        # key_a: 0.5 * max(0.1, 1.0) = 0.5, key_b: 0.8 * max(0.1, 0.2) = 0.16
         assert ranked[0].memory.key == "key_a"
         assert abs(ranked[0].score - 0.5) < 1e-6
         assert abs(ranked[1].score - 0.16) < 1e-6
 
-    def test_missing_key_defaults_to_strength_one(self):
-        strengths = {"key_a": 0.5}
-        ranker = ForgettingCurveRanker(strength_lookup=strengths)
+    def test_missing_key_is_passthrough(self):
+        def lookup(k: str) -> tuple[float, float] | None:
+            return (0.5, 0.0) if k == "key_a" else None
+
+        ranker = ForgettingCurveRanker(strength_lookup=lookup)
         query = SearchQuery(text="test")
         results = [
             _result("key_a", score=0.8),
-            _result("key_b", score=0.6),  # not in strengths → defaults to 1.0
+            _result("key_b", score=0.6),  # not in lookup → passthrough
         ]
         ranked = ranker.rank(results, query)
-        # key_a: 0.8 * 0.5 = 0.4, key_b: 0.6 * 1.0 = 0.6 → key_b wins
+        # key_a: 0.8 * max(0.1, 0.5) = 0.4, key_b: 0.6 (unchanged) → key_b wins
         assert ranked[0].memory.key == "key_b"
 
     def test_sorted_descending(self):
-        strengths = {"k1": 0.3, "k2": 0.9, "k3": 0.6}
-        ranker = ForgettingCurveRanker(strength_lookup=strengths)
+        def lookup(k: str) -> tuple[float, float] | None:
+            return {"k1": (0.3, 0.0), "k2": (0.9, 0.0), "k3": (0.6, 0.0)}.get(k)
+
+        ranker = ForgettingCurveRanker(strength_lookup=lookup)
         query = SearchQuery(text="test")
         results = [_result("k1", score=1.0), _result("k2", score=1.0), _result("k3", score=1.0)]
         ranked = ranker.rank(results, query)
@@ -173,8 +180,7 @@ class TestForgettingCurveRanker:
         assert scores == sorted(scores, reverse=True)
 
     def test_source_preserved(self):
-        strengths = {"key_x": 0.8}
-        ranker = ForgettingCurveRanker(strength_lookup=strengths)
+        ranker = ForgettingCurveRanker(strength_lookup=lambda k: (0.8, 0.0))
         query = SearchQuery(text="test")
         results = [_result("key_x", score=0.5, source="semantic")]
         ranked = ranker.rank(results, query)

@@ -64,6 +64,7 @@ class SearchEngine:
         memorag_config=None,
         chat_config=None,
         reranker=None,
+        link_repo=None,
     ) -> None:
         self._keyword = keyword_search
         self._semantic = semantic_search
@@ -72,6 +73,7 @@ class SearchEngine:
         self._memorag_config = memorag_config
         self._chat_config = chat_config
         self._reranker = reranker
+        self._link_repo = link_repo
 
     async def search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
         """Execute search using the specified mode.
@@ -211,6 +213,20 @@ class SearchEngine:
                     deduped.sort(key=lambda x: x.score, reverse=True)
                 except Exception:
                     logger.warning("Reranker step failed, using pre-rerank scores")
+
+        # 6. Spreading Activation through memory links
+        if self._link_repo and deduped:
+            seed_keys = [r.memory.key for r in deduped[:5]]
+            all_links = self._link_repo.get_links_for_keys(seed_keys)
+            if all_links:
+                from nous.domain.search.spreading_activation import SpreadingActivation
+
+                sa = SpreadingActivation(hops=2)
+                activations = sa.propagate(seed_keys, all_links)
+                for r in deduped:
+                    if r.memory.key in activations:
+                        r.score += activations[r.memory.key] * 0.2
+                deduped.sort(key=lambda x: x.score, reverse=True)
 
         return Success(deduped[: query.top_k])
 

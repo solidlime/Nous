@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
@@ -91,38 +91,50 @@ class RRFRanker:
 
 
 class ForgettingCurveRanker:
-    """Adjusts search scores based on Ebbinghaus forgetting curve."""
+    """Adjusts search scores based on FSRS v6 power-law recall probability.
+
+    ``strength_lookup`` returns ``(strength, stability)`` or ``None``.
+    When stability > 0 the ranker computes the full FSRS v6 recall probability::
+
+        R(t) = (1 + 19 * t_hours / (S * 24)) ** -0.5
+
+    Otherwise it falls back to ``strength`` as a flat multiplier.
+    """
 
     def __init__(
         self,
-        strength_lookup: dict[str, float] | Callable[[str], float] | None = None,
+        strength_lookup: Callable[[str], tuple[float, float] | None] | None = None,
     ) -> None:
-        if strength_lookup is None:
-            self._lookup_fn: Callable[[str], float] | None = None
-        elif callable(strength_lookup):
-            self._lookup_fn = strength_lookup
-        else:
-            # dict — wrap in a lambda that returns 1.0 as default
-            _d = strength_lookup
-            self._lookup_fn = lambda key: _d.get(key, 1.0)
+        self._lookup_fn = strength_lookup
 
     def rank(self, results: list[SearchResult], query: SearchQuery) -> list[SearchResult]:
-        """Multiply scores by recall probability if a strength lookup is configured."""
+        """Multiply scores by FSRS v6 recall probability."""
         if self._lookup_fn is None:
             return results
 
+        now = datetime.now(UTC)
         adjusted: list[SearchResult] = []
         for r in results:
-            recall = self._lookup_fn(r.memory.key)
-            if not recall or recall <= 0:
-                recall = 1.0
-            adjusted.append(
-                SearchResult(
-                    memory=r.memory,
-                    score=r.score * recall,
-                    source=r.source,
+            strength_data = self._lookup_fn(r.memory.key)
+            if strength_data is not None:
+                strength_val, stability = strength_data
+                if stability and stability > 0 and r.memory.created_at:
+                    elapsed_hours = (now - r.memory.created_at).total_seconds() / 3600
+                    recall = (1 + 19 * elapsed_hours / (stability * 24)) ** -0.5
+                    new_score = r.score * (0.3 + 0.7 * recall)
+                else:
+                    new_score = r.score * max(0.1, strength_val)
+                adjusted.append(
+                    SearchResult(
+                        memory=r.memory,
+                        score=new_score,
+                        source=r.source,
+                        similarity_flag=r.similarity_flag,
+                    )
                 )
-            )
+            else:
+                # No strength data → passthrough
+                adjusted.append(r)
         adjusted.sort(key=lambda x: x.score, reverse=True)
         return adjusted
 

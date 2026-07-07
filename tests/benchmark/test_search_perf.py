@@ -43,7 +43,9 @@ def test_rrf_ranker_1000(benchmark):
 def test_forgetting_ranker_100(benchmark):
     """Benchmark ForgettingCurveRanker with 100 results."""
     memories = make_memories(100)
-    strengths = {m.key: 0.5 + (i % 10) * 0.05 for i, m in enumerate(memories)}
+    def strengths(key: str) -> tuple[float, float] | None:
+        return (0.5 + (int(key.split("_")[1]) % 10) * 0.05, 0.0)
+
     ranker = ForgettingCurveRanker(strength_lookup=strengths)
     results = [SearchResult(m, score=0.9, source="hybrid") for m in memories]
     query = SearchQuery(text="test", top_k=10)

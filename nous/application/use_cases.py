@@ -227,11 +227,11 @@ class AppContext:
             keyword = SQLiteKeywordSearch(self.memory_repo)
             semantic = QdrantSemanticSearch(self.vector_store, self.memory_repo) if self.vector_store else None
 
-            def _strength_lookup(key: str) -> float:
+            def _strength_lookup(key: str) -> tuple[float, float] | None:
                 result = self.memory_repo.get_strength(key)
                 if result.is_ok and result.value is not None:
-                    return result.value.strength
-                return 1.0
+                    return (result.value.strength, result.value.stability)
+                return None
 
             ranker = ChainedRanker(
                 RRFRanker(),

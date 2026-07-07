@@ -107,35 +107,16 @@ class QdrantVectorStore:
             logger.error("Failed to upsert vector for %s: %s", key, e)
             return Failure(VectorStoreError(str(e)))
 
-    def _build_decay_query(self, vector, limit, decay_scale=604800):
-        """Build a Qdrant QueryRequest with exp_decay temporal scoring.
+    def _build_search_query(self, vector, limit):
+        """Build a pure similarity search query (no temporal decay).
 
-        decay_scale: 604800 = 1 week in seconds (recency half-life)
+        Pure vector similarity query — FSRS/ForgettingCurveRanker handles
+        all temporal decay at the application layer.
         """
-        from qdrant_client.models import (
-            DatetimeKeyExpression,
-            DecayParamsExpression,
-            ExpDecayExpression,
-            FormulaQuery,
-            Prefetch,
-            QueryRequest,
-            SumExpression,
-        )
+        from qdrant_client.models import NearestQuery, QueryRequest
 
-        decay = DecayParamsExpression(
-            x=DatetimeKeyExpression(datetime_key="created_at"),
-            target="now",
-            scale=decay_scale,
-            midpoint=0.1,
-        )
-        formula = FormulaQuery(formula=SumExpression(sum=["$score", ExpDecayExpression(exp_decay=decay)]))
-        prefetch = Prefetch(
-            query=vector.tolist(),
-            limit=limit * 3,  # oversample to compensate decay re-ranking
-        )
         return QueryRequest(
-            prefetch=[prefetch],
-            query=formula,
+            query=NearestQuery(nearest=vector.tolist()),
             limit=limit,
         )
 
@@ -145,10 +126,10 @@ class QdrantVectorStore:
         query: str,
         limit: int = 10,
     ) -> Result[list[tuple[str, float]], VectorStoreError]:
-        """Semantic search with temporal decay. Returns list of (memory_key, score)."""
+        """Semantic search with pure vector similarity. Returns list of (memory_key, score)."""
         try:
             vector = await self.embedding.async_encode(query, is_query=True)
-            query_request = self._build_decay_query(vector, limit)
+            query_request = self._build_search_query(vector, limit)
             client = self.client_manager.client
             response = await client.query_points(
                 collection_name=self.collection_name(persona),
