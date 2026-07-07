@@ -17,7 +17,6 @@ from nous.infrastructure.llm.factory import get_provider
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
-
     from nous.application.use_cases import AppContext
     from nous.domain.chat_config import ChatConfig
     from nous.domain.memory.entities import Memory
@@ -324,9 +323,7 @@ class ReflectionEngine:
             [{"id": q.id, "intent": q.intent, "output": q.output_key} for q in self._schema],
             ensure_ascii=False,
         )
-        memory_lines = "\n".join(
-            f"- {getattr(m, 'content', str(m))}" for m in memories[-30:]
-        )
+        memory_lines = "\n".join(f"- {getattr(m, 'content', str(m))}" for m in memories[-30:])
         return (
             f"You are {persona}. Analyze the recent memories and generate insights.\n\n"
             f"Reflection tasks:\n{schema_desc}\n\n"

@@ -55,10 +55,7 @@ class SpreadingActivation:
 
             # Combine with decay
             all_keys = set(activation) | set(next_act)
-            activation = {
-                k: activation.get(k, 0.0) * self.decay + next_act.get(k, 0.0)
-                for k in all_keys
-            }
+            activation = {k: activation.get(k, 0.0) * self.decay + next_act.get(k, 0.0) for k in all_keys}
 
         # Remove seed keys from result — only return activated neighbours
         return {k: v for k, v in activation.items() if k not in seed_keys}

@@ -43,6 +43,7 @@ def test_rrf_ranker_1000(benchmark):
 def test_forgetting_ranker_100(benchmark):
     """Benchmark ForgettingCurveRanker with 100 results."""
     memories = make_memories(100)
+
     def strengths(key: str) -> tuple[float, float] | None:
         return (0.5 + (int(key.split("_")[1]) % 10) * 0.05, 0.0)
 

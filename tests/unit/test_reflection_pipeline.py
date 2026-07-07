@@ -86,18 +86,20 @@ class TestReflectionEngine:
         async def stream_iter(**kwargs):
             from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
 
-            response = json.dumps([
-                {
-                    "insight": "The user consistently prefers sci-fi themes.",
-                    "evidence_keys": ["mem_001"],
-                    "confidence": 0.85,
-                },
-                {
-                    "insight": "There is a pattern of interest in futuristic technology.",
-                    "evidence_keys": ["mem_001"],
-                    "confidence": 0.72,
-                },
-            ])
+            response = json.dumps(
+                [
+                    {
+                        "insight": "The user consistently prefers sci-fi themes.",
+                        "evidence_keys": ["mem_001"],
+                        "confidence": 0.85,
+                    },
+                    {
+                        "insight": "There is a pattern of interest in futuristic technology.",
+                        "evidence_keys": ["mem_001"],
+                        "confidence": 0.72,
+                    },
+                ]
+            )
             yield TextDeltaEvent(content=response)
             yield DoneEvent(full_content=response)
 
@@ -161,19 +163,23 @@ class TestReflectionEngine:
         assert "memory 0" in msg
 
     def test_parse_insights_valid_array(self, engine):
-        raw = json.dumps([
-            {"insight": "a", "evidence_keys": [], "confidence": 0.5},
-            {"insight": "b", "evidence_keys": [], "confidence": 0.6},
-        ])
+        raw = json.dumps(
+            [
+                {"insight": "a", "evidence_keys": [], "confidence": 0.5},
+                {"insight": "b", "evidence_keys": [], "confidence": 0.6},
+            ]
+        )
         result = engine._parse_insights_json(raw)
         assert len(result) == 2
 
     def test_parse_insights_with_insights_key(self, engine):
-        raw = json.dumps({
-            "insights": [
-                {"insight": "x", "evidence_keys": [], "confidence": 0.9},
-            ],
-        })
+        raw = json.dumps(
+            {
+                "insights": [
+                    {"insight": "x", "evidence_keys": [], "confidence": 0.9},
+                ],
+            }
+        )
         result = engine._parse_insights_json(raw)
         assert len(result) == 1
         assert result[0]["insight"] == "x"
@@ -184,7 +190,7 @@ class TestReflectionEngine:
         assert engine._parse_insights_json("[]") == []
 
     def test_parse_insights_code_fenced(self, engine):
-        raw = "```json\n[{\"insight\": \"fenced\"}]\n```"
+        raw = '```json\n[{"insight": "fenced"}]\n```'
         result = engine._parse_insights_json(raw)
         assert len(result) == 1
         assert result[0]["insight"] == "fenced"
@@ -243,10 +249,12 @@ class TestReflectionEngineEdgeCases:
             from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
 
             yield TextDeltaEvent(
-                content=json.dumps([
-                    {"insight": "First insight", "evidence_keys": [], "confidence": 0.8},
-                    {"insight": "Second insight", "evidence_keys": [], "confidence": 0.7},
-                ])
+                content=json.dumps(
+                    [
+                        {"insight": "First insight", "evidence_keys": [], "confidence": 0.8},
+                        {"insight": "Second insight", "evidence_keys": [], "confidence": 0.7},
+                    ]
+                )
             )
             yield DoneEvent(full_content="")
 
