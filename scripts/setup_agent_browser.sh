@@ -46,11 +46,18 @@ fi
 # container itself provides isolation.
 # Chrome system dependencies (libcairo2, libgtk-3-0, etc.) are pre-installed
 # in the Dockerfile build stage — no runtime apt-get needed.
-AGENT_CONFIG="$AGENT_DIR/config.json"
-if [ ! -f "$AGENT_CONFIG" ]; then
-    mkdir -p "$(dirname "$AGENT_CONFIG")"
-    echo '{"args": "--no-sandbox"}' > "$AGENT_CONFIG"
-    echo "[agent-browser] --no-sandbox configured (Docker mode)"
+# Write to $HOME first (always writable by the container user), then fall
+# back to the data volume. Step 2 will mv from $HOME to the volume if needed.
+AGENT_HOME_DIR="$DATA_ROOT/.agent-browser"
+if [ ! -f "$AGENT_HOME_DIR/config.json" ] && [ ! -f "$HOME/.agent-browser/config.json" ]; then
+    mkdir -p "$HOME/.agent-browser" 2>/dev/null || true
+    if echo '{"args": "--no-sandbox"}' > "$HOME/.agent-browser/config.json" 2>/dev/null; then
+        echo "[agent-browser] --no-sandbox configured (Docker mode)"
+    else
+        mkdir -p "$AGENT_HOME_DIR" 2>/dev/null || true
+        echo '{"args": "--no-sandbox"}' > "$AGENT_HOME_DIR/config.json" || \
+            echo "[agent-browser] WARNING: could not write --no-sandbox config (non-fatal)"
+    fi
 fi
 
 # ── Step 4: Ensure Chrome browser is installed (idempotent, background) ──
