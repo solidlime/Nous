@@ -52,6 +52,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
         libnspr4 libnss3 libatk-bridge2.0-0 libcups2 libdrm2 \
         libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
         libxrandr2 libgbm1 libpango-1.0-0 libasound2 \
+        libcairo2 libgtk-3-0 libpangocairo-1.0-0 libdbus-1-3 \
+        libfontconfig1 libfreetype6 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Python packages from builder

@@ -40,18 +40,18 @@ if [ ! -L "$HOME/.agent-browser" ]; then
     ln -sfn "$AGENT_HOME" "$HOME/.agent-browser"
 fi
 
-# ── Step 3: Install Chrome system dependencies ──
-# Chrome headless needs GTK/X11 libs. The python:3.12-slim base image
-# doesn't include them. Run synchronously so Chrome is usable immediately.
-echo "[agent-browser] Installing Chrome system dependencies..."
-apt-get update -qq 2>/dev/null
-apt-get install -y -qq --no-install-recommends \
-    libcairo2 libgtk-3-0 libpango-1.0-0 libpangocairo-1.0-0 \
-    libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 libdrm2 \
-    libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
-    libgbm1 libasound2t64 libnss3 libnspr4 libdbus-1-3 \
-    libfontconfig1 libfreetype6 2>/dev/null
-echo "[agent-browser] Chrome dependencies installed."
+# ── Step 3: Configure --no-sandbox for Chrome in Docker ──
+# Chrome's SUID sandbox requires unprivileged user namespaces which are
+# typically unavailable in Docker. --no-sandbox is safe here because the
+# container itself provides isolation.
+# Chrome system dependencies (libcairo2, libgtk-3-0, etc.) are pre-installed
+# in the Dockerfile build stage — no runtime apt-get needed.
+AGENT_CONFIG="$AGENT_DIR/config.json"
+if [ ! -f "$AGENT_CONFIG" ]; then
+    mkdir -p "$(dirname "$AGENT_CONFIG")"
+    echo '{"args": "--no-sandbox"}' > "$AGENT_CONFIG"
+    echo "[agent-browser] --no-sandbox configured (Docker mode)"
+fi
 
 # ── Step 4: Ensure Chrome browser is installed (idempotent, background) ──
 # Run Chrome download in background with low CPU/IO priority to avoid
