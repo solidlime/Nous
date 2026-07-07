@@ -43,7 +43,7 @@ class SpreadingActivation:
                 if curr <= self.threshold:
                     continue
 
-                outgoing = [l for l in links if l.source_key == src]
+                outgoing = [link for link in links if link.source_key == src]
                 degree = max(len(outgoing), 1)
 
                 for link in outgoing:
