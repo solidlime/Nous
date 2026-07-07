@@ -9,7 +9,13 @@ from nous.domain.equipment.service import EquipmentService
 from nous.domain.memory.service import MemoryService
 from nous.domain.persona.service import PersonaService
 from nous.domain.search.engine import SearchEngine
-from nous.domain.search.ranker import ChainedRanker, ForgettingCurveRanker, RRFRanker, TopicAffinityRanker
+from nous.domain.search.ranker import (
+    ChainedRanker,
+    EmotionRecallBiasRanker,
+    ForgettingCurveRanker,
+    RRFRanker,
+    TopicAffinityRanker,
+)
 from nous.domain.shared.errors import SearchError
 from nous.domain.shared.result import Failure, Success
 from nous.infrastructure.embedding.model import EmbeddingModel
@@ -227,7 +233,12 @@ class AppContext:
                     return result.value.strength
                 return 1.0
 
-            ranker = ChainedRanker(RRFRanker(), ForgettingCurveRanker(_strength_lookup), TopicAffinityRanker())
+            ranker = ChainedRanker(
+                RRFRanker(),
+                ForgettingCurveRanker(_strength_lookup),
+                EmotionRecallBiasRanker(),
+                TopicAffinityRanker(),
+            )
             self._search_engine = SearchEngine(
                 keyword,
                 semantic,

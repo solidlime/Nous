@@ -33,7 +33,14 @@ CREATE TABLE IF NOT EXISTS memories (
     privacy_level TEXT DEFAULT 'internal',
     body_state TEXT,
     state_snapped_at TEXT,
-    lifecycle_status TEXT DEFAULT 'active'
+    lifecycle_status TEXT DEFAULT 'active',
+    kind TEXT DEFAULT 'semantic',
+    episodic_time TEXT,
+    episodic_place TEXT,
+    episodic_people TEXT,
+    source_type TEXT DEFAULT 'user_stated',
+    confidence REAL DEFAULT 1.0,
+    derived_from TEXT
 );
 
 CREATE TABLE IF NOT EXISTS memory_strength (
@@ -48,6 +55,7 @@ CREATE TABLE IF NOT EXISTS memory_strength (
     link_count INTEGER DEFAULT 0,
     emotion_peak REAL DEFAULT 0.0,
     is_ltm INTEGER DEFAULT 0,
+    valence REAL DEFAULT 0.0,
     FOREIGN KEY (memory_key) REFERENCES memories(key)
 );
 

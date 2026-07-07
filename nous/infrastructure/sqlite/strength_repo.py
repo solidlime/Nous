@@ -30,8 +30,9 @@ class SQLiteStrengthMixin:
                 """
                 INSERT OR REPLACE INTO memory_strength
                     (memory_key, strength, stability, last_decay, recall_count, last_recall,
-                     last_utility, interference_count, link_count, emotion_peak, is_ltm)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     last_utility, interference_count, link_count, emotion_peak, is_ltm,
+                     valence)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     strength.memory_key,
@@ -45,6 +46,7 @@ class SQLiteStrengthMixin:
                     strength.link_count,
                     strength.emotion_peak,
                     int(strength.is_ltm),
+                    strength.valence,
                 ),
             )
             self._db.commit()
@@ -65,6 +67,7 @@ class SQLiteStrengthMixin:
 
     def _row_to_strength(self, row) -> MemoryStrength:
         """Convert a database row to a MemoryStrength entity."""
+        row_keys = row.keys() if hasattr(row, "keys") else []
         return MemoryStrength(
             memory_key=row["memory_key"],
             strength=row["strength"] or 1.0,
@@ -77,4 +80,5 @@ class SQLiteStrengthMixin:
             link_count=row["link_count"] or 0,
             emotion_peak=row["emotion_peak"] or 0.0,
             is_ltm=bool(row["is_ltm"]) if row["is_ltm"] is not None else False,
+            valence=row["valence"] if "valence" in row_keys else 0.0,
         )

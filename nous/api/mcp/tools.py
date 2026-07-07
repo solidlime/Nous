@@ -125,12 +125,15 @@ def register_tools(mcp: FastMCP) -> None:
         tags: list[str] | None = None,
         privacy_level: str = "internal",
         source_context: str | None = None,
+        kind: str = "semantic",
         defer_vector: bool = False,
         skip_duplicate_check: bool = False,
     ) -> str:
         """Create a memory. Use to record important user facts, preferences, events.
         importance auto-evaluated via LLM when None and enrichment enabled.
-        tags: categorization tags. defer_vector: skip immediate vector indexing.
+        tags: categorization tags. kind: Memory kind — episodic (specific event),
+        semantic (general fact), procedural (pattern), prospective (future plan).
+        defer_vector: skip immediate vector indexing.
         skip_duplicate_check: skip semantic duplicate detection.
 
         **Important**: Call context_update/update_context *before* memory_create
@@ -148,6 +151,7 @@ def register_tools(mcp: FastMCP) -> None:
             tags=tags,
             privacy_level=privacy_level,
             source_context=source_context,
+            kind=kind,
             defer_vector=defer_vector,
             skip_duplicate_check=skip_duplicate_check,
         )

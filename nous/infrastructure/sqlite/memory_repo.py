@@ -50,8 +50,10 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
                     environment, relationship_status, source_context,
                     related_keys, summary_ref, equipped_items, access_count,
                     last_accessed, privacy_level, body_state, state_snapped_at,
-                    lifecycle_status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    lifecycle_status,
+                    kind, episodic_time, episodic_place, episodic_people,
+                    source_type, confidence, derived_from
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     memory.key,
@@ -76,6 +78,13 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
                     json.dumps(memory.body_state, ensure_ascii=False) if memory.body_state else None,
                     format_iso(memory.state_snapped_at) if memory.state_snapped_at else None,
                     memory.lifecycle_status,
+                    memory.kind,
+                    memory.episodic_time,
+                    memory.episodic_place,
+                    json.dumps(memory.episodic_people, ensure_ascii=False) if memory.episodic_people else None,
+                    memory.source_type,
+                    memory.confidence,
+                    memory.derived_from,
                 ),
             )
             # T4-A: Insert initial memory_strength record so WebUI shows a
@@ -733,6 +742,7 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
 
     def _row_to_memory(self, row) -> Memory:
         """Convert a database row to a Memory entity."""
+        row_keys = row.keys() if hasattr(row, "keys") else []
         return Memory(
             key=row["key"],
             content=row["content"],
@@ -752,12 +762,21 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
             summary_ref=row["summary_ref"],
             equipped_items=row["equipped_items"],
             access_count=row["access_count"] or 0,
-            last_accessed=self._parse_iso_or_none(row["last_accessed"]) if "last_accessed" in row else None,
-            body_state=self._parse_json_dict(row["body_state"]) if "body_state" in row else None,
-            state_snapped_at=self._parse_iso_or_none(row["state_snapped_at"]) if "state_snapped_at" in row else None,
-            lifecycle_status=row["lifecycle_status"]
-            if "lifecycle_status" in (row.keys() if hasattr(row, "keys") else [])
-            else "active",
+            last_accessed=self._parse_iso_or_none(row["last_accessed"]) if "last_accessed" in row_keys else None,
+            body_state=self._parse_json_dict(row["body_state"]) if "body_state" in row_keys else None,
+            state_snapped_at=self._parse_iso_or_none(row["state_snapped_at"])
+            if "state_snapped_at" in row_keys
+            else None,
+            lifecycle_status=row["lifecycle_status"] if "lifecycle_status" in row_keys else "active",
+            # kind fields (safe defaults for old rows)
+            kind=row["kind"] if "kind" in row_keys else "semantic",
+            episodic_time=row["episodic_time"] if "episodic_time" in row_keys else None,
+            episodic_place=row["episodic_place"] if "episodic_place" in row_keys else None,
+            episodic_people=row["episodic_people"] if "episodic_people" in row_keys else None,
+            # source provenance (safe defaults for old rows)
+            source_type=row["source_type"] if "source_type" in row_keys else "user_stated",
+            confidence=row["confidence"] if "confidence" in row_keys else 1.0,
+            derived_from=row["derived_from"] if "derived_from" in row_keys else None,
         )
 
     @staticmethod

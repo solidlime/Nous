@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -166,6 +166,55 @@ class TopicAffinityRanker:
                 SearchResult(
                     memory=r.memory,
                     score=r.score + bonus,
+                    source=r.source,
+                )
+            )
+        adjusted.sort(key=lambda x: x.score, reverse=True)
+        return adjusted
+
+
+class EmotionRecallBiasRanker:
+    """Bower 1981: current mood boosts same-valence memories.
+
+    Stores the current persona state (or emotion intensity proxy) and
+    applies a small score boost to memories whose stored valence matches
+    the current mood valence.
+
+    The ranker is passive when no persona_state has been set — it simply
+    passes results through unchanged.
+    """
+
+    def __init__(self, valence_bonus: float = 0.2) -> None:
+        self._persona_state: Any = None
+        self._valence_bonus = valence_bonus
+
+    @property
+    def persona_state(self) -> Any:
+        return self._persona_state
+
+    @persona_state.setter
+    def persona_state(self, state: Any) -> None:
+        self._persona_state = state
+
+    def rank(self, results: list[SearchResult], query: SearchQuery) -> list[SearchResult]:
+        """Boost scores for memories whose valence matches the current mood."""
+        if self._persona_state is None:
+            return results
+
+        mood_valence = getattr(self._persona_state, "valence", 0.0)
+        if mood_valence == 0.0:
+            return results
+
+        adjusted: list[SearchResult] = []
+        for r in results:
+            memory_valence = getattr(r.memory, "valence", 0.0)
+            # Normalize match: 1.0 when identical, 0.0 when opposite
+            valence_match = 1.0 - abs(memory_valence - mood_valence) / 2.0
+            boost = 1.0 + self._valence_bonus * valence_match
+            adjusted.append(
+                SearchResult(
+                    memory=r.memory,
+                    score=r.score * boost,
                     source=r.source,
                 )
             )

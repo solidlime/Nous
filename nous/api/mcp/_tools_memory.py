@@ -23,6 +23,7 @@ async def _tool_memory_create(
     tags: list[str] | None = None,
     privacy_level: str = "internal",
     source_context: str | None = None,
+    kind: str = "semantic",
     defer_vector: bool = False,
     skip_duplicate_check: bool = False,
 ) -> str:
@@ -69,6 +70,7 @@ async def _tool_memory_create(
         tags=tags,
         privacy_level=privacy_level or "internal",
         source_context=source_context,
+        kind=kind,
         emotion=emotion_snap,
         emotion_intensity=intensity_snap,
         body_state=body_snap,

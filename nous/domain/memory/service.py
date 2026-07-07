@@ -50,6 +50,9 @@ class MemoryService:
         source_context: str | None = None,
         body_state: dict[str, float] | None = None,
         state_snapped_at: datetime | None = None,
+        kind: str = "semantic",
+        source_type: str = "user_stated",
+        confidence: float = 1.0,
         **extra_fields: object,
     ) -> Result[Memory, DomainError]:
         """Create and persist a new memory entry.
@@ -92,6 +95,9 @@ class MemoryService:
             source_context=source_context,
             body_state=body_state,
             state_snapped_at=state_snapped_at,
+            kind=kind,
+            source_type=source_type,
+            confidence=confidence,
             **{k: v for k, v in extra_fields.items() if hasattr(Memory, k)},
         )
         result = self._repo.save(memory)
@@ -294,8 +300,14 @@ class MemoryService:
             result["emotion_distribution_note"] = f"+ {hidden_emotions} more emotion types"
         return Success(result)
 
-    def boost_recall(self, key: str) -> Result[MemoryStrength, DomainError]:
-        """Boost memory strength on recall."""
+    def boost_recall(self, key: str, emotion_intensity: float | None = None) -> Result[MemoryStrength, DomainError]:
+        """Boost memory strength on recall.
+
+        Args:
+            key: Memory key to boost.
+            emotion_intensity: Current emotion intensity used as proxy for valence
+                (Bower 1981 emotion-congruent recall). Stored in strength.valence.
+        """
         strength_result = self._repo.get_strength(key)
         if not strength_result.is_ok:
             return Failure(strength_result.error)
@@ -304,7 +316,11 @@ class MemoryService:
         if strength is None:
             strength = MemoryStrength(memory_key=key)
 
-        strength.boost_on_recall()
+        # Store current emotion intensity as valence for emotion-congruent recall
+        if emotion_intensity is not None:
+            strength.valence = emotion_intensity
+
+        strength.boost_on_recall(emotion_intensity=emotion_intensity or 0.0)
         strength.last_recall = get_now()
 
         save_result = self._repo.save_strength(strength)

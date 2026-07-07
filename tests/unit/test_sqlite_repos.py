@@ -26,6 +26,11 @@ def sqlite_conn(tmp_path):
     """Create a fresh SQLiteConnection in a temp directory."""
     conn = SQLiteConnection(data_dir=str(tmp_path), persona="test")
     conn.initialize_schema()
+    # Apply all pending migrations so new columns (kind, valence, source_type, etc.) exist
+    from nous.migration.engine import MigrationEngine
+
+    engine = MigrationEngine(conn)
+    engine.run_all()
     yield conn
     conn.close()
 

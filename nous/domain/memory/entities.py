@@ -4,6 +4,11 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime
 
+VALID_KINDS = frozenset(["episodic", "semantic", "procedural", "prospective"])
+VALID_SOURCE_TYPES = frozenset(
+    ["user_stated", "user_implied", "llm_inferred", "tool_output", "consolidated", "reflected"]
+)
+
 
 @dataclass
 class Memory:
@@ -31,6 +36,23 @@ class Memory:
     body_state: dict[str, float] | None = None
     state_snapped_at: datetime | None = None
     lifecycle_status: str = "active"
+    # kind-related fields (Chunk 1.1)
+    kind: str = "semantic"  # episodic | semantic | procedural | prospective
+    episodic_time: str | None = None
+    episodic_place: str | None = None
+    episodic_people: str | None = None  # JSON array
+    # source provenance fields (Chunk 1.4)
+    source_type: str = (
+        "user_stated"  # user_stated | user_implied | llm_inferred | tool_output | consolidated | reflected
+    )
+    confidence: float = 1.0
+    derived_from: str | None = None  # JSON array of source memory keys
+
+    def __post_init__(self) -> None:
+        if self.kind not in VALID_KINDS:
+            raise ValueError(f"Invalid kind: {self.kind}. Must be one of {VALID_KINDS}")
+        if self.source_type not in VALID_SOURCE_TYPES:
+            raise ValueError(f"Invalid source_type: {self.source_type}")
 
 
 @dataclass
@@ -48,6 +70,7 @@ class MemoryStrength:
     link_count: int = 0
     emotion_peak: float = 0.0
     is_ltm: bool = False
+    valence: float = 0.0  # -1.0 (negative) ~ +1.0 (positive)
 
     def compute_recall(self, elapsed_hours: float, decay_exponent: float = 0.5) -> float:
         """R(t) = (1 + 19 * t_hours / (S * 24))^(-decay_exponent).

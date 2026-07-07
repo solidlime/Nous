@@ -57,6 +57,11 @@ from nous.migration.versions.v031_author_note import upgrade as v031_upgrade
 from nous.migration.versions.v032_dynamic_temp import (
     upgrade as v032_upgrade,
 )
+from nous.migration.versions.v033_memory_kind import upgrade as v033_upgrade
+from nous.migration.versions.v034_valence import upgrade as v034_upgrade
+from nous.migration.versions.v035_source_provenance import (
+    upgrade as v035_upgrade,
+)
 
 ALL_MIGRATIONS: list[tuple[str, str, object]] = [
     ("001", "Initial schema", v001_upgrade),
@@ -90,4 +95,7 @@ ALL_MIGRATIONS: list[tuple[str, str, object]] = [
     ("030", "Add visual_desc column to items table", v030_upgrade),
     ("031", "Add author_note and author_note_frequency to persona state", v031_upgrade),
     ("032", "Add dynamic temperature and top_p to chat_settings", v032_upgrade),
+    ("033", "Add kind column for episodic/semantic/procedural/prospective memory types", v033_upgrade),
+    ("034", "Add valence column for emotion-congruent recall (Bower 1981)", v034_upgrade),
+    ("035", "Add source_type, confidence, derived_from for Bartlett source monitoring", v035_upgrade),
 ]
