@@ -62,6 +62,9 @@ from nous.migration.versions.v034_valence import upgrade as v034_upgrade
 from nous.migration.versions.v035_source_provenance import (
     upgrade as v035_upgrade,
 )
+from nous.migration.versions.v036_memory_links import (
+    upgrade as v036_upgrade,
+)
 
 ALL_MIGRATIONS: list[tuple[str, str, object]] = [
     ("001", "Initial schema", v001_upgrade),
@@ -98,4 +101,5 @@ ALL_MIGRATIONS: list[tuple[str, str, object]] = [
     ("033", "Add kind column for episodic/semantic/procedural/prospective memory types", v033_upgrade),
     ("034", "Add valence column for emotion-congruent recall (Bower 1981)", v034_upgrade),
     ("035", "Add source_type, confidence, derived_from for Bartlett source monitoring", v035_upgrade),
+    ("036", "Create memory_links table for Hebbian associative network", v036_upgrade),
 ]

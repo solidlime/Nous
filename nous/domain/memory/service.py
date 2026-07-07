@@ -30,10 +30,12 @@ class MemoryService:
         repo: MemoryRepository,
         entity_service: object | None = None,
         enricher: MemoryEnricher | None = None,
+        link_repo: object | None = None,
     ) -> None:
         self._repo = repo
         self._entity_service = entity_service
         self._enricher = enricher
+        self._link_repo = link_repo
 
     def save_memory(self, mem: Memory) -> Result[Memory, DomainError]:
         """Save a pre-constructed memory entity directly to the repository."""
@@ -157,7 +159,47 @@ class MemoryService:
                                     confidence=rel.confidence,
                                 )
 
+        # Hebbian co-activation links: associate with co-accessed memories
+        if self._link_repo is not None:
+            with contextlib.suppress(Exception):
+                self._create_hebbian_links(memory)
+
         return Success(memory)
+
+    def _create_hebbian_links(self, new_memory: Memory) -> None:
+        """Generate Hebbian links between *new_memory* and recently accessed memories.
+
+        Hebbian co-fire principle: only memories accessed in the same conversation
+        turn are linked.  Similarity-based linking (cosine >= 0.8) is deferred to
+        a future async search-engine integration.
+        """
+        if self._link_repo is None:
+            return
+
+        co_accessed = self._get_session_memories(new_memory)
+        for candidate in co_accessed[:5]:  # max 5 links per new memory
+            if candidate.key == new_memory.key:
+                continue
+            link_type = self._classify_link_type(new_memory, candidate)
+            self._link_repo.upsert(new_memory.key, candidate.key, link_type)
+
+    @staticmethod
+    def _classify_link_type(m1: Memory, m2: Memory) -> str:
+        """Classify the associative link type between two memories."""
+        if m1.emotion and m2.emotion and m1.emotion == m2.emotion:
+            return "emotional"
+        if m1.kind == "episodic" and m2.kind == "episodic":
+            return "temporal"
+        return "semantic"
+
+    def _get_session_memories(self, _new_memory: Memory) -> list:
+        """Return memories recently accessed in the current conversation turn.
+
+        Stub implementation — always returns empty list.
+        Will be wired to session_event table or in-memory turn context
+        in a follow-up task.
+        """
+        return []
 
     def get_memory(self, key: str) -> Result[Memory, DomainError]:
         """Retrieve a memory by key (excludes tombstoned memories)."""
