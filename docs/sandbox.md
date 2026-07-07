@@ -8,20 +8,17 @@ Nous のチャットでは `llm-sandbox[docker]` を使った Python コード�
 ## アーキテクチャ
 
 ```
-ホストOS (例: Synology NAS)
+ホストOS
 │
-├─ [sandbox-docker]  ← docker:dind (--privileged) ← 推奨
-│   Docker デーモン (tcp://0.0.0.0:2375, TLS無効)
-│   /data → ./data  ← nous と同パスで共有
-│   /var/lib/docker → dind-storage (named volume)
-│   └─ Python/IPython コンテナ（動的生成）
-│       /sandbox → /data/memory/{persona}/sandbox/
+├─ [nous]
+│   /var/run/docker.sock → ホストDockerソケット（直接マウント）
+│   └─ Python/IPython サンドボックスコンテナを spawn（動的生成）
+│       /sandbox → /data/memory/{persona}/sandbox/ (bind mount)
 │       cap_drop: ALL + no-new-privileges（ハードニング済み）
 │
-└─ [nous]
-    DOCKER_HOST=tcp://sandbox-docker:2375
-    /data → ./data
-    ※ docker.sock マウントなし
+└─ [sandbox]  ← 永続化用コンテナ（DooD補助）
+    /home/{persona}/ → ${DATA_ROOT}/sandbox/{persona}/
+    cap_drop: ALL + DAC_OVERRIDE + CHOWN + FOWNER + SETUID + SETGID
 ```
 
 - **ファイル永続化**: コンテナの `/sandbox` は `data/memory/{persona}/sandbox/` にバインドマウントされます。Nous を再起動してもファイルは残ります。
@@ -34,7 +31,7 @@ Nous のチャットでは `llm-sandbox[docker]` を使った Python コード�
 
 ### 1. Docker Compose（推奨）
 
-`docker-compose.yml` には `sandbox-docker`（DinD）サービスがデフォルトで有効になっています。
+`docker-compose.yml` には `nous` サービスにホストDockerソケット（`/var/run/docker.sock`）がマウントされており、サンドボックスコンテナを sibling コンテナとして起動します（DooD: Docker-outside-of-Docker）。
 
 ```bash
 docker-compose up -d
@@ -44,7 +41,8 @@ docker-compose up -d
 
 ```env
 NOUS_SANDBOX__ENABLED=true
-NOUS_SANDBOX__DOCKER_HOST=tcp://sandbox-docker:2375
+# DOCKER_HOST は空のままでOK — 自動検出されます
+NOUS_SANDBOX__DOCKER_HOST=
 ```
 
 その後コンテナを再起動します。
@@ -111,8 +109,8 @@ data/memory/{persona}/sandbox/
 
 ## セキュリティ上の注意
 
-- **DinD**（`sandbox-docker` サービス）は `--privileged` で動作しますが、nous からは TCP 経由でのみアクセスします。`docker.sock` を nous にマウントしていないため、nous コンテナがホストの Docker デーモンを直接操作することはできません。
-- **IPython コンテナ**（ユーザーコードが実行される場所）は `cap_drop: ALL` + `no-new-privileges` + `/sandbox` のみのマウントで動作します。
+- **DooD**（Docker-outside-of-Docker）: `nous` コンテナが `/var/run/docker.sock` を介してホストDockerデーモンにアクセスし、サンドボックスコンテナを sibling コンテナとして起動します。分離された DinD デーモンは不要です。
+- **サンドボックスコンテナ**（ユーザーコードが実行される場所）は `cap_drop: ALL` + `no-new-privileges` + `/sandbox` のみのマウントで動作します。
 - **リモート Docker** を公開する場合は必ず TLS クライアント認証を設定してください。
 - サンドボックスコンテナはデフォルトでインターネットアクセスが可能です。必要に応じて Docker のネットワーク設定で制限してください。
 
@@ -122,15 +120,10 @@ data/memory/{persona}/sandbox/
 
 ### `Failed to start sandbox: ...` / Docker に接続できない
 
-- sandbox-docker サービスが起動しているか確認: `docker-compose ps sandbox-docker`
-- `NOUS_SANDBOX__DOCKER_HOST=tcp://sandbox-docker:2375` が設定されているか確認
-- ローカル Python 実行の場合は Docker Desktop が起動しているか確認: `docker info`
+- Docker ソケットが nous コンテナにマウントされているか確認: `docker-compose exec nous ls -la /var/run/docker.sock`
+- ホストの Docker が起動しているか確認: `docker info`
 - docker-compose のログ: `docker-compose logs nous`
-
-### sandbox-docker が起動しない
-
-- `docker-compose logs sandbox-docker` でログを確認
-- DinD は `--privileged` が必要です。ホストが privileged コンテナを許可しているか確認してください。
+- `NOUS_SANDBOX__ENABLED=true` が設定されているか確認
 
 ### リモートホストに接続できない
 

@@ -82,6 +82,10 @@ RUN chmod +x /usr/local/bin/setup_agent_browser.sh
 # Copy sandbox Dockerfile for on-demand image building
 COPY Dockerfile.sandbox ${APP_HOME}/
 
+# Create non-root user
+RUN useradd --create-home --shell /bin/bash nous && \
+    chown -R nous:nous ${APP_HOME}/data
+
 # Expose FastMCP HTTP port
 EXPOSE 26262
 
@@ -92,6 +96,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
 # Run agent-browser setup on startup, then launch the MCP server
 ENTRYPOINT ["/usr/local/bin/setup_agent_browser.sh"]
 CMD ["python", "-m", "nous.main"]
+
+# Switch to non-root user
+USER nous
 
 # Notes:
 # - Development tip: place environment overrides in a top-level `.env` (or use Compose `env_file:`)

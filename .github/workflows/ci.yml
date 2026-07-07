@@ -69,9 +69,13 @@ jobs:
       - run: ruff check nous/ tests/
       - run: ruff format --check nous/ tests/
       - name: Security scan (Bandit)
+        # WARNING: continue-on-error 維持 — 現状 2 High + 16 Medium issues（B608/B324）
+        # TODO: https://github.com/solidlime/nous/issues/xxx — ブロッキング化への道筋
         run: bandit -r nous/ -ll -x nous/migration/,nous/api/http/sections/
         continue-on-error: true
       - name: Type check (mypy)
+        # WARNING: continue-on-error 維持 — 現状 374 errors（Result型・QdrantClient型他）
+        # TODO: https://github.com/solidlime/nous/issues/xxx — mypy zero-error 達成後ブロッキング化
         run: python -m mypy nous/ --ignore-missing-imports
         continue-on-error: true
 

@@ -60,17 +60,34 @@ nous/
 └── cli/                 # CLIツール
 ```
 
-### 公開ツールAPI（5本）
+### 公開ツールAPI（22本）
 
-| ツール | 主なoperations / パラメータ |
-|--------|---------------------------|
+| ツール | 主なパラメータ |
+|--------|---------------|
 | `get_context()` | なし（状態サマリー返却） |
-| `memory(operation, ...)` | `create / read / update / delete / check_contradictions / history / stats / block_write / block_read / block_list / block_delete / entity_search / entity_graph / entity_add_relation` |
-| `search_memory(query, ...)` | `mode="semantic/keyword/hybrid/smart"`, `top_k`, `tags`, `date_range`, `min_importance`, `emotion`, `importance_weight`, `recency_weight` |
-| `update_context(...)` | `emotion`, `emotion_intensity`, `physical_state`, `mental_state`, `environment`, `fatigue`, `warmth`, `arousal`, `user_info`, `persona_info` |
-| `item(operation, ...)` | `add / remove / equip / unequip / update / search / history` |
+| `memory_create(content, importance, tags, privacy_level, ...)` | 記憶作成。auto_emotionで現在感情を自動添付 |
+| `memory_read(memory_key, limit, offset)` | 記憶読み取り・一覧 |
+| `memory_update(memory_key, content, importance, tags, ...)` | 記憶更新（指定フィールドのみ変更） |
+| `memory_delete(memory_key, query)` | 記憶削除（tombstone） |
+| `memory_search(query, top_k, tags, date_range, min_importance, emotion, importance_weight, recency_weight, vector_weight, keyword_weight)` | ハイブリッド検索。mode廃止 — vector/keyword/importance/recency weightで調整。date_range: `"7d"`, `"30d"`, `"昨日"` |
+| `memory_stats(top_n)` | 統計情報（件数・タグ分布・感情分布） |
+| `update_context(emotion, emotion_intensity, physical_state, mental_state, environment, body_state, user_info, persona_info, ...)` | ペルソナ状態更新。`body_state`: `{fatigue, warmth, arousal, heart_rate, pain}` |
+| `item(operation, item_name, category, description, quantity, ...)` | 統一インベントリツール。operation: `add/remove/equip/unequip/update/search/history` |
+| `goal_manage(operation, content, importance, scope, memory_key)` | 目標管理。operation: `create/list/achieve/cancel`。scope: `self/interpersonal` |
+| `sandbox_execute(code, language, libraries, session_id)` | Dockerサンドボックスでコード実行 |
+| `sandbox_files(operation, path, content)` | サンドボックスファイル操作。`list/read/write/append/delete`。画像はbase64自動返却 |
+| `sandbox_reset(level)` | サンドボックスリセット。level: `files/packages/full` |
+| `sandbox_context()` | サンドボックス環境情報（言語・インストール済みパッケージ） |
+| `invoke_skill(name, task)` | スキル実行（隔離LLMコンテキスト） |
+| `persona_portrait()` | ポートレート画像生成（ComfyUI/DALL-E/Stability） |
+| `irodori_tts(text, voice)` | 日本語TTS音声生成 |
+| `browser(action, url, ref, value, ...)` | 汎用ブラウザ操作 |
+| `search(query, num_results, language)` | Web検索（SearXNG経由） |
+| `image_generate(prompt, size, quality, n, provider)` | 画像生成 |
+| `read_pdf(path)` | PDF解析（テキスト・テーブル・画像抽出） |
+| `list_skills()` | 登録スキル一覧 |
 
-`search_memory()` の検索モード: `semantic`（Qdrant）/ `keyword`（SQLite LIKE + RapidFuzz）/ `hybrid`（RRF統合、デフォルト）/ `smart`（クエリ自動拡張）
+`memory_search()` の weight パラメータ: `vector_weight`（意味検索）/ `keyword_weight`（キーワード検索）/ `importance_weight` / `recency_weight` — 全て 0.0-1.0。
 
 ### Goals & Promises の管理
 
@@ -85,23 +102,23 @@ Goals と Promises は **memory タグ**で管理する。専用テーブルは�
 
 ```python
 # 登録
-memory(operation="create", content="Goal text", tags=["goal","active"], importance=0.8)
-memory(operation="create", content="Promise text", tags=["promise","active"], importance=0.8)
+memory_create(content="Goal text", tags=["goal","active"], importance=0.8)
+memory_create(content="Promise text", tags=["promise","active"], importance=0.8)
 
 # 達成/履行
-memory(operation="update", memory_key="...", tags=["goal","achieved"])
-memory(operation="update", memory_key="...", tags=["promise","fulfilled"])
+memory_update(memory_key="...", tags=["goal","achieved"])
+memory_update(memory_key="...", tags=["promise","fulfilled"])
 
 # 中止
-memory(operation="update", memory_key="...", tags=["goal","cancelled"])
+memory_update(memory_key="...", tags=["goal","cancelled"])
 
 # 検索
-search_memory(query="active goals", tags=["goal","active"])
-search_memory(query="promises", tags=["promise","active"])
-search_memory(query="goals", tags=["goal"])  # 全ステータス
+memory_search(query="active goals", tags=["goal","active"])
+memory_search(query="promises", tags=["promise","active"])
+memory_search(query="goals", tags=["goal"])  # 全ステータス
 ```
 
-- **確認方法**: `get_context()` の ACTIVE COMMITMENTS セクションに表示される
+- **確認方法**: `get_context()` の ACTIVE COMMITMENTS セクションに表示。`memory_search(query="active goals")` でも検索可能。
 - **廃止**: `update_context(append_goals/append_promises/remove_goals/remove_promises)` は削除済み
 - **非推奨**: `update_context(persona_info={"goals":...})` / `context_tags=["promise"]` / `context_tags=["goal"]` は使わない
 

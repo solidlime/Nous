@@ -114,7 +114,7 @@ Nous: 日本語特化の永続記憶 MCP サーバー。SQLite + Qdrant + Ebbing
   - `asyncio.sleep` はテストでモックして高速化
 - `ImageGenConfig` に `comfyui_url` フィールド追加
 - factory に `"comfyui"` ケース追加
-- 注意: httpx 0.28.1 は `Timeout(connect=..., read=...)` 形式をサポートしていない → 全4パラメータ明示が必要
+- 注意: httpx 0.28.1 は `Timeout(connect=5.0, read=180.0, write=180.0, pool=5.0)` キーワード引数を完全サポート
 - 12 tests + 1 factory test = 22 total for image_gen module
 
 ## プロジェクトの現在の状態

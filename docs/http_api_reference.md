@@ -49,7 +49,7 @@ Health check with Qdrant connectivity status.
 ```json
 {
   "status": "ok",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "qdrant": "connected"
 }
 ```
@@ -255,7 +255,7 @@ Export all persona data as a ZIP file download.
 ## Core Memory Blocks
 
 Blocks are named segments always injected into `get_context()` output — high-priority working memory for the AI agent.
-Also accessible via MCP tool (`memory(operation="block_*", ...)`).
+No dedicated MCP tool — manage via HTTP API only.
 
 ### `GET /api/blocks/{persona}`
 List all Core Memory Blocks for a persona.
