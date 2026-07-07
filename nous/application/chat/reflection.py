@@ -1,19 +1,28 @@
-"""ReflectionEngine: Generative Agentsスタイルの高次洞察生成。"""
+"""ReflectionEngine: Park et al. 2023 reflection pipeline — language-agnostic.
+
+Provides both the legacy maybe_run_reflection (Japanese-prompt, AppContext-based)
+and the new language-agnostic ReflectionEngine class.
+"""
 
 from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from nous.domain.memory.reflection_schema import OUTPUT_FORMAT, REFLECTION_SCHEMA, ReflectionQuestion
 from nous.domain.search.engine import SearchQuery
 from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.factory import get_provider
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
+
     from nous.application.use_cases import AppContext
     from nous.domain.chat_config import ChatConfig
+    from nous.domain.memory.entities import Memory
+    from nous.domain.memory.service import MemoryService
+    from nous.infrastructure.llm.base import LLMProvider
 
 logger = get_logger(__name__)
 
@@ -34,6 +43,10 @@ _REFLECTION_PROMPT = """\
 JSONのみ。コメント不要。
 {{"insights": ["洞察1", "洞察2", "洞察3"]}}
 """
+
+# -----------------------------------------------------------
+# Legacy functions (keep for backward compatibility)
+# -----------------------------------------------------------
 
 
 def _get_last_reflection_at(ctx: AppContext) -> datetime | None:
@@ -182,3 +195,183 @@ def _parse_insights(text: str) -> list[str]:
     except Exception:
         pass
     return []
+
+
+# -----------------------------------------------------------
+# New language-agnostic ReflectionEngine (Park et al. 2023)
+# -----------------------------------------------------------
+
+
+class ReflectionEngine:
+    """Language-agnostic reflection pipeline (Park et al. 2023).
+
+    Synthesizes high-level insights from recent episodic memories using
+    configurable reflection questions.  Uses ``llm.stream()`` internally
+    and parses structured JSON output.
+    """
+
+    MIN_MEMORIES = 10
+    DEFAULT_LIMIT = 50
+
+    def __init__(
+        self,
+        schema: list[ReflectionQuestion] | None = None,
+        logger: Any | None = None,
+    ) -> None:
+        self._schema = schema or REFLECTION_SCHEMA
+        self._logger = logger or get_logger(self.__class__.__name__)
+
+    # ---- public API ---------------------------------------------------
+
+    async def reflect(
+        self,
+        persona: str,
+        memory_service: MemoryService,
+        llm: LLMProvider,
+        *,
+        limit: int | None = None,
+        temperature: float = 0.3,
+        max_tokens: int = 1024,
+        system_prompt: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Run one reflection cycle.
+
+        Args:
+            persona: Persona name (used in the system message).
+            memory_service: Domain memory service.
+            llm: LLM provider with a ``stream()`` method.
+            limit: Max recent memories to fetch (default ``DEFAULT_LIMIT``).
+            temperature: LLM temperature.
+            max_tokens: Max tokens for the response.
+            system_prompt: Optional system prompt override.
+
+        Returns:
+            List of insight dicts ``{"insight": str, "evidence_keys": list, "confidence": float}``.
+            Empty list when there are fewer than ``MIN_MEMORIES`` memories.
+        """
+        # 1. Fetch recent memories
+        recent_result = memory_service.get_recent(limit=limit or self.DEFAULT_LIMIT)
+        if not recent_result.is_ok or not recent_result.value:
+            return []
+        memories: list[Memory] = recent_result.value
+
+        if len(memories) < self.MIN_MEMORIES:
+            return []
+
+        # 2. Build system message
+        system_msg = self._build_system_message(persona, memories)
+
+        effective_system = system_prompt or system_msg
+        prompt_msg = system_msg if system_prompt else ""
+        messages = [LLMMessage(role="user", content=prompt_msg)] if prompt_msg else []
+        if system_prompt:
+            messages = [LLMMessage(role="user", content=system_msg)]
+
+        # 3. Call LLM
+        from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, TextDeltaEvent
+
+        text = ""
+        try:
+            async for event in llm.stream(
+                messages=messages or [LLMMessage(role="user", content=system_msg)],
+                system=effective_system if not messages else "",
+                tools=[],
+                temperature=temperature,
+                max_tokens=max_tokens,
+            ):
+                if isinstance(event, TextDeltaEvent):
+                    text += event.content
+                elif isinstance(event, (DoneEvent, ErrorEvent)):
+                    break
+        except Exception as exc:
+            self._logger.warning("ReflectionEngine: LLM call failed: %s", exc)
+            return []
+
+        # 4. Parse structured output
+        insights = self._parse_insights_json(text)
+        if not insights:
+            return []
+
+        # 5. Persist as semantic memories
+        results: list[dict[str, Any]] = []
+        for insight in insights:
+            content = insight.get("insight", "")
+            if not content:
+                continue
+            mem_result = memory_service.create_memory(
+                persona=persona,
+                content=content,
+                kind="semantic",
+                source_type="reflected",
+                confidence=insight.get("confidence", 0.7),
+                importance=0.8,
+                tags=["reflection"],
+            )
+            if mem_result.is_ok:
+                results.append(insight)
+        self._logger.info(
+            "ReflectionEngine: stored %d insights for persona=%s",
+            len(results),
+            persona,
+        )
+        return results
+
+    # ---- internal helpers ---------------------------------------------
+
+    def _build_system_message(self, persona: str, memories: list[Memory]) -> str:
+        """Build the language-agnostic reflection prompt."""
+        schema_desc = json.dumps(
+            [{"id": q.id, "intent": q.intent, "output": q.output_key} for q in self._schema],
+            ensure_ascii=False,
+        )
+        memory_lines = "\n".join(
+            f"- {getattr(m, 'content', str(m))}" for m in memories[-30:]
+        )
+        return (
+            f"You are {persona}. Analyze the recent memories and generate insights.\n\n"
+            f"Reflection tasks:\n{schema_desc}\n\n"
+            f"Output format: {json.dumps(OUTPUT_FORMAT, ensure_ascii=False)}\n\n"
+            f"Recent memories:\n{memory_lines}\n\n"
+            f"Generate insights in {persona}'s natural language. "
+            "The reflection should reveal patterns, traits, or implications "
+            "that are NOT explicitly stated in individual memories."
+        )
+
+    @staticmethod
+    def _parse_insights_json(text: str) -> list[dict[str, Any]]:
+        """Parse the structured LLM output into a list of insight dicts.
+
+        Handles both raw JSON and code-fenced JSON.
+        """
+        text = text.strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            text = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+            text = text.strip()
+
+        try:
+            result = json.loads(text)
+        except json.JSONDecodeError:
+            return []
+
+        if isinstance(result, list):
+            # Direct array of insight objects
+            validated: list[dict[str, Any]] = []
+            for item in result:
+                if isinstance(item, dict) and item.get("insight"):
+                    validated.append(item)
+            return validated
+
+        if isinstance(result, dict):
+            # Maybe it has an "insights" key
+            items = result.get("insights") or result.get("data") or result.get("reflections") or result.get("items")
+            if isinstance(items, list):
+                validated = []
+                for item in items:
+                    if isinstance(item, dict) and item.get("insight"):
+                        validated.append(item)
+                return validated
+            # Single insight object
+            if result.get("insight"):
+                return [result]
+        return []

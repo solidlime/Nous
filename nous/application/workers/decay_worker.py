@@ -3,22 +3,35 @@ from __future__ import annotations
 import contextlib
 import threading
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from nous.domain.shared.time_utils import get_now
 
 if TYPE_CHECKING:
+    from nous.application.chat.reflection import ReflectionEngine
     from nous.application.use_cases import AppContext
+    from nous.infrastructure.llm.base import LLMProvider
 
 
 class DecayWorker:
-    """FSRS v6 power-law forgetting curve decay worker."""
+    """FSRS v6 power-law forgetting curve decay worker + periodic reflection."""
 
-    def __init__(self, context: AppContext, interval_seconds: int = 3600) -> None:
+    REFLECTION_INTERVAL = 50  # trigger reflection every N decay cycles
+
+    def __init__(
+        self,
+        context: AppContext,
+        interval_seconds: int = 3600,
+        reflection_engine: ReflectionEngine | None = None,
+        llm_provider: LLMProvider | None = None,
+    ) -> None:
         self.context = context
         self.interval = interval_seconds
+        self._reflection_engine = reflection_engine
+        self._llm_provider = llm_provider
         self._running = False
         self._thread: threading.Thread | None = None
+        self._cycle_count = 0
 
     def start(self) -> None:
         self._running = True
@@ -30,8 +43,16 @@ class DecayWorker:
 
     def _run(self) -> None:
         while self._running:
-            self._decay_cycle()
+            self._run_cycle()
             time.sleep(self.interval)
+
+    def _run_cycle(self) -> None:
+        """Run one full cycle: decay + optional reflection."""
+        self._decay_cycle()
+        self._cycle_count += 1
+
+        if self._cycle_count % self.REFLECTION_INTERVAL == 0:
+            self._maybe_run_reflection()
 
     def _decay_cycle(self) -> None:
         """Run one decay cycle: update all memory strengths."""
@@ -72,3 +93,43 @@ class DecayWorker:
             strength.strength = new_strength_val
             strength.last_decay = now
             self.context.memory_repo.save_strength(strength)
+
+    def _maybe_run_reflection(self) -> None:
+        """Run reflection if engine and LLM provider are configured.
+
+        Uses the language-agnostic ReflectionEngine when available;
+        falls back to no-op if not configured.
+        """
+        if self._reflection_engine is None or self._llm_provider is None:
+            return
+
+        persona = getattr(self.context, "persona", None) or self.context.__class__.__name__
+        try:
+            import asyncio
+
+            # Create a fresh event loop for the background thread if needed
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            results: list[dict[str, Any]] = loop.run_until_complete(
+                self._reflection_engine.reflect(
+                    persona=persona,
+                    memory_service=self.context.memory_service,
+                    llm=self._llm_provider,
+                )
+            )
+            if results:
+                from nous.infrastructure.logging.structured import get_logger
+
+                get_logger(__name__).info(
+                    "DecayWorker: reflection produced %d insights for %s",
+                    len(results),
+                    persona,
+                )
+        except Exception as exc:
+            from nous.infrastructure.logging.structured import get_logger
+
+            get_logger(__name__).warning("DecayWorker: reflection failed: %s", exc)

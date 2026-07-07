@@ -425,6 +425,16 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
             for slot in unequip_list:
                 ctx.equipment_service.unequip([slot])
 
+        # Optional reflection trigger: run reflection when 3+ facts extracted
+        if len(facts) >= 3:
+            try:
+                importance_sum = sum(float(f.get("importance", 0.6)) for f in facts)
+                from nous.application.chat.reflection import maybe_run_reflection
+
+                await maybe_run_reflection(ctx, config, importance_sum)
+            except Exception as ref_exc:
+                logger.debug("run_memory_llm: reflection trigger skipped: %s", ref_exc)
+
         return result
 
     except Exception as e:
