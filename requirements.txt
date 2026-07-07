@@ -37,7 +37,7 @@ pytest-benchmark>=4.0
 
 # LLM Providers (Chat feature)
 anthropic>=0.40.0
-openai>=1.50.0
+openai>=2.44.0
 # Docker SDK (sandbox sibling-container detection)
 docker>=7.0.0
 
