@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING
 
 from sudachipy import Dictionary as SudachiDict
-from sudachipy.tokenizer import Tokenizer as SudachiTokenizer
+
+if TYPE_CHECKING:
+    from sudachipy.tokenizer import Tokenizer as SudachiTokenizer
 
 
 class SudachiExtractor:

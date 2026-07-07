@@ -20,9 +20,7 @@ class RecallGovernor:
             return False
         if current_turn - self._last_turn < self.MIN_TURN_GAP:
             return False
-        if is_user_speaking:
-            return False
-        return True
+        return not is_user_speaking
 
     def record_recall(self, turn: int) -> None:
         """Record a recall event at the given turn number."""
