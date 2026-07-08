@@ -193,3 +193,109 @@ Block memory は MCP ツール経由に加え、HTTP API 経由でも操作で�
 ### フォールバック
 
 LLM 呼び出しが失敗した場合（ネットワークエラー、レート制限など）は、機械的圧縮の結果をそのまま使用します。要約失敗がユーザー体験に影響することはありません。
+
+---
+
+## Bi-temporal Validity Windows (Graphiti 着想)
+
+記憶に有効期間（validity window）を導入し、時間的に矛盾する情報を「上書き」せず「共存」させます。[Zep/Graphiti](https://github.com/getzep/graphiti) の bi-temporal model に着想。
+
+### データモデル
+
+```python
+@dataclass
+class Memory:
+    valid_from: datetime | None = None  # 記憶が有効になった日時
+    valid_until: datetime | None = None  # None = 現在も有効
+```
+
+| 値 | 意味 |
+|---|---|
+| `valid_from = None, valid_until = None` | 時間制限なしで常に有効（後方互換、デフォルト） |
+| `valid_from = 2024-03, valid_until = 2025-06` | この期間のみ有効 |
+| `valid_until = now()` に設定 | 無効化（論理削除、矛盾する新しい記憶で上書き時） |
+
+### 自動無効化（矛盾検出時）
+
+新しい記憶が既存の記憶と矛盾する場合（semantic similarity ≥ threshold かつ 3-op 分類で CONTRADICTORY）、古い記憶の `valid_until` が自動的に新しい記憶の `created_at` に設定されます。非同期（`asyncio.create_task`）かつ best-effort。
+
+### 検索フィルタリング
+
+`SearchQuery.valid_at` を指定することで、特定の時点で有効な記憶のみを取得可能:
+```python
+SearchQuery(text="...", valid_at=datetime(2024, 6, 15))
+# → valid_from <= 2024-06-15 AND (valid_until IS NULL OR valid_until > 2024-06-15)
+```
+`valid_at=None`（デフォルト）では全件返却。後方互換を完全維持。
+
+### マイグレーション
+
+v037: `ALTER TABLE memories ADD COLUMN valid_from TEXT; ADD COLUMN valid_until TEXT;`
+
+---
+
+## 3-op Contradiction Classification (HiMem 着想)
+
+矛盾を「検知するだけ」から「分類して適切に処理する」に拡張。[HiMem](https://arxiv.org/html/2601.06377) の reconsolidation パターンに準拠。
+
+### 3分類
+
+| 分類 | 動作 |
+|---|---|
+| **INDEPENDENT** | 新記憶と既存記憶は無関係 → 両方ともそのまま保存 |
+| **EXTENDABLE** | 新記憶が既存記憶を拡張 → 既存記憶の metadata（tags, importance 等）を更新 |
+| **CONTRADICTORY** | 新記憶が既存記憶と明確に矛盾 → 既存記憶を tombstone（論理削除）+ 新記憶を保存 |
+
+### 実装
+
+- `MemoryEnricher.classify_contradiction()`: LLM 1回呼出で分類
+- `MemoryService._evolve_related_memories()`: semantic similarity check → 分類 → 処理
+- 判定プロンプトは日本語。全処理 best-effort（LLM 障害時はスキップ）
+
+### 既存の ContradictionDetector との関係
+
+既存の `ContradictionDetector`（ベクトル類似度ベースの検出）は維持。LLM 分類は `_evolve_related_memories()` 内の進化パイプラインに統合され、より粒度の細かい処理を可能にします。
+
+---
+
+## Episode + Note 2-tier Memory (HiMem 着想)
+
+[HiMem](https://arxiv.org/html/2601.06377) の核心: Episode Memory（生の会話ログ）と Note Memory（抽象化された知識）の2階層分離。HiMem の LoCoMo 80.71（Mem0 比 +12pt）は主に Episode Memory の寄与（除去で -11pt）。
+
+### 階層構造
+
+| 階層 | Nousでの位置付け | 内容 |
+|---|---|---|
+| **Episode Memory** | `session_events` テーブル | 生の会話ログ。Topic-Aware Event-Surprise Segmentation で分割 |
+| **Note Memory** | `memories` テーブル | 抽出・抽象化された知識（facts, preferences, profile） |
+
+### Episode Segmentation
+
+`EpisodeSegmenter` が session events を topic shift + surprise scoring で自動分割:
+- **Topic shift detection**: LLM が隣接する turn pair を比較し「トピックが変わったか？」を判定
+- **Surprise signal**: 「この発言は予想外か？」を 0.0-1.0 で評価、閾値 > 0.7 で即時セグメンテーション
+- **OR ルール**: topic shift OR surprise > 0.7 → セグメント境界
+- **最小セグメント長**: 3 turns 未満は前セグメントにマージ（過剰分割防止）
+
+### Consolidation Pipeline
+
+`EpisodeConsolidation` が各 Episode から以下をLLM抽出 → `memories` に保存:
+1. **K_fact**: 事実情報
+2. **K_pref**: ユーザー好み
+3. **K_profile**: プロフィール情報
+
+### 2-tier Retrieval
+
+`PrepareStep` の検索パイプライン:
+1. Note Memory（`memories`）を最初に検索
+2. 結果が `memory_preload_count` 未満の場合、Episode Memory（`session_events`）を fallback 検索
+3. 見つかった episode reference を context に追加
+
+### 設定
+
+| 設定キー | デフォルト | 説明 |
+|---|---|---|
+| `episode_consolidation_enabled` | `True` | Episode → Note 統合の有効/無効 |
+| `episode_search_enabled` | `True` | 2-tier fallback 検索の有効/無効 |
+
+全処理 best-effort: セグメンテーション・統合・検索のいずれかが失敗してもメインの会話フローは継続。
