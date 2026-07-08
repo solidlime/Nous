@@ -110,6 +110,10 @@ class ChatService:
                     mode=config.context_compression_mode,
                 ).to_sse()
 
+            # Save user message BEFORE inference (so it's persisted even if client disconnects)
+            now = get_now()
+            session.add("user", turn_ctx.user_message, now)
+
             # Collect and stream LLM response
             full_response = ""
             async for event in InferenceStep().run(
@@ -121,6 +125,16 @@ class ChatService:
 
                 if isinstance(event, TextDeltaSSE):
                     full_response += event.content
+
+            # Save assistant response BEFORE PostProcessStep
+            if full_response:
+                session.add(
+                    "assistant",
+                    full_response,
+                    get_now(),
+                    tool_calls=turn_ctx.tool_calls_log if turn_ctx.tool_calls_log else None,
+                )
+                turn_ctx.full_response = full_response
 
             # Publish chat.llm_response event
             if full_response:

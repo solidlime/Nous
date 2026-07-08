@@ -69,7 +69,7 @@ class PostProcessStep:
         | ContextUpdateSSE
         | InventoryUpdateSSE
     ]:
-        # evict_callback を設定してからセッションにターンを追加
+        # evict_callback を設定（session.add は service.py で既に実行済み）
         _summary_tasks: list[asyncio.Task] = []
         if getattr(config, "session_summarize", True):
 
@@ -77,15 +77,6 @@ class PostProcessStep:
                 _summary_tasks.append(asyncio.create_task(_do_summarize(ctx, config, evicted)))
 
             session.evict_callback = _evict_cb
-
-        now = get_now()
-        session.add("user", turn_ctx.user_message, now)
-        session.add(
-            "assistant",
-            turn_ctx.full_response,
-            get_now(),
-            tool_calls=turn_ctx.tool_calls_log if turn_ctx.tool_calls_log else None,
-        )
 
         # SessionSummarizedSSE: await collected summary tasks
         for task in _summary_tasks:
