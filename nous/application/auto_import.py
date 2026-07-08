@@ -50,7 +50,12 @@ def run_auto_import(
         connection = SQLiteConnection(settings.data_dir, persona)
         try:
             connection.initialize_schema()
-            MigrationEngine(connection).run_all()
+            migration_result = MigrationEngine(connection).run_all()
+            if not migration_result.is_ok:
+                logger.warning(
+                    "Migration failure during auto-import for '%s': %s",
+                    persona, migration_result.error,
+                )
 
             importer = LegacyImporter(connection, persona)
             result = importer.import_from_zip(str(zip_path))

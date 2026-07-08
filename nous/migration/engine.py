@@ -58,14 +58,29 @@ class MigrationEngine:
             db.rollback()
             return Failure(MigrationError(f"Migration {version} failed: {e}"))
 
-    def run_all(self) -> Result[list[str], MigrationError]:
-        """Run all pending migrations in order."""
+    def run_all(self, *, stop_on_error: bool = False) -> Result[list[str], MigrationError]:
+        """Run all pending migrations in order.
+
+        By default (stop_on_error=False), a failed migration does not stop
+        subsequent migrations. All failures are collected and reported.
+        Set stop_on_error=True for the legacy fail-fast behavior.
+        """
         from nous.migration.versions import ALL_MIGRATIONS
 
         applied: list[str] = []
+        failed: list[str] = []
         for version, description, upgrade_fn in ALL_MIGRATIONS:
             result = self.apply(version, description, upgrade_fn)
             if not result.is_ok:
-                return Failure(result.error)
-            applied.append(version)
+                failed.append(version)
+                if stop_on_error:
+                    return Failure(result.error)
+            else:
+                applied.append(version)
+
+        if failed:
+            return Failure(MigrationError(
+                f"Migration failures ({len(failed)}): {', '.join(failed)}. "
+                f"Applied {len(applied)} successfully."
+            ))
         return Success(applied)
