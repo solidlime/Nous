@@ -65,6 +65,7 @@ class SearchEngine:
         chat_config=None,
         reranker=None,
         link_repo=None,
+        entity_service=None,
     ) -> None:
         self._keyword = keyword_search
         self._semantic = semantic_search
@@ -74,6 +75,7 @@ class SearchEngine:
         self._chat_config = chat_config
         self._reranker = reranker
         self._link_repo = link_repo
+        self._entity_service = entity_service
 
     async def search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
         """Execute search using the specified mode.
@@ -192,6 +194,34 @@ class SearchEngine:
             if r.memory.key not in seen or r.score > seen[r.memory.key].score:
                 seen[r.memory.key] = r
         deduped = sorted(seen.values(), key=lambda x: x.score, reverse=True)
+
+        # 5.5 Entity matching boost
+        if self._entity_service is not None:
+            # Extract entities from query text using the extractor
+            query_entity_ids: set[str] = set()
+            try:
+                extracted = self._entity_service.extractor.extract(query.text)
+                for name, _ in extracted:
+                    eid = name.lower().strip()
+                    if eid:
+                        query_entity_ids.add(eid)
+            except Exception:
+                pass
+
+            if query_entity_ids:
+                # Find all memory keys linked to these entities
+                entity_linked_keys: set[str] = set()
+                for eid in query_entity_ids:
+                    mem_keys_result = self._entity_service.find_related_memories(eid, limit=20)
+                    if mem_keys_result.is_ok:
+                        entity_linked_keys.update(mem_keys_result.value)
+
+                # Boost results that match entity-linked memories
+                if entity_linked_keys:
+                    for r in deduped:
+                        if r.memory.key in entity_linked_keys:
+                            r.score += 0.1
+                    deduped.sort(key=lambda x: x.score, reverse=True)
 
         # 5. Rerank step: cross-encoder refinement (if available)
         if self._reranker is not None and self._reranker.enabled:

@@ -246,6 +246,7 @@ class AppContext:
                 memory_repo=self.memory_repo,
                 memorag_config=self.settings.memorag,
                 reranker=self._reranker,
+                entity_service=self.entity_service,
             )
         return self._search_engine
 
