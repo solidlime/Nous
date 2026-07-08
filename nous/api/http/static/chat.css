@@ -225,7 +225,8 @@ html.light .chat-tool-result-content {
   opacity: 0;
   transition: opacity 0.2s;
 }
-.chat-msg:hover .chat-msg-actions {
+.chat-msg:hover .chat-msg-actions,
+.chat-msg:focus-within .chat-msg-actions {
   opacity: 1;
 }
 .chat-msg-action-btn {
@@ -569,6 +570,26 @@ input[type="range"].chat-field-input:focus {
   }
   #settings-panel .settings-scroll-container {
     padding: 12px;
+    padding-top: 48px;
+  }
+  .settings-panel-close {
+    display: flex;
+  }
+  /* Backdrop overlay for mobile settings */
+  #settings-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 999;
+  }
+  #settings-backdrop.visible {
+    display: block;
+  }
+}
+@media (min-width: 769px) {
+  .settings-panel-close {
+    display: none;
   }
 }
 .chat-sidebar-toggle {
@@ -585,6 +606,29 @@ input[type="range"].chat-field-input:focus {
 .chat-sidebar-toggle:hover {
   color: var(--text-primary);
   background: var(--glass-bg);
+}
+/* Settings panel close button (mobile) */
+.settings-panel-close {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s;
+}
+.settings-panel-close:hover {
+  color: var(--text-primary);
+  background: var(--glass-hover);
 }
 #chat-status {
   font-size: 0.75rem;
@@ -753,12 +797,17 @@ input[type="range"].chat-field-input:focus {
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
   z-index: 2000;
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  backdrop-filter: blur(4px);
 }
 #mem-edit-overlay.show {
-  display: flex;
+  opacity: 1;
+  visibility: visible;
 }
 #mem-edit-modal {
   background: var(--bg-primary);
@@ -924,18 +973,22 @@ input[type="range"].chat-field-input:focus {
 }
 /* Media viewer overlay */
 #media-viewer-overlay {
-  display: none;
   position: fixed;
   inset: 0;
   z-index: 9500;
   background: rgba(0, 0, 0, 0.85);
   backdrop-filter: blur(6px);
+  display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
 }
 #media-viewer-overlay.visible {
-  display: flex;
+  opacity: 1;
+  visibility: visible;
 }
 #media-viewer-inner {
   max-width: 90vw;

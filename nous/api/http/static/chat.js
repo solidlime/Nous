@@ -452,6 +452,12 @@ async function saveChatConfig() {
       ? document.getElementById("chat-image-gen-stability-url").value.trim()
       : "",
   };
+  const btn = document.querySelector(".chat-save-btn");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader"></i> 保存中...';
+    if (typeof lucide !== "undefined") lucide.createIcons();
+  }
   try {
     const cfg = await api(
       "/api/chat/" + encodeURIComponent(S.persona) + "/config",
@@ -464,6 +470,12 @@ async function saveChatConfig() {
     toast("チャット設定を保存しました", "success");
   } catch (e) {
     toast("保存失敗: " + e.message, "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="save"></i> 設定を保存';
+      if (typeof lucide !== "undefined") lucide.createIcons();
+    }
   }
 }
 
@@ -620,17 +632,31 @@ function renderSkillsList(allSkills, enabledSkills) {
 }
 
 function toggleSettingsPanel() {
-  const sidebar = document.getElementById("settings-panel");
+  var sidebar = document.getElementById("settings-panel");
+  var backdrop = document.getElementById("settings-backdrop");
+  var isMobile = window.innerWidth <= 768;
   CHAT.sidebarOpen = !CHAT.sidebarOpen;
   if (CHAT.sidebarOpen) {
-    sidebar.style.width = "360px";
+    sidebar.style.width = isMobile ? "100%" : "360px";
     sidebar.style.display = "flex";
     sidebar.classList.remove("collapsed");
+    if (isMobile && backdrop) backdrop.classList.add("visible");
   } else {
     sidebar.style.width = "0";
     sidebar.classList.add("collapsed");
+    if (backdrop) backdrop.classList.remove("visible");
   }
 }
+
+// ESC key closes settings panel on mobile
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape" && CHAT.sidebarOpen) {
+    var isMobile = window.innerWidth <= 768;
+    if (isMobile) {
+      toggleSettingsPanel();
+    }
+  }
+});
 
 function toggleMemoryPanel() {
   const panel = document.getElementById("memory-panel");
@@ -910,14 +936,13 @@ function showContextCompressed(evt) {
   );
 }
 
-function clearChatHistory() {
-  CHAT.messages = [];
+function resetToWelcome() {
   const container = document.getElementById("chat-messages");
   container.innerHTML = `
         <div class="chat-welcome" id="chat-welcome">
             <div class="chat-welcome-icon"><i data-lucide="message-circle"></i></div>
             <p>チャットを開始するには下のテキストボックスにメッセージを入力してください。</p>
-            <p class="chat-welcome-hint">APIキーとプロバイダーを設定してください。<br><a href="#" onclick="toggleSettingsPanel();return false;" class="chat-welcome-link">⚙️ 設定パネルを開く</a></p>
+            <p class="chat-welcome-hint">APIキーとプロバイダーを設定してください。<br><a href="#" onclick="toggleSettingsPanel();return false;" class="chat-welcome-link"><i data-lucide="settings"></i> 設定パネルを開く</a></p>
             <div class="chat-welcome-commands">
                 <span class="chat-welcome-cmd">/memory</span>
                 <span class="chat-welcome-cmd">/goal</span>
@@ -930,6 +955,20 @@ function clearChatHistory() {
                 <span class="chat-welcome-cmd">/invoke_skill</span>
             </div>
         </div>`;
+  setTimeout(() => {
+    if (typeof lucide !== "undefined") lucide.createIcons();
+  }, 50);
+}
+
+async function clearChatHistory() {
+  if (CHAT.messages.length === 0) {
+    resetToWelcome();
+    return;
+  }
+  const ok = await showConfirm("会話をリセットしますか？現在の会話履歴がすべて削除されます。");
+  if (!ok) return;
+  CHAT.messages = [];
+  resetToWelcome();
   // Delete server-side session (F3)
   const oldSid = getChatSessionId();
   if (S.persona && oldSid) {
@@ -983,10 +1022,7 @@ async function rollbackChat(keepUntil, shouldResend) {
 
     // Restore welcome if no messages left
     if (container.querySelectorAll(".chat-msg").length === 0) {
-      container.innerHTML = `<div class="chat-welcome" id="chat-welcome">
-                <div class="chat-welcome-icon"><i data-lucide="message-circle"></i></div>
-                <p>チャットを開始するには下のテキストボックスにメッセージを入力してください。</p>
-            </div>`;
+      resetToWelcome();
     }
 
     if (result.removed_user_text) {
@@ -1183,23 +1219,7 @@ async function restoreChatHistory() {
   const container = document.getElementById("chat-messages");
   // Always reset DOM first to prevent previous persona's messages from lingering
   CHAT.messages = [];
-  container.innerHTML = `
-        <div class="chat-welcome" id="chat-welcome">
-            <div class="chat-welcome-icon"><i data-lucide="message-circle"></i></div>
-            <p>チャットを開始するには下のテキストボックスにメッセージを入力してください。</p>
-            <p class="chat-welcome-hint">APIキーとプロバイダーを設定してください。<br><a href="#" onclick="toggleSettingsPanel();return false;" class="chat-welcome-link">⚙️ 設定パネルを開く</a></p>
-            <div class="chat-welcome-commands">
-                <span class="chat-welcome-cmd">/memory</span>
-                <span class="chat-welcome-cmd">/goal</span>
-                <span class="chat-welcome-cmd">/code</span>
-                <span class="chat-welcome-cmd">/help</span>
-                <span class="chat-welcome-cmd">/search</span>
-                <span class="chat-welcome-cmd">/browser</span>
-                <span class="chat-welcome-cmd">/image</span>
-                <span class="chat-welcome-cmd">/sandbox</span>
-                <span class="chat-welcome-cmd">/invoke_skill</span>
-            </div>
-        </div>`;
+  resetToWelcome();
   // Show loading skeleton while fetching history
   const skeletonHtml =
     '<div class="chat-msg assistant"><div class="chat-bubble" style="opacity:0.5"><div class="skeleton skeleton-text" style="width:80%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:60%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:40%;height:14px"></div></div></div>' +
@@ -2349,20 +2369,31 @@ function updateEquipmentPanel(update) {
   });
   if (entries.length > 0) {
     html +=
-      '<div style="font-size:0.75rem;font-weight:600;color:var(--text-muted);margin-bottom:4px;">装備中</div>';
+      '<div style="font-size:0.75rem;font-weight:600;color:var(--text-muted);margin-bottom:4px;"><i data-lucide="shield" style="width:12px;height:12px;vertical-align:middle;margin-right:4px;"></i>装備中</div>';
     for (const [slot, item] of entries) {
+      const slotIcon =
+        {
+          top: "shirt",
+          bottom: "footprints",
+          shoes: "footprints",
+          outer: "jacket",
+          accessories: "gem",
+          head: "crown",
+        }[slot] || "circle";
       const slotLabel =
         {
-          top: "👕上",
-          bottom: "👖下",
-          shoes: "👟靴",
-          outer: "🧥アウター",
-          accessories: "💍アクセ",
-          head: "🎩頭",
+          top: "上",
+          bottom: "下",
+          shoes: "靴",
+          outer: "アウター",
+          accessories: "アクセ",
+          head: "頭",
         }[slot] || slot;
       html +=
-        '<div style="font-size:0.73rem;padding:2px 0;display:flex;justify-content:space-between;">' +
-        "<span>" +
+        '<div style="font-size:0.73rem;padding:2px 0;display:flex;justify-content:space-between;align-items:center;">' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;"><i data-lucide="' +
+        slotIcon +
+        '" style="width:11px;height:11px;opacity:0.7;"></i>' +
         slotLabel +
         "</span><span>" +
         esc(String(item)) +
@@ -2392,6 +2423,10 @@ function updateEquipmentPanel(update) {
 
   if (html) {
     list.innerHTML = html;
+    // Re-render Lucide icons in the equipment panel
+    setTimeout(() => {
+      if (typeof lucide !== "undefined") lucide.createIcons();
+    }, 10);
   }
 }
 
@@ -2643,29 +2678,19 @@ function renderCodeBlock(lang, code) {
   }
 
   const uid = "codeblock-" + Math.random().toString(36).slice(2);
-  const runBtnHtml = runnable
-    ? '<button class="hljs-run-btn" id="runbtn-' +
-      uid +
-      '" onclick="sandboxRunBlock(' +
-      JSON.stringify(code) +
-      ", " +
-      JSON.stringify(lang || "python") +
-      ", document.getElementById('result-" +
-      uid +
-      '\'), this)"><i data-lucide="play"></i> Run</button>'
-    : "";
-
-  return (
-    '<div class="hljs-block-wrapper">' +
+  // Build the wrapper HTML without inline onclick
+  const wrapper = document.createElement("div");
+  wrapper.className = "hljs-block-wrapper";
+  wrapper.innerHTML =
     '<div class="hljs-block-header">' +
     '<span class="hljs-lang-badge">' +
     esc(lang || "") +
     "</span>" +
     '<div class="hljs-block-actions">' +
-    '<button class="hljs-copy-btn" onclick="navigator.clipboard.writeText(' +
-    JSON.stringify(code) +
-    ").then(()=>toast('コピーしました','success'))\"><i data-lucide=\"clipboard-list\"></i> Copy</button>" +
-    runBtnHtml +
+    '<button class="hljs-copy-btn"><i data-lucide="clipboard-list"></i> Copy</button>' +
+    (runnable
+      ? '<button class="hljs-run-btn"><i data-lucide="play"></i> Run</button>'
+      : "") +
     "</div>" +
     "</div>" +
     '<pre style="margin:0;padding:8px 10px;background:#0d1117;overflow-x:auto;"><code class="hljs language-' +
@@ -2673,11 +2698,28 @@ function renderCodeBlock(lang, code) {
     '">' +
     highlighted +
     "</code></pre>" +
-    '<div id="result-' +
-    uid +
-    '" class="hljs-run-result" style="display:none;"></div>' +
-    "</div>"
-  );
+    '<div class="hljs-run-result" style="display:none;"></div>';
+
+  // Attach event listeners via addEventListener (no inline onclick)
+  const copyBtn = wrapper.querySelector(".hljs-copy-btn");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", function () {
+      navigator.clipboard.writeText(code).then(function () {
+        toast("コピーしました", "success");
+      });
+    });
+  }
+  if (runnable) {
+    const runBtn = wrapper.querySelector(".hljs-run-btn");
+    const resultEl = wrapper.querySelector(".hljs-run-result");
+    if (runBtn && resultEl) {
+      runBtn.addEventListener("click", function () {
+        sandboxRunBlock(code, lang || "python", resultEl, runBtn);
+      });
+    }
+  }
+
+  return wrapper.outerHTML;
 }
 
 /* =================================================================

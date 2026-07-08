@@ -23,6 +23,8 @@ def render_chat_tab() -> str:
                 </div>
             </div>
             <div id="chat-layout" class="glass" style="padding:0; overflow:hidden;">
+                <!-- Mobile backdrop for settings panel -->
+                <div id="settings-backdrop" onclick="toggleSettingsPanel()"></div>
                 <!-- Memory activity panel (left) -->
                 <div id="memory-panel">
                     <div class="memory-panel-title"><i data-lucide="brain"></i> 記憶活動</div>
@@ -92,7 +94,7 @@ def render_chat_tab() -> str:
                         <div class="chat-welcome" id="chat-welcome">
                             <div class="chat-welcome-icon"><i data-lucide="message-circle"></i></div>
                             <p>チャットを開始するには下のテキストボックスにメッセージを入力してください。</p>
-                            <p class="chat-welcome-hint">APIキーとプロバイダーを設定してください。<br><a href="#" onclick="toggleSettingsPanel();return false;" class="chat-welcome-link">⚙️ 設定パネルを開く</a></p>
+                            <p class="chat-welcome-hint">APIキーとプロバイダーを設定してください。<br><a href="#" onclick="toggleSettingsPanel();return false;" class="chat-welcome-link"><i data-lucide="settings"></i> 設定パネルを開く</a></p>
                             <div class="chat-welcome-commands">
                                 <span class="chat-welcome-cmd">/memory</span>
                                 <span class="chat-welcome-cmd">/goal</span>
@@ -120,6 +122,8 @@ def render_chat_tab() -> str:
                 </div>
                 <!-- Settings sidebar -->
                 <div id="settings-panel" class="glass" style="margin:0; border-radius:0; border-left:1px solid var(--glass-border); padding:0;">
+                    <!-- Mobile close button -->
+                    <button id="settings-panel-close-btn" class="settings-panel-close" onclick="toggleSettingsPanel()" title="設定パネルを閉じる" aria-label="設定パネルを閉じる"><i data-lucide="x"></i></button>
                     <div class="settings-scroll-container">
                         <div style="position:sticky;top:0;z-index:10;background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);font-size:0.9rem;font-weight:600;color:var(--text-primary);padding:12px 0 8px;margin:0 -16px 8px;border-bottom:1px solid var(--glass-border);display:flex;align-items:center;gap:8px;box-shadow:0 2px 12px rgba(0,0,0,0.1);">
                             <span style="font-size:1.1rem;margin-left:16px;"><i data-lucide="settings"></i></span>

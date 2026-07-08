@@ -249,11 +249,20 @@ function toast(msg, type = "info") {
    GLASS CONFIRM / ALERT MODAL (23.6)
    ================================================================= */
 function showConfirm(message, onConfirm, onCancel) {
-  const overlay = document.createElement("div");
+  // Promise-based: showConfirm(msg) returns Promise<boolean>
+  if (typeof onConfirm !== "function") {
+    return new Promise(function (resolve) {
+      showConfirm(message, function () { resolve(true); }, function () { resolve(false); });
+    });
+  }
+  var triggerEl = document.activeElement;
+  var overlay = document.createElement("div");
   overlay.className = "confirm-overlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
   overlay.innerHTML =
     '<div class="confirm-modal">' +
-    "<h3>確認</h3>" +
+    '<h3 id="confirm-title">確認</h3>' +
     "<p>" +
     esc(message).replace(/\n/g, "<br>") +
     "</p>" +
@@ -261,14 +270,21 @@ function showConfirm(message, onConfirm, onCancel) {
     '<button class="glass-btn" id="confirm-cancel-btn">キャンセル</button>' +
     '<button class="glass-btn glass-btn-danger" id="confirm-ok-btn">OK</button>' +
     "</div></div>";
+  overlay.setAttribute("aria-labelledby", "confirm-title");
   document.body.appendChild(overlay);
   requestAnimationFrame(() => overlay.classList.add("show"));
+
+  // Focus the OK button immediately
+  var okBtn = document.getElementById("confirm-ok-btn");
+  if (okBtn) okBtn.focus();
 
   function cleanup() {
     overlay.classList.remove("show");
     setTimeout(() => overlay.remove(), 220);
+    // Return focus to trigger element
+    if (triggerEl && triggerEl.focus) triggerEl.focus();
   }
-  document.getElementById("confirm-ok-btn").onclick = function () {
+  okBtn.onclick = function () {
     cleanup();
     if (onConfirm) onConfirm();
   };
@@ -282,35 +298,69 @@ function showConfirm(message, onConfirm, onCancel) {
       if (onCancel) onCancel();
     }
   });
-  document.addEventListener("keydown", function handler(e) {
+  // Focus trap
+  overlay.addEventListener("keydown", function (e) {
     if (e.key === "Escape") {
+      e.stopPropagation();
       cleanup();
       if (onCancel) onCancel();
-      document.removeEventListener("keydown", handler);
+      return;
+    }
+    if (e.key === "Tab") {
+      var focusable = overlay.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
   });
 }
 function showAlert(message) {
-  const overlay = document.createElement("div");
+  var triggerEl = document.activeElement;
+  var overlay = document.createElement("div");
   overlay.className = "confirm-overlay";
+  overlay.setAttribute("role", "alertdialog");
+  overlay.setAttribute("aria-modal", "true");
   overlay.innerHTML =
     '<div class="confirm-modal">' +
-    "<h3>通知</h3>" +
+    '<h3 id="alert-title">通知</h3>' +
     "<p>" +
     esc(message).replace(/\n/g, "<br>") +
     "</p>" +
     '<div class="confirm-modal-actions">' +
     '<button class="glass-btn glass-btn-success" id="alert-ok-btn">OK</button>' +
     "</div></div>";
+  overlay.setAttribute("aria-labelledby", "alert-title");
   document.body.appendChild(overlay);
   requestAnimationFrame(() => overlay.classList.add("show"));
+  var okBtn = document.getElementById("alert-ok-btn");
+  if (okBtn) okBtn.focus();
   function cleanup() {
     overlay.classList.remove("show");
     setTimeout(() => overlay.remove(), 220);
+    if (triggerEl && triggerEl.focus) triggerEl.focus();
   }
-  document.getElementById("alert-ok-btn").onclick = cleanup;
+  okBtn.onclick = cleanup;
   overlay.addEventListener("click", function (e) {
     if (e.target === overlay) cleanup();
+  });
+  overlay.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      cleanup();
+    }
+    if (e.key === "Tab") {
+      e.preventDefault();
+      okBtn.focus();
+    }
   });
 }
 
@@ -552,6 +602,7 @@ function switchTab(tab) {
   S._tabSwitchCount = (S._tabSwitchCount || 0) + 1;
   showSkeleton(tab);
   loadTab(tab);
+  // Lucide.createIcons() skips already-rendered <i> tags, so this is safe to call broadly
   setTimeout(() => {
     if (typeof lucide !== "undefined") lucide.createIcons();
   }, 100);

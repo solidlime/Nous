@@ -769,3 +769,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .confirm-modal-actions {
     display: flex; gap: 10px; justify-content: flex-end;
 }
+
+/* ============================================================
+   SKIP-TO-CONTENT (Accessibility)
+   ============================================================ */
+.skip-link {
+    position: absolute; top: -100px; left: 16px;
+    z-index: 9999; padding: 8px 16px;
+    background: var(--accent-purple, #8b5cf6); color: white;
+    border-radius: 4px; font-weight: 600; text-decoration: none;
+    transition: top 0.2s ease;
+}
+.skip-link:focus { top: 16px; }

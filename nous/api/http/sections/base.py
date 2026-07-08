@@ -17,14 +17,14 @@ def render_head() -> str:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nous Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://cdn.tailwindcss.com" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js" defer></script>
     <link href="https://unpkg.com/vis-timeline/standalone/umd/vis-timeline-graph2d.min.css" rel="stylesheet" />
-    <script src="https://unpkg.com/vis-timeline/standalone/umd/vis-timeline-graph2d.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/vis-timeline/standalone/umd/vis-timeline-graph2d.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js" defer></script>
+    <script src="https://unpkg.com/lucide@latest" defer></script>
     <link rel="stylesheet" href="/static/base.css">
     <script src="/static/chat.js" defer></script>
 </head>"""
@@ -90,6 +90,7 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str, initial_p
     return (
         "<!DOCTYPE html>\n"
         '<html lang="ja" class="dark">\n' + render_head() + "\n<body>\n"
+        '    <a href="#tab-content" class="skip-link">メインコンテンツにスキップ</a>\n'
         "    <!-- Background Orbs -->\n"
         '    <div class="orb orb-1"></div>\n'
         '    <div class="orb orb-2"></div>\n'
@@ -128,7 +129,7 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str, initial_p
         "    </div>\n"
         "\n"
         "    <!-- Toast container -->\n"
-        '    <div id="toast-container" class="toast-container"></div>\n'
+        '    <div id="toast-container" class="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>\n'
         "\n" + persona_init_script + render_utilities_js() + "\n"
         "<script>\n" + tab_js + "\n"
         "</script>\n"
