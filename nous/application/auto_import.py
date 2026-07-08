@@ -54,7 +54,8 @@ def run_auto_import(
             if not migration_result.is_ok:
                 logger.warning(
                     "Migration failure during auto-import for '%s': %s",
-                    persona, migration_result.error,
+                    persona,
+                    migration_result.error,
                 )
 
             importer = LegacyImporter(connection, persona)

@@ -1,4 +1,5 @@
 """Language-agnostic memory recall metadata annotator."""
+
 from dataclasses import dataclass
 from typing import Literal, cast
 

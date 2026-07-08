@@ -459,7 +459,10 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
     # ── validate: size ──
     size = str(tool_input.get("size", "1024x1024"))
     if not re.match(r"^\d+x\d+$", size):
-        return {"status": "error", "message": f"Invalid size format: '{size}'. Expected 'WIDTHxHEIGHT' (e.g. '1024x1024')."}
+        return {
+            "status": "error",
+            "message": f"Invalid size format: '{size}'. Expected 'WIDTHxHEIGHT' (e.g. '1024x1024').",
+        }
     if size not in _VALID_IMAGE_SIZES:
         valid = ", ".join(sorted(_VALID_IMAGE_SIZES))
         return {"status": "error", "message": f"Unsupported size: '{size}'. Supported sizes: {valid}."}
@@ -583,9 +586,7 @@ async def _handle_read_pdf(ctx: AppContext, config: ChatConfig, tool_input: dict
             return {"status": "error", "message": "PDF file too large (max: 50MB)"}
 
         try:
-            result = await asyncio.to_thread(
-                _sync_process_pdf, pdf_bytes, pages=pages, mode=mode, max_chars=max_chars
-            )
+            result = await asyncio.to_thread(_sync_process_pdf, pdf_bytes, pages=pages, mode=mode, max_chars=max_chars)
             result["filename"] = filename
             return result
         except ImportError as e:
@@ -608,9 +609,7 @@ async def _handle_read_pdf(ctx: AppContext, config: ChatConfig, tool_input: dict
         return {"status": "error", "message": "PDF file too large (max: 50MB)"}
 
     try:
-        result = await asyncio.to_thread(
-            _sync_process_pdf, str(pdf_path), pages=pages, mode=mode, max_chars=max_chars
-        )
+        result = await asyncio.to_thread(_sync_process_pdf, str(pdf_path), pages=pages, mode=mode, max_chars=max_chars)
         result["filename"] = pdf_path.name
         return result
     except ImportError as e:
@@ -752,11 +751,7 @@ def _sync_process_pdf(
                 from PIL import Image
 
                 ocr_parts = []
-                ocr_page_iter = (
-                    target_pages
-                    if target_pages is not None
-                    else range(min(num_pages, 10))
-                )
+                ocr_page_iter = target_pages if target_pages is not None else range(min(num_pages, 10))
                 for page_num in ocr_page_iter:
                     page = doc[page_num]
                     pix = page.get_pixmap()
@@ -800,11 +795,7 @@ def _sync_process_pdf(
                     for table in page_tables:
                         if table and len(table) > 0:
                             headers = [str(h) if h else "" for h in table[0]]
-                            rows = (
-                                [[str(c) if c else "" for c in row] for row in table[1:]]
-                                if len(table) > 1
-                                else []
-                            )
+                            rows = [[str(c) if c else "" for c in row] for row in table[1:]] if len(table) > 1 else []
                             tables.append(
                                 {
                                     "page": page_num + 1,

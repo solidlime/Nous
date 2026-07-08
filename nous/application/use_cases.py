@@ -106,7 +106,9 @@ class AppContext:
                 "MIGRATION FAILURE for persona '%s': %s. "
                 "The application will continue but some features may be broken. "
                 "Consider running 'nous migrate --persona %s' manually.",
-                persona, migration_result.error, persona
+                persona,
+                migration_result.error,
+                persona,
             )
 
         # Repositories

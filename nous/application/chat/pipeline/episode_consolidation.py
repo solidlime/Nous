@@ -215,9 +215,7 @@ class EpisodeConsolidation:
             from nous.domain.search.engine import SearchQuery
 
             if hasattr(ctx, "search_engine"):
-                search_result = await ctx.search_engine.search(
-                    SearchQuery(text=content, top_k=3, mode="semantic")
-                )
+                search_result = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
                 if search_result.is_ok and search_result.value:
                     top_hit = search_result.value[0]
                     hit_score = top_hit.score if hasattr(top_hit, "score") else 0.0
@@ -237,17 +235,10 @@ class EpisodeConsolidation:
             if not isinstance(result, dict):
                 return {}
             return {
-                "facts": [
-                    f for f in result.get("facts", [])
-                    if isinstance(f, dict) and f.get("content")
-                ],
-                "preferences": [
-                    p for p in result.get("preferences", [])
-                    if isinstance(p, dict) and p.get("content")
-                ],
+                "facts": [f for f in result.get("facts", []) if isinstance(f, dict) and f.get("content")],
+                "preferences": [p for p in result.get("preferences", []) if isinstance(p, dict) and p.get("content")],
                 "profile_updates": [
-                    p for p in result.get("profile_updates", [])
-                    if isinstance(p, dict) and p.get("content")
+                    p for p in result.get("profile_updates", []) if isinstance(p, dict) and p.get("content")
                 ],
             }
         except Exception:

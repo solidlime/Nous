@@ -264,6 +264,3 @@ async def _tool_item_history(ctx: AppContext, persona: str, days: int = 7) -> st
         },
     )
     return f"Error: {result.error}"
-
-
-

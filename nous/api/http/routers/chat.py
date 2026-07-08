@@ -790,10 +790,12 @@ def register_chat_routes(mcp) -> None:
             # Ensure response has {status: "ok"} | {status: "error", message} format
             if isinstance(result, dict) and "status" in result:
                 return JSONResponse(result)
-            return JSONResponse({
-                "status": "ok" if result else "error",
-                "key": result.get("memory_key", "") if isinstance(result, dict) else "",
-                "message": str(result) if not isinstance(result, dict) else result.get("response", ""),
-            })
+            return JSONResponse(
+                {
+                    "status": "ok" if result else "error",
+                    "key": result.get("memory_key", "") if isinstance(result, dict) else "",
+                    "message": str(result) if not isinstance(result, dict) else result.get("response", ""),
+                }
+            )
         except Exception as e:
             return JSONResponse({"status": "error", "message": str(e)}, status_code=500)

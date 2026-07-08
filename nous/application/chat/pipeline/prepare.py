@@ -194,9 +194,7 @@ async def _search_episodes(
 
         # Use semantic search via search_engine for relevance if available
         if hasattr(ctx, "search_engine") and ctx.search_engine is not None:
-            search_result = await ctx.search_engine.search(
-                SearchQuery(text=query, top_k=top_k, mode="semantic")
-            )
+            search_result = await ctx.search_engine.search(SearchQuery(text=query, top_k=top_k, mode="semantic"))
             if search_result.is_ok and search_result.value:
                 episodes = []
                 for hit in search_result.value:
@@ -204,12 +202,14 @@ async def _search_episodes(
                     content = getattr(mem, "content", str(mem))[:200]
                     tags = getattr(mem, "tags", [])
                     source = getattr(mem, "source_context", "")
-                    episodes.append({
-                        "topic": tags[0] if tags else "episode",
-                        "summary": content[:100],
-                        "content": content,
-                        "episode_id": source,
-                    })
+                    episodes.append(
+                        {
+                            "topic": tags[0] if tags else "episode",
+                            "summary": content[:100],
+                            "content": content,
+                            "episode_id": source,
+                        }
+                    )
                 return episodes
 
         # Fallback to keyword search on session event summaries
@@ -223,12 +223,17 @@ async def _search_episodes(
             # Count query term occurrences
             score = summary.count(query_lower) * 2 + detail.count(query_lower)
             if score > 0:
-                scored.append((score, {
-                    "topic": ev.event_type or "session_event",
-                    "summary": (ev.summary or "")[:100],
-                    "content": (ev.detail or ev.summary or "")[:200],
-                    "episode_id": str(ev.id or ""),
-                }))
+                scored.append(
+                    (
+                        score,
+                        {
+                            "topic": ev.event_type or "session_event",
+                            "summary": (ev.summary or "")[:100],
+                            "content": (ev.detail or ev.summary or "")[:200],
+                            "episode_id": str(ev.id or ""),
+                        },
+                    )
+                )
         scored.sort(key=lambda x: -x[0])
         return [s[1] for s in scored[:top_k]]
     except Exception:

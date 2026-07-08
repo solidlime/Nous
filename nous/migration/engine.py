@@ -79,8 +79,9 @@ class MigrationEngine:
                 applied.append(version)
 
         if failed:
-            return Failure(MigrationError(
-                f"Migration failures ({len(failed)}): {', '.join(failed)}. "
-                f"Applied {len(applied)} successfully."
-            ))
+            return Failure(
+                MigrationError(
+                    f"Migration failures ({len(failed)}): {', '.join(failed)}. Applied {len(applied)} successfully."
+                )
+            )
         return Success(applied)

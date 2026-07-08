@@ -371,6 +371,7 @@ def register_tools(mcp: FastMCP) -> None:
 
     # sandbox_execute — only registered when sandbox is enabled
     if get_settings().sandbox.enabled:
+
         @_tool("sandbox_execute")
         async def sandbox_execute(
             code: str, language: str = "python", libraries: list[str] | None = None, session_id: str | None = None

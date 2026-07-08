@@ -74,7 +74,10 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 "speech_style": {"type": "string", "description": "話し方のスタイル記述"},
                 "relationship_status": {"type": "string", "description": "関係性の状態記述"},
                 "relationship_type": {"type": "string", "description": "関係性の種類"},
-                "context_note": {"type": "string", "description": "現在の作業内容の要約（1行・50字以内）。次回セッションのget_contextで自動復元"},
+                "context_note": {
+                    "type": "string",
+                    "description": "現在の作業内容の要約（1行・50字以内）。次回セッションのget_contextで自動復元",
+                },
                 "user_info": {"type": "object", "description": "ユーザー情報 {name, nickname, preferred_address}"},
                 "persona_info": {"type": "object", "description": "ペルソナ情報 {nickname, ...}"},
                 "nickname": {"type": "string", "description": "ペルソナのニックネーム"},
@@ -167,7 +170,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="item_equip",
-        description="アイテムを装備。equipment dict必須（例: {\"top\": \"白いドレス\"}）。",
+        description='アイテムを装備。equipment dict必須（例: {"top": "白いドレス"}）。',
         input_schema={
             "type": "object",
             "properties": {
@@ -188,7 +191,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                         {"type": "string"},
                         {"type": "array", "items": {"type": "string"}},
                     ],
-                    "description": "外すスロット名（例: \"top\" / [\"top\", \"outer\"]）",
+                    "description": '外すスロット名（例: "top" / ["top", "outer"]）',
                 },
             },
             "required": ["slots"],
@@ -342,7 +345,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 },
                 "pages": {
                     "type": "string",
-                    "description": "ページ範囲。例: \"1-3\" または \"1,3,5\"。省略時は全ページ。",
+                    "description": 'ページ範囲。例: "1-3" または "1,3,5"。省略時は全ページ。',
                 },
                 "mode": {
                     "type": "string",

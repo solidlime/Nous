@@ -195,7 +195,6 @@ def _messages_with_tool_results() -> list[LLMMessage]:
 
 
 class TestCompressStep:
-
     @pytest.mark.asyncio
     @pytest.mark.asyncio
     async def test_no_compression_when_under_budget(self):
