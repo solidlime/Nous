@@ -136,6 +136,17 @@ def register_admin_routes(mcp) -> None:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
 
+    def _build_export_zip(persona_dir: Path) -> io.BytesIO:
+        buf = io.BytesIO()
+        excluded = {".sqlite-wal", ".sqlite-shm"}
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
+            for file_path in persona_dir.rglob("*"):
+                if file_path.is_file() and file_path.suffix not in excluded:
+                    arcname = str(file_path.relative_to(persona_dir))
+                    zf.write(file_path, arcname)
+        buf.seek(0)
+        return buf
+
     @mcp.custom_route("/api/export/{persona}", methods=["GET"])
     async def export_data(request: Request) -> StreamingResponse:
         persona = _resolve_persona_from_request(request)
@@ -144,13 +155,7 @@ def register_admin_routes(mcp) -> None:
         if not persona_dir.exists():
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
-            buf = io.BytesIO()
-            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                for file_path in persona_dir.rglob("*"):
-                    if file_path.is_file():
-                        arcname = str(file_path.relative_to(persona_dir))
-                        zf.write(file_path, arcname)
-            buf.seek(0)
+            buf = await asyncio.to_thread(_build_export_zip, persona_dir)
             return StreamingResponse(
                 buf,
                 media_type="application/zip",

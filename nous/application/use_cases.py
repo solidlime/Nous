@@ -90,15 +90,19 @@ class AppContext:
         self.settings = settings
         self.persona = persona
         self.connection = SQLiteConnection(settings.data_dir, persona)
-        self.connection.initialize_schema()
+        try:
+            self.connection.initialize_schema()
+        except Exception as e:
+            logger = logging.getLogger("nous")
+            logger.warning("Schema initialization failed for persona '%s': %s", persona, e)
+            # Continue - migration will attempt repair, and if it also fails,
+            # AppContext will still be created but functionality may be degraded
 
         # Run pending schema migrations
         from nous.migration.engine import MigrationEngine
 
         migration_result = MigrationEngine(self.connection).run_all()
         if not migration_result.is_ok:
-            import logging
-
             logging.getLogger("nous").error("Migration failed for persona '%s': %s", persona, migration_result.error)
 
         # Repositories
