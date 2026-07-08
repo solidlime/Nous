@@ -85,6 +85,8 @@ class ChatConfig(BaseModel):
     context_compress_history: bool = True
     memory_preload_count: int = 3  # 0=all, N=preload top N
     enable_parallel_tools: bool = True
+    # LLM context summarization (CompressStep Stage 4)
+    context_use_llm_summary: bool = True
     # Dynamic temperature + top_p (TA02)
     dynamic_temperature: bool = True
     emotion_temperature_scale: float = 0.2

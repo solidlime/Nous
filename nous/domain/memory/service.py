@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from typing import TYPE_CHECKING
 
@@ -8,6 +9,7 @@ if TYPE_CHECKING:
 
 from nous.domain.memory.entities import Memory, MemoryStrength
 from nous.domain.memory.type_classifier import auto_tags
+from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.errors import (
     DomainError,
     MemoryNotFoundError,
@@ -19,6 +21,7 @@ from nous.domain.value_objects import normalize_emotion, normalize_importance
 
 if TYPE_CHECKING:
     from nous.domain.memory.repository import MemoryRepository
+    from nous.domain.search.engine import SearchEngine
     from nous.infrastructure.llm.memory_enricher import MemoryEnricher
 
 
@@ -31,11 +34,13 @@ class MemoryService:
         entity_service: object | None = None,
         enricher: MemoryEnricher | None = None,
         link_repo: object | None = None,
+        search_engine: SearchEngine | None = None,
     ) -> None:
         self._repo = repo
         self._entity_service = entity_service
         self._enricher = enricher
         self._link_repo = link_repo
+        self._search_engine = search_engine
 
     def save_memory(self, mem: Memory) -> Result[Memory, DomainError]:
         """Save a pre-constructed memory entity directly to the repository."""
@@ -164,7 +169,72 @@ class MemoryService:
             with contextlib.suppress(Exception):
                 self._create_hebbian_links(memory)
 
+        # Memory evolution: enrich semantically related memories (best-effort, non-blocking)
+        if self._search_engine is not None:
+            asyncio.create_task(
+                self._evolve_related_memories(
+                    content=content,
+                    new_memory_key=memory.key,
+                )
+            )
+
         return Success(memory)
+
+    async def _evolve_related_memories(
+        self,
+        content: str,
+        new_memory_key: str,
+        max_related: int = 3,
+    ) -> None:
+        """After creating a new memory, find semantically similar existing
+        memories and enrich them by updating context and strengthening links.
+
+        This implements the A-MEM pattern: each new fact refines the
+        understanding of related existing facts (arXiv:2502.12110).
+        """
+        # Only run for substantive content (avoids enriching noise)
+        if len(content) < 30:
+            return
+
+        try:
+            # Semantically search for similar existing memories
+            similar = await self._search_engine.search(
+                SearchQuery(
+                    text=content,
+                    top_k=max_related,
+                    mode="semantic",
+                    similarity_threshold=0.8,
+                )
+            )
+            if not similar.is_ok or not similar.value:
+                return
+
+            for result in similar.value:
+                existing = result.memory
+                if existing.key == new_memory_key:
+                    continue
+
+                # 1. Update access metadata on existing memory
+                existing.access_count += 1
+                existing.last_accessed = get_now()
+                self._repo.update(
+                    existing.key,
+                    access_count=existing.access_count,
+                    last_accessed=existing.last_accessed,
+                )
+
+                # 2. Create or strengthen Hebbian link
+                if self._link_repo is not None:
+                    self._link_repo.upsert(new_memory_key, existing.key, "semantic")
+
+                # 3. Update summary_ref on existing memory (record that
+                #    newer information exists about this topic)
+                if not existing.summary_ref:
+                    self._repo.update(existing.key, summary_ref=new_memory_key)
+
+        except Exception:
+            # Evolution is best-effort, never blocks the main flow
+            pass
 
     def _create_hebbian_links(self, new_memory: Memory) -> None:
         """Generate Hebbian links between *new_memory* and recently accessed memories.

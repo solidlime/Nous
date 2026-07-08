@@ -15,6 +15,13 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+SUMMARIZE_PROMPT = """以下の会話履歴を要約してください。重要な情報（ユーザーの発言、決定事項、好み、約束）のみを抽出し、300文字以内の日本語でまとめてください。
+
+会話履歴:
+{conversation}
+
+要約:"""
+
 
 class CompressStep:
     """トークン予算を超えたらシステムプロンプト・会話履歴を動的圧縮する。
@@ -25,11 +32,10 @@ class CompressStep:
     1. システムプロンプトの関連記憶セクションをトリム
     2. 古いツール結果を [cleared] に置換
     3. 古い会話メッセージを切り詰め
-
-    LLMによる要約圧縮は今後の拡張。
+    4. LLMによる古い会話ターンの要約圧縮（6ターン以上・予算超過時）
     """
 
-    def run(
+    async def run(
         self,
         _ctx: AppContext,
         config: ChatConfig,
@@ -94,12 +100,45 @@ class CompressStep:
         if total <= budget:
             return list(messages)
 
+        keep_recent = getattr(config, "context_keep_recent_turns", 2)
+
         # Stage 3: Truncate old messages
         if getattr(config, "context_compress_history", True):
-            keep_recent = getattr(config, "context_keep_recent_turns", 2)
             messages = self._truncate_old_messages(list(messages), keep_recent)
 
         total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
+
+        # Stage 4: LLM-based summary of old conversation turns
+        # Only runs when mechanical compression still leaves us over budget
+        # and there's enough history worth summarizing (≥6 turns)
+        if total > budget and self._should_summarize(messages, config):
+            try:
+                summary = await self._summarize_old_turns(
+                    config=config,
+                    messages=messages,
+                    keep_recent=keep_recent,
+                )
+                if summary:
+                    keep_count = keep_recent * 2
+                    old_count = len(messages) - keep_count
+                    from nous.infrastructure.llm.base import LLMMessage
+
+                    summary_msg = LLMMessage(
+                        role="user",
+                        content=f"[過去の会話要約]\n{summary}",
+                    )
+                    messages = [summary_msg] + messages[-keep_count:]
+                    total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
+                    logger.info(
+                        "CompressStep: Stage 4 — LLM summarized %d old messages into %d chars",
+                        old_count,
+                        len(summary),
+                    )
+            except Exception:
+                logger.warning(
+                    "CompressStep: Stage 4 — LLM summarization failed, keeping truncated messages",
+                )
+
         logger.info("CompressStep: after compression: %d tokens", total)
         # Store compression info for SSE notification
         turn_ctx._compression_info = {
@@ -108,6 +147,95 @@ class CompressStep:
             "budget": budget,
         }
         return list(messages)
+
+    @staticmethod
+    def _should_summarize(messages: list[LLMMessage], config: ChatConfig) -> bool:
+        """Check if LLM summarization should be attempted.
+
+        Conditions:
+        1. Feature flag is enabled
+        2. Provider is configured (has API key)
+        3. At least 6 user messages (6 conversation turns) exist
+        """
+        if not getattr(config, "context_use_llm_summary", True):
+            return False
+        if not config.is_configured():
+            return False
+        # Count turns by counting user messages
+        user_count = sum(1 for m in messages if m.role == "user")
+        return user_count >= 6
+
+    async def _summarize_old_turns(
+        self,
+        config: ChatConfig,
+        messages: list[LLMMessage],
+        keep_recent: int,
+    ) -> str | None:
+        """Call LLM to summarize old conversation turns.
+
+        Takes all messages except the most recent ``keep_recent * 2``,
+        strips tool messages, truncates long content to 500 chars,
+        and sends to the LLM for a ~300 char Japanese summary.
+
+        Returns:
+            要約文字列。条件不成立時またはエラー時は None。
+        """
+        api_key = config.get_effective_api_key()
+        model = config.get_effective_model()
+        if not api_key or not model:
+            return None
+
+        keep_count = keep_recent * 2
+        if len(messages) <= keep_count:
+            return None
+
+        old_messages = messages[:-keep_count]
+
+        # Build conversation text for summarization:
+        # - Only user and assistant roles (skip tool messages)
+        # - Truncate each message content to 500 chars
+        lines: list[str] = []
+        for msg in old_messages:
+            if msg.role == "user":
+                content = (msg.content or "")[:500]
+                lines.append(f"User: {content}")
+            elif msg.role == "assistant":
+                content = (msg.content or "")[:500]
+                lines.append(f"Assistant: {content}")
+
+        if not lines:
+            return None
+
+        prompt = SUMMARIZE_PROMPT.format(conversation="\n".join(lines))
+
+        from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, LLMMessage, TextDeltaEvent
+        from nous.infrastructure.llm.factory import get_provider
+
+        try:
+            provider = get_provider(config.provider, api_key, model, config.get_effective_base_url())
+        except Exception:
+            logger.warning("CompressStep: Stage 4 — provider init failed")
+            return None
+
+        text = ""
+        try:
+            async for event in provider.stream(
+                messages=[LLMMessage(role="user", content=prompt)],
+                system="",
+                tools=[],
+                temperature=0.0,
+                max_tokens=512,
+            ):
+                if isinstance(event, TextDeltaEvent):
+                    text += event.content
+                elif isinstance(event, (DoneEvent, ErrorEvent)):
+                    break
+        except Exception as e:
+            logger.warning("CompressStep: Stage 4 — LLM call failed: %s", e)
+            return None
+
+        summary = text.strip()
+        return summary if summary else None
 
     @staticmethod
     def _trim_system_prompt(prompt: str, mode: str) -> str:

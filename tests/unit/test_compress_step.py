@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
 from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.token_counter import TokenCounter
 
@@ -191,7 +195,10 @@ def _messages_with_tool_results() -> list[LLMMessage]:
 
 
 class TestCompressStep:
-    def test_no_compression_when_under_budget(self):
+
+    @pytest.mark.asyncio
+    @pytest.mark.asyncio
+    async def test_no_compression_when_under_budget(self):
         """When under budget, messages pass through unchanged."""
         from nous.application.chat.pipeline.compress import CompressStep
 
@@ -200,11 +207,12 @@ class TestCompressStep:
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=5))
         msgs = _long_messages(num_pairs=3)
 
-        result = CompressStep().run(ctx, config, tctx, msgs)
+        result = await CompressStep().run(ctx, config, tctx, msgs)
         # Should be unchanged (no compression needed)
         assert result is msgs  # Same object reference = no compression
 
-    def test_compression_reduces_token_count(self):
+    @pytest.mark.asyncio
+    async def test_compression_reduces_token_count(self):
         """Compression should reduce total tokens."""
         from nous.application.chat.pipeline.compress import CompressStep
 
@@ -218,13 +226,14 @@ class TestCompressStep:
         before = tc.count(tctx.system_prompt) + tc.count_messages(msgs, "")
         assert before > 500, f"Expected >500 tokens before compression, got {before}"
 
-        result = CompressStep().run(ctx, config, tctx, msgs)
+        result = await CompressStep().run(ctx, config, tctx, msgs)
 
         # Count after
         after = tc.count(tctx.system_prompt) + tc.count_messages(result, "")
         assert after < before, f"Expected token reduction: {before} → {after}"
 
-    def test_system_prompt_trimmed(self):
+    @pytest.mark.asyncio
+    async def test_system_prompt_trimmed(self):
         """System prompt should have fewer memory lines after compression."""
         from nous.application.chat.pipeline.compress import CompressStep
 
@@ -235,7 +244,7 @@ class TestCompressStep:
         # Count "- [" lines before
         memory_lines_before = tctx.system_prompt.count("\n- [")
 
-        CompressStep().run(ctx, config, tctx, _long_messages(num_pairs=2))
+        await CompressStep().run(ctx, config, tctx, _long_messages(num_pairs=2))
 
         # Count after
         memory_lines_after = tctx.system_prompt.count("\n- [")
@@ -245,7 +254,8 @@ class TestCompressStep:
         # Aggressive mode keeps 2 + the hint line
         assert "必要なら memory_search" in tctx.system_prompt, "Should include search hint"
 
-    def test_tool_results_cleared(self):
+    @pytest.mark.asyncio
+    async def test_tool_results_cleared(self):
         """Old tool results should be replaced with [cleared] marker."""
         from nous.application.chat.pipeline.compress import CompressStep
 
@@ -257,7 +267,7 @@ class TestCompressStep:
         original_tool_msgs = [m for m in msgs if m.role == "tool"]
         assert len(original_tool_msgs) == 8
 
-        result = CompressStep().run(ctx, config, tctx, msgs)
+        result = await CompressStep().run(ctx, config, tctx, msgs)
 
         cleared = [m for m in result if m.role == "tool" and "cleared" in (m.content or "")]
         assert len(cleared) >= 1, f"Expected at least 1 cleared tool result, got {len(cleared)}"
@@ -266,7 +276,8 @@ class TestCompressStep:
         recent_tools = [m for m in result[-10:] if m.role == "tool" and "cleared" not in (m.content or "")]
         assert len(recent_tools) >= 1, "Recent tool results should be preserved"
 
-    def test_old_messages_truncated(self):
+    @pytest.mark.asyncio
+    async def test_old_messages_truncated(self):
         """Old messages should be truncated and marked with [旧]."""
         from nous.application.chat.pipeline.compress import CompressStep
 
@@ -277,7 +288,7 @@ class TestCompressStep:
 
         assert len(msgs) == 20  # 10 pairs
 
-        result = CompressStep().run(ctx, config, tctx, msgs)
+        result = await CompressStep().run(ctx, config, tctx, msgs)
 
         # Count truncated messages
         truncated = [m for m in result if m.role in ("user", "assistant") and (m.content or "").startswith("[旧]")]
@@ -291,7 +302,8 @@ class TestCompressStep:
                     f"Recent message should not be truncated: {msg.content[:50]}..."
                 )
 
-    def test_compression_preserves_tool_call_ids(self):
+    @pytest.mark.asyncio
+    async def test_compression_preserves_tool_call_ids(self):
         """Cleared tool results should keep their tool_call_id for API compatibility."""
         from nous.application.chat.pipeline.compress import CompressStep
 
@@ -300,13 +312,14 @@ class TestCompressStep:
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=5))
         msgs = _messages_with_tool_results()
 
-        result = CompressStep().run(ctx, config, tctx, msgs)
+        result = await CompressStep().run(ctx, config, tctx, msgs)
 
         cleared = [m for m in result if m.role == "tool" and "cleared" in (m.content or "")]
         for msg in cleared:
             assert msg.tool_call_id is not None, "Cleared tool results must retain tool_call_id"
 
-    def test_conversation_structure_preserved(self):
+    @pytest.mark.asyncio
+    async def test_conversation_structure_preserved(self):
         """Compression should not corrupt message role ordering."""
         from nous.application.chat.pipeline.compress import CompressStep
 
@@ -315,7 +328,7 @@ class TestCompressStep:
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=5))
         msgs = _long_messages(num_pairs=5)
 
-        result = CompressStep().run(ctx, config, tctx, msgs)
+        result = await CompressStep().run(ctx, config, tctx, msgs)
 
         # Verify all messages have valid roles
         valid_roles = {"user", "assistant", "tool"}
@@ -335,7 +348,8 @@ class TestCompressStep:
         result = CompressStep._trim_system_prompt(prompt, "aggressive")
         assert result == prompt
 
-    def test_stage1_alone_brings_under_budget(self):
+    @pytest.mark.asyncio
+    async def test_stage1_alone_brings_under_budget(self):
         """After stage 1 (system prompt trim), if already under budget, return session_messages unchanged."""
         from nous.application.chat.pipeline.compress import CompressStep
 
@@ -349,11 +363,12 @@ class TestCompressStep:
 
         # Should still under budget after stage 1, but before stage 2
         # If compression mode aggressively trims...
-        result = CompressStep().run(ctx, config, tctx, msgs)
+        result = await CompressStep().run(ctx, config, tctx, msgs)
         # Should work without error
         assert isinstance(result, list)
 
-    def test_context_compress_history_false(self):
+    @pytest.mark.asyncio
+    async def test_context_compress_history_false(self):
         """When context_compress_history=False, messages should not be cleared/truncated."""
         from nous.application.chat.pipeline.compress import CompressStep
 
@@ -366,13 +381,14 @@ class TestCompressStep:
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=20))
         msgs = _messages_with_tool_results()
 
-        result = CompressStep().run(ctx, config, tctx, msgs)
+        result = await CompressStep().run(ctx, config, tctx, msgs)
         # Messages should still have tool results (not cleared)
         tool_msgs = [m for m in result if m.role == "tool"]
         assert len(tool_msgs) == 8  # All preserved because history compress is off
         # But tool results right at the end should be fine
 
-    def test_compress_history_true_clears_tool_results(self):
+    @pytest.mark.asyncio
+    async def test_compress_history_true_clears_tool_results(self):
         """When context_compress_history=True and over budget, tool results get cleared."""
         from nous.application.chat.pipeline.compress import CompressStep
 
@@ -385,7 +401,7 @@ class TestCompressStep:
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=20))
         msgs = _messages_with_tool_results()
 
-        result = CompressStep().run(ctx, config, tctx, msgs)
+        result = await CompressStep().run(ctx, config, tctx, msgs)
         # Some tool results should be cleared
         cleared = [m for m in result if m.role == "tool" and "cleared" in (m.content or "")]
         assert len(cleared) >= 1
@@ -458,7 +474,8 @@ class TestCompressStep:
         for msg in result:
             assert not (msg.content or "").startswith("[旧]")
 
-    def test_stage2_under_budget_after_clear(self):
+    @pytest.mark.asyncio
+    async def test_stage2_under_budget_after_clear(self):
         """After clearing tool results (stage 2), if under budget, return messages."""
         from nous.application.chat.pipeline.compress import CompressStep
 
@@ -471,10 +488,11 @@ class TestCompressStep:
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=2))  # Small prompt
         msgs = _messages_with_tool_results()  # 24 messages with tool results
 
-        result = CompressStep().run(ctx, config, tctx, msgs)
+        result = await CompressStep().run(ctx, config, tctx, msgs)
         assert isinstance(result, list)
 
-    def test_return_after_stage1_trim_only(self):
+    @pytest.mark.asyncio
+    async def test_return_after_stage1_trim_only(self):
         """System prompt trim alone brings under budget → return session_messages (line 84)."""
         from nous.application.chat.pipeline.compress import CompressStep
 
@@ -494,7 +512,7 @@ class TestCompressStep:
             LLMMessage(role="assistant", content="Hi there"),
         ]
 
-        result = CompressStep().run(ctx, config, tctx, msgs)
+        result = await CompressStep().run(ctx, config, tctx, msgs)
         assert isinstance(result, list)
         # Messages should NOT be truncated (stage 1 alone did the job)
         for msg in result:
@@ -503,7 +521,8 @@ class TestCompressStep:
                     "Messages should not be truncated after stage 1 alone"
                 )
 
-    def test_return_after_stage2_clear_only(self):
+    @pytest.mark.asyncio
+    async def test_return_after_stage2_clear_only(self):
         """Tool result clearing brings under budget → return messages (line 95)."""
         from nous.application.chat.pipeline.compress import CompressStep
 
@@ -520,8 +539,112 @@ class TestCompressStep:
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=50))
         msgs = _messages_with_tool_results()
 
-        result = CompressStep().run(ctx, config, tctx, msgs)
+        result = await CompressStep().run(ctx, config, tctx, msgs)
         assert isinstance(result, list)
+
+    # ── Stage 4: LLM summarization tests ──────────────
+
+    def test_should_summarize_false_when_disabled(self):
+        """_should_summarize returns False when context_use_llm_summary is False."""
+        from nous.application.chat.pipeline.compress import CompressStep
+
+        config = _make_chat_config(context_use_llm_summary=False)
+        msgs = _long_messages(num_pairs=10)
+        assert not CompressStep._should_summarize(msgs, config)
+
+    def test_should_summarize_false_when_not_configured(self):
+        """_should_summarize returns False when provider has no API key."""
+        from nous.application.chat.pipeline.compress import CompressStep
+
+        config = _make_chat_config(context_use_llm_summary=True, api_key="")
+        msgs = _long_messages(num_pairs=10)
+        assert not CompressStep._should_summarize(msgs, config)
+
+    def test_should_summarize_false_when_few_turns(self):
+        """_should_summarize returns False when fewer than 6 user messages."""
+        from nous.application.chat.pipeline.compress import CompressStep
+
+        config = _make_chat_config(context_use_llm_summary=True, api_key="sk-test")
+        msgs = _long_messages(num_pairs=3)  # Only 3 turns
+        assert not CompressStep._should_summarize(msgs, config)
+
+    def test_should_summarize_true_when_conditions_met(self):
+        """_should_summarize returns True when all conditions are satisfied."""
+        from nous.application.chat.pipeline.compress import CompressStep
+
+        config = _make_chat_config(context_use_llm_summary=True, api_key="sk-test")
+        msgs = _long_messages(num_pairs=6)  # Exactly 6 turns
+        assert CompressStep._should_summarize(msgs, config)
+
+    @pytest.mark.asyncio
+    async def test_stage4_invoked_when_over_budget_with_enough_turns(self):
+        """Stage 4 is invoked when over budget, enough turns, and configured."""
+        from nous.application.chat.pipeline.compress import CompressStep
+
+        config = _make_chat_config(
+            context_max_tokens=200,
+            context_keep_recent_turns=1,
+            api_key="sk-test",
+            context_use_llm_summary=True,
+        )
+        ctx = _dummy_app_context()
+        tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=2))
+        msgs = _long_messages(num_pairs=6)  # 6 turns = 12 messages
+
+        with patch.object(CompressStep, "_summarize_old_turns", new_callable=AsyncMock) as mock_summarize:
+            mock_summarize.return_value = "ユーザーがテスト質問を6回行い、アシスタントが回答しました。"
+            result = await CompressStep().run(ctx, config, tctx, msgs)
+
+            mock_summarize.assert_awaited_once()
+            # Should contain the summary message + recent turns
+            summary_msgs = [m for m in result if "過去の会話要約" in (m.content or "")]
+            assert len(summary_msgs) == 1
+            assert "ユーザーがテスト質問" in summary_msgs[0].content  # type: ignore[union-attr]
+
+    @pytest.mark.asyncio
+    async def test_stage4_graceful_fallback_on_error(self):
+        """Stage 4 gracefully falls back to mechanical compression when LLM fails."""
+        from nous.application.chat.pipeline.compress import CompressStep
+
+        config = _make_chat_config(
+            context_max_tokens=200,
+            context_keep_recent_turns=1,
+            api_key="sk-test",
+            context_use_llm_summary=True,
+        )
+        ctx = _dummy_app_context()
+        tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=2))
+        msgs = _long_messages(num_pairs=6)
+
+        with patch.object(CompressStep, "_summarize_old_turns", new_callable=AsyncMock) as mock_summarize:
+            mock_summarize.side_effect = RuntimeError("LLM unavailable")
+            result = await CompressStep().run(ctx, config, tctx, msgs)
+            mock_summarize.assert_awaited_once()
+            # Should still return a valid list (mechanical compression fallback)
+            assert isinstance(result, list)
+            assert len(result) > 0
+            # No summary message should be present
+            summary_msgs = [m for m in result if "過去の会話要約" in (m.content or "")]
+            assert len(summary_msgs) == 0
+
+    @pytest.mark.asyncio
+    async def test_stage4_not_invoked_when_under_budget(self):
+        """Stage 4 is skipped when mechanical compression already meets budget."""
+        from nous.application.chat.pipeline.compress import CompressStep
+
+        config = _make_chat_config(
+            context_max_tokens=5000,
+            api_key="sk-test",
+            context_use_llm_summary=True,
+        )
+        ctx = _dummy_app_context()
+        tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=2))
+        msgs = _long_messages(num_pairs=6)
+
+        with patch.object(CompressStep, "_summarize_old_turns", new_callable=AsyncMock) as mock_summarize:
+            result = await CompressStep().run(ctx, config, tctx, msgs)
+            mock_summarize.assert_not_awaited()
+            assert isinstance(result, list)
 
 
 # ──────────────────────────────────────────────

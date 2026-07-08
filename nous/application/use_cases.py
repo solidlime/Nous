@@ -248,6 +248,8 @@ class AppContext:
                 reranker=self._reranker,
                 entity_service=self.entity_service,
             )
+            # Wire search engine to memory service for memory evolution
+            self.memory_service._search_engine = self._search_engine
         return self._search_engine
 
     def _init_vector_store(self) -> None:

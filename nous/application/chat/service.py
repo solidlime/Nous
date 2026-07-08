@@ -86,7 +86,7 @@ class ChatService:
             session_messages = session.get_labeled_messages()
 
             # CompressStep: コンテキスト圧縮（トークン予算超過時にシステムプロンプト・会話履歴を縮める）
-            messages = CompressStep().run(ctx, config, turn_ctx, session_messages)
+            messages = await CompressStep().run(ctx, config, turn_ctx, session_messages)
             # Notify frontend if compression occurred
             comp_info = getattr(turn_ctx, "_compression_info", None)
             if comp_info:
