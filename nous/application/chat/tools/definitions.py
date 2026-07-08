@@ -51,16 +51,38 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="update_context",
-        description="ペルソナ状態を更新。感情・体調・環境など。",
+        description="ペルソナ状態を更新。感情・体調・環境・関係性・Author's Note など。",
         input_schema={
             "type": "object",
             "properties": {
-                "emotion": {"type": "string", "description": "感情タイプ"},
+                "emotion": {"type": "string", "description": "感情タイプ (joy/curiosity/sadness/anger/trust 等)"},
                 "emotion_intensity": {"type": "number", "description": "感情強度 0.0〜1.0"},
-                "mental_state": {"type": "string", "description": "精神状態の説明"},
-                "context_note": {
+                "physical_state": {"type": "string", "description": "身体状態の自由記述"},
+                "mental_state": {"type": "string", "description": "精神状態の自由記述"},
+                "environment": {"type": "string", "description": "現在の環境・場所"},
+                "body_state": {
+                    "type": "object",
+                    "description": "身体数値 {fatigue, warmth, arousal, heart_rate, pain} — 各0.0-1.0",
+                    "properties": {
+                        "fatigue": {"type": "number"},
+                        "warmth": {"type": "number"},
+                        "arousal": {"type": "number"},
+                        "heart_rate": {"type": "number"},
+                        "pain": {"type": "number"},
+                    },
+                },
+                "speech_style": {"type": "string", "description": "話し方のスタイル記述"},
+                "relationship_status": {"type": "string", "description": "関係性の状態記述"},
+                "relationship_type": {"type": "string", "description": "関係性の種類"},
+                "context_note": {"type": "string", "description": "現在の作業内容の要約（1行・50字以内）。次回セッションのget_contextで自動復元"},
+                "user_info": {"type": "object", "description": "ユーザー情報 {name, nickname, preferred_address}"},
+                "persona_info": {"type": "object", "description": "ペルソナ情報 {nickname, ...}"},
+                "nickname": {"type": "string", "description": "ペルソナのニックネーム"},
+                "author_note": {"type": "string", "description": "システムプロンプトに常時注入されるコンテキスト"},
+                "author_note_frequency": {
                     "type": "string",
-                    "description": "現在の作業内容の要約（1行・50字以内）。次回セッションのget_contextで自動復元される",
+                    "enum": ["always", "every_n", "on_emotion_change"],
+                    "description": "Author's Note の注入頻度: always / every_n / on_emotion_change",
                 },
             },
         },
@@ -79,7 +101,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="goal_manage",
-        description="目標・約束の作成/一覧/達成/取消。scope: self/interpersonal。",
+        description="目標・約束の管理。create→content+scope必須 / list→scope必須 / achieve/cancel→memory_key必須。",
         input_schema={
             "type": "object",
             "properties": {
@@ -115,6 +137,97 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 "importance": {"type": "number", "description": "新しい重要度（省略可）"},
             },
             "required": ["query", "new_content"],
+        },
+    ),
+    ToolDefinition(
+        name="item_add",
+        description="アイテムをインベントリに追加。item_name必須。category/tags/descriptionで分類可。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "item_name": {"type": "string", "description": "アイテム名"},
+                "category": {"type": "string", "description": "カテゴリ（top/outer/bottom/accessory/etc）"},
+                "description": {"type": "string", "description": "アイテムの説明"},
+                "quantity": {"type": "integer", "description": "数量", "default": 1},
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "タグ"},
+            },
+            "required": ["item_name"],
+        },
+    ),
+    ToolDefinition(
+        name="item_remove",
+        description="アイテムを削除。item_name必須。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "item_name": {"type": "string", "description": "削除するアイテム名"},
+            },
+            "required": ["item_name"],
+        },
+    ),
+    ToolDefinition(
+        name="item_equip",
+        description="アイテムを装備。equipment dict必須（例: {\"top\": \"白いドレス\"}）。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "equipment": {"type": "object", "description": "装備するアイテム {slot: item_name}"},
+                "auto_add": {"type": "boolean", "description": "未登録アイテムを自動追加", "default": True},
+            },
+            "required": ["equipment"],
+        },
+    ),
+    ToolDefinition(
+        name="item_unequip",
+        description="装備を外す。slots必須（文字列または文字列リスト）。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "slots": {
+                    "anyOf": [
+                        {"type": "string"},
+                        {"type": "array", "items": {"type": "string"}},
+                    ],
+                    "description": "外すスロット名（例: \"top\" / [\"top\", \"outer\"]）",
+                },
+            },
+            "required": ["slots"],
+        },
+    ),
+    ToolDefinition(
+        name="item_update",
+        description="アイテム情報を更新。item_name必須。変更するフィールドのみ指定。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "item_name": {"type": "string", "description": "更新するアイテム名"},
+                "category": {"type": "string", "description": "新しいカテゴリ"},
+                "description": {"type": "string", "description": "新しい説明"},
+                "quantity": {"type": "integer", "description": "新しい数量"},
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "新しいタグ"},
+            },
+            "required": ["item_name"],
+        },
+    ),
+    ToolDefinition(
+        name="item_search",
+        description="アイテムを検索。query/categoryでフィルタ可。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "検索クエリ（部分一致）"},
+                "category": {"type": "string", "description": "カテゴリでフィルタ"},
+            },
+        },
+    ),
+    ToolDefinition(
+        name="item_history",
+        description="アイテム操作履歴を取得。daysで期間指定。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "days": {"type": "integer", "description": "取得する日数（デフォルト7日）", "default": 7},
+            },
         },
     ),
     ToolDefinition(
@@ -226,7 +339,22 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 "path": {
                     "type": "string",
                     "description": "PDFファイルのパス（workspace/ 配下）",
-                }
+                },
+                "pages": {
+                    "type": "string",
+                    "description": "ページ範囲。例: \"1-3\" または \"1,3,5\"。省略時は全ページ。",
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["text", "tables", "images", "all"],
+                    "description": "抽出モード: text/tables/images/all",
+                    "default": "all",
+                },
+                "max_chars": {
+                    "type": "integer",
+                    "description": "最大文字数（0=無制限）",
+                    "default": 0,
+                },
             },
             "required": ["path"],
         },
@@ -342,7 +470,13 @@ _NOUS_TOOL_NAMES: frozenset[str] = frozenset(
         "memory_stats",
         "get_context",
         "update_context",
-        "item",
+        "item_add",
+        "item_remove",
+        "item_equip",
+        "item_unequip",
+        "item_update",
+        "item_search",
+        "item_history",
         "sandbox_execute",
         "sandbox_files",
         "sandbox_reset",

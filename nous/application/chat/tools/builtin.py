@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING, Any
 
 from nous.api.mcp.tools import TOOL_DISPATCH
@@ -441,6 +442,10 @@ async def _handle_mcp_dispatch(tool_name: str, ctx: AppContext, config: ChatConf
 
 # ── Image generation ──
 
+_VALID_IMAGE_SIZES: frozenset[str] = frozenset({"1024x1024", "1792x1024", "1024x1792", "512x512", "768x768"})
+_VALID_QUALITIES: frozenset[str] = frozenset({"standard", "hd"})
+_VALID_PROVIDERS: frozenset[str] = frozenset({"openai", "stability", "auto"})
+
 
 async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
     """DALL-E 3またはStable Diffusionで画像を生成する"""
@@ -451,10 +456,32 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
     if not prompt:
         return {"status": "error", "message": "No prompt provided"}
 
+    # ── validate: size ──
     size = str(tool_input.get("size", "1024x1024"))
+    if not re.match(r"^\d+x\d+$", size):
+        return {"status": "error", "message": f"Invalid size format: '{size}'. Expected 'WIDTHxHEIGHT' (e.g. '1024x1024')."}
+    if size not in _VALID_IMAGE_SIZES:
+        valid = ", ".join(sorted(_VALID_IMAGE_SIZES))
+        return {"status": "error", "message": f"Unsupported size: '{size}'. Supported sizes: {valid}."}
+
+    # ── validate: quality ──
     quality = str(tool_input.get("quality", "standard"))
-    n = max(1, min(4, int(tool_input.get("n", 1))))
+    if quality not in _VALID_QUALITIES:
+        valid = ", ".join(sorted(_VALID_QUALITIES))
+        return {"status": "error", "message": f"Unsupported quality: '{quality}'. Supported values: {valid}."}
+
+    # ── validate: n (clamp 1-4) ──
+    try:
+        n = int(tool_input.get("n", 1))
+    except (ValueError, TypeError):
+        return {"status": "error", "message": "Invalid value for 'n': must be an integer between 1 and 4."}
+    n = max(1, min(4, n))
+
+    # ── validate: provider ──
     provider_arg = str(tool_input.get("provider", "auto"))
+    if provider_arg not in _VALID_PROVIDERS:
+        valid = ", ".join(sorted(_VALID_PROVIDERS))
+        return {"status": "error", "message": f"Unsupported provider: '{provider_arg}'. Supported providers: {valid}."}
 
     provider_name = getattr(config, "image_gen_provider", "openai") if provider_arg == "auto" else provider_arg
 
@@ -528,6 +555,16 @@ async def _handle_read_pdf(ctx: AppContext, config: ChatConfig, tool_input: dict
     if not path:
         return {"status": "error", "message": "PDF path not specified"}
 
+    pages = tool_input.get("pages") or None
+    mode = str(tool_input.get("mode", "all")).strip()
+    max_chars = int(tool_input.get("max_chars", 0))
+
+    if mode not in ("text", "tables", "images", "all"):
+        return {
+            "status": "error",
+            "message": f"Invalid mode: {mode}. Must be one of: text, tables, images, all",
+        }
+
     filename = Path(path).name
 
     # ── Sandbox path: read via sandbox session ──
@@ -546,7 +583,9 @@ async def _handle_read_pdf(ctx: AppContext, config: ChatConfig, tool_input: dict
             return {"status": "error", "message": "PDF file too large (max: 50MB)"}
 
         try:
-            result = await asyncio.to_thread(_sync_process_pdf, pdf_bytes)
+            result = await asyncio.to_thread(
+                _sync_process_pdf, pdf_bytes, pages=pages, mode=mode, max_chars=max_chars
+            )
             result["filename"] = filename
             return result
         except ImportError as e:
@@ -569,7 +608,9 @@ async def _handle_read_pdf(ctx: AppContext, config: ChatConfig, tool_input: dict
         return {"status": "error", "message": "PDF file too large (max: 50MB)"}
 
     try:
-        result = await asyncio.to_thread(_sync_process_pdf, str(pdf_path))
+        result = await asyncio.to_thread(
+            _sync_process_pdf, str(pdf_path), pages=pages, mode=mode, max_chars=max_chars
+        )
         result["filename"] = pdf_path.name
         return result
     except ImportError as e:
@@ -587,7 +628,44 @@ def _is_sandbox_path(path: str) -> bool:
     return path.startswith("/home/sbox_") or path.startswith("/sandbox")
 
 
-def _sync_process_pdf(pdf_source: str | bytes) -> dict:
+def _parse_page_range(page_spec: str, num_pages: int) -> list[int]:
+    """Parse page range like "1-3" or "1,3,5" into 0-indexed page numbers.
+    Returns empty list when no valid pages could be parsed.
+    """
+    if not page_spec or not page_spec.strip():
+        return []
+    page_set: set[int] = set()
+    for part in page_spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            bounds = part.split("-", 1)
+            try:
+                start = int(bounds[0].strip())
+                end = int(bounds[1].strip())
+                start_idx = max(0, start - 1)
+                end_idx = min(num_pages, end)
+                if start_idx < end_idx:
+                    page_set.update(range(start_idx, end_idx))
+            except ValueError:
+                continue
+        else:
+            try:
+                idx = int(part) - 1
+                if 0 <= idx < num_pages:
+                    page_set.add(idx)
+            except ValueError:
+                continue
+    return sorted(page_set)
+
+
+def _sync_process_pdf(
+    pdf_source: str | bytes,
+    pages: str | None = None,
+    mode: str = "all",
+    max_chars: int = 0,
+) -> dict:
     """同期PDF処理 — asyncio.to_thread で実行するために分離"""
     import base64
     import io
@@ -602,142 +680,186 @@ def _sync_process_pdf(pdf_source: str | bytes) -> dict:
         pdf_path = pdf_source
     num_pages = len(doc)
 
-    # ── テキスト抽出 (ステージ1: PyMuPDF) ──
-    all_text_parts = []
-    total_chars = 0
-    text_limit = 100000
-    text_source = "pymupdf"
+    # ── Page range filtering ──
+    target_pages: list[int] | None = None
+    if pages:
+        parsed = _parse_page_range(pages, num_pages)
+        if parsed:
+            target_pages = parsed
+    page_iter = range(num_pages) if target_pages is None else target_pages
 
-    for page in doc:
-        text = page.get_text()
-        if total_chars + len(text) > text_limit:
-            remaining = text_limit - total_chars
-            if remaining > 0:
-                all_text_parts.append(text[:remaining])
-            all_text_parts.append("\n\n[Text truncated due to reaching the limit]")
-            break
-        all_text_parts.append(text)
-        total_chars += len(text)
+    # Effective text limit: user's max_chars or internal 100K default
+    effective_text_limit = max_chars if max_chars > 0 else 100000
 
-    full_text = "\n".join(all_text_parts)
+    # ── テキスト抽出 (mode: text / all) ──
+    text_source = "empty"
+    full_text = ""
 
-    # ── テキスト抽出 (ステージ2: pdfplumber フォールバック) ──
-    if len(full_text.strip()) < 50:
+    if mode in ("text", "all"):
+        text_source = "pymupdf"
+
+        # ステージ1: PyMuPDF
+        all_text_parts = []
+        total_chars = 0
+        for page_idx in page_iter:
+            page = doc[page_idx]
+            text = page.get_text()
+            if total_chars + len(text) > effective_text_limit:
+                remaining = effective_text_limit - total_chars
+                if remaining > 0:
+                    all_text_parts.append(text[:remaining])
+                all_text_parts.append("\n\n[Text truncated due to reaching the limit]")
+                break
+            all_text_parts.append(text)
+            total_chars += len(text)
+
+        full_text = "\n".join(all_text_parts)
+
+        # ステージ2: pdfplumber フォールバック
+        if len(full_text.strip()) < 50:
+            try:
+                import pdfplumber
+
+                plumber_parts = []
+                plumber_total = 0
+                with pdfplumber.open(pdf_path) as pdf:
+                    plumber_pages = (
+                        [pdf.pages[i] for i in target_pages if i < len(pdf.pages)]
+                        if target_pages is not None
+                        else pdf.pages
+                    )
+                    for page in plumber_pages:
+                        pt = page.extract_text() or ""
+                        if plumber_total + len(pt) > effective_text_limit:
+                            remaining = effective_text_limit - plumber_total
+                            if remaining > 0:
+                                plumber_parts.append(pt[:remaining])
+                            plumber_parts.append("\n\n[Text truncated due to reaching the limit]")
+                            break
+                        plumber_parts.append(pt)
+                        plumber_total += len(pt)
+                plumber_text = "\n".join(plumber_parts)
+                if len(plumber_text.strip()) >= 50:
+                    full_text = plumber_text
+                    text_source = "pdfplumber"
+            except Exception:
+                pass
+
+        # ステージ3: OCR フォールバック
+        if len(full_text.strip()) < 50:
+            try:
+                import pytesseract  # noqa: F811
+                from PIL import Image
+
+                ocr_parts = []
+                ocr_page_iter = (
+                    target_pages
+                    if target_pages is not None
+                    else range(min(num_pages, 10))
+                )
+                for page_num in ocr_page_iter:
+                    page = doc[page_num]
+                    pix = page.get_pixmap()
+                    img_bytes = pix.tobytes("png")
+                    img = Image.open(io.BytesIO(img_bytes)).convert("L")
+                    ocr_text = pytesseract.image_to_string(img, lang="jpn+eng")
+                    if ocr_text.strip():
+                        ocr_parts.append(f"--- Page {page_num + 1} ---\n{ocr_text.strip()}")
+                if ocr_parts:
+                    full_text = "\n\n".join(ocr_parts)
+                    text_source = "ocr"
+                elif not full_text.strip():
+                    text_source = "empty"
+            except ImportError:
+                if not full_text.strip():
+                    text_source = "empty"
+            except Exception:
+                if not full_text.strip():
+                    text_source = "empty"
+
+        if text_source == "pymupdf" and not full_text.strip():
+            text_source = "empty"
+    else:
+        # mode = tables / images: no text extraction
+        text_source = "skipped"
+
+    # ── テーブル抽出 (mode: tables / all) ──
+    tables = []
+    if mode in ("tables", "all"):
         try:
-            import pdfplumber
+            import pdfplumber  # noqa: F811
 
-            plumber_parts = []
-            plumber_total = 0
             with pdfplumber.open(pdf_path) as pdf:
-                for page in pdf.pages:
-                    pt = page.extract_text() or ""
-                    if plumber_total + len(pt) > text_limit:
-                        remaining = text_limit - plumber_total
-                        if remaining > 0:
-                            plumber_parts.append(pt[:remaining])
-                        plumber_parts.append("\n\n[Text truncated due to reaching the limit]")
-                        break
-                    plumber_parts.append(pt)
-                    plumber_total += len(pt)
-            plumber_text = "\n".join(plumber_parts)
-            if len(plumber_text.strip()) >= 50:
-                full_text = plumber_text
-                text_source = "pdfplumber"
+                plumber_page_iter = (
+                    [(idx, pdf.pages[idx]) for idx in target_pages if idx < len(pdf.pages)]
+                    if target_pages is not None
+                    else list(enumerate(pdf.pages))
+                )
+                for page_num, page in plumber_page_iter:
+                    page_tables = page.extract_tables()
+                    for table in page_tables:
+                        if table and len(table) > 0:
+                            headers = [str(h) if h else "" for h in table[0]]
+                            rows = (
+                                [[str(c) if c else "" for c in row] for row in table[1:]]
+                                if len(table) > 1
+                                else []
+                            )
+                            tables.append(
+                                {
+                                    "page": page_num + 1,
+                                    "headers": headers,
+                                    "rows": rows[:50],
+                                }
+                            )
         except Exception:
             pass
 
-    # ── テキスト抽出 (ステージ3: OCR フォールバック) ──
-    if len(full_text.strip()) < 50:
-        try:
-            import pytesseract  # noqa: F811
-            from PIL import Image
-
-            ocr_parts = []
-            ocr_max_pages = min(num_pages, 10)  # 性能考慮: max 10 pages
-            for page_num in range(ocr_max_pages):
-                page = doc[page_num]
-                pix = page.get_pixmap()
-                img_bytes = pix.tobytes("png")
-                img = Image.open(io.BytesIO(img_bytes)).convert("L")  # グレースケール
-                ocr_text = pytesseract.image_to_string(img, lang="jpn+eng")
-                if ocr_text.strip():
-                    ocr_parts.append(f"--- Page {page_num + 1} ---\n{ocr_text.strip()}")
-            if ocr_parts:
-                full_text = "\n\n".join(ocr_parts)
-                text_source = "ocr"
-            elif not full_text.strip():
-                text_source = "empty"
-        except ImportError:
-            if not full_text.strip():
-                text_source = "empty"
-        except Exception:
-            if not full_text.strip():
-                text_source = "empty"
-
-    if text_source == "pymupdf" and not full_text.strip():
-        text_source = "empty"
-
-    # ── テーブル抽出 (pdfplumber) ──
-    tables = []
-    try:
-        import pdfplumber  # noqa: F811
-
-        with pdfplumber.open(pdf_path) as pdf:
-            for i, page in enumerate(pdf.pages):
-                page_tables = page.extract_tables()
-                for table in page_tables:
-                    if table and len(table) > 0:
-                        headers = [str(h) if h else "" for h in table[0]]
-                        rows = [[str(c) if c else "" for c in row] for row in table[1:]] if len(table) > 1 else []
-                        tables.append(
-                            {
-                                "page": i + 1,
-                                "headers": headers,
-                                "rows": rows[:50],
-                            }
-                        )
-    except Exception:
-        pass
-
-    # ── 埋め込み画像抽出 (最大5枚、1MB/枚上限) ──
+    # ── 埋め込み画像抽出 (mode: images / all, 最大5枚、1MB/枚上限) ──
     images = []
-    for page_num in range(num_pages):
-        if len(images) >= 5:
-            break
-        page = doc[page_num]
-        image_list = page.get_images(full=True)
-        for img_info in image_list:
+    if mode in ("images", "all"):
+        for page_num in page_iter:
             if len(images) >= 5:
                 break
-            xref = img_info[0]
-            base_image = doc.extract_image(xref)
-            image_bytes = base_image["image"]
-            if len(image_bytes) > 1_000_000:
-                continue
+            page = doc[page_num]
+            image_list = page.get_images(full=True)
+            for img_info in image_list:
+                if len(images) >= 5:
+                    break
+                xref = img_info[0]
+                base_image = doc.extract_image(xref)
+                image_bytes = base_image["image"]
+                if len(image_bytes) > 1_000_000:
+                    continue
+                images.append(
+                    {
+                        "page": page_num + 1,
+                        "base64": base64.b64encode(image_bytes).decode("utf-8"),
+                        "mime_type": f"image/{base_image['ext']}",
+                        "source": "embedded",
+                    }
+                )
+
+        # ── スキャンPDF補完: ページラスター画像 ──
+        if not images and text_source == "ocr":
+            first_page = next(iter(page_iter), 0)
+            page = doc[first_page]
+            pix = page.get_pixmap()
+            img_bytes = pix.tobytes("png")
             images.append(
                 {
-                    "page": page_num + 1,
-                    "base64": base64.b64encode(image_bytes).decode("utf-8"),
-                    "mime_type": f"image/{base_image['ext']}",
-                    "source": "embedded",
+                    "page": first_page + 1,
+                    "base64": base64.b64encode(img_bytes).decode("utf-8"),
+                    "mime_type": "image/png",
+                    "source": "page_raster",
                 }
             )
 
-    # ── スキャンPDF補完: ページラスター画像 ──
-    if not images and text_source == "ocr":
-        page = doc[0]
-        pix = page.get_pixmap()
-        img_bytes = pix.tobytes("png")
-        images.append(
-            {
-                "page": 1,
-                "base64": base64.b64encode(img_bytes).decode("utf-8"),
-                "mime_type": "image/png",
-                "source": "page_raster",
-            }
-        )
-
     doc.close()
+
+    # Apply max_chars truncation (overrides internal limit if set)
+    if max_chars > 0 and len(full_text) > max_chars:
+        full_text = full_text[:max_chars] + "\n\n[Text truncated due to reaching the limit]"
 
     return {
         "status": "success",
@@ -758,6 +880,13 @@ async def _handle_list_skills(ctx: AppContext, config: ChatConfig, tool_input: d
 
         repo = SkillRepository(db)
         skills = repo.list_all()
+
+        # Fallback: sync from filesystem if DB is empty
+        if not skills:
+            synced = repo.load_from_dir(get_settings().skills_dir)
+            if synced:
+                skills = repo.list_all()
+
         items = [
             {
                 "name": s.name,

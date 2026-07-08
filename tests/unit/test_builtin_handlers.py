@@ -529,6 +529,53 @@ class TestImageGenerateHandler:
         assert result["status"] == "success"
         mock_dalle.assert_called_once_with(model="dall-e-2")
 
+    # ── New validation tests ──
+
+    @pytest.mark.asyncio
+    async def test_image_invalid_size_format(self, mock_ctx, mock_config):
+        """size='abc' → error (format validation)"""
+        result = await _handle_image_generate(
+            mock_ctx, mock_config, {"prompt": "a cat", "size": "abc"}
+        )
+        assert result["status"] == "error"
+        assert "Invalid size format" in result["message"]
+
+    @pytest.mark.asyncio
+    async def test_image_invalid_size_format_no_x(self, mock_ctx, mock_config):
+        """size='1024-768' → error (format validation)"""
+        result = await _handle_image_generate(
+            mock_ctx, mock_config, {"prompt": "a cat", "size": "1024-768"}
+        )
+        assert result["status"] == "error"
+        assert "Invalid size format" in result["message"]
+
+    @pytest.mark.asyncio
+    async def test_image_unsupported_size(self, mock_ctx, mock_config):
+        """size='200x200' → error (unsupported)"""
+        result = await _handle_image_generate(
+            mock_ctx, mock_config, {"prompt": "a cat", "size": "200x200"}
+        )
+        assert result["status"] == "error"
+        assert "Unsupported size" in result["message"]
+
+    @pytest.mark.asyncio
+    async def test_image_invalid_quality(self, mock_ctx, mock_config):
+        """quality='premium' → error"""
+        result = await _handle_image_generate(
+            mock_ctx, mock_config, {"prompt": "a cat", "quality": "premium"}
+        )
+        assert result["status"] == "error"
+        assert "Unsupported quality" in result["message"]
+
+    @pytest.mark.asyncio
+    async def test_image_invalid_n_type(self, mock_ctx, mock_config):
+        """n='abc' → error"""
+        result = await _handle_image_generate(
+            mock_ctx, mock_config, {"prompt": "a cat", "n": "abc"}
+        )
+        assert result["status"] == "error"
+        assert "Invalid value for 'n'" in result["message"]
+
 
 # ===================================================================
 # _handle_search
