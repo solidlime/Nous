@@ -21,7 +21,6 @@ from nous.application.chat.memory_llm import run_context_housekeeping, run_memor
 from nous.application.chat.pattern_detector import maybe_run_mental_model
 from nous.application.chat.reflection import maybe_run_reflection
 from nous.application.chat.summarizer import summarize_and_store
-from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
