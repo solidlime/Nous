@@ -152,8 +152,8 @@ async def _handle_browser(
         return {"status": "error", "message": "action is required"}
 
     # ── Validate action and params BEFORE binary check ──
-    VALID_ACTIONS = {"open", "snapshot", "click", "fill", "press", "get", "wait", "scroll", "close"}
-    if action not in VALID_ACTIONS:
+    valid_actions = {"open", "snapshot", "click", "fill", "press", "get", "wait", "scroll", "close"}
+    if action not in valid_actions:
         return {"status": "error", "message": f"Unknown action: {action}"}
 
     action_params: dict[str, str] = {}
