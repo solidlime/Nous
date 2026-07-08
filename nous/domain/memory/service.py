@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from datetime import datetime
 
+from nous.domain.memory.contradiction import ContradictionType
 from nous.domain.memory.entities import Memory, MemoryStrength
 from nous.domain.memory.type_classifier import auto_tags
 from nous.domain.search.engine import SearchQuery
@@ -20,6 +21,7 @@ from nous.domain.shared.time_utils import generate_memory_key, get_now
 from nous.domain.value_objects import normalize_emotion, normalize_importance
 
 if TYPE_CHECKING:
+    from nous.domain.memory.contradiction import ContradictionDetector
     from nous.domain.memory.repository import MemoryRepository
     from nous.domain.search.engine import SearchEngine
     from nous.infrastructure.llm.memory_enricher import MemoryEnricher
@@ -35,12 +37,14 @@ class MemoryService:
         enricher: MemoryEnricher | None = None,
         link_repo: object | None = None,
         search_engine: SearchEngine | None = None,
+        contradiction_detector: ContradictionDetector | None = None,
     ) -> None:
         self._repo = repo
         self._entity_service = entity_service
         self._enricher = enricher
         self._link_repo = link_repo
         self._search_engine = search_engine
+        self._contradiction_detector = contradiction_detector
 
     def save_memory(self, mem: Memory) -> Result[Memory, DomainError]:
         """Save a pre-constructed memory entity directly to the repository."""
@@ -178,6 +182,18 @@ class MemoryService:
                 )
             )
 
+        # Contradiction invalidation: detect similar existing memories and
+        # close their validity windows (best-effort, non-blocking)
+        if self._contradiction_detector is not None and self._contradiction_detector.available:
+            asyncio.create_task(
+                self._invalidate_contradicted_memory(
+                    new_content=content.strip(),
+                    new_memory_key=memory.key,
+                    persona="default",
+                    valid_from=now,
+                )
+            )
+
         return Success(memory)
 
     async def _evolve_related_memories(
@@ -189,8 +205,19 @@ class MemoryService:
         """After creating a new memory, find semantically similar existing
         memories and enrich them by updating context and strengthening links.
 
-        This implements the A-MEM pattern: each new fact refines the
-        understanding of related existing facts (arXiv:2502.12110).
+        This implements the A-MEM pattern (arXiv:2502.12110) + HiMem-style
+        3-op contradiction classification (ADD / UPDATE / DELETE).
+
+        Steps:
+        1. Find semantically similar existing memories.
+        2. Run HiMem contradiction classification:
+           - EXTENDABLE → update existing memory's metadata only.
+           - CONTRADICTORY → tombstone existing memory.
+           - INDEPENDENT → no action (both coexist).
+        3. Update access metadata, Hebbian links, and summary_ref on
+           surviving memories.
+
+        All steps are best-effort and never block the caller.
         """
         # Only run for substantive content (avoids enriching noise)
         if len(content) < 30:
@@ -209,9 +236,38 @@ class MemoryService:
             if not similar.is_ok or not similar.value:
                 return
 
+            # --- HiMem-style 3-op contradiction classification ---
+            tombstoned_keys: set[str] = set()
+
+            if self._enricher is not None:
+                candidates = [
+                    {
+                        "key": r.memory.key,
+                        "content": r.memory.content,
+                        "similarity": r.score,
+                    }
+                    for r in similar.value
+                    if r.memory.key != new_memory_key
+                ]
+                if candidates:
+                    result = self._enricher.classify_contradiction(
+                        new_content=content,
+                        existing_memories=candidates,
+                    )
+                    if result is not None and result.existing_memory_key:
+                        if result.type == ContradictionType.EXTENDABLE:
+                            updates = dict(result.updated_fields or {})
+                            if updates:
+                                self._repo.update(result.existing_memory_key, **updates)
+                        elif result.type == ContradictionType.CONTRADICTORY:
+                            self._repo.tombstone(result.existing_memory_key)
+                            tombstoned_keys.add(result.existing_memory_key)
+                        # INDEPENDENT: do nothing, both coexist
+
+            # --- Existing evolution logic (skip tombstoned) ---
             for result in similar.value:
                 existing = result.memory
-                if existing.key == new_memory_key:
+                if existing.key == new_memory_key or existing.key in tombstoned_keys:
                     continue
 
                 # 1. Update access metadata on existing memory
@@ -234,6 +290,42 @@ class MemoryService:
 
         except Exception:
             # Evolution is best-effort, never blocks the main flow
+            pass
+
+    async def _invalidate_contradicted_memory(
+        self,
+        new_content: str,
+        new_memory_key: str,
+        persona: str,
+        valid_from: datetime,
+    ) -> None:
+        """Find existing memories that contradict the new content and close
+        their validity windows (set ``valid_until = valid_from``).
+
+        This is the core bi-temporal invalidation: old facts don't disappear,
+        they just become "no longer valid" from the new fact's timestamp.
+        The old memory remains queryable with ``valid_at`` filters.
+        """
+        if self._contradiction_detector is None:
+            return
+        try:
+            report = await self._contradiction_detector.find_potential_contradictions(
+                content=new_content,
+                persona=persona,
+                exclude_key=new_memory_key,
+            )
+            if not report.is_ok or not report.value.candidates:
+                return
+
+            threshold = report.value.threshold
+            for candidate in report.value.candidates:
+                if candidate.similarity >= threshold:
+                    self._repo.update_validity_window(
+                        memory_key=candidate.memory_key,
+                        valid_until=valid_from,
+                    )
+        except Exception:
+            # Invalidation is best-effort, never blocks the main flow
             pass
 
     def _create_hebbian_links(self, new_memory: Memory) -> None:

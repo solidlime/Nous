@@ -235,3 +235,34 @@ class PostProcessStep:
                 yield MentalModelDoneSSE(message="メンタルモデル抽象化が完了しました")
             except Exception as e:
                 logger.warning("PostProcessStep: mental_model failed: %s", e)
+
+        # Episode Consolidation (HiMem 2-tier): segment + extract facts from recent turns
+        if getattr(config, "episode_consolidation_enabled", True):
+            try:
+                # Use session messages (conversation turns) for segmentation
+                messages = session._messages if hasattr(session, "_messages") else []
+                if len(messages) >= 4:  # at least 2 turns
+                    from nous.application.chat.pipeline.episode_consolidation import (
+                        EpisodeConsolidation,
+                    )
+                    from nous.domain.memory.episode_segmenter import EpisodeSegmenter
+
+                    seg_result = await EpisodeSegmenter().segment(
+                        messages=messages,
+                        config=config,
+                    )
+                    if seg_result.episodes:
+                        consolidation_result = await EpisodeConsolidation().consolidate(
+                            episodes=seg_result.episodes,
+                            memory_service=ctx.memory_service,
+                            ctx=ctx,
+                            config=config,
+                            persona=ctx.persona,
+                        )
+                        logger.info(
+                            "Episode consolidation: %d episodes, %d memories created",
+                            len(seg_result.episodes),
+                            consolidation_result.memories_created,
+                        )
+            except Exception:
+                logger.warning("PostProcessStep: episode consolidation failed", exc_info=True)

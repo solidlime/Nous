@@ -176,6 +176,66 @@ async def _search_memories(
     return "\n".join(lines), {"queries": queries, "results": debug_results}, memories_list
 
 
+async def _search_episodes(
+    ctx: AppContext,
+    query: str,
+    top_k: int = 3,
+) -> list[dict]:
+    """Fallback: search Episode Memory (session_events) when Note Memory is insufficient.
+
+    Returns list of dicts with 'topic', 'summary', 'content' keys.
+    """
+    session_event_repo = getattr(ctx, "_session_event_repo", None)
+    if session_event_repo is None:
+        return []
+
+    try:
+        from nous.domain.search.engine import SearchQuery
+
+        # Use semantic search via search_engine for relevance if available
+        if hasattr(ctx, "search_engine") and ctx.search_engine is not None:
+            search_result = await ctx.search_engine.search(
+                SearchQuery(text=query, top_k=top_k, mode="semantic")
+            )
+            if search_result.is_ok and search_result.value:
+                episodes = []
+                for hit in search_result.value:
+                    mem = hit.memory if hasattr(hit, "memory") else hit
+                    content = getattr(mem, "content", str(mem))[:200]
+                    tags = getattr(mem, "tags", [])
+                    source = getattr(mem, "source_context", "")
+                    episodes.append({
+                        "topic": tags[0] if tags else "episode",
+                        "summary": content[:100],
+                        "content": content,
+                        "episode_id": source,
+                    })
+                return episodes
+
+        # Fallback to keyword search on session event summaries
+        events = session_event_repo.get_by_persona(ctx.persona, limit=top_k * 5)
+        # Simple keyword scoring
+        query_lower = query.lower()
+        scored = []
+        for ev in events:
+            summary = (ev.summary or "").lower()
+            detail = (ev.detail or "").lower()
+            # Count query term occurrences
+            score = summary.count(query_lower) * 2 + detail.count(query_lower)
+            if score > 0:
+                scored.append((score, {
+                    "topic": ev.event_type or "session_event",
+                    "summary": (ev.summary or "")[:100],
+                    "content": (ev.detail or ev.summary or "")[:200],
+                    "episode_id": str(ev.id or ""),
+                }))
+        scored.sort(key=lambda x: -x[0])
+        return [s[1] for s in scored[:top_k]]
+    except Exception:
+        logger.debug("_search_episodes failed (best-effort)", exc_info=True)
+        return []
+
+
 async def _build_context_section(
     ctx: AppContext,
     state,
@@ -456,6 +516,20 @@ class PrepareStep:
             turn_ctx.memory_debug = debug
             turn_ctx.memories_raw = debug.get("results", [])
             turn_ctx.memories_objects = memories_list
+
+            # HiMem 2-tier: Episode Memory fallback when Note Memory insufficient
+            if config.episode_search_enabled:
+                retrieved_count = len(turn_ctx.memories_raw)
+                if preload_count == 0 or retrieved_count < preload_count:
+                    try:
+                        ep_results = await _search_episodes(ctx, turn_ctx.user_message, top_k=3)
+                        if ep_results:
+                            ep_lines = ["\n[Recent Episodes]"]
+                            for ep in ep_results:
+                                ep_lines.append(f"  [{ep.get('topic', 'episode')}] {ep.get('summary', '')[:80]}")
+                            turn_ctx.related_memories += "\n" + "\n".join(ep_lines)
+                    except Exception:
+                        logger.debug("PrepareStep: episode search fallback failed", exc_info=True)
         else:
             logger.warning("PrepareStep: get_context failed: %s", state_result.error)
             # contextなしで継続

@@ -95,6 +95,14 @@ class MemoryRepository(Protocol):
 
     def find_top_by_importance(self, limit: int = 15) -> Result[list[Memory], RepositoryError]: ...
 
+    # Temporal validity window
+    def update_validity_window(
+        self,
+        memory_key: str,
+        valid_from: datetime | None = None,
+        valid_until: datetime | None = None,
+    ) -> Result[None, RepositoryError]: ...
+
     # Goals / Promises / Pagination / Tags (used by HTTP routes via ctx.memory_repo)
     def get_goals(self) -> Result[list[dict], RepositoryError]: ...
 

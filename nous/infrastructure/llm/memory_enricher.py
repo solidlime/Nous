@@ -7,6 +7,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from nous.domain.memory.contradiction import ContradictionResult, classify_contradiction
 from nous.domain.memory.enrichment import EnrichmentResult, RelationCandidate
 from nous.domain.value_objects import normalize_importance
 from nous.infrastructure.llm.factory import get_provider
@@ -196,3 +197,45 @@ class MemoryEnricher:
                     )
 
         return EnrichmentResult(importance=importance, relations=relations)
+
+    def classify_contradiction(
+        self,
+        new_content: str,
+        existing_memories: list[dict],
+    ) -> ContradictionResult | None:
+        """Classify the relationship between new and existing memories via LLM.
+
+        Uses a single LLM call to decide if the new memory is INDEPENDENT,
+        EXTENDABLE, or CONTRADICTORY relative to the provided existing memories.
+
+        Best-effort: returns None on any failure and never blocks the caller.
+
+        Args:
+            new_content: New memory content to classify.
+            existing_memories: List of dicts with keys 'key', 'content',
+                'similarity' representing similar existing memories.
+
+        Returns:
+            ContradictionResult on success, None on any failure.
+        """
+        if not new_content or not existing_memories:
+            return None
+
+        try:
+            provider = get_provider(
+                provider=self._provider_name,
+                api_key=self._api_key,
+                model=self._model,
+                base_url=self._base_url,
+            )
+            result = asyncio.run(
+                classify_contradiction(
+                    new_content=new_content,
+                    existing_memories=existing_memories,
+                    llm_provider=provider,
+                )
+            )
+            return result
+        except Exception:
+            logger.exception("Contradiction classification failed")
+            return None

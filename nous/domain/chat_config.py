@@ -91,6 +91,9 @@ class ChatConfig(BaseModel):
     dynamic_temperature: bool = True
     emotion_temperature_scale: float = 0.2
     top_p: float | None = None
+    # HiMem 2-tier: Episode Memory consolidation
+    episode_consolidation_enabled: bool = True
+    episode_search_enabled: bool = True
     updated_at: str | None = None
 
     def model_post_init(self, __context) -> None:

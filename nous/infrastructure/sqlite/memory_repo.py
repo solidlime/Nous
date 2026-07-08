@@ -52,8 +52,9 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
                     last_accessed, privacy_level, body_state, state_snapped_at,
                     lifecycle_status,
                     kind, episodic_time, episodic_place, episodic_people,
-                    source_type, confidence, derived_from
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    source_type, confidence, derived_from,
+                    valid_from, valid_until
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     memory.key,
@@ -85,6 +86,8 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
                     memory.source_type,
                     memory.confidence,
                     memory.derived_from,
+                    format_iso(memory.valid_from) if memory.valid_from else None,
+                    format_iso(memory.valid_until) if memory.valid_until else None,
                 ),
             )
             # T4-A: Insert initial memory_strength record so WebUI shows a
@@ -220,12 +223,20 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
     # ------------------------------------------------------------------
 
     def search_fts(
-        self, query: str, top_k: int = 10, date_from: datetime | None = None, date_to: datetime | None = None
+        self,
+        query: str,
+        top_k: int = 10,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        valid_at: datetime | None = None,
     ) -> Result[list[tuple[Memory, float]], RepositoryError]:
         """FTS5 full-text search using BM25 ranking.
 
         Returns [(Memory, normalized_bm25_score), ...] sorted by relevance.
         Score normalized to 0-1 range via ``1 / (1 + |bm25|)``.
+
+        When ``valid_at`` is specified, only memories whose validity window
+        covers that timestamp are returned (bi-temporal filtering).
         """
         try:
             fts_query = self._sanitize_fts_query(query)
@@ -249,6 +260,14 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
                 elif date_to is not None:
                     conditions.append("m.created_at <= ?")
                     params.append(date_to.isoformat())
+
+            # Temporal validity filter
+            if valid_at is not None:
+                iso = valid_at.isoformat()
+                conditions.append("(m.valid_from IS NULL OR m.valid_from <= ?)")
+                params.append(iso)
+                conditions.append("(m.valid_until IS NULL OR m.valid_until > ?)")
+                params.append(iso)
 
             where_clause = " AND ".join(conditions)
             rows = self._db.execute(
@@ -300,12 +319,19 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
     # ------------------------------------------------------------------
 
     def search_keyword(
-        self, query: str, limit: int = 10, date_from: datetime | None = None, date_to: datetime | None = None
+        self,
+        query: str,
+        limit: int = 10,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        valid_at: datetime | None = None,
     ) -> Result[list[tuple[Memory, float]], RepositoryError]:
         """Search memories by keyword with relevance scoring.
 
         Multi-word queries use AND logic: all terms must appear in the content.
         Optionally filter by date range (created_at BETWEEN date_from AND date_to).
+        When ``valid_at`` is specified, only memories whose validity window
+        covers that timestamp are returned (bi-temporal filtering).
         """
         try:
             terms = [t for t in query.split() if t]
@@ -329,6 +355,14 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
                 elif date_to is not None:
                     conditions.append("created_at <= ?")
                     params.append(date_to.isoformat())
+
+            # Temporal validity filter
+            if valid_at is not None:
+                iso = valid_at.isoformat()
+                conditions.append("(valid_from IS NULL OR valid_from <= ?)")
+                params.append(iso)
+                conditions.append("(valid_until IS NULL OR valid_until > ?)")
+                params.append(iso)
 
             where_clause = " AND ".join(conditions)
             rows = self._db.execute(
@@ -706,6 +740,51 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
             return Failure(RepositoryError(str(e)))
 
     # ------------------------------------------------------------------
+    # Temporal validity window
+    # ------------------------------------------------------------------
+
+    def update_validity_window(
+        self,
+        memory_key: str,
+        valid_from: datetime | None = None,
+        valid_until: datetime | None = None,
+    ) -> Result[None, RepositoryError]:
+        """Set validity window for a memory.
+
+        ``valid_until=None`` means "currently valid" (open-ended).
+        ``valid_from=None`` leaves the existing value unchanged.
+        """
+        try:
+            existing = self._db.execute("SELECT * FROM memories WHERE key = ?", (memory_key,)).fetchone()
+            if existing is None:
+                return Failure(RepositoryError(f"Memory not found: {memory_key}"))
+
+            now = format_iso(get_now())
+            params: dict[str, object] = {"updated_at": now}
+
+            if valid_from is not None:
+                params["valid_from"] = format_iso(valid_from)
+            if valid_until is not None:
+                params["valid_until"] = format_iso(valid_until)
+            else:
+                # Explicitly set valid_until to NULL to mark as currently valid
+                params["valid_until"] = None
+
+            set_clause = ", ".join(f"{k} = ?" for k in params)
+            values = list(params.values()) + [memory_key]
+            self._db.execute(
+                f"UPDATE memories SET {set_clause} WHERE key = ?",  # noqa: S608  # nosec B608
+                values,
+            )
+            self._db.commit()
+            logger.info("Validity window updated for memory %s", memory_key)
+            return Success(None)
+        except Exception as e:
+            self._db.rollback()
+            logger.error("Failed to update validity window for %s: %s", memory_key, e)
+            return Failure(RepositoryError(str(e)))
+
+    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
@@ -777,6 +856,9 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
             source_type=row["source_type"] if "source_type" in row_keys else "user_stated",
             confidence=row["confidence"] if "confidence" in row_keys else 1.0,
             derived_from=row["derived_from"] if "derived_from" in row_keys else None,
+            # temporal validity (safe defaults for old rows)
+            valid_from=self._parse_iso_or_none(row["valid_from"]) if "valid_from" in row_keys else None,
+            valid_until=self._parse_iso_or_none(row["valid_until"]) if "valid_until" in row_keys else None,
         )
 
     @staticmethod

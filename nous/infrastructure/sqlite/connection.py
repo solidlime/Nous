@@ -40,7 +40,9 @@ CREATE TABLE IF NOT EXISTS memories (
     episodic_people TEXT,
     source_type TEXT DEFAULT 'user_stated',
     confidence REAL DEFAULT 1.0,
-    derived_from TEXT
+    derived_from TEXT,
+    valid_from TEXT,
+    valid_until TEXT
 );
 
 CREATE TABLE IF NOT EXISTS memory_strength (

@@ -9,6 +9,8 @@ from nous.domain.shared.time_utils import parse_date_range
 from nous.domain.value_objects import normalize_emotion
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from nous.domain.memory.entities import Memory
     from nous.domain.search.ranker import ResultRanker
     from nous.domain.search.strategies import (
@@ -40,6 +42,7 @@ class SearchQuery:
     vector_weight: float = 1.0  # RRF weight for vector/semantic signal
     keyword_weight: float = 0.5  # RRF weight for keyword (FTS5 + plain) signal
     similarity_threshold: float = 0.85  # cosine similarity flag threshold
+    valid_at: datetime | None = None  # Only return memories valid at this timestamp
 
 
 @dataclass
@@ -105,7 +108,10 @@ class SearchEngine:
 
         if not result.is_ok:
             return result
-        return Success(self._filter_by_emotion(result.value, query.emotion))
+        filtered = self._filter_by_emotion(result.value, query.emotion)
+        if query.valid_at is not None:
+            filtered = self._filter_by_valid_at(filtered, query.valid_at)
+        return Success(filtered)
 
     @staticmethod
     def _filter_by_emotion(
@@ -117,6 +123,24 @@ class SearchEngine:
             return results
         target = normalize_emotion(emotion)
         return [r for r in results if normalize_emotion(r.memory.emotion) == target]
+
+    @staticmethod
+    def _filter_by_valid_at(
+        results: list[SearchResult],
+        valid_at: datetime,
+    ) -> list[SearchResult]:
+        """Post-filter results to only include memories valid at the given timestamp.
+
+        A memory is valid at ``valid_at`` if:
+        - ``valid_from`` is None OR ``valid_from <= valid_at``
+        - ``valid_until`` is None OR ``valid_until > valid_at``
+        """
+        return [
+            r
+            for r in results
+            if (r.memory.valid_from is None or r.memory.valid_from <= valid_at)
+            and (r.memory.valid_until is None or r.memory.valid_until > valid_at)
+        ]
 
     @staticmethod
     def _to_search_results(

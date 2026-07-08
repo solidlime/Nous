@@ -41,6 +41,10 @@ class Memory:
     episodic_time: str | None = None
     episodic_place: str | None = None
     episodic_people: str | None = None  # JSON array
+    # temporal validity fields (bi-temporal memory model)
+    valid_from: datetime | None = None  # when this memory became valid
+    valid_until: datetime | None = None  # None = currently valid
+
     # source provenance fields (Chunk 1.4)
     source_type: str = (
         "user_stated"  # user_stated | user_implied | llm_inferred | tool_output | consolidated | reflected
