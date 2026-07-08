@@ -701,5 +701,5 @@ class TestDashboardStateRestoration:
 
         assert "function getStoredPersona()" in js
         assert "function setStoredPersona(persona)" in js
-        assert "localStorage.setItem('selected_persona'" in js
-        assert "localStorage.setItem('mmcp-persona'" in js
+        assert 'localStorage.setItem("selected_persona"' in js
+        assert 'localStorage.setItem("mmcp-persona"' in js

@@ -151,7 +151,72 @@ async def _handle_browser(
     if not action:
         return {"status": "error", "message": "action is required"}
 
-    # ── Locate agent-browser binary ──
+    # ── Validate action and params BEFORE binary check ──
+    VALID_ACTIONS = {"open", "snapshot", "click", "fill", "press", "get", "wait", "scroll", "close"}
+    if action not in VALID_ACTIONS:
+        return {"status": "error", "message": f"Unknown action: {action}"}
+
+    action_params: dict[str, str] = {}
+    try:
+        if action == "open":
+            url = (tool_input.get("url") or "").strip()
+            if not url:
+                return {"status": "error", "message": "url is required for open"}
+            if not url.startswith(("http://", "https://")):
+                return {"status": "error", "message": "url must start with http:// or https://"}
+            action_params["url"] = url
+
+        elif action == "click":
+            ref = (tool_input.get("ref") or "").strip()
+            if not ref:
+                return {"status": "error", "message": "ref is required for click"}
+            action_params["ref"] = ref
+
+        elif action == "fill":
+            ref = (tool_input.get("ref") or "").strip()
+            value = tool_input.get("value", "")
+            if not ref:
+                return {"status": "error", "message": "ref is required for fill"}
+            action_params["ref"] = ref
+            action_params["value"] = str(value)
+
+        elif action == "press":
+            key = (tool_input.get("key") or "").strip()
+            if not key:
+                return {"status": "error", "message": "key is required for press"}
+            action_params["key"] = key
+
+        elif action == "get":
+            what = (tool_input.get("what") or "").strip()
+            if not what:
+                return {"status": "error", "message": "what is required for get"}
+            if what == "count":
+                selector = (tool_input.get("selector") or "").strip()
+                if not selector:
+                    return {"status": "error", "message": "selector is required for get count"}
+                action_params["selector"] = selector
+            elif what in ("text", "html", "attr", "title", "url"):
+                ref = (tool_input.get("ref") or "").strip()
+                if not ref:
+                    return {"status": "error", "message": f"ref is required for get {what}"}
+                action_params["ref"] = ref
+
+        elif action == "wait":
+            until = (tool_input.get("until") or "").strip()
+            if not until:
+                return {"status": "error", "message": "until is required for wait"}
+            if until == "text":
+                value = tool_input.get("value", "")
+                if not value:
+                    return {"status": "error", "message": "value is required for wait text"}
+                action_params["value"] = str(value)
+            elif until not in ("load", "url"):
+                return {"status": "error", "message": f"Unknown wait until: {until}"}
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+    # ── Locate agent-browser binary (deferred until params are validated) ──
     agent_bin = _find_agent_browser(ctx.settings if hasattr(ctx, "settings") else None)
     if not agent_bin:
         return {
@@ -171,12 +236,7 @@ async def _handle_browser(
 
     try:
         if action == "open":
-            url = (tool_input.get("url") or "").strip()
-            if not url:
-                return {"status": "error", "message": "url is required for open"}
-            if not url.startswith(("http://", "https://")):
-                return {"status": "error", "message": "url must start with http:// or https://"}
-            args.extend(["open", url])
+            args.extend(["open", action_params["url"]])
 
         elif action == "snapshot":
             interactive = tool_input.get("interactive", True)
@@ -191,58 +251,34 @@ async def _handle_browser(
             args.append("--json")
 
         elif action == "click":
-            ref = (tool_input.get("ref") or "").strip()
-            if not ref:
-                return {"status": "error", "message": "ref is required for click"}
-            args.extend(["click", ref])
+            args.extend(["click", action_params["ref"]])
 
         elif action == "fill":
-            ref = (tool_input.get("ref") or "").strip()
-            value = tool_input.get("value", "")
-            if not ref:
-                return {"status": "error", "message": "ref is required for fill"}
-            args.extend(["fill", ref, str(value)])
+            args.extend(["fill", action_params["ref"], action_params["value"]])
 
         elif action == "press":
-            key = (tool_input.get("key") or "").strip()
-            if not key:
-                return {"status": "error", "message": "key is required for press"}
-            args.extend(["press", key])
+            args.extend(["press", action_params["key"]])
 
         elif action == "get":
-            what = (tool_input.get("what") or "").strip()
-            if not what:
-                return {"status": "error", "message": "what is required for get"}
-            if what == "count":
-                selector = (tool_input.get("selector") or "").strip()
-                if not selector:
-                    return {"status": "error", "message": "selector is required for get count"}
-                args.extend(["get", "count", selector])
-            elif what in ("title", "url"):
-                args.extend(["get", what])
+            what_str = (tool_input.get("what") or "").strip()
+            if what_str == "count":
+                args.extend(["get", "count", action_params["selector"]])
+            elif what_str in ("title", "url"):
+                args.extend(["get", what_str])
             else:
-                ref = (tool_input.get("ref") or "").strip()
-                if not ref:
-                    return {"status": "error", "message": f"ref is required for get {what}"}
-                args.extend(["get", what, ref])
+                args.extend(["get", what_str, action_params["ref"]])
 
         elif action == "wait":
-            until = (tool_input.get("until") or "").strip()
-            value = (tool_input.get("value") or "").strip()
-            if not until:
-                return {"status": "error", "message": "until is required for wait"}
-            if until == "text":
-                if not value:
-                    return {"status": "error", "message": "value is required for wait text"}
-                args.extend(["wait", "--text", value])
-            elif until == "url":
-                if not value:
+            until_str = (tool_input.get("until") or "").strip()
+            if until_str == "text":
+                args.extend(["wait", "--text", action_params["value"]])
+            elif until_str == "url":
+                value_url = (tool_input.get("value") or "").strip()
+                if not value_url:
                     return {"status": "error", "message": "value is required for wait url"}
-                args.extend(["wait", "--url", value])
-            elif until == "load":
+                args.extend(["wait", "--url", value_url])
+            elif until_str == "load":
                 args.extend(["wait", "--load", "networkidle"])
-            else:
-                return {"status": "error", "message": f"Unknown wait until: {until}"}
 
         elif action == "scroll":
             direction = (tool_input.get("direction") or "down").strip()
@@ -251,9 +287,6 @@ async def _handle_browser(
 
         elif action == "close":
             args.append("close")
-
-        else:
-            return {"status": "error", "message": f"Unknown action: {action}"}
 
         # ── Execute ──
         timeout = 30  # seconds
