@@ -93,8 +93,7 @@ class AppContext:
         try:
             self.connection.initialize_schema()
         except Exception as e:
-            logger = logging.getLogger("nous")
-            logger.warning("Schema initialization failed for persona '%s': %s", persona, e)
+            logging.getLogger("nous").warning("Schema initialization failed for persona '%s': %s", persona, e)
             # Continue - migration will attempt repair, and if it also fails,
             # AppContext will still be created but functionality may be degraded
 
