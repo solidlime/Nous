@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse
 
-from nous.application.use_cases import AppContextRegistry
+from nous.api.http.deps import _resolve_persona_from_request, _safe_get_context
 from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
 
 if TYPE_CHECKING:
@@ -29,7 +29,7 @@ def register_session_events_routes(mcp) -> None:
             event_type (str, optional) – e.g. 'tool.called', 'chat.message'
             order  (str, default 'desc') – 'asc' or 'desc'
         """
-        persona = request.path_params["persona"]
+        persona = _resolve_persona_from_request(request)
         limit = int(request.query_params.get("limit", "50"))
         offset = int(request.query_params.get("offset", "0"))
         event_type = request.query_params.get("event_type") or None
@@ -39,7 +39,7 @@ def register_session_events_routes(mcp) -> None:
 
         limit = min(max(limit, 1), 500)
 
-        ctx = AppContextRegistry.get(persona)
+        ctx = _safe_get_context(persona)
         if ctx is None:
             return JSONResponse({"error": "persona not found"}, status_code=404)
 

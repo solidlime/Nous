@@ -310,7 +310,9 @@ class ChatConfigRepository:
                 (persona,),
             ).fetchone()
             if row is not None:
-                row = (*row, 0, "openai", "dall-e-3", "", 1, 0.2, None, 1, 1, 1)
+                # Insert image_gen_* defaults at correct positions (indices 38-41)
+                # and append episode_* defaults at the end (indices 47-49)
+                row = (*row[:38], 0, "openai", "dall-e-3", "", *row[38:], 1, 1, 1)
         if row is None:
             return ChatConfig(persona=persona)
         return ChatConfig(
