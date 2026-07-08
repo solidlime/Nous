@@ -32,7 +32,6 @@ from nous.api.mcp._tools_helpers import (  # noqa: E402, F401
 )
 from nous.api.mcp._tools_irodori import _tool_irodori_tts  # noqa: E402, F401
 from nous.api.mcp._tools_item import (  # noqa: E402, F401
-    _tool_item,
     _tool_item_add,
     _tool_item_equip,
     _tool_item_history,

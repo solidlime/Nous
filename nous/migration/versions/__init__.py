@@ -68,6 +68,9 @@ from nous.migration.versions.v036_memory_links import (
 from nous.migration.versions.v037_temporal_validity import (
     upgrade as v037_upgrade,
 )
+from nous.migration.versions.v038_add_config_fields import (
+    upgrade as v038_upgrade,
+)
 
 ALL_MIGRATIONS: list[tuple[str, str, object]] = [
     ("001", "Initial schema", v001_upgrade),
@@ -106,4 +109,5 @@ ALL_MIGRATIONS: list[tuple[str, str, object]] = [
     ("035", "Add source_type, confidence, derived_from for Bartlett source monitoring", v035_upgrade),
     ("036", "Create memory_links table for Hebbian associative network", v036_upgrade),
     ("037", "Add valid_from/valid_until to memories for bi-temporal model", v037_upgrade),
+    ("038", "Add context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled to chat_settings", v038_upgrade),
 ]

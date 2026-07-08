@@ -256,6 +256,9 @@ class ChatConfigRepository:
             ("dynamic_temperature", "INTEGER", "1"),
             ("emotion_temperature_scale", "REAL", "0.2"),
             ("top_p", "REAL", "NULL"),
+            ("context_use_llm_summary", "INTEGER", "1"),
+            ("episode_consolidation_enabled", "INTEGER", "1"),
+            ("episode_search_enabled", "INTEGER", "1"),
         ):
             try:
                 self._db.execute(f"SELECT {col} FROM chat_settings LIMIT 0")  # nosec B608
@@ -280,7 +283,8 @@ class ChatConfigRepository:
                 "memory_preload_count, enable_parallel_tools, "
                 "image_gen_enabled, image_gen_provider, image_gen_dalle_model, image_gen_stability_url, "
                 "enable_memory_tools, debug_mode, "
-                "dynamic_temperature, emotion_temperature_scale, top_p "
+                "dynamic_temperature, emotion_temperature_scale, top_p, "
+                "context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled "
                 "FROM chat_settings WHERE persona = ?",
                 (persona,),
             ).fetchone()
@@ -300,12 +304,13 @@ class ChatConfigRepository:
                 "context_compression_mode, context_keep_recent_turns, "
                 "context_compress_system_prompt, context_compress_history, "
                 "memory_preload_count, enable_parallel_tools, "
-                "enable_memory_tools, debug_mode "
+                "enable_memory_tools, debug_mode, "
+                "dynamic_temperature, emotion_temperature_scale, top_p "
                 "FROM chat_settings WHERE persona = ?",
                 (persona,),
             ).fetchone()
             if row is not None:
-                row = (*row, 0, "openai", "dall-e-3", "", 1, 0.2, None)
+                row = (*row, 0, "openai", "dall-e-3", "", 1, 0.2, None, 1, 1, 1)
         if row is None:
             return ChatConfig(persona=persona)
         return ChatConfig(
@@ -358,6 +363,9 @@ class ChatConfigRepository:
             dynamic_temperature=bool(row[44]) if len(row) > 44 and row[44] is not None else True,
             emotion_temperature_scale=float(row[45]) if len(row) > 45 and row[45] is not None else 0.2,
             top_p=float(row[46]) if len(row) > 46 and row[46] is not None else None,
+            context_use_llm_summary=bool(row[47]) if len(row) > 47 and row[47] is not None else True,
+            episode_consolidation_enabled=bool(row[48]) if len(row) > 48 and row[48] is not None else True,
+            episode_search_enabled=bool(row[49]) if len(row) > 49 and row[49] is not None else True,
         )
 
     def save(self, config: ChatConfig) -> None:
@@ -373,6 +381,9 @@ class ChatConfigRepository:
             ("dynamic_temperature", "INTEGER", "1"),
             ("emotion_temperature_scale", "REAL", "0.2"),
             ("top_p", "REAL", "NULL"),
+            ("context_use_llm_summary", "INTEGER", "1"),
+            ("episode_consolidation_enabled", "INTEGER", "1"),
+            ("episode_search_enabled", "INTEGER", "1"),
         ):
             try:
                 self._db.execute(f"SELECT {col} FROM chat_settings LIMIT 0")  # nosec B608 — col from hardcoded tuple, not user input
@@ -399,8 +410,9 @@ class ChatConfigRepository:
                    image_gen_enabled, image_gen_provider, image_gen_dalle_model, image_gen_stability_url,
                    enable_memory_tools, debug_mode,
                    dynamic_temperature, emotion_temperature_scale, top_p,
+                   context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled,
                    updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
@@ -447,6 +459,9 @@ class ChatConfigRepository:
                  dynamic_temperature=excluded.dynamic_temperature,
                  emotion_temperature_scale=excluded.emotion_temperature_scale,
                  top_p=excluded.top_p,
+                 context_use_llm_summary=excluded.context_use_llm_summary,
+                 episode_consolidation_enabled=excluded.episode_consolidation_enabled,
+                 episode_search_enabled=excluded.episode_search_enabled,
                  updated_at=excluded.updated_at
             """,
             (
@@ -496,6 +511,9 @@ class ChatConfigRepository:
                 int(config.dynamic_temperature),
                 config.emotion_temperature_scale,
                 config.top_p,
+                int(config.context_use_llm_summary),
+                int(config.episode_consolidation_enabled),
+                int(config.episode_search_enabled),
                 now,
             ),
         )
