@@ -36,6 +36,7 @@ class Memory:
     body_state: dict[str, float] | None = None
     state_snapped_at: datetime | None = None
     lifecycle_status: str = "active"
+    last_consumed_at: datetime | None = None  # ワンショット消費用タイムスタンプ
     # kind-related fields (Chunk 1.1)
     kind: str = "semantic"  # episodic | semantic | procedural | prospective
     episodic_time: str | None = None

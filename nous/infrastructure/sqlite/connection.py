@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS memories (
     body_state TEXT,
     state_snapped_at TEXT,
     lifecycle_status TEXT DEFAULT 'active',
+    last_consumed_at TEXT,
     kind TEXT DEFAULT 'semantic',
     episodic_time TEXT,
     episodic_place TEXT,
@@ -370,6 +371,27 @@ class SQLiteConnection:
         memory_conn.executescript(_MEMORY_SCHEMA + _CHAT_SESSIONS_SCHEMA)
         memory_conn.commit()
         logger.info("Memory schema initialized for persona '%s'", self.persona)
+
+        # Migration: add last_consumed_at if missing (existing DBs)
+        try:
+            memory_conn.execute("ALTER TABLE memories ADD COLUMN last_consumed_at TEXT")
+            memory_conn.commit()
+            logger.info("Added last_consumed_at column to memories (migration)")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
+        # One-shot migration: context_state -> memories (temporary)
+        try:
+            from nous.infrastructure.sqlite.migration_one_shot import (  # noqa: PLC0415
+                migrate_context_state_to_memories,
+            )
+
+            migrated = migrate_context_state_to_memories(memory_conn, self.persona)
+            if migrated:
+                memory_conn.commit()
+                logger.info("One-shot migration: %d state records -> memories", migrated)
+        except Exception:
+            pass
 
         # Initialize FTS5 full-text search index
         self._init_fts_schema(memory_conn)

@@ -570,9 +570,9 @@ class MemoryService:
         """Delete a named memory block."""
         return self._repo.delete_block(block_name)
 
-    def get_by_tags(self, tags: list[str]) -> Result[list[Memory], DomainError]:
+    def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], DomainError]:
         """Get memories that contain ALL specified tags."""
-        return self._repo.get_by_tags(tags)
+        return self._repo.get_by_tags(tags, include_consumed=include_consumed)
 
     # --- Smart Recent + Search Log + Gap Alert ---
 

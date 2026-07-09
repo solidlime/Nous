@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from nous.domain.memory.entities import Memory
@@ -12,8 +13,6 @@ from nous.infrastructure.sqlite.block_repo import SQLiteBlockMixin
 from nous.infrastructure.sqlite.strength_repo import SQLiteStrengthMixin
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from nous.infrastructure.sqlite.connection import SQLiteConnection
 
 logger = get_logger(__name__)
@@ -529,7 +528,22 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
             logger.error("Failed to get all tags: %s", e)
             return Failure(RepositoryError(str(e)))
 
-    def get_by_tags(self, tags: list[str]) -> Result[list[Memory], RepositoryError]:
+    def consume_memory(self, key: str) -> Result[None, RepositoryError]:
+        """Mark a memory as consumed by setting last_consumed_at = now()."""  # noqa: D401
+        try:
+            now = datetime.now(UTC).isoformat()
+            self._db.execute(
+                "UPDATE memories SET last_consumed_at = ? WHERE key = ?",
+                (now, key),
+            )
+            self._db.commit()
+            return Success(None)
+        except Exception as e:
+            self._db.rollback()
+            logger.error("Failed to consume memory %s: %s", key, e)
+            return Failure(RepositoryError(str(e)))
+
+    def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], RepositoryError]:
         """Get memories that contain ALL specified tags."""
         try:
             if not tags:
@@ -537,6 +551,8 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
             match_conditions = ["tags LIKE ?" for _ in tags]
             params = [f'%"{t}"%' for t in tags]
             all_conditions = [self._active_where(), *match_conditions]
+            if not include_consumed:
+                all_conditions.append("last_consumed_at IS NULL")
             where = " AND ".join(all_conditions)
             rows = self._db.execute(
                 f"SELECT * FROM memories WHERE {where} ORDER BY updated_at DESC",  # nosec B608
@@ -831,6 +847,9 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
             if "state_snapped_at" in row_keys
             else None,
             lifecycle_status=row["lifecycle_status"] if "lifecycle_status" in row_keys else "active",
+            last_consumed_at=self._parse_iso_or_none(row["last_consumed_at"])
+            if "last_consumed_at" in row_keys
+            else None,
             # kind fields (safe defaults for old rows)
             kind=row["kind"] if "kind" in row_keys else "semantic",
             episodic_time=row["episodic_time"] if "episodic_time" in row_keys else None,

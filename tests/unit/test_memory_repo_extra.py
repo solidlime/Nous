@@ -117,6 +117,35 @@ class TestGetAllTags:
         assert tags == sorted(set(tags))  # sorted, unique
 
 
+class TestConsumeMemory:
+    def _tagged_memory(self, key: str, content: str) -> Memory:
+        m = _make_memory(key=key, content=content)
+        m.tags = ["speech_style"]
+        return m
+
+    def test_consume_memory_sets_last_consumed_at(self, repo):
+        key = repo.save(_make_memory(key="mem_consume_1", content="test")).unwrap()
+        result = repo.consume_memory(key)
+        assert result.is_ok
+        mem = repo.find_by_key(key).unwrap()
+        assert mem is not None
+        assert mem.last_consumed_at is not None
+
+    def test_get_by_tags_excludes_consumed(self, repo):
+        key1 = repo.save(self._tagged_memory("mem_consume_2", "古い状態")).unwrap()
+        key2 = repo.save(self._tagged_memory("mem_consume_3", "新しい状態")).unwrap()
+        repo.consume_memory(key2)
+        results = repo.get_by_tags(["speech_style"], include_consumed=False).unwrap()
+        assert len(results) == 1
+        assert results[0].key == key1
+
+    def test_get_by_tags_include_consumed(self, repo):
+        key1 = repo.save(self._tagged_memory("mem_consume_4", "s1")).unwrap()
+        repo.consume_memory(key1)
+        results = repo.get_by_tags(["speech_style"], include_consumed=True).unwrap()
+        assert len(results) == 1
+
+
 class TestGetByTags:
     def test_returns_memories_matching_all_tags(self, repo):
         m1 = _make_memory("memory_20250101000001", "both tags")
