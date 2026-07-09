@@ -107,7 +107,6 @@ class TestSearchEngineRerankerIntegration:
     @pytest.mark.asyncio
     async def test_reranker_called_when_enabled(self):
         """When a reranker is set and enabled, _hybrid_search should call rerank."""
-        from nous.domain.shared.result import Success
 
         # Mock the reranker
         mock_reranker = MagicMock()
@@ -128,7 +127,6 @@ class TestSearchEngineRerankerIntegration:
     @pytest.mark.asyncio
     async def test_reranker_scores_merged_into_results(self):
         """Reranked scores should replace SearchResult scores after rerank."""
-        from nous.domain.shared.result import Success
 
         mock_reranker = MagicMock()
         mock_reranker.enabled = True
@@ -151,7 +149,6 @@ class TestSearchEngineRerankerIntegration:
     @pytest.mark.asyncio
     async def test_reranker_not_called_when_none(self):
         """When reranker is None, _hybrid_search should skip rerank."""
-        from nous.domain.shared.result import Success
 
         kw = MagicMock()
         kw.search.return_value = Success([(_make_mem("key_a"), 0.5)])
@@ -164,7 +161,6 @@ class TestSearchEngineRerankerIntegration:
     @pytest.mark.asyncio
     async def test_reranker_not_called_when_disabled(self):
         """When reranker.enabled is False, _hybrid_search should skip rerank."""
-        from nous.domain.shared.result import Success
 
         mock_reranker = MagicMock()
         mock_reranker.enabled = False
