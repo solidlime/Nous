@@ -4,7 +4,6 @@ Usage examples::
 
     python -m nous.cli import  --persona herta   --input data/herta.zip
     python -m nous.cli export  --persona herta   --output backup/herta.jsonl
-    python -m nous.cli migrate --persona herta
     python -m nous.cli stats   --persona herta
 """
 
@@ -16,7 +15,6 @@ from pathlib import Path
 
 from nous.config.settings import Settings
 from nous.infrastructure.sqlite.connection import SQLiteConnection
-from nous.migration.engine import MigrationEngine
 from nous.migration.exporters.jsonl_exporter import JSONLExporter
 from nous.migration.importers.jsonl_importer import JSONLImporter
 from nous.migration.importers.legacy_importer import LegacyImporter
@@ -54,10 +52,6 @@ def main() -> None:
         choices=["jsonl"],
     )
 
-    # -- migrate -------------------------------------------------------
-    migrate_parser = subparsers.add_parser("migrate", help="Run pending migrations")
-    migrate_parser.add_argument("--persona", required=True)
-
     # -- stats ---------------------------------------------------------
     stats_parser = subparsers.add_parser("stats", help="Show persona statistics")
     stats_parser.add_argument("--persona", required=True)
@@ -71,7 +65,7 @@ def main() -> None:
     )
 
     # keep linters happy — parsers are used via subparsers
-    _ = (import_parser, export_parser, migrate_parser, stats_parser, auto_import_parser)
+    _ = (import_parser, export_parser, stats_parser, auto_import_parser)
 
     args = parser.parse_args()
     if not args.command:
@@ -83,7 +77,6 @@ def main() -> None:
     handlers = {
         "import": _handle_import,
         "export": _handle_export,
-        "migrate": _handle_migrate,
         "stats": _handle_stats,
         "auto-import": _handle_auto_import,
     }
@@ -98,9 +91,6 @@ def main() -> None:
 def _handle_import(args: argparse.Namespace, settings: Settings) -> None:
     conn = SQLiteConnection(settings.data_dir, args.persona)
     conn.initialize_schema()
-
-    engine = MigrationEngine(conn)
-    engine.run_all()
 
     input_path = Path(args.input)
 
@@ -141,26 +131,6 @@ def _handle_export(args: argparse.Namespace, settings: Settings) -> None:
         print(f"Exported {result.value} records to {args.output}")
     else:
         print(f"Export failed: {result.error}")
-        sys.exit(1)
-
-    conn.close()
-
-
-def _handle_migrate(args: argparse.Namespace, settings: Settings) -> None:
-    conn = SQLiteConnection(settings.data_dir, args.persona)
-    conn.initialize_schema()
-
-    engine = MigrationEngine(conn)
-    result = engine.run_all()
-
-    if result.is_ok:
-        applied = result.value
-        if applied:
-            print(f"Migrations applied: {', '.join(applied)}")
-        else:
-            print("All migrations already applied.")
-    else:
-        print(f"Migration failed: {result.error}")
         sys.exit(1)
 
     conn.close()

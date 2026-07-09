@@ -576,7 +576,6 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
     def log_search(self, query: str, mode: str, result_count: int) -> Result[None, RepositoryError]:
         """Log a search query for topic detection."""
         try:
-            self._ensure_search_log_table()
             self._db.execute(
                 "INSERT INTO search_log (query, mode, result_count, searched_at) VALUES (?, ?, ?, datetime('now'))",
                 (query, mode, result_count),
@@ -591,7 +590,6 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
     def get_recent_searches(self, limit: int = 5) -> Result[list[dict], RepositoryError]:
         """Get recent search queries."""
         try:
-            self._ensure_search_log_table()
             rows = self._db.execute(
                 "SELECT query, mode, result_count, searched_at FROM search_log ORDER BY searched_at DESC LIMIT ?",
                 (limit,),
@@ -614,20 +612,6 @@ class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
         except Exception as e:
             logger.error("Failed to count decayed: %s", e)
             return Failure(RepositoryError(str(e)))
-
-    def _ensure_search_log_table(self) -> None:
-        """Create search_log table if it doesn't exist (safety fallback)."""
-        self._db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS search_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                query TEXT NOT NULL,
-                mode TEXT DEFAULT 'hybrid',
-                result_count INTEGER DEFAULT 0,
-                searched_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )
-            """
-        )
 
     def get_memory_index(self) -> Result[dict, RepositoryError]:
         """Get compressed memory index for context snapshot."""

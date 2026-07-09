@@ -269,23 +269,6 @@ class TestQdrantSemanticSearchDateFiltering:
 class TestAppContextMigration:
     """Tests for AppContext initialization edge cases."""
 
-    def test_migration_failure_logged(self, tmp_path):
-        """When MigrationEngine.run_all fails, an error should be logged (lines 93-95)."""
-        from nous.application.use_cases import AppContext
-        from nous.config.settings import Settings
-
-        settings = Settings(data_root=str(tmp_path))
-
-        with patch("nous.migration.engine.MigrationEngine") as mock_migration_engine:
-            mock_engine = MagicMock()
-            mock_engine.run_all.return_value = Failure(Exception("migration failed"))
-            mock_migration_engine.return_value = mock_engine
-
-            # Create AppContext; should not raise despite migration failure
-            ctx = AppContext(settings, "test_persona")
-            assert ctx.persona == "test_persona"
-            ctx.close()
-
     def test_memory_enricher_created_with_api_key(self, tmp_path):
         """When memory_enrichment is enabled and api_key is set, MemoryEnricher is created (lines 120-124)."""
         from nous.application.use_cases import AppContext
@@ -303,14 +286,7 @@ class TestAppContextMigration:
             },
         )
 
-        with (
-            patch("nous.migration.engine.MigrationEngine") as mock_migration_engine,
-            patch("nous.infrastructure.llm.memory_enricher.MemoryEnricher") as mock_memory_enricher,
-        ):
-            mock_engine = MagicMock()
-            mock_engine.run_all.return_value = Success(None)
-            mock_migration_engine.return_value = mock_engine
-
+        with patch("nous.infrastructure.llm.memory_enricher.MemoryEnricher") as mock_memory_enricher:
             ctx = AppContext(settings, "test_persona")
             # MemoryEnricher should have been instantiated
             mock_memory_enricher.assert_called_once()
@@ -323,14 +299,7 @@ class TestAppContextMigration:
 
         settings = Settings(data_root=str(tmp_path))
 
-        with (
-            patch("nous.migration.engine.MigrationEngine") as mock_migration_engine,
-            patch("nous.application.session_event_recorder.SessionEventRecorder") as mock_session_event_recorder,
-        ):
-            mock_engine = MagicMock()
-            mock_engine.run_all.return_value = Success(None)
-            mock_migration_engine.return_value = mock_engine
-
+        with patch("nous.application.session_event_recorder.SessionEventRecorder") as mock_session_event_recorder:
             # Make start() raise
             instance = MagicMock()
             instance.start.side_effect = RuntimeError("recorder init failed")
@@ -348,14 +317,9 @@ class TestAppContextMigration:
 
         settings = Settings(data_root=str(tmp_path))
 
-        with patch("nous.migration.engine.MigrationEngine") as mock_migration_engine:
-            mock_engine = MagicMock()
-            mock_engine.run_all.return_value = Success(None)
-            mock_migration_engine.return_value = mock_engine
-
-            # Patch _init_vector_store to avoid eager embedding model creation
-            with patch.object(AppContext, "_init_vector_store", return_value=None):
-                ctx = AppContext(settings, "test_persona")
+        # Patch _init_vector_store to avoid eager embedding model creation
+        with patch.object(AppContext, "_init_vector_store", return_value=None):
+            ctx = AppContext(settings, "test_persona")
             # Before access, _embedding is None (lazy init preserved)
             assert ctx._embedding is None
 
@@ -444,14 +408,7 @@ class TestAppContextVectorStore:
 
         settings = Settings(data_root=str(tmp_path))
 
-        with (
-            patch("nous.migration.engine.MigrationEngine") as mock_migration_engine,
-            patch("nous.application.use_cases.QdrantClientManager") as mock_qdrant_client_manager,
-        ):
-            mock_engine = MagicMock()
-            mock_engine.run_all.return_value = Success(None)
-            mock_migration_engine.return_value = mock_engine
-
+        with patch("nous.application.use_cases.QdrantClientManager") as mock_qdrant_client_manager:
             # Make QdrantClientManager raise
             mock_qdrant_client_manager.side_effect = RuntimeError("Qdrant unavailable")
 
@@ -468,15 +425,10 @@ class TestAppContextVectorStore:
         settings = Settings(data_root=str(tmp_path), qdrant={"url": "http://localhost:6333"})
 
         with (
-            patch("nous.migration.engine.MigrationEngine") as mock_migration_engine,
             patch("nous.application.use_cases.QdrantClientManager") as mock_qdrant_client_manager,
             patch("nous.application.use_cases.QdrantVectorStore") as mock_vector_store,
             patch.object(MagicMock(), "embedding_model", create=True),
         ):
-            mock_engine = MagicMock()
-            mock_engine.run_all.return_value = Success(None)
-            mock_migration_engine.return_value = mock_engine
-
             mock_mgr = AsyncMock()
             mock_mgr.connect = AsyncMock(return_value=mock_mgr)
             mock_mgr.health_check = AsyncMock(return_value=True)
@@ -500,14 +452,7 @@ class TestAppContextVectorStore:
 
         settings = Settings(data_root=str(tmp_path), qdrant={"url": "http://localhost:6333"})
 
-        with (
-            patch("nous.migration.engine.MigrationEngine") as mock_migration_engine,
-            patch("nous.application.use_cases.QdrantClientManager") as mock_qdrant_client_manager,
-        ):
-            mock_engine = MagicMock()
-            mock_engine.run_all.return_value = Success(None)
-            mock_migration_engine.return_value = mock_engine
-
+        with patch("nous.application.use_cases.QdrantClientManager") as mock_qdrant_client_manager:
             mock_mgr = AsyncMock()
             mock_mgr.connect = AsyncMock(return_value=mock_mgr)
             mock_mgr.health_check = AsyncMock(return_value=False)
@@ -526,31 +471,26 @@ class TestAppContextVectorStore:
 
         settings = Settings(data_root=str(tmp_path))
 
-        with patch("nous.migration.engine.MigrationEngine") as mock_migration_engine:
-            mock_engine = MagicMock()
-            mock_engine.run_all.return_value = Success(None)
-            mock_migration_engine.return_value = mock_engine
+        ctx = AppContext(settings, "test_persona")
 
-            ctx = AppContext(settings, "test_persona")
+        # Make get_strength return Failure → _strength_lookup falls to return 1.0
+        ctx.memory_repo.get_strength = MagicMock(return_value=Failure(Exception("not found")))
 
-            # Make get_strength return Failure → _strength_lookup falls to return 1.0
-            ctx.memory_repo.get_strength = MagicMock(return_value=Failure(Exception("not found")))
+        from nous.domain.search.engine import SearchQuery
 
-            from nous.domain.search.engine import SearchQuery
+        # Use hybrid mode which goes through the ranker.
+        # vector_store must be None so QdrantSemanticSearch is not created (it would fail).
+        # The search engine then uses only keyword results + ranker.
+        with patch.object(ctx, "_vector_store", None):
+            se = ctx.search_engine
+            mem = MagicMock(
+                key="test_key", importance=0.5, created_at=MagicMock(), content="test content", tags=["test"]
+            )
+            se._keyword.search = MagicMock(return_value=Success([(mem, 1.0)]))
+            result = await se.search(SearchQuery(text="test", top_k=5, mode="hybrid"))
+            assert result.is_ok
 
-            # Use hybrid mode which goes through the ranker.
-            # vector_store must be None so QdrantSemanticSearch is not created (it would fail).
-            # The search engine then uses only keyword results + ranker.
-            with patch.object(ctx, "_vector_store", None):
-                se = ctx.search_engine
-                mem = MagicMock(
-                    key="test_key", importance=0.5, created_at=MagicMock(), content="test content", tags=["test"]
-                )
-                se._keyword.search = MagicMock(return_value=Success([(mem, 1.0)]))
-                result = await se.search(SearchQuery(text="test", top_k=5, mode="hybrid"))
-                assert result.is_ok
-
-            ctx.close()
+        ctx.close()
 
     @pytest.mark.asyncio
     async def test_search_engine_strength_lookup_none_strength(self, tmp_path):
@@ -560,25 +500,20 @@ class TestAppContextVectorStore:
 
         settings = Settings(data_root=str(tmp_path))
 
-        with patch("nous.migration.engine.MigrationEngine") as mock_migration_engine:
-            mock_engine = MagicMock()
-            mock_engine.run_all.return_value = Success(None)
-            mock_migration_engine.return_value = mock_engine
+        ctx = AppContext(settings, "test_persona")
 
-            ctx = AppContext(settings, "test_persona")
+        # Make get_strength return Success(None) → _strength_lookup falls to return 1.0
+        ctx.memory_repo.get_strength = MagicMock(return_value=Success(None))
 
-            # Make get_strength return Success(None) → _strength_lookup falls to return 1.0
-            ctx.memory_repo.get_strength = MagicMock(return_value=Success(None))
+        from nous.domain.search.engine import SearchQuery
 
-            from nous.domain.search.engine import SearchQuery
+        with patch.object(ctx, "_vector_store", None):
+            se = ctx.search_engine
+            mem = MagicMock(
+                key="test_key", importance=0.5, created_at=MagicMock(), content="test content", tags=["test"]
+            )
+            se._keyword.search = MagicMock(return_value=Success([(mem, 1.0)]))
+            result = await se.search(SearchQuery(text="test", top_k=5, mode="hybrid"))
+            assert result.is_ok
 
-            with patch.object(ctx, "_vector_store", None):
-                se = ctx.search_engine
-                mem = MagicMock(
-                    key="test_key", importance=0.5, created_at=MagicMock(), content="test content", tags=["test"]
-                )
-                se._keyword.search = MagicMock(return_value=Success([(mem, 1.0)]))
-                result = await se.search(SearchQuery(text="test", top_k=5, mode="hybrid"))
-                assert result.is_ok
-
-            ctx.close()
+        ctx.close()

@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
 import warnings
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, field_validator
+
+if TYPE_CHECKING:
+    import sqlite3
 
 from nous.config.runtime_config import RuntimeConfigManager
 from nous.domain.shared.time_utils import format_iso, get_now
@@ -244,75 +247,27 @@ class ChatConfigRepository:
 
     def get(self, persona: str) -> ChatConfig:
         """Load config for persona, returning defaults if not found."""
-        # Ensure newer columns exist (auto-migration on read, same as save())
-        for col, col_type, default in (
-            ("searxng_url", "TEXT", "'http://localhost:8080'"),
-            ("image_gen_enabled", "BOOLEAN", "0"),
-            ("image_gen_provider", "TEXT", "'openai'"),
-            ("image_gen_dalle_model", "TEXT", "'dall-e-3'"),
-            ("image_gen_stability_url", "TEXT", "''"),
-            ("enable_memory_tools", "BOOLEAN", "1"),
-            ("debug_mode", "BOOLEAN", "0"),
-            ("dynamic_temperature", "INTEGER", "1"),
-            ("emotion_temperature_scale", "REAL", "0.2"),
-            ("top_p", "REAL", "NULL"),
-            ("context_use_llm_summary", "INTEGER", "1"),
-            ("episode_consolidation_enabled", "INTEGER", "1"),
-            ("episode_search_enabled", "INTEGER", "1"),
-        ):
-            try:
-                self._db.execute(f"SELECT {col} FROM chat_settings LIMIT 0")  # nosec B608
-            except sqlite3.OperationalError:
-                default_sql = "NULL" if default == "NULL" else f"DEFAULT {default}"
-                self._db.execute(f"ALTER TABLE chat_settings ADD COLUMN {col} {col_type} {default_sql}")
-
-        try:
-            row = self._db.execute(
-                "SELECT persona, provider, model, api_key, base_url, system_prompt, "
-                "temperature, max_tokens, max_window_turns, max_tool_calls, updated_at, "
-                "auto_extract, extract_model, extract_max_tokens, "
-                "tool_result_max_chars, mcp_servers, enabled_skills, "
-                "reflection_enabled, reflection_threshold, reflection_min_interval_hours, "
-                "session_summarize, "
-                "retrieval_recency_weight, retrieval_importance_weight, retrieval_relevance_weight, "
-                "display_history_turns, housekeeping_threshold, sandbox_enabled, "
-                "mental_model_enabled, mental_model_min_samples, "
-                "max_stored_messages, context_max_tokens, context_compression_threshold, "
-                "context_compression_mode, context_keep_recent_turns, "
-                "context_compress_system_prompt, context_compress_history, "
-                "memory_preload_count, enable_parallel_tools, "
-                "image_gen_enabled, image_gen_provider, image_gen_dalle_model, image_gen_stability_url, "
-                "enable_memory_tools, debug_mode, "
-                "dynamic_temperature, emotion_temperature_scale, top_p, "
-                "context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled "
-                "FROM chat_settings WHERE persona = ?",
-                (persona,),
-            ).fetchone()
-        except Exception:
-            # Fallback for older DB schemas missing new columns
-            row = self._db.execute(
-                "SELECT persona, provider, model, api_key, base_url, system_prompt, "
-                "temperature, max_tokens, max_window_turns, max_tool_calls, updated_at, "
-                "auto_extract, extract_model, extract_max_tokens, "
-                "tool_result_max_chars, mcp_servers, enabled_skills, "
-                "reflection_enabled, reflection_threshold, reflection_min_interval_hours, "
-                "session_summarize, "
-                "retrieval_recency_weight, retrieval_importance_weight, retrieval_relevance_weight, "
-                "display_history_turns, housekeeping_threshold, sandbox_enabled, "
-                "mental_model_enabled, mental_model_min_samples, "
-                "max_stored_messages, context_max_tokens, context_compression_threshold, "
-                "context_compression_mode, context_keep_recent_turns, "
-                "context_compress_system_prompt, context_compress_history, "
-                "memory_preload_count, enable_parallel_tools, "
-                "enable_memory_tools, debug_mode, "
-                "dynamic_temperature, emotion_temperature_scale, top_p "
-                "FROM chat_settings WHERE persona = ?",
-                (persona,),
-            ).fetchone()
-            if row is not None:
-                # Insert image_gen_* defaults at correct positions (indices 38-41)
-                # and append episode_* defaults at the end (indices 47-49)
-                row = (*row[:38], 0, "openai", "dall-e-3", "", *row[38:], 1, 1, 1)
+        row = self._db.execute(
+            "SELECT persona, provider, model, api_key, base_url, system_prompt, "
+            "temperature, max_tokens, max_window_turns, max_tool_calls, updated_at, "
+            "auto_extract, extract_model, extract_max_tokens, "
+            "tool_result_max_chars, mcp_servers, enabled_skills, "
+            "reflection_enabled, reflection_threshold, reflection_min_interval_hours, "
+            "session_summarize, "
+            "retrieval_recency_weight, retrieval_importance_weight, retrieval_relevance_weight, "
+            "display_history_turns, housekeeping_threshold, sandbox_enabled, "
+            "mental_model_enabled, mental_model_min_samples, "
+            "max_stored_messages, context_max_tokens, context_compression_threshold, "
+            "context_compression_mode, context_keep_recent_turns, "
+            "context_compress_system_prompt, context_compress_history, "
+            "memory_preload_count, enable_parallel_tools, "
+            "image_gen_enabled, image_gen_provider, image_gen_dalle_model, image_gen_stability_url, "
+            "enable_memory_tools, debug_mode, "
+            "dynamic_temperature, emotion_temperature_scale, top_p, "
+            "context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled "
+            "FROM chat_settings WHERE persona = ?",
+            (persona,),
+        ).fetchone()
         if row is None:
             return ChatConfig(persona=persona)
         return ChatConfig(
@@ -372,26 +327,6 @@ class ChatConfigRepository:
 
     def save(self, config: ChatConfig) -> None:
         """Insert or replace config for persona."""
-        # Ensure newer columns exist (for test environments without migrations)
-        for col, col_type, default in (
-            ("image_gen_enabled", "BOOLEAN", "0"),
-            ("image_gen_provider", "TEXT", "'openai'"),
-            ("image_gen_dalle_model", "TEXT", "'dall-e-3'"),
-            ("image_gen_stability_url", "TEXT", "''"),
-            ("enable_memory_tools", "BOOLEAN", "1"),
-            ("debug_mode", "BOOLEAN", "0"),
-            ("dynamic_temperature", "INTEGER", "1"),
-            ("emotion_temperature_scale", "REAL", "0.2"),
-            ("top_p", "REAL", "NULL"),
-            ("context_use_llm_summary", "INTEGER", "1"),
-            ("episode_consolidation_enabled", "INTEGER", "1"),
-            ("episode_search_enabled", "INTEGER", "1"),
-        ):
-            try:
-                self._db.execute(f"SELECT {col} FROM chat_settings LIMIT 0")  # nosec B608 — col from hardcoded tuple, not user input
-            except sqlite3.OperationalError:
-                self._db.execute(f"ALTER TABLE chat_settings ADD COLUMN {col} {col_type} DEFAULT {default}")
-
         now = format_iso(get_now())
         self._db.execute(
             """

@@ -197,14 +197,9 @@ class TestAppContextRerankerInstantiation:
         )
 
         with (
-            patch("nous.migration.engine.MigrationEngine") as mock_migration_engine,
             patch("nous.infrastructure.embedding.reranker.RerankerModel") as mock_reranker_cls,
             patch.object(AppContext, "_init_vector_store", return_value=None),
         ):
-            mock_engine = MagicMock()
-            mock_engine.run_all.return_value = Success(None)
-            mock_migration_engine.return_value = mock_engine
-
             ctx = AppContext(settings, "test_persona")
 
             # RerankerModel should have been instantiated
@@ -225,14 +220,9 @@ class TestAppContextRerankerInstantiation:
         )
 
         with (
-            patch("nous.migration.engine.MigrationEngine") as mock_migration_engine,
             patch("nous.infrastructure.embedding.reranker.RerankerModel") as mock_reranker_cls,
             patch.object(AppContext, "_init_vector_store", return_value=None),
         ):
-            mock_engine = MagicMock()
-            mock_engine.run_all.return_value = Success(None)
-            mock_migration_engine.return_value = mock_engine
-
             ctx = AppContext(settings, "test_persona")
 
             mock_reranker_cls.assert_called_once_with(
@@ -252,15 +242,10 @@ class TestAppContextRerankerInstantiation:
         )
 
         with (
-            patch("nous.migration.engine.MigrationEngine") as mock_migration_engine,
             patch("nous.infrastructure.embedding.reranker.RerankerModel") as mock_reranker_cls,
             patch.object(AppContext, "_init_vector_store", return_value=None),
             patch("threading.Thread") as mock_thread,
         ):
-            mock_engine = MagicMock()
-            mock_engine.run_all.return_value = Success(None)
-            mock_migration_engine.return_value = mock_engine
-
             mock_instance = MagicMock()
             mock_reranker_cls.return_value = mock_instance
             mock_instance.enabled = True
@@ -283,15 +268,10 @@ class TestAppContextRerankerInstantiation:
         )
 
         with (
-            patch("nous.migration.engine.MigrationEngine") as mock_migration_engine,
             patch("nous.infrastructure.embedding.reranker.RerankerModel") as mock_reranker_cls,
             patch.object(AppContext, "_init_vector_store", return_value=None),
             patch("threading.Thread") as mock_thread,
         ):
-            mock_engine = MagicMock()
-            mock_engine.run_all.return_value = Success(None)
-            mock_migration_engine.return_value = mock_engine
-
             mock_instance = MagicMock()
             mock_reranker_cls.return_value = mock_instance
             mock_instance.enabled = False  # disabled

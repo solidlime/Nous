@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS memories (
     importance REAL DEFAULT 0.5,
     emotion TEXT DEFAULT 'neutral',
     emotion_intensity REAL DEFAULT 0.0,
-    emotions TEXT,
     physical_state TEXT,
     mental_state TEXT,
     environment TEXT,
@@ -88,7 +87,6 @@ CREATE TABLE IF NOT EXISTS emotion_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     emotion_type TEXT NOT NULL,
     intensity REAL DEFAULT 0.5,
-    emotions TEXT,
     timestamp TEXT NOT NULL,
     trigger_memory_key TEXT,
     context TEXT
@@ -108,28 +106,6 @@ CREATE TABLE IF NOT EXISTS persona_info (
     value TEXT,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (persona, key)
-);
-
-CREATE TABLE IF NOT EXISTS goals (
-    id TEXT PRIMARY KEY,
-    description TEXT NOT NULL,
-    status TEXT DEFAULT 'active',
-    priority INTEGER DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    completed_at TEXT,
-    metadata TEXT DEFAULT '{}'
-);
-
-CREATE TABLE IF NOT EXISTS promises (
-    id TEXT PRIMARY KEY,
-    description TEXT NOT NULL,
-    status TEXT DEFAULT 'active',
-    priority INTEGER DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    fulfilled_at TEXT,
-    metadata TEXT DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS entities (
@@ -200,6 +176,87 @@ CREATE TABLE IF NOT EXISTS body_state_history (
     context TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_body_state_history_persona ON body_state_history(persona_id, timestamp DESC);
+
+CREATE TABLE IF NOT EXISTS chat_settings (
+    persona     TEXT PRIMARY KEY,
+    provider    TEXT DEFAULT 'anthropic',
+    model       TEXT DEFAULT '',
+    api_key     TEXT DEFAULT '',
+    base_url    TEXT DEFAULT '',
+    system_prompt TEXT DEFAULT '',
+    temperature REAL DEFAULT 0.7,
+    max_tokens  INTEGER DEFAULT 2048,
+    max_window_turns INTEGER DEFAULT 3,
+    max_tool_calls INTEGER DEFAULT 5,
+    updated_at  TEXT,
+    auto_extract INTEGER DEFAULT 1,
+    extract_model TEXT DEFAULT '',
+    extract_max_tokens INTEGER DEFAULT 512,
+    tool_result_max_chars INTEGER DEFAULT 2000,
+    mcp_servers TEXT DEFAULT '[]',
+    enabled_skills TEXT DEFAULT '[]',
+    reflection_enabled INTEGER DEFAULT 1,
+    reflection_threshold REAL DEFAULT 1.0,
+    reflection_min_interval_hours REAL DEFAULT 1.0,
+    session_summarize INTEGER DEFAULT 1,
+    retrieval_recency_weight REAL DEFAULT 0.3,
+    retrieval_importance_weight REAL DEFAULT 0.3,
+    retrieval_relevance_weight REAL DEFAULT 0.4,
+    display_history_turns INTEGER DEFAULT 20,
+    housekeeping_threshold INTEGER DEFAULT 10,
+    sandbox_enabled INTEGER DEFAULT 1,
+    mental_model_enabled INTEGER DEFAULT 1,
+    mental_model_min_samples INTEGER DEFAULT 3,
+    max_stored_messages INTEGER DEFAULT 200,
+    context_max_tokens INTEGER,
+    context_compression_threshold REAL DEFAULT 0.8,
+    context_compression_mode TEXT DEFAULT 'auto',
+    context_keep_recent_turns INTEGER DEFAULT 2,
+    context_compress_system_prompt INTEGER DEFAULT 1,
+    context_compress_history INTEGER DEFAULT 1,
+    memory_preload_count INTEGER DEFAULT 3,
+    enable_parallel_tools INTEGER DEFAULT 1,
+    image_gen_enabled INTEGER DEFAULT 0,
+    image_gen_provider TEXT DEFAULT 'openai',
+    image_gen_dalle_model TEXT DEFAULT 'dall-e-3',
+    image_gen_stability_url TEXT DEFAULT '',
+    searxng_url TEXT DEFAULT '',
+    enable_memory_tools INTEGER DEFAULT 1,
+    debug_mode INTEGER DEFAULT 0,
+    dynamic_temperature INTEGER DEFAULT 1,
+    emotion_temperature_scale REAL DEFAULT 0.2,
+    top_p REAL,
+    context_use_llm_summary INTEGER DEFAULT 1,
+    episode_consolidation_enabled INTEGER DEFAULT 1,
+    episode_search_enabled INTEGER DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS session_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    persona TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    detail TEXT,
+    metadata_json TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_session_events_session ON session_events(session_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_session_events_persona ON session_events(persona, timestamp);
+CREATE INDEX IF NOT EXISTS idx_session_events_type ON session_events(event_type, timestamp);
+
+CREATE TABLE IF NOT EXISTS memory_links (
+    source_key TEXT NOT NULL,
+    target_key TEXT NOT NULL,
+    weight REAL NOT NULL DEFAULT 0.5,
+    link_type TEXT NOT NULL DEFAULT 'semantic',
+    co_activation_count INTEGER DEFAULT 0,
+    last_activated TEXT,
+    PRIMARY KEY (source_key, target_key, link_type)
+);
+CREATE INDEX IF NOT EXISTS idx_links_source ON memory_links(source_key);
+CREATE INDEX IF NOT EXISTS idx_links_target ON memory_links(target_key);
 """
 
 _INVENTORY_SCHEMA = """\
@@ -271,21 +328,10 @@ def get_global_skills_db(data_dir: str) -> sqlite3.Connection:
         conn.execute("PRAGMA foreign_keys=ON")
         conn.row_factory = sqlite3.Row
         conn.executescript(_SKILLS_SCHEMA)
-        # migrate existing DBs — add columns if missing
-        _migrate_skills_schema(conn)
         conn.commit()
         _global_skills_conn = conn
         logger.info("Global skills DB opened: %s", db_path)
     return _global_skills_conn
-
-
-def _migrate_skills_schema(conn: sqlite3.Connection) -> None:
-    """Add new columns to skills table for existing databases."""
-    from contextlib import suppress
-
-    for col in ("license", "compatibility", "metadata"):
-        with suppress(Exception):
-            conn.execute(f"ALTER TABLE skills ADD COLUMN {col} TEXT")
 
 
 class SQLiteConnection:

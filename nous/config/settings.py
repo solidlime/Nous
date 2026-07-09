@@ -254,7 +254,6 @@ class Settings(BaseSettings):
         """起動時に必要なディレクトリを全て作成する。"""
         dirs = [
             self.data_dir,
-            Path(self.data_root) / "sandbox",
             Path(self.data_root) / "logs",
             Path(self.data_root) / "backups",
             self.import_dir,
@@ -266,6 +265,10 @@ class Settings(BaseSettings):
             self.config_dir,
             self.skills_dir,
         ]
+        # sandbox ディレクトリは sandbox 機能が有効な場合のみ作成
+        if self.sandbox.enabled:
+            dirs.append(Path(self.data_root) / "sandbox")
+
         for d in dirs:
             Path(d).mkdir(parents=True, exist_ok=True)
 

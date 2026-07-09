@@ -269,21 +269,21 @@ class TestSearch:
         assert result.is_ok
         assert len(result.value) == 0
 
-    def test_search_engine_keyword_mode(self, seeded_svc, repo):
+    async def test_search_engine_keyword_mode(self, seeded_svc, repo):
         """SearchEngine in keyword mode returns correct results."""
         adapter = _KeywordAdapter(repo)
         engine = SearchEngine(keyword_search=adapter)
         query = SearchQuery(text="記憶", mode="keyword", top_k=5)
-        result = engine.search(query)
+        result = await engine.search(query)
         assert result.is_ok
         assert isinstance(result.value, list)
 
-    def test_search_engine_hybrid_falls_back_to_keyword(self, seeded_svc, repo):
+    async def test_search_engine_hybrid_falls_back_to_keyword(self, seeded_svc, repo):
         """Hybrid mode without Qdrant falls back gracefully to keyword."""
         adapter = _KeywordAdapter(repo)
         engine = SearchEngine(keyword_search=adapter, semantic_search=None)
         query = SearchQuery(text="食べ物", mode="hybrid", top_k=5)
-        result = engine.search(query)
+        result = await engine.search(query)
         assert result.is_ok
 
     def test_search_by_tags(self, seeded_svc, repo):

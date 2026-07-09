@@ -275,7 +275,13 @@ class TestChatConfigRepository:
                 image_gen_stability_url TEXT DEFAULT '',
                 dynamic_temperature INTEGER DEFAULT 1,
                 emotion_temperature_scale REAL DEFAULT 0.2,
-                top_p REAL
+                top_p REAL,
+                enable_memory_tools INTEGER DEFAULT 1,
+                debug_mode INTEGER DEFAULT 0,
+                searxng_url TEXT DEFAULT '',
+                context_use_llm_summary INTEGER DEFAULT 1,
+                episode_consolidation_enabled INTEGER DEFAULT 1,
+                episode_search_enabled INTEGER DEFAULT 1
             )
         """)
         db.execute("""

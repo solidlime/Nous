@@ -97,20 +97,6 @@ class AppContext:
             # Continue - migration will attempt repair, and if it also fails,
             # AppContext will still be created but functionality may be degraded
 
-        # Run pending schema migrations
-        from nous.migration.engine import MigrationEngine
-
-        migration_result = MigrationEngine(self.connection).run_all()
-        if not migration_result.is_ok:
-            logging.getLogger("nous").critical(
-                "MIGRATION FAILURE for persona '%s': %s. "
-                "The application will continue but some features may be broken. "
-                "Consider running 'nous migrate --persona %s' manually.",
-                persona,
-                migration_result.error,
-                persona,
-            )
-
         # Repositories
         self.memory_repo = SQLiteMemoryRepository(self.connection)
         self.persona_repo = SQLitePersonaRepository(self.connection)

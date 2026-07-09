@@ -702,7 +702,20 @@ class TestDogfooding:
                 context_compress_system_prompt INTEGER DEFAULT 1,
                 context_compress_history INTEGER DEFAULT 1,
                 memory_preload_count INTEGER DEFAULT 3,
-                enable_parallel_tools INTEGER DEFAULT 1
+                enable_parallel_tools INTEGER DEFAULT 1,
+                image_gen_enabled INTEGER DEFAULT 0,
+                image_gen_provider TEXT DEFAULT 'openai',
+                image_gen_dalle_model TEXT DEFAULT 'dall-e-3',
+                image_gen_stability_url TEXT DEFAULT '',
+                searxng_url TEXT DEFAULT '',
+                enable_memory_tools INTEGER DEFAULT 1,
+                debug_mode INTEGER DEFAULT 0,
+                dynamic_temperature INTEGER DEFAULT 1,
+                emotion_temperature_scale REAL DEFAULT 0.2,
+                top_p REAL,
+                context_use_llm_summary INTEGER DEFAULT 1,
+                episode_consolidation_enabled INTEGER DEFAULT 1,
+                episode_search_enabled INTEGER DEFAULT 1
             )
         """)
         db.commit()

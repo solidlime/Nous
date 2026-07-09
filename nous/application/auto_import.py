@@ -12,7 +12,6 @@ from nous.infrastructure.logging.structured import get_logger
 if TYPE_CHECKING:
     from nous.config.settings import Settings
 from nous.infrastructure.sqlite.connection import SQLiteConnection
-from nous.migration.engine import MigrationEngine
 from nous.migration.importers.legacy_importer import LegacyImporter
 
 logger = get_logger(__name__)
@@ -50,13 +49,6 @@ def run_auto_import(
         connection = SQLiteConnection(settings.data_dir, persona)
         try:
             connection.initialize_schema()
-            migration_result = MigrationEngine(connection).run_all()
-            if not migration_result.is_ok:
-                logger.warning(
-                    "Migration failure during auto-import for '%s': %s",
-                    persona,
-                    migration_result.error,
-                )
 
             importer = LegacyImporter(connection, persona)
             result = importer.import_from_zip(str(zip_path))
