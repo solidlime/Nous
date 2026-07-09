@@ -34,16 +34,6 @@ def _format_state_block(state: PersonaState) -> str:
     if state.emotion:
         lines.append(f"  Mind  : {state.emotion}:{state.emotion_intensity:.2f}")
 
-    # Physical / mental state (text descriptions)
-    if state.physical_state:
-        lines.append(f"  Physical: {state.physical_state}")
-    if state.mental_state:
-        lines.append(f"  Mental  : {state.mental_state}")
-
-    # Speech line
-    if state.speech_style:
-        lines.append(f"  Speech: {state.speech_style}")
-
     return "\n".join(lines)
 
 
@@ -125,6 +115,7 @@ def _format_lightweight_response(
     current_time: str = "",
     decay_note: str = "",
     body_state_history: list | None = None,
+    one_shot_context: dict[str, str] | None = None,
 ) -> str:
     """Lightweight context (~700-900 tokens): persona + conversation continuity + body state."""
     lines: list[str] = []
@@ -139,10 +130,6 @@ def _format_lightweight_response(
     if decay_note:
         lines.append(f"  Emotion: {decay_note}")
 
-    # Speech style reminder — critical for persona voice consistency
-    if state.speech_style:
-        lines.append(f"\n🗣️ REMEMBER — Your speaking style: {state.speech_style}")
-
     # State diff note if time has passed
     diff_note = _format_state_diff(time_since)
     if diff_note:
@@ -155,6 +142,12 @@ def _format_lightweight_response(
         time_comment = _build_time_comment(time_since, state.relationship_status)
         if time_comment:
             lines.append(time_comment)
+
+    # One-shot context: speech/physical/mental state from memories (consumed after read)
+    if one_shot_context:
+        lines.append("\n【前回セッションからの状態】")
+        for label, content in one_shot_context.items():
+            lines.append(f"  {label}: {content}")
 
     # Body state history — show how body has changed over time
     if body_state_history and len(body_state_history) >= 2:
@@ -193,12 +186,8 @@ def _format_lightweight_response(
         if name:
             lines.append(f"User you're talking to: {name}")
 
-    # Physical / mental state + action
+    # Environment / action
     state_parts = []
-    if state.physical_state:
-        state_parts.append(f"Body: {state.physical_state}")
-    if state.mental_state:
-        state_parts.append(f"Mind: {state.mental_state}")
     if state.environment:
         state_parts.append(f"Location: {state.environment}")
     if state_parts:

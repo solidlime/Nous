@@ -109,6 +109,26 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> str:
     current_time = get_now().strftime("%Y-%m-%d %H:%M")
     ctx.persona_service.record_conversation_time(persona)
 
+    # Read one-shot state memories (speech_style/physical_state/mental_state)
+    import datetime as _dt
+
+    one_shot_context: dict[str, str] = {}
+    for tag_name, label in [
+        ("speech_style", "🗣️ 口調"),
+        ("physical_state", "💪 身体状態"),
+        ("mental_state", "🧠 精神状態"),
+    ]:
+        mems_result = ctx.memory_service.get_by_tags([tag_name])
+        if mems_result.is_ok and mems_result.value:
+            latest = sorted(mems_result.value, key=lambda m: m.created_at or _dt.datetime.min, reverse=True)[0]
+            content = latest.content.replace(f"{tag_name}: ", "", 1)
+            one_shot_context[label] = content
+            # Mark consumed. Failure swallowed — data loss worse than double-display.
+            import contextlib as _ctxlib
+
+            with _ctxlib.suppress(Exception):
+                ctx.memory_repo.consume_memory(latest.key)
+
     result_text = _format_lightweight_response(
         state,
         top_memories,
@@ -123,6 +143,7 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> str:
         current_time,
         decay_note=decay_note,
         body_state_history=body_state_history or None,
+        one_shot_context=one_shot_context or None,
     )
     await ctx.event_bus.publish(
         "tool.called",

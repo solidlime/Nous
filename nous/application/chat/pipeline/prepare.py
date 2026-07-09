@@ -291,12 +291,6 @@ async def _build_context_section(
     if decay_note:
         t1.append(f"  Emotion: {decay_note}")
 
-    if getattr(state, "mental_state", None):
-        t1.append(f"精神状態: {state.mental_state}")
-
-    if getattr(state, "speech_style", None):
-        t1.append(f"話し方: {state.speech_style}")
-
     # === Tier 2: 身体・環境 ===
     # Body state — qualitative summary, flag only significantly elevated metrics
     high_metrics: list[str] = []
@@ -304,13 +298,7 @@ async def _build_context_section(
         val = getattr(state, key, None)
         if val is not None and val > 0.7:
             high_metrics.append(label)
-    physical_text = getattr(state, "physical_state", None)
-    if physical_text:
-        body_line = f"身体: {physical_text}"
-        if high_metrics:
-            body_line += f"（{'・'.join(high_metrics)}が強め）"
-        t2.append(body_line)
-    elif high_metrics:
+    if high_metrics:
         t2.append(f"身体: {'・'.join(high_metrics)}が強めです")
 
     if getattr(state, "environment", None):
