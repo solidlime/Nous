@@ -380,10 +380,26 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
             intensity = ctx_update.get("emotion_intensity")
             if emotion:
                 ctx.persona_service.update_emotion(persona, emotion, float(intensity or 0.5), context="llm_suggested")
+
+            # speech_style/physical_state/mental_state → memories (one-shot consumption)
+            for key, tags in [
+                ("speech_style", ["speech_style", "speech"]),
+                ("physical_state", ["physical_state", "body"]),
+                ("mental_state", ["mental_state", "mind"]),
+            ]:
+                val = ctx_update.get(key)
+                if val is not None and str(val).strip():
+                    ctx.memory_service.create_memory(
+                        content=f"{key}: {val}",
+                        tags=tags,
+                        importance=0.6,
+                    )
+                    ctx_update.pop(key, None)  # update_physical_state に渡さない
+
             state_fields = {
                 k: v
                 for k, v in ctx_update.items()
-                if k in {"mental_state", "physical_state", "environment", "fatigue", "warmth", "arousal"}
+                if k in {"environment", "fatigue", "warmth", "arousal"}
                 and v is not None
             }
             if state_fields:

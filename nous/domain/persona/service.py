@@ -70,20 +70,18 @@ class PersonaService:
     ) -> Result[None, DomainError]:
         """Update physical/mental/environmental state fields.
 
-        Accepts: physical_state, mental_state, environment, fatigue,
-        warmth, arousal, heart_rate, pain.
+        Accepts: environment, fatigue, warmth, arousal, heart_rate, pain.
+        (speech_style, physical_state, mental_state are persisted via
+        memory_service.create_memory instead.)
         Updates only non-None values.
         """
         allowed_keys = {
-            "physical_state",
-            "mental_state",
             "environment",
             "fatigue",
             "warmth",
             "arousal",
             "heart_rate",
             "pain",
-            "speech_style",
         }
         updated = False
         for key, value in states.items():
