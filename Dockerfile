@@ -99,8 +99,11 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
 ENTRYPOINT ["/usr/local/bin/setup_agent_browser.sh"]
 CMD ["python", "-m", "nous.main"]
 
-# Switch to non-root user
-USER nous
+# Note: Running as root to avoid permission issues with host-mounted data volumes.
+# The sandbox runs in isolated containers, so security impact is minimal.
+# If you need non-root, set user in docker-compose.yml to match the host UID:
+#   nous:
+#     user: "${UID:-1000}:${GID:-1000}"
 
 # Notes:
 # - Development tip: place environment overrides in a top-level `.env` (or use Compose `env_file:`)
