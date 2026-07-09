@@ -155,14 +155,13 @@ def register_chat_routes(mcp) -> None:
 
     @mcp.custom_route("/api/chat/{persona}/commitments", methods=["GET"])
     async def get_chat_commitments(request: Request) -> JSONResponse:
-        """アクティブなgoals・promises・最新リフレクション洞察を返す。"""
+        """アクティブなgoals・最新リフレクション洞察を返す。"""
         persona = _resolve_persona_from_request(request)
         ctx = _safe_get_context(persona)
         if not ctx:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
 
         goals: list[dict] = []
-        promises: list[dict] = []
         insights: list[str] = []
 
         try:
@@ -171,13 +170,6 @@ def register_chat_routes(mcp) -> None:
                 goals = [{"content": m.content, "key": m.key} for m in goal_result.value]
         except Exception as e:
             logger.warning("get_chat_commitments: goals failed: %s", e)
-
-        try:
-            promise_result = ctx.memory_service.get_by_tags(["promise", "active"])
-            if promise_result.is_ok and promise_result.value:
-                promises = [{"content": m.content, "key": m.key} for m in promise_result.value]
-        except Exception as e:
-            logger.warning("get_chat_commitments: promises failed: %s", e)
 
         try:
             reflection_result = ctx.memory_service.get_by_tags(["reflection"])
@@ -191,7 +183,7 @@ def register_chat_routes(mcp) -> None:
         except Exception as e:
             logger.warning("get_chat_commitments: insights failed: %s", e)
 
-        return JSONResponse({"goals": goals, "promises": promises, "insights": insights})
+        return JSONResponse({"goals": goals, "insights": insights})
 
     @mcp.custom_route("/api/chat/{persona}/sessions/{session_id}", methods=["GET"])
     async def get_chat_session(request: Request) -> JSONResponse:
@@ -299,7 +291,7 @@ def register_chat_routes(mcp) -> None:
 
     @mcp.custom_route("/api/chat/{persona}/housekeeping", methods=["POST"])
     async def run_housekeeping(request: Request) -> JSONResponse:
-        """コンテキスト整理: staleなgoals/promises/itemsをLLMで判定・削除する。"""
+        """コンテキスト整理: staleなgoals/itemsをLLMで判定・削除する。"""
         persona = _resolve_persona_from_request(request)
         ctx = _safe_get_context(persona)
         if not ctx:
@@ -312,6 +304,7 @@ def register_chat_routes(mcp) -> None:
         config = repo.get(persona)
         try:
             result = await run_context_housekeeping(ctx, config)
+            result.pop("cancelled_promises", None)
             return JSONResponse(result)
         except Exception as e:
             logger.warning("housekeeping failed: %s", e)

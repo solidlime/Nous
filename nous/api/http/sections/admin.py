@@ -56,8 +56,7 @@ def render_admin_js() -> str:
         '                    <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Blocks</span><span style="font-weight:600">${(dashData.blocks || []).length}</span></div>\n'
         '                    <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Unique Tags</span><span style="font-weight:600">${Object.keys(stats.tag_distribution || {}).length}</span></div>\n'
         '                    <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Emotions Tracked</span><span style="font-weight:600">${Object.keys(stats.emotion_distribution || {}).length}</span></div>\n'
-        '                    <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Goals</span><span style="font-weight:600">${(dashData.goals || []).length}</span></div>\n'
-        '                    <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Promises</span><span style="font-weight:600">${(dashData.promises || []).length}</span></div>\n'
+'                    <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Goals</span><span style="font-weight:600">${(dashData.goals || []).length}</span></div>\n'
         "                </div>\n"
         "            </div>\n"
         '            <div class="glass p-6">\n'

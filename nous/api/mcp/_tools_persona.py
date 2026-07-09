@@ -91,8 +91,6 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> str:
     # Lightweight: essentials for seamless persona + conversation restoration
     goals_result = ctx.memory_service.get_by_tags(["goal"])
     goals = goals_result.value if goals_result.is_ok else []
-    promises_result = ctx.memory_service.get_by_tags(["promise"])
-    promises = promises_result.value if promises_result.is_ok else []
     reflection_result = ctx.memory_service.get_by_tags(["reflection"])
     reflections = reflection_result.value if reflection_result.is_ok else []
     mm_result = ctx.memory_service.get_by_tags(["mental_model", "abstracted"])
@@ -115,7 +113,6 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> str:
         state,
         top_memories,
         goals,
-        promises,
         equipment,
         recent,
         time_since,
@@ -133,7 +130,7 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> str:
             "persona": persona,
             "tool_name": "get_context",
             "params_summary": f"persona={persona}",
-            "result_summary": f"Context formatted ({len(top_memories)} memories, {len(goals)} goals, {len(promises)} promises)",
+            "result_summary": f"Context formatted ({len(top_memories)} memories, {len(goals)} goals)",
             "success": True,
         },
     )
@@ -211,7 +208,6 @@ async def _tool_update_context(
         if nickname:
             pi["nickname"] = nickname
         goals_from_pi = pi.pop("goals", None)
-        promises_from_pi = pi.pop("promises", None)
 
         if goals_from_pi is not None:
             if isinstance(goals_from_pi, str):
@@ -234,30 +230,6 @@ async def _tool_update_context(
                             tags=["goal", "active"],
                             importance=0.8,
                             emotion="anticipation",
-                        )
-                        ctx.memory_service.save_memory(mem)
-
-        if promises_from_pi is not None:
-            if isinstance(promises_from_pi, str):
-                try:
-                    promises_from_pi = json.loads(promises_from_pi)
-                except Exception:
-                    promises_from_pi = [promises_from_pi] if promises_from_pi else []
-            for promise_text in promises_from_pi or []:
-                if promise_text:
-                    existing = ctx.memory_service.get_by_tags(["promise", "active"])
-                    existing_contents = [m.content for m in (existing.value or [])]
-                    if promise_text not in existing_contents:
-                        from nous.domain.memory.entities import Memory as _Memory
-                        from nous.domain.shared.time_utils import generate_memory_key, get_now
-
-                        mem = _Memory(
-                            key=generate_memory_key(),
-                            content=promise_text,
-                            created_at=get_now(),
-                            tags=["promise", "active"],
-                            importance=0.8,
-                            emotion="trust",
                         )
                         ctx.memory_service.save_memory(mem)
 

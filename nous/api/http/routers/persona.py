@@ -137,7 +137,7 @@ def register_persona_routes(mcp) -> None:
                 "max": round(max(strength_values), 3) if strength_values else None,
             }
 
-            # Helper: sort goals/promises by status priority (active first), then by recency
+            # Helper: sort goals by status priority (active first), then by recency
             _status_priority = {"active": 0, "fulfilled": 1, "achieved": 1, "cancelled": 2}
             _max_commitments = 30
 
@@ -161,27 +161,6 @@ def register_persona_routes(mcp) -> None:
                     "key": m.key,
                 }
                 for m in _goals_sorted[:_max_commitments]
-            ]
-            promises_result = ctx.memory_repo.get_by_tags(["promise"])
-            _promises_raw = promises_result.value if promises_result.is_ok else []
-            _promises_sorted = sorted(
-                _promises_raw,
-                key=lambda m: (
-                    _status_priority.get(
-                        next((t for t in (m.tags or []) if t in ("active", "fulfilled", "cancelled")), "active"),
-                        99,
-                    ),
-                    -(m.created_at.timestamp() if m.created_at else 0),
-                ),
-            )
-            promises = [
-                {
-                    "content": m.content,
-                    "status": next((t for t in (m.tags or []) if t in ("active", "fulfilled", "cancelled")), "active"),
-                    "created_at": m.created_at.isoformat() if m.created_at else None,
-                    "key": m.key,
-                }
-                for m in _promises_sorted[:_max_commitments]
             ]
 
             try:
@@ -224,7 +203,6 @@ def register_persona_routes(mcp) -> None:
                     "items": items,
                     "strengths": strengths_summary,
                     "goals": goals,
-                    "promises": promises,
                     "relationship_highlights": rel_highlights,
                 }
             )

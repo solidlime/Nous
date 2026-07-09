@@ -202,7 +202,7 @@ async function loadOverview() {
             blocksHtml = '<span style="color:var(--text-muted)">No core memory blocks</span>';
         }
 
-        // --- Goals & Promises ---
+        // --- Goals ---
         function getStatusIcon(status) {
             if (status === 'active') return '<i data-lucide="refresh-cw"></i>';
             if (status === 'achieved' || status === 'fulfilled') return '<i data-lucide="check-circle"></i>';
@@ -228,7 +228,6 @@ async function loadOverview() {
         }
 
         const effectiveGoals = data.goals || [];
-        const effectivePromises = data.promises || [];
 
         // --- Profile: user_info / persona_info / relationship ---
         const userInfo = ctx.user_info || {};
@@ -289,7 +288,7 @@ async function loadOverview() {
                 </div>
                 <div>
                     <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;font-weight:600">Persona Info</div>
-                    ${(() => { const _GOALS_KEYS = new Set(['goals','promises','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GOALS_KEYS.has(k)); return filtered.length ? filtered.map(([k,v]) => `<div style="display:flex;gap:8px;padding:4px 0;font-size:0.85rem"><span style="color:var(--text-muted);min-width:120px">${esc(k.replace(/_/g,' '))}</span><span style="color:var(--accent-purple)">${esc(String(v))}</span></div>`).join('') : '<span style="color:var(--text-muted)">No persona info</span>'; })()}
+                    ${(() => { const _GOALS_KEYS = new Set(['goals','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GOALS_KEYS.has(k)); return filtered.length ? filtered.map(([k,v]) => `<div style="display:flex;gap:8px;padding:4px 0;font-size:0.85rem"><span style="color:var(--text-muted);min-width:120px">${esc(k.replace(/_/g,' '))}</span><span style="color:var(--accent-purple)">${esc(String(v))}</span></div>`).join('') : '<span style="color:var(--text-muted)">No persona info</span>'; })()}
                 </div>
             </div>
         </div>
@@ -315,18 +314,12 @@ async function loadOverview() {
                 <div style="display:flex;flex-wrap:wrap;gap:6px">${topEmo.length ? topEmo.map(([e,c]) => '<span class="badge badge-pink">' + esc(e) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join('') : '<span style="color:var(--text-muted)">--</span>'}</div>
             </div>
         </div>
-        <!-- Goals & Promises -->
+        <!-- Goals -->
         <div class="glass glass-hoverable p-6 mb-6">
-            <div class="card-title"><i data-lucide="target"></i> Goals & Promises</div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <div style="font-size:0.8rem;font-weight:600;color:var(--accent-green);margin-bottom:8px">Goals <span style="opacity:0.6;font-weight:400">(${effectiveGoals.length}件)</span></div>
-                    <div style="max-height:240px;overflow-y:auto;padding-right:4px">${renderGoalItems(effectiveGoals, 'goals')}</div>
-                </div>
-                <div>
-                    <div style="font-size:0.8rem;font-weight:600;color:var(--accent-pink);margin-bottom:8px">Promises <span style="opacity:0.6;font-weight:400">(${effectivePromises.length}件)</span></div>
-                    <div style="max-height:240px;overflow-y:auto;padding-right:4px">${renderGoalItems(effectivePromises, 'promises')}</div>
-                </div>
+            <div class="card-title"><i data-lucide="target"></i> Goals</div>
+            <div>
+                <div style="font-size:0.8rem;font-weight:600;color:var(--accent-green);margin-bottom:8px">Goals <span style="opacity:0.6;font-weight:400">(${effectiveGoals.length}件)</span></div>
+                <div style="max-height:240px;overflow-y:auto;padding-right:4px">${renderGoalItems(effectiveGoals, 'goals')}</div>
             </div>
         </div>
         <!-- Emotion -->

@@ -81,13 +81,8 @@ async function loadChatCommitments() {
     const data = await api(
       "/api/chat/" + encodeURIComponent(S.persona) + "/commitments",
     );
-    if (Array.isArray(data.goals) || Array.isArray(data.promises)) {
-      updateMemoryPanel(
-        undefined,
-        undefined,
-        data.goals || [],
-        data.promises || [],
-      );
+    if (Array.isArray(data.goals)) {
+      updateMemoryPanel(undefined, undefined, data.goals);
     }
     if (data.insights && data.insights.length > 0) {
       updateReflectionPanel(data.insights);
@@ -709,7 +704,7 @@ function renderDebugPanel(anchorEl, data) {
 }
 
 /* ── Memory Panel helpers ── */
-function updateMemoryPanel(retrieved, saved, goals, promises) {
+function updateMemoryPanel(retrieved, saved, goals) {
   const escAttr = (s) =>
     String(s)
       .replace(/&/g, "&amp;")
@@ -842,37 +837,6 @@ function updateMemoryPanel(retrieved, saved, goals, promises) {
               "','" +
               escAttr((g.content || "").substring(0, 50)) +
               '\')">完了</button><button class="mem-action-btn del" onclick="event.stopPropagation();deleteMemCard(\'' +
-              escAttr(key) +
-              "')\">削除</button></div>" +
-              "</div>"
-            );
-          })
-          .join("");
-      }
-    }
-  }
-  if (promises !== undefined) {
-    const promisesList = document.getElementById("memory-promises-list");
-    if (promisesList) {
-      if (!promises || promises.length === 0) {
-        promisesList.innerHTML = '<div class="memory-empty">なし</div>';
-      } else {
-        promisesList.innerHTML = promises
-          .map((p) => {
-            const key = p.key || "";
-            return (
-              '<div class="memory-item-card" data-key="' +
-              escAttr(key) +
-              '" data-content="' +
-              escAttr(p.content || "") +
-              '" data-importance="' +
-              (p.importance || 0.8) +
-              '" data-tags="' +
-              escAttr((p.tags || []).join(",")) +
-              '" onclick="openMemEdit(this)">' +
-              '<i data-lucide="handshake"></i> ' +
-              esc((p.content || "").substring(0, 80)) +
-              '<div class="mem-actions"><button class="mem-action-btn del" onclick="event.stopPropagation();deleteMemCard(\'' +
               escAttr(key) +
               "')\">削除</button></div>" +
               "</div>"
@@ -1361,9 +1325,8 @@ async function runHousekeeping() {
       },
     );
     const g = (result.cancelled_goals || []).length;
-    const p = (result.cancelled_promises || []).length;
     const i = (result.removed_items || []).length;
-    const msg = `完了: goals ${g}件 / promises ${p}件 / items ${i}件 を整理`;
+    const msg = `完了: goals ${g}件 / items ${i}件 を整理`;
     if (statusEl)
       statusEl.innerHTML = `<span style="color:var(--accent-green)">${msg}</span>`;
     toast(msg, "success");
@@ -2191,7 +2154,7 @@ async function chatSend(retry) {
           }
           statusEl.textContent = "応答中...";
         } else if (evt.type === "memory_activity") {
-          updateMemoryPanel(evt.retrieved, evt.saved, undefined, undefined);
+          updateMemoryPanel(evt.retrieved, evt.saved, undefined);
           setTimeout(() => loadChatCommitments(), 300);
         } else if (evt.type === "inventory_update") {
           updateEquipmentPanel(evt.update);

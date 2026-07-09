@@ -115,7 +115,6 @@ def _format_lightweight_response(
     state: PersonaState,
     top_memories: list,
     goals: list,
-    promises: list,
     equipment: dict,
     recent: list,
     time_since: str = "",
@@ -228,17 +227,12 @@ def _format_lightweight_response(
 
     # Active commitments (compact)
     active_goals = [g for g in goals if "active" in (g.tags or [])]
-    active_promises = [p for p in promises if "active" in (p.tags or [])]
-    if active_goals or active_promises:
+    if active_goals:
         lines.append("\n⚠️ YOUR ACTIVE COMMITMENTS:")
         for g in active_goals:
             ts = relative_time_str(g.created_at) if getattr(g, "created_at", None) else ""
             ts_str = f" ({ts})" if ts else ""
             lines.append(f"  🎯 {g.content[:100]}{ts_str}")
-        for p in active_promises:
-            ts = relative_time_str(p.created_at) if getattr(p, "created_at", None) else ""
-            ts_str = f" ({ts})" if ts else ""
-            lines.append(f"  🤝 {p.content[:100]}{ts_str}")
 
     # Recent memories — conversation continuity across sessions
     if recent:
