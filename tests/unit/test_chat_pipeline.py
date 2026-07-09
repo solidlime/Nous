@@ -357,8 +357,6 @@ class TestBuildContextSectionTierContent:
         state.last_conversation_time = None
         state.emotion = "喜び"
         state.emotion_intensity = 0.8
-        state.mental_state = "集中"
-        state.speech_style = "元気"
         state.physical_state = None
         state.environment = None
         state.relationship_status = None
@@ -370,8 +368,6 @@ class TestBuildContextSectionTierContent:
 
         result = await _build_context_section(ctx, state)
         assert "喜び" in result
-        assert "集中" in result
-        assert "元気" in result
         assert "強い" in result  # intensity 0.8 > 0.6 → "強い"
 
     @pytest.mark.asyncio

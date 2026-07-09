@@ -268,7 +268,7 @@ class TestDashboardEndpoints:
     async def test_api_dashboard_contains_required_keys(self, client):
         resp = await client.get(f"/api/dashboard/{PERSONA}")
         data = resp.json()
-        for key in ("stats", "context", "recent", "blocks", "equipment", "items", "goals", "promises"):
+        for key in ("stats", "context", "recent", "blocks", "equipment", "items", "goals"):
             assert key in data, f"Missing key: {key}"
 
     async def test_api_dashboard_recent_populated_after_create(self, client):

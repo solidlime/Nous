@@ -256,7 +256,7 @@ async def test_dashboard_data_empty(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["persona"] == "testpersona"
-    for key in ("stats", "context", "recent", "blocks", "equipment", "strengths", "goals", "promises"):
+    for key in ("stats", "context", "recent", "blocks", "equipment", "strengths", "goals"):
         assert key in data, f"Missing key '{key}' in dashboard data"
     # Empty DB → no memories
     assert data["recent"] == []
@@ -283,7 +283,6 @@ async def test_dashboard_data_with_memories(seeded_client):
     assert data["strengths"]["avg"] > 0
     # goals and promises
     assert len(data["goals"]) >= 1
-    assert len(data["promises"]) >= 1
 
 
 @pytest.mark.asyncio

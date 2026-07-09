@@ -211,18 +211,18 @@ class TestUpdateEmotion:
 
 class TestUpdatePhysicalState:
     def test_updates_fields(self, service: PersonaService, repo: InMemoryPersonaRepository):
-        result = service.update_physical_state(PERSONA, physical_state="tired", mental_state="calm")
+        result = service.update_physical_state(PERSONA, fatigue="0.8", warmth="0.6")
         assert result.is_ok
-        assert repo._state[PERSONA]["physical_state"] == "tired"
-        assert repo._state[PERSONA]["mental_state"] == "calm"
+        assert repo._state[PERSONA]["fatigue"] == "0.8"
+        assert repo._state[PERSONA]["warmth"] == "0.6"
 
     def test_ignores_none_values(self, service: PersonaService, repo: InMemoryPersonaRepository):
-        service.update_physical_state(PERSONA, physical_state="ok")
-        result = service.update_physical_state(PERSONA, physical_state=None, mental_state="happy")
+        service.update_physical_state(PERSONA, fatigue="0.5")
+        result = service.update_physical_state(PERSONA, fatigue=None, warmth="0.6")
         assert result.is_ok
-        # physical_state should remain "ok"
-        assert repo._state[PERSONA]["physical_state"] == "ok"
-        assert repo._state[PERSONA]["mental_state"] == "happy"
+        # fatigue should remain "0.5" (None doesn't overwrite)
+        assert repo._state[PERSONA]["fatigue"] == "0.5"
+        assert repo._state[PERSONA]["warmth"] == "0.6"
 
     def test_ignores_unknown_keys(self, service: PersonaService, repo: InMemoryPersonaRepository):
         result = service.update_physical_state(PERSONA, unknown_key="value")

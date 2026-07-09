@@ -151,60 +151,33 @@ class TestActiveCommitmentsDisplay:
         )
 
     @staticmethod
-    def _fmt(goals: list, promises: list) -> str:
+    def _fmt(goals: list) -> str:
         return _format_lightweight_response(
             state=TestActiveCommitmentsDisplay._state(),
             top_memories=[],
             goals=goals,
-            promises=promises,
             equipment={},
             recent=[],
             time_since="",
         )
 
-    def test_promises_appear_in_output(self):
-        """active promise が ACTIVE COMMITMENTS に表示される。"""
-        output = self._fmt([], [self._make_promise("P1"), self._make_promise("P2")])
-        assert "P1" in output, f"'P1' not found in output:\n{output}"
-        assert "P2" in output, f"'P2' not found in output:\n{output}"
-        assert "ACTIVE COMMITMENTS" in output
-
     def test_goals_appear_in_output(self):
         """active goal が ACTIVE COMMITMENTS に表示される。"""
-        output = self._fmt([self._make_goal("Goal A"), self._make_goal("Goal B")], [])
+        output = self._fmt([self._make_goal("Goal A"), self._make_goal("Goal B")])
         assert "Goal A" in output
         assert "Goal B" in output
         assert "ACTIVE COMMITMENTS" in output
 
-    def test_both_promises_and_goals_appear(self):
-        """promises と goals が共存して表示される。"""
-        output = self._fmt([self._make_goal("G1")], [self._make_promise("P1")])
-        assert "P1" in output
-        assert "G1" in output
-        assert "ACTIVE COMMITMENTS" in output
-
-    def test_empty_goals_and_promises_show_no_commitments_section(self):
-        """goals/promises が空のとき ACTIVE COMMITMENTS セクションは現れない。"""
-        output = self._fmt([], [])
+    def test_empty_goals_show_no_commitments_section(self):
+        """goals が空のとき ACTIVE COMMITMENTS セクションは現れない。"""
+        output = self._fmt([])
         assert "ACTIVE COMMITMENTS" not in output
 
     def test_non_active_goals_not_shown(self):
         """achieved goal は軽量モードで表示されない（active のみ表示）。"""
-        output = self._fmt([self._make_goal("Done Goal", "achieved")], [])
+        output = self._fmt([self._make_goal("Done Goal", "achieved")])
         assert "ACTIVE COMMITMENTS" not in output
         assert "Done Goal" not in output
-
-    def test_non_active_promises_not_shown(self):
-        """fulfilled promise は軽量モードで表示されない（active のみ表示）。"""
-        output = self._fmt([], [self._make_promise("Old Promise", "fulfilled")])
-        assert "ACTIVE COMMITMENTS" not in output
-        assert "Old Promise" not in output
-
-    def test_json_string_promises_are_parsed_and_displayed(self):
-        """(互換テスト) Memory オブジェクトの active promise は正常に表示される。"""
-        output = self._fmt([], [self._make_promise("P1"), self._make_promise("P2")])
-        assert "P1" in output
-        assert "P2" in output
 
 
 # ===========================================================================
@@ -450,7 +423,6 @@ class TestEmotionTrendDisplay:
             state=self._state("sadness", 0.6),
             top_memories=[],
             goals=[],
-            promises=[],
             equipment={},
             recent=[],
             time_since="",
