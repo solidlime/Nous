@@ -144,7 +144,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="item_add",
-        description="アイテムをインベントリに追加。item_name必須。category/tags/descriptionで分類可。",
+        description="物理的なアイテムをインベントリに追加。item_name必須。感情・概念などの抽象物は不可。category/tags/descriptionで分類可。",
         input_schema={
             "type": "object",
             "properties": {
@@ -170,7 +170,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="item_equip",
-        description='アイテムを装備。equipment dict必須（例: {"top": "白いドレス"}）。',
+        description='物理的なアイテムを装備スロットにセット。equipment dict必須（例: {"top": "白いドレス"}）。抽象概念は不可。',
         input_schema={
             "type": "object",
             "properties": {

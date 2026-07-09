@@ -80,9 +80,14 @@ JSONのみ。コメント不要。不要なフィールドは省略可。
   - 取り消しなら: action="cancel" + memory_key
   - 既存と同じ内容は create しない（重複禁止）
 - goals・promises: 何もなければ空配列。
-- context_update: 私（{persona_name}）自身の感情・状態変化のみ。変化がなければ省略。
+- context_update: 私（{persona_name}）自身の感情・状態変化。変化がなければ省略。
+  - 感情: emotion + emotion_intensity（変化時のみ）
+  - 状態: mental_state, physical_state, fatigue, warmth, arousal
+  - ユーザー情報: user_name, user_nickname, user_preferred_address（ユーザーが自ら名乗ったり呼び方を変えた時のみ記録）
+  - 口調変化: speech_style（私の話し方・口調が大きく変わった時のみ記録）
 - inventory_update:
-  - 服や持ち物の具体的な言及があった場合のみ記述。
+  - 物理的な持ち物（服・装飾品・道具・武器など）の具体的な言及があった場合のみ記述。
+  - 感情・思想・人間関係などの抽象概念は絶対にアイテムとして保存しないこと。
   - 既存アイテムの状態変化（乱れ→整え等）はremove_items+add_itemsで入れ替えるか、update_itemsで更新。
   - equip: スロットへの装備指定（top/bottom/shoes/outer/accessories/head）。
   - 何も変化がなければ省略または空オブジェクト。
@@ -383,6 +388,14 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
             }
             if state_fields:
                 ctx.persona_service.update_physical_state(persona, **state_fields)
+
+            # user_info fields → update_user_info
+            user_info_map = {}
+            for key, val in ctx_update.items():
+                if key.startswith("user_") and val is not None:
+                    user_info_map[key.replace("user_", "")] = str(val)
+            if user_info_map:
+                ctx.persona_service.update_user_info(persona, user_info_map)
 
             # context_note → persona_info（session continuity）
             context_note = ctx_update.get("context_note")
