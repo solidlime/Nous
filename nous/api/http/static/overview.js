@@ -135,6 +135,12 @@ async function loadOverview() {
         const items = data.items || [];
         const str = data.strengths || {};
 
+        // --- State memories: prefer state_memories, fallback to context_state ---
+        const sm = data.state_memories || {};
+        const physicalContent = (sm.physical_state?.content) || ctx.physical_state;
+        const mentalContent = (sm.mental_state?.content) || ctx.mental_state;
+        const speechContent = (sm.speech_style?.content) || stats.speech_style;
+
         // --- Build tag/emotion distributions from stats ---
         const tagDist = stats.tag_distribution || {};
         const emoDist = stats.emotion_distribution || {};
@@ -358,10 +364,10 @@ async function loadOverview() {
                     return '<div style="font-size:0.9rem;color:var(--text-muted);margin-bottom:12px">--</div>';
                 })()}
                 <div style="display:flex;flex-direction:column;gap:6px">
-                    <div><span style="font-size:0.78rem;color:var(--text-muted)">Physical: </span><span style="font-size:0.85rem">${esc(ctx.physical_state || '--')}</span></div>
-                    <div><span style="font-size:0.78rem;color:var(--text-muted)">Mental: </span><span style="font-size:0.85rem">${esc(ctx.mental_state || '--')}</span></div>
+                    <div><span style="font-size:0.78rem;color:var(--text-muted)">Physical: </span><span style="font-size:0.85rem">${esc(physicalContent || '--')}</span></div>
+                    <div><span style="font-size:0.78rem;color:var(--text-muted)">Mental: </span><span style="font-size:0.85rem">${esc(mentalContent || '--')}</span></div>
                     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:0.78rem;color:var(--text-muted);min-width:78px"><i data-lucide="globe"></i> Env:</span>${stats.environment ? '<span class="badge badge-blue">' + esc(stats.environment) + '</span>' : '<span style="color:var(--text-muted);font-size:0.82rem">--</span>'}</div>
-                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:0.78rem;color:var(--text-muted);min-width:78px"><i data-lucide="message-circle"></i> Speech:</span>${stats.speech_style ? '<span class="badge badge-purple">' + esc(stats.speech_style) + '</span>' : '<span style="color:var(--text-muted);font-size:0.82rem">--</span>'}</div>
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:0.78rem;color:var(--text-muted);min-width:78px"><i data-lucide="message-circle"></i> Speech:</span>${speechContent ? '<span class="badge badge-purple">' + esc(speechContent) + '</span>' : '<span style="color:var(--text-muted);font-size:0.82rem">--</span>'}</div>
                 </div>
             </div>
         </div>

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -192,6 +193,24 @@ def register_persona_routes(mcp) -> None:
             except Exception:
                 pass
 
+            # State memories (speech/physical/mental) -- newest per tag for WebUI
+            state_memories: dict[str, dict] = {}
+            for tag in ["speech_style", "physical_state", "mental_state"]:
+                try:
+                    mems_result = ctx.memory_service.get_by_tags([tag], include_consumed=True)
+                    if mems_result.is_ok and mems_result.value:
+                        latest = max(mems_result.value, key=lambda m: m.created_at or datetime.min)
+                        prefix = f"{tag}: "
+                        content = latest.content
+                        if content.startswith(prefix):
+                            content = content[len(prefix):]
+                        state_memories[tag] = {
+                            "content": content,
+                            "created_at": latest.created_at.isoformat() if latest.created_at else None,
+                        }
+                except Exception:
+                    pass
+
             return JSONResponse(
                 {
                     "persona": persona,
@@ -204,6 +223,7 @@ def register_persona_routes(mcp) -> None:
                     "strengths": strengths_summary,
                     "goals": goals,
                     "relationship_highlights": rel_highlights,
+                    "state_memories": state_memories,
                 }
             )
         except Exception as exc:
