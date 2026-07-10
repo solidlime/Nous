@@ -648,6 +648,7 @@ class TestPromptBuildStepAuthorNote:
         ctx.settings.auto_capture.enabled = True
         ctx.settings.auto_capture.max_memories = 5
         ctx.persona = "test"
+        ctx.connection.get_memory_db.return_value.execute.return_value.fetchone.return_value = None
 
         fake_memory = MagicMock()
         fake_memory.key = "mem_key_001"
@@ -721,6 +722,7 @@ class TestPromptBuildStepAuthorNote:
         ctx.settings.auto_capture.enabled = True
         ctx.settings.auto_capture.max_memories = 5
         ctx.persona = "test"
+        ctx.connection.get_memory_db.return_value.execute.return_value.fetchone.return_value = None
 
         fake_memory = MagicMock()
         fake_memory.key = "mem_key_asst"

@@ -127,7 +127,7 @@ class ChatService:
                     full_response += event.content
 
             # Save assistant response BEFORE PostProcessStep
-            if full_response:
+            if full_response or turn_ctx.tool_calls_log:
                 session.add(
                     "assistant",
                     full_response,

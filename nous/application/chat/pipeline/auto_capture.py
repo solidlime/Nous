@@ -152,6 +152,19 @@ async def run_auto_capture(
             # Determine privacy based on role
             privacy = "internal" if role == "user" else "private"
 
+            # Check for duplicate before creating (avoid bypassing MCP-level dedup)
+            try:
+                db = ctx.connection.get_memory_db()
+                existing = db.execute(
+                    "SELECT key FROM memories WHERE persona = ? AND LOWER(content) = LOWER(?) AND deleted_at IS NULL LIMIT 1",
+                    (ctx.persona, text.strip()),
+                ).fetchone()
+                if existing:
+                    logger.debug("auto_capture: skipping duplicate content (key=%s)", existing[0])
+                    continue  # Skip this capture
+            except Exception:
+                pass  # Fall through to normal creation if check fails
+
             try:
                 result = ctx.memory_service.create_memory(
                     content=text,

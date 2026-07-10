@@ -61,6 +61,25 @@ async def _tool_memory_create(
                     ensure_ascii=False,
                 )
 
+    # ── Exact-match duplicate check via direct DB (guards against parallel inserts) ──
+    if not skip_duplicate_check and content and persona:
+        try:
+            db = ctx.connection.get_memory_db()
+            row = db.execute(
+                "SELECT key FROM memories WHERE persona = ? AND LOWER(content) = LOWER(?) AND deleted_at IS NULL LIMIT 1",
+                (persona, content.strip()),
+            ).fetchone()
+            if row:
+                return json.dumps({
+                    "ok": True,
+                    "status": "duplicate",
+                    "duplicate_of": row[0],
+                    "message": f"Identical content already exists (key: {row[0]}). Skipped.",
+                    "auto_emotion": False,
+                }, ensure_ascii=False)
+        except Exception:
+            pass  # Fall through to normal creation if check fails
+
     # Auto-snapshot current persona state
     emotion_snap, intensity_snap, body_snap, snapped_at = ctx.persona_service.get_state_snapshot(persona)
 

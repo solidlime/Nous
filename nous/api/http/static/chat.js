@@ -2135,6 +2135,16 @@ async function chatSend(retry) {
           document.getElementById("chat-messages").scrollTop =
             document.getElementById("chat-messages").scrollHeight;
         } else if (evt.type === "tool_call") {
+          // アシスタントバブルがまだない場合は作成（テキストなしの純粋ツールコールに対応）
+          if (!assistantDiv) {
+            const container = document.getElementById("chat-messages");
+            assistantDiv = document.createElement("div");
+            assistantDiv.className = "chat-msg assistant";
+            assistantBubble = document.createElement("div");
+            assistantBubble.className = "chat-bubble";
+            assistantDiv.appendChild(assistantBubble);
+            container.appendChild(assistantDiv);
+          }
           const sbEnabled = document.getElementById(
             "chat-sandbox-enabled",
           )?.checked;
@@ -2191,6 +2201,12 @@ async function chatSend(retry) {
                 openMediaViewer(img.src, "image"),
               );
             });
+          } else if (assistantDiv && !assistantText) {
+            // テキストがない場合、ツールコールがなければ空バブルを削除
+            if (!assistantDiv.querySelector('.chat-tool-call')) {
+              assistantDiv.remove();
+            }
+            // ツールコールのみの場合は要素が既にあるので何もしない
           }
           statusEl.textContent = "";
         }

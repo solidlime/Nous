@@ -116,6 +116,35 @@ class InferenceStep:
             for tc in pending_tool_calls:
                 yield ToolCallSSE(name=tc.tool_name, input=tc.tool_input, id=tc.tool_use_id)
 
+            # ── Deduplicate tool calls before execution ──
+
+            # 1) Skip tool calls already executed in this turn
+            executed_keys = {
+                (tc.get("name", ""), json.dumps(tc.get("input", {}), sort_keys=True, default=str))
+                for tc in (turn_ctx.tool_calls_log or [])
+            }
+            pending_tool_calls = [
+                tc for tc in pending_tool_calls
+                if (tc.tool_name, json.dumps(tc.tool_input, sort_keys=True, default=str)) not in executed_keys
+            ]
+
+            # 2) Deduplicate identical tool calls within the same pending batch
+            seen_calls: set[tuple[str, str]] = set()
+            deduped_calls: list[ToolCallEvent] = []
+            for tc in pending_tool_calls:
+                tc_name = tc.tool_name
+                tc_args = json.dumps(tc.tool_input, sort_keys=True, default=str)
+                key = (tc_name, tc_args)
+                if key not in seen_calls:
+                    seen_calls.add(key)
+                    deduped_calls.append(tc)
+            if len(deduped_calls) < len(pending_tool_calls):
+                logger.info("Deduplicated %d → %d tool calls", len(pending_tool_calls), len(deduped_calls))
+            pending_tool_calls = deduped_calls
+
+            if not pending_tool_calls:
+                break
+
             enable_parallel = getattr(config, "enable_parallel_tools", True)
 
             async def _exec_one(tc: ToolCallEvent):

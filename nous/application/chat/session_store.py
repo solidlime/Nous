@@ -149,6 +149,7 @@ class SessionWindow:
                     content=msg["content"],
                     timestamp=ts,
                     time_label=label,
+                    tool_calls=msg.get("tool_calls"),
                 )
             )
         return result
