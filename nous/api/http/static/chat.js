@@ -275,9 +275,6 @@ function applyChatConfig(cfg) {
       document.getElementById("threshold-display").textContent =
         this.value + "%";
     });
-  // Sandbox settings
-  setChecked("chat-sandbox-enabled", cfg.sandbox_enabled === true);
-  onSandboxEnabledChange();
   // Debug mode
   setChecked("chat-debug-mode", cfg.debug_mode === true);
   const statusEl = document.getElementById("chat-config-status");
@@ -434,7 +431,6 @@ async function saveChatConfig() {
     housekeeping_threshold: parseInt(
       document.getElementById("chat-housekeeping-threshold")?.value || "10",
     ),
-    sandbox_enabled: getChecked("chat-sandbox-enabled"),
     mental_model_enabled: getChecked("chat-mental-model-enabled"),
     mental_model_min_samples: parseInt(
       document.getElementById("chat-mental-model-min-samples")?.value || "3",
@@ -540,7 +536,6 @@ function renderMcpJson(servers) {
             return s.name !== srv.name;
           });
           renderMcpJson(CHAT.mcpServers);
-          renderMcpServerList(CHAT.mcpServers);
         };
         row.appendChild(delBtn);
       }
@@ -2143,14 +2138,7 @@ async function chatSend(retry) {
             assistantDiv.appendChild(assistantBubble);
             container.appendChild(assistantDiv);
           }
-          const sbEnabled = document.getElementById(
-            "chat-sandbox-enabled",
-          )?.checked;
-          if (FILE_OP_TOOLS.has(evt.name) && sbEnabled) {
-            handleFileToolCall(evt);
-          } else {
-            appendToolEvent("tool_call", evt);
-          }
+          appendToolEvent("tool_call", evt);
           statusEl.innerHTML =
             '<i data-lucide="wrench"></i> ' + esc(evt.name) + " を実行中...";
         } else if (evt.type === "tool_result") {
@@ -2642,11 +2630,7 @@ function scrollToBottom(container) {
 
 /* ── Markdown code block rendering with syntax highlighting ── */
 function renderCodeBlock(lang, code) {
-  const sandboxEnabled = document.getElementById(
-    "chat-sandbox-enabled",
-  )?.checked;
-  const runnable =
-    sandboxEnabled && lang && lang !== "text" && lang !== "output";
+  const runnable = false;
   const escaped = esc(code);
   // Try highlight.js
   let highlighted = escaped;
@@ -2846,14 +2830,15 @@ async function playTts(btn, text) {
       method: "POST",
       body: JSON.stringify({ text: plainText }),
     });
-    if (resp.ok && resp.audio_base64) {
+    const audioBase64 = resp.audio_base64;
+    if (audioBase64) {
       btn.classList.add("playing");
       btn.innerHTML = '<i data-lucide="volume-2"></i>';
       btn.disabled = false;
       if (typeof lucide !== "undefined") lucide.createIcons();
 
       const audioUrl =
-        "data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64;
+        "data:audio/" + (resp.format || "wav") + ";base64," + audioBase64;
       const audio = new Audio(audioUrl);
       audio.onended = function () {
         btn.classList.remove("playing");

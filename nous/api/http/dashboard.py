@@ -9,7 +9,7 @@ from .sections.activity import render_activity_js, render_activity_tab
 from .sections.admin import render_admin_js, render_admin_tab
 from .sections.analytics import render_analytics_js, render_analytics_tab
 from .sections.base import render_layout_shell, render_nav
-from .sections.chat import render_chat_js, render_chat_tab
+from .sections.chat import render_chat_tab
 from .sections.import_export import render_import_export_js, render_import_export_tab
 from .sections.knowledge_graph import render_graph_js, render_graph_tab
 from .sections.memories import render_memories_js, render_memories_tab
@@ -64,7 +64,6 @@ def render_dashboard(persona: str | None = None) -> str:
                 render_graph_js(),
                 render_import_export_js(),
                 render_persona_js(),
-                render_chat_js(),
                 render_activity_js(),
                 render_settings_js(),
                 render_admin_js(),

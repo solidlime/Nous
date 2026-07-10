@@ -89,6 +89,9 @@ def register_chat_routes(mcp) -> None:
             "dynamic_temperature",
             "emotion_temperature_scale",
             "top_p",
+            "context_use_llm_summary",
+            "episode_consolidation_enabled",
+            "episode_search_enabled",
         ):
             if field_name in body:
                 update_data[field_name] = body[field_name]

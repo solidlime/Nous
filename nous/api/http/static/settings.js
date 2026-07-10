@@ -2,8 +2,6 @@
    SETTINGS DASHBOARD — Nous WebUI
    ═══════════════════════════════════════════════════════════════════ */
 
-const DEPENDS_RULES = {};
-
 const BUILTIN_PROFILES = {
     'Development': {
         server: { host: '0.0.0.0', port: 26262 },
@@ -619,7 +617,6 @@ function renderSettings(el, settings, status) {
         });
     }
 
-    applyDependsRules();
     renderSettingsProfiles();
     animateCards(el);
 }
@@ -753,38 +750,6 @@ async function resetCategory(cat) {
     } catch (e) {
         toast('<i data-lucide="x-circle"></i> Reset failed: ' + e.message, 'error');
     }
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   DEPENDENCY RULES
-   ═══════════════════════════════════════════════════════════════════ */
-
-function applyDependsRules() {
-    Object.entries(DEPENDS_RULES).forEach(function(entry) {
-        var targetKey = entry[0], rule = entry[1];
-        var parts = rule.field.split('.');
-        var depCat = parts[0];
-        var depKey = parts[1];
-        var settings = S.settingsData;
-        if (!settings || !settings[depCat] || !settings[depCat][depKey]) return;
-        var depValue = settings[depCat][depKey].value;
-        var isEnabled = depValue === rule.value || depValue === String(rule.value);
-        var row = document.querySelector('[data-setting-key="' + targetKey + '"]');
-        if (row) {
-            row.style.opacity = isEnabled ? '1' : '0.4';
-            row.style.pointerEvents = isEnabled ? 'auto' : 'none';
-            var input = row.querySelector('input, select');
-            if (!isEnabled) {
-                if (input) input.disabled = true;
-            } else {
-                /* Only re-enable if not a locked (hot_reload=false) field */
-                var meta = settings[targetKey.split('.')[0]] && settings[targetKey.split('.')[0]][targetKey.split('.')[1]];
-                if (!meta || meta.hot_reload !== false) {
-                    if (input) input.disabled = false;
-                }
-            }
-        }
-    });
 }
 
 /* ═══════════════════════════════════════════════════════════════════
