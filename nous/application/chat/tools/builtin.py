@@ -112,57 +112,6 @@ async def _handle_context_update(ctx: AppContext, config: ChatConfig, tool_input
     return {"status": "ok"}
 
 
-async def _handle_execute_code(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
-    if not getattr(config, "sandbox_enabled", False):
-        return {"status": "error", "message": "Sandbox is disabled. Enable it in chat settings."}
-    from nous.application.sandbox.service import get_sandbox_session
-
-    code = tool_input.get("code", "")
-    language = tool_input.get("language", "python")
-    libraries = tool_input.get("libraries", [])
-    session_id = tool_input.get("session_id")
-
-    if session_id:
-        # Use persona-scoped session key to prevent cross-persona leaks
-        sandbox_key = f"{ctx.persona}_{session_id}"
-        sandbox = await get_sandbox_session(sandbox_key)
-    else:
-        sandbox = await get_sandbox_session(ctx.persona)
-
-    result = await sandbox.execute(code, language, libraries=libraries)
-    # Include session_id in response for LLM to reference next time
-    response = {
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-        "exit_code": result.exit_code,
-        "artifacts": result.artifacts,
-    }
-    if session_id:
-        response["session_id"] = session_id
-    return response
-
-
-async def _handle_sandbox_reset(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
-    if not getattr(config, "sandbox_enabled", False):
-        return {"status": "error", "message": "Sandbox is disabled."}
-    from nous.application.sandbox.service import get_sandbox_session
-
-    level = tool_input.get("level", "files")
-    session = await get_sandbox_session(ctx.persona)
-    result = await session.reset(level=level)
-    return {"status": "ok", "message": result}
-
-
-async def _handle_sandbox_context(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
-    if not getattr(config, "sandbox_enabled", False):
-        return {"status": "error", "message": "Sandbox is disabled."}
-    from nous.application.sandbox.service import get_sandbox_session
-
-    session = await get_sandbox_session(ctx.persona)
-    result = await session.get_context()
-    return {"status": "ok", **result}
-
-
 async def _handle_search(
     ctx: AppContext, config: ChatConfig, tool_input: dict
 ) -> dict:  # pragma: no cover - external HTTP
@@ -216,9 +165,6 @@ async def _handle_search(
 
 async def _handle_mcp_dispatch(tool_name: str, ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
     """Call shared MCP tool implementation via TOOL_DISPATCH."""
-    if tool_name.startswith("sandbox_") and not getattr(config, "sandbox_enabled", False):
-        return {"status": "error", "message": "Sandbox is disabled. Enable it in chat settings."}
-
     func = TOOL_DISPATCH.get(tool_name)
     if func is None:
         return {"status": "error", "message": f"Unknown tool: {tool_name}"}
@@ -397,34 +343,6 @@ async def _handle_read_pdf(ctx: AppContext, config: ChatConfig, tool_input: dict
 
     filename = Path(path).name
 
-    # ── Sandbox path: read via sandbox session ──
-    if _is_sandbox_path(path):
-        try:
-            from nous.application.sandbox.service import get_sandbox_session
-
-            session = await get_sandbox_session(ctx.persona)
-            pdf_bytes = await session.read_file(path)
-        except FileNotFoundError:
-            return {"status": "error", "message": f"File not found: {path}"}
-        except Exception as e:
-            return {"status": "error", "message": f"Failed to read from sandbox: {e}"}
-
-        if len(pdf_bytes) > 50 * 1024 * 1024:
-            return {"status": "error", "message": "PDF file too large (max: 50MB)"}
-
-        try:
-            result = await asyncio.to_thread(_sync_process_pdf, pdf_bytes, pages=pages, mode=mode, max_chars=max_chars)
-            result["filename"] = filename
-            return result
-        except ImportError as e:
-            missing = str(e).split("'")[1] if "'" in str(e) else str(e)
-            return {
-                "status": "error",
-                "message": f"Missing PDF library: {missing}. Run: pip install PyMuPDF pdfplumber",
-            }
-        except Exception as e:
-            return {"status": "error", "message": f"PDF parse failed: {e}"}
-
     # ── Local filesystem path ──
     pdf_path = Path(path)
     if not pdf_path.exists():
@@ -447,11 +365,6 @@ async def _handle_read_pdf(ctx: AppContext, config: ChatConfig, tool_input: dict
         }
     except Exception as e:
         return {"status": "error", "message": f"PDF parse failed: {e}"}
-
-
-def _is_sandbox_path(path: str) -> bool:
-    """Check if a path is a sandbox container path (not directly accessible)."""
-    return path.startswith("/home/sbox_") or path.startswith("/sandbox")
 
 
 def _parse_page_range(page_spec: str, num_pages: int) -> list[int]:
@@ -727,9 +640,6 @@ async def _handle_list_skills(ctx: AppContext, config: ChatConfig, tool_input: d
 # ── Handler dispatch table (replaces if/elif chain) ──
 
 _BUILTIN_DISPATCH: dict[str, Any] = {
-    "sandbox_execute": _handle_execute_code,
-    "sandbox_reset": _handle_sandbox_reset,
-    "sandbox_context": _handle_sandbox_context,
     "list_skills": _handle_list_skills,
     "search": _handle_search,
     "image_generate": _handle_image_generate,
@@ -740,7 +650,6 @@ _MCP_SHARED_TOOLS = frozenset(
     {
         "goal_manage",
         "invoke_skill",
-        "sandbox_files",
         "update_context",
         "memory_create",
         "memory_search",

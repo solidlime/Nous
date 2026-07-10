@@ -76,7 +76,6 @@ class ChatConfig(BaseModel):
     display_history_turns: int = 20
     # Housekeeping auto-trigger threshold (total active goals+promises)
     housekeeping_threshold: int = 10
-    sandbox_enabled: bool = True
     debug_mode: bool = False
     # === Context compression (v2.1) ===
     max_window_turns: int = 100  # backward-compat; prefer max_stored_messages
@@ -263,7 +262,7 @@ class ChatConfigRepository:
             "reflection_enabled, reflection_threshold, reflection_min_interval_hours, "
             "session_summarize, "
             "retrieval_recency_weight, retrieval_importance_weight, retrieval_relevance_weight, "
-            "display_history_turns, housekeeping_threshold, sandbox_enabled, "
+            "display_history_turns, housekeeping_threshold, "
             "mental_model_enabled, mental_model_min_samples, "
             "max_stored_messages, context_max_tokens, context_compression_threshold, "
             "context_compression_mode, context_keep_recent_turns, "
@@ -307,34 +306,33 @@ class ChatConfigRepository:
             retrieval_relevance_weight=float(row[23]) if row[23] is not None else 0.4,
             display_history_turns=int(row[24]) if row[24] is not None else 20,
             housekeeping_threshold=int(row[25]) if row[25] is not None else 10,
-            sandbox_enabled=bool(row[26]) if row[26] is not None else False,
-            mental_model_enabled=bool(row[27]) if len(row) > 27 and row[27] is not None else True,
-            mental_model_min_samples=int(row[28]) if len(row) > 28 and row[28] is not None else 3,
-            max_stored_messages=int(row[29])
-            if len(row) > 29 and row[29] is not None
+            mental_model_enabled=bool(row[26]) if len(row) > 26 and row[26] is not None else True,
+            mental_model_min_samples=int(row[27]) if len(row) > 27 and row[27] is not None else 3,
+            max_stored_messages=int(row[28])
+            if len(row) > 28 and row[28] is not None
             else (max(2, int(row[8]) * 2) if row[8] is not None else 200),
-            context_max_tokens=int(row[30]) if len(row) > 30 and row[30] is not None else None,
-            context_compression_threshold=float(row[31]) if len(row) > 31 and row[31] is not None else 0.8,
-            context_compression_mode=row[32] if len(row) > 32 and row[32] else "auto",
-            context_keep_recent_turns=int(row[33]) if len(row) > 33 and row[33] is not None else 2,
-            context_compress_system_prompt=bool(row[34]) if len(row) > 34 and row[34] is not None else True,
-            context_compress_history=bool(row[35]) if len(row) > 35 and row[35] is not None else True,
-            memory_preload_count=int(row[36]) if len(row) > 36 and row[36] is not None else 3,
-            enable_parallel_tools=bool(row[37]) if len(row) > 37 and row[37] is not None else True,
-            image_gen_enabled=bool(row[38]) if len(row) > 38 and row[38] is not None else False,
-            image_gen_provider=row[39] if len(row) > 39 and row[39] else "openai",
-            image_gen_dalle_model=row[40] if len(row) > 40 and row[40] else "dall-e-3",
-            image_gen_stability_url=row[41] if len(row) > 41 and row[41] else "",
-            enable_memory_tools=bool(row[42]) if len(row) > 42 and row[42] is not None else True,
-            debug_mode=bool(row[43]) if len(row) > 43 and row[43] is not None else False,
-            dynamic_temperature=bool(row[44]) if len(row) > 44 and row[44] is not None else True,
-            emotion_temperature_scale=float(row[45]) if len(row) > 45 and row[45] is not None else 0.2,
-            top_p=float(row[46]) if len(row) > 46 and row[46] is not None else None,
-            context_use_llm_summary=bool(row[47]) if len(row) > 47 and row[47] is not None else True,
-            episode_consolidation_enabled=bool(row[48]) if len(row) > 48 and row[48] is not None else True,
-            episode_search_enabled=bool(row[49]) if len(row) > 49 and row[49] is not None else True,
-            retrieval_rrf_k=float(row[50]) if len(row) > 50 and row[50] is not None else 5.0,
-            dynamic_tool_selection=bool(row[51]) if len(row) > 51 and row[51] is not None else True,
+            context_max_tokens=int(row[29]) if len(row) > 29 and row[29] is not None else None,
+            context_compression_threshold=float(row[30]) if len(row) > 30 and row[30] is not None else 0.8,
+            context_compression_mode=row[31] if len(row) > 31 and row[31] else "auto",
+            context_keep_recent_turns=int(row[32]) if len(row) > 32 and row[32] is not None else 2,
+            context_compress_system_prompt=bool(row[33]) if len(row) > 33 and row[33] is not None else True,
+            context_compress_history=bool(row[34]) if len(row) > 34 and row[34] is not None else True,
+            memory_preload_count=int(row[35]) if len(row) > 35 and row[35] is not None else 3,
+            enable_parallel_tools=bool(row[36]) if len(row) > 36 and row[36] is not None else True,
+            image_gen_enabled=bool(row[37]) if len(row) > 37 and row[37] is not None else False,
+            image_gen_provider=row[38] if len(row) > 38 and row[38] else "openai",
+            image_gen_dalle_model=row[39] if len(row) > 39 and row[39] else "dall-e-3",
+            image_gen_stability_url=row[40] if len(row) > 40 and row[40] else "",
+            enable_memory_tools=bool(row[41]) if len(row) > 41 and row[41] is not None else True,
+            debug_mode=bool(row[42]) if len(row) > 42 and row[42] is not None else False,
+            dynamic_temperature=bool(row[43]) if len(row) > 43 and row[43] is not None else True,
+            emotion_temperature_scale=float(row[44]) if len(row) > 44 and row[44] is not None else 0.2,
+            top_p=float(row[45]) if len(row) > 45 and row[45] is not None else None,
+            context_use_llm_summary=bool(row[46]) if len(row) > 46 and row[46] is not None else True,
+            episode_consolidation_enabled=bool(row[47]) if len(row) > 47 and row[47] is not None else True,
+            episode_search_enabled=bool(row[48]) if len(row) > 48 and row[48] is not None else True,
+            retrieval_rrf_k=float(row[49]) if len(row) > 49 and row[49] is not None else 5.0,
+            dynamic_tool_selection=bool(row[50]) if len(row) > 50 and row[50] is not None else True,
         )
 
     def save(self, config: ChatConfig) -> None:
@@ -350,7 +348,7 @@ class ChatConfigRepository:
                  reflection_enabled, reflection_threshold, reflection_min_interval_hours,
                  session_summarize,
                  retrieval_recency_weight, retrieval_importance_weight, retrieval_relevance_weight,
-                 display_history_turns, housekeeping_threshold, sandbox_enabled,
+                 display_history_turns, housekeeping_threshold,
                  mental_model_enabled, mental_model_min_samples,
                  max_stored_messages, context_max_tokens, context_compression_threshold,
                  context_compression_mode, context_keep_recent_turns,
@@ -363,7 +361,7 @@ class ChatConfigRepository:
                      retrieval_rrf_k,
                      dynamic_tool_selection,
                      updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
@@ -389,7 +387,6 @@ class ChatConfigRepository:
                 retrieval_relevance_weight=excluded.retrieval_relevance_weight,
                 display_history_turns=excluded.display_history_turns,
                 housekeeping_threshold=excluded.housekeeping_threshold,
-                sandbox_enabled=excluded.sandbox_enabled,
                 mental_model_enabled=excluded.mental_model_enabled,
                 mental_model_min_samples=excluded.mental_model_min_samples,
                 max_stored_messages=excluded.max_stored_messages,
@@ -443,7 +440,6 @@ class ChatConfigRepository:
                 config.retrieval_relevance_weight,
                 config.display_history_turns,
                 config.housekeeping_threshold,
-                int(config.sandbox_enabled),
                 int(config.mental_model_enabled),
                 config.mental_model_min_samples,
                 config.max_stored_messages,

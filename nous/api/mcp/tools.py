@@ -11,8 +11,6 @@ from pydantic import Field
 
 from nous.api.mcp.middleware import PersonaRequiredError, get_current_persona
 from nous.application.use_cases import AppContextRegistry
-from nous.config.settings import get_settings
-
 logger = logging.getLogger(__name__)
 
 
@@ -50,12 +48,6 @@ from nous.api.mcp._tools_memory import (  # noqa: E402, F401
 )
 from nous.api.mcp._tools_persona import _tool_get_context, _tool_update_context  # noqa: E402, F401
 from nous.api.mcp._tools_portrait import _tool_persona_portrait  # noqa: E402, F401
-from nous.api.mcp._tools_sandbox import (  # noqa: E402, F401
-    _tool_sandbox_context,
-    _tool_sandbox_execute,
-    _tool_sandbox_files,
-    _tool_sandbox_reset,
-)
 from nous.api.mcp._tools_skill import _tool_invoke_skill  # noqa: E402, F401
 
 # =============================================================================
@@ -78,10 +70,6 @@ TOOL_DISPATCH: dict[str, Any] = {
     "item_update": _tool_item_update,
     "item_search": _tool_item_search,
     "item_history": _tool_item_history,
-    "sandbox_execute": _tool_sandbox_execute,
-    "sandbox_files": _tool_sandbox_files,
-    "sandbox_reset": _tool_sandbox_reset,
-    "sandbox_context": _tool_sandbox_context,
     "goal_manage": _tool_goal_manage,
     "invoke_skill": _tool_invoke_skill,
     "persona_portrait": _tool_persona_portrait,
@@ -368,54 +356,6 @@ def register_tools(mcp: FastMCP) -> None:
         """アイテム操作履歴を取得。daysで期間指定（デフォルト7日）。"""
         p = _resolve_persona()
         return await _tool_item_history(AppContextRegistry.get(p), p, days=days)
-
-    # sandbox_execute — only registered when sandbox is enabled
-    if get_settings().sandbox.enabled:
-
-        @_tool("sandbox_execute")
-        async def sandbox_execute(
-            code: str, language: str = "python", libraries: list[str] | None = None, session_id: str | None = None
-        ) -> str:
-            """Execute code in Docker sandbox. State persists per session.
-            language: "python", "js", "bash", "go", "rust".
-            libraries: pip packages to install before execution.
-            Pass session_id to scope sandbox per conversation session.
-            Returns stdout, stderr, exit_code, artifacts (base64 images)."""
-            p = _resolve_persona()
-            return await _tool_sandbox_execute(
-                AppContextRegistry.get(p),
-                p,
-                code=code,
-                language=language,
-                libraries=libraries,
-                session_id=session_id,
-            )
-
-        # sandbox_files
-        @_tool("sandbox_files")
-        async def sandbox_files(operation: str, path: str = "", content: str | None = None) -> str:
-            """Sandbox file operations. operation: list/read/write/append/delete.
-            Files are stored in the persona's home directory (bind-mounted per-persona).
-            Use /home/sbox_{persona}/ paths — direct persona home paths.
-            read auto-detects images (PNG/JPEG/GIF/WebP) returning base64 with PIL resize support."""
-            p = _resolve_persona()
-            r = await _tool_sandbox_files(AppContextRegistry.get(p), p, operation=operation, path=path, content=content)
-            return json.dumps(r, ensure_ascii=False)
-
-        # sandbox_reset
-        @_tool("sandbox_reset")
-        async def sandbox_reset(level: str = "files") -> str:
-            """Reset sandbox environment. level: files (default), packages, full."""
-            p = _resolve_persona()
-            return await _tool_sandbox_reset(AppContextRegistry.get(p), p, level=level)
-
-        # sandbox_context
-        @_tool("sandbox_context")
-        async def sandbox_context() -> str:
-            """Get sandbox environment context (languages, installed packages)."""
-            p = _resolve_persona()
-            r = await _tool_sandbox_context(AppContextRegistry.get(p), p)
-            return json.dumps(r, ensure_ascii=False)
 
     # goal_manage
     @_tool("goal_manage")

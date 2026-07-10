@@ -56,22 +56,6 @@ class MemoRAGConfig(BaseModel):
     """Minimum hours between automatic snapshot rebuilds."""
 
 
-class SandboxConfig(BaseModel):
-    """Sandbox code execution configuration."""
-
-    enabled: bool = True
-    provider: str = "docker"  # "docker" | "none"
-    image: str = "nous-sandbox:latest"  # custom sandbox image
-    docker_host: str = ""  # empty = auto-detect socket, "tcp://host:2375" = remote Docker
-    docker_sock: str = ""  # override socket path (empty = auto-detect common paths)
-    timeout: int = 30
-    session_idle_timeout: int = 1800
-    allowed_languages: list[str] = ["python", "javascript", "bash", "go", "rust"]
-    max_sessions: int = 10
-    workspace_dir: str = "/sandbox"
-    host_data_root: str = ""  # HOST-absolute path to data dir (needed for sibling-container volume mounts)
-
-
 class ForgettingConfig(BaseModel):
     """FSRS v6 forgetting curve configuration."""
 
@@ -180,7 +164,6 @@ class Settings(BaseSettings):
     qdrant: QdrantConfig = QdrantConfig()
     forgetting: ForgettingConfig = ForgettingConfig()
     memorag: MemoRAGConfig = MemoRAGConfig()
-    sandbox: SandboxConfig = SandboxConfig()
     memory_enrichment: MemoryEnrichmentConfig = MemoryEnrichmentConfig()
     auto_capture: AutoCaptureConfig = AutoCaptureConfig()
     portrait_gen: PortraitGenerationConfig = Field(default_factory=PortraitGenerationConfig)
@@ -262,10 +245,6 @@ class Settings(BaseSettings):
             self.config_dir,
             self.skills_dir,
         ]
-        # sandbox ディレクトリは sandbox 機能が有効な場合のみ作成
-        if self.sandbox.enabled:
-            dirs.append(Path(self.data_root) / "sandbox")
-
         for d in dirs:
             Path(d).mkdir(parents=True, exist_ok=True)
 

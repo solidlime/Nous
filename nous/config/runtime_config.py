@@ -57,21 +57,6 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "base_url": {"hot_reload": True, "description": "LLM API base URL"},
         "min_chars": {"hot_reload": True, "description": "Min content length to trigger enrichment"},
     },
-    "sandbox": {
-        "enabled": {"hot_reload": True, "description": "sandbox: enable code execution sandbox"},
-        "provider": {"hot_reload": True, "description": "sandbox: provider (docker or none)"},
-        "image": {"hot_reload": False, "description": "sandbox: docker image for container"},
-        "docker_host": {"hot_reload": True, "description": "sandbox: docker host (empty=auto, tcp://host:2375=remote)"},
-        "docker_sock": {"hot_reload": False, "description": "sandbox: docker socket path override (empty=auto)"},
-        "timeout": {"hot_reload": True, "description": "sandbox: code execution timeout (seconds)"},
-        "session_idle_timeout": {"hot_reload": True, "description": "sandbox: session idle timeout (seconds)"},
-        "allowed_languages": {"hot_reload": True, "description": "sandbox: allowed programming languages (JSON array)"},
-        "max_sessions": {"hot_reload": True, "description": "sandbox: max concurrent sessions"},
-        "host_data_root": {
-            "hot_reload": False,
-            "description": "sandbox: host-absolute path to data dir for volume mounts",
-        },
-    },
     "irodori": {
         "enabled": {"hot_reload": True, "description": "Enable Irodori-TTS voice generation"},
         "url": {"hot_reload": True, "description": "Irodori-TTS server URL (OpenAI-compatible endpoint)"},
