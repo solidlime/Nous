@@ -45,17 +45,6 @@ RUN apt-get update && \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
-# Add Node.js for agent-browser
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs && \
-    apt-get install -y --no-install-recommends \
-        libnspr4 libnss3 libatk-bridge2.0-0 libcups2 libdrm2 \
-        libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
-        libxrandr2 libgbm1 libpango-1.0-0 libasound2 \
-        libcairo2 libgtk-3-0 libpangocairo-1.0-0 libdbus-1-3 \
-        libfontconfig1 libfreetype6 \
-    && rm -rf /var/lib/apt/lists/*
-
 # Copy Python packages from builder
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
@@ -77,13 +66,6 @@ COPY pyproject.toml ${APP_HOME}/
 # Create data directory under APP_HOME
 RUN mkdir -p ${APP_HOME}/data
 
-# Copy agent-browser setup script for first-run installation
-COPY scripts/setup_agent_browser.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/setup_agent_browser.sh
-
-# Copy sandbox Dockerfile for on-demand image building
-COPY Dockerfile.sandbox ${APP_HOME}/
-
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash nous && \
     chown -R nous:nous ${APP_HOME}/data
@@ -95,15 +77,7 @@ EXPOSE 26262
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD curl -f http://localhost:26262/health || exit 1
 
-# Run agent-browser setup on startup, then launch the MCP server
-ENTRYPOINT ["/usr/local/bin/setup_agent_browser.sh"]
 CMD ["python", "-m", "nous.main"]
-
-# Note: Running as root to avoid permission issues with host-mounted data volumes.
-# The sandbox runs in isolated containers, so security impact is minimal.
-# If you need non-root, set user in docker-compose.yml to match the host UID:
-#   nous:
-#     user: "${UID:-1000}:${GID:-1000}"
 
 # Notes:
 # - Development tip: place environment overrides in a top-level `.env` (or use Compose `env_file:`)
