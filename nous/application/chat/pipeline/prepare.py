@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from nous.domain.memory.recall_annotator import RecallAnnotator
-from nous.domain.persona.emotion_decay import apply_emotion_decay_if_needed
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.time_utils import get_now, relative_time_str
 from nous.infrastructure.logging.structured import get_logger
@@ -351,21 +350,14 @@ async def _build_context_section(
 
     # === Tier 2: 身体・環境 ===
     # Body state — show all 5 metrics with percentages (unified with MCP tools format)
-    body_parts: list[str] = []
-    for key, label in [
-        ("fatigue", "疲労"),
-        ("warmth", "体温"),
-        ("arousal", "覚醒"),
-        ("heart_rate", "心拍"),
-        ("pain", "痛み"),
-    ]:
-        val = getattr(state, key, None)
-        if val is not None:
-            body_parts.append(
-                f"{label}:{val:.0%}" if isinstance(val, (int, float)) else f"{label}:{val}"
-            )
-    if body_parts:
-        t2.append(f"身体: {' | '.join(body_parts)}")
+    from nous.api.mcp._tools_helpers import _format_body_metrics
+
+    body_str = _format_body_metrics(
+        state,
+        labels={"fatigue": "疲労", "warmth": "体温", "arousal": "覚醒", "heart_rate": "心拍", "pain": "痛み"},
+    )
+    if body_str:
+        t2.append(f"身体: {body_str}")
 
     if getattr(state, "environment", None):
         t2.append(f"場所: {state.environment}")
@@ -515,28 +507,14 @@ class PrepareStep:
 
         persona = ctx.persona
 
-        # 2. PersonaState取得 + EmotionDecay適用
+        # 2. PersonaState取得 + EmotionDecay適用 + BodyDecay適用
         state_result = ctx.persona_service.get_context(persona)
         if state_result.is_ok:
             state = state_result.value
-            decay_note = ""
-            try:
-                from nous.config.runtime_config import RuntimeConfigManager
+            from nous.api.mcp._tools_helpers import _apply_body_decay, _apply_emotion_decay
 
-                half_life, _ = RuntimeConfigManager().get_effective_value("forgetting", "emotion_half_life_hours")
-                decay_result = await apply_emotion_decay_if_needed(
-                    ctx.persona_service, persona, state, half_life_hours=float(half_life)
-                )
-                if decay_result is not None:
-                    # decay後に再取得
-                    refreshed = ctx.persona_service.get_context(persona)
-                    if refreshed.is_ok:
-                        state = refreshed.value
-                    from nous.api.mcp._tools_helpers import _format_emotion_decay_note
-
-                    decay_note = _format_emotion_decay_note(decay_result)
-            except Exception as e:
-                logger.warning("PrepareStep: EmotionDecay failed (swallowed): %s", e)
+            state, decay_note = await _apply_emotion_decay(ctx, persona, state)
+            state = await _apply_body_decay(ctx, persona, state)
 
             # Author's Note: propagate to turn_ctx for PromptBuildStep
             turn_ctx.author_note = getattr(state, "author_note", None)

@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import hashlib
 import time
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING
 
+from nous.domain.persona.body_state import extract_body_metrics
 from nous.domain.persona.portrait_prompt import PortraitPromptBuilder
+from nous.domain.value_objects import EMOTION_EMOJI
 from nous.infrastructure.image_gen.base import ImageGenConfig
 from nous.infrastructure.image_gen.factory import get_image_gen_provider
 
@@ -18,22 +20,6 @@ if TYPE_CHECKING:
     from nous.config.settings import PortraitGenerationConfig
     from nous.domain.persona.entities import PersonaState
     from nous.infrastructure.image_gen.base import GeneratedImage
-
-EMOTION_EMOJI: Final[dict[str, str]] = {
-    "neutral": "😐",
-    "joy": "😊",
-    "sadness": "😢",
-    "anger": "😠",
-    "fear": "😨",
-    "surprise": "😲",
-    "disgust": "🤢",
-    "excitement": "🤩",
-    "love": "😍",
-    "curiosity": "🤔",
-    "anticipation": "😏",
-    "grief": "😥",
-}
-
 
 class PortraitGenerationService:
     """Application service for generating character portraits.
@@ -96,7 +82,7 @@ class PortraitGenerationService:
             On failure: ``{"error": str, "fallback_emoji": str}``.
         """
         # ── 1. Build prompt ────────────────────────────────────────────
-        body_state = self._extract_body_state(persona)
+        body_state = extract_body_metrics(persona)
         prompt, negative_prompt = PortraitPromptBuilder.build(
             persona=persona,
             scene=scene,
@@ -207,17 +193,6 @@ class PortraitGenerationService:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _extract_body_state(persona: PersonaState) -> dict[str, float | None]:
-        """Extract measurable body-state fields from a PersonaState."""
-        return {
-            "fatigue": persona.fatigue,
-            "warmth": persona.warmth,
-            "arousal": persona.arousal,
-            "heart_rate": persona.heart_rate,
-            "pain": persona.pain,
-        }
 
     @staticmethod
     def _fallback(emotion: str, error: str) -> dict:

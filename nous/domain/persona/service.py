@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from nous.domain.persona.body_state import extract_body_metrics
 from nous.domain.persona.entities import (
     BodyStateRecord,
     EmotionRecord,
@@ -170,11 +171,9 @@ class PersonaService:
         """Extract body state numeric values from a PersonaState as a dict.
 
         Returns None for values that are None (never set).
+        Delegates to extract_body_metrics for shared implementation.
         """
-        result: dict[str, float | None] = {}
-        for key in ("fatigue", "warmth", "arousal", "heart_rate", "pain"):
-            result[key] = getattr(state, key, None)
-        return result
+        return extract_body_metrics(state)
 
     def get_state_snapshot(self, persona: str) -> tuple[str, float, dict[str, float] | None, datetime | None]:
         """Get (emotion_name, emotion_intensity, body_state, snapped_at) for memory auto-snapshot.

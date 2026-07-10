@@ -2,13 +2,39 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from nous.domain.shared.time_utils import relative_time_str
 
 if TYPE_CHECKING:
+    from nous.application.use_cases import AppContext
     from nous.domain.persona.emotion_decay import EmotionDecayResult
     from nous.domain.persona.entities import PersonaState
+
+logger = logging.getLogger(__name__)
+
+_DEFAULT_METRIC_LABELS = {
+    "fatigue": "fatigue",
+    "warmth": "warmth",
+    "arousal": "arousal",
+    "heart_rate": "heart",
+    "pain": "pain",
+}
+
+
+def _format_body_metrics(
+    state: PersonaState, labels: dict[str, str] | None = None
+) -> str:
+    """身体メトリクスを 'fatigue:40% | warmth:74% | ...' 形式で返す。
+    labels でラベルをカスタマイズ可能。デフォルトは英語ラベル。"""
+    resolved = _DEFAULT_METRIC_LABELS if labels is None else labels
+    parts = []
+    for key, label in resolved.items():
+        val = getattr(state, key, None)
+        if val is not None:
+            parts.append(f"{label}:{val:.0%}" if isinstance(val, (int, float)) else f"{label}:{val}")
+    return " | ".join(parts)
 
 
 def _format_state_block(state: PersonaState) -> str:
@@ -16,19 +42,9 @@ def _format_state_block(state: PersonaState) -> str:
     lines = ["📊 CURRENT STATE"]
 
     # Body line
-    body_parts = []
-    for key, label in [
-        ("fatigue", "fatigue"),
-        ("warmth", "warmth"),
-        ("arousal", "arousal"),
-        ("heart_rate", "heart"),
-        ("pain", "pain"),
-    ]:
-        val = getattr(state, key, None)
-        if val is not None:
-            body_parts.append(f"{label}:{val:.0%}" if isinstance(val, (int, float)) else f"{label}:{val}")
-    if body_parts:
-        lines.append(f"  Body  : {' | '.join(body_parts)}")
+    body_str = _format_body_metrics(state)
+    if body_str:
+        lines.append(f"  Body  : {body_str}")
 
     # Mind (emotions) line
     if state.emotion:
@@ -253,3 +269,43 @@ def _format_lightweight_response(
 
     lines.append("\n💡 Use memory_search() for deeper context on specific topics.")
     return "\n".join(lines)
+
+
+async def _apply_emotion_decay(
+    ctx: AppContext, persona: str, state: PersonaState
+) -> tuple[PersonaState, str]:
+    """感情減衰を適用し、(更新後state, decay_note) を返す。
+    減衰不要の場合は (state, "") を返す。"""
+    decay_note = ""
+    try:
+        from nous.config.runtime_config import RuntimeConfigManager
+        from nous.domain.persona.emotion_decay import apply_emotion_decay_if_needed
+
+        half_life, _ = RuntimeConfigManager().get_effective_value("forgetting", "emotion_half_life_hours")
+        decay_result = await apply_emotion_decay_if_needed(
+            ctx.persona_service, persona, state, half_life_hours=float(half_life)
+        )
+        if decay_result is not None:
+            refreshed = ctx.persona_service.get_context(persona)
+            if refreshed.is_ok:
+                state = refreshed.value
+            decay_note = _format_emotion_decay_note(decay_result)
+    except Exception as _e:
+        logger.debug("_apply_emotion_decay failed (swallowed): %s", _e)
+    return state, decay_note
+
+
+async def _apply_body_decay(
+    ctx: AppContext, persona: str, state: PersonaState
+) -> PersonaState:
+    """身体減衰をベストエフォートで適用し、更新後stateを返す。失敗時は元のstate。"""
+    try:
+        from nous.domain.persona.body_decay import apply_body_decay_if_needed
+
+        await apply_body_decay_if_needed(ctx.persona_service, persona, state)
+        state_result = ctx.persona_service.get_context(persona)
+        if state_result.is_ok and state_result.value:
+            state = state_result.value
+    except Exception:
+        pass  # best-effort, don't break caller
+    return state

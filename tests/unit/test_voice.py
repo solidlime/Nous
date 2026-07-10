@@ -135,9 +135,9 @@ class TestEmotionEmoji:
     """EMOTION_EMOJI 定数のテスト"""
 
     def test_emoji_keys(self):
-        from nous.infrastructure.voice.emotion import EMOTION_EMOJI
+        from nous.domain.value_objects import EMOTION_EMOJI
 
-        assert EMOTION_EMOJI["neutral"] == ""
+        assert EMOTION_EMOJI["neutral"] == "😐"
         assert EMOTION_EMOJI["joy"] == "😊"
         assert EMOTION_EMOJI["sadness"] == "😢"
         assert EMOTION_EMOJI["anger"] == "😠"
@@ -145,7 +145,7 @@ class TestEmotionEmoji:
         assert EMOTION_EMOJI["surprise"] == "😲"
 
     def test_all_defined_emotions_have_entries(self):
-        from nous.infrastructure.voice.emotion import EMOTION_EMOJI
+        from nous.domain.value_objects import EMOTION_EMOJI
 
         expected_keys = {
             "neutral",
@@ -159,6 +159,7 @@ class TestEmotionEmoji:
             "love",
             "curiosity",
             "anticipation",
+            "grief",
         }
         assert set(EMOTION_EMOJI.keys()) == expected_keys
 

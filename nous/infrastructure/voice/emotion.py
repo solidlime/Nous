@@ -2,25 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from nous.domain.value_objects import EMOTION_EMOJI  # noqa: F401 — re-exported for backward compat
+
 if TYPE_CHECKING:
     from nous.domain.persona.entities import PersonaState
-
-# ──────────────────────────────────────────────
-# 感情→絵文字マッピング
-# ──────────────────────────────────────────────
-EMOTION_EMOJI: dict[str, str] = {
-    "neutral": "",
-    "joy": "😊",
-    "sadness": "😢",
-    "anger": "😠",
-    "fear": "😨",
-    "surprise": "😲",
-    "disgust": "🤢",
-    "excitement": "🤩",
-    "love": "😍",
-    "curiosity": "🤔",
-    "anticipation": "😏",
-}
 
 # 感情→日本語キャプション
 _EMOTION_CAPTIONS: dict[str, str] = {

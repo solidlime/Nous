@@ -6,7 +6,7 @@ from datetime import timedelta
 
 import pytest
 
-from nous.domain.persona.body_decay import _extract_body_dict
+from nous.domain.persona.body_state import extract_body_metrics
 from nous.domain.persona.entities import BodyStateRecord, PersonaState
 from nous.domain.persona.service import PersonaService
 from nous.domain.shared.time_utils import get_now
@@ -197,13 +197,13 @@ class TestGetBodyStateHistoryByDays:
 
 
 # ---------------------------------------------------------------------------
-# _extract_body_dict tests
+# extract_body_metrics tests
 # ---------------------------------------------------------------------------
 
 
 class TestExtractBodyDict:
     def test_extracts_all_fields(self, state):
-        result = _extract_body_dict(state)
+        result = extract_body_metrics(state)
         assert result["fatigue"] == 0.8
         assert result["warmth"] == 0.7
         assert result["arousal"] == 0.6
@@ -212,7 +212,7 @@ class TestExtractBodyDict:
 
     def test_handles_none_fields(self):
         empty = PersonaState(persona=PERSONA)
-        result = _extract_body_dict(empty)
+        result = extract_body_metrics(empty)
         assert all(v is None for v in result.values())
 
 

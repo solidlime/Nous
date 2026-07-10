@@ -5,16 +5,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from nous.domain.persona.body_state import extract_body_metrics
+
 if TYPE_CHECKING:
     from nous.domain.persona.entities import PersonaState
     from nous.domain.persona.service import PersonaService
 
 logger = logging.getLogger(__name__)
-
-
-def _extract_body_dict(state: PersonaState) -> dict[str, float | None]:
-    """Extract numeric body fields from PersonaState."""
-    return {k: getattr(state, k, None) for k in ("fatigue", "warmth", "arousal", "heart_rate", "pain")}
 
 
 # 身体状態の減衰設定: decay_hours で目標値へ半減
@@ -98,7 +95,7 @@ async def apply_body_decay_if_needed(
         return False
 
     # Record body state BEFORE decay
-    before_body = _extract_body_dict(state)
+    before_body = extract_body_metrics(state)
     persona_service.record_body_state(persona, before_body, context="before_body_decay")
 
     try:
@@ -113,7 +110,7 @@ async def apply_body_decay_if_needed(
             after_result = persona_service.get_context(persona)
             if after_result.is_ok:
                 after_state = after_result.value  # type: ignore[union-attr]
-                after_body = _extract_body_dict(after_state)
+                after_body = extract_body_metrics(after_state)
                 persona_service.record_body_state(persona, after_body, context="after_body_decay")
             return True
         logger.warning("BodyDecay: update_physical_state failed: %s", result.error)

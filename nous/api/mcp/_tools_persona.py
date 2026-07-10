@@ -14,7 +14,11 @@ if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
 
 
-from nous.api.mcp._tools_helpers import _format_lightweight_response  # noqa: E402
+from nous.api.mcp._tools_helpers import (  # noqa: E402
+    _apply_body_decay,
+    _apply_emotion_decay,
+    _format_lightweight_response,
+)
 
 
 async def _tool_get_context(ctx: AppContext, persona: str) -> str:
@@ -35,36 +39,9 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> str:
         return f"Error: {state_result.error}"
     state = state_result.value
 
-    decay_note = ""
-    try:
-        from nous.config.runtime_config import RuntimeConfigManager
-        from nous.domain.persona.emotion_decay import apply_emotion_decay_if_needed
+    state, decay_note = await _apply_emotion_decay(ctx, persona, state)
 
-        half_life, _ = RuntimeConfigManager().get_effective_value("forgetting", "emotion_half_life_hours")
-        decay_result = await apply_emotion_decay_if_needed(
-            ctx.persona_service, persona, state, half_life_hours=float(half_life)
-        )
-        if decay_result is not None:
-            refreshed = ctx.persona_service.get_context(persona)
-            if refreshed.is_ok:
-                state = refreshed.value
-            from nous.api.mcp._tools_helpers import _format_emotion_decay_note
-
-            decay_note = _format_emotion_decay_note(decay_result)
-    except Exception as _e:
-        logger.debug("get_context: emotion_decay failed (swallowed): %s", _e)
-
-    # Apply body state decay
-    try:
-        from nous.domain.persona.body_decay import apply_body_decay_if_needed
-
-        await apply_body_decay_if_needed(ctx.persona_service, persona, state)
-        # Re-read state after body decay may have updated it
-        state_result = ctx.persona_service.get_context(persona)
-        if state_result.is_ok and state_result.value:
-            state = state_result.value
-    except Exception:
-        pass  # best-effort, don't break context formatting
+    state = await _apply_body_decay(ctx, persona, state)
 
     # Top memories for ESSENTIAL STORY (reduced from 15 to 8 for leaner context)
     top_result = ctx.memory_service.get_top_by_importance(8)

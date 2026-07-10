@@ -130,6 +130,25 @@ def normalize_emotion(text: str | None) -> str:
 _VALID_EMOTIONS: frozenset[str] = frozenset(_EMOTION_KEYWORD_MAP.keys())
 
 
+# ──────────────────────────────────────────────
+# 感情→絵文字マッピング（正規定義）
+# ──────────────────────────────────────────────
+EMOTION_EMOJI: dict[str, str] = {
+    "neutral": "😐",
+    "joy": "😊",
+    "sadness": "😢",
+    "anger": "😠",
+    "fear": "😨",
+    "surprise": "😲",
+    "disgust": "🤢",
+    "excitement": "🤩",
+    "love": "😍",
+    "curiosity": "🤔",
+    "anticipation": "😏",
+    "grief": "😥",
+}
+
+
 def normalize_importance(value: float | None) -> float:
     """Clamp importance to [0.0, 1.0] range. Returns 0.5 for None."""
     if value is None:
