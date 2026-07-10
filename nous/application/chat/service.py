@@ -150,3 +150,6 @@ class ChatService:
 
         async for post_event in PostProcessStep().run(ctx, config, session, turn_ctx, debug=debug):
             yield post_event.to_sse()
+
+        # Force-persist to SQLite immediately so GET /api/chat/.../sessions/:id returns current data
+        session.flush()

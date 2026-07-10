@@ -95,6 +95,10 @@ class SessionWindow:
         self._persist()
         return removed
 
+    def flush(self) -> None:
+        """Force-persist current window state to SQLite immediately (bypass batch_size)."""
+        self._persist()
+
     def _persist(self) -> None:
         """現在のウィンドウ状態をSQLiteにupsertする。"""
         if self._db is None or not self._persona or not self._session_id:

@@ -1211,7 +1211,10 @@ async function restoreChatHistory() {
     // Remove skeleton
     const skel = document.getElementById("chat-history-skeleton");
     if (skel) skel.remove();
-    if (!data || !data.messages || data.messages.length === 0) return;
+    if (!data || !data.messages || data.messages.length === 0) {
+      console.log("restoreChatHistory: API returned", data);
+      return;
+    }
     // display_history_turns 件数分（最新N turns = N*2 messages）に制限
     const displayTurns = parseInt(
       document.getElementById("chat-display-history-turns")?.value || "20",
@@ -1301,6 +1304,7 @@ async function restoreChatHistory() {
       if (typeof lucide !== "undefined") lucide.createIcons();
     }, 50);
   } catch (_e) {
+    console.error("restoreChatHistory failed:", _e);
     // Session not found or API unavailable — start fresh
     const skel = document.getElementById("chat-history-skeleton");
     if (skel) skel.remove();
@@ -2156,12 +2160,7 @@ async function chatSend(retry) {
           statusEl.innerHTML =
             '<i data-lucide="wrench"></i> ' + esc(evt.name) + " を実行中...";
         } else if (evt.type === "tool_result") {
-          const sbEnabled = document.getElementById(
-            "chat-sandbox-enabled",
-          )?.checked;
-          if (!FILE_OP_TOOLS.has(evt.name) || !sbEnabled) {
-            appendToolEvent("tool_result", evt);
-          }
+          appendToolEvent("tool_result", evt);
           statusEl.textContent = "応答中...";
         } else if (evt.type === "memory_activity") {
           updateMemoryPanel(evt.retrieved, evt.saved, undefined);
@@ -2448,6 +2447,8 @@ function handleFileToolCall(evt) {
       (detail ? ": " + String(detail).substring(0, 60) : ""),
     "system",
   );
+  // チャットにもツールバブルを表示（CodingAgent閉時でも見えるように）
+  appendToolEvent("tool_call", evt);
 }
 
 function sandboxLog(text, type = "") {

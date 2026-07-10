@@ -60,6 +60,45 @@ class TestSessionWindow:
         msgs = win.get_labeled_messages(now)
         assert msgs[0].time_label == "just now"
 
+    def test_flush_persists_to_sqlite_immediately(self):
+        """flush() forces DB write even when batch_size not reached."""
+        import sqlite3
+        import json
+
+        db = sqlite3.connect(":memory:")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                persona TEXT NOT NULL, session_id TEXT NOT NULL,
+                messages TEXT NOT NULL DEFAULT '[]', timestamps TEXT NOT NULL DEFAULT '[]',
+                updated_at TEXT NOT NULL, PRIMARY KEY (persona, session_id))
+        """)
+        db.commit()
+
+        win = SessionWindow(max_turns=10, batch_size=10)  # batch_size=10 > 1 message
+        win.attach_db(db, "test_persona", "test_session")
+        win.add("user", "hello")  # 1 message, won't trigger _persist (batch_size=10)
+
+        # Before flush: DB should be empty
+        row_before = db.execute(
+            "SELECT messages FROM chat_sessions WHERE persona=? AND session_id=?",
+            ("test_persona", "test_session"),
+        ).fetchone()
+        assert row_before is None, "DB should be empty before flush (batch_size not reached)"
+
+        # Act
+        win.flush()
+
+        # After flush: DB should have the message
+        row_after = db.execute(
+            "SELECT messages FROM chat_sessions WHERE persona=? AND session_id=?",
+            ("test_persona", "test_session"),
+        ).fetchone()
+        assert row_after is not None, "DB should have data after flush"
+        messages = json.loads(row_after[0])
+        assert len(messages) == 1
+        assert messages[0]["role"] == "user"
+        assert messages[0]["content"] == "hello"
+
 
 # ─────────────────────────────────────────────────────────────
 # SessionManager tests

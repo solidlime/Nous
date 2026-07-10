@@ -96,7 +96,7 @@ class MemoryEnrichmentConfig(BaseModel):
 class AutoCaptureConfig(BaseModel):
     """Auto-capture: extract key information from session as memories."""
 
-    enabled: bool = True
+    enabled: bool = False
     """Auto-capture memories at end of each chat turn."""
 
     max_memories: int = 5
