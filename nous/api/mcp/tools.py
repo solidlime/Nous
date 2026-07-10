@@ -482,56 +482,6 @@ def register_tools(mcp: FastMCP) -> None:
 
     # ── Chat builtin tool wrappers (delegate to builtin.py handlers) ──
 
-    # browser
-    @_tool("browser")
-    async def browser(
-        action: str,
-        url: str = "",
-        ref: str = "",
-        value: str = "",
-        key: str = "",
-        what: str = "",
-        selector: str = "",
-        until: str = "",
-        direction: str = "",
-        amount: int = 300,
-        interactive: bool = True,
-    ) -> str:
-        """汎用ブラウザ操作。actionによって必要なパラメータが変わります。
-        open → url必須
-        snapshot → ref/selectorでスコープ指定可
-        click → ref必須
-        fill → ref + value必須
-        get → what (text/html/attr/title/url/count) + ref/selector
-        wait → until (text/url/load) + value
-        scroll → direction + amount
-        press → key
-        close → パラメータ不要"""
-        from nous.application.chat.tools.builtin import _handle_browser
-        from nous.domain.chat_config import ChatConfigRepository
-
-        p = _resolve_persona()
-        ctx = AppContextRegistry.get(p)
-        config = ChatConfigRepository(ctx.connection.get_memory_db()).get(p)
-        result = await _handle_browser(
-            ctx,
-            config,
-            {
-                "action": action,
-                "url": url,
-                "ref": ref,
-                "value": value,
-                "key": key,
-                "what": what,
-                "selector": selector,
-                "until": until,
-                "direction": direction,
-                "amount": amount,
-                "interactive": interactive,
-            },
-        )
-        return json.dumps(result, ensure_ascii=False)
-
     # search
     @_tool("search")
     async def search(

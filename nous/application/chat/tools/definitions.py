@@ -32,7 +32,6 @@ CORE_ALWAYS_TOOLS: set[str] = {
 
 # 条件付きツールのカテゴリマッピング（将来の文脈ベース制限用）
 CONDITIONAL_TOOLS: dict[str, str] = {
-    "browser": "browser",
     "search": "web",
     "image_generate": "image",
     "read_pdf": "document",
@@ -266,45 +265,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
             "properties": {
                 "days": {"type": "integer", "description": "取得する日数（デフォルト7日）", "default": 7},
             },
-        },
-    ),
-    ToolDefinition(
-        name="browser",
-        description="汎用ブラウザ操作。action: open/snapshot/click/fill/get/wait/scroll/press/close。",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "description": "操作: open/snapshot/click/fill/get/wait/scroll/press/close",
-                    "enum": ["open", "snapshot", "click", "fill", "press", "get", "wait", "scroll", "close"],
-                },
-                "url": {"type": "string", "description": "open 時に指定（完全なURL）"},
-                "ref": {"type": "string", "description": "操作対象の @eN リファレンス（snapshot で確認）"},
-                "value": {"type": "string", "description": "fill 時の入力文字列 / wait 時の待機テキスト"},
-                "key": {"type": "string", "description": "press 時のキー（Enter / Escape / Tab 等）"},
-                "what": {
-                    "type": "string",
-                    "description": "get 時の取得対象（text / html / attr / title / url / count）",
-                },
-                "selector": {
-                    "type": "string",
-                    "description": "snapshot のCSSセレクタスコープ / get count 時のセレクタ",
-                },
-                "until": {
-                    "type": "string",
-                    "description": "wait の待機条件",
-                    "enum": ["text", "url", "load"],
-                },
-                "direction": {
-                    "type": "string",
-                    "description": "scroll 方向",
-                    "enum": ["up", "down", "left", "right"],
-                },
-                "amount": {"type": "integer", "description": "scroll 量（px, デフォルト300）", "default": 300},
-                "interactive": {"type": "boolean", "description": "snapshot: 操作要素のみにするか", "default": True},
-            },
-            "required": ["action"],
         },
     ),
     ToolDefinition(

@@ -62,8 +62,8 @@ class TestSessionWindow:
 
     def test_flush_persists_to_sqlite_immediately(self):
         """flush() forces DB write even when batch_size not reached."""
-        import sqlite3
         import json
+        import sqlite3
 
         db = sqlite3.connect(":memory:")
         db.execute("""

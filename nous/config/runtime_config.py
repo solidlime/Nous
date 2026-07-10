@@ -100,7 +100,6 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "contradiction_threshold": {"hot_reload": True, "description": "Contradiction detection threshold"},
         "duplicate_threshold": {"hot_reload": True, "description": "Duplicate detection threshold"},
         "searxng_url": {"hot_reload": True, "description": "SearXNG search engine URL"},
-        "agent_browser_path": {"hot_reload": True, "description": "Path to agent-browser binary"},
     },
 }
 
