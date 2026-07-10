@@ -69,7 +69,6 @@ def register_chat_routes(mcp) -> None:
             "retrieval_relevance_weight",
             "display_history_turns",
             "housekeeping_threshold",
-            "sandbox_enabled",
             "mental_model_enabled",
             "mental_model_min_samples",
             "max_stored_messages",
@@ -90,6 +89,9 @@ def register_chat_routes(mcp) -> None:
             "dynamic_temperature",
             "emotion_temperature_scale",
             "top_p",
+            "context_use_llm_summary",
+            "episode_consolidation_enabled",
+            "episode_search_enabled",
         ):
             if field_name in body:
                 update_data[field_name] = body[field_name]
@@ -310,47 +312,6 @@ def register_chat_routes(mcp) -> None:
             logger.warning("housekeeping failed: %s", e)
             return JSONResponse({"error": str(e)}, status_code=500)
 
-    @mcp.custom_route("/api/chat/{persona}/sandbox/upload", methods=["POST"])
-    async def sandbox_upload(request: Request) -> JSONResponse:
-        """ファイルをサンドボックスにアップロードする。"""
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"error": "Persona not found"}, status_code=404)
-        from nous.domain.chat_config import ChatConfigRepository
-
-        chat_cfg = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-        if not chat_cfg.sandbox_enabled:
-            return JSONResponse({"error": "Sandbox not enabled for this persona"}, status_code=400)
-
-        import os
-        import tempfile
-
-        from starlette.datastructures import UploadFile  # noqa: TC002
-
-        form = await request.form()
-        upload: UploadFile = form.get("file")
-        if not upload:
-            return JSONResponse({"error": "file field required"}, status_code=400)
-
-        suffix = os.path.splitext(upload.filename or "upload")[1]
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tf:
-            tmp_path = tf.name
-            tf.write(await upload.read())
-
-        try:
-            from nous.application.sandbox.service import get_sandbox_session
-
-            session = await get_sandbox_session(persona)
-            filename = upload.filename or "upload"
-            remote_path = await session.upload_file(tmp_path, filename)
-            return JSONResponse({"filename": filename, "remote_path": remote_path})
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
-        finally:
-            with __import__("contextlib").suppress(Exception):
-                os.unlink(tmp_path)
-
     @mcp.custom_route("/api/chat/{persona}/attachment/upload", methods=["POST"])
     async def attachment_upload(request: Request) -> JSONResponse:
         """チャット添付ファイルをホストFSに直接保存する（サンドボックス不要）。"""
@@ -368,7 +329,7 @@ def register_chat_routes(mcp) -> None:
         from nous.config.settings import get_settings
 
         settings = get_settings()
-        uploads_dir = Path(settings.data_root) / "sandbox" / persona / "uploads"
+        uploads_dir = Path(settings.data_root) / "uploads" / persona
         uploads_dir.mkdir(parents=True, exist_ok=True)
 
         form = await request.form()
@@ -402,7 +363,7 @@ def register_chat_routes(mcp) -> None:
             {
                 "filename": safe_name,
                 "url": f"/api/chat/{persona}/attachment/{safe_name}",
-                "workspace_path": f"/sandbox/uploads/{safe_name}",
+                "workspace_path": f"/uploads/{safe_name}",
                 "mime_type": mime_type,
                 "size": size,
             }
@@ -430,336 +391,13 @@ def register_chat_routes(mcp) -> None:
         from nous.config.settings import get_settings
 
         settings = get_settings()
-        file_path = Path(settings.data_root) / "sandbox" / persona / "uploads" / safe_name
+        file_path = Path(settings.data_root) / "uploads" / persona / safe_name
         if not file_path.exists():
             return JSONResponse({"error": "File not found"}, status_code=404)
 
         mime_type, _ = mimetypes.guess_type(safe_name)
         mime_type = mime_type or "application/octet-stream"
         return FileResponse(str(file_path), media_type=mime_type)
-
-    @mcp.custom_route("/api/chat/{persona}/sandbox/files", methods=["GET"])
-    async def sandbox_list_files(request: Request) -> JSONResponse:
-        """サンドボックス内ファイル一覧を返す。?recursive=true で再帰ツリー表示。"""
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"error": "Persona not found"}, status_code=404)
-        from nous.domain.chat_config import ChatConfigRepository
-
-        chat_cfg = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-        if not chat_cfg.sandbox_enabled:
-            return JSONResponse({"error": "Sandbox not enabled for this persona"}, status_code=400)
-
-        path = request.query_params.get("path", "/sandbox")
-        recursive = request.query_params.get("recursive", "").lower() in ("true", "1", "yes")
-
-        from nous.application.sandbox.service import get_sandbox_session
-
-        session = await get_sandbox_session(persona)
-        try:
-            if recursive:
-                tree = await session.get_file_tree(path)
-                return JSONResponse({"tree": tree, "root": path, "recursive": True})
-            files = await session.list_files(path)
-            return JSONResponse(
-                {
-                    "path": path,
-                    "files": [{"name": f.name, "path": f.path, "is_dir": f.is_dir, "size": f.size} for f in files],
-                }
-            )
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @mcp.custom_route("/api/chat/{persona}/sandbox/files/{filepath:path}", methods=["GET"])
-    async def sandbox_download_file(request: Request) -> Response:
-        """サンドボックスからファイルを取得する。
-
-        ?format=text   → JSON {content, path} でテキスト返却
-        ?format=base64 → JSON {content_base64, path, mime_type} でBase64返却（画像/PDF/バイナリ全般）
-        省略時         → 拡張子で自動判別:
-                         画像(.png/.jpg/.gif/.webp/.svg等) → インライン表示
-                         テキスト(.txt/.py/.json/.md等)   → JSONテキスト
-                         PDF(.pdf)                         → JSON Base64
-                         その他                             → バイナリDL
-        """
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"error": "Persona not found"}, status_code=404)
-        from nous.domain.chat_config import ChatConfigRepository
-
-        chat_cfg = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-        if not chat_cfg.sandbox_enabled:
-            return JSONResponse({"error": "Sandbox not enabled for this persona"}, status_code=400)
-
-        filepath = request.path_params.get("filepath", "")
-        if not filepath.startswith("sandbox/") and not filepath.startswith("/sandbox/"):
-            filepath = f"/sandbox/{filepath}"
-        elif not filepath.startswith("/"):
-            filepath = f"/{filepath}"
-
-        fmt = request.query_params.get("format", "").lower()
-        if not fmt:
-            # Auto-detect by extension
-            ext = filepath.rsplit(".", 1)[-1].lower() if "." in filepath else ""
-            image_exts = {"png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico"}
-            text_exts = {
-                "txt",
-                "py",
-                "js",
-                "ts",
-                "json",
-                "md",
-                "yaml",
-                "yml",
-                "html",
-                "css",
-                "xml",
-                "log",
-                "sql",
-                "sh",
-                "bash",
-                "rs",
-                "go",
-                "java",
-                "cpp",
-                "c",
-                "h",
-                "toml",
-                "ini",
-                "cfg",
-                "csv",
-                "tsv",
-            }
-            if ext in image_exts:
-                fmt = "image"
-            elif ext in text_exts:
-                fmt = "text"
-            elif ext == "pdf":
-                fmt = "base64"
-            else:
-                fmt = "download"
-
-        from nous.application.sandbox.service import get_sandbox_session
-
-        session = await get_sandbox_session(persona)
-        try:
-            if fmt == "text":
-                content = await session.read_file_text(filepath)
-                return JSONResponse({"content": content, "path": filepath, "format": "text"})
-            if fmt in ("base64", "image"):
-                if fmt == "image":
-                    # Use read_image preprocessing (PIL resize + magic byte detection)
-                    img_data = await session.read_image(filepath)
-                    # Return as inline image viewer
-                    from starlette.responses import HTMLResponse
-
-                    return HTMLResponse(
-                        f'<html><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh">'
-                        f'<img src="data:{img_data["content_type"]};base64,{img_data["content_base64"]}" '
-                        f'style="max-width:100%;max-height:100vh;object-fit:contain" />'
-                        f"</body></html>",
-                        media_type="text/html",
-                    )
-                # format=base64: raw binary → base64, no preprocessing
-                data = await session.read_file(filepath)
-                import base64
-
-                encoded = base64.b64encode(data).decode("ascii")
-                import mimetypes
-
-                mime, _ = mimetypes.guess_type(filepath)
-                mime = mime or "application/octet-stream"
-                return JSONResponse(
-                    {
-                        "content_base64": encoded,
-                        "path": filepath,
-                        "mime_type": mime,
-                        "format": "base64",
-                    }
-                )
-            # Default: binary download
-            data = await session.read_file(filepath)
-            import os
-
-            filename = os.path.basename(filepath)
-            return Response(
-                content=data,
-                media_type="application/octet-stream",
-                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-            )
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @mcp.custom_route("/api/chat/{persona}/sandbox/execute", methods=["POST"])
-    async def sandbox_execute(request: Request) -> JSONResponse:
-        """サンドボックスでコードを実行する。"""
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"error": "Persona not found"}, status_code=404)
-        from nous.domain.chat_config import ChatConfigRepository
-
-        chat_cfg = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-        if not chat_cfg.sandbox_enabled:
-            return JSONResponse({"error": "Sandbox not enabled for this persona"}, status_code=400)
-
-        try:
-            body = await request.json()
-        except Exception:
-            return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
-
-        code = body.get("code", "")
-        language = body.get("language", "python")
-        if not code:
-            return JSONResponse({"error": "code field required"}, status_code=400)
-
-        from nous.application.sandbox.service import get_sandbox_session
-
-        session = await get_sandbox_session(persona)
-        result = await session.execute(code, language=language)
-        return JSONResponse(
-            {
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "exit_code": result.exit_code,
-                "artifacts": result.artifacts,
-                "language": result.language,
-            }
-        )
-
-    @mcp.custom_route("/api/chat/{persona}/sandbox/install", methods=["POST"])
-    async def sandbox_install(request: Request) -> JSONResponse:
-        """Python パッケージをサンドボックスにインストールする。"""
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"error": "Persona not found"}, status_code=404)
-        from nous.domain.chat_config import ChatConfigRepository
-
-        chat_cfg = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-        if not chat_cfg.sandbox_enabled:
-            return JSONResponse({"error": "Sandbox not enabled for this persona"}, status_code=400)
-
-        try:
-            body = await request.json()
-        except Exception:
-            return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
-
-        packages = body.get("packages", [])
-        if not packages or not isinstance(packages, list):
-            return JSONResponse({"error": "packages field required (list of strings)"}, status_code=400)
-
-        from nous.application.sandbox.service import get_sandbox_session
-
-        session = await get_sandbox_session(persona)
-        output = await session.install_packages(packages)
-        return JSONResponse({"output": output, "packages": packages})
-
-    @mcp.custom_route("/api/chat/{persona}/sandbox/reset", methods=["POST"])
-    async def sandbox_reset(request: Request) -> JSONResponse:
-        """サンドボックスセッションをリセットする。"""
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"error": "Persona not found"}, status_code=404)
-        from nous.domain.chat_config import ChatConfigRepository
-
-        chat_cfg = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-        if not chat_cfg.sandbox_enabled:
-            return JSONResponse({"error": "Sandbox not enabled for this persona"}, status_code=400)
-
-        from nous.application.sandbox.service import get_sandbox_session
-
-        session = await get_sandbox_session(persona)
-        await session.reset()
-        return JSONResponse({"ok": True, "message": "セッションをリセットしました"})
-
-    @mcp.custom_route("/api/chat/{persona}/sandbox/files/{filepath:path}", methods=["DELETE"])
-    async def sandbox_delete_file(request: Request) -> JSONResponse:
-        """サンドボックスのファイルを削除する。"""
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"error": "Persona not found"}, status_code=404)
-        from nous.domain.chat_config import ChatConfigRepository
-
-        chat_cfg = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-        if not chat_cfg.sandbox_enabled:
-            return JSONResponse({"error": "Sandbox not enabled for this persona"}, status_code=400)
-
-        filepath = request.path_params.get("filepath", "")
-        if not filepath.startswith("/"):
-            filepath = f"/sandbox/{filepath}"
-
-        from nous.application.sandbox.service import get_sandbox_session
-
-        session = await get_sandbox_session(persona)
-        ok = await session.delete_file(filepath)
-        return JSONResponse({"deleted": ok, "path": filepath})
-
-    @mcp.custom_route("/api/chat/{persona}/sandbox/file/read", methods=["GET"])
-    async def sandbox_read_file_text(request: Request) -> JSONResponse:
-        """サンドボックスのファイルをテキストとして読み込む。?path=... でパスを指定。"""
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"error": "Persona not found"}, status_code=404)
-        from nous.domain.chat_config import ChatConfigRepository
-
-        chat_cfg = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-        if not chat_cfg.sandbox_enabled:
-            return JSONResponse({"error": "Sandbox not enabled for this persona"}, status_code=400)
-
-        path = request.query_params.get("path", "")
-        if not path:
-            return JSONResponse({"error": "path query parameter is required"}, status_code=400)
-        if not path.startswith("/sandbox"):
-            return JSONResponse({"error": "path must be under /sandbox"}, status_code=400)
-
-        from nous.application.sandbox.service import get_sandbox_session
-
-        session = await get_sandbox_session(persona)
-        try:
-            content = await session.read_file_text(path)
-            return JSONResponse({"content": content, "path": path})
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @mcp.custom_route("/api/chat/{persona}/sandbox/file/write", methods=["POST"])
-    async def sandbox_write_file_text(request: Request) -> JSONResponse:
-        """サンドボックスのファイルにテキストを書き込む。{path, content} を POST。"""
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"error": "Persona not found"}, status_code=404)
-        from nous.domain.chat_config import ChatConfigRepository
-
-        chat_cfg = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-        if not chat_cfg.sandbox_enabled:
-            return JSONResponse({"error": "Sandbox not enabled for this persona"}, status_code=400)
-
-        try:
-            body = await request.json()
-        except Exception:
-            return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
-
-        path = body.get("path", "")
-        content = body.get("content", "")
-        if not path:
-            return JSONResponse({"error": "path is required"}, status_code=400)
-        if not path.startswith("/sandbox"):
-            return JSONResponse({"error": "path must be under /sandbox"}, status_code=400)
-
-        from nous.application.sandbox.service import get_sandbox_session
-
-        session = await get_sandbox_session(persona)
-        try:
-            await session.write_file_text(path, content)
-            return JSONResponse({"ok": True, "path": path})
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
 
     @mcp.custom_route("/api/chat/{persona}/tool", methods=["POST"])
     async def execute_chat_tool(request: Request) -> JSONResponse:

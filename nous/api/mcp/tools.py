@@ -11,7 +11,6 @@ from pydantic import Field
 
 from nous.api.mcp.middleware import PersonaRequiredError, get_current_persona
 from nous.application.use_cases import AppContextRegistry
-from nous.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +49,6 @@ from nous.api.mcp._tools_memory import (  # noqa: E402, F401
 )
 from nous.api.mcp._tools_persona import _tool_get_context, _tool_update_context  # noqa: E402, F401
 from nous.api.mcp._tools_portrait import _tool_persona_portrait  # noqa: E402, F401
-from nous.api.mcp._tools_sandbox import (  # noqa: E402, F401
-    _tool_sandbox_context,
-    _tool_sandbox_execute,
-    _tool_sandbox_files,
-    _tool_sandbox_reset,
-)
 from nous.api.mcp._tools_skill import _tool_invoke_skill  # noqa: E402, F401
 
 # =============================================================================
@@ -78,10 +71,6 @@ TOOL_DISPATCH: dict[str, Any] = {
     "item_update": _tool_item_update,
     "item_search": _tool_item_search,
     "item_history": _tool_item_history,
-    "sandbox_execute": _tool_sandbox_execute,
-    "sandbox_files": _tool_sandbox_files,
-    "sandbox_reset": _tool_sandbox_reset,
-    "sandbox_context": _tool_sandbox_context,
     "goal_manage": _tool_goal_manage,
     "invoke_skill": _tool_invoke_skill,
     "persona_portrait": _tool_persona_portrait,
@@ -369,54 +358,6 @@ def register_tools(mcp: FastMCP) -> None:
         p = _resolve_persona()
         return await _tool_item_history(AppContextRegistry.get(p), p, days=days)
 
-    # sandbox_execute — only registered when sandbox is enabled
-    if get_settings().sandbox.enabled:
-
-        @_tool("sandbox_execute")
-        async def sandbox_execute(
-            code: str, language: str = "python", libraries: list[str] | None = None, session_id: str | None = None
-        ) -> str:
-            """Execute code in Docker sandbox. State persists per session.
-            language: "python", "js", "bash", "go", "rust".
-            libraries: pip packages to install before execution.
-            Pass session_id to scope sandbox per conversation session.
-            Returns stdout, stderr, exit_code, artifacts (base64 images)."""
-            p = _resolve_persona()
-            return await _tool_sandbox_execute(
-                AppContextRegistry.get(p),
-                p,
-                code=code,
-                language=language,
-                libraries=libraries,
-                session_id=session_id,
-            )
-
-        # sandbox_files
-        @_tool("sandbox_files")
-        async def sandbox_files(operation: str, path: str = "", content: str | None = None) -> str:
-            """Sandbox file operations. operation: list/read/write/append/delete.
-            Files are stored in the persona's home directory (bind-mounted per-persona).
-            Use /home/sbox_{persona}/ paths — direct persona home paths.
-            read auto-detects images (PNG/JPEG/GIF/WebP) returning base64 with PIL resize support."""
-            p = _resolve_persona()
-            r = await _tool_sandbox_files(AppContextRegistry.get(p), p, operation=operation, path=path, content=content)
-            return json.dumps(r, ensure_ascii=False)
-
-        # sandbox_reset
-        @_tool("sandbox_reset")
-        async def sandbox_reset(level: str = "files") -> str:
-            """Reset sandbox environment. level: files (default), packages, full."""
-            p = _resolve_persona()
-            return await _tool_sandbox_reset(AppContextRegistry.get(p), p, level=level)
-
-        # sandbox_context
-        @_tool("sandbox_context")
-        async def sandbox_context() -> str:
-            """Get sandbox environment context (languages, installed packages)."""
-            p = _resolve_persona()
-            r = await _tool_sandbox_context(AppContextRegistry.get(p), p)
-            return json.dumps(r, ensure_ascii=False)
-
     # goal_manage
     @_tool("goal_manage")
     async def goal_manage(
@@ -481,56 +422,6 @@ def register_tools(mcp: FastMCP) -> None:
         return await _tool_irodori_tts(AppContextRegistry.get(p), p, text=text, voice=voice)
 
     # ── Chat builtin tool wrappers (delegate to builtin.py handlers) ──
-
-    # browser
-    @_tool("browser")
-    async def browser(
-        action: str,
-        url: str = "",
-        ref: str = "",
-        value: str = "",
-        key: str = "",
-        what: str = "",
-        selector: str = "",
-        until: str = "",
-        direction: str = "",
-        amount: int = 300,
-        interactive: bool = True,
-    ) -> str:
-        """汎用ブラウザ操作。actionによって必要なパラメータが変わります。
-        open → url必須
-        snapshot → ref/selectorでスコープ指定可
-        click → ref必須
-        fill → ref + value必須
-        get → what (text/html/attr/title/url/count) + ref/selector
-        wait → until (text/url/load) + value
-        scroll → direction + amount
-        press → key
-        close → パラメータ不要"""
-        from nous.application.chat.tools.builtin import _handle_browser
-        from nous.domain.chat_config import ChatConfigRepository
-
-        p = _resolve_persona()
-        ctx = AppContextRegistry.get(p)
-        config = ChatConfigRepository(ctx.connection.get_memory_db()).get(p)
-        result = await _handle_browser(
-            ctx,
-            config,
-            {
-                "action": action,
-                "url": url,
-                "ref": ref,
-                "value": value,
-                "key": key,
-                "what": what,
-                "selector": selector,
-                "until": until,
-                "direction": direction,
-                "amount": amount,
-                "interactive": interactive,
-            },
-        )
-        return json.dumps(result, ensure_ascii=False)
 
     # search
     @_tool("search")

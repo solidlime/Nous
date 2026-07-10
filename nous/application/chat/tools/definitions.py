@@ -32,7 +32,6 @@ CORE_ALWAYS_TOOLS: set[str] = {
 
 # 条件付きツールのカテゴリマッピング（将来の文脈ベース制限用）
 CONDITIONAL_TOOLS: dict[str, str] = {
-    "browser": "browser",
     "search": "web",
     "image_generate": "image",
     "read_pdf": "document",
@@ -269,45 +268,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         },
     ),
     ToolDefinition(
-        name="browser",
-        description="汎用ブラウザ操作。action: open/snapshot/click/fill/get/wait/scroll/press/close。",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "description": "操作: open/snapshot/click/fill/get/wait/scroll/press/close",
-                    "enum": ["open", "snapshot", "click", "fill", "press", "get", "wait", "scroll", "close"],
-                },
-                "url": {"type": "string", "description": "open 時に指定（完全なURL）"},
-                "ref": {"type": "string", "description": "操作対象の @eN リファレンス（snapshot で確認）"},
-                "value": {"type": "string", "description": "fill 時の入力文字列 / wait 時の待機テキスト"},
-                "key": {"type": "string", "description": "press 時のキー（Enter / Escape / Tab 等）"},
-                "what": {
-                    "type": "string",
-                    "description": "get 時の取得対象（text / html / attr / title / url / count）",
-                },
-                "selector": {
-                    "type": "string",
-                    "description": "snapshot のCSSセレクタスコープ / get count 時のセレクタ",
-                },
-                "until": {
-                    "type": "string",
-                    "description": "wait の待機条件",
-                    "enum": ["text", "url", "load"],
-                },
-                "direction": {
-                    "type": "string",
-                    "description": "scroll 方向",
-                    "enum": ["up", "down", "left", "right"],
-                },
-                "amount": {"type": "integer", "description": "scroll 量（px, デフォルト300）", "default": 300},
-                "interactive": {"type": "boolean", "description": "snapshot: 操作要素のみにするか", "default": True},
-            },
-            "required": ["action"],
-        },
-    ),
-    ToolDefinition(
         name="search",
         description="Web検索。query必須。SearXNG経由で結果を返す。",
         input_schema={
@@ -397,98 +357,9 @@ MEMORY_TOOLS: list[ToolDefinition] = [
             "required": ["path"],
         },
     ),
-]
-
-SANDBOX_TOOLS: list[ToolDefinition] = [
-    ToolDefinition(
-        name="sandbox_execute",
-        description=(
-            "サンドボックス環境でコードを実行します。"
-            "あなたは sandbox コンテナ内の専用ユーザーとして実行されます。"
-            "ホームディレクトリは自動設定され、pip install --user で"
-            "インストールしたパッケージは次回以降も利用可能です。\n"
-            "対応言語: python, javascript, bash, go, rust\n"
-            "ファイル操作は sandbox_files ツールを使ってください。\n"
-            "コードの内容だけ書いてください。環境設定（cd, export等）は不要です。"
-        ),
-        input_schema={
-            "type": "object",
-            "properties": {
-                "code": {"type": "string", "description": "実行するコード"},
-                "language": {
-                    "type": "string",
-                    "description": "プログラミング言語 (python/js/bash/go/rust)",
-                    "default": "python",
-                },
-                "libraries": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "事前インストールするpipパッケージ（初回のみ）",
-                    "default": [],
-                },
-                "session_id": {
-                    "type": "string",
-                    "description": "同一セッションで状態を共有するためのID（省略時はpersonaで永続化）",
-                },
-            },
-            "required": ["code"],
-        },
-    ),
-    ToolDefinition(
-        name="sandbox_files",
-        description="サンドボックス内ファイル操作。operation: list/read/write/append/delete。ファイルはペルソナのホームディレクトリに保存されます。",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "operation": {
-                    "type": "string",
-                    "enum": ["list", "read", "write", "append", "delete"],
-                    "description": "操作: list/read/write/append/delete",
-                },
-                "path": {
-                    "type": "string",
-                    "description": "ペルソナのホームディレクトリ (/home/sbox_{persona}/) 配下のパス",
-                    "default": "",
-                },
-                "content": {
-                    "type": "string",
-                    "description": "書き込む内容（write / append のみ必須）",
-                },
-            },
-            "required": ["operation"],
-        },
-    ),
-    ToolDefinition(
-        name="sandbox_reset",
-        description=(
-            "サンドボックス環境をリセットします。\n"
-            "files: 作業ファイルのみ削除\n"
-            "packages: pip/npmパッケージも削除\n"
-            "full: ユーザーごと再作成（完全初期化）"
-        ),
-        input_schema={
-            "type": "object",
-            "properties": {
-                "level": {
-                    "type": "string",
-                    "enum": ["files", "packages", "full"],
-                    "description": "リセットレベル (files/packages/full)",
-                    "default": "files",
-                },
-            },
-        },
-    ),
-    ToolDefinition(
-        name="sandbox_context",
-        description="サンドボックスの現在の環境情報（利用可能言語、インストール済みパッケージ）を取得します。",
-        input_schema={
-            "type": "object",
-            "properties": {},
-        },
-    ),
     ToolDefinition(
         name="list_skills",
-        description="登録スキル一覧を取得。",
+        description="登録済みスキル一覧を取得。引数不要。",
         input_schema={
             "type": "object",
             "properties": {},
@@ -540,10 +411,6 @@ _NOUS_TOOL_NAMES: frozenset[str] = frozenset(
         "item_update",
         "item_search",
         "item_history",
-        "sandbox_execute",
-        "sandbox_files",
-        "sandbox_reset",
-        "sandbox_context",
         "goal_manage",
         "invoke_skill",
         "search",

@@ -90,12 +90,9 @@ def render_chat_tab() -> str:
                             <div class="chat-welcome-commands">
                                 <span class="chat-welcome-cmd">/memory</span>
                                 <span class="chat-welcome-cmd">/goal</span>
-                                <span class="chat-welcome-cmd">/code</span>
                                 <span class="chat-welcome-cmd">/help</span>
                                 <span class="chat-welcome-cmd">/search</span>
-                                <span class="chat-welcome-cmd">/browser</span>
                                 <span class="chat-welcome-cmd">/image</span>
-                                <span class="chat-welcome-cmd">/sandbox</span>
                                 <span class="chat-welcome-cmd">/invoke_skill</span>
                             </div>
                         </div>
@@ -441,12 +438,6 @@ def render_chat_tab() -> str:
                                 </div>
                                 <button class="chat-clear-btn" style="margin-top:4px;" onclick="runHousekeeping()"><i data-lucide="broom"></i> 今すぐ整理</button>
                                 <div id="chat-housekeeping-status" style="font-size:0.75rem; text-align:center; min-height:16px;"></div>
-                                <div style="border-top:1px solid var(--glass-border);padding-top:8px;display:flex;align-items:center;gap:8px;">
-                                    <input type="checkbox" id="chat-sandbox-enabled"
-                                        style="width:15px;height:15px;accent-color:var(--accent-blue);cursor:pointer;"
-                                        onchange="onSandboxEnabledChange()" />
-                                    <label for="chat-sandbox-enabled" class="chat-field-label" style="margin:0;cursor:pointer;">コード実行 (Dockerサンドボックス)</label>
-                                </div>
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-debug-mode"
                                         style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
@@ -497,10 +488,4 @@ def render_chat_tab() -> str:
         </section>""" + render_coding_agent_panel()
 
 
-def render_chat_js() -> str:
-    """Return the JavaScript for the chat tab.
 
-    The actual JS is loaded via <script src="/static/chat.js"> in render_head().
-    This function exists for dashboard.py's tab_js assembly compatibility.
-    """
-    return ""

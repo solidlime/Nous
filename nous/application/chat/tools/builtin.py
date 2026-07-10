@@ -112,242 +112,6 @@ async def _handle_context_update(ctx: AppContext, config: ChatConfig, tool_input
     return {"status": "ok"}
 
 
-async def _handle_execute_code(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
-    if not getattr(config, "sandbox_enabled", False):
-        return {"status": "error", "message": "Sandbox is disabled. Enable it in chat settings."}
-    from nous.application.sandbox.service import get_sandbox_session
-
-    code = tool_input.get("code", "")
-    language = tool_input.get("language", "python")
-    libraries = tool_input.get("libraries", [])
-    session_id = tool_input.get("session_id")
-
-    if session_id:
-        # Use persona-scoped session key to prevent cross-persona leaks
-        sandbox_key = f"{ctx.persona}_{session_id}"
-        sandbox = await get_sandbox_session(sandbox_key)
-    else:
-        sandbox = await get_sandbox_session(ctx.persona)
-
-    result = await sandbox.execute(code, language, libraries=libraries)
-    # Include session_id in response for LLM to reference next time
-    response = {
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-        "exit_code": result.exit_code,
-        "artifacts": result.artifacts,
-    }
-    if session_id:
-        response["session_id"] = session_id
-    return response
-
-
-async def _handle_sandbox_reset(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
-    if not getattr(config, "sandbox_enabled", False):
-        return {"status": "error", "message": "Sandbox is disabled."}
-    from nous.application.sandbox.service import get_sandbox_session
-
-    level = tool_input.get("level", "files")
-    session = await get_sandbox_session(ctx.persona)
-    result = await session.reset(level=level)
-    return {"status": "ok", "message": result}
-
-
-async def _handle_sandbox_context(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
-    if not getattr(config, "sandbox_enabled", False):
-        return {"status": "error", "message": "Sandbox is disabled."}
-    from nous.application.sandbox.service import get_sandbox_session
-
-    session = await get_sandbox_session(ctx.persona)
-    result = await session.get_context()
-    return {"status": "ok", **result}
-
-
-async def _handle_browser(
-    ctx: AppContext, config: ChatConfig, tool_input: dict
-) -> dict:  # pragma: no cover - external process
-    """Execute agent-browser commands safely via subprocess."""
-    import asyncio
-    import json as _json
-
-    action = (tool_input.get("action") or "").strip()
-    if not action:
-        return {"status": "error", "message": "action is required"}
-
-    # ── Validate action and params BEFORE binary check ──
-    valid_actions = {"open", "snapshot", "click", "fill", "press", "get", "wait", "scroll", "close"}
-    if action not in valid_actions:
-        return {"status": "error", "message": f"Unknown action: {action}"}
-
-    action_params: dict[str, str] = {}
-    try:
-        if action == "open":
-            url = (tool_input.get("url") or "").strip()
-            if not url:
-                return {"status": "error", "message": "url is required for open"}
-            if not url.startswith(("http://", "https://")):
-                return {"status": "error", "message": "url must start with http:// or https://"}
-            action_params["url"] = url
-
-        elif action == "click":
-            ref = (tool_input.get("ref") or "").strip()
-            if not ref:
-                return {"status": "error", "message": "ref is required for click"}
-            action_params["ref"] = ref
-
-        elif action == "fill":
-            ref = (tool_input.get("ref") or "").strip()
-            value = tool_input.get("value", "")
-            if not ref:
-                return {"status": "error", "message": "ref is required for fill"}
-            action_params["ref"] = ref
-            action_params["value"] = str(value)
-
-        elif action == "press":
-            key = (tool_input.get("key") or "").strip()
-            if not key:
-                return {"status": "error", "message": "key is required for press"}
-            action_params["key"] = key
-
-        elif action == "get":
-            what = (tool_input.get("what") or "").strip()
-            if not what:
-                return {"status": "error", "message": "what is required for get"}
-            if what == "count":
-                selector = (tool_input.get("selector") or "").strip()
-                if not selector:
-                    return {"status": "error", "message": "selector is required for get count"}
-                action_params["selector"] = selector
-            elif what in ("text", "html", "attr", "title", "url"):
-                ref = (tool_input.get("ref") or "").strip()
-                if not ref:
-                    return {"status": "error", "message": f"ref is required for get {what}"}
-                action_params["ref"] = ref
-
-        elif action == "wait":
-            until = (tool_input.get("until") or "").strip()
-            if not until:
-                return {"status": "error", "message": "until is required for wait"}
-            if until == "text":
-                value = tool_input.get("value", "")
-                if not value:
-                    return {"status": "error", "message": "value is required for wait text"}
-                action_params["value"] = str(value)
-            elif until not in ("load", "url"):
-                return {"status": "error", "message": f"Unknown wait until: {until}"}
-
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-    # ── Locate agent-browser binary (deferred until params are validated) ──
-    agent_bin = _find_agent_browser(ctx.settings if hasattr(ctx, "settings") else None)
-    if not agent_bin:
-        return {
-            "status": "error",
-            "message": (
-                "agent-browser not found. Install it:\n"
-                "  npm install -g agent-browser\n"
-                "  agent-browser install\n\n"
-                "Or set NOUS_AGENT_BROWSER_PATH=/path/to/agent-browser in .env"
-            ),
-        }
-
-    # ── Build command args from action ──
-    # --no-sandbox: WSL2/Linux で "No usable sandbox!" エラー回避
-    # agent-browser CLI ではブラウザ起動引数は --args フラグ経由で渡す
-    args: list[str] = [agent_bin, "--args", "--no-sandbox"]
-
-    try:
-        if action == "open":
-            args.extend(["open", action_params["url"]])
-
-        elif action == "snapshot":
-            interactive = tool_input.get("interactive", True)
-            args.append("snapshot")
-            if interactive:
-                args.append("-i")
-            if tool_input.get("compact"):
-                args.append("-c")
-            selector = (tool_input.get("selector") or "").strip()
-            if selector:
-                args.extend(["-s", selector])
-            args.append("--json")
-
-        elif action == "click":
-            args.extend(["click", action_params["ref"]])
-
-        elif action == "fill":
-            args.extend(["fill", action_params["ref"], action_params["value"]])
-
-        elif action == "press":
-            args.extend(["press", action_params["key"]])
-
-        elif action == "get":
-            what_str = (tool_input.get("what") or "").strip()
-            if what_str == "count":
-                args.extend(["get", "count", action_params["selector"]])
-            elif what_str in ("title", "url"):
-                args.extend(["get", what_str])
-            else:
-                args.extend(["get", what_str, action_params["ref"]])
-
-        elif action == "wait":
-            until_str = (tool_input.get("until") or "").strip()
-            if until_str == "text":
-                args.extend(["wait", "--text", action_params["value"]])
-            elif until_str == "url":
-                value_url = (tool_input.get("value") or "").strip()
-                if not value_url:
-                    return {"status": "error", "message": "value is required for wait url"}
-                args.extend(["wait", "--url", value_url])
-            elif until_str == "load":
-                args.extend(["wait", "--load", "networkidle"])
-
-        elif action == "scroll":
-            direction = (tool_input.get("direction") or "down").strip()
-            amount = max(1, min(int(tool_input.get("amount", 300)), 5000))
-            args.extend(["scroll", direction, str(amount)])
-
-        elif action == "close":
-            args.append("close")
-
-        # ── Execute ──
-        timeout = 30  # seconds
-        proc = await asyncio.create_subprocess_exec(
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-
-        out_text = stdout.decode(errors="replace").strip()
-        err_text = stderr.decode(errors="replace").strip()
-
-        # Try parsing stdout as JSON (snapshot --json returns JSON)
-        result: dict = {"status": "ok", "action": action}
-        if action == "snapshot" and out_text:
-            try:
-                result["page"] = _json.loads(out_text)
-            except _json.JSONDecodeError:
-                result["text"] = out_text[:5000]
-        elif action == "get":
-            result["value"] = out_text[:5000]
-        else:
-            result["output"] = out_text[:5000]
-
-        if proc.returncode != 0:
-            result["status"] = "error"
-            result["message"] = err_text[:500] or f"exit code {proc.returncode}"
-            result["stderr"] = err_text[:500]
-
-        return result
-
-    except TimeoutError:
-        return {"status": "error", "message": f"browser {action} timed out (30s limit)"}
-    except Exception as e:
-        return {"status": "error", "message": f"browser {action} failed: {str(e)[:200]}"}
-
-
 async def _handle_search(
     ctx: AppContext, config: ChatConfig, tool_input: dict
 ) -> dict:  # pragma: no cover - external HTTP
@@ -396,58 +160,11 @@ async def _handle_search(
     return {"status": "ok", "query": query, "results": results, "count": len(results)}
 
 
-def _find_agent_browser(settings=None) -> str | None:
-    """Find agent-browser binary. Checks Settings, env, data dir, PATH."""
-    import os
-    import shutil
-
-    from nous.config.settings import get_settings
-
-    s = settings or get_settings()
-
-    # 1. Settings.agent_browser_path (env: NOUS_AGENT_BROWSER_PATH)
-    if s.agent_browser_path and os.path.isfile(s.agent_browser_path):
-        return s.agent_browser_path
-
-    # 2. RuntimeConfigManager (NOUS_AGENT_BROWSER_PATH etc.)
-    from nous.config.runtime_config import RuntimeConfigManager
-
-    path, _ = RuntimeConfigManager().get_effective_value("general", "agent_browser_path")
-    if path and os.path.isfile(path):
-        return path
-
-    # 3. Legacy AGENT_BROWSER_PATH (no prefix)
-    path = os.environ.get("AGENT_BROWSER_PATH")
-    if path and os.path.isfile(path):
-        return path
-
-    # 4. Data volume paths (Docker)
-    data_root = os.environ.get("NOUS_DATA_ROOT", "/opt/nous/data")
-    candidates = [
-        os.path.join(data_root, ".agent-browser/bin/agent-browser"),
-        os.path.join(data_root, "bin/agent-browser"),  # legacy path
-        os.path.expanduser("~/.local/nodejs/bin/agent-browser"),
-    ]
-    for c in candidates:
-        if os.path.isfile(c):
-            return c
-
-    # 5. PATH
-    found = shutil.which("agent-browser") or shutil.which("agent-browser.cmd")
-    if found:
-        return found
-
-    return None
-
-
 # ── MCP-shared handlers (delegate to TOOL_DISPATCH) ──
 
 
 async def _handle_mcp_dispatch(tool_name: str, ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
     """Call shared MCP tool implementation via TOOL_DISPATCH."""
-    if tool_name.startswith("sandbox_") and not getattr(config, "sandbox_enabled", False):
-        return {"status": "error", "message": "Sandbox is disabled. Enable it in chat settings."}
-
     func = TOOL_DISPATCH.get(tool_name)
     if func is None:
         return {"status": "error", "message": f"Unknown tool: {tool_name}"}
@@ -624,36 +341,6 @@ async def _handle_read_pdf(ctx: AppContext, config: ChatConfig, tool_input: dict
             "message": f"Invalid mode: {mode}. Must be one of: text, tables, images, all",
         }
 
-    filename = Path(path).name
-
-    # ── Sandbox path: read via sandbox session ──
-    if _is_sandbox_path(path):
-        try:
-            from nous.application.sandbox.service import get_sandbox_session
-
-            session = await get_sandbox_session(ctx.persona)
-            pdf_bytes = await session.read_file(path)
-        except FileNotFoundError:
-            return {"status": "error", "message": f"File not found: {path}"}
-        except Exception as e:
-            return {"status": "error", "message": f"Failed to read from sandbox: {e}"}
-
-        if len(pdf_bytes) > 50 * 1024 * 1024:
-            return {"status": "error", "message": "PDF file too large (max: 50MB)"}
-
-        try:
-            result = await asyncio.to_thread(_sync_process_pdf, pdf_bytes, pages=pages, mode=mode, max_chars=max_chars)
-            result["filename"] = filename
-            return result
-        except ImportError as e:
-            missing = str(e).split("'")[1] if "'" in str(e) else str(e)
-            return {
-                "status": "error",
-                "message": f"Missing PDF library: {missing}. Run: pip install PyMuPDF pdfplumber",
-            }
-        except Exception as e:
-            return {"status": "error", "message": f"PDF parse failed: {e}"}
-
     # ── Local filesystem path ──
     pdf_path = Path(path)
     if not pdf_path.exists():
@@ -676,11 +363,6 @@ async def _handle_read_pdf(ctx: AppContext, config: ChatConfig, tool_input: dict
         }
     except Exception as e:
         return {"status": "error", "message": f"PDF parse failed: {e}"}
-
-
-def _is_sandbox_path(path: str) -> bool:
-    """Check if a path is a sandbox container path (not directly accessible)."""
-    return path.startswith("/home/sbox_") or path.startswith("/sandbox")
 
 
 def _parse_page_range(page_spec: str, num_pages: int) -> list[int]:
@@ -956,11 +638,7 @@ async def _handle_list_skills(ctx: AppContext, config: ChatConfig, tool_input: d
 # ── Handler dispatch table (replaces if/elif chain) ──
 
 _BUILTIN_DISPATCH: dict[str, Any] = {
-    "sandbox_execute": _handle_execute_code,
-    "sandbox_reset": _handle_sandbox_reset,
-    "sandbox_context": _handle_sandbox_context,
     "list_skills": _handle_list_skills,
-    "browser": _handle_browser,
     "search": _handle_search,
     "image_generate": _handle_image_generate,
     "read_pdf": _handle_read_pdf,
@@ -970,7 +648,6 @@ _MCP_SHARED_TOOLS = frozenset(
     {
         "goal_manage",
         "invoke_skill",
-        "sandbox_files",
         "update_context",
         "memory_create",
         "memory_search",

@@ -50,6 +50,71 @@ services:
       retries: 3
       start_period: 60s
 
+  playwright:
+    image: mcr.microsoft.com/playwright/mcp:latest
+    container_name: playwright
+    ports:
+      - "8931:8931"
+    volumes:
+      - ${DATA_ROOT}/playwright:/ms-playwright
+    environment:
+      TZ: Asia/Tokyo
+    command: >
+      node /app/cli.js
+        --headless
+        --browser chromium
+        --no-sandbox
+        --user-data-dir /ms-playwright
+        --port 8931
+        --host 0.0.0.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8931/health', r => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  opensandbox:
+    image: opensandbox/server:latest
+    container_name: opensandbox
+    ports:
+      - "8090:8090"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DATA_ROOT}/opensandbox/volumes:/var/lib/opensandbox/volumes
+      - opensandbox-config:/etc/opensandbox
+    environment:
+      TZ: Asia/Tokyo
+      SANDBOX_CONFIG_PATH: /etc/opensandbox/config.toml
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    configs:
+      - source: opensandbox-config
+        target: /etc/opensandbox/config.toml
+
+  opensandbox-mcp:
+    image: python:3.11-slim
+    container_name: opensandbox-mcp
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "pip install --no-cache-dir opensandbox-mcp &&
+             opensandbox-mcp --transport streamable-http
+                            --domain opensandbox:8090
+                            --protocol http"
+    environment:
+      TZ: Asia/Tokyo
+    restart: unless-stopped
+    depends_on:
+      opensandbox:
+        condition: service_healthy
+
   nous:
     image: ghcr.io/solidlime/nous:latest
     container_name: nous
@@ -59,8 +124,6 @@ services:
       # Nous アプリデータ永続化（memory, logs, cache, config, skills）
       # DATA_ROOT/app（ホスト） → /opt/nous/data（コンテナ、=NOUS_DATA_ROOT）
       - ${DATA_ROOT}/app:/opt/nous/data
-      # Host Docker socket for sibling-container sandbox execution (no DinD needed)
-      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     depends_on:
       qdrant:
@@ -73,18 +136,6 @@ services:
       # SearXNG meta search engine URL
       SEARXNG_URL: http://searxng:8080
       LANG: C.UTF-8
-      # --- Code Execution Sandbox ---
-      # Sandbox uses the host Docker socket (mounted above) to spawn sibling containers.
-      # No separate DinD service required.
-      NOUS_SANDBOX__ENABLED: "true"
-      # Explicitly empty so .env cannot accidentally override with a stale DinD host.
-      NOUS_SANDBOX__DOCKER_HOST: ""
-      # agent-browser installed to data volume by entrypoint script
-      NOUS_AGENT_BROWSER_PATH: /opt/nous/data/.agent-browser/bin/agent-browser
-      # HOST_DATA_ROOT: normally auto-detected from this container's own volume mounts.
-      # Set manually only if auto-detection fails (e.g. on Synology, custom Docker setups).
-      # Example: NOUS_SANDBOX__HOST_DATA_ROOT: /volume1/docker/nous/app
-      # NOUS_SANDBOX__HOST_DATA_ROOT:
     # Load env vars from .env file (ignored by git) so you can override Dockerfile defaults
     env_file:
       - .env
@@ -95,25 +146,29 @@ services:
       retries: 3
       start_period: 120s
 
-  sandbox:
-    image: ghcr.io/solidlime/nous-sandbox:latest
-    container_name: sandbox
-    restart: unless-stopped
-    volumes:
-      # 全ペルソナの sandbox データ永続化
-      # DATA_ROOT（ホスト）の sandbox/ サブディレクトリ → /home（コンテナ）
-      # /home/{persona}/ は useradd -m で自動作成される
-      - ${DATA_ROOT}/sandbox:/home
-    cap_drop:
-      - ALL
-    cap_add:
-      - DAC_OVERRIDE  # file access across users
-      - CHOWN        # chown on bind-mounted /home for per-persona isolation
-      - FOWNER        # needed for useradd to write /etc/shadow
-      - SETUID        # set UID for per-persona users
-      - SETGID        # set GID for per-persona users
-    security_opt:
-      - no-new-privileges:true
+configs:
+  opensandbox-config:
+    content: |
+      [server]
+      host = "0.0.0.0"
+      port = 8090
+
+      [runtime]
+      type = "docker"
+      execd_image = "opensandbox/execd:latest"
+
+      [docker]
+      network_mode = "bridge"
+      host_ip = "host.docker.internal"
+      drop_capabilities = ["AUDIT_WRITE", "MKNOD", "NET_ADMIN", "NET_RAW", "SYS_ADMIN", "SYS_MODULE", "SYS_PTRACE", "SYS_TIME", "SYS_TTY_CONFIG"]
+      no_new_privileges = true
+
+      [store]
+      type = "sqlite"
+      path = "/var/lib/opensandbox/opensandbox.db"
+
+volumes:
+  opensandbox-config:
 
 networks:
   default:

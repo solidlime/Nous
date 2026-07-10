@@ -11,7 +11,7 @@ from nous.application.chat.pipeline.post import PostProcessStep
 from nous.application.chat.pipeline.prepare import PrepareStep
 from nous.application.chat.pipeline.prompt import PromptBuildStep
 from nous.application.chat.session_store import SessionManager
-from nous.application.chat.tools.definitions import SANDBOX_TOOLS, get_filtered_tools
+from nous.application.chat.tools.definitions import get_filtered_tools
 from nous.application.chat.tools.registry import ToolRegistry
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
@@ -79,8 +79,6 @@ class ChatService:
         # InferenceStep + PostProcessStep: MCPプール共有
         async with MCPClientPool(config.mcp_servers) as mcp_pool:
             builtin = get_filtered_tools(config) if config.enable_memory_tools else []
-            if getattr(config, "sandbox_enabled", False):
-                builtin = builtin + list(SANDBOX_TOOLS)
             registry = ToolRegistry(builtin, mcp_pool)
 
             session_messages = session.get_labeled_messages()

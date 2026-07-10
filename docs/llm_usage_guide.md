@@ -6,16 +6,28 @@
 
 ## Overview / 概要
 
-Memory MCP exposes **5 MCP tools** that give AI agents persistent, searchable long-term memory.
+Memory MCP exposes **19 MCP tools** that give AI agents persistent, searchable long-term memory.
 Call these tools proactively — do not wait for the user to ask.
 
 | Tool | Purpose |
 |------|---------|
 | `get_context()` | Load persona state, recent memories, and stats at session start |
-| `memory(operation, ...)` | Create, read, update, delete memories + entity graph + blocks |
-| `search_memory(query, ...)` | Semantic / keyword / hybrid memory search |
+| `memory_create(content, ...)` | Create a new memory |
+| `memory_read(memory_key, ...)` | Read a memory by key or list recent |
+| `memory_update(memory_key, ...)` | Update existing memory |
+| `memory_delete(memory_key, ...)` | Delete (tombstone) a memory |
+| `memory_search(query, ...)` | Semantic / keyword / hybrid memory search |
+| `memory_stats(top_n)` | Memory statistics and distributions |
 | `update_context(...)` | Update emotion, physical state, user info in real time |
-| `item(operation, ...)` | Manage physical inventory and equipment |
+| `item_add / item_remove / item_equip / item_unequip / item_update / item_search / item_history` | Manage physical inventory and equipment |
+| `goal_manage(operation, ...)` | Create / list / achieve / cancel goals |
+| `invoke_skill(name, task)` | Execute a registered skill |
+| `persona_portrait()` | Generate persona portrait image |
+| `irodori_tts(text, voice)` | Japanese TTS voice synthesis |
+| `search(query, ...)` | Web search via SearXNG |
+| `image_generate(prompt, ...)` | Generate images |
+| `read_pdf(path)` | Parse PDF files |
+| `list_skills()` | List registered skills |
 
 ---
 
@@ -649,6 +661,60 @@ When enabled, the chat pipeline automatically:
 
 ---
 
+---
+
+## 14. External MCP Servers / 外部MCPサーバー
+
+コード実行サンドボックスとブラウザ操作は、外部の専用MCPサーバーに委譲されている。
+
+これらのツールは Nous 内蔵ツールとしては提供されず、MCP クライアント（OpenCode 等）が直接外部MCPサーバーに接続して使用する。
+
+### Playwright MCP（ブラウザ操作）
+
+| 項目 | 内容 |
+|------|------|
+| イメージ | `mcr.microsoft.com/playwright/mcp:latest` |
+| ポート | 8931 |
+| ツール数 | 20+ |
+| 命名規則 | `playwright__browser_navigate`, `playwright__browser_click` 等 |
+
+主なツール:
+
+```python
+playwright__browser_navigate(url="https://example.com")
+playwright__browser_click(ref="#submit-button")
+playwright__browser_snapshot()
+playwright__browser_fill(ref="#search", value="query")
+playwright__browser_screenshot()
+```
+
+### OpenSandbox MCP（コード実行サンドボックス）
+
+| 項目 | 内容 |
+|------|------|
+| イメージ | `opensandbox/server:latest` + `opensandbox-mcp` |
+| ポート | 8090 (server) / 8000 (MCP) |
+| ツール数 | 20 |
+| 命名規則 | `opensandbox__sandbox_create`, `opensandbox__sandbox_execute` 等 |
+| 特長 | Docker Compose 1ファイル完結、SQLite 内蔵、server 53.9MB 超軽量 |
+
+主なツール:
+
+```python
+opensandbox__sandbox_create(language="python")
+opensandbox__sandbox_execute(code="print('hello')")
+opensandbox__sandbox_files(operation="write", path="/tmp/test.py", content="...")
+opensandbox__sandbox_install(packages=["numpy", "pandas"])
+opensandbox__sandbox_reset(level="full")
+```
+
+### ペルソナ分離
+
+OpenSandbox は sandbox 単位のコンテナ分離によりペルソナ分離を実現する。
+各ペルソナは独立した sandbox コンテナで動作し、ファイルシステム・プロセス・ネットワークが完全に隔離される。
+
+---
+
 ## Quick Reference Card / クイックリファレンス
 
 ```python
@@ -656,32 +722,30 @@ When enabled, the chat pipeline automatically:
 get_context()
 
 # Create memory
-memory(operation="create", content="...", importance=0.7, tags=["..."], emotion_type="joy")
+memory_create(content="...", importance=0.7, tags=["..."], emotion_type="joy")
 
 # Search memory
-search_memory(query="...", mode="hybrid", top_k=5)
-search_memory(query="...", date_range="先週", tags=["promise"])
+memory_search(query="...", top_k=5)
+memory_search(query="...", date_range="先週", tags=["promise"])
 
 # Update context
 update_context(emotion="joy", emotion_intensity=0.8)
 update_context(user_info={"name": "...", "preferred_address": "..."})
 
 # Goal / Promise  ← stored as memory with tags, NOT persona_info
-memory(operation="create", content="...", tags=["goal","active"], importance=0.8)    # register goal
-memory(operation="create", content="...", tags=["promise","active"], importance=0.8) # register promise
-memory(operation="update", memory_key="...", tags=["goal","achieved"])               # mark done
-memory(operation="update", memory_key="...", tags=["promise","fulfilled"])           # fulfill
-memory(operation="update", memory_key="...", tags=["goal","cancelled"])              # cancel goal
-search_memory(query="goals", tags=["goal","active"])          # search active goals
+goal_manage(operation="create", content="...", scope="self", importance=0.8)       # register goal
+goal_manage(operation="list", scope="self")                                         # list goals
+goal_manage(operation="achieve", memory_key="...")                                  # mark done
+goal_manage(operation="cancel", memory_key="...")                                   # cancel goal
 # → appears in get_context() ACTIVE COMMITMENTS section
 
-# Memory blocks
-memory(operation="block_write", block_name="user_model", content="...")
-memory(operation="block_read", block_name="user_model")
-
 # Items
-item(operation="equip", equipment={"top": "...", "accessories": "..."})
-item(operation="search", category="clothing")
+item_equip(equipment={"top": "...", "accessories": "..."})
+item_search(category="clothing")
+
+# External MCP servers (via MCP client, not Nous built-in)
+# playwright__browser_navigate(url="https://example.com")
+# opensandbox__sandbox_execute(code="print('hello')")
 ```
 
 ---
