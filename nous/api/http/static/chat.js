@@ -583,7 +583,7 @@ function parseMcpJson() {
   }
 }
 
-const BUILTIN_SKILLS = ["browser", "search"];
+const BUILTIN_SKILLS = ["search"];
 
 function renderSkillsList(allSkills, enabledSkills) {
   const list = document.getElementById("chat-skills-list");
@@ -922,7 +922,6 @@ function resetToWelcome() {
                 <span class="chat-welcome-cmd">/code</span>
                 <span class="chat-welcome-cmd">/help</span>
                 <span class="chat-welcome-cmd">/search</span>
-                <span class="chat-welcome-cmd">/browser</span>
                 <span class="chat-welcome-cmd">/image</span>
                 <span class="chat-welcome-cmd">/sandbox</span>
                 <span class="chat-welcome-cmd">/invoke_skill</span>
@@ -1814,11 +1813,6 @@ const SLASH_COMMANDS = [
   { name: "/code", desc: "コードを実行", example: '/code print("hello")' },
   { name: "/help", desc: "コマンド一覧を表示", example: "/help" },
   { name: "/search", desc: "記憶を検索", example: "/search 昨日の会話" },
-  {
-    name: "/browser",
-    desc: "ブラウザ操作",
-    example: "/browser open https://example.com",
-  },
   { name: "/image", desc: "画像を生成", example: "/image 猫の写真" },
   {
     name: "/sandbox",

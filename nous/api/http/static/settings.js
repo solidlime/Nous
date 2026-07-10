@@ -39,7 +39,7 @@ const CATEGORY_DESCRIPTIONS = {
     qdrant: 'Qdrant vector database connection settings.',
     forgetting: 'Ebbinghaus forgetting curve for automatic memory decay.',
     memory_enrichment: 'Auto-evaluate importance and relations via LLM after memory creation.',
-    general: 'General settings: timezone, logging, thresholds, search engine, browser path.'
+    general: 'General settings: timezone, logging, thresholds, search engine.'
 };
 
 /* ── Category display order (consistent across renders) ── */

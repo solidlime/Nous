@@ -93,7 +93,6 @@ def render_chat_tab() -> str:
                                 <span class="chat-welcome-cmd">/code</span>
                                 <span class="chat-welcome-cmd">/help</span>
                                 <span class="chat-welcome-cmd">/search</span>
-                                <span class="chat-welcome-cmd">/browser</span>
                                 <span class="chat-welcome-cmd">/image</span>
                                 <span class="chat-welcome-cmd">/sandbox</span>
                                 <span class="chat-welcome-cmd">/invoke_skill</span>
