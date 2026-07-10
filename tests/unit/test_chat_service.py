@@ -282,7 +282,8 @@ class TestChatConfigRepository:
                 searxng_url TEXT DEFAULT '',
                 context_use_llm_summary INTEGER DEFAULT 1,
                 episode_consolidation_enabled INTEGER DEFAULT 1,
-                episode_search_enabled INTEGER DEFAULT 1
+                episode_search_enabled INTEGER DEFAULT 1,
+                dynamic_tool_selection INTEGER DEFAULT 1
             )
         """)
         db.execute("""

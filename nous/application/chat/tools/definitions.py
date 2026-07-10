@@ -1,8 +1,43 @@
-"""MEMORY_TOOLS: チャット組み込みツール定義。"""
+"""MEMORY_TOOLS: チャット組み込みツール定義 + 選択的ツール登録。"""
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from nous.infrastructure.llm.base import ToolDefinition
+from nous.infrastructure.logging.structured import get_logger
+
+if TYPE_CHECKING:
+    from nous.domain.chat_config import ChatConfig
+
+logger = get_logger(__name__)
+
+# 絶対にフィルタリングされないコアツール（Nous のアイデンティティ）
+CORE_ALWAYS_TOOLS: set[str] = {
+    "memory_search",
+    "memory_create",
+    "memory_update",
+    "update_context",
+    "invoke_skill",
+    "goal_manage",
+    # item_* 系 — ペルソナ表現に必須
+    "item_add",
+    "item_remove",
+    "item_equip",
+    "item_unequip",
+    "item_update",
+    "item_search",
+    "item_history",
+}
+
+# 条件付きツールのカテゴリマッピング（将来の文脈ベース制限用）
+CONDITIONAL_TOOLS: dict[str, str] = {
+    "browser": "browser",
+    "search": "web",
+    "image_generate": "image",
+    "read_pdf": "document",
+    "list_skills": "meta",
+}
 
 MEMORY_TOOLS: list[ToolDefinition] = [
     ToolDefinition(
@@ -460,6 +495,31 @@ SANDBOX_TOOLS: list[ToolDefinition] = [
         },
     ),
 ]
+
+def get_filtered_tools(config: ChatConfig) -> list[ToolDefinition]:
+    """コアツール + 条件次第で条件付きツールを返す。
+
+    この関数が CORE_ALWAYS_TOOLS を絶対に除外しないことを保証する。
+    dynamic_tool_selection=False の場合は従来通り全ツールを返す。
+    """
+    if not config.dynamic_tool_selection:
+        return list(MEMORY_TOOLS)
+
+    # 常時ツールを収集
+    always_tools = [t for t in MEMORY_TOOLS if t.name in CORE_ALWAYS_TOOLS]
+
+    # 条件付きツール（dynamic_tool_selection=True なら全追加 = 現状同じ）
+    conditional_tools = [t for t in MEMORY_TOOLS if t.name not in CORE_ALWAYS_TOOLS]
+
+    result = always_tools + conditional_tools
+    logger.debug(
+        "Tools: %d always + %d conditional = %d total",
+        len(always_tools),
+        len(conditional_tools),
+        len(result),
+    )
+    return result
+
 
 # MCPサーバー由来のツール名（MEMORY_TOOLS と重複するため除外対象）
 _NOUS_TOOL_NAMES: frozenset[str] = frozenset(

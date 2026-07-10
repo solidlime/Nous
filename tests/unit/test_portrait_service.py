@@ -421,8 +421,8 @@ class TestEmotionEmoji:
 
     def test_all_defined_emotions_have_emoji(self):
         """Every known emotion in PortraitPromptBuilder has an emoji."""
-        from nous.domain.value_objects import EMOTION_EMOJI
         from nous.domain.persona.portrait_prompt import _EMOTION_ADJECTIVES
+        from nous.domain.value_objects import EMOTION_EMOJI
 
         for emotion in _EMOTION_ADJECTIVES:
             assert emotion in EMOTION_EMOJI, f"Missing emoji for {emotion!r}"

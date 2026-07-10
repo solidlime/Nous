@@ -38,7 +38,7 @@ def _cleanup_expired_sessions(db: sqlite3.Connection, persona: str, ttl_days: in
 
 
 class SessionWindow:
-    def __init__(self, max_turns: int = 100, max_messages: int | None = None) -> None:
+    def __init__(self, max_turns: int = 100, max_messages: int | None = None, batch_size: int = 10) -> None:
         if max_messages is not None:
             self._max_messages: int = max_messages
         else:
@@ -48,6 +48,8 @@ class SessionWindow:
         self._db: sqlite3.Connection | None = None
         self._persona: str = ""
         self._session_id: str = ""
+        self._persisted_count: int = 0
+        self._batch_size: int = batch_size
         self.pending_memory_task: asyncio.Task | None = None
         self.evict_callback: Callable[[list[dict]], None] | None = None
 
@@ -67,12 +69,14 @@ class SessionWindow:
                     self.evict_callback(evicted)
             self._messages = self._messages[overflow:]
             self._timestamps = self._timestamps[overflow:]
+            self._persisted_count = max(0, self._persisted_count - overflow)
         msg: dict[str, object] = {"role": role, "content": content}
         if tool_calls:
             msg["tool_calls"] = tool_calls
         self._messages.append(msg)
         self._timestamps.append(ts or get_now())
-        self._persist()
+        if len(self._messages) - self._persisted_count >= self._batch_size:
+            self._persist()
 
     def truncate_to(self, message_index: int) -> list[dict]:
         """Keep only messages up to (not including) message_index. Returns removed messages.
@@ -86,6 +90,8 @@ class SessionWindow:
         removed = list(self._messages[message_index:])
         self._messages = self._messages[:message_index]
         self._timestamps = self._timestamps[:message_index]
+        if message_index < self._persisted_count:
+            self._persisted_count = message_index
         self._persist()
         return removed
 
@@ -104,6 +110,7 @@ class SessionWindow:
                 (self._persona, self._session_id, messages_json, timestamps_json, now_str),
             )
             self._db.commit()
+            self._persisted_count = len(self._messages)
         except Exception as e:
             logger.warning("SessionWindow._persist failed: %s", e)
 
@@ -131,6 +138,7 @@ class SessionWindow:
             for msg, ts_str in zip(messages, timestamps_raw, strict=False):
                 window._messages.append(msg)
                 window._timestamps.append(datetime.fromisoformat(ts_str))
+            window._persisted_count = len(window._messages)
             logger.debug("SessionWindow: loaded %d messages from SQLite (persona=%s)", len(messages), persona)
             return window
         except Exception as e:

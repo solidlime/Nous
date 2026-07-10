@@ -95,6 +95,8 @@ class ChatConfig(BaseModel):
     dynamic_temperature: bool = True
     emotion_temperature_scale: float = 0.2
     top_p: float | None = None
+    # Dynamic tool selection (P22): True の時のみ条件付きツールを制限可
+    dynamic_tool_selection: bool = True
     # HiMem 2-tier: Episode Memory consolidation
     episode_consolidation_enabled: bool = True
     episode_search_enabled: bool = True
@@ -271,7 +273,8 @@ class ChatConfigRepository:
             "enable_memory_tools, debug_mode, "
             "dynamic_temperature, emotion_temperature_scale, top_p, "
             "context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled, "
-            "retrieval_rrf_k "
+            "retrieval_rrf_k, "
+            "dynamic_tool_selection "
             "FROM chat_settings WHERE persona = ?",
             (persona,),
         ).fetchone()
@@ -331,6 +334,7 @@ class ChatConfigRepository:
             episode_consolidation_enabled=bool(row[48]) if len(row) > 48 and row[48] is not None else True,
             episode_search_enabled=bool(row[49]) if len(row) > 49 and row[49] is not None else True,
             retrieval_rrf_k=float(row[50]) if len(row) > 50 and row[50] is not None else 5.0,
+            dynamic_tool_selection=bool(row[51]) if len(row) > 51 and row[51] is not None else True,
         )
 
     def save(self, config: ChatConfig) -> None:
@@ -354,11 +358,12 @@ class ChatConfigRepository:
                   memory_preload_count, enable_parallel_tools,
                    image_gen_enabled, image_gen_provider, image_gen_dalle_model, image_gen_stability_url,
                    enable_memory_tools, debug_mode,
-                   dynamic_temperature, emotion_temperature_scale, top_p,
-                    context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled,
-                    retrieval_rrf_k,
-                    updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    dynamic_temperature, emotion_temperature_scale, top_p,
+                     context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled,
+                     retrieval_rrf_k,
+                     dynamic_tool_selection,
+                     updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
@@ -409,6 +414,7 @@ class ChatConfigRepository:
                  episode_consolidation_enabled=excluded.episode_consolidation_enabled,
                  episode_search_enabled=excluded.episode_search_enabled,
                  retrieval_rrf_k=excluded.retrieval_rrf_k,
+                 dynamic_tool_selection=excluded.dynamic_tool_selection,
                  updated_at=excluded.updated_at
             """,
             (
@@ -462,6 +468,7 @@ class ChatConfigRepository:
                 int(config.episode_consolidation_enabled),
                 int(config.episode_search_enabled),
                 config.retrieval_rrf_k,
+                int(config.dynamic_tool_selection),
                 now,
             ),
         )

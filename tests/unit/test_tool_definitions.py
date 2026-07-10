@@ -6,7 +6,15 @@ to catch regressions during refactoring (e.g. promise_manage/goal_manage).
 
 from __future__ import annotations
 
-from nous.application.chat.tools.definitions import MEMORY_TOOLS, SANDBOX_TOOLS
+from unittest.mock import MagicMock
+
+from nous.application.chat.tools.definitions import (
+    CONDITIONAL_TOOLS,
+    CORE_ALWAYS_TOOLS,
+    MEMORY_TOOLS,
+    SANDBOX_TOOLS,
+    get_filtered_tools,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -132,3 +140,75 @@ def test_property_types_are_valid_json_schema_types():
                     assert item_type in _VALID_JSON_SCHEMA_TYPES, (
                         f"{td.name}.{prop_name}.items: invalid type '{item_type}'"
                     )
+
+
+# ---------------------------------------------------------------------------
+# P22: CORE_ALWAYS_TOOLS integrity
+# ---------------------------------------------------------------------------
+
+
+def test_core_always_tools_all_exist_in_memory_tools():
+    """Every CORE_ALWAYS_TOOLS name must exist in MEMORY_TOOLS.
+
+    If a new core tool is added, it must first be defined in MEMORY_TOOLS.
+    """
+    memory_names = {td.name for td in MEMORY_TOOLS}
+    missing = CORE_ALWAYS_TOOLS - memory_names
+    assert not missing, (
+        f"CORE_ALWAYS_TOOLS missing from MEMORY_TOOLS: {missing}"
+    )
+
+
+def test_get_filtered_tools_always_includes_core():
+    """get_filtered_tools が CORE_ALWAYS_TOOLS を絶対に除外しないことを保証する。"""
+    mock_config = MagicMock()
+    mock_config.dynamic_tool_selection = True
+
+    result = get_filtered_tools(mock_config)
+    result_names = {td.name for td in result}
+
+    missing = CORE_ALWAYS_TOOLS - result_names
+    assert not missing, (
+        f"get_filtered_tools がコアツールを除外: {missing}"
+    )
+
+
+def test_get_filtered_tools_dynamic_off_returns_all():
+    """dynamic_tool_selection=False で全ツールが返る。"""
+    mock_config = MagicMock()
+    mock_config.dynamic_tool_selection = False
+
+    result = get_filtered_tools(mock_config)
+    assert len(result) == len(MEMORY_TOOLS)
+    result_names = {td.name for td in result}
+    expected_names = {td.name for td in MEMORY_TOOLS}
+    assert result_names == expected_names
+
+
+def test_get_filtered_tools_dynamic_on_returns_all_currently():
+    """dynamic_tool_selection=True でも現状は全ツールが返る（将来の制限基盤）。"""
+    mock_config = MagicMock()
+    mock_config.dynamic_tool_selection = True
+
+    result = get_filtered_tools(mock_config)
+    assert len(result) == len(MEMORY_TOOLS)
+    result_names = {td.name for td in result}
+    expected_names = {td.name for td in MEMORY_TOOLS}
+    assert result_names == expected_names
+
+
+def test_conditional_tools_are_subset_of_all_builtin_tools():
+    """CONDITIONAL_TOOLS のキーは全て MEMORY_TOOLS + SANDBOX_TOOLS に存在する。"""
+    all_names = {td.name for td in MEMORY_TOOLS} | {td.name for td in SANDBOX_TOOLS}
+    unknown = set(CONDITIONAL_TOOLS) - all_names
+    assert not unknown, (
+        f"CONDITIONAL_TOOLS のキーがどのツールリストにも存在しない: {unknown}"
+    )
+
+
+def test_conditional_tools_not_in_core():
+    """CONDITIONAL_TOOLS のキーは CORE_ALWAYS_TOOLS と重複しない。"""
+    overlap = set(CONDITIONAL_TOOLS) & CORE_ALWAYS_TOOLS
+    assert not overlap, (
+        f"CONDITIONAL_TOOLS が CORE_ALWAYS_TOOLS と重複: {overlap}"
+    )

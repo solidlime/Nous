@@ -7,7 +7,7 @@ from datetime import timedelta
 import pytest
 
 from nous.domain.persona.body_state import extract_body_metrics
-from nous.domain.persona.entities import BodyStateRecord, PersonaState
+from nous.domain.persona.entities import PersonaState
 from nous.domain.persona.service import PersonaService
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.sqlite.connection import SQLiteConnection
