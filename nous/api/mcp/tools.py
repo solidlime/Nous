@@ -11,6 +11,7 @@ from pydantic import Field
 
 from nous.api.mcp.middleware import PersonaRequiredError, get_current_persona
 from nous.application.use_cases import AppContextRegistry
+
 logger = logging.getLogger(__name__)
 
 

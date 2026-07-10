@@ -60,7 +60,7 @@ nous/
 └── cli/                 # CLIツール
 ```
 
-### 公開ツールAPI（22本）
+### 公開ツールAPI（19本）
 
 | ツール | 主なパラメータ |
 |--------|---------------|
@@ -72,16 +72,17 @@ nous/
 | `memory_search(query, top_k, tags, date_range, min_importance, emotion, importance_weight, recency_weight, vector_weight, keyword_weight)` | ハイブリッド検索。mode廃止 — vector/keyword/importance/recency weightで調整。date_range: `"7d"`, `"30d"`, `"昨日"` |
 | `memory_stats(top_n)` | 統計情報（件数・タグ分布・感情分布） |
 | `update_context(emotion, emotion_intensity, physical_state, mental_state, environment, body_state, user_info, persona_info, ...)` | ペルソナ状態更新。`body_state`: `{fatigue, warmth, arousal, heart_rate, pain}` |
-| `item(operation, item_name, category, description, quantity, ...)` | 統一インベントリツール。operation: `add/remove/equip/unequip/update/search/history` |
+| `item_add(item_name, category, description, quantity, ...)` | インベントリにアイテム追加 |
+| `item_remove(item_name)` | インベントリからアイテム削除 |
+| `item_equip(equipment, auto_add)` | 装備スロットにセット |
+| `item_unequip(slots)` | 装備を外す |
+| `item_update(item_name, category, description, quantity, ...)` | 既存アイテム情報更新 |
+| `item_search(query, category)` | インベントリ検索 |
+| `item_history(days)` | アイテム操作履歴 |
 | `goal_manage(operation, content, importance, scope, memory_key)` | 目標管理。operation: `create/list/achieve/cancel`。scope: `self/interpersonal` |
-| `sandbox_execute(code, language, libraries, session_id)` | Dockerサンドボックスでコード実行 |
-| `sandbox_files(operation, path, content)` | サンドボックスファイル操作。`list/read/write/append/delete`。画像はbase64自動返却 |
-| `sandbox_reset(level)` | サンドボックスリセット。level: `files/packages/full` |
-| `sandbox_context()` | サンドボックス環境情報（言語・インストール済みパッケージ） |
 | `invoke_skill(name, task)` | スキル実行（隔離LLMコンテキスト） |
 | `persona_portrait()` | ポートレート画像生成（ComfyUI/DALL-E/Stability） |
 | `irodori_tts(text, voice)` | 日本語TTS音声生成 |
-| `browser(action, url, ref, value, ...)` | 汎用ブラウザ操作 |
 | `search(query, num_results, language)` | Web検索（SearXNG経由） |
 | `image_generate(prompt, size, quality, n, provider)` | 画像生成 |
 | `read_pdf(path)` | PDF解析（テキスト・テーブル・画像抽出） |
@@ -143,3 +144,35 @@ memory_search(query="goals", tags=["goal"])  # 全ステータス
 - Personaごとに独立したSQLiteファイルとQdrantコレクションを持つ
 - `tools/` 配下のファイル（`crud_tools.py`, `search_tools.py` 等）は `unified_tools.py` のハンドラーから内部的に呼ばれるが、直接MCPツールとして公開されていない
 - Ebbinghaus忘却曲線ワーカーはバックグラウンドスレッドで動作し、`recall`時に `boost_on_recall()` で強度を上げる
+
+### 外部MCPサーバー
+
+Nous は以下の機能を外部MCPサーバーに委譲している。docker-compose.yml で一緒に起動する。
+
+| サービス | MCPサーバー | 提供ツール（例） |
+|----------|-------------|-----------------|
+| **Playwright MCP** | `mcr.microsoft.com/playwright/mcp:latest` (port 8931) | `playwright__browser_navigate`, `playwright__browser_click`, `playwright__browser_snapshot`, `playwright__browser_fill`, `playwright__browser_evaluate` 等 20+ ツール |
+| **OpenSandbox MCP** | `opensandbox-mcp` (port 8000) | `opensandbox__sandbox_create`, `opensandbox__sandbox_execute`, `opensandbox__sandbox_files`, `opensandbox__sandbox_install`, `opensandbox__sandbox_reset` 等 20 ツール |
+
+**コード実行サンドボックス**は従来の Docker SDK 直接制御から **OpenSandbox** に移行した。OpenSandbox は Docker Compose 1ファイル完結、SQLite 内蔵、sandbox 単位のコンテナ分離を提供する。ペルソナ分離は sandbox 単位で実現される。
+
+**ブラウザ操作**は従来の `browser` ツールから **Playwright MCP** に移行した。Playwright MCP は headless Chromium で動作し、ナビゲーション・クリック・フォーム入力・スクリーンショット等を網羅する。
+
+OpenCode 等の MCP クライアントから接続する場合の設定例:
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "docker",
+      "args": ["exec", "-i", "playwright", "node", "/app/cli.js"],
+      "url": "http://localhost:8931"
+    },
+    "opensandbox": {
+      "command": "docker",
+      "args": ["exec", "-i", "opensandbox-mcp", "opensandbox-mcp"],
+      "url": "http://localhost:8000"
+    }
+  }
+}
+```

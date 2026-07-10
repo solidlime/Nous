@@ -341,8 +341,6 @@ async def _handle_read_pdf(ctx: AppContext, config: ChatConfig, tool_input: dict
             "message": f"Invalid mode: {mode}. Must be one of: text, tables, images, all",
         }
 
-    filename = Path(path).name
-
     # ── Local filesystem path ──
     pdf_path = Path(path)
     if not pdf_path.exists():

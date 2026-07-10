@@ -10,6 +10,7 @@ from nous.application.chat.tools.builtin import (
     _handle_image_generate,
     _handle_search,
 )
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
