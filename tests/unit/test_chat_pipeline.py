@@ -203,6 +203,92 @@ class TestToolRegistry:
         truncated = reg.truncate_result(result, max_chars=100)
         assert isinstance(truncated, dict)
 
+    def test_truncate_result_image_base64_replaced(self):
+        """content_base64 should be replaced with compact image reference."""
+        from nous.application.chat.tools.registry import ToolRegistry
+
+        reg = ToolRegistry([], mcp_pool=None)
+        b64_data = "iVBORw0KGgo" + "A" * (200 * 1024)  # ~200KB base64
+        result = {
+            "content": "some text result",
+            "content_base64": b64_data,
+            "content_type": "image/png",
+        }
+        truncated = reg.truncate_result(result, max_chars=10000)
+        # content_base64 が参照文字列に置換されている
+        assert truncated["content_base64"].startswith("[image: ")
+        assert "KB" in truncated["content_base64"]
+        assert "image/png" in truncated["content_base64"]
+        # content_type は維持
+        assert truncated["content_type"] == "image/png"
+        # 参照文字列はコンパクト (生base64 <> 参照でサイズ差を確認)
+        assert len(truncated["content_base64"]) < 200
+
+    def test_truncate_result_artifacts_replaced(self):
+        """artifacts entries should each be replaced with image reference."""
+        from nous.application.chat.tools.registry import ToolRegistry
+
+        reg = ToolRegistry([], mcp_pool=None)
+        result = {
+            "stdout": "execution ok",
+            "artifacts": [
+                "iVBORw0KGgo" + "B" * 50000,
+                "iVBORw0KGgo" + "C" * 30000,
+            ],
+        }
+        truncated = reg.truncate_result(result, max_chars=10000)
+        assert len(truncated["artifacts"]) == 2
+        for ref in truncated["artifacts"]:
+            assert ref.startswith("[image: ")
+            assert "KB" in ref
+            assert "image/png" in ref
+
+    def test_truncate_result_both_image_fields_replaced(self):
+        """Both content_base64 and artifacts are replaced."""
+        from nous.application.chat.tools.registry import ToolRegistry
+
+        reg = ToolRegistry([], mcp_pool=None)
+        result = {
+            "content": "has both image types",
+            "content_base64": "iVBORw0KGgo" + "D" * 20000,
+            "content_type": "image/jpeg",
+            "artifacts": ["iVBORw0KGgo" + "E" * 10000],
+        }
+        truncated = reg.truncate_result(result, max_chars=10000)
+        assert truncated["content_base64"].startswith("[image: ")
+        assert "image/jpeg" in truncated["content_base64"]
+        assert len(truncated["artifacts"]) == 1
+        assert truncated["artifacts"][0].startswith("[image: ")
+
+    def test_truncate_result_image_text_truncated(self):
+        """Text part should still be truncated even when images present."""
+        from nous.application.chat.tools.registry import ToolRegistry
+
+        reg = ToolRegistry([], mcp_pool=None)
+        result = {
+            "content": "x" * 10000,
+            "content_base64": "iVBORw0KGgo",
+            "content_type": "image/png",
+        }
+        truncated = reg.truncate_result(result, max_chars=100)
+        assert truncated["content"].endswith("... [truncated]")
+        assert truncated["content_base64"].startswith("[image: ")
+
+    def test_truncate_result_data_uri_prefix(self):
+        """content_base64 with data:image/...;base64, prefix is handled."""
+        from nous.application.chat.tools.registry import ToolRegistry
+
+        reg = ToolRegistry([], mcp_pool=None)
+        raw_b64 = "iVBORw0KGgo" + "F" * 10000
+        data_uri = f"data:image/webp;base64,{raw_b64}"
+        result = {
+            "content": "data uri style",
+            "content_base64": data_uri,
+        }
+        truncated = reg.truncate_result(result, max_chars=10000)
+        assert truncated["content_base64"].startswith("[image: ")
+        assert "image/webp" in truncated["content_base64"]
+
 
 # ──────────────────────────────────────────────
 # PrepareStep — _compute_recency_decay

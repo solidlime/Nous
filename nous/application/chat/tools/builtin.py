@@ -27,6 +27,28 @@ def filter_extra_tools(extra_tools: list[ToolDefinition]) -> list[ToolDefinition
     return [t for t in extra_tools if t.name.split("__")[-1] not in _NOUS_TOOL_NAMES]
 
 
+def _image_ref(b64_str: str, mime_type: str = "image/png") -> str:
+    """Convert base64 image data to a compact reference string.
+
+    Handles both raw base64 and data URI format (data:image/...;base64,...).
+    Returns something like ``[image: 342KB, image/png]``.
+    """
+    data = b64_str
+    ct = mime_type
+
+    # data: URI 形式の場合、MIME と base64 本体を分離
+    if data.startswith("data:"):
+        m = re.match(r"^data:([^;]+);base64,(.+)$", data)
+        if m:
+            ct = m.group(1)
+            data = m.group(2)
+
+    # base64 長さから元のバイトサイズを概算 (base64 は 4/3 倍)
+    size_bytes = len(data) * 3 // 4
+    size_kb = round(size_bytes / 1024)
+    return f"[image: {size_kb}KB, {ct}]"
+
+
 def truncate_tool_result(result: dict, max_chars: int) -> dict:
     """Truncate tool result string to avoid context overflow."""
     has_images = "content_base64" in result or "artifacts" in result
@@ -52,10 +74,11 @@ def truncate_tool_result(result: dict, max_chars: int) -> dict:
         text_str = text_str[:max_chars] + "... [truncated]"
     output = {"content": text_str}
     if "content_base64" in result:
-        output["content_base64"] = result["content_base64"]
-        output["content_type"] = result.get("content_type", "image/png")
+        ct = result.get("content_type", "image/png")
+        output["content_base64"] = _image_ref(result["content_base64"], ct)
+        output["content_type"] = ct
     if "artifacts" in result:
-        output["artifacts"] = result["artifacts"]
+        output["artifacts"] = [_image_ref(a) for a in result["artifacts"]]
     return output
 
 
