@@ -17,7 +17,7 @@ async def _tool_goal_manage(
     ctx: AppContext,
     persona: str,
     operation: str,
-    content: str,
+    content: str = "",
     importance: float = 0.75,
     scope: str = "self",
     memory_key: str | None = None,

@@ -430,7 +430,7 @@ def register_tools(mcp: FastMCP) -> None:
         operation: create/list/achieve/cancel.
         create → requires: content, scope (self/interpersonal), optional: importance.
         list → requires: scope.
-        achieve/cancel → requires: memory_key (content can be empty).
+        achieve/cancel → requires: memory_key. content: optional (not needed when memory_key provided).
         Goals stored as memories with tags=["goal","active/achieved/cancelled"]."""
         p = _resolve_persona()
         r = await _tool_goal_manage(
