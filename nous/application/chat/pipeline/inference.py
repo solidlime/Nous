@@ -124,7 +124,8 @@ class InferenceStep:
                 for tc in (turn_ctx.tool_calls_log or [])
             }
             pending_tool_calls = [
-                tc for tc in pending_tool_calls
+                tc
+                for tc in pending_tool_calls
                 if (tc.tool_name, json.dumps(tc.tool_input, sort_keys=True, default=str)) not in executed_keys
             ]
 

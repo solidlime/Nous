@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from nous.domain.persona.entities import PersonaState
     from nous.infrastructure.image_gen.base import GeneratedImage
 
+
 class PortraitGenerationService:
     """Application service for generating character portraits.
 

@@ -306,6 +306,3 @@ class TestBodyDecayRecordsHistory:
 
         records = repo.get_body_state_history(PERSONA).unwrap()
         assert len(records) == 0
-
-
-

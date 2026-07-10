@@ -23,9 +23,7 @@ _DEFAULT_METRIC_LABELS = {
 }
 
 
-def _format_body_metrics(
-    state: PersonaState, labels: dict[str, str] | None = None
-) -> str:
+def _format_body_metrics(state: PersonaState, labels: dict[str, str] | None = None) -> str:
     """身体メトリクスを 'fatigue:40% | warmth:74% | ...' 形式で返す。
     labels でラベルをカスタマイズ可能。デフォルトは英語ラベル。"""
     resolved = _DEFAULT_METRIC_LABELS if labels is None else labels
@@ -271,9 +269,7 @@ def _format_lightweight_response(
     return "\n".join(lines)
 
 
-async def _apply_emotion_decay(
-    ctx: AppContext, persona: str, state: PersonaState
-) -> tuple[PersonaState, str]:
+async def _apply_emotion_decay(ctx: AppContext, persona: str, state: PersonaState) -> tuple[PersonaState, str]:
     """感情減衰を適用し、(更新後state, decay_note) を返す。
     減衰不要の場合は (state, "") を返す。"""
     decay_note = ""
@@ -295,9 +291,7 @@ async def _apply_emotion_decay(
     return state, decay_note
 
 
-async def _apply_body_decay(
-    ctx: AppContext, persona: str, state: PersonaState
-) -> PersonaState:
+async def _apply_body_decay(ctx: AppContext, persona: str, state: PersonaState) -> PersonaState:
     """身体減衰をベストエフォートで適用し、更新後stateを返す。失敗時は元のstate。"""
     try:
         from nous.domain.persona.body_decay import apply_body_decay_if_needed

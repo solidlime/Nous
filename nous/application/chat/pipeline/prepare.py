@@ -204,8 +204,12 @@ async def _search_memories(
     if rrf_values:
         logger.debug(
             "RRF scores: min=%.4f, max=%.4f, k=%s, top_%d_composite_range=[%.4f, %.4f]",
-            min(rrf_values), max(rrf_values), rrf_k, len(top),
-            top[-1][0], top[0][0],
+            min(rrf_values),
+            max(rrf_values),
+            rrf_k,
+            len(top),
+            top[-1][0],
+            top[0][0],
         )
 
     annotator = RecallAnnotator()

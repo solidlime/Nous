@@ -70,13 +70,16 @@ async def _tool_memory_create(
                 (persona, content.strip()),
             ).fetchone()
             if row:
-                return json.dumps({
-                    "ok": True,
-                    "status": "duplicate",
-                    "duplicate_of": row[0],
-                    "message": f"Identical content already exists (key: {row[0]}). Skipped.",
-                    "auto_emotion": False,
-                }, ensure_ascii=False)
+                return json.dumps(
+                    {
+                        "ok": True,
+                        "status": "duplicate",
+                        "duplicate_of": row[0],
+                        "message": f"Identical content already exists (key: {row[0]}). Skipped.",
+                        "auto_emotion": False,
+                    },
+                    ensure_ascii=False,
+                )
         except Exception:
             pass  # Fall through to normal creation if check fails
 

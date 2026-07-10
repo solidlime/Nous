@@ -399,8 +399,7 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
             state_fields = {
                 k: v
                 for k, v in ctx_update.items()
-                if k in {"environment", "fatigue", "warmth", "arousal"}
-                and v is not None
+                if k in {"environment", "fatigue", "warmth", "arousal"} and v is not None
             }
             if state_fields:
                 ctx.persona_service.update_physical_state(persona, **state_fields)

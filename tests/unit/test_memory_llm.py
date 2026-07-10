@@ -1089,8 +1089,7 @@ class TestRunMemoryLLM:
             _, kwargs = call
             content = kwargs.get("content", "")
             assert not any(
-                content.startswith(prefix)
-                for prefix in ("speech_style:", "physical_state:", "mental_state:")
+                content.startswith(prefix) for prefix in ("speech_style:", "physical_state:", "mental_state:")
             ), f"Memory should not be created: {content}"
 
     @pytest.mark.asyncio
@@ -1115,6 +1114,5 @@ class TestRunMemoryLLM:
             _, kwargs = call
             content = kwargs.get("content", "")
             assert not any(
-                content.startswith(prefix)
-                for prefix in ("speech_style:", "physical_state:", "mental_state:")
+                content.startswith(prefix) for prefix in ("speech_style:", "physical_state:", "mental_state:")
             ), f"Memory should not be created for None: {content}"

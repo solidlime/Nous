@@ -679,6 +679,3 @@ def test_chat_tab_renders_artifacts_tab():
 
     assert "ca-artifacts" in html
     assert "ca-panel" in html
-
-
-

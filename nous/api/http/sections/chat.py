@@ -486,6 +486,3 @@ def render_chat_tab() -> str:
                 </div>
             </div>
         </section>""" + render_coding_agent_panel()
-
-
-

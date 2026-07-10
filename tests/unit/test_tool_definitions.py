@@ -152,9 +152,7 @@ def test_core_always_tools_all_exist_in_memory_tools():
     """
     memory_names = {td.name for td in MEMORY_TOOLS}
     missing = CORE_ALWAYS_TOOLS - memory_names
-    assert not missing, (
-        f"CORE_ALWAYS_TOOLS missing from MEMORY_TOOLS: {missing}"
-    )
+    assert not missing, f"CORE_ALWAYS_TOOLS missing from MEMORY_TOOLS: {missing}"
 
 
 def test_get_filtered_tools_always_includes_core():
@@ -166,9 +164,7 @@ def test_get_filtered_tools_always_includes_core():
     result_names = {td.name for td in result}
 
     missing = CORE_ALWAYS_TOOLS - result_names
-    assert not missing, (
-        f"get_filtered_tools がコアツールを除外: {missing}"
-    )
+    assert not missing, f"get_filtered_tools がコアツールを除外: {missing}"
 
 
 def test_get_filtered_tools_dynamic_off_returns_all():
@@ -199,14 +195,10 @@ def test_conditional_tools_are_subset_of_all_builtin_tools():
     """CONDITIONAL_TOOLS のキーは全て MEMORY_TOOLS に存在する。"""
     all_names = {td.name for td in MEMORY_TOOLS}
     unknown = set(CONDITIONAL_TOOLS) - all_names
-    assert not unknown, (
-        f"CONDITIONAL_TOOLS のキーが MEMORY_TOOLS に存在しない: {unknown}"
-    )
+    assert not unknown, f"CONDITIONAL_TOOLS のキーが MEMORY_TOOLS に存在しない: {unknown}"
 
 
 def test_conditional_tools_not_in_core():
     """CONDITIONAL_TOOLS のキーは CORE_ALWAYS_TOOLS と重複しない。"""
     overlap = set(CONDITIONAL_TOOLS) & CORE_ALWAYS_TOOLS
-    assert not overlap, (
-        f"CONDITIONAL_TOOLS が CORE_ALWAYS_TOOLS と重複: {overlap}"
-    )
+    assert not overlap, f"CONDITIONAL_TOOLS が CORE_ALWAYS_TOOLS と重複: {overlap}"

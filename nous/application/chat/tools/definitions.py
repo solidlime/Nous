@@ -48,7 +48,11 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 "content": {"type": "string", "description": "記憶の内容"},
                 "importance": {"type": "number", "description": "重要度 0.0〜1.0", "default": 0.6},
                 "tags": {"type": "array", "items": {"type": "string"}, "description": "タグリスト"},
-                "skip_duplicate_check": {"type": "boolean", "description": "Skip semantic duplicate detection. ALWAYS keep as false unless explicitly asked by user.", "default": False},
+                "skip_duplicate_check": {
+                    "type": "boolean",
+                    "description": "Skip semantic duplicate detection. ALWAYS keep as false unless explicitly asked by user.",
+                    "default": False,
+                },
             },
             "required": ["content"],
         },
@@ -366,6 +370,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         },
     ),
 ]
+
 
 def get_filtered_tools(config: ChatConfig) -> list[ToolDefinition]:
     """コアツール + 条件次第で条件付きツールを返す。

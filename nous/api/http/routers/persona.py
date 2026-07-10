@@ -203,7 +203,7 @@ def register_persona_routes(mcp) -> None:
                         prefix = f"{tag}: "
                         content = latest.content
                         if content.startswith(prefix):
-                            content = content[len(prefix):]
+                            content = content[len(prefix) :]
                         state_memories[tag] = {
                             "content": content,
                             "created_at": latest.created_at.isoformat() if latest.created_at else None,
