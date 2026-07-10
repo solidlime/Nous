@@ -632,7 +632,7 @@ class TestCompressStep:
         from nous.application.chat.pipeline.compress import CompressStep
 
         config = _make_chat_config(
-            context_max_tokens=5000,
+            context_max_tokens=6000,
             api_key="sk-test",
             context_use_llm_summary=True,
         )
@@ -716,7 +716,8 @@ class TestDogfooding:
                 top_p REAL,
                 context_use_llm_summary INTEGER DEFAULT 1,
                 episode_consolidation_enabled INTEGER DEFAULT 1,
-                episode_search_enabled INTEGER DEFAULT 1
+                episode_search_enabled INTEGER DEFAULT 1,
+                dynamic_tool_selection INTEGER DEFAULT 1
             )
         """)
         db.commit()

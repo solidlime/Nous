@@ -55,7 +55,9 @@ class CompressStep:
             model_max = config.context_max_tokens
         else:
             model_max = TokenCounter.get_model_max_tokens(model)
-        budget = int(model_max * config.context_compression_threshold)
+        budget = int(model_max * config.context_compression_threshold - (config.max_tokens or 4096))
+        # Ensure budget never goes below 10% of model_max
+        budget = max(budget, int(model_max * 0.1))
 
         if total <= budget:
             logger.debug(
