@@ -79,15 +79,6 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> str:
     except Exception:
         pass
 
-    # Body state history for time gap display
-    body_state_history: list = []
-    try:
-        bh_result = ctx.persona_service.get_body_state_history(persona, limit=5)
-        if bh_result.is_ok:
-            body_state_history = bh_result.value
-    except Exception:
-        pass
-
     # Lightweight: essentials for seamless persona + conversation restoration
     goals_result = ctx.memory_service.get_by_tags(["goal"])
     goals = goals_result.value if goals_result.is_ok else []
@@ -142,7 +133,6 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> str:
         session_summaries,
         current_time,
         decay_note=decay_note,
-        body_state_history=body_state_history or None,
         one_shot_context=one_shot_context or None,
     )
     await ctx.event_bus.publish(

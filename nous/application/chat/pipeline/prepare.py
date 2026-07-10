@@ -23,41 +23,99 @@ logger = get_logger(__name__)
 
 _RECENCY_LAMBDA = 0.5  # half-life ≈ 1.4 days
 
+
+def _build_relationship_context(ctx: AppContext) -> str:
+    """Build relationship context summary from interaction history.
+    Returns empty string if no interaction history exists."""
+    db = ctx.connection.get_memory_db()
+    persona = ctx.persona
+
+    # First interaction time
+    row = db.execute(
+        "SELECT MIN(created_at) FROM session_events WHERE persona = ?",
+        (persona,),
+    ).fetchone()
+    first_at_str = row[0] if row and row[0] else None
+    if not first_at_str:
+        return ""  # No history at all
+
+    first_at = datetime.fromisoformat(first_at_str)
+    now = datetime.now(UTC)
+    days_known = (now - first_at.replace(tzinfo=UTC)).days
+
+    # Active days (distinct dates with events)
+    row = db.execute(
+        "SELECT COUNT(DISTINCT DATE(created_at)) FROM session_events WHERE persona = ?",
+        (persona,),
+    ).fetchone()
+    active_days = row[0] if row else 0
+
+    # Time since last conversation
+    row = db.execute(
+        "SELECT value FROM context_state WHERE persona = ? AND key = 'last_conversation_time' AND valid_until IS NULL",
+        (persona,),
+    ).fetchone()
+    last_time_str = row[0] if row else None
+    days_since_last = None
+    if last_time_str:
+        try:
+            last_at = datetime.fromisoformat(last_time_str)
+            days_since_last = (now - last_at.replace(tzinfo=UTC)).days
+        except (ValueError, TypeError):
+            pass
+
+    lines = ["\n--- 関係性コンテキスト ---"]
+    if days_known == 0:
+        lines.append("このユーザーと初めて会話する。")
+    elif days_known == 1:
+        lines.append(f"昨日から知り合った。これまで {active_days} 日会話した。")
+    else:
+        lines.append(f"{days_known}日前から知り合い。これまで {active_days} 日会話した。")
+
+    if days_since_last is not None:
+        if days_since_last == 0:
+            pass  # Same day, skip
+        elif days_since_last == 1:
+            lines.append("前回の会話から1日経過。")
+        elif days_since_last < 7:
+            lines.append(f"前回の会話から{days_since_last}日経過。")
+        elif days_since_last < 30:
+            lines.append(f"前回の会話から{days_since_last}日経過。しばらく話していない。")
+        else:
+            lines.append(f"前回の会話から{days_since_last}日経過。長い間話していなかった。")
+
+    return "\n".join(lines)
+
+
 RECALL_ANNOTATION_GUIDELINES = """
 ## Memory Recall Annotations
-Each recalled memory includes annotations: [certainty: X, time: Y, source: Z, kind: W].
-Use these as hints for natural recall expression — not as literal text to output.
+Each memory includes annotations [certainty, time, source, kind] as hints.
+Express naturally — never output the labels literally.
 
-(Examples below include English and Japanese phrases for multilingual reference.
-Use whichever matches your persona's natural language — never copy-paste.)
+### Certainty
+- confident → state directly.  tentative → hedge ("I think...", "たしか...")
+- vague → strong hedge ("vaguely remember", "〜だった気がする")
+- forgotten → do NOT mention.
 
-### Certainty hints:
-- confident → Recall with assertion. No hedging needed.
-- tentative → Use hedging: "I think...", "たしか...", etc. in your persona's voice.
-- vague → Use stronger hedging: "I vaguely remember...", "〜だった気がする...", etc.
-- forgotten → Do NOT mention this memory (should_mention is false).
+### Time
+- recent/days_7 → "さっき", "この前"
+- days_30 → "こないだ", "a while ago"
+- days_90+ → "前に", "a few months back"
+- years → "昔", "long ago"
 
-### Time hints:
-- recent / days_7 → "just now", "the other day", "さっき", "この前"
-- days_30 → "a while ago", "こないだ"
-- days_90 → "a few months back", "前に"
-- years → "long ago", "昔"
+### Source
+- user_stated → direct.  llm_inferred → slight hedge.
+- reflected → insight ("考えてみると...")
+- consolidated → summary of multiple memories.
 
-### Source hints:
-- user_stated → Recall with confidence (user said it directly).
-- llm_inferred → Slightly hedged (inferred, not explicitly stated).
-- reflected → Express as an insight: "Thinking about it...", "考えてみると..."
-- consolidated → Express as a summary of multiple memories.
-
-### Kind hints:
-- episodic → Include time/place context if available.
-- semantic → State as fact or preference.
-- prospective → Frame as future intention or reminder.
+### Kind
+- episodic → include time/place context.
+- semantic → state as fact/preference.
+- prospective → frame as intention/reminder.
 
 IMPORTANT:
-- Express everything naturally in your persona's voice.
-- NEVER output the annotation labels themselves.
-- NEVER say "database", "retrieved", "record", "search result" or any technical term.
+- Express naturally in your persona's voice.
+- NEVER output annotation labels or technical terms (database, retrieved, record).
 """
 
 
@@ -256,7 +314,7 @@ async def _build_context_section(
     t1: list[str] = []  # Tier 1: 現在の状態
     t2: list[str] = []  # Tier 2: 身体・環境
     t3: list[str] = []  # Tier 3: 参照情報
-    _is_light = compress_mode in ("light", "normal", "aggressive")
+    _is_light = compress_mode == "light"
 
     # === Tier 1: 現在の状態 ===
     now_jst = get_now()
@@ -292,20 +350,39 @@ async def _build_context_section(
         t1.append(f"  Emotion: {decay_note}")
 
     # === Tier 2: 身体・環境 ===
-    # Body state — qualitative summary, flag only significantly elevated metrics
-    high_metrics: list[str] = []
-    for key, label in [("fatigue", "疲労"), ("pain", "痛み"), ("arousal", "過覚醒")]:
+    # Body state — show all 5 metrics with percentages (unified with MCP tools format)
+    body_parts: list[str] = []
+    for key, label in [
+        ("fatigue", "疲労"),
+        ("warmth", "体温"),
+        ("arousal", "覚醒"),
+        ("heart_rate", "心拍"),
+        ("pain", "痛み"),
+    ]:
         val = getattr(state, key, None)
-        if val is not None and val > 0.7:
-            high_metrics.append(label)
-    if high_metrics:
-        t2.append(f"身体: {'・'.join(high_metrics)}が強めです")
+        if val is not None:
+            body_parts.append(
+                f"{label}:{val:.0%}" if isinstance(val, (int, float)) else f"{label}:{val}"
+            )
+    if body_parts:
+        t2.append(f"身体: {' | '.join(body_parts)}")
 
     if getattr(state, "environment", None):
         t2.append(f"場所: {state.environment}")
 
     if getattr(state, "relationship_status", None):
         t2.append(f"関係: {state.relationship_status}")
+
+    # Add relationship context (days known, active days, time since last)
+    try:
+        rel_ctx = _build_relationship_context(ctx)
+        if rel_ctx:
+            # Extract just the content (remove the "--- 関係性コンテキスト ---" header)
+            rel_lines = rel_ctx.split("\n")
+            if len(rel_lines) > 1:
+                t2.append("\n".join(rel_lines[1:]))  # skip header
+    except Exception as e:
+        logger.debug("Failed to build relationship context: %s", e)
 
     user_info = getattr(state, "user_info", None) or {}
     if user_info:
@@ -324,25 +401,15 @@ async def _build_context_section(
         goals_result = ctx.memory_service.get_by_tags(["goal"])
         goals = goals_result.value if goals_result.is_ok else []
         active_goals = [g for g in goals if "active" in (g.tags or [])]
-        promises_result = ctx.memory_service.get_by_tags(["promise"])
-        promises = promises_result.value if promises_result.is_ok else []
-        active_promises = [p for p in promises if "active" in (p.tags or [])]
-        if turn_ctx is not None:
-            turn_ctx.cached_active_goals = active_goals
-            turn_ctx.cached_active_promises = active_promises
-        if active_goals or active_promises:
+        if active_goals:
             commit_lines: list[str] = []
             for g in active_goals:
                 ts = relative_time_str(g.created_at) if getattr(g, "created_at", None) else ""
                 ts_str = f" ({ts})" if ts else ""
                 commit_lines.append(f"  🎯 [Goal] {g.content}{ts_str}")
-            for p in active_promises:
-                ts = relative_time_str(p.created_at) if getattr(p, "created_at", None) else ""
-                ts_str = f" ({ts})" if ts else ""
-                commit_lines.append(f"  🤝 [Promise] {p.content}{ts_str}")
             t3.append("Active commitments:\n" + "\n".join(commit_lines))
     except Exception as e:
-        logger.debug("Failed to fetch goals/promises: %s", e)
+        logger.debug("Failed to fetch goals: %s", e)
 
     # Emotion trend — skip in light mode
     if not _is_light:

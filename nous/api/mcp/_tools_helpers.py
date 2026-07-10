@@ -114,7 +114,6 @@ def _format_lightweight_response(
     session_summaries: list | None = None,
     current_time: str = "",
     decay_note: str = "",
-    body_state_history: list | None = None,
     one_shot_context: dict[str, str] | None = None,
 ) -> str:
     """Lightweight context (~700-900 tokens): persona + conversation continuity + body state."""
@@ -148,26 +147,6 @@ def _format_lightweight_response(
         lines.append("\n【前回セッションからの状態】")
         for label, content in one_shot_context.items():
             lines.append(f"  {label}: {content}")
-
-    # Body state history — show how body has changed over time
-    if body_state_history and len(body_state_history) >= 2:
-        lines.append("  Body state history:")
-        for record in body_state_history[-3:]:  # last 3 records
-            parts = []
-            for key, label in [
-                ("fatigue", "fatigue"),
-                ("warmth", "warmth"),
-                ("arousal", "arousal"),
-                ("heart_rate", "heart"),
-                ("pain", "pain"),
-            ]:
-                val = getattr(record, key, None)
-                if val is not None:
-                    parts.append(f"{label}:{val:.0%}")
-            if parts:
-                ts = relative_time_str(record.timestamp) if getattr(record, "timestamp", None) else ""
-                ctx_str = f" ({record.context})" if getattr(record, "context", None) else ""
-                lines.append(f"    [{ts}{ctx_str}] {' | '.join(parts)}")
 
     if state.relationship_status:
         lines.append(f"Your relationship: {state.relationship_status}")
@@ -233,17 +212,6 @@ def _format_lightweight_response(
             ts = relative_time_str(m.created_at) if getattr(m, "created_at", None) else ""
             ts_str = f" ({ts})" if ts else ""
             lines.append(f"- {snippet}{ts_str}")
-
-        # Synthesize current context from recent memory tags (no LLM call needed)
-        recent_tags: set[str] = set()
-        for m in recent[:8]:
-            for t in (m.tags or [])[:3]:
-                t_clean = t.strip().lower()
-                if t_clean not in ("active", "cancelled", "achieved", "fulfilled", "mental_state"):
-                    recent_tags.add(t_clean)
-        if recent_tags:
-            top_tags = sorted(recent_tags)[:6]
-            lines.append(f"📌 Context tags: {', '.join(top_tags)}")
 
     # Essential Story
     if top_memories:

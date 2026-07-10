@@ -18,9 +18,6 @@ class ChatTurnContext:
     context_section: str = ""
     related_memories: str = ""
     state_raw: dict = field(default_factory=dict)
-    # キャッシュフィールド
-    cached_active_goals: list = field(default_factory=list)
-    cached_active_promises: list = field(default_factory=list)
     memories_raw: list[dict] = field(default_factory=list)
     memories_objects: list = field(default_factory=list)
     memory_debug: dict = field(default_factory=dict)
