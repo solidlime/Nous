@@ -689,6 +689,7 @@ class TestDogfooding:
                 retrieval_recency_weight REAL DEFAULT 0.3,
                 retrieval_importance_weight REAL DEFAULT 0.3,
                 retrieval_relevance_weight REAL DEFAULT 0.4,
+                retrieval_rrf_k REAL DEFAULT 5.0,
                 display_history_turns INTEGER DEFAULT 20,
                 housekeeping_threshold INTEGER DEFAULT 10,
                 sandbox_enabled INTEGER DEFAULT 0,

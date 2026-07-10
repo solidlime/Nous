@@ -145,6 +145,7 @@ async def _search_memories(
     recency_w: float = getattr(config, "retrieval_recency_weight", 0.3)
     importance_w: float = getattr(config, "retrieval_importance_weight", 0.3)
     relevance_w: float = getattr(config, "retrieval_relevance_weight", 0.4)
+    rrf_k: float = getattr(config, "retrieval_rrf_k", 5.0)
 
     queries = [user_message]
     if last_assistant:
@@ -174,7 +175,7 @@ async def _search_memories(
             else:
                 mem = item
             content = getattr(mem, "content", str(mem))
-            rrf_score = 1.0 / (60 + pos + 1)
+            rrf_score = 1.0 / (rrf_k + pos + 1)
             if content in seen:
                 rrf_scores[content] = rrf_scores.get(content, 0.0) + rrf_score
             else:
@@ -197,6 +198,15 @@ async def _search_memories(
 
     if not top:
         return "", {"queries": queries, "results": []}, []
+
+    # Debug: RRF score range
+    rrf_values = [rrf_scores.get(getattr(m, "content", str(m)), 0.0) for _, m in scored]
+    if rrf_values:
+        logger.debug(
+            "RRF scores: min=%.4f, max=%.4f, k=%s, top_%d_composite_range=[%.4f, %.4f]",
+            min(rrf_values), max(rrf_values), rrf_k, len(top),
+            top[-1][0], top[0][0],
+        )
 
     annotator = RecallAnnotator()
     now = datetime.now(tz=UTC)

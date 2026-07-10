@@ -71,6 +71,7 @@ class ChatConfig(BaseModel):
     retrieval_recency_weight: float = 0.3
     retrieval_importance_weight: float = 0.3
     retrieval_relevance_weight: float = 0.4
+    retrieval_rrf_k: float = 5.0  # RRF k parameter for memory search relevance scoring
     # Chat history display (separate from context window)
     display_history_turns: int = 20
     # Housekeeping auto-trigger threshold (total active goals+promises)
@@ -147,6 +148,11 @@ class ChatConfig(BaseModel):
     @classmethod
     def _clamp_retrieval_weights(cls, v: float) -> float:
         return normalize_importance(v)
+
+    @field_validator("retrieval_rrf_k")
+    @classmethod
+    def _clamp_retrieval_rrf_k(cls, v: float) -> float:
+        return max(0.1, min(100.0, v))
 
     @field_validator("display_history_turns")
     @classmethod
@@ -264,7 +270,8 @@ class ChatConfigRepository:
             "image_gen_enabled, image_gen_provider, image_gen_dalle_model, image_gen_stability_url, "
             "enable_memory_tools, debug_mode, "
             "dynamic_temperature, emotion_temperature_scale, top_p, "
-            "context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled "
+            "context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled, "
+            "retrieval_rrf_k "
             "FROM chat_settings WHERE persona = ?",
             (persona,),
         ).fetchone()
@@ -323,6 +330,7 @@ class ChatConfigRepository:
             context_use_llm_summary=bool(row[47]) if len(row) > 47 and row[47] is not None else True,
             episode_consolidation_enabled=bool(row[48]) if len(row) > 48 and row[48] is not None else True,
             episode_search_enabled=bool(row[49]) if len(row) > 49 and row[49] is not None else True,
+            retrieval_rrf_k=float(row[50]) if len(row) > 50 and row[50] is not None else 5.0,
         )
 
     def save(self, config: ChatConfig) -> None:
@@ -347,9 +355,10 @@ class ChatConfigRepository:
                    image_gen_enabled, image_gen_provider, image_gen_dalle_model, image_gen_stability_url,
                    enable_memory_tools, debug_mode,
                    dynamic_temperature, emotion_temperature_scale, top_p,
-                   context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled,
-                   updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled,
+                    retrieval_rrf_k,
+                    updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
@@ -399,6 +408,7 @@ class ChatConfigRepository:
                  context_use_llm_summary=excluded.context_use_llm_summary,
                  episode_consolidation_enabled=excluded.episode_consolidation_enabled,
                  episode_search_enabled=excluded.episode_search_enabled,
+                 retrieval_rrf_k=excluded.retrieval_rrf_k,
                  updated_at=excluded.updated_at
             """,
             (
@@ -451,6 +461,7 @@ class ChatConfigRepository:
                 int(config.context_use_llm_summary),
                 int(config.episode_consolidation_enabled),
                 int(config.episode_search_enabled),
+                config.retrieval_rrf_k,
                 now,
             ),
         )
