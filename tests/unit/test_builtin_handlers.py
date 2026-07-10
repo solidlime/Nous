@@ -7,12 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from nous.application.chat.tools.builtin import (
-    _handle_execute_code,
     _handle_image_generate,
     _handle_search,
 )
-from nous.application.sandbox.service import ExecResult
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -40,96 +37,11 @@ def mock_runtime_config():
 def mock_config():
     """Minimal ChatConfig mock."""
     cfg = MagicMock()
-    cfg.sandbox_enabled = True
     cfg.image_gen_enabled = True
     cfg.image_gen_provider = "openai"
     cfg.image_gen_dalle_model = "dall-e-3"
     cfg.image_gen_stability_url = ""
     return cfg
-
-
-# ===================================================================
-# _handle_execute_code
-# ===================================================================
-
-
-class TestExecuteCodeHandler:
-    @pytest.mark.asyncio
-    async def test_execute_empty_code(self, mock_ctx, mock_config):
-        """code無指定 → sandbox.executeが空文字で呼ばれる"""
-        mock_session = AsyncMock()
-        mock_session.execute.return_value = ExecResult(stdout="", stderr="", exit_code=0, artifacts=[])
-
-        with patch(
-            "nous.application.sandbox.service.get_sandbox_session",
-            return_value=mock_session,
-        ) as mock_get:
-            result = await _handle_execute_code(mock_ctx, mock_config, {})
-
-        assert result["exit_code"] == 0
-        mock_get.assert_called_once_with("test_persona")
-        mock_session.execute.assert_awaited_once_with("", "python", libraries=[])
-
-    @pytest.mark.asyncio
-    async def test_execute_sandbox_disabled(self, mock_ctx, mock_config):
-        """sandbox無効 → error"""
-        mock_config.sandbox_enabled = False
-        result = await _handle_execute_code(mock_ctx, mock_config, {"code": "print(1)"})
-        assert result["status"] == "error"
-        assert "Sandbox" in result["message"]
-
-    @pytest.mark.asyncio
-    async def test_execute_valid_python(self, mock_ctx, mock_config):
-        """python実行 → sandbox session呼出し確認"""
-        mock_session = AsyncMock()
-        mock_session.execute.return_value = ExecResult(stdout="hello\n", stderr="", exit_code=0, artifacts=[])
-
-        with patch(
-            "nous.application.sandbox.service.get_sandbox_session",
-            return_value=mock_session,
-        ) as mock_get:
-            result = await _handle_execute_code(mock_ctx, mock_config, {"code": "print('hello')", "language": "python"})
-
-        assert result["stdout"] == "hello\n"
-        assert result["exit_code"] == 0
-        mock_get.assert_called_once_with("test_persona")
-        mock_session.execute.assert_awaited_once_with("print('hello')", "python", libraries=[])
-
-    @pytest.mark.asyncio
-    async def test_execute_valid_bash(self, mock_ctx, mock_config):
-        """bash実行 → sandbox session呼出し確認"""
-        mock_session = AsyncMock()
-        mock_session.execute.return_value = ExecResult(stdout="file.txt\n", stderr="", exit_code=0, artifacts=[])
-
-        with patch(
-            "nous.application.sandbox.service.get_sandbox_session",
-            return_value=mock_session,
-        ) as mock_get:
-            result = await _handle_execute_code(mock_ctx, mock_config, {"code": "ls", "language": "bash"})
-
-        assert result["stdout"] == "file.txt\n"
-        assert result["exit_code"] == 0
-        mock_get.assert_called_once_with("test_persona")
-        mock_session.execute.assert_awaited_once_with("ls", "bash", libraries=[])
-
-    @pytest.mark.asyncio
-    async def test_execute_with_session_id(self, mock_ctx, mock_config):
-        """session_id指定 → personaスコープ付きでsandbox取得"""
-        mock_session = AsyncMock()
-        mock_session.execute.return_value = ExecResult(stdout="ok", stderr="", exit_code=0)
-
-        with patch(
-            "nous.application.sandbox.service.get_sandbox_session",
-            return_value=mock_session,
-        ) as mock_get:
-            result = await _handle_execute_code(
-                mock_ctx,
-                mock_config,
-                {"code": "x=1", "session_id": "sess_001"},
-            )
-
-        assert result["session_id"] == "sess_001"
-        mock_get.assert_called_once_with("test_persona_sess_001")
 
 
 # ===================================================================

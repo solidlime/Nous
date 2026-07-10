@@ -357,6 +357,14 @@ MEMORY_TOOLS: list[ToolDefinition] = [
             "required": ["path"],
         },
     ),
+    ToolDefinition(
+        name="list_skills",
+        description="登録済みスキル一覧を取得。引数不要。",
+        input_schema={
+            "type": "object",
+            "properties": {},
+        },
+    ),
 ]
 
 def get_filtered_tools(config: ChatConfig) -> list[ToolDefinition]:

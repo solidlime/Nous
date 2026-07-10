@@ -1,6 +1,6 @@
 """Schema integrity tests for ToolDefinition definitions.
 
-These tests validate structural invariants of MEMORY_TOOLS and SANDBOX_TOOLS
+These tests validate structural invariants of MEMORY_TOOLS
 to catch regressions during refactoring (e.g. promise_manage/goal_manage).
 """
 
@@ -12,7 +12,6 @@ from nous.application.chat.tools.definitions import (
     CONDITIONAL_TOOLS,
     CORE_ALWAYS_TOOLS,
     MEMORY_TOOLS,
-    SANDBOX_TOOLS,
     get_filtered_tools,
 )
 
@@ -36,7 +35,6 @@ _VALID_JSON_SCHEMA_TYPES = frozenset(
 def _all_tools():
     """Shorthand for iterating over every defined tool."""
     yield from MEMORY_TOOLS
-    yield from SANDBOX_TOOLS
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +86,7 @@ def test_all_enums_are_non_empty():
 
 
 def test_no_duplicate_tool_names():
-    """No duplicate tool names across MEMORY_TOOLS + SANDBOX_TOOLS."""
+    """No duplicate tool names across MEMORY_TOOLS."""
     names = [td.name for td in _all_tools()]
     assert len(names) == len(set(names)), f"Duplicate names: {[n for n in names if names.count(n) > 1]}"
 
@@ -198,11 +196,11 @@ def test_get_filtered_tools_dynamic_on_returns_all_currently():
 
 
 def test_conditional_tools_are_subset_of_all_builtin_tools():
-    """CONDITIONAL_TOOLS のキーは全て MEMORY_TOOLS + SANDBOX_TOOLS に存在する。"""
-    all_names = {td.name for td in MEMORY_TOOLS} | {td.name for td in SANDBOX_TOOLS}
+    """CONDITIONAL_TOOLS のキーは全て MEMORY_TOOLS に存在する。"""
+    all_names = {td.name for td in MEMORY_TOOLS}
     unknown = set(CONDITIONAL_TOOLS) - all_names
     assert not unknown, (
-        f"CONDITIONAL_TOOLS のキーがどのツールリストにも存在しない: {unknown}"
+        f"CONDITIONAL_TOOLS のキーが MEMORY_TOOLS に存在しない: {unknown}"
     )
 
 
