@@ -947,8 +947,9 @@ async function clearChatHistory() {
         "/sessions/" +
         encodeURIComponent(oldSid),
       { method: "DELETE" },
-    ).catch(() => {
-      /* ignore */
+    ).catch(e => {
+      console.warn("[session delete] failed:", e);
+      toast("セッション削除失敗: " + e.message, "error");
     });
   }
   document.getElementById("chat-status").textContent = "会話をリセットしました";
@@ -1207,7 +1208,14 @@ async function restoreChatHistory() {
     // Remove skeleton
     const skel = document.getElementById("chat-history-skeleton");
     if (skel) skel.remove();
-    if (!data || !data.messages || data.messages.length === 0) {
+    if (!data || !data.messages) {
+      console.warn("[restoreChatHistory] unexpected response — data or messages missing:", data);
+      S.historyLoadFailed = true;
+      return;
+    }
+    if (data.messages.length === 0) {
+      // Legitimate: no history, welcome screen already shown via resetToWelcome()
+      console.info("[restoreChatHistory] no messages, fresh start");
       return;
     }
     // display_history_turns 件数分（最新N turns = N*2 messages）に制限
