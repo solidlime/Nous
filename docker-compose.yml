@@ -1,4 +1,17 @@
 # DATA_ROOT → ホスト側パス（.env.example 参照）。コンテナ側は NOUS_DATA_ROOT (/opt/nous/data) で固定。
+
+x-opensandbox-mcp: &opensandbox-mcp
+  image: python:3.11-slim
+  command: >
+    sh -c "pip install --no-cache-dir opensandbox-mcp &&
+           opensandbox-mcp --transport streamable-http --domain opensandbox:8090 --protocol http"
+  environment:
+    TZ: Asia/Tokyo
+  restart: unless-stopped
+  depends_on:
+    opensandbox:
+      condition: service_healthy
+
 services:
   qdrant:
     image: qdrant/qdrant:latest
@@ -98,22 +111,24 @@ services:
       - source: opensandbox-config
         target: /etc/opensandbox/config.toml
 
-  opensandbox-mcp:
-    image: python:3.11-slim
-    container_name: opensandbox-mcp
+  opensandbox-mcp-herta:
+    <<: *opensandbox-mcp
+    container_name: opensandbox-mcp-herta
     ports:
-      - "8000:8000"
-    command: >
-      sh -c "pip install --no-cache-dir opensandbox-mcp &&
-             opensandbox-mcp --transport streamable-http
-                            --domain opensandbox:8090
-                            --protocol http"
-    environment:
-      TZ: Asia/Tokyo
-    restart: unless-stopped
-    depends_on:
-      opensandbox:
-        condition: service_healthy
+      - "8001:8000"
+
+  opensandbox-mcp-alice:
+    <<: *opensandbox-mcp
+    container_name: opensandbox-mcp-alice
+    ports:
+      - "8002:8000"
+
+  opensandbox-mcp-bob:
+    <<: *opensandbox-mcp
+    container_name: opensandbox-mcp-bob
+    ports:
+      - "8003:8000"
+  # NOUS_PERSONAS と同数を手動追加（スクリプト生成なし）
 
   nous:
     image: ghcr.io/solidlime/nous:latest

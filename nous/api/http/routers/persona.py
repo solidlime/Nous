@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import shutil
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import httpx
 from starlette.responses import HTMLResponse, JSONResponse
 
 from nous.api.http.deps import (
@@ -319,6 +321,7 @@ def register_persona_routes(mcp) -> None:
             if persona in AppContextRegistry._contexts:
                 AppContextRegistry._contexts[persona].close()
                 del AppContextRegistry._contexts[persona]
+            await _cleanup_opensandbox_sandboxes(persona)
             shutil.rmtree(persona_dir)
             return JSONResponse({"status": "ok", "deleted": persona})
         except Exception as exc:
@@ -489,3 +492,48 @@ def _render_setup_page() -> str:
 </script>
 </body>
 </html>"""
+
+
+async def _cleanup_opensandbox_sandboxes(persona: str) -> None:
+    """Best-effort cleanup of OpenSandbox sandboxes for persona."""
+    url = f"http://opensandbox-mcp-{persona}:8000/mcp"
+    headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # List all sandboxes
+            list_resp = await client.post(
+                url,
+                headers=headers,
+                json={
+                    "jsonrpc": "2.0",
+                    "method": "tools/call",
+                    "params": {"name": "sandbox_list", "arguments": {}},
+                    "id": 1,
+                },
+            )
+            list_data = _parse_mcp_response(list_resp.text)
+            sandbox_ids = [s.get("id") for s in list_data.get("result", []) if s.get("id")]
+
+            # Delete each sandbox
+            for sbx_id in sandbox_ids:
+                await client.post(
+                    url,
+                    headers=headers,
+                    json={
+                        "jsonrpc": "2.0",
+                        "method": "tools/call",
+                        "params": {"name": "sandbox_kill", "arguments": {"sandbox_id": sbx_id}},
+                        "id": 1,
+                    },
+                )
+    except Exception as e:
+        logger.warning("OpenSandbox cleanup for persona '%s' failed: %s", persona, e)
+
+
+def _parse_mcp_response(text: str) -> dict:
+    """Parse MCP streaming response (may have 'event:' prefix)."""
+    for line in text.splitlines():
+        if line.startswith("data: "):
+            return json.loads(line[6:])
+    return json.loads(text)

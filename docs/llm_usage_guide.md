@@ -708,10 +708,27 @@ opensandbox__sandbox_install(packages=["numpy", "pandas"])
 opensandbox__sandbox_reset(level="full")
 ```
 
-### ペルソナ分離
+### ペルソナ分離（OpenSandbox MCP マルチインスタンス）
 
-OpenSandbox は sandbox 単位のコンテナ分離によりペルソナ分離を実現する。
-各ペルソナは独立した sandbox コンテナで動作し、ファイルシステム・プロセス・ネットワークが完全に隔離される。
+**アーキテクチャ**: 単一の `opensandbox` サーバーに対して、persona ごとに独立した `opensandbox-mcp` インスタンスが接続する。
+
+```
+opensandbox (port 8090)
+  ├── opensandbox-mcp-herta (port 8001, 独立 ServerState)
+  ├── opensandbox-mcp-alice (port 8002, 独立 ServerState)
+  └── opensandbox-mcp-bob   (port 8003, 独立 ServerState)
+```
+
+- 各 `opensandbox-mcp-{persona}` は別プロセス・別 `ServerState` を持つ
+- persona 間で sandbox_id は共有されない（別 MCP インスタンスに存在しない sandbox_id へのアクセスは失敗する）
+- 各 persona の `ChatConfig.mcp_servers` には `http://opensandbox-mcp-{persona}:8000/mcp` が保存される
+
+**設定**:
+
+- `docker-compose.yml` に `NOUS_PERSONAS` と同数の `opensandbox-mcp-{persona}` サービスを手動定義
+- 環境変数 `NOUS_OPENDBOX_MCP_URL` で全 persona の URL を上書き可能（上級者向け）
+
+**注意**: 新規 persona 作成時、初回アクセス時に `ChatConfig.get_or_create()` が自動的に正しい URL を設定する。既存の persona の設定は上書きしない（後方互換）。
 
 ---
 

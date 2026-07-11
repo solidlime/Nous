@@ -35,21 +35,39 @@ _DEFAULT_BASE_URLS: dict[str, str] = {
     "openrouter": "https://openrouter.ai/api/v1",
 }
 
-# Default external MCP servers for new personas (Chunk 4)
-DEFAULT_MCP_SERVERS: list[dict] = [
-    {
-        "name": "playwright",
-        "transport": "http",
-        "url": "http://playwright:8931/sse",
-        "enabled": True,
-    },
-    {
-        "name": "opensandbox",
-        "transport": "http",
-        "url": "http://opensandbox-mcp:8000/mcp",
-        "enabled": True,
-    },
-]
+
+def _get_default_mcp_servers(persona: str) -> list[dict]:
+    """Generate per-persona MCP server configs.
+
+    Reads NOUS_PERSONAS and constructs per-persona opensandbox URL.
+    NOUS_OPENDBOX_MCP_URL overrides the URL template completely.
+    """
+    servers: list[dict] = [
+        {
+            "name": "playwright",
+            "transport": "http",
+            "url": "http://playwright:8931/sse",
+            "enabled": True,
+        },
+    ]
+
+    sandbox_url = os.environ.get("NOUS_OPENDBOX_MCP_URL")
+    if not sandbox_url:
+        sandbox_url = f"http://opensandbox-mcp-{persona}:8000/mcp"
+
+    servers.append(
+        {
+            "name": "opensandbox",
+            "transport": "http",
+            "url": sandbox_url,
+            "enabled": True,
+        }
+    )
+    return servers
+
+
+# 後方互換のため定数は残すが内容は空（各 persona 個別生成）
+DEFAULT_MCP_SERVERS: list[dict] = []
 
 
 class ChatConfig(BaseModel):
@@ -321,7 +339,7 @@ class ChatConfigRepository:
         config = self.get(persona)
         # Only fill defaults for truly new personas (no mcp_servers configured)
         if not config.mcp_servers:
-            config.mcp_servers = list(DEFAULT_MCP_SERVERS)
+            config.mcp_servers = list(_get_default_mcp_servers(persona))
             self.save(config)
         return config
 

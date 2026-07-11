@@ -152,9 +152,20 @@ Nous は以下の機能を外部MCPサーバーに委譲している。docker-co
 | サービス | MCPサーバー | 提供ツール（例） |
 |----------|-------------|-----------------|
 | **Playwright MCP** | `mcr.microsoft.com/playwright/mcp:latest` (port 8931) | `playwright__browser_navigate`, `playwright__browser_click`, `playwright__browser_snapshot`, `playwright__browser_fill`, `playwright__browser_evaluate` 等 20+ ツール |
-| **OpenSandbox MCP** | `opensandbox-mcp` (port 8000) | `opensandbox__sandbox_create`, `opensandbox__sandbox_execute`, `opensandbox__sandbox_files`, `opensandbox__sandbox_install`, `opensandbox__sandbox_reset` 等 20 ツール |
+| **OpenSandbox MCP** | `opensandbox-mcp-{persona}` (port 8001-8003) | `opensandbox__sandbox_create`, `opensandbox__sandbox_execute`, `opensandbox__sandbox_files`, `opensandbox__sandbox_install`, `opensandbox__sandbox_reset` 等 20 ツール |
 
-**コード実行サンドボックス**は従来の Docker SDK 直接制御から **OpenSandbox** に移行した。OpenSandbox は Docker Compose 1ファイル完結、SQLite 内蔵、sandbox 単位のコンテナ分離を提供する。ペルソナ分離は sandbox 単位で実現される。
+**コード実行サンドボックス**は従来の Docker SDK 直接制御から **OpenSandbox** に移行した。OpenSandbox は Docker Compose 1ファイル完結、SQLite 内蔵、sandbox 単位のコンテナ分離を提供する。
+
+**ペルソナ分離**: 単一 `opensandbox` サーバーに対して、persona ごとに独立した `opensandbox-mcp` インスタンスが接続する。各インスタンスは別プロセス・別 `ServerState` を持ち、persona 間で sandbox_id は共有されない。
+
+```
+opensandbox (port 8090)
+  ├── opensandbox-mcp-herta (port 8001, 独立 ServerState)
+  ├── opensandbox-mcp-alice (port 8002, 独立 ServerState)
+  └── opensandbox-mcp-bob   (port 8003, 独立 ServerState)
+```
+
+各 persona の `ChatConfig.mcp_servers` には `http://opensandbox-mcp-{persona}:8000/mcp` が自動設定される。`docker-compose.yml` に `NOUS_PERSONAS` と同数のサービスを手動定義する。
 
 **ブラウザ操作**は従来の `browser` ツールから **Playwright MCP** に移行した。Playwright MCP は headless Chromium で動作し、ナビゲーション・クリック・フォーム入力・スクリーンショット等を網羅する。
 
@@ -170,9 +181,11 @@ OpenCode 等の MCP クライアントから接続する場合の設定例:
     },
     "opensandbox": {
       "command": "docker",
-      "args": ["exec", "-i", "opensandbox-mcp", "opensandbox-mcp"],
-      "url": "http://localhost:8000"
+      "args": ["exec", "-i", "opensandbox-mcp-herta", "opensandbox-mcp"],
+      "url": "http://localhost:8001"
     }
   }
 }
 ```
+
+注意: `opensandbox-mcp-{persona}` のホストポートは persona ごとに異なる (`8001`=herta, `8002`=alice, `8003`=bob)。`docker-compose.yml` の定義に合わせて調整する。
