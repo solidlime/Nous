@@ -493,6 +493,7 @@ html.light .badge-yellow { color: #d97706; } html.light .badge-red { color: #dc2
     backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
     animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards;
+    transition: opacity 0.3s ease, transform 0.3s ease;
     max-width: 360px;
 }
 .toast-success { background: rgba(52,211,153,0.2); color: var(--accent-green); }
