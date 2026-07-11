@@ -1,16 +1,5 @@
 # DATA_ROOT → ホスト側パス（.env.example 参照）。コンテナ側は NOUS_DATA_ROOT (/opt/nous/data) で固定。
 
-x-opensandbox-mcp: &opensandbox-mcp
-  build:
-    context: .
-    dockerfile: Dockerfile.sandbox-mcp
-  environment:
-    TZ: Asia/Tokyo
-  restart: unless-stopped
-  depends_on:
-    opensandbox:
-      condition: service_healthy
-
 services:
   qdrant:
     image: qdrant/qdrant:latest
@@ -117,25 +106,6 @@ services:
       - source: opensandbox-config
         target: /etc/opensandbox/config.toml
 
-  opensandbox-mcp-herta:
-    <<: *opensandbox-mcp
-    container_name: opensandbox-mcp-herta
-    ports:
-      - "8001:8000"
-
-  opensandbox-mcp-alice:
-    <<: *opensandbox-mcp
-    container_name: opensandbox-mcp-alice
-    ports:
-      - "8002:8000"
-
-  opensandbox-mcp-bob:
-    <<: *opensandbox-mcp
-    container_name: opensandbox-mcp-bob
-    ports:
-      - "8003:8000"
-  # NOUS_PERSONAS と同数を手動追加（スクリプト生成なし）
-
   nous:
     image: ghcr.io/solidlime/nous:latest
     container_name: nous
@@ -145,6 +115,8 @@ services:
       # Nous アプリデータ永続化（memory, logs, cache, config, skills）
       # DATA_ROOT/app（ホスト） → /opt/nous/data（コンテナ、=NOUS_DATA_ROOT）
       - ${DATA_ROOT}/app:/opt/nous/data
+      # Docker socket for SandboxOrchestrator (dynamic MCP container management)
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     depends_on:
       qdrant:
@@ -194,3 +166,7 @@ volumes:
 networks:
   default:
     name: nous-network
+
+# ── Sandbox MCP コンテナ ──
+# opensandbox-mcp-{persona} コンテナは SandboxOrchestrator が動的に管理。
+# イメージは事前にビルド: docker build -t opensandbox-mcp-nous:latest -f Dockerfile.sandbox-mcp .

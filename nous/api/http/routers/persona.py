@@ -19,6 +19,7 @@ from nous.api.http.deps import (
 from nous.application.use_cases import AppContextRegistry
 from nous.config.settings import Settings
 from nous.infrastructure.logging.structured import get_logger
+from nous.infrastructure.sandbox_orchestrator import get_orchestrator
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -297,6 +298,10 @@ def register_persona_routes(mcp) -> None:
         if persona_dir.exists():
             return JSONResponse({"error": f"Persona '{persona_name}' already exists"}, status_code=409)
         try:
+            # Dynamic sandbox container provisioning
+            orchestrator = get_orchestrator()
+            if orchestrator:
+                orchestrator.ensure(persona_name)
             ctx = AppContextRegistry.get(persona_name)
             if ctx is None:
                 return JSONResponse({"error": "Failed to initialize persona"}, status_code=500)
@@ -322,6 +327,10 @@ def register_persona_routes(mcp) -> None:
                 AppContextRegistry._contexts[persona].close()
                 del AppContextRegistry._contexts[persona]
             await _cleanup_opensandbox_sandboxes(persona)
+            # Remove dynamic sandbox container
+            orchestrator = get_orchestrator()
+            if orchestrator:
+                orchestrator.remove(persona)
             shutil.rmtree(persona_dir)
             return JSONResponse({"status": "ok", "deleted": persona})
         except Exception as exc:
