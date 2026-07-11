@@ -916,12 +916,6 @@ document.addEventListener("keydown", function (e) {
       searchInput.focus();
     }
   }
-  if (e.key === "Escape") {
-    document.querySelectorAll(".mem-modal-overlay").forEach(function (m) {
-      m.style.display = "none";
-      m.classList.remove("show");
-    });
-  }
 });
 
 /* =================================================================
