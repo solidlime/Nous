@@ -51,7 +51,12 @@ class PortraitGenerationService:
 
         # Budget / rate counters
         self._generate_count: int = 0
-        self._last_generate_time: float = 0.0
+        # Sentinel: None means "never generated" → interval check is skipped.
+        # Using 0.0 here is a bug because time.monotonic() - 0.0 is always
+        # a large value (system uptime) on long-running hosts but can be
+        # small on freshly-booted CI runners, making the interval check
+        # time-dependent and flaky.
+        self._last_generate_time: float | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -164,9 +169,10 @@ class PortraitGenerationService:
         if persona.emotion_intensity < self._config.emotion_threshold:
             return False
 
-        elapsed = time.monotonic() - self._last_generate_time
-        if elapsed < self._config.generate_interval_min * 60:
-            return False
+        if self._last_generate_time is not None:
+            elapsed = time.monotonic() - self._last_generate_time
+            if elapsed < self._config.generate_interval_min * 60:
+                return False
 
         return not (
             self._config.max_monthly_budget > 0 and self._generate_count >= int(self._config.max_monthly_budget)
