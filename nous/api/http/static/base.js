@@ -749,8 +749,23 @@ function setAutoRefresh(sec) {
     clearInterval(S.refreshTimer);
     S.refreshTimer = null;
   }
+  /* Remove previous visibility handler if any */
+  if (S._visibilityHandler) {
+    document.removeEventListener("visibilitychange", S._visibilityHandler);
+    S._visibilityHandler = null;
+  }
   if (sec > 0) {
-    S.refreshTimer = setInterval(() => loadTab(S.tab), sec * 1000);
+    const handler = () => {
+      if (document.visibilityState === "visible" && !S.refreshTimer) {
+        S.refreshTimer = setInterval(() => loadTab(S.tab), sec * 1000);
+      } else if (document.visibilityState === "hidden" && S.refreshTimer) {
+        clearInterval(S.refreshTimer);
+        S.refreshTimer = null;
+      }
+    };
+    S._visibilityHandler = handler;
+    document.addEventListener("visibilitychange", handler);
+    handler(); /* initial start */
   }
 }
 
@@ -765,6 +780,10 @@ window.addEventListener("beforeunload", function cleanupBeforeUnload() {
   if (S.refreshTimer) {
     clearInterval(S.refreshTimer);
     S.refreshTimer = null;
+  }
+  if (S._visibilityHandler) {
+    document.removeEventListener("visibilitychange", S._visibilityHandler);
+    S._visibilityHandler = null;
   }
 });
 
