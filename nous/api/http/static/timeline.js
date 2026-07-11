@@ -204,17 +204,29 @@ function closeTimelineDetail() {
     document.getElementById('tl-detail-panel')?.classList.remove('open');
 }
 
-// Initialize on tab visibility
+// Initialize — watch tab activation via DOM class changes (replaces switchTab monkey-patch)
 document.addEventListener('DOMContentLoaded', () => {
     buildEmotionLegend();
-    // Load when timeline tab becomes visible via MutationObserver or tab switch
-    const origSwitchTab = switchTab;
-    if (typeof switchTab !== 'undefined') {
-        switchTab = function(tabId) {
-            origSwitchTab(tabId);
-            if (tabId === 'timeline') {
-                setTimeout(loadTimeline, 200);
+    const container = document.querySelector('main.main-content');
+    if (container) {
+        const obs = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+                if (m.type === 'attributes' && m.attributeName === 'class') {
+                    const el = m.target;
+                    if (el.classList?.contains('tab-panel') && el.classList.contains('active')) {
+                        const tabId = el.id.replace('tab-', '');
+                        window.dispatchEvent(new CustomEvent('tab:changed', { detail: { tabId } }));
+                        if (tabId === 'timeline') {
+                            setTimeout(loadTimeline, 200);
+                        }
+                    }
+                }
             }
-        };
+        });
+        obs.observe(container, { attributes: true, attributeFilter: ['class'], subtree: true });
+    }
+    // Load if timeline already active
+    if (document.getElementById('tab-timeline')?.classList.contains('active')) {
+        setTimeout(loadTimeline, 200);
     }
 });
