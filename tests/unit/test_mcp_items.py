@@ -84,19 +84,6 @@ class TestItemTools:
         ctx.equipment_service.add_item.assert_called_once_with("red shoes", "shoes", None, 1, None)
 
     @pytest.mark.asyncio
-    async def test_item_remove(self, registered_tools):
-        tools, ctx, _ = registered_tools
-        ctx.equipment_service.remove_item.return_value = Success(None)
-        item_tool = tools["item_remove"]
-        with (
-            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
-            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
-        ):
-            mock_reg_cls.get.return_value = ctx
-            result = await item_tool(item_name="red shoes")
-        assert "removed" in result.lower()
-
-    @pytest.mark.asyncio
     async def test_item_equip(self, registered_tools):
         tools, ctx, _ = registered_tools
         ctx.equipment_service.equip.return_value = Success(None)
@@ -108,32 +95,6 @@ class TestItemTools:
             mock_reg_cls.get.return_value = ctx
             result = await item_tool(equipment={"top": "red dress"})
         assert "Equipped" in result
-
-    @pytest.mark.asyncio
-    async def test_item_unequip(self, registered_tools):
-        tools, ctx, _ = registered_tools
-        ctx.equipment_service.unequip.return_value = Success(None)
-        item_tool = tools["item_unequip"]
-        with (
-            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
-            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
-        ):
-            mock_reg_cls.get.return_value = ctx
-            result = await item_tool(slots=["top"])
-        assert "Unequipped" in result
-
-    @pytest.mark.asyncio
-    async def test_item_update(self, registered_tools):
-        tools, ctx, _ = registered_tools
-        ctx.equipment_service.update_item.return_value = Success(None)
-        item_tool = tools["item_update"]
-        with (
-            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
-            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
-        ):
-            mock_reg_cls.get.return_value = ctx
-            result = await item_tool(item_name="red shoes", quantity=3)
-        assert "updated" in result.lower()
 
     @pytest.mark.asyncio
     async def test_item_search(self, registered_tools):
@@ -150,24 +111,6 @@ class TestItemTools:
         ):
             mock_reg_cls.get.return_value = ctx
             result = await item_tool(query="shoes")
-        assert "red shoes" in result
-
-    @pytest.mark.asyncio
-    async def test_item_history(self, registered_tools):
-        tools, ctx, _ = registered_tools
-        h = MagicMock()
-        h.timestamp = "2024-01-15 10:00:00"
-        h.action = "equip"
-        h.item_name = "red shoes"
-        h.slot = "shoes"
-        ctx.equipment_service.get_history.return_value = Success([h])
-        item_tool = tools["item_history"]
-        with (
-            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
-            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
-        ):
-            mock_reg_cls.get.return_value = ctx
-            result = await item_tool(days=7)
         assert "red shoes" in result
 
     @pytest.mark.asyncio

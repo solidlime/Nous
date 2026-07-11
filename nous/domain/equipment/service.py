@@ -208,7 +208,3 @@ class EquipmentService:
         if not result.is_ok:
             return Failure(result.error)
         return Success({s.slot: s.item_name for s in result.value})
-
-    def get_history(self, days: int = 7) -> Result[list[EquipmentHistory], DomainError]:
-        """Get equipment change history."""
-        return self._repo.get_history(days)

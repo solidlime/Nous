@@ -310,9 +310,3 @@ class TestSQLiteEquipmentRepo:
         result = equipment_repo.list_items(category="clothing")
         assert result.is_ok
         assert len(result.unwrap()) == 1
-
-    def test_get_history(self, equipment_repo: SQLiteEquipmentRepository):
-        equipment_repo.equip("top", "シャツ")
-        result = equipment_repo.get_history(days=7)
-        assert result.is_ok
-        assert len(result.unwrap()) >= 1

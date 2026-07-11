@@ -22,12 +22,8 @@ CORE_ALWAYS_TOOLS: set[str] = {
     "goal_manage",
     # item_* 系 — ペルソナ表現に必須
     "item_add",
-    "item_remove",
     "item_equip",
-    "item_unequip",
-    "item_update",
     "item_search",
-    "item_history",
 }
 
 # 条件付きツールのカテゴリマッピング（将来の文脈ベース制限用）
@@ -196,17 +192,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         },
     ),
     ToolDefinition(
-        name="item_remove",
-        description="アイテムを削除。item_name必須。",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "item_name": {"type": "string", "description": "削除するアイテム名"},
-            },
-            "required": ["item_name"],
-        },
-    ),
-    ToolDefinition(
         name="item_equip",
         description='物理的なアイテムを装備スロットにセット。equipment dict必須（例: {"top": "白いドレス"}）。抽象概念は不可。',
         input_schema={
@@ -219,38 +204,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         },
     ),
     ToolDefinition(
-        name="item_unequip",
-        description="装備を外す。slots必須（文字列または文字列リスト）。",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "slots": {
-                    "anyOf": [
-                        {"type": "string"},
-                        {"type": "array", "items": {"type": "string"}},
-                    ],
-                    "description": '外すスロット名（例: "top" / ["top", "outer"]）',
-                },
-            },
-            "required": ["slots"],
-        },
-    ),
-    ToolDefinition(
-        name="item_update",
-        description="アイテム情報を更新。item_name必須。変更するフィールドのみ指定。",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "item_name": {"type": "string", "description": "更新するアイテム名"},
-                "category": {"type": "string", "description": "新しいカテゴリ"},
-                "description": {"type": "string", "description": "新しい説明"},
-                "quantity": {"type": "integer", "description": "新しい数量"},
-                "tags": {"type": "array", "items": {"type": "string"}, "description": "新しいタグ"},
-            },
-            "required": ["item_name"],
-        },
-    ),
-    ToolDefinition(
         name="item_search",
         description="アイテムを検索。query/categoryでフィルタ可。",
         input_schema={
@@ -258,16 +211,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
             "properties": {
                 "query": {"type": "string", "description": "検索クエリ（部分一致）"},
                 "category": {"type": "string", "description": "カテゴリでフィルタ"},
-            },
-        },
-    ),
-    ToolDefinition(
-        name="item_history",
-        description="アイテム操作履歴を取得。daysで期間指定。",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "days": {"type": "integer", "description": "取得する日数（デフォルト7日）", "default": 7},
             },
         },
     ),
@@ -410,12 +353,8 @@ _NOUS_TOOL_NAMES: frozenset[str] = frozenset(
         "get_context",
         "update_context",
         "item_add",
-        "item_remove",
         "item_equip",
-        "item_unequip",
-        "item_update",
         "item_search",
-        "item_history",
         "goal_manage",
         "invoke_skill",
         "search",
