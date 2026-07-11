@@ -1,8 +1,7 @@
-# PLAN: Nous 軽量化 + MCPハブ化
+# MCP Hub: デフォルト MCP サーバーのシード登録機能
 
-- compose から searxng, opensandbox, playwright を消す
-- コードから searxng, opensandbox, playwright への依存を消す
-- チャットUIの MCP サーバー登録機能は維持（むしろ強化）
-- Dockerイメージを軽量化しつつ、MCPハブとして npx / npm / uv / python / git 等を同梱
-- ユーザーが自由に MCP サーバーを登録して使える環境に
-- /search ツールは完全削除
+## 要件（ユーザーからの指示）
+- MCP Hub 初回起動時に、6つの推奨 MCP サーバーを自動登録
+- すでにサーバーが登録されていれば何もしない（ユーザー環境の上書き禁止）
+- Puppeteer 用に Chromium を Docker イメージに追加
+- docker-compose.yml に Brave Search API キーのコメント追加
