@@ -901,6 +901,23 @@ function startStatusPoll() {
     }, 2000);
 }
 
+/* ── Clean up status polling when leaving the settings tab ── */
+document.addEventListener('DOMContentLoaded', function() {
+    const origSwitchTab = switchTab;
+    if (typeof switchTab !== 'undefined') {
+        switchTab = function(tabId) {
+            /* Leaving settings tab → stop polling */
+            if (S.tab === 'settings' && tabId !== 'settings') {
+                if (S.statusPoll) {
+                    clearInterval(S.statusPoll);
+                    S.statusPoll = null;
+                }
+            }
+            origSwitchTab(tabId);
+        };
+    }
+});
+
 function updateCategoryStatusBanners(rs) {
     RELOAD_CATEGORIES.forEach(function(cat) {
         var s = rs[cat];
