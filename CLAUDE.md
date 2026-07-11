@@ -73,12 +73,8 @@ nous/
 | `memory_stats(top_n)` | 統計情報（件数・タグ分布・感情分布） |
 | `update_context(emotion, emotion_intensity, physical_state, mental_state, environment, body_state, user_info, persona_info, ...)` | ペルソナ状態更新。`body_state`: `{fatigue, warmth, arousal, heart_rate, pain}` |
 | `item_add(item_name, category, description, quantity, ...)` | インベントリにアイテム追加 |
-| `item_remove(item_name)` | インベントリからアイテム削除 |
 | `item_equip(equipment, auto_add)` | 装備スロットにセット |
-| `item_unequip(slots)` | 装備を外す |
-| `item_update(item_name, category, description, quantity, ...)` | 既存アイテム情報更新 |
 | `item_search(query, category)` | インベントリ検索 |
-| `item_history(days)` | アイテム操作履歴 |
 | `goal_manage(operation, content, importance, scope, memory_key)` | 目標管理。operation: `create/list/achieve/cancel`。scope: `self/interpersonal` |
 | `invoke_skill(name, task)` | スキル実行（隔離LLMコンテキスト） |
 | `persona_portrait()` | ポートレート画像生成（ComfyUI/DALL-E/Stability） |

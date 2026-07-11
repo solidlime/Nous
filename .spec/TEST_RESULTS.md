@@ -93,11 +93,7 @@
 | IT-06 | item_search 全件取得 | ✅ |
 | IT-07 | item_equip auto_add装備 | ✅ |
 | IT-08 | 複数スロット同時装備 | ✅ |
-| IT-09 | item_unequip 装備解除 | ✅ |
-| IT-10 | item_update 説明更新 | ✅ |
-| IT-11 | item_update 数量更新 | ✅ |
-| IT-12 | item_remove アイテム削除 | ✅ |
-| IT-13 | item_history days=7 | ✅ |
+| IT-12 | ~~item_remove~~ | 削除済み (7→3 ツール圧縮) | — |
 
 ### 2.4 ゴール系 (GL-01〜05): 全5項目 通過
 

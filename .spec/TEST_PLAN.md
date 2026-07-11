@@ -239,11 +239,7 @@
 | IT-06 | | パラメータなし | 全アイテムが返る | P1 |
 | IT-07 | **item_equip** | equipment={top:"白いドレス"} | 装備成功。auto_add=trueで不足アイテム自動作成 | P0 |
 | IT-08 | | equipment={top:"白いドレス", bottom:"青いスカート"} | 複数スロット同時装備 | P1 |
-| IT-09 | **item_unequip** | slots=["top"] | 装備解除 | P1 |
-| IT-10 | **item_update** | item_name="聖剣エクスカリバー", description="伝説の剣" | 説明が更新される | P2 |
-| IT-11 | | quantity=3 | 数量が更新される | P2 |
-| IT-12 | **item_remove** | item_name="聖剣エクスカリバー" | アイテム削除成功 | P1 |
-| IT-13 | **item_history** | days=7 | 過去7日分の装備履歴が返る | P3 |
+| IT-12 | ~~item_remove~~ | 削除済み (7→3 ツール圧縮, YAGNI 違反) | — | — |
 
 ### 2.4 ゴール系（1ツール）
 

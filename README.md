@@ -112,7 +112,7 @@ docker-compose up -d
 | `memory_stats(top_n?)` | 記憶の統計情報 |
 | `update_context(emotion?, ...)` | 感情・身体状態・ユーザー情報を更新 |
 | `goal_manage(operation, ...)` | 目標の作成・達成・取消 |
-| `item_add / remove / equip / unequip / ...` | アイテムと装備の管理（7ツール） |
+| `item_add / equip / search` | アイテムと装備の管理（3ツール） |
 | `sandbox(code, language?)` | コード実行（Docker サンドボックス） |
 | `sandbox_files(operation, path?)` | サンドボックス内のファイル操作 |
 | `invoke_skill(name, task)` | スキルを呼び出して LLM の能力を拡張 |

@@ -19,7 +19,7 @@ Call these tools proactively — do not wait for the user to ask.
 | `memory_search(query, ...)` | Semantic / keyword / hybrid memory search |
 | `memory_stats(top_n)` | Memory statistics and distributions |
 | `update_context(...)` | Update emotion, physical state, user info in real time |
-| `item_add / item_remove / item_equip / item_unequip / item_update / item_search / item_history` | Manage physical inventory and equipment |
+| `item_add / item_equip / item_search` | Manage physical inventory and equipment (3 tools) |
 | `goal_manage(operation, ...)` | Create / list / achieve / cancel goals |
 | `invoke_skill(name, task)` | Execute a registered skill |
 | `persona_portrait()` | Generate persona portrait image |
