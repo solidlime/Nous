@@ -603,6 +603,8 @@ function openMemModal(mem) {
 
     content.innerHTML = h;
     overlay.classList.add('show');
+    /* Guard: remove first to prevent duplicate listeners on rapid reopen */
+    document.removeEventListener('keydown', _memModalKeyHandler);
     document.addEventListener('keydown', _memModalKeyHandler);
 
     /* Bind the edit button - we store the mem object in closure */
@@ -754,17 +756,28 @@ async function batchDeleteMemories() {
     var keys = Array.from(S.mem.selected);
     if (keys.length === 0) { toast('No memories selected', 'error'); return; }
     showConfirm(keys.length + '件の記憶を削除しますか？この操作は取り消せません。', async function() {
-        var ok = 0, fail = 0;
+        var ok = 0, failures = [];
         for (var i = 0; i < keys.length; i++) {
             try {
                 await api('/api/memories/' + encodeURIComponent(S.persona) + '/' + encodeURIComponent(keys[i]), {
                     method: 'DELETE'
                 });
                 ok++;
-            } catch (e) { fail++; }
+            } catch (e) {
+                failures.push({ key: keys[i], reason: e.message });
+                console.error('[batchDelete] failed:', keys[i], e);
+            }
         }
         S.mem.selected.clear();
-        toast('Deleted ' + ok + ' memories' + (fail ? ', ' + fail + ' failed' : ''), fail ? 'error' : 'success');
+        if (failures.length > 0) {
+            var detail = failures.slice(0, 3).map(function(f){ return f.key + ' (' + f.reason + ')'; }).join(', ');
+            var summary = ok + ' deleted, ' + failures.length + ' failed';
+            if (failures.length > 3) summary += ' (see console for full list)';
+            toast(summary + ': ' + detail, 'error');
+            console.error('[batchDelete] failure detail:', failures);
+        } else {
+            toast('Deleted ' + ok + ' memories', 'success');
+        }
         loadMemories();
     });
 }
