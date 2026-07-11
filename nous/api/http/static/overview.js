@@ -2,7 +2,7 @@
 
 // --- Block CRUD helpers (global scope) ---
 function showCreateBlock() {
-    document.getElementById('block-modal-title').textContent = '<i data-lucide="pencil"></i> New Block';
+    document.getElementById('block-modal-title').innerHTML = '<i data-lucide="pencil"></i> New Block';
     document.getElementById('block-modal-mode').value = 'create';
     document.getElementById('block-modal-name').value = '';
     document.getElementById('block-modal-name').disabled = false;
@@ -12,7 +12,7 @@ function showCreateBlock() {
 }
 
 function showEditBlock(name, content, priority) {
-    document.getElementById('block-modal-title').textContent = '<i data-lucide="pencil"></i> Edit Block: ' + name;
+    document.getElementById('block-modal-title').innerHTML = '<i data-lucide="pencil"></i> Edit Block: ' + esc(name);
     document.getElementById('block-modal-mode').value = 'edit';
     document.getElementById('block-modal-name').value = name;
     document.getElementById('block-modal-name').disabled = true;
@@ -58,7 +58,7 @@ async function deleteItem(itemName) {
         await api('/api/items/' + encodeURIComponent(S.persona) + '/' + encodeURIComponent(itemName), {method:'DELETE'});
         loadOverview();
     } catch (e) {
-        alert('Failed to delete item: ' + e.message);
+        toast('Failed to delete item: ' + e.message, 'error');
     }
 }
 
@@ -79,7 +79,7 @@ function closeAddItemModal() {
 async function saveNewItem() {
     const nameEl = document.getElementById('new-item-name');
     const name = (nameEl ? nameEl.value : '').trim();
-    if (!name) { alert('Item name is required'); return; }
+    if (!name) { toast('Item name is required', 'error'); return; }
     const category = (document.getElementById('new-item-category') || {}).value || '';
     const desc = (document.getElementById('new-item-desc') || {}).value || '';
     const qty = parseInt((document.getElementById('new-item-qty') || {}).value || '1', 10) || 1;
@@ -92,7 +92,7 @@ async function saveNewItem() {
         closeAddItemModal();
         loadOverview();
     } catch (e) {
-        alert('Failed to add item: ' + e.message);
+        toast('Failed to add item: ' + e.message, 'error');
     }
 }
 
@@ -107,7 +107,7 @@ async function changeEquipSlot(slot, itemName) {
         });
         loadOverview();
     } catch (e) {
-        alert('Failed to change equipment: ' + e.message);
+        toast('Failed to change equipment: ' + e.message, 'error');
     }
 }
 
@@ -120,7 +120,7 @@ async function unequipSlot(slot) {
         });
         loadOverview();
     } catch (e) {
-        alert('Failed to unequip: ' + e.message);
+        toast('Failed to unequip: ' + e.message, 'error');
     }
 }
 

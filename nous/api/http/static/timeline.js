@@ -160,7 +160,7 @@ function showTimelineDetail(mem) {
     if (!panel) return;
     document.getElementById('tl-detail-content').textContent = mem.content || '';
     const style = getEmotionStyle(mem.emotion || 'neutral');
-    document.getElementById('tl-detail-emotion').innerHTML = style.emoji + ' ' + (mem.emotion || 'neutral');
+    document.getElementById('tl-detail-emotion').innerHTML = style.emoji + ' ' + esc(mem.emotion || 'neutral');
     document.getElementById('tl-detail-importance').textContent = (mem.importance != null ? mem.importance.toFixed(2) : '0.50');
     document.getElementById('tl-detail-time').textContent = mem.created_at
         ? new Date(mem.created_at).toLocaleString('ja-JP') : '—';
