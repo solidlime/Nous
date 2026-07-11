@@ -59,6 +59,7 @@ class MemoryService:
         tags: list[str] | None = None,
         privacy_level: str = "internal",
         source_context: str | None = None,
+        persona: str | None = None,
         body_state: dict[str, float] | None = None,
         state_snapped_at: datetime | None = None,
         kind: str = "semantic",
@@ -73,6 +74,9 @@ class MemoryService:
         current persona state (see PersonaService.get_state_snapshot).
         body_state and state_snapped_at are set by the caller after capturing
         current persona state (see PersonaService.get_state_snapshot).
+
+        persona is used for contradiction detection invalidation. When omitted
+        the caller should ensure persona-scoped isolation at the DB layer.
         """
         if not content or not content.strip():
             return Failure(MemoryValidationError("Content must not be empty"))
@@ -189,7 +193,7 @@ class MemoryService:
                 self._invalidate_contradicted_memory(
                     new_content=content.strip(),
                     new_memory_key=memory.key,
-                    persona="default",
+                    persona=persona or "default",
                     valid_from=now,
                 )
             )

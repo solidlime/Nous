@@ -76,6 +76,7 @@ def _store_last_reflection_at(ctx: AppContext, ts: datetime) -> None:
         importance=0.1,
         tags=[_REFLECTION_META_TAG],
         emotion="neutral",
+        persona=ctx.persona,
     )
 
 
@@ -173,6 +174,7 @@ async def maybe_run_reflection(
             importance=0.9,
             tags=["reflection"],
             emotion="neutral",
+            persona=ctx.persona,
         )
 
     _store_last_reflection_at(ctx, now)

@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from nous.application.chat.reflection import _parse_insights
+import pytest
+
+from nous.application.chat.reflection import _parse_insights, maybe_run_reflection
 
 
 class TestParseInsights:
@@ -96,3 +100,133 @@ class TestReflectionThreshold:
         threshold = 0.1
         result = [] if threshold > 0.0 else ["would_reflect"]
         assert result == []
+
+
+class TestMaybeRunReflectionPersona:
+    """Tests that maybe_run_reflection passes ctx.persona to create_memory."""
+
+    @pytest.fixture
+    def mock_ctx(self):
+        ctx = MagicMock()
+        ctx.persona = "test_char"
+        # memory_service
+        ctx.memory_service = MagicMock()
+        # get_recent returns some memories
+        recent_result = MagicMock()
+        recent_result.is_ok = True
+        mem = MagicMock()
+        mem.content = "A sample memory."
+        mem.importance = 0.8
+        mem.created_at = datetime.now().astimezone() - timedelta(hours=1)
+        mem.key = "mem_001"
+        recent_result.value = [mem]
+        ctx.memory_service.get_recent.return_value = recent_result
+        # create_memory returns success
+        create_result = MagicMock()
+        create_result.is_ok = True
+        ctx.memory_service.create_memory.return_value = create_result
+        # get_by_tags for last_reflection check — return empty
+        tags_result = MagicMock()
+        tags_result.is_ok = True
+        tags_result.value = []
+        ctx.memory_service.get_by_tags.return_value = tags_result
+        # search_engine
+        ctx.search_engine = AsyncMock()
+        return ctx
+
+    @pytest.fixture
+    def mock_config(self):
+        config = MagicMock()
+        config.reflection_threshold = 0.1
+        config.reflection_min_interval_hours = 0.0
+        # Provide valid API / model config via get_effective_*
+        config.provider = "test_provider"
+        config.extract_model = "test_model"
+        config.get_effective_api_key.return_value = "sk-test"
+        config.get_effective_model.return_value = "test-model"
+        config.get_effective_base_url.return_value = None
+        return config
+
+    @pytest.mark.asyncio
+    async def test_create_memory_receives_persona(self, mock_ctx, mock_config):
+        """maybe_run_reflection passes ctx.persona to create_memory."""
+        fake_insight_text = json.dumps({"insights": ["Deep insight about user."]})
+
+        fake_provider = AsyncMock()
+        fake_provider.stream = AsyncMock()
+
+        async def fake_stream(**kwargs):
+            from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+
+            yield TextDeltaEvent(content=fake_insight_text)
+            yield DoneEvent(full_content=fake_insight_text)
+
+        fake_provider.stream = fake_stream
+
+        with patch(
+            "nous.application.chat.reflection.get_provider",
+            return_value=fake_provider,
+        ):
+            result = await maybe_run_reflection(mock_ctx, mock_config, recent_importance_sum=5.0)
+
+        assert result == ["Deep insight about user."]
+        assert mock_ctx.memory_service.create_memory.call_count >= 1
+        # Each create_memory call must contain persona=ctx.persona
+        for call_args in mock_ctx.memory_service.create_memory.call_args_list:
+            _, kwargs = call_args
+            assert kwargs.get("persona") == "test_char", (
+                f"create_memory called without persona=ctx.persona; got kwargs={kwargs}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_persona_none_does_not_crash(self, mock_ctx, mock_config):
+        """maybe_run_reflection handles persona=None gracefully."""
+        mock_ctx.persona = None
+
+        fake_insight_text = json.dumps({"insights": ["Another insight."]})
+
+        fake_provider = AsyncMock()
+
+        async def fake_stream(**kwargs):
+            from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+
+            yield TextDeltaEvent(content=fake_insight_text)
+            yield DoneEvent(full_content=fake_insight_text)
+
+        fake_provider.stream = fake_stream
+
+        with patch(
+            "nous.application.chat.reflection.get_provider",
+            return_value=fake_provider,
+        ):
+            result = await maybe_run_reflection(mock_ctx, mock_config, recent_importance_sum=5.0)
+
+        assert result == ["Another insight."]
+        # Should not crash; persona may be None
+        mock_ctx.memory_service.create_memory.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_persona_empty_string_does_not_crash(self, mock_ctx, mock_config):
+        """maybe_run_reflection handles persona='' gracefully."""
+        mock_ctx.persona = ""
+
+        fake_insight_text = json.dumps({"insights": ["Yet another insight."]})
+
+        fake_provider = AsyncMock()
+
+        async def fake_stream(**kwargs):
+            from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+
+            yield TextDeltaEvent(content=fake_insight_text)
+            yield DoneEvent(full_content=fake_insight_text)
+
+        fake_provider.stream = fake_stream
+
+        with patch(
+            "nous.application.chat.reflection.get_provider",
+            return_value=fake_provider,
+        ):
+            result = await maybe_run_reflection(mock_ctx, mock_config, recent_importance_sum=5.0)
+
+        assert result == ["Yet another insight."]
+        mock_ctx.memory_service.create_memory.assert_called()
