@@ -99,6 +99,52 @@ class TestSessionWindow:
         assert messages[0]["role"] == "user"
         assert messages[0]["content"] == "hello"
 
+    def test_update_message_valid_index(self):
+        """update_message should update content and persist."""
+        import json
+        import sqlite3
+
+        db = sqlite3.connect(":memory:")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                persona TEXT NOT NULL, session_id TEXT NOT NULL,
+                messages TEXT NOT NULL DEFAULT '[]', timestamps TEXT NOT NULL DEFAULT '[]',
+                updated_at TEXT NOT NULL, PRIMARY KEY (persona, session_id))
+        """)
+        db.commit()
+
+        win = SessionWindow(max_turns=10)
+        win.attach_db(db, "test_p", "test_s")
+        win.add("user", "original")
+        win.add("assistant", "response")
+
+        updated = win.update_message(0, "edited")
+        assert updated is not None
+        assert updated["role"] == "user"
+        assert updated["content"] == "edited"
+
+        # Verify persistence
+        row = db.execute(
+            "SELECT messages FROM chat_sessions WHERE persona=? AND session_id=?",
+            ("test_p", "test_s"),
+        ).fetchone()
+        msgs = json.loads(row[0])
+        assert msgs[0]["content"] == "edited"
+
+    def test_update_message_out_of_range(self):
+        win = SessionWindow(max_turns=10)
+        win.add("user", "hello")
+        assert win.update_message(-1, "x") is None
+        assert win.update_message(99, "x") is None
+
+    def test_update_message_preserves_tool_calls(self):
+        win = SessionWindow(max_turns=10)
+        win.add("assistant", "text", tool_calls=[{"name": "test", "input": {}}])
+        updated = win.update_message(0, "new text")
+        assert updated is not None
+        assert updated["content"] == "new text"
+        assert updated["tool_calls"] == [{"name": "test", "input": {}}]
+
 
 # ─────────────────────────────────────────────────────────────
 # SessionManager tests

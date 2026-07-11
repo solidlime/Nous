@@ -1142,6 +1142,109 @@ async function rollbackChat(keepUntil, shouldResend) {
   }
 }
 
+// Inline edit: 編集ボタン用 — textarea.value 代入なし、undo スタック非破壊
+async function editChatMessage(msgIndex) {
+  if (!S.persona) return;
+  const msgDiv = document.querySelector(
+    '.chat-msg.user[data-msg-index="' + msgIndex + '"]',
+  );
+  if (!msgDiv) return;
+  const bubble = msgDiv.querySelector(".chat-bubble");
+  if (!bubble) return;
+
+  const originalText = bubble.textContent;
+
+  // Replace bubble with editable textarea
+  const textarea = document.createElement("textarea");
+  textarea.className = "chat-edit-textarea";
+  textarea.value = originalText;
+  textarea.style.width = "100%";
+  textarea.style.minHeight = "60px";
+  textarea.style.boxSizing = "border-box";
+  bubble.style.display = "none";
+  bubble.parentNode.insertBefore(textarea, bubble.nextSibling);
+
+  // Focus and select all
+  textarea.focus();
+  textarea.select();
+
+  // Create save/cancel buttons
+  const btnBar = document.createElement("div");
+  btnBar.className = "chat-edit-btn-bar";
+  btnBar.style.cssText =
+    "display:flex;gap:8px;margin-top:6px;justify-content:flex-end;";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "chat-msg-action-btn";
+  saveBtn.innerHTML = '<i data-lucide="check"></i> 保存';
+  saveBtn.onclick = async () => {
+    const newText = textarea.value.trim();
+    if (!newText || newText === originalText) {
+      cancelEdit();
+      return;
+    }
+    try {
+      const sid = getChatSessionId();
+      const url =
+        "/api/chat/" +
+        encodeURIComponent(S.persona) +
+        "/sessions/" +
+        encodeURIComponent(sid) +
+        "/messages/" +
+        msgIndex;
+      const result = await api(url, {
+        method: "PUT",
+        body: JSON.stringify({ content: newText }),
+      });
+      if (result.status === "ok") {
+        bubble.textContent = newText;
+        toast("メッセージを更新しました", "success");
+      } else {
+        toast("更新失敗: " + (result.error || "unknown"), "error");
+      }
+    } catch (e) {
+      toast("更新失敗: " + e.message, "error");
+    } finally {
+      cleanup();
+    }
+  };
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "chat-msg-action-btn";
+  cancelBtn.innerHTML = '<i data-lucide="x"></i> キャンセル';
+  cancelBtn.onclick = cancelEdit;
+
+  btnBar.appendChild(saveBtn);
+  btnBar.appendChild(cancelBtn);
+  textarea.parentNode.insertBefore(btnBar, textarea.nextSibling);
+
+  // Keyboard shortcuts: Enter to save, Escape to cancel
+  textarea.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      saveBtn.click();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelBtn.click();
+    }
+  });
+
+  setTimeout(() => {
+    if (typeof lucide !== "undefined") lucide.createIcons();
+  }, 50);
+
+  function cancelEdit() {
+    cleanup();
+    toast("編集をキャンセルしました", "info");
+  }
+
+  function cleanup() {
+    textarea.remove();
+    btnBar.remove();
+    bubble.style.display = "";
+  }
+}
+
 function appendChatMessage(role, content, timeStr, isMarkdown) {
   const container = document.getElementById("chat-messages");
   // Remove welcome message if present
@@ -1186,7 +1289,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown) {
     editBtn.className = "chat-msg-action-btn edit";
     editBtn.innerHTML = '<i data-lucide="pencil"></i> 編集';
     editBtn.onclick = () => {
-      rollbackChat(msgIndex, false);
+      editChatMessage(msgIndex);
     };
     actions.appendChild(editBtn);
   } else if (role === "assistant") {

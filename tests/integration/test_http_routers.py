@@ -703,3 +703,81 @@ class TestDashboardStateRestoration:
         assert "function setStoredPersona(persona)" in js
         assert 'localStorage.setItem("selected_persona"' in js
         assert 'localStorage.setItem("mmcp-persona"' in js
+
+
+@pytest.mark.integration
+class TestEditMessageEndpoint:
+    """PUT /api/chat/{persona}/sessions/{session_id}/messages/{msg_index}."""
+
+    async def _create_persona_with_session(self, client, persona: str) -> str:
+        """Helper: create persona and insert a test message directly into session store."""
+        # Create persona via POST /api/personas
+        resp = await client.post("/api/personas", json={"name": persona})
+        assert resp.status_code in (200, 201), f"Expected 200/201, got {resp.status_code}: {resp.text[:200]}"
+
+        # Insert a test message directly via the session store
+        from nous.application.chat.service import _session_manager
+        from nous.application.use_cases import AppContextRegistry
+
+        ctx = AppContextRegistry.get(persona)
+        assert ctx is not None, f"Context for '{persona}' not found"
+        db = ctx.connection.get_memory_db()
+
+        window = _session_manager.get_or_create(persona, "main", db=db)
+        window.add("user", "test message")
+        window.flush()
+        return "main"
+        return "main"
+
+    async def test_edit_message_ok(self, client):
+        persona = "edit_test_ok"
+        await self._create_persona_with_session(client, persona)
+
+        # Read session to get message index
+        resp = await client.get(f"/api/chat/{persona}/sessions/main")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["messages"]) >= 1
+
+        # Edit the first user message (index 0)
+        resp = await client.put(
+            f"/api/chat/{persona}/sessions/main/messages/0",
+            json={"content": "edited content"},
+        )
+        assert resp.status_code == 200
+        result = resp.json()
+        assert result["status"] == "ok"
+        assert result["updated_message"]["content"] == "edited content"
+        assert result["updated_message"]["role"] == "user"
+
+        # Verify persistence
+        resp = await client.get(f"/api/chat/{persona}/sessions/main")
+        data = resp.json()
+        assert data["messages"][0]["content"] == "edited content"
+
+    async def test_edit_message_out_of_range(self, client):
+        persona = "edit_test_oob"
+        await self._create_persona_with_session(client, persona)
+
+        resp = await client.put(
+            f"/api/chat/{persona}/sessions/main/messages/999",
+            json={"content": "nope"},
+        )
+        assert resp.status_code == 404
+
+    async def test_edit_message_empty_content(self, client):
+        persona = "edit_test_empty"
+        await self._create_persona_with_session(client, persona)
+
+        resp = await client.put(
+            f"/api/chat/{persona}/sessions/main/messages/0",
+            json={"content": ""},
+        )
+        assert resp.status_code == 400
+
+    async def test_edit_message_nonexistent_persona(self, client):
+        resp = await client.put(
+            "/api/chat/nonexistent/sessions/main/messages/0",
+            json={"content": "test"},
+        )
+        assert resp.status_code == 404

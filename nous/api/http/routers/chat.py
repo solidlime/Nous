@@ -222,6 +222,67 @@ def register_chat_routes(mcp) -> None:
         _session_manager.clear(persona, session_id)
         return JSONResponse({"deleted": True, "session_id": session_id})
 
+    @mcp.custom_route("/api/chat/{persona}/sessions/{session_id}/messages/{msg_index}", methods=["PUT"])
+    async def update_chat_message(request: Request) -> JSONResponse:
+        """メッセージ 1 件の content を直接更新する（undo スタック非破壊）。
+
+        PUT /api/chat/{persona}/sessions/{session_id}/messages/{msg_index}
+        Request body: {"content": "新しいテキスト"}
+        Response: {"status": "ok", "updated_message": {...}}
+        """
+        persona = _resolve_persona_from_request(request)
+        ctx = _safe_get_context(persona)
+        if not ctx:
+            return JSONResponse({"error": "Persona not found"}, status_code=404)
+        session_id = request.path_params.get("session_id", "")
+        if not session_id:
+            return JSONResponse({"error": "session_id required"}, status_code=400)
+
+        try:
+            msg_index_str = request.path_params.get("msg_index", "")
+            msg_index = int(msg_index_str)
+        except (ValueError, TypeError):
+            return JSONResponse({"error": "msg_index must be an integer"}, status_code=400)
+
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+        new_content = body.get("content")
+        if not isinstance(new_content, str) or not new_content.strip():
+            return JSONResponse({"error": "content must be a non-empty string"}, status_code=400)
+
+        try:
+            from nous.application.chat.service import _session_manager
+            from nous.application.chat.session_store import SessionWindow
+
+            key = (persona, session_id)
+            window = _session_manager._sessions.get(key)
+
+            if window:
+                updated = window.update_message(msg_index, new_content.strip())
+            else:
+                db = ctx.connection.get_memory_db()
+                from nous.application.chat.session_store import _CHAT_SESSIONS_SCHEMA
+
+                db.execute(_CHAT_SESSIONS_SCHEMA)
+                db.commit()
+                window = SessionWindow.from_db(db, persona, session_id)
+                if window is None:
+                    return JSONResponse({"error": "Session not found"}, status_code=404)
+                updated = window.update_message(msg_index, new_content.strip())
+
+            if updated is None:
+                return JSONResponse(
+                    {"error": f"Message index {msg_index} out of range"},
+                    status_code=404,
+                )
+            return JSONResponse({"status": "ok", "updated_message": updated})
+        except Exception as e:
+            logger.exception("update_chat_message failed: %s", e)
+            return JSONResponse({"error": str(e)}, status_code=500)
+
     @mcp.custom_route("/api/chat/{persona}/sessions/{session_id}/rollback", methods=["POST"])
     async def rollback_chat_session(request: Request) -> JSONResponse:
         """ロールバック: keep_until インデックスまでメッセージを保持し、以降を削除。

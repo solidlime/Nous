@@ -78,6 +78,17 @@ class SessionWindow:
         if len(self._messages) - self._persisted_count >= self._batch_size:
             self._persist()
 
+    def update_message(self, message_index: int, new_content: str) -> dict | None:
+        """Update the content of a single message at the given index.
+
+        Returns the updated message dict, or None if index is out of range.
+        """
+        if message_index < 0 or message_index >= len(self._messages):
+            return None
+        self._messages[message_index]["content"] = new_content
+        self._persist()
+        return dict(self._messages[message_index])
+
     def truncate_to(self, message_index: int) -> list[dict]:
         """Keep only messages up to (not including) message_index. Returns removed messages.
 
