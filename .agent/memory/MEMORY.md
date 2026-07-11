@@ -1,135 +1,106 @@
 # MEMORY
 
-## ブラウザ・サンドボックス MCP 移行（2026-07-11）
-前回ハンドオフの詳細は `2026-07-11.md` を参照。
+## 設計パターン
 
-### MCP外部統合パターン
-- `{server_name}__{tool_name}` 命名規則（例: `playwright__browser_navigate`）
-- `ToolRegistry.execute()` → `__` 含む → `MCPClientPool.call_tool()` へルーティング
-- HTTP (streamable-http) と stdio 両対応。設定は `ChatConfig.mcp_servers: list[dict]` に保存
-- WebUIの `#chat-mcp-json` で JSON 編集可能
-- `builtin.py:execute_tool()` にも `__` ゲートを追加 (P0-1 修正)
+### 設定のグローバル vs ペルソナ毎の境界線（2026-07-11 学習）
+- **Settings (グローバル/env)**: インフラ共有資源 + 公開情報 (DB URL, API endpoint, サーバーバインド等)
+- **ChatConfig (per-persona)**: ペルソナの行動選択 + クレデンシャル (enabled フラグ、ペルソナ固有 API キー等)
+- **核心**: `enabled` はペルソナの「意志」の領域。グローバル固定は強制。
+- 過去事例: `irodori.enabled` / `portrait_gen.enabled` がグローバル固定 → ペルソナ毎設定化（P1+P2 完了）
 
-### 選定結果
-- ブラウザ: Playwright MCP（MS公式 / 50+ツール / MCR公式イメージ / LLM不要）
-- サンドボックス: OpenSandbox（Alibaba / Apache-2.0 / 53MB server / SQLite内蔵 / 公式MCP）
+### フォールバックパターンの鉄則
+新機能追加時は「**既存ユーザーへの後方互換**」を常に維持:
+- `chat_config.irodori_enabled or ctx.settings.irodori.enabled` の OR フォールバック
+- 新カラム追加時は `DEFAULT 0` / `DEFAULT ''` で安全側に倒す
+- 旧 Settings のキーは**残す**（CLI からの有効化用）
 
-### sandbox_enabled 削除の波及範囲（最重要教訓）
-単一フィールド削除が以下の全箇所に影響。見落とし多発地帯：
-1. ChatConfig モデルフィールド（`chat_config.py` L79）
-2. Repository SELECT カラムリスト（`connection.py` L266）
-3. Repository 行マッピング（`connection.py` L310 — 後続カラムインデックスずれ注意）
-4. Repository INSERT カラムリスト（`connection.py` L353）
-5. Repository UPSERT カラムリスト（`connection.py` L392）
-6. Repository save() values タプル（`connection.py` L446 — `int(config.sandbox_enabled)` 削除）
-7. DBテーブル定義（`connection.py` L209 — `ALTER TABLE` または再作成必要）
-8. `tools/__init__.py` の `SANDBOX_TOOLS` import
-9. `routers/chat.py` sandbox REST API 8エンドポイント（L313-762）
-10. `field_name` リスト（L72）
+### per-persona MCP インスタンスの幻想（2026-07-11 学習）
+- 別 MCP インスタンスに分ければ完全分離、とは限らない
+- OpenSandbox の場合、`sandbox_list()` は単一バックエンドが全 persona の sandbox を返す
+- **真の分離は Nous レベルのフィルタリング** または OpenSandbox バックエンドの namespace 対応が必要
+- プロセス分離は「障害境界」と「運用上の独立性」には貢献するが、データ分離は限定的
 
-### WebUIバグ（2026-07-11 セッションで修正）
-- TTS再生: `resp.ok` → `audioBase64` 存在チェック
-- 設定保存: `context_use_llm_summary`, `episode_consolidation_enabled`, `episode_search_enabled` field_name追加
-- MCP削除後: `renderMcpServerList()` → `renderMcpJson()` 再呼び出し
-- silent catch 5+6 箇所: `console.error` + `toast()` 追加
-- SSE リスナーリーク: `es._sseHandlers` マップ + removeEventListener
-- `__chatPersonaWatcher` 無限ポーリング: 上限20回設定
-- `setAutoRefresh`: `visibilitychange` で hidden 時停止
-- switchTab monkey-patch → MutationObserver + CustomEvent('tab:changed')
+## アーキテクチャの教訓
 
-### デッドコードパターン
-- 空オブジェクトのまま放置された設定（`DEPENDS_RULES = {}`）
-- HTML要素不在で到達不能な関数（`toggleMobileNav`, `animateCount`）
-- 空文字列を返すだけの互換関数（`render_chat_js()`）
-- sandbox パネル関連（`coding_agent.{js,py}` 638行削除）
+### 動的 vs 静的なコンテナ管理（2026-07-11 学習）
+- Phase B で「init container 方式を棄却、静的 YAML テンプレ（案 B'）採用」→ シンプルだが柔軟性ゼロ
+- ユーザーから「動的プロビジョニング + ハードコード廃止」要求 → 案 A (App-level Orchestration) に方針転換
+- 教訓: **YAGNI と柔軟性のバランス**。MVP 後に要件が変われば再設計を恐れるな
+- 動的プロビジョニングの鉄則: `ensure()` の冪等性 + `_adopt_orphaned()` の障害復旧
 
-## バックエンド修正（2026-07-11）
+### Docker socket 露出の影響評価
+- `opensandbox` サービスが既にマウントしている socket を `nous` にも追加することは、**信頼境界の拡張であり、新たな境界を開くわけではない**
+- 本番では `tecnativa/docker-socket-proxy` で最小権限化（CONTAINERS=1, POST=1, CONTAINERS_DELETE=1 のみ許可）
+- Podman socket も `DOCKER_HOST` env で切り替え可能 → docker-py は docker-compatible
 
-### C1 修正: `memory_create` 重複チェック
-旧: `WHERE persona = ? AND LOWER(content) = LOWER(?) AND deleted_at IS NULL`
-新: `WHERE LOWER(content) = LOWER(?) AND lifecycle_status != 'tombstoned'`
-理由: `memories` テーブルに `persona` / `deleted_at` カラムは存在しない。persona は DB ファイル単位で分離済み。
+## 失敗パターン
 
-### H1 修正: `memory_update` changes 検出
-旧: `[k for k in [...] if locals().get(k) is not None]`
-新: `list(updates.keys())` + 空 updates 早期 return
-理由: `locals()` は関数引数しか見ず、dict 引数 (`updates`) を反映しない。
+### `import os` のような修正漏れの典型（2026-07-11 学習）
+- 症状: ruff check 0 / pytest pass なのに CI (Lint & Format step) が失敗
+- 原因: fixer がローカル ruff チェックで `os` 名前解決を検証しなかった（pre-existing だと誤認）
+- 教訓: 既存 import リストにない名前を使う場合は **明示的に import 追加** を指示。fixer への指示文に「import の追加を確認」を含める
+- CI の Lint & Format step が最終防衛線として機能した（`F821 Undefined name`）
 
-### H4 修正: `plugin_api_key` 認証バイパス
-新設計: `PluginConfig(enabled=False, api_key='')` を `settings.py` に追加。
-3段階ゲート:
-- `disabled` → 403
-- `enabled + no key` → 500
-- `invalid Bearer` → 401
-破壊的変更: `NOUS_PLUGIN_API_KEY` → `NOUS_PLUGIN__ENABLED` + `NOUS_PLUGIN__API_KEY`
+### 既存テストの in-memory DB スキーマ不一致（2026-07-11 学習）
+- 症状: 新カラム追加で 8 件の既存テストが一斉失敗
+- 原因: `test_chat_service.py:317-372` と `test_compress_step.py:667-721` の `_make_db` ヘルパーが `chat_settings` テーブルをハードコードで作成
+- 教訓: 過去 `sandbox_enabled` 削除でも同じ罠 → **新カラム追加時は両方のテストファイルを必ず確認**
+- 対策案: `SQLiteConnection._CHAT_SESSIONS_SCHEMA` から動的に生成する helper を導入（リファクタリング案件）
 
-### H5 修正: `ChatConfigRepository.get()` ハードコード
-旧: 51 行の `row[N]` ハードコード
-新: `cursor.description` で動的カラムマッピング + `model_fields` フィルタ
-耐性: ALTER TABLE カラム追加でも壊れない。
+### 環境変数名不一致（2026-07-11 学習）
+- 症状: SearXNG URL 解決失敗、ただし health check はなぜか動作
+- 原因: `docker-compose.yml` で `SEARXNG_URL` 設定、`RuntimeConfigManager._get_env_key` は `NOUS_SEARXNG_URL` を期待
+- 教訓: **設定の読み取りロジックを grep で確認**してから env 名を決定。プレフィックスは settings.py の `env_prefix` を尊重
+- 対策: `os.environ.get("SEARXNG_URL", ...)` の fallback を defense in depth として追加
 
-## 設計上の教訓
+### 本番環境と dev compose の差異（2026-07-11 学習）
+- 症状: dev compose で Healthy、本番 compose で起動失敗
+- 原因: volume 権限、healthcheck のコマンド存在、pip キャッシュの差
+- 教訓: dev compose はソースマウントで多くの問題を隠蔽する → **本番 compose での動作確認は独立して必要**
+- 対策: `user: "0:0"` のように権限問題を回避するか、init container で chown する
 
-### パッケージレベルの eager import 禁止
-`nous/domain/memory/__init__.py` が `from .sudachi_extractor import ...` すると、pytest collection 時に SudachiPy (~200MB) が常にロードされる。**`__getattr__` で遅延化する**。テストファイルも `import fitz` 等の重い C 拡張は関数内移動。
+## 運用ルール
 
-### `locals()` の使用禁止
-関数引数 + dict 引数の混在では破綻する。dict を真実とする。
+### コミット粒度の指針
+- 機能単位（feat / fix / chore）で 1 コミット
+- ドキュメント反映（docs:）は別コミット
+- 仕様駆動の成果物（`.spec/`）も別コミット
+- HANDOFF 更新は別コミット
+- 緊急修正（CI 失敗など）は独立コミットで `fix(...)` プレフィックス
 
-### 認証キー設定のデフォルト
-空文字デフォルトは「認証バイパス」と等価。明示的 `enabled: bool` フラグで opt-in にする。
+### fixer への指示テンプレ（2026-07-11 確立）
+1. **背景・設計の最終決定**（Oracle レビュー結果を反映）
+2. **採用するアーキテクチャ**（図示）
+3. **環境変数**（必須/オプション一覧）
+4. **既存コードの重要事実**（get_or_create の挙動など、調査結果）
+5. **実装スコープ**（タスク番号、ファイルパス）
+6. **TDD 適用**（RED→GREEN→REFACTOR）
+7. **検証ゲート**（ruff, pytest, YAML 構文チェック）
+8. **テストスコープ制限**（自身の変更ファイルのみ、全テストスイートは orchestrator 責務）
+9. **コミット**（コマンド）
+10. **報告**（項目リスト）
 
-### 時刻 sentinel
-`time.monotonic() - 0.0` は「起動からの経過秒」を意味し、CI runner 起動直後の値域を踏むリスク。sentinel は `None` + `is None` 判定。
+## ツール別 Tips
 
-### switchTab monkey-patch の禁止
-複数 JS ファイルが同じパターンで上書きすると衝突。`MutationObserver` + `CustomEvent('tab:changed')` 方式に統一。
+### Playwright MCP Docker 起動の罠
+- イメージのデフォルト ENTRYPOINT が `["node", "/app/cli.js", "--headless", "--browser", "chromium", "--no-sandbox"]` で `--port` がない
+- **stdio モードで起動** → Docker デタッチドでは stdin 即 EOF → exit(0) → restart loop
+- 修正: `entrypoint: ["node"]` + `command` で全引数明示 + `--port 8931 --host 0.0.0.0 --allowed-hosts *`
+- healthcheck は `/sse` (POST 専用) ではなく **SSE GET** エンドポイントを叩く
 
-### `.env` 残骸のマージ後チェック
-`.env` は gitignore 対象。pydantic-settings が起動時 ValidationError で気付く。マージ時は env 残骸チェックリストを持つ。
+### opensandbox の環境変数
+- `OPENSANDBOX_INSECURE_SERVER=YES` — 非対話モードで API キー空を許可（必須）
+- healthcheck で `python` 不可（Rust 製イメージ）、`wget` か `curl` を使う
 
-### result 型の `is_ok` / `.value` / `.error` アクセス
-pyright が `Failure` / `Success` の型を絞り込めない。pydantic-style `Result[T, E]` の型ガード改善が望まれる (LSP エラーの主要因)。
+### SearXNG URL 解決
+- `docker-compose.yml` → `NOUS_SEARXNG_URL` を使う（`SEARXNG_URL` ではない）
+- 修正前は `SEARXNG_URL` で設定されていたため、Settings のデフォルト `http://localhost:8080` が使われていた
+- `main.py:168-169` の health check だけが `os.environ.get("SEARXNG_URL", ...)` の fallback を持っていた
 
-## ツール評価知見
-- アイテム系7ツール（全体の25%）が YAGNI 違反 → 3ツール（add/equip/search）に圧縮推奨
-- `sandbox_context` は独立ツールとして価値薄 → `sandbox_execute` の返り値に統合すべき
+## 数字で見る Nous
 
-## 計画→実装ワークフロー
-- Oracle レビュー2回通過（v1: 7件指摘 → v2: 全解決確認 + 5件新規発見 → 最終修正後OK）
-- 計画書は `docs/superpowers/plans/2026-07-11-browser-sandbox-migration.md`
-
-## プロジェクト概要
-Nous: 日本語特化の永続記憶 MCP サーバー。SQLite + Qdrant + Ebbinghaus 忘却曲線。WebUIダッシュボード付き。
-3レイヤー構造（L1:MCP拡張, L2:EventBus基盤, L3:OpenCode Plugin）。
-
-## 学習した知識・教訓
-
-### sandbox_context JSON化責務（2026-06-29）
-- core関数はdict/構造化データを返し、MCPラッパーでjson.dumpsする統一パターン
-
-### テスト自動化ルール
-- sandboxテスト: `registered_tools` fixtureでMCPラッパー関数を呼び、戻り値は `json.loads()` でパース
-- 修正担当 fixer は自身の変更モジュールのテストのみ実行。全テストスイートはオーケストレーターの責務
-
-### フロントエンド反映漏れ防止
-- バックエンド変更時は `chat.js` + `sections/chat.py` + `routers/chat.py` の三者を必ず確認
-- WebUI の状態: chat.js 2872行 / base.js 933行 / settings.js 934行
-
-## OpenSandbox MCP ペルソナ分離（2026-07-11 Phase B）
-- 案 B'（静的 YAML テンプレ + URL factory）採用。init container 方式は棄却。
-- `_get_default_mcp_servers(persona)` factory 関数で per-persona URL 生成
-- `NOUS_OPENDBOX_MCP_URL` 環境変数で完全 override 可能
-- persona 削除時の `_cleanup_opensandbox_sandboxes()` は best-effort（例外を握り潰す）
-- `_parse_mcp_response()` は最初の `data:` 行を返す（MCP 単一レスポンスプロトコル）
-- テスト: httpx.AsyncClient を AsyncMock + MagicMock でモック
-
-## プロジェクトの現在の状態
-- ブランチ: main（Phase B 完了）
-- 全ユニットテスト: 1605 passed / 7 skipped（前回計測値、Phase B は 9 追加）
-- ruff check: 0 errors / format: clean
-- CI: 5 ジョブ green (Lint & Format / Documentation Reminder / Integration Tests / Unit Tests / Docker Build & Push)
-- MCPツール: 19個（browser + sandbox 5個削除）
-- 外部MCP: Playwright MCP + OpenSandbox MCP（per-persona インスタンス化）をデフォルト登録
-- 既知バグ（25件）: 全解消。バックエンド HIGH 3件 + WebUI 30件 = 0件
-- LSP エラー: H5 修正の副作用 (`dict[str, Any]` 型推論) あり、ランタイム影響なし
+- コミット数（2026-07-11 時点）: main ブランチに 11 コミット
+- テスト数: 1646 passed / 7 skipped
+- MCP ツール（Nous 内部）: 19 個（うち 5 個は builtin 委譲）
+- per-persona MCP インスタンス: 当初 herta/alice/bob の 3 個ハードコード → 動的プロビジョニング化予定
+- 設定振り分け問題: 5 件 (P1-P5) のうち P1, P2, P5 完了、P3, P4 は現状維持推奨
