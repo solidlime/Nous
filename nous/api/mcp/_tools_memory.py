@@ -66,8 +66,8 @@ async def _tool_memory_create(
         try:
             db = ctx.connection.get_memory_db()
             row = db.execute(
-                "SELECT key FROM memories WHERE persona = ? AND LOWER(content) = LOWER(?) AND deleted_at IS NULL LIMIT 1",
-                (persona, content.strip()),
+                "SELECT key FROM memories WHERE LOWER(content) = LOWER(?) AND lifecycle_status != 'tombstoned' LIMIT 1",
+                (content.strip(),),
             ).fetchone()
             if row:
                 return json.dumps(

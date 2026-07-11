@@ -203,6 +203,51 @@ class TestMemoryCreate:
         assert data["key"] == "mem_new"
         ctx.memory_service.create_memory.assert_called_once()
 
+    # ── DB exact-match duplicate detection ──
+
+    @pytest.mark.asyncio
+    async def test_create_memory_db_exact_duplicate_detected(self, registered_tools):
+        """Exact same content in DB should return duplicate status via DB check."""
+        tools, ctx, _ = registered_tools
+        # Mock the DB connection to return an existing record
+        mock_db = MagicMock()
+        mock_db.execute.return_value.fetchone.return_value = ("mem_exact_dup",)
+        ctx.connection = MagicMock()
+        ctx.connection.get_memory_db.return_value = mock_db
+
+        memory_create = tools["memory_create"]
+        result = await memory_create(content="identical content")
+
+        import json
+
+        data = json.loads(result)
+        assert data["ok"] is True
+        assert data["status"] == "duplicate"
+        assert data["duplicate_of"] == "mem_exact_dup"
+        ctx.memory_service.create_memory.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_memory_db_exact_duplicate_no_match(self, registered_tools):
+        """No matching content in DB should proceed to normal creation."""
+        tools, ctx, _ = registered_tools
+        # Mock the DB connection to return None (no duplicate)
+        mock_db = MagicMock()
+        mock_db.execute.return_value.fetchone.return_value = None
+        ctx.connection = MagicMock()
+        ctx.connection.get_memory_db.return_value = mock_db
+        ctx.persona_service.get_state_snapshot.return_value = ("neutral", 0.0, {}, None)
+        ctx.memory_service.create_memory.return_value = Success(_mem("mem_new"))
+
+        memory_create = tools["memory_create"]
+        result = await memory_create(content="unique content")
+
+        import json
+
+        data = json.loads(result)
+        assert data["ok"] is True
+        assert data["key"] == "mem_new"
+        ctx.memory_service.create_memory.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # memory_read()
