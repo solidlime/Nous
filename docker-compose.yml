@@ -20,6 +20,32 @@ services:
       retries: 5
       start_period: 30s
 
+  mcp-hub:
+    build:
+      context: ./mcp-hub
+      dockerfile: Dockerfile
+    image: ghcr.io/solidlime/mcp-hub:latest
+    container_name: mcp-hub
+    ports:
+      - "26263:26263"
+    volumes:
+      # MCP Hub データ永続化（サーバー登録情報）
+      - ${DATA_ROOT}/mcp-hub:/opt/mcp-hub/data
+    restart: unless-stopped
+    environment:
+      MCP_HUB_PORT: "26263"
+      MCP_HUB_HOST: "0.0.0.0"
+      MCP_HUB_DB_PATH: /opt/mcp-hub/data/hub.db
+      TZ: Asia/Tokyo
+      # Brave Search API キー (オプション)
+      # BRAVE_API_KEY: your-key-here
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:26263/admin/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   nous:
     image: ghcr.io/solidlime/nous:latest
     container_name: nous
@@ -36,6 +62,8 @@ services:
     environment:
       # Point to the qdrant service (overrides Dockerfile default of localhost:6333)
       NOUS_QDRANT__URL: http://qdrant:6333
+      # MCP Hub プロキシエンドポイント（チャットUIでMCPサーバーとして登録可能）
+      NOUS_MCP_HUB_URL: http://mcp-hub:26263/mcp
       LANG: C.UTF-8
     # Load env vars from .env file (ignored by git) so you can override Dockerfile defaults
     env_file:
