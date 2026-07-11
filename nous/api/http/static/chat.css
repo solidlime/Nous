@@ -555,6 +555,18 @@ input[type="range"].chat-field-input:focus {
   #memory-panel {
     display: none;
   }
+  /* Mobile overlay when toggled open via toggleMemoryPanel() inline style */
+  #memory-panel[style*="display: flex"] {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    z-index: 1000;
+    background: var(--bg-primary);
+    border-right: 1px solid var(--glass-border);
+    overflow-y: auto;
+  }
   #settings-panel {
     width: 100%;
     position: fixed;
