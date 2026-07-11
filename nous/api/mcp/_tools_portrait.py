@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
+from nous.domain.chat_config import ChatConfigRepository
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,15 @@ async def _tool_persona_portrait(ctx: AppContext, persona: str) -> str:
     or ``{"ok": False, "error": "..."}`` on unexpected failure.
     """
     try:
+        # 0. Enabled check — ChatConfig with fallback to Settings
+        chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
+        enabled = chat_config.portrait_enabled or ctx.settings.portrait_gen.enabled
+        if not enabled:
+            return json.dumps(
+                {"ok": False, "error": "Portrait generation is disabled in settings"},
+                ensure_ascii=False,
+            )
+
         state_result = ctx.persona_service.get_context(persona)
         if not state_result.is_ok:
             return json.dumps({"ok": False, "error": str(state_result.error)}, ensure_ascii=False)

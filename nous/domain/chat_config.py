@@ -36,8 +36,12 @@ _DEFAULT_BASE_URLS: dict[str, str] = {
 }
 
 
-def _get_default_mcp_servers(persona: str) -> list[dict]:
+def _get_default_mcp_servers(persona: str, opensandbox_url: str = "") -> list[dict]:
     """Generate per-persona MCP server configs.
+
+    Args:
+        persona: Persona name
+        opensandbox_url: Per-persona override. If empty, falls back to env, then default template.
 
     Reads NOUS_PERSONAS and constructs per-persona opensandbox URL.
     NOUS_OPENDBOX_MCP_URL overrides the URL template completely.
@@ -51,7 +55,7 @@ def _get_default_mcp_servers(persona: str) -> list[dict]:
         },
     ]
 
-    sandbox_url = os.environ.get("NOUS_OPENDBOX_MCP_URL")
+    sandbox_url = opensandbox_url or os.environ.get("NOUS_OPENDBOX_MCP_URL")
     if not sandbox_url:
         sandbox_url = f"http://opensandbox-mcp-{persona}:8000/mcp"
 
@@ -133,6 +137,10 @@ class ChatConfig(BaseModel):
     # HiMem 2-tier: Episode Memory consolidation
     episode_consolidation_enabled: bool = True
     episode_search_enabled: bool = True
+    # Phase 1: per-persona toggles with global fallback
+    irodori_enabled: bool = False
+    portrait_enabled: bool = False
+    opensandbox_url: str = ""  # empty = use default template
     updated_at: str | None = None
 
     def model_post_init(self, __context) -> None:
@@ -307,7 +315,8 @@ class ChatConfigRepository:
             "dynamic_temperature, emotion_temperature_scale, top_p, "
             "context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled, "
             "retrieval_rrf_k, "
-            "dynamic_tool_selection "
+            "dynamic_tool_selection, "
+            "irodori_enabled, portrait_enabled, opensandbox_url "
             "FROM chat_settings WHERE persona = ?",
             (persona,),
         )
@@ -339,7 +348,7 @@ class ChatConfigRepository:
         config = self.get(persona)
         # Only fill defaults for truly new personas (no mcp_servers configured)
         if not config.mcp_servers:
-            config.mcp_servers = list(_get_default_mcp_servers(persona))
+            config.mcp_servers = list(_get_default_mcp_servers(persona, config.opensandbox_url))
             self.save(config)
         return config
 
@@ -367,10 +376,11 @@ class ChatConfigRepository:
                     dynamic_temperature, emotion_temperature_scale, top_p,
                      context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled,
                      retrieval_rrf_k,
-                     dynamic_tool_selection,
-                     updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(persona) DO UPDATE SET
+                      dynamic_tool_selection,
+                      irodori_enabled, portrait_enabled, opensandbox_url,
+                      updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
                 api_key=excluded.api_key,
@@ -420,6 +430,9 @@ class ChatConfigRepository:
                  episode_search_enabled=excluded.episode_search_enabled,
                  retrieval_rrf_k=excluded.retrieval_rrf_k,
                  dynamic_tool_selection=excluded.dynamic_tool_selection,
+                 irodori_enabled=excluded.irodori_enabled,
+                 portrait_enabled=excluded.portrait_enabled,
+                 opensandbox_url=excluded.opensandbox_url,
                  updated_at=excluded.updated_at
             """,
             (
@@ -473,6 +486,9 @@ class ChatConfigRepository:
                 int(config.episode_search_enabled),
                 config.retrieval_rrf_k,
                 int(config.dynamic_tool_selection),
+                int(config.irodori_enabled),
+                int(config.portrait_enabled),
+                config.opensandbox_url,
                 now,
             ),
         )

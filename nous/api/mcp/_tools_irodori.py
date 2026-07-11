@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
+from nous.domain.chat_config import ChatConfigRepository
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +23,11 @@ async def _tool_irodori_tts(
 
     Returns JSON with ok:bool, audio_base64 (on success) or error message.
     """
-    # 1. Get Irodori config
+    # 1. Get Irodori config — ChatConfig with fallback to Settings
+    chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
     config = ctx.settings.irodori
-    if not config.enabled:
+    enabled = chat_config.irodori_enabled or config.enabled
+    if not enabled:
         return json.dumps(
             {"ok": False, "error": "Irodori TTS is not enabled in settings"},
             ensure_ascii=False,
