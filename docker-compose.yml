@@ -72,14 +72,26 @@ services:
       - ${DATA_ROOT}/playwright:/ms-playwright
     environment:
       TZ: Asia/Tokyo
-    command: []
+    entrypoint: ["node"]
+    command:
+      - "/app/cli.js"
+      - "--headless"
+      - "--browser"
+      - "chromium"
+      - "--no-sandbox"
+      - "--port"
+      - "8931"
+      - "--host"
+      - "0.0.0.0"
+      - "--allowed-hosts"
+      - "*"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8931/health', r => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8931/sse',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
       retries: 3
-      start_period: 30s
+      start_period: 15s
 
   opensandbox:
     image: opensandbox/server:latest
