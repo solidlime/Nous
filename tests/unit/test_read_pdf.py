@@ -13,7 +13,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import fitz  # PyMuPDF
 import pytest
 
 # ── ヘルパー ──
@@ -24,6 +23,8 @@ def create_test_pdf(path: str) -> str:
 
     日本語テキストを正しく抽出できるよう fontname='japan' を指定する。
     """
+    import fitz  # PyMuPDF (lazy import: ~100-150MB RSS)
+
     doc = fitz.open()
     page = doc.new_page()
 
@@ -43,6 +44,8 @@ def create_test_pdf(path: str) -> str:
 
 def create_test_pdf_multi_page(path: str, pages: int = 3) -> str:
     """複数ページのテストPDFを作成"""
+    import fitz  # PyMuPDF (lazy import)
+
     doc = fitz.open()
     for i in range(pages):
         page = doc.new_page()
@@ -187,6 +190,8 @@ async def test_read_pdf_text_truncation():
         pdf_path = f.name
 
     # 100K文字を超えるテキストを含むPDFを生成 (ASCIIテキストで十分)
+    import fitz  # PyMuPDF (lazy import)
+
     doc = fitz.open()
     line = "Lorem ipsum dolor sit amet consectetur adipiscing elit. " * 8
     pages_needed = 100  # 100ページあれば 100K を超える
@@ -220,6 +225,8 @@ async def test_read_pdf_text_truncation():
 
 def _make_minimal_pdf(path: str) -> str:
     """パス検証を通すための最小限PDF (中身は空テキスト)"""
+    import fitz  # PyMuPDF (lazy import)
+
     doc = fitz.open()
     page = doc.new_page()
     page.insert_text((50, 50), "x", fontname="japan")  # 1文字だけ
@@ -231,6 +238,8 @@ def _make_minimal_pdf(path: str) -> str:
 @pytest.mark.asyncio
 async def test_read_pdf_fallback_pdfplumber():
     """PyMuPDF空テキスト → pdfplumber フォールバック"""
+    import fitz  # needed for MagicMock(spec=fitz.Page)
+
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
         pdf_path = _make_minimal_pdf(f.name)
 
@@ -283,6 +292,8 @@ async def test_read_pdf_fallback_pdfplumber():
 @pytest.mark.asyncio
 async def test_read_pdf_fallback_ocr():
     """PyMuPDF + pdfplumber 空テキスト → OCR フォールバック"""
+    import fitz  # needed for MagicMock(spec=fitz.Page)
+
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
         pdf_path = _make_minimal_pdf(f.name)
 
@@ -356,6 +367,8 @@ async def test_read_pdf_fallback_ocr():
 @pytest.mark.asyncio
 async def test_read_pdf_pymupdf_normal_text():
     """通常テキスト抽出 → text_source = 'pymupdf' (リグレッションチェック)"""
+    import fitz  # needed for MagicMock(spec=fitz.Page)
+
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
         pdf_path = _make_minimal_pdf(f.name)
 
@@ -395,6 +408,8 @@ async def test_read_pdf_pymupdf_normal_text():
 @pytest.mark.asyncio
 async def test_read_pdf_ocr_no_images():
     """OCRテキスト → ページラスター画像が追加されること"""
+    import fitz  # needed for MagicMock(spec=fitz.Page)
+
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
         pdf_path = _make_minimal_pdf(f.name)
 
@@ -465,6 +480,8 @@ async def test_read_pdf_ocr_no_images():
 @pytest.mark.asyncio
 async def test_read_pdf_ocr_import_error():
     """pytesseract 未インストール → graceful degradation (text_source = 'empty')"""
+    import fitz  # needed for MagicMock(spec=fitz.Page)
+
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
         pdf_path = _make_minimal_pdf(f.name)
 

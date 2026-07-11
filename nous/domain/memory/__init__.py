@@ -7,7 +7,21 @@ from nous.domain.memory.recall_annotator import RecallAnnotation, RecallAnnotato
 from nous.domain.memory.recall_governor import RecallGovernor
 from nous.domain.memory.repository import MemoryRepository
 from nous.domain.memory.service import MemoryService
-from nous.domain.memory.sudachi_extractor import HybridEntityExtractor, SudachiExtractor
+
+# SudachiExtractor / HybridEntityExtractor は __getattr__ で遅延ロード
+# （pytest collection 時に sudachipy 辞書 ~200MB をロードしないため）
+
+
+def __getattr__(name: str):
+    if name in ("SudachiExtractor", "HybridEntityExtractor"):
+        from nous.domain.memory.sudachi_extractor import (
+            HybridEntityExtractor,
+            SudachiExtractor,
+        )
+
+        return {"SudachiExtractor": SudachiExtractor, "HybridEntityExtractor": HybridEntityExtractor}[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "HybridEntityExtractor",
