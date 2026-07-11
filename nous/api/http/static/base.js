@@ -368,10 +368,19 @@ function showAlert(message) {
    SSE REAL-TIME EVENTS
    ================================================================= */
 function connectSSE(persona) {
+  // 古い SSE のリスナーを削除してから閉じる（リーク防止）
   if (S._sse) {
     try {
+      if (S._sse._sseHandlers) {
+        for (const [ev, fn] of Object.entries(S._sse._sseHandlers)) {
+          S._sse.removeEventListener(ev, fn);
+        }
+      }
+      S._sse.onerror = null;
       S._sse.close();
-    } catch (_) {}
+    } catch (e) {
+      console.warn("[SSE] close failed:", e.message);
+    }
   }
   S._sseBackoff = 5000;
   const es = new EventSource(
@@ -379,9 +388,9 @@ function connectSSE(persona) {
       encodeURIComponent(persona) +
       "?topics=memory,context,portrait",
   );
-  S._sse = es;
+  es._sseHandlers = {};
 
-  es.addEventListener("memory.created", function (e) {
+  es._sseHandlers["memory.created"] = function handleMemoryCreated(e) {
     try {
       const d = JSON.parse(e.data);
       toast(
@@ -389,9 +398,13 @@ function connectSSE(persona) {
           (d.content_preview || "...").substring(0, 50),
         "info",
       );
-    } catch (_) {}
-  });
-  es.addEventListener("memory.updated", function (e) {
+    } catch (e) {
+      console.warn("[SSE parse] memory.created:", e.message);
+    }
+  };
+  es.addEventListener("memory.created", es._sseHandlers["memory.created"]);
+
+  es._sseHandlers["memory.updated"] = function handleMemoryUpdated(e) {
     try {
       const d = JSON.parse(e.data);
       toast(
@@ -399,9 +412,13 @@ function connectSSE(persona) {
           (d.content_preview || "...").substring(0, 50),
         "info",
       );
-    } catch (_) {}
-  });
-  es.addEventListener("memory.deleted", function (e) {
+    } catch (e) {
+      console.warn("[SSE parse] memory.updated:", e.message);
+    }
+  };
+  es.addEventListener("memory.updated", es._sseHandlers["memory.updated"]);
+
+  es._sseHandlers["memory.deleted"] = function handleMemoryDeleted(e) {
     try {
       const d = JSON.parse(e.data);
       toast(
@@ -409,23 +426,35 @@ function connectSSE(persona) {
           (d.content_preview || "...").substring(0, 50),
         "info",
       );
-    } catch (_) {}
-  });
+    } catch (e) {
+      console.warn("[SSE parse] memory.deleted:", e.message);
+    }
+  };
+  es.addEventListener("memory.deleted", es._sseHandlers["memory.deleted"]);
+
   es.addEventListener("context.updated", function (e) {
     toast(
       "\ud83d\udc64 \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u66f4\u65b0\u3055\u308c\u307e\u3057\u305f",
       "info",
     );
   });
-  es.addEventListener("portrait.generated", function (e) {
+
+  es._sseHandlers["portrait.generated"] = function handlePortraitGenerated(e) {
     try {
       const d = JSON.parse(e.data);
       window.dispatchEvent(
         new CustomEvent("portrait-generated", { detail: d }),
       );
-    } catch (_) {}
-  });
-  es.onerror = function () {
+    } catch (e) {
+      console.warn("[SSE parse] portrait.generated:", e.message);
+    }
+  };
+  es.addEventListener(
+    "portrait.generated",
+    es._sseHandlers["portrait.generated"],
+  );
+
+  es.onerror = function handleSSEError() {
     S._sse = null;
     var backoff = S._sseBackoff || 5000;
     S._sseBackoff = Math.min(backoff * 2, 60000);
@@ -433,6 +462,7 @@ function connectSSE(persona) {
       if (S.persona) connectSSE(S.persona);
     }, backoff);
   };
+  S._sse = es;
 }
 
 /* =================================================================
@@ -723,6 +753,20 @@ function setAutoRefresh(sec) {
     S.refreshTimer = setInterval(() => loadTab(S.tab), sec * 1000);
   }
 }
+
+/* =================================================================
+   PAGE CLEANUP (beforeunload)
+   ================================================================= */
+window.addEventListener("beforeunload", function cleanupBeforeUnload() {
+  if (S._sse) {
+    S._sse.close();
+    S._sse = null;
+  }
+  if (S.refreshTimer) {
+    clearInterval(S.refreshTimer);
+    S.refreshTimer = null;
+  }
+});
 
 /* =================================================================
    INITIALIZATION
