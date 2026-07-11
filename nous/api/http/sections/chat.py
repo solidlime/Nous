@@ -426,6 +426,22 @@ def render_chat_tab() -> str:
                                 </div>
                             </div>
                         </details>
+                        <!-- Extensions: irodori / portrait -->
+                        <details data-category="extensions">
+                            <summary><i data-lucide="puzzle"></i> 拡張機能 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'extensions')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <div class="details-body">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <input type="checkbox" id="chat-irodori-enabled"
+                                        style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
+                                    <label for="chat-irodori-enabled" class="chat-field-label" style="margin:0;cursor:pointer;">irodori を有効にする</label>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <input type="checkbox" id="chat-portrait-enabled"
+                                        style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
+                                    <label for="chat-portrait-enabled" class="chat-field-label" style="margin:0;cursor:pointer;">Portrait を有効にする</label>
+                                </div>
+                            </div>
+                        </details>
                         <!-- Housekeeping & Other -->
                         <details data-category="other">
                             <summary><i data-lucide="broom"></i> 整理・その他 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'other')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>

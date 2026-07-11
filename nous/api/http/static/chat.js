@@ -164,11 +164,6 @@ function chatInputKeydownHandler(e) {
         content: val.slice(6).trim(),
         importance: 0.8,
       });
-    } else if (val.startsWith("/exec ") && S.persona) {
-      handleSlashCommand("opensandbox__execute_code", {
-        code: val.slice(6).trim(),
-        language: "python",
-      });
     } else if (val === "/help" || val.startsWith("/help ")) {
       input.value = "";
       input.style.height = "auto";
@@ -398,6 +393,9 @@ function applyChatConfig(cfg) {
       document.getElementById("threshold-display").textContent =
         this.value + "%";
     });
+  // Extensions: irodori / portrait
+  setChecked("chat-irodori-enabled", cfg.irodori_enabled === true);
+  setChecked("chat-portrait-enabled", cfg.portrait_enabled === true);
   // Debug mode
   setChecked("chat-debug-mode", cfg.debug_mode === true);
   const statusEl = document.getElementById("chat-config-status");
@@ -574,6 +572,9 @@ async function saveChatConfig() {
     )
       ? document.getElementById("chat-image-gen-stability-url").value.trim()
       : "",
+    // 拡張機能: irodori / portrait
+    irodori_enabled: getChecked("chat-irodori-enabled"),
+    portrait_enabled: getChecked("chat-portrait-enabled"),
   };
   const btn = document.querySelector(".chat-save-btn");
   if (btn) {
@@ -1040,7 +1041,6 @@ function resetToWelcome() {
                 <span class="chat-welcome-cmd">/help</span>
                 <span class="chat-welcome-cmd">/search</span>
                 <span class="chat-welcome-cmd">/image</span>
-                <span class="chat-welcome-cmd">/exec</span>
                 <span class="chat-welcome-cmd">/invoke_skill</span>
             </div>
         </div>`;
@@ -2046,7 +2046,6 @@ const SLASH_COMMANDS = [
     desc: "目標を作成",
     example: "/goal プロジェクトを完成させる",
   },
-  { name: "/exec", desc: "コードをサンドボックス実行", example: "/exec python script.py" },
   { name: "/help", desc: "コマンド一覧を表示", example: "/help" },
   { name: "/search", desc: "記憶を検索", example: "/search 昨日の会話" },
   { name: "/image", desc: "画像を生成", example: "/image 猫の写真" },
@@ -2684,37 +2683,10 @@ async function execCodeBlock(code, language, resultEl, runBtn) {
     if (runBtn) runBtn.textContent = "▶ Run";
     return;
   }
-  runBtn.disabled = true;
-  runBtn.innerHTML = '<i data-lucide="clock"></i>';
-  resultEl.className = "hljs-run-result running";
-  resultEl.textContent = "実行中...";
-  resultEl.style.display = "block";
-  try {
-    const resp = await api(
-      "/api/chat/" + encodeURIComponent(S.persona) + "/tool",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          tool: "opensandbox__execute_code",
-          input: { code, language },
-        }),
-      },
-    );
-    const out = ((resp.result && resp.result.stdout) || resp.stdout || "").trim();
-    const err = ((resp.result && resp.result.stderr) || resp.stderr || "").trim();
-    if (err) {
-      resultEl.className = "hljs-run-result stderr";
-      resultEl.textContent = err;
-    } else {
-      resultEl.className = "hljs-run-result stdout";
-      resultEl.textContent = out || "(出力なし)";
-    }
-  } catch (ex) {
+  if (resultEl) {
     resultEl.className = "hljs-run-result stderr";
-    resultEl.textContent = "Error: " + ex.message;
-  } finally {
-    runBtn.disabled = false;
-    runBtn.textContent = "▶ Run";
+    resultEl.textContent = "サンドボックス実行は利用できません";
+    resultEl.style.display = "block";
   }
 }
 

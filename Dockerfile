@@ -17,10 +17,9 @@ COPY requirements.txt ./
 # Use PyTorch's CPU-only index to prevent CUDA packages
 RUN pip install --no-cache-dir \
     torch \
-    torchvision \
-    torchaudio \
     --index-url https://download.pytorch.org/whl/cpu && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir uv && \
+    uv pip install --system -r requirements.txt
 
 # Runtime stage: Copy only necessary files
 FROM python:3.12-slim
@@ -39,9 +38,6 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl \
     tzdata \
-    # OCR用。不要なら削除可
-    tesseract-ocr \
-    tesseract-ocr-jpn \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
@@ -56,8 +52,7 @@ RUN find /usr/local/lib/python3.12/site-packages -type d -name __pycache__ -exec
     find /usr/local/lib/python3.12/site-packages -type f -name '*.pyc' -delete && \
     find /usr/local/lib/python3.12/site-packages -type f -name '*.pyo' -delete && \
     find /usr/local/lib/python3.12/site-packages -type f -name '*.c' -delete && \
-    find /usr/local/lib/python3.12/site-packages -type f -name '*.h' -delete && \
-    rm -rf /usr/local/lib/python3.12/site-packages/pip /usr/local/lib/python3.12/site-packages/setuptools
+    find /usr/local/lib/python3.12/site-packages -type f -name '*.h' -delete
 
 # Copy application code (v2: memory_mcp package only)
 COPY nous/ ${APP_HOME}/nous/

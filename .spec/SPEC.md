@@ -1,223 +1,183 @@
-# SPEC: 残課題 2 件（アイテムツール圧縮 + OpenSandbox ペルソナ分離）
+# SPEC: Nous 軽量化 + MCP ハブ化
 
-## ① アイテムツール 7 → 3 圧縮（YAGNI 解消）
-
-### 設計原則
-
-- **MCP ツールは LLM が必要とするものだけ残す**
-- 内部処理（inventory_update / REST API / prepare.py）は無関係、影響ゼロ
-- dead code は同時削除してリポジトリを綺麗に保つ
-
-### 残すツール（3個）
-
-| ツール | 役割 | LLM 必要性 |
-|--------|------|----------|
-| `item_add` | 新規アイテム登録 | LLM が「これは新しい」と言いたい時に必要 |
-| `item_equip` | 装備変更（スロット一括） | LLM が「着替える」「装備する」を表現する時に必要 |
-| `item_search` | インベントリ照会 | LLM が「何持ってる？」を確認するのに必要 |
-
-### 削除するツール（4個）と根拠
-
-| ツール | 削除根拠 |
-|--------|---------|
-| `item_remove` | `memory_llm.inventory_update` が JSON から直接 `equipment_service.remove_item()` を呼ぶ。LLM が MCP ツールとして個別に呼ぶ必要がない。 |
-| `item_unequip` | 同上。`memory_llm` から直接 `unequip()` を呼ぶ経路あり。 |
-| `item_update` | 同上。`memory_llm` から直接 `update_item()` を呼ぶ経路あり。 |
-| `item_history` | **どの経路からも呼ばれていない**（REST API / memory_llm / フロントエンド全て）。完全デッドコード。 |
-
-### 変更ファイル一覧
-
-| # | ファイル | 変更内容 |
-|---|---------|---------|
-| 1 | `nous/api/mcp/_tools_item.py` | `_tool_item_remove` (L51-77), `_tool_item_unequip` (L109-136), `_tool_item_update` (L139-182), `_tool_item_history` (L228-266) の 4 関数を削除。ファイル末尾は `_tool_item_search` (L185-225) のみ残す |
-| 2 | `nous/api/mcp/tools.py` | Import リスト (L33-41) から 4 つ削除、Dispatch dict (L67-73) から 4 件削除、`@_tool` 関数 (L311-359) から 4 件削除 |
-| 3 | `nous/application/chat/tools/definitions.py` | `CORE_ALWAYS_TOOLS` (L24-30) から 4 件削除、`MEMORY_TOOLS` dict (L183-273) から 4 つの `ToolDefinition` 削除、`_NOUS_TOOL_NAMES` frozenset (L412-418) から 4 件削除 |
-| 4 | `nous/domain/equipment/service.py` | `get_history()` メソッド (L212-214) 削除 |
-| 5 | `nous/domain/equipment/repository.py` | Protocol から `get_history` (L42) 削除 |
-| 6 | `tests/unit/test_mcp_items.py` | `test_item_remove` (L87), `test_item_unequip` (L113), `test_item_update` (L126), `test_item_history` (L156) の 4 テストケース削除 + 関連 fixture 整理 |
-| 7 | `tests/unit/test_sqlite_repos.py` | `test_get_history` (L314) 削除 |
-| 8 | `docs/llm_usage_guide.md` | L22 ツール一覧から 4 件削除、L743-744 使用例更新 |
-| 9 | `CLAUDE.md` | L76-81 ツール一覧を 3 件に更新 |
-| 10 | `README.md` | L115 ツール一覧を 3 件に更新 |
-| 11 | `.spec/TEST_PLAN.md` | IT-09, IT-10, IT-11, IT-12, IT-13 の再分類または削除 |
-| 12 | `.spec/TEST_RESULTS.md` | L96-100 テスト結果行を削除 |
-
-### 影響ゼロが確認できているもの
-
-- `nous/api/http/routers/item.py` — REST API は `equipment_service` を直接呼ぶ、MCP ツール経由ではない
-- `nous/application/chat/memory_llm.py` — 同上
-- フロントエンド（`activity.js`, `sections/activity.py`）— `tool.called` イベントに依存しない汎用ハンドラ
-- `EquipmentHistory` エンティティ — 装備変更の履歴書き込みには継続使用
+## 1. 目的
+- compose 構成を 6→2 に簡素化（qdrant + nous のみ）
+- 未使用外部サービス（searxng, opensandbox, playwright）を完全削除
+- Docker イメージに Node.js + uv を追加し、汎用 MCP ハブとして機能させる
+- チャットUI の MCP サーバー登録機能は維持・強化
 
 ---
 
-## ② OpenSandbox MCP ペルソナ分離の実機構成
+## 2. Docker Compose 変更
 
-### 設計原則
+### 2.1 docker-compose.yml
+**削除するサービス（4つ）**:
+- `searxng-init` (全行)
+- `searxng` (全行)
+- `playwright` (全行)
+- `opensandbox` (全行)
 
-- **OpenSandbox 公式の per-sandbox filesystem 分離を最大活用**（既に成立）
-- **sandbox_id の可視性スコープを persona ごとに制限**（課題）
-- **Nous 側だけで完結**（OpenSandbox のフォーク・改造はしない）
-- **既存 per-persona 設定機構を再利用**（`ChatConfig.mcp_servers`）
-- **シンプルイズベスト**（init container 動的生成は不採用 — 静的 YAML で十分）
+**削除する設定**:
+- `configs.opensandbox-config` ブロック
+- `volumes.opensandbox-config` ブロック
+- `networks` ブロック（不要なら）
 
-### アーキテクチャ（案 B' 採用: 静的 YAML テンプレ + URL factory）
+**nous サービス変更**:
+- `depends_on` から `searxng` を削除（qdrant のみ残す）
+- `environment.NOUS_SEARXNG_URL` を削除
+- `volumes` から `/var/run/docker.sock:/var/run/docker.sock` を削除（sandbox_orchestrator 削除に伴う）
+- sandbox-mcp 関連コメント削除
 
-**Oracle レビュー（2026-07-11）により SPEC の init container 方式を棄却、案 B' に変更**:
-
-```
-┌─────────────────┐
-│   opensandbox   │ ← 単一サーバー（port 8090、全 sandbox を管理）
-│   (FastAPI)     │
-└────────┬────────┘
-         │  HTTP
-   ┌─────┴─────┬─────┬─────┐
-   ▼           ▼     ▼     ▼
-┌────────┐ ┌────────┐ ┌────────┐
-│mcp-herta│ │mcp-alice│ │mcp-bob │  ← per-persona インスタンス
-│:8001   │ │:8002   │ │:8003   │     独立した ServerState
-└────────┘ └────────┘ └────────┘
-   ▲           ▲     ▲
-   │           │     │
- ChatConfig[persona]  ChatConfig[persona]  ChatConfig[persona]
-   (.sqlite)         (.sqlite)           (.sqlite)
-   mcp_servers:      mcp_servers:        mcp_servers:
-   opensandbox-mcp-herta:8000   ...alice:8000   ...bob:8000
-```
-
-各 `opensandbox-mcp-{persona}` は同一の `opensandbox` サーバーを指すが、別プロセス・別 `ServerState` を持つ。
-コンテナ間通信は service name（`opensandbox-mcp-{persona}:8000`）で名前解決、port マッピングはデバッグ用ホストポートのみ。
-
-### 棄却理由（init container 方式）
-
-1. **`docker-compose.override.yml` 動的生成の罠**: 起動時ワンショットしか評価されない、`POST /api/personas` での動的追加が反映されない
-2. **Nous コンテナに docker socket マウントが必要**: セキュリティ懸念（現状 Nous はマウントしていない）
-3. **冪等性・誤削除・手動編集との競合**: gitignore 対象ファイルへの自動書き込みは事故りやすい
-4. **複雑度に見合わない**: 静的 YAML で全要件が満たせる
-
-### 変更ファイル一覧
-
-| # | ファイル | 変更内容 |
-|---|---------|---------|
-| 1 | `docker-compose.yml` | `x-opensandbox-mcp` YAML アンカー追加、各 persona サービス `opensandbox-mcp-{persona}` 定義。port マッピングは `8001:8000`, `8002:8000`, ... のデバッグ用。コンテナ間通信は service name。 |
-| 2 | `nous/domain/chat_config.py` | `DEFAULT_MCP_SERVERS` (L39-52) を `_get_default_mcp_servers(persona)` factory 関数に置換。`os.environ` から `NOUS_PERSONAS` を読んで persona → URL マッピングを生成。`NOUS_OPENDBOX_MCP_URL` 環境変数で完全 override 可能。 |
-| 3 | `nous/infrastructure/sqlite/repositories/chat_config_repository.py` (要確認パス) | `get_or_create()` で `mcp_servers` 未設定時に `_get_default_mcp_servers(persona)` を呼ぶ。既存設定は上書きしない（後方互換）。 |
-| 4 | `nous/api/http/routers/persona.py` | persona 削除時に `httpx` で `opensandbox-mcp-{persona}:8000/mcp` 経由 `sandbox_list` → 全 `sandbox_delete` の best-effort クリーンアップ追加。失敗しても削除フローは継続。 |
-| 5 | `.env.example` | `NOUS_PERSONAS` + `NOUS_OPENDBOX_MCP_URL` の説明追記 |
-| 6 | `docs/llm_usage_guide.md` | ペルソナ分離の説明セクション追加 |
-| 7 | `CLAUDE.md` | アーキテクチャ図更新 |
-
-### 環境変数
-
-```bash
-# 必須: ペルソナ一覧（カンマ区切り）
-NOUS_PERSONAS=herta,alice,bob
-
-# オプション: URL テンプレートを完全 override（advanced）
-# デフォルト: f"http://opensandbox-mcp-{persona}:8000/mcp"
-NOUS_OPENDBOX_MCP_URL=http://custom-host:9999/mcp
-```
-
-### chat_config.py 修正内容
-
-```python
-import os
-
-def _get_default_mcp_servers(persona: str) -> list[dict]:
-    """Generate per-persona MCP server configs.
-    
-    Reads NOUS_PERSONAS and constructs per-persona opensandbox URL.
-    NOUS_OPENDBOX_MCP_URL overrides the URL template completely.
-    """
-    servers: list[dict] = [
-        {
-            "name": "playwright",
-            "transport": "http",
-            "url": "http://playwright:8931/sse",
-            "enabled": True,
-        },
-    ]
-    
-    sandbox_url = os.environ.get("NOUS_OPENDBOX_MCP_URL")
-    if not sandbox_url:
-        sandbox_url = f"http://opensandbox-mcp-{persona}:8000/mcp"
-    
-    servers.append({
-        "name": "opensandbox",
-        "transport": "http",
-        "url": sandbox_url,
-        "enabled": True,
-    })
-    return servers
-
-# 後方互換のため定数は残すが内容は空（各 persona 個別生成）
-DEFAULT_MCP_SERVERS: list[dict] = []
-```
-
-### docker-compose.yml 修正内容
-
-```yaml
-x-opensandbox-mcp: &opensandbox-mcp
-  image: python:3.11-slim
-  command: >
-    sh -c "pip install --no-cache-dir opensandbox-mcp &&
-           opensandbox-mcp --transport streamable-http --domain opensandbox:8090 --protocol http"
-  environment:
-    TZ: Asia/Tokyo
-  restart: unless-stopped
-  depends_on:
-    opensandbox:
-      condition: service_healthy
-
-services:
-  opensandbox-mcp-herta:
-    <<: *opensandbox-mcp
-    container_name: opensandbox-mcp-herta
-    ports: ["8001:8000"]  # デバッグ用
-    
-  opensandbox-mcp-alice:
-    <<: *opensandbox-mcp
-    container_name: opensandbox-mcp-alice
-    ports: ["8002:8000"]
-    
-  opensandbox-mcp-bob:
-    <<: *opensandbox-mcp
-    container_name: opensandbox-mcp-bob
-    ports: ["8003:8000"]
-  # NOUS_PERSONAS と同数を手動追加（スクリプト生成なし）
-```
-
-### 動作確認手順（Phase B 完了後）
-
-1. `NOUS_PERSONAS=herta,alice,bob` を `.env` に設定
-2. `docker compose up -d` → 全サービス healthy
-3. `persona=herta` の `mcp_servers` を DB で確認 → `http://opensandbox-mcp-herta:8000/mcp` が保存されていること
-4. `persona=herta` で `opensandbox__execute_code(code="echo 'herta-secret' > /tmp/secret")` 実行
-5. `persona=alice` で `/tmp/secret` が存在しないことを確認（別 sandbox / 別 filesystem）
-6. `persona=herta` の `sandbox_list` が herta の sandbox のみ返すことを確認
-7. 別 persona の `sandbox_id` で `sandbox_connect` を試行 → 別 MCP インスタンスの `ServerState` には存在しないので失敗
-8. persona 削除時、`sandbox_*` もクリーンアップされることを確認
-
-### ロールバック方法
-
-- `docker-compose.yml` の `x-opensandbox-mcp` アンカー + 各サービス定義を削除、旧 `opensandbox-mcp` 単一サービスに戻す
-- `chat_config.py` の `_get_default_mcp_servers()` を旧 `DEFAULT_MCP_SERVERS` ハードコードに戻す
-- 既存 persona の DB 内 `mcp_servers` は `http://opensandbox-mcp:8000/mcp` のままなので、`get_or_create` は上書きしないため影響なし
+### 2.2 docker-compose.dev.yml
+- 変更不要（nous サービスのオーバーライドのみ、searxng 参照なし）
 
 ---
 
-## VERIFY: 検証
+## 3. Dockerfile 再構築
 
-### ① アイテムツール圧縮
+### 3.1 ベースイメージ
+- Builder: `python:3.12-slim`
+- Runtime: `python:3.12-slim` + Node.js
 
-- `ruff check .` → 0 errors
-- `python3 -m pytest tests/unit/test_mcp_items.py tests/unit/test_equipment_service.py tests/unit/test_sqlite_repos.py -v` → 全パス
-- `python3 -m pytest tests/ --ignore=tests/benchmark --ignore=tests/integration/test_dashboard_e2e.py -q` → 全パス（orchestrator のみ）
-- MCP ツール一覧が 3 ツールになっていることを `http://localhost:26262/api/mcp/tools` で確認
+### 3.2 Builder ステージ変更
+```
+# 削除: torchvision, torchaudio
+# 維持: torch (sentence-transformers の間接依存)
+# 追加: uv インストール
+```
+- `pip install torch --index-url https://download.pytorch.org/whl/cpu` (torchvision/torchaudio 除去)
+- `pip install uv`
+- `uv pip install --system -r requirements.txt` (pip → uv 移行)
 
-### ② OpenSandbox ペルソナ分離
+### 3.3 Runtime ステージ変更
+**apt パッケージ追加**:
+- `nodejs`, `npm` (Node.js LTS: MCP サーバー実行用)
+- `git` (npm パッケージの git 依存対応)
+- `wget` (汎用ユーティリティ)
+- `build-essential` の一部 (`gcc`, `g++`, `make`: native addon ビルド用)
 
-- `docker compose up -d` → 全サービス healthy
-- 上記「動作確認手順」6 ステップ
-- `docker compose ps` で `opensandbox-mcp-{persona}` が各 persona ごとに起動していることを確認
-- `http://localhost:8001/mcp` (herta) と `http://localhost:8002/mcp` (alice) が別プロセスであることを PID で確認
+**apt パッケージ維持**:
+- `curl` (healthcheck)
+- `tzdata` (タイムゾーン)
+- `tesseract-ocr`, `tesseract-ocr-jpn` (PDF OCR)
+
+**削除**:
+- pip/setuptools 削除処理: **削除しない**（ユーザーが `pip install` する可能性があるため）
+
+### 3.4 uv のバイナリ保持
+- Builder で `pip install uv` → Runtime に COPY されるので uv CLI が使える
+
+---
+
+## 4. コード変更: searxng 依存削除
+
+### 4.1 `nous/application/chat/tools/builtin.py`
+- `_handle_search()` 関数（約70行）を完全削除
+- `TOOL_DISPATCH` 辞書から `"search": _handle_search` エントリ削除
+- searxng 関連 import（httpx? → 他でも使ってたら維持）削除
+
+### 4.2 `nous/api/mcp/tools.py`
+- `search` ツール定義を削除
+- `_handle_search` 呼び出しを削除
+- NOTE: `_tool_search.py` があるならそちらも確認
+
+### 4.3 `nous/main.py`
+- searxng health check コードブロック削除（約10行）
+- `status["services"]["searxng"]` 削除
+- `SEARXNG_URL` 関連の env 参照削除
+
+### 4.4 `nous/config/settings.py`
+- `searxng_url: str = "http://localhost:8080"` 削除
+
+### 4.5 `nous/config/runtime_config.py`
+- `searxng_url` エントリ削除
+
+### 4.6 `nous/infrastructure/sqlite/connection.py`
+- `searxng_url TEXT` カラム削除（スキーマ定義 + マイグレーション）
+- 注意: DB マイグレーションとして安全に処理する必要あり
+
+### 4.7 ツール一覧系
+- `list_skills` / tool list に `search` が含まれていないか確認
+
+---
+
+## 5. コード変更: opensandbox 依存削除
+
+### 5.1 `nous/infrastructure/sandbox_orchestrator.py`
+- **ファイルごと削除**
+
+### 5.2 `nous/application/chat/tools/builtin.py`
+- opensandbox 固有のツールルーティングコード削除
+- **重要**: `__`区切りの汎用MCPルーティングは **削除しない**（ユーザー登録MCPサーバーのツール呼び出しに必須）
+- 削除対象: opensandbox 専用の初期化/クリーンアップコード
+
+### 5.3 `nous/domain/chat_config.py`
+- `_get_default_mcp_servers()` 関数から opensandbox エントリを削除
+- `ChatConfig.opensandbox_url` フィールド削除
+- `DEFAULT_MCP_SERVERS` から playwright エントリ削除（playwright依存削除）
+- 関数自体は維持（将来のデフォルトMCPサーバー用）
+
+### 5.4 `nous/application/persona.py` (または該当ファイル)
+- `_cleanup_opensandbox_sandboxes()` 削除
+- 呼び出し元も削除
+
+### 5.5 `nous/api/http/routers/chat.py`
+- `ChatConfigUpdate` スキーマから `opensandbox_url` フィールド削除
+
+### 5.6 `nous/api/http/sections/chat.py`
+- OpenSandbox URL 入力欄の HTML ブロック削除（`<details data-category="extensions">` 内）
+
+### 5.7 `nous/api/http/static/chat.js`
+- `openSandboxUrl` 関連の変数/処理削除
+- `chat-opensandbox-url` DOM 操作削除
+- `opensandbox__sandbox_execute` 直接呼び出し削除
+
+---
+
+## 6. コード変更: playwright 依存削除
+
+### 6.1 `nous/domain/chat_config.py`
+- `_get_default_mcp_servers()` から playwright エントリ削除（#5.3と重複）
+
+---
+
+## 7. 変更しないもの（明示的維持）
+
+### 7.1 汎用 MCP ルーティング
+- `registry.py` の `is_mcp_tool()` : `"__" in tool_name` → **維持**
+- `builtin.py` の `execute_tool()` MCP 転送 → **維持**
+- `MCPClientPool` → **維持**
+- チャットUI の MCP サーバー登録UI → **維持**
+
+### 7.2 ツール
+- `invoke_skill` → 維持（LLM呼び出しのみ）
+- `memory_*` → 維持
+- `image_generate` → 維持
+- `read_pdf` → 維持
+
+---
+
+## 8. テスト更新
+
+### 8.1 削除対象テスト
+- `tests/unit/test_builtin_handlers.py`: searxng 関連テスト削除
+- `tests/unit/domain/test_chat_config.py`: opensandbox URL テスト削除
+- `tests/unit/domain/test_sandbox_ownership.py`: ファイルごと削除
+- `tests/unit/infrastructure/test_sandbox_orchestrator.py`: ファイルごと削除
+- `tests/unit/application/chat/tools/test_builtin.py`: opensandbox + playwright テスト削除
+- `tests/unit/api/http/routers/test_persona.py`: opensandbox cleanup テスト削除
+
+### 8.2 修正対象テスト
+- `tests/unit/test_chat_service.py`: searxng_url / opensandbox_url 参照を削除
+
+---
+
+## 9. 検証項目
+
+1. `docker compose up` で qdrant + nous のみ起動すること
+2. nous の `/health` エンドポイントが正常に 200 を返すこと
+3. MCP サーバー登録UI が正常に表示・動作すること
+4. 既存ツール（memory, image_generate, read_pdf, invoke_skill）が動作すること
+5. `docker compose down` で全サービスが正常終了すること
+6. 全テストがパスすること
+7. Docker イメージサイズが許容範囲であること

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -11,7 +10,6 @@ from nous.api.mcp.tools import TOOL_DISPATCH
 from nous.application.chat.tools.definitions import _NOUS_TOOL_NAMES
 from nous.config.runtime_config import RuntimeConfigManager
 from nous.config.settings import get_settings
-from nous.domain.sandbox_ownership import get_registry
 from nous.domain.skill import SkillRepository
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.sqlite.connection import get_global_skills_db
@@ -112,54 +110,6 @@ async def _handle_context_update(ctx: AppContext, config: ChatConfig, tool_input
     if "context_note" in tool_input and tool_input["context_note"]:
         ctx.persona_service.update_persona_info(ctx.persona, {"context_note": tool_input["context_note"]})
     return {"status": "ok"}
-
-
-async def _handle_search(
-    ctx: AppContext, config: ChatConfig, tool_input: dict
-) -> dict:  # pragma: no cover - external HTTP
-    """Execute a web search via SearXNG meta-search engine."""
-    import urllib.parse
-
-    query = (tool_input.get("query") or "").strip()
-    if not query:
-        return {"status": "error", "message": "query is required"}
-
-    num_results = int(tool_input.get("num_results", 10))
-    lang = (tool_input.get("language") or "ja").strip()
-
-    searxng_url = RuntimeConfigManager().get_effective_value("general", "searxng_url")[0] or os.environ.get(
-        "SEARXNG_URL", "http://searxng:8080"
-    )
-    search_url = f"{searxng_url}/search?q={urllib.parse.quote(query)}&format=json&language={lang}"
-
-    import httpx
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(search_url)
-            resp.raise_for_status()
-            data = resp.json()
-    except httpx.TimeoutException:
-        return {"status": "error", "message": "SearXNG search timed out (15s)"}
-    except httpx.ConnectError:
-        return {"status": "error", "message": f"SearXNG connection failed: {searxng_url}"}
-    except httpx.HTTPStatusError as exc:
-        return {"status": "error", "message": f"SearXNG returned HTTP {exc.response.status_code}"}
-    except Exception as e:
-        error_msg = str(e)[:200] if str(e) else type(e).__name__
-        return {"status": "error", "message": f"SearXNG search failed: {error_msg}"}
-
-    raw_results = data.get("results", [])
-    limit = min(num_results, len(raw_results))
-    results = []
-    for r in raw_results[:limit]:
-        title = (r.get("title") or "").strip()
-        url = (r.get("url") or "").strip()
-        content = (r.get("content") or "").strip()
-        if title or content:
-            results.append({"title": title, "url": url, "content": content})
-
-    return {"status": "ok", "query": query, "results": results, "count": len(results)}
 
 
 # ── MCP-shared handlers (delegate to TOOL_DISPATCH) ──
@@ -641,7 +591,6 @@ async def _handle_list_skills(ctx: AppContext, config: ChatConfig, tool_input: d
 
 _BUILTIN_DISPATCH: dict[str, Any] = {
     "list_skills": _handle_list_skills,
-    "search": _handle_search,
     "image_generate": _handle_image_generate,
     "read_pdf": _handle_read_pdf,
 }
@@ -674,9 +623,6 @@ async def execute_tool(ctx: AppContext, config: ChatConfig, tool_name: str, tool
             # Normalise MCP error responses to builtin status format
             if "error" in result:
                 return {"status": "error", "message": result["error"]}
-
-            # ── Sandbox ownership tracking (Priority C) ──
-            result = _track_sandbox_ownership(ctx, tool_name, tool_input, result)
 
             return result
         except Exception as e:

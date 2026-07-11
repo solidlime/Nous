@@ -20,92 +20,6 @@ services:
       retries: 5
       start_period: 30s
 
-  searxng-init:
-    image: alpine:latest
-    container_name: searxng-init
-    volumes:
-      - ${DATA_ROOT}/searxng:/etc/searxng
-    command: >
-      sh -c 'if [ ! -f /etc/searxng/settings.yml ]; then
-      SECRET=$$(head -c 32 /dev/urandom | base64 | tr -d "=+/" | cut -c1-32);
-      printf "use_default_settings: true\nserver:\n  secret_key: \"%s\"\n  limiter: false\n  image_proxy: true\nsearch:\n  formats:\n    - html\n    - json\n" "$$SECRET" > /etc/searxng/settings.yml;
-      echo "Generated default settings.yml"; else echo "settings.yml already exists, skipping."; fi'
-
-  searxng:
-    image: searxng/searxng:latest
-    container_name: searxng
-    ports:
-      - "8080:8080"
-    volumes:
-      - ${DATA_ROOT}/searxng:/etc/searxng
-    restart: unless-stopped
-    depends_on:
-      searxng-init:
-        condition: service_completed_successfully
-    environment:
-      SEARXNG_BASE_URL: http://localhost:8080/
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/healthz || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-
-  playwright:
-    image: mcr.microsoft.com/playwright/mcp:latest
-    container_name: playwright
-    ports:
-      - "8931:8931"
-    volumes:
-      - ${DATA_ROOT}/playwright:/ms-playwright
-    environment:
-      TZ: Asia/Tokyo
-    entrypoint: ["node"]
-    command:
-      - "/app/cli.js"
-      - "--headless"
-      - "--browser"
-      - "chromium"
-      - "--no-sandbox"
-      - "--port"
-      - "8931"
-      - "--host"
-      - "0.0.0.0"
-      - "--allowed-hosts"
-      - "*"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8931/sse',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-
-  opensandbox:
-    image: opensandbox/server:latest
-    container_name: opensandbox
-    ports:
-      - "8090:8090"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ${DATA_ROOT}/opensandbox/volumes:/var/lib/opensandbox/volumes
-      - opensandbox-config:/etc/opensandbox
-    environment:
-      TZ: Asia/Tokyo
-      SANDBOX_CONFIG_PATH: /etc/opensandbox/config.toml
-      # OpenSandbox: disable API key requirement for local dev
-      OPENSANDBOX_INSECURE_SERVER: "YES"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8090'"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    configs:
-      - source: opensandbox-config
-        target: /etc/opensandbox/config.toml
-
   nous:
     image: ghcr.io/solidlime/nous:latest
     container_name: nous
@@ -115,19 +29,13 @@ services:
       # Nous アプリデータ永続化（memory, logs, cache, config, skills）
       # DATA_ROOT/app（ホスト） → /opt/nous/data（コンテナ、=NOUS_DATA_ROOT）
       - ${DATA_ROOT}/app:/opt/nous/data
-      # Docker socket for SandboxOrchestrator (dynamic MCP container management)
-      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     depends_on:
       qdrant:
         condition: service_healthy
-      searxng:
-        condition: service_healthy
     environment:
       # Point to the qdrant service (overrides Dockerfile default of localhost:6333)
       NOUS_QDRANT__URL: http://qdrant:6333
-      # SearXNG meta search engine URL
-      NOUS_SEARXNG_URL: http://searxng:8080
       LANG: C.UTF-8
     # Load env vars from .env file (ignored by git) so you can override Dockerfile defaults
     env_file:
@@ -139,34 +47,4 @@ services:
       retries: 3
       start_period: 120s
 
-configs:
-  opensandbox-config:
-    content: |
-      [server]
-      host = "0.0.0.0"
-      port = 8090
 
-      [runtime]
-      type = "docker"
-      execd_image = "opensandbox/execd:latest"
-
-      [docker]
-      network_mode = "bridge"
-      host_ip = "host.docker.internal"
-      drop_capabilities = ["AUDIT_WRITE", "MKNOD", "NET_ADMIN", "NET_RAW", "SYS_ADMIN", "SYS_MODULE", "SYS_PTRACE", "SYS_TIME", "SYS_TTY_CONFIG"]
-      no_new_privileges = true
-
-      [store]
-      type = "sqlite"
-      path = "/var/lib/opensandbox/opensandbox.db"
-
-volumes:
-  opensandbox-config:
-
-networks:
-  default:
-    name: nous-network
-
-# ── Sandbox MCP コンテナ ──
-# opensandbox-mcp-{persona} コンテナは SandboxOrchestrator が動的に管理。
-# イメージは事前にビルド: docker build -t opensandbox-mcp-nous:latest -f Dockerfile.sandbox-mcp .

@@ -209,9 +209,6 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openrouter_api_key: str = ""
 
-    # SearXNG search engine URL
-    searxng_url: str = "http://localhost:8080"
-
     embedding: EmbeddingConfig = EmbeddingConfig()
     reranker: RerankerConfig = RerankerConfig()
     qdrant: QdrantConfig = QdrantConfig()
