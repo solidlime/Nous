@@ -28,7 +28,7 @@ ENV APP_HOME=/opt/nous \
     NOUS_DATA_ROOT=/opt/nous/data \
     PYTHONUNBUFFERED=1 \
     LANG=C.UTF-8 \
-    TZ=Asia/Tokyo
+    TZ=UTC
 
 # Set working directory
 WORKDIR ${APP_HOME}

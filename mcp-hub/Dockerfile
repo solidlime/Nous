@@ -7,7 +7,7 @@ FROM python:3.12-slim
 ENV APP_HOME=/opt/mcp-hub \
     PYTHONUNBUFFERED=1 \
     LANG=C.UTF-8 \
-    TZ=Asia/Tokyo
+    TZ=UTC
 
 WORKDIR ${APP_HOME}
 

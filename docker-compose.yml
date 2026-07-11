@@ -11,8 +11,8 @@ services:
       # Persist Qdrant vector data on host (ensures ./storage is always pre-created)
       - ${DATA_ROOT}/qdrant:/qdrant/storage
     restart: unless-stopped
-    environment:
-      TZ: Asia/Tokyo
+    env_file:
+      - .env
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
       interval: 10s
@@ -32,11 +32,12 @@ services:
       # MCP Hub データ永続化（サーバー登録情報）
       - ${DATA_ROOT}/mcp-hub:/opt/mcp-hub/data
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       MCP_HUB_PORT: "26263"
       MCP_HUB_HOST: "0.0.0.0"
       MCP_HUB_DB_PATH: /opt/mcp-hub/data/hub.db
-      TZ: Asia/Tokyo
       # Brave Search API キー (オプション)
       # BRAVE_API_KEY: your-key-here
     healthcheck:
