@@ -70,9 +70,128 @@ function loadChat() {
   loadChatCommitments();
   loadEquipment();
   loadPortrait();
+  setupChatInputHandler();
   setTimeout(() => {
     if (typeof lucide !== "undefined") lucide.createIcons();
   }, 100);
+}
+
+function setupChatInputHandler() {
+  const input = document.getElementById("chat-input");
+  if (!input) {
+    setupChatInputHandlerWithObserver();
+    return;
+  }
+  if (input._keydownBound) return;
+  input._keydownBound = true;
+  input.addEventListener("keydown", chatInputKeydownHandler);
+  input.addEventListener("input", chatInputInputHandler);
+  input.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    input.classList.add("dragover");
+  });
+  input.addEventListener("dragleave", () => {
+    input.classList.remove("dragover");
+  });
+  input.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    input.classList.remove("dragover");
+    const files = Array.from(e.dataTransfer.files);
+    for (const file of files) {
+      await uploadAttachment(file);
+    }
+  });
+}
+
+function setupChatInputHandlerWithObserver() {
+  const observer = new MutationObserver(() => {
+    const input = document.getElementById("chat-input");
+    if (input) {
+      observer.disconnect();
+      setupChatInputHandler();
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  setTimeout(() => observer.disconnect(), 5000);
+}
+
+function chatInputKeydownHandler(e) {
+  const input = e.currentTarget;
+  // Slash command popup keyboard navigation
+  const popup = document.getElementById("chat-command-popup");
+  if (popup) {
+    const items = popup.querySelectorAll(".chat-command-item");
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (S.slashCommandIndex < items.length - 1) {
+        S.slashCommandIndex++;
+        updateSlashSelection(items);
+      }
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (S.slashCommandIndex > 0) {
+        S.slashCommandIndex--;
+        updateSlashSelection(items);
+      }
+    } else if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (S.slashCommandIndex >= 0 && S.slashCommandIndex < items.length) {
+        items[S.slashCommandIndex].click();
+      }
+    } else if (e.key === "Tab") {
+      e.preventDefault();
+      if (S.slashCommandIndex >= 0 && S.slashCommandIndex < items.length) {
+        items[S.slashCommandIndex].click();
+      }
+    }
+    // Escape continues to default handler below
+  }
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    const val = input.value.trim();
+    hideCommandPopup();
+    // Slash commands
+    if (val.startsWith("/memory ")) {
+      handleSlashCommand("memory_create", {
+        content: val.slice(8).trim(),
+        importance: 0.7,
+        tags: [],
+      });
+    } else if (val.startsWith("/goal ")) {
+      handleSlashCommand("goal_manage", {
+        operation: "create",
+        content: val.slice(6).trim(),
+        importance: 0.8,
+      });
+    } else if (val.startsWith("/exec ") && S.persona) {
+      handleSlashCommand("opensandbox__execute_code", {
+        code: val.slice(6).trim(),
+        language: "python",
+      });
+    } else if (val === "/help" || val.startsWith("/help ")) {
+      input.value = "";
+      input.style.height = "auto";
+      showHelpCommand();
+    } else {
+      chatSend();
+    }
+  }
+  if (e.key === "Escape") {
+    hideCommandPopup();
+  }
+}
+
+function chatInputInputHandler() {
+  const input = document.getElementById("chat-input");
+  if (!input) return;
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 160) + "px";
+  // Show command popup when typing /
+  if (input.value.startsWith("/")) {
+    showCommandPopup(input);
+  } else {
+    hideCommandPopup();
+  }
 }
 
 async function loadChatCommitments() {
@@ -1956,7 +2075,16 @@ async function chatSend(retry) {
     toast("ペルソナを選択してください", "error");
     return;
   }
-  if (CHAT.streaming) return;
+  if (CHAT.streaming) {
+    // Safety net: if streaming flag has been set for > 60 seconds, force-reset
+    if (CHAT._streamingSince && Date.now() - CHAT._streamingSince > 60000) {
+      console.warn("[chatSend] streaming flag stuck for >60s, force-resetting");
+      CHAT.streaming = false;
+      CHAT._streamingSince = null;
+    } else {
+      return;
+    }
+  }
 
   const inputEl = document.getElementById("chat-input");
   let rawInput;
@@ -2072,6 +2200,7 @@ async function chatSend(retry) {
   showTypingIndicator();
 
   CHAT.streaming = true;
+  CHAT._streamingSince = Date.now();
   CHAT.abortController = new AbortController();
   sendBtn.style.display = "none";
   if (cancelBtn) cancelBtn.style.display = "";
@@ -2107,7 +2236,11 @@ async function chatSend(retry) {
     removeTypingIndicator();
 
     while (true) {
-      const { value, done } = await reader.read();
+      const readPromise = reader.read();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Stream timeout: no data for 120s")), 120000),
+      );
+      const { value, done } = await Promise.race([readPromise, timeoutPromise]);
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
 
@@ -2220,6 +2353,7 @@ async function chatSend(retry) {
     statusEl.textContent = "";
   } finally {
     CHAT.streaming = false;
+    CHAT._streamingSince = null;
     CHAT.abortController = null;
     sendBtn.style.display = "";
     if (cancelBtn) cancelBtn.style.display = "none";
@@ -2240,101 +2374,8 @@ async function chatSend(retry) {
   }
 }
 
-// Chat input auto-resize and keyboard handler
-document.addEventListener("DOMContentLoaded", () => {
-  const input = document.getElementById("chat-input");
-  if (!input) return;
-  input.addEventListener("keydown", (e) => {
-    // Slash command popup keyboard navigation
-    const popup = document.getElementById("chat-command-popup");
-    if (popup) {
-      const items = popup.querySelectorAll(".chat-command-item");
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        if (S.slashCommandIndex < items.length - 1) {
-          S.slashCommandIndex++;
-          updateSlashSelection(items);
-        }
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        if (S.slashCommandIndex > 0) {
-          S.slashCommandIndex--;
-          updateSlashSelection(items);
-        }
-      } else if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        if (S.slashCommandIndex >= 0 && S.slashCommandIndex < items.length) {
-          items[S.slashCommandIndex].click();
-        }
-      } else if (e.key === "Tab") {
-        e.preventDefault();
-        if (S.slashCommandIndex >= 0 && S.slashCommandIndex < items.length) {
-          items[S.slashCommandIndex].click();
-        }
-      }
-      // Escape continues to default handler below
-    }
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      const val = input.value.trim();
-      hideCommandPopup();
-      // Slash commands
-      if (val.startsWith("/memory ")) {
-        handleSlashCommand("memory_create", {
-          content: val.slice(8).trim(),
-          importance: 0.7,
-          tags: [],
-        });
-      } else if (val.startsWith("/goal ")) {
-        handleSlashCommand("goal_manage", {
-          operation: "create",
-          content: val.slice(6).trim(),
-          importance: 0.8,
-        });
-      } else if (val.startsWith("/exec ") && S.persona) {
-        handleSlashCommand("opensandbox__execute_code", {
-          code: val.slice(6).trim(),
-          language: "python",
-        });
-      } else if (val === "/help" || val.startsWith("/help ")) {
-        input.value = "";
-        input.style.height = "auto";
-        showHelpCommand();
-      } else {
-        chatSend();
-      }
-    }
-    if (e.key === "Escape") {
-      hideCommandPopup();
-    }
-  });
-  input.addEventListener("input", () => {
-    input.style.height = "auto";
-    input.style.height = Math.min(input.scrollHeight, 160) + "px";
-    // Show command popup when typing /
-    if (input.value.startsWith("/")) {
-      showCommandPopup(input);
-    } else {
-      hideCommandPopup();
-    }
-  });
-  // File drag-and-drop on chat input
-  input.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    input.classList.add("dragover");
-  });
-  input.addEventListener("dragleave", () => {
-    input.classList.remove("dragover");
-  });
-  input.addEventListener("drop", async (e) => {
-    e.preventDefault();
-    input.classList.remove("dragover");
-    const files = Array.from(e.dataTransfer.files);
-    for (const file of files) {
-      await uploadAttachment(file);
-    }
-  });
-});
+// Chat auto-resize and keyboard handler — now registered via loadChat() -> setupChatInputHandler()
+// DOMContentLoaded に依存しない: MutationObserver で #chat-input を待つ
 
 // Reload chat config when persona changes
 let __chatPersonaTries = 0;
