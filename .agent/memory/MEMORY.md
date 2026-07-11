@@ -47,6 +47,17 @@
 - 教訓: 過去 `sandbox_enabled` 削除でも同じ罠 → **新カラム追加時は両方のテストファイルを必ず確認**
 - 対策案: `SQLiteConnection._CHAT_SESSIONS_SCHEMA` から動的に生成する helper を導入（リファクタリング案件）
 
+### 大規模依存削除の手順（2026-07-11 学習）
+- 依存削除時は以下の順で確認・削除する:
+  1. アプリケーションコードの参照（import・関数呼び出し・定数）
+  2. スキーマ定義（CREATE TABLE・migration ALTER TABLE）
+  3. 設定定義（Settings フィールド・RuntimeConfig SETTINGS_META）
+  4. 依存定義（pyproject.toml dependencies）
+  5. テストファイルの参照・テストファイル自体の削除
+  6. ファイル削除（削除予定ファイルへの import が残っていないか確認）
+- **SQL VALUES とカラム数の一致**は手動編集で崩れやすい。`?` placeholder 数とカラム数の一致を必ず確認する（スクリプト検証推奨）
+- 削除後は必ず `ruff check nous/ tests/` と `ruff format --check nous/ tests/` の両方を CI と同じ条件で実行
+
 ### 環境変数名不一致（2026-07-11 学習）
 - 症状: SearXNG URL 解決失敗、ただし health check はなぜか動作
 - 原因: `docker-compose.yml` で `SEARXNG_URL` 設定、`RuntimeConfigManager._get_env_key` は `NOUS_SEARXNG_URL` を期待
