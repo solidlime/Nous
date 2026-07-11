@@ -125,9 +125,9 @@ async def _handle_search(
     num_results = int(tool_input.get("num_results", 10))
     lang = (tool_input.get("language") or "ja").strip()
 
-    searxng_url, _ = RuntimeConfigManager().get_effective_value("general", "searxng_url")
-    if not searxng_url:
-        searxng_url = "http://searxng:8080"
+    searxng_url = RuntimeConfigManager().get_effective_value("general", "searxng_url")[0] or os.environ.get(
+        "SEARXNG_URL", "http://searxng:8080"
+    )
     search_url = f"{searxng_url}/search?q={urllib.parse.quote(query)}&format=json&language={lang}"
 
     import httpx

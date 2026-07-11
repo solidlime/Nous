@@ -1,0 +1,33 @@
+# docker-compose.dev.yml
+# ローカルデバッグ用オーバーライド — nous サービスのみ
+#
+# 使い方:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f nous
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+#
+# 利点:
+# - nous のイメージ再ビルド不要（ソース変更がコンテナに即反映）
+# - IDE / フォーマッタ / リンタと完全同期
+# - 起動時間短縮（pull 不要）
+#
+# 用途: 開発・デバッグ時のみ。本番は docker-compose.yml 単体で OK。
+
+services:
+  nous:
+    # ソースをホストからマウント（コード変更が即反映）
+    volumes:
+      - ./nous:/opt/nous/nous
+      # データ永続化（SQLite, Qdrant コレクション設定等）
+      - ./data:/opt/nous/data
+      # 設定ファイル（.env と同じ効果）
+      - ./.env:/opt/nous/.env:ro
+    # command は継承（CMD ["python", "-m", "nous.main"]）
+    # 環境変数も docker-compose.yml から継承
+    environment:
+      PYTHONUNBUFFERED: "1"
+      # dev 用: ログレベルを DEBUG に（必要に応じてコメントアウト）
+      NOUS_LOG_LEVEL: DEBUG
+    # user は継承（nous ユーザー）。マウントした nous/ の owner と一致しない場合は
+    # 書き込み権限がない。dev では root で動かしても可。
+    user: "0:0"

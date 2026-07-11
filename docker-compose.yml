@@ -72,14 +72,7 @@ services:
       - ${DATA_ROOT}/playwright:/ms-playwright
     environment:
       TZ: Asia/Tokyo
-    command: >
-      node /app/cli.js
-        --headless
-        --browser chromium
-        --no-sandbox
-        --user-data-dir /ms-playwright
-        --port 8931
-        --host 0.0.0.0
+    command: []
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:8931/health', r => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
@@ -100,9 +93,11 @@ services:
     environment:
       TZ: Asia/Tokyo
       SANDBOX_CONFIG_PATH: /etc/opensandbox/config.toml
+      # OpenSandbox: disable API key requirement for local dev
+      OPENSANDBOX_INSECURE_SERVER: "YES"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -149,7 +144,7 @@ services:
       # Point to the qdrant service (overrides Dockerfile default of localhost:6333)
       NOUS_QDRANT__URL: http://qdrant:6333
       # SearXNG meta search engine URL
-      SEARXNG_URL: http://searxng:8080
+      NOUS_SEARXNG_URL: http://searxng:8080
       LANG: C.UTF-8
     # Load env vars from .env file (ignored by git) so you can override Dockerfile defaults
     env_file:
