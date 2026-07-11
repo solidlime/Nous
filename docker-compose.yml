@@ -1,10 +1,9 @@
 # DATA_ROOT → ホスト側パス（.env.example 参照）。コンテナ側は NOUS_DATA_ROOT (/opt/nous/data) で固定。
 
 x-opensandbox-mcp: &opensandbox-mcp
-  image: python:3.11-slim
-  command: >
-    sh -c "pip install --no-cache-dir opensandbox-mcp &&
-           opensandbox-mcp --transport streamable-http --domain opensandbox:8090 --protocol http"
+  build:
+    context: .
+    dockerfile: Dockerfile.sandbox-mcp
   environment:
     TZ: Asia/Tokyo
   restart: unless-stopped
@@ -109,9 +108,9 @@ services:
       OPENSANDBOX_INSECURE_SERVER: "YES"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8090'"]
+      interval: 15s
+      timeout: 5s
       retries: 3
       start_period: 30s
     configs:

@@ -1,0 +1,10 @@
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir opensandbox-mcp
+
+ENV TZ=Asia/Tokyo
+
+EXPOSE 8000
+
+ENTRYPOINT ["opensandbox-mcp"]
+CMD ["--transport", "streamable-http", "--domain", "opensandbox:8090", "--protocol", "http"]
