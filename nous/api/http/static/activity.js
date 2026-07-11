@@ -181,6 +181,7 @@ function renderActivityFeed() {
 }
 
 function toggleActivitySession(sid) {
+    if (!sid) return;
     const sessionEl = document.querySelector('.act-session[data-session="' + CSS.escape(sid) + '"]');
     if (!sessionEl) return;
     ACT.sessions[sid].open = !ACT.sessions[sid].open;
