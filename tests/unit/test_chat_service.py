@@ -405,6 +405,39 @@ class TestChatConfigRepository:
         loaded = repo.get("p1")
         assert loaded.top_p is None
 
+    def test_get_resilient_to_column_addition(self):
+        """get() uses dynamic column mapping: adding a column won't break it."""
+        repo = ChatConfigRepository(self._make_db())
+        cfg = ChatConfig(
+            persona="p1",
+            provider="openai",
+            model="gpt-4o",
+            api_key="sk-test",
+            temperature=0.5,
+        )
+        repo.save(cfg)
+
+        # Simulate schema evolution: add a column
+        db = repo._db
+        db.execute("ALTER TABLE chat_settings ADD COLUMN dummy_col TEXT DEFAULT 'x'")
+        db.commit()
+
+        loaded = repo.get("p1")
+        assert loaded.provider == "openai"
+        assert loaded.model == "gpt-4o"
+        assert loaded.api_key == "sk-test"
+        assert loaded.temperature == 0.5
+        assert loaded.max_window_turns == 100
+        assert loaded.auto_extract is True
+        assert loaded.mcp_servers == []
+
+        # Also confirm a newly-inserted row still round-trips
+        cfg2 = ChatConfig(persona="p2", provider="anthropic", model="claude-4")
+        repo.save(cfg2)
+        loaded2 = repo.get("p2")
+        assert loaded2.provider == "anthropic"
+        assert loaded2.model == "claude-4"
+
 
 # ─────────────────────────────────────────────────────────────
 # _sse helper tests

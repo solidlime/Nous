@@ -270,7 +270,7 @@ class ChatConfigRepository:
 
     def get(self, persona: str) -> ChatConfig:
         """Load config for persona, returning defaults if not found."""
-        row = self._db.execute(
+        cursor = self._db.execute(
             "SELECT persona, provider, model, api_key, base_url, system_prompt, "
             "temperature, max_tokens, max_window_turns, max_tool_calls, updated_at, "
             "auto_extract, extract_model, extract_max_tokens, "
@@ -292,64 +292,29 @@ class ChatConfigRepository:
             "dynamic_tool_selection "
             "FROM chat_settings WHERE persona = ?",
             (persona,),
-        ).fetchone()
+        )
+        row = cursor.fetchone()
         if row is None:
             return ChatConfig(persona=persona)
-        return ChatConfig(
-            persona=row[0],
-            provider=row[1] or "anthropic",
-            model=row[2] or "",
-            api_key=row[3] or "",
-            base_url=row[4] or "",
-            system_prompt=row[5] or "",
-            temperature=float(row[6]) if row[6] is not None else 0.7,
-            max_tokens=int(row[7]) if row[7] is not None else 2048,
-            max_window_turns=int(row[8]) if row[8] is not None else 100,
-            max_tool_calls=int(row[9]) if row[9] is not None else 5,
-            updated_at=row[10],
-            auto_extract=bool(row[11]) if row[11] is not None else True,
-            extract_model=row[12] or "",
-            extract_max_tokens=int(row[13]) if row[13] is not None else 512,
-            tool_result_max_chars=int(row[14]) if row[14] is not None else 4000,
-            mcp_servers=json.loads(row[15] or "[]"),
-            enabled_skills=json.loads(row[16] or "[]"),
-            reflection_enabled=bool(row[17]) if row[17] is not None else True,
-            reflection_threshold=float(row[18]) if row[18] is not None else 1.0,
-            reflection_min_interval_hours=float(row[19]) if row[19] is not None else 1.0,
-            session_summarize=bool(row[20]) if row[20] is not None else True,
-            retrieval_recency_weight=float(row[21]) if row[21] is not None else 0.3,
-            retrieval_importance_weight=float(row[22]) if row[22] is not None else 0.3,
-            retrieval_relevance_weight=float(row[23]) if row[23] is not None else 0.4,
-            display_history_turns=int(row[24]) if row[24] is not None else 20,
-            housekeeping_threshold=int(row[25]) if row[25] is not None else 10,
-            mental_model_enabled=bool(row[26]) if len(row) > 26 and row[26] is not None else True,
-            mental_model_min_samples=int(row[27]) if len(row) > 27 and row[27] is not None else 3,
-            max_stored_messages=int(row[28])
-            if len(row) > 28 and row[28] is not None
-            else (max(2, int(row[8]) * 2) if row[8] is not None else 200),
-            context_max_tokens=int(row[29]) if len(row) > 29 and row[29] is not None else None,
-            context_compression_threshold=float(row[30]) if len(row) > 30 and row[30] is not None else 0.8,
-            context_compression_mode=row[31] if len(row) > 31 and row[31] else "auto",
-            context_keep_recent_turns=int(row[32]) if len(row) > 32 and row[32] is not None else 2,
-            context_compress_system_prompt=bool(row[33]) if len(row) > 33 and row[33] is not None else True,
-            context_compress_history=bool(row[34]) if len(row) > 34 and row[34] is not None else True,
-            memory_preload_count=int(row[35]) if len(row) > 35 and row[35] is not None else 3,
-            enable_parallel_tools=bool(row[36]) if len(row) > 36 and row[36] is not None else True,
-            image_gen_enabled=bool(row[37]) if len(row) > 37 and row[37] is not None else False,
-            image_gen_provider=row[38] if len(row) > 38 and row[38] else "openai",
-            image_gen_dalle_model=row[39] if len(row) > 39 and row[39] else "dall-e-3",
-            image_gen_stability_url=row[40] if len(row) > 40 and row[40] else "",
-            enable_memory_tools=bool(row[41]) if len(row) > 41 and row[41] is not None else True,
-            debug_mode=bool(row[42]) if len(row) > 42 and row[42] is not None else False,
-            dynamic_temperature=bool(row[43]) if len(row) > 43 and row[43] is not None else True,
-            emotion_temperature_scale=float(row[44]) if len(row) > 44 and row[44] is not None else 0.2,
-            top_p=float(row[45]) if len(row) > 45 and row[45] is not None else None,
-            context_use_llm_summary=bool(row[46]) if len(row) > 46 and row[46] is not None else True,
-            episode_consolidation_enabled=bool(row[47]) if len(row) > 47 and row[47] is not None else True,
-            episode_search_enabled=bool(row[48]) if len(row) > 48 and row[48] is not None else True,
-            retrieval_rrf_k=float(row[49]) if len(row) > 49 and row[49] is not None else 5.0,
-            dynamic_tool_selection=bool(row[50]) if len(row) > 50 and row[50] is not None else True,
-        )
+
+        # Dynamic column-name → value mapping (not hardcoded indices)
+        columns = [d[0] for d in cursor.description]
+        data = dict(zip(columns, row, strict=False))
+
+        # Parse stored JSON fields
+        for jf in ("mcp_servers", "enabled_skills"):
+            if data.get(jf) is not None:
+                data[jf] = json.loads(data[jf])
+
+        # max_stored_messages has a backward-compat fallback
+        if data.get("max_stored_messages") is None:
+            max_window = data.get("max_window_turns")
+            data["max_stored_messages"] = max(2, int(max_window) * 2) if max_window is not None else 200
+
+        # Build kwargs: only pass known ChatConfig fields, skip None unless nullable
+        nullable = {"updated_at", "context_max_tokens", "top_p"}
+        kwargs = {k: v for k, v in data.items() if k in ChatConfig.model_fields and (v is not None or k in nullable)}
+        return ChatConfig(**kwargs)
 
     def get_or_create(self, persona: str) -> ChatConfig:
         """Get existing config or create new with defaults for fresh personas."""
