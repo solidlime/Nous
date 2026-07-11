@@ -10,6 +10,7 @@ const CHAT = {
   enabledSkills: [],
   abortController: null, // F4: AbortController for streaming cancel
   attachments: [], // { filename, url, workspace_path, mime_type, size }
+  _nextTurnReady: false, // true after 'done' event; next event creates a new assistant div
 };
 
 const HELP_TEXTS = {
@@ -1599,7 +1600,15 @@ function appendToolEvent(eventType, data) {
       '<pre class="chat-tool-detail">' +
       esc(inputStr) +
       "</pre></details>";
-    container.appendChild(div);
+    // Insert tool_call after the last assistant message, not always at container end
+    const lastAssistant = container.querySelector(".chat-msg.assistant:last-child");
+    if (lastAssistant && lastAssistant.nextSibling) {
+      container.insertBefore(div, lastAssistant.nextSibling);
+    } else if (lastAssistant) {
+      container.appendChild(div);
+    } else {
+      container.appendChild(div);
+    }
     container.scrollTop = container.scrollHeight;
     setTimeout(() => {
       if (typeof lucide !== "undefined") lucide.createIcons();
@@ -2272,6 +2281,24 @@ async function chatSend(retry) {
             assistantDiv.appendChild(assistantBubble);
             assistantDiv.appendChild(timeDiv);
             container.appendChild(assistantDiv);
+          } else if (CHAT._nextTurnReady) {
+            // マルチターン: 新しいターンの開始 → 新規 assistant div 作成
+            CHAT._nextTurnReady = false;
+            const container = document.getElementById("chat-messages");
+            assistantDiv = document.createElement("div");
+            assistantDiv.className = "chat-msg assistant";
+            assistantBubble = document.createElement("div");
+            assistantBubble.className = "chat-bubble";
+            const timeDiv = document.createElement("div");
+            timeDiv.className = "chat-time";
+            timeDiv.textContent = new Date().toLocaleTimeString("ja-JP", {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+            assistantDiv.appendChild(assistantBubble);
+            assistantDiv.appendChild(timeDiv);
+            container.appendChild(assistantDiv);
+            assistantText = "";
           }
           assistantText += evt.content;
           // F1: stream as plain text for performance; render markdown on done
@@ -2288,6 +2315,17 @@ async function chatSend(retry) {
             assistantBubble.className = "chat-bubble";
             assistantDiv.appendChild(assistantBubble);
             container.appendChild(assistantDiv);
+          } else if (CHAT._nextTurnReady) {
+            // マルチターン: 新しいターンの tool_call → 新規 assistant div 作成
+            CHAT._nextTurnReady = false;
+            const container = document.getElementById("chat-messages");
+            assistantDiv = document.createElement("div");
+            assistantDiv.className = "chat-msg assistant";
+            assistantBubble = document.createElement("div");
+            assistantBubble.className = "chat-bubble";
+            assistantDiv.appendChild(assistantBubble);
+            container.appendChild(assistantDiv);
+            assistantText = "";
           }
           appendToolEvent("tool_call", evt);
           statusEl.innerHTML =
@@ -2339,6 +2377,13 @@ async function chatSend(retry) {
               assistantDiv.remove();
             }
             // ツールコールのみの場合は要素が既にあるので何もしない
+          }
+          // マルチターン対応: 次のターンに備えてアシスタント状態をリセット
+          // 次の SSE イベント（tool_call / text_delta）が来たら新しい div を作成する
+          if (assistantDiv) {
+            // ツールコールがある場合は assistantDiv を残すが、
+            // 次のターンの開始に備えてフラグを設定
+            CHAT._nextTurnReady = true;
           }
           statusEl.textContent = "";
         }
