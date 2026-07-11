@@ -92,18 +92,12 @@ class ProxyManager:
             if not proxy:
                 return {}
             tools = await proxy.list_tools()
-            result[name] = [
-                {"name": t.name, "description": t.description or ""}
-                for t in tools
-            ]
+            result[name] = [{"name": t.name, "description": t.description or ""} for t in tools]
         else:
             for srv_name, proxy in self._proxies.items():
                 try:
                     tools = await proxy.list_tools()
-                    result[srv_name] = [
-                        {"name": t.name, "description": t.description or ""}
-                        for t in tools
-                    ]
+                    result[srv_name] = [{"name": t.name, "description": t.description or ""} for t in tools]
                 except Exception:
                     logger.warning("Failed to list tools for %s", srv_name)
                     result[srv_name] = []
