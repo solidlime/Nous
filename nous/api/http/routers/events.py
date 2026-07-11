@@ -159,15 +159,18 @@ def register_events_routes(mcp) -> None:
         if not ctx:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
 
-        # 4. API key authentication
-        api_key = ctx.settings.plugin_api_key
-        if api_key:
-            auth_header = request.headers.get("authorization", "")
-            if not auth_header.startswith("Bearer "):
-                return JSONResponse({"error": "Missing or invalid Authorization header"}, status_code=401)
-            token = auth_header.removeprefix("Bearer ").strip()
-            if token != api_key:
-                return JSONResponse({"error": "Invalid API key"}, status_code=401)
+        # 4. Plugin API authentication
+        plugin_cfg = ctx.settings.plugin
+        if not plugin_cfg.enabled:
+            return JSONResponse({"error": "Plugin API is disabled"}, status_code=403)
+        if not plugin_cfg.api_key:
+            return JSONResponse({"error": "Plugin API misconfigured: api_key not set"}, status_code=500)
+        auth_header = request.headers.get("authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return JSONResponse({"error": "Missing or invalid Authorization header"}, status_code=401)
+        token = auth_header.removeprefix("Bearer ").strip()
+        if token != plugin_cfg.api_key:
+            return JSONResponse({"error": "Invalid API key"}, status_code=401)
 
         # 5. Ensure database schema exists (session_events table)
         db = ctx.connection.get_memory_db()

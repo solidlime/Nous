@@ -176,6 +176,22 @@ class PortraitGenerationConfig(BaseModel):
     """Interval between health checks in seconds."""
 
 
+class PluginConfig(BaseModel):
+    """Plugin API configuration — default OFF for security.
+
+    Must be explicitly enabled AND configured with an api_key for access.
+    """
+
+    enabled: bool = False
+    """DEFAULT OFF — must be explicitly enabled for plugin API access.
+    Set ``NOUS_PLUGIN__ENABLED=true`` to enable."""
+
+    api_key: str = ""
+    """API key required for Bearer token authentication.
+    Must be a non-empty string when enabled.
+    Set ``NOUS_PLUGIN__API_KEY=<strong_key>``."""
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -187,7 +203,7 @@ class Settings(BaseSettings):
     )
 
     server: ServerConfig = ServerConfig()
-    plugin_api_key: str = ""  # empty = no auth (dev mode)
+    plugin: PluginConfig = Field(default_factory=PluginConfig)
     # LLM provider API keys (shared across subsystems)
     anthropic_api_key: str = ""
     openai_api_key: str = ""
