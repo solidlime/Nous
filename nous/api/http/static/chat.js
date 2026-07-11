@@ -1854,6 +1854,8 @@ function showCommandPopup(inputEl) {
   });
   if (matches.length === 0) return;
 
+  S.slashCommandIndex = 0;
+
   const popup = document.createElement("div");
   popup.className = "chat-command-popup";
   popup.id = "chat-command-popup";
@@ -1861,6 +1863,8 @@ function showCommandPopup(inputEl) {
   matches.forEach(function (cmd, idx) {
     const item = document.createElement("div");
     item.className = "chat-command-item" + (idx === 0 ? " active" : "");
+    item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", idx === 0 ? "true" : "false");
     item.innerHTML =
       '<span class="cmd-name">' +
       cmd.name +
@@ -1884,6 +1888,15 @@ function showCommandPopup(inputEl) {
 function hideCommandPopup() {
   const existing = document.getElementById("chat-command-popup");
   if (existing) existing.remove();
+  S.slashCommandIndex = -1;
+}
+
+function updateSlashSelection(items) {
+  items.forEach(function (el, i) {
+    var selected = i === S.slashCommandIndex;
+    el.classList.toggle("active", selected);
+    el.setAttribute("aria-selected", selected ? "true" : "false");
+  });
 }
 
 async function handleSlashCommand(toolName, toolInput) {
@@ -2232,6 +2245,35 @@ document.addEventListener("DOMContentLoaded", () => {
   const input = document.getElementById("chat-input");
   if (!input) return;
   input.addEventListener("keydown", (e) => {
+    // Slash command popup keyboard navigation
+    const popup = document.getElementById("chat-command-popup");
+    if (popup) {
+      const items = popup.querySelectorAll(".chat-command-item");
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (S.slashCommandIndex < items.length - 1) {
+          S.slashCommandIndex++;
+          updateSlashSelection(items);
+        }
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (S.slashCommandIndex > 0) {
+          S.slashCommandIndex--;
+          updateSlashSelection(items);
+        }
+      } else if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        if (S.slashCommandIndex >= 0 && S.slashCommandIndex < items.length) {
+          items[S.slashCommandIndex].click();
+        }
+      } else if (e.key === "Tab") {
+        e.preventDefault();
+        if (S.slashCommandIndex >= 0 && S.slashCommandIndex < items.length) {
+          items[S.slashCommandIndex].click();
+        }
+      }
+      // Escape continues to default handler below
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       const val = input.value.trim();
