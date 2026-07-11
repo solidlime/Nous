@@ -5,7 +5,7 @@ MCP サーバー登録の永続化レイヤー。
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import aiosqlite
 
@@ -14,9 +14,7 @@ class SqliteStore:
     """SQLite を使った MCP サーバー登録の永続化。"""
 
     def __init__(self, db_path: str | None = None):
-        self.db_path = db_path or os.environ.get(
-            "MCP_HUB_DB_PATH", "data/hub.db"
-        )
+        self.db_path = db_path or os.environ.get("MCP_HUB_DB_PATH", "data/hub.db")
 
     async def init(self) -> None:
         """テーブル作成。ディレクトリも自動生成。"""
@@ -35,9 +33,7 @@ class SqliteStore:
         """全サーバー取得。"""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            rows = await db.execute_fetchall(
-                "SELECT name, config_json, created_at FROM servers ORDER BY created_at"
-            )
+            rows = await db.execute_fetchall("SELECT name, config_json, created_at FROM servers ORDER BY created_at")
             return [
                 {
                     "name": row["name"],
@@ -52,16 +48,14 @@ class SqliteStore:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 "INSERT OR REPLACE INTO servers (name, config_json, created_at) VALUES (?, ?, ?)",
-                (name, json.dumps(config), datetime.now(timezone.utc).isoformat()),
+                (name, json.dumps(config), datetime.now(UTC).isoformat()),
             )
             await db.commit()
 
     async def remove_server(self, name: str) -> bool:
         """削除。存在すれば True。"""
         async with aiosqlite.connect(self.db_path) as db:
-            cursor = await db.execute(
-                "DELETE FROM servers WHERE name = ?", (name,)
-            )
+            cursor = await db.execute("DELETE FROM servers WHERE name = ?", (name,))
             await db.commit()
             return cursor.rowcount > 0
 

@@ -77,10 +77,9 @@ async def lifespan(app: FastAPI):
     )
     inner_app.session_manager = sm
 
-    async with mcp_server._lifespan_manager():
-        async with sm.run():
-            logger.info("MCP Hub started on %s:%s", HOST, PORT)
-            yield
+    async with mcp_server._lifespan_manager(), sm.run():
+        logger.info("MCP Hub started on %s:%s", HOST, PORT)
+        yield
 
     # --- 終了処理 ---
     logger.info("MCP Hub shutting down")
@@ -116,6 +115,7 @@ def main():
     if os.path.exists(index_html):
         # index.html を /admin/ で配信
         from pathlib import Path
+
         html_content = Path(index_html).read_text(encoding="utf-8")
 
         @app.get("/admin/")
@@ -132,6 +132,7 @@ def main():
         )
 
     import uvicorn
+
     uvicorn.run(
         app,
         host=HOST,

@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 # --- Schemas ---
 
+
 class ServerConfig(BaseModel):
     url: str | None = None
     command: str | None = None
@@ -114,10 +115,10 @@ async def register_server(body: RegisterRequest):
     try:
         tool_names = await pm.register_server(body.name, config)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.exception("Failed to register server %s", body.name)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
     return {
         "name": body.name,
@@ -146,10 +147,7 @@ async def test_server(name: str):
         return {
             "success": True,
             "tools_count": len(tools),
-            "tools": [
-                {"name": t.name, "description": t.description or ""}
-                for t in tools
-            ],
+            "tools": [{"name": t.name, "description": t.description or ""} for t in tools],
         }
     except Exception as e:
         return {
@@ -167,7 +165,7 @@ async def call_tool(name: str, tool_name: str, body: CallToolRequest):
         result = await pm.call_tool(name, tool_name, body.arguments)
         return {"result": result}
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.exception("Tool call failed %s/%s", name, tool_name)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
