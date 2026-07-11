@@ -363,14 +363,12 @@ class TestChatConfigRepository:
                 top_p REAL,
                 enable_memory_tools INTEGER DEFAULT 1,
                 debug_mode INTEGER DEFAULT 0,
-                searxng_url TEXT DEFAULT '',
                 context_use_llm_summary INTEGER DEFAULT 1,
                 episode_consolidation_enabled INTEGER DEFAULT 1,
                 episode_search_enabled INTEGER DEFAULT 1,
                 dynamic_tool_selection INTEGER DEFAULT 1,
                 irodori_enabled INTEGER DEFAULT 0,
-                portrait_enabled INTEGER DEFAULT 0,
-                opensandbox_url TEXT DEFAULT ''
+                portrait_enabled INTEGER DEFAULT 0
             )
         """)
         db.execute("""

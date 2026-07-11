@@ -707,7 +707,6 @@ class TestDogfooding:
                 image_gen_provider TEXT DEFAULT 'openai',
                 image_gen_dalle_model TEXT DEFAULT 'dall-e-3',
                 image_gen_stability_url TEXT DEFAULT '',
-                searxng_url TEXT DEFAULT '',
                 enable_memory_tools INTEGER DEFAULT 1,
                 debug_mode INTEGER DEFAULT 0,
                 dynamic_temperature INTEGER DEFAULT 1,
@@ -718,8 +717,7 @@ class TestDogfooding:
                 episode_search_enabled INTEGER DEFAULT 1,
                 dynamic_tool_selection INTEGER DEFAULT 1,
                 irodori_enabled INTEGER DEFAULT 0,
-                portrait_enabled INTEGER DEFAULT 0,
-                opensandbox_url TEXT DEFAULT ''
+                portrait_enabled INTEGER DEFAULT 0
             )
         """)
         db.commit()

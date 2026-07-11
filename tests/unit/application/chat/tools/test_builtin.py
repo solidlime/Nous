@@ -138,21 +138,21 @@ class TestExecuteToolMcpRouting:
         """__ を含まないツール名は従来通り builtin dispatch を通る"""
         from nous.application.chat.tools.builtin import _BUILTIN_DISPATCH
 
-        original = _BUILTIN_DISPATCH.get("search")
+        original = _BUILTIN_DISPATCH.get("list_skills")
 
         try:
-            mock_handler = AsyncMock(return_value={"status": "ok", "results": []})
-            _BUILTIN_DISPATCH["search"] = mock_handler
+            mock_handler = AsyncMock(return_value={"status": "ok", "skills": []})
+            _BUILTIN_DISPATCH["list_skills"] = mock_handler
 
-            result = await execute_tool(mock_ctx, mock_config, "search", {"query": "test"})
+            result = await execute_tool(mock_ctx, mock_config, "list_skills", {})
 
-            mock_handler.assert_called_once_with(mock_ctx, mock_config, {"query": "test"})
-            assert result == {"status": "ok", "results": []}
+            mock_handler.assert_called_once_with(mock_ctx, mock_config, {})
+            assert result == {"status": "ok", "skills": []}
         finally:
             if original:
-                _BUILTIN_DISPATCH["search"] = original
+                _BUILTIN_DISPATCH["list_skills"] = original
             else:
-                _BUILTIN_DISPATCH.pop("search", None)
+                _BUILTIN_DISPATCH.pop("list_skills", None)
 
     @pytest.mark.asyncio
     async def test_unknown_tool_without_underscore(self, mock_ctx, mock_config):

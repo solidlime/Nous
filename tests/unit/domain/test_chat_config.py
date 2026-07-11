@@ -6,11 +6,11 @@ import sqlite3
 
 import pytest
 
-from nous.domain.chat_config import ChatConfig, ChatConfigRepository, _get_default_mcp_servers
+from nous.domain.chat_config import ChatConfig, ChatConfigRepository
 
 
 class TestChatConfigFields:
-    """New Phase 1 fields: irodori_enabled, portrait_enabled, opensandbox_url."""
+    """New Phase 1 fields: irodori_enabled, portrait_enabled."""
 
     def test_irodori_enabled_default_false(self):
         config = ChatConfig(persona="test")
@@ -20,10 +20,6 @@ class TestChatConfigFields:
         config = ChatConfig(persona="test")
         assert config.portrait_enabled is False
 
-    def test_opensandbox_url_default_empty(self):
-        config = ChatConfig(persona="test")
-        assert config.opensandbox_url == ""
-
     def test_irodori_enabled_set_true(self):
         config = ChatConfig(persona="test", irodori_enabled=True)
         assert config.irodori_enabled is True
@@ -31,38 +27,6 @@ class TestChatConfigFields:
     def test_portrait_enabled_set_true(self):
         config = ChatConfig(persona="test", portrait_enabled=True)
         assert config.portrait_enabled is True
-
-    def test_opensandbox_url_set(self):
-        config = ChatConfig(persona="test", opensandbox_url="http://custom:8000/mcp")
-        assert config.opensandbox_url == "http://custom:8000/mcp"
-
-
-class TestGetDefaultMcpServers:
-    """_get_default_mcp_servers with opensandbox_url override."""
-
-    def test_default_url_template(self):
-        servers = _get_default_mcp_servers("herta")
-        opensandbox = [s for s in servers if s["name"] == "opensandbox"]
-        assert len(opensandbox) == 1
-        assert opensandbox[0]["url"] == "http://opensandbox-mcp-herta:8000/mcp"
-
-    def test_opensandbox_url_override(self):
-        servers = _get_default_mcp_servers("herta", opensandbox_url="http://custom:9999/mcp")
-        opensandbox = [s for s in servers if s["name"] == "opensandbox"]
-        assert len(opensandbox) == 1
-        assert opensandbox[0]["url"] == "http://custom:9999/mcp"
-
-    def test_opensandbox_url_empty_falls_back_to_env(self, monkeypatch):
-        monkeypatch.setenv("NOUS_OPENDBOX_MCP_URL", "http://env-override:8000/mcp")
-        servers = _get_default_mcp_servers("herta", opensandbox_url="")
-        opensandbox = [s for s in servers if s["name"] == "opensandbox"]
-        assert opensandbox[0]["url"] == "http://env-override:8000/mcp"
-
-    def test_opensandbox_url_overrides_env(self, monkeypatch):
-        monkeypatch.setenv("NOUS_OPENDBOX_MCP_URL", "http://env-override:8000/mcp")
-        servers = _get_default_mcp_servers("herta", opensandbox_url="http://persona-override:8000/mcp")
-        opensandbox = [s for s in servers if s["name"] == "opensandbox"]
-        assert opensandbox[0]["url"] == "http://persona-override:8000/mcp"
 
 
 class TestChatConfigRepository:
@@ -74,7 +38,7 @@ class TestChatConfigRepository:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         conn.row_factory = sqlite3.Row
-        # Create table with ALL current columns
+        # Create table with ALL current columns (without searxng_url/opensandbox_url)
         conn.execute(
             """
             CREATE TABLE chat_settings (
@@ -130,8 +94,7 @@ class TestChatConfigRepository:
                 episode_search_enabled INTEGER DEFAULT 1,
                 dynamic_tool_selection INTEGER DEFAULT 1,
                 irodori_enabled INTEGER DEFAULT 0,
-                portrait_enabled INTEGER DEFAULT 0,
-                opensandbox_url TEXT DEFAULT ''
+                portrait_enabled INTEGER DEFAULT 0
             )
             """
         )
@@ -155,45 +118,14 @@ class TestChatConfigRepository:
         loaded = repo.get("test")
         assert loaded.portrait_enabled is True
 
-    def test_save_and_load_opensandbox_url(self, db):
+    def test_get_or_create_empty_servers(self, db):
+        """get_or_create should default to empty mcp_servers list."""
         repo = ChatConfigRepository(db)
-        config = ChatConfig(persona="test", opensandbox_url="http://custom:8000/mcp")
-        repo.save(config)
-
-        loaded = repo.get("test")
-        assert loaded.opensandbox_url == "http://custom:8000/mcp"
-
-    def test_get_or_create_uses_opensandbox_url(self, db):
-        repo = ChatConfigRepository(db)
-        config = ChatConfig(
-            persona="test",
-            opensandbox_url="http://persona-opensandbox:8000/mcp",
-        )
+        config = ChatConfig(persona="test")
         repo.save(config)
 
         loaded = repo.get_or_create("test")
-        opensandbox = [s for s in loaded.mcp_servers if s["name"] == "opensandbox"]
-        assert len(opensandbox) >= 1
-        # opensandbox_url is set, but mcp_servers are already saved, so get_or_create
-        # won't regenerate. Let's test fresh persona instead:
-        assert loaded.opensandbox_url == "http://persona-opensandbox:8000/mcp"
-
-    def test_get_or_create_fresh_persona_respects_opensandbox_url(self, db):
-        """Fresh persona (no mcp_servers) should use opensandbox_url from config."""
-        repo = ChatConfigRepository(db)
-        # First save a config with opensandbox_url set
-        config = ChatConfig(
-            persona="fresh_test",
-            opensandbox_url="http://custom-opensandbox:8000/mcp",
-        )
-        repo.save(config)
-
-        # Now get_or_create — since mcp_servers is empty (default []),
-        # it should regenerate using the saved opensandbox_url
-        loaded = repo.get_or_create("fresh_test")
-        opensandbox = [s for s in loaded.mcp_servers if s["name"] == "opensandbox"]
-        assert len(opensandbox) == 1
-        assert opensandbox[0]["url"] == "http://custom-opensandbox:8000/mcp"
+        assert loaded.mcp_servers == []
 
     def test_default_values_in_db(self, db):
         """When no config saved, get() returns defaults including new fields."""
@@ -201,7 +133,6 @@ class TestChatConfigRepository:
         config = repo.get("nonexistent")
         assert config.irodori_enabled is False
         assert config.portrait_enabled is False
-        assert config.opensandbox_url == ""
 
     def test_default_values_from_sql_defaults(self, db):
         """When row exists but new columns are NULL/default, map correctly."""
@@ -216,10 +147,6 @@ class TestChatConfigRepository:
         config = repo.get("legacy")
         assert config.irodori_enabled is False
         assert config.portrait_enabled is False
-        # opensandbox_url defaults to empty string from SQL DEFAULT ''
-        # But if the column didn't exist when row was inserted, it might be '' or None
-        # The ChatConfig default is "", so either is fine
-        assert config.opensandbox_url == "" or config.opensandbox_url == ""
 
 
 class TestSqliteMigration:
@@ -229,9 +156,7 @@ class TestSqliteMigration:
         """Simulate opening an existing DB (all pre-Phase1 columns) and running migration."""
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
-        # Pre-Phase1 schema (has all columns except the 3 new ones).
-        # This matches the real migration scenario: CREATE TABLE IF NOT EXISTS
-        # creates the full current schema, then ALTER TABLE adds new columns.
+        # Pre-Phase1 schema (has all columns except the 2 new ones).
         pre_phase1_schema = """
             CREATE TABLE chat_settings (
                 persona TEXT PRIMARY KEY,
@@ -295,13 +220,11 @@ class TestSqliteMigration:
         old_cols = [d[0] for d in cursor.description]
         assert "irodori_enabled" not in old_cols
         assert "portrait_enabled" not in old_cols
-        assert "opensandbox_url" not in old_cols
 
         # Simulate the migration: ALTER TABLE ADD COLUMN for each new field
         for col_sql in [
             "irodori_enabled INTEGER DEFAULT 0",
             "portrait_enabled INTEGER DEFAULT 0",
-            "opensandbox_url TEXT DEFAULT ''",
         ]:
             try:
                 conn.execute(f"ALTER TABLE chat_settings ADD COLUMN {col_sql}")
@@ -314,7 +237,6 @@ class TestSqliteMigration:
         columns = [d[0] for d in cursor.description]
         assert "irodori_enabled" in columns
         assert "portrait_enabled" in columns
-        assert "opensandbox_url" in columns
 
         # Verify defaults work
         conn.execute("INSERT INTO chat_settings (persona) VALUES ('test')")
@@ -322,7 +244,6 @@ class TestSqliteMigration:
         row = conn.execute("SELECT * FROM chat_settings WHERE persona = 'test'").fetchone()
         assert row["irodori_enabled"] == 0
         assert row["portrait_enabled"] == 0
-        assert row["opensandbox_url"] == ""
 
         # Verify ChatConfigRepository works with migrated schema
         from nous.domain.chat_config import ChatConfigRepository
@@ -331,6 +252,5 @@ class TestSqliteMigration:
         config = repo.get("test")
         assert config.irodori_enabled is False
         assert config.portrait_enabled is False
-        assert config.opensandbox_url == ""
 
         conn.close()
