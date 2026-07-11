@@ -1,95 +1,96 @@
-# HANDOFF — 2026-07-11 10:47
+# HANDOFF — 2026-07-11 11:15
 
 ## セッション概要
-`feat/browser-sandbox-mcp` ブランチを main にマージ後、計21コミットで環境クリーンアップと既知バグ（35件以上）をすべて解消。
+HANDOFF.md:69 の残課題 2 件（アイテムツール 7→3 圧縮、OpenSandbox MCP ペルソナ分離）を完全解消。
+3 コミット / 全テスト 1615 passed / ruff clean / YAML 構文 OK。
 
 ## 作業ブランチ
 ```
 main
 ```
 
+## コミット履歴
+```
+f43d139 docs: アイテム 7→3 ツール圧縮のドキュメント反映 (Phase A T05)
+5cd3cb0 feat: OpenSandbox MCP ペルソナ分離（per-persona instance 化）
+766d46d feat: アイテムツール 7→3 圧縮（YAGNI 解消）
+```
+
 ## 完了したこと
 
-### マージ + 環境クリーンアップ
-- `feat/browser-sandbox-mcp` → `main` (no-ff マージ)
-- `.env` の `NOUS_SANDBOX__ENABLED=true` 残骸削除（gitignore 対象）
-- `test_dashboard_e2e.py` の `version == "2.0.0"` を `3.0.0` に修正（branding commit 4af063b の更新漏れ）
-- `ruff format` drift 14 ファイル修正（CI gate 失敗対応）
+### Phase A: アイテムツール 7→3 圧縮（コミット 766d46d, 7 ファイル / -322 行）
 
-### インフラ修正
-- **pytest OOM**: `nous/domain/memory/__init__.py` の eager import を `__getattr__` で遅延化 + `tests/unit/test_read_pdf.py` の `import fitz` を関数内移動。フルスイート 1605 passed / 7 skipped 達成
-- **portrait service CI flaky**: `_last_generate_time = 0.0` sentinel を `None` に変更（CI runner 起動直後の `time.monotonic() - 0.0` が uptime 依存で失敗していた）
+YAGNI 違反だった 4 ツールを削除。`memory_llm.inventory_update` 機構が代替を担う。
 
-### バックエンド CRITICAL
-- **C1** (`_tools_memory.py:69`): `memory_create` の重複チェック `WHERE persona=? AND deleted_at IS NULL` → `LOWER(content) = LOWER(?) AND lifecycle_status != 'tombstoned'` に修正。persona は既に DB ファイル単位で分離済み、`persona` カラム自体が存在しない
-- **C3** (`settings.py` + `main.py`): `CorsConfig` 追加 (`NOUS_CORS_ALLOWED_ORIGINS` / `NOUS_CORS__ALLOWED_ORIGINS`、デフォルト `["*"]`)、`MemoryFastMCP._add_cors_middleware()` で CORSMiddleware 注入
+| 削除 | 残す |
+|------|------|
+| `item_remove` | `item_add` |
+| `item_unequip` | `item_equip` |
+| `item_update` | `item_search` |
+| `item_history` | |
 
-### バックエンド HIGH
-- **H1** (`_tools_memory.py:283-297`): `memory_update` の `locals()` ベース changes 検出を `updates.keys()` に置換。空 updates 早期 return + `emotion`/`emotion_intensity` を changes に追加
-- **H4** (`settings.py` + `routers/events.py`): `plugin_api_key` 空文字デフォルト = 認証バイパスを修正。`PluginConfig(enabled=False, api_key='')` を導入、3段階ゲート (disabled→403 / no key→500 / invalid→401)。破壊的変更だが正当化 (auth bypass)
-- **H5** (`chat_config.py:271-352`): `ChatConfigRepository.get()` の 51 行ハードコードインデックスを `cursor.description` 動的マッピングに置換。`ChatConfig.model_fields` でフィルタ、ALTER TABLE 耐性テスト追加
+- `equipment_service.get_history()` / `repository.get_history()` も dead code として同時削除
+- REST API / フロントエンドは影響なし
+- テスト: 53 passed (削除前 58 → 削除後 53)
 
-### リフレクション修正
-- **persona 欠落** (`reflection.py:170-176` + `service.py:53-68`): `_store_last_reflection_at()` と洞察保存ループで `persona=ctx.persona` を渡すよう修正。`create_memory()` に明示的 `persona` パラメータ追加
-- **silent failure** (`chat.js:90-92`): `loadChatCommitments` の `catch (_e)` を `console.error` + `toast()` に変更
+### Phase B: OpenSandbox MCP ペルソナ分離（コミット 5cd3cb0, 7 ファイル / +290/-38 行）
 
-### WebUI P0（5コミット・サイレント障害/XSS）
-- chat.js 5 箇所 silent catch → console.error + toast
-- base.js SSE silent catch 5 箇所 + リスナーリーク修正 (`es._sseHandlers` マップ) + beforeunload クリーンアップ
-- timeline.js:163 `esc()` 追加 (XSS), overview.js textContent→innerHTML, alert()→toast() 5 箇所
-- settings.js statusPoll switchTab オーバーライドで clearInterval
-- chat.js /code→/exec リネーム + `__chatPersonaWatcher` 上限 20 回設定
+**採用方式: 案 B'（静的 YAML + URL factory）**。Oracle レビューで SPEC の init container 方式を棄却し、シンプルイズベストに舵を切った。
 
-### WebUI P1（6コミット・ステート管理/API コントラクト）
-- chat.js C9 (session-delete catch) + H5 (空履歴 `S.historyLoadFailed` フラグ)
-- settings.js C8 (save 失敗キー収集, console.warn, toast, >3件 console.group) + M8 (localStorage 事前フィルタ)
-- memories.js M5 (keydown removeEventListener ガード) + H4 (バッチ削除失敗キー/理由収集)
-- base.js Escape ハンドラ削除 (`_memModalKeyHandler` に委譲、重複とバグ混入を解消)
-- timeline.js switchTab monkey-patch → MutationObserver + CustomEvent('tab:changed')
-- activity.js `CSS.escape(sid)` guard `if (!sid) return;`
-
-### WebUI LOW（5コミット・UX polish）
-- L1 chat.css: `@media (max-width: 768px)` 内に `#memory-panel[style*="display: flex"]` セレクタ追加でモバイル対応
-- L2 base.css: `.toast` に `transition: opacity 0.3s, transform 0.3s` 追加
-- L3 base.js: `setAutoRefresh()` を `visibilitychange` で制御（バックグラウンドタブで停止）
-- L4 chat.js: スラッシュコマンドポップアップのキーボード操作 (↑↓Enter/Tab + aria-selected)
-- L5 persona.py: `_PERSONA_PATTERN` エラーメッセージを日本語化
-
-## 成果
+アーキテクチャ:
 ```
-21 commits / +約 700 / -約 200 lines
-ruff check: 0 errors, format: clean
-pytest: 1605 passed / 7 skipped
-CI: all green
+単一 opensandbox (port 8090)
+  ├── opensandbox-mcp-herta (port 8001, 独立 ServerState)
+  ├── opensandbox-mcp-alice (port 8002, 独立 ServerState)
+  └── opensandbox-mcp-bob   (port 8003, 独立 ServerState)
+```
+
+| タスク | 内容 |
+|--------|------|
+| T07 | `docker-compose.yml` を `x-opensandbox-mcp` アンカー + 3 サービス (herta/alice/bob) に書き換え。port 8001-8003 |
+| T08 | `chat_config.py` の `DEFAULT_MCP_SERVERS` を空に、`_get_default_mcp_servers(persona)` factory 追加。`NOUS_OPENDBOX_MCP_URL` で完全 override 可能 |
+| T09 | `delete_persona` に best-effort な OpenSandbox sandbox クリーンアップ追加（`_cleanup_opensandbox_sandboxes` / `_parse_mcp_response`）。9 テスト新規 |
+| T10 | `.env.example` に `NOUS_PERSONAS` / `NOUS_OPENDBOX_MCP_URL` 追記、`docs/llm_usage_guide.md` ペルソナ分離セクション追加、`CLAUDE.md` 外部MCPテーブル更新 |
+
+### Phase A T05: ドキュメント反映（コミット f43d139, 5 ファイル / -12 行）
+
+7→3 圧縮に合わせて以下を更新:
+- `docs/llm_usage_guide.md` L22: 7 ツール名 → 3 ツール名
+- `CLAUDE.md` L75-81: 7 行 → 3 行
+- `README.md` L115: `(7ツール)` → `(3ツール)`
+- `.spec/TEST_PLAN.md` IT-09〜13: 5 行削除（IT-12 のみ `~~item_remove~~` として履歴残し）
+- `.spec/TEST_RESULTS.md` L96-100: 同様に 5 行削除
+
+## 検証状況
+
+```
+ruff check: 0 errors
+ruff format: clean
+pytest tests/ --ignore=tests/benchmark --ignore=tests/integration/test_dashboard_e2e.py: 1615 passed, 7 skipped
+YAML syntax (docker-compose.yml): OK
+```
+
+## 環境変数（運用者向け）
+
+```bash
+# 必須: ペルソナ一覧（カンマ区切り）
+NOUS_PERSONAS=herta,alice,bob
+
+# オプション: URL テンプレート完全 override
+# デフォルト: f"http://opensandbox-mcp-{persona}:8000/mcp"
+# NOUS_OPENDBOX_MCP_URL=http://custom-host:9999/mcp
 ```
 
 ## 既知事項 / 次セッション候補
 
-### 残課題（緊急性低）
-- アイテム系 7 ツール (`item_add/remove/equip/unequip/update/search/history`) の 3 ツール圧縮（YAGNI 違反 ora-3 評価）
-- OpenSandbox MCP ペルソナ分離の実機構成
-- `/code` (旧) → `/exec` のフロントエンド UX 統一（残骸なし、ただし旧ドキュメント削除要確認）
-- irodori_tts の存続判断
+- **T12 実機確認**: `docker compose up -d` で全サービス起動 + 動作テスト（未実施・環境依存）
+- **T14 push + CI**: `f43d139` まで main ブランチに push、GitHub Actions パス確認
+- **persona 追加手順**: 新しい persona を増やす場合、(1) `docker-compose.yml` に `opensandbox-mcp-{persona}` サービス追加、(2) `NOUS_PERSONAS` 環境変数に追記、(3) `POST /api/personas/{persona}` で作成、の 3 ステップが必要
+- **persona 数の上限**: 現状 herta/alice/bob の 3 つまで静的定義。増やす場合は docker-compose.yml の手動編集が必要
+- `DEFAULT_MCP_SERVERS` 定数は空にしたが import 後方互換のため削除せず残置（grep で確認した範囲では import なし）
 
-### 残バグ（ハンドオフ25件 → 全解消済み）
-すべての CRITICAL/HIGH/MEDIUM/LOW が解消。次のバグ調査は exploratory。
+## 関連ドキュメント
 
-## 設計上の教訓（今セッション）
-
-### マージ後の .env 残骸
-`.env` は gitignore 対象だが、`sandbox_enabled` のような環境変数は pydantic-settings が起動時に ValidationError を投げるまで気付かない。マージ時の env 残骸チェックリストを持つべき。
-
-### `locals()` の使用禁止
-`memory_update` の changes 検出で `locals()` を使ってパラメータの指定有無を判定していたが、関数引数 + dict 引数 (`updates`) の混在では破綻する。dict を真実とする設計が正しい。
-
-### `plugin_api_key` のデフォルト値
-空文字デフォルトは「認証バイパス」と等価。明示的な `enabled: bool` フラグで opt-in にすべき。今回 `PortraitGenerationConfig` / `IrodoriConfig` と同一パターンに統一。
-
-### pytest collection のメモリ爆発
-`nous.domain.memory` のパッケージレベル import 連鎖で SudachiPy (~200MB) + PyMuPDF (~150MB) が collection 時にロードされる。**パッケージレベルでは eager せず、`__getattr__` で遅延化する**。テストファイルの `import fitz` も関数内移動。
-
-### 時刻 sentinel
-`time.monotonic() - 0.0` は「起動からの経過秒」を意味し、CI runner 起動直後の値域を踏むリスクがある。sentinel は `None` を使い、`is None` で判定する。
-
-### switchTab monkey-patch の禁止
-複数の JS ファイルが `switchTab = function(orig) { orig(); ... }` パターンで上書きすると衝突。`MutationObserver` + `CustomEvent('tab:changed')` 方式にリファクタ。
+- `.spec/PLAN.md` — 残課題 2 件の背景・目的
+- `.spec/SPEC.md` — 詳細仕様（案 B ベース、案 B' 採用は本 HANDOFF に記録）
+- `.spec/TODO.md` — Phase A/B/C のタスク分解
