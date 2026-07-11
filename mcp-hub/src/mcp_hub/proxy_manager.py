@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from fastmcp import FastMCP
+from fastmcp.client.transports.stdio import StdioTransport
 from fastmcp.server import create_proxy
 from fastmcp.server.providers.proxy import FastMCPProxy
 
@@ -129,7 +130,8 @@ class ProxyManager:
             proxy = create_proxy(url, name=name)
         elif command:
             args = config.get("args", [])
-            proxy = create_proxy({"command": command, "args": args}, name=name)
+            transport = StdioTransport(command=command, args=args)
+            proxy = create_proxy(transport, name=name)
         else:
             raise ValueError(f"Invalid config for {name}: need 'url' or 'command'")
         return proxy
