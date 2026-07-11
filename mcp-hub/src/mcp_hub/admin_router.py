@@ -21,6 +21,17 @@ class ServerConfig(BaseModel):
     command: str | None = None
     args: list[str] = []
 
+    def model_dump_for_config(self) -> dict:
+        """空文字・空リストを除外した config dict を返す。"""
+        raw = self.model_dump(exclude_none=True)
+        if "url" in raw and not raw["url"]:
+            del raw["url"]
+        if "command" in raw and not raw["command"]:
+            del raw["command"]
+        if "args" in raw and not raw["args"]:
+            del raw["args"]
+        return raw
+
 
 class RegisterRequest(BaseModel):
     name: str
@@ -83,6 +94,9 @@ async def register_server(body: RegisterRequest):
     registry = _get_registry()
     pm = _get_proxy_manager()
 
+    if not body.name.strip():
+        raise HTTPException(status_code=422, detail="Server name must not be empty")
+
     existing = await registry.get_server(body.name)
     if existing:
         raise HTTPException(
@@ -90,7 +104,13 @@ async def register_server(body: RegisterRequest):
             detail=f"Server '{body.name}' already exists",
         )
 
-    config = body.config.model_dump(exclude_none=True)
+    config = body.config.model_dump_for_config()
+    if not config.get("url") and not config.get("command"):
+        raise HTTPException(
+            status_code=422,
+            detail="Either 'url' or 'command' is required",
+        )
+
     try:
         tool_names = await pm.register_server(body.name, config)
     except ValueError as e:
