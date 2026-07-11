@@ -280,6 +280,10 @@ async def _tool_memory_update(
         updates["tags"] = tags
     if privacy_level is not None:
         updates["privacy_level"] = privacy_level
+
+    if not updates:
+        return json.dumps({"ok": False, "error": "no fields to update"}, ensure_ascii=False)
+
     result = ctx.memory_service.update_memory(memory_key, **updates)
     if result.is_ok:
         if ctx.vector_store and "content" in updates:
@@ -290,9 +294,7 @@ async def _tool_memory_update(
                 "key": memory_key,
                 "persona": persona,
                 "content_preview": (content or "...")[:100],
-                "changes": [
-                    k for k in ["content", "importance", "tags", "privacy_level"] if locals().get(k) is not None
-                ],
+                "changes": list(updates.keys()),
             },
         )
         return json.dumps({"ok": True, "key": memory_key}, ensure_ascii=False)

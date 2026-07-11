@@ -464,6 +464,58 @@ class TestMemoryUpdate:
         assert data["ok"] is False
         assert "invalid privacy_level" in data["error"].lower()
 
+    @pytest.mark.asyncio
+    async def test_update_no_fields_returns_error(self, registered_tools):
+        """No update fields → early return with error."""
+        tools, ctx, _ = registered_tools
+        memory_update = tools["memory_update"]
+        result = await memory_update(memory_key="k1")
+        import json
+
+        data = json.loads(result)
+        assert data["ok"] is False
+        assert "no fields to update" in data["error"].lower()
+        ctx.memory_service.update_memory.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_update_changes_contains_content(self, registered_tools):
+        """Single field update → field appears in changes."""
+        tools, ctx, _ = registered_tools
+        ctx.memory_service.update_memory.return_value = Success(_mem("mem_001"))
+        memory_update = tools["memory_update"]
+        result = await memory_update(memory_key="k1", content="updated content")
+        import json
+
+        data = json.loads(result)
+        assert data["ok"] is True
+        # Verify the event bus was called with changes=["content"]
+        call_args = ctx.event_bus.publish.call_args
+        assert call_args is not None
+        _event_name, payload = call_args[0]
+        assert payload["changes"] == ["content"]
+
+    @pytest.mark.asyncio
+    async def test_update_changes_contains_multiple(self, registered_tools):
+        """Multiple field update → all fields appear in changes."""
+        tools, ctx, _ = registered_tools
+        ctx.memory_service.update_memory.return_value = Success(_mem("mem_001"))
+        memory_update = tools["memory_update"]
+        result = await memory_update(
+            memory_key="k1",
+            content="updated",
+            importance=0.8,
+            tags=["a", "b"],
+        )
+        import json
+
+        data = json.loads(result)
+        assert data["ok"] is True
+        call_args = ctx.event_bus.publish.call_args
+        assert call_args is not None
+        _event_name, payload = call_args[0]
+        # content, importance, tags — in insertion order
+        assert payload["changes"] == ["content", "importance", "tags"]
+
 
 # ---------------------------------------------------------------------------
 # memory_search()
