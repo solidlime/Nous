@@ -917,7 +917,6 @@ function resetToWelcome() {
             <div class="chat-welcome-commands">
                 <span class="chat-welcome-cmd">/memory</span>
                 <span class="chat-welcome-cmd">/goal</span>
-                <span class="chat-welcome-cmd">/code</span>
                 <span class="chat-welcome-cmd">/help</span>
                 <span class="chat-welcome-cmd">/search</span>
                 <span class="chat-welcome-cmd">/image</span>
@@ -1808,15 +1807,10 @@ const SLASH_COMMANDS = [
     desc: "目標を作成",
     example: "/goal プロジェクトを完成させる",
   },
-  { name: "/code", desc: "コードを実行", example: '/code print("hello")' },
+  { name: "/exec", desc: "コードをサンドボックス実行", example: "/exec python script.py" },
   { name: "/help", desc: "コマンド一覧を表示", example: "/help" },
   { name: "/search", desc: "記憶を検索", example: "/search 昨日の会話" },
   { name: "/image", desc: "画像を生成", example: "/image 猫の写真" },
-  {
-    name: "/exec",
-    desc: "コードをサンドボックス実行",
-    example: "/exec python script.py",
-  },
   {
     name: "/invoke_skill",
     desc: "スキルを呼び出す",
@@ -2247,7 +2241,7 @@ document.addEventListener("DOMContentLoaded", () => {
           content: val.slice(6).trim(),
           importance: 0.8,
         });
-      } else if (val.startsWith("/code ") && S.persona) {
+      } else if (val.startsWith("/exec ") && S.persona) {
         handleSlashCommand("opensandbox__execute_code", {
           code: val.slice(6).trim(),
           language: "python",
@@ -2293,9 +2287,18 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // Reload chat config when persona changes
+let __chatPersonaTries = 0;
+const __CHAT_PERSONA_MAX_TRIES = 20;
 window.__chatPersonaWatcher = setInterval(() => {
   const sel = document.getElementById("persona-select");
-  if (!sel) return;
+  if (!sel) {
+    __chatPersonaTries++;
+    if (__chatPersonaTries >= __CHAT_PERSONA_MAX_TRIES) {
+      console.warn("[chat] #persona-select not found after 20 tries, giving up");
+      clearInterval(window.__chatPersonaWatcher);
+    }
+    return;
+  }
   if (!sel._chatBound) {
     sel._chatBound = true;
     sel.addEventListener("change", () => {
