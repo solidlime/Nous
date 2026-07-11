@@ -87,8 +87,9 @@ async function loadChatCommitments() {
     if (data.insights && data.insights.length > 0) {
       updateReflectionPanel(data.insights);
     }
-  } catch (_e) {
-    // commitments API unavailable — ignore silently
+  } catch (e) {
+    console.error("[loadChatCommitments] failed:", e);
+    toast("リフレクション読込失敗: " + e.message, "error");
   }
 }
 
