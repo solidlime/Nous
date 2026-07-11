@@ -94,7 +94,6 @@ def register_chat_routes(mcp) -> None:
             "episode_search_enabled",
             "irodori_enabled",
             "portrait_enabled",
-            "opensandbox_url",
         ):
             if field_name in body:
                 update_data[field_name] = body[field_name]

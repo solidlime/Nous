@@ -377,31 +377,6 @@ def register_tools(mcp: FastMCP) -> None:
 
     # ── Chat builtin tool wrappers (delegate to builtin.py handlers) ──
 
-    # search
-    @_tool("search")
-    async def search(
-        query: str,
-        num_results: int = 10,
-        language: str = "",
-    ) -> str:
-        """Web検索。query必須。SearXNG経由で結果を返す。"""
-        from nous.application.chat.tools.builtin import _handle_search
-        from nous.domain.chat_config import ChatConfigRepository
-
-        p = _resolve_persona()
-        ctx = AppContextRegistry.get(p)
-        config = ChatConfigRepository(ctx.connection.get_memory_db()).get(p)
-        result = await _handle_search(
-            ctx,
-            config,
-            {
-                "query": query,
-                "num_results": num_results,
-                "language": language,
-            },
-        )
-        return json.dumps(result, ensure_ascii=False)
-
     # image_generate
     @_tool("image_generate")
     async def image_generate(

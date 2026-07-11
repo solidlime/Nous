@@ -11,8 +11,6 @@ from mcp.shared.exceptions import McpError
 if TYPE_CHECKING:
     from starlette.requests import Request
 
-import atexit
-
 from nous import __version__
 from nous.api.http.routes import register_http_routes
 from nous.api.mcp.middleware import PersonaMiddleware
@@ -20,7 +18,6 @@ from nous.api.mcp.tools import register_tools
 from nous.application.use_cases import AppContextRegistry
 from nous.config.settings import Settings, get_settings
 from nous.infrastructure.logging.structured import get_logger, setup_logging
-from nous.infrastructure.sandbox_orchestrator import SandboxOrchestrator, set_orchestrator
 
 # ── Monkey-patch Tool.run() to re-raise McpError (preserves JSON-RPC error codes) ──
 # FastMCP's Tool.run() wraps all exceptions in ToolError, but McpError must
@@ -111,22 +108,6 @@ def create_app() -> MemoryFastMCP:
     # ディレクトリ構造を確保
     settings.ensure_directories()
 
-    # ── Sandbox Orchestrator ──
-    try:
-        sandbox_orchestrator = SandboxOrchestrator(
-            network="nous-network",
-            data_dir=settings.data_dir,
-        )
-        set_orchestrator(sandbox_orchestrator)
-        atexit.register(sandbox_orchestrator.shutdown)
-
-        personas_from_env = [p.strip() for p in os.environ.get("NOUS_PERSONAS", "").split(",") if p.strip()]
-        result = sandbox_orchestrator.sync_all(personas_from_env if personas_from_env else None)
-        if result:
-            logger.info("SandboxOrchestrator synced: %s", {k: v for k, v in result.items() if v != "exists"})
-    except Exception:
-        logger.exception("SandboxOrchestrator initialization failed — running without dynamic sandbox management")
-
     # キャッシュ環境変数を自動設定（未設定の場合のみ）
     os.environ.setdefault("HF_HOME", str(Path(settings.cache_dir) / "huggingface"))
     os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", str(Path(settings.cache_dir) / "sentence_transformers"))
@@ -177,21 +158,6 @@ def create_app() -> MemoryFastMCP:
         except Exception as e:
             status["services"]["qdrant"] = f"error: {e}"
             status["status"] = "degraded"
-
-        # Check SearXNG (non-critical)
-        try:
-            import httpx
-
-            from nous.config.runtime_config import RuntimeConfigManager
-
-            searxng_url = RuntimeConfigManager().get_effective_value("general", "searxng_url")[0] or os.environ.get(
-                "SEARXNG_URL", "http://searxng:8080"
-            )
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                r = await client.get(f"{searxng_url}/healthz")
-                status["services"]["searxng"] = "ok" if r.status_code < 500 else f"error: HTTP {r.status_code}"
-        except Exception as e:
-            status["services"]["searxng"] = f"unreachable: {e}"
 
         return Response(
             _json.dumps(status, ensure_ascii=False),

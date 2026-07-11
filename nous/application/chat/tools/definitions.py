@@ -28,10 +28,8 @@ CORE_ALWAYS_TOOLS: set[str] = {
 
 # 条件付きツールのカテゴリマッピング（将来の文脈ベース制限用）
 CONDITIONAL_TOOLS: dict[str, str] = {
-    "search": "web",
-    "image_generate": "image",
-    "read_pdf": "document",
-    "list_skills": "meta",
+    "image_generate": "image_gen",
+    "read_pdf": "read_pdf",
 }
 
 MEMORY_TOOLS: list[ToolDefinition] = [
@@ -215,28 +213,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         },
     ),
     ToolDefinition(
-        name="search",
-        description="Web検索。query必須。SearXNG経由で結果を返す。",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "検索クエリ（日本語可）"},
-                "num_results": {
-                    "type": "integer",
-                    "description": "取得する検索結果数（1〜50）",
-                    "default": 10,
-                    "minimum": 1,
-                    "maximum": 50,
-                },
-                "language": {
-                    "type": "string",
-                    "description": "言語フィルタ（'ja', 'en' 等）。指定しない場合は制限なし",
-                },
-            },
-            "required": ["query"],
-        },
-    ),
-    ToolDefinition(
         name="image_generate",
         description="画像生成。prompt必須。nは1-4枚、size指定可。",
         input_schema={
@@ -357,7 +333,6 @@ _NOUS_TOOL_NAMES: frozenset[str] = frozenset(
         "item_search",
         "goal_manage",
         "invoke_skill",
-        "search",
         "image_generate",
         "read_pdf",
         "list_skills",

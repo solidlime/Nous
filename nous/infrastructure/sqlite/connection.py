@@ -221,7 +221,6 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     image_gen_provider TEXT DEFAULT 'openai',
     image_gen_dalle_model TEXT DEFAULT 'dall-e-3',
     image_gen_stability_url TEXT DEFAULT '',
-    searxng_url TEXT DEFAULT '',
     enable_memory_tools INTEGER DEFAULT 1,
     debug_mode INTEGER DEFAULT 0,
     dynamic_temperature INTEGER DEFAULT 1,
@@ -232,8 +231,7 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     episode_search_enabled INTEGER DEFAULT 1,
     dynamic_tool_selection INTEGER DEFAULT 1,
     irodori_enabled INTEGER DEFAULT 0,
-    portrait_enabled INTEGER DEFAULT 0,
-    opensandbox_url TEXT DEFAULT ''
+    portrait_enabled INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS session_events (
@@ -397,14 +395,6 @@ class SQLiteConnection:
             memory_conn.execute("ALTER TABLE chat_settings ADD COLUMN portrait_enabled INTEGER DEFAULT 0")
             memory_conn.commit()
             logger.info("Added portrait_enabled column to chat_settings (migration)")
-        except sqlite3.OperationalError:
-            pass  # column already exists
-
-        # Migration: add opensandbox_url if missing (existing DBs)
-        try:
-            memory_conn.execute("ALTER TABLE chat_settings ADD COLUMN opensandbox_url TEXT DEFAULT ''")
-            memory_conn.commit()
-            logger.info("Added opensandbox_url column to chat_settings (migration)")
         except sqlite3.OperationalError:
             pass  # column already exists
 

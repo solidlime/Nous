@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import json
 import shutil
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import httpx
 from starlette.responses import HTMLResponse, JSONResponse
 
 from nous.api.http.deps import (
@@ -19,7 +17,6 @@ from nous.api.http.deps import (
 from nous.application.use_cases import AppContextRegistry
 from nous.config.settings import Settings
 from nous.infrastructure.logging.structured import get_logger
-from nous.infrastructure.sandbox_orchestrator import get_orchestrator
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -298,10 +295,6 @@ def register_persona_routes(mcp) -> None:
         if persona_dir.exists():
             return JSONResponse({"error": f"Persona '{persona_name}' already exists"}, status_code=409)
         try:
-            # Dynamic sandbox container provisioning
-            orchestrator = get_orchestrator()
-            if orchestrator:
-                orchestrator.ensure(persona_name)
             ctx = AppContextRegistry.get(persona_name)
             if ctx is None:
                 return JSONResponse({"error": "Failed to initialize persona"}, status_code=500)
@@ -326,11 +319,6 @@ def register_persona_routes(mcp) -> None:
             if persona in AppContextRegistry._contexts:
                 AppContextRegistry._contexts[persona].close()
                 del AppContextRegistry._contexts[persona]
-            await _cleanup_opensandbox_sandboxes(persona)
-            # Remove dynamic sandbox container
-            orchestrator = get_orchestrator()
-            if orchestrator:
-                orchestrator.remove(persona)
             shutil.rmtree(persona_dir)
             return JSONResponse({"status": "ok", "deleted": persona})
         except Exception as exc:
@@ -501,57 +489,3 @@ def _render_setup_page() -> str:
 </script>
 </body>
 </html>"""
-
-
-async def _cleanup_opensandbox_sandboxes(persona: str) -> None:
-    """Best-effort cleanup of OpenSandbox sandboxes for persona."""
-    url = f"http://opensandbox-mcp-{persona}:8000/mcp"
-    headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
-
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # List all sandboxes
-            list_resp = await client.post(
-                url,
-                headers=headers,
-                json={
-                    "jsonrpc": "2.0",
-                    "method": "tools/call",
-                    "params": {"name": "sandbox_list", "arguments": {}},
-                    "id": 1,
-                },
-            )
-            list_data = _parse_mcp_response(list_resp.text)
-            sandbox_ids = [s.get("id") for s in list_data.get("result", []) if s.get("id")]
-
-            # Delete each sandbox
-            for sbx_id in sandbox_ids:
-                await client.post(
-                    url,
-                    headers=headers,
-                    json={
-                        "jsonrpc": "2.0",
-                        "method": "tools/call",
-                        "params": {"name": "sandbox_kill", "arguments": {"sandbox_id": sbx_id}},
-                        "id": 1,
-                    },
-                )
-    except Exception as e:
-        logger.warning("OpenSandbox cleanup for persona '%s' failed: %s", persona, e)
-
-    # Clean up sandbox ownership registry
-    try:
-        from nous.domain.sandbox_ownership import get_registry
-
-        registry = get_registry(Settings().data_dir)
-        registry.cleanup_persona(persona)
-    except Exception:
-        logger.warning("Sandbox ownership registry cleanup for persona '%s' failed", persona)
-
-
-def _parse_mcp_response(text: str) -> dict:
-    """Parse MCP streaming response (may have 'event:' prefix)."""
-    for line in text.splitlines():
-        if line.startswith("data: "):
-            return json.loads(line[6:])
-    return json.loads(text)

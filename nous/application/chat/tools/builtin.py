@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 
 from nous.api.mcp.tools import TOOL_DISPATCH
 from nous.application.chat.tools.definitions import _NOUS_TOOL_NAMES
-from nous.config.runtime_config import RuntimeConfigManager
 from nous.config.settings import get_settings
 from nous.domain.skill import SkillRepository
 from nous.infrastructure.logging.structured import get_logger
@@ -610,8 +609,8 @@ _MCP_SHARED_TOOLS = frozenset(
 async def execute_tool(ctx: AppContext, config: ChatConfig, tool_name: str, tool_input: dict) -> dict:
     """Execute built-in or shared MCP tool via dispatch table.
 
-    Tools with ``__`` in the name (e.g. ``opensandbox__execute_code``) are
-    routed to ``MCPClientPool.call_tool()`` for external MCP server execution.
+    Tools with ``__`` in the name are routed to ``MCPClientPool.call_tool()``
+    for external MCP server execution.
     """
     # ── MCP routing gate: tools with "__" go directly to MCP pool ──
     if "__" in tool_name:
@@ -647,116 +646,3 @@ async def execute_tool(ctx: AppContext, config: ChatConfig, tool_name: str, tool
 
 
 # invoke_skill is now handled via TOOL_DISPATCH → _tool_invoke_skill in tools.py
-
-
-# ── Sandbox ownership tracking helpers (Priority C) ──
-
-_SANDBOX_CREATE_TOOL = "opensandbox__sandbox_create"
-_SANDBOX_KILL_TOOL = "opensandbox__sandbox_kill"
-_SANDBOX_LIST_TOOL = "opensandbox__sandbox_list"
-
-
-def _extract_sandbox_id(result: dict) -> str | None:
-    """Extract sandbox_id from sandbox_create result.
-
-    OpenSandbox MCP の sandbox_create は様々な形式で sandbox_id を返しうる。
-    主なケース:
-    - {"sandbox_id": "xxx", ...}  # OpenSandbox の標準形式
-    - {"result": "xxx"}            # 簡易形式
-    - {"id": "xxx", ...}           # JSON-RPC result
-    """
-    # content 配列からテキストを抽出 (MCP content 形式)
-    content = result.get("content", [])
-    if isinstance(content, list):
-        for item in content:
-            if isinstance(item, dict) and item.get("type") == "text":
-                text = item.get("text", "")
-                try:
-                    parsed = json.loads(text)
-                    if isinstance(parsed, dict):
-                        for key in ("sandbox_id", "id", "result"):
-                            if key in parsed and isinstance(parsed[key], str):
-                                return parsed[key]
-                except (json.JSONDecodeError, TypeError):
-                    pass
-    # 直接 result に sandbox_id がある場合
-    for key in ("sandbox_id", "id"):
-        if key in result and isinstance(result[key], str):
-            return result[key]
-    return None
-
-
-def _track_sandbox_ownership(
-    ctx: AppContext, tool_name: str, tool_input: dict, result: dict
-) -> dict:
-    """Track sandbox ownership and filter sandbox_list results.
-
-    - sandbox_create → record persona owns sandbox_id
-    - sandbox_kill → remove ownership record
-    - sandbox_list → filter to only persona's sandboxes
-    """
-    persona = ctx.persona
-    settings = ctx.settings
-    registry = get_registry(settings.data_dir)
-
-    if tool_name == _SANDBOX_CREATE_TOOL:
-        sandbox_id = _extract_sandbox_id(result)
-        if sandbox_id:
-            registry.record(persona, sandbox_id)
-            logger.debug("sandbox_create tracked: persona=%s sandbox_id=%s", persona, sandbox_id)
-
-    elif tool_name == _SANDBOX_KILL_TOOL:
-        sandbox_id = tool_input.get("sandbox_id")
-        if sandbox_id:
-            registry.remove(sandbox_id)
-            logger.debug("sandbox_kill tracked: persona=%s sandbox_id=%s", persona, sandbox_id)
-
-    elif tool_name == _SANDBOX_LIST_TOOL:
-        owned = registry.list_owned(persona)
-        if owned:
-            filtered = _filter_sandbox_list(result, owned)
-            if filtered is not None:
-                return filtered
-
-    return result
-
-
-def _filter_sandbox_list(result: dict, owned_ids: set[str]) -> dict | None:
-    """Filter sandbox_list result to only include owned sandbox_ids.
-    Returns None if filtering fails (caller should use original result).
-    """
-    # content 配列から sandbox 一覧を抽出
-    content = result.get("content", [])
-    if not isinstance(content, list):
-        return None
-
-    for i, item in enumerate(content):
-        if isinstance(item, dict) and item.get("type") == "text":
-            text = item.get("text", "")
-            try:
-                parsed = json.loads(text)
-                if isinstance(parsed, list):
-                    # 全 sandbox のリスト → 所有分のみフィルタ
-                    filtered_list = [
-                        s for s in parsed if isinstance(s, dict) and s.get("id") in owned_ids
-                    ]
-                    new_content = list(content)
-                    new_content[i] = {**item, "text": json.dumps(filtered_list, ensure_ascii=False)}
-                    return {**result, "content": new_content}
-                elif isinstance(parsed, dict):
-                    # 結果がオブジェクトの場合
-                    sandboxes = parsed.get("sandboxes") or parsed.get("result") or []
-                    if isinstance(sandboxes, list):
-                        filtered = [
-                            s for s in sandboxes if isinstance(s, dict) and s.get("id") in owned_ids
-                        ]
-                        if "sandboxes" in parsed:
-                            new_parsed = {**parsed, "sandboxes": filtered}
-                        else:
-                            new_parsed = {**parsed, "result": filtered}
-                        new_content = list(content)
-                        new_content[i] = {**item, "text": json.dumps(new_parsed, ensure_ascii=False)}
-                        return {**result, "content": new_content}
-            except (json.JSONDecodeError, TypeError, AttributeError):
-                return None
-    return None
