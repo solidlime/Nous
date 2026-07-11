@@ -287,7 +287,7 @@ def register_persona_routes(mcp) -> None:
             return JSONResponse({"error": "Field 'name' is required"}, status_code=400)
         if not _PERSONA_PATTERN.match(persona_name):
             return JSONResponse(
-                {"error": "Persona name must contain only alphanumeric characters, hyphens, and underscores"},
+                {"error": "ペルソナ名には英数字・ハイフン・アンダースコアのみ使用できます"},
                 status_code=400,
             )
         settings = Settings()
