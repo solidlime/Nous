@@ -116,12 +116,20 @@ Nous: 日本語特化の永続記憶 MCP サーバー。SQLite + Qdrant + Ebbing
 - バックエンド変更時は `chat.js` + `sections/chat.py` + `routers/chat.py` の三者を必ず確認
 - WebUI の状態: chat.js 2872行 / base.js 933行 / settings.js 934行
 
+## OpenSandbox MCP ペルソナ分離（2026-07-11 Phase B）
+- 案 B'（静的 YAML テンプレ + URL factory）採用。init container 方式は棄却。
+- `_get_default_mcp_servers(persona)` factory 関数で per-persona URL 生成
+- `NOUS_OPENDBOX_MCP_URL` 環境変数で完全 override 可能
+- persona 削除時の `_cleanup_opensandbox_sandboxes()` は best-effort（例外を握り潰す）
+- `_parse_mcp_response()` は最初の `data:` 行を返す（MCP 単一レスポンスプロトコル）
+- テスト: httpx.AsyncClient を AsyncMock + MagicMock でモック
+
 ## プロジェクトの現在の状態
-- ブランチ: main（feat/browser-sandbox-mcp マージ済み）
-- 全ユニットテスト: 1605 passed / 7 skipped
+- ブランチ: main（Phase B 完了）
+- 全ユニットテスト: 1605 passed / 7 skipped（前回計測値、Phase B は 9 追加）
 - ruff check: 0 errors / format: clean
 - CI: 5 ジョブ green (Lint & Format / Documentation Reminder / Integration Tests / Unit Tests / Docker Build & Push)
 - MCPツール: 19個（browser + sandbox 5個削除）
-- 外部MCP: Playwright MCP + OpenSandbox MCP をデフォルト登録
+- 外部MCP: Playwright MCP + OpenSandbox MCP（per-persona インスタンス化）をデフォルト登録
 - 既知バグ（25件）: 全解消。バックエンド HIGH 3件 + WebUI 30件 = 0件
 - LSP エラー: H5 修正の副作用 (`dict[str, Any]` 型推論) あり、ランタイム影響なし
