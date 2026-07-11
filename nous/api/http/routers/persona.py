@@ -539,6 +539,15 @@ async def _cleanup_opensandbox_sandboxes(persona: str) -> None:
     except Exception as e:
         logger.warning("OpenSandbox cleanup for persona '%s' failed: %s", persona, e)
 
+    # Clean up sandbox ownership registry
+    try:
+        from nous.domain.sandbox_ownership import get_registry
+
+        registry = get_registry(Settings().data_dir)
+        registry.cleanup_persona(persona)
+    except Exception:
+        logger.warning("Sandbox ownership registry cleanup for persona '%s' failed", persona)
+
 
 def _parse_mcp_response(text: str) -> dict:
     """Parse MCP streaming response (may have 'event:' prefix)."""
