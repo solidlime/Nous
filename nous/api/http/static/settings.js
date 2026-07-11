@@ -494,11 +494,25 @@ function renderSettings(el, settings, status) {
                     }
                 } catch (err) {
                     failed++;
+                    var catKey = e.cat + '.' + e.key;
+                    console.warn('[settings] save failed:', catKey, err.message || err);
+                    /* Accumulate failed key paths */
+                    if (!window.__settings_failed_keys) window.__settings_failed_keys = [];
+                    window.__settings_failed_keys.push(catKey);
                 }
             }
 
             if (failed > 0) {
+                var failKeys = (window.__settings_failed_keys || []).slice();
+                window.__settings_failed_keys = null;
                 if (statusEl) { statusEl.className = 'setting-status status-error visible'; statusEl.innerHTML = '✕ ' + failed + ' failed'; }
+                /* Log batch failures in a structured way */
+                if (failKeys.length > 3) {
+                    console.group('[settings] batch save failures');
+                    console.table(failKeys.map(function(k) { return { key: k }; }));
+                    console.groupEnd();
+                }
+                toast('<i data-lucide="alert-triangle"></i> ' + failed + ' failed: ' + failKeys.join(', '), 'error');
             } else if (restartNeeded) {
                 if (statusEl) { statusEl.className = 'setting-status status-saved visible'; statusEl.innerHTML = '✓ Saved — restart to apply'; }
                 if (detailsEl) {
@@ -841,19 +855,21 @@ function renderSettingsProfiles() {
         html += '<i data-lucide="package"></i> ' + esc(name);
         html += '</button>';
     });
-    /* User profiles from localStorage */
+    /* User profiles from localStorage — collect keys upfront to avoid mixing non-profile keys */
+    var profileKeys = [];
     for (var i = 0; i < localStorage.length; i++) {
         var k = localStorage.key(i);
-        if (k && k.startsWith('nous_profile_')) {
-            var pName = k.replace('nous_profile_', '');
-            html += '<div style="display:inline-flex;align-items:center;gap:0">';
-            html += '<button data-profile-action="load-user" data-profile-name="' + esc(pName) + '" class="glass-btn profile-chip" style="padding:5px 14px;font-size:0.78rem;border-top-right-radius:0;border-bottom-right-radius:0">';
-            html += '<i data-lucide="user"></i> ' + esc(pName);
-            html += '</button>';
-            html += '<button data-profile-action="delete" data-profile-name="' + esc(pName) + '" class="glass-btn glass-btn-danger" style="padding:5px 8px;font-size:0.72rem;border-top-left-radius:0;border-bottom-left-radius:0;border-left:none" title="Delete profile"><i data-lucide="x"></i></button>';
-            html += '</div>';
-        }
+        if (k && k.startsWith('nous_profile_')) profileKeys.push(k);
     }
+    profileKeys.forEach(function(k) {
+        var pName = k.replace('nous_profile_', '');
+        html += '<div style="display:inline-flex;align-items:center;gap:0">';
+        html += '<button data-profile-action="load-user" data-profile-name="' + esc(pName) + '" class="glass-btn profile-chip" style="padding:5px 14px;font-size:0.78rem;border-top-right-radius:0;border-bottom-right-radius:0">';
+        html += '<i data-lucide="user"></i> ' + esc(pName);
+        html += '</button>';
+        html += '<button data-profile-action="delete" data-profile-name="' + esc(pName) + '" class="glass-btn glass-btn-danger" style="padding:5px 8px;font-size:0.72rem;border-top-left-radius:0;border-bottom-left-radius:0;border-left:none" title="Delete profile"><i data-lucide="x"></i></button>';
+        html += '</div>';
+    });
     if (!html) html = '<span style="font-size:0.8rem;color:var(--text-muted)">No profiles yet</span>';
     container.innerHTML = html;
 }
