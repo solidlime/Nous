@@ -209,6 +209,3 @@ class TestImageGenerateHandler:
         result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "n": "abc"})
         assert result["status"] == "error"
         assert "Invalid value for 'n'" in result["message"]
-
-
-
