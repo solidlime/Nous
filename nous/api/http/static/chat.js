@@ -99,8 +99,9 @@ async function loadEquipment() {
     const data = await api("/api/dashboard/" + encodeURIComponent(S.persona));
     const equipment = data.equipment || {};
     updateEquipmentPanel({ equip: equipment });
-  } catch (_e) {
-    // dashboard API unavailable — ignore silently
+  } catch (e) {
+    console.error("[loadEquipment] failed:", e);
+    toast("装備データ読込失敗: " + e.message, "error");
   }
 }
 
@@ -110,8 +111,9 @@ async function loadSkillsForChat() {
     await api("/api/skills/sync", { method: "POST" });
     const skills = await api("/api/skills");
     renderSkillsList(skills, CHAT.enabledSkills);
-  } catch (_e) {
-    // skills API not available yet, ignore
+  } catch (e) {
+    console.error("[loadSkillsForChat] failed:", e);
+    toast("スキル読込失敗: " + e.message, "error");
   }
 }
 
@@ -1297,8 +1299,9 @@ async function restoreChatHistory() {
     setTimeout(() => {
       if (typeof lucide !== "undefined") lucide.createIcons();
     }, 50);
-  } catch (_e) {
-    console.error("restoreChatHistory failed:", _e);
+  } catch (e) {
+    console.error("[restoreChatHistory] failed:", e);
+    toast("チャット履歴復元失敗: " + e.message, "error");
     // Session not found or API unavailable — start fresh
     const skel = document.getElementById("chat-history-skeleton");
     if (skel) skel.remove();
@@ -2670,8 +2673,9 @@ async function loadPortrait() {
       placeholder.textContent = data.fallback_emoji;
       placeholder.style.fontSize = "2.5rem";
     }
-  } catch (_e) {
-    // Portrait API unavailable — keep default placeholder
+  } catch (e) {
+    console.error("[loadPortrait] failed:", e);
+    toast("ポートレート読込失敗: " + e.message, "error");
   }
 }
 
@@ -2721,8 +2725,9 @@ window.addEventListener("portrait-generated", function (e) {
       setPortraitImage(data.image_base64, data.emotion);
       toast("🎨 ポートレートが更新されました", "info");
     }
-  } catch (_err) {
-    /* ignore parse errors */
+  } catch (err) {
+    console.error("[portrait-generated SSE] failed:", err);
+    toast("ポートレート更新処理失敗: " + err.message, "error");
   }
 });
 
