@@ -16,7 +16,7 @@ from nous.api.http.routes import register_http_routes
 from nous.api.mcp.middleware import PersonaMiddleware
 from nous.api.mcp.tools import register_tools
 from nous.application.use_cases import AppContextRegistry
-from nous.config.settings import Settings
+from nous.config.settings import Settings, get_settings
 from nous.infrastructure.logging.structured import get_logger, setup_logging
 
 # ── Monkey-patch Tool.run() to re-raise McpError (preserves JSON-RPC error codes) ──
@@ -44,16 +44,31 @@ Tool.run = _patched_tool_run
 
 
 class MemoryFastMCP(FastMCP):
-    """FastMCP subclass that injects PersonaMiddleware for header-based persona resolution."""
+    """FastMCP subclass that injects PersonaMiddleware + CORSMiddleware."""
+
+    def _add_cors_middleware(self, app):
+        from starlette.middleware.cors import CORSMiddleware
+
+        settings = get_settings()
+        cfg = settings.cors
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cfg.allowed_origins,
+            allow_credentials=cfg.allow_credentials,
+            allow_methods=cfg.allow_methods,
+            allow_headers=cfg.allow_headers,
+        )
 
     def streamable_http_app(self):
         app = super().streamable_http_app()
         app.add_middleware(PersonaMiddleware)
+        self._add_cors_middleware(app)
         return app
 
     def sse_app(self, mount_path=None):
         app = super().sse_app(mount_path)
         app.add_middleware(PersonaMiddleware)
+        self._add_cors_middleware(app)
         return app
 
 

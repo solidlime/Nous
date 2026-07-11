@@ -2,8 +2,15 @@ from __future__ import annotations
 
 import functools
 from pathlib import Path
+from typing import Self
 
-from pydantic import BaseModel, Field, computed_field, field_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -103,6 +110,36 @@ class IrodoriConfig(BaseModel):
     """Generation timeout in seconds."""
 
 
+class CorsConfig(BaseModel):
+    """CORS (Cross-Origin Resource Sharing) configuration."""
+
+    allowed_origins: list[str] = ["*"]
+    """Allowed origins. Env var ``NOUS_CORS__ALLOWED_ORIGINS`` accepts JSON array
+    (e.g. ``'["http://a.com","http://b.com"]'``) **or** comma-separated string
+    (e.g. ``http://a.com,http://b.com``).
+    Default: ``["*"]`` (development only). Production should set explicit origins."""
+
+    allow_credentials: bool = True
+    allow_methods: list[str] = ["*"]
+    allow_headers: list[str] = ["*"]
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def parse_comma_separated(cls, v: object) -> object:
+        """Allow comma-separated string as input (for non-JSON env vars)."""
+        if isinstance(v, str):
+            # Try JSON first
+            import json
+
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                pass
+            # Fallback: comma-separated
+            return [s.strip() for s in v.split(",") if s.strip()]
+        return v
+
+
 class PortraitGenerationConfig(BaseModel):
     """Portrait generation configuration — CRITICAL cost-control layer (default OFF)."""
 
@@ -166,6 +203,7 @@ class Settings(BaseSettings):
     memorag: MemoRAGConfig = MemoRAGConfig()
     memory_enrichment: MemoryEnrichmentConfig = MemoryEnrichmentConfig()
     auto_capture: AutoCaptureConfig = AutoCaptureConfig()
+    cors: CorsConfig = CorsConfig()
     portrait_gen: PortraitGenerationConfig = Field(default_factory=PortraitGenerationConfig)
     irodori: IrodoriConfig = Field(default_factory=IrodoriConfig)
     timezone: str = "Asia/Tokyo"
@@ -174,6 +212,30 @@ class Settings(BaseSettings):
     default_persona: str | None = None
     contradiction_threshold: float = 0.85
     duplicate_threshold: float = 0.90
+
+    # Flat CORS origins env var (supports comma-separated; nested var
+    # NOUS_CORS__ALLOWED_ORIGINS requires JSON array).  Parsed into
+    # ``cors.allowed_origins`` via :meth:`_apply_cors_allowed_origins`.
+    cors_allowed_origins_env: str = Field(
+        default="",
+        alias="NOUS_CORS_ALLOWED_ORIGINS",
+    )
+
+    @model_validator(mode="after")
+    def apply_cors_allowed_origins(self) -> Self:
+        """Parse NOUS_CORS_ALLOWED_ORIGINS (comma-separated) into cors.allowed_origins."""
+        raw = self.cors_allowed_origins_env.strip()
+        if raw:
+            import json
+
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                parsed = [s.strip() for s in raw.split(",") if s.strip()]
+            if isinstance(parsed, str):
+                parsed = [parsed]
+            self.cors.allowed_origins = parsed
+        return self
 
     @field_validator("timezone")
     @classmethod
