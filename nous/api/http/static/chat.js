@@ -918,7 +918,7 @@ function resetToWelcome() {
                 <span class="chat-welcome-cmd">/help</span>
                 <span class="chat-welcome-cmd">/search</span>
                 <span class="chat-welcome-cmd">/image</span>
-                <span class="chat-welcome-cmd">/sandbox</span>
+                <span class="chat-welcome-cmd">/exec</span>
                 <span class="chat-welcome-cmd">/invoke_skill</span>
             </div>
         </div>`;
@@ -1206,7 +1206,6 @@ async function restoreChatHistory() {
     const skel = document.getElementById("chat-history-skeleton");
     if (skel) skel.remove();
     if (!data || !data.messages || data.messages.length === 0) {
-      console.log("restoreChatHistory: API returned", data);
       return;
     }
     // display_history_turns 件数分（最新N turns = N*2 messages）に制限
@@ -1810,9 +1809,9 @@ const SLASH_COMMANDS = [
   { name: "/search", desc: "記憶を検索", example: "/search 昨日の会話" },
   { name: "/image", desc: "画像を生成", example: "/image 猫の写真" },
   {
-    name: "/sandbox",
-    desc: "サンドボックスで実行",
-    example: "/sandbox python script.py",
+    name: "/exec",
+    desc: "コードをサンドボックス実行",
+    example: "/exec python script.py",
   },
   {
     name: "/invoke_skill",
@@ -2245,7 +2244,7 @@ document.addEventListener("DOMContentLoaded", () => {
           importance: 0.8,
         });
       } else if (val.startsWith("/code ") && S.persona) {
-        handleSlashCommand("sandbox", {
+        handleSlashCommand("opensandbox__execute_code", {
           code: val.slice(6).trim(),
           language: "python",
         });
@@ -2422,62 +2421,12 @@ function handleFileToolCall(evt) {
     evt.input?.pattern ||
     evt.input?.glob ||
     "";
-  sandboxLog(
-    icon +
-      " " +
-      evt.name +
-      (detail ? ": " + String(detail).substring(0, 60) : ""),
-    "system",
-  );
   // チャットにもツールバブルを表示（CodingAgent閉時でも見えるように）
   appendToolEvent("tool_call", evt);
 }
 
-function sandboxLog(text, type = "") {
-  if (
-    typeof isCodingAgentOpen === "function" &&
-    isCodingAgentOpen() &&
-    typeof caAppendOutput === "function"
-  ) {
-    caAppendOutput(text + "\n", type === "stderr" ? "stderr" : "stdout");
-  }
-}
-
-function onSandboxEnabledChange() {
-  const enabled = document.getElementById("chat-sandbox-enabled")?.checked;
-  if (
-    !enabled &&
-    typeof isCodingAgentOpen === "function" &&
-    isCodingAgentOpen()
-  ) {
-    closeCodingAgent();
-  }
-}
-
-/* ── Sandbox: Add artifact to tab ── */
-function sandboxAddArtifact(base64png, label) {
-  const list = document.getElementById("sandbox-artifacts-list");
-  if (!list) return;
-  // Clear placeholder
-  const placeholder = list.querySelector('div[style*="text-muted"]');
-  if (placeholder) placeholder.remove();
-
-  const thumb = document.createElement("div");
-  thumb.className = "artifact-thumb";
-  const img = document.createElement("img");
-  img.src = "data:image/png;base64," + base64png;
-  img.alt = label || "artifact";
-  img.onclick = () => window.open(img.src, "_blank");
-  const lbl = document.createElement("div");
-  lbl.className = "artifact-thumb-label";
-  lbl.textContent = label || new Date().toLocaleTimeString();
-  thumb.appendChild(img);
-  thumb.appendChild(lbl);
-  list.appendChild(thumb);
-}
-
 /* ── Code block Run button ── */
-async function sandboxRunBlock(code, language, resultEl, runBtn) {
+async function execCodeBlock(code, language, resultEl, runBtn) {
   if (!S.persona) return;
   if (typeof openCodingAgent === "function") {
     openCodingAgent({ code, language });
@@ -2496,14 +2445,17 @@ async function sandboxRunBlock(code, language, resultEl, runBtn) {
   resultEl.style.display = "block";
   try {
     const resp = await api(
-      "/api/chat/" + encodeURIComponent(S.persona) + "/sandbox/execute",
+      "/api/chat/" + encodeURIComponent(S.persona) + "/tool",
       {
         method: "POST",
-        body: JSON.stringify({ code, language }),
+        body: JSON.stringify({
+          tool: "opensandbox__execute_code",
+          input: { code, language },
+        }),
       },
     );
-    const out = (resp.stdout || "").trim();
-    const err = (resp.stderr || "").trim();
+    const out = ((resp.result && resp.result.stdout) || resp.stdout || "").trim();
+    const err = ((resp.result && resp.result.stderr) || resp.stderr || "").trim();
     if (err) {
       resultEl.className = "hljs-run-result stderr";
       resultEl.textContent = err;
@@ -2511,27 +2463,6 @@ async function sandboxRunBlock(code, language, resultEl, runBtn) {
       resultEl.className = "hljs-run-result stdout";
       resultEl.textContent = out || "(出力なし)";
     }
-    if (resp.artifacts && resp.artifacts.length > 0) {
-      resp.artifacts.forEach((a, i) => {
-        const img = document.createElement("img");
-        img.src = "data:image/png;base64," + a;
-        img.className = "hljs-artifact-img";
-        img.title = "クリックで拡大";
-        img.onclick = () => window.open(img.src, "_blank");
-        resultEl.parentNode.insertBefore(img, resultEl.nextSibling);
-        sandboxAddArtifact(a, "chart-" + new Date().toLocaleTimeString());
-      });
-    }
-    sandboxLog(
-      "▶ [" +
-        language +
-        "] " +
-        code.split("\n")[0].substring(0, 60) +
-        (code.includes("\n") ? "..." : ""),
-      "system",
-    );
-    if (out) out.split("\n").forEach((l) => l && sandboxLog(l, "success"));
-    if (err) err.split("\n").forEach((l) => l && sandboxLog(l, "stderr"));
   } catch (ex) {
     resultEl.className = "hljs-run-result stderr";
     resultEl.textContent = "Error: " + ex.message;
@@ -2681,7 +2612,7 @@ function renderCodeBlock(lang, code) {
     const resultEl = wrapper.querySelector(".hljs-run-result");
     if (runBtn && resultEl) {
       runBtn.addEventListener("click", function () {
-        sandboxRunBlock(code, lang || "python", resultEl, runBtn);
+        execCodeBlock(code, lang || "python", resultEl, runBtn);
       });
     }
   }

@@ -42,7 +42,7 @@ const CATEGORY_DESCRIPTIONS = {
 
 /* ── Category display order (consistent across renders) ── */
 const CATEGORY_ORDER = [
-    'api_keys', 'general', 'server', 'sandbox', 'embedding', 'reranker',
+    'api_keys', 'general', 'server', 'embedding', 'reranker',
     'qdrant', 'forgetting', 'memory_enrichment'
 ];
 
@@ -731,7 +731,7 @@ async function resetCategory(cat) {
     if (!confirm('Reset all ' + cat + ' settings to defaults?')) return;
     var settings = S.settingsData;
     if (!settings || !settings[cat]) return;
-    var isHotCat = !RELOAD_CATEGORIES.has(cat) && cat !== 'server' && cat !== 'sandbox' && cat !== 'general';
+    var isHotCat = !RELOAD_CATEGORIES.has(cat) && cat !== 'server' && cat !== 'general';
     try {
         var count = 0;
         Object.entries(settings[cat]).forEach(function(entry) {

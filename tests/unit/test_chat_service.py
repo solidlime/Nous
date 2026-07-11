@@ -671,11 +671,3 @@ def test_chat_js_has_single_panel_toggle_definitions():
     assert js.count("function toggleMemoryPanel()") == 1
     assert js.count("function toggleSettingsPanel()") == 1
     assert "memory-panel-toggle-btn" not in js
-
-
-def test_chat_tab_renders_artifacts_tab():
-    """Coding Agent panel should include an artifacts display area."""
-    html = render_chat_tab()
-
-    assert "ca-artifacts" in html
-    assert "ca-panel" in html

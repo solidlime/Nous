@@ -554,7 +554,6 @@ html.light .badge-yellow { color: #d97706; } html.light .badge-red { color: #dc2
 .animate-in { animation: fadeInUp 0.4s ease; }
 .mem-modal { transform: scale(0.95); transition: transform 0.3s ease; }
 .mem-modal-overlay.show .mem-modal { transform: scale(1); }
-.count-up { display: inline-block; }
 .collapsible { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
 .collapsible.open { max-height: 2000px; }
 

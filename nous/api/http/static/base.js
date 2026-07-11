@@ -839,39 +839,6 @@ async function init() {
 }
 
 /* =================================================================
-   COUNT-UP ANIMATION (batched)
-   ================================================================= */
-function animateCount(el, target, duration) {
-  duration = duration || 800;
-  el._animTarget = target;
-  el._animDuration = duration;
-  el._animStart = performance.now();
-  if (!S._rafRunning) {
-    S._rafRunning = true;
-    requestAnimationFrame(_batchAnimateCount);
-  }
-}
-function _batchAnimateCount(currentTime) {
-  let anyRunning = false;
-  // Handle elements set via animateCount function
-  document.querySelectorAll(".count-up").forEach(function (el) {
-    if (el._animTarget == null) return;
-    const start = el._animStart || currentTime;
-    const duration = el._animDuration || 800;
-    const elapsed = currentTime - start;
-    const progress = Math.min(elapsed / duration, 1);
-    const eased = 1 - Math.pow(1 - progress, 3);
-    el.textContent = Math.round(el._animTarget * eased).toLocaleString();
-    if (progress < 1) anyRunning = true;
-  });
-  if (anyRunning) {
-    requestAnimationFrame(_batchAnimateCount);
-  } else {
-    S._rafRunning = false;
-  }
-}
-
-/* =================================================================
    STAGGERED CARD ANIMATION
    ================================================================= */
 function animateCards(container) {

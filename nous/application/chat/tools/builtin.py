@@ -657,7 +657,26 @@ _MCP_SHARED_TOOLS = frozenset(
 
 
 async def execute_tool(ctx: AppContext, config: ChatConfig, tool_name: str, tool_input: dict) -> dict:
-    """Execute built-in or shared MCP tool via dispatch table."""
+    """Execute built-in or shared MCP tool via dispatch table.
+
+    Tools with ``__`` in the name (e.g. ``opensandbox__execute_code``) are
+    routed to ``MCPClientPool.call_tool()`` for external MCP server execution.
+    """
+    # ── MCP routing gate: tools with "__" go directly to MCP pool ──
+    if "__" in tool_name:
+        try:
+            from nous.infrastructure.mcp_client.pool import MCPClientPool
+
+            pool = MCPClientPool(config.mcp_servers)
+            result = await pool.call_tool(tool_name, tool_input)
+            # Normalise MCP error responses to builtin status format
+            if "error" in result:
+                return {"status": "error", "message": result["error"]}
+            return result
+        except Exception as e:
+            logger.exception("MCP tool call failed: %s", tool_name)
+            return {"status": "error", "message": str(e)}
+
     try:
         # Builtin-specific handler
         handler = _BUILTIN_DISPATCH.get(tool_name)

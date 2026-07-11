@@ -6,8 +6,6 @@ tool call visualization, and an inline settings panel.
 
 import sys
 
-from .coding_agent import render_coding_agent_panel
-
 
 def render_chat_tab() -> str:
     """Return the HTML for the Chat tab."""
@@ -485,4 +483,4 @@ def render_chat_tab() -> str:
                     </div>
                 </div>
             </div>
-        </section>""" + render_coding_agent_panel()
+        </section>"""
