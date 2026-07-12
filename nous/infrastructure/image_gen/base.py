@@ -21,6 +21,8 @@ class ImageGenConfig:
     dalle_model: str = "dall-e-3"  # "dall-e-2" | "dall-e-3"
     stability_url: str = ""  # SD WebUI APIエンドポイント (例: http://localhost:7860)
     comfyui_url: str = "http://localhost:8188"  # ComfyUI APIエンドポイント
+    size: str = "1024x1024"  # 画像サイズ (例: "1024x1024")
+    quality: str = "standard"  # 品質 ("standard" | "hd")
 
 
 class ImageGenProvider(ABC):
