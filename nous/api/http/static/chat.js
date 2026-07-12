@@ -3199,28 +3199,69 @@ async function fetchMcpTools() {
 function renderMcpTools() {
   const list = document.getElementById("chat-mcp-tools-list");
   if (!list) return;
+  // Clear previous content
+  while (list.firstChild) list.removeChild(list.firstChild);
   const tools = CHAT.mcpTools || [];
   if (!tools.length) {
-    list.innerHTML = '<span style="font-size:0.7rem;color:var(--text-muted);">ツールがありません</span>';
+    const span = document.createElement("span");
+    span.style.cssText = "font-size:0.7rem;color:var(--text-muted);";
+    span.textContent = "ツールがありません";
+    list.appendChild(span);
     return;
   }
-  let html = "";
   if (CHAT.mcpErrors && CHAT.mcpErrors.length > 0) {
-    html += '<div style="font-size:0.65rem;color:var(--accent-red);margin-bottom:4px;">⚠ ' + CHAT.mcpErrors.join("; ") + '</div>';
+    const errDiv = document.createElement("div");
+    errDiv.style.cssText = "font-size:0.65rem;color:var(--accent-red);margin-bottom:4px;";
+    errDiv.textContent = "⚠ " + CHAT.mcpErrors.join("; ");
+    list.appendChild(errDiv);
   }
   for (const tool of tools) {
     const enabled = !CHAT.disabledTools.has(tool.name);
     const shortDesc = (tool.description || "").slice(0, 60) + ((tool.description || "").length > 60 ? "..." : "");
-    html += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:0.7rem;">' +
-      '<label class="mcp-tool-toggle" title="' + esc(tool.name) + '">' +
-      '<input type="checkbox" ' + (enabled ? 'checked' : '') + ' onchange="toggleTool(\'' + esc(tool.name) + '\')" />' +
-      '<span class="mcp-tool-toggle-slider"></span></label>' +
-      '<span style="font-weight:500;flex-shrink:0;">' + esc(tool.name) + '</span>' +
-      (tool.server ? '<span class="chat-badge" style="font-size:0.6rem;flex-shrink:0;">' + esc(tool.server) + '</span>' : '') +
-      '<span style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(shortDesc) + '</span>' +
-      '</div>';
+
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:center;gap:6px;padding:2px 0;font-size:0.7rem;";
+
+    // Toggle switch
+    const label = document.createElement("label");
+    label.className = "mcp-tool-toggle";
+    label.title = tool.name;
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = enabled;
+    input.dataset.toolName = tool.name;
+    input.addEventListener("change", function() {
+      toggleTool(this.dataset.toolName);
+    });
+    const slider = document.createElement("span");
+    slider.className = "mcp-tool-toggle-slider";
+    label.appendChild(input);
+    label.appendChild(slider);
+    row.appendChild(label);
+
+    // Tool name
+    const nameSpan = document.createElement("span");
+    nameSpan.style.cssText = "font-weight:500;flex-shrink:0;";
+    nameSpan.textContent = tool.name;
+    row.appendChild(nameSpan);
+
+    // Server badge
+    if (tool.server) {
+      const badge = document.createElement("span");
+      badge.className = "chat-badge";
+      badge.style.cssText = "font-size:0.6rem;flex-shrink:0;";
+      badge.textContent = tool.server;
+      row.appendChild(badge);
+    }
+
+    // Description
+    const descSpan = document.createElement("span");
+    descSpan.style.cssText = "color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+    descSpan.textContent = shortDesc;
+    row.appendChild(descSpan);
+
+    list.appendChild(row);
   }
-  list.innerHTML = html;
 }
 
 function toggleTool(toolName) {
