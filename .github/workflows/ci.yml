@@ -20,9 +20,10 @@ jobs:
   check-docs:
     name: Documentation Reminder
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 2
 
@@ -60,12 +61,13 @@ jobs:
   lint:
     name: Lint & Format
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
         with:
           python-version: "3.12"
-      - run: pip install ruff bandit mypy
+      - run: pip install ruff -r requirements-dev.txt
       - run: ruff check nous/ tests/
       - run: ruff format --check nous/ tests/
       - name: Security scan (Bandit)
@@ -85,21 +87,15 @@ jobs:
     needs: [lint]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
         with:
           python-version: "3.12"
           cache: pip
 
-      - name: Install CPU-only torch
-        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
-
       - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Install test tools
-        run: pip install pytest pytest-asyncio pytest-cov pytest-timeout httpx
+        run: pip install -r requirements-prod.txt -r requirements-dev.txt
 
       - name: Unit tests with coverage gate
         run: >-
@@ -127,21 +123,15 @@ jobs:
     env:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
         with:
           python-version: "3.12"
           cache: pip
 
-      - name: Install CPU-only torch
-        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
-
       - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Install test tools
-        run: pip install pytest pytest-asyncio pytest-cov pytest-timeout httpx
+        run: pip install -r requirements-prod.txt -r requirements-dev.txt
 
       - name: Wait for Qdrant
         run: |
@@ -158,7 +148,7 @@ jobs:
 
       - name: Upload coverage
         if: always() && env.CODECOV_TOKEN != ''
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@0cfda1dd0a4ad9efc75517f399d859cd1ea4ced1 # v5.4.2
         with:
           token: ${{ env.CODECOV_TOKEN }}
           file: ./coverage.xml
@@ -166,7 +156,7 @@ jobs:
 
       - name: Upload test artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4880f43607fa02 # v4.6.2
         with:
           name: integration-test-results
           path: coverage.xml
