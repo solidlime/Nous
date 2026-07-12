@@ -513,8 +513,8 @@ function connectSSE(persona) {
   es._sseHandlers["portrait.generate_start"] = function handlePortraitGenerateStart(e) {
     try {
       const d = JSON.parse(e.data);
-      if (typeof handlePortraitGenerateStart === 'function') {
-        handlePortraitGenerateStart(d);
+      if (typeof window.handlePortraitGenerateStart === 'function') {
+        window.handlePortraitGenerateStart(d);
       }
     } catch (err) {
       console.warn("[SSE parse] portrait.generate_start:", err.message);
@@ -528,8 +528,8 @@ function connectSSE(persona) {
   es._sseHandlers["portrait.generate_complete"] = function handlePortraitGenerateComplete(e) {
     try {
       const d = JSON.parse(e.data);
-      if (typeof handlePortraitGenerateComplete === 'function') {
-        handlePortraitGenerateComplete(d);
+      if (typeof window.handlePortraitGenerateComplete === 'function') {
+        window.handlePortraitGenerateComplete(d);
       }
     } catch (err) {
       console.warn("[SSE parse] portrait.generate_complete:", err.message);
@@ -543,8 +543,8 @@ function connectSSE(persona) {
   es._sseHandlers["portrait.generate_error"] = function handlePortraitGenerateError(e) {
     try {
       const d = JSON.parse(e.data);
-      if (typeof handlePortraitGenerateError === 'function') {
-        handlePortraitGenerateError(d);
+      if (typeof window.handlePortraitGenerateError === 'function') {
+        window.handlePortraitGenerateError(d);
       }
     } catch (err) {
       console.warn("[SSE parse] portrait.generate_error:", err.message);
@@ -740,37 +740,54 @@ function switchTab(tab) {
 }
 function loadTab(tab) {
   if (!S.persona && tab !== "settings" && tab !== "personas") return;
+  var fn;
   switch (tab) {
     case "overview":
-      loadOverview();
+      fn = typeof loadOverview === 'function' ? loadOverview : null;
       break;
     case "analytics":
-      loadAnalytics();
+      fn = typeof loadAnalytics === 'function' ? loadAnalytics : null;
       break;
     case "memories":
-      loadMemories();
+      fn = typeof loadMemories === 'function' ? loadMemories : null;
       break;
     case "graph":
-      loadGraph();
+      fn = typeof loadGraph === 'function' ? loadGraph : null;
       break;
     case "import-export":
-      loadImportExport();
+      fn = typeof loadImportExport === 'function' ? loadImportExport : null;
       break;
     case "personas":
-      loadPersonas();
+      fn = typeof loadPersonas === 'function' ? loadPersonas : null;
       break;
     case "settings":
-      loadSettings();
+      fn = typeof loadSettings === 'function' ? loadSettings : null;
       break;
     case "chat":
-      loadChat();
+      fn = typeof loadChat === 'function' ? loadChat : null;
       break;
     case "activity":
-      loadActivity(true);
+      fn = typeof loadActivity === 'function'
+        ? function () { loadActivity(true); }
+        : null;
       break;
     case "admin":
-      loadAdmin();
+      fn = typeof loadAdmin === 'function' ? loadAdmin : null;
       break;
+  }
+  if (fn) {
+    fn();
+  } else {
+    document.addEventListener('DOMContentLoaded', function deferTab() {
+      if (tab === "activity") {
+        if (typeof loadActivity === 'function') loadActivity(true);
+      } else {
+        var deferFn = typeof window['load' + tab.charAt(0).toUpperCase() + tab.slice(1)] === 'function'
+          ? window['load' + tab.charAt(0).toUpperCase() + tab.slice(1)]
+          : null;
+        if (deferFn) deferFn();
+      }
+    });
   }
 }
 
