@@ -221,6 +221,7 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     image_gen_provider TEXT DEFAULT 'openai',
     image_gen_dalle_model TEXT DEFAULT 'dall-e-3',
     image_gen_stability_url TEXT DEFAULT '',
+    image_gen_comfyui_url TEXT DEFAULT '',
     enable_memory_tools INTEGER DEFAULT 1,
     debug_mode INTEGER DEFAULT 0,
     dynamic_temperature INTEGER DEFAULT 1,
@@ -408,6 +409,14 @@ class SQLiteConnection:
                 logger.info("Added %s column to chat_settings (migration)", col)
             except sqlite3.OperationalError:
                 pass  # column already exists
+
+        # Migration: add image_gen_comfyui_url if missing (existing DBs)
+        try:
+            memory_conn.execute("ALTER TABLE chat_settings ADD COLUMN image_gen_comfyui_url TEXT DEFAULT ''")
+            memory_conn.commit()
+            logger.info("Added image_gen_comfyui_url column to chat_settings (migration)")
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
         # Migration: add remaining chat_settings columns if missing (existing DBs)
         _chat_settings_migrations = [
