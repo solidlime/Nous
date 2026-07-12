@@ -527,8 +527,7 @@ def _render_setup_page() -> str:
     <div id="error-msg" style="color:#ef4444;font-size:0.85rem;margin-top:10px;display:none"></div>
 
     <button type="submit" id="create-btn" class="glass-btn btn-primary"
-      style="width:100%;margin-top:20px;padding:12px;font-size:1rem;font-weight:600"
-      onclick="this.disabled=true;this.textContent='Creating...'">
+      style="width:100%;margin-top:20px;padding:12px;font-size:1rem;font-weight:600">
       <i data-lucide="sparkles" style="width:1.1rem;height:1.1rem;vertical-align:middle"></i>
       Create Persona
     </button>
@@ -543,6 +542,8 @@ def _render_setup_page() -> str:
     var errEl = document.getElementById('error-msg');
     var btn = document.getElementById('create-btn');
     if (!name) return false;
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
     var ctrl = new AbortController();
     var timer = setTimeout(function(){ ctrl.abort(); }, 60000);
     try {
