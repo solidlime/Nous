@@ -35,6 +35,10 @@ quote-style = "double"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+filterwarnings = [
+    "ignore:Use 'streamable_http_client' instead:DeprecationWarning",
+    "ignore:Using 'httpx' with 'starlette.testclient' is deprecated:DeprecationWarning",
+]
 markers = [
     "unit: Unit tests (no external dependencies)",
     "integration: Integration tests (requires DB)",
