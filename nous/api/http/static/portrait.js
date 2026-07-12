@@ -1,0 +1,351 @@
+/* =================================================================
+   TB07: PORTRAIT GENERATION UI
+   ================================================================= */
+
+/**
+ * Portrait UI controller — handles SSE events for portrait generation,
+ * loading states, and image display updates across Overview and Chat tabs.
+ */
+
+// ── Portrait SSE Event Handlers ──────────────────────────────────
+
+/**
+ * Handle portrait.generate_start SSE event.
+ * Shows loading skeleton in both Overview and Chat portrait areas.
+ */
+function handlePortraitGenerateStart(data) {
+  // Chat tab: show loading on portrait container
+  const chatContainer = document.getElementById('portrait-container');
+  if (chatContainer) {
+    chatContainer.classList.add('portrait-loading');
+    const img = document.getElementById('portrait-img');
+    const placeholder = document.getElementById('portrait-placeholder');
+    const status = document.getElementById('portrait-status');
+    if (img) img.style.display = 'none';
+    if (placeholder) {
+      placeholder.style.display = 'flex';
+      placeholder.innerHTML = '<div class="portrait-skeleton-pulse"></div>';
+    }
+    if (status) {
+      status.textContent = 'Generating...';
+      status.className = 'portrait-status generating';
+    }
+  }
+
+  // Overview tab: show loading on overview portrait area
+  const overviewPortrait = document.getElementById('overview-portrait-container');
+  if (overviewPortrait) {
+    overviewPortrait.classList.add('portrait-loading');
+    const img = document.getElementById('overview-portrait-img');
+    const placeholder = document.getElementById('overview-portrait-placeholder');
+    const status = document.getElementById('overview-portrait-status');
+    if (img) img.style.display = 'none';
+    if (placeholder) {
+      placeholder.style.display = 'flex';
+      placeholder.innerHTML = '<div class="portrait-skeleton-pulse"></div>';
+    }
+    if (status) {
+      status.textContent = 'Generating...';
+      status.className = 'portrait-status generating';
+    }
+  }
+}
+
+/**
+ * Handle portrait.generate_complete SSE event.
+ * Updates portrait image in both Overview and Chat tabs.
+ */
+function handlePortraitGenerateComplete(data) {
+  if (!data.image_base64) return;
+
+  // Update Chat tab portrait
+  if (typeof setPortraitImage === 'function') {
+    setPortraitImage(data.image_base64, data.emotion);
+  }
+
+  // Update Overview tab portrait
+  const overviewImg = document.getElementById('overview-portrait-img');
+  const overviewPlaceholder = document.getElementById('overview-portrait-placeholder');
+  const overviewStatus = document.getElementById('overview-portrait-status');
+  const overviewContainer = document.getElementById('overview-portrait-container');
+
+  if (overviewImg) {
+    overviewImg.src = 'data:image/png;base64,' + data.image_base64;
+    overviewImg.style.display = 'block';
+    overviewImg.classList.remove('fade-in');
+    void overviewImg.offsetWidth; // trigger reflow
+    overviewImg.classList.add('fade-in');
+  }
+  if (overviewPlaceholder) {
+    overviewPlaceholder.style.display = 'none';
+  }
+  if (overviewStatus) {
+    overviewStatus.textContent = '';
+    overviewStatus.className = 'portrait-status';
+  }
+  if (overviewContainer) {
+    overviewContainer.classList.remove('portrait-loading');
+    // Set emotion border color
+    if (data.emotion && EMOTION_COLORS_PORTRAIT[data.emotion]) {
+      overviewContainer.classList.add('has-emotion');
+      overviewContainer.style.setProperty('--portrait-emotion-color', EMOTION_COLORS_PORTRAIT[data.emotion]);
+    } else {
+      overviewContainer.classList.remove('has-emotion');
+      overviewContainer.style.removeProperty('--portrait-emotion-color');
+    }
+  }
+
+  // Remove loading state from Chat container
+  const chatContainer = document.getElementById('portrait-container');
+  if (chatContainer) {
+    chatContainer.classList.remove('portrait-loading');
+  }
+
+  toast('🎨 Portrait updated', 'info');
+}
+
+/**
+ * Handle portrait.generate_error SSE event.
+ * Shows error state and falls back to emotion emoji.
+ */
+function handlePortraitGenerateError(data) {
+  const errorEmoji = data.fallback_emoji || '😐';
+  const errorMsg = data.error || 'Generation failed';
+
+  // Chat tab: show fallback
+  const chatContainer = document.getElementById('portrait-container');
+  if (chatContainer) {
+    chatContainer.classList.remove('portrait-loading');
+    const img = document.getElementById('portrait-img');
+    const placeholder = document.getElementById('portrait-placeholder');
+    const status = document.getElementById('portrait-status');
+    if (img) img.style.display = 'none';
+    if (placeholder) {
+      placeholder.style.display = 'flex';
+      placeholder.textContent = errorEmoji;
+      placeholder.style.fontSize = '2.5rem';
+    }
+    if (status) {
+      status.textContent = errorMsg;
+      status.className = 'portrait-status error';
+    }
+  }
+
+  // Overview tab: show fallback
+  const overviewContainer = document.getElementById('overview-portrait-container');
+  if (overviewContainer) {
+    overviewContainer.classList.remove('portrait-loading');
+    const img = document.getElementById('overview-portrait-img');
+    const placeholder = document.getElementById('overview-portrait-placeholder');
+    const status = document.getElementById('overview-portrait-status');
+    if (img) img.style.display = 'none';
+    if (placeholder) {
+      placeholder.style.display = 'flex';
+      placeholder.textContent = errorEmoji;
+      placeholder.style.fontSize = '2.5rem';
+    }
+    if (status) {
+      status.textContent = errorMsg;
+      status.className = 'portrait-status error';
+    }
+  }
+
+  toast('⚠️ Portrait generation failed: ' + errorMsg, 'warning');
+}
+
+// ── Generate Now (Overview Tab) ──────────────────────────────────
+
+/**
+ * Trigger portrait generation from Overview tab.
+ * Reads scene text from input field and sends POST request.
+ */
+async function generatePortraitNow() {
+  if (!S.persona) {
+    toast('Please select a persona first', 'error');
+    return;
+  }
+
+  const sceneInput = document.getElementById('overview-portrait-scene');
+  const scene = sceneInput ? sceneInput.value.trim() : '';
+  const btn = document.getElementById('overview-portrait-generate-btn');
+
+  // Disable button during generation
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader"></i> Generating...';
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
+
+  try {
+    const body = {};
+    if (scene) body.scene = scene;
+
+    const result = await api('/api/portrait/' + encodeURIComponent(S.persona), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (result.image_base64) {
+      // Update Overview portrait
+      const overviewImg = document.getElementById('overview-portrait-img');
+      const overviewPlaceholder = document.getElementById('overview-portrait-placeholder');
+      const overviewStatus = document.getElementById('overview-portrait-status');
+      const overviewContainer = document.getElementById('overview-portrait-container');
+
+      if (overviewImg) {
+        overviewImg.src = 'data:image/png;base64,' + result.image_base64;
+        overviewImg.style.display = 'block';
+        overviewImg.classList.remove('fade-in');
+        void overviewImg.offsetWidth;
+        overviewImg.classList.add('fade-in');
+      }
+      if (overviewPlaceholder) overviewPlaceholder.style.display = 'none';
+      if (overviewStatus) {
+        overviewStatus.textContent = '';
+        overviewStatus.className = 'portrait-status';
+      }
+      if (overviewContainer) {
+        overviewContainer.classList.remove('portrait-loading');
+        if (result.emotion && EMOTION_COLORS_PORTRAIT[result.emotion]) {
+          overviewContainer.classList.add('has-emotion');
+          overviewContainer.style.setProperty('--portrait-emotion-color', EMOTION_COLORS_PORTRAIT[result.emotion]);
+        }
+      }
+
+      // Also update Chat tab portrait
+      if (typeof setPortraitImage === 'function') {
+        setPortraitImage(result.image_base64, result.emotion);
+      }
+
+      toast('🎨 Portrait generated!', 'success');
+    } else if (result.fallback_emoji) {
+      // Show fallback emoji
+      const overviewPlaceholder = document.getElementById('overview-portrait-placeholder');
+      if (overviewPlaceholder) {
+        overviewPlaceholder.style.display = 'flex';
+        overviewPlaceholder.textContent = result.fallback_emoji;
+        overviewPlaceholder.style.fontSize = '2.5rem';
+      }
+      toast('Using fallback emoji: ' + result.fallback_emoji, 'info');
+    }
+  } catch (e) {
+    console.error('[generatePortraitNow] failed:', e);
+    toast('Portrait generation failed: ' + e.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="image"></i> Generate Now';
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+  }
+}
+
+// ── Overview Tab Portrait Section Renderer ───────────────────────
+
+/**
+ * Render the portrait section HTML for the Overview tab.
+ * Called from loadOverview() to inject portrait display area.
+ *
+ * @param {Object} data - Dashboard data (may contain latest portrait info)
+ * @returns {string} HTML string for portrait section
+ */
+function renderOverviewPortraitSection(data) {
+  const ctx = data.context || {};
+  const emotion = ctx.emotion || 'neutral';
+  const emotionColor = EMOTION_COLORS_PORTRAIT[emotion] || '#94a3b8';
+
+  return `
+    <div class="glass glass-hoverable p-6 mb-6">
+      <div class="card-title"><i data-lucide="image" aria-hidden="true"></i> Portrait</div>
+      <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+        <!-- Portrait image area -->
+        <div id="overview-portrait-container" class="portrait-container" style="flex-shrink:0; width:160px; height:160px; position:relative;">
+          <div id="overview-portrait-placeholder" style="display:flex; align-items:center; justify-content:center; width:100%; height:100%; border-radius:var(--card-radius); background:var(--glass-bg); border:1px solid var(--glass-border);">
+            <span style="font-size:3rem;">${esc(EMOTION_EMOJI_MAP[emotion] || '😐')}</span>
+          </div>
+          <img id="overview-portrait-img" alt="Persona portrait" style="display:none; width:100%; height:100%; object-fit:cover; border-radius:var(--card-radius); border:2px solid ${emotionColor}; transition:border-color 0.3s ease;" />
+          <div id="overview-portrait-status" class="portrait-status"></div>
+        </div>
+        <!-- Generate controls -->
+        <div style="flex:1; min-width:200px;">
+          <div style="margin-bottom:10px;">
+            <label for="overview-portrait-scene" style="font-size:0.82rem; color:var(--text-muted); display:block; margin-bottom:4px;">Scene description (optional)</label>
+            <input type="text" id="overview-portrait-scene" class="glass-input" placeholder="e.g. Standing in a moonlit garden…" style="width:100%; font-size:0.85rem;" />
+          </div>
+          <button id="overview-portrait-generate-btn" class="glass-btn" onclick="generatePortraitNow()" aria-label="Generate portrait now" style="width:100%;">
+            <i data-lucide="image" aria-hidden="true"></i> Generate Now
+          </button>
+          <div style="margin-top:8px; font-size:0.72rem; color:var(--text-muted);">
+            Emotion: <span style="color:${emotionColor}; font-weight:600;">${esc(emotion)}</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Helper: Emotion Emoji Map (fallback) ─────────────────────────
+
+const EMOTION_EMOJI_MAP = {
+  joy: '😊',
+  sadness: '😢',
+  anger: '😠',
+  fear: '😨',
+  surprise: '😲',
+  disgust: '🤢',
+  love: '😍',
+  neutral: '😐',
+  anticipation: '🤔',
+  trust: '🤝',
+  anxiety: '😰',
+  excitement: '🤩',
+  frustration: '😤',
+  nostalgia: '🥹',
+  pride: '😌',
+  shame: '😳',
+  guilt: '😣',
+  loneliness: '🥺',
+  contentment: '☺️',
+  curiosity: '🧐',
+  awe: '🤯',
+  relief: '😮‍💨',
+  happiness: '😄',
+  calm: '😌',
+};
+
+// ── Auto-generate Settings (Chat Tab) ────────────────────────────
+
+/**
+ * Render the auto-generate portrait settings section.
+ * Injected into the Chat settings panel under Extensions.
+ *
+ * @returns {string} HTML string for auto-generate settings
+ */
+function renderPortraitAutoGenerateSettings() {
+  return `
+    <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--glass-border);">
+      <div style="font-size:0.82rem; font-weight:600; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+        <i data-lucide="image" aria-hidden="true"></i> Portrait Auto-Generate
+      </div>
+      <div class="chat-config-row" style="display:flex; align-items:center; gap:8px; margin:4px 0;">
+        <label class="chat-config-label" for="chat-portrait-auto-generate" style="display:flex; align-items:center; gap:6px; font-size:0.8rem; color:var(--text-secondary); cursor:pointer;">
+          <input type="checkbox" id="chat-portrait-auto-generate" class="chat-config-checkbox" style="width:15px; height:15px; accent-color:var(--accent-purple); cursor:pointer;" />
+          <span>Auto-generate on emotion change</span>
+        </label>
+      </div>
+      <div>
+        <div class="chat-field-label" style="display:flex; justify-content:space-between;">
+          <label for="chat-portrait-threshold">Emotion threshold</label>
+          <span id="chat-portrait-threshold-val" style="color:var(--accent-purple);">0.60</span>
+        </div>
+        <input type="range" id="chat-portrait-threshold" class="chat-field-input" min="0" max="1" step="0.05" value="0.6"
+          aria-label="Emotion threshold for auto-generate"
+          oninput="document.getElementById('chat-portrait-threshold-val').textContent=parseFloat(this.value).toFixed(2)"
+          style="width:100%; accent-color:var(--accent-purple);" />
+      </div>
+      <div>
+        <label for="chat-portrait-interval" class="chat-field-label">Min interval (minutes)</label>
+        <input type="number" id="chat-portrait-interval" class="chat-field-input" min="1" max="1440" value="30" />
+      </div>
+    </div>`;
+}

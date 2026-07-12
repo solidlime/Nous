@@ -31,6 +31,8 @@ const HELP_TEXTS = {
     "記憶検索時の「鮮度（新しさ）」「重要度」「関連性」の重みバランスを調整します。",
   other:
     "自動整理・Dockerサンドボックス・デバッグモード など、その他のユーティリティ設定です。",
+  voice:
+    "Irodori-TTS による音声合成の設定です。音声モデルの選択・感情連動・応答の自動再生を制御します。",
 };
 
 function showHelpTooltip(event, category) {
@@ -71,6 +73,7 @@ function loadChat() {
   loadChatCommitments();
   loadEquipment();
   loadPortrait();
+  loadPortraitAutoGenerateSettings();
   setupChatInputHandler();
   setTimeout(() => {
     if (typeof lucide !== "undefined") lucide.createIcons();
@@ -396,6 +399,37 @@ function applyChatConfig(cfg) {
   // Extensions: irodori / portrait
   setChecked("chat-irodori-enabled", cfg.irodori_enabled === true);
   setChecked("chat-portrait-enabled", cfg.portrait_enabled === true);
+  // Voice / TTS settings (TE04)
+  setChecked("chat-voice-enabled", cfg.irodori_enabled === true);
+  setChecked("chat-voice-emotion-link", cfg.voice_emotion_link !== false);
+  setChecked("chat-voice-auto-play", cfg.voice_auto_play === true);
+  // Voice options visibility toggle
+  const voiceEnabledCb = document.getElementById("chat-voice-enabled");
+  const voiceOptions = document.getElementById("chat-voice-options");
+  if (voiceEnabledCb && voiceOptions) {
+    voiceOptions.style.display = voiceEnabledCb.checked ? "" : "none";
+    voiceEnabledCb.addEventListener("change", function () {
+      voiceOptions.style.display = this.checked ? "" : "none";
+      // Sync with irodori_enabled
+      const irodoriCb = document.getElementById("chat-irodori-enabled");
+      if (irodoriCb) irodoriCb.checked = this.checked;
+    });
+  }
+  // Sync irodori_enabled → voice-enabled
+  const irodoriCb = document.getElementById("chat-irodori-enabled");
+  if (irodoriCb) {
+    irodoriCb.addEventListener("change", function () {
+      const voiceCb = document.getElementById("chat-voice-enabled");
+      if (voiceCb) {
+        voiceCb.checked = this.checked;
+        voiceCb.dispatchEvent(new Event("change"));
+      }
+    });
+  }
+  // Load voice models if enabled
+  if (cfg.irodori_enabled) {
+    loadVoiceModels();
+  }
   // Debug mode
   setChecked("chat-debug-mode", cfg.debug_mode === true);
   const statusEl = document.getElementById("chat-config-status");
@@ -444,6 +478,11 @@ function applyChatConfig(cfg) {
   if (igEnabled) igEnabled.addEventListener("change", updateImageGenUI);
   if (igProvider) igProvider.addEventListener("change", updateImageGenUI);
   updateImageGenUI();
+
+  // Portrait auto-generate settings
+  setChecked("chat-portrait-auto-generate", cfg.portrait_auto_generate === true);
+  setSlider("chat-portrait-threshold", "chat-portrait-threshold-val", cfg.portrait_threshold != null ? cfg.portrait_threshold : 0.6);
+  set("chat-portrait-interval", cfg.portrait_interval_min != null ? cfg.portrait_interval_min : 30);
 }
 
 function onChatProviderChange() {
@@ -573,8 +612,15 @@ async function saveChatConfig() {
       ? document.getElementById("chat-image-gen-stability-url").value.trim()
       : "",
     // 拡張機能: irodori / portrait
-    irodori_enabled: getChecked("chat-irodori-enabled"),
+    irodori_enabled: getChecked("chat-irodori-enabled") || getChecked("chat-voice-enabled"),
     portrait_enabled: getChecked("chat-portrait-enabled"),
+    // Portrait auto-generate settings
+    portrait_auto_generate: getChecked("chat-portrait-auto-generate"),
+    portrait_threshold: parseFloat(document.getElementById("chat-portrait-threshold")?.value || "0.6"),
+    portrait_interval_min: parseInt(document.getElementById("chat-portrait-interval")?.value || "30"),
+    // Voice / TTS settings (TE04)
+    voice_auto_play: getChecked("chat-voice-auto-play"),
+    voice_emotion_link: getChecked("chat-voice-emotion-link"),
   };
   const btn = document.querySelector(".chat-save-btn");
   if (btn) {
@@ -2473,6 +2519,11 @@ async function chatSend(retry) {
                 openMediaViewer(img.src, "image"),
               );
             });
+            // TE04: Auto-play TTS if enabled
+            var voiceAutoPlay = document.getElementById("chat-voice-auto-play");
+            if (voiceAutoPlay && voiceAutoPlay.checked) {
+              autoPlayTts(assistantText);
+            }
           } else if (assistantDiv && !assistantText) {
             // テキストがない場合、ツールコールがなければ空バブルを削除
             if (!assistantDiv.querySelector('.chat-tool-call')) {
@@ -2950,6 +3001,92 @@ window.addEventListener("portrait-generated", function (e) {
    ================================================================= */
 let _ttsAbortController = null;
 
+/* ── TE04: Voice model loading & test playback ── */
+async function loadVoiceModels() {
+  if (!S.persona) return;
+  const select = document.getElementById("chat-voice-model");
+  if (!select) return;
+  try {
+    const resp = await api("/api/tts/" + encodeURIComponent(S.persona) + "/voices");
+    if (resp.ok && resp.voices && resp.voices.length > 0) {
+      select.innerHTML = "";
+      resp.voices.forEach(function (v) {
+        var opt = document.createElement("option");
+        opt.value = v.id;
+        opt.textContent = v.name || v.id;
+        select.appendChild(opt);
+      });
+    } else {
+      select.innerHTML = '<option value="">音声モデルが見つかりません</option>';
+    }
+  } catch (e) {
+    console.warn("[Voice] Failed to load models:", e.message);
+    select.innerHTML = '<option value="">取得エラー</option>';
+  }
+}
+
+async function testVoicePlayback() {
+  if (!S.persona) return;
+  var statusEl = document.getElementById("chat-voice-test-status");
+  if (statusEl) statusEl.textContent = "合成中...";
+  try {
+    var resp = await api("/api/tts/" + encodeURIComponent(S.persona), {
+      method: "POST",
+      body: JSON.stringify({ text: "こんにちは、テストです。" }),
+    });
+    if (resp.ok && resp.audio_base64) {
+      if (statusEl) statusEl.textContent = "再生中...";
+      var audioUrl = "data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64;
+      var audio = new Audio(audioUrl);
+      audio.onended = function () {
+        if (statusEl) statusEl.textContent = "完了";
+        setTimeout(function () { if (statusEl) statusEl.textContent = ""; }, 2000);
+      };
+      audio.onerror = function () {
+        if (statusEl) statusEl.textContent = "再生エラー";
+      };
+      audio.play().catch(function (err) {
+        console.error("[Voice test] Play failed:", err);
+        if (statusEl) statusEl.textContent = "再生エラー: " + err.message;
+      });
+    } else {
+      if (statusEl) statusEl.textContent = "エラー: " + (resp.error || "不明");
+    }
+  } catch (e) {
+    console.error("[Voice test] Error:", e);
+    if (statusEl) statusEl.textContent = "エラー: " + e.message;
+  }
+}
+
+function autoPlayTts(text) {
+  if (!S.persona || !text) return;
+  // Strip markdown for TTS
+  var plainText = text
+    .replace(/```[\s\S]*?```/g, "コードブロック")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/[*_~>#-]/g, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .trim();
+  if (!plainText) return;
+
+  api("/api/tts/" + encodeURIComponent(S.persona), {
+    method: "POST",
+    body: JSON.stringify({ text: plainText }),
+  })
+    .then(function (resp) {
+      if (resp.ok && resp.audio_base64) {
+        var audioUrl = "data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64;
+        var audio = new Audio(audioUrl);
+        audio.play().catch(function (err) {
+          console.warn("[AutoTTS] Play failed:", err.message);
+        });
+      }
+    })
+    .catch(function (e) {
+      console.warn("[AutoTTS] Request failed:", e.message);
+    });
+}
+
 async function playTts(btn, text) {
   if (!S.persona || !text) return;
   // If already playing, stop
@@ -3019,5 +3156,21 @@ async function playTts(btn, text) {
     btn.innerHTML = '<i data-lucide="volume-2"></i>';
     btn.disabled = false;
     if (typeof lucide !== "undefined") lucide.createIcons();
+  }
+}
+
+/* =================================================================
+   TB07: PORTRAIT AUTO-GENERATE SETTINGS
+   ================================================================= */
+
+/**
+ * Load and render portrait auto-generate settings into the Extensions panel.
+ */
+function loadPortraitAutoGenerateSettings() {
+  const container = document.getElementById('portrait-auto-generate-settings');
+  if (!container) return;
+  if (typeof renderPortraitAutoGenerateSettings === 'function') {
+    container.innerHTML = renderPortraitAutoGenerateSettings();
+    if (typeof lucide !== 'undefined') lucide.createIcons();
   }
 }

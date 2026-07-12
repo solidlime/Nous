@@ -454,6 +454,52 @@ function connectSSE(persona) {
     es._sseHandlers["portrait.generated"],
   );
 
+  // TB07: Portrait generation SSE events
+  es._sseHandlers["portrait.generate_start"] = function handlePortraitGenerateStart(e) {
+    try {
+      const d = JSON.parse(e.data);
+      if (typeof handlePortraitGenerateStart === 'function') {
+        handlePortraitGenerateStart(d);
+      }
+    } catch (err) {
+      console.warn("[SSE parse] portrait.generate_start:", err.message);
+    }
+  };
+  es.addEventListener(
+    "portrait.generate_start",
+    es._sseHandlers["portrait.generate_start"],
+  );
+
+  es._sseHandlers["portrait.generate_complete"] = function handlePortraitGenerateComplete(e) {
+    try {
+      const d = JSON.parse(e.data);
+      if (typeof handlePortraitGenerateComplete === 'function') {
+        handlePortraitGenerateComplete(d);
+      }
+    } catch (err) {
+      console.warn("[SSE parse] portrait.generate_complete:", err.message);
+    }
+  };
+  es.addEventListener(
+    "portrait.generate_complete",
+    es._sseHandlers["portrait.generate_complete"],
+  );
+
+  es._sseHandlers["portrait.generate_error"] = function handlePortraitGenerateError(e) {
+    try {
+      const d = JSON.parse(e.data);
+      if (typeof handlePortraitGenerateError === 'function') {
+        handlePortraitGenerateError(d);
+      }
+    } catch (err) {
+      console.warn("[SSE parse] portrait.generate_error:", err.message);
+    }
+  };
+  es.addEventListener(
+    "portrait.generate_error",
+    es._sseHandlers["portrait.generate_error"],
+  );
+
   es.onerror = function handleSSEError() {
     S._sse = null;
     var backoff = S._sseBackoff || 5000;

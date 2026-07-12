@@ -11,6 +11,7 @@ def render_chat_tab() -> str:
     """Return the HTML for the Chat tab."""
     return f"""
         <link rel="stylesheet" href="/static/chat.css">
+        <link rel="stylesheet" href="/static/portrait.css">
         <!-- ========== CHAT TAB ========== -->
         <section id="tab-chat" class="tab-panel" role="tabpanel">
             <div style="position:relative; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
@@ -138,7 +139,7 @@ def render_chat_tab() -> str:
                                 </div>
                                 <!-- 画像生成設定 -->
                                 <div class="chat-config-section">
-                                    <h4 style="font-size:0.82rem;font-weight:600;color:var(--text-secondary);margin:8px 0 4px;display:flex;align-items:center;gap:6px;"><i data-lucide="image"></i> 画像生成</h4>
+                                    <h4 style="font-size:0.82rem;font-weight:600;color:var(--text-secondary);margin:8px 0 4px;display:flex;align-items:center;gap:6px;"><i data-lucide="image" aria-hidden="true"></i> 画像生成</h4>
                                     <div class="chat-config-row" style="display:flex;align-items:center;gap:8px;margin:4px 0;">
                                         <label class="chat-config-label" style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-secondary);cursor:pointer;">
                                             <input type="checkbox" id="chat-image-gen-enabled" class="chat-config-checkbox" style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
@@ -439,6 +440,39 @@ def render_chat_tab() -> str:
                                     <input type="checkbox" id="chat-portrait-enabled"
                                         style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
                                     <label for="chat-portrait-enabled" class="chat-field-label" style="margin:0;cursor:pointer;">Portrait を有効にする</label>
+                                </div>
+                            </div>
+                        </details>
+                        <!-- Voice / TTS (TE04) -->
+                        <details data-category="voice">
+                            <summary><i data-lucide="volume-2"></i> 音声 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'voice')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <div class="details-body">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <input type="checkbox" id="chat-voice-enabled"
+                                        style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
+                                    <label for="chat-voice-enabled" class="chat-field-label" style="margin:0;cursor:pointer;">🎵 音声合成を有効にする</label>
+                                </div>
+                                <div id="chat-voice-options" style="display:none;">
+                                    <div>
+                                        <div class="chat-field-label">音声モデル</div>
+                                        <select id="chat-voice-model" class="chat-field-input">
+                                            <option value="">読み込み中...</option>
+                                        </select>
+                                    </div>
+                                    <div style="display:flex;align-items:center;gap:8px;">
+                                        <input type="checkbox" id="chat-voice-emotion-link" checked
+                                            style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
+                                        <label for="chat-voice-emotion-link" class="chat-field-label" style="margin:0;cursor:pointer;">感情を音声に反映</label>
+                                    </div>
+                                    <div style="display:flex;align-items:center;gap:8px;">
+                                        <input type="checkbox" id="chat-voice-auto-play"
+                                            style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
+                                        <label for="chat-voice-auto-play" class="chat-field-label" style="margin:0;cursor:pointer;">応答を自動再生</label>
+                                    </div>
+                                    <div style="display:flex;gap:8px;margin-top:4px;">
+                                        <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="testVoicePlayback()" aria-label="音声をテスト再生"><i data-lucide="play"></i> テスト再生</button>
+                                    </div>
+                                    <div id="chat-voice-test-status" style="font-size:0.72rem;color:var(--text-muted);min-height:16px;margin-top:2px;"></div>
                                 </div>
                             </div>
                         </details>
