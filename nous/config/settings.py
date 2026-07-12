@@ -316,8 +316,6 @@ class Settings(BaseSettings):
             Path(self.import_dir) / "done",
             self.cache_dir,
             Path(self.cache_dir) / "huggingface",
-            Path(self.cache_dir) / "sentence_transformers",
-            Path(self.cache_dir) / "torch",
             self.config_dir,
             self.skills_dir,
         ]

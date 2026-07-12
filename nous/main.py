@@ -110,8 +110,6 @@ def create_app() -> MemoryFastMCP:
 
     # キャッシュ環境変数を自動設定（未設定の場合のみ）
     os.environ.setdefault("HF_HOME", str(Path(settings.cache_dir) / "huggingface"))
-    os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", str(Path(settings.cache_dir) / "sentence_transformers"))
-    os.environ.setdefault("TORCH_HOME", str(Path(settings.cache_dir) / "torch"))
 
     mcp = MemoryFastMCP(
         "Nous",

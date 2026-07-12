@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 from nous.domain.memory.entities import Memory
@@ -30,9 +31,21 @@ class TestRerankerModelScoreBlending:
         from nous.infrastructure.embedding.reranker import RerankerModel
 
         model = RerankerModel(model_name="test-model", enabled=True)
-        model._model = MagicMock()
+        model._session = MagicMock()
+        model._tokenizer = MagicMock()
         # Two documents: doc1 gets high CE score, doc2 gets low CE score
-        model._model.predict.return_value = [0.9, 0.3]
+        # ONNX の reranker は sigmoid(logit) → score なので logit を渡す
+        model._session.run.return_value = [
+            np.array(
+                [[2.1972245773362196], [-0.8472978603872037]],  # logit(0.9), logit(0.3)
+                dtype=np.float32,
+            )
+        ]
+        # tokenizer.encode → ダミーの encoding (ids + attention_mask)
+        model._tokenizer.encode.return_value = MagicMock(
+            ids=[101, 102, 103, 104, 105],
+            attention_mask=[1, 1, 1, 1, 1],
+        )
 
         results = [("key1", 0.5), ("key2", 0.8)]
         contents = {"key1": "document one content", "key2": "document two content"}
@@ -65,7 +78,7 @@ class TestRerankerModelScoreBlending:
         from nous.infrastructure.embedding.reranker import RerankerModel
 
         model = RerankerModel(model_name="test-model", enabled=True)
-        model._model = MagicMock()
+        model._session = MagicMock()
         reranked = model.rerank("query", [], {}, top_k=5)
         assert reranked == []
 
@@ -74,7 +87,8 @@ class TestRerankerModelScoreBlending:
         from nous.infrastructure.embedding.reranker import RerankerModel
 
         model = RerankerModel(model_name="test-model", enabled=True)
-        model._model = MagicMock()
+        model._session = MagicMock()
+        model._tokenizer = MagicMock()
         results = [("key1", 0.9)]
         reranked = model.rerank("query", results, {}, top_k=5)
         assert len(reranked) == 1
@@ -254,7 +268,7 @@ class TestAppContextRerankerInstantiation:
             ctx.close()
 
     def test_reranker_not_preloaded_when_disabled(self, tmp_path):
-        """When disabled, no preload thread should be started."""
+        """When disabled, no preload thread should be started — but vector store init thread is always created."""
         from nous.application.use_cases import AppContext
         from nous.config.settings import Settings
 
@@ -274,5 +288,9 @@ class TestAppContextRerankerInstantiation:
 
             ctx = AppContext(settings, "test_persona")
 
-            mock_thread.assert_not_called()
+            # One background thread is always created for _init_vector_store.
+            # Reranker preload thread must NOT be created when disabled.
+            assert mock_thread.call_count == 1, (
+                f"Expected 1 Thread() call (vector store init), got {mock_thread.call_count}"
+            )
             ctx.close()
