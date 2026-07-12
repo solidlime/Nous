@@ -85,6 +85,9 @@ class TestChatConfigRepository:
                 image_gen_dalle_model TEXT DEFAULT 'dall-e-3',
                 image_gen_stability_url TEXT DEFAULT '',
                 image_gen_comfyui_url TEXT DEFAULT '',
+                image_gen_gemini_model TEXT DEFAULT 'google/gemini-2.5-flash-image',
+                image_gen_replicate_model TEXT DEFAULT 'black-forest-labs/flux-schnell',
+                image_gen_replicate_api_key TEXT DEFAULT '',
                 enable_memory_tools INTEGER DEFAULT 1,
                 debug_mode INTEGER DEFAULT 0,
                 dynamic_temperature INTEGER DEFAULT 1,
@@ -231,6 +234,9 @@ class TestSqliteMigration:
             "portrait_enabled INTEGER DEFAULT 0",
             "voice_auto_play INTEGER DEFAULT 0",
             "voice_emotion_link INTEGER DEFAULT 1",
+            "image_gen_gemini_model TEXT DEFAULT 'google/gemini-2.5-flash-image'",
+            "image_gen_replicate_model TEXT DEFAULT 'black-forest-labs/flux-schnell'",
+            "image_gen_replicate_api_key TEXT DEFAULT ''",
         ]:
             try:
                 conn.execute(f"ALTER TABLE chat_settings ADD COLUMN {col_sql}")
@@ -245,6 +251,9 @@ class TestSqliteMigration:
         assert "portrait_enabled" in columns
         assert "voice_auto_play" in columns
         assert "voice_emotion_link" in columns
+        assert "image_gen_gemini_model" in columns
+        assert "image_gen_replicate_model" in columns
+        assert "image_gen_replicate_api_key" in columns
 
         # Verify defaults work
         conn.execute("INSERT INTO chat_settings (persona) VALUES ('test')")

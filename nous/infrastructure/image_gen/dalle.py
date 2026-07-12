@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import os
 
 import httpx
 
@@ -8,12 +9,15 @@ from .base import GeneratedImage, ImageGenProvider
 
 
 class DalleProvider(ImageGenProvider):
-    def __init__(self, model: str = "dall-e-3") -> None:
+    def __init__(self, model: str = "dall-e-3", api_key: str = "", base_url: str = "", provider_name: str = "openai") -> None:
         self._model = model
+        self._api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
+        self._base_url = base_url
+        self._provider_name = provider_name
 
     @property
     def provider_name(self) -> str:
-        return "openai"
+        return self._provider_name
 
     async def generate(
         self,
@@ -24,14 +28,17 @@ class DalleProvider(ImageGenProvider):
     ) -> list[GeneratedImage]:
         from openai import AsyncOpenAI
 
-        client = AsyncOpenAI()  # 環境変数 OPENAI_API_KEY から自動読み取り
+        client_kwargs: dict = {"api_key": self._api_key}
+        if self._base_url:
+            client_kwargs["base_url"] = self._base_url
+        client = AsyncOpenAI(**client_kwargs)
 
         # DALL-E 2 は quality パラメータ非対応
-        kwargs: dict = {"model": self._model, "prompt": prompt, "size": size, "n": n}
+        gen_kwargs: dict = {"model": self._model, "prompt": prompt, "size": size, "n": n}
         if self._model not in ("dall-e-2",):
-            kwargs["quality"] = quality
+            gen_kwargs["quality"] = quality
 
-        response = await client.images.generate(**kwargs)
+        response = await client.images.generate(**gen_kwargs)
 
         images: list[GeneratedImage] = []
         async with httpx.AsyncClient() as http:

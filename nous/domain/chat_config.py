@@ -62,6 +62,9 @@ class ChatConfig(BaseModel):
     image_gen_dalle_model: str = "dall-e-3"  # "dall-e-2" | "dall-e-3"
     image_gen_stability_url: str = ""  # SD WebUI APIエンドポイント
     image_gen_comfyui_url: str = ""  # ComfyUI APIエンドポイント
+    image_gen_gemini_model: str = "google/gemini-2.5-flash-image"
+    image_gen_replicate_model: str = "black-forest-labs/flux-schnell"
+    image_gen_replicate_api_key: str = ""
     enable_memory_tools: bool = True
     # Generative Agents-style reflection
     reflection_enabled: bool = True
@@ -280,6 +283,7 @@ class ChatConfigRepository:
             "context_compress_system_prompt, context_compress_history, "
             "memory_preload_count, enable_parallel_tools, "
             "image_gen_enabled, image_gen_provider, image_gen_dalle_model, image_gen_stability_url, image_gen_comfyui_url, "
+            "image_gen_gemini_model, image_gen_replicate_model, image_gen_replicate_api_key, "
             "enable_memory_tools, debug_mode, "
             "dynamic_temperature, emotion_temperature_scale, top_p, "
             "context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled, "
@@ -342,6 +346,7 @@ class ChatConfigRepository:
                   context_compress_system_prompt, context_compress_history,
                   memory_preload_count, enable_parallel_tools,
                     image_gen_enabled, image_gen_provider, image_gen_dalle_model, image_gen_stability_url, image_gen_comfyui_url,
+                    image_gen_gemini_model, image_gen_replicate_model, image_gen_replicate_api_key,
                     enable_memory_tools, debug_mode,
                     dynamic_temperature, emotion_temperature_scale, top_p,
                      context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled,
@@ -350,7 +355,7 @@ class ChatConfigRepository:
                        irodori_enabled, portrait_enabled,
                        voice_auto_play, voice_emotion_link,
                        updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
@@ -392,6 +397,9 @@ class ChatConfigRepository:
                  image_gen_dalle_model=excluded.image_gen_dalle_model,
                  image_gen_stability_url=excluded.image_gen_stability_url,
                  image_gen_comfyui_url=excluded.image_gen_comfyui_url,
+                 image_gen_gemini_model=excluded.image_gen_gemini_model,
+                 image_gen_replicate_model=excluded.image_gen_replicate_model,
+                 image_gen_replicate_api_key=excluded.image_gen_replicate_api_key,
                  enable_memory_tools=excluded.enable_memory_tools,
                  debug_mode=excluded.debug_mode,
                  dynamic_temperature=excluded.dynamic_temperature,
@@ -450,6 +458,9 @@ class ChatConfigRepository:
                 config.image_gen_dalle_model,
                 config.image_gen_stability_url,
                 config.image_gen_comfyui_url,
+                config.image_gen_gemini_model,
+                config.image_gen_replicate_model,
+                config.image_gen_replicate_api_key,
                 int(config.enable_memory_tools),
                 int(config.debug_mode),
                 int(config.dynamic_temperature),

@@ -17,12 +17,18 @@ class GeneratedImage:
 class ImageGenConfig:
     """画像生成設定"""
 
-    provider: str = "openai"  # "openai" | "stability" | "comfyui"
+    provider: str = "openai"  # "openai" | "stability" | "comfyui" | "gemini" | "replicate"
     dalle_model: str = "dall-e-3"  # "dall-e-2" | "dall-e-3"
     stability_url: str = ""  # SD WebUI APIエンドポイント (例: http://localhost:7860)
     comfyui_url: str = "http://localhost:8188"  # ComfyUI APIエンドポイント
     size: str = "1024x1024"  # 画像サイズ (例: "1024x1024")
     quality: str = "standard"  # 品質 ("standard" | "hd")
+    # Gemini (OpenRouter経由)
+    gemini_model: str = "google/gemini-2.5-flash-image"
+    gemini_api_key: str = ""
+    # Replicate (FLUX Schnell)
+    replicate_model: str = "black-forest-labs/flux-schnell"
+    replicate_api_key: str = ""
 
 
 class ImageGenProvider(ABC):
@@ -53,5 +59,5 @@ class ImageGenProvider(ABC):
     @property
     @abstractmethod
     def provider_name(self) -> str:
-        """プロバイダ名 ("openai" または "stability")"""
+        """プロバイダ名 ("openai" / "stability" / "comfyui" / "gemini" / "replicate")"""
         ...

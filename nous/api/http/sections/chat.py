@@ -153,6 +153,8 @@ def render_chat_tab() -> str:
                                                 <option value="openai">OpenAI (DALL-E)</option>
                                                 <option value="stability">Stable Diffusion</option>
                                                 <option value="comfyui">ComfyUI</option>
+                                                <option value="gemini">Gemini (OpenRouter)</option>
+                                                <option value="replicate">Replicate (FLUX)</option>
                                             </select>
                                         </div>
                                         <div id="chat-image-gen-dalle-options">
@@ -174,6 +176,26 @@ def render_chat_tab() -> str:
                                             <div class="chat-config-row" style="margin-bottom:6px;">
                                                 <div class="chat-field-label">ComfyUI URL:</div>
                                                 <input type="text" id="chat-image-gen-comfyui-url" class="chat-field-input" placeholder="http://localhost:8188" />
+                                            </div>
+                                        </div>
+                                        <div id="chat-image-gen-gemini-options" style="display:none;">
+                                            <div class="chat-config-row" style="margin-bottom:6px;">
+                                                <div class="chat-field-label">Gemini モデル:</div>
+                                                <select id="chat-image-gen-gemini-model" class="chat-field-input">
+                                                    <option value="google/gemini-2.5-flash-image">Gemini 2.5 Flash Image</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div id="chat-image-gen-replicate-options" style="display:none;">
+                                            <div class="chat-config-row" style="margin-bottom:6px;">
+                                                <div class="chat-field-label">Replicate モデル:</div>
+                                                <select id="chat-image-gen-replicate-model" class="chat-field-input">
+                                                    <option value="black-forest-labs/flux-schnell">FLUX Schnell (最安 $0.003)</option>
+                                                </select>
+                                            </div>
+                                            <div class="chat-config-row" style="margin-bottom:6px;">
+                                                <div class="chat-field-label">Replicate API Key:</div>
+                                                <input type="password" id="chat-image-gen-replicate-api-key" class="chat-field-input" placeholder="r8_..." autocomplete="off" />
                                             </div>
                                         </div>
                                     </div>

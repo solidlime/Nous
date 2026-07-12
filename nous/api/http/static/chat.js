@@ -468,7 +468,16 @@ function applyChatConfig(cfg) {
   if (igDalleModel)
     igDalleModel.value = cfg.image_gen_dalle_model || "dall-e-3";
   if (igStabilityUrl) igStabilityUrl.value = cfg.image_gen_stability_url || "";
+  const igGeminiModel = document.getElementById("chat-image-gen-gemini-model");
+  const igReplicateModel = document.getElementById("chat-image-gen-replicate-model");
+  const igReplicateApiKey = document.getElementById("chat-image-gen-replicate-api-key");
+  const igGeminiOptions = document.getElementById("chat-image-gen-gemini-options");
+  const igReplicateOptions = document.getElementById("chat-image-gen-replicate-options");
+
   if (igComfyuiUrl) igComfyuiUrl.value = cfg.image_gen_comfyui_url || "";
+  if (igGeminiModel) igGeminiModel.value = cfg.image_gen_gemini_model || "google/gemini-2.5-flash-image";
+  if (igReplicateModel) igReplicateModel.value = cfg.image_gen_replicate_model || "black-forest-labs/flux-schnell";
+  if (igReplicateApiKey) igReplicateApiKey.value = cfg.image_gen_replicate_api_key || "";
 
   // 表示切替
   function updateImageGenUI() {
@@ -480,6 +489,8 @@ function applyChatConfig(cfg) {
       igDalleOptions.style.display = prov === "openai" ? "" : "none";
       igStabilityOptions.style.display = prov === "stability" ? "" : "none";
       igComfyuiOptions.style.display = prov === "comfyui" ? "" : "none";
+      if (igGeminiOptions) igGeminiOptions.style.display = prov === "gemini" ? "" : "none";
+      if (igReplicateOptions) igReplicateOptions.style.display = prov === "replicate" ? "" : "none";
     }
   }
   if (igEnabled) igEnabled.addEventListener("change", updateImageGenUI);
@@ -618,6 +629,15 @@ async function saveChatConfig() {
       "chat-image-gen-comfyui-url",
     )
       ? document.getElementById("chat-image-gen-comfyui-url").value.trim()
+      : "",
+    image_gen_gemini_model: document.getElementById("chat-image-gen-gemini-model")
+      ? document.getElementById("chat-image-gen-gemini-model").value
+      : "google/gemini-2.5-flash-image",
+    image_gen_replicate_model: document.getElementById("chat-image-gen-replicate-model")
+      ? document.getElementById("chat-image-gen-replicate-model").value
+      : "black-forest-labs/flux-schnell",
+    image_gen_replicate_api_key: document.getElementById("chat-image-gen-replicate-api-key")
+      ? document.getElementById("chat-image-gen-replicate-api-key").value.trim()
       : "",
     // 拡張機能: irodori / portrait
     irodori_enabled: getChecked("chat-irodori-enabled") || getChecked("chat-voice-enabled"),

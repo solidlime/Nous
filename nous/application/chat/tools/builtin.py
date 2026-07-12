@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -168,7 +169,7 @@ async def _handle_mcp_dispatch(tool_name: str, ctx: AppContext, config: ChatConf
 
 _VALID_IMAGE_SIZES: frozenset[str] = frozenset({"1024x1024", "1792x1024", "1024x1792", "512x512", "768x768"})
 _VALID_QUALITIES: frozenset[str] = frozenset({"standard", "hd"})
-_VALID_PROVIDERS: frozenset[str] = frozenset({"openai", "stability", "comfyui", "auto"})
+_VALID_PROVIDERS: frozenset[str] = frozenset({"openai", "stability", "comfyui", "gemini", "replicate", "auto"})
 
 
 async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
@@ -234,6 +235,18 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             if not comfyui_url:
                 comfyui_url, _ = rm.get_effective_value("portrait_gen", "comfyui_url")
 
+        # Gemini APIキー解決: RuntimeConfig → env → ChatConfig fallback
+        gemini_api_key = ""
+        if provider_name == "gemini":
+            from nous.config.runtime_config import RuntimeConfigManager
+
+            rm = RuntimeConfigManager()
+            gemini_api_key, _ = rm.get_effective_value("api_keys", "openrouter_api_key")
+            if not gemini_api_key:
+                gemini_api_key = os.environ.get("OPENROUTER_API_KEY", "")
+            if not gemini_api_key:
+                gemini_api_key = getattr(config, "api_key", "")
+
         gen_cfg = ImageGenConfig(
             provider=provider_name,
             dalle_model=getattr(config, "image_gen_dalle_model", "dall-e-3"),
@@ -241,6 +254,10 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             comfyui_url=comfyui_url,
             size=size,
             quality=quality,
+            gemini_model=getattr(config, "image_gen_gemini_model", "google/gemini-2.5-flash-image"),
+            gemini_api_key=gemini_api_key,
+            replicate_model=getattr(config, "image_gen_replicate_model", "black-forest-labs/flux-schnell"),
+            replicate_api_key=getattr(config, "image_gen_replicate_api_key", ""),
         )
         provider = get_image_gen_provider(gen_cfg)
         if provider is None:

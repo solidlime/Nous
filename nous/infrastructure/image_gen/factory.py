@@ -21,4 +21,18 @@ def get_image_gen_provider(config: ImageGenConfig) -> ImageGenProvider | None:
         from .comfyui import ComfyUIProvider
 
         return ComfyUIProvider(api_url=config.comfyui_url)
+    elif config.provider == "gemini":
+        return DalleProvider(
+            provider_name="gemini",
+            model=config.gemini_model,
+            base_url="https://openrouter.ai/api/v1",
+            api_key=config.gemini_api_key,
+        )
+    elif config.provider == "replicate":
+        from .replicate import ReplicateProvider
+
+        return ReplicateProvider(
+            model=config.replicate_model,
+            api_key=config.replicate_api_key,
+        )
     return None

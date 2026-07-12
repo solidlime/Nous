@@ -418,6 +418,19 @@ class SQLiteConnection:
         except sqlite3.OperationalError:
             pass  # column already exists
 
+        # Migration: add image_gen_gemini_model, replicate fields if missing
+        for col, col_type, default in [
+            ("image_gen_gemini_model", "TEXT", "'google/gemini-2.5-flash-image'"),
+            ("image_gen_replicate_model", "TEXT", "'black-forest-labs/flux-schnell'"),
+            ("image_gen_replicate_api_key", "TEXT", "''"),
+        ]:
+            try:
+                memory_conn.execute(f"ALTER TABLE chat_settings ADD COLUMN {col} {col_type} DEFAULT {default}")
+                memory_conn.commit()
+                logger.info("Added %s column to chat_settings (migration)", col)
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
         # Migration: add remaining chat_settings columns if missing (existing DBs)
         _chat_settings_migrations = [
             ("enable_memory_tools", "INTEGER", 1),
