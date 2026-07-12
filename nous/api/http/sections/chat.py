@@ -481,7 +481,7 @@ def render_chat_tab() -> str:
                             <summary><i data-lucide="broom"></i> 整理・その他 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'other')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div>
-                                    <div class="chat-field-label">自動整理 閾値 (goals 合計のみ)</div>
+                                    <div class="chat-field-label">自動整理 閾値 (goals + promises 合計)</div>
                                     <input type="number" id="chat-housekeeping-threshold" class="chat-field-input" min="1" max="100" value="10" />
                                 </div>
                                 <button class="chat-clear-btn" style="margin-top:4px;" onclick="runHousekeeping()"><i data-lucide="broom"></i> 今すぐ整理</button>
