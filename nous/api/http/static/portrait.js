@@ -313,39 +313,4 @@ const EMOTION_EMOJI_MAP = {
   calm: '😌',
 };
 
-// ── Auto-generate Settings (Chat Tab) ────────────────────────────
 
-/**
- * Render the auto-generate portrait settings section.
- * Injected into the Chat settings panel under Extensions.
- *
- * @returns {string} HTML string for auto-generate settings
- */
-function renderPortraitAutoGenerateSettings() {
-  return `
-    <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--glass-border);">
-      <div style="font-size:0.82rem; font-weight:600; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:6px;">
-        <i data-lucide="image" aria-hidden="true"></i> Portrait Auto-Generate
-      </div>
-      <div class="chat-config-row" style="display:flex; align-items:center; gap:8px; margin:4px 0;">
-        <label class="chat-config-label" for="chat-portrait-auto-generate" style="display:flex; align-items:center; gap:6px; font-size:0.8rem; color:var(--text-secondary); cursor:pointer;">
-          <input type="checkbox" id="chat-portrait-auto-generate" class="chat-config-checkbox" style="width:15px; height:15px; accent-color:var(--accent-purple); cursor:pointer;" />
-          <span>Auto-generate on emotion change</span>
-        </label>
-      </div>
-      <div>
-        <div class="chat-field-label" style="display:flex; justify-content:space-between;">
-          <label for="chat-portrait-threshold">Emotion threshold</label>
-          <span id="chat-portrait-threshold-val" style="color:var(--accent-purple);">0.60</span>
-        </div>
-        <input type="range" id="chat-portrait-threshold" class="chat-field-input" min="0" max="1" step="0.05" value="0.6"
-          aria-label="Emotion threshold for auto-generate"
-          oninput="document.getElementById('chat-portrait-threshold-val').textContent=parseFloat(this.value).toFixed(2)"
-          style="width:100%; accent-color:var(--accent-purple);" />
-      </div>
-      <div>
-        <label for="chat-portrait-interval" class="chat-field-label">Min interval (minutes)</label>
-        <input type="number" id="chat-portrait-interval" class="chat-field-input" min="1" max="1440" value="30" />
-      </div>
-    </div>`;
-}

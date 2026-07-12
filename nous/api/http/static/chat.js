@@ -73,7 +73,6 @@ function loadChat() {
   loadChatCommitments();
   loadEquipment();
   loadPortrait();
-  loadPortraitAutoGenerateSettings();
   setupChatInputHandler();
   setTimeout(() => {
     if (typeof lucide !== "undefined") lucide.createIcons();
@@ -479,10 +478,6 @@ function applyChatConfig(cfg) {
   if (igProvider) igProvider.addEventListener("change", updateImageGenUI);
   updateImageGenUI();
 
-  // Portrait auto-generate settings
-  setChecked("chat-portrait-auto-generate", cfg.portrait_auto_generate === true);
-  setSlider("chat-portrait-threshold", "chat-portrait-threshold-val", cfg.portrait_threshold != null ? cfg.portrait_threshold : 0.6);
-  set("chat-portrait-interval", cfg.portrait_interval_min != null ? cfg.portrait_interval_min : 30);
 }
 
 function onChatProviderChange() {
@@ -614,10 +609,6 @@ async function saveChatConfig() {
     // 拡張機能: irodori / portrait
     irodori_enabled: getChecked("chat-irodori-enabled") || getChecked("chat-voice-enabled"),
     portrait_enabled: getChecked("chat-portrait-enabled"),
-    // Portrait auto-generate settings
-    portrait_auto_generate: getChecked("chat-portrait-auto-generate"),
-    portrait_threshold: parseFloat(document.getElementById("chat-portrait-threshold")?.value || "0.6"),
-    portrait_interval_min: parseInt(document.getElementById("chat-portrait-interval")?.value || "30"),
     // Voice / TTS settings (TE04)
     voice_auto_play: getChecked("chat-voice-auto-play"),
     voice_emotion_link: getChecked("chat-voice-emotion-link"),
@@ -3163,18 +3154,4 @@ async function playTts(btn, text) {
   }
 }
 
-/* =================================================================
-   TB07: PORTRAIT AUTO-GENERATE SETTINGS
-   ================================================================= */
 
-/**
- * Load and render portrait auto-generate settings into the Extensions panel.
- */
-function loadPortraitAutoGenerateSettings() {
-  const container = document.getElementById('portrait-auto-generate-settings');
-  if (!container) return;
-  if (typeof renderPortraitAutoGenerateSettings === 'function') {
-    container.innerHTML = renderPortraitAutoGenerateSettings();
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-  }
-}
