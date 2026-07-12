@@ -190,8 +190,12 @@ class AppContext:
             self._session_event_repo = None
             self._session_event_recorder = None
 
-        # Eagerly ensure Qdrant collection exists for this persona (best-effort)
-        self._init_vector_store()
+        # Kick off vector store init in background thread to avoid blocking
+        # persona creation / startup (Qdrant may be unavailable or slow).
+        # The vector_store property handles lazy-init on first access.
+        import threading as _threading
+
+        _threading.Thread(target=self._init_vector_store, daemon=True).start()
 
     @property
     def vector_store(self) -> QdrantVectorStore | None:

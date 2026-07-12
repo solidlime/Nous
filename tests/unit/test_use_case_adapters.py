@@ -428,6 +428,7 @@ class TestAppContextVectorStore:
             patch("nous.application.use_cases.QdrantClientManager") as mock_qdrant_client_manager,
             patch("nous.application.use_cases.QdrantVectorStore") as mock_vector_store,
             patch.object(MagicMock(), "embedding_model", create=True),
+            patch.object(AppContext, "_init_vector_store", return_value=None),
         ):
             mock_mgr = AsyncMock()
             mock_mgr.connect = AsyncMock(return_value=mock_mgr)
