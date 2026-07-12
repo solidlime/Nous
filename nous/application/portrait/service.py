@@ -23,6 +23,7 @@ from nous.infrastructure.image_gen.factory import get_image_gen_provider
 if TYPE_CHECKING:
     from nous.application.event_bus import EventBus
     from nous.config.settings import PortraitGenerationConfig
+    from nous.domain.equipment.service import EquipmentService
     from nous.domain.persona.entities import PersonaState
     from nous.infrastructure.image_gen.base import GeneratedImage
 
@@ -38,9 +39,15 @@ class PortraitGenerationService:
     - Enforce monthly budget cap for cloud providers.
     """
 
-    def __init__(self, config: PortraitGenerationConfig, event_bus: EventBus | None = None) -> None:
+    def __init__(
+        self,
+        config: PortraitGenerationConfig,
+        event_bus: EventBus | None = None,
+        equipment_service: EquipmentService | None = None,
+    ) -> None:
         self._config = config
         self._event_bus = event_bus
+        self._equipment_service = equipment_service
 
         # Convert PortraitGenerationConfig → ImageGenConfig so the factory
         # can build the right provider.
@@ -93,6 +100,12 @@ class PortraitGenerationService:
             On failure: ``{"error": str, "fallback_emoji": str}``.
         """
         # ── 1. Build prompt ────────────────────────────────────────────
+        # Auto-fetch equipment descriptions if not explicitly provided
+        if equipment_desc is None and self._equipment_service is not None:
+            descs_result = self._equipment_service.get_equipped_item_descs()
+            if descs_result.is_ok and descs_result.value:
+                equipment_desc = ", ".join(descs_result.value)
+
         body_state = extract_body_metrics(persona)
         prompt, negative_prompt = PortraitPromptBuilder.build(
             persona=persona,

@@ -141,6 +141,21 @@ class TestPortraitPromptBuilder:
         assert "tired" in prompt
         assert "looking at viewer" in prompt
 
+    def test_auto_mode_with_equipment(self) -> None:
+        """Auto mode: equipment_desc appears in prompt."""
+        persona = self._make_persona()
+        prompt, _ = PortraitPromptBuilder.build(
+            persona=persona,
+            equipment_desc="wearing a black coat",
+        )
+        assert "wearing a black coat" in prompt
+
+    def test_auto_mode_missing_equipment(self) -> None:
+        """Auto mode: no equipment line when equipment_desc is None."""
+        persona = self._make_persona()
+        prompt, _ = PortraitPromptBuilder.build(persona=persona)
+        assert "wearing a black coat" not in prompt
+
     # ------------------------------------------------------------------
     # Emotion → adjective mapping
     # ------------------------------------------------------------------

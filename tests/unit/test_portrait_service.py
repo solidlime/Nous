@@ -139,6 +139,68 @@ class TestGenerateSuccess:
         )
         assert "wearing a silver armor" in result["prompt"]
 
+    @pytest.mark.asyncio
+    async def test_generate_auto_fetches_equipment_desc(self, mock_provider):
+        """Auto-fetches equipment_desc from equipment_service when not explicitly provided."""
+        from unittest.mock import MagicMock
+
+        from nous.domain.equipment.service import EquipmentService
+
+        mock_eq_service = MagicMock(spec=EquipmentService)
+        mock_eq_service.get_equipped_item_descs.return_value = MagicMock(
+            is_ok=True,
+            value=["wearing a silver armor", "a red scarf"],
+        )
+
+        with patch(
+            "nous.application.portrait.service.get_image_gen_provider",
+            return_value=mock_provider,
+        ):
+            svc = _make_service()
+            svc._equipment_service = mock_eq_service
+
+            persona = _make_persona()
+            result = await svc.generate(persona=persona, scene="castle")
+
+        assert "wearing a silver armor" in result["prompt"]
+        assert "a red scarf" in result["prompt"]
+
+    @pytest.mark.asyncio
+    async def test_generate_no_equipment_service_backward_compat(self, service, mock_provider):
+        """No crash when equipment_service is None (backward compat)."""
+        persona = _make_persona()
+        result = await service.generate(persona=persona, scene="garden")
+        assert "image_base64" in result
+        # No equipment desc should appear
+        assert "wearing" not in result["prompt"]
+
+    @pytest.mark.asyncio
+    async def test_generate_auto_fetch_empty_equipment(self, mock_provider):
+        """No equipment_desc added when equipped items have no visual_desc."""
+        from unittest.mock import MagicMock
+
+        from nous.domain.equipment.service import EquipmentService
+
+        mock_eq_service = MagicMock(spec=EquipmentService)
+        mock_eq_service.get_equipped_item_descs.return_value = MagicMock(
+            is_ok=True,
+            value=[],
+        )
+
+        with patch(
+            "nous.application.portrait.service.get_image_gen_provider",
+            return_value=mock_provider,
+        ):
+            svc = _make_service()
+            svc._equipment_service = mock_eq_service
+
+            persona = _make_persona()
+            result = await svc.generate(persona=persona, scene="forest")
+
+        assert "image_base64" in result
+        # Prompt should not contain any extra equipment line
+        assert result["prompt"] is not None
+
 
 # ===========================================================================
 # Tests: generate() — caching

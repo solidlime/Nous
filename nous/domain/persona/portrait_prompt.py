@@ -117,6 +117,7 @@ class PortraitPromptBuilder:
                 char_name=char_name,
                 emotion_adj=emotion_adj,
                 appearance_desc=persona.appearance,
+                equipment_desc=equipment_desc,
                 body_state_desc=body_state_desc,
             )
 
@@ -147,6 +148,7 @@ def _build_auto_prompt(
     char_name: str,
     emotion_adj: str,
     appearance_desc: str | None,
+    equipment_desc: str | None,
     body_state_desc: str | None,
 ) -> str:
     """Auto synthesis template — no scene, uses body state instead."""
@@ -155,6 +157,8 @@ def _build_auto_prompt(
     ]
     if appearance_desc:
         lines.append(appearance_desc)
+    if equipment_desc:
+        lines.append(equipment_desc)
     if body_state_desc:
         lines.append(body_state_desc)
     lines.append("looking at viewer")

@@ -38,7 +38,10 @@ async def _tool_persona_portrait(ctx: AppContext, persona: str) -> str:
 
         from nous.application.portrait.service import PortraitGenerationService
 
-        service = PortraitGenerationService(config)
+        service = PortraitGenerationService(
+            config,
+            equipment_service=ctx.equipment_service,
+        )
         result = await service.generate(persona_state)
 
         return json.dumps(result, ensure_ascii=False)

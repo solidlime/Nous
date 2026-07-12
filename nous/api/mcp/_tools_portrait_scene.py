@@ -68,7 +68,10 @@ async def _tool_persona_portrait_with_scene(
 
         from nous.application.portrait.service import PortraitGenerationService
 
-        service = PortraitGenerationService(config)
+        service = PortraitGenerationService(
+            config,
+            equipment_service=ctx.equipment_service,
+        )
         result = await service.generate(persona_state, scene=effective_scene)
 
         # Map service result to tool output format

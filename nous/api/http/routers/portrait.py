@@ -35,6 +35,7 @@ def register_portrait_routes(mcp) -> None:
         service = PortraitGenerationService(
             config=ctx.settings.portrait_gen,
             event_bus=ctx.event_bus,
+            equipment_service=ctx.equipment_service,
         )
         result = await service.generate(state_result.value)
         return JSONResponse(result)
@@ -67,6 +68,7 @@ def register_portrait_routes(mcp) -> None:
         service = PortraitGenerationService(
             config=ctx.settings.portrait_gen,
             event_bus=ctx.event_bus,
+            equipment_service=ctx.equipment_service,
         )
         result = await service.generate(
             state_result.value,
