@@ -559,7 +559,7 @@ class PrepareStep:
                     turn_ctx.user_message,
                     last_assistant,
                     config,
-                    top_k=max(preload_count, 1) if preload_count > 0 else 0,
+                    top_k=max(preload_count, 1) if preload_count > 0 else 100,
                 )
             )
             turn_ctx.context_section, (turn_ctx.related_memories, debug, memories_list) = await asyncio.gather(
@@ -593,7 +593,7 @@ class PrepareStep:
                     turn_ctx.user_message,
                     last_assistant,
                     config,
-                    top_k=max(preload_count, 1) if preload_count > 0 else 0,
+                    top_k=max(preload_count, 1) if preload_count > 0 else 100,
                 )
                 turn_ctx.memory_debug = debug
                 turn_ctx.memories_raw = debug.get("results", [])
