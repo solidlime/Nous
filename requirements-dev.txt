@@ -1,0 +1,22 @@
+# ==========================================
+# Nous v3 — 開発・テスト用依存関係
+# ==========================================
+# 本番イメージには含めない。
+# インストール: pip install -r requirements-prod.txt -r requirements-dev.txt
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
+pytest-cov>=5.0.0
+pytest-mock>=3.14.0
+
+# E2E Testing (Playwright)
+playwright>=1.40.0
+pytest-playwright>=0.4.0
+
+# Benchmarking
+pytest-benchmark>=4.0
+
+# Static Analysis & Linting
+mypy>=1.9
+bandit>=1.7
