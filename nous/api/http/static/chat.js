@@ -11,6 +11,7 @@ const CHAT = {
   abortController: null, // F4: AbortController for streaming cancel
   attachments: [], // { filename, url, workspace_path, mime_type, size }
   _nextTurnReady: false, // true after 'done' event; next event creates a new assistant div
+  _justReset: false, // true after reset; prevents restoreChatHistory from re-fetching
 };
 
 const HELP_TEXTS = {
@@ -1131,19 +1132,23 @@ async function clearChatHistory() {
   const badge = document.getElementById('chat-attach-badge');
   if (badge) badge.style.display = 'none';
   resetToWelcome();
-  // Delete server-side session (F3)
+  // Delete server-side session (F3) - AWAITED, not fire-and-forget
   const oldSid = getChatSessionId();
   if (S.persona && oldSid) {
-    fetch(
-      "/api/chat/" +
-        encodeURIComponent(S.persona) +
-        "/sessions/" +
-        encodeURIComponent(oldSid),
-      { method: "DELETE" },
-    ).catch(e => {
+    try {
+      const res = await fetch(
+        "/api/chat/" +
+          encodeURIComponent(S.persona) +
+          "/sessions/" +
+          encodeURIComponent(oldSid),
+        { method: "DELETE" },
+      );
+      if (!res.ok) throw new Error(res.statusText);
+      CHAT._justReset = true; // prevent restoreChatHistory from re-fetching
+    } catch (e) {
       console.warn("[session delete] failed:", e);
       toast("セッション削除失敗: " + e.message, "error");
-    });
+    }
   }
   document.getElementById("chat-status").textContent = "会話をリセットしました";
   setTimeout(() => {
@@ -1481,6 +1486,10 @@ function safeMarkdown(text) {
 // F2: Restore chat history from server on page load / persona switch
 async function restoreChatHistory() {
   if (!S.persona) return;
+  if (CHAT._justReset) {
+    CHAT._justReset = false;
+    return; // リセット直後は履歴を再取得しない
+  }
   const sid = getChatSessionId();
   const container = document.getElementById("chat-messages");
   // Always reset DOM first to prevent previous persona's messages from lingering

@@ -91,7 +91,19 @@ class InferenceStep:
                     turn_ctx.full_response += event.content
                     yield TextDeltaSSE(content=event.content)
                 elif isinstance(event, ToolCallEvent):
-                    pending_tool_calls.append(event)
+                    # Only add to pending if input is non-empty (skip early/empty yield from OpenAI)
+                    # But always yield SSE for display
+                    if event.tool_input:
+                        # Check if a tool with same id already pending (replace empty with full)
+                        existing = next(
+                            (tc for tc in pending_tool_calls if tc.tool_use_id == event.tool_use_id),
+                            None,
+                        )
+                        if existing:
+                            idx = pending_tool_calls.index(existing)
+                            pending_tool_calls[idx] = event
+                        else:
+                            pending_tool_calls.append(event)
                     yield ToolCallSSE(name=event.tool_name, input=event.tool_input, id=event.tool_use_id)
                 elif isinstance(event, ErrorEvent):
                     yield ErrorSSE(message=event.message)
@@ -155,6 +167,7 @@ class InferenceStep:
                 yield ToolResultSSE(name=tc.tool_name, result=truncated, id=tc.tool_use_id)
                 turn_ctx.tool_calls_log.append(
                     {
+                        "id": tc.tool_use_id,
                         "name": tc.tool_name,
                         "input": tc.tool_input,
                         "result": truncated,

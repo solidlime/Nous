@@ -53,7 +53,7 @@ class OpenAICompatProvider(LLMProvider):
                 for tc in msg.tool_calls:
                     tool_calls_data.append(
                         {
-                            "id": tc["id"],
+                            "id": tc.get("id", ""),
                             "type": "function",
                             "function": {
                                 "name": tc["name"],
@@ -159,8 +159,9 @@ class OpenAICompatProvider(LLMProvider):
                                 if tc_chunk.function.arguments:
                                     pending_tool_calls[idx]["args_json"] += tc_chunk.function.arguments
                             # Yield immediately when tool name is first known
+                            # Only yield early if we have a real tool_use_id (not empty string)
                             tc_data = pending_tool_calls[idx]
-                            if tc_data["name"] and not tc_data.get("yielded"):
+                            if tc_data["name"] and tc_data["id"] and not tc_data.get("yielded"):
                                 tc_data["yielded"] = True
                                 yield ToolCallEvent(
                                     tool_name=tc_data["name"],

@@ -255,7 +255,13 @@ class SessionManager:
                     time_label = ""
                 entry: dict[str, object] = {"role": msg["role"], "content": msg["content"], "time": time_label}
                 if msg.get("tool_calls"):
-                    entry["tool_calls"] = msg["tool_calls"]
+                    # Ensure all tool_calls have "id" field for backward compat
+                    fixed_tc = []
+                    for tc in msg["tool_calls"]:
+                        if "id" not in tc:
+                            tc = dict(tc, id="")
+                        fixed_tc.append(tc)
+                    entry["tool_calls"] = fixed_tc
                 result.append(entry)
             return result
         except Exception as e:
