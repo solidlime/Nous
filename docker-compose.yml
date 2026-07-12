@@ -20,32 +20,6 @@ services:
       retries: 5
       start_period: 30s
 
-  mcp-hub:
-    image: ghcr.io/solidlime/mcp-hub:latest
-    container_name: mcp-hub
-    # root で実行: バインドマウントの /opt/mcp-hub/data がホスト側 root 所有のため
-    user: "0:0"
-    ports:
-      - "26263:26263"
-    volumes:
-      # MCP Hub データ永続化（サーバー登録情報）
-      - ${DATA_ROOT}/mcp-hub:/opt/mcp-hub/data
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      MCP_HUB_PORT: "26263"
-      MCP_HUB_HOST: "0.0.0.0"
-      MCP_HUB_DB_PATH: /opt/mcp-hub/data/hub.db
-      # Brave Search API キー (オプション)
-      # BRAVE_API_KEY: your-key-here
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:26263/admin/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
   nous:
     image: ghcr.io/solidlime/nous:latest
     container_name: nous
@@ -74,5 +48,4 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
-
 
