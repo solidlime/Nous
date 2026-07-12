@@ -91,6 +91,21 @@ class TestGetEmotionHistoryByDays:
         assert records[1].emotion == "sadness"
 
 
+class TestAppearanceField:
+    def test_appearance_read_from_state_map(self, persona_repo):
+        """appearance stored in context_state should be reflected in PersonaState."""
+        persona_repo.update_state(PERSONA, "appearance", "銀色の長い髪、赤い瞳")
+        result = persona_repo.get_current_state(PERSONA)
+        assert result.is_ok
+        assert result.unwrap().appearance == "銀色の長い髪、赤い瞳"
+
+    def test_appearance_defaults_to_none(self, persona_repo):
+        """Fresh persona with no appearance set should have None."""
+        result = persona_repo.get_current_state(PERSONA)
+        assert result.is_ok
+        assert result.unwrap().appearance is None
+
+
 class TestGetCurrentStateWithBodyFields:
     def test_fatigue_and_warmth_in_state(self, persona_repo):
         persona_repo.update_state(PERSONA, "fatigue", "0.7")

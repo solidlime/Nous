@@ -82,6 +82,7 @@ class SQLitePersonaRepository(PersonaRepository):
                     heart_rate=_safe_float(state_map.get("heart_rate")),
                     pain=_safe_float(state_map.get("pain")),
                     speech_style=state_map.get("speech_style"),
+                    appearance=state_map.get("appearance"),
                     user_info=user_info,
                     persona_info=persona_info,
                     last_conversation_time=_resolve_last_conversation_time(self._db, state_map),
