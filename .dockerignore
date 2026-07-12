@@ -17,6 +17,20 @@ test_*.py
 .serena/
 .agent/
 .spec/
+.opencode/
+
+# Env files (secrets — keep out of image)
+.env
+.env.example
+.env.template
+.python-version
+
+# Build tools
+Makefile
+Makefile.bak
+
+# Other project directories (not needed in nous image)
+mcp-hub/
 
 # Data (bind-mounted at runtime)
 data/

@@ -26,6 +26,9 @@ services:
       dockerfile: Dockerfile
     image: ghcr.io/solidlime/mcp-hub:latest
     container_name: mcp-hub
+    # root で実行: バインドマウントの /opt/mcp-hub/data がホスト側 root 所有のため
+    # 本番では docker-socket-proxy + 専用ユーザー を推奨
+    user: "0:0"
     ports:
       - "26263:26263"
     volumes:
