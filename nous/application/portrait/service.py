@@ -9,6 +9,11 @@ import hashlib
 import time
 from typing import TYPE_CHECKING
 
+from nous.application.event_bus import (
+    PORTRAIT_GENERATE_COMPLETE,
+    PORTRAIT_GENERATE_ERROR,
+    PORTRAIT_GENERATE_START,
+)
 from nous.domain.persona.body_state import extract_body_metrics
 from nous.domain.persona.portrait_prompt import PortraitPromptBuilder
 from nous.domain.value_objects import EMOTION_EMOJI
@@ -96,25 +101,48 @@ class PortraitGenerationService:
             body_state=body_state,
         )
 
-        # ── 2. Check cache ─────────────────────────────────────────────
+        # ── 2. Publish start event ─────────────────────────────────────
+        if self._event_bus is not None:
+            await self._event_bus.publish(
+                PORTRAIT_GENERATE_START,
+                {
+                    "persona": persona.persona,
+                    "emotion": persona.emotion,
+                    "scene": scene,
+                    "prompt": prompt,
+                },
+            )
+
+        # ── 3. Check cache ─────────────────────────────────────────────
         cache_key = hashlib.md5(prompt.encode()).hexdigest()
         cached = self._cache.get(cache_key)
         if cached is not None:
             cached_b64, cached_ts = cached
             if time.monotonic() - cached_ts < self._cache_ttl:
-                return {
+                result = {
                     "image_base64": cached_b64,
                     "prompt": prompt,
                     "negative_prompt": negative_prompt,
                 }
+                if self._event_bus is not None:
+                    await self._event_bus.publish(
+                        PORTRAIT_GENERATE_COMPLETE,
+                        {
+                            "persona": persona.persona,
+                            "emotion": persona.emotion,
+                            "image_base64": result["image_base64"],
+                            "cached": True,
+                        },
+                    )
+                return result
 
-        # ── 3. Budget gate ─────────────────────────────────────────────
+        # ── 4. Budget gate ─────────────────────────────────────────────
         if self._config.max_monthly_budget > 0 and self._generate_count >= int(self._config.max_monthly_budget):
-            return self._fallback(persona.emotion, "Monthly budget exceeded")
+            return await self._publish_error(persona, "Monthly budget exceeded")
 
-        # ── 4. Provider check & generate ───────────────────────────────
+        # ── 5. Provider check & generate ───────────────────────────────
         if self._provider is None:
-            return self._fallback(persona.emotion, "No image provider configured")
+            return await self._publish_error(persona, "No image provider configured")
 
         try:
             images: list[GeneratedImage] = await self._provider.generate(
@@ -123,13 +151,13 @@ class PortraitGenerationService:
                 quality=self._config.quality,
             )
             if not images:
-                return self._fallback(persona.emotion, "Provider returned no images")
+                return await self._publish_error(persona, "Provider returned no images")
 
             image_b64 = images[0].base64
         except Exception as exc:
-            return self._fallback(persona.emotion, f"Generation failed: {exc}")
+            return await self._publish_error(persona, f"Generation failed: {exc}")
 
-        # ── 5. Update cache & counters ─────────────────────────────────
+        # ── 6. Update cache & counters ─────────────────────────────────
         self._cache[cache_key] = (image_b64, time.monotonic())
         self._generate_count += 1
         self._last_generate_time = time.monotonic()
@@ -140,14 +168,15 @@ class PortraitGenerationService:
             "negative_prompt": negative_prompt,
         }
 
-        # ── 6. Publish event ──────────────────────────────────────────
+        # ── 7. Publish complete event ──────────────────────────────────
         if self._event_bus is not None:
             await self._event_bus.publish(
-                "portrait.generated",
+                PORTRAIT_GENERATE_COMPLETE,
                 {
                     "persona": persona.persona,
                     "emotion": persona.emotion,
                     "image_base64": result["image_base64"],
+                    "cached": False,
                 },
             )
 
@@ -201,10 +230,18 @@ class PortraitGenerationService:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _fallback(emotion: str, error: str) -> dict:
-        """Build a fallback response dict with an emotion emoji."""
+    async def _publish_error(self, persona: PersonaState, error: str) -> dict:
+        """Publish an error event and return the fallback response dict."""
+        if self._event_bus is not None:
+            await self._event_bus.publish(
+                PORTRAIT_GENERATE_ERROR,
+                {
+                    "persona": persona.persona,
+                    "emotion": persona.emotion,
+                    "error": error,
+                },
+            )
         return {
             "error": error,
-            "fallback_emoji": EMOTION_EMOJI.get(emotion, "😐"),
+            "fallback_emoji": EMOTION_EMOJI.get(persona.emotion, "😐"),
         }

@@ -14,6 +14,9 @@ from nous.application.event_bus import (
     EVENT_MEMORY_CREATED,
     EVENT_MEMORY_DELETED,
     EVENT_MEMORY_UPDATED,
+    PORTRAIT_GENERATE_COMPLETE,
+    PORTRAIT_GENERATE_ERROR,
+    PORTRAIT_GENERATE_START,
     PORTRAIT_GENERATED,
 )
 from nous.domain.memory.session_event import SessionEvent
@@ -31,7 +34,10 @@ _ALL_EVENT_TYPES = frozenset(
         EVENT_MEMORY_UPDATED,
         EVENT_MEMORY_DELETED,
         EVENT_CONTEXT_UPDATED,
-        PORTRAIT_GENERATED,
+        PORTRAIT_GENERATE_START,
+        PORTRAIT_GENERATE_COMPLETE,
+        PORTRAIT_GENERATE_ERROR,
+        PORTRAIT_GENERATED,  # kept for backward compatibility
     }
 )
 

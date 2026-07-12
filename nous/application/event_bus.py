@@ -24,7 +24,10 @@ SESSION_STARTED = "session.started"
 SESSION_COMPACT = "session.compact"
 
 # Portrait generation
-PORTRAIT_GENERATED = "portrait.generated"
+PORTRAIT_GENERATE_START = "portrait.generate_start"
+PORTRAIT_GENERATE_COMPLETE = "portrait.generate_complete"
+PORTRAIT_GENERATE_ERROR = "portrait.generate_error"
+PORTRAIT_GENERATED = "portrait.generated"  # backward compat (kept for existing subscribers)
 
 
 class EventBus:
