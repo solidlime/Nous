@@ -123,13 +123,19 @@
 
 ---
 
+## ✅ 完了 (2026-07-12)
+
+| Phase | 内容 | コミット |
+|-------|------|----------|
+| Phase C | WebUI リアルタイム化 (SSE emotion/body) | `bfdeba7` — 5ファイル・105行 |
+| Phase D | SillyTavern ペルソナカード PNG エクスポート | `4327a2d` — 81行 |
+| Phase F | アイテム衣装→ポートレート連携 | `ad5aeb4` — 8ファイル・124行 |
+| MCP-Hub分離 | 独立リポジトリ移行 (solidlime/MCP-Hub) | `7374c11` |
+
 ## 延期 (将来対応)
 
 | Phase | 内容 | 理由 |
 |-------|------|------|
-| Phase C | WebUI リアルタイム化 (SSE emotion/body) | 画像・音声完了後に着手 |
-| Phase D | SillyTavern 連携 (Author's Note, ペルソナカード) | 後回し |
-| Phase F | アイテム衣装連携 | TB01 完了後に価値が出る |
 | TDOC | ドキュメント更新 | 全Phase完了後 |
 
 ---
