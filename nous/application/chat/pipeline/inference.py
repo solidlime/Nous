@@ -77,6 +77,7 @@ class InferenceStep:
         while turn_ctx.tool_call_count <= config.max_tool_calls:
             pending_tool_calls: list[ToolCallEvent] = []
             current_text = ""
+            _seg_text = ""  # text accumulator for segment ordering
 
             async for event in provider.stream(
                 messages=messages,
@@ -89,8 +90,13 @@ class InferenceStep:
                 if isinstance(event, TextDeltaEvent):
                     current_text += event.content
                     turn_ctx.full_response += event.content
+                    _seg_text += event.content
                     yield TextDeltaSSE(content=event.content)
                 elif isinstance(event, ToolCallEvent):
+                    # Flush accumulated text as segment before tool call
+                    if _seg_text:
+                        turn_ctx.segments.append({"type": "text", "content": _seg_text})
+                        _seg_text = ""
                     # Only add to pending if input is non-empty (skip early/empty yield from OpenAI)
                     # But always yield SSE for display
                     if event.tool_input:
@@ -105,6 +111,9 @@ class InferenceStep:
                         else:
                             pending_tool_calls.append(event)
                     yield ToolCallSSE(name=event.tool_name, input=event.tool_input, id=event.tool_use_id)
+                    turn_ctx.segments.append(
+                        {"type": "tool_call", "name": event.tool_name, "input": event.tool_input, "id": event.tool_use_id}
+                    )
                 elif isinstance(event, ErrorEvent):
                     yield ErrorSSE(message=event.message)
                     return
@@ -116,6 +125,11 @@ class InferenceStep:
                             config.get_effective_model(),
                             turn_ctx.tool_call_count,
                         )
+
+            # Flush remaining text segment after inner loop
+            if _seg_text:
+                turn_ctx.segments.append({"type": "text", "content": _seg_text})
+                _seg_text = ""
 
             if not pending_tool_calls:
                 break
@@ -165,6 +179,9 @@ class InferenceStep:
 
             for tc, truncated, tool_result in results:
                 yield ToolResultSSE(name=tc.tool_name, result=truncated, id=tc.tool_use_id)
+                turn_ctx.segments.append(
+                    {"type": "tool_result", "name": tc.tool_name, "result": truncated, "id": tc.tool_use_id}
+                )
                 turn_ctx.tool_calls_log.append(
                     {
                         "id": tc.tool_use_id,

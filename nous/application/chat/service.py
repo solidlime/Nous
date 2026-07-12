@@ -131,6 +131,7 @@ class ChatService:
                     full_response,
                     get_now(),
                     tool_calls=turn_ctx.tool_calls_log if turn_ctx.tool_calls_log else None,
+                    segments=turn_ctx.segments if turn_ctx.segments else None,
                 )
                 turn_ctx.full_response = full_response
 
