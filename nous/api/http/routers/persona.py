@@ -463,12 +463,16 @@ def _render_setup_page() -> str:
     var errEl = document.getElementById('error-msg');
     var btn = document.getElementById('create-btn');
     if (!name) return false;
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 60000);
     try {
       var res = await fetch('/api/personas', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name: name})
+        body: JSON.stringify({name: name}),
+        signal: ctrl.signal
       });
+      clearTimeout(timer);
       var data = await res.json();
       if (!res.ok) {
         errEl.textContent = data.error || 'Failed to create persona';
@@ -479,7 +483,10 @@ def _render_setup_page() -> str:
       }
       window.location.href = '/dashboard/' + encodeURIComponent(name);
     } catch (e) {
-      errEl.textContent = 'Network error: ' + e.message;
+      clearTimeout(timer);
+      errEl.textContent = e.name === 'AbortError'
+        ? 'Request timed out (60s). Is Qdrant running?'
+        : 'Network error: ' + e.message;
       errEl.style.display = 'block';
       btn.disabled = false;
       btn.textContent = 'Create Persona';
