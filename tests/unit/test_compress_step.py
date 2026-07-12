@@ -717,7 +717,9 @@ class TestDogfooding:
                 episode_search_enabled INTEGER DEFAULT 1,
                 dynamic_tool_selection INTEGER DEFAULT 1,
                 irodori_enabled INTEGER DEFAULT 0,
-                portrait_enabled INTEGER DEFAULT 0
+                portrait_enabled INTEGER DEFAULT 0,
+                voice_auto_play INTEGER DEFAULT 0,
+                voice_emotion_link INTEGER DEFAULT 1
             )
         """)
         db.commit()

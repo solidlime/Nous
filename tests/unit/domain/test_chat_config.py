@@ -94,7 +94,9 @@ class TestChatConfigRepository:
                 episode_search_enabled INTEGER DEFAULT 1,
                 dynamic_tool_selection INTEGER DEFAULT 1,
                 irodori_enabled INTEGER DEFAULT 0,
-                portrait_enabled INTEGER DEFAULT 0
+                portrait_enabled INTEGER DEFAULT 0,
+                voice_auto_play INTEGER DEFAULT 0,
+                voice_emotion_link INTEGER DEFAULT 1
             )
             """
         )
@@ -225,6 +227,8 @@ class TestSqliteMigration:
         for col_sql in [
             "irodori_enabled INTEGER DEFAULT 0",
             "portrait_enabled INTEGER DEFAULT 0",
+            "voice_auto_play INTEGER DEFAULT 0",
+            "voice_emotion_link INTEGER DEFAULT 1",
         ]:
             try:
                 conn.execute(f"ALTER TABLE chat_settings ADD COLUMN {col_sql}")
@@ -237,6 +241,8 @@ class TestSqliteMigration:
         columns = [d[0] for d in cursor.description]
         assert "irodori_enabled" in columns
         assert "portrait_enabled" in columns
+        assert "voice_auto_play" in columns
+        assert "voice_emotion_link" in columns
 
         # Verify defaults work
         conn.execute("INSERT INTO chat_settings (persona) VALUES ('test')")
@@ -244,6 +250,8 @@ class TestSqliteMigration:
         row = conn.execute("SELECT * FROM chat_settings WHERE persona = 'test'").fetchone()
         assert row["irodori_enabled"] == 0
         assert row["portrait_enabled"] == 0
+        assert row["voice_auto_play"] == 0
+        assert row["voice_emotion_link"] == 1
 
         # Verify ChatConfigRepository works with migrated schema
         from nous.domain.chat_config import ChatConfigRepository
@@ -252,5 +260,7 @@ class TestSqliteMigration:
         config = repo.get("test")
         assert config.irodori_enabled is False
         assert config.portrait_enabled is False
+        assert config.voice_auto_play is False
+        assert config.voice_emotion_link is True
 
         conn.close()
