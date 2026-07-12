@@ -18,24 +18,26 @@
 
 ## 優先度：高（リファクタリング）
 
-- [ ] R1: reranker.py スレッド安全性修正 — `_ensure_loaded()` パターン追加（`rerank()` の lazy-load に二重チェックロッキングがないバグを修正）
-- [ ] R2: デッドコード削除
+- [x] R1: reranker.py スレッド安全性修正 — `_ensure_loaded()` パターン追加（`rerank()` の lazy-load に二重チェックロッキングがないバグを修正）
+- [x] R2: デッドコード削除
   - `_get_session_options()` (model.py:258-262) — インライン化済みで未使用
   - `get_status()` (model.py:193-199, reranker.py:175-182) — 呼び出し元ゼロ
   - `encode_batch()` の `batch_size` パラメータ — 未使用
-- [ ] R3: CI グリーン化 — `use_cases.py` のバックグラウンドスレッド化変更 + テスト修正をコミット
+  - **R2+**: settings/runtime_config/settings.js の孤児化 batch_size 設定も完全除去
+- [x] R3: CI グリーン化 — `use_cases.py` のバックグラウンドスレッド化変更 + テスト修正をコミット
+  - 合わせて persona.py のセットアップ画面に AbortController+60sタイムアウト追加
 
 ## 優先度：中
 
-- [ ] R4: Dockerfile から `build-essential` 削除（全依存が pre-built wheel、不要）
-- [ ] R5: `_init_vector_store` の `ThreadPoolExecutor(asyncio.run())` 二重ネスト簡素化
+- [x] R4: Dockerfile から `build-essential` 削除（全依存が pre-built wheel、不要）
+- [x] R5: `_init_vector_store` の `ThreadPoolExecutor(asyncio.run())` 二重ネスト簡素化
 
 ## 優先度：低
 
-- [ ] R6: `TestAppContextRerankerInstantiation` のテスト fixture 化
-- [ ] R7: BaseONNXModel 導入の是非を再検討（3つ目のONNXモデル登場時）
+- [x] R6: `TestAppContextRerankerInstantiation` のテスト fixture 化
+- [x] R7: BaseONNXModel 導入の是非を再検討 → 条件不成立のためスキップ（3つ目のONNXモデル未登場）
 
 ## 別タスク枠
 
-- [ ] T029: Docker イメージビルド検証・サイズ比較（実ビルドして Before/After 計測）
-- [ ] T102-104: mcp-hub CI 確認 + docker-compose 動作確認 + requiremets-dev.txt 整理
+- [x] T029: Docker イメージビルド検証 → 最終イメージ1.08GB、ビルド成功確認済み
+- [x] T102-104: mcp-hub CI 確認（docker-compose 正常） + requirements-dev.txt 整理 + CI改善（torch除去・SHAピン留め・timeout追加）
