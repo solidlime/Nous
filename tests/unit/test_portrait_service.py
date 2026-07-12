@@ -8,6 +8,10 @@ import pytest
 
 from nous.config.settings import PortraitGenerationConfig
 from nous.domain.persona.entities import PersonaState
+from nous.domain.persona.portrait_prompt import (
+    PortraitPromptBuilder,
+    _intensity_modifier,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -471,6 +475,82 @@ class TestHealthCheck:
         ):
             svc = _make_service()
             assert await svc.health_check() is False
+
+
+# ===========================================================================
+# Tests: auto prompt builder
+# ===========================================================================
+
+
+class TestAutoPrompt:
+    """Tests for the auto-prompt builder (no LLM scene)."""
+
+    def test_auto_prompt_intensity_high(self):
+        """emotion_intensity 0.9 → 'intense' modifier in prompt."""
+        persona = _make_persona(emotion_intensity=0.9)
+        prompt, _neg = PortraitPromptBuilder.build(persona=persona)
+        assert "intense" in prompt
+
+    def test_auto_prompt_intensity_low(self):
+        """emotion_intensity 0.2 → 'subtle' modifier in prompt."""
+        persona = _make_persona(emotion_intensity=0.2)
+        prompt, _neg = PortraitPromptBuilder.build(persona=persona)
+        assert "subtle" in prompt
+
+    def test_auto_prompt_intensity_medium(self):
+        """emotion_intensity 0.5 → no modifier in prompt."""
+        persona = _make_persona(emotion_intensity=0.5)
+        prompt, _neg = PortraitPromptBuilder.build(persona=persona)
+        assert "intense" not in prompt
+        assert "subtle" not in prompt
+
+    def test_auto_prompt_with_full_state(self):
+        """All personality state fields reflected in prompt."""
+        persona = _make_persona(
+            emotion_intensity=0.9,
+            mental_state="focused and determined",
+            physical_state="sweating lightly",
+            environment="dark forest at night",
+        )
+        prompt, _neg = PortraitPromptBuilder.build(persona=persona)
+        assert "intense" in prompt
+        assert "focused and determined" in prompt
+        assert "sweating lightly" in prompt
+        assert "dark forest at night" in prompt
+        assert "detailed background" in prompt
+
+    def test_auto_prompt_environment_none(self):
+        """When environment is None → 'simple background' is present."""
+        persona = _make_persona(environment=None)
+        prompt, _neg = PortraitPromptBuilder.build(persona=persona)
+        assert "simple background" in prompt
+
+    def test_auto_prompt_mental_state_none(self):
+        """When mental_state is None → nothing extra added from it."""
+        persona = _make_persona(mental_state=None, emotion_intensity=0.5)
+        prompt, _neg = PortraitPromptBuilder.build(persona=persona)
+        # No mental state string in prompt
+        assert "simple background" in prompt
+        # Should still have normal structure
+        assert "1girl" in prompt
+        assert "test_char" in prompt
+
+
+class TestIntensityModifier:
+    """Unit tests for _intensity_modifier helper."""
+
+    def test_intensity_below_03(self):
+        assert _intensity_modifier(0.0) == "subtle"
+        assert _intensity_modifier(0.29) == "subtle"
+
+    def test_intensity_03_to_07(self):
+        assert _intensity_modifier(0.3) == ""
+        assert _intensity_modifier(0.5) == ""
+        assert _intensity_modifier(0.7) == ""
+
+    def test_intensity_above_07(self):
+        assert _intensity_modifier(0.71) == "intense"
+        assert _intensity_modifier(1.0) == "intense"
 
 
 # ===========================================================================

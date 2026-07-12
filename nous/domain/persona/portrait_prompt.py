@@ -38,6 +38,20 @@ def _emotion_adjective(emotion: str) -> str:
     return _EMOTION_ADJECTIVES.get(emotion, "calm")
 
 
+def _intensity_modifier(intensity: float) -> str:
+    """Map emotion_intensity to a prompt modifier string.
+
+    0.0-0.3  → "subtle"
+    0.3-0.7  → "" (default, omit)
+    0.7-1.0  → "intense"
+    """
+    if intensity < 0.3:
+        return "subtle"
+    if intensity > 0.7:
+        return "intense"
+    return ""
+
+
 def _build_body_state_desc(body_state: dict | None) -> str | None:
     """Build a short body-state description from a dict of float values."""
     if not body_state:
@@ -102,11 +116,16 @@ class PortraitPromptBuilder:
         """
         char_name = persona.persona
         emotion_adj = _emotion_adjective(persona.emotion)
+        emotion_intensity = persona.emotion_intensity
+        mental_state = persona.mental_state
+        physical_state = persona.physical_state
+        environment = persona.environment
 
         if scene is not None:
             prompt = _build_llm_prompt(
                 char_name=char_name,
                 emotion_adj=emotion_adj,
+                emotion_intensity=emotion_intensity,
                 appearance_desc=persona.appearance,
                 equipment_desc=equipment_desc,
                 scene=scene,
@@ -116,9 +135,13 @@ class PortraitPromptBuilder:
             prompt = _build_auto_prompt(
                 char_name=char_name,
                 emotion_adj=emotion_adj,
+                emotion_intensity=emotion_intensity,
                 appearance_desc=persona.appearance,
                 equipment_desc=equipment_desc,
                 body_state_desc=body_state_desc,
+                mental_state=mental_state,
+                physical_state=physical_state,
+                environment=environment,
             )
 
         return prompt, _NEGATIVE_PROMPT
@@ -127,13 +150,16 @@ class PortraitPromptBuilder:
 def _build_llm_prompt(
     char_name: str,
     emotion_adj: str,
-    appearance_desc: str | None,
-    equipment_desc: str | None,
-    scene: str,
+    emotion_intensity: float = 0.5,
+    appearance_desc: str | None = None,
+    equipment_desc: str | None = None,
+    scene: str = "",
 ) -> str:
     """LLM synthesis template — scene is provided."""
+    intensity_str = _intensity_modifier(emotion_intensity)
+    expr_mod = f"{intensity_str} {emotion_adj}" if intensity_str else emotion_adj
     lines: list[str] = [
-        f"1girl, {char_name}, original, {emotion_adj} expression",
+        f"1girl, {char_name}, original, {expr_mod} expression",
     ]
     if appearance_desc:
         lines.append(appearance_desc)
@@ -147,20 +173,44 @@ def _build_llm_prompt(
 def _build_auto_prompt(
     char_name: str,
     emotion_adj: str,
-    appearance_desc: str | None,
-    equipment_desc: str | None,
-    body_state_desc: str | None,
+    emotion_intensity: float = 0.5,
+    appearance_desc: str | None = None,
+    equipment_desc: str | None = None,
+    body_state_desc: str | None = None,
+    mental_state: str | None = None,
+    physical_state: str | None = None,
+    environment: str | None = None,
 ) -> str:
-    """Auto synthesis template — no scene, uses body state instead."""
+    """Auto synthesis template — no scene, uses body state + persona state fields."""
+    intensity_str = _intensity_modifier(emotion_intensity)
+    expr_mod = f"{intensity_str} {emotion_adj}" if intensity_str else emotion_adj
     lines: list[str] = [
-        f"1girl, {char_name}, original, {emotion_adj} expression",
+        f"1girl, {char_name}, original, {expr_mod} expression",
     ]
     if appearance_desc:
         lines.append(appearance_desc)
     if equipment_desc:
         lines.append(equipment_desc)
+
+    # mental_state → injected as pose/mood nuance
+    if mental_state:
+        lines.append(mental_state)
+
+    # combine body_state (numerical) + physical_state (free-text)
+    body_parts: list[str] = []
     if body_state_desc:
-        lines.append(body_state_desc)
+        body_parts.append(body_state_desc)
+    if physical_state:
+        body_parts.append(physical_state)
+    if body_parts:
+        lines.append(", ".join(body_parts))
+
+    # environment → background
+    if environment:
+        lines.append(f"{environment}, detailed background")
+    else:
+        lines.append("simple background")
+
     lines.append("looking at viewer")
     lines.append("masterpiece, high score, great score, absurdres")
     return ",\n".join(lines)
