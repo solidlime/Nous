@@ -195,6 +195,27 @@ class PluginConfig(BaseModel):
     Set ``NOUS_PLUGIN__API_KEY=<strong_key>``."""
 
 
+class ImageGenSettings(BaseModel):
+    """Image generation configuration — shared across chat tool and portrait.
+    Env var: ``NOUS_IMAGE_GEN__COMFYUI_URL`` (default: http://localhost:8188)
+    """
+
+    enabled: bool = False
+    """Default OFF — must be explicitly enabled."""
+
+    provider: str = "openai"
+    """"openai" | "stability" | "comfyui" — generation backend."""
+
+    dalle_model: str = "dall-e-3"
+    """"dall-e-2" | "dall-e-3" — OpenAI DALL-E model."""
+
+    comfyui_url: str = "http://localhost:8188"
+    """ComfyUI API address (used when provider="comfyui")."""
+
+    stability_url: str = ""
+    """Stable Diffusion WebUI API endpoint."""
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -222,6 +243,7 @@ class Settings(BaseSettings):
     auto_capture: AutoCaptureConfig = AutoCaptureConfig()
     cors: CorsConfig = CorsConfig()
     portrait_gen: PortraitGenerationConfig = Field(default_factory=PortraitGenerationConfig)
+    image_gen: ImageGenSettings = Field(default_factory=ImageGenSettings)
     irodori: IrodoriConfig = Field(default_factory=IrodoriConfig)
     timezone: str = "Asia/Tokyo"
     data_root: str = "./data"

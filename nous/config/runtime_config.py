@@ -56,6 +56,13 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "base_url": {"hot_reload": True, "description": "LLM API base URL"},
         "min_chars": {"hot_reload": True, "description": "Min content length to trigger enrichment"},
     },
+    "image_gen": {
+        "enabled": {"hot_reload": True, "description": "Enable image generation (chat tool)"},
+        "provider": {"hot_reload": True, "description": "Generation backend (openai/stability/comfyui)"},
+        "dalle_model": {"hot_reload": True, "description": "OpenAI DALL-E model"},
+        "comfyui_url": {"hot_reload": True, "description": "ComfyUI API address"},
+        "stability_url": {"hot_reload": True, "description": "Stable Diffusion WebUI API endpoint"},
+    },
     "irodori": {
         "enabled": {"hot_reload": True, "description": "Enable Irodori-TTS voice generation"},
         "url": {"hot_reload": True, "description": "Irodori-TTS server URL (OpenAI-compatible endpoint)"},
