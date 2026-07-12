@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -71,6 +72,17 @@ class MemoryEnricher:
         self._base_url = base_url
         self._min_chars = min_chars
 
+    @staticmethod
+    def _run_async(coro):
+        """Safely run an async coroutine from a sync context."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result()
+
     def enrich(
         self,
         content: str,
@@ -110,7 +122,7 @@ class MemoryEnricher:
                 model=self._model,
                 base_url=self._base_url,
             )
-            result_text = asyncio.run(self._call_llm(provider, _SYSTEM_PROMPT, user_message))
+            result_text = self._run_async(self._call_llm(provider, _SYSTEM_PROMPT, user_message))
             if not result_text:
                 return None
             return self._parse_response(result_text)
@@ -228,7 +240,7 @@ class MemoryEnricher:
                 model=self._model,
                 base_url=self._base_url,
             )
-            result = asyncio.run(
+            result = self._run_async(
                 classify_contradiction(
                     new_content=new_content,
                     existing_memories=existing_memories,
