@@ -253,22 +253,13 @@ class AppContext:
         return self._search_engine
 
     def _init_vector_store(self) -> None:
-        """Eagerly ensure Qdrant collection exists for this persona on startup (sync wrapper)."""
-        import concurrent.futures
+        """Eagerly ensure Qdrant collection exists for this persona on startup.
 
-        try:
-            asyncio.get_running_loop()
-            # Running inside event loop — run async init in a thread to avoid
-            # "RuntimeError: asyncio.run() cannot be called from a running event loop"
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                result = pool.submit(asyncio.run, self._init_vector_store_async()).result()
-                if result is not None:
-                    self._vector_store = result
-        except RuntimeError:
-            # No running loop — run directly
-            result = asyncio.run(self._init_vector_store_async())
-            if result is not None:
-                self._vector_store = result
+        Called from a daemon thread (AppContext.__init__), so asyncio.run() is safe here.
+        """
+        result = asyncio.run(self._init_vector_store_async())
+        if result is not None:
+            self._vector_store = result
 
     async def _init_vector_store_async(self) -> QdrantVectorStore | None:
         """Async vector store initialization (connect + ensure collection)."""
