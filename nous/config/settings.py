@@ -19,7 +19,6 @@ class EmbeddingConfig(BaseModel):
 
     model: str = "cl-nagoya/ruri-v3-30m"
     device: str = "cpu"
-    batch_size: int = 32
 
 
 class RerankerConfig(BaseModel):

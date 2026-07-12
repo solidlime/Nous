@@ -26,7 +26,6 @@ class TestDefaultValues:
         cfg = EmbeddingConfig()
         assert cfg.model == "cl-nagoya/ruri-v3-30m"
         assert cfg.device == "cpu"
-        assert cfg.batch_size == 32
 
     def test_reranker_defaults(self):
         cfg = RerankerConfig()

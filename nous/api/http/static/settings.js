@@ -5,13 +5,13 @@
 const BUILTIN_PROFILES = {
     'Development': {
         server: { host: '0.0.0.0', port: 26262 },
-        embedding: { model: 'cl-nagoya/ruri-v3-30m', device: 'cpu', batch_size: 32 },
+        embedding: { model: 'cl-nagoya/ruri-v3-30m', device: 'cpu' },
         reranker: { model: 'hotchpotch/japanese-reranker-xsmall-v2', enabled: true },
         general: { log_level: 'DEBUG', contradiction_threshold: 0.85, duplicate_threshold: 0.90 },
         forgetting: { enabled: true, decay_interval_seconds: 3600, min_strength: 0.005, emotion_half_life_hours: 24.0 }
     },
     'Production': {
-        embedding: { model: 'cl-nagoya/ruri-v3-30m', device: 'auto', batch_size: 64 },
+        embedding: { model: 'cl-nagoya/ruri-v3-30m', device: 'auto' },
         reranker: { model: 'hotchpotch/japanese-reranker-xsmall-v2', enabled: true },
         general: { log_level: 'WARNING', contradiction_threshold: 0.85, duplicate_threshold: 0.90 },
         forgetting: { enabled: true, decay_interval_seconds: 1800, min_strength: 0.005, emotion_half_life_hours: 24.0 }
@@ -780,7 +780,6 @@ function validateField(cat, key, value, meta) {
         var num = parseFloat(value);
         if (isNaN(num)) return { valid: false, error: 'Must be a number' };
         if (key === 'port' && (num < 1 || num > 65535)) return { valid: false, error: 'Port must be 1-65535' };
-        if (key === 'batch_size' && num < 1) return { valid: false, error: 'Must be >= 1' };
         if (key === 'min_strength' && (num < 0 || num > 1)) return { valid: false, error: 'Must be 0-1' };
         if (key === 'min_importance' && (num < 0 || num > 1)) return { valid: false, error: 'Must be 0-1' };
         if (key === 'contradiction_threshold' && (num < 0 || num > 1)) return { valid: false, error: 'Must be 0-1' };

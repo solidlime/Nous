@@ -62,8 +62,7 @@ class RerankerModel:
         if not self.enabled or not results:
             return results[:top_k]
 
-        if self._session is None:
-            self._load_model()
+        self._ensure_loaded()
         assert self._session is not None
         assert self._tokenizer is not None
 
@@ -172,15 +171,6 @@ class RerankerModel:
                     "message": f"Reload failed, reverted: {e}",
                 }
 
-    def get_status(self) -> dict:
-        """Return current model state."""
-        if not self.enabled:
-            return {"status": "disabled", "model": self.model_name}
-        return {
-            "status": "ready" if self._session is not None else "not_loaded",
-            "model": self.model_name,
-        }
-
     def unload(self) -> None:
         """Release model resources."""
         with self._lock:
@@ -191,6 +181,13 @@ class RerankerModel:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _ensure_loaded(self) -> None:
+        """Lazy-load model with double-checked locking."""
+        if self._session is None:
+            with self._lock:
+                if self._session is None:
+                    self._load_model()
 
     def _load_model(self) -> None:
         """Download ONNX model + tokenizer, create InferenceSession (CPU)."""

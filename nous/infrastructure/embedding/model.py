@@ -85,7 +85,6 @@ class EmbeddingModel:
         texts: list[str],
         *,
         is_query: bool = False,
-        batch_size: int = 32,
     ) -> np.ndarray:
         """Encode multiple texts to normalised vectors (2D)."""
         self._ensure_loaded()
@@ -129,10 +128,9 @@ class EmbeddingModel:
         texts: list[str],
         *,
         is_query: bool = False,
-        batch_size: int = 32,
     ) -> np.ndarray:
         """Async version of :meth:`encode_batch`."""
-        return await asyncio.to_thread(self.encode_batch, texts, is_query=is_query, batch_size=batch_size)
+        return await asyncio.to_thread(self.encode_batch, texts, is_query=is_query)
 
     async def async_dimension(self) -> int:
         """Async version of :attr:`dimension`."""
@@ -190,14 +188,6 @@ class EmbeddingModel:
                     "message": f"Reload failed, reverted: {e}",
                 }
 
-    def get_status(self) -> dict:
-        """Return current model state."""
-        return {
-            "status": "ready" if self._session is not None else "not_loaded",
-            "model": self.model_name,
-            "dimension": self._dimension,
-        }
-
     def unload(self) -> None:
         """Release model resources."""
         with self._lock:
@@ -254,12 +244,6 @@ class EmbeddingModel:
         if self.device == "cpu":
             return ["CPUExecutionProvider"]
         return ["CUDAExecutionProvider", "CPUExecutionProvider"]
-
-    def _get_session_options(self) -> onnxruntime.SessionOptions:
-        """Create session options with thread limit."""
-        opts = onnxruntime.SessionOptions()
-        opts.intra_op_num_threads = min(4, os.cpu_count() or 4)
-        return opts
 
     def _pool(self, hidden: np.ndarray, mask: np.ndarray) -> np.ndarray:
         """Mean pooling with attention mask, then L2 normalise.

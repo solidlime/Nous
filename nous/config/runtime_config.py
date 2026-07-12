@@ -32,7 +32,6 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
     "embedding": {
         "model": {"hot_reload": True, "description": "Embedding model name", "reload_time": "10-60s"},
         "device": {"hot_reload": True, "description": "Device (cpu/cuda)", "reload_time": "10-60s"},
-        "batch_size": {"hot_reload": True, "description": "Embedding batch size"},
     },
     "reranker": {
         "model": {"hot_reload": True, "description": "Reranker model name", "reload_time": "5-30s"},
