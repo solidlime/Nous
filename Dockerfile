@@ -38,8 +38,6 @@ RUN apt-get update && \
 
 # Copy Python packages from builder
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
-
 # Clean up Python cache and unnecessary files to reduce image size
 RUN find /usr/local/lib/python3.12/site-packages -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
     find /usr/local/lib/python3.12/site-packages -type d -name tests -exec rm -rf {} + 2>/dev/null || true && \
@@ -47,7 +45,8 @@ RUN find /usr/local/lib/python3.12/site-packages -type d -name __pycache__ -exec
     find /usr/local/lib/python3.12/site-packages -type f -name '*.pyc' -delete && \
     find /usr/local/lib/python3.12/site-packages -type f -name '*.pyo' -delete && \
     find /usr/local/lib/python3.12/site-packages -type f -name '*.c' -delete && \
-    find /usr/local/lib/python3.12/site-packages -type f -name '*.h' -delete
+    find /usr/local/lib/python3.12/site-packages -type f -name '*.h' -delete && \
+    python3.12 -m pip uninstall -y pip 2>/dev/null || true
 
 # Copy application code (v2: memory_mcp package only)
 COPY nous/ ${APP_HOME}/nous/
