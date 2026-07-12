@@ -9,7 +9,9 @@ from .base import GeneratedImage, ImageGenProvider
 
 
 class DalleProvider(ImageGenProvider):
-    def __init__(self, model: str = "dall-e-3", api_key: str = "", base_url: str = "", provider_name: str = "openai") -> None:
+    def __init__(
+        self, model: str = "dall-e-3", api_key: str = "", base_url: str = "", provider_name: str = "openai"
+    ) -> None:
         self._model = model
         self._api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
         self._base_url = base_url
