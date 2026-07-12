@@ -9,7 +9,9 @@ from starlette.responses import JSONResponse, StreamingResponse
 
 from nous.api.http.deps import _resolve_persona_from_request, _safe_get_context
 from nous.application.event_bus import (
+    EVENT_BODY_STATE_CHANGED,
     EVENT_CONTEXT_UPDATED,
+    EVENT_EMOTION_CHANGED,
     EVENT_EVENTS_INGESTED,
     EVENT_MEMORY_CREATED,
     EVENT_MEMORY_DELETED,
@@ -34,6 +36,8 @@ _ALL_EVENT_TYPES = frozenset(
         EVENT_MEMORY_UPDATED,
         EVENT_MEMORY_DELETED,
         EVENT_CONTEXT_UPDATED,
+        EVENT_EMOTION_CHANGED,
+        EVENT_BODY_STATE_CHANGED,
         PORTRAIT_GENERATE_START,
         PORTRAIT_GENERATE_COMPLETE,
         PORTRAIT_GENERATE_ERROR,

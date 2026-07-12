@@ -13,6 +13,8 @@ EVENT_MEMORY_CREATED = "memory.created"
 EVENT_MEMORY_UPDATED = "memory.updated"
 EVENT_MEMORY_DELETED = "memory.deleted"
 EVENT_CONTEXT_UPDATED = "context.updated"
+EVENT_EMOTION_CHANGED = "context.emotion_changed"
+EVENT_BODY_STATE_CHANGED = "context.body_state_changed"
 
 # Plugin ingestion
 EVENT_EVENTS_INGESTED = "events.ingested"

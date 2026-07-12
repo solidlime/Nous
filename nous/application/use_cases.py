@@ -135,13 +135,18 @@ class AppContext:
                     min_chars=self.settings.memory_enrichment.min_chars,
                 )
 
+        # EventBus (must be created before services)
+        from nous.application.event_bus import EventBus
+
+        self.event_bus = EventBus()
+
         # Services
         self.memory_service = MemoryService(
             self.memory_repo,
             entity_service=self.entity_service,
             enricher=enricher,
         )
-        self.persona_service = PersonaService(self.persona_repo)
+        self.persona_service = PersonaService(self.persona_repo, event_bus=self.event_bus)
         self.equipment_service = EquipmentService(self.equipment_repo)
 
         # Vector store (lazy)
@@ -169,11 +174,6 @@ class AppContext:
                     logger.debug("Reranker preload failed (will lazy-load on first use)")
 
             threading.Thread(target=_safe_preload, daemon=True).start()
-
-        # EventBus
-        from nous.application.event_bus import EventBus
-
-        self.event_bus = EventBus()
 
         # Initialize SessionEventRecorder (best-effort, don't fail startup)
         try:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import TYPE_CHECKING
 
@@ -17,18 +18,30 @@ from nous.domain.value_objects import normalize_emotion, normalize_importance
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from nous.application.event_bus import EventBus
     from nous.domain.persona.repository import PersonaRepository
 
 
 class PersonaService:
     """Domain service for persona state management."""
 
-    def __init__(self, repo: PersonaRepository) -> None:
+    def __init__(self, repo: PersonaRepository, event_bus: EventBus | None = None) -> None:
         self._repo = repo
+        self._event_bus = event_bus
 
     def get_context(self, persona: str) -> Result[PersonaState, DomainError]:
         """Get current persona state."""
         return self._repo.get_current_state(persona)
+
+    def _fire_event(self, event_type: str, data: dict) -> None:
+        """Fire-and-forget event publication from sync context."""
+        if self._event_bus is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._event_bus.publish(event_type, data))
+        except RuntimeError:
+            pass
 
     def update_emotion(
         self,
@@ -62,7 +75,19 @@ class PersonaService:
             trigger_memory_key=trigger_key,
             context=context,
         )
-        return self._repo.add_emotion_record(persona, record)
+        result = self._repo.add_emotion_record(persona, record)
+        if result.is_ok:
+            self._fire_event(
+                "context.emotion_changed",
+                {
+                    "persona": persona,
+                    "emotion": normalized_name,
+                    "emotion_intensity": clamped,
+                    "trigger_key": trigger_key,
+                    "context": context,
+                },
+            )
+        return result
 
     def update_physical_state(
         self,
@@ -84,7 +109,7 @@ class PersonaService:
             "heart_rate",
             "pain",
         }
-        updated = False
+        updated_values: dict[str, object] = {}
         for key, value in states.items():
             if key not in allowed_keys:
                 continue
@@ -93,9 +118,16 @@ class PersonaService:
             result = self._repo.update_state(persona, key, str(value))
             if not result.is_ok:
                 return Failure(result.error)
-            updated = True
-        if updated:
+            updated_values[key] = value
+        if updated_values:
             self._repo.update_state(persona, "last_state_update", get_now().isoformat())
+            self._fire_event(
+                "context.body_state_changed",
+                {
+                    "persona": persona,
+                    "states": updated_values,
+                },
+            )
         return Success(None)
 
     def update_relationship(self, persona: str, status: str) -> Result[None, DomainError]:

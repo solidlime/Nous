@@ -386,7 +386,7 @@ function connectSSE(persona) {
   const es = new EventSource(
     "/api/events/" +
       encodeURIComponent(persona) +
-      "?topics=memory,context,portrait",
+      "?topics=memory,context,portrait,emotion,body",
   );
   es._sseHandlers = {};
 
@@ -437,6 +437,61 @@ function connectSSE(persona) {
       "\ud83d\udc64 \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u66f4\u65b0\u3055\u308c\u307e\u3057\u305f",
       "info",
     );
+  });
+
+  es.addEventListener("context.emotion_changed", function (e) {
+    try {
+      const d = JSON.parse(e.data);
+      if (d.emotion) {
+        toast(
+          "\ud83d\ude0c \u611f\u60c5\u5909\u66f4: " +
+            d.emotion +
+            " (" +
+            Math.round((d.emotion_intensity || 0) * 100) +
+            "%)",
+          "info",
+        );
+        window.dispatchEvent(
+          new CustomEvent("emotion-changed", { detail: d }),
+        );
+      }
+    } catch (e) {
+      console.warn("[SSE parse] context.emotion_changed:", e.message);
+    }
+  });
+
+  es.addEventListener("context.body_state_changed", function (e) {
+    try {
+      const d = JSON.parse(e.data);
+      if (d.states) {
+        const labels = {
+          fatigue: "\U0001f525",
+          warmth: "\U0001f33c",
+          arousal: "\u26a1",
+          heart_rate: "\ud83d\udc93",
+          pain: "\U0001f4aa",
+        };
+        const parts = Object.entries(d.states)
+          .filter(function (_a) {
+            var _b = _a, k = _b[0], v = _b[1];
+            return v != null;
+          })
+          .map(function (_a) {
+            var _b = _a, k = _b[0], v = _b[1];
+            return (
+              (labels[k] || k) + " " + Math.round(Number(v) * 100) + "%"
+            );
+          });
+        if (parts.length) {
+          toast("\U0001f9a0 \u4f53\u8abf\u5909\u66f4: " + parts.join(" "), "info");
+        }
+        window.dispatchEvent(
+          new CustomEvent("body-state-changed", { detail: d }),
+        );
+      }
+    } catch (e) {
+      console.warn("[SSE parse] context.body_state_changed:", e.message);
+    }
   });
 
   es._sseHandlers["portrait.generated"] = function handlePortraitGenerated(e) {
