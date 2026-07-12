@@ -10,16 +10,13 @@ RUN apt-get update && \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt ./
+# Copy requirements (production-only — dev deps are in requirements-dev.txt)
+COPY requirements-prod.txt ./
 
-# Install PyTorch CPU version first (to avoid CUDA dependencies)
-# Use PyTorch's CPU-only index to prevent CUDA packages
-RUN pip install --no-cache-dir \
-    torch \
-    --index-url https://download.pytorch.org/whl/cpu && \
-    pip install --no-cache-dir uv && \
-    uv pip install --system -r requirements.txt
+# Install Python dependencies (ONNX Runtime replaces PyTorch — no torch needed)
+RUN pip install --no-cache-dir uv && \
+    uv pip install --system -r requirements-prod.txt && \
+    uv cache clean
 
 # Runtime stage: Copy only necessary files
 FROM python:3.12-slim

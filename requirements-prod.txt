@@ -1,0 +1,46 @@
+# ==========================================
+# Nous v3 — 本番用依存関係
+# ==========================================
+# Dockerfile はこのファイルを使用。
+# 開発/テスト用依存は requirements-dev.txt を参照。
+
+# Embedding & Reranker (ONNX Runtime — PyTorch-free)
+onnxruntime>=1.18.0
+tokenizers>=0.21.0
+huggingface_hub>=0.20
+sentencepiece>=0.1.99  # Required for cl-nagoya/ruri-v3-30m tokenizer
+
+# MCP Server Framework
+mcp>=1.0.0
+fastmcp>=3.4.4
+fastapi>=0.139.0
+uvicorn>=0.51.0
+
+# Async SQLite
+aiosqlite>=0.22.1
+
+# Data Validation & Settings
+pydantic>=2.0.0,<3.0.0
+pydantic-settings>=2.0.0
+
+# Vector Store
+qdrant-client>=1.8.2
+
+# Numerical
+numpy>=1.24.0
+
+# LLM Providers (Chat feature)
+anthropic>=0.40.0
+openai>=1.50.0
+
+# Docker SDK (sandbox sibling-container detection)
+docker>=7.0.0
+
+# Japanese NER (entity extraction)
+sudachipy>=0.6.0
+sudachidict_core>=20240716
+
+# PDF/Document Parsing (read_pdf tool)
+PyMuPDF>=1.24.0
+pdfplumber>=0.11.0
+pytesseract>=0.3.10
