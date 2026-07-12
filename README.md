@@ -28,6 +28,8 @@
 | 🎨 **Persona Portrait** | AIによるペルソナ画像生成（ComfyUI対応・デフォルトOFF） |
 | 📝 **Author's Note** | システムプロンプトへの永続コンテキスト注入でロールの一貫性を維持 |
 | 🎤 **Voice (Irodori-TTS)** | 日本語TTS音声出力（オプション・GPUサーバー必須・デフォルトOFF） |
+| 🃏 **SillyTavern Card Export** | PNGメタデータ埋め込みのペルソナカードエクスポート (`/api/personas/{persona}/card.png`) |
+| ⚡ **リアルタイム感情SSE** | 感情・体調の変化をSSEでリアルタイム通知。WebUIが即時反映 |
 
 ---
 
