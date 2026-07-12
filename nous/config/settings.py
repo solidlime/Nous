@@ -94,7 +94,9 @@ class AutoCaptureConfig(BaseModel):
 
 
 class IrodoriConfig(BaseModel):
-    """Irodori-TTS connection configuration."""
+    """Irodori-TTS connection configuration.
+    Env var: ``NOUS_IRODORI__URL`` (default: http://localhost:8088/v1)
+    """
 
     enabled: bool = False
     """Default OFF — must be explicitly enabled."""
@@ -140,7 +142,9 @@ class CorsConfig(BaseModel):
 
 
 class PortraitGenerationConfig(BaseModel):
-    """Portrait generation configuration — CRITICAL cost-control layer (default OFF)."""
+    """Portrait generation configuration — CRITICAL cost-control layer (default OFF).
+    Env var: ``NOUS_PORTRAIT_GEN__COMFYUI_URL`` (default: http://localhost:8188)
+    """
 
     enabled: bool = False
     """DEFAULT OFF — must be explicitly enabled for any portrait generation."""
