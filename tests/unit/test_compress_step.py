@@ -707,6 +707,7 @@ class TestDogfooding:
                 image_gen_provider TEXT DEFAULT 'openai',
                 image_gen_dalle_model TEXT DEFAULT 'dall-e-3',
                 image_gen_stability_url TEXT DEFAULT '',
+                image_gen_comfyui_url TEXT DEFAULT '',
                 enable_memory_tools INTEGER DEFAULT 1,
                 debug_mode INTEGER DEFAULT 0,
                 dynamic_temperature INTEGER DEFAULT 1,
