@@ -535,7 +535,7 @@ def _render_setup_page() -> str:
 </div>
 
 <script>
-  lucide.createIcons();
+  if (typeof lucide !== "undefined") lucide.createIcons();
   async function createPersona(e) {
     e.preventDefault();
     var name = document.getElementById('persona-name').value.trim();

@@ -1103,6 +1103,9 @@ async function clearChatHistory() {
   const ok = await showConfirm("会話をリセットしますか？現在の会話履歴がすべて削除されます。");
   if (!ok) return;
   CHAT.messages = [];
+  CHAT.attachments = [];
+  const badge = document.getElementById('chat-attach-badge');
+  if (badge) badge.style.display = 'none';
   resetToWelcome();
   // Delete server-side session (F3)
   const oldSid = getChatSessionId();
@@ -1646,8 +1649,8 @@ function exportChatHistory() {
   lines.push("");
   bubbles.forEach((msg) => {
     const role = msg.classList.contains("user")
-      ? '**<i data-lucide="user"></i> ユーザー**'
-      : '**<i data-lucide="bot"></i> アシスタント**';
+      ? '**ユーザー**'
+      : '**アシスタント**';
     const bubble = msg.querySelector(".chat-bubble");
     const time = msg.querySelector(".chat-time")?.textContent || "";
     const content = bubble ? bubble.textContent : "";
@@ -1801,6 +1804,7 @@ function appendToolEvent(eventType, data) {
         details.appendChild(resultPre);
       }
       callDiv.classList.add("done");
+      container.scrollTop = container.scrollHeight;
     } else {
       const div = document.createElement("div");
       div.className = "chat-tool-result";
