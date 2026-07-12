@@ -17,9 +17,9 @@
 **問題**: `session_id` が `localStorage` 管理 → PC/スマフォで別セッションに。チャットログが一致しない。
 
 ### CX01: session_id 固定化 [極小]
-- [ ] CX01a: `chat.js` の `getChatSessionId()` → localStorage の代わりに固定 `"main"` を返す
-- [ ] CX01b: `clearChatHistory()` 時にDBレコードのDELETEも行う（orphan防止）
-- [ ] CX01c: `restoreChatHistory()` が固定session_idで動作することの確認
+- [x] CX01a: `chat.js` の `getChatSessionId()` → localStorage の代わりに固定 `"main"` を返す
+- [x] CX01b: `clearChatHistory()` 時にDBレコードのDELETEも行う（orphan防止）
+- [x] CX01c: `restoreChatHistory()` が固定session_idで動作することの確認
 - **依存**: なし
 - **担当**: @fixer
 
@@ -37,9 +37,9 @@
 - `nous/infrastructure/image_gen/comfyui.py` — fire-and-forget + ポーリング、リトライ、factory連携
 
 ### TB01: ペルソナ外見記述フィールド [小]
-- [ ] `PersonaState` に `appearance: str | None` 追加
-- [ ] `persona_info` dict の `appearance` キーから自動読み込み
-- [ ] DB マイグレーション + テスト
+- [x] `PersonaState` に `appearance: str | None` 追加
+- [x] `persona_info` dict の `appearance` キーから自動読み込み
+- [x] DB マイグレーション + テスト
 - **依存**: なし
 - **担当**: @fixer
 
@@ -56,30 +56,30 @@
 - **担当**: @fixer
 
 ### TB04: MCP ツール `persona_portrait` [小]
-- [ ] `nous/api/mcp/tools/portrait.py` 新設
-- [ ] tool definition + ハンドラ追加
-- [ ] 統合テスト
+- [x] `nous/api/mcp/tools/portrait.py` 新設
+- [x] tool definition + ハンドラ追加
+- [x] 統合テスト
 - **依存**: TB03
 - **担当**: @fixer
 
 ### TB06: ComfyUI 接続設定の残り [極小]
-- [ ] `.env.example` に `COMFYUI_URL` 追記
-- [ ] 非起動時フォールバック確認
+- [x] `.env.example` に `COMFYUI_URL` 追記
+- [x] 非起動時フォールバック確認
 - **依存**: TB05
 - **担当**: @fixer
 
 ### TB07: WebUI ペルソナ画像表示 [中]
-- [ ] Overview タブ: 最新生成画像 + 「Generate Now」ボタン
-- [ ] チャットタブ: サイドバー上段に最新画像表示
-- [ ] 生成中ローディング (skeleton + pulse)
-- [ ] 自動生成設定パネル
+- [x] Overview タブ: 最新生成画像 + 「Generate Now」ボタン
+- [x] チャットタブ: サイドバー上段に最新画像表示
+- [x] 生成中ローディング (skeleton + pulse)
+- [x] 自動生成設定パネル
 - **依存**: TB03, TB05
 - **担当**: @designer
 
 ### TB08: SSE ポートレートイベント [小]
-- [ ] `events.py` に `portrait.generate_start/complete/error` 追加
-- [ ] EventBus 連携
-- [ ] フロントエンド SSE ハンドラ
+- [x] `events.py` に `portrait.generate_start/complete/error` 追加
+- [x] EventBus 連携
+- [x] フロントエンド SSE ハンドラ
 - **依存**: TB03
 - **担当**: @fixer
 
@@ -91,33 +91,33 @@
 **残り**: 全タスク（インフラ → MCP → WebUI）
 
 ### TE01: Irodori-TTS 設定の残り [極小]
-- [ ] `.env.example` に `IRODORI_TTS_URL` 追記
-- [ ] ヘルスチェック確認
+- [x] `.env.example` に `IRODORI_TTS_URL` 追記
+- [x] ヘルスチェック確認
 - **依存**: なし
 - **担当**: @fixer
 
 ### TE02: VoiceEngine 抽象 + Irodori 実装 [中]
-- [ ] `nous/infrastructure/voice/base.py` — VoiceEngine ABC (`synthesize(text, emotion) → bytes`)
-- [ ] `nous/infrastructure/voice/irodori.py` — OpenAI SDK `/v1/audio/speech` 実装
-- [ ] `nous/infrastructure/voice/emotion.py` — `build_caption(persona) → str` (context_note + 口調 + 感情)
-- [ ] テキスト絵文字注入 (joy→😊, anger→😠)
-- [ ] `nous/infrastructure/voice/factory.py`
-- [ ] 漢字→ひらがな前処理 + チャンク分割 (100文字)
-- [ ] テスト
+- [x] `nous/infrastructure/voice/base.py` — VoiceEngine ABC (`synthesize(text, emotion) → bytes`)
+- [x] `nous/infrastructure/voice/irodori.py` — OpenAI SDK `/v1/audio/speech` 実装
+- [x] `nous/infrastructure/voice/emotion.py` — `build_caption(persona) → str` (context_note + 口調 + 感情)
+- [x] テキスト絵文字注入 (joy→😊, anger→😠)
+- [x] `nous/infrastructure/voice/factory.py`
+- [x] 漢字→ひらがな前処理 + チャンク分割 (100文字)
+- [x] テスト
 - **依存**: TE01
 - **担当**: @fixer
 
 ### TE03: MCP ツール `irodori_tts` [小]
-- [ ] `nous/api/mcp/tools/tts.py` 新設
-- [ ] tool definition + ハンドラ追加
-- [ ] 統合テスト
+- [x] `nous/api/mcp/tools/tts.py` 新設
+- [x] tool definition + ハンドラ追加
+- [x] 統合テスト
 - **依存**: TE02
 - **担当**: @fixer
 
 ### TE04: WebUI 音声設定・再生 [中]
-- [ ] Chat 設定パネル「Voice」セクション
-- [ ] チャットメッセージ横の 🎵 再生ボタン (base64/wav)
-- [ ] 自動再生モード
+- [x] Chat 設定パネル「Voice」セクション
+- [x] チャットメッセージ横の 🎵 再生ボタン (base64/wav)
+- [x] 自動再生モード
 - **依存**: TE02, TE03
 - **担当**: @designer
 
