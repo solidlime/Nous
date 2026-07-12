@@ -424,9 +424,7 @@ class SQLiteConnection:
         ]
         for col, col_type, default in _chat_settings_migrations:
             try:
-                memory_conn.execute(
-                    f"ALTER TABLE chat_settings ADD COLUMN {col} {col_type} DEFAULT {default}"
-                )
+                memory_conn.execute(f"ALTER TABLE chat_settings ADD COLUMN {col} {col_type} DEFAULT {default}")
                 memory_conn.commit()
                 logger.info("Added %s column to chat_settings (migration)", col)
             except sqlite3.OperationalError:
