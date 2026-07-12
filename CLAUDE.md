@@ -29,9 +29,8 @@ python run_tests.py --test search    # 検索精度テスト
 python run_tests.py --test migrate   # DBスキーママイグレーション
 python run_tests.py -v               # 詳細出力
 
-# PyTorch CPU版（ローカル開発時のみ）
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-pip install -r requirements.txt
+# ONNX Runtime（PyTorch不要）
+pip install -r requirements-prod.txt -r requirements-dev.txt
 ```
 
 ## アーキテクチャ
