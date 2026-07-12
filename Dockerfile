@@ -4,11 +4,9 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
-# Install build dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# Build dependencies not needed for AMD64 (pre-built manylinux wheels).
+# For ARM64, install gcc/g++ if sudachipy fails to build:
+#   RUN apt-get update && apt-get install -y --no-install-recommends gcc g++
 
 # Copy requirements (production-only — dev deps are in requirements-dev.txt)
 COPY requirements-prod.txt ./
