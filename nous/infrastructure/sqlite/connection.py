@@ -409,6 +409,29 @@ class SQLiteConnection:
             except sqlite3.OperationalError:
                 pass  # column already exists
 
+        # Migration: add remaining chat_settings columns if missing (existing DBs)
+        _chat_settings_migrations = [
+            ("enable_memory_tools", "INTEGER", 1),
+            ("debug_mode", "INTEGER", 0),
+            ("dynamic_temperature", "INTEGER", 1),
+            ("emotion_temperature_scale", "REAL", 0.2),
+            ("top_p", "REAL", "NULL"),
+            ("context_use_llm_summary", "INTEGER", 1),
+            ("episode_consolidation_enabled", "INTEGER", 1),
+            ("episode_search_enabled", "INTEGER", 1),
+            ("dynamic_tool_selection", "INTEGER", 1),
+            ("retrieval_rrf_k", "REAL", 5.0),
+        ]
+        for col, col_type, default in _chat_settings_migrations:
+            try:
+                memory_conn.execute(
+                    f"ALTER TABLE chat_settings ADD COLUMN {col} {col_type} DEFAULT {default}"
+                )
+                memory_conn.commit()
+                logger.info("Added %s column to chat_settings (migration)", col)
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
         # One-shot migration: context_state -> memories (temporary)
         try:
             from nous.infrastructure.sqlite.migration_one_shot import (  # noqa: PLC0415
