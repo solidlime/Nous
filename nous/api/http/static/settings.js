@@ -594,17 +594,15 @@ function renderSettings(el, settings, status) {
         if (!confirm('Reset ALL settings to defaults? This cannot be undone.')) return;
         try {
             var count = 0;
-            Object.entries(settings).forEach(function(entry) {
-                var rCat = entry[0], rFields = entry[1];
-                if (typeof rFields !== 'object') return;
-                Object.entries(rFields).forEach(function(e2) {
-                    var rKey = e2[0], rMeta = e2[1];
+            for (const [rCat, rFields] of Object.entries(settings)) {
+                if (typeof rFields !== 'object') continue;
+                for (const [rKey, rMeta] of Object.entries(rFields)) {
                     if (rMeta && rMeta.source === 'override' && rMeta.default_value != null) {
-                        api('/api/settings', { method: 'PUT', body: JSON.stringify({ category: rCat, key: rKey, value: rMeta.default_value }) });
+                        await api('/api/settings', { method: 'PUT', body: JSON.stringify({ category: rCat, key: rKey, value: rMeta.default_value }) });
                         count++;
                     }
-                });
-            });
+                }
+            }
             toast('<i data-lucide="check-circle"></i> All settings reset to defaults (' + count + ' changes)', 'success');
             setTimeout(function() { loadSettings(); }, 500);
         } catch (e) {
@@ -748,13 +746,12 @@ async function resetCategory(cat) {
     var isHotCat = !RELOAD_CATEGORIES.has(cat) && cat !== 'server' && cat !== 'general';
     try {
         var count = 0;
-        Object.entries(settings[cat]).forEach(function(entry) {
-            var key = entry[0], meta = entry[1];
+        for (const [key, meta] of Object.entries(settings[cat])) {
             if (meta && meta.source === 'override' && meta.default_value != null) {
-                api('/api/settings', { method: 'PUT', body: JSON.stringify({ category: cat, key: key, value: meta.default_value }) });
+                await api('/api/settings', { method: 'PUT', body: JSON.stringify({ category: cat, key: key, value: meta.default_value }) });
                 count++;
             }
-        });
+        }
         toast('<i data-lucide="check-circle"></i> Category ' + cat + ' reset (' + count + ' settings)', 'success');
         if (RELOAD_CATEGORIES.has(cat)) {
             startStatusPoll();
@@ -822,14 +819,12 @@ async function loadSettingsProfile(name, profile) {
     if (!confirm('Load profile "' + esc(name) + '"? This will apply all settings from the profile.')) return;
     try {
         var count = 0;
-        Object.entries(profile).forEach(function(entry) {
-            var cat = entry[0], fields = entry[1];
-            Object.entries(fields).forEach(function(e2) {
-                var key = e2[0], value = e2[1];
-                api('/api/settings', { method: 'PUT', body: JSON.stringify({ category: cat, key: key, value: value }) });
+        for (const [cat, fields] of Object.entries(profile)) {
+            for (const [key, value] of Object.entries(fields)) {
+                await api('/api/settings', { method: 'PUT', body: JSON.stringify({ category: cat, key: key, value: value }) });
                 count++;
-            });
-        });
+            }
+        }
         toast('<i data-lucide="check-circle"></i> Loaded profile "' + esc(name) + '" (' + count + ' settings)', 'success');
         setTimeout(function() { loadSettings(); }, 1000);
     } catch (e) {

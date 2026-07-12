@@ -3008,7 +3008,7 @@ async function loadVoiceModels() {
   if (!select) return;
   try {
     const resp = await api("/api/tts/" + encodeURIComponent(S.persona) + "/voices");
-    if (resp.ok && resp.voices && resp.voices.length > 0) {
+    if (resp.voices && resp.voices.length > 0) {
       select.innerHTML = "";
       resp.voices.forEach(function (v) {
         var opt = document.createElement("option");
@@ -3034,7 +3034,7 @@ async function testVoicePlayback() {
       method: "POST",
       body: JSON.stringify({ text: "こんにちは、テストです。" }),
     });
-    if (resp.ok && resp.audio_base64) {
+    if (resp.audio_base64) {
       if (statusEl) statusEl.textContent = "再生中...";
       var audioUrl = "data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64;
       var audio = new Audio(audioUrl);
@@ -3074,7 +3074,7 @@ function autoPlayTts(text) {
     body: JSON.stringify({ text: plainText }),
   })
     .then(function (resp) {
-      if (resp.ok && resp.audio_base64) {
+    if (resp.audio_base64) {
         var audioUrl = "data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64;
         var audio = new Audio(audioUrl);
         audio.play().catch(function (err) {

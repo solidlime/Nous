@@ -76,7 +76,7 @@ class MemoryEnricher:
     def _run_async(coro):
         """Safely run an async coroutine from a sync context."""
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()  # raises RuntimeError if no loop
         except RuntimeError:
             return asyncio.run(coro)
         else:
