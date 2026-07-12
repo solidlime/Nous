@@ -1,0 +1,83 @@
+"""MCP tools for LLM-driven persona portrait generation.
+
+Provides the ``persona_portrait`` tool which accepts an LLM-provided scene
+description (and optional style hint) and generates a portrait image via the
+configured provider (ComfyUI / DALL-E / Stability).
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from nous.application.use_cases import AppContext
+from nous.domain.chat_config import ChatConfigRepository
+
+logger = logging.getLogger(__name__)
+
+
+async def _tool_persona_portrait_with_scene(
+    ctx: AppContext,
+    persona: str,
+    scene: str,
+    style: str | None = None,
+) -> str:
+    """Generate a portrait image for the current persona using an LLM scene.
+
+    Parameters
+    ----------
+    ctx : AppContext
+        Application context with services and settings.
+    persona : str
+        Persona name.
+    scene : str
+        LLM-provided scene description (e.g. "at the beach watching sunset").
+    style : str | None
+        Optional art style hint (e.g. "anime", "watercolor", "oil painting").
+        When provided the style is incorporated into the prompt.
+
+    Returns
+    -------
+    str
+        JSON string with ``{"image_base64": "...", "revised_prompt": "..."}``
+        on success, or ``{"ok": False, "error": "..."}`` on failure.
+    """
+    try:
+        # 0. Enabled check — ChatConfig with fallback to Settings
+        chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
+        enabled = chat_config.portrait_enabled or ctx.settings.portrait_gen.enabled
+        if not enabled:
+            return json.dumps(
+                {"ok": False, "error": "Portrait generation is disabled in settings"},
+                ensure_ascii=False,
+            )
+
+        state_result = ctx.persona_service.get_context(persona)
+        if not state_result.is_ok:
+            return json.dumps({"ok": False, "error": str(state_result.error)}, ensure_ascii=False)
+
+        persona_state = state_result.value
+        config = ctx.settings.portrait_gen
+
+        # Incorporate style into scene if provided
+        effective_scene = scene
+        if style:
+            effective_scene = f"{scene}, {style} style"
+
+        from nous.application.portrait.service import PortraitGenerationService
+
+        service = PortraitGenerationService(config)
+        result = await service.generate(persona_state, scene=effective_scene)
+
+        # Map service result to tool output format
+        return json.dumps(
+            {
+                "image_base64": result.get("image_base64", ""),
+                "revised_prompt": result.get("prompt", effective_scene),
+            },
+            ensure_ascii=False,
+        )
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)

@@ -29,7 +29,7 @@ from nous.api.mcp._tools_helpers import (  # noqa: E402, F401
     _format_state_diff,
     _parse_days_from_relative,
 )
-from nous.api.mcp._tools_irodori import _tool_irodori_tts  # noqa: E402, F401
+from nous.api.mcp._tools_irodori import _tool_irodori_tts, _tool_irodori_voices  # noqa: E402, F401
 from nous.api.mcp._tools_item import (  # noqa: E402, F401
     _tool_item_add,
     _tool_item_equip,
@@ -45,6 +45,7 @@ from nous.api.mcp._tools_memory import (  # noqa: E402, F401
 )
 from nous.api.mcp._tools_persona import _tool_get_context, _tool_update_context  # noqa: E402, F401
 from nous.api.mcp._tools_portrait import _tool_persona_portrait  # noqa: E402, F401
+from nous.api.mcp._tools_portrait_scene import _tool_persona_portrait_with_scene  # noqa: E402, F401
 from nous.api.mcp._tools_skill import _tool_invoke_skill  # noqa: E402, F401
 
 # =============================================================================
@@ -65,8 +66,9 @@ TOOL_DISPATCH: dict[str, Any] = {
     "item_search": _tool_item_search,
     "goal_manage": _tool_goal_manage,
     "invoke_skill": _tool_invoke_skill,
-    "persona_portrait": _tool_persona_portrait,
+    "persona_portrait": _tool_persona_portrait_with_scene,
     "irodori_tts": _tool_irodori_tts,
+    "irodori_voices": _tool_irodori_voices,
 }
 
 
@@ -360,20 +362,32 @@ def register_tools(mcp: FastMCP) -> None:
 
     # persona_portrait
     @_tool("persona_portrait")
-    async def persona_portrait() -> str:
-        """Generate a portrait image for the current persona.
-        Uses the configured image provider (ComfyUI / DALL-E / Stability).
-        Returns base64-encoded image + prompt metadata,
-        or fallback emoji when the provider is unavailable."""
+    async def persona_portrait(
+        scene: str = "",
+        style: str | None = None,
+    ) -> str:
+        """Generate a portrait image for the current persona from a scene description.
+        scene: LLM-written scene description (required). style: art style hint (optional) — e.g. 'anime',
+        'watercolor', 'oil painting'.  Uses configured provider (ComfyUI / DALL-E / Stability).
+        Returns base64-encoded image + revised prompt metadata."""
+        if not scene:
+            return json.dumps({"ok": False, "error": "scene is required"}, ensure_ascii=False)
         p = _resolve_persona()
-        return await _tool_persona_portrait(AppContextRegistry.get(p), p)
+        return await _tool_persona_portrait_with_scene(AppContextRegistry.get(p), p, scene=scene, style=style)
 
     # irodori_tts
     @_tool("irodori_tts")
-    async def irodori_tts(text: str, voice: str | None = None) -> str:
-        """Generate TTS audio using Irodori. text: Japanese text to speak. voice: speaker name override."""
+    async def irodori_tts(text: str, voice: str | None = None, emotion: str | None = None) -> str:
+        """Generate TTS audio using Irodori. text: Japanese text to speak. voice: speaker name override. emotion: override persona emotion (joy/sadness/anger/etc)."""
         p = _resolve_persona()
-        return await _tool_irodori_tts(AppContextRegistry.get(p), p, text=text, voice=voice)
+        return await _tool_irodori_tts(AppContextRegistry.get(p), p, text=text, voice=voice, emotion=emotion)
+
+    # irodori_voices
+    @_tool("irodori_voices")
+    async def irodori_voices() -> str:
+        """List available voices from Irodori TTS engine."""
+        p = _resolve_persona()
+        return await _tool_irodori_voices(AppContextRegistry.get(p), p)
 
     # ── Chat builtin tool wrappers (delegate to builtin.py handlers) ──
 
