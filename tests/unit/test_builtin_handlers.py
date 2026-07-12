@@ -93,7 +93,7 @@ class TestImageGenerateHandler:
         mock_provider.generate.return_value = []
 
         with (
-            patch("nous.infrastructure.image_gen.dalle.DalleProvider", return_value=mock_provider) as mock_dalle,
+            patch("nous.infrastructure.image_gen.factory.DalleProvider", return_value=mock_provider) as mock_dalle,
         ):
             result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "provider": "openai"})
 
@@ -108,7 +108,7 @@ class TestImageGenerateHandler:
         mock_provider.provider_name = "openai"
         mock_provider.generate.return_value = []
 
-        with patch("nous.infrastructure.image_gen.dalle.DalleProvider", return_value=mock_provider) as mock_dalle:
+        with patch("nous.infrastructure.image_gen.factory.DalleProvider", return_value=mock_provider) as mock_dalle:
             result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "provider": "auto"})
 
         assert result["status"] == "success"
@@ -123,7 +123,7 @@ class TestImageGenerateHandler:
         mock_provider.generate.return_value = []
 
         with (
-            patch("nous.infrastructure.image_gen.stability.StabilityProvider", return_value=mock_provider) as mock_sd,
+            patch("nous.infrastructure.image_gen.factory.StabilityProvider", return_value=mock_provider) as mock_sd,
         ):
             result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "provider": "stability"})
 
@@ -138,7 +138,7 @@ class TestImageGenerateHandler:
         mock_provider.provider_name = "openai"
         mock_provider.generate.return_value = []
 
-        with patch("nous.infrastructure.image_gen.dalle.DalleProvider", return_value=mock_provider):
+        with patch("nous.infrastructure.image_gen.factory.DalleProvider", return_value=mock_provider):
             result = await _handle_image_generate(
                 mock_ctx, mock_config, {"prompt": "a cat", "provider": "openai", "n": 0}
             )
@@ -152,7 +152,7 @@ class TestImageGenerateHandler:
         mock_provider.provider_name = "openai"
         mock_provider.generate.return_value = []
 
-        with patch("nous.infrastructure.image_gen.dalle.DalleProvider", return_value=mock_provider):
+        with patch("nous.infrastructure.image_gen.factory.DalleProvider", return_value=mock_provider):
             result = await _handle_image_generate(
                 mock_ctx, mock_config, {"prompt": "a cat", "provider": "openai", "n": 10}
             )
@@ -167,7 +167,7 @@ class TestImageGenerateHandler:
         mock_provider.provider_name = "openai"
         mock_provider.generate.return_value = []
 
-        with patch("nous.infrastructure.image_gen.dalle.DalleProvider", return_value=mock_provider) as mock_dalle:
+        with patch("nous.infrastructure.image_gen.factory.DalleProvider", return_value=mock_provider) as mock_dalle:
             result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "provider": "openai"})
 
         assert result["status"] == "success"

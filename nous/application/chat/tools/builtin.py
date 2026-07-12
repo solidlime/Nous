@@ -168,7 +168,7 @@ async def _handle_mcp_dispatch(tool_name: str, ctx: AppContext, config: ChatConf
 
 _VALID_IMAGE_SIZES: frozenset[str] = frozenset({"1024x1024", "1792x1024", "1024x1792", "512x512", "768x768"})
 _VALID_QUALITIES: frozenset[str] = frozenset({"standard", "hd"})
-_VALID_PROVIDERS: frozenset[str] = frozenset({"openai", "stability", "auto"})
+_VALID_PROVIDERS: frozenset[str] = frozenset({"openai", "stability", "comfyui", "auto"})
 
 
 async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
@@ -220,20 +220,34 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
                 {"type": "image_gen_start", "provider": provider_name, "prompt": prompt[:100], "n": n},
             )
 
-        # プロバイダ選択
-        if provider_name == "openai":
-            from nous.infrastructure.image_gen.dalle import DalleProvider
+        # プロバイダ選択（ファクトリ経由）
+        from nous.infrastructure.image_gen.base import ImageGenConfig
+        from nous.infrastructure.image_gen.factory import get_image_gen_provider
 
-            model = getattr(config, "image_gen_dalle_model", "dall-e-3")
-            provider = DalleProvider(model=model)
-        elif provider_name == "stability":
-            from nous.infrastructure.image_gen.stability import StabilityProvider
+        # comfyui_url フォールバック: ChatConfig → image_gen → portrait_gen
+        comfyui_url = getattr(config, "image_gen_comfyui_url", "")
+        if not comfyui_url:
+            from nous.config.runtime_config import RuntimeConfigManager
 
-            stability_url = getattr(config, "image_gen_stability_url", "")
-            if not stability_url:
+            rm = RuntimeConfigManager()
+            comfyui_url, _ = rm.get_effective_value("image_gen", "comfyui_url")
+            if not comfyui_url:
+                comfyui_url, _ = rm.get_effective_value("portrait_gen", "comfyui_url")
+
+        gen_cfg = ImageGenConfig(
+            provider=provider_name,
+            dalle_model=getattr(config, "image_gen_dalle_model", "dall-e-3"),
+            stability_url=getattr(config, "image_gen_stability_url", ""),
+            comfyui_url=comfyui_url,
+            size=size,
+            quality=quality,
+        )
+        provider = get_image_gen_provider(gen_cfg)
+        if provider is None:
+            if provider_name == "stability" and not gen_cfg.stability_url:
                 return {"status": "error", "message": "Stable Diffusion URL is not configured"}
-            provider = StabilityProvider(api_url=stability_url)
-        else:
+            if provider_name == "comfyui" and not gen_cfg.comfyui_url:
+                return {"status": "error", "message": "ComfyUI URL is not configured"}
             return {"status": "error", "message": f"Unsupported provider: {provider_name}"}
 
         generated = await provider.generate(prompt=prompt, size=size, quality=quality, n=n)
