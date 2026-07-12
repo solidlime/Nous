@@ -599,7 +599,8 @@ async def run_context_housekeeping(ctx: AppContext, config: ChatConfig) -> dict:
         raw = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
     try:
         result = json.loads(raw)
-    except Exception:
+    except Exception as e:
+        logger.warning("memory_llm: context housekeeping parse failed: %s", e)
         result = {}
 
     cancel_goals = result.get("cancel_goals", [])

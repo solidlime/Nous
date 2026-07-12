@@ -430,8 +430,8 @@ def _sync_process_pdf(
                 if len(plumber_text.strip()) >= 50:
                     full_text = plumber_text
                     text_source = "pdfplumber"
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("builtin: pdf text extraction failed: %s", e)
 
         # ステージ3: OCR フォールバック
         if len(full_text.strip()) < 50:
@@ -457,7 +457,8 @@ def _sync_process_pdf(
             except ImportError:
                 if not full_text.strip():
                     text_source = "empty"
-            except Exception:
+            except Exception as e:
+                logger.debug("builtin: OCR extraction failed: %s", e)
                 if not full_text.strip():
                     text_source = "empty"
 
@@ -492,8 +493,8 @@ def _sync_process_pdf(
                                     "rows": rows[:50],
                                 }
                             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("builtin: table extraction failed: %s", e)
 
     # ── 埋め込み画像抽出 (mode: images / all, 最大5枚、1MB/枚上限) ──
     images = []

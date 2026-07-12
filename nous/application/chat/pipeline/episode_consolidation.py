@@ -6,6 +6,10 @@ import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from nous.infrastructure.logging.structured import get_logger
+
+logger = get_logger(__name__)
+
 if TYPE_CHECKING:
     from nous.domain.chat_config import ChatConfig
     from nous.domain.memory.episode_segmenter import Episode
@@ -184,7 +188,8 @@ class EpisodeConsolidation:
                 model,
                 config.get_effective_base_url(),
             )
-        except Exception:
+        except Exception as e:
+            logger.warning("episode_consolidation: provider init failed: %s", e, exc_info=True)
             return {}
 
         prompt = CONSOLIDATE_FACTS_PROMPT.format(
@@ -204,7 +209,8 @@ class EpisodeConsolidation:
                     text += event.content
                 elif isinstance(event, (DoneEvent, ErrorEvent)):
                     break
-        except Exception:
+        except Exception as e:
+            logger.warning("episode_consolidation: LLM call failed: %s", e, exc_info=True)
             return {}
 
         return self._parse_result(text)
@@ -220,8 +226,8 @@ class EpisodeConsolidation:
                     top_hit = search_result.value[0]
                     hit_score = top_hit.score if hasattr(top_hit, "score") else 0.0
                     return hit_score > self.SIMILARITY_THRESHOLD
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("episode_consolidation: duplicate check failed: %s", e)
         return False
 
     def _parse_result(self, text: str) -> dict:
@@ -241,5 +247,6 @@ class EpisodeConsolidation:
                     p for p in result.get("profile_updates", []) if isinstance(p, dict) and p.get("content")
                 ],
             }
-        except Exception:
+        except Exception as e:
+            logger.warning("episode_consolidation: parse result failed: %s", e)
             return {}
