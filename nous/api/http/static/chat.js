@@ -449,6 +449,9 @@ function applyChatConfig(cfg) {
   const igStabilityUrl = document.getElementById(
     "chat-image-gen-stability-url",
   );
+  const igComfyuiUrl = document.getElementById(
+    "chat-image-gen-comfyui-url",
+  );
   const igOptions = document.getElementById("chat-image-gen-options");
   const igDalleOptions = document.getElementById(
     "chat-image-gen-dalle-options",
@@ -456,22 +459,27 @@ function applyChatConfig(cfg) {
   const igStabilityOptions = document.getElementById(
     "chat-image-gen-stability-options",
   );
+  const igComfyuiOptions = document.getElementById(
+    "chat-image-gen-comfyui-options",
+  );
 
   if (igEnabled) igEnabled.checked = cfg.image_gen_enabled || false;
   if (igProvider) igProvider.value = cfg.image_gen_provider || "openai";
   if (igDalleModel)
     igDalleModel.value = cfg.image_gen_dalle_model || "dall-e-3";
   if (igStabilityUrl) igStabilityUrl.value = cfg.image_gen_stability_url || "";
+  if (igComfyuiUrl) igComfyuiUrl.value = cfg.image_gen_comfyui_url || "";
 
   // 表示切替
   function updateImageGenUI() {
     if (!igOptions) return;
     const enabled = igEnabled && igEnabled.checked;
     igOptions.style.display = enabled ? "" : "none";
-    if (igProvider && igDalleOptions && igStabilityOptions) {
+    if (igProvider && igDalleOptions && igStabilityOptions && igComfyuiOptions) {
       const prov = igProvider.value;
       igDalleOptions.style.display = prov === "openai" ? "" : "none";
       igStabilityOptions.style.display = prov === "stability" ? "" : "none";
+      igComfyuiOptions.style.display = prov === "comfyui" ? "" : "none";
     }
   }
   if (igEnabled) igEnabled.addEventListener("change", updateImageGenUI);
@@ -605,6 +613,11 @@ async function saveChatConfig() {
       "chat-image-gen-stability-url",
     )
       ? document.getElementById("chat-image-gen-stability-url").value.trim()
+      : "",
+    image_gen_comfyui_url: document.getElementById(
+      "chat-image-gen-comfyui-url",
+    )
+      ? document.getElementById("chat-image-gen-comfyui-url").value.trim()
       : "",
     // 拡張機能: irodori / portrait
     irodori_enabled: getChecked("chat-irodori-enabled") || getChecked("chat-voice-enabled"),

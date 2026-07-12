@@ -84,6 +84,7 @@ def register_chat_routes(mcp) -> None:
             "image_gen_provider",
             "image_gen_dalle_model",
             "image_gen_stability_url",
+            "image_gen_comfyui_url",
             "enable_memory_tools",
             "debug_mode",
             "dynamic_temperature",

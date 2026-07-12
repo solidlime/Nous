@@ -152,6 +152,7 @@ def render_chat_tab() -> str:
                                             <select id="chat-image-gen-provider" class="chat-field-input">
                                                 <option value="openai">OpenAI (DALL-E)</option>
                                                 <option value="stability">Stable Diffusion</option>
+                                                <option value="comfyui">ComfyUI</option>
                                             </select>
                                         </div>
                                         <div id="chat-image-gen-dalle-options">
@@ -167,6 +168,12 @@ def render_chat_tab() -> str:
                                             <div class="chat-config-row" style="margin-bottom:6px;">
                                                 <div class="chat-field-label">SD WebUI URL:</div>
                                                 <input type="text" id="chat-image-gen-stability-url" class="chat-field-input" placeholder="http://localhost:7860" />
+                                            </div>
+                                        </div>
+                                        <div id="chat-image-gen-comfyui-options" style="display:none;">
+                                            <div class="chat-config-row" style="margin-bottom:6px;">
+                                                <div class="chat-field-label">ComfyUI URL:</div>
+                                                <input type="text" id="chat-image-gen-comfyui-url" class="chat-field-input" placeholder="http://localhost:8188" />
                                             </div>
                                         </div>
                                     </div>
