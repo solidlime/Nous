@@ -17,6 +17,7 @@ def mock_app_context():
     ctx.memory_service = MagicMock()
     ctx.memory_service.count_memories.return_value = Success(0)
     ctx.search_engine = AsyncMock()
+    ctx.search_engine.set_persona = MagicMock(return_value=None)
     ctx.persona_service = MagicMock()
     ctx.equipment_service = MagicMock()
     ctx.entity_service = MagicMock()
