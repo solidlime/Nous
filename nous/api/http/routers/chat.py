@@ -221,6 +221,8 @@ def register_chat_routes(mcp) -> None:
 
         db = ctx.connection.get_memory_db()
         SessionManager.delete_session(db, persona, session_id)
+        db.execute("DELETE FROM session_events WHERE persona=? AND session_id=?", (persona, session_id))
+        db.commit()
         _session_manager.clear(persona, session_id)
         return JSONResponse({"deleted": True, "session_id": session_id})
 
