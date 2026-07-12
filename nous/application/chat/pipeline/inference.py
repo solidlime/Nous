@@ -12,7 +12,7 @@ from nous.application.chat.events import (
     ToolCallSSE,
     ToolResultSSE,
 )
-from nous.infrastructure.llm.base import LLMMessage
+from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, LLMMessage, TextDeltaEvent, ToolCallEvent
 from nous.infrastructure.llm.factory import get_provider
 from nous.infrastructure.logging.structured import get_logger
 
@@ -39,8 +39,6 @@ class InferenceStep:
         registry: ToolRegistry,
         effective_temp: float | None = None,
     ) -> AsyncIterator[TextDeltaSSE | ToolCallSSE | ToolResultSSE | ErrorSSE]:
-        from nous.infrastructure.llm.base import ErrorEvent, TextDeltaEvent, ToolCallEvent
-
         api_key = config.get_effective_api_key()
         if not api_key:
             yield ErrorSSE(message="APIキーが設定されていません。チャット設定でAPIキーを入力してください。")
@@ -94,9 +92,18 @@ class InferenceStep:
                     yield TextDeltaSSE(content=event.content)
                 elif isinstance(event, ToolCallEvent):
                     pending_tool_calls.append(event)
+                    yield ToolCallSSE(name=event.tool_name, input=event.tool_input, id=event.tool_use_id)
                 elif isinstance(event, ErrorEvent):
                     yield ErrorSSE(message=event.message)
                     return
+                elif isinstance(event, DoneEvent):
+                    # Provider finished streaming this turn.
+                    if not current_text and not pending_tool_calls:
+                        logger.warning(
+                            "InferenceStep: provider finished with empty response (model=%s, turn=%d)",
+                            config.get_effective_model(),
+                            turn_ctx.tool_call_count,
+                        )
 
             if not pending_tool_calls:
                 break
@@ -112,32 +119,18 @@ class InferenceStep:
                 )
             )
 
-            # Yield all tool call SSEs first
-            for tc in pending_tool_calls:
-                yield ToolCallSSE(name=tc.tool_name, input=tc.tool_input, id=tc.tool_use_id)
-
             # ── Deduplicate tool calls before execution ──
 
             # 1) Skip tool calls already executed in this turn
-            executed_keys = {
-                (tc.get("name", ""), json.dumps(tc.get("input", {}), sort_keys=True, default=str))
-                for tc in (turn_ctx.tool_calls_log or [])
-            }
-            pending_tool_calls = [
-                tc
-                for tc in pending_tool_calls
-                if (tc.tool_name, json.dumps(tc.tool_input, sort_keys=True, default=str)) not in executed_keys
-            ]
+            executed_ids = {tc.get("id", "") for tc in (turn_ctx.tool_calls_log or [])}
+            pending_tool_calls = [tc for tc in pending_tool_calls if tc.tool_use_id not in executed_ids]
 
             # 2) Deduplicate identical tool calls within the same pending batch
-            seen_calls: set[tuple[str, str]] = set()
+            seen_ids: set[str] = set()
             deduped_calls: list[ToolCallEvent] = []
             for tc in pending_tool_calls:
-                tc_name = tc.tool_name
-                tc_args = json.dumps(tc.tool_input, sort_keys=True, default=str)
-                key = (tc_name, tc_args)
-                if key not in seen_calls:
-                    seen_calls.add(key)
+                if tc.tool_use_id not in seen_ids:
+                    seen_ids.add(tc.tool_use_id)
                     deduped_calls.append(tc)
             if len(deduped_calls) < len(pending_tool_calls):
                 logger.info("Deduplicated %d → %d tool calls", len(pending_tool_calls), len(deduped_calls))

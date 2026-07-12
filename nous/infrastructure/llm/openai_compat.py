@@ -149,6 +149,7 @@ class OpenAICompatProvider(LLMProvider):
                                     "id": tc_chunk.id or "",
                                     "name": tc_chunk.function.name if tc_chunk.function else "",
                                     "args_json": "",
+                                    "yielded": False,
                                 }
                             if tc_chunk.id:
                                 pending_tool_calls[idx]["id"] = tc_chunk.id
@@ -157,6 +158,15 @@ class OpenAICompatProvider(LLMProvider):
                                     pending_tool_calls[idx]["name"] = tc_chunk.function.name
                                 if tc_chunk.function.arguments:
                                     pending_tool_calls[idx]["args_json"] += tc_chunk.function.arguments
+                            # Yield immediately when tool name is first known
+                            tc_data = pending_tool_calls[idx]
+                            if tc_data["name"] and not tc_data.get("yielded"):
+                                tc_data["yielded"] = True
+                                yield ToolCallEvent(
+                                    tool_name=tc_data["name"],
+                                    tool_input={},  # args not complete yet; full version comes at stream end
+                                    tool_use_id=tc_data["id"],
+                                )
 
             # Emit collected tool calls
             for idx in sorted(pending_tool_calls.keys()):
