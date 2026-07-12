@@ -94,6 +94,8 @@ def register_chat_routes(mcp) -> None:
             "episode_search_enabled",
             "irodori_enabled",
             "portrait_enabled",
+            "voice_auto_play",
+            "voice_emotion_link",
         ):
             if field_name in body:
                 update_data[field_name] = body[field_name]

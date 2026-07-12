@@ -106,6 +106,9 @@ class ChatConfig(BaseModel):
     # Phase 1: per-persona toggles with global fallback
     irodori_enabled: bool = False
     portrait_enabled: bool = False
+    # Voice / TTS settings (TE04)
+    voice_auto_play: bool = False
+    voice_emotion_link: bool = True
     updated_at: str | None = None
 
     def model_post_init(self, __context) -> None:
@@ -281,7 +284,8 @@ class ChatConfigRepository:
             "context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled, "
             "retrieval_rrf_k, "
             "dynamic_tool_selection, "
-            "irodori_enabled, portrait_enabled "
+            "irodori_enabled, portrait_enabled, "
+            "voice_auto_play, voice_emotion_link "
             "FROM chat_settings WHERE persona = ?",
             (persona,),
         )
@@ -343,8 +347,9 @@ class ChatConfigRepository:
                      retrieval_rrf_k,
                        dynamic_tool_selection,
                        irodori_enabled, portrait_enabled,
+                       voice_auto_play, voice_emotion_link,
                        updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
@@ -397,6 +402,8 @@ class ChatConfigRepository:
                  dynamic_tool_selection=excluded.dynamic_tool_selection,
                  irodori_enabled=excluded.irodori_enabled,
                  portrait_enabled=excluded.portrait_enabled,
+                 voice_auto_play=excluded.voice_auto_play,
+                 voice_emotion_link=excluded.voice_emotion_link,
                  updated_at=excluded.updated_at
             """,
             (
@@ -452,6 +459,8 @@ class ChatConfigRepository:
                 int(config.dynamic_tool_selection),
                 int(config.irodori_enabled),
                 int(config.portrait_enabled),
+                int(config.voice_auto_play),
+                int(config.voice_emotion_link),
                 now,
             ),
         )

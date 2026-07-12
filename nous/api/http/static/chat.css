@@ -433,6 +433,9 @@ html.light .chat-tool-result-content {
 #settings-panel details[data-category="other"] summary::before {
   color: var(--accent-red);
 }
+#settings-panel details[data-category="voice"] summary::before {
+  color: var(--accent-green);
+}
 
 /* Enhanced field labels */
 .chat-field-label {
