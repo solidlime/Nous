@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from nous.config.settings import (
     EmbeddingConfig,
     ForgettingConfig,
@@ -123,3 +125,43 @@ class TestSettings:
         assert s.import_dir == "/custom/data/import"
         assert s.cache_dir == "/custom/data/cache"
         assert s.config_dir == "/custom/data/config"
+
+
+class TestEnsureDirectories:
+    """ensure_directories() should create expected directories, NOT
+    sentence_transformers or torch (removed in ONNX migration)."""
+
+    def test_creates_expected_dirs(self, tmp_path):
+        s = Settings(data_root=str(tmp_path))
+        s.ensure_directories()
+
+        expected = [
+            Path(s.data_dir),
+            Path(s.data_root) / "logs",
+            Path(s.data_root) / "backups",
+            Path(s.import_dir),
+            Path(s.import_dir) / "done",
+            Path(s.cache_dir),
+            Path(s.cache_dir) / "huggingface",
+            Path(s.config_dir),
+            Path(s.skills_dir),
+        ]
+        for d in expected:
+            assert d.is_dir(), f"Missing: {d}"
+
+    def test_no_sentence_transformers_dir(self, tmp_path):
+        s = Settings(data_root=str(tmp_path))
+        s.ensure_directories()
+        st_dir = Path(s.cache_dir) / "sentence_transformers"
+        assert not st_dir.exists()
+
+    def test_no_torch_dir(self, tmp_path):
+        s = Settings(data_root=str(tmp_path))
+        s.ensure_directories()
+        torch_dir = Path(s.cache_dir) / "torch"
+        assert not torch_dir.exists()
+
+    def test_idempotent(self, tmp_path):
+        s = Settings(data_root=str(tmp_path))
+        s.ensure_directories()
+        s.ensure_directories()  # should not raise

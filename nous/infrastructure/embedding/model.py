@@ -1,14 +1,22 @@
+"""ONNX Runtime embedding model using tokenizers + onnxruntime.
+
+Replaces the old sentence-transformers backend with a lighter ONNX inference
+pipeline.  Lazy-loaded with double-checked locking; supports sync and async
+encode interfaces with query/document prefixing.
+"""
+
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
-from typing import TYPE_CHECKING
+
+import numpy as np
+import onnxruntime
+from huggingface_hub import snapshot_download
+from tokenizers import Tokenizer
 
 from nous.infrastructure.logging.structured import get_logger
-
-if TYPE_CHECKING:
-    import numpy as np
-    from sentence_transformers import SentenceTransformer
 
 logger = get_logger(__name__)
 
@@ -17,49 +25,60 @@ _DOCUMENT_PREFIX = "検索文書: "
 
 
 class EmbeddingModel:
-    """Lazy-loading embedding model wrapper for sentence-transformers.
+    """Lazy-loading embedding model backed by ONNX Runtime + tokenizers.
 
-    Supports the ruri-v3 family that uses query/document prefixes.
+    Thread-safe (double-checked locking).  Provides sync and async encode
+    methods that return L2-normalised embeddings via mean pooling.
 
-    Thread-safe: uses double-checked locking for lazy model loading.
-    Provides both sync (encode/encode_batch/dimension) and async
-    (async_encode/async_encode_batch/async_dimension) interfaces.
+    Public API is stable — do not change.
     """
 
     def __init__(
         self,
-        model_name: str = "cl-nagoya/ruri-v3-30m",
+        model_name: str = "onnx-community/ruri-v3-30m-ONNX",
         device: str = "cpu",
     ) -> None:
         self.model_name = model_name
         self.device = device
-        self._model: SentenceTransformer | None = None
+        self._session: onnxruntime.InferenceSession | None = None
+        self._tokenizer: Tokenizer | None = None
         self._dimension: int | None = None
         self._lock = threading.Lock()
+        self._tok_name: str = "cl-nagoya/ruri-v3-30m"
 
     # ------------------------------------------------------------------
-    # Sync API
+    # Public sync API
     # ------------------------------------------------------------------
 
     @property
     def dimension(self) -> int:
-        """Return the embedding dimension, loading the model if needed."""
+        """Return embedding dimension, loading the model if needed."""
         if self._dimension is None:
             self._ensure_loaded()
         assert self._dimension is not None
         return self._dimension
 
     def encode(self, text: str, *, is_query: bool = False) -> np.ndarray:
-        """Encode a single text to a normalised vector.
-
-        Args:
-            text: The text to encode.
-            is_query: If True, prepend the query prefix; otherwise the document prefix.
-        """
+        """Encode a single text to a normalised vector (1D)."""
         self._ensure_loaded()
-        assert self._model is not None
-        prefixed = f"{_QUERY_PREFIX}{text}" if is_query else f"{_DOCUMENT_PREFIX}{text}"
-        return self._model.encode(prefixed, normalize_embeddings=True)
+        assert self._session is not None
+        assert self._tokenizer is not None
+
+        prefix = _QUERY_PREFIX if is_query else _DOCUMENT_PREFIX
+        prefixed = f"{prefix}{text}"
+
+        encoded = self._tokenizer.encode(prefixed)
+        input_ids = np.array([encoded.ids], dtype=np.int64)
+        attention_mask = np.array([encoded.attention_mask], dtype=np.int64)
+
+        outputs = self._session.run(
+            None,
+            {"input_ids": input_ids, "attention_mask": attention_mask},
+        )
+        hidden = outputs[0]  # (1, seq_len, dim)
+
+        emb = self._pool(hidden, attention_mask)  # (1, dim)
+        return emb[0]  # 1D
 
     def encode_batch(
         self,
@@ -68,25 +87,41 @@ class EmbeddingModel:
         is_query: bool = False,
         batch_size: int = 32,
     ) -> np.ndarray:
-        """Encode multiple texts to normalised vectors.
-
-        Args:
-            texts: List of texts to encode.
-            is_query: If True, prepend query prefix; otherwise document prefix.
-            batch_size: Batch size for encoding.
-        """
+        """Encode multiple texts to normalised vectors (2D)."""
         self._ensure_loaded()
-        assert self._model is not None
+        assert self._session is not None
+        assert self._tokenizer is not None
+
         prefix = _QUERY_PREFIX if is_query else _DOCUMENT_PREFIX
         prefixed = [f"{prefix}{t}" for t in texts]
-        return self._model.encode(prefixed, batch_size=batch_size, normalize_embeddings=True)
+
+        # Encode all texts, find max length for padding
+        encodings = [self._tokenizer.encode(t) for t in prefixed]
+        max_len = max(len(e.ids) for e in encodings) if encodings else 0
+        max_len = min(max_len, 512)
+
+        batch_ids = np.zeros((len(encodings), max_len), dtype=np.int64)
+        batch_mask = np.zeros((len(encodings), max_len), dtype=np.int64)
+
+        for i, enc in enumerate(encodings):
+            length = min(len(enc.ids), max_len)
+            batch_ids[i, :length] = np.array(enc.ids[:length], dtype=np.int64)
+            batch_mask[i, :length] = np.array(enc.attention_mask[:length], dtype=np.int64)
+
+        outputs = self._session.run(
+            None,
+            {"input_ids": batch_ids, "attention_mask": batch_mask},
+        )
+        hidden = outputs[0]  # (batch, seq_len, dim)
+
+        return self._pool(hidden, batch_mask)  # (batch, dim)
 
     # ------------------------------------------------------------------
-    # Async API (runs sync methods in executor to avoid event-loop blocking)
+    # Public async API — delegates to sync via asyncio.to_thread
     # ------------------------------------------------------------------
 
     async def async_encode(self, text: str, *, is_query: bool = False) -> np.ndarray:
-        """Async version of :meth:`encode` — runs in a thread via ``asyncio.to_thread``."""
+        """Async version of :meth:`encode`."""
         return await asyncio.to_thread(self.encode, text, is_query=is_query)
 
     async def async_encode_batch(
@@ -96,40 +131,26 @@ class EmbeddingModel:
         is_query: bool = False,
         batch_size: int = 32,
     ) -> np.ndarray:
-        """Async version of :meth:`encode_batch` — runs in a thread via ``asyncio.to_thread``."""
+        """Async version of :meth:`encode_batch`."""
         return await asyncio.to_thread(self.encode_batch, texts, is_query=is_query, batch_size=batch_size)
 
     async def async_dimension(self) -> int:
-        """Async version of the :attr:`dimension` property."""
+        """Async version of :attr:`dimension`."""
         return await asyncio.to_thread(lambda: self.dimension)
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # Model lifecycle
     # ------------------------------------------------------------------
 
-    def _ensure_loaded(self) -> None:
-        """Ensure model is loaded (thread-safe with double-checked locking)."""
-        if self._model is None:
-            with self._lock:
-                if self._model is None:
-                    self._load_model()
-
-    def _load_model(self) -> None:
-        """Lazy load the sentence-transformers model."""
-        from sentence_transformers import SentenceTransformer
-
-        logger.info("Loading embedding model: %s (device=%s)", self.model_name, self.device)
-        self._model = SentenceTransformer(self.model_name, device=self.device)
-        try:
-            self._dimension = self._model.get_embedding_dimension()
-        except AttributeError:
-            self._dimension = self._model.get_sentence_embedding_dimension()
-        logger.info("Embedding model loaded: dim=%d, model=%s", self._dimension, self.model_name)
-
-    def reload_model(self, new_model_name: str | None = None, new_device: str | None = None) -> dict:
-        """モデルを再ロードする（スレッドセーフ）。"""
+    def reload_model(
+        self,
+        new_model_name: str | None = None,
+        new_device: str | None = None,
+    ) -> dict:
+        """Reload the model (thread-safe). Falls back to previous on failure."""
         with self._lock:
-            old_model = self._model
+            old_session = self._session
+            old_tokenizer = self._tokenizer
             old_dimension = self._dimension
             old_name = self.model_name
             old_device = self.device
@@ -139,14 +160,16 @@ class EmbeddingModel:
             if new_device:
                 self.device = new_device
 
-            self._model = None
+            self._session = None
+            self._tokenizer = None
             self._dimension = None
 
             try:
                 self._load_model()
-                # 旧モデルのクリーンアップ
-                if old_model is not None:
-                    del old_model
+                if old_session is not None:
+                    del old_session
+                if old_tokenizer is not None:
+                    del old_tokenizer
                 return {
                     "status": "ready",
                     "model": self.model_name,
@@ -155,8 +178,8 @@ class EmbeddingModel:
                 }
             except Exception as e:
                 logger.error("Failed to reload embedding model: %s", e)
-                # フォールバック: 旧モデルに戻す  # noqa: ERA001
-                self._model = old_model
+                self._session = old_session
+                self._tokenizer = old_tokenizer
                 self._dimension = old_dimension
                 self.model_name = old_name
                 self.device = old_device
@@ -168,16 +191,95 @@ class EmbeddingModel:
                 }
 
     def get_status(self) -> dict:
-        """現在のモデル状態を返す。"""
+        """Return current model state."""
         return {
-            "status": "ready" if self._model is not None else "not_loaded",
+            "status": "ready" if self._session is not None else "not_loaded",
             "model": self.model_name,
             "dimension": self._dimension,
         }
 
     def unload(self) -> None:
-        """モデルをメモリから解放する。"""
+        """Release model resources."""
         with self._lock:
-            self._model = None
+            self._session = None
+            self._tokenizer = None
             self._dimension = None
             logger.info("Embedding model unloaded: %s", self.model_name)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _ensure_loaded(self) -> None:
+        """Lazy-load model with double-checked locking."""
+        if self._session is None:
+            with self._lock:
+                if self._session is None:
+                    self._load_model()
+
+    def _load_model(self) -> None:
+        """Download ONNX model + tokenizer, create InferenceSession."""
+        logger.info("Loading embedding model: %s (device=%s)", self.model_name, self.device)
+
+        # 1. Download ONNX model
+        model_dir = snapshot_download(self.model_name)
+        onnx_path = os.path.join(model_dir, "onnx", "model.onnx")
+
+        # 2. Load tokenizer
+        tok = Tokenizer.from_pretrained(self._tok_name)
+        tok.enable_padding(pad_id=3, pad_token="<pad>")
+        tok.enable_truncation(max_length=512)
+        self._tokenizer = tok
+
+        # 3. Create ONNX session
+        sess_options = onnxruntime.SessionOptions()
+        sess_options.intra_op_num_threads = min(4, os.cpu_count() or 4)
+        providers = self._get_providers()
+        self._session = onnxruntime.InferenceSession(
+            onnx_path,
+            providers=providers,
+            sess_options=sess_options,
+        )
+
+        # 4. Detect dimension from output shape
+        self._dimension = self._session.get_outputs()[0].shape[2]
+        logger.info(
+            "Embedding model loaded: dim=%d, model=%s",
+            self._dimension,
+            self.model_name,
+        )
+
+    def _get_providers(self) -> list[str]:
+        """Return ONNX Runtime provider list based on device."""
+        if self.device == "cpu":
+            return ["CPUExecutionProvider"]
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+    def _get_session_options(self) -> onnxruntime.SessionOptions:
+        """Create session options with thread limit."""
+        opts = onnxruntime.SessionOptions()
+        opts.intra_op_num_threads = min(4, os.cpu_count() or 4)
+        return opts
+
+    def _pool(self, hidden: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        """Mean pooling with attention mask, then L2 normalise.
+
+        Args:
+            hidden: (batch, seq_len, dim) — raw hidden states.
+            mask:   (batch, seq_len) — attention mask (int64).
+
+        Returns:
+            (batch, dim) — pooled and normalised embeddings.
+        """
+        # Expand mask to 3D
+        mask_3d = mask.astype(hidden.dtype)[..., np.newaxis]  # (batch, seq_len, 1)
+
+        masked = hidden * mask_3d
+        summed = masked.sum(axis=1)  # (batch, dim)
+        counts = mask_3d.sum(axis=1).clip(min=1e-9)  # (batch, 1)
+
+        pooled = summed / counts  # (batch, dim)
+
+        # L2 normalise
+        norms = np.maximum(np.linalg.norm(pooled, axis=1, keepdims=True), 1e-12)
+        return pooled / norms
