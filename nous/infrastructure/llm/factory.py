@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 def get_provider(provider: str, api_key: str, model: str, base_url: str = "") -> LLMProvider:
-    from .openai_compat import OpenAICompatProvider, _OPENAI_BASE_URL, _OPENROUTER_BASE_URL
+    from .openai_compat import OpenAICompatProvider, _OPENAI_BASE_URL, _OPENROUTER_BASE_URL  # noqa: I001
 
     if provider == "anthropic":
         return AnthropicProvider(api_key=api_key, model=model)
