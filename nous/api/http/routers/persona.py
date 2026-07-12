@@ -517,8 +517,8 @@ def _render_setup_page() -> str:
     </label>
     <input type="text" id="persona-name" class="glass-input"
       placeholder="e.g. assistant, friend, scholar"
-      maxlength="50" pattern="[a-zA-Z0-9_-]{1,50}"
-      title="Alphanumeric, hyphens, underscores (1-50 chars)"
+      maxlength="50" pattern="[a-zA-Z0-9_\-]{1,50}"
+      title="Letters, numbers, hyphens, underscores (1-50 chars)"
       autofocus required>
     <p class="text-muted" style="margin:6px 0 0 0">
       Allowed: letters, numbers, underscores, hyphens (1-50 chars)
