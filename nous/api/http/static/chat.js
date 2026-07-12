@@ -1531,9 +1531,70 @@ async function restoreChatHistory() {
     const msgs = data.messages.slice(-maxMsgs);
     container.innerHTML = "";
     for (const msg of msgs) {
-      // assistant の tool_calls は先にレンダリング（時系列順: tool_call → tool_result → assistant 応答）
+      const msgContainer = document.getElementById("chat-messages");
+
+      // ── Segments-based rendering (F2: correct interleaving) ──
+      if (msg.segments) {
+        let textContent = "";
+        const toolCallDivs = {}; // id -> div
+        const toolDivList = [];  // ordered list for insertion
+
+        for (const seg of msg.segments) {
+          if (seg.type === "text") {
+            textContent += seg.content;
+          } else if (seg.type === "tool_call") {
+            let inputStr;
+            try { inputStr = JSON.stringify(seg.input, null, 2); } catch (e) { inputStr = String(seg.input); }
+            const div = document.createElement("div");
+            div.className = "chat-tool-call done";
+            if (seg.id) div.dataset.toolId = seg.id;
+            div.innerHTML =
+              '<details><summary><i data-lucide="wrench"></i> <strong>' +
+              esc(seg.name) +
+              "</strong>" +
+              '<span class="chat-tool-status"> <i data-lucide="check"></i> 完了</span></summary>' +
+              '<pre class="chat-tool-detail">' +
+              esc(inputStr) +
+              "</pre></details>";
+            if (seg.id) toolCallDivs[seg.id] = div;
+            toolDivList.push(div);
+          } else if (seg.type === "tool_result") {
+            const toolDiv = seg.id ? toolCallDivs[seg.id] : null;
+            if (toolDiv) {
+              let resultStr;
+              try {
+                resultStr = typeof seg.result === "object"
+                  ? JSON.stringify(seg.result, null, 2)
+                  : String(seg.result);
+              } catch (e) { resultStr = String(seg.result); }
+              const details = toolDiv.querySelector("details");
+              if (details) {
+                const resultPre = document.createElement("pre");
+                resultPre.className = "chat-tool-detail chat-tool-result-content";
+                resultPre.textContent = resultStr;
+                details.appendChild(resultPre);
+              }
+            }
+          }
+        }
+
+        // Render the message bubble with accumulated text
+        appendChatMessage(msg.role, textContent, msg.time, msg.role === "assistant");
+
+        // Insert tool divs after the message bubble (preserving segment order)
+        const lastMsg = msgContainer.querySelector(".chat-msg:last-child");
+        for (const div of toolDivList) {
+          if (lastMsg && lastMsg.nextSibling) {
+            msgContainer.insertBefore(div, lastMsg.nextSibling);
+          } else {
+            msgContainer.appendChild(div);
+          }
+        }
+        continue;
+      }
+
+      // ── Legacy: no segments (backward compat) ──
       if (msg.role === "assistant" && msg.tool_calls?.length) {
-        const msgContainer = document.getElementById("chat-messages");
         for (const tc of msg.tool_calls) {
           const div = document.createElement("div");
           div.className = "chat-tool-call done";
@@ -1572,9 +1633,7 @@ async function restoreChatHistory() {
         msg.time,
         msg.role === "assistant",
       );
-      // user メッセージの tool_calls（存在すれば）は従来通り後
       if (msg.role !== "assistant" && msg.tool_calls?.length) {
-        const msgContainer = document.getElementById("chat-messages");
         for (const tc of msg.tool_calls) {
           const div = document.createElement("div");
           div.className = "chat-tool-call done";
