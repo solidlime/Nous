@@ -5,6 +5,7 @@ TDD: Write failing tests first, then implement.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -196,101 +197,67 @@ class TestSearchEngineRerankerIntegration:
 class TestAppContextRerankerInstantiation:
     """AppContext should instantiate RerankerModel with correct configuration."""
 
-    def test_reranker_instantiated_with_config(self, tmp_path):
-        """RerankerModel should be created with model_name and enabled from settings."""
+    @contextmanager
+    def _make_context(self, tmp_path, reranker_config, *, patch_thread=False):
+        """AppContextのテスト用ヘルパー。_init_vector_storeパッチ済み。"""
         from nous.application.use_cases import AppContext
         from nous.config.settings import Settings
 
-        settings = Settings(
-            data_root=str(tmp_path),
-            reranker={"model": "test-model", "enabled": True},
-        )
-
-        with (
-            patch("nous.infrastructure.embedding.reranker.RerankerModel") as mock_reranker_cls,
+        settings = Settings(data_root=str(tmp_path), reranker=reranker_config)
+        patchers = [
             patch.object(AppContext, "_init_vector_store", return_value=None),
-        ):
-            ctx = AppContext(settings, "test_persona")
+            patch("nous.infrastructure.embedding.reranker.RerankerModel"),
+        ]
+        if patch_thread:
+            patchers.append(patch("threading.Thread"))
 
-            # RerankerModel should have been instantiated
-            mock_reranker_cls.assert_called_once_with(
+        mocks = [p.start() for p in patchers]
+        self.mock_reranker_cls = mocks[1]
+        self.mock_thread = mocks[2] if patch_thread else None
+
+        # Wire up reranker mock instance with enabled state from config
+        mock_instance = MagicMock()
+        mock_instance.enabled = reranker_config.get("enabled", False)
+        self.mock_reranker_cls.return_value = mock_instance
+
+        ctx = AppContext(settings, "test_persona")
+        try:
+            yield ctx
+        finally:
+            ctx.close()
+            for p in reversed(patchers):
+                p.stop()
+
+    def test_reranker_instantiated_with_config(self, tmp_path):
+        """RerankerModel should be created with model_name and enabled from settings."""
+        with self._make_context(tmp_path, {"model": "test-model", "enabled": True}):
+            self.mock_reranker_cls.assert_called_once_with(
                 model_name="test-model",
                 enabled=True,
             )
-            ctx.close()
 
     def test_reranker_not_instantiated_when_disabled(self, tmp_path):
         """Even when disabled, RerankerModel should still be instantiated (config-driven)."""
-        from nous.application.use_cases import AppContext
-        from nous.config.settings import Settings
-
-        settings = Settings(
-            data_root=str(tmp_path),
-            reranker={"model": "test-model", "enabled": False},
-        )
-
-        with (
-            patch("nous.infrastructure.embedding.reranker.RerankerModel") as mock_reranker_cls,
-            patch.object(AppContext, "_init_vector_store", return_value=None),
-        ):
-            ctx = AppContext(settings, "test_persona")
-
-            mock_reranker_cls.assert_called_once_with(
+        with self._make_context(tmp_path, {"model": "test-model", "enabled": False}):
+            self.mock_reranker_cls.assert_called_once_with(
                 model_name="test-model",
                 enabled=False,
             )
-            ctx.close()
 
     def test_reranker_preload_thread_started_when_enabled(self, tmp_path):
         """When enabled, a background thread should preload the model."""
-        from nous.application.use_cases import AppContext
-        from nous.config.settings import Settings
-
-        settings = Settings(
-            data_root=str(tmp_path),
-            reranker={"model": "test-model", "enabled": True},
-        )
-
-        with (
-            patch("nous.infrastructure.embedding.reranker.RerankerModel") as mock_reranker_cls,
-            patch.object(AppContext, "_init_vector_store", return_value=None),
-            patch("threading.Thread") as mock_thread,
+        with self._make_context(
+            tmp_path, {"model": "test-model", "enabled": True},
+            patch_thread=True,
         ):
-            mock_instance = MagicMock()
-            mock_reranker_cls.return_value = mock_instance
-            mock_instance.enabled = True
-
-            ctx = AppContext(settings, "test_persona")
-
-            # A daemon thread should be started to preload the model;
-            # the target is a local wrapper that will call _load_model
-            assert mock_thread.return_value.start.called
-            ctx.close()
+            assert self.mock_thread.return_value.start.called
 
     def test_reranker_not_preloaded_when_disabled(self, tmp_path):
         """When disabled, no preload thread should be started — but vector store init thread is always created."""
-        from nous.application.use_cases import AppContext
-        from nous.config.settings import Settings
-
-        settings = Settings(
-            data_root=str(tmp_path),
-            reranker={"model": "test-model", "enabled": False},
-        )
-
-        with (
-            patch("nous.infrastructure.embedding.reranker.RerankerModel") as mock_reranker_cls,
-            patch.object(AppContext, "_init_vector_store", return_value=None),
-            patch("threading.Thread") as mock_thread,
+        with self._make_context(
+            tmp_path, {"model": "test-model", "enabled": False},
+            patch_thread=True,
         ):
-            mock_instance = MagicMock()
-            mock_reranker_cls.return_value = mock_instance
-            mock_instance.enabled = False  # disabled
-
-            ctx = AppContext(settings, "test_persona")
-
-            # One background thread is always created for _init_vector_store.
-            # Reranker preload thread must NOT be created when disabled.
-            assert mock_thread.call_count == 1, (
-                f"Expected 1 Thread() call (vector store init), got {mock_thread.call_count}"
+            assert self.mock_thread.call_count == 1, (
+                f"Expected 1 Thread() call (vector store init), got {self.mock_thread.call_count}"
             )
-            ctx.close()
