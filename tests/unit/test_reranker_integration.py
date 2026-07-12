@@ -247,7 +247,8 @@ class TestAppContextRerankerInstantiation:
     def test_reranker_preload_thread_started_when_enabled(self, tmp_path):
         """When enabled, a background thread should preload the model."""
         with self._make_context(
-            tmp_path, {"model": "test-model", "enabled": True},
+            tmp_path,
+            {"model": "test-model", "enabled": True},
             patch_thread=True,
         ):
             assert self.mock_thread.return_value.start.called
@@ -255,7 +256,8 @@ class TestAppContextRerankerInstantiation:
     def test_reranker_not_preloaded_when_disabled(self, tmp_path):
         """When disabled, no preload thread should be started — but vector store init thread is always created."""
         with self._make_context(
-            tmp_path, {"model": "test-model", "enabled": False},
+            tmp_path,
+            {"model": "test-model", "enabled": False},
             patch_thread=True,
         ):
             assert self.mock_thread.call_count == 1, (

@@ -84,9 +84,7 @@ class TestPortraitWithScene:
 
         from nous.api.mcp._tools_portrait_scene import _tool_persona_portrait_with_scene
 
-        result = await _tool_persona_portrait_with_scene(
-            mock_ctx, "test", scene="at the beach"
-        )
+        result = await _tool_persona_portrait_with_scene(mock_ctx, "test", scene="at the beach")
         data = json.loads(result)
 
         assert data["image_base64"] == "fakebase64data"
@@ -116,9 +114,7 @@ class TestPortraitWithScene:
 
         from nous.api.mcp._tools_portrait_scene import _tool_persona_portrait_with_scene
 
-        await _tool_persona_portrait_with_scene(
-            mock_ctx, "test", scene="castle at night", style="watercolor"
-        )
+        await _tool_persona_portrait_with_scene(mock_ctx, "test", scene="castle at night", style="watercolor")
 
         svc_patch.generate.assert_awaited_once()
         call_kwargs = svc_patch.generate.call_args.kwargs
@@ -134,9 +130,7 @@ class TestPortraitWithScene:
 
         from nous.api.mcp._tools_portrait_scene import _tool_persona_portrait_with_scene
 
-        result = await _tool_persona_portrait_with_scene(
-            mock_ctx, "test", scene="beach sunset"
-        )
+        result = await _tool_persona_portrait_with_scene(mock_ctx, "test", scene="beach sunset")
         data = json.loads(result)
         assert data["ok"] is False
         assert "disabled" in data["error"].lower()
@@ -160,9 +154,7 @@ class TestPortraitWithScene:
 
         from nous.api.mcp._tools_portrait_scene import _tool_persona_portrait_with_scene
 
-        result = await _tool_persona_portrait_with_scene(
-            mock_ctx, "test", scene="sunset"
-        )
+        result = await _tool_persona_portrait_with_scene(mock_ctx, "test", scene="sunset")
         data = json.loads(result)
         assert data["image_base64"] == "fake"
 
@@ -180,9 +172,7 @@ class TestPortraitWithScene:
 
         from nous.api.mcp._tools_portrait_scene import _tool_persona_portrait_with_scene
 
-        result = await _tool_persona_portrait_with_scene(
-            mock_ctx, "test", scene="sunset"
-        )
+        result = await _tool_persona_portrait_with_scene(mock_ctx, "test", scene="sunset")
         data = json.loads(result)
         assert data["ok"] is False
         assert "Provider unavailable" in str(data.get("error", ""))
@@ -199,9 +189,7 @@ class TestPortraitWithScene:
 
         from nous.api.mcp._tools_portrait_scene import _tool_persona_portrait_with_scene
 
-        result = await _tool_persona_portrait_with_scene(
-            mock_ctx, "test", scene="sunset"
-        )
+        result = await _tool_persona_portrait_with_scene(mock_ctx, "test", scene="sunset")
         data = json.loads(result)
         assert data["ok"] is False
         assert "Persona not found" in data["error"]
