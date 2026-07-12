@@ -723,7 +723,8 @@ class TestDogfooding:
                 irodori_enabled INTEGER DEFAULT 0,
                 portrait_enabled INTEGER DEFAULT 0,
                 voice_auto_play INTEGER DEFAULT 0,
-                voice_emotion_link INTEGER DEFAULT 1
+                voice_emotion_link INTEGER DEFAULT 1,
+                disabled_tools TEXT DEFAULT '[]'
             )
         """)
         db.commit()

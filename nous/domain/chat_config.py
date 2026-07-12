@@ -66,6 +66,7 @@ class ChatConfig(BaseModel):
     image_gen_replicate_model: str = "black-forest-labs/flux-schnell"
     image_gen_replicate_api_key: str = ""
     enable_memory_tools: bool = True
+    disabled_tools: list[str] = []
     # Generative Agents-style reflection
     reflection_enabled: bool = True
     reflection_threshold: float = 1.0  # sum of importance scores to trigger reflection
@@ -290,7 +291,8 @@ class ChatConfigRepository:
             "retrieval_rrf_k, "
             "dynamic_tool_selection, "
             "irodori_enabled, portrait_enabled, "
-            "voice_auto_play, voice_emotion_link "
+            "voice_auto_play, voice_emotion_link, "
+            "disabled_tools "
             "FROM chat_settings WHERE persona = ?",
             (persona,),
         )
@@ -303,7 +305,7 @@ class ChatConfigRepository:
         data = dict(zip(columns, row, strict=False))
 
         # Parse stored JSON fields
-        for jf in ("mcp_servers", "enabled_skills"):
+        for jf in ("mcp_servers", "enabled_skills", "disabled_tools"):
             if data.get(jf) is not None:
                 data[jf] = json.loads(data[jf])
 
@@ -354,8 +356,9 @@ class ChatConfigRepository:
                        dynamic_tool_selection,
                        irodori_enabled, portrait_enabled,
                        voice_auto_play, voice_emotion_link,
+                       disabled_tools,
                        updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
@@ -414,6 +417,7 @@ class ChatConfigRepository:
                  portrait_enabled=excluded.portrait_enabled,
                  voice_auto_play=excluded.voice_auto_play,
                  voice_emotion_link=excluded.voice_emotion_link,
+                 disabled_tools=excluded.disabled_tools,
                  updated_at=excluded.updated_at
             """,
             (
@@ -475,6 +479,7 @@ class ChatConfigRepository:
                 int(config.portrait_enabled),
                 int(config.voice_auto_play),
                 int(config.voice_emotion_link),
+                json.dumps(config.disabled_tools, ensure_ascii=False),
                 now,
             ),
         )

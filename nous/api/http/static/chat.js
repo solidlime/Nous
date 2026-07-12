@@ -8,6 +8,9 @@ const CHAT = {
   messages: [], // { role, content, time }
   mcpServers: [],
   enabledSkills: [],
+  mcpTools: [], // MCP tools list from server
+  mcpErrors: [], // errors from mcp-tools endpoint
+  disabledTools: new Set(), // set of disabled tool names
   abortController: null, // F4: AbortController for streaming cancel
   attachments: [], // { filename, url, workspace_path, mime_type, size }
   _nextTurnReady: false, // true after 'done' event; next event creates a new assistant div
@@ -310,6 +313,7 @@ function applyChatConfig(cfg) {
     if (toolMaxVal) toolMaxVal.textContent = cfg.tool_result_max_chars;
   }
   CHAT.enabledSkills = cfg.enabled_skills || [];
+  CHAT.disabledTools = new Set(cfg.disabled_tools || []);
   // Reflection settings
   setChecked("chat-reflection-enabled", cfg.reflection_enabled !== false);
   set(
@@ -583,6 +587,7 @@ async function saveChatConfig() {
         return !BUILTIN_SKILLS.includes(s);
       }),
     ),
+    disabled_tools: Array.from(CHAT.disabledTools || []),
     reflection_enabled: getChecked("chat-reflection-enabled"),
     reflection_threshold: parseFloat(
       document.getElementById("chat-reflection-threshold")?.value || "1.0",
@@ -765,11 +770,32 @@ function parseMcpJson() {
       _builtin: builtinMap[name] || false,
     }));
   } catch (e) {
-    if (errEl) {
-      errEl.textContent = "JSON形式エラー: " + e.message;
-      errEl.style.display = "";
+    // Try loosened JSON parsing
+    try {
+      const loosened = loosenJson(raw);
+      const parsed = JSON.parse(loosened);
+      const dict = parsed.mcpServers || {};
+      var builtinMap = {};
+      (CHAT.mcpServers || []).forEach(function (s) {
+        if (s._builtin) builtinMap[s.name] = true;
+      });
+      return Object.entries(dict).map(([name, cfg]) => ({
+        name,
+        transport: cfg.url ? "http" : "stdio",
+        url: cfg.url || "",
+        command: cfg.command || "",
+        args: cfg.args || [],
+        headers: cfg.headers || cfg.env || {},
+        enabled: true,
+        _builtin: builtinMap[name] || false,
+      }));
+    } catch (e2) {
+      if (errEl) {
+        errEl.textContent = "JSON形式エラー: " + e2.message;
+        errEl.style.display = "";
+      }
+      return CHAT.mcpServers;
     }
-    return CHAT.mcpServers;
   }
 }
 
@@ -3153,6 +3179,104 @@ async function testVoicePlayback() {
     if (statusEl) statusEl.textContent = "エラー: " + e.message;
   }
 }
+
+/* ── MCP Tools management ── */
+async function fetchMcpTools() {
+  if (!S.persona) return;
+  const list = document.getElementById("chat-mcp-tools-list");
+  if (!list) return;
+  list.innerHTML = '<span style="font-size:0.7rem;color:var(--text-muted);">読み込み中...</span>';
+  try {
+    const data = await api("/api/chat/" + encodeURIComponent(S.persona) + "/mcp-tools");
+    CHAT.mcpTools = data.tools || [];
+    CHAT.mcpErrors = data.errors || [];
+    renderMcpTools();
+  } catch (e) {
+    list.innerHTML = '<span style="font-size:0.7rem;color:var(--accent-red);">取得失敗: ' + e.message + '</span>';
+  }
+}
+
+function renderMcpTools() {
+  const list = document.getElementById("chat-mcp-tools-list");
+  if (!list) return;
+  const tools = CHAT.mcpTools || [];
+  if (!tools.length) {
+    list.innerHTML = '<span style="font-size:0.7rem;color:var(--text-muted);">ツールがありません</span>';
+    return;
+  }
+  let html = "";
+  if (CHAT.mcpErrors && CHAT.mcpErrors.length > 0) {
+    html += '<div style="font-size:0.65rem;color:var(--accent-red);margin-bottom:4px;">⚠ ' + CHAT.mcpErrors.join("; ") + '</div>';
+  }
+  for (const tool of tools) {
+    const enabled = !CHAT.disabledTools.has(tool.name);
+    const shortDesc = (tool.description || "").slice(0, 60) + ((tool.description || "").length > 60 ? "..." : "");
+    html += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:0.7rem;">' +
+      '<label class="mcp-tool-toggle" title="' + esc(tool.name) + '">' +
+      '<input type="checkbox" ' + (enabled ? 'checked' : '') + ' onchange="toggleTool(\'' + esc(tool.name) + '\')" />' +
+      '<span class="mcp-tool-toggle-slider"></span></label>' +
+      '<span style="font-weight:500;flex-shrink:0;">' + esc(tool.name) + '</span>' +
+      (tool.server ? '<span class="chat-badge" style="font-size:0.6rem;flex-shrink:0;">' + esc(tool.server) + '</span>' : '') +
+      '<span style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(shortDesc) + '</span>' +
+      '</div>';
+  }
+  list.innerHTML = html;
+}
+
+function toggleTool(toolName) {
+  if (!CHAT.disabledTools) CHAT.disabledTools = new Set();
+  if (CHAT.disabledTools.has(toolName)) {
+    CHAT.disabledTools.delete(toolName);
+  } else {
+    CHAT.disabledTools.add(toolName);
+  }
+}
+
+function loosenJson(text) {
+  var s = text.trim();
+  if (!s) return s;
+  // Remove // line comments
+  s = s.replace(/\/\/.*$/gm, '');
+  // Remove /* */ block comments
+  s = s.replace(/\/\*[\s\S]*?\*\//g, '');
+  // Convert single-quoted keys/values to double-quoted (simple heuristic)
+  s = s.replace(/'([^']*)'/g, function(m, inner) {
+    return '"' + inner.replace(/"/g, '\\"') + '"';
+  });
+  // Quote unquoted keys: /(\s*)(\w+)(\s*):/ → $1"$2"$3:
+  s = s.replace(/([{,]\s*)([a-zA-Z_]\w*)(\s*:)/g, '$1"$2"$3');
+  // Remove trailing commas before } or ]
+  s = s.replace(/,(\s*[}\]])/g, '$1');
+  return s;
+}
+
+async function formatMcpJson() {
+  var ta = document.getElementById("chat-mcp-json");
+  var errDiv = document.getElementById("chat-mcp-json-error");
+  if (!ta) return;
+  var raw = ta.value.trim();
+  if (!raw) { ta.value = '{\n  "mcpServers": {}\n}'; return; }
+  try {
+    // Try strict first
+    var parsed = JSON.parse(raw);
+    ta.value = JSON.stringify(parsed, null, 2);
+    if (errDiv) errDiv.style.display = "none";
+  } catch (e) {
+    // Try loosened
+    try {
+      var parsed2 = JSON.parse(loosenJson(raw));
+      ta.value = JSON.stringify(parsed2, null, 2);
+      if (errDiv) errDiv.style.display = "none";
+    } catch (e2) {
+      if (errDiv) {
+        errDiv.textContent = "整形できません: " + e2.message;
+        errDiv.style.display = "block";
+      }
+    }
+  }
+}
+
+function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
 function autoPlayTts(text) {
   if (!S.persona || !text) return;

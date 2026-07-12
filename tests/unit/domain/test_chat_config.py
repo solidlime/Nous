@@ -100,7 +100,8 @@ class TestChatConfigRepository:
                 irodori_enabled INTEGER DEFAULT 0,
                 portrait_enabled INTEGER DEFAULT 0,
                 voice_auto_play INTEGER DEFAULT 0,
-                voice_emotion_link INTEGER DEFAULT 1
+                voice_emotion_link INTEGER DEFAULT 1,
+                disabled_tools TEXT DEFAULT '[]'
             )
             """
         )
@@ -237,6 +238,7 @@ class TestSqliteMigration:
             "image_gen_gemini_model TEXT DEFAULT 'google/gemini-2.5-flash-image'",
             "image_gen_replicate_model TEXT DEFAULT 'black-forest-labs/flux-schnell'",
             "image_gen_replicate_api_key TEXT DEFAULT ''",
+            "disabled_tools TEXT DEFAULT '[]'",
         ]:
             try:
                 conn.execute(f"ALTER TABLE chat_settings ADD COLUMN {col_sql}")
@@ -254,6 +256,7 @@ class TestSqliteMigration:
         assert "image_gen_gemini_model" in columns
         assert "image_gen_replicate_model" in columns
         assert "image_gen_replicate_api_key" in columns
+        assert "disabled_tools" in columns
 
         # Verify defaults work
         conn.execute("INSERT INTO chat_settings (persona) VALUES ('test')")
@@ -263,6 +266,7 @@ class TestSqliteMigration:
         assert row["portrait_enabled"] == 0
         assert row["voice_auto_play"] == 0
         assert row["voice_emotion_link"] == 1
+        assert row["disabled_tools"] == "[]"
 
         # Verify ChatConfigRepository works with migrated schema
         from nous.domain.chat_config import ChatConfigRepository
@@ -273,5 +277,6 @@ class TestSqliteMigration:
         assert config.portrait_enabled is False
         assert config.voice_auto_play is False
         assert config.voice_emotion_link is True
+        assert config.disabled_tools == []
 
         conn.close()

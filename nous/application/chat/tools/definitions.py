@@ -296,9 +296,12 @@ def get_filtered_tools(config: ChatConfig) -> list[ToolDefinition]:
 
     この関数が CORE_ALWAYS_TOOLS を絶対に除外しないことを保証する。
     dynamic_tool_selection=False の場合は従来通り全ツールを返す。
+    disabled_tools に指定されたツールは除外する（コアツールも対象）。
     """
+    disabled = set(config.disabled_tools or [])
+
     if not config.dynamic_tool_selection:
-        return list(MEMORY_TOOLS)
+        return [t for t in MEMORY_TOOLS if t.name not in disabled]
 
     # 常時ツールを収集
     always_tools = [t for t in MEMORY_TOOLS if t.name in CORE_ALWAYS_TOOLS]
@@ -307,11 +310,15 @@ def get_filtered_tools(config: ChatConfig) -> list[ToolDefinition]:
     conditional_tools = [t for t in MEMORY_TOOLS if t.name not in CORE_ALWAYS_TOOLS]
 
     result = always_tools + conditional_tools
+    # disabled_tools でフィルタリング
+    if disabled:
+        result = [t for t in result if t.name not in disabled]
     logger.debug(
-        "Tools: %d always + %d conditional = %d total",
+        "Tools: %d always + %d conditional = %d total (disabled: %d)",
         len(always_tools),
         len(conditional_tools),
         len(result),
+        len(disabled),
     )
     return result
 

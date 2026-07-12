@@ -100,6 +100,7 @@ def register_chat_routes(mcp) -> None:
             "portrait_enabled",
             "voice_auto_play",
             "voice_emotion_link",
+            "disabled_tools",
         ):
             if field_name in body:
                 update_data[field_name] = body[field_name]
@@ -113,6 +114,44 @@ def register_chat_routes(mcp) -> None:
 
         repo.save(new_config)
         return JSONResponse(new_config.to_safe_dict())
+
+    @mcp.custom_route("/api/chat/{persona}/mcp-tools", methods=["GET"])
+    async def list_mcp_tools(request: Request) -> JSONResponse:
+        """MCP サーバーのツール一覧を返す。"""
+        persona = _resolve_persona_from_request(request)
+        ctx = _safe_get_context(persona)
+        if not ctx:
+            return JSONResponse({"error": "Persona not found"}, status_code=404)
+        from nous.domain.chat_config import ChatConfigRepository
+
+        repo = ChatConfigRepository(ctx.connection.get_memory_db())
+        config = repo.get(persona)
+
+        if not config.mcp_servers:
+            return JSONResponse({"tools": [], "errors": []})
+
+        from nous.infrastructure.mcp_client.pool import MCPClientPool
+
+        tools_out: list[dict] = []
+        errors_out: list[str] = []
+        try:
+            async with MCPClientPool(config.mcp_servers) as pool:
+                for tool in pool.list_all_tools():
+                    # description から [server_name] プレフィックスを抽出
+                    desc = tool.description or ""
+                    server_name = ""
+                    if desc.startswith("[") and "]" in desc:
+                        server_name = desc[1 : desc.index("]")]
+                        desc = desc[desc.index("]") + 1 :].strip()
+                    tools_out.append({
+                        "name": tool.name,
+                        "description": desc,
+                        "server": server_name,
+                    })
+        except Exception as e:
+            errors_out.append(str(e))
+
+        return JSONResponse({"tools": tools_out, "errors": errors_out})
 
     @mcp.custom_route("/api/chat/{persona}", methods=["POST"])
     async def chat_endpoint(request: Request) -> StreamingResponse:
