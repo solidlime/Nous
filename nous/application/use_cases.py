@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import TYPE_CHECKING
 
 from nous.domain.equipment.service import EquipmentService
@@ -112,16 +111,7 @@ class AppContext:
         # Create MemoryEnricher if configured (best-effort enrichment)
         enricher = None
         if self.settings.memory_enrichment.enabled:
-            from nous.config.runtime_config import RuntimeConfigManager
-
-            _rcm = RuntimeConfigManager()
-            api_key = (
-                self.settings.memory_enrichment.api_key
-                or _rcm.get_effective_value("api_keys", "openrouter_api_key")[0]
-                or _rcm.get_effective_value("api_keys", "anthropic_api_key")[0]
-                or os.environ.get("OPENROUTER_API_KEY")
-                or os.environ.get("ANTHROPIC_API_KEY")
-            )
+            api_key = self.settings.memory_enrichment.get_effective_api_key(self.settings)
             if api_key:
                 from nous.infrastructure.llm.memory_enricher import (
                     MemoryEnricher,

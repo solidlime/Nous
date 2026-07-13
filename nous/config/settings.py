@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import os
 from pathlib import Path
 from typing import Self
 
@@ -82,6 +83,37 @@ class MemoryEnrichmentConfig(BaseModel):
     model: str = "openai/gpt-4o-mini"
     base_url: str = "https://openrouter.ai/api/v1"
     min_chars: int = 10  # skip enrichment for very short memories
+
+    def get_effective_api_key(self, settings: Settings) -> str:
+        """Return API key, falling back to global Settings keys."""
+        # 1. Explicit memory_enrichment.api_key
+        if self.api_key:
+            return self.api_key
+
+        # 2. Provider-matched global Settings key
+        if self.provider == "openrouter" and settings.openrouter_api_key:
+            return settings.openrouter_api_key
+        if self.provider == "anthropic" and settings.anthropic_api_key:
+            return settings.anthropic_api_key
+        if self.provider == "openai" and settings.openai_api_key:
+            return settings.openai_api_key
+
+        # 3. RuntimeConfigManager fallback (hot-reload overrides)
+        from nous.config.runtime_config import RuntimeConfigManager
+
+        key_name = f"{self.provider}_api_key"
+        value, _ = RuntimeConfigManager().get_effective_value("api_keys", key_name)
+        if value:
+            return value
+
+        # 4. Backward compat: legacy env vars without NOUS_ prefix
+        _LEGACY_ENV_KEYS = {
+            "openrouter": "OPENROUTER_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "openai": "OPENAI_API_KEY",
+        }
+        env_var = _LEGACY_ENV_KEYS.get(self.provider, "")
+        return os.environ.get(env_var, "")
 
 
 class AutoCaptureConfig(BaseModel):
