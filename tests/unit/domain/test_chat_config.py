@@ -280,3 +280,175 @@ class TestSqliteMigration:
         assert config.disabled_tools == []
 
         conn.close()
+
+
+class TestChatConfigRepositoryResilience:
+    """Resilience: corrupted/legacy data in DB should not cause crash."""
+
+    _SCHEMA = """
+        CREATE TABLE chat_settings (
+            persona TEXT PRIMARY KEY,
+            provider TEXT DEFAULT 'anthropic',
+            model TEXT DEFAULT '',
+            api_key TEXT DEFAULT '',
+            base_url TEXT DEFAULT '',
+            system_prompt TEXT DEFAULT '',
+            temperature REAL DEFAULT 0.7,
+            max_tokens INTEGER DEFAULT 2048,
+            max_window_turns INTEGER DEFAULT 3,
+            max_tool_calls INTEGER DEFAULT 5,
+            updated_at TEXT,
+            auto_extract INTEGER DEFAULT 1,
+            extract_model TEXT DEFAULT '',
+            extract_max_tokens INTEGER DEFAULT 512,
+            tool_result_max_chars INTEGER DEFAULT 2000,
+            mcp_servers TEXT DEFAULT '[]',
+            enabled_skills TEXT DEFAULT '[]',
+            reflection_enabled INTEGER DEFAULT 1,
+            reflection_threshold REAL DEFAULT 1.0,
+            reflection_min_interval_hours REAL DEFAULT 1.0,
+            session_summarize INTEGER DEFAULT 1,
+            retrieval_recency_weight REAL DEFAULT 0.3,
+            retrieval_importance_weight REAL DEFAULT 0.3,
+            retrieval_relevance_weight REAL DEFAULT 0.4,
+            retrieval_rrf_k REAL DEFAULT 5.0,
+            display_history_turns INTEGER DEFAULT 20,
+            housekeeping_threshold INTEGER DEFAULT 10,
+            mental_model_enabled INTEGER DEFAULT 1,
+            mental_model_min_samples INTEGER DEFAULT 3,
+            max_stored_messages INTEGER DEFAULT 200,
+            context_max_tokens INTEGER,
+            context_compression_threshold REAL DEFAULT 0.8,
+            context_compression_mode TEXT DEFAULT 'auto',
+            context_keep_recent_turns INTEGER DEFAULT 2,
+            context_compress_system_prompt INTEGER DEFAULT 1,
+            context_compress_history INTEGER DEFAULT 1,
+            memory_preload_count INTEGER DEFAULT 3,
+            enable_parallel_tools INTEGER DEFAULT 1,
+            image_gen_enabled INTEGER DEFAULT 0,
+            image_gen_provider TEXT DEFAULT 'openai',
+            image_gen_dalle_model TEXT DEFAULT 'dall-e-3',
+            image_gen_stability_url TEXT DEFAULT '',
+            image_gen_comfyui_url TEXT DEFAULT '',
+            image_gen_gemini_model TEXT DEFAULT 'google/gemini-2.5-flash-image',
+            image_gen_replicate_model TEXT DEFAULT 'black-forest-labs/flux-schnell',
+            image_gen_replicate_api_key TEXT DEFAULT '',
+            enable_memory_tools INTEGER DEFAULT 1,
+            debug_mode INTEGER DEFAULT 0,
+            dynamic_temperature INTEGER DEFAULT 1,
+            emotion_temperature_scale REAL DEFAULT 0.2,
+            top_p REAL,
+            context_use_llm_summary INTEGER DEFAULT 1,
+            episode_consolidation_enabled INTEGER DEFAULT 1,
+            episode_search_enabled INTEGER DEFAULT 1,
+            dynamic_tool_selection INTEGER DEFAULT 1,
+            irodori_enabled INTEGER DEFAULT 0,
+            portrait_enabled INTEGER DEFAULT 0,
+            voice_auto_play INTEGER DEFAULT 0,
+            voice_emotion_link INTEGER DEFAULT 1,
+            disabled_tools TEXT DEFAULT '[]'
+        )
+    """
+
+    @pytest.fixture
+    def db(self):
+        conn = sqlite3.connect(":memory:")
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.row_factory = sqlite3.Row
+        conn.execute(self._SCHEMA)
+        conn.commit()
+        yield conn
+        conn.close()
+
+    def test_corrupted_mcp_servers_json(self, db):
+        """Invalid JSON in mcp_servers → fallback to []."""
+        db.execute(
+            "INSERT INTO chat_settings (persona, provider, mcp_servers) VALUES (?, ?, ?)",
+            ("test", "anthropic", "{corrupted"),
+        )
+        db.commit()
+        repo = ChatConfigRepository(db)
+        config = repo.get("test")
+        assert config.mcp_servers == []
+        assert config.provider == "anthropic"  # Other fields intact
+
+    def test_corrupted_enabled_skills_json(self, db):
+        """Invalid JSON in enabled_skills → fallback to []."""
+        db.execute(
+            "INSERT INTO chat_settings (persona, provider, enabled_skills) VALUES (?, ?, ?)",
+            ("test", "openai", "not json at all"),
+        )
+        db.commit()
+        repo = ChatConfigRepository(db)
+        config = repo.get("test")
+        assert config.enabled_skills == []
+        assert config.provider == "openai"
+
+    def test_corrupted_disabled_tools_json(self, db):
+        """Invalid JSON in disabled_tools → fallback to []."""
+        db.execute(
+            "INSERT INTO chat_settings (persona, disabled_tools) VALUES (?, ?)",
+            ("test", "{{{broken"),
+        )
+        db.commit()
+        repo = ChatConfigRepository(db)
+        config = repo.get("test")
+        assert config.disabled_tools == []
+
+    def test_valid_json_wrong_type_mcp_servers(self, db):
+        """Valid JSON but wrong type for mcp_servers → fallback to []."""
+        db.execute(
+            "INSERT INTO chat_settings (persona, provider, mcp_servers) VALUES (?, ?, ?)",
+            ("test", "anthropic", '"not_a_list"'),  # valid JSON string, not list
+        )
+        db.commit()
+        repo = ChatConfigRepository(db)
+        config = repo.get("test")
+        assert config.mcp_servers == []
+        assert config.provider == "anthropic"
+
+    def test_validation_error_temperature_out_of_range(self, db):
+        """temperature=3.0 should be clamped to 2.0 by validator, no crash."""
+        db.execute(
+            "INSERT INTO chat_settings (persona, temperature) VALUES (?, ?)",
+            ("test", 3.0),
+        )
+        db.commit()
+        repo = ChatConfigRepository(db)
+        config = repo.get("test")
+        assert config.temperature == 2.0  # Clamped
+
+    def test_unknown_column_in_db_not_in_model(self):
+        """Extra DB columns not in ChatConfig.model_fields → silently ignored."""
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        # Use all columns from the main schema plus an extra obsolete_column
+        conn.execute(
+            self._SCHEMA.replace(
+                "CREATE TABLE chat_settings (",
+                "CREATE TABLE chat_settings (obsolete_column TEXT DEFAULT 'legacy', ",
+            )
+        )
+        conn.execute("INSERT INTO chat_settings (persona) VALUES ('test')")
+        conn.commit()
+        repo = ChatConfigRepository(conn)
+        config = repo.get("test")
+        assert config.persona == "test"
+        conn.close()
+
+    def test_all_json_fields_corrupted(self, db):
+        """All three JSON fields corrupted → all fallback to []."""
+        db.execute(
+            "INSERT INTO chat_settings (persona, mcp_servers, enabled_skills, disabled_tools) "
+            "VALUES (?, ?, ?, ?)",
+            ("test", "{bad", "[broken", "null invalid"),
+        )
+        db.commit()
+        repo = ChatConfigRepository(db)
+        config = repo.get("test")
+        assert config.mcp_servers == []
+        assert config.enabled_skills == []
+        assert config.disabled_tools == []
+
+

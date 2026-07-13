@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import warnings
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ValidationError, field_validator
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import sqlite3
@@ -304,10 +307,14 @@ class ChatConfigRepository:
         columns = [d[0] for d in cursor.description]
         data = dict(zip(columns, row, strict=False))
 
-        # Parse stored JSON fields
+        # Parse stored JSON fields with resilience
         for jf in ("mcp_servers", "enabled_skills", "disabled_tools"):
             if data.get(jf) is not None:
-                data[jf] = json.loads(data[jf])
+                try:
+                    data[jf] = json.loads(data[jf])
+                except json.JSONDecodeError:
+                    logger.warning("chat_config.get: corrupted JSON in '%s', falling back to []", jf)
+                    data[jf] = []
 
         # max_stored_messages has a backward-compat fallback
         if data.get("max_stored_messages") is None:
@@ -317,7 +324,21 @@ class ChatConfigRepository:
         # Build kwargs: only pass known ChatConfig fields, skip None unless nullable
         nullable = {"updated_at", "context_max_tokens", "top_p"}
         kwargs = {k: v for k, v in data.items() if k in ChatConfig.model_fields and (v is not None or k in nullable)}
-        return ChatConfig(**kwargs)
+
+        # Construct with resilience — strip invalid fields on ValidationError
+        try:
+            return ChatConfig(**kwargs)
+        except ValidationError as e:
+            for err in e.errors():
+                field = err["loc"][0] if err.get("loc") else None
+                if field and field in kwargs:
+                    logger.warning("chat_config.get: stripping invalid field '%s': %s", field, err["msg"])
+                    kwargs.pop(field)
+            try:
+                return ChatConfig(**kwargs)
+            except ValidationError:
+                logger.warning("chat_config.get: still invalid after stripping fields, returning defaults")
+                return ChatConfig(persona=persona)
 
     def get_or_create(self, persona: str) -> ChatConfig:
         """Get existing config or create new with defaults for fresh personas."""
