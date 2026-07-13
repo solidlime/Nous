@@ -343,5 +343,8 @@ _NOUS_TOOL_NAMES: frozenset[str] = frozenset(
         "image_generate",
         "read_pdf",
         "list_skills",
+        "persona_portrait",
+        "irodori_tts",
+        "irodori_voices",
     }
 )

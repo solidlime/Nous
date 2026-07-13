@@ -44,7 +44,6 @@ from nous.api.mcp._tools_memory import (  # noqa: E402, F401
     _tool_memory_update,
 )
 from nous.api.mcp._tools_persona import _tool_get_context, _tool_update_context  # noqa: E402, F401
-from nous.api.mcp._tools_portrait import _tool_persona_portrait  # noqa: E402, F401
 from nous.api.mcp._tools_portrait_scene import _tool_persona_portrait_with_scene  # noqa: E402, F401
 from nous.api.mcp._tools_skill import _tool_invoke_skill  # noqa: E402, F401
 
