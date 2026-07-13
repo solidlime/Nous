@@ -57,7 +57,6 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "min_chars": {"hot_reload": True, "description": "Min content length to trigger enrichment"},
     },
     "image_gen": {
-        "enabled": {"hot_reload": True, "description": "Enable image generation (chat tool)"},
         "provider": {"hot_reload": True, "description": "Generation backend (openai/stability/comfyui)"},
         "dalle_model": {"hot_reload": True, "description": "OpenAI DALL-E model"},
         "comfyui_url": {"hot_reload": True, "description": "ComfyUI API address"},
@@ -70,7 +69,6 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "timeout_seconds": {"hot_reload": True, "description": "Generation timeout (seconds)"},
     },
     "portrait_gen": {
-        "enabled": {"hot_reload": True, "description": "Enable portrait generation (DEFAULT OFF)"},
         "provider": {"hot_reload": True, "description": "Generation backend (comfyui/openai/stability)"},
         "comfyui_url": {"hot_reload": True, "description": "ComfyUI API address"},
         "auto_generate": {"hot_reload": True, "description": "Auto-generate portrait on emotion change"},
