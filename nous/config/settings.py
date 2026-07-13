@@ -17,7 +17,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class EmbeddingConfig(BaseModel):
     """Embedding model configuration."""
 
-    model: str = "cl-nagoya/ruri-v3-30m"
+    model: str = "onnx-community/ruri-v3-30m-ONNX"
     device: str = "cpu"
 
 
