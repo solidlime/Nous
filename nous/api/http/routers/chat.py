@@ -22,10 +22,14 @@ def register_chat_routes(mcp) -> None:
         ctx = _safe_get_context(persona)
         if not ctx:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
-        from nous.domain.chat_config import ChatConfigRepository
+        from nous.domain.chat_config import ChatConfig, ChatConfigRepository
 
         repo = ChatConfigRepository(ctx.connection.get_memory_db())
-        config = repo.get(persona)
+        try:
+            config = repo.get(persona)
+        except Exception:
+            logger.warning("get_chat_config: repo.get(%r) failed, returning defaults", persona)
+            config = ChatConfig(persona=persona)
         return JSONResponse(config.to_safe_dict())
 
     @mcp.custom_route("/api/chat/{persona}/config", methods=["POST"])
