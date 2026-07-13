@@ -35,4 +35,8 @@ def get_image_gen_provider(config: ImageGenConfig) -> ImageGenProvider | None:
             model=config.replicate_model,
             api_key=config.replicate_api_key,
         )
+    elif config.provider == "pollinations":
+        from .pollinations import PollinationsImageProvider
+
+        return PollinationsImageProvider()
     return None
