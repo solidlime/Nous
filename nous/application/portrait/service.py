@@ -195,17 +195,24 @@ class PortraitGenerationService:
 
         return result
 
-    async def should_auto_generate(self, persona: PersonaState) -> bool:
+    async def should_auto_generate(self, persona: PersonaState, portrait_enabled: bool = False) -> bool:
         """Check whether auto-generation should trigger for this state.
+
+        Parameters
+        ----------
+        persona : PersonaState
+            Current persona state.
+        portrait_enabled : bool
+            Per-persona portrait enabled flag from ChatConfig.portrait_enabled.
 
         Returns ``True`` only when **all** conditions are met:
 
-        * ``config.enabled`` and ``config.auto_generate`` are both ``True``.
+        * ``portrait_enabled`` and ``config.auto_generate`` are both ``True``.
         * ``persona.emotion_intensity >= config.emotion_threshold``.
         * Minimum generation interval (``generate_interval_min``) has elapsed.
         * Monthly budget has not been exhausted (if budget is set).
         """
-        if not self._config.enabled or not self._config.auto_generate:
+        if not portrait_enabled or not self._config.auto_generate:
             return False
 
         if persona.emotion_intensity < self._config.emotion_threshold:
