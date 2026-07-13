@@ -31,8 +31,8 @@ class CompressStep:
     圧縮段階（軽い順）:
     1. システムプロンプトの関連記憶セクションをトリム
     2. 古いツール結果を [cleared] に置換
-    3. 古い会話メッセージを切り詰め
-    4. LLMによる古い会話ターンの要約圧縮（6ターン以上・予算超過時）
+    3. LLMによる古い会話ターンの要約圧縮（予算超過時）— フルテキストで要約
+    4. 古い会話メッセージを切り詰め（予算超過が続く場合のみ）
     """
 
     async def run(
@@ -79,7 +79,9 @@ class CompressStep:
         # Stage 1: System prompt trimming
         if getattr(config, "context_compress_system_prompt", True):
             old_len = len(turn_ctx.system_prompt)
-            turn_ctx.system_prompt = self._trim_system_prompt(turn_ctx.system_prompt, config.context_compression_mode)
+            turn_ctx.system_prompt = self._trim_system_prompt(
+                turn_ctx.system_prompt, config.context_compression_mode, total, budget,
+            )
             logger.debug(
                 "CompressStep: system prompt trimmed %d → %d chars",
                 old_len,
@@ -104,16 +106,9 @@ class CompressStep:
 
         keep_recent = getattr(config, "context_keep_recent_turns", 2)
 
-        # Stage 3: Truncate old messages
-        if getattr(config, "context_compress_history", True):
-            messages = self._truncate_old_messages(list(messages), keep_recent)
-
-        total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
-
-        # Stage 4: LLM-based summary of old conversation turns
-        # Only runs when mechanical compression still leaves us over budget
-        # and there's enough history worth summarizing (≥6 turns)
-        if total > budget and self._should_summarize(messages, config):
+        # Stage 3: LLM-based summary of old conversation turns (runs BEFORE truncation)
+        # Only runs when we're over budget and there's enough history worth summarizing
+        if total > budget and getattr(config, "context_compress_history", True) and self._should_summarize(messages, config):
             try:
                 summary = await self._summarize_old_turns(
                     config=config,
@@ -132,14 +127,30 @@ class CompressStep:
                     messages = [summary_msg] + messages[-keep_count:]
                     total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
                     logger.info(
-                        "CompressStep: Stage 4 — LLM summarized %d old messages into %d chars",
+                        "CompressStep: Stage 3 — LLM summarized %d old messages into %d chars",
                         old_count,
                         len(summary),
                     )
             except Exception:
                 logger.warning(
-                    "CompressStep: Stage 4 — LLM summarization failed, keeping truncated messages",
+                    "CompressStep: Stage 3 — LLM summarization failed, proceeding to truncation",
                 )
+
+        # Re-check after Stage 3 (if summarization already meets budget, skip truncation)
+        total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
+        if total <= budget:
+            logger.info("CompressStep: after compression: %d tokens", total)
+            turn_ctx._compression_info = {
+                "before_tokens": before_total,
+                "after_tokens": total,
+                "budget": budget,
+            }
+            return list(messages)
+
+        # Stage 4: Truncate old messages (runs only if budget still exceeded after Stage 3)
+        if getattr(config, "context_compress_history", True):
+            messages = self._truncate_old_messages(list(messages), keep_recent)
+            total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
 
         logger.info("CompressStep: after compression: %d tokens", total)
         # Store compression info for SSE notification
@@ -157,7 +168,8 @@ class CompressStep:
         Conditions:
         1. Feature flag is enabled
         2. Provider is configured (has API key)
-        3. At least 6 user messages (6 conversation turns) exist
+        3. More user messages than context_keep_recent_turns (i.e. there are messages
+           beyond what's being kept intact to summarize)
         """
         if not getattr(config, "context_use_llm_summary", True):
             return False
@@ -165,7 +177,8 @@ class CompressStep:
             return False
         # Count turns by counting user messages
         user_count = sum(1 for m in messages if m.role == "user")
-        return user_count >= 6
+        keep = getattr(config, "context_keep_recent_turns", 2)
+        return user_count > keep
 
     async def _summarize_old_turns(
         self,
@@ -182,11 +195,6 @@ class CompressStep:
         Returns:
             要約文字列。条件不成立時またはエラー時は None。
         """
-        api_key = config.get_effective_api_key()
-        model = config.get_effective_model()
-        if not api_key or not model:
-            return None
-
         keep_count = keep_recent * 2
         if len(messages) <= keep_count:
             return None
@@ -214,7 +222,7 @@ class CompressStep:
         from nous.infrastructure.llm.factory import get_provider
 
         try:
-            provider = get_provider(config.provider, api_key, model, config.get_effective_base_url())
+            provider = get_provider(config.provider, config.get_effective_api_key(), config.get_effective_model(), config.get_effective_base_url())
         except Exception:
             logger.warning("CompressStep: Stage 4 — provider init failed")
             return None
@@ -240,7 +248,7 @@ class CompressStep:
         return summary if summary else None
 
     @staticmethod
-    def _trim_system_prompt(prompt: str, mode: str) -> str:
+    def _trim_system_prompt(prompt: str, mode: str, total_tokens: int = 0, budget_tokens: int = 0) -> str:
         """Trim system prompt sections by reducing memory list size.
 
         Sections are separated by '\\n--- ' markers.
@@ -252,12 +260,21 @@ class CompressStep:
 
         # Limits per mode (how many memory lines to keep)
         mode_limits = {
-            "light": 8,  # Keep most
-            "normal": 4,  # Moderate
-            "aggressive": 2,  # Minimal
-            "auto": 4,  # Default: normal
+            "light": 8,
+            "normal": 4,
+            "aggressive": 2,
         }
-        limit = mode_limits.get(mode, mode_limits["auto"])
+        limit = mode_limits.get(mode, 4)  # default = normal
+
+        # Auto mode: dynamic based on budget excess ratio
+        if mode == "auto" and total_tokens > 0 and budget_tokens > 0:
+            ratio = total_tokens / budget_tokens
+            if ratio < 1.2:
+                limit = 8
+            elif ratio < 1.5:
+                limit = 4
+            else:
+                limit = 2
 
         result: list[str] = [sections[0]]  # Base prompt + time (section 0)
         trimmed = False

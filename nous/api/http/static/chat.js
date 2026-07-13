@@ -1514,10 +1514,7 @@ async function restoreChatHistory() {
   }
   const sid = getChatSessionId();
   const container = document.getElementById("chat-messages");
-  // Always reset DOM first to prevent previous persona's messages from lingering
-  CHAT.messages = [];
-  resetToWelcome();
-  // Show loading skeleton while fetching history
+  // Show loading skeleton while fetching history (Bug B3 fix: don't reset DOM before fetch)
   const skeletonHtml =
     '<div class="chat-msg assistant"><div class="chat-bubble" style="opacity:0.5"><div class="skeleton skeleton-text" style="width:80%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:60%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:40%;height:14px"></div></div></div>' +
     '<div class="chat-msg user" style="align-self:flex-end"><div class="chat-bubble" style="opacity:0.5"><div class="skeleton skeleton-text" style="width:70%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:50%;height:14px"></div></div></div>';
@@ -1541,8 +1538,10 @@ async function restoreChatHistory() {
       return;
     }
     if (data.messages.length === 0) {
-      // Legitimate: no history, welcome screen already shown via resetToWelcome()
+      // No history, show welcome
       console.info("[restoreChatHistory] no messages, fresh start");
+      CHAT.messages = [];
+      resetToWelcome();
       return;
     }
     // display_history_turns 件数分（最新N turns = N*2 messages）に制限
@@ -1551,19 +1550,37 @@ async function restoreChatHistory() {
     );
     const maxMsgs = displayTurns * 2;
     const msgs = data.messages.slice(-maxMsgs);
+    // Successful fetch — now safe to reset DOM (Bug B3 fix: only reset after fetch succeeds)
+    CHAT.messages = [];
     container.innerHTML = "";
     for (const msg of msgs) {
       const msgContainer = document.getElementById("chat-messages");
 
       // ── Segments-based rendering (F2: correct interleaving) ──
       if (msg.segments) {
-        let textContent = "";
+        // F3: inline content_parts rendering for correct interleaving
+        appendChatMessage(msg.role, "", msg.time, false);  // creates empty .chat-msg div
+        const msgDiv = msgContainer.querySelector(".chat-msg:last-child");
         const toolCallDivs = {}; // id -> div
-        const toolDivList = [];  // ordered list for insertion
 
         for (const seg of msg.segments) {
           if (seg.type === "text") {
-            textContent += seg.content;
+            const bubble = document.createElement("div");
+            bubble.className = "chat-bubble";
+            bubble.innerHTML = safeMarkdown(seg.content);
+            bubble.querySelectorAll("img").forEach((img) => {
+              img.style.cssText =
+                "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
+              img.addEventListener("click", () =>
+                openMediaViewer(img.src, "image"),
+              );
+            });
+            const timeDiv = msgDiv.querySelector(".chat-time");
+            if (timeDiv) {
+              msgDiv.insertBefore(bubble, timeDiv);
+            } else {
+              msgDiv.appendChild(bubble);
+            }
           } else if (seg.type === "tool_call") {
             let inputStr;
             try { inputStr = JSON.stringify(seg.input, null, 2); } catch (e) { inputStr = String(seg.input); }
@@ -1579,7 +1596,12 @@ async function restoreChatHistory() {
               esc(inputStr) +
               "</pre></details>";
             if (seg.id) toolCallDivs[seg.id] = div;
-            toolDivList.push(div);
+            const timeDiv = msgDiv.querySelector(".chat-time");
+            if (timeDiv) {
+              msgDiv.insertBefore(div, timeDiv);
+            } else {
+              msgDiv.appendChild(div);
+            }
           } else if (seg.type === "tool_result") {
             const toolDiv = seg.id ? toolCallDivs[seg.id] : null;
             if (toolDiv) {
@@ -1599,19 +1621,14 @@ async function restoreChatHistory() {
             }
           }
         }
-
-        // Render the message bubble with accumulated text
-        appendChatMessage(msg.role, textContent, msg.time, msg.role === "assistant");
-
-        // Insert tool divs after the message bubble (preserving segment order)
-        const lastMsg = msgContainer.querySelector(".chat-msg:last-child");
-        for (const div of toolDivList) {
-          if (lastMsg && lastMsg.nextSibling) {
-            msgContainer.insertBefore(div, lastMsg.nextSibling);
-          } else {
-            msgContainer.appendChild(div);
-          }
+        // Remove empty bubble if appendChatMessage created one with no content
+        const emptyBubble = msgDiv.querySelector(".chat-bubble");
+        if (emptyBubble && !emptyBubble.innerHTML.trim()) {
+          emptyBubble.remove();
         }
+        // Set time
+        const timeEl = msgDiv.querySelector(".chat-time");
+        if (timeEl && msg.time) timeEl.textContent = msg.time;
         continue;
       }
 
@@ -1845,7 +1862,7 @@ function toggleVoiceInput() {
   _voiceRecognition.start();
 }
 
-function appendToolEvent(eventType, data) {
+function appendToolEvent(eventType, data, targetDiv) {
   const container = document.getElementById("chat-messages");
 
   if (eventType === "tool_call") {
@@ -1866,14 +1883,24 @@ function appendToolEvent(eventType, data) {
       '<pre class="chat-tool-detail">' +
       esc(inputStr) +
       "</pre></details>";
-    // Insert tool_call after the last assistant message, not always at container end
-    const lastAssistant = container.querySelector(".chat-msg.assistant:last-child");
-    if (lastAssistant && lastAssistant.nextSibling) {
-      container.insertBefore(div, lastAssistant.nextSibling);
-    } else if (lastAssistant) {
-      container.appendChild(div);
+    if (targetDiv) {
+      // F3: inline insertion inside assistant div (before .chat-time)
+      const timeDiv = targetDiv.querySelector(".chat-time");
+      if (timeDiv) {
+        targetDiv.insertBefore(div, timeDiv);
+      } else {
+        targetDiv.appendChild(div);
+      }
     } else {
-      container.appendChild(div);
+      // Legacy: insert tool_call after the last assistant message
+      const lastAssistant = container.querySelector(".chat-msg.assistant:last-child");
+      if (lastAssistant && lastAssistant.nextSibling) {
+        container.insertBefore(div, lastAssistant.nextSibling);
+      } else if (lastAssistant) {
+        container.appendChild(div);
+      } else {
+        container.appendChild(div);
+      }
     }
     container.scrollTop = container.scrollHeight;
     setTimeout(() => {
@@ -2345,6 +2372,83 @@ async function handleSlashCommand(toolName, toolInput) {
   }
 }
 
+// F3: Helper — create a new assistant message div with time stamp + actions
+function _createAssistantDiv() {
+  const container = document.getElementById("chat-messages");
+  // Remove welcome message if present
+  const welcome = container.querySelector(".chat-welcome");
+  if (welcome) welcome.remove();
+  // Calculate message index (0-based position in session)
+  const msgIndex = container.querySelectorAll(".chat-msg").length;
+  const div = document.createElement("div");
+  div.className = "chat-msg assistant";
+  div.dataset.msgIndex = msgIndex;
+  const timeDiv = document.createElement("div");
+  timeDiv.className = "chat-time";
+  timeDiv.textContent = new Date().toLocaleTimeString("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  div.appendChild(timeDiv);
+  // Action buttons (deferred — content collected from all .chat-bubble text at click time)
+  const actions = document.createElement("div");
+  actions.className = "chat-msg-actions";
+  // TTS manual play button
+  const ttsBtn = document.createElement("button");
+  ttsBtn.className = "chat-msg-action-btn chat-tts-btn";
+  ttsBtn.innerHTML = '<i data-lucide="volume-2"></i>';
+  ttsBtn.title = "音声で再生";
+  ttsBtn.setAttribute("aria-label", "音声で再生");
+  ttsBtn.onclick = () => {
+    const allText = Array.from(div.querySelectorAll(".chat-bubble"))
+      .map(b => b.textContent)
+      .join("\n");
+    playTts(ttsBtn, allText);
+  };
+  actions.appendChild(ttsBtn);
+  // Retry / regenerate button
+  const retryBtn = document.createElement("button");
+  retryBtn.className = "chat-msg-action-btn retry";
+  retryBtn.innerHTML = '<i data-lucide="refresh-cw"></i> 再生成';
+  retryBtn.onclick = () => {
+    rollbackChat(msgIndex, true);
+  };
+  actions.appendChild(retryBtn);
+  // Copy button
+  const copyBtn = document.createElement("button");
+  copyBtn.className = "chat-msg-action-btn";
+  copyBtn.innerHTML = '<i data-lucide="clipboard-list"></i>';
+  copyBtn.title = "コピー";
+  copyBtn.onclick = () => {
+    const allText = Array.from(div.querySelectorAll(".chat-bubble"))
+      .map(b => b.textContent)
+      .join("\n");
+    navigator.clipboard
+      .writeText(allText)
+      .then(() => toast("コピーしました", "success"));
+  };
+  actions.appendChild(copyBtn);
+  div.appendChild(actions);
+  container.appendChild(div);
+  setTimeout(() => {
+    if (typeof lucide !== "undefined") lucide.createIcons();
+  }, 50);
+  return div;
+}
+
+// F3: Helper — create a new text bubble inside an assistant div (before .chat-time)
+function _createTextBubble(assistantDiv) {
+  const bubble = document.createElement("div");
+  bubble.className = "chat-bubble";
+  const timeDiv = assistantDiv.querySelector(".chat-time");
+  if (timeDiv) {
+    assistantDiv.insertBefore(bubble, timeDiv);
+  } else {
+    assistantDiv.appendChild(bubble);
+  }
+  return bubble;
+}
+
 async function chatSend(retry) {
   if (!S.persona) {
     toast("ペルソナを選択してください", "error");
@@ -2482,9 +2586,11 @@ async function chatSend(retry) {
   statusEl.textContent = "応答中...";
 
   const sessionId = getChatSessionId();
-  let assistantText = "";
-  let assistantBubble = null;
+  // F3: content_parts-based rendering — tracks interleaved text/tool_call/tool_result
+  let contentParts = [];       // [{type:"text"|"tool_call"|"tool_result", ...}]
   let assistantDiv = null;
+  let currentTextBubble = null;  // DOM element currently being streamed to
+  let currentTextContent = "";   // raw text accumulated for current text part
 
   try {
     const response = await fetch("/api/chat/" + encodeURIComponent(S.persona), {
@@ -2532,72 +2638,38 @@ async function chatSend(retry) {
         }
 
         if (evt.type === "text_delta") {
+          // F3: content_parts — create or continue text bubble inside assistant div
           if (!assistantDiv) {
-            const container = document.getElementById("chat-messages");
-            assistantDiv = document.createElement("div");
-            assistantDiv.className = "chat-msg assistant";
-            assistantBubble = document.createElement("div");
-            assistantBubble.className = "chat-bubble";
-            const timeDiv = document.createElement("div");
-            timeDiv.className = "chat-time";
-            timeDiv.textContent = new Date().toLocaleTimeString("ja-JP", {
-              hour: "2-digit",
-              minute: "2-digit",
-            });
-            assistantDiv.appendChild(assistantBubble);
-            assistantDiv.appendChild(timeDiv);
-            container.appendChild(assistantDiv);
-          } else if (CHAT._nextTurnReady) {
-            // マルチターン: 新しいターンの開始 → 新規 assistant div 作成
-            CHAT._nextTurnReady = false;
-            const container = document.getElementById("chat-messages");
-            assistantDiv = document.createElement("div");
-            assistantDiv.className = "chat-msg assistant";
-            assistantBubble = document.createElement("div");
-            assistantBubble.className = "chat-bubble";
-            const timeDiv = document.createElement("div");
-            timeDiv.className = "chat-time";
-            timeDiv.textContent = new Date().toLocaleTimeString("ja-JP", {
-              hour: "2-digit",
-              minute: "2-digit",
-            });
-            assistantDiv.appendChild(assistantBubble);
-            assistantDiv.appendChild(timeDiv);
-            container.appendChild(assistantDiv);
-            assistantText = "";
+            assistantDiv = _createAssistantDiv();
           }
-          assistantText += evt.content;
-          // F1: stream as plain text for performance; render markdown on done
-          assistantBubble.textContent = assistantText;
+          // If the last part was a tool call, start a new text bubble
+          const lastPart = contentParts[contentParts.length - 1];
+          if (!lastPart || lastPart.type !== "text") {
+            currentTextBubble = _createTextBubble(assistantDiv);
+            currentTextContent = "";
+            contentParts.push({ type: "text", bubble: currentTextBubble, content: "" });
+          }
+          currentTextContent += evt.content;
+          currentTextBubble.textContent = currentTextContent;
+          contentParts[contentParts.length - 1].content = currentTextContent;
           document.getElementById("chat-messages").scrollTop =
             document.getElementById("chat-messages").scrollHeight;
         } else if (evt.type === "tool_call") {
-          // アシスタントバブルがまだない場合は作成（テキストなしの純粋ツールコールに対応）
           if (!assistantDiv) {
-            const container = document.getElementById("chat-messages");
-            assistantDiv = document.createElement("div");
-            assistantDiv.className = "chat-msg assistant";
-            assistantBubble = document.createElement("div");
-            assistantBubble.className = "chat-bubble";
-            assistantDiv.appendChild(assistantBubble);
-            container.appendChild(assistantDiv);
-          } else if (CHAT._nextTurnReady) {
-            // マルチターン: 新しいターンの tool_call → 新規 assistant div 作成
-            CHAT._nextTurnReady = false;
-            const container = document.getElementById("chat-messages");
-            assistantDiv = document.createElement("div");
-            assistantDiv.className = "chat-msg assistant";
-            assistantBubble = document.createElement("div");
-            assistantBubble.className = "chat-bubble";
-            assistantDiv.appendChild(assistantBubble);
-            container.appendChild(assistantDiv);
-            assistantText = "";
+            assistantDiv = _createAssistantDiv();
           }
-          appendToolEvent("tool_call", evt);
+          // End current text bubble — next text_delta will create a new one
+          currentTextBubble = null;
+          currentTextContent = "";
+          const toolDiv = appendToolEvent("tool_call", evt, assistantDiv);
+          contentParts.push({ type: "tool_call", div: toolDiv, id: evt.id, name: evt.name });
           statusEl.innerHTML =
             '<i data-lucide="wrench"></i> ' + esc(evt.name) + " を実行中...";
         } else if (evt.type === "tool_result") {
           appendToolEvent("tool_result", evt);
+          currentTextBubble = null; // ensure next text_delta creates new bubble
+          currentTextContent = "";
+          contentParts.push({ type: "tool_result", id: evt.id, result: evt.result });
           statusEl.textContent = "応答中...";
         } else if (evt.type === "memory_activity") {
           updateMemoryPanel(evt.retrieved, evt.saved, undefined);
@@ -2626,35 +2698,33 @@ async function chatSend(retry) {
           console.debug("[debug_info received]", Object.keys(evt));
           renderDebugPanel(assistantDiv, evt);
         } else if (evt.type === "done") {
-          // F1: final Markdown render
-          if (assistantBubble && assistantText) {
-            assistantBubble.innerHTML = safeMarkdown(assistantText);
-            // メッセージ内の画像にクリックイベント追加
-            assistantBubble.querySelectorAll("img").forEach((img) => {
-              img.style.cssText =
-                "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
-              img.addEventListener("click", () =>
-                openMediaViewer(img.src, "image"),
-              );
-            });
-            // TE04: Auto-play TTS if enabled
-            var voiceAutoPlay = document.getElementById("chat-voice-auto-play");
-            if (voiceAutoPlay && voiceAutoPlay.checked) {
-              autoPlayTts(assistantText);
+          // F3: render all text parts as final markdown
+          let allText = "";
+          for (const part of contentParts) {
+            if (part.type === "text" && part.bubble && part.content) {
+              part.bubble.innerHTML = safeMarkdown(part.content);
+              part.bubble.querySelectorAll("img").forEach((img) => {
+                img.style.cssText =
+                  "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
+                img.addEventListener("click", () =>
+                  openMediaViewer(img.src, "image"),
+                );
+              });
+              allText += part.content + "\n";
             }
-          } else if (assistantDiv && !assistantText) {
-            // テキストがない場合、ツールコールがなければ空バブルを削除
-            if (!assistantDiv.querySelector('.chat-tool-call')) {
+          }
+          // TE04: Auto-play TTS for all text
+          var voiceAutoPlay = document.getElementById("chat-voice-auto-play");
+          if (voiceAutoPlay && voiceAutoPlay.checked && allText.trim()) {
+            autoPlayTts(allText.trim());
+          }
+          // Clean up: remove assistant div if it has no content (text or tools)
+          if (assistantDiv) {
+            const hasToolCalls = assistantDiv.querySelector(".chat-tool-call");
+            const hasTextBubbles = assistantDiv.querySelector(".chat-bubble");
+            if (!hasToolCalls && !hasTextBubbles) {
               assistantDiv.remove();
             }
-            // ツールコールのみの場合は要素が既にあるので何もしない
-          }
-          // マルチターン対応: 次のターンに備えてアシスタント状態をリセット
-          // 次の SSE イベント（tool_call / text_delta）が来たら新しい div を作成する
-          if (assistantDiv) {
-            // ツールコールがある場合は assistantDiv を残すが、
-            // 次のターンの開始に備えてフラグを設定
-            CHAT._nextTurnReady = true;
           }
           statusEl.textContent = "";
         }
@@ -2675,17 +2745,21 @@ async function chatSend(retry) {
     if (cancelBtn) cancelBtn.style.display = "none";
     inputEl.focus();
     // Fallback: render markdown if stream ended without 'done' event
-    if (
-      assistantBubble &&
-      assistantText &&
-      assistantBubble.textContent === assistantText
-    ) {
-      assistantBubble.innerHTML = safeMarkdown(assistantText);
-      assistantBubble.querySelectorAll("img").forEach((img) => {
-        img.style.cssText =
-          "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
-        img.addEventListener("click", () => openMediaViewer(img.src, "image"));
-      });
+    // F3: iterate over all text content parts
+    for (const part of contentParts) {
+      if (
+        part.type === "text" &&
+        part.bubble &&
+        part.content &&
+        part.bubble.textContent === part.content
+      ) {
+        part.bubble.innerHTML = safeMarkdown(part.content);
+        part.bubble.querySelectorAll("img").forEach((img) => {
+          img.style.cssText =
+            "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
+          img.addEventListener("click", () => openMediaViewer(img.src, "image"));
+        });
+      }
     }
   }
 }

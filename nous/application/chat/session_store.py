@@ -38,11 +38,8 @@ def _cleanup_expired_sessions(db: sqlite3.Connection, persona: str, ttl_days: in
 
 
 class SessionWindow:
-    def __init__(self, max_turns: int = 100, max_messages: int | None = None, batch_size: int = 10) -> None:
-        if max_messages is not None:
-            self._max_messages: int = max_messages
-        else:
-            self._max_messages: int = max_turns * 2
+    def __init__(self, max_messages: int = 200, batch_size: int = 10) -> None:
+        self._max_messages: int = max_messages
         self._messages: list[dict] = []
         self._timestamps: list[datetime] = []
         self._db: sqlite3.Connection | None = None
@@ -144,8 +141,7 @@ class SessionWindow:
         db: sqlite3.Connection,
         persona: str,
         session_id: str,
-        max_turns: int = 100,
-        max_messages: int | None = None,
+        max_messages: int = 200,
     ) -> SessionWindow | None:
         """SQLiteから既存セッションをロードする。存在しなければNoneを返す。"""
         try:
@@ -155,7 +151,7 @@ class SessionWindow:
             ).fetchone()
             if row is None:
                 return None
-            window = cls(max_turns=max_turns, max_messages=max_messages)
+            window = cls(max_messages=max_messages)
             window.attach_db(db, persona, session_id)
             messages: list[dict] = json.loads(row["messages"] if hasattr(row, "keys") else row[0])
             timestamps_raw: list[str] = json.loads(row["timestamps"] if hasattr(row, "keys") else row[1])
@@ -210,8 +206,7 @@ class SessionManager:
         self,
         persona: str,
         session_id: str,
-        max_turns: int = 100,
-        max_messages: int | None = None,
+        max_messages: int = 200,
         db: sqlite3.Connection | None = None,
     ) -> SessionWindow:
         key = (persona, session_id)
@@ -228,13 +223,13 @@ class SessionManager:
                 db.commit()
             except Exception as _e:
                 logger.warning("SessionStore: failed to init DB schema: %s", _e)
-            window = SessionWindow.from_db(db, persona, session_id, max_turns, max_messages)
+            window = SessionWindow.from_db(db, persona, session_id, max_messages)
             if window is None:
-                window = SessionWindow(max_turns=max_turns, max_messages=max_messages)
+                window = SessionWindow(max_messages=max_messages)
                 window.attach_db(db, persona, session_id)
                 _cleanup_expired_sessions(db, persona)
         else:
-            window = SessionWindow(max_turns=max_turns, max_messages=max_messages)
+            window = SessionWindow(max_messages=max_messages)
 
         self._sessions[key] = window
         return window
