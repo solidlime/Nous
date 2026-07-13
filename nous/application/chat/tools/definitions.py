@@ -252,6 +252,25 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         },
     ),
     ToolDefinition(
+        name="persona_portrait",
+        description="ポートレート画像生成。scene必須。感情変化や自己表現更新時に使用。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "scene": {
+                    "type": "string",
+                    "description": "ポートレートのシーンや雰囲気の説明（日本語可）",
+                },
+                "style": {
+                    "type": "string",
+                    "description": "画風。例: anime, watercolor, oil painting",
+                    "default": "anime",
+                },
+            },
+            "required": ["scene"],
+        },
+    ),
+    ToolDefinition(
         name="read_pdf",
         description="PDF解析。path必須。テキスト・テーブル・画像抽出。",
         input_schema={
