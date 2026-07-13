@@ -76,6 +76,7 @@ class InferenceStep:
         temperature = effective_temp if effective_temp is not None else config.temperature
         while turn_ctx.tool_call_count <= config.max_tool_calls:
             pending_tool_calls: list[ToolCallEvent] = []
+            _yielded_tool_ids: set[str] = set()  # dedup SSE+segments across empty→full yields
             current_text = ""
             _seg_text = ""  # text accumulator for segment ordering
 
@@ -97,22 +98,13 @@ class InferenceStep:
                     if _seg_text:
                         turn_ctx.segments.append({"type": "text", "content": _seg_text})
                         _seg_text = ""
-                    # Only add to pending if input is non-empty (skip early/empty yield from OpenAI)
-                    is_new = True
-                    if event.tool_input:
-                        # Check if a tool with same id already pending (replace empty with full)
-                        existing = next(
-                            (tc for tc in pending_tool_calls if tc.tool_use_id == event.tool_use_id),
-                            None,
-                        )
-                        if existing:
-                            idx = pending_tool_calls.index(existing)
-                            pending_tool_calls[idx] = event
-                            is_new = False
-                        else:
-                            pending_tool_calls.append(event)
-                    # Only yield SSE + append segment for NEW tool calls — dedup duplicates
-                    if is_new:
+                    # Check if tool with same id already seen (dedup empty→full yield from OpenAI)
+                    # Use separate tracking so empty-input calls are also deduped
+                    if event.tool_use_id in _yielded_tool_ids:
+                        # Already yielded SSE for this tool — skip
+                        pass
+                    else:
+                        _yielded_tool_ids.add(event.tool_use_id)
                         yield ToolCallSSE(name=event.tool_name, input=event.tool_input, id=event.tool_use_id)
                         turn_ctx.segments.append(
                             {
@@ -122,6 +114,17 @@ class InferenceStep:
                                 "id": event.tool_use_id,
                             }
                         )
+                    # Only add to pending if input is non-empty (original logic)
+                    if event.tool_input:
+                        existing = next(
+                            (tc for tc in pending_tool_calls if tc.tool_use_id == event.tool_use_id),
+                            None,
+                        )
+                        if existing:
+                            idx = pending_tool_calls.index(existing)
+                            pending_tool_calls[idx] = event
+                        else:
+                            pending_tool_calls.append(event)
                 elif isinstance(event, ErrorEvent):
                     yield ErrorSSE(message=event.message)
                     return
