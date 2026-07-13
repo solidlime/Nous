@@ -45,12 +45,11 @@ async def _tool_persona_portrait_with_scene(
         on success, or ``{"ok": False, "error": "..."}`` on failure.
     """
     try:
-        # 0. Enabled check — ChatConfig with fallback to Settings
+        # 0. Enabled check — ChatConfig (per-persona)
         chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-        enabled = chat_config.portrait_enabled or ctx.settings.portrait_gen.enabled
-        if not enabled:
+        if not chat_config.portrait_enabled:
             return json.dumps(
-                {"ok": False, "error": "Portrait generation is disabled in settings"},
+                {"ok": False, "error": "Portrait generation is disabled for this persona"},
                 ensure_ascii=False,
             )
 
