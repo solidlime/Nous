@@ -85,7 +85,7 @@ class ChatConfig(BaseModel):
     retrieval_relevance_weight: float = 0.4
     retrieval_rrf_k: float = 5.0  # RRF k parameter for memory search relevance scoring
     # Chat history display (separate from context window)
-    display_history_turns: int = 20
+    display_history_turns: int = 10
     # Housekeeping auto-trigger threshold (total active goals+promises)
     housekeeping_threshold: int = 10
     debug_mode: bool = False
