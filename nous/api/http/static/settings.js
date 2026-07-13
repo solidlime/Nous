@@ -26,6 +26,11 @@ const CATEGORY_ICONS = {
     qdrant: '<i data-lucide="package"></i>',
     forgetting: '<i data-lucide="broom"></i>',
     memory_enrichment: '<i data-lucide="sparkles"></i>',
+    irodori: '<i data-lucide="mic"></i>',
+    auto_capture: '<i data-lucide="camera"></i>',
+    memorag: '<i data-lucide="layers"></i>',
+    portrait_gen: '<i data-lucide="image"></i>',
+    plugin: '<i data-lucide="puzzle"></i>',
     general: '<i data-lucide="settings"></i>'
 };
 
@@ -37,13 +42,19 @@ const CATEGORY_DESCRIPTIONS = {
     qdrant: 'Qdrant vector database connection settings.',
     forgetting: 'Ebbinghaus forgetting curve for automatic memory decay.',
     memory_enrichment: 'Auto-evaluate importance and relations via LLM after memory creation.',
+    irodori: '音声合成（Irodori TTS）設定',
+    auto_capture: '自動メモリキャプチャ設定',
+    memorag: 'MemoRAG設定',
+    portrait_gen: 'ポートレート自動生成設定',
+    plugin: '外部プラグインAPI設定',
     general: 'General settings: timezone, logging, thresholds, search engine.'
 };
 
 /* ── Category display order (consistent across renders) ── */
 const CATEGORY_ORDER = [
     'api_keys', 'general', 'server', 'embedding', 'reranker',
-    'qdrant', 'forgetting', 'memory_enrichment'
+    'qdrant', 'forgetting', 'memory_enrichment',
+    'irodori', 'auto_capture', 'memorag', 'portrait_gen', 'plugin'
 ];
 
 /* ═══════════════════════════════════════════════════════════════════

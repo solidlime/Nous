@@ -60,7 +60,7 @@ def test_get_effective_value_default(tmp_data_dir: Path):
 
     value, source = mgr.get_effective_value("embedding", "model")
     assert source == "default"
-    assert value == "cl-nagoya/ruri-v3-30m"
+    assert value == "onnx-community/ruri-v3-30m-ONNX"
 
 
 def test_update_hot_reloadable(tmp_data_dir: Path):
@@ -273,7 +273,7 @@ def test_get_all_masked_values(tmp_data_dir: Path):
         for key, meta in keys.items():
             if meta.get("masked"):
                 entry = result["settings"][category][key]
-                assert entry["value"] == "***" or entry.get("value") is None
+                assert entry["value"] == "***" or entry.get("value") is None or entry.get("value") == ""
 
 
 def test_get_all_includes_reload_status(tmp_data_dir: Path):

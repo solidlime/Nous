@@ -63,6 +63,33 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "voice": {"hot_reload": True, "description": "Default voice name"},
         "timeout_seconds": {"hot_reload": True, "description": "Generation timeout (seconds)"},
     },
+    "auto_capture": {
+        "enabled": {"hot_reload": True, "description": "Auto-capture memories at end of each chat turn"},
+        "max_memories": {"hot_reload": True, "description": "Maximum memories to create per session"},
+    },
+    "memorag": {
+        "enabled": {"hot_reload": True, "description": "Enable MemoryContextSnapshot building"},
+        "clue_generation_enabled": {"hot_reload": True, "description": "Enable LLM-based clue generation for memorag search mode"},
+        "rebuild_threshold": {"hot_reload": True, "description": "Rebuild snapshot when memory count increases by this many"},
+        "snapshot_top_memories": {"hot_reload": True, "description": "Number of top-importance memories in snapshot"},
+        "snapshot_interval_hours": {"hot_reload": True, "description": "Minimum hours between automatic snapshot rebuilds"},
+    },
+    "portrait_gen": {
+        "provider": {"hot_reload": True, "description": "Generation backend (comfyui/openai/stability)"},
+        "comfyui_url": {"hot_reload": True, "description": "ComfyUI API address"},
+        "auto_generate": {"hot_reload": True, "description": "Auto-generate portrait on emotion change"},
+        "generate_interval_min": {"hot_reload": True, "description": "Minimum minutes between auto-generations"},
+        "size": {"hot_reload": True, "description": "Preview size"},
+        "quality": {"hot_reload": True, "description": "Generation quality"},
+        "emotion_threshold": {"hot_reload": True, "description": "Emotion intensity change threshold for regeneration"},
+        "max_monthly_budget": {"hot_reload": True, "description": "Monthly USD cap for cloud providers"},
+        "healthcheck_enabled": {"hot_reload": True, "description": "Periodically check if ComfyUI is reachable"},
+        "healthcheck_interval_seconds": {"hot_reload": True, "description": "Interval between health checks"},
+    },
+    "plugin": {
+        "enabled": {"hot_reload": True, "description": "Enable plugin API access"},
+        "api_key": {"hot_reload": True, "description": "Plugin API key", "masked": True},
+    },
     "general": {
         "timezone": {"hot_reload": True, "description": "Timezone"},
         "log_level": {"hot_reload": True, "description": "Log level"},
