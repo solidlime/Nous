@@ -19,6 +19,7 @@ class EmbeddingConfig(BaseModel):
 
     model: str = "onnx-community/ruri-v3-30m-ONNX"
     device: str = "cpu"
+    batch_size: int = 32
 
 
 class RerankerConfig(BaseModel):
