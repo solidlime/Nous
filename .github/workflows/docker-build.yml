@@ -1,0 +1,48 @@
+# Docker build + push to ghcr.io
+# Runs on push to main (PR merge) and via manual workflow_dispatch.
+name: Docker Build
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write  # ghcr.io push requires packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Short SHA tag (first 7 characters) for traceability
+      - name: Set image tags
+        id: meta
+        env:
+          SHORT_SHA: ${{ github.sha }}
+        run: |
+          echo "tags=ghcr.io/solidlime/nous:latest,ghcr.io/solidlime/nous:${SHORT_SHA:0:7}" >> $GITHUB_OUTPUT
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      # BuildKit cache mounts speed up repeated builds
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

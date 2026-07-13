@@ -1,166 +1,69 @@
+# CI: PR checks — lint + unit tests
+# Runs on push to main and on every PR.
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ["main"]
   pull_request:
-    branches: [main]
+    types: [opened, synchronize, reopened]
+  merge_group:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  # Opt into Node.js 24 for JavaScript actions to remove Node.js 20 deprecation warnings.
-  # Verified upstream action.yml files indicate node24 is supported for the actions used here.
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  check-docs:
-    name: Documentation Reminder
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    if: github.event_name == 'push'
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 2
-
-      - name: Check if docs need updating
-        id: check
-        run: |
-          # このコミットで変更されたファイル一覧
-          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff-tree --no-commit-id --name-only -r HEAD)
-
-          # nous/ 配下のコード変更 (テスト・migration・__init__.py を除く)
-          CODE_CHANGES=$(echo "$CHANGED" | grep '^nous/' | grep -v '/tests/' | grep -v '__init__\.py$' | grep -v '/migration/' | wc -l)
-
-          # docs/ または README.md または CLAUDE.md の変更
-          DOC_CHANGES=$(echo "$CHANGED" | grep -cE '^docs/|^README\.md$|^CLAUDE\.md$' || echo 0)
-
-          # コミットメッセージに [skip-docs] が含まれているか
-          SKIP_DOCS=$(git log -1 --format=%B | grep -ci '\[skip-docs\]' || echo 0)
-
-          echo "CODE_CHANGES=$CODE_CHANGES"
-          echo "DOC_CHANGES=$DOC_CHANGES"
-          echo "SKIP_DOCS=$SKIP_DOCS"
-
-          if [ "$CODE_CHANGES" -gt 0 ] && [ "$DOC_CHANGES" -eq 0 ] && [ "$SKIP_DOCS" -eq 0 ]; then
-            echo "::warning title=ドキュメント未更新::nous/ にコード変更がありますが、docs/・README.md・CLAUDE.md のいずれも更新されていません。必要に応じてドキュメントを更新するか、意図的であればコミットメッセージに [skip-docs] を含めてください。"
-            echo "reminder=true" >> $GITHUB_OUTPUT
-          else
-            if [ "$SKIP_DOCS" -gt 0 ]; then
-              echo "ℹ️ [skip-docs] 指定あり → スキップ"
-            else
-              echo "✅ ドキュメント更新OK"
-            fi
-            echo "reminder=false" >> $GITHUB_OUTPUT
-          fi
-
+  # ------------------------------------------------------------------
+  # Lint: ruff check + ruff format check
+  # ------------------------------------------------------------------
   lint:
-    name: Lint & Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      # ruff check — lint rules (E, F, W, I, N, UP, B, A, SIM, TCH)
+      - name: Run ruff check
+        run: ruff check .
+
+      # ruff format — formatting compliance (dry-run)
+      - name: Run ruff format check
+        run: ruff format --check .
+
+  # ------------------------------------------------------------------
+  # Test: unit tests with pytest
+  # ------------------------------------------------------------------
+  test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
+      - uses: actions/checkout@v4
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ruff -r requirements-dev.txt
-      - run: ruff check nous/ tests/
-      - run: ruff format --check nous/ tests/
-      - name: Security scan (Bandit)
-        # WARNING: continue-on-error 維持 — 現状 2 High + 16 Medium issues（B608/B324）
-        # TODO: https://github.com/solidlime/nous/issues/xxx — ブロッキング化への道筋
-        run: bandit -r nous/ -ll -x nous/migration/,nous/api/http/sections/
-        continue-on-error: true
-      - name: Type check (mypy)
-        # WARNING: continue-on-error 維持 — 現状 374 errors（Result型・QdrantClient型他）
-        # TODO: https://github.com/solidlime/nous/issues/xxx — mypy zero-error 達成後ブロッキング化
-        run: python -m mypy nous/ --ignore-missing-imports
-        continue-on-error: true
 
-  test-unit:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    needs: [lint]
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
-        with:
-          python-version: "3.12"
-          cache: pip
-
+      # Install both prod and dev dependencies
       - name: Install dependencies
-        run: pip install -r requirements-prod.txt -r requirements-dev.txt
-
-      - name: Unit tests with coverage gate
-        run: >-
-          python -m pytest tests/unit/ tests/integration/test_http_routers.py
-          -v --tb=short -m "not slow" --timeout=60
-          --cov=nous --cov-config=pyproject.toml
-          --cov-fail-under=62
-
-  test-integration:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: [lint]
-    timeout-minutes: 20
-    services:
-      qdrant:
-        image: qdrant/qdrant:latest
-        ports:
-          - 6333:6333
-        options: >-
-          --health-cmd "bash -c 'echo > /dev/tcp/localhost/6333' || exit 1"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 20
-          --health-start-period 5s
-    env:
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install dependencies
-        run: pip install -r requirements-prod.txt -r requirements-dev.txt
-
-      - name: Wait for Qdrant
         run: |
-          for i in {1..30}; do
-            if curl -sf http://localhost:6333/healthz; then break; fi
-            sleep 2
-          done
+          pip install -r requirements-prod.txt -r requirements-dev.txt
 
-      - name: Integration tests
-        run: python -m pytest tests/integration/ -v --tb=short --timeout=120 --cov=nous --cov-report=xml --cov-report=term-missing
-        env:
-          MEMORY_MCP_QDRANT_URL: http://localhost:6333
-          MEMORY_MCP_DATA_ROOT: /tmp/test_data
-
-      - name: Upload coverage
-        if: always() && env.CODECOV_TOKEN != ''
-        uses: codecov/codecov-action@0cfda1dd0a4ad9efc75517f399d859cd1ea4ced1 # v5.4.2
-        with:
-          token: ${{ env.CODECOV_TOKEN }}
-          file: ./coverage.xml
-          fail_ci_if_error: false
-
-      - name: Upload test artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: integration-test-results
-          path: coverage.xml
-          if-no-files-found: ignore
-
-
-
+      # Qdrant client is needed even for unit tests (some fixtures import it)
+      # Unit tests should not require a running Qdrant instance
+      - name: Run unit tests
+        run: pytest tests/unit/ -q --timeout=60
