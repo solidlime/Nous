@@ -41,4 +41,4 @@ sudachidict_core>=20240716
 # PDF/Document Parsing (read_pdf tool)
 PyMuPDF>=1.24.0
 pdfplumber>=0.11.0
-pytesseract>=0.3.10
+pytesseract>=0.3.13
