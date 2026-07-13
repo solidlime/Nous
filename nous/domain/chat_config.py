@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ValidationError, field_validator
 
+from nous.config.runtime_config import RuntimeConfigManager
+from nous.domain.shared.time_utils import format_iso, get_now
+from nous.domain.value_objects import normalize_importance
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import sqlite3
-
-from nous.config.runtime_config import RuntimeConfigManager
-from nous.domain.shared.time_utils import format_iso, get_now
-from nous.domain.value_objects import normalize_importance
 
 # Backward-compat env var names for API keys per provider (legacy, without NOUS_ prefix)
 _ENV_API_KEYS: dict[str, str] = {
