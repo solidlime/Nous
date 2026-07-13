@@ -3174,19 +3174,6 @@ function onPortraitClick() {
   }
 }
 
-// SSE listener for portrait.generated events
-window.addEventListener("portrait-generated", function (e) {
-  try {
-    const data = typeof e.detail === "string" ? JSON.parse(e.detail) : e.detail;
-    if (data.image_base64) {
-      setPortraitImage(data.image_base64, data.emotion);
-      toast("🎨 ポートレートが更新されました", "info");
-    }
-  } catch (err) {
-    console.error("[portrait-generated SSE] failed:", err);
-    toast("ポートレート更新処理失敗: " + err.message, "error");
-  }
-});
 
 /* =================================================================
    TE04: TTS AUDIO PLAYBACK

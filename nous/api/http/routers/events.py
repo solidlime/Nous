@@ -19,7 +19,6 @@ from nous.application.event_bus import (
     PORTRAIT_GENERATE_COMPLETE,
     PORTRAIT_GENERATE_ERROR,
     PORTRAIT_GENERATE_START,
-    PORTRAIT_GENERATED,
 )
 from nous.domain.memory.session_event import SessionEvent
 from nous.infrastructure.logging.structured import get_logger
@@ -41,7 +40,6 @@ _ALL_EVENT_TYPES = frozenset(
         PORTRAIT_GENERATE_START,
         PORTRAIT_GENERATE_COMPLETE,
         PORTRAIT_GENERATE_ERROR,
-        PORTRAIT_GENERATED,  # kept for backward compatibility
     }
 )
 

@@ -494,21 +494,6 @@ function connectSSE(persona) {
     }
   });
 
-  es._sseHandlers["portrait.generated"] = function handlePortraitGenerated(e) {
-    try {
-      const d = JSON.parse(e.data);
-      window.dispatchEvent(
-        new CustomEvent("portrait-generated", { detail: d }),
-      );
-    } catch (e) {
-      console.warn("[SSE parse] portrait.generated:", e.message);
-    }
-  };
-  es.addEventListener(
-    "portrait.generated",
-    es._sseHandlers["portrait.generated"],
-  );
-
   // TB07: Portrait generation SSE events
   es._sseHandlers["portrait.generate_start"] = function handlePortraitGenerateStart(e) {
     try {
