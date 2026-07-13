@@ -13,7 +13,6 @@ from nous.domain.chat_config import ChatConfig
 @pytest.fixture
 def mock_ctx():
     ctx = MagicMock()
-    ctx.settings.portrait_gen.enabled = True
     ctx.settings.portrait_gen.provider = "comfyui"
     ctx.settings.portrait_gen.comfyui_url = "http://localhost:8188"
     ctx.settings.portrait_gen.size = "512x512"
@@ -126,7 +125,6 @@ class TestPortraitWithScene:
         """Both ChatConfig and Settings disabled → return error."""
         chat_config = ChatConfig(persona="test", portrait_enabled=False)
         repo_patch.get.return_value = chat_config
-        mock_ctx.settings.portrait_gen.enabled = False
 
         from nous.api.mcp._tools_portrait_scene import _tool_persona_portrait_with_scene
 
@@ -139,7 +137,6 @@ class TestPortraitWithScene:
         """ChatConfig.portrait_enabled = True → enabled even if Settings disabled."""
         chat_config = ChatConfig(persona="test", portrait_enabled=True)
         repo_patch.get.return_value = chat_config
-        mock_ctx.settings.portrait_gen.enabled = False
 
         state_result = MagicMock()
         state_result.is_ok = True

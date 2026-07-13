@@ -13,7 +13,6 @@ from nous.domain.chat_config import ChatConfig
 @pytest.fixture
 def mock_ctx():
     ctx = MagicMock()
-    ctx.settings.portrait_gen.enabled = False
     ctx.settings.portrait_gen.provider = "comfyui"
     ctx.settings.portrait_gen.comfyui_url = "http://localhost:8188"
     ctx.settings.portrait_gen.size = "512x512"

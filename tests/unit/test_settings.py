@@ -24,7 +24,7 @@ class TestDefaultValues:
 
     def test_embedding_defaults(self):
         cfg = EmbeddingConfig()
-        assert cfg.model == "cl-nagoya/ruri-v3-30m"
+        assert cfg.model == "onnx-community/ruri-v3-30m-ONNX"
         assert cfg.device == "cpu"
 
     def test_reranker_defaults(self):
@@ -47,7 +47,7 @@ class TestDefaultValues:
 
     def test_portrait_gen_defaults(self):
         cfg = PortraitGenerationConfig()
-        assert cfg.enabled is False  # CRITICAL: default OFF
+        # CRITICAL: default OFF (managed per-persona via ChatConfig.portrait_enabled)
         assert cfg.provider == "comfyui"
         assert cfg.comfyui_url == "http://localhost:8188"
         assert cfg.auto_generate is False
@@ -79,7 +79,6 @@ class TestSettings:
         assert s.contradiction_threshold == 0.85
         assert s.duplicate_threshold == 0.90
         # Portrait generation — critical cost-control layer: default OFF
-        assert s.portrait_gen.enabled is False
         assert s.portrait_gen.provider == "comfyui"
 
     def test_env_override_simple(self, monkeypatch):
@@ -95,11 +94,9 @@ class TestSettings:
         assert s.server.port == 9999
 
     def test_env_override_portrait_gen(self, monkeypatch):
-        monkeypatch.setenv("NOUS_PORTRAIT_GEN__ENABLED", "true")
         monkeypatch.setenv("NOUS_PORTRAIT_GEN__PROVIDER", "openai")
         monkeypatch.setenv("NOUS_PORTRAIT_GEN__AUTO_GENERATE", "true")
         s = Settings()
-        assert s.portrait_gen.enabled is True
         assert s.portrait_gen.provider == "openai"
         assert s.portrait_gen.auto_generate is True
         # Other fields should remain default

@@ -516,7 +516,7 @@ When `auto_generate=True`, the system checks after each emotion change:
 
 ### MCP Tool
 
-The `persona_portrait` tool is registered for LLM use (requires `portrait_gen.enabled=True`):
+The `persona_portrait` tool is registered for LLM use. Portrait generation is enabled per-persona via `ChatConfig.portrait_enabled` (default: `False`):
 
 ```python
 # Generate or update persona portrait
@@ -527,7 +527,7 @@ persona_portrait(
 )
 ```
 
-> **⚠️ Cost Warning**: Always verify `portrait_gen.enabled` is `True` before calling. Default is OFF for a reason — generating images via cloud providers incurs API costs.
+> **⚠️ Cost Warning**: Always verify `chat_config.portrait_enabled` is `True` before calling (via `ChatConfigRepository.get(persona)`). Default is OFF for a reason — generating images via cloud providers incurs API costs.
 
 ---
 

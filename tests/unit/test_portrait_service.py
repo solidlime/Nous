@@ -412,7 +412,7 @@ class TestShouldAutoGenerate:
         """auto_generate=False → False."""
         svc = _make_service(auto_generate=False)
         persona = _make_persona(emotion_intensity=0.9)
-        assert await svc.should_auto_generate(persona) is False
+        assert await svc.should_auto_generate(persona, portrait_enabled=True) is False
 
     @pytest.mark.asyncio
     async def test_auto_generate_below_threshold(self, service):
@@ -438,7 +438,7 @@ class TestShouldAutoGenerate:
 
             persona = _make_persona(emotion_intensity=0.8)
             await svc.generate(persona=persona, scene="use_budget")
-            assert await svc.should_auto_generate(persona) is False
+        assert await svc.should_auto_generate(persona, portrait_enabled=True) is False
 
 
 # ===========================================================================

@@ -32,6 +32,7 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
     "embedding": {
         "model": {"hot_reload": True, "description": "Embedding model name", "reload_time": "10-60s"},
         "device": {"hot_reload": True, "description": "Device (cpu/cuda)", "reload_time": "10-60s"},
+        "batch_size": {"hot_reload": True, "description": "Embedding batch size"},
     },
     "reranker": {
         "model": {"hot_reload": True, "description": "Reranker model name", "reload_time": "5-30s"},
@@ -56,29 +57,11 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "base_url": {"hot_reload": True, "description": "LLM API base URL"},
         "min_chars": {"hot_reload": True, "description": "Min content length to trigger enrichment"},
     },
-    "image_gen": {
-        "provider": {"hot_reload": True, "description": "Generation backend (openai/stability/comfyui)"},
-        "dalle_model": {"hot_reload": True, "description": "OpenAI DALL-E model"},
-        "comfyui_url": {"hot_reload": True, "description": "ComfyUI API address"},
-        "stability_url": {"hot_reload": True, "description": "Stable Diffusion WebUI API endpoint"},
-    },
     "irodori": {
         "enabled": {"hot_reload": True, "description": "Enable Irodori-TTS voice generation"},
         "url": {"hot_reload": True, "description": "Irodori-TTS server URL (OpenAI-compatible endpoint)"},
         "voice": {"hot_reload": True, "description": "Default voice name"},
         "timeout_seconds": {"hot_reload": True, "description": "Generation timeout (seconds)"},
-    },
-    "portrait_gen": {
-        "provider": {"hot_reload": True, "description": "Generation backend (comfyui/openai/stability)"},
-        "comfyui_url": {"hot_reload": True, "description": "ComfyUI API address"},
-        "auto_generate": {"hot_reload": True, "description": "Auto-generate portrait on emotion change"},
-        "generate_interval_min": {"hot_reload": True, "description": "Min minutes between auto generations"},
-        "size": {"hot_reload": True, "description": "Preview size (e.g. 512x512)"},
-        "quality": {"hot_reload": True, "description": "Generation quality"},
-        "emotion_threshold": {"hot_reload": True, "description": "Emotion intensity change threshold for regeneration"},
-        "max_monthly_budget": {"hot_reload": True, "description": "Monthly USD cap for cloud providers"},
-        "healthcheck_enabled": {"hot_reload": True, "description": "Periodically check ComfyUI reachability"},
-        "healthcheck_interval_seconds": {"hot_reload": True, "description": "Interval between health checks (seconds)"},
     },
     "general": {
         "timezone": {"hot_reload": True, "description": "Timezone"},
