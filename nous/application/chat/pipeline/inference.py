@@ -98,7 +98,7 @@ class InferenceStep:
                         turn_ctx.segments.append({"type": "text", "content": _seg_text})
                         _seg_text = ""
                     # Only add to pending if input is non-empty (skip early/empty yield from OpenAI)
-                    # But always yield SSE for display
+                    is_new = True
                     if event.tool_input:
                         # Check if a tool with same id already pending (replace empty with full)
                         existing = next(
@@ -108,17 +108,20 @@ class InferenceStep:
                         if existing:
                             idx = pending_tool_calls.index(existing)
                             pending_tool_calls[idx] = event
+                            is_new = False
                         else:
                             pending_tool_calls.append(event)
-                    yield ToolCallSSE(name=event.tool_name, input=event.tool_input, id=event.tool_use_id)
-                    turn_ctx.segments.append(
-                        {
-                            "type": "tool_call",
-                            "name": event.tool_name,
-                            "input": event.tool_input,
-                            "id": event.tool_use_id,
-                        }
-                    )
+                    # Only yield SSE + append segment for NEW tool calls — dedup duplicates
+                    if is_new:
+                        yield ToolCallSSE(name=event.tool_name, input=event.tool_input, id=event.tool_use_id)
+                        turn_ctx.segments.append(
+                            {
+                                "type": "tool_call",
+                                "name": event.tool_name,
+                                "input": event.tool_input,
+                                "id": event.tool_use_id,
+                            }
+                        )
                 elif isinstance(event, ErrorEvent):
                     yield ErrorSSE(message=event.message)
                     return
