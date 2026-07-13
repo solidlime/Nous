@@ -10,11 +10,9 @@ if TYPE_CHECKING:
     from .base import VoiceEngine
 
 
-def get_voice_engine(config: IrodoriConfig) -> VoiceEngine | None:
+def get_voice_engine(config: IrodoriConfig) -> VoiceEngine:
     """設定に基づいて VoiceEngine を生成する。
 
-    有効なエンジンがない場合は None を返す。
+    呼び出し元が ChatConfig.irodori_enabled を事前チェックすること。
     """
-    if config.enabled:
-        return IrodoriEngine(config)
-    return None
+    return IrodoriEngine(config)

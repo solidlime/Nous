@@ -57,7 +57,7 @@ class TestIrodoriEngine:
 
     @pytest.fixture
     def config(self) -> IrodoriConfig:
-        return IrodoriConfig(enabled=True, url="http://irodori:8088/v1", voice="kiritan", timeout_seconds=30)
+        return IrodoriConfig(url="http://irodori:8088/v1", voice="kiritan", timeout_seconds=30)
 
     def _make_irodori(self, config: IrodoriConfig):
         from nous.infrastructure.voice.irodori import IrodoriEngine
@@ -245,32 +245,14 @@ class TestIrodoriEngine:
 
 
 class TestVoiceFactory:
-    """get_voice_engine のテスト"""
+    """get_voice_engine のテスト（有効/無効は呼び出し元が ChatConfig で制御）"""
 
-    def test_enabled_returns_engine(self):
-        """enabled=True → IrodoriEngine インスタンス"""
+    def test_returns_irodori_engine(self):
+        """常に IrodoriEngine インスタンスを返す"""
         from nous.infrastructure.voice.factory import get_voice_engine
         from nous.infrastructure.voice.irodori import IrodoriEngine
 
-        config = IrodoriConfig(enabled=True, url="http://localhost:8088/v1")
+        config = IrodoriConfig(url="http://localhost:8088/v1")
         engine = get_voice_engine(config)
 
         assert isinstance(engine, IrodoriEngine)
-
-    def test_disabled_returns_none(self):
-        """enabled=False → None"""
-        from nous.infrastructure.voice.factory import get_voice_engine
-
-        config = IrodoriConfig(enabled=False)
-        engine = get_voice_engine(config)
-
-        assert engine is None
-
-    def test_default_config_is_disabled(self):
-        """デフォルト設定では無効 (None)"""
-        from nous.infrastructure.voice.factory import get_voice_engine
-
-        config = IrodoriConfig()  # enabled=False
-        engine = get_voice_engine(config)
-
-        assert engine is None

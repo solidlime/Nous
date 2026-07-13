@@ -26,10 +26,9 @@ async def _tool_irodori_voices(
 
     Returns JSON with ok:bool, voices (on success) or error message.
     """
-    # 1. Get Irodori config — ChatConfig with fallback to Settings
+    # 1. Get Irodori config — per-persona ChatConfig only
     chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-    config = ctx.settings.irodori
-    enabled = chat_config.irodori_enabled or config.enabled
+    enabled = chat_config.irodori_enabled
     if not enabled:
         return json.dumps(
             {"ok": False, "error": "Irodori TTS is not enabled in settings"},
@@ -37,14 +36,10 @@ async def _tool_irodori_voices(
         )
 
     # 2. Get voice engine
+    config = ctx.settings.irodori
     from nous.infrastructure.voice.factory import get_voice_engine
 
     engine = get_voice_engine(config)
-    if engine is None:
-        return json.dumps(
-            {"ok": False, "error": "Failed to create voice engine"},
-            ensure_ascii=False,
-        )
 
     # 3. Query /v1/models for available voices
     base_url = config.url.rstrip("/")
@@ -91,10 +86,9 @@ async def _tool_irodori_tts(
 
     Returns JSON with ok:bool, audio_base64 (on success) or error message.
     """
-    # 1. Get Irodori config — ChatConfig with fallback to Settings
+    # 1. Get Irodori config — per-persona ChatConfig only
     chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-    config = ctx.settings.irodori
-    enabled = chat_config.irodori_enabled or config.enabled
+    enabled = chat_config.irodori_enabled
     if not enabled:
         return json.dumps(
             {"ok": False, "error": "Irodori TTS is not enabled in settings"},
@@ -102,14 +96,10 @@ async def _tool_irodori_tts(
         )
 
     # 2. Get voice engine
+    config = ctx.settings.irodori
     from nous.infrastructure.voice.factory import get_voice_engine
 
     engine = get_voice_engine(config)
-    if engine is None:
-        return json.dumps(
-            {"ok": False, "error": "Failed to create voice engine"},
-            ensure_ascii=False,
-        )
 
     # 3. Override voice if explicitly given
     if voice is not None:

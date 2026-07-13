@@ -13,7 +13,6 @@ from nous.domain.chat_config import ChatConfig
 @pytest.fixture
 def mock_ctx():
     ctx = MagicMock()
-    ctx.settings.irodori.enabled = False
     ctx.settings.irodori.url = "http://irodori:8088/v1"
     ctx.settings.irodori.voice = "default"
     ctx.settings.irodori.timeout_seconds = 30
@@ -66,26 +65,6 @@ class TestIrodoriEnabled:
             data = json.loads(result)
             assert data["ok"] is True
             assert "audio_base64" in data
-
-    async def test_irodori_fallback_to_settings(self, mock_ctx, repo_patch):
-        """ChatConfig default (False) but Settings enabled → enabled."""
-        chat_config = ChatConfig(persona="test", irodori_enabled=False)
-        repo_patch.get.return_value = chat_config
-        mock_ctx.settings.irodori.enabled = True  # Settings enables it
-
-        with patch("nous.infrastructure.voice.factory.get_voice_engine") as mock_get_engine:
-            mock_engine = AsyncMock()
-            mock_engine.health_check.return_value = True
-            mock_engine.synthesize.return_value = b"fake_wav_data"
-            mock_get_engine.return_value = mock_engine
-            mock_engine._voice = "default"
-
-            from nous.api.mcp._tools_irodori import _tool_irodori_tts
-
-            result = await _tool_irodori_tts(mock_ctx, "test", "こんにちは")
-            data = json.loads(result)
-            assert data["ok"] is True
-
 
 class TestIrodoriVoices:
     """irodori_voices tool — voice listing."""

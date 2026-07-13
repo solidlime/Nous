@@ -58,7 +58,6 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "min_chars": {"hot_reload": True, "description": "Min content length to trigger enrichment"},
     },
     "irodori": {
-        "enabled": {"hot_reload": True, "description": "Enable Irodori-TTS voice generation"},
         "url": {"hot_reload": True, "description": "Irodori-TTS server URL (OpenAI-compatible endpoint)"},
         "voice": {"hot_reload": True, "description": "Default voice name"},
         "timeout_seconds": {"hot_reload": True, "description": "Generation timeout (seconds)"},

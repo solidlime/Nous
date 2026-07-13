@@ -533,7 +533,7 @@ persona_portrait(
 
 ## 11-a. Voice Synthesis / 音声合成 (Irodori TTS)
 
-ペルソナの声で日本語テキストを音声合成する機能。`irodori.enabled=True` のとき有効。
+ペルソナの声で日本語テキストを音声合成する機能。`ChatConfig.irodori_enabled=True` のとき有効（デフォルト OFF）。
 
 ### MCP Tool
 
@@ -554,7 +554,7 @@ irodori_tts(
 |--------|------|-------------|
 | `POST` | `/api/tts/{persona}` | テキストを音声合成（body: `{"text": "..."}`） |
 
-> **⚠️ Enabled Check**: `irodori.enabled=False`（デフォルト）では呼び出してもエラーになります。Irodori-TTS-Server が稼働している環境でのみ有効化してください。
+> **⚠️ Enabled Check**: `ChatConfig.irodori_enabled=False`（デフォルト）では呼び出してもエラーになります。Irodori-TTS-Server が稼働している環境でのみ有効化してください。
 
 ---
 

@@ -59,7 +59,6 @@ class TestDefaultValues:
 
     def test_irodori_defaults(self):
         cfg = IrodoriConfig()
-        assert cfg.enabled is False
         assert cfg.url == "http://localhost:8088/v1"
         assert cfg.voice == "default"
         assert cfg.timeout_seconds == 30
@@ -110,7 +109,6 @@ class TestSettings:
         assert s.irodori.url == "http://192.168.1.100:8088/v1"
         assert s.irodori.voice == "kobayashi"
         # Other fields should remain default
-        assert s.irodori.enabled is False
         assert s.irodori.timeout_seconds == 30
 
     def test_env_override_data_root(self, monkeypatch):
