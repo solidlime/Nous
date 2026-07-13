@@ -361,6 +361,11 @@ function applyChatConfig(cfg) {
       ? cfg.retrieval_relevance_weight
       : 0.4,
   );
+  setSlider(
+    "chat-retrieval-rrf-k",
+    "chat-retrieval-rrf-k-val",
+    cfg.retrieval_rrf_k != null ? cfg.retrieval_rrf_k : 60,
+  );
   // Housekeeping settings
   set(
     "chat-display-history-turns",
@@ -404,35 +409,24 @@ function applyChatConfig(cfg) {
   setChecked("chat-irodori-enabled", cfg.irodori_enabled === true);
   setChecked("chat-portrait-enabled", cfg.portrait_enabled === true);
   // Voice / TTS settings (TE04)
-  setChecked("chat-voice-enabled", cfg.irodori_enabled === true);
   setChecked("chat-voice-emotion-link", cfg.voice_emotion_link !== false);
   setChecked("chat-voice-auto-play", cfg.voice_auto_play === true);
-  // Voice options visibility toggle
-  const voiceEnabledCb = document.getElementById("chat-voice-enabled");
-  const voiceOptions = document.getElementById("chat-voice-options");
-  if (voiceEnabledCb && voiceOptions) {
-    voiceOptions.style.display = voiceEnabledCb.checked ? "" : "none";
-    voiceEnabledCb.addEventListener("change", function () {
-      voiceOptions.style.display = this.checked ? "" : "none";
-      // Sync with irodori_enabled
-      const irodoriCb = document.getElementById("chat-irodori-enabled");
-      if (irodoriCb) irodoriCb.checked = this.checked;
-    });
-  }
-  // Sync irodori_enabled → voice-enabled
+  // Voice options visibility toggle (controlled by irodori_enabled checkbox)
   const irodoriCb = document.getElementById("chat-irodori-enabled");
-  if (irodoriCb) {
+  const voiceOptions = document.getElementById("chat-voice-options");
+  if (irodoriCb && voiceOptions) {
+    voiceOptions.style.display = irodoriCb.checked ? "" : "none";
     irodoriCb.addEventListener("change", function () {
-      const voiceCb = document.getElementById("chat-voice-enabled");
-      if (voiceCb) {
-        voiceCb.checked = this.checked;
-        voiceCb.dispatchEvent(new Event("change"));
-      }
+      voiceOptions.style.display = this.checked ? "" : "none";
     });
   }
   // Load voice models if enabled
   if (cfg.irodori_enabled) {
-    loadVoiceModels();
+    loadVoiceModels(cfg.voice_model);
+  } else {
+    // Set value directly so it's available when irodori is later enabled
+    const vmSelect = document.getElementById("chat-voice-model");
+    if (vmSelect && cfg.voice_model) vmSelect.value = cfg.voice_model;
   }
   // Debug mode
   setChecked("chat-debug-mode", cfg.debug_mode === true);
@@ -452,8 +446,8 @@ function applyChatConfig(cfg) {
   const igProvider = document.getElementById("chat-image-gen-provider");
   const igDalleModel = document.getElementById("chat-image-gen-dalle-model");
   const igStabilityUrl = document.getElementById(
-    "chat-image-gen-stability-url",
-  );
+    "chat-image-gen-sd-webui-url",
+  ) || document.getElementById("chat-image-gen-stability-url");
   const igComfyuiUrl = document.getElementById(
     "chat-image-gen-comfyui-url",
   );
@@ -462,8 +456,8 @@ function applyChatConfig(cfg) {
     "chat-image-gen-dalle-options",
   );
   const igStabilityOptions = document.getElementById(
-    "chat-image-gen-stability-options",
-  );
+    "chat-image-gen-sd-webui-options",
+  ) || document.getElementById("chat-image-gen-stability-options");
   const igComfyuiOptions = document.getElementById(
     "chat-image-gen-comfyui-options",
   );
@@ -605,6 +599,9 @@ async function saveChatConfig() {
     retrieval_relevance_weight: parseFloat(
       document.getElementById("chat-relevance-weight")?.value || "0.4",
     ),
+    retrieval_rrf_k: parseInt(
+      document.getElementById("chat-retrieval-rrf-k")?.value || "60",
+    ),
     display_history_turns: parseInt(
       document.getElementById("chat-display-history-turns")?.value || "20",
     ),
@@ -626,11 +623,9 @@ async function saveChatConfig() {
     image_gen_dalle_model: document.getElementById("chat-image-gen-dalle-model")
       ? document.getElementById("chat-image-gen-dalle-model").value
       : "dall-e-3",
-    image_gen_stability_url: document.getElementById(
-      "chat-image-gen-stability-url",
-    )
-      ? document.getElementById("chat-image-gen-stability-url").value.trim()
-      : "",
+    image_gen_stability_url: document.getElementById("chat-image-gen-sd-webui-url")?.value
+      ?? document.getElementById("chat-image-gen-stability-url")?.value
+      ?? "",
     image_gen_comfyui_url: document.getElementById(
       "chat-image-gen-comfyui-url",
     )
@@ -646,11 +641,12 @@ async function saveChatConfig() {
       ? document.getElementById("chat-image-gen-replicate-api-key").value.trim()
       : "",
     // 拡張機能: irodori / portrait
-    irodori_enabled: getChecked("chat-irodori-enabled") || getChecked("chat-voice-enabled"),
+    irodori_enabled: getChecked("chat-irodori-enabled"),
     portrait_enabled: getChecked("chat-portrait-enabled"),
     // Voice / TTS settings (TE04)
     voice_auto_play: getChecked("chat-voice-auto-play"),
     voice_emotion_link: getChecked("chat-voice-emotion-link"),
+    voice_model: document.getElementById("chat-voice-model")?.value || "",
   };
   const btn = document.querySelector(".chat-save-btn");
   if (btn) {
@@ -3124,7 +3120,7 @@ window.addEventListener("portrait-generated", function (e) {
 let _ttsAbortController = null;
 
 /* ── TE04: Voice model loading & test playback ── */
-async function loadVoiceModels() {
+async function loadVoiceModels(selectedId) {
   if (!S.persona) return;
   const select = document.getElementById("chat-voice-model");
   if (!select) return;
@@ -3138,6 +3134,10 @@ async function loadVoiceModels() {
         opt.textContent = v.name || v.id;
         select.appendChild(opt);
       });
+      // Restore saved selection
+      if (selectedId && select.querySelector('option[value="' + selectedId.replace(/"/g, '&quot;') + '"]')) {
+        select.value = selectedId;
+      }
     } else {
       select.innerHTML = '<option value="">音声モデルが見つかりません</option>';
     }

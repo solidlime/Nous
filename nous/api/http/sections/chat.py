@@ -166,10 +166,10 @@ def render_chat_tab() -> str:
                                                 </select>
                                             </div>
                                         </div>
-                                        <div id="chat-image-gen-stability-options" style="display:none;">
+                                        <div id="chat-image-gen-sd-webui-options" style="display:none;">
                                             <div class="chat-config-row" style="margin-bottom:6px;">
                                                 <div class="chat-field-label">SD WebUI URL:</div>
-                                                <input type="text" id="chat-image-gen-stability-url" class="chat-field-input" placeholder="http://localhost:7860" />
+                                                <input type="text" id="chat-image-gen-sd-webui-url" class="chat-field-input" placeholder="http://localhost:7860" />
                                             </div>
                                         </div>
                                         <div id="chat-image-gen-comfyui-options" style="display:none;">
@@ -465,6 +465,15 @@ def render_chat_tab() -> str:
                                         oninput="document.getElementById('chat-relevance-weight-val').textContent=parseFloat(this.value).toFixed(2)"
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
+                                <div>
+                                    <div class="chat-field-label" style="display:flex;justify-content:space-between;">
+                                        <span>RRF K値</span>
+                                        <span id="chat-retrieval-rrf-k-val" style="color:var(--accent-purple);">60</span>
+                                    </div>
+                                    <input type="range" id="chat-retrieval-rrf-k" class="chat-field-input" min="10" max="200" step="5" value="60"
+                                        oninput="document.getElementById('chat-retrieval-rrf-k-val').textContent=this.value"
+                                        style="width:100%;accent-color:var(--accent-purple);" />
+                                </div>
                             </div>
                         </details>
                         <!-- Extensions: irodori / portrait -->
@@ -487,11 +496,6 @@ def render_chat_tab() -> str:
                         <details data-category="voice">
                             <summary><i data-lucide="volume-2"></i> 音声 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'voice')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <input type="checkbox" id="chat-voice-enabled"
-                                        style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
-                                    <label for="chat-voice-enabled" class="chat-field-label" style="margin:0;cursor:pointer;">🎵 音声合成を有効にする</label>
-                                </div>
                                 <div id="chat-voice-options" style="display:none;">
                                     <div>
                                         <div class="chat-field-label">音声モデル</div>
