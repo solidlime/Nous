@@ -259,7 +259,7 @@ class AppContext:
     @property
     def embedding_model(self) -> EmbeddingModel:
         if self._embedding is None:
-            self._embedding = EmbeddingModel(self.settings.embedding.model, self.settings.embedding.device)
+            self._embedding = EmbeddingModel(self.settings.embedding)
         return self._embedding
 
     @property

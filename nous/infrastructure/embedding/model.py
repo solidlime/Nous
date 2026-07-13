@@ -16,6 +16,7 @@ import onnxruntime
 from huggingface_hub import snapshot_download
 from tokenizers import Tokenizer
 
+from nous.config.settings import EmbeddingConfig
 from nous.infrastructure.logging.structured import get_logger
 
 logger = get_logger(__name__)
@@ -35,11 +36,9 @@ class EmbeddingModel:
 
     def __init__(
         self,
-        model_name: str = "onnx-community/ruri-v3-30m-ONNX",
-        device: str = "cpu",
+        config: EmbeddingConfig | None = None,
     ) -> None:
-        self.model_name = model_name
-        self.device = device
+        self.config = config or EmbeddingConfig()
         self._session: onnxruntime.InferenceSession | None = None
         self._tokenizer: Tokenizer | None = None
         self._dimension: int | None = None
@@ -86,11 +85,31 @@ class EmbeddingModel:
         *,
         is_query: bool = False,
     ) -> np.ndarray:
-        """Encode multiple texts to normalised vectors (2D)."""
+        """Encode multiple texts to normalised vectors (2D).
+
+        Splits input into chunks of ``self.config.batch_size`` to limit
+        memory usage during ONNX inference.
+        """
         self._ensure_loaded()
         assert self._session is not None
         assert self._tokenizer is not None
 
+        results: list[np.ndarray] = []
+        bs = self.config.batch_size
+        for start in range(0, len(texts), bs):
+            chunk = texts[start : start + bs]
+            emb = self._encode_batch_internal(chunk, is_query=is_query)
+            results.append(emb)
+
+        return np.vstack(results) if results else np.empty((0, self.dimension), dtype=np.float64)
+
+    def _encode_batch_internal(
+        self,
+        texts: list[str],
+        *,
+        is_query: bool = False,
+    ) -> np.ndarray:
+        """Encode a single chunk of texts (no chunking)."""
         prefix = _QUERY_PREFIX if is_query else _DOCUMENT_PREFIX
         prefixed = [f"{prefix}{t}" for t in texts]
 
@@ -150,13 +169,13 @@ class EmbeddingModel:
             old_session = self._session
             old_tokenizer = self._tokenizer
             old_dimension = self._dimension
-            old_name = self.model_name
-            old_device = self.device
+            old_name = self.config.model
+            old_device = self.config.device
 
             if new_model_name:
-                self.model_name = new_model_name
+                self.config.model = new_model_name
             if new_device:
-                self.device = new_device
+                self.config.device = new_device
 
             self._session = None
             self._tokenizer = None
@@ -170,20 +189,20 @@ class EmbeddingModel:
                     del old_tokenizer
                 return {
                     "status": "ready",
-                    "model": self.model_name,
+                    "model": self.config.model,
                     "dimension": self._dimension,
-                    "message": f"Model reloaded: {self.model_name}",
+                    "message": f"Model reloaded: {self.config.model}",
                 }
             except Exception as e:
                 logger.error("Failed to reload embedding model: %s", e)
                 self._session = old_session
                 self._tokenizer = old_tokenizer
                 self._dimension = old_dimension
-                self.model_name = old_name
-                self.device = old_device
+                self.config.model = old_name
+                self.config.device = old_device
                 return {
                     "status": "error",
-                    "model": self.model_name,
+                    "model": self.config.model,
                     "dimension": self._dimension,
                     "message": f"Reload failed, reverted: {e}",
                 }
@@ -194,7 +213,7 @@ class EmbeddingModel:
             self._session = None
             self._tokenizer = None
             self._dimension = None
-            logger.info("Embedding model unloaded: %s", self.model_name)
+            logger.info("Embedding model unloaded: %s", self.config.model)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -209,10 +228,10 @@ class EmbeddingModel:
 
     def _load_model(self) -> None:
         """Download ONNX model + tokenizer, create InferenceSession."""
-        logger.info("Loading embedding model: %s (device=%s)", self.model_name, self.device)
+        logger.info("Loading embedding model: %s (device=%s)", self.config.model, self.config.device)
 
         # 1. Download ONNX model
-        model_dir = snapshot_download(self.model_name)
+        model_dir = snapshot_download(self.config.model)
         onnx_path = os.path.join(model_dir, "onnx", "model.onnx")
 
         # 2. Load tokenizer
@@ -236,12 +255,12 @@ class EmbeddingModel:
         logger.info(
             "Embedding model loaded: dim=%d, model=%s",
             self._dimension,
-            self.model_name,
+            self.config.model,
         )
 
     def _get_providers(self) -> list[str]:
         """Return ONNX Runtime provider list based on device."""
-        if self.device == "cpu":
+        if self.config.device == "cpu":
             return ["CPUExecutionProvider"]
         return ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
