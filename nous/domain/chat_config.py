@@ -90,7 +90,8 @@ class ChatConfig(BaseModel):
     housekeeping_threshold: int = 10
     debug_mode: bool = False
     # === Context compression (v2.1) ===
-    max_window_turns: int = 100  # backward-compat; prefer max_stored_messages
+    # DEPRECATED: remove when DB migration clears max_window_turns; use max_stored_messages
+    max_window_turns: int = 100
     max_stored_messages: int = 200
     context_max_tokens: int | None = None  # None = auto-detect from model
     context_compression_threshold: float = 0.8  # 0.5-1.0
@@ -117,6 +118,7 @@ class ChatConfig(BaseModel):
     # Voice / TTS settings (TE04)
     voice_auto_play: bool = False
     voice_emotion_link: bool = True
+    voice_model: str = ""
     updated_at: str | None = None
 
     def model_post_init(self, __context) -> None:
@@ -274,7 +276,9 @@ class ChatConfigRepository:
         """Load config for persona, returning defaults if not found."""
         cursor = self._db.execute(
             "SELECT persona, provider, model, api_key, base_url, system_prompt, "
-            "temperature, max_tokens, max_window_turns, max_tool_calls, updated_at, "
+            "temperature, max_tokens, "
+            "max_window_turns, "  # DEPRECATED: remove when DB migration clears max_window_turns
+            "max_tool_calls, updated_at, "
             "auto_extract, extract_model, extract_max_tokens, "
             "tool_result_max_chars, mcp_servers, enabled_skills, "
             "reflection_enabled, reflection_threshold, reflection_min_interval_hours, "
@@ -294,9 +298,9 @@ class ChatConfigRepository:
             "retrieval_rrf_k, "
             "dynamic_tool_selection, "
             "irodori_enabled, portrait_enabled, "
-            "voice_auto_play, voice_emotion_link, "
-            "disabled_tools "
-            "FROM chat_settings WHERE persona = ?",
+             "voice_auto_play, voice_emotion_link, voice_model, "
+             "disabled_tools "
+             "FROM chat_settings WHERE persona = ?",
             (persona,),
         )
         row = cursor.fetchone()
@@ -316,7 +320,7 @@ class ChatConfigRepository:
                     logger.warning("chat_config.get: corrupted JSON in '%s', falling back to []", jf)
                     data[jf] = []
 
-        # max_stored_messages has a backward-compat fallback
+        # DEPRECATED: backward-compat fallback — remove when DB migration clears max_window_turns
         if data.get("max_stored_messages") is None:
             max_window = data.get("max_window_turns")
             data["max_stored_messages"] = max(2, int(max_window) * 2) if max_window is not None else 200
@@ -352,6 +356,7 @@ class ChatConfigRepository:
     def save(self, config: ChatConfig) -> None:
         """Insert or replace config for persona."""
         now = format_iso(get_now())
+        # DEPRECATED: max_window_turns — remove when DB migration clears the column
         self._db.execute(
             """
             INSERT INTO chat_settings
@@ -376,11 +381,11 @@ class ChatConfigRepository:
                      retrieval_rrf_k,
                        dynamic_tool_selection,
                        irodori_enabled, portrait_enabled,
-                       voice_auto_play, voice_emotion_link,
-                       disabled_tools,
-                       updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(persona) DO UPDATE SET
+                       voice_auto_play, voice_emotion_link, voice_model,
+                        disabled_tools,
+                        updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
                 api_key=excluded.api_key,
@@ -388,7 +393,8 @@ class ChatConfigRepository:
                 system_prompt=excluded.system_prompt,
                 temperature=excluded.temperature,
                 max_tokens=excluded.max_tokens,
-                max_window_turns=excluded.max_window_turns,
+                max_window_turns=excluded.max_window_turns,  -- DEPRECATED: remove when DB migration clears
+
                 max_tool_calls=excluded.max_tool_calls,
                 auto_extract=excluded.auto_extract,
                 extract_model=excluded.extract_model,
@@ -437,8 +443,9 @@ class ChatConfigRepository:
                  irodori_enabled=excluded.irodori_enabled,
                  portrait_enabled=excluded.portrait_enabled,
                  voice_auto_play=excluded.voice_auto_play,
-                 voice_emotion_link=excluded.voice_emotion_link,
-                 disabled_tools=excluded.disabled_tools,
+                  voice_emotion_link=excluded.voice_emotion_link,
+                  voice_model=excluded.voice_model,
+                  disabled_tools=excluded.disabled_tools,
                  updated_at=excluded.updated_at
             """,
             (
@@ -500,6 +507,7 @@ class ChatConfigRepository:
                 int(config.portrait_enabled),
                 int(config.voice_auto_play),
                 int(config.voice_emotion_link),
+                config.voice_model,
                 json.dumps(config.disabled_tools, ensure_ascii=False),
                 now,
             ),

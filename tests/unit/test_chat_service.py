@@ -27,23 +27,23 @@ def _read_chat_js() -> str:
 
 class TestSessionWindow:
     def test_initial_empty(self):
-        win = SessionWindow(max_turns=3)
+        win = SessionWindow(max_messages=6)
         assert len(win) == 0
 
     def test_add_and_retrieve(self):
-        win = SessionWindow(max_turns=2)
+        win = SessionWindow(max_messages=4)
         win.add("user", "hello")
         win.add("assistant", "hi there")
         assert len(win) == 2
 
-    def test_max_turns_eviction(self):
-        win = SessionWindow(max_turns=2)  # max_messages = 4
+    def test_max_messages_eviction(self):
+        win = SessionWindow(max_messages=4)
         for i in range(6):
             win.add("user" if i % 2 == 0 else "assistant", f"msg{i}")
         assert len(win) == 4
 
     def test_get_labeled_messages_returns_llm_messages(self):
-        win = SessionWindow(max_turns=3)
+        win = SessionWindow(max_messages=6)
         ts = datetime(2025, 1, 1, 12, 0, 0)
         win.add("user", "test message", ts)
         now = datetime(2025, 1, 1, 13, 0, 0)
@@ -54,7 +54,7 @@ class TestSessionWindow:
         assert msgs[0].time_label == "1h ago"
 
     def test_labeled_messages_recent(self):
-        win = SessionWindow(max_turns=3)
+        win = SessionWindow(max_messages=6)
         now = datetime(2025, 3, 1, 10, 0, 0)
         win.add("user", "just now message", now)
         msgs = win.get_labeled_messages(now)
@@ -74,7 +74,7 @@ class TestSessionWindow:
         """)
         db.commit()
 
-        win = SessionWindow(max_turns=10, batch_size=10)  # batch_size=10 > 1 message
+        win = SessionWindow(max_messages=20, batch_size=10)  # batch_size=10 > 1 message
         win.attach_db(db, "test_persona", "test_session")
         win.add("user", "hello")  # 1 message, won't trigger _persist (batch_size=10)
 
@@ -113,7 +113,7 @@ class TestSessionWindow:
         """)
         db.commit()
 
-        win = SessionWindow(max_turns=10)
+        win = SessionWindow(max_messages=20)
         win.attach_db(db, "test_p", "test_s")
         win.add("user", "original")
         win.add("assistant", "response")
@@ -132,13 +132,13 @@ class TestSessionWindow:
         assert msgs[0]["content"] == "edited"
 
     def test_update_message_out_of_range(self):
-        win = SessionWindow(max_turns=10)
+        win = SessionWindow(max_messages=20)
         win.add("user", "hello")
         assert win.update_message(-1, "x") is None
         assert win.update_message(99, "x") is None
 
     def test_update_message_preserves_tool_calls(self):
-        win = SessionWindow(max_turns=10)
+        win = SessionWindow(max_messages=20)
         win.add("assistant", "text", tool_calls=[{"name": "test", "input": {}}])
         updated = win.update_message(0, "new text")
         assert updated is not None
@@ -154,7 +154,7 @@ class TestSessionWindow:
 class TestSessionManager:
     def test_creates_new_session(self):
         mgr = SessionManager(max_sessions=10)
-        win = mgr.get_or_create("persona1", "session1", max_turns=3)
+        win = mgr.get_or_create("persona1", "session1", max_messages=6)
         assert isinstance(win, SessionWindow)
 
     def test_returns_same_session(self):
@@ -375,6 +375,7 @@ class TestChatConfigRepository:
                 portrait_enabled INTEGER DEFAULT 0,
                 voice_auto_play INTEGER DEFAULT 0,
                 voice_emotion_link INTEGER DEFAULT 1,
+                voice_model TEXT DEFAULT '',
                 disabled_tools TEXT DEFAULT '[]'
             )
         """)

@@ -235,6 +235,7 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     portrait_enabled INTEGER DEFAULT 0,
     voice_auto_play INTEGER DEFAULT 0,
     voice_emotion_link INTEGER DEFAULT 1,
+    voice_model TEXT DEFAULT '',
     disabled_tools TEXT DEFAULT '[]'
 );
 
@@ -402,7 +403,7 @@ class SQLiteConnection:
         except sqlite3.OperationalError:
             pass  # column already exists
 
-        # Migration: add voice_auto_play, voice_emotion_link if missing (existing DBs, TE04)
+        # Migration: add voice_auto_play, voice_emotion_link, voice_model if missing (existing DBs, TE04)
         for col, default in [("voice_auto_play", 0), ("voice_emotion_link", 1)]:
             try:
                 memory_conn.execute(f"ALTER TABLE chat_settings ADD COLUMN {col} INTEGER DEFAULT {default}")
@@ -410,6 +411,12 @@ class SQLiteConnection:
                 logger.info("Added %s column to chat_settings (migration)", col)
             except sqlite3.OperationalError:
                 pass  # column already exists
+        try:
+            memory_conn.execute("ALTER TABLE chat_settings ADD COLUMN voice_model TEXT DEFAULT ''")
+            memory_conn.commit()
+            logger.info("Added voice_model column to chat_settings (migration)")
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
         # Migration: add image_gen_comfyui_url if missing (existing DBs)
         try:

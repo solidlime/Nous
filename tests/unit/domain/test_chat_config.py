@@ -101,6 +101,7 @@ class TestChatConfigRepository:
                 portrait_enabled INTEGER DEFAULT 0,
                 voice_auto_play INTEGER DEFAULT 0,
                 voice_emotion_link INTEGER DEFAULT 1,
+                voice_model TEXT DEFAULT '',
                 disabled_tools TEXT DEFAULT '[]'
             )
             """
@@ -235,6 +236,7 @@ class TestSqliteMigration:
             "portrait_enabled INTEGER DEFAULT 0",
             "voice_auto_play INTEGER DEFAULT 0",
             "voice_emotion_link INTEGER DEFAULT 1",
+            "voice_model TEXT DEFAULT ''",
             "image_gen_gemini_model TEXT DEFAULT 'google/gemini-2.5-flash-image'",
             "image_gen_replicate_model TEXT DEFAULT 'black-forest-labs/flux-schnell'",
             "image_gen_replicate_api_key TEXT DEFAULT ''",
@@ -346,6 +348,7 @@ class TestChatConfigRepositoryResilience:
             portrait_enabled INTEGER DEFAULT 0,
             voice_auto_play INTEGER DEFAULT 0,
             voice_emotion_link INTEGER DEFAULT 1,
+            voice_model TEXT DEFAULT '',
             disabled_tools TEXT DEFAULT '[]'
         )
     """

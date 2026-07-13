@@ -560,11 +560,11 @@ class TestCompressStep:
         assert not CompressStep._should_summarize(msgs, config)
 
     def test_should_summarize_false_when_few_turns(self):
-        """_should_summarize returns False when fewer than 6 user messages."""
+        """_should_summarize returns False when not enough user messages beyond keep_recent."""
         from nous.application.chat.pipeline.compress import CompressStep
 
         config = _make_chat_config(context_use_llm_summary=True, api_key="sk-test")
-        msgs = _long_messages(num_pairs=3)  # Only 3 turns
+        msgs = _long_messages(num_pairs=1)  # 1 user message, keep_recent=1 → 1 > 1 = False
         assert not CompressStep._should_summarize(msgs, config)
 
     def test_should_summarize_true_when_conditions_met(self):
@@ -627,12 +627,12 @@ class TestCompressStep:
             assert len(summary_msgs) == 0
 
     @pytest.mark.asyncio
-    async def test_stage4_not_invoked_when_under_budget(self):
-        """Stage 4 is skipped when mechanical compression already meets budget."""
+    async def test_stage3_not_invoked_when_under_budget(self):
+        """Stage 3 (LLM summary) is skipped when already within budget."""
         from nous.application.chat.pipeline.compress import CompressStep
 
         config = _make_chat_config(
-            context_max_tokens=6000,
+            context_max_tokens=100000,
             api_key="sk-test",
             context_use_llm_summary=True,
         )
@@ -724,6 +724,7 @@ class TestDogfooding:
                 portrait_enabled INTEGER DEFAULT 0,
                 voice_auto_play INTEGER DEFAULT 0,
                 voice_emotion_link INTEGER DEFAULT 1,
+                voice_model TEXT DEFAULT '',
                 disabled_tools TEXT DEFAULT '[]'
             )
         """)
@@ -776,12 +777,12 @@ class TestDogfooding:
         w = SessionWindow(max_messages=50)
         assert w._max_messages == 50
 
-    def test_sessionwindow_max_turns_backward_compat(self):
-        """Verify SessionWindow still accepts max_turns and converts."""
+    def test_sessionwindow_default_max_messages(self):
+        """Verify SessionWindow default max_messages is 200."""
         from nous.application.chat.session_store import SessionWindow
 
-        w = SessionWindow(max_turns=10)
-        assert w._max_messages == 20  # 10 turns * 2
+        w = SessionWindow()
+        assert w._max_messages == 200  # default
 
     def test_chatconfig_max_window_turns_validator(self):
         """Verify max_window_turns validates correctly with new 1-500 range."""
