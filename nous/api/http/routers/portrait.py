@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse
 
 from nous.api.http.deps import _resolve_persona_from_request, _safe_get_context
 from nous.application.portrait.service import PortraitGenerationService
+from nous.domain.chat_config import ChatConfigRepository
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -31,6 +32,14 @@ def register_portrait_routes(mcp) -> None:
         state_result = ctx.persona_service.get_context(persona)
         if not state_result.is_ok:
             return JSONResponse({"ok": False, "error": state_result.error}, status_code=500)
+
+        # Enabled check — ChatConfig (per-persona)
+        chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
+        if not chat_config.portrait_enabled:
+            return JSONResponse(
+                {"ok": False, "error": "Portrait generation is disabled for this persona"},
+                status_code=403,
+            )
 
         service = PortraitGenerationService(
             config=ctx.settings.portrait_gen,
@@ -56,6 +65,14 @@ def register_portrait_routes(mcp) -> None:
         state_result = ctx.persona_service.get_context(persona)
         if not state_result.is_ok:
             return JSONResponse({"ok": False, "error": state_result.error}, status_code=500)
+
+        # Enabled check — ChatConfig (per-persona)
+        chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
+        if not chat_config.portrait_enabled:
+            return JSONResponse(
+                {"ok": False, "error": "Portrait generation is disabled for this persona"},
+                status_code=403,
+            )
 
         # Parse request body
         body = {}
