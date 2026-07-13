@@ -142,12 +142,10 @@ class CorsConfig(BaseModel):
 
 
 class PortraitGenerationConfig(BaseModel):
-    """Portrait generation configuration — CRITICAL cost-control layer (default OFF).
+    """Portrait generation configuration — provider settings only.
+    Enabled/disabled state is now managed per-persona via ChatConfig.portrait_enabled.
     Env var: ``NOUS_PORTRAIT_GEN__COMFYUI_URL`` (default: http://localhost:8188)
     """
-
-    enabled: bool = False
-    """DEFAULT OFF — must be explicitly enabled for any portrait generation."""
 
     provider: str = "comfyui"
     """"comfyui" | "openai" | "stability" — generation backend."""
@@ -196,12 +194,10 @@ class PluginConfig(BaseModel):
 
 
 class ImageGenSettings(BaseModel):
-    """Image generation configuration — shared across chat tool and portrait.
+    """Image generation configuration — provider settings only.
+    Enabled/disabled state is now managed per-persona via ChatConfig.image_gen_enabled.
     Env var: ``NOUS_IMAGE_GEN__COMFYUI_URL`` (default: http://localhost:8188)
     """
-
-    enabled: bool = False
-    """Default OFF — must be explicitly enabled."""
 
     provider: str = "openai"
     """"openai" | "stability" | "comfyui" — generation backend."""
