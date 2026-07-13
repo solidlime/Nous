@@ -27,6 +27,7 @@ def render_head() -> str:
     <script src="https://unpkg.com/lucide@latest" defer></script>
     <link rel="stylesheet" href="/static/base.css">
     <script src="/static/chat.js" defer></script>
+    <script src="/static/portrait.js" defer></script>
 </head>"""
 
 
