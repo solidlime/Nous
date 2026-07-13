@@ -440,8 +440,7 @@ class TestChatConfigRepositoryResilience:
     def test_all_json_fields_corrupted(self, db):
         """All three JSON fields corrupted → all fallback to []."""
         db.execute(
-            "INSERT INTO chat_settings (persona, mcp_servers, enabled_skills, disabled_tools) "
-            "VALUES (?, ?, ?, ?)",
+            "INSERT INTO chat_settings (persona, mcp_servers, enabled_skills, disabled_tools) VALUES (?, ?, ?, ?)",
             ("test", "{bad", "[broken", "null invalid"),
         )
         db.commit()
@@ -450,5 +449,3 @@ class TestChatConfigRepositoryResilience:
         assert config.mcp_servers == []
         assert config.enabled_skills == []
         assert config.disabled_tools == []
-
-

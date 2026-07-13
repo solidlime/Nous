@@ -112,7 +112,12 @@ class InferenceStep:
                             pending_tool_calls.append(event)
                     yield ToolCallSSE(name=event.tool_name, input=event.tool_input, id=event.tool_use_id)
                     turn_ctx.segments.append(
-                        {"type": "tool_call", "name": event.tool_name, "input": event.tool_input, "id": event.tool_use_id}
+                        {
+                            "type": "tool_call",
+                            "name": event.tool_name,
+                            "input": event.tool_input,
+                            "id": event.tool_use_id,
+                        }
                     )
                 elif isinstance(event, ErrorEvent):
                     yield ErrorSSE(message=event.message)

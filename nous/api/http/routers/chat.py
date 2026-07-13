@@ -147,11 +147,13 @@ def register_chat_routes(mcp) -> None:
                     if desc.startswith("[") and "]" in desc:
                         server_name = desc[1 : desc.index("]")]
                         desc = desc[desc.index("]") + 1 :].strip()
-                    tools_out.append({
-                        "name": tool.name,
-                        "description": desc,
-                        "server": server_name,
-                    })
+                    tools_out.append(
+                        {
+                            "name": tool.name,
+                            "description": desc,
+                            "server": server_name,
+                        }
+                    )
         except Exception as e:
             errors_out.append(str(e))
 
