@@ -21,7 +21,6 @@ from nous.domain.persona.portrait_prompt import (
 def _make_config(**overrides: object) -> PortraitGenerationConfig:
     """Create a PortraitGenerationConfig with sensible defaults."""
     defaults: dict[str, object] = {
-        "enabled": True,
         "provider": "comfyui",
         "comfyui_url": "http://localhost:8188",
         "auto_generate": True,
@@ -398,15 +397,15 @@ class TestShouldAutoGenerate:
     async def test_auto_generate_returns_true_when_all_conditions_met(self, service):
         """All conditions pass → True."""
         persona = _make_persona(emotion_intensity=0.8)
-        result = await service.should_auto_generate(persona)
+        result = await service.should_auto_generate(persona, portrait_enabled=True)
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_auto_generate_disabled_when_config_off(self):
-        """enabled=False → False."""
-        svc = _make_service(enabled=False)
+    async def test_auto_generate_disabled_when_portrait_disabled(self):
+        """portrait_enabled=False → False (even when auto_generate config is True)."""
+        svc = _make_service(auto_generate=True)
         persona = _make_persona(emotion_intensity=0.9)
-        assert await svc.should_auto_generate(persona) is False
+        assert await svc.should_auto_generate(persona, portrait_enabled=False) is False
 
     @pytest.mark.asyncio
     async def test_auto_generate_disabled_when_auto_generate_off(self):

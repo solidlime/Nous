@@ -34,10 +34,10 @@ def repo_patch():
 
 
 class TestPortraitEnabled:
-    """persona_portrait enabled check via ChatConfig with fallback to Settings."""
+    """persona_portrait enabled check via ChatConfig — Settings fallback was removed."""
 
     async def test_portrait_disabled_returns_error(self, mock_ctx, repo_patch):
-        """Both ChatConfig and Settings disabled → return error."""
+        """ChatConfig.portrait_enabled = False → return error."""
         chat_config = ChatConfig(persona="test", portrait_enabled=False)
         repo_patch.get.return_value = chat_config
 
@@ -49,7 +49,7 @@ class TestPortraitEnabled:
         assert "disabled" in data["error"].lower()
 
     async def test_portrait_enabled_via_chat_config(self, mock_ctx, repo_patch):
-        """ChatConfig.portrait_enabled = True → enabled even if Settings disabled."""
+        """ChatConfig.portrait_enabled = True → enabled."""
         chat_config = ChatConfig(persona="test", portrait_enabled=True)
         repo_patch.get.return_value = chat_config
 
@@ -72,25 +72,15 @@ class TestPortraitEnabled:
             # With enabled=True, should succeed (no error)
             assert "error" not in data or "disabled" not in str(data.get("error", "")).lower()
 
-    async def test_portrait_fallback_to_settings(self, mock_ctx, repo_patch):
-        """ChatConfig default (False) but Settings enabled → enabled."""
+    async def test_portrait_disabled_when_chat_config_off_regardless_of_settings(self, mock_ctx, repo_patch):
+        """ChatConfig False → disabled; Settings fallback no longer exists."""
         chat_config = ChatConfig(persona="test", portrait_enabled=False)
         repo_patch.get.return_value = chat_config
-        mock_ctx.settings.portrait_gen.enabled = True  # Settings enables it
+        # Settings.portrait_gen.enabled was removed — only ChatConfig is checked
 
-        state_result = MagicMock()
-        state_result.is_ok = True
-        state_result.value = MagicMock()
-        state_result.value.emotion = "happy"
-        mock_ctx.persona_service.get_context.return_value = state_result
+        from nous.api.mcp._tools_portrait import _tool_persona_portrait
 
-        with patch("nous.application.portrait.service.PortraitGenerationService") as mock_svc_cls:
-            mock_svc = AsyncMock()
-            mock_svc.generate.return_value = {"image_base64": "fake", "prompt": "test", "negative_prompt": ""}
-            mock_svc_cls.return_value = mock_svc
-
-            from nous.api.mcp._tools_portrait import _tool_persona_portrait
-
-            result = await _tool_persona_portrait(mock_ctx, "test")
-            data = json.loads(result)
-            assert "error" not in data or "disabled" not in str(data.get("error", "")).lower()
+        result = await _tool_persona_portrait(mock_ctx, "test")
+        data = json.loads(result)
+        assert data["ok"] is False
+        assert "disabled" in data["error"].lower()
