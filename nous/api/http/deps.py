@@ -64,7 +64,17 @@ def _safe_get_context(persona: str):
 def _memory_to_dict(m) -> dict:
     """Convert a Memory dataclass to a JSON-safe dict."""
     d = asdict(m)
-    for k in ("created_at", "updated_at", "last_accessed", "last_decay", "last_recall", "state_snapped_at"):
+    for k in (
+        "created_at",
+        "updated_at",
+        "last_accessed",
+        "last_decay",
+        "last_recall",
+        "state_snapped_at",
+        "last_consumed_at",
+        "valid_from",
+        "valid_until",
+    ):
         if k in d and d[k] is not None:
             d[k] = d[k].isoformat()
     return d
@@ -73,7 +83,7 @@ def _memory_to_dict(m) -> dict:
 def _strength_to_dict(s) -> dict:
     """Convert a MemoryStrength dataclass to a JSON-safe dict."""
     d = asdict(s)
-    for k in ("last_decay", "last_recall"):
+    for k in ("last_decay", "last_recall", "last_utility"):
         if k in d and d[k] is not None:
             d[k] = d[k].isoformat()
     return d
