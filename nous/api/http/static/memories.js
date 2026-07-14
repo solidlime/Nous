@@ -553,8 +553,7 @@ function openMemModal(mem) {
     /* Body State */
     if (mem.body_state) {
         var bodyKeys = ['fatigue','warmth','arousal','heart_rate','pain'];
-        var bodyLabels = {fatigue:'<i data-lucide="flame"></i> Fatigue',warmth:'<i data-lucide="flower"></i> Warmth',arousal:'<i data-lucide="zap"></i> Arousal',heart_rate:'<i data-lucide="heart-pulse"></i> Heart',pain:'<i data-lucide="activity"></i> Pain'};
-        var bodyColors = {fatigue:'linear-gradient(90deg,#f87171,#fca5a5)',warmth:'linear-gradient(90deg,#f9a8d4,#fda4af)',arousal:'linear-gradient(90deg,#a78bfa,#c4b5fd)',heart_rate:'linear-gradient(90deg,#ef4444,#fca5a5)',pain:'linear-gradient(90deg,#f59e0b,#fcd34d)'};
+        /* Constants now from core/constants.js via adapter globals */
         var hasBody = bodyKeys.some(function(k){ return mem.body_state[k] != null; });
         if (hasBody) {
             h += '<div class=\"mem-modal-row\"><span class=\"mem-modal-key\">Body</span><span style=\"display:flex;flex-direction:column;gap:6px;flex:1\">';
@@ -563,9 +562,9 @@ function openMemModal(mem) {
                     var val = mem.body_state[k];
                     var pct = Math.round(val * 100);
                     h += '<div style=\"display:flex;align-items:center;gap:8px\">';
-                    h += '<span style=\"font-size:0.75rem;color:var(--text-muted);min-width:80px\">' + bodyLabels[k] + '</span>';
+                    h += '<span style=\"font-size:0.75rem;color:var(--text-muted);min-width:80px\">' + BODY_LABELS[k] + '</span>';
                     h += '<div style=\"flex:1;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden\">';
-                    h += '<div style=\"height:100%;width:' + pct + '%;background:' + bodyColors[k] + ';border-radius:3px\"></div>';
+                    h += '<div style=\"height:100%;width:' + pct + '%;background:' + BODY_BAR_COLORS[k] + ';border-radius:3px\"></div>';
                     h += '</div>';
                     h += '<span style=\"font-size:0.75rem;color:var(--text-muted);min-width:32px;text-align:right\">' + pct + '%</span>';
                     h += '</div>';
