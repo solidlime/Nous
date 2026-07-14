@@ -3077,32 +3077,7 @@ function renderCodeBlock(lang, code) {
 /* =================================================================
    TB07: PERSONA PORTRAIT
    ================================================================= */
-const EMOTION_COLORS_PORTRAIT = {
-  joy: "#fbbf24",
-  sadness: "#60a5fa",
-  anger: "#f87171",
-  fear: "#a78bfa",
-  surprise: "#fb923c",
-  disgust: "#6ee7b7",
-  love: "#ec4899",
-  neutral: "#94a3b8",
-  anticipation: "#F59E0B",
-  trust: "#10B981",
-  anxiety: "#8B5CF6",
-  excitement: "#EC4899",
-  frustration: "#DC2626",
-  nostalgia: "#92400E",
-  pride: "#F97316",
-  shame: "#BE185D",
-  guilt: "#78350F",
-  loneliness: "#1E3A5F",
-  contentment: "#065F46",
-  curiosity: "#0891B2",
-  awe: "#5B21B6",
-  relief: "#34D399",
-  happiness: "#fbbf24",
-  calm: "#2dd4bf",
-};
+// EMOTION_COLORS_PORTRAIT — removed; use global EMOTION_COLORS from core/constants.js
 
 async function loadPortrait() {
   if (!S.persona) return;
@@ -3150,11 +3125,11 @@ function setPortraitImage(base64, emotion) {
   }
 
   // Set emotion border color
-  if (emotion && EMOTION_COLORS_PORTRAIT[emotion]) {
+  if (emotion && EMOTION_COLORS[emotion]) {
     container.classList.add("has-emotion");
     container.style.setProperty(
       "--portrait-emotion-color",
-      EMOTION_COLORS_PORTRAIT[emotion],
+      EMOTION_COLORS[emotion],
     );
   } else {
     container.classList.remove("has-emotion");
