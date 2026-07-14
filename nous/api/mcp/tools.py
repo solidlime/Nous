@@ -364,15 +364,19 @@ def register_tools(mcp: FastMCP) -> None:
     async def persona_portrait(
         scene: str = "",
         style: str | None = None,
+        reference_image: str | None = None,
     ) -> str:
         """Generate a portrait image for the current persona from a scene description.
         scene: LLM-written scene description (required). style: art style hint (optional) — e.g. 'anime',
-        'watercolor', 'oil painting'.  Uses configured provider (ComfyUI / DALL-E / Stability).
+        'watercolor', 'oil painting'. reference_image: base64-encoded reference image for img2img (optional).
+        Uses configured provider (ComfyUI / DALL-E / Stability).
         Returns base64-encoded image + revised prompt metadata."""
         if not scene:
             return json.dumps({"ok": False, "error": "scene is required"}, ensure_ascii=False)
         p = _resolve_persona()
-        return await _tool_persona_portrait_with_scene(AppContextRegistry.get(p), p, scene=scene, style=style)
+        return await _tool_persona_portrait_with_scene(
+            AppContextRegistry.get(p), p, scene=scene, style=style, reference_image=reference_image,
+        )
 
     # irodori_tts
     @_tool("irodori_tts")

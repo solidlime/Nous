@@ -153,11 +153,60 @@ function handlePortraitGenerateError(data) {
   toast('⚠️ Portrait generation failed: ' + errorMsg, 'warning');
 }
 
+// ── Reference Image Helpers ──────────────────────────────────────
+
+/**
+ * Read a File as a data URL for preview thumbnail display.
+ * @param {File} file
+ * @returns {Promise<string>}
+ */
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Handle reference image file selection — update preview thumbnail.
+ */
+function onReferenceImageSelected(input) {
+  const preview = document.getElementById('overview-portrait-ref-preview');
+  const removeBtn = document.getElementById('overview-portrait-ref-remove');
+  const file = input.files ? input.files[0] : null;
+  if (file) {
+    readFileAsDataURL(file).then((dataUrl) => {
+      if (preview) {
+        preview.src = dataUrl;
+        preview.style.display = 'block';
+      }
+      if (removeBtn) removeBtn.style.display = 'inline-flex';
+    });
+  } else {
+    if (preview) { preview.src = ''; preview.style.display = 'none'; }
+    if (removeBtn) removeBtn.style.display = 'none';
+  }
+}
+
+/**
+ * Clear the reference image selection.
+ */
+function clearReferenceImage() {
+  const input = document.getElementById('overview-portrait-ref-input');
+  const preview = document.getElementById('overview-portrait-ref-preview');
+  const removeBtn = document.getElementById('overview-portrait-ref-remove');
+  if (input) input.value = '';
+  if (preview) { preview.src = ''; preview.style.display = 'none'; }
+  if (removeBtn) removeBtn.style.display = 'none';
+}
+
 // ── Generate Now (Overview Tab) ──────────────────────────────────
 
 /**
  * Trigger portrait generation from Overview tab.
- * Reads scene text from input field and sends POST request.
+ * Reads scene text from input field, optional reference image, and sends POST request.
  */
 async function generatePortraitNow() {
   if (!S.persona) {
@@ -168,6 +217,8 @@ async function generatePortraitNow() {
   const sceneInput = document.getElementById('overview-portrait-scene');
   const scene = sceneInput ? sceneInput.value.trim() : '';
   const btn = document.getElementById('overview-portrait-generate-btn');
+  const refInput = document.getElementById('overview-portrait-ref-input');
+  const refFile = refInput && refInput.files ? refInput.files[0] : null;
 
   // Disable button during generation
   if (btn) {
@@ -177,14 +228,30 @@ async function generatePortraitNow() {
   }
 
   try {
-    const body = {};
-    if (scene) body.scene = scene;
+    let result;
 
-    const result = await api('/api/portrait/' + encodeURIComponent(S.persona), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    if (refFile) {
+      // ── Multipart upload with reference image ────────────────
+      const formData = new FormData();
+      if (scene) formData.append('scene', scene);
+      formData.append('reference_image', refFile);
+
+      const resp = await fetch('/api/portrait/' + encodeURIComponent(S.persona), {
+        method: 'POST',
+        body: formData,
+      });
+      result = await resp.json();
+    } else {
+      // ── Plain JSON (no reference image) ──────────────────────
+      const body = {};
+      if (scene) body.scene = scene;
+
+      result = await api('/api/portrait/' + encodeURIComponent(S.persona), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    }
 
     if (result.image_base64) {
       // Update Overview portrait
@@ -272,6 +339,14 @@ function renderOverviewPortraitSection(data) {
           <div style="margin-bottom:10px;">
             <label for="overview-portrait-scene" style="font-size:0.82rem; color:var(--text-muted); display:block; margin-bottom:4px;">Scene description (optional)</label>
             <input type="text" id="overview-portrait-scene" class="glass-input" placeholder="e.g. Standing in a moonlit garden…" style="width:100%; font-size:0.85rem;" />
+          </div>
+          <div style="margin-bottom:10px;">
+            <label for="overview-portrait-ref-input" style="font-size:0.82rem; color:var(--text-muted); display:block; margin-bottom:4px;">Reference image (optional — for img2img)</label>
+            <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+              <input type="file" id="overview-portrait-ref-input" accept="image/*" onchange="onReferenceImageSelected(this)" style="font-size:0.78rem; flex:1; min-width:120px;" class="glass-input" />
+              <img id="overview-portrait-ref-preview" alt="Reference preview" style="display:none; width:36px; height:36px; object-fit:cover; border-radius:6px; border:1px solid var(--glass-border);" />
+              <button id="overview-portrait-ref-remove" type="button" onclick="clearReferenceImage()" style="display:none; background:none; border:none; color:var(--accent-red); cursor:pointer; font-size:0.8rem; padding:4px;" aria-label="Clear reference image">&times;</button>
+            </div>
           </div>
           <button id="overview-portrait-generate-btn" class="glass-btn" onclick="generatePortraitNow()" aria-label="Generate portrait now" style="width:100%;">
             <i data-lucide="image" aria-hidden="true"></i> Generate Now

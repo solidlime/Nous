@@ -366,14 +366,9 @@ function applyChatConfig(cfg) {
     "chat-retrieval-rrf-k-val",
     cfg.retrieval_rrf_k != null ? cfg.retrieval_rrf_k : 60,
   );
-  // Housekeeping settings
   set(
     "chat-display-history-turns",
     cfg.display_history_turns != null ? cfg.display_history_turns : 20,
-  );
-  set(
-    "chat-housekeeping-threshold",
-    cfg.housekeeping_threshold != null ? cfg.housekeeping_threshold : 10,
   );
   // Context compression settings
   set("chat-stored-msgs", cfg.max_stored_messages ?? 200);
@@ -411,14 +406,24 @@ function applyChatConfig(cfg) {
   // Voice / TTS settings (TE04)
   setChecked("chat-voice-emotion-link", cfg.voice_emotion_link !== false);
   setChecked("chat-voice-auto-play", cfg.voice_auto_play === true);
-  // Voice options visibility toggle (controlled by irodori_enabled checkbox)
+  // Voice options / section visibility toggle (controlled by irodori_enabled checkbox)
   const irodoriCb = document.getElementById("chat-irodori-enabled");
+  const voiceSection = document.getElementById("chat-voice-section");
   const voiceOptions = document.getElementById("chat-voice-options");
-  if (irodoriCb && voiceOptions) {
-    voiceOptions.style.display = irodoriCb.checked ? "" : "none";
-    irodoriCb.addEventListener("change", function () {
-      voiceOptions.style.display = this.checked ? "" : "none";
-    });
+
+  function updateVoiceVisibility() {
+    const enabled = irodoriCb.checked;
+    if (voiceSection) {
+      voiceSection.style.display = enabled ? "" : "none";
+    }
+    if (voiceOptions) {
+      voiceOptions.style.display = enabled ? "" : "none";
+    }
+  }
+
+  if (irodoriCb) {
+    updateVoiceVisibility();  // Initial state
+    irodoriCb.addEventListener("change", updateVoiceVisibility);
   }
   // Load voice models if enabled
   if (cfg.irodori_enabled) {
@@ -605,9 +610,6 @@ async function saveChatConfig() {
     display_history_turns: parseInt(
       document.getElementById("chat-display-history-turns")?.value || "20",
     ),
-    housekeeping_threshold: parseInt(
-      document.getElementById("chat-housekeeping-threshold")?.value || "10",
-    ),
     mental_model_enabled: getChecked("chat-mental-model-enabled"),
     mental_model_min_samples: parseInt(
       document.getElementById("chat-mental-model-min-samples")?.value || "3",
@@ -738,6 +740,27 @@ function renderMcpJson(servers) {
       listEl.appendChild(row);
     });
   }
+}
+
+function addMcpServer() {
+    const nameInput = document.getElementById("chat-mcp-add-name");
+    const urlInput = document.getElementById("chat-mcp-add-url");
+    const name = nameInput.value.trim();
+    const url = urlInput.value.trim();
+    if (!name || !url) {
+        alert("サーバー名とURLを入力してください");
+        return;
+    }
+    // Add to CHAT.mcpServers (array of server objects)
+    if (!CHAT.mcpServers) CHAT.mcpServers = [];
+    CHAT.mcpServers.push({ name: name, url: url, transport: "http" });
+    // Re-render
+    renderMcpJson(CHAT.mcpServers);
+    // Clear inputs
+    nameInput.value = "";
+    urlInput.value = "";
+    // Auto-fetch tools
+    fetchMcpTools();
 }
 
 function parseMcpJson() {
@@ -1715,36 +1738,6 @@ async function restoreChatHistory() {
     // Session not found or API unavailable — start fresh
     const skel = document.getElementById("chat-history-skeleton");
     if (skel) skel.remove();
-  }
-}
-
-// Housekeeping: manual trigger
-async function runHousekeeping() {
-  if (!S.persona) {
-    toast("ペルソナを選択してください", "error");
-    return;
-  }
-  const statusEl = document.getElementById("chat-housekeeping-status");
-  if (statusEl)
-    statusEl.innerHTML =
-      '<span style="color:var(--text-muted)">整理中...</span>';
-  try {
-    const result = await api(
-      "/api/chat/" + encodeURIComponent(S.persona) + "/housekeeping",
-      {
-        method: "POST",
-      },
-    );
-    const g = (result.cancelled_goals || []).length;
-    const i = (result.removed_items || []).length;
-    const msg = `完了: goals ${g}件 / items ${i}件 を整理`;
-    if (statusEl)
-      statusEl.innerHTML = `<span style="color:var(--accent-green)">${msg}</span>`;
-    toast(msg, "success");
-  } catch (e) {
-    if (statusEl)
-      statusEl.innerHTML = `<span style="color:var(--accent-red)">失敗: ${e.message}</span>`;
-    toast("整理失敗: " + e.message, "error");
   }
 }
 

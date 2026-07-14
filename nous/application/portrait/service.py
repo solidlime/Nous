@@ -83,6 +83,7 @@ class PortraitGenerationService:
         persona: PersonaState,
         scene: str | None = None,
         equipment_desc: str | None = None,
+        reference_image: bytes | None = None,
     ) -> dict:
         """Generate a portrait for the given persona state.
 
@@ -95,6 +96,8 @@ class PortraitGenerationService:
             prompt builder uses LLM synthesis; otherwise auto synthesis.
         equipment_desc : str | None
             Optional equipment / clothing description.
+        reference_image : bytes | None
+            Optional reference image bytes for img2img generation.
 
         Returns
         -------
@@ -130,28 +133,29 @@ class PortraitGenerationService:
                 },
             )
 
-        # ── 3. Check cache ─────────────────────────────────────────────
+        # ── 3. Check cache (skip when reference_image provided) ───────
         cache_key = hashlib.md5(prompt.encode()).hexdigest()
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            cached_b64, cached_ts = cached
-            if time.monotonic() - cached_ts < self._cache_ttl:
-                result = {
-                    "image_base64": cached_b64,
-                    "prompt": prompt,
-                    "negative_prompt": negative_prompt,
-                }
-                if self._event_bus is not None:
-                    await self._event_bus.publish(
-                        PORTRAIT_GENERATE_COMPLETE,
-                        {
-                            "persona": persona.persona,
-                            "emotion": persona.emotion,
-                            "image_base64": result["image_base64"],
-                            "cached": True,
-                        },
-                    )
-                return result
+        if reference_image is None:
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                cached_b64, cached_ts = cached
+                if time.monotonic() - cached_ts < self._cache_ttl:
+                    result = {
+                        "image_base64": cached_b64,
+                        "prompt": prompt,
+                        "negative_prompt": negative_prompt,
+                    }
+                    if self._event_bus is not None:
+                        await self._event_bus.publish(
+                            PORTRAIT_GENERATE_COMPLETE,
+                            {
+                                "persona": persona.persona,
+                                "emotion": persona.emotion,
+                                "image_base64": result["image_base64"],
+                                "cached": True,
+                            },
+                        )
+                    return result
 
         # ── 4. Budget gate ─────────────────────────────────────────────
         if self._config.max_monthly_budget > 0 and self._generate_count >= int(self._config.max_monthly_budget):
@@ -162,11 +166,14 @@ class PortraitGenerationService:
             return await self._publish_error(persona, "No image provider configured")
 
         try:
-            images: list[GeneratedImage] = await self._provider.generate(
-                prompt=prompt,
-                size=self._config.size,
-                quality=self._config.quality,
-            )
+            gen_kwargs: dict = {
+                "prompt": prompt,
+                "size": self._config.size,
+                "quality": self._config.quality,
+            }
+            if reference_image is not None:
+                gen_kwargs["reference_image"] = reference_image
+            images: list[GeneratedImage] = await self._provider.generate(**gen_kwargs)
             if not images:
                 return await self._publish_error(persona, "Provider returned no images")
 

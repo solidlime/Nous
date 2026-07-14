@@ -17,7 +17,7 @@ from nous.application.chat.events import (
     ReflectionStartSSE,
     SessionSummarizedSSE,
 )
-from nous.application.chat.memory_llm import run_context_housekeeping, run_memory_llm
+from nous.application.chat.memory_llm import run_memory_llm
 from nous.application.chat.pattern_detector import maybe_run_mental_model
 from nous.application.chat.reflection import maybe_run_reflection
 from nous.application.chat.summarizer import summarize_and_store
@@ -116,28 +116,6 @@ class PostProcessStep:
                 memory_result = await run_memory_llm(ctx, config, payload)
             except Exception as e:
                 logger.warning("PostProcessStep: run_memory_llm failed: %s", e)
-
-        # Housekeeping: active goals+promises が threshold 超えたら自動整理
-        housekeeping_threshold = getattr(config, "housekeeping_threshold", 10)
-        try:
-            goal_count = 0
-            promise_count = 0
-            g_res = ctx.memory_service.get_by_tags(["goal", "active"])
-            if g_res.is_ok and g_res.value:
-                goal_count = len(g_res.value)
-            p_res = ctx.memory_service.get_by_tags(["promise", "active"])
-            if p_res.is_ok and p_res.value:
-                promise_count = len(p_res.value)
-            if goal_count + promise_count >= housekeeping_threshold:
-                logger.info(
-                    "PostProcessStep: housekeeping triggered (goals=%d, promises=%d, threshold=%d)",
-                    goal_count,
-                    promise_count,
-                    housekeeping_threshold,
-                )
-                asyncio.create_task(run_context_housekeeping(ctx, config))
-        except Exception as e:
-            logger.warning("PostProcessStep: housekeeping check failed: %s", e)
 
         # MemoryActivitySSE: 取得された記憶と保存された記憶・goals・promises を通知
         retrieved_for_sse = turn_ctx.memories_raw[:5]

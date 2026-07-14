@@ -1,4 +1,4 @@
-"""Tests for memory_llm.py — LLM-based memory extraction and context housekeeping."""
+"""Tests for memory_llm.py — LLM-based memory extraction and context updates."""
 
 from __future__ import annotations
 
@@ -7,11 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from nous.application.chat.memory_llm import (
-    _HOUSEKEEPING_PROMPT,
     _MEMORY_LLM_PROMPT,
     _build_memory_llm_context,
     _parse_memory_llm_result,
-    run_context_housekeeping,
     run_memory_llm,
 )
 from nous.domain.shared.result import Failure, Success
@@ -352,36 +350,6 @@ class TestMemoryLLMPromptFormat:
 
 
 # ===========================================================================
-# _HOUSEKEEPING_PROMPT format tests
-# ===========================================================================
-
-
-class TestHousekeepingPromptFormat:
-    """_HOUSEKEEPING_PROMPT format string tests."""
-
-    def test_housekeeping_prompt_format(self):
-        """All placeholders fill correctly."""
-        formatted = _HOUSEKEEPING_PROMPT.format(
-            persona_name="test_persona",
-            goals="  - key=goal_001: 朝活する",
-            promises="  - key=prom_001: 本を読む",
-            inventory="  - アイテムX",
-        )
-        assert "test_persona" in formatted
-        assert "goal_001" in formatted
-        assert "prom_001" in formatted
-        assert "アイテムX" in formatted
-
-    def test_housekeeping_prompt_placeholders(self):
-        """All {placeholders} match expected keys."""
-        import re
-
-        placeholders = set(re.findall(r"\{(\w+)\}", _HOUSEKEEPING_PROMPT))
-        expected = {"persona_name", "goals", "promises", "inventory"}
-        assert placeholders == expected
-
-
-# ===========================================================================
 # _build_memory_llm_context()
 # ===========================================================================
 
@@ -658,218 +626,6 @@ class TestBuildMemoryLLMContext:
 
 
 # ===========================================================================
-# run_context_housekeeping()
-# ===========================================================================
-
-
-class TestRunContextHousekeeping:
-    """0.4: run_context_housekeeping() parse tests."""
-
-    @pytest.fixture
-    def mock_ctx(self):
-        ctx = MagicMock()
-        ctx.persona = "test_persona"
-        ctx.memory_service = MagicMock()
-        ctx.equipment_service = MagicMock()
-        ctx.search_engine = MagicMock()
-        return ctx
-
-    @pytest.fixture
-    def mock_config(self):
-        config = MagicMock()
-        config.extract_model = "gpt-4o-mini"
-        config.get_effective_api_key.return_value = "sk-test"
-        config.get_effective_model.return_value = "gpt-4o-mini"
-        config.get_effective_base_url.return_value = "https://api.openai.com/v1"
-        config.provider = "openai"
-        return config
-
-    @pytest.mark.asyncio
-    async def test_housekeeping_valid_result(self, mock_ctx, mock_config):
-        """Normal housekeeping result parsing."""
-        mock_ctx.memory_service.get_by_tags.return_value = Success([])
-        mock_ctx.equipment_service.search_items.return_value = Success([])
-
-        # Mock the LLM stream to return valid JSON
-        from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
-
-        async def mock_stream(**kwargs):
-            yield TextDeltaEvent(
-                content='{"cancel_goals":["goal_001"],"cancel_promises":["prom_001"],"remove_items":["古いアイテム"]}'
-            )
-            yield DoneEvent()
-
-        with patch("nous.application.chat.memory_llm.get_provider") as mock_get_provider:
-            mock_provider = AsyncMock()
-            mock_provider.stream = mock_stream
-            mock_get_provider.return_value = mock_provider
-
-            # Mock the memory service updates
-            mock_ctx.memory_service.update_memory.return_value = Success(None)
-            mock_ctx.equipment_service.remove_item.return_value = Success(None)
-
-            result = await run_context_housekeeping(mock_ctx, mock_config)
-
-        assert result["cancelled_goals"] == ["goal_001"]
-        assert result["cancelled_promises"] == ["prom_001"]
-        assert result["removed_items"] == ["古いアイテム"]
-
-    @pytest.mark.asyncio
-    async def test_housekeeping_invalid_json(self, mock_ctx, mock_config):
-        """Invalid JSON → empty lists returned."""
-        mock_ctx.memory_service.get_by_tags.return_value = Success([])
-        mock_ctx.equipment_service.search_items.return_value = Success([])
-
-        from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
-
-        async def mock_stream(**kwargs):
-            yield TextDeltaEvent(content="不正なJSON{{{")
-            yield DoneEvent()
-
-        with patch("nous.application.chat.memory_llm.get_provider") as mock_get_provider:
-            mock_provider = AsyncMock()
-            mock_provider.stream = mock_stream
-            mock_get_provider.return_value = mock_provider
-
-            result = await run_context_housekeeping(mock_ctx, mock_config)
-
-        assert result["cancelled_goals"] == []
-        assert result["cancelled_promises"] == []
-        assert result["removed_items"] == []
-
-    @pytest.mark.asyncio
-    async def test_housekeeping_no_cancellations(self, mock_ctx, mock_config):
-        """No cancellation targets — empty arrays."""
-        mock_ctx.memory_service.get_by_tags.return_value = Success([])
-        mock_ctx.equipment_service.search_items.return_value = Success([])
-
-        from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
-
-        async def mock_stream(**kwargs):
-            yield TextDeltaEvent(content='{"cancel_goals":[],"cancel_promises":[],"remove_items":[]}')
-            yield DoneEvent()
-
-        with patch("nous.application.chat.memory_llm.get_provider") as mock_get_provider:
-            mock_provider = AsyncMock()
-            mock_provider.stream = mock_stream
-            mock_get_provider.return_value = mock_provider
-
-            result = await run_context_housekeeping(mock_ctx, mock_config)
-
-        assert result["cancelled_goals"] == []
-        assert result["cancelled_promises"] == []
-        assert result["removed_items"] == []
-
-    @pytest.mark.asyncio
-    async def test_housekeeping_llm_not_configured(self, mock_ctx, mock_config):
-        """When API key or model is missing, returns skipped."""
-        mock_config.get_effective_api_key.return_value = ""
-
-        result = await run_context_housekeeping(mock_ctx, mock_config)
-        assert result == {"skipped": "LLM not configured"}
-
-    @pytest.mark.asyncio
-    async def test_housekeeping_provider_init_failure(self, mock_ctx, mock_config):
-        """Provider init failure returns error dict."""
-        mock_ctx.memory_service.get_by_tags.return_value = Success([])
-        mock_ctx.equipment_service.search_items.return_value = Success([])
-
-        with patch("nous.application.chat.memory_llm.get_provider") as mock_get_provider:
-            mock_get_provider.side_effect = ValueError("bad provider config")
-
-            result = await run_context_housekeeping(mock_ctx, mock_config)
-
-        assert "error" in result
-        assert "bad provider config" in result["error"]
-
-    @pytest.mark.asyncio
-    async def test_housekeeping_markdown_codeblock(self, mock_ctx, mock_config):
-        """JSON in markdown code block."""
-        mock_ctx.memory_service.get_by_tags.return_value = Success([])
-        mock_ctx.equipment_service.search_items.return_value = Success([])
-
-        from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
-
-        async def mock_stream(**kwargs):
-            yield TextDeltaEvent(
-                content="""```json
-{"cancel_goals":["goal_002"],"cancel_promises":[],"remove_items":[]}
-```"""
-            )
-            yield DoneEvent()
-
-        with patch("nous.application.chat.memory_llm.get_provider") as mock_get_provider:
-            mock_provider = AsyncMock()
-            mock_provider.stream = mock_stream
-            mock_get_provider.return_value = mock_provider
-
-            mock_ctx.memory_service.update_memory.return_value = Success(None)
-            mock_ctx.equipment_service.remove_item.return_value = Success(None)
-
-            result = await run_context_housekeeping(mock_ctx, mock_config)
-
-        assert result["cancelled_goals"] == ["goal_002"]
-
-    @pytest.mark.asyncio
-    async def test_housekeeping_empty_string_keys_skipped(self, mock_ctx, mock_config):
-        """Empty string keys in cancel lists are skipped."""
-        mock_ctx.memory_service.get_by_tags.return_value = Success([])
-        mock_ctx.equipment_service.search_items.return_value = Success([])
-
-        from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
-
-        async def mock_stream(**kwargs):
-            yield TextDeltaEvent(
-                content='{"cancel_goals":["goal_001", "", "  "],"cancel_promises":[""],"remove_items":["", "valid_item"]}'
-            )
-            yield DoneEvent()
-
-        with patch("nous.application.chat.memory_llm.get_provider") as mock_get_provider:
-            mock_provider = AsyncMock()
-            mock_provider.stream = mock_stream
-            mock_get_provider.return_value = mock_provider
-
-            mock_ctx.memory_service.update_memory.return_value = Success(None)
-            mock_ctx.equipment_service.remove_item.return_value = Success(None)
-
-            result = await run_context_housekeeping(mock_ctx, mock_config)
-
-        assert result["cancelled_goals"] == ["goal_001"]
-        assert result["cancelled_promises"] == []
-        assert result["removed_items"] == ["valid_item"]
-
-    @pytest.mark.asyncio
-    async def test_housekeeping_update_memory_failure_skipped(self, mock_ctx, mock_config):
-        """When update_memory fails, that key is not included in results."""
-        mock_ctx.memory_service.get_by_tags.return_value = Success([])
-        mock_ctx.equipment_service.search_items.return_value = Success([])
-
-        from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
-
-        async def mock_stream(**kwargs):
-            yield TextDeltaEvent(
-                content='{"cancel_goals":["goal_001","goal_002"],"cancel_promises":[],"remove_items":[]}'
-            )
-            yield DoneEvent()
-
-        with patch("nous.application.chat.memory_llm.get_provider") as mock_get_provider:
-            mock_provider = AsyncMock()
-            mock_provider.stream = mock_stream
-            mock_get_provider.return_value = mock_provider
-
-            # First call succeeds, second fails
-            mock_ctx.memory_service.update_memory.side_effect = [
-                Success(None),
-                Failure(Exception("update failed")),
-            ]
-
-            result = await run_context_housekeeping(mock_ctx, mock_config)
-
-        assert result["cancelled_goals"] == ["goal_001"]  # only the successful one
-        assert mock_ctx.memory_service.update_memory.call_count == 2
-
-
-# ===========================================================================
 # run_memory_llm() — context_update automation
 # ===========================================================================
 
@@ -917,7 +673,7 @@ class TestRunMemoryLLM:
         return config
 
     @pytest.mark.asyncio
-    async def test_housekeeping_applies_context_update(self, mock_ctx, mock_config):
+    async def test_context_update_applies(self, mock_ctx, mock_config):
         """LLM result with context_update → update_emotion / memory for mental_state / update_persona_info."""
         payload = {"user": "こんにちは", "assistant": "楽しいね！"}
         llm_result = {
@@ -958,7 +714,7 @@ class TestRunMemoryLLM:
         )
 
     @pytest.mark.asyncio
-    async def test_housekeeping_skips_empty_context_update(self, mock_ctx, mock_config):
+    async def test_context_update_skips_empty(self, mock_ctx, mock_config):
         """Empty context_update dict → no update calls."""
         payload = {"user": "test", "assistant": "response"}
         llm_result = {

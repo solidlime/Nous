@@ -7,6 +7,7 @@ configured provider (ComfyUI / DALL-E / Stability).
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -23,6 +24,7 @@ async def _tool_persona_portrait_with_scene(
     persona: str,
     scene: str,
     style: str | None = None,
+    reference_image: str | None = None,
 ) -> str:
     """Generate a portrait image for the current persona using an LLM scene.
 
@@ -37,6 +39,8 @@ async def _tool_persona_portrait_with_scene(
     style : str | None
         Optional art style hint (e.g. "anime", "watercolor", "oil painting").
         When provided the style is incorporated into the prompt.
+    reference_image : str | None
+        Optional base64-encoded reference image for img2img generation.
 
     Returns
     -------
@@ -65,6 +69,17 @@ async def _tool_persona_portrait_with_scene(
         if style:
             effective_scene = f"{scene}, {style} style"
 
+        # Decode reference_image if provided (base64 → bytes)
+        ref_bytes: bytes | None = None
+        if reference_image:
+            try:
+                ref_bytes = base64.b64decode(reference_image)
+            except Exception:
+                return json.dumps(
+                    {"ok": False, "error": "Invalid base64 reference_image"},
+                    ensure_ascii=False,
+                )
+
         from nous.application.portrait.service import PortraitGenerationService
 
         service = PortraitGenerationService(
@@ -72,7 +87,7 @@ async def _tool_persona_portrait_with_scene(
             equipment_service=ctx.equipment_service,
             comfyui_url_override=chat_config.image_gen_comfyui_url or None,
         )
-        result = await service.generate(persona_state, scene=effective_scene)
+        result = await service.generate(persona_state, scene=effective_scene, reference_image=ref_bytes)
 
         # Map service result to tool output format
         return json.dumps(

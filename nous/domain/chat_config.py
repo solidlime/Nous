@@ -86,8 +86,6 @@ class ChatConfig(BaseModel):
     retrieval_rrf_k: float = 5.0  # RRF k parameter for memory search relevance scoring
     # Chat history display (separate from context window)
     display_history_turns: int = 10
-    # Housekeeping auto-trigger threshold (total active goals+promises)
-    housekeeping_threshold: int = 10
     debug_mode: bool = False
     # === Context compression (v2.1) ===
     # DEPRECATED: remove when DB migration clears max_window_turns; use max_stored_messages
@@ -179,11 +177,6 @@ class ChatConfig(BaseModel):
     @classmethod
     def _clamp_display_history_turns(cls, v: int) -> int:
         return max(1, min(200, v))
-
-    @field_validator("housekeeping_threshold")
-    @classmethod
-    def _clamp_housekeeping_threshold(cls, v: int) -> int:
-        return max(1, min(100, v))
 
     @field_validator("max_window_turns")
     @classmethod
@@ -284,7 +277,7 @@ class ChatConfigRepository:
             "reflection_enabled, reflection_threshold, reflection_min_interval_hours, "
             "session_summarize, "
             "retrieval_recency_weight, retrieval_importance_weight, retrieval_relevance_weight, "
-            "display_history_turns, housekeeping_threshold, "
+            "display_history_turns, "
             "mental_model_enabled, mental_model_min_samples, "
             "max_stored_messages, context_max_tokens, context_compression_threshold, "
             "context_compression_mode, context_keep_recent_turns, "
@@ -367,7 +360,7 @@ class ChatConfigRepository:
                  reflection_enabled, reflection_threshold, reflection_min_interval_hours,
                  session_summarize,
                  retrieval_recency_weight, retrieval_importance_weight, retrieval_relevance_weight,
-                 display_history_turns, housekeeping_threshold,
+                 display_history_turns,
                  mental_model_enabled, mental_model_min_samples,
                  max_stored_messages, context_max_tokens, context_compression_threshold,
                  context_compression_mode, context_keep_recent_turns,
@@ -384,7 +377,7 @@ class ChatConfigRepository:
                        voice_auto_play, voice_emotion_link, voice_model,
                         disabled_tools,
                         updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
@@ -410,7 +403,6 @@ class ChatConfigRepository:
                 retrieval_importance_weight=excluded.retrieval_importance_weight,
                 retrieval_relevance_weight=excluded.retrieval_relevance_weight,
                 display_history_turns=excluded.display_history_turns,
-                housekeeping_threshold=excluded.housekeeping_threshold,
                 mental_model_enabled=excluded.mental_model_enabled,
                 mental_model_min_samples=excluded.mental_model_min_samples,
                 max_stored_messages=excluded.max_stored_messages,
@@ -473,7 +465,6 @@ class ChatConfigRepository:
                 config.retrieval_importance_weight,
                 config.retrieval_relevance_weight,
                 config.display_history_turns,
-                config.housekeeping_threshold,
                 int(config.mental_model_enabled),
                 config.mental_model_min_samples,
                 config.max_stored_messages,

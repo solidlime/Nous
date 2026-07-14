@@ -356,6 +356,11 @@ def render_chat_tab() -> str:
                             <summary><i data-lucide="battery-charging"></i> MCPサーバー <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'tools')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body" id="chat-mcp-section">
                                 <div id="chat-mcp-server-list" style="display:flex;flex-direction:column;gap:2px;margin-bottom:8px;"></div>
+                                <div class="mcp-add-form" style="margin-bottom: 8px; display: flex; gap: 4px;">
+                                    <input type="text" id="chat-mcp-add-name" placeholder="Server name" class="glass-input" style="flex: 1;">
+                                    <input type="text" id="chat-mcp-add-url" placeholder="http://host:port/mcp" class="glass-input" style="flex: 2;">
+                                    <button onclick="addMcpServer()" class="glass-btn" style="white-space: nowrap;">追加</button>
+                                </div>
                                 <div>
                                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                                         <div style="font-size:0.72rem;color:var(--text-muted);">Claude の mcp.json 形式で貼り付け・編集できます</div>
@@ -495,7 +500,7 @@ def render_chat_tab() -> str:
                             </div>
                         </details>
                         <!-- Voice / TTS (TE04) -->
-                        <details data-category="voice">
+                        <details data-category="voice" id="chat-voice-section">
                             <summary><i data-lucide="volume-2"></i> 音声 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'voice')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div id="chat-voice-options" style="display:none;">
@@ -522,16 +527,10 @@ def render_chat_tab() -> str:
                                 </div>
                             </div>
                         </details>
-                        <!-- Housekeeping & Other -->
+                        <!-- Debug & Other -->
                         <details data-category="other">
-                            <summary><i data-lucide="broom"></i> 整理・その他 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'other')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="bug"></i> デバッグ・その他 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'other')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
-                                <div>
-                                    <div class="chat-field-label">自動整理 閾値 (goals + promises 合計)</div>
-                                    <input type="number" id="chat-housekeeping-threshold" class="chat-field-input" min="1" max="100" value="10" />
-                                </div>
-                                <button class="chat-clear-btn" style="margin-top:4px;" onclick="runHousekeeping()"><i data-lucide="broom"></i> 今すぐ整理</button>
-                                <div id="chat-housekeeping-status" style="font-size:0.75rem; text-align:center; min-height:16px;"></div>
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-debug-mode"
                                         style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />

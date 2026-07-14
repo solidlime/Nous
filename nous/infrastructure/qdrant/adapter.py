@@ -107,19 +107,6 @@ class QdrantVectorStore:
             logger.error("Failed to upsert vector for %s: %s", key, e)
             return Failure(VectorStoreError(str(e)))
 
-    def _build_search_query(self, vector, limit):
-        """Build a pure similarity search query (no temporal decay).
-
-        Pure vector similarity query — FSRS/ForgettingCurveRanker handles
-        all temporal decay at the application layer.
-        """
-        from qdrant_client.models import NearestQuery, QueryRequest
-
-        return QueryRequest(
-            query=NearestQuery(nearest=vector.tolist()),
-            limit=limit,
-        )
-
     async def search(
         self,
         persona: str,
@@ -129,11 +116,11 @@ class QdrantVectorStore:
         """Semantic search with pure vector similarity. Returns list of (memory_key, score)."""
         try:
             vector = await self.embedding.async_encode(query, is_query=True)
-            query_request = self._build_search_query(vector, limit)
             client = self.client_manager.client
             response = await client.query_points(
                 collection_name=self.collection_name(persona),
-                **query_request.model_dump(exclude_none=True),
+                query=vector.tolist(),
+                limit=limit,
             )
             results = response.points if response else []
             return Success(

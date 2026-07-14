@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -29,6 +30,8 @@ class ImageGenConfig:
     # Replicate (FLUX Schnell)
     replicate_model: str = "black-forest-labs/flux-schnell"
     replicate_api_key: str = ""
+    # Reference image (img2img) support
+    reference_image_enabled: bool = False  # True の場合reference_imageを受け付ける
 
 
 class ImageGenProvider(ABC):
@@ -41,6 +44,8 @@ class ImageGenProvider(ABC):
         size: str = "1024x1024",
         quality: str = "standard",
         n: int = 1,
+        reference_image: bytes | None = None,
+        **kwargs: Any,
     ) -> list[GeneratedImage]:
         """
         画像を生成する。
@@ -50,6 +55,7 @@ class ImageGenProvider(ABC):
             size: 画像サイズ (DALL-E: "1024x1024"|"1792x1024"|"1024x1792", SD: "512x512"等)
             quality: 品質 (DALL-Eのみ: "standard"|"hd")
             n: 生成枚数 (1-4)
+            reference_image: img2img用参照画像のバイト列 (Noneの場合はtxt2img)
 
         Returns:
             生成された画像のリスト

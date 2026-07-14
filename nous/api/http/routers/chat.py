@@ -72,7 +72,6 @@ def register_chat_routes(mcp) -> None:
             "retrieval_importance_weight",
             "retrieval_relevance_weight",
             "display_history_turns",
-            "housekeeping_threshold",
             "mental_model_enabled",
             "mental_model_min_samples",
             "max_stored_messages",
@@ -405,27 +404,6 @@ def register_chat_routes(mcp) -> None:
             )
         except Exception as e:
             logger.exception("rollback_chat_session failed: %s", e)
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @mcp.custom_route("/api/chat/{persona}/housekeeping", methods=["POST"])
-    async def run_housekeeping(request: Request) -> JSONResponse:
-        """コンテキスト整理: staleなgoals/itemsをLLMで判定・削除する。"""
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"error": "Persona not found"}, status_code=404)
-
-        from nous.application.chat.memory_llm import run_context_housekeeping
-        from nous.domain.chat_config import ChatConfigRepository
-
-        repo = ChatConfigRepository(ctx.connection.get_memory_db())
-        config = repo.get(persona)
-        try:
-            result = await run_context_housekeeping(ctx, config)
-            result.pop("cancelled_promises", None)
-            return JSONResponse(result)
-        except Exception as e:
-            logger.warning("housekeeping failed: %s", e)
             return JSONResponse({"error": str(e)}, status_code=500)
 
     @mcp.custom_route("/api/chat/{persona}/attachment/upload", methods=["POST"])

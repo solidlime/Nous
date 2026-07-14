@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import time
+from typing import Any
 
 import httpx
 
@@ -15,6 +17,9 @@ class ComfyUIProvider(ImageGenProvider):
       1. POST /prompt でワークフロー送信 → prompt_id 取得
       2. GET /history/{prompt_id} をポーリング → 出力画像を取得
       3. GET /view で画像ダウンロード → base64 エンコード
+
+    img2img サポート:
+      - reference_image を渡すと ComfyUI にアップロードし img2img ワークフローを構築
     """
 
     def __init__(self, api_url: str = "http://localhost:8188") -> None:
@@ -45,15 +50,36 @@ class ComfyUIProvider(ImageGenProvider):
         size: str = "512x512",
         quality: str = "standard",
         n: int = 1,
+        reference_image: bytes | None = None,
+        **kwargs: Any,
     ) -> list[GeneratedImage]:
-        """ComfyUI で画像生成（fire-and-forget + polling）"""
-        workflow = self._build_workflow(prompt, size, n)
+        """ComfyUI で画像生成（fire-and-forget + polling）
+
+        reference_image が指定された場合、img2img ワークフローを使用。
+        """
+        image_filename: str | None = None
+        if reference_image is not None:
+            image_filename = await self._upload_reference_image(reference_image)
+
+        workflow = self._build_workflow(prompt, size, n, image_filename=image_filename)
 
         # POST /prompt — 最大 2 回リトライ
         prompt_id = await self._submit_workflow(workflow)
 
         # Poll /history — 最大 180 秒
         return await self._poll_result(prompt_id, prompt, size, n)
+
+    async def _upload_reference_image(self, image_bytes: bytes) -> str:
+        """参照画像を ComfyUI の /upload/image にアップロードし、filename を返す。"""
+        filename = f"nous_ref_{int(time.time() * 1000)}.png"
+        files = {
+            "image": (filename, image_bytes, "image/png"),
+            "type": (None, "input"),
+            "overwrite": (None, "True"),
+        }
+        resp = await self.client.post(f"{self._api_url}/upload/image", files=files)
+        resp.raise_for_status()
+        return filename
 
     async def _submit_workflow(self, workflow: dict) -> str:
         """ワークフローを送信し prompt_id を取得。接続エラー時は最大2回リトライ。"""
@@ -102,55 +128,112 @@ class ComfyUIProvider(ImageGenProvider):
 
         raise RuntimeError("ComfyUI generation timed out after 180s")
 
-    def _build_workflow(self, prompt: str, size: str, n: int) -> dict:
-        """txt2img 用の最小ワークフロー JSON を構築"""
+    def _build_workflow(self, prompt: str, size: str, n: int, image_filename: str | None = None) -> dict:
+        """ワークフロー JSON を構築。
+
+        image_filename が指定された場合、img2img ワークフロー
+        （LoadImage → VAEEncode → KSampler(denoise<1.0)）を使用。
+        指定がない場合、従来の txt2img（EmptyLatentImage）を使用。
+        """
         if "x" in size:
             parts = size.split("x")
             w, h = int(parts[0]), int(parts[1])
         else:
             w = h = 512
 
-        return {
-            "3": {
-                "class_type": "KSampler",
-                "inputs": {
-                    "seed": 0,
-                    "steps": 30,
-                    "cfg": 5.0,
-                    "sampler_name": "euler_ancestral",
-                    "scheduler": "normal",
-                    "denoise": 1.0,
-                    "model": ["4", 0],
-                    "positive": ["6", 0],
-                    "negative": ["7", 0],
-                    "latent_image": ["5", 0],
+        if image_filename:
+            # ── img2img ワークフロー ────────────────────────────────
+            return {
+                "3": {
+                    "class_type": "KSampler",
+                    "inputs": {
+                        "seed": 0,
+                        "steps": 30,
+                        "cfg": 5.0,
+                        "sampler_name": "euler_ancestral",
+                        "scheduler": "normal",
+                        "denoise": 0.7,  # img2img: 元画像の特徴を残す
+                        "model": ["4", 0],
+                        "positive": ["6", 0],
+                        "negative": ["7", 0],
+                        "latent_image": ["10", 0],  # VAEEncode からの latent
+                    },
                 },
-            },
-            "4": {
-                "class_type": "CheckpointLoaderSimple",
-                "inputs": {"ckpt_name": "animagine-xl-4.0.safetensors"},
-            },
-            "5": {
-                "class_type": "EmptyLatentImage",
-                "inputs": {"width": w, "height": h, "batch_size": n},
-            },
-            "6": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": prompt, "clip": ["4", 1]},
-            },
-            "7": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {
-                    "text": "lowres, bad anatomy, bad hands, text, error",
-                    "clip": ["4", 1],
+                "4": {
+                    "class_type": "CheckpointLoaderSimple",
+                    "inputs": {"ckpt_name": "animagine-xl-4.0.safetensors"},
                 },
-            },
-            "8": {
-                "class_type": "VAEDecode",
-                "inputs": {"samples": ["3", 0], "vae": ["4", 2]},
-            },
-            "9": {
-                "class_type": "SaveImage",
-                "inputs": {"filename_prefix": "nous_portrait", "images": ["8", 0]},
-            },
-        }
+                "6": {
+                    "class_type": "CLIPTextEncode",
+                    "inputs": {"text": prompt, "clip": ["4", 1]},
+                },
+                "7": {
+                    "class_type": "CLIPTextEncode",
+                    "inputs": {
+                        "text": "lowres, bad anatomy, bad hands, text, error",
+                        "clip": ["4", 1],
+                    },
+                },
+                "8": {
+                    "class_type": "VAEDecode",
+                    "inputs": {"samples": ["3", 0], "vae": ["4", 2]},
+                },
+                "9": {
+                    "class_type": "SaveImage",
+                    "inputs": {"filename_prefix": "nous_portrait", "images": ["8", 0]},
+                },
+                "10": {
+                    "class_type": "VAEEncode",
+                    "inputs": {"pixels": ["11", 0], "vae": ["4", 2]},
+                },
+                "11": {
+                    "class_type": "LoadImage",
+                    "inputs": {"image": image_filename},
+                },
+            }
+        else:
+            # ── txt2img ワークフロー（従来） ────────────────────────
+            return {
+                "3": {
+                    "class_type": "KSampler",
+                    "inputs": {
+                        "seed": 0,
+                        "steps": 30,
+                        "cfg": 5.0,
+                        "sampler_name": "euler_ancestral",
+                        "scheduler": "normal",
+                        "denoise": 1.0,
+                        "model": ["4", 0],
+                        "positive": ["6", 0],
+                        "negative": ["7", 0],
+                        "latent_image": ["5", 0],
+                    },
+                },
+                "4": {
+                    "class_type": "CheckpointLoaderSimple",
+                    "inputs": {"ckpt_name": "animagine-xl-4.0.safetensors"},
+                },
+                "5": {
+                    "class_type": "EmptyLatentImage",
+                    "inputs": {"width": w, "height": h, "batch_size": n},
+                },
+                "6": {
+                    "class_type": "CLIPTextEncode",
+                    "inputs": {"text": prompt, "clip": ["4", 1]},
+                },
+                "7": {
+                    "class_type": "CLIPTextEncode",
+                    "inputs": {
+                        "text": "lowres, bad anatomy, bad hands, text, error",
+                        "clip": ["4", 1],
+                    },
+                },
+                "8": {
+                    "class_type": "VAEDecode",
+                    "inputs": {"samples": ["3", 0], "vae": ["4", 2]},
+                },
+                "9": {
+                    "class_type": "SaveImage",
+                    "inputs": {"filename_prefix": "nous_portrait", "images": ["8", 0]},
+                },
+            }
