@@ -36,8 +36,6 @@ services:
     environment:
       # Point to the qdrant service (overrides Dockerfile default of localhost:6333)
       NOUS_QDRANT__URL: http://qdrant:6333
-      # MCP Hub プロキシエンドポイント（チャットUIでMCPサーバーとして登録可能）
-      NOUS_MCP_HUB_URL: http://mcp-hub:26263/mcp
       LANG: C.UTF-8
     # Load env vars from .env file (ignored by git) so you can override Dockerfile defaults
     env_file:

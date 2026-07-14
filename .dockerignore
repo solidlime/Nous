@@ -29,9 +29,6 @@ test_*.py
 Makefile
 Makefile.bak
 
-# Other project directories (not needed in nous image)
-mcp-hub/
-
 # Data (bind-mounted at runtime)
 data/
 
