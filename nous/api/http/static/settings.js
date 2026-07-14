@@ -35,17 +35,17 @@ const CATEGORY_ICONS = {
 };
 
 const CATEGORY_DESCRIPTIONS = {
-    api_keys: 'API keys for LLM providers. Keys are stored securely and masked in the UI.',
+    api_keys: 'Global API keys for LLM providers. Used as fallback for non-chat subsystems (memory enrichment, etc.). ChatConfig per-persona API keys take priority for chat.',
     server: 'Server bind address and port. Changes require a full server restart.',
     embedding: 'Embedding model configuration for vector search. Reload takes 10-60s.',
     reranker: 'Cross-encoder reranker for search result quality. Reload takes 5-30s.',
     qdrant: 'Qdrant vector database connection settings.',
     forgetting: 'Ebbinghaus forgetting curve for automatic memory decay.',
     memory_enrichment: 'Auto-evaluate importance and relations via LLM after memory creation.',
-    irodori: '音声合成（Irodori TTS）設定',
+    irodori: '音声合成（Irodori TTS）設定 — グローバルデフォルト値です。各ペルソナのチャット設定パネルで上書き可能です。',
     auto_capture: '自動メモリキャプチャ設定',
     memorag: 'MemoRAG設定',
-    portrait_gen: 'ポートレート自動生成設定',
+    portrait_gen: 'ポートレート自動生成設定 — グローバルデフォルト値です。各ペルソナのチャット設定パネルで上書き可能です。',
     plugin: '外部プラグインAPI設定',
     general: 'General settings: timezone, logging, thresholds, search engine.'
 };
