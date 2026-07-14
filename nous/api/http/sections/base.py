@@ -133,11 +133,12 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str, initial_p
         "            <h1>Nous v" + __version__ + " Dashboard</h1>\n"
         "        </div>\n"
         '        <div class="header-controls">\n'
-        '            <select id="persona-select" class="glass-input" title="Select persona">\n'
-        '                <option value="">Loading...</option>\n'
-        "            </select>\n"
-        '            <button id="dark-toggle" class="glass-btn" title="Toggle theme"><i data-lucide="moon"></i></button>\n'
-        "        </div>\n"
+        '            <span id="sse-status" class="sse-indicator" title="SSE connection status"><i data-lucide="wifi"></i></span>\n'
+         '            <select id="persona-select" class="glass-input" title="Select persona">\n'
+         '                <option value="">Loading...</option>\n'
+         "            </select>\n"
+         '            <button id="dark-toggle" class="glass-btn" title="Toggle theme"><i data-lucide="moon"></i></button>\n'
+         "        </div>\n"
         "    </header>\n"
         "\n" + nav_html + "\n"
         "\n"

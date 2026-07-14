@@ -4,7 +4,17 @@
 ;(function(N) {
 "use strict";
 
+/* SSE status indicator helpers */
+function _setSseStatus(state) {
+  var el = document.getElementById("sse-status");
+  if (!el) return;
+  el.className = "sse-indicator sse-" + state;
+  var labels = { connected: "接続済み", connecting: "接続中...", reconnecting: "再接続中...", error: "接続エラー" };
+  el.title = labels[state] || state;
+}
+
 N.Core.connectSSE = function connectSSE(persona) {
+  _setSseStatus("connecting");
   // Clean up old SSE
   if (N.Core._sse) {
     try {
@@ -110,8 +120,14 @@ N.Core.connectSSE = function connectSSE(persona) {
   };
   es.addEventListener("portrait.generate_error", es._sseHandlers["portrait.generate_error"]);
 
+  es.onopen = function handleSSEOpen() {
+    _setSseStatus("connected");
+    N.Core._sseBackoff = 5000;
+  };
+
   es.onerror = function handleSSEError() {
     N.Core._sse = null;
+    _setSseStatus("reconnecting");
     var backoff = N.Core._sseBackoff || 5000;
     N.Core._sseBackoff = Math.min(backoff * 2, 60000);
     setTimeout(function() {

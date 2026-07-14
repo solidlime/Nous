@@ -177,6 +177,22 @@ html.light .app-header {
 }
 .header-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
+/* SSE status indicator */
+.sse-indicator {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  font-size: 0.85rem; transition: all 0.3s ease;
+}
+.sse-indicator svg { width: 16px; height: 16px; }
+.sse-connected { color: var(--accent-green); }
+.sse-connecting { color: var(--accent-yellow); animation: sse-pulse 1s ease-in-out infinite; }
+.sse-reconnecting { color: var(--accent-orange); animation: sse-pulse 0.6s ease-in-out infinite; }
+.sse-error { color: var(--accent-red); }
+@keyframes sse-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* ============================================================
    TAB BAR
    ============================================================ */
