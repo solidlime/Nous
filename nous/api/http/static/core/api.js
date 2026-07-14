@@ -3,9 +3,6 @@
    ================================================================= */
 ;(function(N) {
 
-/* Global error hook — override to intercept all API errors */
-N.Core.api._onError = null;
-
 N.Core.api = async function api(path, opts) {
   opts = opts || {};
   try {
@@ -33,5 +30,8 @@ N.Core.api = async function api(path, opts) {
     throw e;
   }
 };
+
+/* Default error hook */
+N.Core.api._onError = null;
 
 })(window.Nous);
