@@ -198,10 +198,11 @@ function renderNetwork(container, nodes, edges) {
         if (graphNetwork) { graphNetwork.destroy(); graphNetwork = null; }
         if (loading) loading.style.display = 'none';
         container.innerHTML =
-            '<div style="display:flex;align-items:center;justify-content:center;height:100%;' +
-            'color:var(--text-muted);text-align:center;padding:40px">' +
-            '<div><div style="font-size:3rem;margin-bottom:16px">\ud83d\udd78\ufe0f</div>' +
-            '<p style="font-size:1.1rem">No memories found. Create some memories first!</p></div></div>';
+            '<div class="empty-state">' +
+            '<div class="empty-state-icon"><i data-lucide="share-2"></i></div>' +
+            '<div class="empty-state-text">まだグラフに表示できる記憶がありません。<br>記憶を作成するとここに表示されます。</div>' +
+            '<button class="empty-state-cta" onclick="switchTab(\'memories\')"><i data-lucide="brain"></i> 記憶を作成</button>' +
+            '</div>';
         return;
     }
 

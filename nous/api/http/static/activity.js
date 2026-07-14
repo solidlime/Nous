@@ -66,7 +66,8 @@ async function loadActivity(reset = false) {
             feed.innerHTML =
                 '<div class="empty-state">' +
                 '<div class="empty-state-icon"><i data-lucide="activity"></i></div>' +
-                '<div class="empty-state-text">まだアクティビティがありません。<br>記憶を作成・更新するとここに表示されます。</div>' +
+                '<div class="empty-state-text">まだアクティビティがありません。<br>Chatで会話を始めるとセッションが記録されます。</div>' +
+                '<button class="empty-state-cta" onclick="switchTab(\'chat\')"><i data-lucide="message-circle"></i> Chatを開く</button>' +
                 '</div>';
             if (typeof lucide !== 'undefined') lucide.createIcons();
             return;
