@@ -335,21 +335,9 @@ async function loadOverview() {
             <div class="card-title"><i data-lucide="sparkles"></i> Emotion</div>
             <div>
                 ${(function() {
-                    var emotionColors = {
-                        joy: ['#fbbf24', '#fcd34d'],
-                        sadness: ['#60a5fa', '#93c5fd'],
-                        anger: ['#ef4444', '#fca5a5'],
-                        fear: ['#a855f7', '#c4b5fd'],
-                        disgust: ['#22c55e', '#86efac'],
-                        surprise: ['#ec4899', '#f9a8d4'],
-                        love: ['#fb7185', '#fda4af'],
-                        trust: ['#14b8a6', '#5eead4'],
-                        anticipation: ['#f97316', '#fdba74'],
-                        curiosity: ['#6366f1', '#a5b4fc'],
-                        neutral: ['#9ca3af', '#d1d5db']
-                    };
+                    /* Constants now from core/constants.js via adapter globals */
                     if (ctx.emotion) {
-                        var colors = emotionColors[ctx.emotion] || emotionColors.neutral;
+                        var barGrad = EMOTION_BAR_COLORS[ctx.emotion] || EMOTION_BAR_COLORS.neutral;
                         var pct = (ctx.emotion_intensity || 0) * 100;
                         pct = Math.round(pct);
                         return '<div style="margin-bottom:12px">' +
@@ -359,7 +347,7 @@ async function loadOverview() {
                             '<span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">' + pct + '%</span>' +
                             '</div>' +
                             '<div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">' +
-                            '<div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,' + colors[0] + ',' + colors[1] + ');border-radius:3px;transition:width 0.4s ease"></div>' +
+                            '<div style="height:100%;width:' + pct + '%;background:' + barGrad + ';border-radius:3px;transition:width 0.4s ease"></div>' +
                             '</div>' +
                             '</div></div>';
                     }
@@ -388,7 +376,7 @@ async function loadOverview() {
                         <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.fatigue != null ? (stats.fatigue * 100).toFixed(0) + '%' : '--'}</span>
                     </div>
                     <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.fatigue != null ? (stats.fatigue * 100).toFixed(1) : 0}%;background:linear-gradient(90deg,#f87171,#fca5a5);border-radius:3px;transition:width 0.4s ease"></div>
+                        <div style="height:100%;width:${stats.fatigue != null ? (stats.fatigue * 100).toFixed(1) : 0}%;background:${BODY_BAR_COLORS.fatigue};border-radius:3px;transition:width 0.4s ease"></div>
                     </div>
                 </div>
                 <div>
@@ -397,7 +385,7 @@ async function loadOverview() {
                         <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.warmth != null ? (stats.warmth * 100).toFixed(0) + '%' : '--'}</span>
                     </div>
                     <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.warmth != null ? (stats.warmth * 100).toFixed(1) : 0}%;background:linear-gradient(90deg,#f9a8d4,#fda4af);border-radius:3px;transition:width 0.4s ease"></div>
+                        <div style="height:100%;width:${stats.warmth != null ? (stats.warmth * 100).toFixed(1) : 0}%;background:${BODY_BAR_COLORS.warmth};border-radius:3px;transition:width 0.4s ease"></div>
                     </div>
                 </div>
                 <div>
@@ -406,7 +394,7 @@ async function loadOverview() {
                         <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.arousal != null ? (stats.arousal * 100).toFixed(0) + '%' : '--'}</span>
                     </div>
                     <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.arousal != null ? (stats.arousal * 100).toFixed(1) : 0}%;background:linear-gradient(90deg,#a78bfa,#c4b5fd);border-radius:3px;transition:width 0.4s ease"></div>
+                        <div style="height:100%;width:${stats.arousal != null ? (stats.arousal * 100).toFixed(1) : 0}%;background:${BODY_BAR_COLORS.arousal};border-radius:3px;transition:width 0.4s ease"></div>
                     </div>
                 </div>
                 <div>
@@ -415,7 +403,7 @@ async function loadOverview() {
                         <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.heart_rate != null ? (stats.heart_rate * 100).toFixed(0) + '%' : '--'}</span>
                     </div>
                     <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.heart_rate != null ? (stats.heart_rate * 100).toFixed(1) : 0}%;background:linear-gradient(90deg,#ef4444,#fca5a5);border-radius:3px;transition:width 0.4s ease"></div>
+                        <div style="height:100%;width:${stats.heart_rate != null ? (stats.heart_rate * 100).toFixed(1) : 0}%;background:${BODY_BAR_COLORS.heart_rate};border-radius:3px;transition:width 0.4s ease"></div>
                     </div>
                 </div>
                 <div>
@@ -424,7 +412,7 @@ async function loadOverview() {
                         <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.pain != null ? (stats.pain * 100).toFixed(0) + '%' : '--'}</span>
                     </div>
                     <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.pain != null ? (stats.pain * 100).toFixed(1) : 0}%;background:linear-gradient(90deg,#f59e0b,#fcd34d);border-radius:3px;transition:width 0.4s ease"></div>
+                        <div style="height:100%;width:${stats.pain != null ? (stats.pain * 100).toFixed(1) : 0}%;background:${BODY_BAR_COLORS.pain};border-radius:3px;transition:width 0.4s ease"></div>
                     </div>
                 </div>
             </div>
