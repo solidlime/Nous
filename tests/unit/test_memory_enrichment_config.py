@@ -36,10 +36,15 @@ class TestGetEffectiveApiKey:
         settings = Settings(openai_api_key="sk-oai")
         assert config.get_effective_api_key(settings) == "sk-oai"
 
-    def test_all_fallbacks_exhausted_returns_empty(self):
+    @patch("nous.config.runtime_config.RuntimeConfigManager.get_effective_value")
+    def test_all_fallbacks_exhausted_returns_empty(self, mock_get_eff):
         """All stages empty → returns empty string."""
+        mock_get_eff.return_value = ("", "")
         config = MemoryEnrichmentConfig(api_key=None, provider="openrouter")
         settings = Settings()
+        settings.openrouter_api_key = ""
+        settings.openai_api_key = ""
+        settings.anthropic_api_key = ""
         assert config.get_effective_api_key(settings) == ""
 
     @patch("nous.config.runtime_config.RuntimeConfigManager.get_effective_value")
@@ -50,6 +55,9 @@ class TestGetEffectiveApiKey:
         mock_get_effective_value.return_value = ("sk-override", "override")
         config = MemoryEnrichmentConfig(api_key=None, provider="openrouter")
         settings = Settings()
+        settings.openrouter_api_key = ""
+        settings.openai_api_key = ""
+        settings.anthropic_api_key = ""
         assert config.get_effective_api_key(settings) == "sk-override"
         mock_get_effective_value.assert_called_once_with(
             "api_keys", "openrouter_api_key"
@@ -67,23 +75,38 @@ class TestGetEffectiveApiKey:
         # RuntimeConfigManager should NOT be called since global key matched
         mock_get_effective_value.assert_not_called()
 
-    def test_legacy_env_var_fallback(self, monkeypatch):
+    @patch("nous.config.runtime_config.RuntimeConfigManager.get_effective_value")
+    def test_legacy_env_var_fallback(self, mock_get_eff, monkeypatch):
         """Stage 4: legacy env var (OPENROUTER_API_KEY) is used when all else fails."""
+        mock_get_eff.return_value = ("", "")
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-legacy-env")
         config = MemoryEnrichmentConfig(api_key=None, provider="openrouter")
         settings = Settings()
+        settings.openrouter_api_key = ""
+        settings.openai_api_key = ""
+        settings.anthropic_api_key = ""
         assert config.get_effective_api_key(settings) == "sk-legacy-env"
 
-    def test_legacy_env_var_anthropic(self, monkeypatch):
+    @patch("nous.config.runtime_config.RuntimeConfigManager.get_effective_value")
+    def test_legacy_env_var_anthropic(self, mock_get_eff, monkeypatch):
         """Stage 4: ANTHROPIC_API_KEY legacy env var fallback."""
+        mock_get_eff.return_value = ("", "")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-legacy-ant")
         config = MemoryEnrichmentConfig(api_key=None, provider="anthropic")
         settings = Settings()
+        settings.openrouter_api_key = ""
+        settings.openai_api_key = ""
+        settings.anthropic_api_key = ""
         assert config.get_effective_api_key(settings) == "sk-legacy-ant"
 
-    def test_legacy_env_var_openai(self, monkeypatch):
+    @patch("nous.config.runtime_config.RuntimeConfigManager.get_effective_value")
+    def test_legacy_env_var_openai(self, mock_get_eff, monkeypatch):
         """Stage 4: OPENAI_API_KEY legacy env var fallback."""
+        mock_get_eff.return_value = ("", "")
         monkeypatch.setenv("OPENAI_API_KEY", "sk-legacy-oai")
         config = MemoryEnrichmentConfig(api_key=None, provider="openai")
         settings = Settings()
+        settings.openrouter_api_key = ""
+        settings.openai_api_key = ""
+        settings.anthropic_api_key = ""
         assert config.get_effective_api_key(settings) == "sk-legacy-oai"

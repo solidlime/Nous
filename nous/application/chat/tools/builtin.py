@@ -169,7 +169,7 @@ async def _handle_mcp_dispatch(tool_name: str, ctx: AppContext, config: ChatConf
 
 _VALID_IMAGE_SIZES: frozenset[str] = frozenset({"1024x1024", "1792x1024", "1024x1792", "512x512", "768x768"})
 _VALID_QUALITIES: frozenset[str] = frozenset({"standard", "hd"})
-_VALID_PROVIDERS: frozenset[str] = frozenset({"openai", "stability", "comfyui", "gemini", "replicate", "auto"})
+_VALID_PROVIDERS: frozenset[str] = frozenset({"openai", "stability", "comfyui", "gemini", "replicate", "pollinations", "auto"})
 
 
 async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
