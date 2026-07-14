@@ -197,6 +197,9 @@ def register_chat_routes(mcp) -> None:
         config = repo.get(persona)
         service = ChatService()
 
+        # Ensure search engine uses the correct persona for semantic search
+        ctx.search_engine.set_persona(persona)
+
         async def generate():
             async for chunk in service.chat(ctx, config, session_id, user_message, debug=debug_mode, images=images):
                 yield chunk
@@ -505,6 +508,10 @@ def register_chat_routes(mcp) -> None:
 
         repo = ChatConfigRepository(ctx.connection.get_memory_db())
         config = repo.get(persona)
+
+        # Ensure search engine uses the correct persona for semantic search
+        ctx.search_engine.set_persona(persona)
+
         body = await request.json()
         tool_name = body.get("tool", "")
         tool_input = body.get("input", {})
