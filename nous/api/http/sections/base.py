@@ -40,6 +40,11 @@ def render_head() -> str:
     <!-- Chat modules (Phase 3) -->
     <script src="/static/chat/chat-core.js" defer></script>
     <script src="/static/chat/chat-settings.js" defer></script>
+    <script src="/static/chat/chat-markdown.js" defer></script>
+    <script src="/static/chat/chat-send.js" defer></script>
+    <script src="/static/chat/chat-history.js" defer></script>
+    <script src="/static/chat/chat-memory-panel.js" defer></script>
+    <script src="/static/chat/chat-tools.js" defer></script>
     <!-- Existing feature scripts -->
     <script src="/static/chat.js" defer></script>
     <script src="/static/portrait.js" defer></script>
