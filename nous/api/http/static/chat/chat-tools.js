@@ -257,7 +257,7 @@ async function fetchMcpTools() {
     CHAT.mcpErrors = data.errors || [];
     renderMcpTools();
   } catch (e) {
-    list.innerHTML = '<span style="font-size:0.7rem;color:var(--accent-red);">取得失敗: ' + e.message + '</span>';
+    list.innerHTML = '<span style="font-size:0.7rem;color:var(--accent-red);">取得失敗: ' + esc(e.message) + '</span>';
   }
 }
 
