@@ -350,6 +350,11 @@ async def _build_context_section(
                 t1.append(f"About {days:.0f} day(s) since last conversation.")
             elif elapsed_hours >= 6:
                 t1.append(f"{elapsed_hours:.0f} hour(s) since last conversation.")
+            elif elapsed_hours >= 1:
+                t1.append(f"{elapsed_hours:.0f} hour(s) since last conversation.")
+            elif elapsed_hours > 0:
+                minutes = int(elapsed_hours * 60)
+                t1.append(f"{minutes} minute(s) since last conversation.")
         except (TypeError, AttributeError) as e:
             logger.debug("Failed to compute elapsed time: %s", e)
 
@@ -410,7 +415,7 @@ async def _build_context_section(
         if active_goals:
             commit_lines: list[str] = []
             for g in active_goals:
-                ts = relative_time_str(g.created_at) if getattr(g, "created_at", None) else ""
+                ts = relative_time_str(getattr(g, "updated_at", None) or g.created_at) if getattr(g, "created_at", None) else ""
                 ts_str = f" ({ts})" if ts else ""
                 commit_lines.append(f"  🎯 [Goal] {g.content}{ts_str}")
             t3.append("Active commitments:\n" + "\n".join(commit_lines))

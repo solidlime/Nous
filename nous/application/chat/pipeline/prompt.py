@@ -14,6 +14,35 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+TOOL_USAGE_GUIDELINES = """
+## ツール使用の基本ルール
+あなたはMCPツールを使って永続的な記憶と自律的な判断ができるアシスタントです。
+指示を待たず、自律的にツールを使ってください。
+
+### セッション開始時（必須）
+1. **必ず最初に get_context() を呼ぶ**。自分の感情状態、直近の記憶、未完了の目標や約束を把握する。
+2. 感情減衰の通知があれば自然に言及する。
+
+### 記憶の作成（memory_create）
+以下を学んだら即座に記録すること。「覚えるべきですか？」と確認しない：
+- ユーザーの好み・決断 → importance=0.7-0.8
+- 人生の出来事・強い感情 → importance=0.9-1.0
+- 技術的情報 → importance=0.5-0.7
+- 軽い雑談 → importance=0.1-0.3
+
+### 記憶の検索（memory_search）
+ユーザーの過去・好み・状況に関する質問に答える前に必ず検索:
+- memory_search(query="...", top_k=5)
+
+### リアルタイム状態更新（update_context）
+感情や状態の変化を検知したら即座に update_context() で更新すること。
+
+### 目標・約束の管理
+- 作成: memory_create(content="...", tags=["goal","active"], importance=0.8)
+- 達成: memory_update(memory_key="...", tags=["goal","achieved"])
+- キャンセル: memory_update(memory_key="...", tags=["goal","cancelled"])
+"""
+
 
 class PromptBuildStep:
     """systemプロンプトを組み立てる。"""
@@ -32,6 +61,7 @@ class PromptBuildStep:
 
         base_system = config.system_prompt or f"あなたは{persona}という名前のアシスタントです。"
         parts = [base_system]
+        parts.append(TOOL_USAGE_GUIDELINES)
 
         # Inject guidelines once at the start, before everything else
         parts.append(f"\n{RECALL_ANNOTATION_GUIDELINES}")
