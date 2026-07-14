@@ -70,6 +70,7 @@ async def _tool_persona_portrait_with_scene(
         service = PortraitGenerationService(
             config,
             equipment_service=ctx.equipment_service,
+            comfyui_url_override=chat_config.image_gen_comfyui_url or None,
         )
         result = await service.generate(persona_state, scene=effective_scene)
 
