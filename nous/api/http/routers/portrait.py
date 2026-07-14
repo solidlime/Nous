@@ -6,7 +6,6 @@ import base64
 import contextlib
 from typing import TYPE_CHECKING
 
-from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from nous.api.http.deps import _resolve_persona_from_request, _safe_get_context
@@ -15,7 +14,7 @@ from nous.domain.chat_config import ChatConfigRepository
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
-    pass
+    from starlette.requests import Request
 
 logger = get_logger(__name__)
 

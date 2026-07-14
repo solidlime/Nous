@@ -348,8 +348,6 @@ async def _build_context_section(
             if elapsed_hours >= 24:
                 days = elapsed_hours / 24
                 t1.append(f"About {days:.0f} day(s) since last conversation.")
-            elif elapsed_hours >= 6:
-                t1.append(f"{elapsed_hours:.0f} hour(s) since last conversation.")
             elif elapsed_hours >= 1:
                 t1.append(f"{elapsed_hours:.0f} hour(s) since last conversation.")
             elif elapsed_hours > 0:

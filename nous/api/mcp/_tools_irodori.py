@@ -35,11 +35,8 @@ async def _tool_irodori_voices(
             ensure_ascii=False,
         )
 
-    # 2. Get voice engine
+    # 2. Get voice engine config
     config = ctx.settings.irodori
-    from nous.infrastructure.voice.factory import get_voice_engine
-
-    engine = get_voice_engine(config)
 
     # 3. Query /v1/models for available voices
     base_url = config.url.rstrip("/")

@@ -107,12 +107,12 @@ class MemoryEnrichmentConfig(BaseModel):
             return value
 
         # 4. Backward compat: legacy env vars without NOUS_ prefix
-        _LEGACY_ENV_KEYS = {
+        _legacy_env_keys = {
             "openrouter": "OPENROUTER_API_KEY",
             "anthropic": "ANTHROPIC_API_KEY",
             "openai": "OPENAI_API_KEY",
         }
-        env_var = _LEGACY_ENV_KEYS.get(self.provider, "")
+        env_var = _legacy_env_keys.get(self.provider, "")
         return os.environ.get(env_var, "")
 
 
