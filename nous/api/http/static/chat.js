@@ -3125,7 +3125,9 @@ async function loadPortrait() {
     }
   } catch (e) {
     console.error("[loadPortrait] failed:", e);
-    toast("ポートレート読込失敗: " + e.message, "error");
+    if (e.message !== "Portrait generation is disabled for this persona") {
+      toast("ポートレート読込失敗: " + e.message, "error");
+    }
   }
 }
 
@@ -3371,7 +3373,7 @@ async function formatMcpJson() {
   }
 }
 
-function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+// esc() — now provided by core/adapter.js (global alias for Nous.Core.esc)
 
 function autoPlayTts(text) {
   if (!S.persona || !text) return;
