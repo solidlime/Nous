@@ -26,6 +26,17 @@ def render_head() -> str:
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js" defer></script>
     <script src="https://unpkg.com/lucide@latest" defer></script>
     <link rel="stylesheet" href="/static/base.css">
+    <!-- Nous Core Modules (Phase 1: Foundation) -->
+    <script src="/static/core/namespace.js" defer></script>
+    <script src="/static/core/constants.js" defer></script>
+    <script src="/static/core/dom.js" defer></script>
+    <script src="/static/core/time.js" defer></script>
+    <script src="/static/core/api.js" defer></script>
+    <script src="/static/core/toast.js" defer></script>
+    <script src="/static/core/modal.js" defer></script>
+    <script src="/static/core/theme.js" defer></script>
+    <script src="/static/core/sse.js" defer></script>
+    <!-- Existing feature scripts -->
     <script src="/static/chat.js" defer></script>
     <script src="/static/portrait.js" defer></script>
 </head>"""
