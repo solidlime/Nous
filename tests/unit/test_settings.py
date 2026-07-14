@@ -131,8 +131,6 @@ class TestEnsureDirectories:
 
         expected = [
             Path(s.data_dir),
-            Path(s.data_root) / "logs",
-            Path(s.data_root) / "backups",
             Path(s.import_dir),
             Path(s.import_dir) / "done",
             Path(s.cache_dir),

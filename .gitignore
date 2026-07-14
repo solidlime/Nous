@@ -40,7 +40,6 @@ Thumbs.db
 
 # Generated output
 output/
-logs/
 
 # Data runtime (allow: .gitkeep, SKILL.md, seed settings)
 data/*/
@@ -68,14 +67,6 @@ data/import/*
 !data/config/
 data/config/*
 !data/config/.gitkeep
-# logs: allow only .gitkeep
-!data/logs/
-data/logs/*
-!data/logs/.gitkeep
-# backups: allow only .gitkeep
-!data/backups/
-data/backups/*
-!data/backups/.gitkeep
 
 # Serena local files
 .serena/
