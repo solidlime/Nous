@@ -233,18 +233,6 @@ async function loadChatCommitments() {
   }
 }
 
-async function loadEquipment() {
-  if (!S.persona) return;
-  try {
-    const data = await api("/api/dashboard/" + encodeURIComponent(S.persona));
-    const equipment = data.equipment || {};
-    updateEquipmentPanel({ equip: equipment });
-  } catch (e) {
-    console.error("[loadEquipment] failed:", e);
-    toast("装備データ読込失敗: " + e.message, "error");
-  }
-}
-
 async function loadSkillsForChat() {
   try {
     // Auto-sync skills from filesystem on every chat tab open
@@ -332,7 +320,6 @@ window.setupChatInputHandlerWithObserver = setupChatInputHandlerWithObserver;
 window.chatInputKeydownHandler = chatInputKeydownHandler;
 window.chatInputInputHandler = chatInputInputHandler;
 window.loadChatCommitments = loadChatCommitments;
-window.loadEquipment = loadEquipment;
 window.loadSkillsForChat = loadSkillsForChat;
 window.toggleSettingsPanel = toggleSettingsPanel;
 window.toggleMemoryPanel = toggleMemoryPanel;
