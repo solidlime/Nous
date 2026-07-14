@@ -857,6 +857,26 @@ window.addEventListener("beforeunload", function cleanupBeforeUnload() {
    INITIALIZATION
    ================================================================= */
 async function init() {
+  // Initialize centralized store
+  if (window.Nous && window.Nous.Core && window.Nous.Core.store) {
+    window.Nous.Core.store.init({
+      persona: null,
+      tab: localStorage.getItem("mmcp-tab") || "overview",
+      charts: {},
+      mem: { page: 1, tag: "", q: "", perPage: 20 },
+      statusPoll: null,
+      dashCache: null,
+      initTime: Date.now(),
+    });
+    // Bridge: keep S object for backward compat, backed by store
+    (function() {
+      var store = window.Nous.Core.store;
+      Object.keys(S).forEach(function(k) {
+        if (store.get(k) === undefined) store.set(k, S[k]);
+      });
+    })();
+  }
+
   // Theme
   applyTheme();
 
