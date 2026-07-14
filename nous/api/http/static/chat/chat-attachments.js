@@ -116,14 +116,14 @@ function openMediaViewer(url, type, mimeType) {
   } else if (type === "pdf") {
     inner.innerHTML =
       '<iframe src="' +
-      url +
+      esc(url) +
       '" width="100%" height="80vh" style="border:none;border-radius:8px;"></iframe>';
   } else if (type === "audio") {
     inner.innerHTML =
       '<audio controls autoplay style="max-width:90vw;"><source src="' +
-      url +
+      esc(url) +
       '" type="' +
-      (mimeType || "audio/mpeg") +
+      esc(mimeType || "audio/mpeg") +
       '"></audio>';
   } else {
     const vid = document.createElement("video");
