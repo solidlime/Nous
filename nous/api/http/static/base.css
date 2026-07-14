@@ -661,6 +661,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     #graph-container { height: 400px !important; }
     .toast-container { left: 50%; transform: translateX(-50%); right: auto; bottom: 16px; }
     .toast { max-width: 90vw; text-align: center; }
+    /* Chat: keep input area visible above keyboard */
+    #chat-input-area { position: sticky; bottom: 0; background: var(--bg-primary); z-index: 10; }
 }
 @media (max-width: 1024px) {
     .lg\:grid-cols-4 { grid-template-columns: repeat(2, 1fr) !important; }
