@@ -44,16 +44,20 @@ class PortraitGenerationService:
         config: PortraitGenerationConfig,
         event_bus: EventBus | None = None,
         equipment_service: EquipmentService | None = None,
+        comfyui_url_override: str | None = None,
     ) -> None:
         self._config = config
         self._event_bus = event_bus
         self._equipment_service = equipment_service
 
+        # Resolve ComfyUI URL: per-persona override > global config default
+        resolved_comfyui_url = comfyui_url_override or config.comfyui_url
+
         # Convert PortraitGenerationConfig → ImageGenConfig so the factory
         # can build the right provider.
         gen_cfg = ImageGenConfig(
             provider=config.provider,
-            comfyui_url=config.comfyui_url or "http://localhost:8188",
+            comfyui_url=resolved_comfyui_url,
         )
         self._provider = get_image_gen_provider(gen_cfg)
 
