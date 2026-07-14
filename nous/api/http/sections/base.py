@@ -10,7 +10,6 @@ from nous import __version__
 # 1. render_head
 # ---------------------------------------------------------------------------
 
-
 def render_head() -> str:
     """Return the full <head>…</head> block (meta, CDN scripts, all CSS)."""
     return r"""<head>
@@ -30,11 +29,9 @@ def render_head() -> str:
     <script src="/static/portrait.js" defer></script>
 </head>"""
 
-
 # ---------------------------------------------------------------------------
 # 2. render_nav
 # ---------------------------------------------------------------------------
-
 
 def render_nav(tabs: list[dict]) -> str:
     """Build ``<nav class="tab-bar">`` dynamically from *tabs*.
@@ -57,21 +54,17 @@ def render_nav(tabs: list[dict]) -> str:
 
     return '    <nav class="tab-bar" role="tablist">\n        ' + "\n        ".join(buttons) + "\n    </nav>"
 
-
 # ---------------------------------------------------------------------------
 # 3. render_utilities_js
 # ---------------------------------------------------------------------------
-
 
 def render_utilities_js() -> str:
     """Return a ``<script>`` tag loading the shared utility JavaScript."""
     return '<script src="/static/base.js"></script>'
 
-
 # ---------------------------------------------------------------------------
 # 4. render_layout_shell
 # ---------------------------------------------------------------------------
-
 
 def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str, initial_persona: str | None = None) -> str:
     """Compose the full HTML page.
@@ -109,13 +102,6 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str, initial_p
         '            <select id="persona-select" class="glass-input" title="Select persona">\n'
         '                <option value="">Loading...</option>\n'
         "            </select>\n"
-        '            <select id="auto-refresh" class="glass-input" title="Auto refresh interval">\n'
-        '                <option value="0">Auto: Off</option>\n'
-        '                <option value="30">30s</option>\n'
-        '                <option value="60">1min</option>\n'
-        '                <option value="300">5min</option>\n'
-        "            </select>\n"
-        '            <button id="refresh-btn" class="glass-btn" title="Refresh now"><i data-lucide="refresh-cw"></i></button>\n'
         '            <button id="dark-toggle" class="glass-btn" title="Toggle theme"><i data-lucide="moon"></i></button>\n'
         "        </div>\n"
         "    </header>\n"

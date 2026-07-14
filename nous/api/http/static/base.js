@@ -4,7 +4,6 @@
 const S = {
   persona: null,
   tab: localStorage.getItem("mmcp-tab") || "overview",
-  refreshTimer: null,
   charts: {},
   mem: { page: 1, tag: "", q: "", perPage: 20 },
   statusPoll: null,
@@ -845,48 +844,12 @@ function updateLastTime() {
 }
 
 /* =================================================================
-   AUTO REFRESH
-   ================================================================= */
-function setAutoRefresh(sec) {
-  if (S.refreshTimer) {
-    clearInterval(S.refreshTimer);
-    S.refreshTimer = null;
-  }
-  /* Remove previous visibility handler if any */
-  if (S._visibilityHandler) {
-    document.removeEventListener("visibilitychange", S._visibilityHandler);
-    S._visibilityHandler = null;
-  }
-  if (sec > 0) {
-    const handler = () => {
-      if (document.visibilityState === "visible" && !S.refreshTimer) {
-        S.refreshTimer = setInterval(() => loadTab(S.tab), sec * 1000);
-      } else if (document.visibilityState === "hidden" && S.refreshTimer) {
-        clearInterval(S.refreshTimer);
-        S.refreshTimer = null;
-      }
-    };
-    S._visibilityHandler = handler;
-    document.addEventListener("visibilitychange", handler);
-    handler(); /* initial start */
-  }
-}
-
-/* =================================================================
    PAGE CLEANUP (beforeunload)
    ================================================================= */
 window.addEventListener("beforeunload", function cleanupBeforeUnload() {
   if (S._sse) {
     S._sse.close();
     S._sse = null;
-  }
-  if (S.refreshTimer) {
-    clearInterval(S.refreshTimer);
-    S.refreshTimer = null;
-  }
-  if (S._visibilityHandler) {
-    document.removeEventListener("visibilitychange", S._visibilityHandler);
-    S._visibilityHandler = null;
   }
 });
 
@@ -966,17 +929,6 @@ async function init() {
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
-
-  // Event: Refresh button
-  document.getElementById("refresh-btn").onclick = () => {
-    S.dashCache = null;
-    loadTab(S.tab);
-  };
-
-  // Event: Auto-refresh
-  document.getElementById("auto-refresh").onchange = (e) => {
-    setAutoRefresh(parseInt(e.target.value));
-  };
 
   // Event: Theme toggle
   document.getElementById("dark-toggle").onclick = toggleTheme;
