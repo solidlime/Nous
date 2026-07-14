@@ -953,6 +953,22 @@ async function init() {
   // Event: Theme toggle
   document.getElementById("dark-toggle").onclick = toggleTheme;
 
+  // Global API error handler — toast with retry
+  window.addEventListener("api:error", function _handleApiError(e) {
+    var d = e.detail;
+    if (!d) return;
+    var known = N.Core.toastAction || toastAction || null;
+    if (typeof known === "function") {
+      known(d.message || "API error", "error", "再試行", function() {
+        fetch(d.path, { method: "GET" }).then(function(r) {
+          if (r.ok) { toast("再試行成功", "success"); }
+        }).catch(function() {});
+      });
+    } else {
+      toast(d.message || "API error", "error");
+    }
+  });
+
   // Keyboard: tab navigation
   document.addEventListener("keydown", (e) => {
     if (e.altKey && ((e.key >= "1" && e.key <= "9") || e.key === "0")) {

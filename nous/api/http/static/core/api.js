@@ -3,6 +3,9 @@
    ================================================================= */
 ;(function(N) {
 
+/* Global error hook — override to intercept all API errors */
+N.Core.api._onError = null;
+
 N.Core.api = async function api(path, opts) {
   opts = opts || {};
   try {
@@ -18,6 +21,15 @@ N.Core.api = async function api(path, opts) {
     return await resp.json();
   } catch (e) {
     console.error("API error:", path, e);
+    var detail = { path: path, message: e.message, error: e };
+    /* Global hook */
+    if (typeof N.Core.api._onError === "function") {
+      N.Core.api._onError(detail);
+    }
+    /* Dispatch custom event for loose coupling */
+    try {
+      window.dispatchEvent(new CustomEvent("api:error", { detail: detail }));
+    } catch (_) {}
     throw e;
   }
 };
