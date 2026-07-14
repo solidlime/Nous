@@ -2,6 +2,8 @@
    SETTINGS DASHBOARD — Nous WebUI
    ═══════════════════════════════════════════════════════════════════ */
 
+const { esc, toast, api } = Nous.Core;
+
 const BUILTIN_PROFILES = {
     'Development': {
         server: { host: '0.0.0.0', port: 26262 },

@@ -1,4 +1,6 @@
 
+const { esc, api, truncate } = Nous.Core;
+
 /* ================================================================
  *  Knowledge Graph — vis-network interactive memory visualization
  * ================================================================ */

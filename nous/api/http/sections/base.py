@@ -37,7 +37,6 @@ def render_head() -> str:
     <script src="/static/core/modal.js" defer></script>
     <script src="/static/core/theme.js" defer></script>
     <script src="/static/core/sse.js" defer></script>
-    <script src="/static/core/adapter.js" defer></script>
     <!-- Chat modules (Phase 3) -->
     <script src="/static/chat/chat-core.js" defer></script>
     <script src="/static/chat/chat-settings.js" defer></script>

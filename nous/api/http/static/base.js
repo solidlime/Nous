@@ -11,6 +11,15 @@ const S = {
   initTime: Date.now(),
 };
 
+/* =================================================================
+   CORE — Import from modules (replaces legacy global definitions)
+   ================================================================= */
+const _NC = (window.Nous && window.Nous.Core) || {};
+const { esc, toast, api, showConfirm, showAlert, truncate, relativeTime, fmtDate, applyTheme, toggleTheme, connectSSE } = _NC;
+
+/* =================================================================
+   CONSTANTS
+   ================================================================= */
 const CHART_COLORS = [
   "#a78bfa",
   "#f472b6",
@@ -190,34 +199,6 @@ function renderBodyStateCompact(bodyState) {
   return html;
 }
 
-/* =================================================================
-   UTILITIES
-   ================================================================= */
-function esc(s) {
-  if (!s) return "";
-  const d = document.createElement("div");
-  d.textContent = String(s);
-  return d.innerHTML.replace(/"/g, "&quot;");
-}
-function truncate(s, n) {
-  return s && s.length > n ? s.slice(0, n) + "..." : s || "";
-}
-function relativeTime(iso) {
-  if (!iso) return "--";
-  const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 0) return "just now";
-  if (diff < 60000) return Math.floor(diff / 1000) + "s ago";
-  if (diff < 3600000) return Math.floor(diff / 60000) + "m ago";
-  if (diff < 86400000) return Math.floor(diff / 3600000) + "h ago";
-  return Math.floor(diff / 86400000) + "d ago";
-}
-function fmtDate(iso) {
-  if (!iso) return "--";
-  return new Date(iso).toLocaleDateString("ja-JP", {
-    month: "short",
-    day: "numeric",
-  });
-}
 
 /* Persona storage helpers — write to both keys for backward compatibility */
 function getStoredPersona() {
@@ -231,345 +212,6 @@ function setStoredPersona(persona) {
   localStorage.setItem("mmcp-persona", persona);
   localStorage.setItem("selected_persona", persona);
 }
-
-/* =================================================================
-   TOAST NOTIFICATIONS
-   ================================================================= */
-function toast(msg, type = "info") {
-  const c = document.getElementById("toast-container");
-  const t = document.createElement("div");
-  t.className = "toast toast-" + type;
-  t.textContent = msg;
-  c.appendChild(t);
-  setTimeout(() => t.remove(), 3200);
-}
-
-/* =================================================================
-   GLASS CONFIRM / ALERT MODAL (23.6)
-   ================================================================= */
-function showConfirm(message, onConfirm, onCancel) {
-  // Promise-based: showConfirm(msg) returns Promise<boolean>
-  if (typeof onConfirm !== "function") {
-    return new Promise(function (resolve) {
-      showConfirm(message, function () { resolve(true); }, function () { resolve(false); });
-    });
-  }
-  var triggerEl = document.activeElement;
-  var overlay = document.createElement("div");
-  overlay.className = "confirm-overlay";
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.innerHTML =
-    '<div class="confirm-modal">' +
-    '<h3 id="confirm-title">確認</h3>' +
-    "<p>" +
-    esc(message).replace(/\n/g, "<br>") +
-    "</p>" +
-    '<div class="confirm-modal-actions">' +
-    '<button class="glass-btn" id="confirm-cancel-btn">キャンセル</button>' +
-    '<button class="glass-btn glass-btn-danger" id="confirm-ok-btn">OK</button>' +
-    "</div></div>";
-  overlay.setAttribute("aria-labelledby", "confirm-title");
-  document.body.appendChild(overlay);
-  requestAnimationFrame(() => overlay.classList.add("show"));
-
-  // Focus the OK button immediately
-  var okBtn = document.getElementById("confirm-ok-btn");
-  if (okBtn) okBtn.focus();
-
-  function cleanup() {
-    overlay.classList.remove("show");
-    setTimeout(() => overlay.remove(), 220);
-    // Return focus to trigger element
-    if (triggerEl && triggerEl.focus) triggerEl.focus();
-  }
-  okBtn.onclick = function () {
-    cleanup();
-    if (onConfirm) onConfirm();
-  };
-  document.getElementById("confirm-cancel-btn").onclick = function () {
-    cleanup();
-    if (onCancel) onCancel();
-  };
-  overlay.addEventListener("click", function (e) {
-    if (e.target === overlay) {
-      cleanup();
-      if (onCancel) onCancel();
-    }
-  });
-  // Focus trap
-  overlay.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      cleanup();
-      if (onCancel) onCancel();
-      return;
-    }
-    if (e.key === "Tab") {
-      var focusable = overlay.querySelectorAll(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      var first = focusable[0];
-      var last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-  });
-}
-function showAlert(message) {
-  var triggerEl = document.activeElement;
-  var overlay = document.createElement("div");
-  overlay.className = "confirm-overlay";
-  overlay.setAttribute("role", "alertdialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.innerHTML =
-    '<div class="confirm-modal">' +
-    '<h3 id="alert-title">通知</h3>' +
-    "<p>" +
-    esc(message).replace(/\n/g, "<br>") +
-    "</p>" +
-    '<div class="confirm-modal-actions">' +
-    '<button class="glass-btn glass-btn-success" id="alert-ok-btn">OK</button>' +
-    "</div></div>";
-  overlay.setAttribute("aria-labelledby", "alert-title");
-  document.body.appendChild(overlay);
-  requestAnimationFrame(() => overlay.classList.add("show"));
-  var okBtn = document.getElementById("alert-ok-btn");
-  if (okBtn) okBtn.focus();
-  function cleanup() {
-    overlay.classList.remove("show");
-    setTimeout(() => overlay.remove(), 220);
-    if (triggerEl && triggerEl.focus) triggerEl.focus();
-  }
-  okBtn.onclick = cleanup;
-  overlay.addEventListener("click", function (e) {
-    if (e.target === overlay) cleanup();
-  });
-  overlay.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      cleanup();
-    }
-    if (e.key === "Tab") {
-      e.preventDefault();
-      okBtn.focus();
-    }
-  });
-}
-
-/* =================================================================
-   SSE REAL-TIME EVENTS
-   ================================================================= */
-function connectSSE(persona) {
-  // 古い SSE のリスナーを削除してから閉じる（リーク防止）
-  if (S._sse) {
-    try {
-      if (S._sse._sseHandlers) {
-        for (const [ev, fn] of Object.entries(S._sse._sseHandlers)) {
-          S._sse.removeEventListener(ev, fn);
-        }
-      }
-      S._sse.onerror = null;
-      S._sse.close();
-    } catch (e) {
-      console.warn("[SSE] close failed:", e.message);
-    }
-  }
-  S._sseBackoff = 5000;
-  const es = new EventSource(
-    "/api/events/" +
-      encodeURIComponent(persona) +
-      "?topics=memory,context,portrait,emotion,body",
-  );
-  es._sseHandlers = {};
-
-  es._sseHandlers["memory.created"] = function handleMemoryCreated(e) {
-    try {
-      const d = JSON.parse(e.data);
-      toast(
-        "\ud83d\udcdd \u65b0\u3057\u3044\u8a18\u61b6: " +
-          (d.content_preview || "...").substring(0, 50),
-        "info",
-      );
-    } catch (e) {
-      console.warn("[SSE parse] memory.created:", e.message);
-    }
-  };
-  es.addEventListener("memory.created", es._sseHandlers["memory.created"]);
-
-  es._sseHandlers["memory.updated"] = function handleMemoryUpdated(e) {
-    try {
-      const d = JSON.parse(e.data);
-      toast(
-        "\ud83d\udd04 \u8a18\u61b6\u66f4\u65b0: " +
-          (d.content_preview || "...").substring(0, 50),
-        "info",
-      );
-    } catch (e) {
-      console.warn("[SSE parse] memory.updated:", e.message);
-    }
-  };
-  es.addEventListener("memory.updated", es._sseHandlers["memory.updated"]);
-
-  es._sseHandlers["memory.deleted"] = function handleMemoryDeleted(e) {
-    try {
-      const d = JSON.parse(e.data);
-      toast(
-        "\ud83d\uddd1 \u8a18\u61b6\u524a\u9664: " +
-          (d.content_preview || "...").substring(0, 50),
-        "info",
-      );
-    } catch (e) {
-      console.warn("[SSE parse] memory.deleted:", e.message);
-    }
-  };
-  es.addEventListener("memory.deleted", es._sseHandlers["memory.deleted"]);
-
-  es.addEventListener("context.updated", function (e) {
-    toast(
-      "\ud83d\udc64 \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u66f4\u65b0\u3055\u308c\u307e\u3057\u305f",
-      "info",
-    );
-  });
-
-  es.addEventListener("context.emotion_changed", function (e) {
-    try {
-      const d = JSON.parse(e.data);
-      if (d.emotion) {
-        toast(
-          "\ud83d\ude0c \u611f\u60c5\u5909\u66f4: " +
-            d.emotion +
-            " (" +
-            Math.round((d.emotion_intensity || 0) * 100) +
-            "%)",
-          "info",
-        );
-        window.dispatchEvent(
-          new CustomEvent("emotion-changed", { detail: d }),
-        );
-      }
-    } catch (e) {
-      console.warn("[SSE parse] context.emotion_changed:", e.message);
-    }
-  });
-
-  es.addEventListener("context.body_state_changed", function (e) {
-    try {
-      const d = JSON.parse(e.data);
-      if (d.states) {
-        const labels = {
-          fatigue: "\U0001f525",
-          warmth: "\U0001f33c",
-          arousal: "\u26a1",
-          heart_rate: "\ud83d\udc93",
-          pain: "\U0001f4aa",
-        };
-        const parts = Object.entries(d.states)
-          .filter(function (_a) {
-            var _b = _a, k = _b[0], v = _b[1];
-            return v != null;
-          })
-          .map(function (_a) {
-            var _b = _a, k = _b[0], v = _b[1];
-            return (
-              (labels[k] || k) + " " + Math.round(Number(v) * 100) + "%"
-            );
-          });
-        if (parts.length) {
-          toast("\U0001f9a0 \u4f53\u8abf\u5909\u66f4: " + parts.join(" "), "info");
-        }
-        window.dispatchEvent(
-          new CustomEvent("body-state-changed", { detail: d }),
-        );
-      }
-    } catch (e) {
-      console.warn("[SSE parse] context.body_state_changed:", e.message);
-    }
-  });
-
-  // TB07: Portrait generation SSE events
-  es._sseHandlers["portrait.generate_start"] = function handlePortraitGenerateStart(e) {
-    try {
-      const d = JSON.parse(e.data);
-      if (typeof window.handlePortraitGenerateStart === 'function') {
-        window.handlePortraitGenerateStart(d);
-      }
-    } catch (err) {
-      console.warn("[SSE parse] portrait.generate_start:", err.message);
-    }
-  };
-  es.addEventListener(
-    "portrait.generate_start",
-    es._sseHandlers["portrait.generate_start"],
-  );
-
-  es._sseHandlers["portrait.generate_complete"] = function handlePortraitGenerateComplete(e) {
-    try {
-      const d = JSON.parse(e.data);
-      if (typeof window.handlePortraitGenerateComplete === 'function') {
-        window.handlePortraitGenerateComplete(d);
-      }
-    } catch (err) {
-      console.warn("[SSE parse] portrait.generate_complete:", err.message);
-    }
-  };
-  es.addEventListener(
-    "portrait.generate_complete",
-    es._sseHandlers["portrait.generate_complete"],
-  );
-
-  es._sseHandlers["portrait.generate_error"] = function handlePortraitGenerateError(e) {
-    try {
-      const d = JSON.parse(e.data);
-      if (typeof window.handlePortraitGenerateError === 'function') {
-        window.handlePortraitGenerateError(d);
-      }
-    } catch (err) {
-      console.warn("[SSE parse] portrait.generate_error:", err.message);
-    }
-  };
-  es.addEventListener(
-    "portrait.generate_error",
-    es._sseHandlers["portrait.generate_error"],
-  );
-
-  es.onerror = function handleSSEError() {
-    S._sse = null;
-    var backoff = S._sseBackoff || 5000;
-    S._sseBackoff = Math.min(backoff * 2, 60000);
-    setTimeout(function () {
-      if (S.persona) connectSSE(S.persona);
-    }, backoff);
-  };
-  S._sse = es;
-}
-
-/* =================================================================
-   API HELPER
-   ================================================================= */
-async function api(path, opts = {}) {
-  try {
-    const resp = await fetch(path, {
-      headers: { "Content-Type": "application/json", ...opts.headers },
-      ...opts,
-    });
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({ error: resp.statusText }));
-      throw new Error(err.error || resp.statusText);
-    }
-    return await resp.json();
-  } catch (e) {
-    console.error("API error:", path, e);
-    throw e;
-  }
-}
-
 /* =================================================================
    CHART HELPERS
    ================================================================= */
@@ -618,25 +260,6 @@ function errorCard(msg) {
     esc(msg) +
     "</p></div>"
   );
-}
-
-/* =================================================================
-   THEME TOGGLE
-   ================================================================= */
-function applyTheme() {
-  const dark = localStorage.getItem("mmcp-dark") !== "false";
-  document.documentElement.className = dark ? "dark" : "light";
-  document.getElementById("dark-toggle").innerHTML = dark
-    ? '<i data-lucide="moon"></i>'
-    : '<i data-lucide="sun"></i>';
-  if (typeof lucide !== "undefined") lucide.createIcons();
-  // Re-render charts for color update
-  Object.values(S.charts).forEach((c) => c.update());
-}
-function toggleTheme() {
-  const isDark = document.documentElement.classList.contains("dark");
-  localStorage.setItem("mmcp-dark", isDark ? "false" : "true");
-  applyTheme();
 }
 
 /* =================================================================
@@ -847,9 +470,9 @@ function updateLastTime() {
    PAGE CLEANUP (beforeunload)
    ================================================================= */
 window.addEventListener("beforeunload", function cleanupBeforeUnload() {
-  if (S._sse) {
-    S._sse.close();
-    S._sse = null;
+  if (_NC._sse) {
+    _NC._sse.close();
+    _NC._sse = null;
   }
 });
 

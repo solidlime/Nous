@@ -1,4 +1,5 @@
 
+const { esc, toast, api, truncate, relativeTime, fmtDate } = Nous.Core;
 
 // --- Block CRUD helpers (global scope) ---
 function showCreateBlock() {
