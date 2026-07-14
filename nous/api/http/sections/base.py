@@ -29,6 +29,7 @@ def render_head() -> str:
     <!-- Nous Core Modules (Phase 1: Foundation) -->
     <script src="/static/core/namespace.js" defer></script>
     <script src="/static/core/constants.js" defer></script>
+    <script src="/static/core/store.js" defer></script>
     <script src="/static/core/dom.js" defer></script>
     <script src="/static/core/time.js" defer></script>
     <script src="/static/core/api.js" defer></script>
