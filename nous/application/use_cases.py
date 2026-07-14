@@ -217,6 +217,7 @@ class AppContext:
                     self.settings.portrait_gen,
                     event_bus=self.event_bus,
                     equipment_service=self.equipment_service,
+                    comfyui_url_override=chat_config.image_gen_comfyui_url or None,
                 )
                 if await service.should_auto_generate(
                     state_result.value,
