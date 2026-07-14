@@ -236,23 +236,11 @@ function renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSe
             var tagsHtml = tags.slice(0, 3).map(function(t){ return tagChipHtml(t); }).join(' ');
             var impPct = m.importance != null ? (m.importance * 100) : 0;
             var timeStr = m.created_at ? relativeTime(m.created_at) : '';
-            var memJson = encodeURIComponent(JSON.stringify({
-                memory_key: key, content: m.content || '',
-                tags: tags, emotion: m.emotion || '',
-                emotion_intensity: m.emotion_intensity, importance: m.importance,
-                strength: m.strength, privacy_level: m.privacy_level || '',
-                source_context: m.source_context || '',
-                body_state: m.body_state || null, emotion: m.emotion || "neutral", emotion_intensity: m.emotion_intensity || 0,
-                state_snapped_at: m.state_snapped_at || '',
-                created_at: m.created_at || '', updated_at: m.updated_at || '',
-                _score: m._score != null ? m._score : null,
-                _source: m._source || ''
-            }));
             /* Compact body state + emotion badges */
             var bodyCompactHtml = renderBodyStateCompact(m.body_state);
             var emotionCompactHtml = renderEmotionBadges(m.emotion, m.emotion_intensity);
 
-            html += '<div class=\"memory-compact\" data-memkey=\"' + esc(key) + '\" data-memjson=\"' + memJson + '\">';
+            html += '<div class=\"memory-compact\" data-memkey=\"' + esc(key) + '\">';
             html += '<span class=\"' + cbClass + '\"><input type=\"checkbox\" class=\"mem-checkbox\" data-key=\"' + esc(key) + '\"' + checked + '></span>';
             html += '<span class=\"mem-compact-key\">' + esc(truncate(key, 20)) + '</span>';
             html += '<span class=\"mem-compact-content\">' + esc(truncate(m.content || '', 80)) + '</span>';
@@ -276,20 +264,7 @@ function renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSe
             var scoreHtml = m._score != null ? '<span class=\"badge badge-green\">Score: ' + m._score.toFixed(3) + '</span>' : '';
             /* Compact body state for card view */
             var bodyCardHtml = renderBodyStateCompact(m.body_state);
-            var memJson = encodeURIComponent(JSON.stringify({
-                memory_key: key, content: m.content || '',
-                tags: tags, emotion: m.emotion || '',
-                emotion_intensity: m.emotion_intensity, importance: m.importance,
-                strength: m.strength, privacy_level: m.privacy_level || '',
-                source_context: m.source_context || '',
-                body_state: m.body_state || null, emotion: m.emotion || "neutral", emotion_intensity: m.emotion_intensity || 0,
-                state_snapped_at: m.state_snapped_at || '',
-                created_at: m.created_at || '', updated_at: m.updated_at || '',
-                _score: m._score != null ? m._score : null,
-                _source: m._source || ''
-            }));
-
-            html += '<div class="memory-card" style="cursor:pointer" data-memkey="' + esc(key) + '" data-memjson="' + memJson + '">';
+            html += '<div class="memory-card" style="cursor:pointer" data-memkey="' + esc(key) + '">';
             html += '<div style=\"display:flex;align-items:center;gap:8px\">';
             html += '<span class=\"' + cbClass + '\"><input type=\"checkbox\" class=\"mem-checkbox\" data-key=\"' + esc(key) + '\"' + checked + '></span>';
             html += '<div class=\"memory-key\">' + esc(key) + '</div>';
@@ -346,14 +321,13 @@ function bindMemoryEvents() {
     });
 
     /* Memory card / compact row clicks */
-    document.querySelectorAll('[data-memjson]').forEach(function(card) {
+    document.querySelectorAll('[data-memkey]').forEach(function(card) {
         card.onclick = function(e) {
             /* Don't open modal when clicking checkbox */
             if (e.target.type === 'checkbox') return;
-            try {
-                var mem = JSON.parse(decodeURIComponent(card.getAttribute('data-memjson')));
-                openMemModal(mem);
-            } catch(err) { console.error('Modal parse error', err); }
+            var key = card.getAttribute('data-memkey');
+            if (!key) return;
+            openMemModalByKey(key);
         };
     });
 
@@ -472,6 +446,22 @@ function bindMemoryEvents() {
             tagInput.value = '';
         }
     };
+}
+
+/* ================================================================
+   openMemModalByKey — Fetch memory by key and open modal
+   ================================================================ */
+async function openMemModalByKey(key) {
+    try {
+        var data = await api('/api/memories/' + encodeURIComponent(S.persona) + '/' + encodeURIComponent(key));
+        if (data.memory) {
+            openMemModal(data.memory);
+        } else {
+            toast('Memory not found', 'error');
+        }
+    } catch (e) {
+        toast('Failed to load memory: ' + e.message, 'error');
+    }
 }
 
 /* ================================================================
