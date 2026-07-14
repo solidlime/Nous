@@ -11,6 +11,11 @@ from mcp.shared.exceptions import McpError
 if TYPE_CHECKING:
     from starlette.requests import Request
 
+# Set HF_HOME early, before any module triggers huggingface_hub import
+# This must happen before huggingface_hub.constants is evaluated
+_data_root = os.environ.get("NOUS_DATA_ROOT", os.path.join(os.path.dirname(__file__), "..", "data"))
+os.environ.setdefault("HF_HOME", os.path.join(_data_root, "cache", "huggingface"))
+
 from nous import __version__
 from nous.api.http.routes import register_http_routes
 from nous.api.mcp.middleware import PersonaMiddleware
@@ -108,8 +113,7 @@ def create_app() -> MemoryFastMCP:
     # ディレクトリ構造を確保
     settings.ensure_directories()
 
-    # キャッシュ環境変数を自動設定（未設定の場合のみ）
-    os.environ.setdefault("HF_HOME", str(Path(settings.cache_dir) / "huggingface"))
+    # HF_HOME is already set at module level (before imports) — no need to set again
 
     mcp = MemoryFastMCP(
         "Nous",

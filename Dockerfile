@@ -21,6 +21,7 @@ FROM python:3.12-slim
 
 ENV APP_HOME=/opt/nous \
     NOUS_DATA_ROOT=/opt/nous/data \
+    HF_HOME=/opt/nous/data/cache/huggingface \
     PYTHONUNBUFFERED=1 \
     LANG=C.UTF-8 \
     TZ=UTC
