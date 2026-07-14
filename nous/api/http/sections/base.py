@@ -54,6 +54,15 @@ def render_head() -> str:
     <!-- Existing feature scripts -->
     <script src="/static/chat.js" defer></script>
     <script src="/static/portrait.js" defer></script>
+    <!-- Feature page scripts (defer so N.Core is available) -->
+    <script src="/static/overview.js" defer></script>
+    <script src="/static/memories.js" defer></script>
+    <script src="/static/settings.js" defer></script>
+    <script src="/static/timeline.js" defer></script>
+    <script src="/static/activity.js" defer></script>
+    <script src="/static/graph.js" defer></script>
+    <!-- Base (last — needs load functions defined) -->
+    <script src="/static/base.js" defer></script>
 </head>"""
 
 
@@ -90,8 +99,9 @@ def render_nav(tabs: list[dict]) -> str:
 
 
 def render_utilities_js() -> str:
-    """Return a ``<script>`` tag loading the shared utility JavaScript."""
-    return '<script src="/static/base.js"></script>'
+    """Return a ``<script>`` tag loading the shared utility JavaScript.
+    Now handled via defer in render_head() — returns empty."""
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -138,22 +148,20 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str, initial_p
          "            </select>\n"
          '            <button id="dark-toggle" class="glass-btn" title="Toggle theme"><i data-lucide="moon"></i></button>\n'
          "        </div>\n"
-        "    </header>\n"
-        "\n" + nav_html + "\n"
-        "\n"
-        '    <main class="main-content">\n' + tab_contents + "\n"
-        "    </main>\n"
-        "\n"
-        "    <!-- Memory Detail Modal -->\n"
-        '    <div id="mem-modal-overlay" class="mem-modal-overlay" onclick="if(event.target===this)closeMemModal()">\n'
-        '        <div class="mem-modal" id="mem-modal-content"></div>\n'
-        "    </div>\n"
-        "\n"
-        "    <!-- Toast container -->\n"
-        '    <div id="toast-container" class="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>\n'
-        "\n" + persona_init_script + render_utilities_js() + "\n"
-        "<script>\n" + tab_js + "\n"
-        "</script>\n"
-        "</body>\n"
-        "</html>"
-    )
+         "    </header>\n"
+         "\n" + nav_html + "\n"
+         "\n"
+         '    <main class="main-content">\n' + tab_contents + "\n"
+         "    </main>\n"
+         "\n"
+         "    <!-- Memory Detail Modal -->\n"
+         '    <div id="mem-modal-overlay" class="mem-modal-overlay" onclick="if(event.target===this)closeMemModal()">\n'
+         '        <div class="mem-modal" id="mem-modal-content"></div>\n'
+         "    </div>\n"
+         "\n"
+         "    <!-- Toast container -->\n"
+         '    <div id="toast-container" class="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>\n'
+         "\n" + persona_init_script + "\n"
+         "</body>\n"
+         "</html>"
+     )

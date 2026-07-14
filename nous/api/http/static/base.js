@@ -724,5 +724,9 @@ document.addEventListener("DOMContentLoaded", function () {
   if (tablist) tablist.setAttribute("role", "tablist");
 });
 
-// Boot
-init();
+// Boot — defer-safe: wait for all deferred scripts to load
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
