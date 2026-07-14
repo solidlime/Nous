@@ -1010,7 +1010,7 @@ function animateCards(container) {
 }
 
 /* =================================================================
-   KEYBOARD SHORTCUTS (Ctrl+F / Escape)
+   KEYBOARD SHORTCUTS (Ctrl+F / Escape / ? help)
    ================================================================= */
 document.addEventListener("keydown", function (e) {
   if ((e.ctrlKey || e.metaKey) && e.key === "f") {
@@ -1024,6 +1024,63 @@ document.addEventListener("keydown", function (e) {
     if (searchInput) {
       e.preventDefault();
       searchInput.focus();
+    }
+  }
+});
+
+/* Keyboard shortcut help overlay — toggle with ? key */
+function toggleShortcutHelp() {
+  var existing = document.getElementById("shortcut-help-overlay");
+  if (existing) {
+    existing.remove();
+    return;
+  }
+  var overlay = document.createElement("div");
+  overlay.id = "shortcut-help-overlay";
+  overlay.className = "shortcut-help-overlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-label", "Keyboard Shortcuts");
+  overlay.innerHTML =
+    '<div class="shortcut-help-modal">' +
+    '<div class="shortcut-help-header">' +
+    '<span>⌨ Keyboard Shortcuts</span>' +
+    '<button class="shortcut-help-close" onclick="toggleShortcutHelp()" aria-label="Close shortcuts"><i data-lucide="x"></i></button>' +
+    "</div>" +
+    '<div class="shortcut-help-body">' +
+    "<table>" +
+    "<tr><td><kbd>Alt+1</kbd>–<kbd>9</kbd></td><td>Switch tabs</td></tr>" +
+    "<tr><td><kbd>Alt+0</kbd></td><td>Switch to Activity tab</td></tr>" +
+    "<tr><td><kbd>Ctrl+F</kbd> / <kbd>⌘F</kbd></td><td>Focus search input</td></tr>" +
+    "<tr><td><kbd>Esc</kbd></td><td>Close modals / panels</td></tr>" +
+    "<tr><td><kbd>?</kbd></td><td>Toggle this help</td></tr>" +
+    "</table>" +
+    "</div></div>";
+  document.body.appendChild(overlay);
+  requestAnimationFrame(function () {
+    overlay.classList.add("show");
+    overlay.querySelector(".shortcut-help-close").focus();
+  });
+  if (typeof lucide !== "undefined") lucide.createIcons();
+}
+
+/* Global ? key listener for shortcut help */
+document.addEventListener("keydown", function (e) {
+  /* ? or Shift+/ on US/JP keyboards */
+  if (e.key === "?" || (e.key === "/" && e.shiftKey)) {
+    /* Don't trigger when focused on input/textarea */
+    var tag = document.activeElement && document.activeElement.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    e.preventDefault();
+    toggleShortcutHelp();
+  }
+});
+/* Close shortcut help on Escape */
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape") {
+    var overlay = document.getElementById("shortcut-help-overlay");
+    if (overlay && overlay.classList.contains("show")) {
+      e.preventDefault();
+      toggleShortcutHelp();
     }
   }
 });

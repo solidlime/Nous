@@ -806,3 +806,101 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     transition: top 0.2s ease;
 }
 .skip-link:focus { top: 16px; }
+
+/* ============================================================
+   KEYBOARD SHORTCUT HELP OVERLAY
+   ============================================================ */
+.shortcut-help-overlay {
+    position: fixed; inset: 0; z-index: 10001;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center;
+    visibility: hidden; opacity: 0;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+.shortcut-help-overlay.show { visibility: visible; opacity: 1; }
+.shortcut-help-modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    max-width: 420px; width: 90%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    overflow: hidden;
+}
+.shortcut-help-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--glass-border);
+    font-weight: 600; font-size: 0.9rem;
+    color: var(--text-primary);
+}
+.shortcut-help-close {
+    background: none; border: none; color: var(--text-muted);
+    cursor: pointer; font-size: 1.2rem; padding: 2px 6px;
+    border-radius: 6px; transition: all 0.15s;
+}
+.shortcut-help-close:hover { color: var(--text-primary); background: var(--glass-bg); }
+.shortcut-help-body { padding: 14px 18px; }
+.shortcut-help-body table { width: 100%; border-collapse: collapse; }
+.shortcut-help-body td {
+    padding: 8px 4px; font-size: 0.82rem;
+    border-bottom: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+}
+.shortcut-help-body td:first-child { white-space: nowrap; padding-right: 16px; }
+.shortcut-help-body td:last-child { width: 100%; color: var(--text-muted); }
+.shortcut-help-body tr:last-child td { border-bottom: none; }
+.shortcut-help-body kbd {
+    display: inline-block; padding: 2px 7px; margin: 0 2px;
+    font-size: 0.72rem; font-family: inherit;
+    border-radius: 5px;
+    background: rgba(167,139,250,0.12);
+    border: 1px solid rgba(167,139,250,0.25);
+    color: var(--accent-purple);
+}
+
+/* ============================================================
+   FOCUS-VISIBLE INDICATORS (Accessibility)
+   ============================================================ */
+.memory-card:focus-visible {
+    outline: 2px solid var(--accent-purple);
+    outline-offset: -2px;
+    border-radius: 8px;
+}
+.setting-row:focus-within {
+    background: rgba(167,139,250,0.04);
+    border-radius: 6px;
+}
+.act-event:focus-visible {
+    outline: 2px solid var(--accent-purple);
+    outline-offset: -2px;
+    border-radius: 6px;
+}
+.tl-detail-panel:focus-visible {
+    outline: 2px solid var(--accent-purple);
+    outline-offset: -2px;
+}
+#graph-detail-panel:focus-visible {
+    outline: 2px solid var(--accent-purple);
+    outline-offset: -2px;
+}
+.chat-message:focus-visible {
+    outline: 2px solid var(--accent-purple);
+    outline-offset: 2px;
+    border-radius: 8px;
+}
+.tab-bar .tab-btn:focus-visible {
+    outline: 2px solid var(--accent-purple);
+    outline-offset: 2px;
+    border-radius: 10px;
+}
+
+/* ============================================================
+   TAB BAR GRAB CURSOR (Mobile affordance)
+   ============================================================ */
+.tab-bar {
+    cursor: grab;
+}
+.tab-bar:active {
+    cursor: grabbing;
+}
