@@ -36,6 +36,7 @@ def render_head() -> str:
     <script src="/static/core/modal.js" defer></script>
     <script src="/static/core/theme.js" defer></script>
     <script src="/static/core/sse.js" defer></script>
+    <script src="/static/core/adapter.js" defer></script>
     <!-- Existing feature scripts -->
     <script src="/static/chat.js" defer></script>
     <script src="/static/portrait.js" defer></script>
