@@ -41,6 +41,3 @@ class TestImportanceToLabel:
     def test_low_negative(self):
         """Negative importance → low (clamped elsewhere, but should handle gracefully)."""
         assert importance_to_label(-0.1) == "low"
-
-
-

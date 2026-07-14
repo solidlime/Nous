@@ -375,7 +375,11 @@ def register_tools(mcp: FastMCP) -> None:
             return json.dumps({"ok": False, "error": "scene is required"}, ensure_ascii=False)
         p = _resolve_persona()
         return await _tool_persona_portrait_with_scene(
-            AppContextRegistry.get(p), p, scene=scene, style=style, reference_image=reference_image,
+            AppContextRegistry.get(p),
+            p,
+            scene=scene,
+            style=style,
+            reference_image=reference_image,
         )
 
     # irodori_tts

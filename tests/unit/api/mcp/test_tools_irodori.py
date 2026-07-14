@@ -66,6 +66,7 @@ class TestIrodoriEnabled:
             assert data["ok"] is True
             assert "audio_base64" in data
 
+
 class TestIrodoriVoices:
     """irodori_voices tool — voice listing."""
 

@@ -413,7 +413,11 @@ async def _build_context_section(
         if active_goals:
             commit_lines: list[str] = []
             for g in active_goals:
-                ts = relative_time_str(getattr(g, "updated_at", None) or g.created_at) if getattr(g, "created_at", None) else ""
+                ts = (
+                    relative_time_str(getattr(g, "updated_at", None) or g.created_at)
+                    if getattr(g, "created_at", None)
+                    else ""
+                )
                 ts_str = f" ({ts})" if ts else ""
                 commit_lines.append(f"  🎯 [Goal] {g.content}{ts_str}")
             t3.append("Active commitments:\n" + "\n".join(commit_lines))

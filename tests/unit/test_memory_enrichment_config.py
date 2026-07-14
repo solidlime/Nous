@@ -46,9 +46,7 @@ class TestGetEffectiveApiKey:
         assert config.get_effective_api_key(settings) == ""
 
     @patch("nous.config.runtime_config.RuntimeConfigManager.get_effective_value")
-    def test_runtime_config_override(
-        self, mock_get_effective_value
-    ):
+    def test_runtime_config_override(self, mock_get_effective_value):
         """Stage 3: RuntimeConfigManager override is used when all prior stages are empty."""
         mock_get_effective_value.return_value = ("sk-override", "override")
         config = MemoryEnrichmentConfig(api_key=None, provider="openrouter")
@@ -57,14 +55,10 @@ class TestGetEffectiveApiKey:
         settings.openai_api_key = ""
         settings.anthropic_api_key = ""
         assert config.get_effective_api_key(settings) == "sk-override"
-        mock_get_effective_value.assert_called_once_with(
-            "api_keys", "openrouter_api_key"
-        )
+        mock_get_effective_value.assert_called_once_with("api_keys", "openrouter_api_key")
 
     @patch("nous.config.runtime_config.RuntimeConfigManager.get_effective_value")
-    def test_global_key_takes_priority_over_runtime_config(
-        self, mock_get_effective_value
-    ):
+    def test_global_key_takes_priority_over_runtime_config(self, mock_get_effective_value):
         """Stage 2 global key should be returned before checking RuntimeConfigManager."""
         mock_get_effective_value.return_value = ("sk-override", "override")
         config = MemoryEnrichmentConfig(api_key=None, provider="openrouter")

@@ -468,6 +468,3 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
     except Exception as e:
         logger.warning("run_memory_llm failed: %s", e)
         return {}
-
-
-

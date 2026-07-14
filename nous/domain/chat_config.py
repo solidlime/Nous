@@ -291,9 +291,9 @@ class ChatConfigRepository:
             "retrieval_rrf_k, "
             "dynamic_tool_selection, "
             "irodori_enabled, portrait_enabled, "
-             "voice_auto_play, voice_emotion_link, voice_model, "
-             "disabled_tools "
-             "FROM chat_settings WHERE persona = ?",
+            "voice_auto_play, voice_emotion_link, voice_model, "
+            "disabled_tools "
+            "FROM chat_settings WHERE persona = ?",
             (persona,),
         )
         row = cursor.fetchone()

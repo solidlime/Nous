@@ -80,7 +80,10 @@ class CompressStep:
         if getattr(config, "context_compress_system_prompt", True):
             old_len = len(turn_ctx.system_prompt)
             turn_ctx.system_prompt = self._trim_system_prompt(
-                turn_ctx.system_prompt, config.context_compression_mode, total, budget,
+                turn_ctx.system_prompt,
+                config.context_compression_mode,
+                total,
+                budget,
             )
             logger.debug(
                 "CompressStep: system prompt trimmed %d → %d chars",
@@ -108,7 +111,11 @@ class CompressStep:
 
         # Stage 3: LLM-based summary of old conversation turns (runs BEFORE truncation)
         # Only runs when we're over budget and there's enough history worth summarizing
-        if total > budget and getattr(config, "context_compress_history", True) and self._should_summarize(messages, config):
+        if (
+            total > budget
+            and getattr(config, "context_compress_history", True)
+            and self._should_summarize(messages, config)
+        ):
             try:
                 summary = await self._summarize_old_turns(
                     config=config,
@@ -222,7 +229,12 @@ class CompressStep:
         from nous.infrastructure.llm.factory import get_provider
 
         try:
-            provider = get_provider(config.provider, config.get_effective_api_key(), config.get_effective_model(), config.get_effective_base_url())
+            provider = get_provider(
+                config.provider,
+                config.get_effective_api_key(),
+                config.get_effective_model(),
+                config.get_effective_base_url(),
+            )
         except Exception:
             logger.warning("CompressStep: Stage 4 — provider init failed")
             return None

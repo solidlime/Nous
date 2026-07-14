@@ -38,10 +38,7 @@ class PollinationsImageProvider(ImageGenProvider):
         async with httpx.AsyncClient(timeout=30.0) as client:
             images: list[GeneratedImage] = []
             for _ in range(n):
-                url = (
-                    f"https://image.pollinations.ai/prompt/{encoded_prompt}"
-                    f"?width={width}&height={height}&nologo=true"
-                )
+                url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&nologo=true"
                 resp = await client.get(url)
                 resp.raise_for_status()
                 img_base64 = base64.b64encode(resp.content).decode("utf-8")

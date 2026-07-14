@@ -21,9 +21,21 @@ logger = get_logger(__name__)
 # Settings metadata: which settings can be hot-reloaded
 SETTINGS_META: dict[str, dict[str, dict]] = {
     "api_keys": {
-        "anthropic_api_key": {"hot_reload": True, "description": "Global fallback Anthropic API key (ChatConfig per-persona key takes priority)", "masked": True},
-        "openai_api_key": {"hot_reload": True, "description": "Global fallback OpenAI API key (ChatConfig per-persona key takes priority)", "masked": True},
-        "openrouter_api_key": {"hot_reload": True, "description": "Global fallback OpenRouter API key (ChatConfig per-persona key takes priority)", "masked": True},
+        "anthropic_api_key": {
+            "hot_reload": True,
+            "description": "Global fallback Anthropic API key (ChatConfig per-persona key takes priority)",
+            "masked": True,
+        },
+        "openai_api_key": {
+            "hot_reload": True,
+            "description": "Global fallback OpenAI API key (ChatConfig per-persona key takes priority)",
+            "masked": True,
+        },
+        "openrouter_api_key": {
+            "hot_reload": True,
+            "description": "Global fallback OpenRouter API key (ChatConfig per-persona key takes priority)",
+            "masked": True,
+        },
     },
     "server": {
         "host": {"hot_reload": False, "description": "Server bind address"},
@@ -58,9 +70,18 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "min_chars": {"hot_reload": True, "description": "Min content length to trigger enrichment"},
     },
     "irodori": {
-        "url": {"hot_reload": True, "description": "Irodori-TTS server URL (OpenAI-compatible endpoint). Global default; ChatConfig per-persona settings override."},
-        "voice": {"hot_reload": True, "description": "Default voice name. Global default; ChatConfig per-persona settings override."},
-        "timeout_seconds": {"hot_reload": True, "description": "Generation timeout (seconds). Global default; ChatConfig per-persona settings override."},
+        "url": {
+            "hot_reload": True,
+            "description": "Irodori-TTS server URL (OpenAI-compatible endpoint). Global default; ChatConfig per-persona settings override.",
+        },
+        "voice": {
+            "hot_reload": True,
+            "description": "Default voice name. Global default; ChatConfig per-persona settings override.",
+        },
+        "timeout_seconds": {
+            "hot_reload": True,
+            "description": "Generation timeout (seconds). Global default; ChatConfig per-persona settings override.",
+        },
     },
     "auto_capture": {
         "enabled": {"hot_reload": True, "description": "Auto-capture memories at end of each chat turn"},
@@ -68,20 +89,47 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
     },
     "memorag": {
         "enabled": {"hot_reload": True, "description": "Enable MemoryContextSnapshot building"},
-        "clue_generation_enabled": {"hot_reload": True, "description": "Enable LLM-based clue generation for memorag search mode"},
-        "rebuild_threshold": {"hot_reload": True, "description": "Rebuild snapshot when memory count increases by this many"},
+        "clue_generation_enabled": {
+            "hot_reload": True,
+            "description": "Enable LLM-based clue generation for memorag search mode",
+        },
+        "rebuild_threshold": {
+            "hot_reload": True,
+            "description": "Rebuild snapshot when memory count increases by this many",
+        },
         "snapshot_top_memories": {"hot_reload": True, "description": "Number of top-importance memories in snapshot"},
-        "snapshot_interval_hours": {"hot_reload": True, "description": "Minimum hours between automatic snapshot rebuilds"},
+        "snapshot_interval_hours": {
+            "hot_reload": True,
+            "description": "Minimum hours between automatic snapshot rebuilds",
+        },
     },
     "portrait_gen": {
-        "provider": {"hot_reload": True, "description": "Generation backend (comfyui/openai/stability). Global default; ChatConfig per-persona settings override."},
-        "comfyui_url": {"hot_reload": True, "description": "ComfyUI API address. Global fallback; ChatConfig.image_gen_comfyui_url takes priority."},
-        "auto_generate": {"hot_reload": True, "description": "Auto-generate portrait on emotion change. Global default; ChatConfig per-persona settings override."},
-        "generate_interval_min": {"hot_reload": True, "description": "Minimum minutes between auto-generations. Global default."},
+        "provider": {
+            "hot_reload": True,
+            "description": "Generation backend (comfyui/openai/stability). Global default; ChatConfig per-persona settings override.",
+        },
+        "comfyui_url": {
+            "hot_reload": True,
+            "description": "ComfyUI API address. Global fallback; ChatConfig.image_gen_comfyui_url takes priority.",
+        },
+        "auto_generate": {
+            "hot_reload": True,
+            "description": "Auto-generate portrait on emotion change. Global default; ChatConfig per-persona settings override.",
+        },
+        "generate_interval_min": {
+            "hot_reload": True,
+            "description": "Minimum minutes between auto-generations. Global default.",
+        },
         "size": {"hot_reload": True, "description": "Preview size. Global default."},
         "quality": {"hot_reload": True, "description": "Generation quality. Global default."},
-        "emotion_threshold": {"hot_reload": True, "description": "Emotion intensity change threshold for regeneration. Global default."},
-        "max_monthly_budget": {"hot_reload": True, "description": "Monthly USD cap for cloud providers. Global default."},
+        "emotion_threshold": {
+            "hot_reload": True,
+            "description": "Emotion intensity change threshold for regeneration. Global default.",
+        },
+        "max_monthly_budget": {
+            "hot_reload": True,
+            "description": "Monthly USD cap for cloud providers. Global default.",
+        },
         "healthcheck_enabled": {"hot_reload": True, "description": "Periodically check if ComfyUI is reachable."},
         "healthcheck_interval_seconds": {"hot_reload": True, "description": "Interval between health checks."},
     },
