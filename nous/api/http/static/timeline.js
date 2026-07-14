@@ -2,48 +2,50 @@
 /* =================================================================
    MEMORY TIMELINE
    ================================================================= */
-const TL_EMOTION_COLORS = {
-    joy:         { bg: 'rgba(251,191,36,0.15)',  border: '#FBBF24', emoji: '<i data-lucide="smile"></i>' },
-    sadness:     { bg: 'rgba(96,165,250,0.15)',  border: '#60A5FA', emoji: '<i data-lucide="frown"></i>' },
-    anger:       { bg: 'rgba(248,113,113,0.15)', border: '#F87171', emoji: '<i data-lucide="angry"></i>' },
-    love:        { bg: 'rgba(244,114,182,0.15)', border: '#F472B6', emoji: '<i data-lucide="heart"></i>' },
-    fear:        { bg: 'rgba(167,139,250,0.15)', border: '#A78BFA', emoji: '<i data-lucide="skull"></i>' },
-    surprise:    { bg: 'rgba(52,211,153,0.15)',  border: '#34D399', emoji: '<i data-lucide="sparkles"></i>' },
-    neutral:     { bg: 'rgba(156,163,175,0.15)', border: '#9CA3AF', emoji: '<i data-lucide="meh"></i>' },
-    excitement:  { bg: 'rgba(245,158,11,0.15)',  border: '#F59E0B', emoji: '<i data-lucide="star"></i>' },
-    pride:       { bg: 'rgba(129,140,248,0.15)', border: '#818CF8', emoji: '<i data-lucide="feather"></i>' },
-    shame:       { bg: 'rgba(251,113,133,0.15)', border: '#FB7185', emoji: '<i data-lucide="eye-off"></i>' },
-    curiosity:   { bg: 'rgba(45,212,191,0.15)',  border: '#2DD4BF', emoji: '<i data-lucide="brain-circuit"></i>' },
-    anxiety:     { bg: 'rgba(248,113,113,0.12)', border: '#F87171', emoji: '<i data-lucide="activity"></i>' },
-    frustration: { bg: 'rgba(251,146,60,0.15)',  border: '#FB923C', emoji: '<i data-lucide="alert-triangle"></i>' },
-    nostalgia:   { bg: 'rgba(167,139,250,0.12)', border: '#A78BFA', emoji: '<i data-lucide="sunrise"></i>' },
-    trust:       { bg: 'rgba(52,211,153,0.12)',  border: '#34D399', emoji: '<i data-lucide="handshake"></i>' },
-    loneliness:  { bg: 'rgba(148,163,184,0.15)', border: '#94A3B8', emoji: '<i data-lucide="frown"></i>' },
-    contentment: { bg: 'rgba(134,239,172,0.15)', border: '#86EFAC', emoji: '<i data-lucide="smile-plus"></i>' },
-    awe:         { bg: 'rgba(192,132,252,0.15)', border: '#C084FC', emoji: '<i data-lucide="sun"></i>' },
-    relief:      { bg: 'rgba(110,231,183,0.15)', border: '#6EE7B7', emoji: '<i data-lucide="wind"></i>' },
-    disgust:     { bg: 'rgba(163,230,53,0.15)',  border: '#A3E635', emoji: '<i data-lucide="thumbs-down"></i>' },
-    guilt:       { bg: 'rgba(252,165,165,0.15)', border: '#FCA5A5', emoji: '<i data-lucide="heart-crack"></i>' },
+/* Timeline emoji icons — border/bg derived from EMOTION_COLORS global */
+const TL_EMOJI = {
+    joy: '<i data-lucide="smile"></i>',   sadness: '<i data-lucide="frown"></i>',
+    anger: '<i data-lucide="angry"></i>',  love: '<i data-lucide="heart"></i>',
+    fear: '<i data-lucide="skull"></i>',  surprise: '<i data-lucide="sparkles"></i>',
+    neutral: '<i data-lucide="meh"></i>', excitement: '<i data-lucide="star"></i>',
+    pride: '<i data-lucide="feather"></i>', shame: '<i data-lucide="eye-off"></i>',
+    curiosity: '<i data-lucide="brain-circuit"></i>', anxiety: '<i data-lucide="activity"></i>',
+    frustration: '<i data-lucide="alert-triangle"></i>', nostalgia: '<i data-lucide="sunrise"></i>',
+    trust: '<i data-lucide="handshake"></i>', loneliness: '<i data-lucide="frown"></i>',
+    contentment: '<i data-lucide="smile-plus"></i>', awe: '<i data-lucide="sun"></i>',
+    relief: '<i data-lucide="wind"></i>', disgust: '<i data-lucide="thumbs-down"></i>',
+    guilt: '<i data-lucide="heart-crack"></i>',
 };
 
 function getEmotionStyle(emotion) {
-    return TL_EMOTION_COLORS[emotion] || TL_EMOTION_COLORS['neutral'];
+    var c = EMOTION_COLORS[emotion] || '#94a3b8';
+    var r = parseInt(c.slice(1,3), 16);
+    var g = parseInt(c.slice(3,5), 16);
+    var b = parseInt(c.slice(5,7), 16);
+    return {
+        bg: 'rgba(' + r + ',' + g + ',' + b + ',0.15)',
+        border: c,
+        emoji: TL_EMOJI[emotion] || '<i data-lucide="meh"></i>',
+    };
 }
 
 function buildEmotionLegend() {
     const legend = document.getElementById('tl-legend');
     if (!legend) return;
+    var emos = Object.keys(EMOTION_COLORS).sort();
     let html = '';
-    for (const [emo, style] of Object.entries(TL_EMOTION_COLORS)) {
-        html += '<span><span class="tl-legend-dot" style="background:' + style.border + '"></span>' + style.emoji + ' ' + emo + '</span>';
+    for (var i = 0; i < emos.length; i++) {
+        var style = getEmotionStyle(emos[i]);
+        html += '<span><span class="tl-legend-dot" style="background:' + style.border + '"></span>' + style.emoji + ' ' + emos[i] + '</span>';
     }
     legend.innerHTML = html;
     // Populate emotion filter dropdown
     const sel = document.getElementById('tl-emotion');
     if (sel) {
         sel.innerHTML = '<option value="">すべて</option>';
-        for (const emo of Object.keys(TL_EMOTION_COLORS).sort()) {
-            sel.innerHTML += '<option value="' + emo + '">' + TL_EMOTION_COLORS[emo].emoji + ' ' + emo + '</option>';
+        for (var j = 0; j < emos.length; j++) {
+            var s = getEmotionStyle(emos[j]);
+            sel.innerHTML += '<option value="' + emos[j] + '">' + s.emoji + ' ' + emos[j] + '</option>';
         }
     }
     setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
@@ -170,8 +172,7 @@ function showTimelineDetail(mem) {
     var bodyHtml = '';
     if (mem.body_state) {
         var bodyKeys = ['fatigue','warmth','arousal','heart_rate','pain'];
-        var bodyLabels = {fatigue:'<i data-lucide="flame"></i> Fatigue',warmth:'<i data-lucide="flower"></i> Warmth',arousal:'<i data-lucide="zap"></i> Arousal',heart_rate:'<i data-lucide="heart-pulse"></i> Heart',pain:'<i data-lucide="activity"></i> Pain'};
-        var bodyColors = {fatigue:'linear-gradient(90deg,#f87171,#fca5a5)',warmth:'linear-gradient(90deg,#f9a8d4,#fda4af)',arousal:'linear-gradient(90deg,#a78bfa,#c4b5fd)',heart_rate:'linear-gradient(90deg,#ef4444,#fca5a5)',pain:'linear-gradient(90deg,#f59e0b,#fcd34d)'};
+        /* Constants now from core/constants.js via adapter globals */
         var hasBody = bodyKeys.some(function(k){ return mem.body_state[k] != null; });
         if (hasBody) {
             bodyHtml += '<div style="margin-bottom:10px;"><div class="tl-detail-label">Body State</div>';
@@ -180,9 +181,9 @@ function showTimelineDetail(mem) {
                     var val = mem.body_state[k];
                     var pct = Math.round(val * 100);
                     bodyHtml += '<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">';
-                    bodyHtml += '<span style="font-size:0.7rem;color:var(--text-muted);min-width:70px">' + bodyLabels[k] + '</span>';
+                    bodyHtml += '<span style="font-size:0.7rem;color:var(--text-muted);min-width:70px">' + BODY_LABELS[k] + '</span>';
                     bodyHtml += '<div style="flex:1;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden">';
-                    bodyHtml += '<div style="height:100%;width:' + pct + '%;background:' + bodyColors[k] + ';border-radius:2px"></div>';
+                    bodyHtml += '<div style="height:100%;width:' + pct + '%;background:' + BODY_BAR_COLORS[k] + ';border-radius:2px"></div>';
                     bodyHtml += '</div>';
                     bodyHtml += '<span style="font-size:0.7rem;color:var(--text-muted);min-width:28px;text-align:right">' + pct + '%</span>';
                     bodyHtml += '</div>';
