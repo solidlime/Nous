@@ -460,7 +460,7 @@ def register_chat_routes(mcp) -> None:
             {
                 "filename": safe_name,
                 "url": f"/api/chat/{persona}/attachment/{safe_name}",
-                "workspace_path": f"/uploads/{safe_name}",
+                "workspace_path": f"/uploads/{persona}/{safe_name}",
                 "mime_type": mime_type,
                 "size": size,
             }
