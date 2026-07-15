@@ -577,27 +577,6 @@ function renderMcpServerTools(listEl, srv) {
   listEl.appendChild(wrapper);
 }
 
-function addMcpServer() {
-    const nameInput = document.getElementById("chat-mcp-add-name");
-    const urlInput = document.getElementById("chat-mcp-add-url");
-    const name = nameInput.value.trim();
-    const url = urlInput.value.trim();
-    if (!name || !url) {
-        alert("サーバー名とURLを入力してください");
-        return;
-    }
-    // Add to N.Chat.state.mcpServers (array of server objects)
-    if (!N.Chat.state.mcpServers) N.Chat.state.mcpServers = [];
-    N.Chat.state.mcpServers.push({ name: name, url: url, transport: "http" });
-    // Re-render
-    renderMcpJson(N.Chat.state.mcpServers);
-    // Clear inputs
-    nameInput.value = "";
-    urlInput.value = "";
-    // Auto-fetch tools
-    fetchMcpTools();
-}
-
 function parseMcpJson() {
   const ta = document.getElementById("chat-mcp-json");
   const errEl = document.getElementById("chat-mcp-json-error");
@@ -769,7 +748,6 @@ window.applyChatConfig = applyChatConfig;
 window.onChatProviderChange = onChatProviderChange;
 window.saveChatConfig = saveChatConfig;
 window.renderMcpJson = renderMcpJson;
-window.addMcpServer = addMcpServer;
 window.parseMcpJson = parseMcpJson;
 window.renderSkillsList = renderSkillsList;
 window.loosenJson = loosenJson;

@@ -253,88 +253,15 @@ function showImageGenResult(evt) {
 // ------------------------------------------------------------------
 async function fetchMcpTools() {
   if (!S.persona) return;
-  const list = document.getElementById("chat-mcp-tools-list");
-  if (!list) return;
-  list.innerHTML = '<span style="font-size:0.7rem;color:var(--text-muted);">読み込み中...</span>';
   try {
     const data = await api("/api/chat/" + encodeURIComponent(S.persona) + "/mcp-tools");
     CHAT.mcpTools = data.tools || [];
     CHAT.mcpErrors = data.errors || [];
-    renderMcpTools();
-    // Update per-server tool display in server list
     if (typeof renderMcpJson === 'function') {
       renderMcpJson(CHAT.mcpServers || []);
     }
   } catch (e) {
-    list.innerHTML = '<span style="font-size:0.7rem;color:var(--accent-red);">取得失敗: ' + esc(e.message) + '</span>';
-  }
-}
-
-function renderMcpTools() {
-  const list = document.getElementById("chat-mcp-tools-list");
-  if (!list) return;
-  // Clear previous content
-  while (list.firstChild) list.removeChild(list.firstChild);
-  const tools = CHAT.mcpTools || [];
-  if (!tools.length) {
-    const span = document.createElement("span");
-    span.style.cssText = "font-size:0.7rem;color:var(--text-muted);";
-    span.textContent = "ツールがありません";
-    list.appendChild(span);
-    return;
-  }
-  if (CHAT.mcpErrors && CHAT.mcpErrors.length > 0) {
-    const errDiv = document.createElement("div");
-    errDiv.style.cssText = "font-size:0.65rem;color:var(--accent-red);margin-bottom:4px;";
-    errDiv.textContent = "⚠ " + CHAT.mcpErrors.join("; ");
-    list.appendChild(errDiv);
-  }
-  for (const tool of tools) {
-    const enabled = !CHAT.disabledTools.has(tool.name);
-    const shortDesc = (tool.description || "").slice(0, 60) + ((tool.description || "").length > 60 ? "..." : "");
-
-    const row = document.createElement("div");
-    row.style.cssText = "display:flex;align-items:center;gap:6px;padding:2px 0;font-size:0.7rem;";
-
-    // Toggle switch
-    const label = document.createElement("label");
-    label.className = "mcp-tool-toggle";
-    label.title = tool.name;
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.checked = enabled;
-    input.dataset.toolName = tool.name;
-    input.addEventListener("change", function() {
-      toggleTool(this.dataset.toolName);
-    });
-    const slider = document.createElement("span");
-    slider.className = "mcp-tool-toggle-slider";
-    label.appendChild(input);
-    label.appendChild(slider);
-    row.appendChild(label);
-
-    // Tool name
-    const nameSpan = document.createElement("span");
-    nameSpan.style.cssText = "font-weight:500;flex-shrink:0;";
-    nameSpan.textContent = tool.name;
-    row.appendChild(nameSpan);
-
-    // Server badge
-    if (tool.server) {
-      const badge = document.createElement("span");
-      badge.className = "chat-badge";
-      badge.style.cssText = "font-size:0.6rem;flex-shrink:0;";
-      badge.textContent = tool.server;
-      row.appendChild(badge);
-    }
-
-    // Description
-    const descSpan = document.createElement("span");
-    descSpan.style.cssText = "color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
-    descSpan.textContent = shortDesc;
-    row.appendChild(descSpan);
-
-    list.appendChild(row);
+    console.warn('MCP tools fetch failed:', e);
   }
 }
 
@@ -353,7 +280,6 @@ function toggleTool(toolName) {
 N.Chat.tools = {
   append: appendToolEvent,
   fetch: fetchMcpTools,
-  render: renderMcpTools,
   toggle: toggleTool,
 };
 
@@ -364,7 +290,6 @@ window.execCodeBlock = execCodeBlock;
 window.showImageGenSpinner = showImageGenSpinner;
 window.showImageGenResult = showImageGenResult;
 window.fetchMcpTools = fetchMcpTools;
-window.renderMcpTools = renderMcpTools;
 window.toggleTool = toggleTool;
 
 })(window.Nous);

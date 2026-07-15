@@ -357,11 +357,6 @@ def render_chat_tab() -> str:
                             <summary><i data-lucide="battery-charging"></i> MCPサーバー <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'tools')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body" id="chat-mcp-section">
                                 <div id="chat-mcp-server-list" style="display:flex;flex-direction:column;gap:2px;margin-bottom:8px;"></div>
-                                <div class="mcp-add-form" style="margin-bottom: 8px; display: flex; gap: 4px;">
-                                    <input type="text" id="chat-mcp-add-name" placeholder="Server name" class="glass-input" style="flex: 1;">
-                                    <input type="text" id="chat-mcp-add-url" placeholder="http://host:port/mcp" class="glass-input" style="flex: 2;">
-                                    <button onclick="addMcpServer()" class="glass-btn" style="white-space: nowrap;">追加</button>
-                                </div>
                                 <div>
                                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                                         <div style="font-size:0.72rem;color:var(--text-muted);">Claude の mcp.json 形式で貼り付け・編集できます</div>
@@ -371,14 +366,6 @@ def render_chat_tab() -> str:
                                         style="resize:vertical;min-height:100px;font-family:monospace;font-size:0.73rem;line-height:1.45;"
                                         placeholder='[{{&#10;  "name": "memory-mcp",&#10;  "command": "{sys.executable}",&#10;  "args": ["-m", "nous.main"],&#10;  "env": {{}}&#10;}}]'></textarea>
                                     <div id="chat-mcp-json-error" style="font-size:0.72rem;color:var(--accent-red);margin-top:3px;display:none;"></div>
-                                </div>
-                                <!-- MCP Tools toggle list -->
-                                <div style="margin-top:8px;">
-                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                                        <div class="chat-field-label" style="margin:0;">全ツール一覧 <span style="color:var(--text-muted);font-size:0.6rem;">（サーバー別表示は上）</span></div>
-                                        <button type="button" class="mem-action-btn" style="font-size:0.65rem;padding:2px 8px;" onclick="fetchMcpTools()">リフレッシュ</button>
-                                    </div>
-                                    <div id="chat-mcp-tools-list" style="display:flex;flex-direction:column;gap:2px;max-height:240px;overflow-y:auto;"></div>
                                 </div>
                                 <div>
                                     <div class="chat-field-label" style="display:flex;justify-content:space-between;">
