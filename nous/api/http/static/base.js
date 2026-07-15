@@ -294,41 +294,21 @@ window.switchTab = switchTab;
 function loadTab(tab) {
   if (!S.persona && tab !== "settings" && tab !== "personas") return;
   var fn;
-  switch (tab) {
-    case "overview":
-      fn = typeof loadOverview === 'function' ? loadOverview : null;
-      break;
-    case "memories":
-      fn = typeof loadMemories === 'function' ? loadMemories : null;
-      break;
-    case "graph":
-      fn = typeof loadGraph === 'function' ? loadGraph : null;
-      break;
-    case "settings":
-      fn = typeof loadSettings === 'function' ? loadSettings : null;
-      break;
-    case "chat":
-      fn = typeof loadChat === 'function' ? loadChat : null;
-      break;
-    case "activity":
-      fn = typeof loadActivity === 'function'
-        ? function () { loadActivity(true); }
-        : null;
-      break;
-  }
+   var loaderName = 'load' + tab.charAt(0).toUpperCase() + tab.slice(1);
+   fn = typeof window[loaderName] === 'function' ? window[loaderName] : null;
   if (fn) {
-    fn();
+    if (tab === "activity") {
+      (function () { fn(true); })();
+    } else {
+      fn();
+    }
   } else {
-    document.addEventListener('DOMContentLoaded', function deferTab() {
-      if (tab === "activity") {
-        if (typeof loadActivity === 'function') loadActivity(true);
-      } else {
-        var deferFn = typeof window['load' + tab.charAt(0).toUpperCase() + tab.slice(1)] === 'function'
-          ? window['load' + tab.charAt(0).toUpperCase() + tab.slice(1)]
-          : null;
-        if (deferFn) deferFn();
-      }
-    });
+    // Retry after a tick in case loader script hasn't executed yet
+    setTimeout(function deferTab() {
+      var deferFn = typeof window[loaderName] === 'function' ? window[loaderName] : null;
+      if (deferFn) deferFn();
+      else console.warn("[loadTab] loader not found:", loaderName);
+    }, 10);
   }
 }
 
