@@ -6,15 +6,11 @@ its own module under ``sections/``.
 """
 
 from .sections.activity import render_activity_js, render_activity_tab
-from .sections.admin import render_admin_js, render_admin_tab
-from .sections.analytics import render_analytics_js, render_analytics_tab
 from .sections.base import render_layout_shell, render_nav
 from .sections.chat import render_chat_tab
-from .sections.import_export import render_import_export_js, render_import_export_tab
 from .sections.knowledge_graph import render_graph_js, render_graph_tab
 from .sections.memories import render_memories_js, render_memories_tab
 from .sections.overview import render_overview_js, render_overview_tab
-from .sections.persona import render_persona_js, render_persona_tab
 from .sections.settings import render_settings_js, render_settings_tab
 from .sections.timeline import render_timeline_js, render_timeline_tab
 
@@ -27,12 +23,8 @@ def render_dashboard(persona: str | None = None) -> str:
         {"id": "chat", "lucide": "message-circle", "label": "Chat"},
         {"id": "activity", "lucide": "activity", "label": "Activity"},
         {"id": "settings", "lucide": "settings", "label": "Settings"},
-        {"id": "analytics", "lucide": "bar-chart-3", "label": "Analytics"},
         {"id": "timeline", "lucide": "clock", "label": "Timeline"},
         {"id": "graph", "lucide": "share-2", "label": "Graph"},
-        {"id": "import-export", "lucide": "package", "label": "Import/Export"},
-        {"id": "personas", "lucide": "users", "label": "Personas"},
-        {"id": "admin", "lucide": "wrench", "label": "Admin"},
     ]
 
     nav_html = render_nav(tabs)
@@ -40,16 +32,13 @@ def render_dashboard(persona: str | None = None) -> str:
     tab_contents = "\n".join(
         [
             render_overview_tab(),
-            render_analytics_tab(),
             render_memories_tab(),
             render_timeline_tab(),
             render_graph_tab(),
-            render_import_export_tab(),
-            render_persona_tab(),
+
             render_chat_tab(),
             render_activity_tab(),
             render_settings_tab(),
-            render_admin_tab(),
         ]
     )
 
@@ -58,15 +47,12 @@ def render_dashboard(persona: str | None = None) -> str:
             None,
             [
                 render_overview_js(),
-                render_analytics_js(),
                 render_memories_js(),
                 render_timeline_js(),
                 render_graph_js(),
-                render_import_export_js(),
-                render_persona_js(),
+
                 render_activity_js(),
                 render_settings_js(),
-                render_admin_js(),
             ],
         )
     )
