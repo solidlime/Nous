@@ -108,6 +108,11 @@ async function doAutoSave(cat, key, inputId, value) {
                 srcEl.title = 'Set via WebUI override';
                 srcEl.innerHTML = '<i data-lucide="edit-3"></i> override';
             }
+            /* Show reset button and diff dot */
+            var resetBtn = row.querySelector('.setting-reset-btn');
+            if (resetBtn) resetBtn.style.display = '';
+            var diffDot = row.querySelector('.setting-diff-dot');
+            if (diffDot) diffDot.style.display = '';
         }
 
         /* Start polling for reload categories */
@@ -744,6 +749,20 @@ async function resetField(cat, key, defaultVal) {
             if (S.settingsData && S.settingsData[cat] && S.settingsData[cat][key]) {
                 S.settingsData[cat][key].value = defaultVal;
                 S.settingsData[cat][key].source = 'default';
+            }
+            /* Hide reset button and diff dot, update source badge */
+            var row = input ? input.closest('.setting-row') : null;
+            if (row) {
+                var resetBtn = row.querySelector('.setting-reset-btn');
+                if (resetBtn) resetBtn.style.display = 'none';
+                var diffDot = row.querySelector('.setting-diff-dot');
+                if (diffDot) diffDot.style.display = 'none';
+                var srcEl = row.querySelector('.setting-source');
+                if (srcEl) {
+                    srcEl.className = 'setting-source source-default';
+                    srcEl.title = 'Using default value';
+                    srcEl.innerHTML = '<i data-lucide="clipboard-list"></i> default';
+                }
             }
             /* Start polling for reload categories */
             if (RELOAD_CATEGORIES.has(cat)) startStatusPoll();

@@ -405,24 +405,30 @@ function _graphRefilter() {
     });
 
     /* Tag filter → re-apply (no refetch) */
-    document.getElementById('graph-tag-filter').addEventListener('change', _graphRefilter);
+    var tagFilter = document.getElementById('graph-tag-filter');
+    if (tagFilter) tagFilter.addEventListener('change', _graphRefilter);
 
     /* Emotion filter → re-apply (no refetch) */
-    document.getElementById('graph-emotion-filter').addEventListener('change', _graphRefilter);
+    var emotionFilter = document.getElementById('graph-emotion-filter');
+    if (emotionFilter) emotionFilter.addEventListener('change', _graphRefilter);
 
     /* Physics toggle */
-    document.getElementById('graph-physics-toggle').addEventListener('change', function() {
+    var physToggle = document.getElementById('graph-physics-toggle');
+    if (physToggle) physToggle.addEventListener('change', function() {
         if (graphNetwork) {
             graphNetwork.setOptions({ physics: { enabled: this.checked } });
         }
     });
 
     /* Refresh button */
-    document.getElementById('graph-refresh-btn').addEventListener('click', loadGraph);
+    var refreshBtn = document.getElementById('graph-refresh-btn');
+    if (refreshBtn) refreshBtn.addEventListener('click', loadGraph);
 
     /* Close panel */
-    document.getElementById('graph-panel-close').addEventListener('click', closeGraphDetailPanel);
-    document.getElementById('graph-panel-overlay').addEventListener('click', closeGraphDetailPanel);
+    var panelClose = document.getElementById('graph-panel-close');
+    if (panelClose) panelClose.addEventListener('click', closeGraphDetailPanel);
+    var panelOverlay = document.getElementById('graph-panel-overlay');
+    if (panelOverlay) panelOverlay.addEventListener('click', closeGraphDetailPanel);
 
     /* ESC key closes panel */
     document.addEventListener('keydown', function(e) {
