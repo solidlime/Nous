@@ -454,7 +454,7 @@ async function init() {
   window.addEventListener("api:error", function _handleApiError(e) {
     var d = e.detail;
     if (!d) return;
-    var known = C.toastAction || toastAction || null;
+    var known = C.toastAction || null;
     if (typeof known === "function") {
       known(d.message || "API error", "error", "再試行", function() {
         fetch(d.path, { method: "GET" }).then(function(r) {
