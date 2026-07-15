@@ -17,6 +17,10 @@ async function loadPortrait() {
   status.textContent = "";
   status.className = "";
 
+  if (S.portraitEnabled === false) {
+    return;  // portrait disabled — skip silently, no error
+  }
+
   try {
     const data = await api("/api/portrait/" + encodeURIComponent(S.persona));
     if (data.image_base64) {
@@ -26,7 +30,7 @@ async function loadPortrait() {
       placeholder.style.fontSize = "2.5rem";
     }
   } catch (e) {
-    console.error("[loadPortrait] failed:", e);
+    console.warn("[loadPortrait] failed:", e);
     placeholder.textContent = "😐";
     placeholder.style.fontSize = "2.5rem";
     status.textContent = "";

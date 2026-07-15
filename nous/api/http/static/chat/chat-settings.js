@@ -178,6 +178,7 @@ function applyChatConfig(cfg) {
   // Extensions: irodori / portrait
   setChecked("chat-irodori-enabled", cfg.irodori_enabled === true);
   setChecked("chat-portrait-enabled", cfg.portrait_enabled === true);
+  S.portraitEnabled = cfg.portrait_enabled;  // expose to other chat modules
   // Voice / TTS settings (TE04)
   setChecked("chat-voice-emotion-link", cfg.voice_emotion_link !== false);
   setChecked("chat-voice-auto-play", cfg.voice_auto_play === true);

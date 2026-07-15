@@ -115,6 +115,9 @@ window.handlePortraitGenerateComplete = handlePortraitGenerateComplete;
  * Shows error state and falls back to emotion emoji.
  */
 function handlePortraitGenerateError(data) {
+  if (window.S?.portraitEnabled === false) {
+    return;  // portrait disabled — silently ignore
+  }
   const errorEmoji = data.fallback_emoji || '😐';
   const errorMsg = data.error || 'Generation failed';
 
