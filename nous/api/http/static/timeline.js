@@ -1,5 +1,5 @@
 
-const { esc, api } = Nous.Core;
+var { esc, api } = Nous.Core;
 
 /* =================================================================
    MEMORY TIMELINE

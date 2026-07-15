@@ -14,8 +14,8 @@ const S = {
 /* =================================================================
    CORE — Import from modules (replaces legacy global definitions)
    ================================================================= */
-const _NC = (window.Nous && window.Nous.Core) || {};
-const { esc, toast, api, showConfirm, showAlert, truncate, relativeTime, fmtDate, applyTheme, toggleTheme, connectSSE } = _NC;
+var _NC = (window.Nous && window.Nous.Core) || {};
+var { esc, toast, api, showConfirm, showAlert, truncate, relativeTime, fmtDate, applyTheme, toggleTheme, connectSSE } = _NC;
 
 /* =================================================================
    CONSTANTS

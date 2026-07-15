@@ -1,5 +1,5 @@
 
-const { esc, api, relativeTime } = Nous.Core;
+var { esc, api, relativeTime } = Nous.Core;
 
 /* =================================================================
    ACTIVITY TAB

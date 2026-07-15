@@ -1,7 +1,7 @@
 /* =================================================================
    MEMORIES TAB — Extended State + Full CRUD
    ================================================================= */
-const { esc, toast, api, truncate, relativeTime, showConfirm } = Nous.Core;
+var { esc, toast, api, truncate, relativeTime, showConfirm } = Nous.Core;
 Object.assign(S.mem, {
     sort: 'date_desc', viewMode: 'compact', selectMode: false, selected: new Set(),
     searchMode: 'hybrid', dateFrom: '', dateTo: '', impMin: 0, impMax: 1,

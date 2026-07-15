@@ -2,7 +2,7 @@
    SETTINGS DASHBOARD — Nous WebUI
    ═══════════════════════════════════════════════════════════════════ */
 
-const { esc, toast, api } = Nous.Core;
+var { esc, toast, api } = Nous.Core;
 
 const BUILTIN_PROFILES = {
     'Development': {
