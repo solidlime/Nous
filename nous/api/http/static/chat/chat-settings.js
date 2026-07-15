@@ -668,6 +668,7 @@ function renderSkillsList(allSkills, enabledSkills) {
       } else {
         N.Chat.state.enabledSkills = N.Chat.state.enabledSkills.filter((n) => n !== skill.name);
       }
+      saveChatConfig();
     });
     const label = document.createElement("label");
     label.htmlFor = cb.id;

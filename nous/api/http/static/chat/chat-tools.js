@@ -272,6 +272,8 @@ function toggleTool(toolName) {
   } else {
     CHAT.disabledTools.add(toolName);
   }
+  // 即時保存
+  if (typeof saveChatConfig === 'function') saveChatConfig();
 }
 
 // ------------------------------------------------------------------
