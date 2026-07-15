@@ -453,22 +453,6 @@ def register_tools(mcp: FastMCP) -> None:
         )
         return json.dumps(result, ensure_ascii=False)
 
-    # read_uploaded_file
-    @_tool("read_uploaded_file")
-    async def read_uploaded_file(
-        path: str,
-    ) -> str:
-        """アップロード済みファイルの内容を読み取る。pathは '/uploads/{persona}/{filename}'
-        の形式。テキストファイル(.txt/.json/.csv/.py/.js/.md等)は内容を返す。
-        バイナリファイルはファイル情報のみ返す。"""
-        from nous.application.chat.tools.builtin import _handle_read_uploaded_file
-        from nous.domain.chat_config import ChatConfig
-
-        p = _resolve_persona()
-        ctx = AppContextRegistry.get(p)
-        result = await _handle_read_uploaded_file(ctx, ChatConfig(), {"path": path})
-        return json.dumps(result, ensure_ascii=False)
-
     # list_skills
     @_tool("list_skills")
     async def list_skills() -> str:
