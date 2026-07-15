@@ -4,7 +4,7 @@ var S = window.S;
    SETTINGS DASHBOARD — Nous WebUI
    ═══════════════════════════════════════════════════════════════════ */
 
-var { esc, toast, api } = Nous.Core;
+var { esc, toast, api } = window.Nous.Core;
 
 const BUILTIN_PROFILES = {
     'Development': {

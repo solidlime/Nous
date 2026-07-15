@@ -1,7 +1,7 @@
 
 ;(function() {
 var S = window.S;
-var { esc, api, truncate } = Nous.Core;
+var { esc, api, truncate } = window.Nous.Core;
 
 /* ================================================================
  *  Knowledge Graph — vis-network interactive memory visualization

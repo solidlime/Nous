@@ -1,7 +1,7 @@
 
 ;(function() {
 var S = window.S;
-var { esc, api, relativeTime } = Nous.Core;
+var { esc, api, relativeTime } = window.Nous.Core;
 
 /* =================================================================
    ACTIVITY TAB

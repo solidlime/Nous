@@ -1,6 +1,6 @@
 ;(function() {
 var S = window.S;
-var { esc, api } = Nous.Core;
+var { esc, api } = window.Nous.Core;
 
 /* =================================================================
    MEMORY TIMELINE

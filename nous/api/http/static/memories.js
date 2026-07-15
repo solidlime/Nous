@@ -3,7 +3,7 @@ var S = window.S;
 /* =================================================================
    MEMORIES TAB — Extended State + Full CRUD
    ================================================================= */
-var { esc, toast, api, truncate, relativeTime, showConfirm } = Nous.Core;
+var { esc, toast, api, truncate, relativeTime, showConfirm } = window.Nous.Core;
 Object.assign(S.mem, {
     sort: 'date_desc', viewMode: 'compact', selectMode: false, selected: new Set(),
     searchMode: 'hybrid', dateFrom: '', dateTo: '', impMin: 0, impMax: 1,
@@ -486,7 +486,7 @@ function openMemModal(mem) {
     h += '<div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:4px">Memory Key</div>';
     h += '<div style="display:flex;align-items:center;gap:6px">';
     h += '<span style="font-family:monospace;font-size:0.85rem;color:var(--accent-purple)">' + esc(mem.memory_key) + '</span>';
-    h += '<button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + esc(mem.memory_key).replace(/'/g,'\\\'') + '\');Nous.Core.toast(\'Key copied!\',\'info\')" title="Copy key">\uD83D\uDCCB</button>';
+    h += '<button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + esc(mem.memory_key).replace(/'/g,'\\\'') + '\');window.Nous.Core.toast(\'Key copied!\',\'info\')" title="Copy key">\uD83D\uDCCB</button>';
     h += '</div></div>';
     h += '<button class="mem-modal-close" onclick="closeMemModal()"><i data-lucide="x"></i></button>';
     h += '</div>';

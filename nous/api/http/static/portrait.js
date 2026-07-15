@@ -1,6 +1,6 @@
 ;(function() {
 var S = window.S;
-var { esc, toast, api } = Nous.Core;
+var { esc, toast, api } = window.Nous.Core;
 
 /* =================================================================
    TB07: PORTRAIT GENERATION UI
