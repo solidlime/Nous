@@ -1,4 +1,5 @@
 ;(function() {
+var S = window.S;
 var { esc, toast, api, truncate, relativeTime, fmtDate } = Nous.Core;
 
 // --- Block CRUD helpers (global scope) ---

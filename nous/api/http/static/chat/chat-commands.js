@@ -4,6 +4,7 @@
    ================================================================= */
 (function(N) {
 "use strict";
+var S = window.S;
 
 /* ---- Slash command definitions ---- */
 const SLASH_COMMANDS = [

@@ -4,6 +4,7 @@
    ================================================================= */
 (function(N) {
 "use strict";
+var S = window.S;
 
 var CHAT = N.Chat.state;
 

@@ -1,5 +1,6 @@
 
 ;(function() {
+var S = window.S;
 var { esc, api, truncate } = Nous.Core;
 
 /* ================================================================

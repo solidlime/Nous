@@ -4,6 +4,7 @@
    ================================================================= */
 (function(N) {
 "use strict";
+var S = window.S;
 
 async function loadPortrait() {
   if (!S.persona) return;
