@@ -232,14 +232,14 @@ def render_memories_tab() -> str:
                             <option value="joy"><i data-lucide="smile"></i> Joy</option>
                             <option value="sadness"><i data-lucide="frown"></i> Sadness</option>
                             <option value="anger"><i data-lucide="angry"></i> Anger</option>
-                            <option value="fear"><i data-lucide="fear"></i> Fear</option>
-                            <option value="surprise"><i data-lucide="fear"></i> Surprise</option>
+                            <option value="fear"><i data-lucide="alert-triangle"></i> Fear</option>
+                            <option value="surprise"><i data-lucide="alert-triangle"></i> Surprise</option>
                             <option value="disgust">&#129326; Disgust</option>
                             <option value="love">&#10084; Love</option>
                             <option value="neutral"><i data-lucide="meh"></i> Neutral</option>
                             <option value="anticipation">&#129300; Anticipation</option>
                             <option value="trust">&#129309; Trust</option>
-                            <option value="anxiety"><i data-lucide="fear"></i> Anxiety</option>
+                            <option value="anxiety"><i data-lucide="alert-triangle"></i> Anxiety</option>
                             <option value="excitement">&#127881; Excitement</option>
                             <option value="frustration"><i data-lucide="frown"></i> Frustration</option>
                             <option value="nostalgia">&#127749; Nostalgia</option>
