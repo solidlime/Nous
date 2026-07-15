@@ -37,6 +37,8 @@ def render_head() -> str:
     <script src="/static/core/modal.js" defer></script>
     <script src="/static/core/theme.js" defer></script>
     <script src="/static/core/sse.js" defer></script>
+    <!-- Base application shell — must load before feature scripts -->
+    <script src="/static/base.js" defer></script>
     <!-- Chat modules (Phase 3) -->
     <script src="/static/chat/chat-core.js" defer></script>
     <script src="/static/chat/chat-settings.js" defer></script>
@@ -60,8 +62,6 @@ def render_head() -> str:
     <script src="/static/timeline.js" defer></script>
     <script src="/static/activity.js" defer></script>
     <script src="/static/graph.js" defer></script>
-    <!-- Base (last — needs load functions defined) -->
-    <script src="/static/base.js" defer></script>
 </head>"""
 
 
