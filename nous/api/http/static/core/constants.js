@@ -16,7 +16,19 @@ N.Core.EMOTION_COLORS = {
   frustration: "#DC2626", nostalgia: "#92400E", pride: "#F97316",
   shame: "#BE185D", guilt: "#78350F", loneliness: "#1E3A5F",
   contentment: "#065F46", curiosity: "#0891B2", awe: "#5B21B6",
-  relief: "#34D399", happiness: "#fbbf24", calm: "#2dd4bf",
+  relief: "#34D399",   happiness: "#fbbf24", calm: "#2dd4bf",
+};
+
+N.Core.EMOTION_COLORS_PORTRAIT = {
+  joy: "#fbbf24",
+  sadness: "#60a5fa",
+  anger: "#ef4444",
+  fear: "#a78bfa",
+  surprise: "#f472b6",
+  disgust: "#84cc16",
+  trust: "#34d399",
+  anticipation: "#fb923c",
+  neutral: "#94a3b8",
 };
 
 N.Core.EMOTION_BAR_COLORS = {

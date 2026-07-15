@@ -94,6 +94,41 @@ function loadChat() {
   setTimeout(() => {
     if (typeof lucide !== "undefined") lucide.createIcons();
   }, 100);
+
+  // Monitor persona selector changes (moved from chat.js)
+  var __chatPersonaTries = 0;
+  var __CHAT_PERSONA_MAX_TRIES = 20;
+  var __chatPersonaWatcher = setInterval(function() {
+    var sel = document.getElementById("persona-select");
+    if (!sel) {
+      __chatPersonaTries++;
+      if (__chatPersonaTries >= __CHAT_PERSONA_MAX_TRIES) {
+        console.warn("[chat] #persona-select not found, giving up");
+        clearInterval(__chatPersonaWatcher);
+      }
+      return;
+    }
+    if (!sel._chatBound) {
+      sel._chatBound = true;
+      sel.addEventListener("change", function() {
+        if (window.S && window.S.tab === "chat") {
+          loadChatConfig();
+          loadChatCommitments();
+        }
+      });
+      clearInterval(__chatPersonaWatcher);
+    }
+  }, 500);
+
+  // ESC closes settings panel on mobile (moved from chat.js)
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape" && CHAT.sidebarOpen) {
+      var isMobile = window.innerWidth <= 768;
+      if (isMobile) {
+        toggleSettingsPanel();
+      }
+    }
+  });
 }
 
 // ------------------------------------------------------------------
