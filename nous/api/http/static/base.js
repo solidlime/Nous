@@ -409,58 +409,6 @@ function loadTab(tab) {
   }
 }
 
-/* =================================================================
-   MEMORY DETAIL MODAL
-   ================================================================= */
-function openMemModal(mem) {
-  const overlay = document.getElementById("mem-modal-overlay");
-  const content = document.getElementById("mem-modal-content");
-  const tags = (mem.tags || [])
-    .map((t) => '<span class="badge badge-purple">' + esc(t) + "</span>")
-    .join(" ");
-  var emoHtml = "";
-  if (mem.emotion) {
-    emoHtml =
-      '<span class="badge badge-pink"><i data-lucide="smile"></i> ' +
-      esc(mem.emotion) +
-      (mem.emotion_intensity != null
-        ? " (" + (mem.emotion_intensity * 100).toFixed(0) + "%)"
-        : "") +
-      "</span>";
-  }
-  content.innerHTML = `
-        <div class="mem-modal-header">
-            <div>
-                <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:4px">Memory Key</div>
-                <div style="font-family:monospace;font-size:0.85rem;color:var(--accent-purple)">${esc(mem.memory_key)}</div>
-            </div>
-            <button class="mem-modal-close" onclick="closeMemModal()"><i data-lucide="x"></i></button>
-        </div>
-        <div class="mem-modal-content">${esc(mem.content)}</div>
-        <div>
-            ${tags || emoHtml ? `<div class="mem-modal-row"><span class="mem-modal-key">Tags/Emotion</span><span>${tags} ${emoHtml}</span></div>` : ""}
-            ${mem.importance != null ? `<div class="mem-modal-row"><span class="mem-modal-key">Importance</span><span style="color:var(--accent-yellow)">${mem.importance.toFixed(2)}</span></div>` : ""}
-            ${mem.strength != null ? `<div class="mem-modal-row"><span class="mem-modal-key">Strength</span><span style="color:var(--accent-green)"><i data-lucide="zap"></i>${mem.strength.toFixed(3)}</span></div>` : ""}
-            ${mem.privacy_level ? `<div class="mem-modal-row"><span class="mem-modal-key">Privacy</span><span>${esc(mem.privacy_level)}</span></div>` : ""}
-            ${mem.source_context ? `<div class="mem-modal-row"><span class="mem-modal-key">Source</span><span style="color:var(--text-muted)">${esc(mem.source_context)}</span></div>` : ""}
-            ${mem.created_at ? `<div class="mem-modal-row"><span class="mem-modal-key">Created</span><span><i data-lucide="calendar"></i> ${relativeTime(mem.created_at)} <span style="color:var(--text-muted);font-size:0.75rem">(${new Date(mem.created_at).toLocaleString("ja-JP")})</span></span></div>` : ""}
-            ${mem.state_snapped_at && mem.state_snapped_at !== mem.created_at ? `<div class="mem-modal-row"><span class="mem-modal-key">State</span><span><i data-lucide="camera"></i> ${relativeTime(mem.state_snapped_at)} <span style="color:var(--text-muted);font-size:0.75rem">(${new Date(mem.state_snapped_at).toLocaleString("ja-JP")})</span></span></div>` : ""}
-            ${mem.updated_at ? `<div class="mem-modal-row"><span class="mem-modal-key">Updated</span><span><i data-lucide="calendar"></i> ${relativeTime(mem.updated_at)}</span></div>` : ""}
-            ${mem.body_state ? renderBodyStateBars(mem.body_state) : ""}
-            ${mem.emotion ? renderEmotionBars(mem.emotion, mem.emotion_intensity) : ""}
-        </div>`;
-  overlay.classList.add("show");
-  document.addEventListener("keydown", _memModalKeyHandler);
-}
-function closeMemModal() {
-  const overlay = document.getElementById("mem-modal-overlay");
-  if (!overlay || !overlay.classList.contains("show")) return;
-  overlay.classList.remove("show");
-  document.removeEventListener("keydown", _memModalKeyHandler);
-}
-function _memModalKeyHandler(e) {
-  if (e.key === "Escape") closeMemModal();
-}
 
 /* =================================================================
    LAST UPDATE TIMESTAMP
