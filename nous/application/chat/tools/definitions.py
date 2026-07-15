@@ -29,7 +29,6 @@ CORE_ALWAYS_TOOLS: set[str] = {
 # 条件付きツールのカテゴリマッピング（将来の文脈ベース制限用）
 CONDITIONAL_TOOLS: dict[str, str] = {
     "image_generate": "image_gen",
-    "read_pdf": "read_pdf",
 }
 
 MEMORY_TOOLS: list[ToolDefinition] = [
@@ -271,35 +270,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         },
     ),
     ToolDefinition(
-        name="read_pdf",
-        description="PDF解析。path必須。テキスト・テーブル・画像抽出。",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "PDFファイルのパス（workspace/ 配下）",
-                },
-                "pages": {
-                    "type": "string",
-                    "description": 'ページ範囲。例: "1-3" または "1,3,5"。省略時は全ページ。',
-                },
-                "mode": {
-                    "type": "string",
-                    "enum": ["text", "tables", "images", "all"],
-                    "description": "抽出モード: text/tables/images/all",
-                    "default": "all",
-                },
-                "max_chars": {
-                    "type": "integer",
-                    "description": "最大文字数（0=無制限）",
-                    "default": 0,
-                },
-            },
-            "required": ["path"],
-        },
-    ),
-    ToolDefinition(
         name="list_skills",
         description="登録済みスキル一覧を取得。引数不要。",
         input_schema={
@@ -360,7 +330,6 @@ _NOUS_TOOL_NAMES: frozenset[str] = frozenset(
         "goal_manage",
         "invoke_skill",
         "image_generate",
-        "read_pdf",
         "list_skills",
         "persona_portrait",
         "irodori_tts",

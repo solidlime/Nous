@@ -427,32 +427,6 @@ def register_tools(mcp: FastMCP) -> None:
         )
         return json.dumps(result, ensure_ascii=False)
 
-    # read_pdf
-    @_tool("read_pdf")
-    async def read_pdf(
-        path: str,
-        pages: str | None = None,
-        mode: str = "all",
-        max_chars: int = 0,
-    ) -> str:
-        """PDF解析。path必須。pages: 範囲指定（例 "1-3,5"）。mode: text/tables/images/all。max_chars: 抽出文字数上限（0=無制限）。"""
-        from nous.application.chat.tools.builtin import _handle_read_pdf
-        from nous.domain.chat_config import ChatConfig
-
-        p = _resolve_persona()
-        ctx = AppContextRegistry.get(p)
-        result = await _handle_read_pdf(
-            ctx,
-            ChatConfig(),
-            {
-                "path": path,
-                "pages": pages,
-                "mode": mode,
-                "max_chars": max_chars,
-            },
-        )
-        return json.dumps(result, ensure_ascii=False)
-
     # list_skills
     @_tool("list_skills")
     async def list_skills() -> str:
