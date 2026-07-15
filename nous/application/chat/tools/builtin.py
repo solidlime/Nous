@@ -583,6 +583,58 @@ def _sync_process_pdf(
     }
 
 
+async def _handle_read_uploaded_file(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
+    """Read the content of a previously uploaded file."""
+    from pathlib import Path
+
+    from nous.config.settings import Settings
+
+    path = tool_input.get("path", "")
+    if not path:
+        return {"ok": False, "error": "path is required"}
+
+    settings = Settings()
+    data_root = Path(settings.data_root or "data")
+    full_path = data_root / path
+
+    # Security: ensure the path stays within data_root/uploads/
+    try:
+        resolved = full_path.resolve()
+        allowed_prefix = (data_root / "uploads").resolve()
+        if not str(resolved).startswith(str(allowed_prefix)):
+            return {"ok": False, "error": "Access denied: path outside uploads directory"}
+    except Exception:
+        return {"ok": False, "error": "Invalid path"}
+
+    if not full_path.exists():
+        return {"ok": False, "error": f"File not found: {path}"}
+
+    import mimetypes
+
+    mime_type, _ = mimetypes.guess_type(str(full_path))
+    is_text = mime_type and mime_type.startswith(
+        ("text/", "application/json", "application/xml", "application/javascript", "application/x-python")
+    )
+
+    try:
+        if is_text or mime_type is None:
+            content = full_path.read_text(encoding="utf-8")
+            return {"ok": True, "content": content, "path": path, "size": len(content)}
+        else:
+            return {
+                "ok": True,
+                "content": f"[Binary file: {mime_type}, {full_path.stat().st_size} bytes]",
+                "path": path,
+                "binary": True,
+                "mime_type": mime_type,
+            }
+    except UnicodeDecodeError:
+        size = full_path.stat().st_size
+        return {"ok": True, "content": f"[Binary file: {size} bytes]", "path": path, "binary": True}
+    except Exception as e:
+        return {"ok": False, "error": f"Read error: {e}"}
+
+
 async def _handle_list_skills(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
     """List all registered skills from the skill store."""
     try:
@@ -624,6 +676,7 @@ _BUILTIN_DISPATCH: dict[str, Any] = {
     "list_skills": _handle_list_skills,
     "image_generate": _handle_image_generate,
     "read_pdf": _handle_read_pdf,
+    "read_uploaded_file": _handle_read_uploaded_file,
 }
 
 _MCP_SHARED_TOOLS = frozenset(

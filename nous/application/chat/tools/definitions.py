@@ -363,6 +363,7 @@ _NOUS_TOOL_NAMES: frozenset[str] = frozenset(
         "read_pdf",
         "list_skills",
         "persona_portrait",
+        "read_uploaded_file",
         "irodori_tts",
         "irodori_voices",
     }
