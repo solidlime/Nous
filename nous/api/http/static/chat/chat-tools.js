@@ -261,6 +261,10 @@ async function fetchMcpTools() {
     CHAT.mcpTools = data.tools || [];
     CHAT.mcpErrors = data.errors || [];
     renderMcpTools();
+    // Update per-server tool display in server list
+    if (typeof renderMcpJson === 'function') {
+      renderMcpJson(CHAT.mcpServers || []);
+    }
   } catch (e) {
     list.innerHTML = '<span style="font-size:0.7rem;color:var(--accent-red);">取得失敗: ' + esc(e.message) + '</span>';
   }

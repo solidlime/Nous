@@ -375,7 +375,7 @@ def render_chat_tab() -> str:
                                 <!-- MCP Tools toggle list -->
                                 <div style="margin-top:8px;">
                                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                                        <div class="chat-field-label" style="margin:0;">MCP ツール一覧</div>
+                                        <div class="chat-field-label" style="margin:0;">全ツール一覧 <span style="color:var(--text-muted);font-size:0.6rem;">（サーバー別表示は上）</span></div>
                                         <button type="button" class="mem-action-btn" style="font-size:0.65rem;padding:2px 8px;" onclick="fetchMcpTools()">リフレッシュ</button>
                                     </div>
                                     <div id="chat-mcp-tools-list" style="display:flex;flex-direction:column;gap:2px;max-height:240px;overflow-y:auto;"></div>

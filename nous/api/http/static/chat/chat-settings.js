@@ -81,6 +81,10 @@ function applyChatConfig(cfg) {
   onChatProviderChange();
   N.Chat.state.mcpServers = cfg.mcp_servers || [];
   renderMcpJson(N.Chat.state.mcpServers);
+  // Auto-fetch MCP tools for per-server display
+  if (N.Chat.tools && N.Chat.tools.fetch) {
+    N.Chat.tools.fetch();
+  }
   const toolMax = document.getElementById("chat-tool-result-max");
   const toolMaxVal = document.getElementById("chat-tool-max-val");
   if (toolMax && cfg.tool_result_max_chars) {
@@ -516,8 +520,61 @@ function renderMcpJson(servers) {
         row.appendChild(delBtn);
       }
       listEl.appendChild(row);
+      renderMcpServerTools(listEl, srv);
     });
   }
+}
+
+function renderMcpServerTools(listEl, srv) {
+  var toolsForServer = (N.Chat.state.mcpTools || []).filter(function(t) {
+    return t.server === srv.name;
+  });
+  if (!toolsForServer.length) return;
+
+  var collapsed = false;
+
+  var head = document.createElement("div");
+  head.style.cssText =
+    "font-size:0.6rem;color:var(--text-muted);cursor:pointer;user-select:none;padding:1px 4px;";
+  head.textContent = "▼ tools (" + toolsForServer.length + ")";
+
+  var body = document.createElement("div");
+  body.style.cssText =
+    "display:flex;flex-wrap:wrap;gap:3px;padding:2px 0 4px 8px;";
+
+  toolsForServer.forEach(function(tool) {
+    var enabled =
+      !(N.Chat.state.disabledTools &&
+        N.Chat.state.disabledTools.has(tool.name));
+    var badge = document.createElement("span");
+    badge.textContent = tool.name;
+    badge.title = (tool.description || "").slice(0, 100);
+    badge.style.cssText =
+      "font-size:0.6rem;padding:1px 5px;border-radius:3px;border:1px solid var(--glass-border);cursor:pointer;" +
+      (enabled
+        ? "background:var(--glass-bg);color:var(--text-secondary);"
+        : "background:var(--bg-secondary);color:var(--text-muted);opacity:0.5;text-decoration:line-through;");
+    badge.onclick = function(ev) {
+      ev.stopPropagation();
+      N.Chat.tools.toggle(tool.name);
+      renderMcpJson(N.Chat.state.mcpServers);
+    };
+    body.appendChild(badge);
+  });
+
+  head.onclick = function() {
+    collapsed = !collapsed;
+    body.style.display = collapsed ? "none" : "flex";
+    head.textContent =
+      (collapsed ? "▶" : "▼") + " tools (" + toolsForServer.length + ")";
+  };
+
+  var wrapper = document.createElement("div");
+  wrapper.style.cssText =
+    "border-bottom:1px solid var(--glass-border);margin-bottom:2px;";
+  wrapper.appendChild(head);
+  wrapper.appendChild(body);
+  listEl.appendChild(wrapper);
 }
 
 function addMcpServer() {
