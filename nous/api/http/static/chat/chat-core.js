@@ -87,9 +87,9 @@ function hideHelpTooltip() {
 // ------------------------------------------------------------------
 // Chat initialization
 // ------------------------------------------------------------------
-function loadChat() {
+async function loadChat() {
   if (!S.persona) return;
-  loadChatConfig();
+  await loadChatConfig();
   loadSkillsForChat();
   restoreChatHistory();
   loadChatCommitments();
