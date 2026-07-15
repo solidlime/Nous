@@ -27,9 +27,10 @@ async function loadPortrait() {
     }
   } catch (e) {
     console.error("[loadPortrait] failed:", e);
-    if (e.message !== "Portrait generation is disabled for this persona") {
-      toast("ポートレート読込失敗: " + e.message, "error");
-    }
+    placeholder.textContent = "😐";
+    placeholder.style.fontSize = "2.5rem";
+    status.textContent = "";
+    status.className = "";
   }
 }
 
