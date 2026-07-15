@@ -1,4 +1,5 @@
 
+;(function() {
 var { esc, api, truncate } = Nous.Core;
 
 /* ================================================================
@@ -65,6 +66,7 @@ async function loadGraph() {
         if (loading) loading.style.display = 'none';
     }
 }
+window.loadGraph = loadGraph;
 
 /* ---- Populate filter dropdowns ---- */
 
@@ -430,4 +432,5 @@ function _graphRefilter() {
             }
         }
     });
+})();
 })();

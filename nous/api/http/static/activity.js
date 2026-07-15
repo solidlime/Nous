@@ -1,4 +1,5 @@
 
+;(function() {
 var { esc, api, relativeTime } = Nous.Core;
 
 /* =================================================================
@@ -116,6 +117,7 @@ async function loadActivity(reset = false) {
             '</div>';
     }
 }
+window.loadActivity = loadActivity;
 
 function renderActivityFeed() {
     const feed = document.getElementById('act-feed');
@@ -221,7 +223,10 @@ function toggleActivitySession(sid) {
         sessionEl.classList.remove('open');
     }
 }
+window.toggleActivitySession = toggleActivitySession;
 
 function toggleActivityDetail(el) {
     el.classList.toggle('expanded');
 }
+window.toggleActivityDetail = toggleActivityDetail;
+})();

@@ -1,3 +1,4 @@
+;(function() {
 var { esc, toast, api } = Nous.Core;
 
 /* =================================================================
@@ -52,6 +53,7 @@ function handlePortraitGenerateStart(data) {
     }
   }
 }
+window.handlePortraitGenerateStart = handlePortraitGenerateStart;
 
 /**
  * Handle portrait.generate_complete SSE event.
@@ -105,6 +107,7 @@ function handlePortraitGenerateComplete(data) {
 
   toast('🎨 Portrait updated', 'info');
 }
+window.handlePortraitGenerateComplete = handlePortraitGenerateComplete;
 
 /**
  * Handle portrait.generate_error SSE event.
@@ -154,6 +157,7 @@ function handlePortraitGenerateError(data) {
 
   toast('⚠️ Portrait generation failed: ' + errorMsg, 'warning');
 }
+window.handlePortraitGenerateError = handlePortraitGenerateError;
 
 // ── Reference Image Helpers ──────────────────────────────────────
 
@@ -191,6 +195,7 @@ function onReferenceImageSelected(input) {
     if (removeBtn) removeBtn.style.display = 'none';
   }
 }
+window.onReferenceImageSelected = onReferenceImageSelected;
 
 /**
  * Clear the reference image selection.
@@ -203,6 +208,7 @@ function clearReferenceImage() {
   if (preview) { preview.src = ''; preview.style.display = 'none'; }
   if (removeBtn) removeBtn.style.display = 'none';
 }
+window.clearReferenceImage = clearReferenceImage;
 
 // ── Generate Now (Overview Tab) ──────────────────────────────────
 
@@ -309,6 +315,7 @@ async function generatePortraitNow() {
     }
   }
 }
+window.generatePortraitNow = generatePortraitNow;
 
 // ── Overview Tab Portrait Section Renderer ───────────────────────
 
@@ -360,6 +367,7 @@ function renderOverviewPortraitSection(data) {
       </div>
     </div>`;
 }
+window.renderOverviewPortraitSection = renderOverviewPortraitSection;
 
 // ── Helper: Emotion Emoji Map (fallback) ─────────────────────────
 
@@ -389,5 +397,7 @@ const EMOTION_EMOJI_MAP = {
   happiness: '😄',
   calm: '😌',
 };
+
+})();
 
 
