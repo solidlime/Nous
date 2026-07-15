@@ -1,3 +1,5 @@
+;(function() {
+
 /* =================================================================
    STATE
    ================================================================= */
@@ -10,6 +12,7 @@ const S = {
   dashCache: null,
   initTime: Date.now(),
 };
+window.S = S;
 
 /* =================================================================
    CORE — Import from modules (replaces legacy global definitions)
@@ -135,6 +138,7 @@ function renderBodyStateBars(bodyState) {
   html += "</span></div>";
   return html;
 }
+window.renderBodyStateBars = renderBodyStateBars;
 
 function renderEmotionBars(emotion, emotion_intensity) {
   if (!emotion) return "";
@@ -160,6 +164,7 @@ function renderEmotionBars(emotion, emotion_intensity) {
     "</div></span></div>"
   );
 }
+window.renderEmotionBars = renderEmotionBars;
 
 /* Compact emotion badges for list/card views */
 function renderEmotionBadges(emotion, emotion_intensity) {
@@ -180,6 +185,7 @@ function renderEmotionBadges(emotion, emotion_intensity) {
     "%</span>"
   );
 }
+window.renderEmotionBadges = renderEmotionBadges;
 
 /* Compact body state indicator for list/card views - shows all 5 metrics */
 function renderBodyStateCompact(bodyState) {
@@ -198,6 +204,7 @@ function renderBodyStateCompact(bodyState) {
   html += "</span>";
   return html;
 }
+window.renderBodyStateCompact = renderBodyStateCompact;
 
 
 /* Persona storage helpers — write to both keys for backward compatibility */
@@ -221,6 +228,7 @@ function destroyChart(id) {
     delete S.charts[id];
   }
 }
+window.destroyChart = destroyChart;
 function chartOpts(extra = {}) {
   const color =
     getComputedStyle(document.documentElement)
@@ -247,6 +255,7 @@ function chartOpts(extra = {}) {
       : undefined,
   };
 }
+window.chartOpts = chartOpts;
 
 /* =================================================================
    SKELETON HELPERS
@@ -261,6 +270,7 @@ function errorCard(msg) {
     "</p></div>"
   );
 }
+window.errorCard = errorCard;
 
 /* =================================================================
    SKELETON LOADING
@@ -345,6 +355,7 @@ function switchTab(tab) {
     if (typeof lucide !== "undefined") lucide.createIcons();
   }, 100);
 }
+window.switchTab = switchTab;
 function loadTab(tab) {
   if (!S.persona && tab !== "settings" && tab !== "personas") return;
   var fn;
@@ -465,6 +476,7 @@ function updateLastTime() {
         second: "2-digit",
       });
 }
+window.updateLastTime = updateLastTime;
 
 /* =================================================================
    PAGE CLEANUP (beforeunload)
@@ -618,6 +630,8 @@ async function init() {
 /* =================================================================
    STAGGERED CARD ANIMATION
    ================================================================= */
+window.init = init;
+
 function animateCards(container) {
   if (!container) return;
   const cards = container.querySelectorAll(".glass");
@@ -631,6 +645,7 @@ function animateCards(container) {
     }, i * 60);
   });
 }
+window.animateCards = animateCards;
 
 /* =================================================================
    KEYBOARD SHORTCUTS (Ctrl+F / Escape / ? help)
@@ -685,6 +700,7 @@ function toggleShortcutHelp() {
   });
   if (typeof lucide !== "undefined") lucide.createIcons();
 }
+window.toggleShortcutHelp = toggleShortcutHelp;
 
 /* Global ? key listener for shortcut help */
 document.addEventListener("keydown", function (e) {
@@ -730,3 +746,4 @@ if (document.readyState === "loading") {
 } else {
   init();
 }
+})();
