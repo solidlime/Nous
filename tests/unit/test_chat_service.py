@@ -12,7 +12,7 @@ from nous.application.chat_service import SessionManager, SessionWindow
 from nous.domain.chat_config import ChatConfig, ChatConfigRepository
 from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent, ToolCallEvent
 
-_CHAT_JS_PATH = Path(__file__).resolve().parent.parent.parent / "nous" / "api" / "http" / "static" / "chat.js"
+_CHAT_JS_PATH = Path(__file__).resolve().parent.parent.parent / "nous" / "api" / "http" / "static" / "chat" / "chat-core.js"
 
 
 def _read_chat_js() -> str:
