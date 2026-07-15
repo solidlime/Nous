@@ -145,9 +145,12 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str, initial_p
          '            <select id="persona-select" class="glass-input" title="Select persona">\n'
          '                <option value="">Loading...</option>\n'
          "            </select>\n"
-         '            <button id="create-persona-btn" class="glass-btn" title="Create new persona" onclick="openCreatePersonaModal()">\n'
-         '              <i data-lucide="user-plus"></i>\n'
-         "            </button>\n"
+          '            <button id="create-persona-btn" class="glass-btn" title="Create new persona" onclick="openCreatePersonaModal()">\n'
+          '              <i data-lucide="user-plus"></i>\n'
+          "            </button>\n"
+          '            <button id="delete-persona-btn" class="glass-btn" title="Delete current persona" onclick="deleteCurrentPersona()" style="display:none">\n'
+          '              <i data-lucide="trash-2"></i>\n'
+          "            </button>\n"
          '            <button id="dark-toggle" class="glass-btn" title="Toggle theme"><i data-lucide="moon"></i></button>\n'
          "        </div>\n"
          "    </header>\n"

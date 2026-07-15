@@ -402,6 +402,7 @@ async function init() {
     }
     S.persona = _target;
     sel.value = _target;
+    syncDeleteBtn();
     connectSSE(_target);
     switchTab(S.tab);
   } catch (e) {
@@ -413,6 +414,7 @@ async function init() {
     S.persona = e.target.value;
     setStoredPersona(e.target.value);
     connectSSE(e.target.value);
+    syncDeleteBtn();
     S.dashCache = null;
     // Reset pagination/search without losing extended properties from memories.js
     Object.assign(S.mem, {
@@ -436,7 +438,16 @@ async function init() {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
 
-  // Event: Theme toggle
+   // Persona delete button — show only when a real persona is selected
+  function syncDeleteBtn() {
+    var btn = document.getElementById('delete-persona-btn');
+    var sel = document.getElementById('persona-select');
+    if (btn && sel) {
+      btn.style.display = (sel.value && sel.value !== 'None') ? '' : 'none';
+    }
+  }
+
+   // Event: Theme toggle
   document.getElementById("dark-toggle").onclick = toggleTheme;
 
   // Global API error handler — toast with retry
@@ -668,6 +679,23 @@ function submitCreatePersona(e) {
 window.openCreatePersonaModal = openCreatePersonaModal;
 window.closeCreatePersonaModal = closeCreatePersonaModal;
 window.submitCreatePersona = submitCreatePersona;
+
+function deleteCurrentPersona() {
+  var sel = document.getElementById('persona-select');
+  var name = sel.value;
+  if (!name || name === 'None') return;
+  if (!confirm('Delete persona "' + name + '"? This cannot be undone.')) return;
+  api('/api/personas/' + encodeURIComponent(name), {method: 'DELETE'}).then(function(data) {
+    var opt = sel.querySelector('option[value="' + name.replace(/"/g, '\\"') + '"]');
+    if (opt) opt.remove();
+    var first = sel.options[0];
+    if (first) { sel.value = first.value; sel.dispatchEvent(new Event('change', {bubbles: true})); }
+    if (typeof N !== 'undefined' && N.Core && N.Core.toast) N.Core.toast('Persona "' + name + '" deleted.', 'success');
+  }).catch(function(err) {
+    if (typeof N !== 'undefined' && N.Core && N.Core.toast) N.Core.toast('Delete failed: ' + err.message, 'error');
+  });
+}
+window.deleteCurrentPersona = deleteCurrentPersona;
 
 // Escape key closes persona modal
 document.addEventListener('keydown', function(e) {
