@@ -26,11 +26,11 @@ var applyTheme = C.applyTheme, toggleTheme = C.toggleTheme, connectSSE = C.conne
 /* =================================================================
    CONSTANTS
    ================================================================= */
-var CHART_COLORS = N.Core.CHART_COLORS;
-var EMOTION_COLORS = N.Core.EMOTION_COLORS;
-var EMOTION_BAR_COLORS = N.Core.EMOTION_BAR_COLORS;
-var BODY_BAR_COLORS = N.Core.BODY_BAR_COLORS;
-var BODY_LABELS = N.Core.BODY_LABELS;
+var CHART_COLORS = C.CHART_COLORS;
+var EMOTION_COLORS = C.EMOTION_COLORS;
+var EMOTION_BAR_COLORS = C.EMOTION_BAR_COLORS;
+var BODY_BAR_COLORS = C.BODY_BAR_COLORS;
+var BODY_LABELS = C.BODY_LABELS;
 window.CHART_COLORS = CHART_COLORS;
 window.EMOTION_COLORS = EMOTION_COLORS;
 window.EMOTION_BAR_COLORS = EMOTION_BAR_COLORS;
@@ -443,7 +443,7 @@ async function init() {
   window.addEventListener("api:error", function _handleApiError(e) {
     var d = e.detail;
     if (!d) return;
-    var known = N.Core.toastAction || toastAction || null;
+    var known = C.toastAction || toastAction || null;
     if (typeof known === "function") {
       known(d.message || "API error", "error", "再試行", function() {
         fetch(d.path, { method: "GET" }).then(function(r) {
