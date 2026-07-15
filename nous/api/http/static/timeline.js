@@ -1,4 +1,4 @@
-
+;(function() {
 var { esc, api } = Nous.Core;
 
 /* =================================================================
@@ -159,6 +159,8 @@ async function loadTimeline() {
     }
 }
 
+window.loadTimeline = loadTimeline;
+
 function showTimelineDetail(mem) {
     const panel = document.getElementById('tl-detail-panel');
     if (!panel) return;
@@ -207,6 +209,8 @@ function closeTimelineDetail() {
     document.getElementById('tl-detail-panel')?.classList.remove('open');
 }
 
+window.closeTimelineDetail = closeTimelineDetail;
+
 // Initialize — watch tab activation via DOM class changes (replaces switchTab monkey-patch)
 document.addEventListener('DOMContentLoaded', () => {
     buildEmotionLegend();
@@ -233,3 +237,4 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(loadTimeline, 200);
     }
 });
+})();
