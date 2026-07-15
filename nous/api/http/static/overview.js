@@ -1,4 +1,4 @@
-
+;(function() {
 var { esc, toast, api, truncate, relativeTime, fmtDate } = Nous.Core;
 
 // --- Block CRUD helpers (global scope) ---
@@ -11,6 +11,7 @@ function showCreateBlock() {
     document.getElementById('block-modal-priority').value = '0';
     document.getElementById('block-edit-modal').style.display = 'flex';
 }
+window.showCreateBlock = showCreateBlock;
 
 function showEditBlock(name, content, priority) {
     document.getElementById('block-modal-title').innerHTML = '<i data-lucide="pencil"></i> Edit Block: ' + esc(name);
@@ -21,10 +22,12 @@ function showEditBlock(name, content, priority) {
     document.getElementById('block-modal-priority').value = priority || 0;
     document.getElementById('block-edit-modal').style.display = 'flex';
 }
+window.showEditBlock = showEditBlock;
 
 function hideBlockModal() {
     document.getElementById('block-edit-modal').style.display = 'none';
 }
+window.hideBlockModal = hideBlockModal;
 
 async function saveBlock() {
     var name = document.getElementById('block-modal-name').value.trim();
@@ -42,6 +45,7 @@ async function saveBlock() {
         loadOverview();
     } catch (e) { toast('Failed to save block: ' + e.message, 'error'); }
 }
+window.saveBlock = saveBlock;
 
 async function deleteBlock(name) {
     if (!confirm('Delete block "' + name + '"?')) return;
@@ -51,6 +55,7 @@ async function deleteBlock(name) {
         loadOverview();
     } catch (e) { toast('Failed: ' + e.message, 'error'); }
 }
+window.deleteBlock = deleteBlock;
 
 // --- Inventory CRUD helpers (global scope) ---
 async function deleteItem(itemName) {
@@ -62,11 +67,13 @@ async function deleteItem(itemName) {
         toast('Failed to delete item: ' + e.message, 'error');
     }
 }
+window.deleteItem = deleteItem;
 
 function openAddItemModal() {
     const m = document.getElementById('add-item-modal');
     if (m) { m.style.display = 'flex'; }
 }
+window.openAddItemModal = openAddItemModal;
 
 function closeAddItemModal() {
     const m = document.getElementById('add-item-modal');
@@ -76,6 +83,7 @@ function closeAddItemModal() {
         if (el) el.value = id === 'new-item-qty' ? '1' : '';
     });
 }
+window.closeAddItemModal = closeAddItemModal;
 
 async function saveNewItem() {
     const nameEl = document.getElementById('new-item-name');
@@ -96,6 +104,7 @@ async function saveNewItem() {
         toast('Failed to add item: ' + e.message, 'error');
     }
 }
+window.saveNewItem = saveNewItem;
 
 async function changeEquipSlot(slot, itemName) {
     try {
@@ -111,6 +120,7 @@ async function changeEquipSlot(slot, itemName) {
         toast('Failed to change equipment: ' + e.message, 'error');
     }
 }
+window.changeEquipSlot = changeEquipSlot;
 
 async function unequipSlot(slot) {
     try {
@@ -124,6 +134,7 @@ async function unequipSlot(slot) {
         toast('Failed to unequip: ' + e.message, 'error');
     }
 }
+window.unequipSlot = unequipSlot;
 
 async function loadOverview() {
     const el = document.getElementById('overview-content');
@@ -524,3 +535,5 @@ async function loadOverview() {
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 }
+window.loadOverview = loadOverview;
+})();

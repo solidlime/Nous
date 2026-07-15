@@ -1,3 +1,4 @@
+;(function() {
 /* ═══════════════════════════════════════════════════════════════════
    SETTINGS DASHBOARD — Nous WebUI
    ═══════════════════════════════════════════════════════════════════ */
@@ -645,6 +646,7 @@ function renderSettings(el, settings, status) {
     renderSettingsProfiles();
     animateCards(el);
 }
+window.loadSettings = loadSettings;
 
 /* ═══════════════════════════════════════════════════════════════════
    SEARCH / FILTER
@@ -690,6 +692,7 @@ function filterSettings(query) {
         }
     });
 }
+window.filterSettings = filterSettings;
 
 /* ═══════════════════════════════════════════════════════════════════
    CATEGORY TOGGLE
@@ -972,3 +975,4 @@ function updateCategoryStatusBanners(rs) {
         }
     });
 }
+})();

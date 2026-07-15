@@ -1,3 +1,4 @@
+;(function() {
 /* =================================================================
    MEMORIES TAB — Extended State + Full CRUD
    ================================================================= */
@@ -287,6 +288,7 @@ function renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSe
     }
     el.innerHTML = html;
 }
+window.loadMemories = loadMemories;
 
 /* ================================================================
    bindMemoryEvents
@@ -601,6 +603,22 @@ function openMemModal(mem) {
     var editBtn = document.getElementById('mem-modal-edit-btn');
     if (editBtn) editBtn.onclick = function() { openEditModal(mem); };
 }
+window.openMemModal = openMemModal;
+
+/* ================================================================
+   closeMemModal — companion to openMemModal (rich version)
+   ================================================================ */
+function closeMemModal() {
+    var overlay = document.getElementById('mem-modal-overlay');
+    if (!overlay || !overlay.classList.contains('show')) return;
+    overlay.classList.remove('show');
+    document.removeEventListener('keydown', _memModalKeyHandler);
+}
+window.closeMemModal = closeMemModal;
+
+function _memModalKeyHandler(e) {
+    if (e.key === 'Escape') closeMemModal();
+}
 
 /* ================================================================
    openEditModal / openCreateModal
@@ -738,6 +756,7 @@ async function deleteMemory(key) {
         }
     });
 }
+window.deleteMemory = deleteMemory;
 
 /* ================================================================
    batchDeleteMemories
@@ -831,3 +850,4 @@ function clearAdvancedSearch() {
     S.mem.searchMode = 'hybrid';
     loadMemories(1);
 }
+})();
