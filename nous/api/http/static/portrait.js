@@ -91,9 +91,9 @@ function handlePortraitGenerateComplete(data) {
   if (overviewContainer) {
     overviewContainer.classList.remove('portrait-loading');
     // Set emotion border color
-    if (data.emotion && EMOTION_COLORS_PORTRAIT[data.emotion]) {
+    if (data.emotion && window.Nous.Core.EMOTION_COLORS_PORTRAIT[data.emotion]) {
       overviewContainer.classList.add('has-emotion');
-      overviewContainer.style.setProperty('--portrait-emotion-color', EMOTION_COLORS_PORTRAIT[data.emotion]);
+      overviewContainer.style.setProperty('--portrait-emotion-color', window.Nous.Core.EMOTION_COLORS_PORTRAIT[data.emotion]);
     } else {
       overviewContainer.classList.remove('has-emotion');
       overviewContainer.style.removeProperty('--portrait-emotion-color');
@@ -283,9 +283,9 @@ async function generatePortraitNow() {
       }
       if (overviewContainer) {
         overviewContainer.classList.remove('portrait-loading');
-        if (result.emotion && EMOTION_COLORS_PORTRAIT[result.emotion]) {
+        if (result.emotion && window.Nous.Core.EMOTION_COLORS_PORTRAIT[result.emotion]) {
           overviewContainer.classList.add('has-emotion');
-          overviewContainer.style.setProperty('--portrait-emotion-color', EMOTION_COLORS_PORTRAIT[result.emotion]);
+          overviewContainer.style.setProperty('--portrait-emotion-color', window.Nous.Core.EMOTION_COLORS_PORTRAIT[result.emotion]);
         }
       }
 
@@ -330,7 +330,7 @@ window.generatePortraitNow = generatePortraitNow;
 function renderOverviewPortraitSection(data) {
   const ctx = data.context || {};
   const emotion = ctx.emotion || 'neutral';
-  const emotionColor = EMOTION_COLORS_PORTRAIT[emotion] || '#94a3b8';
+  const emotionColor = window.Nous.Core.EMOTION_COLORS_PORTRAIT[emotion] || '#94a3b8';
 
   return `
     <div class="glass glass-hoverable p-6 mb-6">
