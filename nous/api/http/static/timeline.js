@@ -21,7 +21,7 @@ const TL_EMOJI = {
 };
 
 function getEmotionStyle(emotion) {
-    var c = EMOTION_COLORS[emotion] || '#94a3b8';
+    var c = window.EMOTION_COLORS[emotion] || '#94a3b8';
     var r = parseInt(c.slice(1,3), 16);
     var g = parseInt(c.slice(3,5), 16);
     var b = parseInt(c.slice(5,7), 16);
@@ -35,7 +35,7 @@ function getEmotionStyle(emotion) {
 function buildEmotionLegend() {
     const legend = document.getElementById('tl-legend');
     if (!legend) return;
-    var emos = Object.keys(EMOTION_COLORS).sort();
+    var emos = Object.keys(window.EMOTION_COLORS).sort();
     let html = '';
     for (var i = 0; i < emos.length; i++) {
         var style = getEmotionStyle(emos[i]);
@@ -186,9 +186,9 @@ function showTimelineDetail(mem) {
                     var val = mem.body_state[k];
                     var pct = Math.round(val * 100);
                     bodyHtml += '<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">';
-                    bodyHtml += '<span style="font-size:0.7rem;color:var(--text-muted);min-width:70px">' + BODY_LABELS[k] + '</span>';
+                    bodyHtml += '<span style="font-size:0.7rem;color:var(--text-muted);min-width:70px">' + window.BODY_LABELS[k] + '</span>';
                     bodyHtml += '<div style="flex:1;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden">';
-                    bodyHtml += '<div style="height:100%;width:' + pct + '%;background:' + BODY_BAR_COLORS[k] + ';border-radius:2px"></div>';
+                    bodyHtml += '<div style="height:100%;width:' + pct + '%;background:' + window.BODY_BAR_COLORS[k] + ';border-radius:2px"></div>';
                     bodyHtml += '</div>';
                     bodyHtml += '<span style="font-size:0.7rem;color:var(--text-muted);min-width:28px;text-align:right">' + pct + '%</span>';
                     bodyHtml += '</div>';
