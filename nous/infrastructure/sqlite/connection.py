@@ -236,6 +236,9 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     voice_auto_play INTEGER DEFAULT 0,
     voice_emotion_link INTEGER DEFAULT 1,
     voice_model TEXT DEFAULT '',
+    image_gen_gemini_model TEXT DEFAULT 'google/gemini-2.5-flash-image',
+    image_gen_replicate_model TEXT DEFAULT 'black-forest-labs/flux-schnell',
+    image_gen_replicate_api_key TEXT DEFAULT '',
     disabled_tools TEXT DEFAULT '[]'
 );
 
@@ -451,6 +454,7 @@ class SQLiteConnection:
             ("episode_search_enabled", "INTEGER", 1),
             ("dynamic_tool_selection", "INTEGER", 1),
             ("retrieval_rrf_k", "REAL", 5.0),
+            ("disabled_tools", "TEXT", "'[]'"),
         ]
         for col, col_type, default in _chat_settings_migrations:
             try:
