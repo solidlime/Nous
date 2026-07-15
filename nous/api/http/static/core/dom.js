@@ -14,4 +14,6 @@ N.Core.truncate = function truncate(s, n) {
   return s && s.length > n ? s.slice(0, n) + "..." : s || "";
 };
 
+window.esc = N.Core.esc;
+window.truncate = N.Core.truncate;
 })(window.Nous);

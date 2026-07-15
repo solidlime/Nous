@@ -3,6 +3,10 @@
    Extracted from chat.js (Phase 3, Batch 2)
    ================================================================= */
 ;(function(N) {
+var C = N.Core;
+var api = C.api, esc = C.esc, toast = C.toast;
+var showConfirm = C.showConfirm, showAlert = C.showAlert;
+var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
 "use strict";
 
 // ------------------------------------------------------------------

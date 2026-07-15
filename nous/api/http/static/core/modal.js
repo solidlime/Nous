@@ -95,4 +95,6 @@ N.Core.showAlert = function showAlert(message) {
   });
 };
 
+window.showConfirm = N.Core.showConfirm;
+window.showAlert = N.Core.showAlert;
 })(window.Nous);

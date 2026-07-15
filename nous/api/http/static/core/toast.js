@@ -42,4 +42,5 @@ N.Core.toastAction = function toastAction(msg, type, actionLabel, actionFn) {
   setTimeout(function() { t.remove(); }, 5000);
 };
 
+window.toast = N.Core.toast;
 })(window.Nous);

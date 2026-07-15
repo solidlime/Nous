@@ -22,4 +22,6 @@ N.Core.toggleTheme = function toggleTheme() {
   N.Core.applyTheme();
 };
 
+window.applyTheme = N.Core.applyTheme;
+window.toggleTheme = N.Core.toggleTheme;
 })(window.Nous);

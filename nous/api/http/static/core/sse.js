@@ -138,4 +138,5 @@ N.Core.connectSSE = function connectSSE(persona) {
   N.Core._sse = es;
 };
 
+window.connectSSE = N.Core.connectSSE;
 })(window.Nous);

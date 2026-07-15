@@ -34,4 +34,5 @@ N.Core.api = async function api(path, opts) {
 /* Default error hook */
 N.Core.api._onError = null;
 
+window.api = N.Core.api;
 })(window.Nous);
