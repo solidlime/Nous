@@ -597,4 +597,83 @@ if (document.readyState === "loading") {
 } else {
   init();
 }
+
+/* =================================================================
+   CREATE PERSONA MODAL
+   ================================================================= */
+function openCreatePersonaModal() {
+  var modal = document.getElementById('create-persona-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'create-persona-modal';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+    modal.innerHTML = '\
+      <div style="background:var(--bg-card);border-radius:16px;padding:24px;min-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.3)">\
+        <h2 style="margin:0 0 4px 0;font-size:1.2rem"><i data-lucide="user-plus"></i> Create Persona</h2>\
+        <p style="color:var(--text-muted);font-size:0.85rem;margin:0 0 16px 0">Enter a name for the new persona.</p>\
+        <form onsubmit="return submitCreatePersona(event)" style="display:flex;flex-direction:column;gap:12px">\
+          <input id="new-persona-name" type="text" placeholder="e.g. assistant, friend, scholar" class="glass-input" style="width:100%;padding:10px" required autofocus>\
+          <div style="display:flex;gap:8px;justify-content:flex-end">\
+            <button type="button" class="glass-btn" onclick="closeCreatePersonaModal()">Cancel</button>\
+            <button type="submit" class="glass-btn" style="background:var(--accent-purple);color:white">Create</button>\
+          </div>\
+        </form>\
+      </div>';
+    document.body.appendChild(modal);
+    // Close on overlay click
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) closeCreatePersonaModal();
+    });
+  }
+  modal.style.display = 'flex';
+  setTimeout(function() {
+    var input = document.getElementById('new-persona-name');
+    if (input) input.focus();
+  }, 100);
+}
+
+function closeCreatePersonaModal() {
+  var modal = document.getElementById('create-persona-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function submitCreatePersona(e) {
+  e.preventDefault();
+  var nameInput = document.getElementById('new-persona-name');
+  var name = nameInput.value.trim();
+  if (!name) return false;
+  api('/api/personas', {method: 'POST', body: JSON.stringify({name: name})}).then(function(data) {
+    closeCreatePersonaModal();
+    var sel = document.getElementById('persona-select');
+    var exists = Array.from(sel.options).some(function(o) { return o.value === name; });
+    if (!exists) {
+      var opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    }
+    sel.value = name;
+    sel.dispatchEvent(new Event('change', {bubbles: true}));
+    if (typeof toast === 'function') toast('Persona "' + name + '" created.', 'success');
+    else if (typeof N !== 'undefined' && N.Core && N.Core.toast) N.Core.toast('Persona "' + name + '" created.', 'success');
+  }).catch(function(err) {
+    if (typeof toast === 'function') toast('Failed: ' + err.message, 'error');
+    else if (typeof N !== 'undefined' && N.Core && N.Core.toast) N.Core.toast('Failed: ' + err.message, 'error');
+  });
+  return false;
+}
+
+// Export to global scope
+window.openCreatePersonaModal = openCreatePersonaModal;
+window.closeCreatePersonaModal = closeCreatePersonaModal;
+window.submitCreatePersona = submitCreatePersona;
+
+// Escape key closes persona modal
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    var modal = document.getElementById('create-persona-modal');
+    if (modal && modal.style.display !== 'none') closeCreatePersonaModal();
+  }
+});
 })();
