@@ -4,7 +4,7 @@ var S = window.S;
    MEMORIES TAB — Extended State + Full CRUD
    ================================================================= */
 var { esc, toast, api, truncate, relativeTime, showConfirm } = window.Nous.Core;
-Object.assign(S.mem, {
+if (S && S.mem) Object.assign(S.mem, {
     sort: 'date_desc', viewMode: 'compact', selectMode: false, selected: new Set(),
     searchMode: 'hybrid', dateFrom: '', dateTo: '', impMin: 0, impMax: 1,
     searchTags: [], emotion: '', advOpen: false
