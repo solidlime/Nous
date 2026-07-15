@@ -102,6 +102,7 @@ def render_chat_tab() -> str:
                         <textarea id="chat-input" placeholder="メッセージを入力... (Enter で送信、Shift+Enter で改行)" rows="1" aria-label="チャットメッセージ入力"></textarea>
                         <div style="display:flex;align-items:center;gap:6px;">
                             <button id="chat-cancel-btn" class="chat-stop-btn" onclick="chatCancel()" style="display:none" aria-label="応答を停止"><i data-lucide="stop-circle"></i> 中止</button>
+                            <button id="chat-attach-btn" class="chat-action-btn" onclick="triggerFileAttach()" title="ファイル添付" aria-label="ファイルを添付"><i data-lucide="paperclip"></i></button>
                             <button id="chat-voice-btn" class="chat-action-btn" onclick="toggleVoiceInput()" title="音声入力" aria-label="音声入力の切替"><i data-lucide="mic"></i></button>
                             <button id="chat-export-btn" class="chat-action-btn" onclick="exportChatHistory()" title="会話をエクスポート" aria-label="会話履歴をエクスポート"><i data-lucide="download"></i></button>
                             <button id="chat-send-btn" onclick="chatSend()" aria-label="メッセージを送信">送信</button>

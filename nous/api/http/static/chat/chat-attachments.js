@@ -161,8 +161,26 @@ N.Chat.attachments = {
   closeViewer: closeMediaViewer,
 };
 
+function triggerFileAttach() {
+  var input = document.createElement("input");
+  input.type = "file";
+  input.multiple = true;
+  input.accept = "image/*,.pdf,.txt,.json,.csv,.py,.js,.ts,.md,.log,.zip";
+  input.style.display = "none";
+  input.addEventListener("change", function () {
+    var files = Array.from(input.files);
+    for (var i = 0; i < files.length; i++) {
+      uploadAttachment(files[i]);
+    }
+    input.remove();
+  });
+  document.body.appendChild(input);
+  input.click();
+}
+
 window.uploadAttachment = uploadAttachment;
 window.openMediaViewer = openMediaViewer;
 window.closeMediaViewer = closeMediaViewer;
+window.triggerFileAttach = triggerFileAttach;
 
 })(window.Nous);
