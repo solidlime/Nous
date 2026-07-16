@@ -193,7 +193,7 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     auto_extract INTEGER DEFAULT 1,
     extract_model TEXT DEFAULT '',
     extract_max_tokens INTEGER DEFAULT 512,
-    tool_result_max_chars INTEGER DEFAULT 2000,
+    tool_result_max_chars INTEGER DEFAULT 4000,
     mcp_servers TEXT DEFAULT '[]',
     enabled_skills TEXT DEFAULT '[]',
     reflection_enabled INTEGER DEFAULT 1,

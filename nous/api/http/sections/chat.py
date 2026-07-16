@@ -372,7 +372,7 @@ def render_chat_tab() -> str:
                                         <span>ツール結果最大文字数</span>
                                         <span id="chat-tool-max-val" style="color:var(--accent-purple);">4000</span>
                                     </div>
-                                    <input type="range" id="chat-tool-result-max" class="chat-field-input" min="500" max="20000" step="500" value="4000"
+                                    <input type="range" id="chat-tool-result-max" class="chat-field-input" min="500" max="100000" step="500" value="4000"
                                         oninput="document.getElementById('chat-tool-max-val').textContent=this.value"
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
