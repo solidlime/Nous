@@ -143,7 +143,7 @@ function applyChatConfig(cfg) {
   setSlider(
     "chat-retrieval-rrf-k",
     "chat-retrieval-rrf-k-val",
-    cfg.retrieval_rrf_k != null ? cfg.retrieval_rrf_k : 60,
+    cfg.retrieval_rrf_k != null ? cfg.retrieval_rrf_k : 5,
   );
   set(
     "chat-display-history-turns",
@@ -384,7 +384,7 @@ async function saveChatConfig() {
       document.getElementById("chat-relevance-weight")?.value || "0.4",
     ),
     retrieval_rrf_k: parseInt(
-      document.getElementById("chat-retrieval-rrf-k")?.value || "60",
+      document.getElementById("chat-retrieval-rrf-k")?.value || "5",
     ),
     display_history_turns: parseInt(
       document.getElementById("chat-display-history-turns")?.value || "20",

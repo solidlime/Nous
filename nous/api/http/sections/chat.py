@@ -463,9 +463,9 @@ def render_chat_tab() -> str:
                                 <div>
                                     <div class="chat-field-label" style="display:flex;justify-content:space-between;">
                                         <span>RRF K値</span>
-                                        <span id="chat-retrieval-rrf-k-val" style="color:var(--accent-purple);">60</span>
+                                        <span id="chat-retrieval-rrf-k-val" style="color:var(--accent-purple);">5</span>
                                     </div>
-                                    <input type="range" id="chat-retrieval-rrf-k" class="chat-field-input" min="10" max="200" step="5" value="60"
+                                    <input type="range" id="chat-retrieval-rrf-k" class="chat-field-input" min="1" max="100" step="1" value="5"
                                         oninput="document.getElementById('chat-retrieval-rrf-k-val').textContent=this.value"
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
