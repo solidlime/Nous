@@ -254,7 +254,7 @@ def render_chat_tab() -> str:
                             <div class="details-body">
                                 <div>
                                     <div class="chat-field-label">表示履歴 (turns) <span style="color:var(--text-muted);font-size:0.7rem;">（ページロード時に遡る件数）</span></div>
-                                    <input type="number" id="chat-display-history-turns" class="chat-field-input" min="1" max="200" value="20" />
+                                    <input type="number" id="chat-display-history-turns" class="chat-field-input" min="1" max="200" value="10" />
                                     <span class="setting-hint">表示される履歴数です。AIが完全に記憶するターン数は「完全保持ターン数」で設定します。</span>
                                 </div>
                                 <div>

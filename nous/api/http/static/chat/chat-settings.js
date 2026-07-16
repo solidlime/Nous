@@ -87,7 +87,7 @@ function applyChatConfig(cfg) {
   }
   const toolMax = document.getElementById("chat-tool-result-max");
   const toolMaxVal = document.getElementById("chat-tool-max-val");
-  if (toolMax && cfg.tool_result_max_chars) {
+  if (toolMax && cfg.tool_result_max_chars != null) {
     toolMax.value = cfg.tool_result_max_chars;
     if (toolMaxVal) toolMaxVal.textContent = cfg.tool_result_max_chars;
   }
@@ -147,7 +147,7 @@ function applyChatConfig(cfg) {
   );
   set(
     "chat-display-history-turns",
-    cfg.display_history_turns != null ? cfg.display_history_turns : 20,
+    cfg.display_history_turns != null ? cfg.display_history_turns : 10,
   );
   // Context compression settings
   set("chat-stored-msgs", cfg.max_stored_messages ?? 200);
@@ -387,7 +387,7 @@ async function saveChatConfig() {
       document.getElementById("chat-retrieval-rrf-k")?.value || "5",
     ),
     display_history_turns: parseInt(
-      document.getElementById("chat-display-history-turns")?.value || "20",
+      document.getElementById("chat-display-history-turns")?.value || "10",
     ),
     mental_model_enabled: getChecked("chat-mental-model-enabled"),
     mental_model_min_samples: parseInt(

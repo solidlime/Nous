@@ -292,7 +292,7 @@ async function restoreChatHistory() {
     }
     // display_history_turns 件数分（最新N turns = N*2 messages）に制限
     const displayTurns = parseInt(
-      document.getElementById("chat-display-history-turns")?.value || "20",
+      document.getElementById("chat-display-history-turns")?.value || "10",
     );
     const maxMsgs = displayTurns * 2;
     const msgs = data.messages.slice(-maxMsgs);
