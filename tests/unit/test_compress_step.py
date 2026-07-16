@@ -673,7 +673,6 @@ class TestDogfooding:
                 system_prompt TEXT DEFAULT '',
                 temperature REAL DEFAULT 0.7,
                 max_tokens INTEGER DEFAULT 2048,
-                max_window_turns INTEGER DEFAULT 100,
                 max_tool_calls INTEGER DEFAULT 5,
                 updated_at TEXT,
                 auto_extract INTEGER DEFAULT 1,
@@ -735,7 +734,6 @@ class TestDogfooding:
             persona="test",
             provider="openrouter",
             model="openai/gpt-4o",
-            max_window_turns=20,
             max_stored_messages=40,
             context_max_tokens=50000,
             context_compression_threshold=0.75,
@@ -751,7 +749,6 @@ class TestDogfooding:
 
         loaded = repo.get("test")
         assert loaded.persona == "test"
-        assert loaded.max_window_turns == 20
         assert loaded.max_stored_messages == 40
         assert loaded.context_max_tokens == 50000
         assert loaded.context_compression_threshold == 0.75
@@ -783,22 +780,6 @@ class TestDogfooding:
 
         w = SessionWindow()
         assert w._max_messages == 200  # default
-
-    def test_chatconfig_max_window_turns_validator(self):
-        """Verify max_window_turns validates correctly with new 1-500 range."""
-        from nous.domain.chat_config import ChatConfig
-
-        # Within range
-        cfg = ChatConfig(persona="test", max_window_turns=100)
-        assert cfg.max_window_turns == 100
-
-        # Upper clamp (600 → 500)
-        cfg = ChatConfig(persona="test", max_window_turns=600)
-        assert cfg.max_window_turns == 500
-
-        # Lower clamp (0 → 1)
-        cfg = ChatConfig(persona="test", max_window_turns=0)
-        assert cfg.max_window_turns == 1
 
     def test_parallel_tools_flag_exists(self):
         """Verify enable_parallel_tools is accessible."""

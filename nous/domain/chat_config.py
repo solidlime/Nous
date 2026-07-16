@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import warnings
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ValidationError, field_validator
@@ -88,8 +87,7 @@ class ChatConfig(BaseModel):
     display_history_turns: int = 10
     debug_mode: bool = False
     # === Context compression (v2.1) ===
-    # DEPRECATED: remove when DB migration clears max_window_turns; use max_stored_messages
-    max_window_turns: int = 100
+    # (max_window_turns removed — use max_stored_messages)
     max_stored_messages: int = 200
     context_max_tokens: int | None = None  # None = auto-detect from model
     context_compression_threshold: float = 0.8  # 0.5-1.0
@@ -118,15 +116,6 @@ class ChatConfig(BaseModel):
     voice_emotion_link: bool = True
     voice_model: str = ""
     updated_at: str | None = None
-
-    def model_post_init(self, __context) -> None:
-        """Post-init hook: emit deprecation warnings for legacy fields."""
-        if self.max_window_turns is not None:
-            warnings.warn(
-                "max_window_turns is deprecated, use max_stored_messages instead",
-                DeprecationWarning,
-                stacklevel=2,
-            )
 
     @field_validator("temperature")
     @classmethod
@@ -177,11 +166,6 @@ class ChatConfig(BaseModel):
     @classmethod
     def _clamp_display_history_turns(cls, v: int) -> int:
         return max(1, min(200, v))
-
-    @field_validator("max_window_turns")
-    @classmethod
-    def _clamp_window_turns(cls, v: int) -> int:
-        return max(1, min(500, v))
 
     @field_validator("context_compression_threshold")
     @classmethod
@@ -270,7 +254,6 @@ class ChatConfigRepository:
         cursor = self._db.execute(
             "SELECT persona, provider, model, api_key, base_url, system_prompt, "
             "temperature, max_tokens, "
-            "max_window_turns, "  # DEPRECATED: remove when DB migration clears max_window_turns
             "max_tool_calls, updated_at, "
             "auto_extract, extract_model, extract_max_tokens, "
             "tool_result_max_chars, mcp_servers, enabled_skills, "
@@ -313,11 +296,6 @@ class ChatConfigRepository:
                     logger.warning("chat_config.get: corrupted JSON in '%s', falling back to []", jf)
                     data[jf] = []
 
-        # DEPRECATED: backward-compat fallback — remove when DB migration clears max_window_turns
-        if data.get("max_stored_messages") is None:
-            max_window = data.get("max_window_turns")
-            data["max_stored_messages"] = max(2, int(max_window) * 2) if max_window is not None else 200
-
         # Build kwargs: only pass known ChatConfig fields, skip None unless nullable
         nullable = {"updated_at", "context_max_tokens", "top_p"}
         kwargs = {k: v for k, v in data.items() if k in ChatConfig.model_fields and (v is not None or k in nullable)}
@@ -349,12 +327,11 @@ class ChatConfigRepository:
     def save(self, config: ChatConfig) -> None:
         """Insert or replace config for persona."""
         now = format_iso(get_now())
-        # DEPRECATED: max_window_turns — remove when DB migration clears the column
         self._db.execute(
             """
             INSERT INTO chat_settings
                 (persona, provider, model, api_key, base_url, system_prompt,
-                 temperature, max_tokens, max_window_turns, max_tool_calls,
+                 temperature, max_tokens, max_tool_calls,
                  auto_extract, extract_model, extract_max_tokens,
                  tool_result_max_chars, mcp_servers, enabled_skills,
                  reflection_enabled, reflection_threshold, reflection_min_interval_hours,
@@ -377,7 +354,7 @@ class ChatConfigRepository:
                        voice_auto_play, voice_emotion_link, voice_model,
                         disabled_tools,
                         updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
@@ -386,9 +363,7 @@ class ChatConfigRepository:
                 system_prompt=excluded.system_prompt,
                 temperature=excluded.temperature,
                 max_tokens=excluded.max_tokens,
-                max_window_turns=excluded.max_window_turns,  -- DEPRECATED: remove when DB migration clears
-
-                max_tool_calls=excluded.max_tool_calls,
+                 max_tool_calls=excluded.max_tool_calls,
                 auto_extract=excluded.auto_extract,
                 extract_model=excluded.extract_model,
                 extract_max_tokens=excluded.extract_max_tokens,
@@ -449,7 +424,6 @@ class ChatConfigRepository:
                 config.system_prompt,
                 config.temperature,
                 config.max_tokens,
-                config.max_window_turns,
                 config.max_tool_calls,
                 int(config.auto_extract),
                 config.extract_model,

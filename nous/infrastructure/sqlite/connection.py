@@ -187,7 +187,6 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     system_prompt TEXT DEFAULT '',
     temperature REAL DEFAULT 0.7,
     max_tokens  INTEGER DEFAULT 2048,
-    max_window_turns INTEGER DEFAULT 3,
     max_tool_calls INTEGER DEFAULT 5,
     updated_at  TEXT,
     auto_extract INTEGER DEFAULT 1,
@@ -195,7 +194,7 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     extract_max_tokens INTEGER DEFAULT 512,
     tool_result_max_chars INTEGER DEFAULT 4000,
     mcp_servers TEXT DEFAULT '[]',
-    enabled_skills TEXT DEFAULT '[]',
+    enabled_skills TEXT DEFAULT '["search","memory"]',
     reflection_enabled INTEGER DEFAULT 1,
     reflection_threshold REAL DEFAULT 1.0,
     reflection_min_interval_hours REAL DEFAULT 1.0,
@@ -205,7 +204,6 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     retrieval_relevance_weight REAL DEFAULT 0.4,
     retrieval_rrf_k REAL DEFAULT 5.0,
     display_history_turns INTEGER DEFAULT 20,
-    housekeeping_threshold INTEGER DEFAULT 10,
     mental_model_enabled INTEGER DEFAULT 1,
     mental_model_min_samples INTEGER DEFAULT 3,
     max_stored_messages INTEGER DEFAULT 200,
@@ -476,6 +474,36 @@ class SQLiteConnection:
                 logger.info("One-shot migration: %d state records -> memories", migrated)
         except Exception:
             pass
+
+        # Migration: enabled_skills default value correction (existing empty arrays)
+        try:
+            cursor = memory_conn.execute("SELECT persona FROM chat_settings WHERE enabled_skills = '[]'")
+            empty_rows = cursor.fetchall()
+            if empty_rows:
+                memory_conn.execute(
+                    "UPDATE chat_settings SET enabled_skills = ? WHERE enabled_skills = ?",
+                    ('["search","memory"]', "[]"),
+                )
+                logger.info(
+                    "migrated %d chat_settings rows: enabled_skills '[]' → '[\"search\",\"memory\"]'",
+                    len(empty_rows),
+                )
+        except Exception as e:
+            logger.warning("enabled_skills migration skipped: %s", e)
+
+        # Migration: drop unused housekeeping_threshold column
+        try:
+            memory_conn.execute("ALTER TABLE chat_settings DROP COLUMN housekeeping_threshold")
+            logger.info("dropped unused column: housekeeping_threshold")
+        except Exception as e:
+            logger.debug("housekeeping_threshold drop skipped (already dropped or not exists): %s", e)
+
+        # Migration: drop deprecated max_window_turns column
+        try:
+            memory_conn.execute("ALTER TABLE chat_settings DROP COLUMN max_window_turns")
+            logger.info("dropped deprecated column: max_window_turns")
+        except Exception as e:
+            logger.debug("max_window_turns drop skipped: %s", e)
 
         # Initialize FTS5 full-text search index
         self._init_fts_schema(memory_conn)

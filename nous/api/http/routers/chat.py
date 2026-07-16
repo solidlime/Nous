@@ -56,7 +56,6 @@ def register_chat_routes(mcp) -> None:
             "system_prompt",
             "temperature",
             "max_tokens",
-            "max_window_turns",
             "max_tool_calls",
             "auto_extract",
             "extract_model",

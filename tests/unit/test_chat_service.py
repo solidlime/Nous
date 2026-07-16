@@ -12,7 +12,9 @@ from nous.application.chat_service import SessionManager, SessionWindow
 from nous.domain.chat_config import ChatConfig, ChatConfigRepository
 from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent, ToolCallEvent
 
-_CHAT_JS_PATH = Path(__file__).resolve().parent.parent.parent / "nous" / "api" / "http" / "static" / "chat" / "chat-core.js"
+_CHAT_JS_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "nous" / "api" / "http" / "static" / "chat" / "chat-core.js"
+)
 
 
 def _read_chat_js() -> str:
@@ -214,12 +216,6 @@ class TestChatConfig:
         cfg2 = ChatConfig(persona="test", max_tokens=0)
         assert cfg2.max_tokens == 1
 
-    def test_window_turns_clamped(self):
-        cfg = ChatConfig(persona="test", max_window_turns=600)
-        assert cfg.max_window_turns == 500
-        cfg2 = ChatConfig(persona="test", max_window_turns=0)
-        assert cfg2.max_window_turns == 1
-
     def test_tool_calls_clamped(self):
         cfg = ChatConfig(persona="test", max_tool_calls=50)
         assert cfg.max_tool_calls == 20
@@ -324,7 +320,6 @@ class TestChatConfigRepository:
                 system_prompt TEXT DEFAULT '',
                 temperature REAL DEFAULT 0.7,
                 max_tokens INTEGER DEFAULT 2048,
-                max_window_turns INTEGER DEFAULT 3,
                 max_tool_calls INTEGER DEFAULT 5,
                 updated_at TEXT,
                 auto_extract INTEGER DEFAULT 1,
@@ -332,7 +327,7 @@ class TestChatConfigRepository:
                 extract_max_tokens INTEGER DEFAULT 512,
                 tool_result_max_chars INTEGER DEFAULT 4000,
                 mcp_servers TEXT DEFAULT '[]',
-                enabled_skills TEXT DEFAULT '[]',
+                enabled_skills TEXT DEFAULT '["search","memory"]',
                 reflection_enabled INTEGER DEFAULT 1,
                 reflection_threshold REAL DEFAULT 1.0,
                 reflection_min_interval_hours REAL DEFAULT 1.0,
@@ -482,7 +477,6 @@ class TestChatConfigRepository:
         assert loaded.model == "gpt-4o"
         assert loaded.api_key == "sk-test"
         assert loaded.temperature == 0.5
-        assert loaded.max_window_turns == 100
         assert loaded.auto_extract is True
         assert loaded.mcp_servers == []
 
