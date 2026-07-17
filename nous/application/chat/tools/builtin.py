@@ -227,13 +227,8 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
         from nous.infrastructure.image_gen.base import ImageGenConfig
         from nous.infrastructure.image_gen.factory import get_image_gen_provider
 
-        # comfyui_url フォールバック: ChatConfig → portrait_gen
+        # comfyui_url: ChatConfig per-persona setting
         comfyui_url = getattr(config, "image_gen_comfyui_url", "")
-        if not comfyui_url:
-            from nous.config.runtime_config import RuntimeConfigManager
-
-            rm = RuntimeConfigManager()
-            comfyui_url, _ = rm.get_effective_value("portrait_gen", "comfyui_url")
 
         # Gemini APIキー解決: RuntimeConfig → env → ChatConfig fallback
         gemini_api_key = ""

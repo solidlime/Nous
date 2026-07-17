@@ -180,7 +180,7 @@ class ComfyUIProvider(ImageGenProvider):
                 },
                 "9": {
                     "class_type": "SaveImage",
-                    "inputs": {"filename_prefix": "nous_portrait", "images": ["8", 0]},
+                    "inputs": {"filename_prefix": "nous_comfyui", "images": ["8", 0]},
                 },
                 "10": {
                     "class_type": "VAEEncode",
@@ -234,6 +234,6 @@ class ComfyUIProvider(ImageGenProvider):
                 },
                 "9": {
                     "class_type": "SaveImage",
-                    "inputs": {"filename_prefix": "nous_portrait", "images": ["8", 0]},
+                    "inputs": {"filename_prefix": "nous_comfyui", "images": ["8", 0]},
                 },
             }
