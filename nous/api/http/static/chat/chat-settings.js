@@ -179,10 +179,8 @@ function applyChatConfig(cfg) {
       document.getElementById("threshold-display").textContent =
         this.value + "%";
     });
-  // Extensions: irodori / portrait
+  // Extensions: irodori
   setChecked("chat-irodori-enabled", cfg.irodori_enabled === true);
-  setChecked("chat-portrait-enabled", cfg.portrait_enabled === true);
-  S.portraitEnabled = cfg.portrait_enabled;  // expose to other chat modules
   // Voice / TTS settings (TE04)
   setChecked("chat-voice-emotion-link", cfg.voice_emotion_link !== false);
   setChecked("chat-voice-auto-play", cfg.voice_auto_play === true);
@@ -421,9 +419,8 @@ async function saveChatConfig() {
     image_gen_replicate_api_key: document.getElementById("chat-image-gen-replicate-api-key")
       ? document.getElementById("chat-image-gen-replicate-api-key").value.trim()
       : "",
-    // 拡張機能: irodori / portrait
+    // 拡張機能: irodori
     irodori_enabled: getChecked("chat-irodori-enabled"),
-    portrait_enabled: getChecked("chat-portrait-enabled"),
     // Voice / TTS settings (TE04)
     voice_auto_play: getChecked("chat-voice-auto-play"),
     voice_emotion_link: getChecked("chat-voice-emotion-link"),

@@ -33,7 +33,7 @@ const CATEGORY_ICONS = {
     irodori: '<i data-lucide="mic"></i>',
     auto_capture: '<i data-lucide="camera"></i>',
     memorag: '<i data-lucide="layers"></i>',
-    portrait_gen: '<i data-lucide="image"></i>',
+
     plugin: '<i data-lucide="puzzle"></i>',
     general: '<i data-lucide="settings"></i>'
 };
@@ -49,7 +49,7 @@ const CATEGORY_DESCRIPTIONS = {
     irodori: '音声合成（Irodori TTS）設定 — グローバルデフォルト値です。各ペルソナのチャット設定パネルで上書き可能です。',
     auto_capture: '自動メモリキャプチャ設定',
     memorag: 'MemoRAG設定',
-    portrait_gen: 'ポートレート自動生成設定 — グローバルデフォルト値です。各ペルソナのチャット設定パネルで上書き可能です。',
+
     plugin: '外部プラグインAPI設定',
     general: 'General settings: timezone, logging, thresholds, search engine.'
 };
@@ -58,7 +58,7 @@ const CATEGORY_DESCRIPTIONS = {
 const CATEGORY_ORDER = [
     'api_keys', 'general', 'server', 'embedding', 'reranker',
     'qdrant', 'forgetting', 'memory_enrichment',
-    'irodori', 'auto_capture', 'memorag', 'portrait_gen', 'plugin'
+    'irodori', 'auto_capture', 'memorag', 'plugin'
 ];
 
 /* ═══════════════════════════════════════════════════════════════════

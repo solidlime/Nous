@@ -11,7 +11,6 @@ def render_chat_tab() -> str:
     """Return the HTML for the Chat tab."""
     return f"""
         <link rel="stylesheet" href="/static/chat.css">
-        <link rel="stylesheet" href="/static/portrait.css">
         <!-- ========== CHAT TAB ========== -->
         <section id="tab-chat" class="tab-panel" role="tabpanel">
             <div style="position:relative; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
@@ -71,16 +70,6 @@ def render_chat_tab() -> str:
 
                 <!-- Chat area -->
                 <div id="chat-main">
-                    <!-- Persona Portrait -->
-                    <div id="portrait-area">
-                        <div id="portrait-container" onclick="onPortraitClick()">
-                            <div id="portrait-placeholder">
-                                <i data-lucide="user"></i>
-                            </div>
-                            <img id="portrait-img" alt="Persona portrait" style="display:none;" />
-                        </div>
-                        <div id="portrait-status"></div>
-                    </div>
                     <div id="chat-messages">
                         <div class="chat-welcome" id="chat-welcome">
                             <div class="chat-welcome-icon"><i data-lucide="message-circle"></i></div>
@@ -471,7 +460,7 @@ def render_chat_tab() -> str:
                                 </div>
                             </div>
                         </details>
-                        <!-- Extensions: irodori / portrait -->
+                        <!-- Extensions: irodori -->
                         <details data-category="extensions">
                             <summary><i data-lucide="puzzle"></i> 拡張機能 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'extensions')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
@@ -479,11 +468,6 @@ def render_chat_tab() -> str:
                                     <input type="checkbox" id="chat-irodori-enabled"
                                         style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
                                     <label for="chat-irodori-enabled" class="chat-field-label" style="margin:0;cursor:pointer;">irodori を有効にする</label>
-                                </div>
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <input type="checkbox" id="chat-portrait-enabled"
-                                        style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
-                                    <label for="chat-portrait-enabled" class="chat-field-label" style="margin:0;cursor:pointer;">Portrait を有効にする</label>
                                 </div>
                             </div>
                         </details>

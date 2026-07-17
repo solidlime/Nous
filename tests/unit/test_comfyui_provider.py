@@ -89,7 +89,7 @@ async def test_generate_submits_workflow_and_returns_images():
                 "outputs": {
                     "9": {
                         "images": [
-                            {"filename": "nous_portrait_0001.png", "type": "output"},
+                            {"filename": "nous_comfyui_0001.png", "type": "output"},
                         ],
                     },
                 },
@@ -222,8 +222,8 @@ async def test_generate_multiple_images():
                 "outputs": {
                     "9": {
                         "images": [
-                            {"filename": "nous_portrait_0001.png", "type": "output"},
-                            {"filename": "nous_portrait_0002.png", "type": "output"},
+                            {"filename": "nous_comfyui_0001.png", "type": "output"},
+                            {"filename": "nous_comfyui_0002.png", "type": "output"},
                         ],
                     },
                 },

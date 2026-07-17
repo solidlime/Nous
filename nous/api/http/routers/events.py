@@ -16,9 +16,6 @@ from nous.application.event_bus import (
     EVENT_MEMORY_CREATED,
     EVENT_MEMORY_DELETED,
     EVENT_MEMORY_UPDATED,
-    PORTRAIT_GENERATE_COMPLETE,
-    PORTRAIT_GENERATE_ERROR,
-    PORTRAIT_GENERATE_START,
 )
 from nous.domain.memory.session_event import SessionEvent
 from nous.infrastructure.logging.structured import get_logger
@@ -37,9 +34,6 @@ _ALL_EVENT_TYPES = frozenset(
         EVENT_CONTEXT_UPDATED,
         EVENT_EMOTION_CHANGED,
         EVENT_BODY_STATE_CHANGED,
-        PORTRAIT_GENERATE_START,
-        PORTRAIT_GENERATE_COMPLETE,
-        PORTRAIT_GENERATE_ERROR,
     }
 )
 

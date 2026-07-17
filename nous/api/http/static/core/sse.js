@@ -33,7 +33,7 @@ N.Core.connectSSE = function connectSSE(persona) {
   N.Core._sseBackoff = 5000;
   var es = new EventSource(
     "/api/events/" + encodeURIComponent(persona) +
-    "?topics=memory,context,portrait,emotion,body"
+    "?topics=memory,context,emotion,body"
   );
   es._sseHandlers = {};
 
@@ -94,32 +94,6 @@ N.Core.connectSSE = function connectSSE(persona) {
       }
     } catch (err) { console.warn("[SSE parse] context.body_state_changed:", err.message); }
   });
-
-  // Portrait SSE
-  es._sseHandlers["portrait.generate_start"] = function(e) {
-    try {
-      var d = JSON.parse(e.data);
-      if (typeof window.handlePortraitGenerateStart === 'function') window.handlePortraitGenerateStart(d);
-    } catch (err) { console.warn("[SSE parse] portrait.generate_start:", err.message); }
-  };
-  es.addEventListener("portrait.generate_start", es._sseHandlers["portrait.generate_start"]);
-
-  es._sseHandlers["portrait.generate_complete"] = function(e) {
-    try {
-      var d = JSON.parse(e.data);
-      if (typeof window.handlePortraitGenerateComplete === 'function') window.handlePortraitGenerateComplete(d);
-    } catch (err) { console.warn("[SSE parse] portrait.generate_complete:", err.message); }
-  };
-  es.addEventListener("portrait.generate_complete", es._sseHandlers["portrait.generate_complete"]);
-
-  es._sseHandlers["portrait.generate_error"] = function(e) {
-    try {
-      var d = JSON.parse(e.data);
-      if (typeof window.handlePortraitGenerateError === 'function') window.handlePortraitGenerateError(d);
-    } catch (err) { console.warn("[SSE parse] portrait.generate_error:", err.message); }
-  };
-  es.addEventListener("portrait.generate_error", es._sseHandlers["portrait.generate_error"]);
-
   es.onopen = function handleSSEOpen() {
     _setSseStatus("connected");
     N.Core._sseBackoff = 5000;

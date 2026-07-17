@@ -95,7 +95,6 @@ async function loadChat() {
   setupChatInputHandler();
   loadChatCommitments();
   loadEquipment();
-  loadPortrait();
   setTimeout(() => {
     if (typeof lucide !== "undefined") lucide.createIcons();
   }, 100);

@@ -23,7 +23,6 @@ def render_overview_tab() -> str:
                 <div class="glass p-6 mb-6"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text" style="width:80%"></div></div>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="glass p-6"><div class="skeleton skeleton-chart"></div></div><div class="glass p-6"><div class="skeleton skeleton-chart"></div></div></div>
             </div>
-            <link rel="stylesheet" href="/static/portrait.css">
         </section>"""
 
 
