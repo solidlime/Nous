@@ -49,13 +49,13 @@ async def _safe_reflection(
     turn_ctx: ChatTurnContext,
 ) -> None:
     """Background task: run reflection after DoneSSE."""
-    if not getattr(config, "reflection_enabled", True):
+    if not config.reflection_enabled:
         return
     importance_sum = (
         sum(float(f.get("importance", 0.6)) for f in memory_result.get("facts", []))
         + len(turn_ctx.tool_calls_log) * 0.1
     )
-    threshold = getattr(config, "reflection_threshold", 1.0)
+    threshold = config.reflection_threshold
     if importance_sum < threshold:
         return
     try:
@@ -67,7 +67,7 @@ async def _safe_reflection(
 
 async def _safe_mental_model(ctx: AppContext, config: ChatConfig) -> None:
     """Background task: run mental model after DoneSSE."""
-    if not getattr(config, "mental_model_enabled", True):
+    if not config.mental_model_enabled:
         return
     try:
         await maybe_run_mental_model(ctx, config)
@@ -82,10 +82,10 @@ async def _safe_episode_consolidation(
     session: SessionWindow,
 ) -> None:
     """Background task: run episode consolidation after DoneSSE."""
-    if not getattr(config, "episode_consolidation_enabled", True):
+    if not config.episode_consolidation_enabled:
         return
     try:
-        messages = session._messages if hasattr(session, "_messages") else []
+        messages = list(session._messages) if hasattr(session, "_messages") else []
         if len(messages) >= 4:
             from nous.application.chat.pipeline.episode_consolidation import (
                 EpisodeConsolidation,
@@ -116,6 +116,9 @@ async def _safe_episode_consolidation(
 class PostProcessStep:
     """MemoryLLM await実行 + Reflection SSE + セッション更新 + debug_info/done SSEの送出。"""
 
+    def __init__(self) -> None:
+        self._background_tasks: list[asyncio.Task] = []
+
     async def run(
         self,
         ctx: AppContext,
@@ -133,7 +136,7 @@ class PostProcessStep:
     ]:
         # evict_callback を設定（session.add は service.py で既に実行済み）
         _summary_tasks: list[asyncio.Task] = []
-        if getattr(config, "session_summarize", True):
+        if config.session_summarize:
 
             def _evict_cb(evicted: list[dict]) -> None:
                 _summary_tasks.append(asyncio.create_task(_do_summarize(ctx, config, evicted)))
@@ -154,12 +157,14 @@ class PostProcessStep:
             if ctx.settings.auto_capture.enabled and session._messages:
                 from nous.application.chat.pipeline.auto_capture import run_auto_capture
 
-                asyncio.create_task(
-                    run_auto_capture(
-                        ctx=ctx,
-                        persona=ctx.persona,
-                        messages=session._messages,
-                        max_memories=ctx.settings.auto_capture.max_memories,
+                self._background_tasks.append(
+                    asyncio.create_task(
+                        run_auto_capture(
+                            ctx=ctx,
+                            persona=ctx.persona,
+                            messages=list(session._messages),
+                            max_memories=ctx.settings.auto_capture.max_memories,
+                        )
                     )
                 )
         except Exception as e:
@@ -242,7 +247,7 @@ class PostProcessStep:
         yield DoneSSE(truncated=turn_ctx.was_truncated)
 
         # Fire-and-forget: DoneSSE後に後処理を非同期タスクとして実行
-        asyncio.create_task(_safe_reflection(ctx, config, memory_result, turn_ctx))
-        asyncio.create_task(_safe_mental_model(ctx, config))
-        asyncio.create_task(_safe_episode_consolidation(ctx, config, session))
+        self._background_tasks.append(asyncio.create_task(_safe_reflection(ctx, config, memory_result, turn_ctx)))
+        self._background_tasks.append(asyncio.create_task(_safe_mental_model(ctx, config)))
+        self._background_tasks.append(asyncio.create_task(_safe_episode_consolidation(ctx, config, session)))
         return
