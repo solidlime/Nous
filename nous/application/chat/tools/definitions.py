@@ -312,7 +312,5 @@ _NOUS_TOOL_NAMES: frozenset[str] = frozenset(
         "invoke_skill",
         "image_generate",
         "list_skills",
-        "irodori_tts",
-        "irodori_voices",
     }
 )
