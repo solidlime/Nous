@@ -22,7 +22,6 @@ Call these tools proactively — do not wait for the user to ask.
 | `item_add / item_equip / item_search` | Manage physical inventory and equipment (3 tools) |
 | `goal_manage(operation, ...)` | Create / list / achieve / cancel goals |
 | `invoke_skill(name, task)` | Execute a registered skill |
-| `persona_portrait()` | Generate persona portrait image |
 | `irodori_tts(text, voice)` | Japanese TTS voice synthesis |
 | `search(query, ...)` | Web search via SearXNG |
 | `image_generate(prompt, ...)` | Generate images |
@@ -477,57 +476,6 @@ effective_temperature = base_temperature + emotion_modulation
 Dynamic Temperature settings are available in the Chat Config section of the WebUI Settings page. Changes take effect on the next message.
 
 ---
-
-## 11. Persona Portrait Generation / ペルソナ肖像生成
-
-Persona Portrait Generation creates AI-generated character images using ComfyUI (or other providers). **Default OFF** — must be explicitly enabled via configuration to avoid unintended API costs.
-
-### Configuration (`PortraitGenerationConfig`)
-
-Environment variables (prefix `NOUS__PORTRAIT_GEN__`):
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NOUS__PORTRAIT_GEN__ENABLED` | `false` | **DEFAULT OFF** — master switch for portrait generation |
-| `NOUS__PORTRAIT_GEN__PROVIDER` | `comfyui` | Backend: `comfyui` \| `openai` \| `stability` |
-| `NOUS__PORTRAIT_GEN__COMFYUI_URL` | `http://localhost:8188` | ComfyUI API address (used when `provider=comfyui`) |
-| `NOUS__PORTRAIT_GEN__AUTO_GENERATE` | `false` | Auto-generate portrait on emotion change (also OFF by default) |
-| `NOUS__PORTRAIT_GEN__GENERATE_INTERVAL_MIN` | `10` | Minimum minutes between auto-generations |
-| `NOUS__PORTRAIT_GEN__SIZE` | `512x512` | Preview image size |
-| `NOUS__PORTRAIT_GEN__QUALITY` | `standard` | Image quality setting |
-| `NOUS__PORTRAIT_GEN__EMOTION_THRESHOLD` | `0.3` | Only regenerate if emotion intensity change exceeds this threshold |
-| `NOUS__PORTRAIT_GEN__MAX_MONTHLY_BUDGET` | `5.0` | Monthly USD cap for cloud providers (`0` = N/A for local ComfyUI) |
-
-### Providers
-
-| Provider | Requirements | Cost |
-|----------|-------------|------|
-| `comfyui` | Local ComfyUI server (GPU recommended) | Free (local GPU) |
-| `openai` | OpenAI API key (`NOUS__OPENAI_API_KEY`) | Pay-per-image |
-| `stability` | Stability AI API key | Pay-per-image |
-
-### Auto-generation behavior
-
-When `auto_generate=True`, the system checks after each emotion change:
-1. Has `generate_interval_min` elapsed since last generation?
-2. Did emotion intensity change by at least `emotion_threshold`?
-3. Has `max_monthly_budget` been exceeded? (cloud providers only)
-4. If all checks pass → queues portrait generation
-
-### MCP Tool
-
-The `persona_portrait` tool is registered for LLM use. Portrait generation is enabled per-persona via `ChatConfig.portrait_enabled` (default: `False`):
-
-```python
-# Generate or update persona portrait
-persona_portrait(
-    style="anime",          # Optional style hint
-    emotion="joy",          # Optional emotion override (uses current if omitted)
-    force=False             # Skip rate-limit checks when True
-)
-```
-
-> **⚠️ Cost Warning**: Always verify `chat_config.portrait_enabled` is `True` before calling (via `ChatConfigRepository.get(persona)`). Default is OFF for a reason — generating images via cloud providers incurs API costs.
 
 ---
 
