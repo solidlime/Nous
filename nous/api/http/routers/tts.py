@@ -23,14 +23,9 @@ def register_tts_routes(mcp) -> None:
         if not ctx:
             return JSONResponse({"ok": False, "error": "Persona not found"}, status_code=404)
 
-        # ChatConfig-based enabled check (no global fallback)
         from nous.domain.chat_config import ChatConfigRepository
 
         chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-        enabled = chat_config.irodori_enabled
-        if not enabled:
-            return JSONResponse({"ok": False, "error": "TTS not enabled"}, status_code=400)
-
         irodori_config = ctx.settings.irodori
         engine = get_voice_engine(irodori_config)
 
@@ -91,13 +86,6 @@ def register_tts_routes(mcp) -> None:
         ctx = _safe_get_context(persona)
         if not ctx:
             return JSONResponse({"ok": False, "error": "Persona not found"}, status_code=404)
-
-        from nous.domain.chat_config import ChatConfigRepository
-
-        chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-        enabled = chat_config.irodori_enabled
-        if not enabled:
-            return JSONResponse({"ok": False, "error": "TTS not enabled"}, status_code=400)
 
         irodori_config = ctx.settings.irodori
 
