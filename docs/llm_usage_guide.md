@@ -6,7 +6,7 @@
 
 ## Overview / 概要
 
-Memory MCP exposes **19 MCP tools** that give AI agents persistent, searchable long-term memory.
+Memory MCP exposes **12 MCP tools** that give AI agents persistent, searchable long-term memory.
 Call these tools proactively — do not wait for the user to ask.
 
 | Tool | Purpose |
@@ -21,11 +21,8 @@ Call these tools proactively — do not wait for the user to ask.
 | `update_context(...)` | Update emotion, physical state, user info in real time |
 | `item_add / item_equip / item_search` | Manage physical inventory and equipment (3 tools) |
 | `goal_manage(operation, ...)` | Create / list / achieve / cancel goals |
-| `invoke_skill(name, task)` | Execute a registered skill |
 | `search(query, ...)` | Web search via SearXNG |
-| `image_generate(prompt, ...)` | Generate images |
 | `read_pdf(path)` | Parse PDF files |
-| `list_skills()` | List registered skills |
 
 ---
 

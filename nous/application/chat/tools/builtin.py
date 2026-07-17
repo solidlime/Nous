@@ -7,6 +7,7 @@ import os
 import re
 from typing import TYPE_CHECKING, Any
 
+from nous.api.mcp._tools_skill import _tool_invoke_skill
 from nous.api.mcp.tools import TOOL_DISPATCH
 from nous.application.chat.tools.definitions import _NOUS_TOOL_NAMES
 from nous.config.settings import get_settings
@@ -331,17 +332,29 @@ async def _handle_list_skills(ctx: AppContext, config: ChatConfig, tool_input: d
         return {"status": "error", "message": str(e)}
 
 
+async def _handle_invoke_skill(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
+    """Execute a skill via isolated LLM context. Delegates to _tool_invoke_skill."""
+    name = tool_input.get("name", "")
+    task = tool_input.get("task", "")
+    if not name or not task:
+        return {"status": "error", "message": "name and task are required"}
+    r = await _tool_invoke_skill(ctx, ctx.persona, name=name, task=task)
+    if r.get("ok"):
+        return {"status": "ok", "result": r.get("result", "(no response)")}
+    return {"status": "error", "message": r.get("error", "unknown")}
+
+
 # ── Handler dispatch table (replaces if/elif chain) ──
 
 _BUILTIN_DISPATCH: dict[str, Any] = {
     "list_skills": _handle_list_skills,
     "image_generate": _handle_image_generate,
+    "invoke_skill": _handle_invoke_skill,
 }
 
 _MCP_SHARED_TOOLS = frozenset(
     {
         "goal_manage",
-        "invoke_skill",
         "update_context",
         "memory_create",
         "memory_search",
@@ -389,4 +402,4 @@ async def execute_tool(ctx: AppContext, config: ChatConfig, tool_name: str, tool
         return {"status": "error", "message": str(e)}
 
 
-# invoke_skill is now handled via TOOL_DISPATCH → _tool_invoke_skill in tools.py
+# invoke_skill is now handled via _BUILTIN_DISPATCH → _handle_invoke_skill
