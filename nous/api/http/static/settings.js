@@ -30,7 +30,6 @@ const CATEGORY_ICONS = {
     qdrant: '<i data-lucide="package"></i>',
     forgetting: '<i data-lucide="eraser"></i>',
     memory_enrichment: '<i data-lucide="sparkles"></i>',
-    irodori: '<i data-lucide="mic"></i>',
     auto_capture: '<i data-lucide="camera"></i>',
     memorag: '<i data-lucide="layers"></i>',
 
@@ -46,7 +45,6 @@ const CATEGORY_DESCRIPTIONS = {
     qdrant: 'Qdrant vector database connection settings.',
     forgetting: 'Ebbinghaus forgetting curve for automatic memory decay.',
     memory_enrichment: 'Auto-evaluate importance and relations via LLM after memory creation.',
-    irodori: '音声合成（Irodori TTS）設定 — グローバルデフォルト値です。各ペルソナのチャット設定パネルで上書き可能です。',
     auto_capture: '自動メモリキャプチャ設定',
     memorag: 'MemoRAG設定',
 
@@ -58,7 +56,7 @@ const CATEGORY_DESCRIPTIONS = {
 const CATEGORY_ORDER = [
     'api_keys', 'general', 'server', 'embedding', 'reranker',
     'qdrant', 'forgetting', 'memory_enrichment',
-    'irodori', 'auto_capture', 'memorag', 'plugin'
+    'auto_capture', 'memorag', 'plugin'
 ];
 
 /* ═══════════════════════════════════════════════════════════════════
