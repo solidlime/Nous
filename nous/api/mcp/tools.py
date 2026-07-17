@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 from typing import Annotated, Any
 
@@ -43,7 +42,6 @@ from nous.api.mcp._tools_memory import (  # noqa: E402, F401
     _tool_memory_update,
 )
 from nous.api.mcp._tools_persona import _tool_get_context, _tool_update_context  # noqa: E402, F401
-from nous.api.mcp._tools_skill import _tool_invoke_skill  # noqa: E402, F401
 
 # =============================================================================
 # Dispatch table — maps tool name → (core_function, docstring)
@@ -62,7 +60,6 @@ TOOL_DISPATCH: dict[str, Any] = {
     "item_equip": _tool_item_equip,
     "item_search": _tool_item_search,
     "goal_manage": _tool_goal_manage,
-    "invoke_skill": _tool_invoke_skill,
 }
 
 
@@ -342,60 +339,6 @@ def register_tools(mcp: FastMCP) -> None:
                 return r["result"]
             return "Goal done"
         return f"Error: {r.get('error', 'unknown')}"
-
-    # invoke_skill
-    @_tool("invoke_skill")
-    async def invoke_skill(name: str, task: str) -> str:
-        """Execute a skill in isolated LLM context. Loads skill from store,
-        runs with chat config provider/model. Returns skill output text."""
-        p = _resolve_persona()
-        r = await _tool_invoke_skill(AppContextRegistry.get(p), p, name=name, task=task)
-        if r.get("ok"):
-            return r.get("result", "(no response)")
-        return f"Error: {r.get('error', 'unknown')}"
-
-    # ── Chat builtin tool wrappers (delegate to builtin.py handlers) ──
-
-    # image_generate
-    @_tool("image_generate")
-    async def image_generate(
-        prompt: str,
-        size: str = "1024x1024",
-        quality: str = "standard",
-        n: int = 1,
-        provider: str = "auto",
-    ) -> str:
-        """画像生成。prompt必須。nは1-4枚、size指定可。"""
-        from nous.application.chat.tools.builtin import _handle_image_generate
-        from nous.domain.chat_config import ChatConfigRepository
-
-        p = _resolve_persona()
-        ctx = AppContextRegistry.get(p)
-        config = ChatConfigRepository(ctx.connection.get_memory_db()).get(p)
-        result = await _handle_image_generate(
-            ctx,
-            config,
-            {
-                "prompt": prompt,
-                "size": size,
-                "quality": quality,
-                "n": n,
-                "provider": provider,
-            },
-        )
-        return json.dumps(result, ensure_ascii=False)
-
-    # list_skills
-    @_tool("list_skills")
-    async def list_skills() -> str:
-        """登録スキル一覧を取得。"""
-        from nous.application.chat.tools.builtin import _handle_list_skills
-        from nous.domain.chat_config import ChatConfig
-
-        p = _resolve_persona()
-        ctx = AppContextRegistry.get(p)
-        result = await _handle_list_skills(ctx, ChatConfig(), {})
-        return json.dumps(result, ensure_ascii=False)
 
 
 def _resolve_persona() -> str:
