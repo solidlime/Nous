@@ -244,7 +244,7 @@ def render_chat_tab() -> str:
                                 </div>
                                 <div>
                                     <div class="chat-field-label">Max Tokens</div>
-                                    <input type="number" id="chat-max-tokens" class="chat-field-input" min="1" max="32768" value="2048" />
+                                    <input type="number" id="chat-max-tokens" class="chat-field-input" min="1" max="131072" value="8192" />
                                 </div>
                             </div>
                         </details>

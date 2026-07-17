@@ -126,6 +126,7 @@ class AnthropicProvider(LLMProvider):
                 kwargs["tools"] = anthropic_tools
 
             full_text = ""
+            finish_reason = ""
             tool_calls_collected: list[ToolCallEvent] = []
             current_tool: dict | None = None
 
@@ -163,7 +164,17 @@ class AnthropicProvider(LLMProvider):
                             yield tc
                             current_tool = None
 
-            yield DoneEvent(full_content=full_text, tool_calls=tool_calls_collected)
+                    elif event_type == "message_delta":
+                        raw = getattr(event.delta, "stop_reason", "") or ""
+                        reason_map = {
+                            "end_turn": "stop",
+                            "max_tokens": "length",
+                            "tool_use": "tool_calls",
+                            "stop_sequence": "stop",
+                        }
+                        finish_reason = reason_map.get(raw, raw)
+
+            yield DoneEvent(full_content=full_text, tool_calls=tool_calls_collected, finish_reason=finish_reason)
 
         except Exception as e:
             yield ErrorEvent(message=str(e))

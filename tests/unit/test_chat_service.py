@@ -202,7 +202,7 @@ class TestChatConfig:
         assert cfg.provider == "anthropic"
         assert cfg.model == ""
         assert cfg.temperature == 0.7
-        assert cfg.max_tokens == 2048
+        assert cfg.max_tokens == 8192
 
     def test_temperature_clamped(self):
         cfg = ChatConfig(persona="test", temperature=5.0)

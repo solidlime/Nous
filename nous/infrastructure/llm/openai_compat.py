@@ -127,6 +127,7 @@ class OpenAICompatProvider(LLMProvider):
                 kwargs["tools"] = openai_tools
 
             full_text = ""
+            finish_reason = ""
             tool_calls_collected: list[ToolCallEvent] = []
             # Accumulate tool call chunks by index
             pending_tool_calls: dict[int, dict] = {}
@@ -136,6 +137,9 @@ class OpenAICompatProvider(LLMProvider):
                     delta = chunk.choices[0].delta if chunk.choices else None
                     if delta is None:
                         continue
+
+                    if chunk.choices and chunk.choices[0].finish_reason:
+                        finish_reason = chunk.choices[0].finish_reason
 
                     if delta.content:
                         full_text += delta.content
@@ -184,7 +188,7 @@ class OpenAICompatProvider(LLMProvider):
                 tool_calls_collected.append(tc)
                 yield tc
 
-            yield DoneEvent(full_content=full_text, tool_calls=tool_calls_collected)
+            yield DoneEvent(full_content=full_text, tool_calls=tool_calls_collected, finish_reason=finish_reason)
 
         except Exception as e:
             yield ErrorEvent(message=str(e))

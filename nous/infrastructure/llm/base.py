@@ -46,6 +46,7 @@ class DoneEvent:
     type: Literal["done"] = "done"
     full_content: str = ""
     tool_calls: list[ToolCallEvent] = field(default_factory=list)
+    finish_reason: str = ""
 
 
 @dataclass

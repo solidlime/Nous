@@ -56,9 +56,10 @@ class DebugInfoSSE:
 @dataclass
 class DoneSSE:
     message: str = "completed"
+    truncated: bool = False
 
     def to_sse(self) -> str:
-        return _sse_encode("done", {"message": self.message})
+        return _sse_encode("done", {"message": self.message, "truncated": self.truncated})
 
 
 @dataclass

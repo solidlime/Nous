@@ -32,5 +32,7 @@ class ChatTurnContext:
     full_response: str = ""
     tool_calls_log: list[dict] = field(default_factory=list)
     tool_call_count: int = 0
+    # InferenceStep が埋める (インタラクティブに追記)
+    was_truncated: bool = False  # max_tokens到達による応答切断が発生したか
     # セグメント順序記録（F2 履歴復元用: text/tool_call/tool_result の順序を保持）
     segments: list[dict] = field(default_factory=list)

@@ -50,7 +50,7 @@ class ChatConfig(BaseModel):
     base_url: str = ""
     system_prompt: str = ""
     temperature: float = 0.7
-    max_tokens: int = 2048
+    max_tokens: int = 8192
     max_tool_calls: int = 5
     auto_extract: bool = True
     extract_model: str = ""

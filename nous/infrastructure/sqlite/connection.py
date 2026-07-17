@@ -186,7 +186,7 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     base_url    TEXT DEFAULT '',
     system_prompt TEXT DEFAULT '',
     temperature REAL DEFAULT 0.7,
-    max_tokens  INTEGER DEFAULT 2048,
+    max_tokens  INTEGER DEFAULT 8192,
     max_tool_calls INTEGER DEFAULT 5,
     updated_at  TEXT,
     auto_extract INTEGER DEFAULT 1,

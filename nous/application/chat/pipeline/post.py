@@ -176,7 +176,7 @@ class PostProcessStep:
                 logger.warning("PostProcessStep: debug_info SSE failed: %s", e)
                 yield DebugInfoSSE(data={"error": str(e), "system_prompt": turn_ctx.system_prompt[:500]})
 
-        yield DoneSSE()
+        yield DoneSSE(truncated=turn_ctx.was_truncated)
 
         # Reflection: DoneSSE後にawait実行 & SSE通知
         # importance_sum = 保存された facts の importance 合計 + ツールコール数 * 0.3

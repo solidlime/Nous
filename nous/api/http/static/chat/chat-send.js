@@ -514,6 +514,19 @@ async function chatSend(retry) {
             }
           }
           statusEl.textContent = "";
+          // Show truncation notice when response was auto-continued
+          if (evt.truncated) {
+            const notice = document.createElement("div");
+            notice.className = "chat-truncation-notice";
+            notice.textContent = "⚠️ 応答が長すぎたため自動継続されました";
+            // Insert after the last text bubble inside assistantDiv
+            const lastBubble = assistantDiv.querySelector(".chat-bubble:last-of-type");
+            if (lastBubble) {
+              lastBubble.insertAdjacentElement("afterend", notice);
+            } else if (assistantDiv) {
+              assistantDiv.appendChild(notice);
+            }
+          }
         }
       }
       if (streamDone) break;

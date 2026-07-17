@@ -74,11 +74,14 @@ class InferenceStep:
             messages.append(LLMMessage(role="user", content=turn_ctx.user_message))
 
         temperature = effective_temp if effective_temp is not None else config.temperature
+        max_continuation_rounds = 3
+        _continuation_rounds = 0
         while turn_ctx.tool_call_count <= config.max_tool_calls:
             pending_tool_calls: list[ToolCallEvent] = []
             _yielded_tool_ids: set[str] = set()  # dedup SSE+segments across empty→full yields
             current_text = ""
             _seg_text = ""  # text accumulator for segment ordering
+            _finish_reason = ""  # set by DoneEvent handler inside stream loop
 
             async for event in provider.stream(
                 messages=messages,
@@ -130,17 +133,43 @@ class InferenceStep:
                     return
                 elif isinstance(event, DoneEvent):
                     # Provider finished streaming this turn.
+                    _finish_reason = (event.finish_reason or "").lower()
                     if not current_text and not pending_tool_calls:
                         logger.warning(
-                            "InferenceStep: provider finished with empty response (model=%s, turn=%d)",
+                            "InferenceStep: provider finished with empty response (model=%s, turn=%d, finish=%s)",
                             config.get_effective_model(),
                             turn_ctx.tool_call_count,
+                            _finish_reason,
                         )
 
             # Flush remaining text segment after inner loop
             if _seg_text:
                 turn_ctx.segments.append({"type": "text", "content": _seg_text})
                 _seg_text = ""
+
+            # Auto-continue if response was truncated by max_tokens limit
+            if not pending_tool_calls and _finish_reason == "length" and current_text:
+                _continuation_rounds += 1
+                if _continuation_rounds <= max_continuation_rounds:
+                    logger.info(
+                        "InferenceStep: response truncated by max_tokens, auto-continuing (round %d/%d, model=%s)",
+                        _continuation_rounds,
+                        max_continuation_rounds,
+                        config.get_effective_model(),
+                    )
+                    turn_ctx.was_truncated = True
+                    # Save partial text as assistant message for continuation context
+                    messages.append(LLMMessage(role="assistant", content=current_text))
+                    # Empty user message prompts LLM to continue from where it left off
+                    messages.append(LLMMessage(role="user", content=""))
+                    current_text = ""
+                    _seg_text = ""
+                    continue  # back to top of while loop for another stream
+                else:
+                    logger.warning(
+                        "InferenceStep: max continuation rounds (%d) reached, giving up",
+                        max_continuation_rounds,
+                    )
 
             if not pending_tool_calls:
                 break
