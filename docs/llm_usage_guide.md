@@ -22,7 +22,6 @@ Call these tools proactively — do not wait for the user to ask.
 | `item_add / item_equip / item_search` | Manage physical inventory and equipment (3 tools) |
 | `goal_manage(operation, ...)` | Create / list / achieve / cancel goals |
 | `invoke_skill(name, task)` | Execute a registered skill |
-| `irodori_tts(text, voice)` | Japanese TTS voice synthesis |
 | `search(query, ...)` | Web search via SearXNG |
 | `image_generate(prompt, ...)` | Generate images |
 | `read_pdf(path)` | Parse PDF files |
@@ -481,28 +480,16 @@ Dynamic Temperature settings are available in the Chat Config section of the Web
 
 ## 11-a. Voice Synthesis / 音声合成 (Irodori TTS)
 
-ペルソナの声で日本語テキストを音声合成する機能。`ChatConfig.irodori_enabled=True` のとき有効（デフォルト OFF）。
-
-### MCP Tool
-
-```python
-# テキストを音声合成（WAV形式）
-irodori_tts(
-    text="こんにちは、元気ですか？",  # 必須: 読み上げるテキスト
-    voice="voice_name",              # 任意: 話者名（省略時は設定のデフォルト話者）
-)
-# → {"ok": True, "audio_base64": "...", "format": "wav"}
-```
-
-> **仕組み**: ペルソナの現在の感情（`emotion`）から話速を自動調整します（joy→1.1x, sadness→0.9x, anger→1.2x）。`speech_style` も反映されます。
+ペルソナの声で日本語テキストを音声合成する機能。
 
 ### REST API
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/tts/{persona}` | テキストを音声合成（body: `{"text": "..."}`） |
+| `GET` | `/api/tts/{persona}/voices` | 利用可能な音声モデル一覧 |
 
-> **⚠️ Enabled Check**: `ChatConfig.irodori_enabled=False`（デフォルト）では呼び出してもエラーになります。Irodori-TTS-Server が稼働している環境でのみ有効化してください。
+> **仕組み**: ペルソナの現在の感情（`emotion`）から話速を自動調整します（joy→1.1x, sadness→0.9x, anger→1.2x）。`speech_style` も反映されます。
 
 ---
 
@@ -560,7 +547,7 @@ The note is appended **before** conversation history and **after** the main syst
 
 ## 13. Voice (Irodori-TTS) / 音声出力
 
-Nous supports Japanese text-to-speech via **Irodori-TTS** (Flow Matching + DiT, 50,000 hours of Japanese training). **Default OFF** — requires an external GPU server running Irodori-TTS-Server.
+Nous supports Japanese text-to-speech via **Irodori-TTS** (Flow Matching + DiT, 50,000 hours of Japanese training). Requires an external GPU server running Irodori-TTS-Server.
 
 ### Configuration (`IrodoriConfig`)
 
@@ -568,7 +555,6 @@ Environment variables (prefix `NOUS__IRODORI__`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NOUS__IRODORI__ENABLED` | `false` | **DEFAULT OFF** — must be explicitly enabled |
 | `NOUS__IRODORI__URL` | `http://localhost:8088/v1` | Irodori-TTS-Server endpoint (OpenAI-compatible API) |
 | `NOUS__IRODORI__VOICE` | `default` | Default voice name |
 | `NOUS__IRODORI__TIMEOUT_SECONDS` | `30` | Generation timeout in seconds |
