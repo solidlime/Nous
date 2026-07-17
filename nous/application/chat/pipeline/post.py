@@ -11,10 +11,6 @@ from nous.application.chat.events import (
     DoneSSE,
     InventoryUpdateSSE,
     MemoryActivitySSE,
-    MentalModelDoneSSE,
-    MentalModelStartSSE,
-    ReflectionDoneSSE,
-    ReflectionStartSSE,
     SessionSummarizedSSE,
 )
 from nous.application.chat.memory_llm import run_memory_llm
@@ -46,6 +42,77 @@ async def _do_summarize(ctx: AppContext, config: ChatConfig, turns: list[dict]) 
         return None
 
 
+async def _safe_reflection(
+    ctx: AppContext,
+    config: ChatConfig,
+    memory_result: dict,
+    turn_ctx: ChatTurnContext,
+) -> None:
+    """Background task: run reflection after DoneSSE."""
+    if not getattr(config, "reflection_enabled", True):
+        return
+    importance_sum = (
+        sum(float(f.get("importance", 0.6)) for f in memory_result.get("facts", []))
+        + len(turn_ctx.tool_calls_log) * 0.1
+    )
+    threshold = getattr(config, "reflection_threshold", 1.0)
+    if importance_sum < threshold:
+        return
+    try:
+        insights = await maybe_run_reflection(ctx, config, importance_sum)
+        logger.info("background reflection completed: %d insights", len(insights or []))
+    except Exception:
+        logger.warning("background reflection failed", exc_info=True)
+
+
+async def _safe_mental_model(ctx: AppContext, config: ChatConfig) -> None:
+    """Background task: run mental model after DoneSSE."""
+    if not getattr(config, "mental_model_enabled", True):
+        return
+    try:
+        await maybe_run_mental_model(ctx, config)
+        logger.info("background mental model completed")
+    except Exception:
+        logger.warning("background mental model failed", exc_info=True)
+
+
+async def _safe_episode_consolidation(
+    ctx: AppContext,
+    config: ChatConfig,
+    session: SessionWindow,
+) -> None:
+    """Background task: run episode consolidation after DoneSSE."""
+    if not getattr(config, "episode_consolidation_enabled", True):
+        return
+    try:
+        messages = session._messages if hasattr(session, "_messages") else []
+        if len(messages) >= 4:
+            from nous.application.chat.pipeline.episode_consolidation import (
+                EpisodeConsolidation,
+            )
+            from nous.domain.memory.episode_segmenter import EpisodeSegmenter
+
+            seg_result = await EpisodeSegmenter().segment(
+                messages=messages,
+                config=config,
+            )
+            if seg_result.episodes:
+                consolidation_result = await EpisodeConsolidation().consolidate(
+                    episodes=seg_result.episodes,
+                    memory_service=ctx.memory_service,
+                    ctx=ctx,
+                    config=config,
+                    persona=ctx.persona,
+                )
+                logger.info(
+                    "background episode consolidation: %d episodes, %d memories created",
+                    len(seg_result.episodes),
+                    consolidation_result.memories_created,
+                )
+    except Exception:
+        logger.warning("background episode consolidation failed", exc_info=True)
+
+
 class PostProcessStep:
     """MemoryLLM await実行 + Reflection SSE + セッション更新 + debug_info/done SSEの送出。"""
 
@@ -60,10 +127,6 @@ class PostProcessStep:
         DebugInfoSSE
         | DoneSSE
         | MemoryActivitySSE
-        | MentalModelStartSSE
-        | MentalModelDoneSSE
-        | ReflectionStartSSE
-        | ReflectionDoneSSE
         | SessionSummarizedSSE
         | ContextUpdateSSE
         | InventoryUpdateSSE
@@ -178,59 +241,8 @@ class PostProcessStep:
 
         yield DoneSSE(truncated=turn_ctx.was_truncated)
 
-        # Reflection: DoneSSE後にawait実行 & SSE通知
-        # importance_sum = 保存された facts の importance 合計 + ツールコール数 * 0.3
-        if getattr(config, "reflection_enabled", True):
-            importance_sum = (
-                sum(float(f.get("importance", 0.6)) for f in memory_result.get("facts", []))
-                + len(turn_ctx.tool_calls_log) * 0.1
-            )
-            threshold = getattr(config, "reflection_threshold", 1.0)
-            if importance_sum >= threshold:
-                try:
-                    yield ReflectionStartSSE()
-                    insights = await maybe_run_reflection(ctx, config, importance_sum)
-                    yield ReflectionDoneSSE(insights=insights or [])
-                except Exception as e:
-                    logger.warning("PostProcessStep: reflection failed: %s", e)
-                    yield ReflectionDoneSSE(insights=[])
-
-        # Mental Model: 蓄積されたパターンから抽象化モデルを生成
-        if getattr(config, "mental_model_enabled", True):
-            yield MentalModelStartSSE(message="メンタルモデル抽象化を開始...")
-            try:
-                await maybe_run_mental_model(ctx, config)
-                yield MentalModelDoneSSE(message="メンタルモデル抽象化が完了しました")
-            except Exception as e:
-                logger.warning("PostProcessStep: mental_model failed: %s", e)
-
-        # Episode Consolidation (HiMem 2-tier): segment + extract facts from recent turns
-        if getattr(config, "episode_consolidation_enabled", True):
-            try:
-                # Use session messages (conversation turns) for segmentation
-                messages = session._messages if hasattr(session, "_messages") else []
-                if len(messages) >= 4:  # at least 2 turns
-                    from nous.application.chat.pipeline.episode_consolidation import (
-                        EpisodeConsolidation,
-                    )
-                    from nous.domain.memory.episode_segmenter import EpisodeSegmenter
-
-                    seg_result = await EpisodeSegmenter().segment(
-                        messages=messages,
-                        config=config,
-                    )
-                    if seg_result.episodes:
-                        consolidation_result = await EpisodeConsolidation().consolidate(
-                            episodes=seg_result.episodes,
-                            memory_service=ctx.memory_service,
-                            ctx=ctx,
-                            config=config,
-                            persona=ctx.persona,
-                        )
-                        logger.info(
-                            "Episode consolidation: %d episodes, %d memories created",
-                            len(seg_result.episodes),
-                            consolidation_result.memories_created,
-                        )
-            except Exception:
-                logger.warning("PostProcessStep: episode consolidation failed", exc_info=True)
+        # Fire-and-forget: DoneSSE後に後処理を非同期タスクとして実行
+        asyncio.create_task(_safe_reflection(ctx, config, memory_result, turn_ctx))
+        asyncio.create_task(_safe_mental_model(ctx, config))
+        asyncio.create_task(_safe_episode_consolidation(ctx, config, session))
+        return
