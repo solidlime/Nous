@@ -230,7 +230,6 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     episode_search_enabled INTEGER DEFAULT 1,
     dynamic_tool_selection INTEGER DEFAULT 1,
     irodori_enabled INTEGER DEFAULT 0,
-    portrait_enabled INTEGER DEFAULT 0,
     voice_auto_play INTEGER DEFAULT 0,
     voice_emotion_link INTEGER DEFAULT 1,
     voice_model TEXT DEFAULT '',
@@ -393,14 +392,6 @@ class SQLiteConnection:
             memory_conn.execute("ALTER TABLE chat_settings ADD COLUMN irodori_enabled INTEGER DEFAULT 0")
             memory_conn.commit()
             logger.info("Added irodori_enabled column to chat_settings (migration)")
-        except sqlite3.OperationalError:
-            pass  # column already exists
-
-        # Migration: add portrait_enabled if missing (existing DBs)
-        try:
-            memory_conn.execute("ALTER TABLE chat_settings ADD COLUMN portrait_enabled INTEGER DEFAULT 0")
-            memory_conn.commit()
-            logger.info("Added portrait_enabled column to chat_settings (migration)")
         except sqlite3.OperationalError:
             pass  # column already exists
 

@@ -251,25 +251,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         },
     ),
     ToolDefinition(
-        name="persona_portrait",
-        description="ポートレート画像生成。scene必須。感情変化や自己表現更新時に使用。",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "scene": {
-                    "type": "string",
-                    "description": "ポートレートのシーンや雰囲気の説明（日本語可）",
-                },
-                "style": {
-                    "type": "string",
-                    "description": "画風。例: anime, watercolor, oil painting",
-                    "default": "anime",
-                },
-            },
-            "required": ["scene"],
-        },
-    ),
-    ToolDefinition(
         name="list_skills",
         description="登録済みスキル一覧を取得。引数不要。",
         input_schema={
@@ -331,7 +312,6 @@ _NOUS_TOOL_NAMES: frozenset[str] = frozenset(
         "invoke_skill",
         "image_generate",
         "list_skills",
-        "persona_portrait",
         "irodori_tts",
         "irodori_voices",
     }

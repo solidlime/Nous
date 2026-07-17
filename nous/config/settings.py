@@ -172,42 +172,6 @@ class CorsConfig(BaseModel):
         return v
 
 
-class PortraitGenerationConfig(BaseModel):
-    """Portrait generation configuration — provider settings only.
-    Enabled/disabled state is now managed per-persona via ChatConfig.portrait_enabled.
-    Env var: ``NOUS_PORTRAIT_GEN__COMFYUI_URL`` (default: http://localhost:8188)
-    """
-
-    provider: str = "comfyui"
-    """"comfyui" | "openai" | "stability" — generation backend."""
-
-    comfyui_url: str = "http://localhost:8188"
-    """ComfyUI API address (used when provider="comfyui")."""
-
-    auto_generate: bool = False
-    """Auto-generate portrait on emotion change (also default OFF)."""
-
-    generate_interval_min: int = 10
-    """Minimum minutes between automatic generations."""
-
-    size: str = "512x512"
-    """Preview size."""
-
-    quality: str = "standard"
-
-    emotion_threshold: float = 0.3
-    """Only regenerate if emotion intensity change exceeds this threshold."""
-
-    max_monthly_budget: float = 5.0
-    """Monthly USD cap for cloud providers (0 = N/A for local ComfyUI)."""
-
-    healthcheck_enabled: bool = True
-    """Periodically check if ComfyUI is reachable."""
-
-    healthcheck_interval_seconds: int = 60
-    """Interval between health checks in seconds."""
-
-
 class PluginConfig(BaseModel):
     """Plugin API configuration — default OFF for security.
 
@@ -250,7 +214,6 @@ class Settings(BaseSettings):
     memory_enrichment: MemoryEnrichmentConfig = MemoryEnrichmentConfig()
     auto_capture: AutoCaptureConfig = AutoCaptureConfig()
     cors: CorsConfig = CorsConfig()
-    portrait_gen: PortraitGenerationConfig = Field(default_factory=PortraitGenerationConfig)
     irodori: IrodoriConfig = Field(default_factory=IrodoriConfig)
     timezone: str = "Asia/Tokyo"
     data_root: str = "./data"

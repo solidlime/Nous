@@ -44,7 +44,6 @@ from nous.api.mcp._tools_memory import (  # noqa: E402, F401
     _tool_memory_update,
 )
 from nous.api.mcp._tools_persona import _tool_get_context, _tool_update_context  # noqa: E402, F401
-from nous.api.mcp._tools_portrait_scene import _tool_persona_portrait_with_scene  # noqa: E402, F401
 from nous.api.mcp._tools_skill import _tool_invoke_skill  # noqa: E402, F401
 
 # =============================================================================
@@ -65,7 +64,6 @@ TOOL_DISPATCH: dict[str, Any] = {
     "item_search": _tool_item_search,
     "goal_manage": _tool_goal_manage,
     "invoke_skill": _tool_invoke_skill,
-    "persona_portrait": _tool_persona_portrait_with_scene,
     "irodori_tts": _tool_irodori_tts,
     "irodori_voices": _tool_irodori_voices,
 }
@@ -358,29 +356,6 @@ def register_tools(mcp: FastMCP) -> None:
         if r.get("ok"):
             return r.get("result", "(no response)")
         return f"Error: {r.get('error', 'unknown')}"
-
-    # persona_portrait
-    @_tool("persona_portrait")
-    async def persona_portrait(
-        scene: str = "",
-        style: str | None = None,
-        reference_image: str | None = None,
-    ) -> str:
-        """Generate a portrait image for the current persona from a scene description.
-        scene: LLM-written scene description (required). style: art style hint (optional) — e.g. 'anime',
-        'watercolor', 'oil painting'. reference_image: base64-encoded reference image for img2img (optional).
-        Uses configured provider (ComfyUI / DALL-E / Stability).
-        Returns base64-encoded image + revised prompt metadata."""
-        if not scene:
-            return json.dumps({"ok": False, "error": "scene is required"}, ensure_ascii=False)
-        p = _resolve_persona()
-        return await _tool_persona_portrait_with_scene(
-            AppContextRegistry.get(p),
-            p,
-            scene=scene,
-            style=style,
-            reference_image=reference_image,
-        )
 
     # irodori_tts
     @_tool("irodori_tts")

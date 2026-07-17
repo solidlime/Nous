@@ -7,7 +7,6 @@ from nous.api.http.routers import (
     register_item_routes,
     register_memory_routes,
     register_persona_routes,
-    register_portrait_routes,
     register_search_routes,
     register_session_events_routes,
     register_skills_routes,
@@ -18,7 +17,6 @@ from nous.api.http.routers import (
 def register_http_routes(mcp) -> None:
     """Register HTTP routes on the FastMCP server."""
     register_persona_routes(mcp)
-    register_portrait_routes(mcp)
     register_memory_routes(mcp)
     register_search_routes(mcp)
     register_item_routes(mcp)

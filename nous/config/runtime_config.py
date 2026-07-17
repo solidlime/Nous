@@ -103,36 +103,6 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
             "description": "Minimum hours between automatic snapshot rebuilds",
         },
     },
-    "portrait_gen": {
-        "provider": {
-            "hot_reload": True,
-            "description": "Generation backend (comfyui/openai/stability). Global default; ChatConfig per-persona settings override.",
-        },
-        "comfyui_url": {
-            "hot_reload": True,
-            "description": "ComfyUI API address. Global fallback; ChatConfig.image_gen_comfyui_url takes priority.",
-        },
-        "auto_generate": {
-            "hot_reload": True,
-            "description": "Auto-generate portrait on emotion change. Global default; ChatConfig per-persona settings override.",
-        },
-        "generate_interval_min": {
-            "hot_reload": True,
-            "description": "Minimum minutes between auto-generations. Global default.",
-        },
-        "size": {"hot_reload": True, "description": "Preview size. Global default."},
-        "quality": {"hot_reload": True, "description": "Generation quality. Global default."},
-        "emotion_threshold": {
-            "hot_reload": True,
-            "description": "Emotion intensity change threshold for regeneration. Global default.",
-        },
-        "max_monthly_budget": {
-            "hot_reload": True,
-            "description": "Monthly USD cap for cloud providers. Global default.",
-        },
-        "healthcheck_enabled": {"hot_reload": True, "description": "Periodically check if ComfyUI is reachable."},
-        "healthcheck_interval_seconds": {"hot_reload": True, "description": "Interval between health checks."},
-    },
     "plugin": {
         "enabled": {"hot_reload": True, "description": "Enable plugin API access"},
         "api_key": {"hot_reload": True, "description": "Plugin API key", "masked": True},

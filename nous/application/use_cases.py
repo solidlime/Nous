@@ -187,48 +187,6 @@ class AppContext:
 
         _threading.Thread(target=self._init_vector_store, daemon=True).start()
 
-        # ── Auto-portrait on emotion change ────────────────────────────
-        self._setup_portrait_auto_generate()
-
-    def _setup_portrait_auto_generate(self) -> None:
-        """Subscribe to emotion changes for auto-portrait generation.
-
-        Wired from ``EVENT_EMOTION_CHANGED`` → async fire-and-forget.
-        """
-        from nous.application.event_bus import EVENT_EMOTION_CHANGED
-        from nous.application.portrait.service import PortraitGenerationService
-        from nous.domain.chat_config import ChatConfigRepository
-
-        async def _on_emotion_changed(event_type: str, data: dict) -> None:
-            persona_name: str = data.get("persona", "")
-            if not persona_name:
-                return
-
-            try:
-                chat_config = ChatConfigRepository(self.connection.get_memory_db()).get(persona_name)
-                if not chat_config.portrait_enabled:
-                    return
-
-                state_result = self.persona_service.get_context(persona_name)
-                if not state_result.is_ok:
-                    return
-
-                service = PortraitGenerationService(
-                    self.settings.portrait_gen,
-                    event_bus=self.event_bus,
-                    equipment_service=self.equipment_service,
-                    comfyui_url_override=chat_config.image_gen_comfyui_url or None,
-                )
-                if await service.should_auto_generate(
-                    state_result.value,
-                    portrait_enabled=chat_config.portrait_enabled,
-                ):
-                    await service.generate(state_result.value)
-            except Exception:
-                logger.debug("Auto-portrait generation failed (non-fatal)", exc_info=True)
-
-        self.event_bus.subscribe(EVENT_EMOTION_CHANGED, _on_emotion_changed)
-
     @property
     def vector_store(self) -> QdrantVectorStore | None:
         """Lazy-init vector store. Returns None if Qdrant unavailable or collection creation fails."""
