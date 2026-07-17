@@ -464,7 +464,7 @@ def render_chat_tab() -> str:
                         <details data-category="voice" id="chat-voice-section">
                             <summary><i data-lucide="volume-2"></i> 音声 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'voice')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
-                                <div id="chat-voice-options" style="display:none;">
+                                <div id="chat-voice-options">
                                     <div>
                                         <div class="chat-field-label">音声モデル</div>
                                         <select id="chat-voice-model" class="chat-field-input">

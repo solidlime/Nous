@@ -179,38 +179,11 @@ function applyChatConfig(cfg) {
       document.getElementById("threshold-display").textContent =
         this.value + "%";
     });
-  // Extensions: irodori
-  setChecked("chat-irodori-enabled", cfg.irodori_enabled === true);
   // Voice / TTS settings (TE04)
   setChecked("chat-voice-emotion-link", cfg.voice_emotion_link !== false);
   setChecked("chat-voice-auto-play", cfg.voice_auto_play === true);
-  // Voice options / section visibility toggle (controlled by irodori_enabled checkbox)
-  const irodoriCb = document.getElementById("chat-irodori-enabled");
-  const voiceSection = document.getElementById("chat-voice-section");
-  const voiceOptions = document.getElementById("chat-voice-options");
-
-  function updateVoiceVisibility() {
-    const enabled = irodoriCb.checked;
-    if (voiceSection) {
-      voiceSection.style.display = enabled ? "" : "none";
-    }
-    if (voiceOptions) {
-      voiceOptions.style.display = enabled ? "" : "none";
-    }
-  }
-
-  if (irodoriCb) {
-    updateVoiceVisibility();  // Initial state
-    irodoriCb.addEventListener("change", updateVoiceVisibility);
-  }
-  // Load voice models if enabled
-  if (cfg.irodori_enabled) {
-    loadVoiceModels(cfg.voice_model);
-  } else {
-    // Set value directly so it's available when irodori is later enabled
-    const vmSelect = document.getElementById("chat-voice-model");
-    if (vmSelect && cfg.voice_model) vmSelect.value = cfg.voice_model;
-  }
+  // Load voice models
+  loadVoiceModels(cfg.voice_model);
   // Debug mode
   setChecked("chat-debug-mode", cfg.debug_mode === true);
   const statusEl = document.getElementById("chat-config-status");
@@ -419,8 +392,6 @@ async function saveChatConfig() {
     image_gen_replicate_api_key: document.getElementById("chat-image-gen-replicate-api-key")
       ? document.getElementById("chat-image-gen-replicate-api-key").value.trim()
       : "",
-    // 拡張機能: irodori
-    irodori_enabled: getChecked("chat-irodori-enabled"),
     // Voice / TTS settings (TE04)
     voice_auto_play: getChecked("chat-voice-auto-play"),
     voice_emotion_link: getChecked("chat-voice-emotion-link"),
