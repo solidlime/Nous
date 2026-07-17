@@ -127,12 +127,7 @@ class PostProcessStep:
         turn_ctx: ChatTurnContext,
         debug: bool = False,
     ) -> AsyncIterator[
-        DebugInfoSSE
-        | DoneSSE
-        | MemoryActivitySSE
-        | SessionSummarizedSSE
-        | ContextUpdateSSE
-        | InventoryUpdateSSE
+        DebugInfoSSE | DoneSSE | MemoryActivitySSE | SessionSummarizedSSE | ContextUpdateSSE | InventoryUpdateSSE
     ]:
         # evict_callback を設定（session.add は service.py で既に実行済み）
         _summary_tasks: list[asyncio.Task] = []

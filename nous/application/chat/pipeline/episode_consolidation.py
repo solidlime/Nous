@@ -293,14 +293,12 @@ class EpisodeConsolidation:
             if quote_count % 2 == 0:
                 if ch == "{":
                     stack.append("brace")
-                elif ch == "}":
-                    if stack and stack[-1] == "brace":
-                        stack.pop()
+                elif ch == "}" and stack and stack[-1] == "brace":
+                    stack.pop()
                 elif ch == "[":
                     stack.append("bracket")
-                elif ch == "]":
-                    if stack and stack[-1] == "bracket":
-                        stack.pop()
+                elif ch == "]" and stack and stack[-1] == "bracket":
+                    stack.pop()
             i += 1
 
         repaired = text.rstrip()
