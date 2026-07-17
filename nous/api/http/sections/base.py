@@ -142,31 +142,31 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str, initial_p
         "        </div>\n"
         '        <div class="header-controls">\n'
         '            <span id="sse-status" class="sse-indicator" title="SSE connection status"><i data-lucide="wifi"></i></span>\n'
-         '            <select id="persona-select" class="glass-input" title="Select persona">\n'
-         '                <option value="">Loading...</option>\n'
-         "            </select>\n"
-          '            <button id="create-persona-btn" class="glass-btn" title="Create new persona" onclick="openCreatePersonaModal()">\n'
-          '              <i data-lucide="user-plus"></i>\n'
-          "            </button>\n"
-          '            <button id="delete-persona-btn" class="glass-btn" title="Delete current persona" onclick="deleteCurrentPersona()" style="display:none">\n'
-          '              <i data-lucide="trash-2"></i>\n'
-          "            </button>\n"
-         '            <button id="dark-toggle" class="glass-btn" title="Toggle theme"><i data-lucide="moon"></i></button>\n'
-         "        </div>\n"
-         "    </header>\n"
-         "\n" + nav_html + "\n"
-         "\n"
-         '    <main class="main-content">\n' + tab_contents + "\n"
-         "    </main>\n"
-         "\n"
-         "    <!-- Memory Detail Modal -->\n"
-         '    <div id="mem-modal-overlay" class="mem-modal-overlay" onclick="if(event.target===this)closeMemModal()">\n'
-         '        <div class="mem-modal" id="mem-modal-content"></div>\n'
-         "    </div>\n"
-         "\n"
-         "    <!-- Toast container -->\n"
-         '    <div id="toast-container" class="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>\n'
-         "\n" + persona_init_script + "\n"
-         "</body>\n"
-         "</html>"
-     )
+        '            <select id="persona-select" class="glass-input" title="Select persona">\n'
+        '                <option value="">Loading...</option>\n'
+        "            </select>\n"
+        '            <button id="create-persona-btn" class="glass-btn" title="Create new persona" onclick="openCreatePersonaModal()">\n'
+        '              <i data-lucide="user-plus"></i>\n'
+        "            </button>\n"
+        '            <button id="delete-persona-btn" class="glass-btn" title="Delete current persona" onclick="deleteCurrentPersona()" style="display:none">\n'
+        '              <i data-lucide="trash-2"></i>\n'
+        "            </button>\n"
+        '            <button id="dark-toggle" class="glass-btn" title="Toggle theme"><i data-lucide="moon"></i></button>\n'
+        "        </div>\n"
+        "    </header>\n"
+        "\n" + nav_html + "\n"
+        "\n"
+        '    <main class="main-content">\n' + tab_contents + "\n"
+        "    </main>\n"
+        "\n"
+        "    <!-- Memory Detail Modal -->\n"
+        '    <div id="mem-modal-overlay" class="mem-modal-overlay" onclick="if(event.target===this)closeMemModal()">\n'
+        '        <div class="mem-modal" id="mem-modal-content"></div>\n'
+        "    </div>\n"
+        "\n"
+        "    <!-- Toast container -->\n"
+        '    <div id="toast-container" class="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>\n'
+        "\n" + persona_init_script + "\n"
+        "</body>\n"
+        "</html>"
+    )
