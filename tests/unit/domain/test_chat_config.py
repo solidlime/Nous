@@ -9,18 +9,6 @@ import pytest
 from nous.domain.chat_config import ChatConfig, ChatConfigRepository
 
 
-class TestChatConfigFields:
-    """New Phase 1 fields: irodori_enabled."""
-
-    def test_irodori_enabled_default_false(self):
-        config = ChatConfig(persona="test")
-        assert config.irodori_enabled is False
-
-    def test_irodori_enabled_set_true(self):
-        config = ChatConfig(persona="test", irodori_enabled=True)
-        assert config.irodori_enabled is True
-
-
 class TestChatConfigRepository:
     """ChatConfigRepository CRUD with new Phase 1 fields."""
 
@@ -88,7 +76,6 @@ class TestChatConfigRepository:
                 episode_consolidation_enabled INTEGER DEFAULT 1,
                 episode_search_enabled INTEGER DEFAULT 1,
                 dynamic_tool_selection INTEGER DEFAULT 1,
-                irodori_enabled INTEGER DEFAULT 0,
                 voice_auto_play INTEGER DEFAULT 0,
                 voice_emotion_link INTEGER DEFAULT 1,
                 voice_model TEXT DEFAULT '',
@@ -100,14 +87,6 @@ class TestChatConfigRepository:
         yield conn
         conn.close()
 
-    def test_save_and_load_irodori_enabled(self, db):
-        repo = ChatConfigRepository(db)
-        config = ChatConfig(persona="test", irodori_enabled=True)
-        repo.save(config)
-
-        loaded = repo.get("test")
-        assert loaded.irodori_enabled is True
-
     def test_get_or_create_empty_servers(self, db):
         """get_or_create should default to empty mcp_servers list."""
         repo = ChatConfigRepository(db)
@@ -118,10 +97,10 @@ class TestChatConfigRepository:
         assert loaded.mcp_servers == []
 
     def test_default_values_in_db(self, db):
-        """When no config saved, get() returns defaults including new fields."""
+        """When no config saved, get() returns defaults."""
         repo = ChatConfigRepository(db)
         config = repo.get("nonexistent")
-        assert config.irodori_enabled is False
+        assert config.voice_auto_play is False
 
     def test_default_values_from_sql_defaults(self, db):
         """When row exists but new columns are NULL/default, map correctly."""
@@ -134,7 +113,7 @@ class TestChatConfigRepository:
 
         repo = ChatConfigRepository(db)
         config = repo.get("legacy")
-        assert config.irodori_enabled is False
+        assert config.voice_auto_play is False
 
 
 class TestSqliteMigration:
@@ -203,14 +182,8 @@ class TestSqliteMigration:
         conn.execute(pre_phase1_schema)
         conn.commit()
 
-        # Verify old schema doesn't have new columns
-        cursor = conn.execute("SELECT * FROM chat_settings LIMIT 0")
-        old_cols = [d[0] for d in cursor.description]
-        assert "irodori_enabled" not in old_cols
-
         # Simulate the migration: ALTER TABLE ADD COLUMN for each new field
         for col_sql in [
-            "irodori_enabled INTEGER DEFAULT 0",
             "voice_auto_play INTEGER DEFAULT 0",
             "voice_emotion_link INTEGER DEFAULT 1",
             "voice_model TEXT DEFAULT ''",
@@ -228,7 +201,6 @@ class TestSqliteMigration:
         # Verify columns exist
         cursor = conn.execute("SELECT * FROM chat_settings LIMIT 0")
         columns = [d[0] for d in cursor.description]
-        assert "irodori_enabled" in columns
         assert "voice_auto_play" in columns
         assert "voice_emotion_link" in columns
         assert "image_gen_gemini_model" in columns
@@ -240,7 +212,6 @@ class TestSqliteMigration:
         conn.execute("INSERT INTO chat_settings (persona) VALUES ('test')")
         conn.commit()
         row = conn.execute("SELECT * FROM chat_settings WHERE persona = 'test'").fetchone()
-        assert row["irodori_enabled"] == 0
         assert row["voice_auto_play"] == 0
         assert row["voice_emotion_link"] == 1
         assert row["disabled_tools"] == "[]"
@@ -250,7 +221,6 @@ class TestSqliteMigration:
 
         repo = ChatConfigRepository(conn)
         config = repo.get("test")
-        assert config.irodori_enabled is False
         assert config.voice_auto_play is False
         assert config.voice_emotion_link is True
         assert config.disabled_tools == []
@@ -317,7 +287,6 @@ class TestChatConfigRepositoryResilience:
             episode_consolidation_enabled INTEGER DEFAULT 1,
             episode_search_enabled INTEGER DEFAULT 1,
             dynamic_tool_selection INTEGER DEFAULT 1,
-            irodori_enabled INTEGER DEFAULT 0,
             voice_auto_play INTEGER DEFAULT 0,
             voice_emotion_link INTEGER DEFAULT 1,
             voice_model TEXT DEFAULT '',
