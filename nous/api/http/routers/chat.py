@@ -98,7 +98,6 @@ def register_chat_routes(mcp) -> None:
             "context_use_llm_summary",
             "episode_consolidation_enabled",
             "episode_search_enabled",
-            "irodori_enabled",
             "voice_auto_play",
             "voice_emotion_link",
             "disabled_tools",
