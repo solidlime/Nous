@@ -76,10 +76,10 @@ class EpisodeSegmenter:
             SegmentationResult with list of Episode objects.
         """
         if config is not None:
-            llm_api_key = llm_api_key or config.get_effective_api_key()
-            llm_model = llm_model or config.extract_model.strip() or config.get_effective_model()
+            llm_api_key = config.get_effective_api_key() or llm_api_key
+            llm_model = config.extract_model.strip() or config.get_effective_model() or llm_model
             llm_provider_name = config.provider or llm_provider_name
-            llm_base_url = llm_base_url or config.get_effective_base_url()
+            llm_base_url = config.get_effective_base_url() or llm_base_url
 
         if not llm_api_key or not llm_model:
             return SegmentationResult()
