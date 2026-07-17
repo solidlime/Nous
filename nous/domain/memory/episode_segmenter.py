@@ -78,7 +78,7 @@ class EpisodeSegmenter:
         if config is not None:
             llm_api_key = llm_api_key or config.get_effective_api_key()
             llm_model = llm_model or config.extract_model.strip() or config.get_effective_model()
-            llm_provider_name = llm_provider_name or config.provider
+            llm_provider_name = config.provider or llm_provider_name
             llm_base_url = llm_base_url or config.get_effective_base_url()
 
         if not llm_api_key or not llm_model:
