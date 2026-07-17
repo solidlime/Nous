@@ -12,7 +12,5 @@ if TYPE_CHECKING:
 
 def get_voice_engine(config: IrodoriConfig) -> VoiceEngine:
     """設定に基づいて VoiceEngine を生成する。
-
-    呼び出し元が ChatConfig.irodori_enabled を事前チェックすること。
     """
     return IrodoriEngine(config)

@@ -366,7 +366,6 @@ class TestChatConfigRepository:
                 episode_consolidation_enabled INTEGER DEFAULT 1,
                 episode_search_enabled INTEGER DEFAULT 1,
                 dynamic_tool_selection INTEGER DEFAULT 1,
-                irodori_enabled INTEGER DEFAULT 0,
                 voice_auto_play INTEGER DEFAULT 0,
                 voice_emotion_link INTEGER DEFAULT 1,
                 voice_model TEXT DEFAULT '',

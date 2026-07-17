@@ -128,7 +128,6 @@ class AutoCaptureConfig(BaseModel):
 
 class IrodoriConfig(BaseModel):
     """Irodori-TTS connection configuration — provider settings only.
-    Enabled/disabled state is now managed per-persona via ChatConfig.irodori_enabled.
     Env var: ``NOUS_IRODORI__URL`` (default: http://localhost:8088/v1)
     """
 
