@@ -29,7 +29,6 @@ from nous.api.mcp._tools_helpers import (  # noqa: E402, F401
     _format_state_diff,
     _parse_days_from_relative,
 )
-from nous.api.mcp._tools_irodori import _tool_irodori_tts, _tool_irodori_voices  # noqa: E402, F401
 from nous.api.mcp._tools_item import (  # noqa: E402, F401
     _tool_item_add,
     _tool_item_equip,
@@ -64,8 +63,6 @@ TOOL_DISPATCH: dict[str, Any] = {
     "item_search": _tool_item_search,
     "goal_manage": _tool_goal_manage,
     "invoke_skill": _tool_invoke_skill,
-    "irodori_tts": _tool_irodori_tts,
-    "irodori_voices": _tool_irodori_voices,
 }
 
 
@@ -356,20 +353,6 @@ def register_tools(mcp: FastMCP) -> None:
         if r.get("ok"):
             return r.get("result", "(no response)")
         return f"Error: {r.get('error', 'unknown')}"
-
-    # irodori_tts
-    @_tool("irodori_tts")
-    async def irodori_tts(text: str, voice: str | None = None, emotion: str | None = None) -> str:
-        """Generate TTS audio using Irodori. text: Japanese text to speak. voice: speaker name override. emotion: override persona emotion (joy/sadness/anger/etc)."""
-        p = _resolve_persona()
-        return await _tool_irodori_tts(AppContextRegistry.get(p), p, text=text, voice=voice, emotion=emotion)
-
-    # irodori_voices
-    @_tool("irodori_voices")
-    async def irodori_voices() -> str:
-        """List available voices from Irodori TTS engine."""
-        p = _resolve_persona()
-        return await _tool_irodori_voices(AppContextRegistry.get(p), p)
 
     # ── Chat builtin tool wrappers (delegate to builtin.py handlers) ──
 
