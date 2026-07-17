@@ -336,7 +336,7 @@ class TestChatConfigRepository:
                 retrieval_importance_weight REAL DEFAULT 0.3,
                 retrieval_relevance_weight REAL DEFAULT 0.4,
                 retrieval_rrf_k REAL DEFAULT 5.0,
-                display_history_turns INTEGER DEFAULT 20,
+                display_history_turns INTEGER DEFAULT 10,
                 housekeeping_threshold INTEGER DEFAULT 10,
                 mental_model_enabled INTEGER DEFAULT 1,
                 mental_model_min_samples INTEGER DEFAULT 3,

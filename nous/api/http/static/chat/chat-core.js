@@ -91,11 +91,11 @@ async function loadChat() {
   if (!S.persona) return;
   await loadChatConfig();
   loadSkillsForChat();
-  restoreChatHistory();
+  await restoreChatHistory();
+  setupChatInputHandler();
   loadChatCommitments();
   loadEquipment();
   loadPortrait();
-  setupChatInputHandler();
   setTimeout(() => {
     if (typeof lucide !== "undefined") lucide.createIcons();
   }, 100);
