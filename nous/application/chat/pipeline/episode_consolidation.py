@@ -58,7 +58,6 @@ class EpisodeConsolidation:
         self,
         episodes: list[Episode],
         memory_service: object,  # MemoryService
-        session_events: list[dict] | None = None,
         ctx: object | None = None,  # AppContext
         config: ChatConfig | None = None,
         persona: str = "",
@@ -70,7 +69,7 @@ class EpisodeConsolidation:
         result = ConsolidationResult(episodes_processed=len(episodes))
 
         for episode in episodes:
-            dialogue_lines = self._build_dialogue(episode, session_events)
+            dialogue_lines = self._build_dialogue(episode)
             if not dialogue_lines:
                 continue
 
@@ -159,18 +158,11 @@ class EpisodeConsolidation:
 
         return result
 
-    def _build_dialogue(self, episode: Episode, session_events: list[dict] | None) -> str:
-        """Build dialogue text from episode turn indices."""
+    def _build_dialogue(self, episode: Episode) -> str:
+        """Build dialogue text from episode topic summary."""
         lines = []
         if episode.topic_summary:
             lines.append(episode.topic_summary)
-
-        if session_events and episode.start_index is not None and episode.end_index is not None:
-            for event in session_events[episode.start_index : episode.end_index + 1]:
-                role = event.get("role", "unknown")
-                content = event.get("content", "")
-                lines.append(f"{role}: {content}")
-
         return "\n".join(lines)
 
     async def _extract_facts(
@@ -213,7 +205,7 @@ class EpisodeConsolidation:
                 messages=[LLMMessage(role="user", content=prompt)],
                 system="",
                 temperature=0.0,
-                max_tokens=config.extract_max_tokens or 1024,
+                max_tokens=1024,
             ):
                 if isinstance(event, TextDeltaEvent):
                     text += event.content
@@ -240,6 +232,17 @@ class EpisodeConsolidation:
             logger.debug("episode_consolidation: duplicate check failed: %s", e)
         return False
 
+    @staticmethod
+    def _filter_result(result: dict) -> dict:
+        """Filter and validate parsed result fields."""
+        return {
+            "facts": [f for f in result.get("facts", []) if isinstance(f, dict) and f.get("content")],
+            "preferences": [p for p in result.get("preferences", []) if isinstance(p, dict) and p.get("content")],
+            "profile_updates": [
+                p for p in result.get("profile_updates", []) if isinstance(p, dict) and p.get("content")
+            ],
+        }
+
     def _parse_result(self, text: str) -> dict:
         """Parse LLM JSON output."""
         text = text.strip()
@@ -250,13 +253,7 @@ class EpisodeConsolidation:
             result = json.loads(text)
             if not isinstance(result, dict):
                 return {}
-            return {
-                "facts": [f for f in result.get("facts", []) if isinstance(f, dict) and f.get("content")],
-                "preferences": [p for p in result.get("preferences", []) if isinstance(p, dict) and p.get("content")],
-                "profile_updates": [
-                    p for p in result.get("profile_updates", []) if isinstance(p, dict) and p.get("content")
-                ],
-            }
+            return self._filter_result(result)
         except Exception as e:
             # Attempt recovery: try repairing truncated JSON
             repaired = self._repair_json(text)
@@ -264,15 +261,7 @@ class EpisodeConsolidation:
                 try:
                     result = json.loads(repaired)
                     if isinstance(result, dict):
-                        return {
-                            "facts": [f for f in result.get("facts", []) if isinstance(f, dict) and f.get("content")],
-                            "preferences": [
-                                p for p in result.get("preferences", []) if isinstance(p, dict) and p.get("content")
-                            ],
-                            "profile_updates": [
-                                p for p in result.get("profile_updates", []) if isinstance(p, dict) and p.get("content")
-                            ],
-                        }
+                        return self._filter_result(result)
                 except Exception:
                     pass
             logger.warning("episode_consolidation: parse result failed: %s", e, exc_info=True)
@@ -280,30 +269,46 @@ class EpisodeConsolidation:
 
     @staticmethod
     def _repair_json(text: str) -> str:
-        """Attempt to repair truncated JSON by appending missing closing tokens."""
-        # Count unescaped quotes to detect unclosed strings
-        escaped = False
+        """Attempt to repair truncated JSON by appending missing closing tokens.
+
+        Handles string-in-string braces/brackets and escape sequences correctly.
+        """
+        i = 0
+        n = len(text)
         quote_count = 0
-        for ch in text:
-            if escaped:
-                escaped = False
+        stack: list[str] = []  # tracks nesting order for correct closing sequence
+
+        while i < n:
+            ch = text[i]
+            # Fix C: backslash escapes next character
+            if ch == "\\" and i + 1 < n:
+                i += 2
                 continue
-            if ch == "\\":
-                escaped = True
-                continue
+            # Toggle string state on unescaped double-quote
             if ch == '"':
                 quote_count += 1
+                i += 1
+                continue
+            # Fix B: only track braces/brackets outside strings
+            if quote_count % 2 == 0:
+                if ch == "{":
+                    stack.append("brace")
+                elif ch == "}":
+                    if stack and stack[-1] == "brace":
+                        stack.pop()
+                elif ch == "[":
+                    stack.append("bracket")
+                elif ch == "]":
+                    if stack and stack[-1] == "bracket":
+                        stack.pop()
+            i += 1
 
         repaired = text.rstrip()
         if quote_count % 2 == 1:
             repaired += '"'
 
-        # Add missing closing brackets/braces
-        need_braces = repaired.count("{") - repaired.count("}")
-        need_brackets = repaired.count("[") - repaired.count("]")
-        if need_brackets > 0:
-            repaired += "]" * need_brackets
-        if need_braces > 0:
-            repaired += "}" * need_braces
+        # Fix F: close in reverse nesting order
+        for item in reversed(stack):
+            repaired += "}" if item == "brace" else "]"
 
         return repaired
