@@ -161,7 +161,17 @@ class EpisodeConsolidation:
 
     def _build_dialogue(self, episode: Episode, session_events: list[dict] | None) -> str:
         """Build dialogue text from episode turn indices."""
-        return episode.topic_summary or ""
+        lines = []
+        if episode.topic_summary:
+            lines.append(episode.topic_summary)
+
+        if session_events and episode.start_index is not None and episode.end_index is not None:
+            for event in session_events[episode.start_index : episode.end_index + 1]:
+                role = event.get("role", "unknown")
+                content = event.get("content", "")
+                lines.append(f"{role}: {content}")
+
+        return "\n".join(lines)
 
     async def _extract_facts(
         self,
@@ -203,7 +213,7 @@ class EpisodeConsolidation:
                 messages=[LLMMessage(role="user", content=prompt)],
                 system="",
                 temperature=0.0,
-                max_tokens=1024,
+                max_tokens=config.extract_max_tokens or 1024,
             ):
                 if isinstance(event, TextDeltaEvent):
                     text += event.content
@@ -248,5 +258,52 @@ class EpisodeConsolidation:
                 ],
             }
         except Exception as e:
-            logger.warning("episode_consolidation: parse result failed: %s", e)
+            # Attempt recovery: try repairing truncated JSON
+            repaired = self._repair_json(text)
+            if repaired != text:
+                try:
+                    result = json.loads(repaired)
+                    if isinstance(result, dict):
+                        return {
+                            "facts": [f for f in result.get("facts", []) if isinstance(f, dict) and f.get("content")],
+                            "preferences": [
+                                p for p in result.get("preferences", []) if isinstance(p, dict) and p.get("content")
+                            ],
+                            "profile_updates": [
+                                p for p in result.get("profile_updates", []) if isinstance(p, dict) and p.get("content")
+                            ],
+                        }
+                except Exception:
+                    pass
+            logger.warning("episode_consolidation: parse result failed: %s", e, exc_info=True)
             return {}
+
+    @staticmethod
+    def _repair_json(text: str) -> str:
+        """Attempt to repair truncated JSON by appending missing closing tokens."""
+        # Count unescaped quotes to detect unclosed strings
+        escaped = False
+        quote_count = 0
+        for ch in text:
+            if escaped:
+                escaped = False
+                continue
+            if ch == "\\":
+                escaped = True
+                continue
+            if ch == '"':
+                quote_count += 1
+
+        repaired = text.rstrip()
+        if quote_count % 2 == 1:
+            repaired += '"'
+
+        # Add missing closing brackets/braces
+        need_braces = repaired.count("{") - repaired.count("}")
+        need_brackets = repaired.count("[") - repaired.count("]")
+        if need_brackets > 0:
+            repaired += "]" * need_brackets
+        if need_braces > 0:
+            repaired += "}" * need_braces
+
+        return repaired

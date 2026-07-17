@@ -122,7 +122,7 @@ class EpisodeSegmenter:
                     messages=[LLMMessage(role="user", content=prompt)],
                     system="",
                     temperature=0.0,
-                    max_tokens=200,
+                    max_tokens=config.extract_max_tokens if config else 200,
                 ):
                     if isinstance(event, TextDeltaEvent):
                         text += event.content
