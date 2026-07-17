@@ -460,17 +460,6 @@ def render_chat_tab() -> str:
                                 </div>
                             </div>
                         </details>
-                        <!-- Extensions: irodori -->
-                        <details data-category="extensions">
-                            <summary><i data-lucide="puzzle"></i> 拡張機能 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'extensions')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
-                            <div class="details-body">
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <input type="checkbox" id="chat-irodori-enabled"
-                                        style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
-                                    <label for="chat-irodori-enabled" class="chat-field-label" style="margin:0;cursor:pointer;">irodori を有効にする</label>
-                                </div>
-                            </div>
-                        </details>
                         <!-- Voice / TTS (TE04) -->
                         <details data-category="voice" id="chat-voice-section">
                             <summary><i data-lucide="volume-2"></i> 音声 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'voice')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
