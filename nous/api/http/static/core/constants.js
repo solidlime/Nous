@@ -19,17 +19,6 @@ N.Core.EMOTION_COLORS = {
   relief: "#34D399",   happiness: "#fbbf24", calm: "#2dd4bf",
 };
 
-N.Core.EMOTION_COLORS_PORTRAIT = {
-  joy: "#fbbf24",
-  sadness: "#60a5fa",
-  anger: "#ef4444",
-  fear: "#a78bfa",
-  surprise: "#f472b6",
-  disgust: "#84cc16",
-  trust: "#34d399",
-  anticipation: "#fb923c",
-  neutral: "#94a3b8",
-};
 
 N.Core.EMOTION_BAR_COLORS = {
   joy: "linear-gradient(90deg,#fbbf24,#fcd34d)",

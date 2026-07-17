@@ -294,8 +294,6 @@ async function loadOverview() {
 
         // --- Render (new section order) ---
         el.innerHTML = `
-        <!-- Portrait -->
-        ${typeof renderOverviewPortraitSection === 'function' ? renderOverviewPortraitSection(data) : ''}
         <!-- Profile & Relationship -->
         <div class="glass glass-hoverable p-6 mb-6">
             <div class="card-title"><i data-lucide="user"></i> Profile &amp; Relationship</div>
