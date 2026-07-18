@@ -24,6 +24,7 @@ CHAT_MESSAGE = "chat.message"
 CHAT_LLM_RESPONSE = "chat.llm_response"
 SESSION_STARTED = "session.started"
 SESSION_COMPACT = "session.compact"
+SESSION_ROLLBACK = "session.rollback"
 
 
 class EventBus:
