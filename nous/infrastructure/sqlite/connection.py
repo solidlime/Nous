@@ -232,6 +232,7 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     voice_auto_play INTEGER DEFAULT 0,
     voice_emotion_link INTEGER DEFAULT 1,
     voice_model TEXT DEFAULT '',
+    voice_url TEXT DEFAULT '',
     image_gen_gemini_model TEXT DEFAULT 'google/gemini-2.5-flash-image',
     image_gen_replicate_model TEXT DEFAULT 'black-forest-labs/flux-schnell',
     image_gen_replicate_api_key TEXT DEFAULT '',
@@ -398,6 +399,14 @@ class SQLiteConnection:
             memory_conn.execute("ALTER TABLE chat_settings ADD COLUMN voice_model TEXT DEFAULT ''")
             memory_conn.commit()
             logger.info("Added voice_model column to chat_settings (migration)")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
+        # Migration: add voice_url if missing (existing DBs)
+        try:
+            memory_conn.execute("ALTER TABLE chat_settings ADD COLUMN voice_url TEXT DEFAULT ''")
+            memory_conn.commit()
+            logger.info("Added voice_url column to chat_settings (migration)")
         except sqlite3.OperationalError:
             pass  # column already exists
 
