@@ -1109,7 +1109,7 @@ class TestGapClassification:
         from nous.application.chat.pipeline.prepare import _classify_gap
 
         assert _classify_gap(23.9) == "EXTENDED_BREAK"
-        assert _classify_gap(24.1) == "NEXT_DAY"
+        assert _classify_gap(24.1) == "FEW_DAYS"
 
     def test_long_absence(self):
         from nous.application.chat.pipeline.prepare import _classify_gap

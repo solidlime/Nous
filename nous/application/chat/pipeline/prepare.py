@@ -336,7 +336,7 @@ async def _build_context_section(
         intensity_label = "強い" if intensity > 0.6 else "やや強い" if intensity > 0.3 else "弱い"
         t1.append(f"感情: {state.emotion}（{intensity_label}）")
 
-    # Emotion decay notification (English per T02 unification)
+    # Emotion decay notification
     if decay_note:
         t1.append(f"  Emotion: {decay_note}")
 
@@ -482,7 +482,7 @@ def _classify_gap(elapsed_hours: float) -> str:
     if elapsed_hours < 24:
         return "EXTENDED_BREAK"
     if elapsed_hours < 168:
-        return "NEXT_DAY"  # < 7 days
+        return "FEW_DAYS"  # < 7 days
     if elapsed_hours < 720:
         return "LONG_ABSENCE"  # < 30 days
     return "VERY_LONG_ABSENCE"
@@ -492,7 +492,7 @@ _GAP_INSTRUCTIONS: dict[str, str] = {
     "SAME_SESSION": "",
     "SHORT_BREAK": "You were just here a moment ago. Continue naturally.",
     "EXTENDED_BREAK": "Several hours have passed since your last conversation. Your mood may have shifted slightly.",
-    "NEXT_DAY": "A new day has begun. You may feel refreshed or different from yesterday. Acknowledge the time that has passed.",
+    "FEW_DAYS": "Several days have passed since your last conversation. Acknowledge the gap naturally.",
     "LONG_ABSENCE": "You haven't spoken in a while. Much may have happened. Greet the user with awareness of the gap.",
     "VERY_LONG_ABSENCE": "A very long time has passed. This is a reunion. Greet with appropriate surprise or acknowledgment of the long silence.",
 }
