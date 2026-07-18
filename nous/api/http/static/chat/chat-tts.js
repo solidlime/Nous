@@ -1,57 +1,77 @@
 ;/* =================================================================
-   CHAT TTS — Voice model loading, test playback, TTS playback
-   Extracted from chat.js (Phase 3c)
+   CHAT TTS — Voice connection, model config, test playback, TTS playback
+   Redesigned for per-persona Irodori server configuration
    ================================================================= */
 (function(N) {
 "use strict";
 var S = window.S;
 
 let _ttsAbortController = null;
+let _connectionCheckTimer = null;
 
-/* ── Voice model loading & test playback ── */
-async function loadVoiceModels(selectedId) {
+/* ── Connection status indicator ── */
+function _setStatus(state, text) {
+  var el = document.getElementById("chat-voice-status");
+  if (!el) return;
+  el.className = "voice-status-" + state;
+  var textEl = el.querySelector(".voice-status-text");
+  if (textEl) textEl.textContent = text;
+}
+
+/* ── Debounce helper ── */
+function _debounce(fn, ms) {
+  var timer;
+  return function() {
+    clearTimeout(timer);
+    timer = setTimeout(fn, ms);
+  };
+}
+
+/* ── Check TTS server connection ── */
+async function checkVoiceConnection() {
   if (!S.persona) return;
-  const select = document.getElementById("chat-voice-model");
-  if (!select) return;
+  _setStatus("checking", "接続確認中...");
   try {
-    const resp = await api("/api/tts/" + encodeURIComponent(S.persona) + "/voices");
-    if (resp.voices && resp.voices.length > 0) {
-      select.innerHTML = "";
-      resp.voices.forEach(function (v) {
-        var opt = document.createElement("option");
-        opt.value = v.id;
-        opt.textContent = v.name || v.id;
-        select.appendChild(opt);
-      });
-      // Restore saved selection
-      if (selectedId && select.querySelector('option[value="' + selectedId.replace(/"/g, '&quot;') + '"]')) {
-        select.value = selectedId;
+    var resp = await api("/api/tts/" + encodeURIComponent(S.persona) + "/health");
+    if (resp.ok && resp.connected) {
+      _setStatus("connected", "接続中 — " + (resp.url || ""));
+      // Auto-fill model if empty and models available
+      var modelInput = document.getElementById("chat-voice-model");
+      if (modelInput && !modelInput.value && resp.models && resp.models.length > 0) {
+        modelInput.value = resp.models[0].id;
       }
     } else {
-      select.innerHTML = '<option value="">音声モデルが見つかりません</option>';
+      var errMsg = resp.error || "サーバーに接続できません";
+      _setStatus("disconnected", "未接続 — " + errMsg);
     }
   } catch (e) {
-    console.warn("[Voice] Failed to load models:", e.message);
-    select.innerHTML = '<option value="">取得エラー</option>';
+    _setStatus("disconnected", "未接続 — " + e.message);
   }
 }
 
+/* ── Test playback ── */
 async function testVoicePlayback() {
   if (!S.persona) return;
   var statusEl = document.getElementById("chat-voice-test-status");
   if (statusEl) statusEl.textContent = "合成中...";
   try {
+    var urlInput = document.getElementById("chat-voice-url");
+    var modelInput = document.getElementById("chat-voice-model");
+    var body = { text: "こんにちは、音声合成のテストです。正常に動作しています。" };
+    if (modelInput && modelInput.value) {
+      body.voice = modelInput.value;
+    }
     var resp = await api("/api/tts/" + encodeURIComponent(S.persona), {
       method: "POST",
-      body: JSON.stringify({ text: "こんにちは、テストです。" }),
+      body: JSON.stringify(body),
     });
     if (resp.audio_base64) {
       if (statusEl) statusEl.textContent = "再生中...";
       var audioUrl = "data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64;
       var audio = new Audio(audioUrl);
       audio.onended = function () {
-        if (statusEl) statusEl.textContent = "完了";
-        setTimeout(function () { if (statusEl) statusEl.textContent = ""; }, 2000);
+        if (statusEl) statusEl.textContent = "✓ 完了";
+        setTimeout(function () { if (statusEl) statusEl.textContent = ""; }, 3000);
       };
       audio.onerror = function () {
         if (statusEl) statusEl.textContent = "再生エラー";
@@ -69,6 +89,7 @@ async function testVoicePlayback() {
   }
 }
 
+/* ── Auto-play TTS on response ── */
 function autoPlayTts(text) {
   if (!S.persona || !text) return;
   // Strip markdown for TTS
@@ -80,9 +101,15 @@ function autoPlayTts(text) {
     .trim();
   if (!plainText) return;
 
+  var modelInput = document.getElementById("chat-voice-model");
+  var body = { text: plainText };
+  if (modelInput && modelInput.value) {
+    body.voice = modelInput.value;
+  }
+
   api("/api/tts/" + encodeURIComponent(S.persona), {
     method: "POST",
-    body: JSON.stringify({ text: plainText }),
+    body: JSON.stringify(body),
   })
     .then(function (resp) {
     if (resp.audio_base64) {
@@ -98,6 +125,7 @@ function autoPlayTts(text) {
     });
 }
 
+/* ── Inline TTS playback (chat bubble button) ── */
 async function playTts(btn, text) {
   if (!S.persona || !text) return;
   // If already playing, stop
@@ -125,9 +153,14 @@ async function playTts(btn, text) {
   btn.disabled = true;
 
   try {
+    var modelInput = document.getElementById("chat-voice-model");
+    var body = { text: plainText };
+    if (modelInput && modelInput.value) {
+      body.voice = modelInput.value;
+    }
     const resp = await api("/api/tts/" + encodeURIComponent(S.persona), {
       method: "POST",
-      body: JSON.stringify({ text: plainText }),
+      body: JSON.stringify(body),
     });
     const audioBase64 = resp.audio_base64;
     if (audioBase64) {
@@ -170,14 +203,41 @@ async function playTts(btn, text) {
   }
 }
 
+/* ── Initialize: auto-check on section expand, debounce on URL change ── */
+function initVoiceSection() {
+  var section = document.getElementById("chat-voice-section");
+  if (!section) return;
+
+  // Check connection when details is toggled open
+  section.addEventListener("toggle", function() {
+    if (section.open) {
+      checkVoiceConnection();
+    }
+  });
+
+  // Debounced connection check when URL input changes
+  var urlInput = document.getElementById("chat-voice-url");
+  if (urlInput) {
+    var debouncedCheck = _debounce(checkVoiceConnection, 500);
+    urlInput.addEventListener("input", debouncedCheck);
+  }
+}
+
+// Auto-init when DOM is ready
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initVoiceSection);
+} else {
+  initVoiceSection();
+}
+
 N.Chat.tts = {
-  loadVoices: loadVoiceModels,
+  checkConnection: checkVoiceConnection,
   test: testVoicePlayback,
   play: playTts,
   autoPlay: autoPlayTts,
 };
 
-window.loadVoiceModels = loadVoiceModels;
+window.checkVoiceConnection = checkVoiceConnection;
 window.testVoicePlayback = testVoicePlayback;
 window.playTts = playTts;
 window.autoPlayTts = autoPlayTts;

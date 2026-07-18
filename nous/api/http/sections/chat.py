@@ -465,12 +465,26 @@ def render_chat_tab() -> str:
                             <summary><i data-lucide="volume-2"></i> 音声 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'voice')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div id="chat-voice-options">
-                                    <div>
-                                        <div class="chat-field-label">音声モデル</div>
-                                        <select id="chat-voice-model" class="chat-field-input">
-                                            <option value="">読み込み中...</option>
-                                        </select>
+                                    <!-- Connection status -->
+                                    <div id="chat-voice-status" class="voice-status-checking" role="status" aria-live="polite">
+                                        <span class="voice-status-dot"></span>
+                                        <span class="voice-status-text">接続確認中...</span>
                                     </div>
+                                    <!-- Server URL -->
+                                    <div>
+                                        <div class="chat-field-label">Irodori サーバーURL</div>
+                                        <input type="url" id="chat-voice-url" class="chat-field-input"
+                                            placeholder="http://192.168.50.150:8088/v1"
+                                            aria-label="TTSサーバーのURL" />
+                                    </div>
+                                    <!-- Voice model name -->
+                                    <div>
+                                        <div class="chat-field-label">音声モデル名</div>
+                                        <input type="text" id="chat-voice-model" class="chat-field-input"
+                                            placeholder="model-01"
+                                            aria-label="音声モデル名" />
+                                    </div>
+                                    <!-- Checkboxes -->
                                     <div style="display:flex;align-items:center;gap:8px;">
                                         <input type="checkbox" id="chat-voice-emotion-link" checked
                                             style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
@@ -481,10 +495,11 @@ def render_chat_tab() -> str:
                                             style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
                                         <label for="chat-voice-auto-play" class="chat-field-label" style="margin:0;cursor:pointer;">応答を自動再生</label>
                                     </div>
-                                    <div style="display:flex;gap:8px;margin-top:4px;">
+                                    <!-- Test playback -->
+                                    <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
                                         <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="testVoicePlayback()" aria-label="音声をテスト再生"><i data-lucide="play"></i> テスト再生</button>
+                                        <span id="chat-voice-test-status" style="font-size:0.72rem;color:var(--text-muted);min-height:16px;"></span>
                                     </div>
-                                    <div id="chat-voice-test-status" style="font-size:0.72rem;color:var(--text-muted);min-height:16px;margin-top:2px;"></div>
                                 </div>
                             </div>
                         </details>

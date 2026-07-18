@@ -180,10 +180,15 @@ function applyChatConfig(cfg) {
         this.value + "%";
     });
   // Voice / TTS settings (TE04)
+  var voiceUrlInput = document.getElementById("chat-voice-url");
+  if (voiceUrlInput) voiceUrlInput.value = cfg.voice_url || "";
   setChecked("chat-voice-emotion-link", cfg.voice_emotion_link !== false);
   setChecked("chat-voice-auto-play", cfg.voice_auto_play === true);
-  // Load voice models
-  loadVoiceModels(cfg.voice_model);
+  // Load voice model name (text input now)
+  var voiceModelInput = document.getElementById("chat-voice-model");
+  if (voiceModelInput) voiceModelInput.value = cfg.voice_model || "";
+  // Check connection status
+  checkVoiceConnection();
   // Debug mode
   setChecked("chat-debug-mode", cfg.debug_mode === true);
   const statusEl = document.getElementById("chat-config-status");
@@ -393,6 +398,7 @@ async function saveChatConfig() {
       ? document.getElementById("chat-image-gen-replicate-api-key").value.trim()
       : "",
     // Voice / TTS settings (TE04)
+    voice_url: document.getElementById("chat-voice-url")?.value || "",
     voice_auto_play: getChecked("chat-voice-auto-play"),
     voice_emotion_link: getChecked("chat-voice-emotion-link"),
     voice_model: document.getElementById("chat-voice-model")?.value || "",
