@@ -76,8 +76,8 @@ class MemoryActivitySSE:
 
     retrieved: list  # list of {"content": str, "score": float, "importance": float}
     saved: list  # list of {"content": str, "tags": list}
-    goals: list = None  # list of {"content": str} newly saved goals
-    promises: list = None  # list of {"content": str} newly saved promises
+    goals: list | None = None  # list of {"content": str} newly saved goals
+    promises: list | None = None  # list of {"content": str} newly saved promises
 
     def to_sse(self) -> str:
         return _sse_encode(
