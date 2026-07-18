@@ -9,7 +9,8 @@ from nous.domain.memory.repository import MemoryRepository
 from nous.domain.memory.service import MemoryService
 
 # SudachiExtractor / HybridEntityExtractor は __getattr__ で遅延ロード
-# （pytest collection 時に sudachipy 辞書 ~200MB をロードしないため）
+# （pytest collection 時に sudachipy 辞書のロードを避けるため。辞書は初回使用時に
+#  NOUS_DATA_ROOT/sudachi/ へ自動ダウンロードされる）
 
 
 def __getattr__(name: str):

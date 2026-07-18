@@ -35,8 +35,8 @@ openai>=1.50.0
 
 
 # Japanese NER (entity extraction)
+# sudachidict_core is no longer installed via pip — downloaded at runtime to NOUS_DATA_ROOT/sudachi/
 sudachipy>=0.6.0
-sudachidict_core>=20240716
 
 # PDF/Document Parsing (read_pdf tool)
 PyMuPDF>=1.24.0
