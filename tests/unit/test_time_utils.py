@@ -337,3 +337,48 @@ class TestParseDateRange:
         now_naive = datetime(2025, 6, 15, 12, 0, 0)  # naive — no tzinfo
         result = relative_time_str(dt, now_naive)
         assert "h ago" in result
+
+
+# ──────────────────────────────────────────────
+# Gap classification (from prepare.py)
+# ──────────────────────────────────────────────
+
+
+class TestClassifyGap:
+    """_classify_gap() の境界値テスト。時間ユーティリティとして prepare からインポート。"""
+
+    def test_same_session(self):
+        from nous.application.chat.pipeline.prepare import _classify_gap
+
+        assert _classify_gap(0.0) == ""
+        assert _classify_gap(0.1) == "SAME_SESSION"
+
+    def test_short_break(self):
+        from nous.application.chat.pipeline.prepare import _classify_gap
+
+        assert _classify_gap(0.5) == "SHORT_BREAK"
+        assert _classify_gap(2.9) == "SHORT_BREAK"
+
+    def test_extended_break(self):
+        from nous.application.chat.pipeline.prepare import _classify_gap
+
+        assert _classify_gap(3.0) == "EXTENDED_BREAK"
+        assert _classify_gap(23.0) == "EXTENDED_BREAK"
+
+    def test_next_day(self):
+        from nous.application.chat.pipeline.prepare import _classify_gap
+
+        assert _classify_gap(24) == "NEXT_DAY"
+        assert _classify_gap(100) == "NEXT_DAY"
+
+    def test_long_absence(self):
+        from nous.application.chat.pipeline.prepare import _classify_gap
+
+        assert _classify_gap(168) == "LONG_ABSENCE"
+        assert _classify_gap(500) == "LONG_ABSENCE"
+
+    def test_very_long_absence(self):
+        from nous.application.chat.pipeline.prepare import _classify_gap
+
+        assert _classify_gap(720) == "VERY_LONG_ABSENCE"
+        assert _classify_gap(10000) == "VERY_LONG_ABSENCE"
