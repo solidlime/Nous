@@ -242,7 +242,7 @@ class TestGetContext:
     # ------------------------------------------------------------------
 
     def test_format_emotion_decay_note_emotion_change(self):
-        """_format_emotion_decay_note shows before→after when emotion changed."""
+        """_format_emotion_decay_note uses natural language for emotion→neutral."""
         from nous.api.mcp._tools_helpers import _format_emotion_decay_note
         from nous.domain.persona.emotion_decay import EmotionDecayResult
 
@@ -254,13 +254,13 @@ class TestGetContext:
             elapsed_hours=48.0,
         )
         note = _format_emotion_decay_note(result)
-        assert "anger(0.72)" in note
-        assert "neutral" in note
-        assert "48h" in note
-        assert "faded" in note
+        assert "anger" in note
+        assert "消えていった" in note
+        assert "2日" in note
+        assert "(" not in note  # no debug format like (0.72)
 
     def test_format_emotion_decay_note_same_emotion(self):
-        """_format_emotion_decay_note handles same emotion with decayed intensity."""
+        """_format_emotion_decay_note uses natural language for same emotion decay."""
         from nous.api.mcp._tools_helpers import _format_emotion_decay_note
         from nous.domain.persona.emotion_decay import EmotionDecayResult
 
@@ -272,9 +272,10 @@ class TestGetContext:
             elapsed_hours=24.0,
         )
         note = _format_emotion_decay_note(result)
-        assert "joy(0.90)" in note
-        assert "joy(0.30)" in note
-        assert "24h" in note
+        assert "joy" in note
+        assert "落ち着いてきた" in note
+        assert "1日" in note
+        assert "(" not in note  # no debug format
 
     def test_format_emotion_decay_note_none(self):
         """_format_emotion_decay_note returns empty string for None."""
@@ -295,7 +296,8 @@ class TestGetContext:
             elapsed_hours=0.5,
         )
         note = _format_emotion_decay_note(result)
-        assert "30min" in note
+        assert "30分" in note
+        assert "消えていった" in note
 
     @pytest.mark.asyncio
     async def test_get_context_includes_decay_notification(self, registered_tools):
@@ -345,9 +347,9 @@ class TestGetContext:
         ):
             mock_reg_cls.get.return_value = ctx
             result = await get_context()
-        assert "anger(0.72)" in result
-        assert "neutral" in result
-        assert "faded" in result
+        assert "anger" in result
+        assert "消えていった" in result
+        assert "2日" in result
 
     @pytest.mark.asyncio
     async def test_get_context_no_decay_no_notification(self, registered_tools):

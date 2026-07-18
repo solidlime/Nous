@@ -367,8 +367,8 @@ class TestBuildContextSectionLightMode:
         state.arousal = None
 
         result = await _build_context_section(ctx, state, compress_mode="light")
-        # Should still contain basic info
-        assert "Now:" in result
+        # Should still contain basic structure (time info moved to TIME_CONTEXT block)
+        assert "【現在の状態】" in result
         # Should not call emotion history
         ctx.persona_service.get_emotion_history.assert_not_called()
         # Light mode should not fetch heavy sections (reflection, mental_model, session_summary)
@@ -414,7 +414,7 @@ class TestBuildContextSectionNormalMode:
         state.arousal = None
 
         result = await _build_context_section(ctx, state, compress_mode="auto")
-        assert "Now:" in result
+        assert "【現在の状態】" in result
 
 
 class TestBuildContextSectionTierContent:
@@ -1021,3 +1021,153 @@ class TestDynamicTemperatureInference:
 
         result = EmotionDrivenSampler.compute(0.7, "neutral", 0.9, scale=0.2)
         assert result == pytest.approx(0.7, rel=1e-3)
+
+
+# ──────────────────────────────────────────────
+# PrepareStep — _build_time_context
+# ──────────────────────────────────────────────
+
+
+class TestBuildTimeContext:
+    """_build_time_context() の出力検証"""
+
+    def test_output_structure(self):
+        """<TIME_CONTEXT>...</TIME_CONTEXT> で囲まれている"""
+        from nous.application.chat.pipeline.prepare import _build_time_context
+        from unittest.mock import MagicMock
+
+        state = MagicMock()
+        state.last_conversation_time = None
+        result = _build_time_context(state)
+        assert result.startswith("<TIME_CONTEXT>")
+        assert result.endswith("</TIME_CONTEXT>")
+
+    def test_contains_now_and_weekday(self):
+        """出力に Now: と曜日が含まれる"""
+        from nous.application.chat.pipeline.prepare import _build_time_context
+        from unittest.mock import MagicMock
+
+        state = MagicMock()
+        state.last_conversation_time = None
+        result = _build_time_context(state)
+        assert "Now:" in result
+        assert any(d in result for d in ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"])
+
+    def test_no_gap_when_no_last_conversation(self):
+        """last_conversation_time が None の場合、ギャップ表示なし"""
+        from nous.application.chat.pipeline.prepare import _build_time_context
+        from unittest.mock import MagicMock
+
+        state = MagicMock()
+        state.last_conversation_time = None
+        result = _build_time_context(state)
+        assert "Time since last conversation" not in result
+
+    def test_gap_shows_only_above_15min(self):
+        """15分未満の経過時間ではギャップ表示が出ない"""
+        from datetime import timedelta
+        from unittest.mock import MagicMock, patch
+        from zoneinfo import ZoneInfo
+
+        from nous.application.chat.pipeline.prepare import _build_time_context
+
+        fixed_now = datetime(2025, 6, 15, 14, 30, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
+        recent_conv = fixed_now - timedelta(minutes=10)
+
+        state2 = MagicMock()
+        state2.last_conversation_time = recent_conv
+
+        with patch("nous.application.chat.pipeline.prepare.get_now", return_value=fixed_now):
+            result = _build_time_context(state2)
+        # 10min < 15min threshold → no gap
+        assert "Time since last conversation" not in result
+
+
+class TestGapClassification:
+    """_classify_gap() の境界値テスト"""
+
+    def test_same_session(self):
+        from nous.application.chat.pipeline.prepare import _classify_gap
+
+        assert _classify_gap(0.0) == ""
+        assert _classify_gap(0.1) == "SAME_SESSION"
+        assert _classify_gap(0.24) == "SAME_SESSION"
+
+    def test_boundary_same_to_short(self):
+        from nous.application.chat.pipeline.prepare import _classify_gap
+
+        assert _classify_gap(0.24) == "SAME_SESSION"
+        assert _classify_gap(0.26) == "SHORT_BREAK"
+
+    def test_boundary_short_to_extended(self):
+        from nous.application.chat.pipeline.prepare import _classify_gap
+
+        assert _classify_gap(2.9) == "SHORT_BREAK"
+        assert _classify_gap(3.1) == "EXTENDED_BREAK"
+
+    def test_boundary_extended_to_next_day(self):
+        from nous.application.chat.pipeline.prepare import _classify_gap
+
+        assert _classify_gap(23.9) == "EXTENDED_BREAK"
+        assert _classify_gap(24.1) == "NEXT_DAY"
+
+    def test_long_absence(self):
+        from nous.application.chat.pipeline.prepare import _classify_gap
+
+        assert _classify_gap(168) == "LONG_ABSENCE"  # 7 days → LONG_ABSENCE
+        assert _classify_gap(169) == "LONG_ABSENCE"
+
+    def test_very_long_absence(self):
+        from nous.application.chat.pipeline.prepare import _classify_gap
+
+        assert _classify_gap(720) == "VERY_LONG_ABSENCE"  # 30 days → VERY_LONG_ABSENCE
+        assert _classify_gap(1000) == "VERY_LONG_ABSENCE"
+
+
+class TestEmotionDecayNoteNaturalLanguage:
+    """衰退通知の自然言語フォーマット検証"""
+
+    def test_no_debug_format(self):
+        """出力がデバッグログ形式（(0.80) のような数値付き）でないこと"""
+        from nous.api.mcp._tools_helpers import _format_emotion_decay_note
+        from nous.domain.persona.emotion_decay import EmotionDecayResult
+
+        result = EmotionDecayResult(
+            before_emotion="happy",
+            before_intensity=0.80,
+            after_emotion="happy",
+            after_intensity=0.45,
+            elapsed_hours=48.0,
+        )
+        note = _format_emotion_decay_note(result)
+        assert "(" not in note  # no debug parenthetical format
+        assert "→" not in note  # no debug arrow format
+        assert "faded" not in note  # no English debug term
+
+    def test_neutralization_uses_different_phrasing(self):
+        """完全減衰時と部分減衰時で異なる表現を使う"""
+        from nous.api.mcp._tools_helpers import _format_emotion_decay_note
+        from nous.domain.persona.emotion_decay import EmotionDecayResult
+
+        # 完全減衰 (after == neutral, intensity == 0)
+        neutralized = EmotionDecayResult(
+            before_emotion="anger",
+            before_intensity=0.7,
+            after_emotion="neutral",
+            after_intensity=0.0,
+            elapsed_hours=48.0,
+        )
+        note_neutral = _format_emotion_decay_note(neutralized)
+        assert "消えていった" in note_neutral
+
+        # 部分減衰 (same emotion, reduced intensity)
+        partial = EmotionDecayResult(
+            before_emotion="joy",
+            before_intensity=0.9,
+            after_emotion="joy",
+            after_intensity=0.3,
+            elapsed_hours=24.0,
+        )
+        note_partial = _format_emotion_decay_note(partial)
+        assert "落ち着いてきた" in note_partial
+        assert "消えていった" not in note_partial
