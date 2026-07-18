@@ -68,7 +68,12 @@ function appendChatMessage(role, content, timeStr, isMarkdown) {
     ttsBtn.innerHTML = '<i data-lucide="volume-2"></i>';
     ttsBtn.title = "音声で再生";
     ttsBtn.setAttribute("aria-label", "音声で再生");
-    ttsBtn.onclick = () => playTts(ttsBtn, content);
+    ttsBtn.onclick = () => {
+        const allText = Array.from(div.querySelectorAll(".chat-bubble"))
+            .map(b => b.textContent)
+            .join("\n");
+        playTts(ttsBtn, allText);
+    };
     actions.appendChild(ttsBtn);
     const retryBtn = document.createElement("button");
     retryBtn.className = "chat-msg-action-btn retry";
@@ -83,9 +88,12 @@ function appendChatMessage(role, content, timeStr, isMarkdown) {
     copyBtn.innerHTML = '<i data-lucide="clipboard-list"></i>';
     copyBtn.title = "コピー";
     copyBtn.onclick = () => {
-      navigator.clipboard
-        .writeText(content)
-        .then(() => toast("コピーしました", "success"));
+        const allText = Array.from(div.querySelectorAll(".chat-bubble"))
+            .map(b => b.textContent)
+            .join("\n");
+        navigator.clipboard
+            .writeText(allText)
+            .then(() => toast("コピーしました", "success"));
     };
     actions.appendChild(copyBtn);
   }
