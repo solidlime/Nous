@@ -33,7 +33,7 @@ N.Core.connectSSE = function connectSSE(persona) {
   N.Core._sseBackoff = 5000;
   var es = new EventSource(
     "/api/events/" + encodeURIComponent(persona) +
-    "?topics=memory,context,emotion,body"
+    "?topics=memory,context,emotion,body,session"
   );
   es._sseHandlers = {};
 
@@ -94,6 +94,15 @@ N.Core.connectSSE = function connectSSE(persona) {
       }
     } catch (err) { console.warn("[SSE parse] context.body_state_changed:", err.message); }
   });
+  es._sseHandlers["session.rollback"] = function handleSessionRollback(e) {
+    try {
+      var d = JSON.parse(e.data);
+      N.Core.toast("\ud83d\udd04 \u30bb\u30c3\u30b7\u30e7\u30f3\u304c\u30ed\u30fc\u30eb\u30d0\u30c3\u30af\u3055\u308c\u307e\u3057\u305f (" + (d.remaining_count || 0) + " \u30e1\u30c3\u30bb\u30fc\u30b8)", "info");
+      if (typeof restoreChatHistory === "function") restoreChatHistory();
+    } catch (err) { console.warn("[SSE parse] session.rollback:", err.message); }
+  };
+  es.addEventListener("session.rollback", es._sseHandlers["session.rollback"]);
+
   es.onopen = function handleSSEOpen() {
     _setSseStatus("connected");
     N.Core._sseBackoff = 5000;
