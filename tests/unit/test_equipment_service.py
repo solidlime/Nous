@@ -234,3 +234,35 @@ class TestGetEquipment:
         eq = result.unwrap()
         assert eq["top"] == "シャツ"
         assert eq["bottom"] == "パンツ"
+
+
+class TestAccessorySlots:
+    """accessory_1/2/3 スロットの拡張テスト."""
+
+    def test_equip_accessory_1(self, service: EquipmentService, repo: InMemoryEquipmentRepository):
+        service.equip({"accessory_1": "リング"}, auto_add=True)
+        assert repo._slots.get("accessory_1") == "リング"
+
+    def test_equip_accessory_2(self, service: EquipmentService, repo: InMemoryEquipmentRepository):
+        service.equip({"accessory_2": "ネックレス"}, auto_add=True)
+        assert repo._slots.get("accessory_2") == "ネックレス"
+
+    def test_equip_accessory_3(self, service: EquipmentService, repo: InMemoryEquipmentRepository):
+        service.equip({"accessory_3": "ブレスレット"}, auto_add=True)
+        assert repo._slots.get("accessory_3") == "ブレスレット"
+
+    def test_equip_all_three_accessories(self, service: EquipmentService, repo: InMemoryEquipmentRepository):
+        service.equip({
+            "accessory_1": "リング",
+            "accessory_2": "ネックレス",
+            "accessory_3": "ブレスレット",
+        }, auto_add=True)
+        assert repo._slots.get("accessory_1") == "リング"
+        assert repo._slots.get("accessory_2") == "ネックレス"
+        assert repo._slots.get("accessory_3") == "ブレスレット"
+
+    def test_old_accessories_slot_invalid(self, service: EquipmentService):
+        service.add_item("指輪")
+        result = service.equip({"accessories": "指輪"})
+        assert not result.is_ok
+        assert "Invalid slot" in str(result.error)

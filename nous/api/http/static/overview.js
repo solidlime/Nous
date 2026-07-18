@@ -175,7 +175,7 @@ async function loadOverview() {
         const hasMemTypes = Object.keys(memTypeCounts).length > 0;
 
         // --- Equipment display ---
-        const EQUIP_SLOTS = ['top','bottom','shoes','outer','accessories','head'];
+        const EQUIP_SLOTS = ['top','bottom','shoes','outer','head','accessory_1','accessory_2','accessory_3'];
         let equipHtml = '<div style="display:grid;gap:6px;margin-top:8px">';
         EQUIP_SLOTS.forEach(slot => {
             const current = equip[slot];

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from datetime import datetime
 
-VALID_SLOTS: list[str] = ["top", "bottom", "shoes", "outer", "accessories", "head"]
+VALID_SLOTS: list[str] = ["top", "bottom", "shoes", "outer", "head", "accessory_1", "accessory_2", "accessory_3"]
 
 
 @dataclass

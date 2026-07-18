@@ -46,8 +46,10 @@ function updateEquipmentPanel(update) {
           bottom: "footprints",
           shoes: "footprints",
           outer: "jacket",
-          accessories: "gem",
           head: "crown",
+          accessory_1: "gem",
+          accessory_2: "gem",
+          accessory_3: "gem",
         }[slot] || "circle";
       const slotLabel =
         {
@@ -55,9 +57,15 @@ function updateEquipmentPanel(update) {
           bottom: "下",
           shoes: "靴",
           outer: "アウター",
-          accessories: "アクセ",
           head: "頭",
+          accessory_1: "アクセ1",
+          accessory_2: "アクセ2",
+          accessory_3: "アクセ3",
         }[slot] || slot;
+      var itemLabel =
+        typeof item === "object" && item !== null
+          ? item.name || JSON.stringify(item)
+          : String(item);
       html +=
         '<div style="font-size:0.73rem;padding:2px 0;display:flex;justify-content:space-between;align-items:center;">' +
         '<span style="display:inline-flex;align-items:center;gap:4px;"><i data-lucide="' +
@@ -65,28 +73,25 @@ function updateEquipmentPanel(update) {
         '" style="width:11px;height:11px;opacity:0.7;"></i>' +
         slotLabel +
         "</span><span>" +
-        esc(String(item)) +
+        esc(itemLabel) +
         "</span></div>";
     }
+  }
+  function _itemLabel(i) {
+    return typeof i === "object" && i !== null
+      ? i.name || JSON.stringify(i)
+      : String(i);
   }
   if (unequipped.length > 0) {
     html +=
       '<div style="font-size:0.7rem;opacity:0.6;margin-top:4px;">外した: ' +
-      unequipped
-        .map(function (i) {
-          return esc(String(i));
-        })
-        .join(", ") +
+      unequipped.map(function (i) { return esc(_itemLabel(i)); }).join(", ") +
       "</div>";
   }
   if (added.length > 0) {
     html +=
       '<div style="font-size:0.7rem;opacity:0.6;margin-top:2px;">追加: ' +
-      added
-        .map(function (i) {
-          return esc(String(i));
-        })
-        .join(", ") +
+      added.map(function (i) { return esc(_itemLabel(i)); }).join(", ") +
       "</div>";
   }
 

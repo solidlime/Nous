@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-VALID_SLOTS = frozenset({"top", "bottom", "shoes", "outer", "accessories", "head"})
+VALID_SLOTS = frozenset({"top", "bottom", "shoes", "outer", "head", "accessory_1", "accessory_2", "accessory_3"})
 
 
 class SQLiteEquipmentRepository:

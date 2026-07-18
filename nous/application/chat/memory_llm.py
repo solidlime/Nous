@@ -89,7 +89,7 @@ JSONのみ。コメント不要。不要なフィールドは省略可。
   - 物理的な持ち物（服・装飾品・道具・武器など）の具体的な言及があった場合のみ記述。
   - 感情・思想・人間関係などの抽象概念は絶対にアイテムとして保存しないこと。
   - 既存アイテムの状態変化（乱れ→整え等）はremove_items+add_itemsで入れ替えるか、update_itemsで更新。
-  - equip: スロットへの装備指定（top/bottom/shoes/outer/accessories/head）。
+   - equip: スロットへの装備指定（top/bottom/shoes/outer/head/accessory_1/accessory_2/accessory_3）。
   - 何も変化がなければ省略または空オブジェクト。
 - 何も抽出すべきものがなければ {{"facts": [], "goals": [], "promises": [], "context_update": {{}}, "inventory_update": {{}}}} を出力。
 """

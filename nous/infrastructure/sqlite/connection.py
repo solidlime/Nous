@@ -492,6 +492,22 @@ class SQLiteConnection:
 
         inventory_conn = self.get_inventory_db()
         inventory_conn.executescript(_INVENTORY_SCHEMA)
+
+        # Migration: accessories → accessory_1 rename (slot expansion v1)
+        try:
+            cursor = inventory_conn.execute("SELECT COUNT(*) as cnt FROM equipment_slots WHERE slot = 'accessories'")
+            if cursor.fetchone()["cnt"] > 0:
+                inventory_conn.execute(
+                    "UPDATE equipment_slots SET slot = 'accessory_1' WHERE slot = 'accessories'"
+                )
+                inventory_conn.execute(
+                    "UPDATE equipment_history SET slot = 'accessory_1' WHERE slot = 'accessories'"
+                )
+                inventory_conn.commit()
+                logger.info("Migration: renamed 'accessories' slot to 'accessory_1'")
+        except Exception as e:
+            logger.warning("Migration 'accessories→accessory_1' skipped: %s", e)
+
         inventory_conn.commit()
         logger.info("Inventory schema initialized for persona '%s'", self.persona)
 
