@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import time
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -72,10 +72,10 @@ class ComfyUIProvider(ImageGenProvider):
     async def _upload_reference_image(self, image_bytes: bytes) -> str:
         """参照画像を ComfyUI の /upload/image にアップロードし、filename を返す。"""
         filename = f"nous_ref_{int(time.time() * 1000)}.png"
-        files = {
+        files: dict[str, tuple[str | None, str | bytes, str | None]] = {
             "image": (filename, image_bytes, "image/png"),
-            "type": (None, "input"),
-            "overwrite": (None, "True"),
+            "type": (None, "input", None),
+            "overwrite": (None, "True", None),
         }
         resp = await self.client.post(f"{self._api_url}/upload/image", files=files)
         resp.raise_for_status()
@@ -88,7 +88,7 @@ class ComfyUIProvider(ImageGenProvider):
             try:
                 resp = await self.client.post(f"{self._api_url}/prompt", json={"prompt": workflow})
                 resp.raise_for_status()
-                return resp.json()["prompt_id"]
+                return cast(str, resp.json()["prompt_id"])
             except (httpx.ConnectError, httpx.TimeoutException) as e:
                 last_exc = e
                 if attempt < 2:

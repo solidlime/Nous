@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from typing import Any
 
 import httpx
 
@@ -26,6 +27,8 @@ class ReplicateProvider(ImageGenProvider):
         size: str = "1024x1024",
         quality: str = "standard",
         n: int = 1,
+        reference_image: bytes | None = None,
+        **kwargs: Any,
     ) -> list[GeneratedImage]:
         headers = {
             "Authorization": f"Bearer {self._api_key}",

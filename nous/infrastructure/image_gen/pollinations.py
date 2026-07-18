@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from typing import Any
 from urllib.parse import quote
 
 import httpx
@@ -21,6 +22,8 @@ class PollinationsImageProvider(ImageGenProvider):
         size: str = "1024x1024",
         quality: str = "standard",
         n: int = 1,
+        reference_image: bytes | None = None,
+        **kwargs: Any,
     ) -> list[GeneratedImage]:
         # Parse size
         if "x" in size:

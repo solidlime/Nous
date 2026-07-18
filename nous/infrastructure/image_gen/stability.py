@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 
 from .base import GeneratedImage, ImageGenProvider
@@ -20,6 +22,8 @@ class StabilityProvider(ImageGenProvider):
         size: str = "1024x1024",
         quality: str = "standard",
         n: int = 1,
+        reference_image: bytes | None = None,
+        **kwargs: Any,
     ) -> list[GeneratedImage]:
         # サイズ文字列を width x height にパース
         if "x" in size:
