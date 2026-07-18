@@ -109,9 +109,9 @@ class InferenceStep:
                             "id": event.tool_use_id,
                         }
                     )
-                    # tool_input is guaranteed non-empty after Phase 1 fix.
-                    # Guard retained against buggy provider implementations.
-                    if event.tool_input:
+                    # Guard against None from buggy provider implementations.
+                    # Note: {} is a valid tool input (parameterless tools).
+                    if event.tool_input is not None:
                         pending_tool_calls.append(event)
                 elif isinstance(event, ErrorEvent):
                     yield ErrorSSE(message=event.message)
