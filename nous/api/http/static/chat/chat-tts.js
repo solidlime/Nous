@@ -8,6 +8,9 @@ var S = window.S;
 
 let _ttsAbortController = null;
 let _connectionCheckTimer = null;
+let _currentAudio = null;       // 現在再生中の Audio 要素（seekbar用）
+let _currentAudioBtn = null;    // 対応する再生ボタン
+let _seekBarInterval = null;    // シークバー更新タイマー
 
 /* ── Connection status indicator ── */
 function _setStatus(state, text) {
@@ -25,6 +28,99 @@ function _debounce(fn, ms) {
     clearTimeout(timer);
     timer = setTimeout(fn, ms);
   };
+}
+
+/* ── Volume helper ── */
+function _getVolume() {
+  var volEl = document.getElementById("chat-voice-volume");
+  return volEl ? parseFloat(volEl.value) : 1.0;
+}
+
+/* ── Seekbar management ── */
+function _createSeekBar(containerDiv) {
+  var existing = containerDiv.querySelector(".tts-seekbar");
+  if (existing) existing.remove();
+  var bar = document.createElement("input");
+  bar.type = "range";
+  bar.className = "tts-seekbar";
+  bar.min = "0";
+  bar.max = "100";
+  bar.value = "0";
+  bar.style.width = "100%";
+  bar.style.accentColor = "var(--accent-purple)";
+  // 親div（chat-msg-actionsの外側、chat-bubbleのすぐ下）に挿入
+  var actions = containerDiv.querySelector(".chat-msg-actions");
+  if (actions) {
+    actions.insertAdjacentElement("afterend", bar);
+  } else {
+    containerDiv.appendChild(bar);
+  }
+  return bar;
+}
+
+function _startSeekBar(audio, bar) {
+  if (_seekBarInterval) clearInterval(_seekBarInterval);
+  _seekBarInterval = setInterval(function() {
+    if (!audio.duration || isNaN(audio.duration)) return;
+    bar.max = audio.duration;
+    bar.value = audio.currentTime;
+  }, 50);
+}
+
+function _removeSeekBar() {
+  if (_seekBarInterval) { clearInterval(_seekBarInterval); _seekBarInterval = null; }
+  var bar = document.querySelector(".tts-seekbar");
+  if (bar) bar.remove();
+  _currentAudio = null;
+  _currentAudioBtn = null;
+}
+
+/* ── Common audio setup ── */
+function _setupAudio(audio, audioUrl, btn, containerDiv) {
+  audio.volume = _getVolume();
+  
+  if (containerDiv) {
+    var seekBar = _createSeekBar(containerDiv);
+    seekBar.oninput = function() {
+      audio.currentTime = parseFloat(this.value);
+    };
+    _startSeekBar(audio, seekBar);
+  }
+  
+  // btn再生中状態
+  if (btn) {
+    btn.classList.add("playing");
+    btn.innerHTML = '<i data-lucide="pause"></i>';
+    btn.disabled = false;
+    if (typeof lucide !== "undefined") lucide.createIcons();
+  }
+  
+  audio.onended = function() {
+    _removeSeekBar();
+    if (btn) {
+      btn.classList.remove("playing");
+      btn.innerHTML = '<i data-lucide="volume-2"></i>';
+      if (typeof lucide !== "undefined") lucide.createIcons();
+    }
+  };
+  
+  audio.onerror = function() {
+    _removeSeekBar();
+    if (btn) {
+      btn.classList.remove("playing");
+      btn.innerHTML = '<i data-lucide="volume-2"></i>';
+      if (typeof lucide !== "undefined") lucide.createIcons();
+    }
+    console.error("[TTS] Audio playback error");
+  };
+  
+  _currentAudio = audio;
+  _currentAudioBtn = btn;
+  
+  audio.play().catch(function(err) {
+    console.error("[TTS] Play failed:", err);
+    _removeSeekBar();
+  });
 }
 
 /* ── Check TTS server connection ── */
@@ -69,6 +165,7 @@ async function testVoicePlayback() {
       if (statusEl) statusEl.textContent = "再生中...";
       var audioUrl = "data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64;
       var audio = new Audio(audioUrl);
+      audio.volume = _getVolume();
       audio.onended = function () {
         if (statusEl) statusEl.textContent = "✓ 完了";
         setTimeout(function () { if (statusEl) statusEl.textContent = ""; }, 3000);
@@ -115,6 +212,7 @@ function autoPlayTts(text) {
     if (resp.audio_base64) {
         var audioUrl = "data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64;
         var audio = new Audio(audioUrl);
+        audio.volume = _getVolume();
         audio.play().catch(function (err) {
           console.warn("[AutoTTS] Play failed:", err.message);
         });
@@ -128,19 +226,32 @@ function autoPlayTts(text) {
 /* ── Inline TTS playback (chat bubble button) ── */
 async function playTts(btn, text) {
   if (!S.persona || !text) return;
-  // If already playing, stop
-  if (btn.classList.contains("playing")) {
-    btn.classList.remove("playing");
-    btn.innerHTML = '<i data-lucide="volume-2"></i>';
-    if (typeof lucide !== "undefined") lucide.createIcons();
-    if (_ttsAbortController) {
-      _ttsAbortController.abort();
-      _ttsAbortController = null;
+  
+  // 一時停止中の再開
+  if (_currentAudio && btn.classList.contains("playing") && _currentAudioBtn === btn) {
+    if (_currentAudio.paused) {
+      _currentAudio.play();
+      btn.innerHTML = '<i data-lucide="pause"></i>';
+      if (typeof lucide !== "undefined") lucide.createIcons();
+      return;
     }
+  }
+  
+  // 再生中の一時停止
+  if (_currentAudio && !_currentAudio.paused && _currentAudioBtn === btn) {
+    _currentAudio.pause();
+    btn.innerHTML = '<i data-lucide="play"></i>';
+    if (typeof lucide !== "undefined") lucide.createIcons();
     return;
   }
-
-  // Strip markdown-like formatting for TTS
+  
+  // 別の音声再生中は停止
+  if (_currentAudio && _currentAudioBtn !== btn) {
+    _currentAudio.pause();
+    _removeSeekBar();
+  }
+  
+  // Strip markdown
   const plainText = text
     .replace(/```[\s\S]*?```/g, "コードブロック")
     .replace(/`([^`]+)`/g, "$1")
@@ -148,47 +259,22 @@ async function playTts(btn, text) {
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .trim();
   if (!plainText) return;
-
+  
   btn.innerHTML = '<span class="tts-spinner"></span>';
   btn.disabled = true;
-
+  
   try {
     var modelInput = document.getElementById("chat-voice-model");
     var body = { text: plainText };
-    if (modelInput && modelInput.value) {
-      body.voice = modelInput.value;
-    }
+    if (modelInput && modelInput.value) body.voice = modelInput.value;
     const resp = await api("/api/tts/" + encodeURIComponent(S.persona), {
       method: "POST",
       body: JSON.stringify(body),
     });
-    const audioBase64 = resp.audio_base64;
-    if (audioBase64) {
-      btn.classList.add("playing");
-      btn.innerHTML = '<i data-lucide="volume-2"></i>';
-      btn.disabled = false;
-      if (typeof lucide !== "undefined") lucide.createIcons();
-
-      const audioUrl =
-        "data:audio/" + (resp.format || "wav") + ";base64," + audioBase64;
+    if (resp.audio_base64) {
+      const audioUrl = "data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64;
       const audio = new Audio(audioUrl);
-      audio.onended = function () {
-        btn.classList.remove("playing");
-        btn.innerHTML = '<i data-lucide="volume-2"></i>';
-        if (typeof lucide !== "undefined") lucide.createIcons();
-      };
-      audio.onerror = function () {
-        btn.classList.remove("playing");
-        btn.innerHTML = '<i data-lucide="volume-2"></i>';
-        if (typeof lucide !== "undefined") lucide.createIcons();
-        console.error("[TTS] Audio playback error");
-      };
-      audio.play().catch(function (err) {
-        console.error("[TTS] Play failed:", err);
-        btn.classList.remove("playing");
-        btn.innerHTML = '<i data-lucide="volume-2"></i>';
-        if (typeof lucide !== "undefined") lucide.createIcons();
-      });
+      _setupAudio(audio, audioUrl, btn, btn.closest(".chat-msg"));
     } else {
       console.warn("[TTS] Synthesis failed:", resp.error || "unknown");
       btn.innerHTML = '<i data-lucide="volume-2"></i>';

@@ -233,6 +233,7 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     voice_emotion_link INTEGER DEFAULT 1,
     voice_model TEXT DEFAULT '',
     voice_url TEXT DEFAULT '',
+    voice_volume REAL DEFAULT 1.0,
     irodori_num_steps INTEGER DEFAULT 30,
     irodori_cfg_scale_text REAL DEFAULT 3.2,
     irodori_cfg_scale_speaker REAL DEFAULT 5.0,
@@ -413,6 +414,14 @@ class SQLiteConnection:
             memory_conn.execute("ALTER TABLE chat_settings ADD COLUMN voice_url TEXT DEFAULT ''")
             memory_conn.commit()
             logger.info("Added voice_url column to chat_settings (migration)")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
+        # Migration: add voice_volume if missing (existing DBs)
+        try:
+            memory_conn.execute("ALTER TABLE chat_settings ADD COLUMN voice_volume REAL DEFAULT 1.0")
+            memory_conn.commit()
+            logger.info("Added voice_volume column to chat_settings (migration)")
         except sqlite3.OperationalError:
             pass  # column already exists
 

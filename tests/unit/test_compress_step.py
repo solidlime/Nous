@@ -723,6 +723,7 @@ class TestDogfooding:
                 voice_emotion_link INTEGER DEFAULT 1,
                 voice_model TEXT DEFAULT '',
                 voice_url TEXT DEFAULT '',
+                voice_volume REAL DEFAULT 1.0,
                 irodori_num_steps INTEGER DEFAULT 30,
                 irodori_cfg_scale_text REAL DEFAULT 3.2,
                 irodori_cfg_scale_speaker REAL DEFAULT 5.0,

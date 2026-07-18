@@ -205,6 +205,10 @@ function applyChatConfig(cfg) {
   if (irodoriChunkMin) document.getElementById("chat-irodori-chunk-min-val").textContent = cfg.irodori_chunk_min_chars ?? 85;
   var irodoriSeed = document.getElementById("chat-irodori-seed");
   if (irodoriSeed) irodoriSeed.value = cfg.irodori_seed != null ? cfg.irodori_seed : "";
+  // Voice volume
+  var voiceVolume = document.getElementById("chat-voice-volume");
+  if (voiceVolume) voiceVolume.value = cfg.voice_volume ?? 1.0;
+  if (voiceVolume) document.getElementById("chat-voice-volume-val").textContent = Math.round((cfg.voice_volume ?? 1.0) * 100) + "%";
   // Check connection status
   checkVoiceConnection();
   // Debug mode
@@ -430,6 +434,8 @@ async function saveChatConfig() {
       var v = document.getElementById("chat-irodori-seed")?.value;
       return v !== "" && v != null ? parseInt(v) : null;
     })(),
+    // Voice volume
+    voice_volume: parseFloat(document.getElementById("chat-voice-volume")?.value) ?? 1.0,
   };
   const btn = document.querySelector(".chat-save-btn");
   if (btn) {

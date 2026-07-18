@@ -113,6 +113,7 @@ class ChatConfig(BaseModel):
     voice_emotion_link: bool = True
     voice_model: str = ""
     voice_url: str = ""
+    voice_volume: float = 1.0
     # Irodori advanced TTS parameters
     irodori_num_steps: int = 30
     irodori_cfg_scale_text: float = 3.2
@@ -278,7 +279,7 @@ class ChatConfigRepository:
             "context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled, "
             "retrieval_rrf_k, "
             "dynamic_tool_selection, "
-            "voice_auto_play, voice_emotion_link, voice_model, voice_url, "
+            "voice_auto_play, voice_emotion_link, voice_model, voice_url, voice_volume, "
             "irodori_num_steps, irodori_cfg_scale_text, irodori_cfg_scale_speaker, "
             "irodori_cfg_scale_caption, irodori_chunk_min_chars, irodori_seed, "
             "disabled_tools "
@@ -356,13 +357,13 @@ class ChatConfigRepository:
                      context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled,
                      retrieval_rrf_k,
                         dynamic_tool_selection,
-                          voice_auto_play, voice_emotion_link, voice_model, voice_url,
+                          voice_auto_play, voice_emotion_link, voice_model, voice_url, voice_volume,
                           irodori_num_steps, irodori_cfg_scale_text, irodori_cfg_scale_speaker,
                           irodori_cfg_scale_caption, irodori_chunk_min_chars, irodori_seed,
                            disabled_tools,
                            updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT(persona) DO UPDATE SET
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
                 api_key=excluded.api_key,
@@ -416,8 +417,9 @@ class ChatConfigRepository:
                  dynamic_tool_selection=excluded.dynamic_tool_selection,
                  voice_auto_play=excluded.voice_auto_play,
                     voice_emotion_link=excluded.voice_emotion_link,
-                    voice_model=excluded.voice_model,
-                    voice_url=excluded.voice_url,
+                     voice_model=excluded.voice_model,
+                     voice_url=excluded.voice_url,
+                     voice_volume=excluded.voice_volume,
                     irodori_num_steps=excluded.irodori_num_steps,
                     irodori_cfg_scale_text=excluded.irodori_cfg_scale_text,
                     irodori_cfg_scale_speaker=excluded.irodori_cfg_scale_speaker,
@@ -484,6 +486,7 @@ class ChatConfigRepository:
                 int(config.voice_emotion_link),
                 config.voice_model,
                 config.voice_url,
+                config.voice_volume,
                 config.irodori_num_steps,
                 config.irodori_cfg_scale_text,
                 config.irodori_cfg_scale_speaker,

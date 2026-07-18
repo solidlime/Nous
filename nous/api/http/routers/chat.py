@@ -103,6 +103,7 @@ def register_chat_routes(mcp) -> None:
             "voice_emotion_link",
             "voice_model",
             "voice_url",
+            "voice_volume",
             "irodori_num_steps",
             "irodori_cfg_scale_text",
             "irodori_cfg_scale_speaker",

@@ -495,6 +495,17 @@ def render_chat_tab() -> str:
                                             style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
                                         <label for="chat-voice-auto-play" class="chat-field-label" style="margin:0;cursor:pointer;">応答を自動再生</label>
                                     </div>
+                                    <!-- Voice volume -->
+                                    <div>
+                                        <div style="display:flex;justify-content:space-between;">
+                                            <span class="chat-field-label" style="font-size:0.78rem;">音量</span>
+                                            <span id="chat-voice-volume-val" style="font-size:0.72rem;color:var(--accent-purple);">100%</span>
+                                        </div>
+                                        <input type="range" id="chat-voice-volume" class="chat-field-input"
+                                            min="0.0" max="1.0" step="0.05" value="1.0"
+                                            oninput="document.getElementById('chat-voice-volume-val').textContent=Math.round(this.value*100)+'%'"
+                                            style="width:100%;accent-color:var(--accent-purple);" />
+                                    </div>
                                     <!-- Irodori advanced params -->
                                     <details style="margin-top:12px;">
                                         <summary style="font-size:0.82rem;color:var(--text-muted);cursor:pointer;">詳細設定</summary>
