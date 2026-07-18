@@ -112,6 +112,7 @@ class ChatConfig(BaseModel):
     voice_auto_play: bool = False
     voice_emotion_link: bool = True
     voice_model: str = ""
+    voice_url: str = ""
     updated_at: str | None = None
 
     @field_validator("temperature")
@@ -270,7 +271,7 @@ class ChatConfigRepository:
             "context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled, "
             "retrieval_rrf_k, "
             "dynamic_tool_selection, "
-            "voice_auto_play, voice_emotion_link, voice_model, "
+            "voice_auto_play, voice_emotion_link, voice_model, voice_url, "
             "disabled_tools "
             "FROM chat_settings WHERE persona = ?",
             (persona,),
@@ -346,10 +347,10 @@ class ChatConfigRepository:
                      context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled,
                      retrieval_rrf_k,
                         dynamic_tool_selection,
-                        voice_auto_play, voice_emotion_link, voice_model,
-                         disabled_tools,
-                         updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         voice_auto_play, voice_emotion_link, voice_model, voice_url,
+                          disabled_tools,
+                          updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
@@ -403,9 +404,10 @@ class ChatConfigRepository:
                  retrieval_rrf_k=excluded.retrieval_rrf_k,
                  dynamic_tool_selection=excluded.dynamic_tool_selection,
                  voice_auto_play=excluded.voice_auto_play,
-                  voice_emotion_link=excluded.voice_emotion_link,
-                  voice_model=excluded.voice_model,
-                  disabled_tools=excluded.disabled_tools,
+                   voice_emotion_link=excluded.voice_emotion_link,
+                   voice_model=excluded.voice_model,
+                   voice_url=excluded.voice_url,
+                   disabled_tools=excluded.disabled_tools,
                  updated_at=excluded.updated_at
             """,
             (
@@ -464,6 +466,7 @@ class ChatConfigRepository:
                 int(config.voice_auto_play),
                 int(config.voice_emotion_link),
                 config.voice_model,
+                config.voice_url,
                 json.dumps(config.disabled_tools, ensure_ascii=False),
                 now,
             ),
