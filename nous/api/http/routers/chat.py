@@ -101,6 +101,8 @@ def register_chat_routes(mcp) -> None:
             "episode_search_enabled",
             "voice_auto_play",
             "voice_emotion_link",
+            "voice_model",
+            "voice_url",
             "disabled_tools",
         ):
             if field_name in body:
