@@ -144,11 +144,9 @@ class MemoryService:
                 # Extract entities using Sudachi NER (accurate path) for LLM context.
                 # create_memory is sync — call SudachiExtractor directly (no await needed).
                 from nous.domain.memory.sudachi_extractor import (
-                    HybridEntityExtractor,
                     SudachiExtractor,
                 )
 
-                hybrid = HybridEntityExtractor()
                 sudachi = SudachiExtractor()
                 accurate = sudachi.extract(content.strip())
                 # Convert list[dict] with keys {name, type, start, end} → list[tuple[str, str]]
