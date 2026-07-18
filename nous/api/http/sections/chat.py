@@ -479,10 +479,10 @@ def render_chat_tab() -> str:
                                     </div>
                                     <!-- Voice model name -->
                                     <div>
-                                        <div class="chat-field-label">音声モデル名</div>
+                                        <div class="chat-field-label">音声 (Voice)</div>
                                         <input type="text" id="chat-voice-model" class="chat-field-input"
-                                            placeholder="model-01"
-                                            aria-label="音声モデル名" />
+                                            placeholder="sample"
+                                            aria-label="音声名" />
                                     </div>
                                     <!-- Checkboxes -->
                                     <div style="display:flex;align-items:center;gap:8px;">
@@ -495,6 +495,74 @@ def render_chat_tab() -> str:
                                             style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
                                         <label for="chat-voice-auto-play" class="chat-field-label" style="margin:0;cursor:pointer;">応答を自動再生</label>
                                     </div>
+                                    <!-- Irodori advanced params -->
+                                    <details style="margin-top:12px;">
+                                        <summary style="font-size:0.82rem;color:var(--text-muted);cursor:pointer;">詳細設定</summary>
+                                        <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;padding-left:4px;">
+                                            <!-- num_steps: range 10-50, step 1, default 30 -->
+                                            <div>
+                                                <div style="display:flex;justify-content:space-between;">
+                                                    <span class="chat-field-label" style="font-size:0.78rem;">推論ステップ数</span>
+                                                    <span id="chat-irodori-num-steps-val" style="font-size:0.72rem;color:var(--accent-purple);">30</span>
+                                                </div>
+                                                <input type="range" id="chat-irodori-num-steps" class="chat-field-input"
+                                                    min="10" max="50" step="1" value="30"
+                                                    oninput="document.getElementById('chat-irodori-num-steps-val').textContent=this.value"
+                                                    style="width:100%;accent-color:var(--accent-purple);" />
+                                            </div>
+                                            <!-- cfg_scale_text: range 1.0-5.0, step 0.1, default 3.2 -->
+                                            <div>
+                                                <div style="display:flex;justify-content:space-between;">
+                                                    <span class="chat-field-label" style="font-size:0.78rem;">テキスト忠実度</span>
+                                                    <span id="chat-irodori-cfg-text-val" style="font-size:0.72rem;color:var(--accent-purple);">3.2</span>
+                                                </div>
+                                                <input type="range" id="chat-irodori-cfg-scale-text" class="chat-field-input"
+                                                    min="1.0" max="5.0" step="0.1" value="3.2"
+                                                    oninput="document.getElementById('chat-irodori-cfg-text-val').textContent=parseFloat(this.value).toFixed(1)"
+                                                    style="width:100%;accent-color:var(--accent-purple);" />
+                                            </div>
+                                            <!-- cfg_scale_speaker: range 1.0-8.0, step 0.1, default 5.0 -->
+                                            <div>
+                                                <div style="display:flex;justify-content:space-between;">
+                                                    <span class="chat-field-label" style="font-size:0.78rem;">話者再現度</span>
+                                                    <span id="chat-irodori-cfg-speaker-val" style="font-size:0.72rem;color:var(--accent-purple);">5.0</span>
+                                                </div>
+                                                <input type="range" id="chat-irodori-cfg-scale-speaker" class="chat-field-input"
+                                                    min="1.0" max="8.0" step="0.1" value="5.0"
+                                                    oninput="document.getElementById('chat-irodori-cfg-speaker-val').textContent=parseFloat(this.value).toFixed(1)"
+                                                    style="width:100%;accent-color:var(--accent-purple);" />
+                                            </div>
+                                            <!-- cfg_scale_caption: range 1.0-8.0, step 0.1, default 4.2 -->
+                                            <div>
+                                                <div style="display:flex;justify-content:space-between;">
+                                                    <span class="chat-field-label" style="font-size:0.78rem;">感情・スタイル強度</span>
+                                                    <span id="chat-irodori-cfg-caption-val" style="font-size:0.72rem;color:var(--accent-purple);">4.2</span>
+                                                </div>
+                                                <input type="range" id="chat-irodori-cfg-scale-caption" class="chat-field-input"
+                                                    min="1.0" max="8.0" step="0.1" value="4.2"
+                                                    oninput="document.getElementById('chat-irodori-cfg-caption-val').textContent=parseFloat(this.value).toFixed(1)"
+                                                    style="width:100%;accent-color:var(--accent-purple);" />
+                                            </div>
+                                            <!-- chunk_min_chars: range 30-200, step 5, default 85 -->
+                                            <div>
+                                                <div style="display:flex;justify-content:space-between;">
+                                                    <span class="chat-field-label" style="font-size:0.78rem;">最小チャンク文字数</span>
+                                                    <span id="chat-irodori-chunk-min-val" style="font-size:0.72rem;color:var(--accent-purple);">85</span>
+                                                </div>
+                                                <input type="range" id="chat-irodori-chunk-min-chars" class="chat-field-input"
+                                                    min="30" max="200" step="5" value="85"
+                                                    oninput="document.getElementById('chat-irodori-chunk-min-val').textContent=this.value"
+                                                    style="width:100%;accent-color:var(--accent-purple);" />
+                                            </div>
+                                            <!-- seed: number input, empty=random -->
+                                            <div>
+                                                <div class="chat-field-label" style="font-size:0.78rem;">乱数シード（空欄=ランダム）</div>
+                                                <input type="number" id="chat-irodori-seed" class="chat-field-input"
+                                                    placeholder="ランダム"
+                                                    style="width:100%;" />
+                                            </div>
+                                        </div>
+                                    </details>
                                     <!-- Test playback -->
                                     <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
                                         <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="testVoicePlayback()" aria-label="音声をテスト再生"><i data-lucide="play"></i> テスト再生</button>

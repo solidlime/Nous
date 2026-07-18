@@ -187,6 +187,24 @@ function applyChatConfig(cfg) {
   // Load voice model name (text input now)
   var voiceModelInput = document.getElementById("chat-voice-model");
   if (voiceModelInput) voiceModelInput.value = cfg.voice_model || "";
+  // Irodori advanced params
+  var irodoriNumSteps = document.getElementById("chat-irodori-num-steps");
+  if (irodoriNumSteps) irodoriNumSteps.value = cfg.irodori_num_steps ?? 30;
+  if (irodoriNumSteps) document.getElementById("chat-irodori-num-steps-val").textContent = cfg.irodori_num_steps ?? 30;
+  var irodoriCfgText = document.getElementById("chat-irodori-cfg-scale-text");
+  if (irodoriCfgText) irodoriCfgText.value = cfg.irodori_cfg_scale_text ?? 3.2;
+  if (irodoriCfgText) document.getElementById("chat-irodori-cfg-text-val").textContent = (cfg.irodori_cfg_scale_text ?? 3.2).toFixed(1);
+  var irodoriCfgSpeaker = document.getElementById("chat-irodori-cfg-scale-speaker");
+  if (irodoriCfgSpeaker) irodoriCfgSpeaker.value = cfg.irodori_cfg_scale_speaker ?? 5.0;
+  if (irodoriCfgSpeaker) document.getElementById("chat-irodori-cfg-speaker-val").textContent = (cfg.irodori_cfg_scale_speaker ?? 5.0).toFixed(1);
+  var irodoriCfgCaption = document.getElementById("chat-irodori-cfg-scale-caption");
+  if (irodoriCfgCaption) irodoriCfgCaption.value = cfg.irodori_cfg_scale_caption ?? 4.2;
+  if (irodoriCfgCaption) document.getElementById("chat-irodori-cfg-caption-val").textContent = (cfg.irodori_cfg_scale_caption ?? 4.2).toFixed(1);
+  var irodoriChunkMin = document.getElementById("chat-irodori-chunk-min-chars");
+  if (irodoriChunkMin) irodoriChunkMin.value = cfg.irodori_chunk_min_chars ?? 85;
+  if (irodoriChunkMin) document.getElementById("chat-irodori-chunk-min-val").textContent = cfg.irodori_chunk_min_chars ?? 85;
+  var irodoriSeed = document.getElementById("chat-irodori-seed");
+  if (irodoriSeed) irodoriSeed.value = cfg.irodori_seed != null ? cfg.irodori_seed : "";
   // Check connection status
   checkVoiceConnection();
   // Debug mode
@@ -402,6 +420,16 @@ async function saveChatConfig() {
     voice_auto_play: getChecked("chat-voice-auto-play"),
     voice_emotion_link: getChecked("chat-voice-emotion-link"),
     voice_model: document.getElementById("chat-voice-model")?.value || "",
+    // Irodori advanced params
+    irodori_num_steps: parseInt(document.getElementById("chat-irodori-num-steps")?.value) || 30,
+    irodori_cfg_scale_text: parseFloat(document.getElementById("chat-irodori-cfg-scale-text")?.value) || 3.2,
+    irodori_cfg_scale_speaker: parseFloat(document.getElementById("chat-irodori-cfg-scale-speaker")?.value) || 5.0,
+    irodori_cfg_scale_caption: parseFloat(document.getElementById("chat-irodori-cfg-scale-caption")?.value) || 4.2,
+    irodori_chunk_min_chars: parseInt(document.getElementById("chat-irodori-chunk-min-chars")?.value) || 85,
+    irodori_seed: (function() {
+      var v = document.getElementById("chat-irodori-seed")?.value;
+      return v !== "" && v != null ? parseInt(v) : null;
+    })(),
   };
   const btn = document.querySelector(".chat-save-btn");
   if (btn) {
