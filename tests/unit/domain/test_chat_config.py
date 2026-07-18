@@ -79,6 +79,13 @@ class TestChatConfigRepository:
                 voice_auto_play INTEGER DEFAULT 0,
                 voice_emotion_link INTEGER DEFAULT 1,
                 voice_model TEXT DEFAULT '',
+                voice_url TEXT DEFAULT '',
+                irodori_num_steps INTEGER DEFAULT 30,
+                irodori_cfg_scale_text REAL DEFAULT 3.2,
+                irodori_cfg_scale_speaker REAL DEFAULT 5.0,
+                irodori_cfg_scale_caption REAL DEFAULT 4.2,
+                irodori_chunk_min_chars INTEGER DEFAULT 85,
+                irodori_seed INTEGER,
                 disabled_tools TEXT DEFAULT '[]'
             )
             """
@@ -187,6 +194,13 @@ class TestSqliteMigration:
             "voice_auto_play INTEGER DEFAULT 0",
             "voice_emotion_link INTEGER DEFAULT 1",
             "voice_model TEXT DEFAULT ''",
+            "voice_url TEXT DEFAULT ''",
+            "irodori_num_steps INTEGER DEFAULT 30",
+            "irodori_cfg_scale_text REAL DEFAULT 3.2",
+            "irodori_cfg_scale_speaker REAL DEFAULT 5.0",
+            "irodori_cfg_scale_caption REAL DEFAULT 4.2",
+            "irodori_chunk_min_chars INTEGER DEFAULT 85",
+            "irodori_seed INTEGER",
             "image_gen_gemini_model TEXT DEFAULT 'google/gemini-2.5-flash-image'",
             "image_gen_replicate_model TEXT DEFAULT 'black-forest-labs/flux-schnell'",
             "image_gen_replicate_api_key TEXT DEFAULT ''",
@@ -290,6 +304,13 @@ class TestChatConfigRepositoryResilience:
             voice_auto_play INTEGER DEFAULT 0,
             voice_emotion_link INTEGER DEFAULT 1,
             voice_model TEXT DEFAULT '',
+            voice_url TEXT DEFAULT '',
+            irodori_num_steps INTEGER DEFAULT 30,
+            irodori_cfg_scale_text REAL DEFAULT 3.2,
+            irodori_cfg_scale_speaker REAL DEFAULT 5.0,
+            irodori_cfg_scale_caption REAL DEFAULT 4.2,
+            irodori_chunk_min_chars INTEGER DEFAULT 85,
+            irodori_seed INTEGER,
             disabled_tools TEXT DEFAULT '[]'
         )
     """
