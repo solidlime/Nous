@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from nous.api.http.deps import _resolve_persona_from_request, _safe_get_context
+from nous.application.event_bus import SESSION_ROLLBACK
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -394,6 +395,15 @@ def register_chat_routes(mcp) -> None:
                 if msg["role"] == "user":
                     removed_user_text = msg["content"]
                     break
+
+            # SSEでロールバックを通知
+            try:
+                await ctx.event_bus.publish(
+                    SESSION_ROLLBACK,
+                    {"persona": persona, "session_id": session_id, "remaining_count": len(remaining)},
+                )
+            except Exception:
+                pass  # 通知失敗はロールバック自体を失敗させない
 
             return JSONResponse(
                 {
