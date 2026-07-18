@@ -19,16 +19,25 @@ logger = logging.getLogger(__name__)
 
 def _get_irodori_config(ctx, chat_config) -> IrodoriConfig:
     """Build IrodoriConfig from ChatConfig.voice_url if set, else global settings."""
-    from nous.config.settings import IrodoriConfig
+    from nous.config.settings import IrodoriAdvancedParams, IrodoriConfig
 
     global_config = ctx.settings.irodori
-    if chat_config.voice_url:
-        return IrodoriConfig(
-            url=chat_config.voice_url,
-            voice=chat_config.voice_model or global_config.voice,
-            timeout_seconds=global_config.timeout_seconds,
-        )
-    return global_config
+    # Build advanced params from ChatConfig
+    advanced = IrodoriAdvancedParams(
+        num_steps=getattr(chat_config, "irodori_num_steps", 30),
+        cfg_scale_text=getattr(chat_config, "irodori_cfg_scale_text", 3.2),
+        cfg_scale_speaker=getattr(chat_config, "irodori_cfg_scale_speaker", 5.0),
+        cfg_scale_caption=getattr(chat_config, "irodori_cfg_scale_caption", 4.2),
+        chunk_min_chars=getattr(chat_config, "irodori_chunk_min_chars", 85),
+        seed=getattr(chat_config, "irodori_seed", None),
+    )
+    return IrodoriConfig(
+        url=chat_config.voice_url or global_config.url,
+        voice=chat_config.voice_model or global_config.voice,
+        model=global_config.model,
+        timeout_seconds=global_config.timeout_seconds,
+        advanced=advanced,
+    )
 
 
 def register_tts_routes(mcp) -> None:
@@ -84,6 +93,7 @@ def register_tts_routes(mcp) -> None:
                 text=text,
                 emotion=emotion,
                 speech_style=speech_style,
+                caption=speech_style,
             )
             return JSONResponse(
                 {

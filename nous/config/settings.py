@@ -126,19 +126,46 @@ class AutoCaptureConfig(BaseModel):
     """Maximum memories to create per session."""
 
 
+class IrodoriAdvancedParams(BaseModel):
+    """Irodori-TTS extra_body.irodori advanced parameters."""
+
+    num_steps: int = 30
+    """Inference steps. Range: 10-50. Higher = better quality, slower."""
+
+    cfg_scale_text: float = 3.2
+    """Text adherence. Range: 1.0-5.0."""
+
+    cfg_scale_speaker: float = 5.0
+    """Reference voice fidelity. Range: 1.0-8.0."""
+
+    cfg_scale_caption: float = 4.2
+    """Emotion/style strength. Range: 1.0-8.0."""
+
+    chunk_min_chars: int = 85
+    """Min chars per chunk for long text. Range: 30-200."""
+
+    seed: int | None = None
+    """Random seed. None = random. Set to int for deterministic output."""
+
+
 class IrodoriConfig(BaseModel):
     """Irodori-TTS connection configuration — provider settings only.
     Env var: ``NOUS_IRODORI__URL`` (default: http://localhost:8088/v1)
     """
 
-    url: str = "http://192.168.50.150:8088/v1"
+    url: str = "http://localhost:8088/v1"
     """Irodori-TTS-Server OpenAI-compatible API endpoint."""
 
     voice: str = "default"
     """Default voice name."""
 
+    model: str = "irodori-tts"
+    """TTS model name (fixed for Irodori)."""
+
     timeout_seconds: int = 30
     """Generation timeout in seconds."""
+
+    advanced: IrodoriAdvancedParams = IrodoriAdvancedParams()
 
 
 class CorsConfig(BaseModel):

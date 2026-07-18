@@ -28,6 +28,7 @@ class IrodoriEngine(VoiceEngine):
         self._url = config.url.rstrip("/")
         self._voice = config.voice
         self._timeout = httpx.Timeout(config.timeout_seconds)
+        self._advanced = config.advanced
 
     # ── synthesize ────────────────────────────────────────────
 
@@ -36,17 +37,36 @@ class IrodoriEngine(VoiceEngine):
         text: str,
         emotion: str,
         speech_style: str | None = None,  # noqa: ARG002 — 将来の拡張用
+        caption: str | None = None,
     ) -> bytes:
         """Irodori-TTS で音声合成しWAVバイト列を返す。
 
         接続エラーの場合は最大2回リトライする。
         """
         speed = _EMOTION_SPEED.get(emotion, _DEFAULT_SPEED)
+
+        extra_body_irodori: dict = {
+            "num_steps": self._advanced.num_steps,
+            "cfg_scale_text": self._advanced.cfg_scale_text,
+            "cfg_scale_speaker": self._advanced.cfg_scale_speaker,
+            "cfg_scale_caption": self._advanced.cfg_scale_caption,
+            "chunking_enabled": True,
+            "chunk_min_chars": self._advanced.chunk_min_chars,
+        }
+        if caption:
+            extra_body_irodori["caption"] = caption
+        if self._advanced.seed is not None:
+            extra_body_irodori["seed"] = self._advanced.seed
+
         payload = {
+            "model": "irodori-tts",
             "input": text,
             "voice": self._voice,
             "response_format": "wav",
             "speed": speed,
+            "extra_body": {
+                "irodori": extra_body_irodori,
+            },
         }
 
         last_exception: Exception | None = None

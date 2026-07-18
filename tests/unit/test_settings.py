@@ -46,7 +46,7 @@ class TestDefaultValues:
 
     def test_irodori_defaults(self):
         cfg = IrodoriConfig()
-        assert cfg.url == "http://192.168.50.150:8088/v1"
+        assert cfg.url == "http://localhost:8088/v1"
         assert cfg.voice == "default"
         assert cfg.timeout_seconds == 30
 

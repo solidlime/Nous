@@ -233,6 +233,12 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     voice_emotion_link INTEGER DEFAULT 1,
     voice_model TEXT DEFAULT '',
     voice_url TEXT DEFAULT '',
+    irodori_num_steps INTEGER DEFAULT 30,
+    irodori_cfg_scale_text REAL DEFAULT 3.2,
+    irodori_cfg_scale_speaker REAL DEFAULT 5.0,
+    irodori_cfg_scale_caption REAL DEFAULT 4.2,
+    irodori_chunk_min_chars INTEGER DEFAULT 85,
+    irodori_seed INTEGER,
     image_gen_gemini_model TEXT DEFAULT 'google/gemini-2.5-flash-image',
     image_gen_replicate_model TEXT DEFAULT 'black-forest-labs/flux-schnell',
     image_gen_replicate_api_key TEXT DEFAULT '',
@@ -409,6 +415,27 @@ class SQLiteConnection:
             logger.info("Added voice_url column to chat_settings (migration)")
         except sqlite3.OperationalError:
             pass  # column already exists
+
+        # Migration: add irodori advanced params (existing DBs)
+        for col, col_type, default in [
+            ("irodori_num_steps", "INTEGER", "30"),
+            ("irodori_cfg_scale_text", "REAL", "3.2"),
+            ("irodori_cfg_scale_speaker", "REAL", "5.0"),
+            ("irodori_cfg_scale_caption", "REAL", "4.2"),
+            ("irodori_chunk_min_chars", "INTEGER", "85"),
+        ]:
+            try:
+                memory_conn.execute(f"ALTER TABLE chat_settings ADD COLUMN {col} {col_type} DEFAULT {default}")
+                memory_conn.commit()
+                logger.info("Added %s column to chat_settings (migration)", col)
+            except sqlite3.OperationalError:
+                pass
+        try:
+            memory_conn.execute("ALTER TABLE chat_settings ADD COLUMN irodori_seed INTEGER")
+            memory_conn.commit()
+            logger.info("Added irodori_seed column to chat_settings (migration)")
+        except sqlite3.OperationalError:
+            pass
 
         # Migration: add image_gen_comfyui_url if missing (existing DBs)
         try:

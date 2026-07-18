@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from nous.config.settings import IrodoriConfig
+from nous.config.settings import IrodoriAdvancedParams, IrodoriConfig
 
 # ============================================================
 # EMOTION_EMOJI
@@ -191,6 +191,87 @@ class TestIrodoriEngine:
                 await engine.synthesize("test", emotion="neutral")
 
             assert mock_client.post.call_count == 1  # リトライなし
+
+    @pytest.mark.asyncio
+    async def test_synthesize_includes_model_and_extra_body(self, config):
+        """model='irodori-tts' と extra_body.irodori が payload に含まれる"""
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_client = MagicMock()
+            mock_resp = MagicMock(status_code=200, content=b"wav")
+            mock_resp.raise_for_status = MagicMock()
+            mock_client.post = AsyncMock(return_value=mock_resp)
+            mock_cls.return_value.__aenter__.return_value = mock_client
+
+            engine = self._make_irodori(config)
+            await engine.synthesize("hello", emotion="neutral")
+
+            sent_json = mock_client.post.call_args[1]["json"]
+            assert sent_json["model"] == "irodori-tts"
+            extra = sent_json["extra_body"]["irodori"]
+            assert extra["num_steps"] == 30
+            assert extra["cfg_scale_text"] == 3.2
+            assert extra["cfg_scale_speaker"] == 5.0
+            assert extra["cfg_scale_caption"] == 4.2
+            assert extra["chunking_enabled"] is True
+            assert extra["chunk_min_chars"] == 85
+            # caption と seed は None のため含まれない
+            assert "caption" not in extra
+            assert "seed" not in extra
+
+    @pytest.mark.asyncio
+    async def test_synthesize_with_caption(self, config):
+        """caption が渡された場合 extra_body.irodori.caption に含まれる"""
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_client = MagicMock()
+            mock_resp = MagicMock(status_code=200, content=b"wav")
+            mock_resp.raise_for_status = MagicMock()
+            mock_client.post = AsyncMock(return_value=mock_resp)
+            mock_cls.return_value.__aenter__.return_value = mock_client
+
+            engine = self._make_irodori(config)
+            await engine.synthesize("hello", emotion="neutral", caption="joyful narration")
+
+            extra = mock_client.post.call_args[1]["json"]["extra_body"]["irodori"]
+            assert extra["caption"] == "joyful narration"
+
+    @pytest.mark.asyncio
+    async def test_synthesize_with_seed(self, config):
+        """seed が設定されている場合 extra_body.irodori.seed に含まれる"""
+        adv = IrodoriAdvancedParams(seed=42)
+        cfg = IrodoriConfig(
+            url=config.url,
+            voice=config.voice,
+            timeout_seconds=config.timeout_seconds,
+            advanced=adv,
+        )
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_client = MagicMock()
+            mock_resp = MagicMock(status_code=200, content=b"wav")
+            mock_resp.raise_for_status = MagicMock()
+            mock_client.post = AsyncMock(return_value=mock_resp)
+            mock_cls.return_value.__aenter__.return_value = mock_client
+
+            engine = self._make_irodori(cfg)
+            await engine.synthesize("hello", emotion="neutral")
+
+            extra = mock_client.post.call_args[1]["json"]["extra_body"]["irodori"]
+            assert extra["seed"] == 42
+
+    @pytest.mark.asyncio
+    async def test_synthesize_without_seed(self, config):
+        """seed=None の場合 extra_body.irodori に seed が含まれない"""
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_client = MagicMock()
+            mock_resp = MagicMock(status_code=200, content=b"wav")
+            mock_resp.raise_for_status = MagicMock()
+            mock_client.post = AsyncMock(return_value=mock_resp)
+            mock_cls.return_value.__aenter__.return_value = mock_client
+
+            engine = self._make_irodori(config)
+            await engine.synthesize("hello", emotion="neutral")
+
+            extra = mock_client.post.call_args[1]["json"]["extra_body"]["irodori"]
+            assert "seed" not in extra
 
     # ── health_check ──
 

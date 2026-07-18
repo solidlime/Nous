@@ -113,6 +113,13 @@ class ChatConfig(BaseModel):
     voice_emotion_link: bool = True
     voice_model: str = ""
     voice_url: str = ""
+    # Irodori advanced TTS parameters
+    irodori_num_steps: int = 30
+    irodori_cfg_scale_text: float = 3.2
+    irodori_cfg_scale_speaker: float = 5.0
+    irodori_cfg_scale_caption: float = 4.2
+    irodori_chunk_min_chars: int = 85
+    irodori_seed: int | None = None
     updated_at: str | None = None
 
     @field_validator("temperature")
@@ -272,6 +279,8 @@ class ChatConfigRepository:
             "retrieval_rrf_k, "
             "dynamic_tool_selection, "
             "voice_auto_play, voice_emotion_link, voice_model, voice_url, "
+            "irodori_num_steps, irodori_cfg_scale_text, irodori_cfg_scale_speaker, "
+            "irodori_cfg_scale_caption, irodori_chunk_min_chars, irodori_seed, "
             "disabled_tools "
             "FROM chat_settings WHERE persona = ?",
             (persona,),
@@ -347,10 +356,12 @@ class ChatConfigRepository:
                      context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled,
                      retrieval_rrf_k,
                         dynamic_tool_selection,
-                         voice_auto_play, voice_emotion_link, voice_model, voice_url,
-                          disabled_tools,
-                          updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          voice_auto_play, voice_emotion_link, voice_model, voice_url,
+                          irodori_num_steps, irodori_cfg_scale_text, irodori_cfg_scale_speaker,
+                          irodori_cfg_scale_caption, irodori_chunk_min_chars, irodori_seed,
+                           disabled_tools,
+                           updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
@@ -404,11 +415,17 @@ class ChatConfigRepository:
                  retrieval_rrf_k=excluded.retrieval_rrf_k,
                  dynamic_tool_selection=excluded.dynamic_tool_selection,
                  voice_auto_play=excluded.voice_auto_play,
-                   voice_emotion_link=excluded.voice_emotion_link,
-                   voice_model=excluded.voice_model,
-                   voice_url=excluded.voice_url,
-                   disabled_tools=excluded.disabled_tools,
-                 updated_at=excluded.updated_at
+                    voice_emotion_link=excluded.voice_emotion_link,
+                    voice_model=excluded.voice_model,
+                    voice_url=excluded.voice_url,
+                    irodori_num_steps=excluded.irodori_num_steps,
+                    irodori_cfg_scale_text=excluded.irodori_cfg_scale_text,
+                    irodori_cfg_scale_speaker=excluded.irodori_cfg_scale_speaker,
+                    irodori_cfg_scale_caption=excluded.irodori_cfg_scale_caption,
+                    irodori_chunk_min_chars=excluded.irodori_chunk_min_chars,
+                    irodori_seed=excluded.irodori_seed,
+                    disabled_tools=excluded.disabled_tools,
+                  updated_at=excluded.updated_at
             """,
             (
                 config.persona,
@@ -467,6 +484,12 @@ class ChatConfigRepository:
                 int(config.voice_emotion_link),
                 config.voice_model,
                 config.voice_url,
+                config.irodori_num_steps,
+                config.irodori_cfg_scale_text,
+                config.irodori_cfg_scale_speaker,
+                config.irodori_cfg_scale_caption,
+                config.irodori_chunk_min_chars,
+                config.irodori_seed,
                 json.dumps(config.disabled_tools, ensure_ascii=False),
                 now,
             ),

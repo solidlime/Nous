@@ -103,6 +103,12 @@ def register_chat_routes(mcp) -> None:
             "voice_emotion_link",
             "voice_model",
             "voice_url",
+            "irodori_num_steps",
+            "irodori_cfg_scale_text",
+            "irodori_cfg_scale_speaker",
+            "irodori_cfg_scale_caption",
+            "irodori_chunk_min_chars",
+            "irodori_seed",
             "disabled_tools",
         ):
             if field_name in body:

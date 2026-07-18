@@ -7,7 +7,13 @@ class VoiceEngine(ABC):
     """音声合成エンジンの抽象基底クラス"""
 
     @abstractmethod
-    async def synthesize(self, text: str, emotion: str, speech_style: str | None = None) -> bytes:
+    async def synthesize(
+        self,
+        text: str,
+        emotion: str,
+        speech_style: str | None = None,
+        caption: str | None = None,
+    ) -> bytes:
         """音声合成してWAVバイト列を返す"""
         ...
 
