@@ -165,21 +165,86 @@ class SessionWindow:
             logger.warning("SessionWindow.from_db failed: %s", e)
             return None
 
+    @staticmethod
+    def _expand_segments(segments: list[dict], ts: datetime, now: datetime) -> list[LLMMessage]:
+        """Expand segment sequence into proper assistant/tool LLMMessage list.
+
+        Segments record the chronological order of text, tool_call, and tool_result
+        within one assistant turn. This method decomposes them into the
+        assistant(tool_calls) → tool → assistant(...) sequence expected by LLM APIs.
+        """
+        label = relative_time_str(ts, now)
+        result: list[LLMMessage] = []
+        current_text = ""
+        current_tool_calls: list[dict] = []
+
+        def _flush_assistant() -> None:
+            nonlocal current_text, current_tool_calls
+            if current_text or current_tool_calls:
+                result.append(
+                    LLMMessage(
+                        role="assistant",
+                        content=current_text,
+                        timestamp=ts,
+                        time_label=label,
+                        tool_calls=list(current_tool_calls) if current_tool_calls else None,
+                    )
+                )
+                current_text = ""
+                current_tool_calls = []
+
+        for seg in segments:
+            seg_type = seg.get("type", "")
+            if seg_type == "text":
+                current_text += seg.get("content", "")
+            elif seg_type == "tool_call":
+                current_tool_calls.append(
+                    {
+                        "id": seg.get("id", ""),
+                        "name": seg.get("name", ""),
+                        "input": seg.get("input", {}),
+                    }
+                )
+            elif seg_type == "tool_result":
+                _flush_assistant()
+                raw_result = seg.get("result", "")
+                if isinstance(raw_result, dict):
+                    content = json.dumps(raw_result, ensure_ascii=False)
+                elif isinstance(raw_result, str):
+                    content = raw_result
+                else:
+                    content = str(raw_result)
+                result.append(
+                    LLMMessage(
+                        role="tool",
+                        content=content,
+                        tool_call_id=seg.get("id", ""),
+                        timestamp=ts,
+                        time_label=label,
+                    )
+                )
+        _flush_assistant()
+        return result
+
     def get_labeled_messages(self, now: datetime | None = None) -> list[LLMMessage]:
         if now is None:
             now = get_now()
         result = []
         for msg, ts in zip(self._messages, self._timestamps, strict=False):
-            label = relative_time_str(ts, now)
-            result.append(
-                LLMMessage(
-                    role=msg["role"],
-                    content=msg["content"],
-                    timestamp=ts,
-                    time_label=label,
-                    tool_calls=msg.get("tool_calls"),
+            segments = msg.get("segments")
+            if segments:
+                result.extend(self._expand_segments(segments, ts, now))
+            else:
+                label = relative_time_str(ts, now)
+                result.append(
+                    LLMMessage(
+                        role=msg["role"],
+                        content=msg["content"],
+                        timestamp=ts,
+                        time_label=label,
+                        tool_calls=msg.get("tool_calls"),
+                    )
                 )
-            )
         return result
 
     def get_last_assistant_content(self) -> str | None:
