@@ -12,7 +12,23 @@ from nous.infrastructure.voice.factory import get_voice_engine
 if TYPE_CHECKING:
     from starlette.requests import Request
 
+    from nous.config.settings import IrodoriConfig
+
 logger = logging.getLogger(__name__)
+
+
+def _get_irodori_config(ctx, chat_config) -> IrodoriConfig:
+    """Build IrodoriConfig from ChatConfig.voice_url if set, else global settings."""
+    from nous.config.settings import IrodoriConfig
+
+    global_config = ctx.settings.irodori
+    if chat_config.voice_url:
+        return IrodoriConfig(
+            url=chat_config.voice_url,
+            voice=chat_config.voice_model or global_config.voice,
+            timeout_seconds=global_config.timeout_seconds,
+        )
+    return global_config
 
 
 def register_tts_routes(mcp) -> None:
@@ -26,7 +42,7 @@ def register_tts_routes(mcp) -> None:
         from nous.domain.chat_config import ChatConfigRepository
 
         chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
-        irodori_config = ctx.settings.irodori
+        irodori_config = _get_irodori_config(ctx, chat_config)
         engine = get_voice_engine(irodori_config)
 
         # health check
@@ -46,8 +62,8 @@ def register_tts_routes(mcp) -> None:
         if not text:
             return JSONResponse({"ok": False, "error": "text is required"}, status_code=400)
 
-        # Optional voice override (TE04)
-        voice_override = body.get("voice")
+        # Optional voice override (body > chat_config.voice_model > global)
+        voice_override = body.get("voice") or (chat_config.voice_model or None)
         if voice_override:
             from nous.infrastructure.voice.irodori import IrodoriEngine
 
@@ -87,7 +103,10 @@ def register_tts_routes(mcp) -> None:
         if not ctx:
             return JSONResponse({"ok": False, "error": "Persona not found"}, status_code=404)
 
-        irodori_config = ctx.settings.irodori
+        from nous.domain.chat_config import ChatConfigRepository
+
+        chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
+        irodori_config = _get_irodori_config(ctx, chat_config)
 
         # Query the Irodori TTS server for available models
         import httpx
@@ -119,3 +138,42 @@ def register_tts_routes(mcp) -> None:
             voices.append({"id": irodori_config.voice, "name": irodori_config.voice, "source": "config"})
 
         return JSONResponse({"ok": True, "voices": voices})
+
+    @mcp.custom_route("/api/tts/{persona}/health", methods=["GET"])
+    async def health_check_tts(request: Request) -> JSONResponse:
+        persona = _resolve_persona_from_request(request)
+        ctx = _safe_get_context(persona)
+        if not ctx:
+            return JSONResponse({"ok": True, "connected": False, "error": "Persona not found"}, status_code=404)
+
+        from nous.domain.chat_config import ChatConfigRepository
+
+        chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
+        irodori_config = _get_irodori_config(ctx, chat_config)
+        base_url = irodori_config.url.rstrip("/")
+
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+                resp = await client.get(f"{base_url}/models")
+                models_data = resp.json() if resp.status_code == 200 else None
+                models = []
+                if models_data and isinstance(models_data, dict) and "data" in models_data:
+                    for item in models_data["data"]:
+                        mid = item.get("id", "")
+                        if mid:
+                            models.append({"id": mid, "name": mid})
+                return JSONResponse({
+                    "ok": True,
+                    "connected": True,
+                    "url": base_url,
+                    "models": models,
+                })
+        except Exception as e:
+            return JSONResponse({
+                "ok": True,
+                "connected": False,
+                "url": base_url,
+                "error": str(e),
+            })
