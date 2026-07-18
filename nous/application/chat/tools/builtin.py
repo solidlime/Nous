@@ -359,6 +359,9 @@ _MCP_SHARED_TOOLS = frozenset(
         "memory_create",
         "memory_search",
         "memory_update",
+        "item_add",
+        "item_equip",
+        "item_search",
     }
 )
 

@@ -1,81 +1,45 @@
-# HANDOFF — 2026-07-12 12:00
+# HANDOFF — 2026-07-18
 
 ## セッション概要
 
-本セッションでは PyTorch 依存完全排除を目的に、`sentence-transformers` → `onnxruntime` + `tokenizers` への置き換えを完了した。
+portrait 機能をコードベースから完全削除。backend（Python）・frontend（JS/CSS/HTML）・tests・docs を全掃除。
 
 ## 完了したコミット
 
 ```
-05b2acb docs(memory): embedding ONNX化の学びをMEMORY.mdに記録
-c39f9e0 chore: sentence-transformers/PyTorch依存を完全排除、ONNX Runtime直叩きに移行
-f0dbbcc refactor(embedding): ONNX Runtime + tokenizers rewrite
+bb0eeb8 chore: remove dead portrait constants and overview section
+fab6169 docs: remove portrait references from CLAUDE.md and llm_usage_guide.md
+35e0974 chore: remove portrait frontend references and fix tests
+7d94c07 chore: remove remaining portrait references from Python backend
+2cabf8a feat: remove portrait feature from Python backend
 ```
 
 ## 実装サマリ
 
-### 置き換え対象
-- `nous/infrastructure/embedding/model.py` — `SentenceTransformer` → `onnxruntime.InferenceSession` + `tokenizers.Tokenizer`
-- `nous/infrastructure/embedding/reranker.py` — `CrossEncoder` → 同上
-- 公開 API（`encode`, `encode_batch`, `rerank`等）は完全互換、1行も変更なし
+### 完全削除したファイル（11件）
+- `nous/application/portrait/__init__.py`, `service.py`
+- `nous/api/mcp/_tools_portrait_scene.py`
+- `nous/api/http/routers/portrait.py`
+- `nous/api/http/static/chat/chat-portrait.js`
+- `nous/api/http/static/portrait.js`, `portrait.css`
+- `nous/domain/persona/portrait_prompt.py`
+- テスト 3ファイル（portrait関連テスト）
 
-### モデル
-- Embedding: `onnx-community/ruri-v3-30m-ONNX`（公式 ONNX、mean pooling + L2 normalize 自前実装）
-- Reranker: `hotchpotch/japanese-reranker-xsmall-v2`（`onnx/model.onnx` 内蔵）
-- Tokenizer: `cl-nagoya/ruri-v3-30m` / モデルと同リポジトリの `tokenizer.json`
+### 部分削除したファイル（20件+）
+- Python: settings.py, runtime_config.py, event_bus.py, use_cases.py, chat_config.py, connection.py, routes.py, tools.py, definitions.py, builtin.py, comfyui.py, routers/chat.py, routers/__init__.py
+- HTML/Sections: base.py, overview.py, chat.py
+- JS: chat-settings.js, settings.js, chat-core.js, constants.js, overview.js, sse.js
+- CSS: chat.css
+- Docs: CLAUDE.md, docs/llm_usage_guide.md
 
-### 依存変更
-- **削除**: `sentence-transformers>=3.0.0`（間接的に torch, transformers 等も削除）
-- **追加**: `onnxruntime>=1.18.0`, `tokenizers>=0.21.0`, `huggingface_hub>=0.20`
-- **維持**: `sentencepiece>=0.1.99`
+### 変更行数
+- 5 commits, 約600行削除（11ファイル削除 + 25ファイル修正）
+- 最終テスト: 1535 passed, 1 deselected（pre-existing）
 
-### 設定変更
-- `nous/config/settings.py`: `ensure_directories()` から `sentence_transformers`/`torch` キャッシュ削除
-- `nous/main.py`: `SENTENCE_TRANSFORMERS_HOME`/`TORCH_HOME` env 設定削除。`HF_HOME` 維持
+### 注意点
+- `image_gen_comfyui_url` は `image_generate` ツール用に ChatConfig に残した
+- フロントエンドの portrait 領域は削除（絵文字プレースホルダは元から none）
+- 唯一の pre-existing failure: `test_should_summarize_false_when_not_configured`（compress step, unrelated）
 
-## 検証状況
-
-```
-pytest (全): 1621 passed / 7 skipped (ローカル)
-ruff check: 0 errors
-ruff format: clean
-```
-
-### CI
-- Docker Build & Push: ✅ success
-- CI (python tests): ⚠️ 1 failed — `TestAppContextRerankerInstantiation::test_reranker_not_preloaded_when_disabled`
-  - **これは pre-existing な問題**。`use_cases.py` のバックグラウンドスレッド化変更（未コミット）とテストの不整合
-
-## 未コミットの変更（working tree）
-
-以下のファイルは embedding 変更と**無関係**、別タスクで対応:
-
-| ファイル | 内容 | 備考 |
-|---------|------|------|
-| `nous/application/use_cases.py` | `_init_vector_store()` をバックグラウンドスレッド化 | 未コミット、テストと不整合あり |
-| `tests/unit/test_use_case_adapters.py` | 同上のテスト修正 | 同上 |
-| `.dockerignore` | MCP Hub 関連の Docker ignore | 別タスク |
-| `Dockerfile` | MCP Hub マルチステージ化 | 別タスク (T101-T104) |
-| `docker-compose.yml` | 同上 | 別タスク |
-| `nous/api/http/routers/persona.py` | sandbox orchestration 関連？ | 要確認 |
-| `requirements-dev.txt` | 新規ファイル (untracked) | 要確認 |
-
-## 🎯 残タスク
-
-### T028-T029: Docker ビルド検証・サイズ比較
-- 新しい requirements-prod.txt で Docker ビルド
-- PyTorch 非依存のイメージサイズ計測（Before/After で ~800MB 削減見込み）
-
-### T101-T104: mcp-hub/Dockerfile マルチステージ化
-- 現在シングルステージ → マルチステージ化でビルド依存分離
-- mcp-hub は embedding と無関係、独立して進められる
-
-### Pre-existing issue 修正
-- `use_cases.py` のバックグラウンドスレッド化変更を確認し、テストと合わせてコミット
-
-## 注意点
-
-- `requirements-prod.txt` は git 管理下にない（歴史的に untracked）。本番 Docker ビルドで使用
-- ONNX モデルは初回起動時に `huggingface_hub.snapshot_download()` で自動ダウンロード（`HF_HOME` キャッシュ）
-- `tokenizers` の `post_processor` は自動で `<s>` + text + `</s>` を付与 → 手動 TemplateProcessing 不要
-- ONNX Runtime `SessionOptions.intra_op_num_threads = min(4, cpu_count)` でスレッド制限
+## 残タスク
+- なし。portrait 削除は完全完了。

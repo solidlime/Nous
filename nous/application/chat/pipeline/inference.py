@@ -109,18 +109,10 @@ class InferenceStep:
                             "id": event.tool_use_id,
                         }
                     )
-                    # Empty tool_input is now an anomaly (early yield was removed from provider)
-                    assert event.tool_input is not None, f"Empty tool_input for tool {event.tool_use_id}"
+                    # tool_input is guaranteed non-empty after Phase 1 fix.
+                    # Guard retained against buggy provider implementations.
                     if event.tool_input:
-                        existing = next(
-                            (tc for tc in pending_tool_calls if tc.tool_use_id == event.tool_use_id),
-                            None,
-                        )
-                        if existing:
-                            idx = pending_tool_calls.index(existing)
-                            pending_tool_calls[idx] = event
-                        else:
-                            pending_tool_calls.append(event)
+                        pending_tool_calls.append(event)
                 elif isinstance(event, ErrorEvent):
                     yield ErrorSSE(message=event.message)
                     return

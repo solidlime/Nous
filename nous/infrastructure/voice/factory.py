@@ -11,6 +11,5 @@ if TYPE_CHECKING:
 
 
 def get_voice_engine(config: IrodoriConfig) -> VoiceEngine:
-    """設定に基づいて VoiceEngine を生成する。
-    """
+    """設定に基づいて VoiceEngine を生成する。"""
     return IrodoriEngine(config)
