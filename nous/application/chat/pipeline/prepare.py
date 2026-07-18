@@ -330,32 +330,7 @@ async def _build_context_section(
     _is_light = compress_mode == "light"
 
     # === Tier 1: 現在の状態 ===
-    now_jst = get_now()
-    t1.append(f"Now: {now_jst.strftime('%Y-%m-%d %H:%M')} (JST)")
-
-    last_conv = getattr(state, "last_conversation_time", None)
-    if last_conv:
-        time_since = relative_time_str(last_conv)
-        t1.append(f"Last conversation: {time_since}")
-        # Elapsed time note (minimal - LLM uses this naturally)
-        try:
-            _now = get_now()
-            if last_conv.tzinfo is None:
-                from zoneinfo import ZoneInfo  # noqa: PLC0415
-
-                last_conv = last_conv.replace(tzinfo=ZoneInfo("Asia/Tokyo"))
-            elapsed_hours = (_now - last_conv).total_seconds() / 3600.0
-            if elapsed_hours >= 24:
-                days = elapsed_hours / 24
-                t1.append(f"About {days:.0f} day(s) since last conversation.")
-            elif elapsed_hours >= 1:
-                t1.append(f"{elapsed_hours:.0f} hour(s) since last conversation.")
-            elif elapsed_hours > 0:
-                minutes = int(elapsed_hours * 60)
-                t1.append(f"{minutes} minute(s) since last conversation.")
-        except (TypeError, AttributeError) as e:
-            logger.debug("Failed to compute elapsed time: %s", e)
-
+    # 時間情報は <TIME_CONTEXT> ブロック（システムプロンプト先頭）を参照
     if getattr(state, "emotion", None):
         intensity = getattr(state, "emotion_intensity", 0.5)
         intensity_label = "強い" if intensity > 0.6 else "やや強い" if intensity > 0.3 else "弱い"
@@ -496,6 +471,94 @@ async def _build_context_section(
     return result
 
 
+def _classify_gap(elapsed_hours: float) -> str:
+    """Classify time gap since last conversation."""
+    if elapsed_hours <= 0:
+        return ""
+    if elapsed_hours < 0.25:
+        return "SAME_SESSION"
+    if elapsed_hours < 3:
+        return "SHORT_BREAK"
+    if elapsed_hours < 24:
+        return "EXTENDED_BREAK"
+    if elapsed_hours < 168:
+        return "NEXT_DAY"  # < 7 days
+    if elapsed_hours < 720:
+        return "LONG_ABSENCE"  # < 30 days
+    return "VERY_LONG_ABSENCE"
+
+
+_GAP_INSTRUCTIONS: dict[str, str] = {
+    "SAME_SESSION": "",
+    "SHORT_BREAK": "You were just here a moment ago. Continue naturally.",
+    "EXTENDED_BREAK": "Several hours have passed since your last conversation. Your mood may have shifted slightly.",
+    "NEXT_DAY": "A new day has begun. You may feel refreshed or different from yesterday. Acknowledge the time that has passed.",
+    "LONG_ABSENCE": "You haven't spoken in a while. Much may have happened. Greet the user with awareness of the gap.",
+    "VERY_LONG_ABSENCE": "A very long time has passed. This is a reunion. Greet with appropriate surprise or acknowledgment of the long silence.",
+}
+
+_TIME_OF_DAY: list[tuple[int, str]] = [
+    (5, "早朝"),
+    (9, "朝"),
+    (12, "昼"),
+    (15, "午後"),
+    (18, "夕方"),
+    (22, "夜"),
+    (24, "深夜"),
+]
+
+
+def _build_time_context(state, decay_note: str = "") -> str:
+    """Build <TIME_CONTEXT> block for injection at the TOP of system prompt."""
+    from zoneinfo import ZoneInfo
+
+    now_jst = get_now()
+
+    # 曜日
+    days_ja = ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"]
+    weekday = days_ja[now_jst.weekday()]
+
+    # 時間帯
+    hour = now_jst.hour
+    time_of_day = next((label for h, label in _TIME_OF_DAY if hour < h), "深夜")
+
+    lines: list[str] = [
+        "<TIME_CONTEXT>",
+        f"Now: {now_jst.strftime('%Y-%m-%d %H:%M')} (JST) — {weekday} {time_of_day}",
+    ]
+
+    # 経過時間 + ギャップ分類 + 行動指示
+    last_conv = getattr(state, "last_conversation_time", None)
+    if last_conv:
+        if last_conv.tzinfo is None:
+            last_conv = last_conv.replace(tzinfo=ZoneInfo("Asia/Tokyo"))
+        elapsed_hours = (now_jst - last_conv).total_seconds() / 3600.0
+
+        if elapsed_hours > 0.25:  # 15分以上のギャップから表示
+            gap = _classify_gap(elapsed_hours)
+            if gap:
+                # 経過時間の表示
+                if elapsed_hours >= 720:
+                    time_str = f"{elapsed_hours / 720:.0f}ヶ月"
+                elif elapsed_hours >= 24:
+                    time_str = f"{elapsed_hours / 24:.0f}日"
+                elif elapsed_hours >= 1:
+                    time_str = f"{elapsed_hours:.0f}時間"
+                else:
+                    time_str = f"{elapsed_hours * 60:.0f}分"
+                lines.append(f"Time since last conversation: {time_str} ago ({gap})")
+                instruction = _GAP_INSTRUCTIONS.get(gap, "")
+                if instruction:
+                    lines.append(instruction)
+
+    # 減衰通知（主観的表現）
+    if decay_note:
+        lines.append(f"Emotion update: {decay_note}")
+
+    lines.append("</TIME_CONTEXT>")
+    return "\n".join(lines)
+
+
 class PrepareStep:
     """ターン開始時の準備ステップ。"""
 
@@ -550,6 +613,9 @@ class PrepareStep:
                 if hasattr(state, "__dict__")
                 else {}
             )
+
+            # TIME_CONTEXT ブロック（システムプロンプト先頭注入用）
+            turn_ctx.time_context = _build_time_context(state, decay_note=decay_note)
 
             # context_section 構築
             last_assistant = session.get_last_assistant_content()

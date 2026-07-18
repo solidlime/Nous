@@ -16,6 +16,7 @@ class ChatTurnContext:
     images: list[dict] = field(default_factory=list)
     # PrepareStep が埋める
     context_section: str = ""
+    time_context: str = ""  # ★ <TIME_CONTEXT> ブロック（システムプロンプト先頭に注入）
     related_memories: str = ""
     state_raw: dict = field(default_factory=dict)
     memories_raw: list[dict] = field(default_factory=list)
