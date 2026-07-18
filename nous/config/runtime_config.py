@@ -69,20 +69,6 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "base_url": {"hot_reload": True, "description": "LLM API base URL"},
         "min_chars": {"hot_reload": True, "description": "Min content length to trigger enrichment"},
     },
-    "irodori": {
-        "url": {
-            "hot_reload": True,
-            "description": "Irodori-TTS server URL (OpenAI-compatible endpoint). Global default; ChatConfig per-persona settings override.",
-        },
-        "voice": {
-            "hot_reload": True,
-            "description": "Default voice name. Global default; ChatConfig per-persona settings override.",
-        },
-        "timeout_seconds": {
-            "hot_reload": True,
-            "description": "Generation timeout (seconds). Global default; ChatConfig per-persona settings override.",
-        },
-    },
     "auto_capture": {
         "enabled": {"hot_reload": True, "description": "Auto-capture memories at end of each chat turn"},
         "max_memories": {"hot_reload": True, "description": "Maximum memories to create per session"},
