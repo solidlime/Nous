@@ -42,6 +42,7 @@ N.Core.connectSSE = function connectSSE(persona) {
       var d = JSON.parse(e.data);
       N.Core.toast("\ud83d\udcdd \u65b0\u3057\u3044\u8a18\u61b6: " +
         (d.content_preview || "...").substring(0, 50), "info");
+      _scheduleMemoriesRefresh();
     } catch (err) { console.warn("[SSE parse] memory.created:", err.message); }
   };
   es.addEventListener("memory.created", es._sseHandlers["memory.created"]);
@@ -51,6 +52,7 @@ N.Core.connectSSE = function connectSSE(persona) {
       var d = JSON.parse(e.data);
       N.Core.toast("\ud83d\udd04 \u8a18\u61b6\u66f4\u65b0: " +
         (d.content_preview || "...").substring(0, 50), "info");
+      _scheduleMemoriesRefresh();
     } catch (err) { console.warn("[SSE parse] memory.updated:", err.message); }
   };
   es.addEventListener("memory.updated", es._sseHandlers["memory.updated"]);
@@ -60,6 +62,7 @@ N.Core.connectSSE = function connectSSE(persona) {
       var d = JSON.parse(e.data);
       N.Core.toast("\ud83d\uddd1 \u8a18\u61b6\u524a\u9664: " +
         (d.content_preview || "...").substring(0, 50), "info");
+      _scheduleMemoriesRefresh();
     } catch (err) { console.warn("[SSE parse] memory.deleted:", err.message); }
   };
   es.addEventListener("memory.deleted", es._sseHandlers["memory.deleted"]);
@@ -122,4 +125,16 @@ N.Core.connectSSE = function connectSSE(persona) {
 };
 
 window.connectSSE = N.Core.connectSSE;
+
+/* Memories tab debounced refresh — called from memory SSE handlers */
+var _memoriesRefreshTimer = null;
+function _scheduleMemoriesRefresh() {
+    if (_memoriesRefreshTimer) clearTimeout(_memoriesRefreshTimer);
+    _memoriesRefreshTimer = setTimeout(function() {
+        if (typeof S !== "undefined" && S.tab === "memories" && typeof loadMemories === "function") {
+            loadMemories();
+        }
+        _memoriesRefreshTimer = null;
+    }, 500);
+}
 })(window.Nous);

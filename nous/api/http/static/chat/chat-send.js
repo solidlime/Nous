@@ -459,7 +459,7 @@ async function chatSend(retry) {
           contentParts.push({ type: "tool_result", id: evt.id, result: evt.result });
           statusEl.textContent = "応答中...";
         } else if (evt.type === "memory_activity") {
-          updateMemoryPanel(evt.retrieved, evt.saved, undefined);
+          updateMemoryPanel(evt.retrieved, evt.saved, evt.goals);
           setTimeout(function() { loadChatCommitments(); }, 300);
         } else if (evt.type === "inventory_update") {
           updateEquipmentPanel(evt.update);
