@@ -182,14 +182,34 @@ class PostProcessStep:
 
         # MemoryActivitySSE: 取得された記憶と保存された記憶・goals・promises を通知
         retrieved_for_sse = turn_ctx.memories_raw[:5]
+
+        def _ensure_str(val: object, default: str = "") -> str:
+            if isinstance(val, str):
+                return val
+            if val is None:
+                return default
+            import json
+
+            return json.dumps(val, ensure_ascii=False)
+
         saved_facts = [
-            {"content": f.get("content", ""), "tags": f.get("tags", []), "emotion": f.get("emotion", "neutral")}
+            {
+                "content": _ensure_str(f.get("content")),
+                "tags": f.get("tags", []),
+                "emotion": f.get("emotion", "neutral"),
+            }
             for f in memory_result.get("facts", [])
             if f.get("content")
         ]
-        saved_goals = [{"content": g.get("content", "")} for g in memory_result.get("goals", []) if g.get("content")]
+        saved_goals = [
+            {"content": _ensure_str(g.get("content"))}
+            for g in memory_result.get("goals", [])
+            if g.get("content")
+        ]
         saved_promises = [
-            {"content": p.get("content", "")} for p in memory_result.get("promises", []) if p.get("content")
+            {"content": _ensure_str(p.get("content"))}
+            for p in memory_result.get("promises", [])
+            if p.get("content")
         ]
         yield MemoryActivitySSE(
             retrieved=retrieved_for_sse,
@@ -208,9 +228,25 @@ class PostProcessStep:
         # InventoryUpdateSSE: notify frontend of equipment changes
         inventory_update = memory_result.get("inventory_update")
         if inventory_update:
-            non_empty = {k: v for k, v in inventory_update.items() if v}
-            if non_empty:
-                yield InventoryUpdateSSE(update=non_empty)
+            # Ensure string values — LLM may return objects instead of strings
+            _inv = {}
+            for k, v in inventory_update.items():
+                if not v:
+                    continue
+                if k == "equip" and isinstance(v, dict):
+                    _inv[k] = {sk: _ensure_str(sv) for sk, sv in v.items() if sv}
+                elif k in ("unequip", "remove_items") and isinstance(v, list):
+                    _inv[k] = [_ensure_str(i) for i in v if i]
+                elif k in ("add_items", "update_items") and isinstance(v, list):
+                    _inv[k] = [
+                        {ik: _ensure_str(iv) if isinstance(iv, (str, dict)) else iv for ik, iv in i.items()}
+                        for i in v
+                        if isinstance(i, dict)
+                    ]
+                else:
+                    _inv[k] = v
+            if _inv:
+                yield InventoryUpdateSSE(update=_inv)
 
         # debug_info SSE — only when debug flag is enabled
         if debug:

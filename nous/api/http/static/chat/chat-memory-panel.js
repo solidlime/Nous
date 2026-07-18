@@ -31,7 +31,8 @@ function updateMemoryPanel(retrieved, saved, goals) {
             const score = m.score != null ? parseFloat(m.score).toFixed(3) : "";
             const imp =
               m.importance != null ? parseFloat(m.importance).toFixed(2) : "";
-            const content = esc((m.content || "").substring(0, 80));
+            var _raw = typeof m.content === "object" && m.content !== null ? JSON.stringify(m.content) : String(m.content || "");
+            const content = esc(_raw.substring(0, 80));
             const meta = [
               score ? "score:" + score : "",
               imp ? "imp:" + imp : "",
@@ -47,11 +48,12 @@ function updateMemoryPanel(retrieved, saved, goals) {
             const extra = [emotionBadges, bodyCompact]
               .filter(Boolean)
               .join(" ");
+            var _contentStr = typeof m.content === "object" && m.content !== null ? JSON.stringify(m.content) : String(m.content || "");
             return (
               '<div class="memory-item-card" data-key="' +
               escAttr(key) +
               '" data-content="' +
-              escAttr(m.content || "") +
+              escAttr(_contentStr) +
               '" data-importance="' +
               (m.importance || 0.5) +
               '" data-tags="' +
@@ -82,7 +84,8 @@ function updateMemoryPanel(retrieved, saved, goals) {
       } else {
         savedList.innerHTML = saved
           .map((m) => {
-            const content = esc((m.content || "").substring(0, 80));
+            var _raw = typeof m.content === "object" && m.content !== null ? JSON.stringify(m.content) : String(m.content || "");
+            const content = esc(_raw.substring(0, 80));
             const tags = m.tags ? m.tags.join(", ") : "";
             const key = m.key || "";
             const emotionBadges = renderEmotionBadges(
@@ -93,11 +96,12 @@ function updateMemoryPanel(retrieved, saved, goals) {
             const extra = [emotionBadges, bodyCompact]
               .filter(Boolean)
               .join(" ");
+            var _contentStr = typeof m.content === "object" && m.content !== null ? JSON.stringify(m.content) : String(m.content || "");
             return (
               '<div class="memory-item-card" data-key="' +
               escAttr(key) +
               '" data-content="' +
-              escAttr(m.content || "") +
+              escAttr(_contentStr) +
               '" data-importance="' +
               (m.importance || 0.5) +
               '" data-tags="' +
