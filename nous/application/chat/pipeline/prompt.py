@@ -61,6 +61,11 @@ class PromptBuildStep:
 
         base_system = config.system_prompt or f"あなたは{persona}という名前のアシスタントです。"
         parts = [base_system]
+
+        # TIME_CONTEXT を先頭に注入（時空間の認識）
+        if turn_ctx.time_context:
+            parts.append(f"\n{turn_ctx.time_context}")
+
         parts.append(TOOL_USAGE_GUIDELINES)
 
         # Inject guidelines once at the start, before everything else

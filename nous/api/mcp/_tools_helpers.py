@@ -52,23 +52,24 @@ def _format_state_block(state: PersonaState) -> str:
 
 
 def _format_emotion_decay_note(decay_result: EmotionDecayResult | None) -> str:
-    """Format a notification line for emotion decay: before→after — faded over N hours."""
+    """自然言語の減衰通知。ペルソナの主観的体験として表現する。"""
     if decay_result is None:
         return ""
-    before_str = f"{decay_result.before_emotion}({decay_result.before_intensity:.2f})"
-    after_str = (
-        f"{decay_result.after_emotion}({decay_result.after_intensity:.2f})"
-        if decay_result.after_intensity > 0
-        else decay_result.after_emotion
-    )
-    if decay_result.elapsed_hours >= 1:
-        time_str = f"{decay_result.elapsed_hours:.0f}h"
+    before = decay_result.before_emotion
+    after = decay_result.after_emotion
+    hours = decay_result.elapsed_hours
+
+    if hours >= 24:
+        time_str = f"{hours / 24:.0f}日"
+    elif hours >= 1:
+        time_str = f"{hours:.0f}時間"
     else:
-        time_str = f"{decay_result.elapsed_hours * 60:.0f}min"
-    # 強度が高いほど半減期が長いので減衰が遅い
-    intensity = decay_result.before_intensity
-    speed_note = " (high intensity, slow decay)" if intensity >= 0.7 else ""
-    return f"{before_str} → {after_str} — faded over {time_str}{speed_note}"
+        time_str = f"{hours * 60:.0f}分"
+
+    if after == "neutral" or decay_result.after_intensity < 0.01:
+        return f"{time_str}の間に、{before}の感情は自然に消えていった"
+    else:
+        return f"{time_str}の間に、{before}の感情は自然に落ち着いてきた"
 
 
 def _format_state_diff(time_since: str) -> str:
