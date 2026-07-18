@@ -3,12 +3,58 @@
 from __future__ import annotations
 
 import asyncio
+import io
+import logging
+import os
+import urllib.request
+import zipfile
 from typing import TYPE_CHECKING
 
 from sudachipy import Dictionary as SudachiDict
 
 if TYPE_CHECKING:
     from sudachipy.tokenizer import Tokenizer as SudachiTokenizer
+
+
+logger = logging.getLogger(__name__)
+
+SUDACHI_DICT_VERSION = "20260428"
+SUDACHI_DICT_TYPE = "core"
+SUDACHI_DICT_URL = (
+    f"https://github.com/WorksApplications/SudachiDict/releases/download/"
+    f"v{SUDACHI_DICT_VERSION}/sudachi-dictionary-{SUDACHI_DICT_VERSION}-{SUDACHI_DICT_TYPE}.zip"
+)
+SUDACHI_DICT_FILENAME = f"system_{SUDACHI_DICT_TYPE}.dic"
+
+
+def _get_dict_path() -> str:
+    data_root = os.environ.get("NOUS_DATA_ROOT", "./data")
+    return os.path.join(data_root, "sudachi", SUDACHI_DICT_FILENAME)
+
+
+def _download_dict(target_path: str) -> None:
+    target_dir = os.path.dirname(target_path)
+    os.makedirs(target_dir, exist_ok=True)
+    try:
+        logger.info("Downloading Sudachi dictionary from %s", SUDACHI_DICT_URL)
+        with urllib.request.urlopen(SUDACHI_DICT_URL) as resp:
+            zip_data = io.BytesIO(resp.read())
+        with zipfile.ZipFile(zip_data) as zf:
+            names = zf.namelist()
+            dic_member = next(
+                (n for n in names if n.endswith(SUDACHI_DICT_FILENAME)), None
+            )
+            if dic_member is None:
+                raise FileNotFoundError(
+                    f"{SUDACHI_DICT_FILENAME} not found in Sudachi dictionary archive"
+                )
+            dic_data = zf.read(dic_member)
+        with open(target_path, "wb") as f:
+            f.write(dic_data)
+        logger.info("Sudachi dictionary extracted to %s", target_path)
+    except Exception:
+        logger.error("Failed to download/extract Sudachi dictionary", exc_info=True)
+        raise
 
 
 class SudachiExtractor:
@@ -25,8 +71,14 @@ class SudachiExtractor:
         self._tokenizer: SudachiTokenizer | None = None  # lazy load
 
     def _ensure_loaded(self) -> None:
-        if self._tokenizer is None:
-            self._tokenizer = SudachiDict().create()
+        if self._tokenizer is not None:
+            return
+        dict_path = _get_dict_path()
+        if not os.path.exists(dict_path):
+            logger.info("Sudachi dictionary not found at %s, downloading...", dict_path)
+            _download_dict(dict_path)
+            logger.info("Sudachi dictionary downloaded to %s", dict_path)
+        self._tokenizer = SudachiDict(dict=dict_path).create()
 
     def extract(self, text: str) -> list[dict]:
         """Extract named entities from *text*.
