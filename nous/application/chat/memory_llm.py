@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import TYPE_CHECKING
 
@@ -294,12 +295,15 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
                 if hit_score > 0.85:
                     logger.debug("MemoryLLM: skipping duplicate fact (score=%.2f): %s", hit_score, content[:60])
                     continue
-            ctx.memory_service.create_memory(
+            mem_result = ctx.memory_service.create_memory(
                 content=content,
                 importance=float(fact.get("importance", 0.6)),
                 tags=fact.get("tags", ["auto_extract"]),
                 emotion=fact.get("emotion", "neutral"),
             )
+            if mem_result.is_ok and ctx.vector_store is not None:
+                with contextlib.suppress(Exception):
+                    await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
         if facts:
             logger.info("MemoryLLM: processed %d facts for persona=%s", len(facts), persona)
 
@@ -327,12 +331,15 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
                     if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
                         logger.debug("MemoryLLM: skipping duplicate goal: %s", content[:60])
                         continue
-                ctx.memory_service.create_memory(
+                mem_result = ctx.memory_service.create_memory(
                     content=content,
                     importance=0.75,
                     tags=["goal", "active"],
                     emotion="neutral",
                 )
+                if mem_result.is_ok and ctx.vector_store is not None:
+                    with contextlib.suppress(Exception):
+                        await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
         if goals:
             logger.info("MemoryLLM: processed %d goals for persona=%s", len(goals), persona)
 
@@ -364,12 +371,15 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
                     if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
                         logger.debug("MemoryLLM: skipping duplicate interpersonal goal: %s", content[:60])
                         continue
-                ctx.memory_service.create_memory(
+                mem_result = ctx.memory_service.create_memory(
                     content=content,
                     importance=0.8,
                     tags=["goal", "active", "interpersonal"],
                     emotion="neutral",
                 )
+                if mem_result.is_ok and ctx.vector_store is not None:
+                    with contextlib.suppress(Exception):
+                        await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
         if promises:
             logger.info("MemoryLLM: processed %d interpersonal goals for persona=%s", len(promises), persona)
 
@@ -389,11 +399,14 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
             ]:
                 val = ctx_update.get(key)
                 if val is not None and str(val).strip():
-                    ctx.memory_service.create_memory(
+                    mem_result = ctx.memory_service.create_memory(
                         content=f"{key}: {val}",
                         tags=tags,
                         importance=0.6,
                     )
+                    if mem_result.is_ok and ctx.vector_store is not None:
+                        with contextlib.suppress(Exception):
+                            await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
                     ctx_update.pop(key, None)  # update_physical_state に渡さない
 
             state_fields = {

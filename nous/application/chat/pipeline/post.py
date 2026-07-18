@@ -171,7 +171,10 @@ class PostProcessStep:
         except Exception as e:
             logger.warning("PostProcessStep: record_conversation_time failed: %s", e)
 
-        # MemoryLLM: DoneSSE前にawait実行（fire-and-forgetをやめて結果をSSEに含める）
+        # DoneSSE: memory_llmの前に送出（was_truncatedは事前に設定済み）
+        yield DoneSSE(truncated=turn_ctx.was_truncated)
+
+        # MemoryLLM: DoneSSE後にawait実行（fire-and-forgetをやめて結果をSSEに含める）
         memory_result: dict = {}
         if config.auto_extract and turn_ctx.full_response:
             payload = {"user": turn_ctx.user_message, "assistant": turn_ctx.full_response}
@@ -275,7 +278,7 @@ class PostProcessStep:
                 logger.warning("PostProcessStep: debug_info SSE failed: %s", e)
                 yield DebugInfoSSE(data={"error": str(e), "system_prompt": turn_ctx.system_prompt[:500]})
 
-        yield DoneSSE(truncated=turn_ctx.was_truncated)
+        # DoneSSE は run_memory_llm の前に移動済み（L175）
 
         # Fire-and-forget: DoneSSE後に後処理を非同期タスクとして実行
         self._background_tasks.append(asyncio.create_task(_safe_reflection(ctx, config, memory_result, turn_ctx)))
