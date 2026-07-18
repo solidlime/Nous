@@ -17,11 +17,11 @@ services:
   nous:
     # ソースをホストからマウント（コード変更が即反映）
     volumes:
-      - ./nous:/opt/nous/nous
-      # データ永続化（SQLite, Qdrant コレクション設定等）
-      - ./data:/opt/nous/data
+      - ./nous:/app/nous
+      # データ永続化（SQLite, HuggingFace cache, Sudachi, Qdrant 設定等）
+      - ./data:/opt/nous
       # 設定ファイル（.env と同じ効果）
-      - ./.env:/opt/nous/.env:ro
+      - ./.env:/app/.env:ro
     # command は継承（CMD ["python", "-m", "nous.main"]）
     # 環境変数も docker-compose.yml から継承
     environment:

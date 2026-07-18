@@ -1,4 +1,4 @@
-# DATA_ROOT → ホスト側パス（.env.example 参照）。コンテナ側は NOUS_DATA_ROOT (/opt/nous/data) で固定。
+# DATA_ROOT → ホスト側パス（.env.example 参照）。コンテナ側 /opt/nous（= NOUS_DATA_ROOT）にマウントされる。
 
 services:
   qdrant:
@@ -26,9 +26,9 @@ services:
     ports:
       - "26262:26262"
     volumes:
-      # Nous アプリデータ永続化（memory, logs, cache, config, skills）
-      # DATA_ROOT/app（ホスト） → /opt/nous/data（コンテナ、=NOUS_DATA_ROOT）
-      - ${DATA_ROOT}/app:/opt/nous/data
+      # Nous アプリデータ永続化（memory, cache, sudachi, config, skills）
+      # DATA_ROOT（ホスト） → /opt/nous（コンテナ、=NOUS_DATA_ROOT）
+      - ${DATA_ROOT}:/opt/nous
     restart: unless-stopped
     depends_on:
       qdrant:

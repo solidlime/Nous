@@ -19,9 +19,9 @@ RUN pip install --no-cache-dir uv && \
 # Runtime stage: Copy only necessary files
 FROM python:3.12-slim
 
-ENV APP_HOME=/opt/nous \
-    NOUS_DATA_ROOT=/opt/nous/data \
-    HF_HOME=/opt/nous/data/cache/huggingface \
+ENV APP_HOME=/app \
+    NOUS_DATA_ROOT=/opt/nous \
+    HF_HOME=/opt/nous/cache/huggingface \
     PYTHONUNBUFFERED=1 \
     LANG=C.UTF-8 \
     TZ=UTC
@@ -53,12 +53,8 @@ RUN find /usr/local/lib/python3.12/site-packages -type d -name __pycache__ -exec
 COPY nous/ ${APP_HOME}/nous/
 COPY pyproject.toml ${APP_HOME}/
 
-# Create data directory under APP_HOME
-RUN mkdir -p ${APP_HOME}/data
-
 # Create non-root user
-RUN useradd --create-home --shell /bin/bash nous && \
-    chown -R nous:nous ${APP_HOME}/data
+RUN useradd --create-home --shell /bin/bash nous
 
 # Expose FastMCP HTTP port
 EXPOSE 26262
