@@ -31,6 +31,8 @@ class DalleProvider(ImageGenProvider):
         reference_image: bytes | None = None,
         **kwargs: Any,
     ) -> list[GeneratedImage]:
+        if reference_image is not None:
+            raise ValueError(f"{self._provider_name} does not support reference_image (img2img)")
         from openai import AsyncOpenAI
 
         client_kwargs: dict = {"api_key": self._api_key}

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import time
-from typing import Any, cast
+from typing import Any
 
 import httpx
 
@@ -88,7 +88,10 @@ class ComfyUIProvider(ImageGenProvider):
             try:
                 resp = await self.client.post(f"{self._api_url}/prompt", json={"prompt": workflow})
                 resp.raise_for_status()
-                return cast(str, resp.json()["prompt_id"])
+                prompt_id = resp.json()["prompt_id"]
+                if not isinstance(prompt_id, str):
+                    raise RuntimeError(f"ComfyUI returned non-string prompt_id: {type(prompt_id)}")
+                return prompt_id
             except (httpx.ConnectError, httpx.TimeoutException) as e:
                 last_exc = e
                 if attempt < 2:

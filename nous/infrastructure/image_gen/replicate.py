@@ -30,6 +30,8 @@ class ReplicateProvider(ImageGenProvider):
         reference_image: bytes | None = None,
         **kwargs: Any,
     ) -> list[GeneratedImage]:
+        if reference_image is not None:
+            raise ValueError(f"{self.provider_name} does not support reference_image (img2img)")
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",

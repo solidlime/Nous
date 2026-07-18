@@ -25,6 +25,8 @@ class PollinationsImageProvider(ImageGenProvider):
         reference_image: bytes | None = None,
         **kwargs: Any,
     ) -> list[GeneratedImage]:
+        if reference_image is not None:
+            raise ValueError(f"{self.provider_name} does not support reference_image (img2img)")
         # Parse size
         if "x" in size:
             parts = size.split("x")
