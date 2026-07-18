@@ -78,7 +78,6 @@ class InferenceStep:
         _continuation_rounds = 0
         while turn_ctx.tool_call_count <= config.max_tool_calls:
             pending_tool_calls: list[ToolCallEvent] = []
-            _yielded_tool_ids: set[str] = set()  # dedup SSE+segments across empty→full yields
             current_text = ""
             _seg_text = ""  # text accumulator for segment ordering
             _finish_reason = ""  # set by DoneEvent handler inside stream loop
@@ -101,23 +100,17 @@ class InferenceStep:
                     if _seg_text:
                         turn_ctx.segments.append({"type": "text", "content": _seg_text})
                         _seg_text = ""
-                    # Check if tool with same id already seen (dedup empty→full yield from OpenAI)
-                    # Use separate tracking so empty-input calls are also deduped
-                    if event.tool_use_id in _yielded_tool_ids:
-                        # Already yielded SSE for this tool — skip
-                        pass
-                    else:
-                        _yielded_tool_ids.add(event.tool_use_id)
-                        yield ToolCallSSE(name=event.tool_name, input=event.tool_input, id=event.tool_use_id)
-                        turn_ctx.segments.append(
-                            {
-                                "type": "tool_call",
-                                "name": event.tool_name,
-                                "input": event.tool_input,
-                                "id": event.tool_use_id,
-                            }
-                        )
-                    # Only add to pending if input is non-empty (original logic)
+                    yield ToolCallSSE(name=event.tool_name, input=event.tool_input, id=event.tool_use_id)
+                    turn_ctx.segments.append(
+                        {
+                            "type": "tool_call",
+                            "name": event.tool_name,
+                            "input": event.tool_input,
+                            "id": event.tool_use_id,
+                        }
+                    )
+                    # Empty tool_input is now an anomaly (early yield was removed from provider)
+                    assert event.tool_input is not None, f"Empty tool_input for tool {event.tool_use_id}"
                     if event.tool_input:
                         existing = next(
                             (tc for tc in pending_tool_calls if tc.tool_use_id == event.tool_use_id),
