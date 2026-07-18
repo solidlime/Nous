@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from nous.domain.memory.entity_extractor import SimpleEntityExtractor
+    from nous.domain.memory.sudachi_extractor import HybridEntityExtractor
     from nous.domain.shared.errors import DomainError
     from nous.domain.shared.result import Result
 
@@ -88,15 +88,15 @@ class EntityService:
     def __init__(
         self,
         entity_repo: EntityRepository,
-        extractor: SimpleEntityExtractor | None = None,
+        extractor: HybridEntityExtractor | None = None,
     ) -> None:
         self.repo = entity_repo
         if extractor is None:
-            from nous.domain.memory.entity_extractor import (
-                SimpleEntityExtractor,
+            from nous.domain.memory.sudachi_extractor import (
+                HybridEntityExtractor,
             )
 
-            extractor = SimpleEntityExtractor()
+            extractor = HybridEntityExtractor()
         self.extractor = extractor
 
     # -- write operations --------------------------------------------------

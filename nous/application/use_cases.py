@@ -165,6 +165,21 @@ class AppContext:
 
             threading.Thread(target=_safe_preload, daemon=True).start()
 
+        # Preload Sudachi dictionary in background (lazy-download on first use otherwise)
+        import threading
+
+        def _safe_preload_sudachi() -> None:
+            try:
+                from nous.domain.memory.sudachi_extractor import SudachiExtractor
+
+                # Trigger dict download by creating instance and calling extract
+                SudachiExtractor().extract("")
+                logger.debug("Sudachi dictionary preloaded successfully")
+            except Exception:
+                logger.debug("Sudachi preload failed (will retry on first use)", exc_info=True)
+
+        threading.Thread(target=_safe_preload_sudachi, daemon=True).start()
+
         # Initialize SessionEventRecorder (best-effort, don't fail startup)
         try:
             from nous.application.session_event_recorder import SessionEventRecorder

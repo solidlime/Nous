@@ -141,12 +141,18 @@ class MemoryService:
         # Memory enrichment: auto-evaluate importance + extract relations (best-effort)
         if self._enricher is not None and importance == 0.5:
             with contextlib.suppress(Exception):
-                # Extract entities from content for LLM context
-                from nous.domain.memory.entity_extractor import (
-                    SimpleEntityExtractor,
+                # Extract entities using Sudachi NER (accurate path) for LLM context.
+                # create_memory is sync — call SudachiExtractor directly (no await needed).
+                from nous.domain.memory.sudachi_extractor import (
+                    HybridEntityExtractor,
+                    SudachiExtractor,
                 )
 
-                extracted_entities = SimpleEntityExtractor().extract(content.strip())
+                hybrid = HybridEntityExtractor()
+                sudachi = SudachiExtractor()
+                accurate = sudachi.extract(content.strip())
+                # Convert list[dict] with keys {name, type, start, end} → list[tuple[str, str]]
+                extracted_entities = [(e["name"], e["type"]) for e in accurate]
                 enrichment = self._enricher.enrich(
                     content=content.strip(),
                     type_tags=type_hints or [],

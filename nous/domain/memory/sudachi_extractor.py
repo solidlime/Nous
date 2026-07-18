@@ -134,6 +134,10 @@ class HybridEntityExtractor:
         self._fast = SimpleEntityExtractor()
         self._sudachi: SudachiExtractor | None = None
 
+    def extract(self, text: str) -> list[tuple[str, str]]:
+        """Sync extract using fast regex path. Backward-compat with SimpleEntityExtractor."""
+        return self.extract_fast(text)
+
     def extract_fast(self, text: str) -> list[tuple[str, str]]:
         """Fast path: regex-based extraction for real-time use."""
         return self._fast.extract(text)
