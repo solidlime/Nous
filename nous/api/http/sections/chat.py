@@ -127,123 +127,6 @@ def render_chat_tab() -> str:
                                     <div class="chat-field-label">APIキー</div>
                                     <input type="password" id="chat-api-key" class="chat-field-input" placeholder="sk-..." autocomplete="off" />
                                 </div>
-                                <!-- 画像生成 -->
-                                <details data-category="image" id="chat-image-section">
-                                    <summary><i data-lucide="image"></i> 🎨 画像生成 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'image')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
-                                    <div class="details-body">
-                                        <div id="chat-image-options">
-                                            <!-- Connection status -->
-                                            <div id="chat-image-status" class="voice-status voice-status-checking" role="status" aria-live="polite">
-                                                <span class="voice-status-dot"></span>
-                                                <span class="voice-status-text">接続確認中...</span>
-                                            </div>
-                                            <!-- ComfyUI URL + 接続確認ボタン -->
-                                            <div>
-                                                <div class="chat-field-label">ComfyUI URL</div>
-                                                <div style="display:flex;gap:4px;">
-                                                    <input type="text" id="chat-image-gen-comfyui-url" class="chat-field-input" placeholder="http://192.168.50.150:8188" style="flex:1;" />
-                                                    <button type="button" id="chat-image-gen-health-check" class="chat-btn-sm">接続確認</button>
-                                                </div>
-                                                <span id="chat-image-gen-health-status" style="font-size:0.8em;margin-left:4px;"></span>
-                                            </div>
-                                            <!-- チェックポイント -->
-                                            <div>
-                                                <div class="chat-field-label">チェックポイント</div>
-                                                <input type="text" id="chat-image-gen-checkpoint" class="chat-field-input" placeholder="noobaiXLNAIXL_epsilonPred11Version.safetensors" />
-                                            </div>
-                                            <!-- LoRA リスト（動的追加） -->
-                                            <div>
-                                                <div style="display:flex;justify-content:space-between;align-items:center;">
-                                                    <span class="chat-field-label" style="font-size:0.78rem;">LoRA</span>
-                                                    <button type="button" id="chat-image-gen-lora-add" class="chat-btn-sm" style="font-size:0.72rem;">+ 追加</button>
-                                                </div>
-                                                <div id="chat-image-gen-lora-list" style="display:flex;flex-direction:column;gap:4px;margin-top:4px;"></div>
-                                            </div>
-                                            <!-- 解像度: W x H -->
-                                            <div>
-                                                <div class="chat-field-label">解像度</div>
-                                                <div style="display:flex;gap:8px;align-items:center;">
-                                                    <span style="font-size:0.78rem;">W</span>
-                                                    <input type="number" id="chat-image-gen-width" class="chat-field-input" value="1024" min="256" max="2048" step="64" style="width:90px;" />
-                                                    <span style="font-size:0.78rem;">H</span>
-                                                    <input type="number" id="chat-image-gen-height" class="chat-field-input" value="1024" min="256" max="2048" step="64" style="width:90px;" />
-                                                </div>
-                                            </div>
-                                            <!-- Steps スライダー + 値表示 -->
-                                            <div>
-                                                <div style="display:flex;justify-content:space-between;">
-                                                    <span class="chat-field-label" style="font-size:0.78rem;">Steps</span>
-                                                    <span id="chat-image-gen-steps-val" style="font-size:0.72rem;color:var(--accent-purple);">28</span>
-                                                </div>
-                                                <input type="range" id="chat-image-gen-steps" class="chat-field-input" min="1" max="100" step="1" value="28" oninput="document.getElementById('chat-image-gen-steps-val').textContent=this.value" style="width:100%;accent-color:var(--accent-purple);" />
-                                            </div>
-                                            <!-- CFG Scale スライダー + 値表示 -->
-                                            <div>
-                                                <div style="display:flex;justify-content:space-between;">
-                                                    <span class="chat-field-label" style="font-size:0.78rem;">CFG Scale</span>
-                                                    <span id="chat-image-gen-cfg-val" style="font-size:0.72rem;color:var(--accent-purple);">5.5</span>
-                                                </div>
-                                                <input type="range" id="chat-image-gen-cfg" class="chat-field-input" min="1.0" max="30.0" step="0.5" value="5.5" oninput="document.getElementById('chat-image-gen-cfg-val').textContent=parseFloat(this.value).toFixed(1)" style="width:100%;accent-color:var(--accent-purple);" />
-                                            </div>
-                                            <!-- 詳細設定（折りたたみ） -->
-                                            <details style="margin-top:12px;">
-                                                <summary style="font-size:0.82rem;color:var(--text-muted);cursor:pointer;">詳細設定</summary>
-                                                <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;padding-left:4px;">
-                                                    <!-- Sampler -->
-                                                    <div>
-                                                        <div class="chat-field-label" style="font-size:0.78rem;">Sampler</div>
-                                                        <select id="chat-image-gen-sampler" class="chat-field-input" style="width:100%;">
-                                                            <option value="euler">Euler</option>
-                                                            <option value="euler_ancestral" selected>Euler Ancestral</option>
-                                                            <option value="dpmpp_2m">DPM++ 2M</option>
-                                                            <option value="dpmpp_2m_sde">DPM++ 2M SDE</option>
-                                                            <option value="dpmpp_3m_sde">DPM++ 3M SDE</option>
-                                                            <option value="dpm_2">DPM 2</option>
-                                                            <option value="dpm_2_ancestral">DPM 2 Ancestral</option>
-                                                            <option value="lcm">LCM</option>
-                                                        </select>
-                                                    </div>
-                                                    <!-- Scheduler -->
-                                                    <div>
-                                                        <div class="chat-field-label" style="font-size:0.78rem;">Scheduler</div>
-                                                        <select id="chat-image-gen-scheduler" class="chat-field-input" style="width:100%;">
-                                                            <option value="normal" selected>Normal</option>
-                                                            <option value="karras">Karras</option>
-                                                            <option value="exponential">Exponential</option>
-                                                            <option value="sgm_uniform">SGM Uniform</option>
-                                                            <option value="simple">Simple</option>
-                                                            <option value="ddim_uniform">DDIM Uniform</option>
-                                                        </select>
-                                                    </div>
-                                                    <!-- Denoise (img2img) -->
-                                                    <div>
-                                                        <div style="display:flex;justify-content:space-between;">
-                                                            <span class="chat-field-label" style="font-size:0.78rem;">Denoise (img2img)</span>
-                                                            <span id="chat-image-gen-denoise-val" style="font-size:0.72rem;color:var(--accent-purple);">0.70</span>
-                                                        </div>
-                                                        <input type="range" id="chat-image-gen-denoise" class="chat-field-input" min="0.1" max="1.0" step="0.05" value="0.7" oninput="document.getElementById('chat-image-gen-denoise-val').textContent=parseFloat(this.value).toFixed(2)" style="width:100%;accent-color:var(--accent-purple);" />
-                                                    </div>
-                                                    <!-- Seed -->
-                                                    <div>
-                                                        <div class="chat-field-label" style="font-size:0.78rem;">乱数シード（0=ランダム）</div>
-                                                        <input type="number" id="chat-image-gen-seed" class="chat-field-input" value="0" min="0" style="width:100%;" />
-                                                    </div>
-                                                    <!-- 高速化LoRA（display:noneで保持、後方互換のため） -->
-                                                    <div style="display:none;">
-                                                        <select id="chat-image-gen-speed-lora-method"><option value="">使用しない</option><option value="lcm">LCM</option><option value="lightning">Lightning</option><option value="hyper">Hyper-SD</option><option value="tcd">TCD</option></select>
-                                                        <input type="text" id="chat-image-gen-speed-lora-path" />
-                                                        <input type="number" id="chat-image-gen-speed-lora-weight" value="1.0" />
-                                                    </div>
-                                                </div>
-                                            </details>
-                                            <!-- テスト生成ボタン + ステータス -->
-                                            <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
-                                                <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="testImageGen()"><i data-lucide="play"></i> テスト生成</button>
-                                                <span id="chat-image-test-status" style="font-size:0.72rem;color:var(--text-muted);min-height:16px;"></span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </details>
                                 <div id="chat-base-url-row">
                                     <div class="chat-field-label">Base URL <span style="color:var(--text-muted);font-size:0.7rem;">（任意）</span></div>
                                     <input type="text" id="chat-base-url" class="chat-field-input" placeholder="https://openrouter.ai/api/v1" />
@@ -511,6 +394,108 @@ def render_chat_tab() -> str:
                                     <input type="range" id="chat-retrieval-rrf-k" class="chat-field-input" min="1" max="100" step="1" value="5"
                                         oninput="document.getElementById('chat-retrieval-rrf-k-val').textContent=this.value"
                                         style="width:100%;accent-color:var(--accent-purple);" />
+                                </div>
+                            </div>
+                        </details>
+                        <!-- 画像生成 -->
+                        <details data-category="image" id="chat-image-section">
+                            <summary><i data-lucide="image"></i> 画像生成 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'image')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <div class="details-body">
+                                <div id="chat-image-options">
+                                    <div id="chat-image-status" class="voice-status voice-status-checking" role="status" aria-live="polite">
+                                        <span class="voice-status-dot"></span>
+                                        <span class="voice-status-text">接続確認中...</span>
+                                    </div>
+                                    <div>
+                                        <div class="chat-field-label">ComfyUI URL</div>
+                                        <div style="display:flex;gap:4px;">
+                                            <input type="text" id="chat-image-gen-comfyui-url" class="chat-field-input" placeholder="http://192.168.50.150:8188" style="flex:1;" />
+                                            <button type="button" id="chat-image-gen-health-check" class="chat-btn-sm">接続確認</button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="chat-field-label">チェックポイント</div>
+                                        <input type="text" id="chat-image-gen-checkpoint" class="chat-field-input" placeholder="noobaiXLNAIXL_epsilonPred11Version.safetensors" />
+                                    </div>
+                                    <div>
+                                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                                            <span class="chat-field-label" style="font-size:0.78rem;">LoRA</span>
+                                            <button type="button" id="chat-image-gen-lora-add" class="chat-btn-sm" style="font-size:0.72rem;">+ 追加</button>
+                                        </div>
+                                        <div id="chat-image-gen-lora-list" style="display:flex;flex-direction:column;gap:4px;margin-top:4px;"></div>
+                                    </div>
+                                    <div>
+                                        <div class="chat-field-label">解像度</div>
+                                        <div style="display:flex;gap:8px;align-items:center;">
+                                            <span style="font-size:0.78rem;">W</span>
+                                            <input type="number" id="chat-image-gen-width" class="chat-field-input" value="1024" min="256" max="2048" step="64" style="width:90px;" />
+                                            <span style="font-size:0.78rem;">H</span>
+                                            <input type="number" id="chat-image-gen-height" class="chat-field-input" value="1024" min="256" max="2048" step="64" style="width:90px;" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style="display:flex;justify-content:space-between;">
+                                            <span class="chat-field-label" style="font-size:0.78rem;">Steps</span>
+                                            <span id="chat-image-gen-steps-val" style="font-size:0.72rem;color:var(--accent-purple);">28</span>
+                                        </div>
+                                        <input type="range" id="chat-image-gen-steps" class="chat-field-input" min="1" max="100" step="1" value="28" oninput="document.getElementById('chat-image-gen-steps-val').textContent=this.value" style="width:100%;accent-color:var(--accent-purple);" />
+                                    </div>
+                                    <div>
+                                        <div style="display:flex;justify-content:space-between;">
+                                            <span class="chat-field-label" style="font-size:0.78rem;">CFG Scale</span>
+                                            <span id="chat-image-gen-cfg-val" style="font-size:0.72rem;color:var(--accent-purple);">5.5</span>
+                                        </div>
+                                        <input type="range" id="chat-image-gen-cfg" class="chat-field-input" min="1.0" max="30.0" step="0.5" value="5.5" oninput="document.getElementById('chat-image-gen-cfg-val').textContent=parseFloat(this.value).toFixed(1)" style="width:100%;accent-color:var(--accent-purple);" />
+                                    </div>
+                                    <details style="margin-top:12px;">
+                                        <summary style="font-size:0.82rem;color:var(--text-muted);cursor:pointer;">詳細設定</summary>
+                                        <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;padding-left:4px;">
+                                            <div>
+                                                <div class="chat-field-label" style="font-size:0.78rem;">Sampler</div>
+                                                <select id="chat-image-gen-sampler" class="chat-field-input" style="width:100%;">
+                                                    <option value="euler">Euler</option>
+                                                    <option value="euler_ancestral" selected>Euler Ancestral</option>
+                                                    <option value="dpmpp_2m">DPM++ 2M</option>
+                                                    <option value="dpmpp_2m_sde">DPM++ 2M SDE</option>
+                                                    <option value="dpmpp_3m_sde">DPM++ 3M SDE</option>
+                                                    <option value="dpm_2">DPM 2</option>
+                                                    <option value="dpm_2_ancestral">DPM 2 Ancestral</option>
+                                                    <option value="lcm">LCM</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <div class="chat-field-label" style="font-size:0.78rem;">Scheduler</div>
+                                                <select id="chat-image-gen-scheduler" class="chat-field-input" style="width:100%;">
+                                                    <option value="normal" selected>Normal</option>
+                                                    <option value="karras">Karras</option>
+                                                    <option value="exponential">Exponential</option>
+                                                    <option value="sgm_uniform">SGM Uniform</option>
+                                                    <option value="simple">Simple</option>
+                                                    <option value="ddim_uniform">DDIM Uniform</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <div style="display:flex;justify-content:space-between;">
+                                                    <span class="chat-field-label" style="font-size:0.78rem;">Denoise (img2img)</span>
+                                                    <span id="chat-image-gen-denoise-val" style="font-size:0.72rem;color:var(--accent-purple);">0.70</span>
+                                                </div>
+                                                <input type="range" id="chat-image-gen-denoise" class="chat-field-input" min="0.1" max="1.0" step="0.05" value="0.7" oninput="document.getElementById('chat-image-gen-denoise-val').textContent=parseFloat(this.value).toFixed(2)" style="width:100%;accent-color:var(--accent-purple);" />
+                                            </div>
+                                            <div>
+                                                <div class="chat-field-label" style="font-size:0.78rem;">乱数シード（0=ランダム）</div>
+                                                <input type="number" id="chat-image-gen-seed" class="chat-field-input" value="0" min="0" style="width:100%;" />
+                                            </div>
+                                            <div style="display:none;">
+                                                <select id="chat-image-gen-speed-lora-method"><option value="">使用しない</option><option value="lcm">LCM</option><option value="lightning">Lightning</option><option value="hyper">Hyper-SD</option><option value="tcd">TCD</option></select>
+                                                <input type="text" id="chat-image-gen-speed-lora-path" />
+                                                <input type="number" id="chat-image-gen-speed-lora-weight" value="1.0" />
+                                            </div>
+                                        </div>
+                                    </details>
+                                    <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+                                        <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="testImageGen()"><i data-lucide="play"></i> テスト生成</button>
+                                        <span id="chat-image-test-status" style="font-size:0.72rem;color:var(--text-muted);min-height:16px;"></span>
+                                    </div>
                                 </div>
                             </div>
                         </details>

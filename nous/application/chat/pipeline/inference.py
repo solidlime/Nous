@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from nous.application.chat.events import (
     ErrorSSE,
+    ImageGenResultSSE,
     TextDeltaSSE,
     ToolCallSSE,
     ToolResultSSE,
@@ -204,6 +205,12 @@ class InferenceStep:
                 results = [await _exec_one(tc) for tc in pending_tool_calls]
 
             for tc, truncated, tool_result in results:
+                # If tool result contains images, emit ImageGenResultSSE to frontend
+                if isinstance(tool_result, dict) and tool_result.get("images"):
+                    yield ImageGenResultSSE(
+                        provider=tool_result.get("provider", "comfyui"),
+                        images=tool_result["images"],
+                    )
                 yield ToolResultSSE(name=tc.tool_name, result=truncated, id=tc.tool_use_id)
                 turn_ctx.segments.append(
                     {"type": "tool_result", "name": tc.tool_name, "result": truncated, "id": tc.tool_use_id}
