@@ -42,7 +42,11 @@ class DalleProvider(ImageGenProvider):
 
         # DALL-E 2 は quality パラメータ非対応
         gen_kwargs: dict = {"model": self._model, "prompt": prompt, "size": size, "n": n}
-        if self._model not in ("dall-e-2",):
+        if self._provider_name == "gemini":
+            # Gemini accepts: auto | low | medium | high
+            _gemini_quality_map = {"standard": "auto", "hd": "high"}
+            gen_kwargs["quality"] = _gemini_quality_map.get(quality, quality)
+        elif self._model not in ("dall-e-2",):
             gen_kwargs["quality"] = quality
 
         response = await client.images.generate(**gen_kwargs)
