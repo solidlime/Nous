@@ -109,7 +109,9 @@ def register_tts_routes(mcp) -> None:
 
         # ---- TTS audio cache ----
         voice_speed = getattr(chat_config, "voice_speed", 1.0)
-        cache_dir = Path("nous/opt/memory") / persona / "tts_cache"
+        from nous.config.settings import get_settings
+        settings = get_settings()
+        cache_dir = Path(settings.data_root) / "memory" / persona / "tts_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         cache_key = hashlib.sha256(f"{text}|{emotion}|{caption or ''}|{voice_speed}".encode()).hexdigest()
         cache_path = cache_dir / f"{cache_key}.wav"
