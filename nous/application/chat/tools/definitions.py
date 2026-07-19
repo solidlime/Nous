@@ -212,13 +212,13 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="image_generate",
-        description="画像生成。prompt必須。nは1-4枚、size指定可。",
+        description="画像生成。prompt必須（Danbooruタグ形式推奨）。nは1-4枚、size指定可。",
         input_schema={
             "type": "object",
             "properties": {
                 "prompt": {
                     "type": "string",
-                    "description": "画像生成プロンプト。生成内容を詳細に記述。",
+                    "description": "画像生成プロンプト。Danbooruタグ形式（カンマ区切りの英語タグ）で記述。例: '1girl, blue sky, standing, smile, detailed'",
                 },
                 "size": {
                     "type": "string",
