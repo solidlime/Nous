@@ -242,6 +242,7 @@ function applyChatConfig(cfg) {
   set("chat-image-gen-speed-lora-method", cfg.image_gen_comfyui_speed_lora_method);
   set("chat-image-gen-speed-lora-path", cfg.image_gen_comfyui_speed_lora_path);
   set("chat-image-gen-speed-lora-weight", cfg.image_gen_comfyui_speed_lora_weight);
+  set("chat-image-gen-self-portrait-prompt", cfg.image_gen_self_portrait_prompt);
   // LoRA リスト復元
   var loraContainer = document.getElementById('chat-image-gen-lora-list');
   if (loraContainer) loraContainer.innerHTML = '';
@@ -383,6 +384,7 @@ async function saveChatConfig() {
     image_gen_comfyui_speed_lora_path: document.getElementById("chat-image-gen-speed-lora-path")?.value || "",
     image_gen_comfyui_speed_lora_weight: parseFloat(document.getElementById("chat-image-gen-speed-lora-weight")?.value || "1.0"),
     image_gen_comfyui_loras: JSON.stringify(collectLoraRows()),
+    image_gen_self_portrait_prompt: document.getElementById("chat-image-gen-self-portrait-prompt")?.value || "",
     // Voice / TTS settings (TE04)
     voice_url: document.getElementById("chat-voice-url")?.value || "",
     voice_auto_play: getChecked("chat-voice-auto-play"),
