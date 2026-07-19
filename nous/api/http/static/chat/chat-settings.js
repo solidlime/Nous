@@ -386,7 +386,7 @@ async function saveChatConfig() {
       ? document.getElementById("chat-image-gen-enabled").checked
       : false,
     image_gen_comfyui_url: (document.getElementById("chat-image-gen-comfyui-url")?.value || "").trim(),
-    image_gen_comfyui_checkpoint: document.getElementById("chat-image-gen-checkpoint")?.value || "noobai-xl-epsilon-pred-11.safetensors",
+    image_gen_comfyui_checkpoint: document.getElementById("chat-image-gen-checkpoint")?.value || "noobaiXLNAIXL_epsilonPred11Version.safetensors",
     image_gen_comfyui_width: parseInt(document.getElementById("chat-image-gen-width")?.value || "1024"),
     image_gen_comfyui_height: parseInt(document.getElementById("chat-image-gen-height")?.value || "1024"),
     image_gen_comfyui_steps: parseInt(document.getElementById("chat-image-gen-steps")?.value || "28"),

@@ -26,7 +26,7 @@ class ComfyUIProvider(ImageGenProvider):
     def __init__(
         self,
         api_url: str = "http://localhost:8188",
-        checkpoint: str = "noobai-xl-epsilon-pred-11.safetensors",
+        checkpoint: str = "noobaiXLNAIXL_epsilonPred11Version.safetensors",
         loras: list[dict] | None = None,
         speed_lora_path: str = "",
         speed_lora_weight: float = 1.0,

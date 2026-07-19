@@ -249,7 +249,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
         )
         provider = ComfyUIProvider(
             api_url=gen_cfg.comfyui_url,
-            checkpoint=getattr(config, "image_gen_comfyui_checkpoint", "noobai-xl-epsilon-pred-11.safetensors"),
+            checkpoint=getattr(config, "image_gen_comfyui_checkpoint", "noobaiXLNAIXL_epsilonPred11Version.safetensors"),
             loras=loras,
             speed_lora_path=getattr(config, "image_gen_comfyui_speed_lora_path", ""),
             speed_lora_weight=getattr(config, "image_gen_comfyui_speed_lora_weight", 1.0),

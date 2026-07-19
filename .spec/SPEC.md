@@ -211,7 +211,7 @@ Mental: {mental_state 要約}
 #### ChatConfig 新規追加フィールド
 | フィールド名 | 型 | デフォルト | 範囲/選択肢 | 説明 |
 |---|---|---|---|---|
-| `image_gen_comfyui_checkpoint` | `str` | `"noobai-xl-epsilon-pred-11.safetensors"` | 自由入力（ファイル名） | チェックポイント名 |
+| `image_gen_comfyui_checkpoint` | `str` | `"noobaiXLNAIXL_epsilonPred11Version.safetensors"` | 自由入力（ファイル名） | チェックポイント名 |
 | `image_gen_comfyui_loras` | `str` | `""` | JSON文字列: `[{"path":"...","weight":1.0}]` | LoRA リスト（JSON） |
 | `image_gen_comfyui_width` | `int` | `1024` | 256-2048 (step 64) | 生成横幅 |
 | `image_gen_comfyui_height` | `int` | `1024` | 256-2048 (step 64) | 生成縦幅 |

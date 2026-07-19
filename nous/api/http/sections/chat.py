@@ -147,7 +147,7 @@ def render_chat_tab() -> str:
                                         </div>
                                         <div class="chat-config-subsection" style="margin-top:8px;">
                                             <label for="chat-image-gen-checkpoint">チェックポイント</label>
-                                            <input type="text" id="chat-image-gen-checkpoint" placeholder="noobai-xl-epsilon-pred-11.safetensors" style="width:100%;">
+                                            <input type="text" id="chat-image-gen-checkpoint" placeholder="noobaiXLNAIXL_epsilonPred11Version.safetensors" style="width:100%;">
                                         </div>
                                         <div class="chat-config-subsection" style="margin-top:8px;">
                                             <label>LoRA</label>
