@@ -107,6 +107,61 @@ async function saveNewItem() {
 }
 window.saveNewItem = saveNewItem;
 
+// --- Edit item ---
+function openEditItemModal(itemName) {
+    var item = null;
+    if (S.dashCache && S.dashCache.items) {
+        var items = S.dashCache.items;
+        for (var i = 0; i < items.length; i++) {
+            if (items[i].name === itemName) { item = items[i]; break; }
+        }
+    }
+    if (!item) { toast('Item not found in cache', 'error'); return; }
+    document.getElementById('edit-item-original-name').value = itemName;
+    document.getElementById('edit-item-name').value = item.name || '';
+    document.getElementById('edit-item-category').value = item.category || '';
+    document.getElementById('edit-item-desc').value = item.description || '';
+    document.getElementById('edit-item-qty').value = item.quantity || 1;
+    document.getElementById('edit-item-tags').value = (item.tags || []).join(', ');
+    document.getElementById('edit-item-modal').style.display = 'flex';
+}
+window.openEditItemModal = openEditItemModal;
+
+function closeEditItemModal() {
+    document.getElementById('edit-item-modal').style.display = 'none';
+}
+window.closeEditItemModal = closeEditItemModal;
+
+async function saveEditItem() {
+    var originalName = document.getElementById('edit-item-original-name').value;
+    var name = document.getElementById('edit-item-name').value.trim();
+    var category = document.getElementById('edit-item-category').value.trim() || null;
+    var description = document.getElementById('edit-item-desc').value.trim() || null;
+    var qty = parseInt(document.getElementById('edit-item-qty').value, 10) || 1;
+    var tagsStr = document.getElementById('edit-item-tags').value.trim();
+    var tags = tagsStr ? tagsStr.split(',').map(function(t) { return t.trim(); }).filter(Boolean) : [];
+    if (!name) { toast('Item name is required', 'error'); return; }
+    try {
+        await api('/api/items/' + encodeURIComponent(S.persona) + '/' + encodeURIComponent(originalName), {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                item_name: name,
+                category: category,
+                description: description,
+                quantity: qty,
+                tags: tags
+            })
+        });
+        closeEditItemModal();
+        toast('Item updated!', 'success');
+        loadOverview();
+    } catch (e) {
+        toast('Failed to update item: ' + e.message, 'error');
+    }
+}
+window.saveEditItem = saveEditItem;
+
 async function changeEquipSlot(slot, itemName) {
     try {
         const body = {};
@@ -152,8 +207,6 @@ async function loadOverview() {
         const sm = data.state_memories || {};
         const physicalContent = (sm.physical_state?.content) || ctx.physical_state;
         const mentalContent = (sm.mental_state?.content) || ctx.mental_state;
-        const speechContent = (sm.speech_style?.content) || stats.speech_style;
-
         // --- Build tag/emotion distributions from stats ---
         const tagDist = stats.tag_distribution || {};
         const emoDist = stats.emotion_distribution || {};
@@ -267,6 +320,7 @@ async function loadOverview() {
                 invHtml += '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)" title="' + esc(desc) + '">' + esc(it.name) + '</span>';
                 if (it.quantity > 1) invHtml += '<span style="font-size:0.78rem;color:var(--text-muted)">x' + it.quantity + '</span>';
                 if (truncDesc) invHtml += '<span class="badge badge-purple" title="' + esc(desc) + '">' + esc(truncDesc) + '</span>';
+                invHtml += '<button data-item="' + esc(it.name) + '" onclick="openEditItemModal(this.dataset.item)" style="padding:2px 8px;border-radius:4px;border:1px solid rgba(167,139,250,0.3);background:rgba(167,139,250,0.08);color:var(--accent-purple);cursor:pointer;font-size:0.78rem" title="Edit item"><i data-lucide="pencil"></i></button>';
                 invHtml += '<button data-item="' + esc(it.name) + '" onclick="deleteItem(this.dataset.item)" style="padding:2px 8px;border-radius:4px;border:1px solid rgba(255,100,100,0.3);background:rgba(255,100,100,0.08);color:#f87171;cursor:pointer;font-size:0.78rem" title="Delete item"><i data-lucide="trash-2"></i></button>';
                 invHtml += '</div>';
             });
@@ -368,7 +422,6 @@ async function loadOverview() {
                     <div><span style="font-size:0.78rem;color:var(--text-muted)">Physical: </span><span style="font-size:0.85rem">${esc(physicalContent || '--')}</span></div>
                     <div><span style="font-size:0.78rem;color:var(--text-muted)">Mental: </span><span style="font-size:0.85rem">${esc(mentalContent || '--')}</span></div>
                     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:0.78rem;color:var(--text-muted);min-width:78px"><i data-lucide="globe"></i> Env:</span>${stats.environment ? '<span class="badge badge-blue">' + esc(stats.environment) + '</span>' : '<span style="color:var(--text-muted);font-size:0.82rem">--</span>'}</div>
-                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:0.78rem;color:var(--text-muted);min-width:78px"><i data-lucide="message-circle"></i> Speech:</span>${speechContent ? '<span class="badge badge-purple">' + esc(speechContent) + '</span>' : '<span style="color:var(--text-muted);font-size:0.82rem">--</span>'}</div>
                 </div>
             </div>
         </div>
@@ -480,6 +533,24 @@ async function loadOverview() {
                 <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
                     <button onclick="closeAddItemModal()" style="padding:7px 18px;border-radius:7px;border:1px solid var(--glass-border);background:var(--glass-bg);color:var(--text-muted);cursor:pointer;font-size:0.88rem">Cancel</button>
                     <button onclick="saveNewItem()" style="padding:7px 18px;border-radius:7px;border:1px solid rgba(167,139,250,0.5);background:rgba(167,139,250,0.2);color:var(--accent-purple);cursor:pointer;font-size:0.88rem;font-weight:600">Save</button>
+                </div>
+            </div>
+        </div>
+        <!-- Edit Item Modal -->
+        <div id="edit-item-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center">
+            <div style="background:#1e1b2e;border:1px solid rgba(167,139,250,0.3);border-radius:14px;padding:28px;width:420px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,0.6)">
+                <div style="font-weight:700;font-size:1.05rem;margin-bottom:18px;color:var(--accent-purple)"><i data-lucide="pencil"></i> Edit Inventory Item</div>
+                <input type="hidden" id="edit-item-original-name" value="">
+                <div style="display:flex;flex-direction:column;gap:12px">
+                    <input id="edit-item-name" type="text" placeholder="Item name *" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
+                    <input id="edit-item-category" type="text" placeholder="Category (e.g. clothing, weapon)" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
+                    <textarea id="edit-item-desc" placeholder="Description" rows="2" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box;resize:vertical"></textarea>
+                    <input id="edit-item-qty" type="number" value="1" min="1" placeholder="Quantity" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
+                    <input id="edit-item-tags" type="text" placeholder="Tags (comma-separated)" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
+                </div>
+                <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+                    <button onclick="closeEditItemModal()" style="padding:7px 18px;border-radius:7px;border:1px solid var(--glass-border);background:var(--glass-bg);color:var(--text-muted);cursor:pointer;font-size:0.88rem">Cancel</button>
+                    <button onclick="saveEditItem()" style="padding:7px 18px;border-radius:7px;border:1px solid rgba(167,139,250,0.5);background:rgba(167,139,250,0.2);color:var(--accent-purple);cursor:pointer;font-size:0.88rem;font-weight:600">Save</button>
                 </div>
             </div>
         </div>
