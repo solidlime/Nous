@@ -223,6 +223,8 @@ function showImageGenResult(evt) {
   if (!evt.images || !evt.images.length) return;
 
   evt.images.forEach(function (img) {
+    console.log("[showImageGenResult] img keys:", Object.keys(img));
+    console.log("[showImageGenResult] base64 len:", img.base64?.length, "first 10:", img.base64?.substring(0, 10));
     var card = document.createElement("div");
     card.className = "chat-image-gen-card";
 
@@ -260,9 +262,11 @@ function showImageGenResult(evt) {
 
     // スピナーの後に画像カードを挿入（スピナーがあった位置に）
     if (anchor && anchor.parentNode) {
+      console.log("[showImageGenResult] DOM insert: anchor path, container:", !!container);
       container.insertBefore(card, anchor);
       anchor = card.nextSibling; // 次の画像カードもこの後ろに
     } else {
+      console.log("[showImageGenResult] DOM insert: fallback path, anchor:", !!anchor);
       // フォールバック：ツールバブルの直後を探す
       var toolBubble = container.querySelector(".chat-tool-call:last-of-type");
       if (toolBubble && toolBubble.nextSibling) {
