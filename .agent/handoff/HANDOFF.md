@@ -1,36 +1,72 @@
-# HANDOFF — 2026-07-20
+# HANDOFF — 2026-07-20 (セッション2)
 
 ## セッション概要
+画像生成パイプラインの複数バグ修正・TTS前処理・設定UI改善。画像がチャットログに表示されない問題を追跡中。
 
-ハードコードされた旧紫色（`rgba(167,139,250,*)` / `#a78bfa` / `var(--accent-purple)`）をApple HIG準拠の青色系（`--accent-blue`）に置換。
-
-## 完了したコミット
-
+## 完了したコミット（全プッシュ済み main → origin/main）
 ```
-d7efdc9 fix: replace hardcoded purple (#a78bfa/rgba(167,139,250)) with Apple HIG accent-blue CSS vars
+7875bfa fix: simplify image gen spinner/image card DOM insertion to container.appendChild
+0962c1d fix: swap SSE order — yield ToolResultSSE before ImageGenResultSSE
+74a87e3 feat: make image_gen MODE_PREFIX configurable via ChatConfig + fix 2 latent bugs
+fa83473 docs: add Danbooru tag guidance to image_generate tool definition
+6e0969f fix: add missing fields to ALLOWED_FIELDS, replace hardcoded test prompt
+68121bc fix: remove hardcoded 'opt' from TTS cache path, use settings.data_root
+bad115b fix: remove erroneous 'opt' from image persistence path
+3d12ec8 fix: unify seed convention to 0=random for both image gen and irodori TTS
+d368ae8 feat: add negative prompt support for image generation
+bd9ab9c fix: remove 接続確認 button from ComfyUI settings
+f2cddf2 fix: image_generate BLOCKER fixes + TTS pre-processing + DB column auto-migration
+f6d24c4 feat: make ChatConfigRepository save() auto-create missing DB columns
 ```
 
 ## 実装サマリ
 
-### 変更ファイル（6件）
-| ファイル | 変更行数 | 種別 |
-|----------|---------|------|
-| `nous/api/http/static/base.css` | +12 | `--accent-blue-rgb` CSS変数定義（前提） |
-| `nous/api/http/static/chat.css` | 34 | 14箇所の `rgba(167,139,250,*)` 置換 |
-| `nous/api/http/static/overview.js` | 14 | 6箇所inline style + 1箇所chart.js canvas |
-| `nous/api/http/static/settings.js` | 4 | 2箇所inline style |
-| `nous/api/http/static/base.js` | 2 | 1箇所chart.js canvas grid |
-| `nous/api/http/static/graph.js` | 2 | 1箇所vis-network edge color |
+### DB/リポジトリ
+- `chat_config.py`: `get()` → `SELECT *` 化、`save()` → 動的SQL + 不足列自動 ALTER TABLE。本番DBが列不在でも動作。
+- `connection.py`: `image_gen_max_width/height` 等24列の ALTER TABLE マイグレーション追加
 
-### 置換ルール
-- **CSS通常**: `rgba(167,139,250,X)` → `rgba(var(--accent-blue-rgb), X)`
-- **CSS変数**: `color: var(--accent-purple)` → `color: var(--accent-blue)`（JS inline style内のみ）
-- **Canvas（chart.js/vis-network）**: `#a78bfa` → `#007aff`、`rgba(167,139,250,X)` → `rgba(0,122,255,X)`
-- **Canvas dark mode edge**: `rgba(109,40,217,X)` → `rgba(0,82,204,X)`
+### 画像生成
+- negative prompt: ChatConfig フィールド + UI textarea + ComfyUI ワークフロー連携 (d368ae8)
+- MODE_PREFIX 設定化: full_body/portrait/selfie/scene の prefix を ChatConfig で管理 (74a87e3)
+- シード統一: irodori も画像生成も `0=ランダム` に統一 (3d12ec8)
+- 保存パス修正: builtin.py, tts.py の `"opt"` 除去 (bad115b, 68121bc)
+- テスト生成: ハードコード `'1girl, herta...'` → 自画像プロンプト入力値に変更 (6e0969f)
+- ALLOWED_FIELDS: `image_gen_max_width/height`, `image_gen_negative_prompt`, `voice_speed` 追加
+- 接続確認ボタン削除 (bd9ab9c)
 
-### 確認結果
-- 対象5ファイルから `rgba(167,139,250` と `#a78bfa` 完全除去済み
-- `core/constants.js` の `#a78bfa` は対象外（CHART_COLORS/EMOTION_COLORS定義）
+### TTS
+- 前処理: 「」（）除去、―→... 置換 (f2cddf2)
+- キャッシュパス修正 (68121bc)
 
-## 残タスク
-- なし。ただし `core/constants.js` の `#a78bfa` はCHART_COLORS配列・EMOTION_COLORSマップに残存。別途対応判断が必要。
+### 潜伏バグ修正 (74a87e3)
+- `builtin.py:68`: 同一オブジェクト返却 → `dict(result)` 浅コピー
+- `inference.py:274`: `images` キーがLLMフォローアップ注入対象外だったのを修正
+
+### SSE/画像表示（進行中）
+- SSE順序修正: `ToolResultSSE` → `ImageGenResultSSE` の順に入れ替え (0962c1d)
+- DOM簡略化: spinner/画像カードを `container.appendChild()` に (7875bfa)
+
+## 未解決: 画像がチャットログに表示されない
+
+### 調査経過
+- SSE はバックエンドから正常送信 (`ImageGenResultSSE: yielding 1 image(s)`)
+- フロントエンドも受信確認 (ブラウザコンソール: `imagesCount:1, hasImages:true`)
+- `showImageGenResult()` の images check も通過
+- base64 データ有効 (1.35MB PNG, `iVBORw0KGgo` で始まる)
+
+### @oracle レビュー結果（BLOCK判定）
+**根本原因**: 1.35MB base64 data URI を `img.src` に直接代入。Chrome の data URI 上限 (~2MB) に近く、デコードに静かに失敗している。
+
+### 修正指示（oracle推奨）
+1. **base64 → Blob URL 変換**: `atob()` + `Uint8Array` + `URL.createObjectURL(blob)` で上限なし
+2. **`anchor` 未使用バグ**: スピナー削除時に記録した `anchor` を `insertBefore(card, anchor)` で使う
+3. **`.chat-image-gen-card` に `min-height: 120px`** 追加 → 画像未表示時もカードが潰れない
+4. **`img.onerror` ハンドラ** 追加 → デコード失敗時のフィードバック
+
+### 修正対象ファイル
+- `nous/api/http/static/chat/chat-tools.js`: `showImageGenResult()` の base64→Blob変換 + anchor再導入 + onerror追加
+- `nous/api/http/static/chat.css`: `.chat-image-gen-card` に min-height + img に min-height
+
+### 注意点
+- サーバーは `/home/rausraus/code/Nous` で起動中 (PID 729890, `http://localhost:26262`)
+- 開発環境DBは既に列追加済みだが、本番DBは次回 `save()` 時に自動修復される

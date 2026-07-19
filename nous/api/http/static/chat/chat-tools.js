@@ -222,9 +222,27 @@ function showImageGenResult(evt) {
     card.className = "chat-image-gen-card";
 
     var imgEl = document.createElement("img");
-    imgEl.src = "data:image/png;base64," + img.base64;
+    // base64 → Blob URL: Chrome data URI上限(~2MB)を回避
+    try {
+      var binary = atob(img.base64);
+      var bytes = new Uint8Array(binary.length);
+      for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      var blob = new Blob([bytes], { type: "image/png" });
+      imgEl.src = URL.createObjectURL(blob);
+    } catch (e) {
+      console.warn("[showImageGenResult] Blob conversion failed, fallback to data URI:", e);
+      imgEl.src = "data:image/png;base64," + img.base64;
+    }
     imgEl.alt = img.revised_prompt || "生成画像";
     imgEl.title = img.revised_prompt || "";
+    imgEl.onerror = function () {
+      console.error("[showImageGenResult] img decode failed, size:", img.base64?.length);
+      imgEl.style.display = "none";
+      var errDiv = document.createElement("div");
+      errDiv.className = "image-gen-error";
+      errDiv.textContent = "⚠️ 画像のデコードに失敗しました（" + (img.base64?.length || 0) + " bytes）";
+      card.insertBefore(errDiv, card.firstChild);
+    };
     imgEl.onclick = function () {
       if (typeof openMediaViewer === "function") {
         openMediaViewer(imgEl.src, "image");
@@ -253,8 +271,12 @@ function showImageGenResult(evt) {
     card.appendChild(imgEl);
     card.appendChild(meta);
 
-    // スピナーの後に画像カードを挿入
-    container.appendChild(card);
+    // スピナーがあった位置に画像カードを挿入
+    if (anchor && anchor.parentNode === container) {
+      container.insertBefore(card, anchor);
+    } else {
+      container.appendChild(card);
+    }
   });
 
   scrollToBottom(container);

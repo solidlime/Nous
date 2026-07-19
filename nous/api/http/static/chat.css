@@ -1273,6 +1273,7 @@ input[type="range"].chat-field-input:focus {
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--bg-secondary);
+  min-height: 120px;
 }
 .chat-image-gen-card img {
   width: 100%;
@@ -1280,6 +1281,7 @@ input[type="range"].chat-field-input:focus {
   display: block;
   cursor: pointer;
   transition: opacity var(--duration-fast) var(--ease-apple);
+  min-height: 120px;
 }
 .chat-image-gen-card img:hover {
   opacity: 0.9;
@@ -1308,6 +1310,12 @@ input[type="range"].chat-field-input:focus {
   border-top: 2px solid var(--accent-blue);
   border-radius: 50%;
   animation: gen-spin 0.8s linear infinite;
+}
+.image-gen-error {
+  padding: 12px;
+  color: var(--accent-red);
+  font-size: 0.82rem;
+  text-align: center;
 }
 @keyframes gen-spin {
   to {
