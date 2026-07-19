@@ -4,13 +4,13 @@
 ;(function(N) {
 
 N.Core.CHART_COLORS = [
-  "#a78bfa", "#f472b6", "#60a5fa", "#34d399", "#fbbf24",
+  "#007aff", "#f472b6", "#60a5fa", "#34d399", "#fbbf24",
   "#fb923c", "#f87171", "#2dd4bf", "#a3e635", "#e879f9",
 ];
 
 N.Core.EMOTION_COLORS = {
   joy: "#fbbf24", sadness: "#60a5fa", anger: "#f87171",
-  fear: "#a78bfa", surprise: "#fb923c", disgust: "#6ee7b7",
+  fear: "#5856d6", surprise: "#fb923c", disgust: "#6ee7b7",
   love: "#ec4899", neutral: "#94a3b8", anticipation: "#F59E0B",
   trust: "#10B981", anxiety: "#8B5CF6", excitement: "#EC4899",
   frustration: "#DC2626", nostalgia: "#92400E", pride: "#F97316",
@@ -35,7 +35,7 @@ N.Core.EMOTION_BAR_COLORS = {
   excitement: "linear-gradient(90deg,#f59e0b,#fbbf24)",
   pride: "linear-gradient(90deg,#818cf8,#a5b4fc)",
   shame: "linear-gradient(90deg,#fb7185,#fda4af)",
-  nostalgia: "linear-gradient(90deg,#a78bfa,#c4b5fd)",
+  nostalgia: "linear-gradient(90deg,#5856d6,#a5b4fc)",
   anxiety: "linear-gradient(90deg,#f87171,#fca5a5)",
   contentment: "linear-gradient(90deg,#86efac,#bbf7d0)",
   frustration: "linear-gradient(90deg,#fb923c,#fdba74)",
@@ -47,7 +47,7 @@ N.Core.EMOTION_BAR_COLORS = {
 N.Core.BODY_BAR_COLORS = {
   fatigue: "linear-gradient(90deg,#f87171,#fca5a5)",
   warmth: "linear-gradient(90deg,#f9a8d4,#fda4af)",
-  arousal: "linear-gradient(90deg,#a78bfa,#c4b5fd)",
+  arousal: "linear-gradient(90deg,#5856d6,#a5b4fc)",
   heart_rate: "linear-gradient(90deg,#ef4444,#fca5a5)",
   pain: "linear-gradient(90deg,#f59e0b,#fcd34d)",
 };

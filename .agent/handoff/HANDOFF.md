@@ -1,45 +1,36 @@
-# HANDOFF — 2026-07-18
+# HANDOFF — 2026-07-20
 
 ## セッション概要
 
-portrait 機能をコードベースから完全削除。backend（Python）・frontend（JS/CSS/HTML）・tests・docs を全掃除。
+ハードコードされた旧紫色（`rgba(167,139,250,*)` / `#a78bfa` / `var(--accent-purple)`）をApple HIG準拠の青色系（`--accent-blue`）に置換。
 
 ## 完了したコミット
 
 ```
-bb0eeb8 chore: remove dead portrait constants and overview section
-fab6169 docs: remove portrait references from CLAUDE.md and llm_usage_guide.md
-35e0974 chore: remove portrait frontend references and fix tests
-7d94c07 chore: remove remaining portrait references from Python backend
-2cabf8a feat: remove portrait feature from Python backend
+d7efdc9 fix: replace hardcoded purple (#a78bfa/rgba(167,139,250)) with Apple HIG accent-blue CSS vars
 ```
 
 ## 実装サマリ
 
-### 完全削除したファイル（11件）
-- `nous/application/portrait/__init__.py`, `service.py`
-- `nous/api/mcp/_tools_portrait_scene.py`
-- `nous/api/http/routers/portrait.py`
-- `nous/api/http/static/chat/chat-portrait.js`
-- `nous/api/http/static/portrait.js`, `portrait.css`
-- `nous/domain/persona/portrait_prompt.py`
-- テスト 3ファイル（portrait関連テスト）
+### 変更ファイル（6件）
+| ファイル | 変更行数 | 種別 |
+|----------|---------|------|
+| `nous/api/http/static/base.css` | +12 | `--accent-blue-rgb` CSS変数定義（前提） |
+| `nous/api/http/static/chat.css` | 34 | 14箇所の `rgba(167,139,250,*)` 置換 |
+| `nous/api/http/static/overview.js` | 14 | 6箇所inline style + 1箇所chart.js canvas |
+| `nous/api/http/static/settings.js` | 4 | 2箇所inline style |
+| `nous/api/http/static/base.js` | 2 | 1箇所chart.js canvas grid |
+| `nous/api/http/static/graph.js` | 2 | 1箇所vis-network edge color |
 
-### 部分削除したファイル（20件+）
-- Python: settings.py, runtime_config.py, event_bus.py, use_cases.py, chat_config.py, connection.py, routes.py, tools.py, definitions.py, builtin.py, comfyui.py, routers/chat.py, routers/__init__.py
-- HTML/Sections: base.py, overview.py, chat.py
-- JS: chat-settings.js, settings.js, chat-core.js, constants.js, overview.js, sse.js
-- CSS: chat.css
-- Docs: CLAUDE.md, docs/llm_usage_guide.md
+### 置換ルール
+- **CSS通常**: `rgba(167,139,250,X)` → `rgba(var(--accent-blue-rgb), X)`
+- **CSS変数**: `color: var(--accent-purple)` → `color: var(--accent-blue)`（JS inline style内のみ）
+- **Canvas（chart.js/vis-network）**: `#a78bfa` → `#007aff`、`rgba(167,139,250,X)` → `rgba(0,122,255,X)`
+- **Canvas dark mode edge**: `rgba(109,40,217,X)` → `rgba(0,82,204,X)`
 
-### 変更行数
-- 5 commits, 約600行削除（11ファイル削除 + 25ファイル修正）
-- 最終テスト: 1535 passed, 1 deselected（pre-existing）
-
-### 注意点
-- `image_gen_comfyui_url` は `image_generate` ツール用に ChatConfig に残した
-- フロントエンドの portrait 領域は削除（絵文字プレースホルダは元から none）
-- 唯一の pre-existing failure: `test_should_summarize_false_when_not_configured`（compress step, unrelated）
+### 確認結果
+- 対象5ファイルから `rgba(167,139,250` と `#a78bfa` 完全除去済み
+- `core/constants.js` の `#a78bfa` は対象外（CHART_COLORS/EMOTION_COLORS定義）
 
 ## 残タスク
-- なし。portrait 削除は完全完了。
+- なし。ただし `core/constants.js` の `#a78bfa` はCHART_COLORS配列・EMOTION_COLORSマップに残存。別途対応判断が必要。

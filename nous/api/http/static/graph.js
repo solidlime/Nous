@@ -21,8 +21,8 @@ function _graphEdgeColor(isRelated) {
     if (isRelated) {
         return {
             color:     isLight ? 'rgba(0,82,204,0.75)' : 'rgba(0,122,255,0.85)',
-            highlight: isLight ? '#7c3aed' : '#c4b5fd',
-            hover:     isLight ? '#7c3aed' : '#c4b5fd'
+            highlight: isLight ? '#0051d5' : '#60a5fa',
+            hover:     isLight ? '#0051d5' : '#60a5fa'
         };
     }
     return {
