@@ -57,14 +57,17 @@ def register_image_gen_routes(mcp) -> None:
         prompt = body.get("prompt", "test image: a cute anime girl").strip()
         comfyui_url = getattr(config, "image_gen_comfyui_url", "") or body.get("comfyui_url", "http://localhost:8188")
 
-        # LoRA リスト
-        loras_raw = getattr(config, "image_gen_comfyui_loras", "")
-        loras: list[dict] = []
-        if loras_raw:
-            try:
-                loras = json.loads(loras_raw)
-            except (json.JSONDecodeError, TypeError):
-                pass
+        # LoRA リスト: POST body 指定があれば優先、なければDB設定から
+        if "loras" in body and isinstance(body["loras"], list):
+            loras = body["loras"]
+        else:
+            loras_raw = getattr(config, "image_gen_comfyui_loras", "")
+            loras: list[dict] = []
+            if loras_raw:
+                try:
+                    loras = json.loads(loras_raw)
+                except (json.JSONDecodeError, TypeError):
+                    pass
 
         provider = ComfyUIProvider(
             api_url=comfyui_url,

@@ -439,6 +439,15 @@ def render_chat_tab() -> str:
                                         </div>
                                     </div>
                                     <div>
+                                        <div class="chat-field-label" style="font-size:0.78rem;">最大解像度（LLMが指定できる上限）</div>
+                                        <div style="display:flex;gap:8px;align-items:center;">
+                                            <span style="font-size:0.78rem;">W</span>
+                                            <input type="number" id="chat-image-gen-max-width" class="chat-field-input" value="1200" min="64" max="4096" step="64" style="width:90px;" />
+                                            <span style="font-size:0.78rem;">H</span>
+                                            <input type="number" id="chat-image-gen-max-height" class="chat-field-input" value="1200" min="64" max="4096" step="64" style="width:90px;" />
+                                        </div>
+                                    </div>
+                                    <div>
                                         <div style="display:flex;justify-content:space-between;">
                                             <span class="chat-field-label" style="font-size:0.78rem;">Steps</span>
                                             <span id="chat-image-gen-steps-val" style="font-size:0.72rem;color:var(--accent-purple);">28</span>

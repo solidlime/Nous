@@ -189,7 +189,16 @@ function showImageGenSpinner(evt) {
 
   _imageGenSpinnerId = "image-gen-spinner-" + Date.now();
   spinner.id = _imageGenSpinnerId;
-  container.appendChild(spinner);
+
+  // 画像生成ツールバブルの直後にスピナーを配置
+  var toolBubble = container.querySelector(".chat-tool-call:last-of-type");
+  if (toolBubble && toolBubble.nextSibling) {
+    container.insertBefore(spinner, toolBubble.nextSibling);
+  } else if (toolBubble) {
+    container.appendChild(spinner);
+  } else {
+    container.appendChild(spinner);
+  }
 
   scrollToBottom(container);
 }
@@ -198,20 +207,24 @@ function showImageGenResult(evt) {
   const container = findChatLogContainer();
   if (!container) return;
 
-  // スピナーを削除
+  // スピナーを検索（後で差し替えるため、削除前に位置を記録）
+  var anchor = null;
   if (_imageGenSpinnerId) {
-    const spinner = document.getElementById(_imageGenSpinnerId);
-    if (spinner) spinner.remove();
+    var spinner = document.getElementById(_imageGenSpinnerId);
+    if (spinner) {
+      anchor = spinner.nextSibling;
+      spinner.remove();
+    }
     _imageGenSpinnerId = null;
   }
 
   if (!evt.images || !evt.images.length) return;
 
   evt.images.forEach(function (img) {
-    const card = document.createElement("div");
+    var card = document.createElement("div");
     card.className = "chat-image-gen-card";
 
-    const imgEl = document.createElement("img");
+    var imgEl = document.createElement("img");
     imgEl.src = "data:image/png;base64," + img.base64;
     imgEl.alt = img.revised_prompt || "生成画像";
     imgEl.title = img.revised_prompt || "";
@@ -223,26 +236,39 @@ function showImageGenResult(evt) {
       }
     };
 
-    const meta = document.createElement("div");
+    var meta = document.createElement("div");
     meta.className = "image-gen-meta";
 
     // 改訂プロンプトがあれば表示（先頭80文字）
-    const rp = img.revised_prompt || "";
+    var rp = img.revised_prompt || "";
     if (rp) {
-      const promptSpan = document.createElement("span");
+      var promptSpan = document.createElement("span");
       promptSpan.textContent =
         rp.length > 80 ? rp.substring(0, 80) + "..." : rp;
       promptSpan.style.fontStyle = "italic";
       meta.appendChild(promptSpan);
     }
 
-    const sizeSpan = document.createElement("span");
+    var sizeSpan = document.createElement("span");
     sizeSpan.textContent = evt.provider + " · " + (img.size || "");
     meta.appendChild(sizeSpan);
 
     card.appendChild(imgEl);
     card.appendChild(meta);
-    container.appendChild(card);
+
+    // スピナーの後に画像カードを挿入（スピナーがあった位置に）
+    if (anchor && anchor.parentNode) {
+      container.insertBefore(card, anchor);
+      anchor = card.nextSibling; // 次の画像カードもこの後ろに
+    } else {
+      // フォールバック：ツールバブルの直後を探す
+      var toolBubble = container.querySelector(".chat-tool-call:last-of-type");
+      if (toolBubble && toolBubble.nextSibling) {
+        container.insertBefore(card, toolBubble.nextSibling);
+      } else {
+        container.appendChild(card);
+      }
+    }
   });
 
   scrollToBottom(container);

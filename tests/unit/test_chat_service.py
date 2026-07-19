@@ -362,6 +362,9 @@ class TestChatConfigRepository:
                 image_gen_comfyui_scheduler TEXT DEFAULT 'normal',
                 image_gen_comfyui_seed INTEGER DEFAULT 0,
                 image_gen_comfyui_denoise REAL DEFAULT 0.7,
+                image_gen_self_portrait_prompt TEXT DEFAULT '',
+                image_gen_max_width INTEGER DEFAULT 1200,
+                image_gen_max_height INTEGER DEFAULT 1200,
                 image_gen_comfyui_speed_lora_path TEXT DEFAULT '',
                 image_gen_comfyui_speed_lora_weight REAL DEFAULT 1.0,
                 image_gen_comfyui_speed_lora_method TEXT DEFAULT 'lcm',
@@ -551,6 +554,7 @@ class TestChatService:
         state.fatigue = None
         state.warmth = None
         state.arousal = None
+        state.last_conversation_time = None
         state.heart_rate = None
         state.pain = None
         state_result = MagicMock()

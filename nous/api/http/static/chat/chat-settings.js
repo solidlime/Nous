@@ -233,6 +233,8 @@ function applyChatConfig(cfg) {
   set("chat-image-gen-checkpoint", cfg.image_gen_comfyui_checkpoint);
   set("chat-image-gen-width", cfg.image_gen_comfyui_width);
   set("chat-image-gen-height", cfg.image_gen_comfyui_height);
+  set("chat-image-gen-max-width", cfg.image_gen_max_width);
+  set("chat-image-gen-max-height", cfg.image_gen_max_height);
   set("chat-image-gen-steps", cfg.image_gen_comfyui_steps);
   set("chat-image-gen-cfg", cfg.image_gen_comfyui_cfg);
   set("chat-image-gen-sampler", cfg.image_gen_comfyui_sampler);
@@ -250,10 +252,14 @@ function applyChatConfig(cfg) {
     try {
       var loras = JSON.parse(cfg.image_gen_comfyui_loras);
       loras.forEach(function(l) { addLoraRow(l.path, l.weight); });
-    } catch(e) {}
+    } catch(e) { console.error('LoRA JSON parse error:', e); }
   }
   // スライダー値表示更新
   updateImageGenSliderLabels();
+  // URLが設定済みなら疎通確認を自動実行
+  if (cfg.image_gen_comfyui_url) {
+    checkComfyUIHealth();
+  }
 }
 
 function onChatProviderChange() {
@@ -374,6 +380,8 @@ async function saveChatConfig() {
     image_gen_comfyui_checkpoint: document.getElementById("chat-image-gen-checkpoint")?.value || "noobaiXLNAIXL_epsilonPred11Version.safetensors",
     image_gen_comfyui_width: parseInt(document.getElementById("chat-image-gen-width")?.value || "1024"),
     image_gen_comfyui_height: parseInt(document.getElementById("chat-image-gen-height")?.value || "1024"),
+    image_gen_max_width: parseInt(document.getElementById("chat-image-gen-max-width")?.value || "1200"),
+    image_gen_max_height: parseInt(document.getElementById("chat-image-gen-max-height")?.value || "1200"),
     image_gen_comfyui_steps: parseInt(document.getElementById("chat-image-gen-steps")?.value || "28"),
     image_gen_comfyui_cfg: parseFloat(document.getElementById("chat-image-gen-cfg")?.value || "5.5"),
     image_gen_comfyui_sampler: document.getElementById("chat-image-gen-sampler")?.value || "euler_ancestral",
@@ -787,9 +795,12 @@ function checkComfyUIHealth() {
   if (!url) { status.textContent = '⚠ URLを入力してください'; status.style.color = 'var(--accent-yellow)'; return; }
   status.textContent = '確認中...';
   status.style.color = 'var(--text-secondary)';
-  fetch('/api/image-gen/health?url=' + encodeURIComponent(url))
+  var controller = new AbortController();
+  var timeoutId = setTimeout(function() { controller.abort(); }, 10000);
+  fetch('/api/image-gen/health?url=' + encodeURIComponent(url), { signal: controller.signal })
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      clearTimeout(timeoutId);
       if (d.healthy) {
         status.textContent = '🟢 接続OK';
         status.style.color = 'var(--accent-green)';
@@ -799,7 +810,8 @@ function checkComfyUIHealth() {
       }
     })
     .catch(function(e) {
-      status.textContent = '🔴 ' + e.message;
+      clearTimeout(timeoutId);
+      status.textContent = '🔴 ' + (e.name === 'AbortError' ? 'タイムアウト' : e.message);
       status.style.color = 'var(--accent-red)';
     });
 }
@@ -815,6 +827,12 @@ function escHtml(s) {
     if (addBtn && !addBtn._bound) {
       addBtn._bound = true;
       addBtn.addEventListener('click', function() { addLoraRow('', 1.0); });
+    }
+    // 疎通確認ボタン
+    var healthBtn = document.getElementById('chat-image-gen-health-check');
+    if (healthBtn && !healthBtn._bound) {
+      healthBtn._bound = true;
+      healthBtn.addEventListener('click', checkComfyUIHealth);
     }
     // ページロード時にComfyUI URLが設定済みなら疎通確認
     if (document.getElementById('chat-image-gen-comfyui-url')?.value) {

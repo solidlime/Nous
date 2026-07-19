@@ -197,6 +197,9 @@ function autoPlayTts(text) {
     .replace(/`([^`]+)`/g, "$1")
     .replace(/[*_~>#-]/g, "")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/「[^」]*」/g, "")
+    .replace(/（[^）]*）/g, "")
+    .replace(/[―─—]/g, "...")
     .trim();
   if (!plainText) return;
 
@@ -260,6 +263,9 @@ async function playTts(btn, text) {
     .replace(/`([^`]+)`/g, "$1")
     .replace(/[*_~>#-]/g, "")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/「[^」]*」/g, "")
+    .replace(/（[^）]*）/g, "")
+    .replace(/[―─—]/g, "...")
     .trim();
   if (!plainText) return;
   

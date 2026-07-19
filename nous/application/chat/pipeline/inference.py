@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from nous.application.chat.events import (
     ErrorSSE,
     ImageGenResultSSE,
+    ImageGenStartSSE,
     TextDeltaSSE,
     ToolCallSSE,
     ToolResultSSE,
@@ -39,7 +40,7 @@ class InferenceStep:
         turn_ctx: ChatTurnContext,
         registry: ToolRegistry,
         effective_temp: float | None = None,
-    ) -> AsyncIterator[TextDeltaSSE | ToolCallSSE | ToolResultSSE | ErrorSSE]:
+    ) -> AsyncIterator[TextDeltaSSE | ToolCallSSE | ToolResultSSE | ErrorSSE | ImageGenStartSSE | ImageGenResultSSE]:
         api_key = config.get_effective_api_key()
         if not api_key:
             yield ErrorSSE(message="APIキーが設定されていません。チャット設定でAPIキーを入力してください。")
@@ -193,6 +194,21 @@ class InferenceStep:
                 break
 
             enable_parallel = getattr(config, "enable_parallel_tools", True)
+
+            # Yield ImageGenStartSSE before executing image_generate tools
+            for tc in pending_tool_calls:
+                if tc.tool_name == "image_generate":
+                    ti = tc.tool_input or {}
+                    n = ti.get("n", 1)
+                    try:
+                        n = int(n)
+                    except (ValueError, TypeError):
+                        n = 1
+                    yield ImageGenStartSSE(
+                        provider="comfyui",
+                        prompt=str(ti.get("prompt", ""))[:100],
+                        n=max(1, min(4, n)),
+                    )
 
             async def _exec_one(tc: ToolCallEvent):
                 result = await registry.execute(ctx, config, tc.tool_name, tc.tool_input)
