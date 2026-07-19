@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import json
 from typing import TYPE_CHECKING
 
@@ -223,6 +224,8 @@ class InferenceStep:
             for tc, truncated, tool_result in results:
                 # If tool result contains images, emit ImageGenResultSSE to frontend
                 if isinstance(tool_result, dict) and tool_result.get("images"):
+                    imgs = tool_result["images"]
+                    logger.info("ImageGenResultSSE: yielding %d image(s) to frontend", len(imgs) if isinstance(imgs, list) else 0)
                     yield ImageGenResultSSE(
                         provider=tool_result.get("provider", "comfyui"),
                         images=tool_result["images"],
