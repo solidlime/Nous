@@ -64,7 +64,7 @@ class ChatConfig(BaseModel):
     image_gen_comfyui_url: str = ""  # ComfyUI APIエンドポイント
     # ComfyUI 詳細設定
     image_gen_comfyui_checkpoint: str = "noobaiXLNAIXL_epsilonPred11Version.safetensors"
-    image_gen_comfyui_loras: str = ""  # JSON: [{"path":"...","weight":1.0}]
+    image_gen_comfyui_loras: str = '[{"path":"TheHerta_Noob_bs1_noTE_trig_64-4-000100.safetensors","weight":1.0}]'
     image_gen_comfyui_width: int = 1024
     image_gen_comfyui_height: int = 1024
     image_gen_comfyui_steps: int = 28

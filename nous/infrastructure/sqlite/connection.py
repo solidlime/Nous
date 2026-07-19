@@ -221,7 +221,7 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     image_gen_stability_url TEXT DEFAULT '',
     image_gen_comfyui_url TEXT DEFAULT '',
     image_gen_comfyui_checkpoint TEXT DEFAULT 'noobaiXLNAIXL_epsilonPred11Version.safetensors',
-    image_gen_comfyui_loras TEXT DEFAULT '',
+    image_gen_comfyui_loras TEXT DEFAULT '[{"path":"TheHerta_Noob_bs1_noTE_trig_64-4-000100.safetensors","weight":1.0}]',
     image_gen_comfyui_width INTEGER DEFAULT 1024,
     image_gen_comfyui_height INTEGER DEFAULT 1024,
     image_gen_comfyui_steps INTEGER DEFAULT 28,
@@ -470,7 +470,7 @@ class SQLiteConnection:
         # Migration: add ComfyUI detailed fields if missing
         _comfyui_detail_migrations = [
             ("image_gen_comfyui_checkpoint", "TEXT", "'noobaiXLNAIXL_epsilonPred11Version.safetensors'"),
-            ("image_gen_comfyui_loras", "TEXT", "''"),
+            ("image_gen_comfyui_loras", "TEXT", "'[{\"path\":\"TheHerta_Noob_bs1_noTE_trig_64-4-000100.safetensors\",\"weight\":1.0}]'"),
             ("image_gen_comfyui_width", "INTEGER", "1024"),
             ("image_gen_comfyui_height", "INTEGER", "1024"),
             ("image_gen_comfyui_steps", "INTEGER", "28"),
