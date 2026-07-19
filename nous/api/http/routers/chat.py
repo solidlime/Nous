@@ -96,6 +96,7 @@ def register_chat_routes(mcp) -> None:
             "image_gen_comfyui_scheduler",
             "image_gen_comfyui_seed",
             "image_gen_comfyui_denoise",
+            "image_gen_self_portrait_prompt",
             "image_gen_comfyui_speed_lora_path",
             "image_gen_comfyui_speed_lora_weight",
             "image_gen_comfyui_speed_lora_method",

@@ -73,6 +73,8 @@ class ChatConfig(BaseModel):
     image_gen_comfyui_scheduler: str = "normal"
     image_gen_comfyui_seed: int = 0  # 0=ランダム
     image_gen_comfyui_denoise: float = 0.7
+    # 自画像生成用プロンプト（キャラ外見のSDタグ・LoRAトリガーワード・トーンなどを含む固定プロンプト文字列）
+    image_gen_self_portrait_prompt: str = ""
     # 高速化 LoRA
     image_gen_comfyui_speed_lora_path: str = "lcm_lora_sdxl.safetensors"
     image_gen_comfyui_speed_lora_weight: float = 1.0
@@ -288,7 +290,7 @@ class ChatConfigRepository:
             "image_gen_comfyui_width, image_gen_comfyui_height, "
             "image_gen_comfyui_steps, image_gen_comfyui_cfg, "
             "image_gen_comfyui_sampler, image_gen_comfyui_scheduler, "
-            "image_gen_comfyui_seed, image_gen_comfyui_denoise, "
+            "image_gen_comfyui_seed, image_gen_comfyui_denoise, image_gen_self_portrait_prompt, "
             "image_gen_comfyui_speed_lora_path, image_gen_comfyui_speed_lora_weight, "
             "image_gen_comfyui_speed_lora_method, "
             "enable_memory_tools, debug_mode, "
@@ -372,7 +374,7 @@ class ChatConfigRepository:
                     image_gen_comfyui_width, image_gen_comfyui_height,
                     image_gen_comfyui_steps, image_gen_comfyui_cfg,
                     image_gen_comfyui_sampler, image_gen_comfyui_scheduler,
-                    image_gen_comfyui_seed, image_gen_comfyui_denoise,
+                    image_gen_comfyui_seed, image_gen_comfyui_denoise, image_gen_self_portrait_prompt,
                     image_gen_comfyui_speed_lora_path, image_gen_comfyui_speed_lora_weight,
                     image_gen_comfyui_speed_lora_method,
                     enable_memory_tools, debug_mode,
@@ -385,7 +387,7 @@ class ChatConfigRepository:
                           irodori_cfg_scale_caption, irodori_chunk_min_chars, irodori_seed,
                            disabled_tools,
                            updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
@@ -433,6 +435,7 @@ class ChatConfigRepository:
                  image_gen_comfyui_scheduler=excluded.image_gen_comfyui_scheduler,
                  image_gen_comfyui_seed=excluded.image_gen_comfyui_seed,
                  image_gen_comfyui_denoise=excluded.image_gen_comfyui_denoise,
+                 image_gen_self_portrait_prompt=excluded.image_gen_self_portrait_prompt,
                  image_gen_comfyui_speed_lora_path=excluded.image_gen_comfyui_speed_lora_path,
                  image_gen_comfyui_speed_lora_weight=excluded.image_gen_comfyui_speed_lora_weight,
                  image_gen_comfyui_speed_lora_method=excluded.image_gen_comfyui_speed_lora_method,
@@ -508,6 +511,7 @@ class ChatConfigRepository:
                 config.image_gen_comfyui_scheduler,
                 config.image_gen_comfyui_seed,
                 config.image_gen_comfyui_denoise,
+                config.image_gen_self_portrait_prompt,
                 config.image_gen_comfyui_speed_lora_path,
                 config.image_gen_comfyui_speed_lora_weight,
                 config.image_gen_comfyui_speed_lora_method,
