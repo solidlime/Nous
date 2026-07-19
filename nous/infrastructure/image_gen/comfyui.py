@@ -162,12 +162,15 @@ class ComfyUIProvider(ImageGenProvider):
         raise RuntimeError("ComfyUI generation timed out after 180s")
 
     def _build_workflow(self, prompt: str, size: str, n: int, image_filename: str | None = None) -> dict:
-        """ワークフロー JSON を構築。
+        """ワークフロー JSON を構築（パラメータ駆動）。
 
         image_filename が指定された場合、img2img ワークフロー
         （LoadImage → VAEEncode → KSampler(denoise<1.0)）を使用。
         指定がない場合、従来の txt2img（EmptyLatentImage）を使用。
         """
+        # ── seed: 0 はランダム ──
+        seed = self._seed if self._seed != 0 else random.randint(0, 2**63 - 1)
+
         if "x" in size:
             parts = size.split("x")
             w, h = int(parts[0]), int(parts[1])
@@ -180,12 +183,12 @@ class ComfyUIProvider(ImageGenProvider):
                 "3": {
                     "class_type": "KSampler",
                     "inputs": {
-                        "seed": 0,
-                        "steps": 30,
-                        "cfg": 5.0,
-                        "sampler_name": "euler_ancestral",
-                        "scheduler": "normal",
-                        "denoise": 0.7,  # img2img: 元画像の特徴を残す
+                        "seed": seed,
+                        "steps": self._steps,
+                        "cfg": self._cfg,
+                        "sampler_name": self._sampler,
+                        "scheduler": self._scheduler,
+                        "denoise": self._denoise,
                         "model": ["4", 0],
                         "positive": ["6", 0],
                         "negative": ["7", 0],
@@ -194,7 +197,7 @@ class ComfyUIProvider(ImageGenProvider):
                 },
                 "4": {
                     "class_type": "CheckpointLoaderSimple",
-                    "inputs": {"ckpt_name": "animagine-xl-4.0.safetensors"},
+                    "inputs": {"ckpt_name": self._checkpoint},
                 },
                 "6": {
                     "class_type": "CLIPTextEncode",
@@ -230,11 +233,11 @@ class ComfyUIProvider(ImageGenProvider):
                 "3": {
                     "class_type": "KSampler",
                     "inputs": {
-                        "seed": 0,
-                        "steps": 30,
-                        "cfg": 5.0,
-                        "sampler_name": "euler_ancestral",
-                        "scheduler": "normal",
+                        "seed": seed,
+                        "steps": self._steps,
+                        "cfg": self._cfg,
+                        "sampler_name": self._sampler,
+                        "scheduler": self._scheduler,
                         "denoise": 1.0,
                         "model": ["4", 0],
                         "positive": ["6", 0],
@@ -244,7 +247,7 @@ class ComfyUIProvider(ImageGenProvider):
                 },
                 "4": {
                     "class_type": "CheckpointLoaderSimple",
-                    "inputs": {"ckpt_name": "animagine-xl-4.0.safetensors"},
+                    "inputs": {"ckpt_name": self._checkpoint},
                 },
                 "5": {
                     "class_type": "EmptyLatentImage",
