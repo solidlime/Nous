@@ -828,12 +828,6 @@ function escHtml(s) {
       addBtn._bound = true;
       addBtn.addEventListener('click', function() { addLoraRow('', 1.0); });
     }
-    // 疎通確認ボタン
-    var healthBtn = document.getElementById('chat-image-gen-health-check');
-    if (healthBtn && !healthBtn._bound) {
-      healthBtn._bound = true;
-      healthBtn.addEventListener('click', checkComfyUIHealth);
-    }
     // ページロード時にComfyUI URLが設定済みなら疎通確認
     if (document.getElementById('chat-image-gen-comfyui-url')?.value) {
       checkComfyUIHealth();

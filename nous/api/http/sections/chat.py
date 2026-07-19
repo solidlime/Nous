@@ -410,7 +410,6 @@ def render_chat_tab() -> str:
                                         <div class="chat-field-label">ComfyUI URL</div>
                                         <div style="display:flex;gap:4px;">
                                             <input type="text" id="chat-image-gen-comfyui-url" class="chat-field-input" placeholder="http://192.168.50.150:8188" style="flex:1;" />
-                                            <button type="button" id="chat-image-gen-health-check" class="chat-btn-sm">接続確認</button>
                                         </div>
                                     </div>
                                     <div>
