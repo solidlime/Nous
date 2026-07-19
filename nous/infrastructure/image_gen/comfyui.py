@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import random
 import time
 from typing import Any
 
@@ -22,8 +23,37 @@ class ComfyUIProvider(ImageGenProvider):
       - reference_image を渡すと ComfyUI にアップロードし img2img ワークフローを構築
     """
 
-    def __init__(self, api_url: str = "http://localhost:8188") -> None:
+    def __init__(
+        self,
+        api_url: str = "http://localhost:8188",
+        checkpoint: str = "noobai-xl-epsilon-pred-11.safetensors",
+        loras: list[dict] | None = None,
+        speed_lora_path: str = "",
+        speed_lora_weight: float = 1.0,
+        speed_lora_method: str = "",
+        width: int = 1024,
+        height: int = 1024,
+        steps: int = 28,
+        cfg: float = 5.5,
+        sampler: str = "euler_ancestral",
+        scheduler: str = "normal",
+        seed: int = 0,
+        denoise: float = 0.7,
+    ) -> None:
         self._api_url = api_url.rstrip("/")
+        self._checkpoint = checkpoint
+        self._loras = loras or []
+        self._speed_lora_path = speed_lora_path
+        self._speed_lora_weight = speed_lora_weight
+        self._speed_lora_method = speed_lora_method
+        self._width = width
+        self._height = height
+        self._steps = steps
+        self._cfg = cfg
+        self._sampler = sampler
+        self._scheduler = scheduler
+        self._seed = seed
+        self._denoise = denoise
         self._client: httpx.AsyncClient | None = None
 
     @property
