@@ -108,9 +108,10 @@ def register_tts_routes(mcp) -> None:
                 caption = "\n".join(caption_parts)
 
         # ---- TTS audio cache ----
+        voice_speed = getattr(chat_config, "voice_speed", 1.0)
         cache_dir = Path(ctx.settings.data_root) / "tts_cache" / persona
         cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_key = hashlib.sha256(f"{text}|{emotion}|{caption or ''}".encode()).hexdigest()
+        cache_key = hashlib.sha256(f"{text}|{emotion}|{caption or ''}|{voice_speed}".encode()).hexdigest()
         cache_path = cache_dir / f"{cache_key}.wav"
 
         if cache_path.exists():
@@ -125,7 +126,6 @@ def register_tts_routes(mcp) -> None:
             )
 
         try:
-            voice_speed = getattr(chat_config, "voice_speed", 1.0)
             audio_bytes = await engine.synthesize(
                 text=text,
                 emotion=emotion,
