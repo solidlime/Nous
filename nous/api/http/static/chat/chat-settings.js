@@ -228,60 +228,45 @@ function applyChatConfig(cfg) {
     }
   }
 
-  // 画像生成設定
+  // 画像生成 — ComfyUI 詳細
   const igEnabled = document.getElementById("chat-image-gen-enabled");
-  const igProvider = document.getElementById("chat-image-gen-provider");
-  const igDalleModel = document.getElementById("chat-image-gen-dalle-model");
-  const igStabilityUrl = document.getElementById(
-    "chat-image-gen-sd-webui-url",
-  ) || document.getElementById("chat-image-gen-stability-url");
-  const igComfyuiUrl = document.getElementById(
-    "chat-image-gen-comfyui-url",
-  );
   const igOptions = document.getElementById("chat-image-gen-options");
-  const igDalleOptions = document.getElementById(
-    "chat-image-gen-dalle-options",
-  );
-  const igStabilityOptions = document.getElementById(
-    "chat-image-gen-sd-webui-options",
-  ) || document.getElementById("chat-image-gen-stability-options");
-  const igComfyuiOptions = document.getElementById(
-    "chat-image-gen-comfyui-options",
-  );
-
   if (igEnabled) igEnabled.checked = cfg.image_gen_enabled || false;
-  if (igProvider) igProvider.value = cfg.image_gen_provider || "openai";
-  if (igDalleModel)
-    igDalleModel.value = cfg.image_gen_dalle_model || "dall-e-3";
-  if (igStabilityUrl) igStabilityUrl.value = cfg.image_gen_stability_url || "";
-  const igGeminiModel = document.getElementById("chat-image-gen-gemini-model");
-  const igReplicateModel = document.getElementById("chat-image-gen-replicate-model");
-  const igReplicateApiKey = document.getElementById("chat-image-gen-replicate-api-key");
-  const igGeminiOptions = document.getElementById("chat-image-gen-gemini-options");
-  const igReplicateOptions = document.getElementById("chat-image-gen-replicate-options");
-
-  if (igComfyuiUrl) igComfyuiUrl.value = cfg.image_gen_comfyui_url || "";
-  if (igGeminiModel) igGeminiModel.value = cfg.image_gen_gemini_model || "google/gemini-2.5-flash-image";
-  if (igReplicateModel) igReplicateModel.value = cfg.image_gen_replicate_model || "black-forest-labs/flux-schnell";
-  if (igReplicateApiKey) igReplicateApiKey.value = cfg.image_gen_replicate_api_key || "";
-
+  set("chat-image-gen-comfyui-url", cfg.image_gen_comfyui_url);
+  set("chat-image-gen-checkpoint", cfg.image_gen_comfyui_checkpoint);
+  set("chat-image-gen-width", cfg.image_gen_comfyui_width);
+  set("chat-image-gen-height", cfg.image_gen_comfyui_height);
+  set("chat-image-gen-steps", cfg.image_gen_comfyui_steps);
+  set("chat-image-gen-cfg", cfg.image_gen_comfyui_cfg);
+  set("chat-image-gen-sampler", cfg.image_gen_comfyui_sampler);
+  set("chat-image-gen-scheduler", cfg.image_gen_comfyui_scheduler);
+  set("chat-image-gen-seed", cfg.image_gen_comfyui_seed);
+  set("chat-image-gen-denoise", cfg.image_gen_comfyui_denoise);
+  set("chat-image-gen-speed-lora-method", cfg.image_gen_comfyui_speed_lora_method);
+  set("chat-image-gen-speed-lora-path", cfg.image_gen_comfyui_speed_lora_path);
+  set("chat-image-gen-speed-lora-weight", cfg.image_gen_comfyui_speed_lora_weight);
+  // speed lora options 表示/非表示
+  var speedSel = document.getElementById("chat-image-gen-speed-lora-method");
+  if (speedSel) {
+    var speedOpts = document.getElementById("chat-image-gen-speed-lora-opts");
+    if (speedOpts) speedOpts.style.display = speedSel.value ? "" : "none";
+  }
+  // LoRA リスト復元
+  if (cfg.image_gen_comfyui_loras) {
+    try {
+      var loras = JSON.parse(cfg.image_gen_comfyui_loras);
+      loras.forEach(function(l) { addLoraToList(l.path, l.weight); });
+    } catch(e) {}
+  }
   // 表示切替
   function updateImageGenUI() {
     if (!igOptions) return;
-    const enabled = igEnabled && igEnabled.checked;
-    igOptions.style.display = enabled ? "" : "none";
-    if (igProvider && igDalleOptions && igStabilityOptions && igComfyuiOptions) {
-      const prov = igProvider.value;
-      igDalleOptions.style.display = prov === "openai" ? "" : "none";
-      igStabilityOptions.style.display = prov === "stability" ? "" : "none";
-      igComfyuiOptions.style.display = prov === "comfyui" ? "" : "none";
-      if (igGeminiOptions) igGeminiOptions.style.display = prov === "gemini" ? "" : "none";
-      if (igReplicateOptions) igReplicateOptions.style.display = prov === "replicate" ? "" : "none";
-    }
+    igOptions.style.display = (igEnabled && igEnabled.checked) ? "" : "none";
   }
   if (igEnabled) igEnabled.addEventListener("change", updateImageGenUI);
-  if (igProvider) igProvider.addEventListener("change", updateImageGenUI);
   updateImageGenUI();
+  // スライダー値表示更新
+  updateImageGenSliderLabels();
 }
 
 function onChatProviderChange() {
@@ -396,33 +381,24 @@ async function saveChatConfig() {
       document.getElementById("chat-mental-model-min-samples")?.value || "3",
     ),
     debug_mode: getChecked("chat-debug-mode"),
-    // 画像生成設定
+    // 画像生成設定 — ComfyUI
     image_gen_enabled: document.getElementById("chat-image-gen-enabled")
       ? document.getElementById("chat-image-gen-enabled").checked
       : false,
-    image_gen_provider: document.getElementById("chat-image-gen-provider")
-      ? document.getElementById("chat-image-gen-provider").value
-      : "openai",
-    image_gen_dalle_model: document.getElementById("chat-image-gen-dalle-model")
-      ? document.getElementById("chat-image-gen-dalle-model").value
-      : "dall-e-3",
-    image_gen_stability_url: document.getElementById("chat-image-gen-sd-webui-url")?.value
-      ?? document.getElementById("chat-image-gen-stability-url")?.value
-      ?? "",
-    image_gen_comfyui_url: document.getElementById(
-      "chat-image-gen-comfyui-url",
-    )
-      ? document.getElementById("chat-image-gen-comfyui-url").value.trim()
-      : "",
-    image_gen_gemini_model: document.getElementById("chat-image-gen-gemini-model")
-      ? document.getElementById("chat-image-gen-gemini-model").value
-      : "google/gemini-2.5-flash-image",
-    image_gen_replicate_model: document.getElementById("chat-image-gen-replicate-model")
-      ? document.getElementById("chat-image-gen-replicate-model").value
-      : "black-forest-labs/flux-schnell",
-    image_gen_replicate_api_key: document.getElementById("chat-image-gen-replicate-api-key")
-      ? document.getElementById("chat-image-gen-replicate-api-key").value.trim()
-      : "",
+    image_gen_comfyui_url: (document.getElementById("chat-image-gen-comfyui-url")?.value || "").trim(),
+    image_gen_comfyui_checkpoint: document.getElementById("chat-image-gen-checkpoint")?.value || "noobai-xl-epsilon-pred-11.safetensors",
+    image_gen_comfyui_width: parseInt(document.getElementById("chat-image-gen-width")?.value || "1024"),
+    image_gen_comfyui_height: parseInt(document.getElementById("chat-image-gen-height")?.value || "1024"),
+    image_gen_comfyui_steps: parseInt(document.getElementById("chat-image-gen-steps")?.value || "28"),
+    image_gen_comfyui_cfg: parseFloat(document.getElementById("chat-image-gen-cfg")?.value || "5.5"),
+    image_gen_comfyui_sampler: document.getElementById("chat-image-gen-sampler")?.value || "euler_ancestral",
+    image_gen_comfyui_scheduler: document.getElementById("chat-image-gen-scheduler")?.value || "normal",
+    image_gen_comfyui_seed: parseInt(document.getElementById("chat-image-gen-seed")?.value || "0"),
+    image_gen_comfyui_denoise: parseFloat(document.getElementById("chat-image-gen-denoise")?.value || "0.7"),
+    image_gen_comfyui_speed_lora_method: document.getElementById("chat-image-gen-speed-lora-method")?.value || "",
+    image_gen_comfyui_speed_lora_path: document.getElementById("chat-image-gen-speed-lora-path")?.value || "",
+    image_gen_comfyui_speed_lora_weight: parseFloat(document.getElementById("chat-image-gen-speed-lora-weight")?.value || "1.0"),
+    image_gen_comfyui_loras: JSON.stringify(getLoraList()),
     // Voice / TTS settings (TE04)
     voice_url: document.getElementById("chat-voice-url")?.value || "",
     voice_auto_play: getChecked("chat-voice-auto-play"),
@@ -749,6 +725,139 @@ async function formatMcpJson() {
 }
 
 // ------------------------------------------------------------------
+// ComfyUI helper functions
+// ------------------------------------------------------------------
+var _loraList = [];
+
+function addLoraToList(path, weight) {
+  _loraList.push({path: path, weight: weight || 1.0});
+  renderLoraList();
+}
+
+function removeLoraFromList(idx) {
+  _loraList.splice(idx, 1);
+  renderLoraList();
+}
+
+function getLoraList() { return _loraList; }
+
+function renderLoraList() {
+  var container = document.getElementById('chat-image-gen-lora-list');
+  if (!container) return;
+  var h = '';
+  _loraList.forEach(function(l, i) {
+    h += '<div style="display:flex;gap:4px;align-items:center;font-size:0.85em;margin-top:2px;">';
+    h += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(l.path) + '</span>';
+    h += '<span style="color:var(--text-secondary);">×' + l.weight.toFixed(1) + '</span>';
+    h += '<button type="button" onclick="removeLoraFromList(' + i + ')" style="color:var(--accent-red);background:none;border:none;cursor:pointer;">×</button>';
+    h += '</div>';
+  });
+  container.innerHTML = h;
+}
+
+function updateImageGenSliderLabels() {
+  var steps = document.getElementById('chat-image-gen-steps');
+  var cfg = document.getElementById('chat-image-gen-cfg');
+  var denoise = document.getElementById('chat-image-gen-denoise');
+  if (steps) {
+    var sv = document.getElementById('chat-image-gen-steps-val');
+    if (sv) sv.textContent = steps.value;
+    steps.oninput = function() { if (sv) sv.textContent = steps.value; };
+  }
+  if (cfg) {
+    var cv = document.getElementById('chat-image-gen-cfg-val');
+    if (cv) cv.textContent = cfg.value;
+    cfg.oninput = function() { if (cv) cv.textContent = cfg.value; };
+  }
+  if (denoise) {
+    var dv = document.getElementById('chat-image-gen-denoise-val');
+    if (dv) dv.textContent = denoise.value;
+    denoise.oninput = function() { if (dv) dv.textContent = denoise.value; };
+  }
+}
+
+function updateSpeedLoraHint() {
+  var method = document.getElementById('chat-image-gen-speed-lora-method');
+  var opts = document.getElementById('chat-image-gen-speed-lora-opts');
+  var hint = document.getElementById('chat-image-gen-speed-lora-hint');
+  if (!method || !opts) return;
+  var hints = {
+    'lcm': '推奨: cfg=1.5, sampler=lcm, scheduler=sgm_uniform, steps=4-8',
+    'lightning': '推奨: cfg=0, sampler=euler, scheduler=sgm_uniform, steps=4',
+    'hyper': '推奨: cfg=5.0, sampler=euler, scheduler=sgm_uniform, steps=4-8 (要カスタムノード)',
+    'tcd': '推奨: cfg=1.0, sampler=euler_ancestral, scheduler=normal, steps=4-8 (要カスタムノード)'
+  };
+  opts.style.display = method.value ? '' : 'none';
+  if (hint) hint.textContent = hints[method.value] || '';
+}
+
+function checkComfyUIHealth() {
+  var url = document.getElementById('chat-image-gen-comfyui-url').value.trim();
+  var status = document.getElementById('chat-image-gen-health-status');
+  if (!url) { status.textContent = '⚠ URLを入力してください'; status.style.color = 'var(--accent-yellow)'; return; }
+  status.textContent = '確認中...';
+  status.style.color = 'var(--text-secondary)';
+  fetch('/api/image-gen/health?url=' + encodeURIComponent(url))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.healthy) {
+        status.textContent = '🟢 接続OK';
+        status.style.color = 'var(--accent-green)';
+      } else {
+        status.textContent = '🔴 ' + (d.error || '接続失敗');
+        status.style.color = 'var(--accent-red)';
+      }
+    })
+    .catch(function(e) {
+      status.textContent = '🔴 ' + e.message;
+      status.style.color = 'var(--accent-red)';
+    });
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// イベントリスナー初期化 (DOMContentLoaded 安全策)
+(function initImageGenEvents() {
+  document.addEventListener('DOMContentLoaded', function() {
+    var loraAddBtn = document.getElementById('chat-image-gen-lora-add');
+    if (loraAddBtn) {
+      loraAddBtn.addEventListener('click', function() {
+        var path = document.getElementById('chat-image-gen-lora-path');
+        var weight = document.getElementById('chat-image-gen-lora-weight');
+        if (path && path.value.trim()) {
+          addLoraToList(path.value.trim(), parseFloat(weight ? weight.value : 1.0));
+          path.value = '';
+        }
+      });
+    }
+    var speedMethod = document.getElementById('chat-image-gen-speed-lora-method');
+    if (speedMethod) speedMethod.addEventListener('change', updateSpeedLoraHint);
+    var healthBtn = document.getElementById('chat-image-gen-health-check');
+    if (healthBtn) healthBtn.addEventListener('click', checkComfyUIHealth);
+  });
+  // DOMContentLoaded 済みの場合のフォールバック
+  if (document.readyState !== 'loading') {
+    var loraAddBtn = document.getElementById('chat-image-gen-lora-add');
+    if (loraAddBtn) {
+      loraAddBtn.addEventListener('click', function() {
+        var path = document.getElementById('chat-image-gen-lora-path');
+        var weight = document.getElementById('chat-image-gen-lora-weight');
+        if (path && path.value.trim()) {
+          addLoraToList(path.value.trim(), parseFloat(weight ? weight.value : 1.0));
+          path.value = '';
+        }
+      });
+    }
+    var speedMethod = document.getElementById('chat-image-gen-speed-lora-method');
+    if (speedMethod) speedMethod.addEventListener('change', updateSpeedLoraHint);
+    var healthBtn = document.getElementById('chat-image-gen-health-check');
+    if (healthBtn) healthBtn.addEventListener('click', checkComfyUIHealth);
+  }
+})();
+
+// ------------------------------------------------------------------
 // Register namespace and global backward-compat aliases
 // ------------------------------------------------------------------
 N.Chat.settings = {
@@ -766,5 +875,11 @@ window.parseMcpJson = parseMcpJson;
 window.renderSkillsList = renderSkillsList;
 window.loosenJson = loosenJson;
 window.formatMcpJson = formatMcpJson;
+window.addLoraToList = addLoraToList;
+window.removeLoraFromList = removeLoraFromList;
+window.checkComfyUIHealth = checkComfyUIHealth;
+window.updateImageGenSliderLabels = updateImageGenSliderLabels;
+window.updateSpeedLoraHint = updateSpeedLoraHint;
+window.getLoraList = getLoraList;
 
 })(window.Nous);

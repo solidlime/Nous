@@ -137,56 +137,88 @@ def render_chat_tab() -> str:
                                         </label>
                                     </div>
                                     <div id="chat-image-gen-options" style="display:none;">
-                                        <div class="chat-config-row" style="margin-bottom:6px;">
-                                            <div class="chat-field-label">プロバイダ:</div>
-                                            <select id="chat-image-gen-provider" class="chat-field-input">
-                                                <option value="openai">OpenAI (DALL-E)</option>
-                                                <option value="stability">Stable Diffusion</option>
-                                                <option value="comfyui">ComfyUI</option>
-                                                <option value="gemini">Gemini (OpenRouter)</option>
-                                                <option value="replicate">Replicate (FLUX)</option>
+                                        <div class="chat-config-subsection" style="margin-top:8px;">
+                                            <label style="font-size:0.85em;color:var(--text-secondary);">ComfyUI URL</label>
+                                            <div style="display:flex;gap:4px;">
+                                                <input type="text" id="chat-image-gen-comfyui-url" placeholder="http://comfyui.local:8188" style="flex:1;">
+                                                <button type="button" id="chat-image-gen-health-check" class="chat-btn-sm">接続確認</button>
+                                            </div>
+                                            <span id="chat-image-gen-health-status" style="font-size:0.8em;margin-left:4px;"></span>
+                                        </div>
+                                        <div class="chat-config-subsection" style="margin-top:8px;">
+                                            <label for="chat-image-gen-checkpoint">チェックポイント</label>
+                                            <input type="text" id="chat-image-gen-checkpoint" placeholder="noobai-xl-epsilon-pred-11.safetensors" style="width:100%;">
+                                        </div>
+                                        <div class="chat-config-subsection" style="margin-top:8px;">
+                                            <label>LoRA</label>
+                                            <div id="chat-image-gen-lora-list"></div>
+                                            <div style="display:flex;gap:4px;margin-top:4px;">
+                                                <input type="text" id="chat-image-gen-lora-path" placeholder="LoRAパス (.safetensors)" style="flex:1;">
+                                                <input type="number" id="chat-image-gen-lora-weight" value="1.0" min="0.1" max="2.0" step="0.1" style="width:60px;">
+                                                <button type="button" id="chat-image-gen-lora-add" class="chat-btn-sm">追加</button>
+                                            </div>
+                                        </div>
+                                        <div class="chat-config-subsection" style="margin-top:8px;">
+                                            <label>高速化LoRA</label>
+                                            <select id="chat-image-gen-speed-lora-method">
+                                                <option value="">使用しない</option>
+                                                <option value="lcm">LCM LoRA</option>
+                                                <option value="lightning">Lightning LoRA</option>
+                                                <option value="hyper">Hyper-SD LoRA</option>
+                                                <option value="tcd">TCD LoRA</option>
+                                            </select>
+                                            <div id="chat-image-gen-speed-lora-opts" style="display:none;margin-top:4px;">
+                                                <input type="text" id="chat-image-gen-speed-lora-path" placeholder="LoRAパス (例: lcm_lora_sdxl.safetensors)" style="width:100%;">
+                                                <label style="font-size:0.8em;">重み: <input type="number" id="chat-image-gen-speed-lora-weight" value="1.0" min="0.1" max="2.0" step="0.1" style="width:60px;"></label>
+                                                <div id="chat-image-gen-speed-lora-hint" style="font-size:0.75em;color:var(--text-secondary);margin-top:2px;"></div>
+                                            </div>
+                                        </div>
+                                        <div class="chat-config-subsection" style="margin-top:8px;">
+                                            <label>解像度</label>
+                                            <div style="display:flex;gap:4px;">
+                                                <label style="font-size:0.8em;">W: <input type="number" id="chat-image-gen-width" value="1024" min="256" max="2048" step="64" style="width:80px;"></label>
+                                                <label style="font-size:0.8em;">H: <input type="number" id="chat-image-gen-height" value="1024" min="256" max="2048" step="64" style="width:80px;"></label>
+                                            </div>
+                                        </div>
+                                        <div class="chat-config-subsection" style="margin-top:8px;">
+                                            <label>Steps: <span id="chat-image-gen-steps-val">28</span></label>
+                                            <input type="range" id="chat-image-gen-steps" value="28" min="1" max="100" step="1" style="width:100%;">
+                                        </div>
+                                        <div class="chat-config-subsection" style="margin-top:8px;">
+                                            <label>CFG Scale: <span id="chat-image-gen-cfg-val">5.5</span></label>
+                                            <input type="range" id="chat-image-gen-cfg" value="5.5" min="1" max="30" step="0.5" style="width:100%;">
+                                        </div>
+                                        <div class="chat-config-subsection" style="margin-top:8px;">
+                                            <label for="chat-image-gen-sampler">Sampler</label>
+                                            <select id="chat-image-gen-sampler">
+                                                <option value="euler">Euler</option>
+                                                <option value="euler_ancestral" selected>Euler Ancestral</option>
+                                                <option value="dpmpp_2m">DPM++ 2M</option>
+                                                <option value="dpmpp_2m_sde">DPM++ 2M SDE</option>
+                                                <option value="dpmpp_3m_sde">DPM++ 3M SDE</option>
+                                                <option value="dpm_2">DPM 2</option>
+                                                <option value="dpm_2_ancestral">DPM 2 Ancestral</option>
+                                                <option value="lcm">LCM</option>
                                             </select>
                                         </div>
-                                        <div id="chat-image-gen-dalle-options">
-                                            <div class="chat-config-row" style="margin-bottom:6px;">
-                                                <div class="chat-field-label">DALL-E モデル:</div>
-                                                <select id="chat-image-gen-dalle-model" class="chat-field-input">
-                                                    <option value="dall-e-3">DALL-E 3</option>
-                                                    <option value="dall-e-2">DALL-E 2</option>
-                                                </select>
-                                            </div>
+                                        <div class="chat-config-subsection" style="margin-top:8px;">
+                                            <label for="chat-image-gen-scheduler">Scheduler</label>
+                                            <select id="chat-image-gen-scheduler">
+                                                <option value="normal" selected>Normal</option>
+                                                <option value="karras">Karras</option>
+                                                <option value="exponential">Exponential</option>
+                                                <option value="sgm_uniform">SGM Uniform</option>
+                                                <option value="simple">Simple</option>
+                                                <option value="ddim_uniform">DDIM Uniform</option>
+                                            </select>
                                         </div>
-                                        <div id="chat-image-gen-sd-webui-options" style="display:none;">
-                                            <div class="chat-config-row" style="margin-bottom:6px;">
-                                                <div class="chat-field-label">SD WebUI URL:</div>
-                                                <input type="text" id="chat-image-gen-sd-webui-url" class="chat-field-input" placeholder="http://localhost:7860" />
-                                            </div>
+                                        <div class="chat-config-subsection" style="margin-top:8px;">
+                                            <label>Seed (0=ランダム)</label>
+                                            <input type="number" id="chat-image-gen-seed" value="0" min="0" style="width:120px;">
                                         </div>
-                                        <div id="chat-image-gen-comfyui-options" style="display:none;">
-                                            <div class="chat-config-row" style="margin-bottom:6px;">
-                                                <div class="chat-field-label">ComfyUI URL:</div>
-                                                <input type="text" id="chat-image-gen-comfyui-url" class="chat-field-input" placeholder="http://localhost:8188" />
-                                            </div>
-                                        </div>
-                                        <div id="chat-image-gen-gemini-options" style="display:none;">
-                                            <div class="chat-config-row" style="margin-bottom:6px;">
-                                                <div class="chat-field-label">Gemini モデル:</div>
-                                                <select id="chat-image-gen-gemini-model" class="chat-field-input">
-                                                    <option value="google/gemini-2.5-flash-image">Gemini 2.5 Flash Image</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        <div id="chat-image-gen-replicate-options" style="display:none;">
-                                            <div class="chat-config-row" style="margin-bottom:6px;">
-                                                <div class="chat-field-label">Replicate モデル:</div>
-                                                <select id="chat-image-gen-replicate-model" class="chat-field-input">
-                                                    <option value="black-forest-labs/flux-schnell">FLUX Schnell (最安 $0.003)</option>
-                                                </select>
-                                            </div>
-                                            <div class="chat-config-row" style="margin-bottom:6px;">
-                                                <div class="chat-field-label">Replicate API Key:</div>
-                                                <input type="password" id="chat-image-gen-replicate-api-key" class="chat-field-input" placeholder="r8_..." autocomplete="off" />
-                                            </div>
+                                        <div class="chat-config-subsection" style="margin-top:8px;">
+                                            <label>Denoise (img2img): <span id="chat-image-gen-denoise-val">0.7</span></label>
+                                            <input type="range" id="chat-image-gen-denoise" value="0.7" min="0.1" max="1.0" step="0.05" style="width:100%;">
                                         </div>
                                     </div>
                                 </div>
