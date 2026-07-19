@@ -216,10 +216,23 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     memory_preload_count INTEGER DEFAULT 3,
     enable_parallel_tools INTEGER DEFAULT 1,
     image_gen_enabled INTEGER DEFAULT 0,
-    image_gen_provider TEXT DEFAULT 'openai',
+    image_gen_provider TEXT DEFAULT 'comfyui',
     image_gen_dalle_model TEXT DEFAULT 'dall-e-3',
     image_gen_stability_url TEXT DEFAULT '',
     image_gen_comfyui_url TEXT DEFAULT '',
+    image_gen_comfyui_checkpoint TEXT DEFAULT 'noobai-xl-epsilon-pred-11.safetensors',
+    image_gen_comfyui_loras TEXT DEFAULT '',
+    image_gen_comfyui_width INTEGER DEFAULT 1024,
+    image_gen_comfyui_height INTEGER DEFAULT 1024,
+    image_gen_comfyui_steps INTEGER DEFAULT 28,
+    image_gen_comfyui_cfg REAL DEFAULT 5.5,
+    image_gen_comfyui_sampler TEXT DEFAULT 'euler_ancestral',
+    image_gen_comfyui_scheduler TEXT DEFAULT 'normal',
+    image_gen_comfyui_seed INTEGER DEFAULT 0,
+    image_gen_comfyui_denoise REAL DEFAULT 0.7,
+    image_gen_comfyui_speed_lora_path TEXT DEFAULT '',
+    image_gen_comfyui_speed_lora_weight REAL DEFAULT 1.0,
+    image_gen_comfyui_speed_lora_method TEXT DEFAULT 'lcm',
     enable_memory_tools INTEGER DEFAULT 1,
     debug_mode INTEGER DEFAULT 0,
     dynamic_temperature INTEGER DEFAULT 1,
@@ -453,6 +466,30 @@ class SQLiteConnection:
             logger.info("Added image_gen_comfyui_url column to chat_settings (migration)")
         except sqlite3.OperationalError:
             pass  # column already exists
+
+        # Migration: add ComfyUI detailed fields if missing
+        _comfyui_detail_migrations = [
+            ("image_gen_comfyui_checkpoint", "TEXT", "'noobai-xl-epsilon-pred-11.safetensors'"),
+            ("image_gen_comfyui_loras", "TEXT", "''"),
+            ("image_gen_comfyui_width", "INTEGER", "1024"),
+            ("image_gen_comfyui_height", "INTEGER", "1024"),
+            ("image_gen_comfyui_steps", "INTEGER", "28"),
+            ("image_gen_comfyui_cfg", "REAL", "5.5"),
+            ("image_gen_comfyui_sampler", "TEXT", "'euler_ancestral'"),
+            ("image_gen_comfyui_scheduler", "TEXT", "'normal'"),
+            ("image_gen_comfyui_seed", "INTEGER", "0"),
+            ("image_gen_comfyui_denoise", "REAL", "0.7"),
+            ("image_gen_comfyui_speed_lora_path", "TEXT", "''"),
+            ("image_gen_comfyui_speed_lora_weight", "REAL", "1.0"),
+            ("image_gen_comfyui_speed_lora_method", "TEXT", "'lcm'"),
+        ]
+        for col, col_type, default in _comfyui_detail_migrations:
+            try:
+                memory_conn.execute(f"ALTER TABLE chat_settings ADD COLUMN {col} {col_type} DEFAULT {default}")
+                memory_conn.commit()
+                logger.info("Added %s column to chat_settings (migration)", col)
+            except sqlite3.OperationalError:
+                pass  # column already exists
 
         # Migration: add image_gen_gemini_model, replicate fields if missing
         for col, col_type, default in [
