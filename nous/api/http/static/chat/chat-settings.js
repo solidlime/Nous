@@ -228,10 +228,7 @@ function applyChatConfig(cfg) {
     }
   }
 
-  // 画像生成 — ComfyUI 詳細
-  const igEnabled = document.getElementById("chat-image-gen-enabled");
-  const igOptions = document.getElementById("chat-image-gen-options");
-  if (igEnabled) igEnabled.checked = cfg.image_gen_enabled || false;
+  // 画像生成設定
   set("chat-image-gen-comfyui-url", cfg.image_gen_comfyui_url);
   set("chat-image-gen-checkpoint", cfg.image_gen_comfyui_checkpoint);
   set("chat-image-gen-width", cfg.image_gen_comfyui_width);
@@ -245,26 +242,13 @@ function applyChatConfig(cfg) {
   set("chat-image-gen-speed-lora-method", cfg.image_gen_comfyui_speed_lora_method);
   set("chat-image-gen-speed-lora-path", cfg.image_gen_comfyui_speed_lora_path);
   set("chat-image-gen-speed-lora-weight", cfg.image_gen_comfyui_speed_lora_weight);
-  // speed lora options 表示/非表示
-  var speedSel = document.getElementById("chat-image-gen-speed-lora-method");
-  if (speedSel) {
-    var speedOpts = document.getElementById("chat-image-gen-speed-lora-opts");
-    if (speedOpts) speedOpts.style.display = speedSel.value ? "" : "none";
-  }
   // LoRA リスト復元
   if (cfg.image_gen_comfyui_loras) {
     try {
       var loras = JSON.parse(cfg.image_gen_comfyui_loras);
-      loras.forEach(function(l) { addLoraToList(l.path, l.weight); });
+      loras.forEach(function(l) { addLoraRow(l.path, l.weight); });
     } catch(e) {}
   }
-  // 表示切替
-  function updateImageGenUI() {
-    if (!igOptions) return;
-    igOptions.style.display = (igEnabled && igEnabled.checked) ? "" : "none";
-  }
-  if (igEnabled) igEnabled.addEventListener("change", updateImageGenUI);
-  updateImageGenUI();
   // スライダー値表示更新
   updateImageGenSliderLabels();
 }
@@ -382,9 +366,7 @@ async function saveChatConfig() {
     ),
     debug_mode: getChecked("chat-debug-mode"),
     // 画像生成設定 — ComfyUI
-    image_gen_enabled: document.getElementById("chat-image-gen-enabled")
-      ? document.getElementById("chat-image-gen-enabled").checked
-      : false,
+    image_gen_enabled: true,
     image_gen_comfyui_url: (document.getElementById("chat-image-gen-comfyui-url")?.value || "").trim(),
     image_gen_comfyui_checkpoint: document.getElementById("chat-image-gen-checkpoint")?.value || "noobaiXLNAIXL_epsilonPred11Version.safetensors",
     image_gen_comfyui_width: parseInt(document.getElementById("chat-image-gen-width")?.value || "1024"),
@@ -398,7 +380,7 @@ async function saveChatConfig() {
     image_gen_comfyui_speed_lora_method: document.getElementById("chat-image-gen-speed-lora-method")?.value || "",
     image_gen_comfyui_speed_lora_path: document.getElementById("chat-image-gen-speed-lora-path")?.value || "",
     image_gen_comfyui_speed_lora_weight: parseFloat(document.getElementById("chat-image-gen-speed-lora-weight")?.value || "1.0"),
-    image_gen_comfyui_loras: JSON.stringify(getLoraList()),
+    image_gen_comfyui_loras: JSON.stringify(collectLoraRows()),
     // Voice / TTS settings (TE04)
     voice_url: document.getElementById("chat-voice-url")?.value || "",
     voice_auto_play: getChecked("chat-voice-auto-play"),
@@ -727,73 +709,45 @@ async function formatMcpJson() {
 // ------------------------------------------------------------------
 // ComfyUI helper functions
 // ------------------------------------------------------------------
-var _loraList = [];
-
-function addLoraToList(path, weight) {
-  _loraList.push({path: path, weight: weight || 1.0});
-  renderLoraList();
-}
-
-function removeLoraFromList(idx) {
-  _loraList.splice(idx, 1);
-  renderLoraList();
-}
-
-function getLoraList() { return _loraList; }
-
-function renderLoraList() {
+function addLoraRow(path, weight) {
   var container = document.getElementById('chat-image-gen-lora-list');
   if (!container) return;
-  var h = '';
-  _loraList.forEach(function(l, i) {
-    h += '<div style="display:flex;gap:4px;align-items:center;font-size:0.85em;margin-top:2px;">';
-    h += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(l.path) + '</span>';
-    h += '<span style="color:var(--text-secondary);">×' + l.weight.toFixed(1) + '</span>';
-    h += '<button type="button" onclick="removeLoraFromList(' + i + ')" style="color:var(--accent-red);background:none;border:none;cursor:pointer;">×</button>';
-    h += '</div>';
+  var idx = container.children.length;
+  var div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:4px;align-items:center;';
+  div.innerHTML = '<input type="text" class="chat-field-input lora-path" value="' + escHtml(path || '') + '" placeholder="lora.safetensors" style="flex:1;font-size:0.82rem;">'
+    + '<input type="number" class="chat-field-input lora-weight" value="' + (weight || 1.0).toFixed(1) + '" min="0.1" max="2.0" step="0.1" style="width:55px;font-size:0.82rem;">'
+    + '<button type="button" onclick="this.parentElement.remove()" style="color:var(--accent-red);background:none;border:none;cursor:pointer;font-size:1rem;">\u00d7</button>';
+  container.appendChild(div);
+}
+
+function collectLoraRows() {
+  var container = document.getElementById('chat-image-gen-lora-list');
+  if (!container) return [];
+  var result = [];
+  container.querySelectorAll('.lora-path').forEach(function(input, i) {
+    var path = input.value.trim();
+    if (path) {
+      var weightEl = container.querySelectorAll('.lora-weight')[i];
+      result.push({path: path, weight: parseFloat(weightEl ? weightEl.value : 1.0)});
+    }
   });
-  container.innerHTML = h;
+  return result;
 }
 
 function updateImageGenSliderLabels() {
-  var steps = document.getElementById('chat-image-gen-steps');
-  var cfg = document.getElementById('chat-image-gen-cfg');
-  var denoise = document.getElementById('chat-image-gen-denoise');
-  if (steps) {
-    var sv = document.getElementById('chat-image-gen-steps-val');
-    if (sv) sv.textContent = steps.value;
-    steps.oninput = function() { if (sv) sv.textContent = steps.value; };
-  }
-  if (cfg) {
-    var cv = document.getElementById('chat-image-gen-cfg-val');
-    if (cv) cv.textContent = cfg.value;
-    cfg.oninput = function() { if (cv) cv.textContent = cfg.value; };
-  }
-  if (denoise) {
-    var dv = document.getElementById('chat-image-gen-denoise-val');
-    if (dv) dv.textContent = denoise.value;
-    denoise.oninput = function() { if (dv) dv.textContent = denoise.value; };
-  }
+  // HTML側の oninput で処理するため、ここでは何もしない
 }
 
-function updateSpeedLoraHint() {
-  var method = document.getElementById('chat-image-gen-speed-lora-method');
-  var opts = document.getElementById('chat-image-gen-speed-lora-opts');
-  var hint = document.getElementById('chat-image-gen-speed-lora-hint');
-  if (!method || !opts) return;
-  var hints = {
-    'lcm': '推奨: cfg=1.5, sampler=lcm, scheduler=sgm_uniform, steps=4-8',
-    'lightning': '推奨: cfg=0, sampler=euler, scheduler=sgm_uniform, steps=4',
-    'hyper': '推奨: cfg=5.0, sampler=euler, scheduler=sgm_uniform, steps=4-8 (要カスタムノード)',
-    'tcd': '推奨: cfg=1.0, sampler=euler_ancestral, scheduler=normal, steps=4-8 (要カスタムノード)'
-  };
-  opts.style.display = method.value ? '' : 'none';
-  if (hint) hint.textContent = hints[method.value] || '';
+function testImageGen() {
+  var status = document.getElementById('chat-image-test-status');
+  if (status) status.textContent = 'テスト生成は準備中です...';
+  // TODO: 実際のテスト生成API呼び出し
 }
 
 function checkComfyUIHealth() {
   var url = document.getElementById('chat-image-gen-comfyui-url').value.trim();
-  var status = document.getElementById('chat-image-gen-health-status');
+  var status = document.getElementById('chat-image-status');
   if (!url) { status.textContent = '⚠ URLを入力してください'; status.style.color = 'var(--accent-yellow)'; return; }
   status.textContent = '確認中...';
   status.style.color = 'var(--text-secondary)';
@@ -820,41 +774,15 @@ function escHtml(s) {
 
 // イベントリスナー初期化 (DOMContentLoaded 安全策)
 (function initImageGenEvents() {
-  document.addEventListener('DOMContentLoaded', function() {
-    var loraAddBtn = document.getElementById('chat-image-gen-lora-add');
-    if (loraAddBtn) {
-      loraAddBtn.addEventListener('click', function() {
-        var path = document.getElementById('chat-image-gen-lora-path');
-        var weight = document.getElementById('chat-image-gen-lora-weight');
-        if (path && path.value.trim()) {
-          addLoraToList(path.value.trim(), parseFloat(weight ? weight.value : 1.0));
-          path.value = '';
-        }
-      });
+  function bind() {
+    var addBtn = document.getElementById('chat-image-gen-lora-add');
+    if (addBtn && !addBtn._bound) {
+      addBtn._bound = true;
+      addBtn.addEventListener('click', function() { addLoraRow('', 1.0); });
     }
-    var speedMethod = document.getElementById('chat-image-gen-speed-lora-method');
-    if (speedMethod) speedMethod.addEventListener('change', updateSpeedLoraHint);
-    var healthBtn = document.getElementById('chat-image-gen-health-check');
-    if (healthBtn) healthBtn.addEventListener('click', checkComfyUIHealth);
-  });
-  // DOMContentLoaded 済みの場合のフォールバック
-  if (document.readyState !== 'loading') {
-    var loraAddBtn = document.getElementById('chat-image-gen-lora-add');
-    if (loraAddBtn) {
-      loraAddBtn.addEventListener('click', function() {
-        var path = document.getElementById('chat-image-gen-lora-path');
-        var weight = document.getElementById('chat-image-gen-lora-weight');
-        if (path && path.value.trim()) {
-          addLoraToList(path.value.trim(), parseFloat(weight ? weight.value : 1.0));
-          path.value = '';
-        }
-      });
-    }
-    var speedMethod = document.getElementById('chat-image-gen-speed-lora-method');
-    if (speedMethod) speedMethod.addEventListener('change', updateSpeedLoraHint);
-    var healthBtn = document.getElementById('chat-image-gen-health-check');
-    if (healthBtn) healthBtn.addEventListener('click', checkComfyUIHealth);
   }
+  if (document.readyState !== 'loading') bind();
+  else document.addEventListener('DOMContentLoaded', bind);
 })();
 
 // ------------------------------------------------------------------
@@ -875,11 +803,11 @@ window.parseMcpJson = parseMcpJson;
 window.renderSkillsList = renderSkillsList;
 window.loosenJson = loosenJson;
 window.formatMcpJson = formatMcpJson;
-window.addLoraToList = addLoraToList;
-window.removeLoraFromList = removeLoraFromList;
 window.checkComfyUIHealth = checkComfyUIHealth;
 window.updateImageGenSliderLabels = updateImageGenSliderLabels;
-window.updateSpeedLoraHint = updateSpeedLoraHint;
-window.getLoraList = getLoraList;
+window.testImageGen = testImageGen;
+
+window.addLoraRow = addLoraRow;
+window.collectLoraRows = collectLoraRows;
 
 })(window.Nous);
