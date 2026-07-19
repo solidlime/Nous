@@ -90,6 +90,10 @@ class ChatConfig(BaseModel):
     # 自画像生成用プロンプト（キャラ外見のSDタグ・LoRAトリガーワード・トーンなどを含む固定プロンプト文字列）
     image_gen_self_portrait_prompt: str = ""
     image_gen_negative_prompt: str = ""  # negative prompt for image generation
+    image_gen_full_body_prefix: str = "full body, standing, looking at viewer, "
+    image_gen_portrait_prefix: str = "upper body, portrait, looking at viewer, "
+    image_gen_selfie_prefix: str = "selfie, from below, mirror selfie, "
+    image_gen_scene_prefix: str = "environment shot, full body, "
     # 高速化 LoRA
     image_gen_comfyui_speed_lora_path: str = "lcm_lora_sdxl.safetensors"
     image_gen_comfyui_speed_lora_weight: float = 1.0

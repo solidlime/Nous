@@ -65,7 +65,7 @@ def truncate_tool_result(result: dict, max_chars: int) -> dict:
     if not has_images:
         result_str = json.dumps(result, ensure_ascii=False)
         if len(result_str) <= max_chars:
-            return result
+            return dict(result)
         remaining = len(result_str) - max_chars
         return {
             "truncated": True,
@@ -230,13 +230,13 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
     if isinstance(self_portrait, bool) and self_portrait:
         self_prompt = getattr(config, "image_gen_self_portrait_prompt", "")
         if self_prompt:
-            MODE_PREFIX = {
-                "full_body": "full body, standing, looking at viewer, ",
-                "portrait": "upper body, portrait, looking at viewer, ",
-                "selfie": "selfie, from below, mirror selfie, ",
-                "scene": "environment shot, full body, ",
+            mode_prefix_map = {
+                "full_body": getattr(config, "image_gen_full_body_prefix", "full body, standing, looking at viewer, "),
+                "portrait": getattr(config, "image_gen_portrait_prefix", "upper body, portrait, looking at viewer, "),
+                "selfie": getattr(config, "image_gen_selfie_prefix", "selfie, from below, mirror selfie, "),
+                "scene": getattr(config, "image_gen_scene_prefix", "environment shot, full body, "),
             }
-            mode_prefix = MODE_PREFIX.get(portrait_mode, MODE_PREFIX["full_body"])
+            mode_prefix = mode_prefix_map.get(portrait_mode, "")
             prompt = f"{self_prompt}, {mode_prefix}, {prompt}"
 
     try:

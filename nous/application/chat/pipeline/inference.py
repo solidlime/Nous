@@ -281,6 +281,16 @@ class InferenceStep:
                                         "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "auto"},
                                     }
                                 )
+                    if result.get("images"):
+                        logger.info("InferenceStep: found %d images in tool result", len(result["images"]))
+                        for img in result["images"]:
+                            if isinstance(img, dict) and img.get("base64"):
+                                image_parts.append(
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {"url": f"data:image/png;base64,{img['base64']}", "detail": "auto"},
+                                    }
+                                )
 
             if image_parts:
                 logger.info(
