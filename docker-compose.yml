@@ -27,8 +27,11 @@ services:
       - "26262:26262"
     volumes:
       # Nous アプリデータ永続化（memory, cache, sudachi, config, skills）
-      # DATA_ROOT（ホスト） → /opt/nous（コンテナ、=NOUS_DATA_ROOT）
-      - ${DATA_ROOT}:/opt/nous
+      # DATA_ROOT/opt（ホスト） → /opt/nous（コンテナ、=NOUS_DATA_ROOT）
+      - ${DATA_ROOT}/opt:/opt/nous
+      # 画像・音声キャッシュ永続化
+      # DATA_ROOT/data（ホスト） → /data（コンテナ）
+      - ${DATA_ROOT}/data:/data
     restart: unless-stopped
     depends_on:
       qdrant:
