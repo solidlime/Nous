@@ -241,7 +241,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 },
                 "provider": {
                     "type": "string",
-                    "enum": ["openai", "stability", "auto"],
+                    "enum": ["comfyui", "auto"],
                     "description": "プロバイダ。autoでデフォルト。",
                     "default": "auto",
                 },

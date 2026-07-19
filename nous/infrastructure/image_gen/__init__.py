@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from .pollinations import PollinationsImageProvider
+from .comfyui import ComfyUIProvider
 
 __all__ = [
-    "PollinationsImageProvider",
+    "ComfyUIProvider",
 ]
