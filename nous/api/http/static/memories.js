@@ -485,8 +485,8 @@ function openMemModal(mem) {
     h += '<div>';
     h += '<div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:4px">Memory Key</div>';
     h += '<div style="display:flex;align-items:center;gap:6px">';
-    h += '<span style="font-family:monospace;font-size:0.85rem;color:var(--accent-purple)">' + esc(mem.memory_key) + '</span>';
-    h += '<button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + esc(mem.memory_key).replace(/'/g,'\\\'') + '\');window.Nous.Core.toast(\'Key copied!\',\'info\')" title="Copy key">\uD83D\uDCCB</button>';
+    h += '<span style="font-family:monospace;font-size:0.85rem;color:var(--accent-purple)">' + esc(mem.key) + '</span>';
+    h += '<button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + esc(mem.key).replace(/'/g,'\\\'') + '\');window.Nous.Core.toast(\'Key copied!\',\'info\')" title="Copy key">\uD83D\uDCCB</button>';
     h += '</div></div>';
     h += '<button class="mem-modal-close" onclick="closeMemModal()"><i data-lucide="x"></i></button>';
     h += '</div>';
@@ -590,7 +590,7 @@ function openMemModal(mem) {
 
     /* Action buttons */
     h += '<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">';
-    h += '<button class="glass-btn glass-btn-danger" onclick="deleteMemory(\'' + esc(mem.memory_key).replace(/'/g,'\\\'') + '\')">\uD83D\uDDD1 Delete</button>';
+    h += '<button class="glass-btn glass-btn-danger" onclick="deleteMemory(\'' + esc(mem.key).replace(/'/g,'\\\'') + '\')">\uD83D\uDDD1 Delete</button>';
     h += '<button class="glass-btn glass-btn-success" id="mem-modal-edit-btn">\u270F\uFE0F Edit</button>';
     h += '</div>';
 
@@ -662,7 +662,7 @@ function _addEditTag(val) {
 function openEditModal(mem) {
     document.getElementById('edit-modal-title').textContent = 'Edit Memory';
     document.getElementById('edit-content').value = mem.content || '';
-    document.getElementById('edit-memory-key').value = mem.memory_key || '';
+    document.getElementById('edit-memory-key').value = mem.key || '';
 
     var imp = mem.importance != null ? mem.importance : 0.5;
     document.getElementById('edit-importance').value = imp;
@@ -679,6 +679,7 @@ function openEditModal(mem) {
 
     document.getElementById('mem-edit-overlay').classList.add('active');
 }
+window.openEditModal = openEditModal;
 
 function openCreateModal() {
     document.getElementById('edit-modal-title').textContent = 'New Memory';
@@ -702,6 +703,7 @@ function openCreateModal() {
 function closeEditModal() {
     document.getElementById('mem-edit-overlay').classList.remove('active');
 }
+window.closeEditModal = closeEditModal;
 
 /* ================================================================
    saveMemory
@@ -739,6 +741,7 @@ async function saveMemory() {
         toast('Save failed: ' + e.message, 'error');
     }
 }
+window.saveMemory = saveMemory;
 
 /* ================================================================
    deleteMemory

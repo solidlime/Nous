@@ -58,7 +58,7 @@ function updateMemoryPanel(retrieved, saved, goals) {
               (m.importance || 0.5) +
               '" data-tags="' +
               escAttr((m.tags || []).join(",")) +
-              '" onclick="openMemEdit(this)">' +
+              '">' +
               (meta ? '<div class="mem-score">' + esc(meta) + "</div>" : "") +
               content +
               (extra
@@ -106,7 +106,7 @@ function updateMemoryPanel(retrieved, saved, goals) {
               (m.importance || 0.5) +
               '" data-tags="' +
               escAttr((m.tags || []).join(",")) +
-              '" onclick="openMemEdit(this)">' +
+              '">' +
               content +
               (tags ? '<div class="mem-score">' + esc(tags) + "</div>" : "") +
               (extra
@@ -142,7 +142,7 @@ function updateMemoryPanel(retrieved, saved, goals) {
               (g.importance || 0.75) +
               '" data-tags="' +
               escAttr((g.tags || []).join(",")) +
-              '" onclick="openMemEdit(this)">' +
+              '">' +
               '<i data-lucide="target"></i> ' +
               esc((g.content || "").substring(0, 80)) +
               '<div class="mem-actions"><button class="mem-action-btn done" onclick="event.stopPropagation();completeGoal(\'' +
@@ -228,73 +228,19 @@ function showContextCompressed(evt) {
 // ------------------------------------------------------------------
 // Memory CRUD operations
 // ------------------------------------------------------------------
-let _memEditKey = null;
-
-function openMemEdit(card) {
-  _memEditKey = card.dataset.key;
-  document.getElementById("mem-edit-content").value =
-    card.dataset.content || "";
-  document.getElementById("mem-edit-importance").value =
-    card.dataset.importance || "0.5";
-  document.getElementById("mem-edit-tags").value = card.dataset.tags || "";
-  document.getElementById("mem-edit-overlay").classList.add("show");
-}
-
-function closeMemEdit() {
-  document.getElementById("mem-edit-overlay").classList.remove("show");
-  _memEditKey = null;
-}
-
-async function saveMemEdit() {
-  if (!_memEditKey || !S.persona) return;
-  const content = document.getElementById("mem-edit-content").value.trim();
-  const importance =
-    parseFloat(document.getElementById("mem-edit-importance").value) || 0.5;
-  const tagsStr = document.getElementById("mem-edit-tags").value.trim();
-  const tags = tagsStr
-    ? tagsStr
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean)
-    : [];
-  if (!content) {
-    toast("内容を入力してください", "error");
-    return;
-  }
-  try {
-    await api(
-      "/api/memories/" +
-        encodeURIComponent(S.persona) +
-        "/" +
-        encodeURIComponent(_memEditKey),
-      {
-        method: "PUT",
-        body: JSON.stringify({ content, importance, tags }),
-      },
-    );
-    closeMemEdit();
-    toast("メモリを更新しました", "success");
-    loadChatCommitments(); // refresh panels
-  } catch (e) {
-    toast("更新失敗: " + e.message, "error");
-  }
-}
-
 async function deleteMemCard(key) {
-  const k = key || _memEditKey;
-  if (!k || !S.persona) return;
+  if (!key || !S.persona) return;
   showConfirm("このメモリを削除しますか？", async function () {
     try {
       await api(
         "/api/memories/" +
           encodeURIComponent(S.persona) +
           "/" +
-          encodeURIComponent(k),
+          encodeURIComponent(key),
         {
           method: "DELETE",
         },
       );
-      closeMemEdit();
       toast("メモリを削除しました", "success");
       loadChatCommitments(); // refresh panels
     } catch (e) {
@@ -342,9 +288,6 @@ window.showReflectionStart = showReflectionStart;
 window.updateReflectionPanel = updateReflectionPanel;
 window.showSessionSummarized = showSessionSummarized;
 window.showContextCompressed = showContextCompressed;
-window.openMemEdit = openMemEdit;
-window.closeMemEdit = closeMemEdit;
-window.saveMemEdit = saveMemEdit;
 window.deleteMemCard = deleteMemCard;
 window.completeGoal = completeGoal;
 

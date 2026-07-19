@@ -937,56 +937,6 @@ input[type="range"].chat-field-input:focus {
   color: var(--accent-red);
   border-color: rgba(248, 113, 113, 0.4);
 }
-/* Memory edit modal */
-#mem-edit-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 2000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.2s ease, visibility 0.2s ease;
-  backdrop-filter: blur(4px);
-}
-#mem-edit-overlay.show {
-  opacity: 1;
-  visibility: visible;
-}
-#mem-edit-modal {
-  background: var(--bg-primary);
-  border: 1px solid var(--glass-border);
-  border-radius: 12px;
-  padding: 20px;
-  width: 400px;
-  max-width: 90vw;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-#mem-edit-modal .mem-edit-label {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-}
-#mem-edit-modal textarea,
-#mem-edit-modal input {
-  width: 100%;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: 8px;
-  padding: 8px 10px;
-  color: var(--text-primary);
-  font-size: 0.85rem;
-  font-family: inherit;
-  outline: none;
-  box-sizing: border-box;
-}
-#mem-edit-modal textarea {
-  min-height: 80px;
-  resize: vertical;
-}
 .memory-empty {
   font-size: 0.74rem;
   color: var(--text-muted);

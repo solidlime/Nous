@@ -620,28 +620,4 @@ def render_chat_tab() -> str:
             <div id="media-viewer-overlay" onclick="closeMediaViewer()">
                 <div id="media-viewer-inner" onclick="event.stopPropagation()"></div>
             </div>
-            <!-- Memory edit modal -->
-            <div id="chat-mem-edit-overlay" onclick="closeMemEdit()">
-                <div id="chat-mem-edit-modal" onclick="event.stopPropagation()">
-                    <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">メモリ編集</div>
-                    <div>
-                        <div class="mem-edit-label">内容</div>
-                        <textarea id="mem-edit-content"></textarea>
-                    </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                        <div>
-                            <div class="mem-edit-label">重要度 (0.0-1.0)</div>
-                            <input type="number" id="mem-edit-importance" min="0" max="1" step="0.05" value="0.5" />
-                        </div>
-                        <div>
-                            <div class="mem-edit-label">タグ (カンマ区切り)</div>
-                            <input type="text" id="mem-edit-tags" placeholder="goal, active" />
-                        </div>
-                    </div>
-                    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
-                        <button class="chat-clear-btn" style="width:auto;padding:6px 14px;" onclick="deleteMemCard()" aria-label="メモリを削除">削除</button>
-                        <button class="chat-save-btn" style="width:auto;padding:6px 14px;" onclick="saveMemEdit()" aria-label="メモリを保存">保存</button>
-                    </div>
-                </div>
-            </div>
         </section>"""
