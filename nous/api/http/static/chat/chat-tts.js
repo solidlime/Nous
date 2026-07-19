@@ -162,7 +162,7 @@ async function testVoicePlayback() {
     });
     if (resp.audio_base64) {
       if (statusEl) statusEl.textContent = "再生中...";
-      var audioUrl = "data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64;
+      var audioUrl = resp.audio_url || ("data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64);
       var audio = new Audio(audioUrl);
       audio.volume = _getVolume();
       audio.onended = function () {
@@ -215,7 +215,7 @@ function autoPlayTts(text) {
   })
     .then(function (resp) {
       if (resp.audio_base64) {
-        var audioUrl = "data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64;
+        var audioUrl = resp.audio_url || ("data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64);
         var audio = new Audio(audioUrl);
         // Find the last assistant message for seekbar + TTS button
         var msgEls = document.querySelectorAll("#chat-messages .chat-msg");
@@ -281,7 +281,7 @@ async function playTts(btn, text) {
       body: JSON.stringify(body),
     });
     if (resp.audio_base64) {
-      const audioUrl = "data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64;
+      const audioUrl = resp.audio_url || ("data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64);
       const audio = new Audio(audioUrl);
       _setupAudio(audio, audioUrl, btn, btn.closest(".chat-msg"));
     } else {

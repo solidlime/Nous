@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse
+from starlette.responses import FileResponse, Response
 
 from nous.api.http.deps import _resolve_persona_from_request, _safe_get_context
 from nous.infrastructure.voice.factory import get_voice_engine
@@ -115,6 +116,7 @@ def register_tts_routes(mcp) -> None:
         cache_dir.mkdir(parents=True, exist_ok=True)
         cache_key = hashlib.sha256(f"{text}|{emotion}|{caption or ''}|{voice_speed}".encode()).hexdigest()
         cache_path = cache_dir / f"{cache_key}.wav"
+        audio_url = f"/api/tts/{persona}/cache/{cache_key}.wav"
 
         if cache_path.exists():
             audio_bytes = cache_path.read_bytes()
@@ -123,6 +125,7 @@ def register_tts_routes(mcp) -> None:
                 {
                     "ok": True,
                     "audio_base64": base64.b64encode(audio_bytes).decode("ascii"),
+                    "audio_url": audio_url,
                     "format": "wav",
                 }
             )
@@ -140,6 +143,7 @@ def register_tts_routes(mcp) -> None:
                 {
                     "ok": True,
                     "audio_base64": base64.b64encode(audio_bytes).decode("ascii"),
+                    "audio_url": audio_url,
                     "format": "wav",
                 }
             )
@@ -228,3 +232,26 @@ def register_tts_routes(mcp) -> None:
                 "url": base_url,
                 "error": str(e),
             })
+
+    @mcp.custom_route("/api/tts/{persona}/cache/{filename}", methods=["GET"])
+    async def serve_tts_cache(request: Request) -> Response:
+        """Serve cached TTS audio from memory storage."""
+        import mimetypes
+        import os
+
+        persona = _resolve_persona_from_request(request)
+        filename = request.path_params.get("filename", "")
+        safe_name = os.path.basename(filename).replace("..", "").strip()
+        if not safe_name or not safe_name.lower().endswith(".wav"):
+            return JSONResponse({"error": "Invalid filename"}, status_code=400)
+
+        from nous.config.settings import get_settings
+
+        settings = get_settings()
+        file_path = Path(settings.data_root) / "memory" / persona / "tts_cache" / safe_name
+        if not file_path.exists():
+            return JSONResponse({"error": "File not found"}, status_code=404)
+
+        mime_type, _ = mimetypes.guess_type(safe_name)
+        mime_type = mime_type or "audio/wav"
+        return FileResponse(str(file_path), media_type=mime_type)
