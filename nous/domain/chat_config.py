@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import typing
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ValidationError, field_validator
@@ -40,6 +41,17 @@ _DEFAULT_BASE_URLS: dict[str, str] = {
 
 # 後方互換のため定数は残すが内容は空（各 persona 個別生成）
 DEFAULT_MCP_SERVERS: list[dict] = []
+
+# SQL type mapping for dynamic ALTER TABLE ADD COLUMN
+_TYPE_SQL: dict[type, tuple[str, str]] = {
+    bool: ("INTEGER", "0"),
+    int: ("INTEGER", "0"),
+    float: ("REAL", "0.0"),
+    str: ("TEXT", "''"),
+    list: ("TEXT", "''"),
+    dict: ("TEXT", "''"),
+    type(None): ("TEXT", "NULL"),
+}
 
 
 class ChatConfig(BaseModel):
@@ -270,41 +282,78 @@ class ChatConfigRepository:
     def __init__(self, db: sqlite3.Connection) -> None:
         self._db = db
 
+    # --- Schema introspection & auto-migration helpers ---
+
+    def _get_db_columns(self) -> set[str]:
+        """Return set of existing column names in chat_settings."""
+        cursor = self._db.execute("PRAGMA table_info(chat_settings)")
+        return {row[1] for row in cursor.fetchall()}
+
+    def _ensure_columns(self, db_columns: set[str]) -> set[str]:
+        """Add missing ChatConfig columns to chat_settings. Returns updated column set."""
+        new_columns = set(db_columns)
+        for field_name, field_info in ChatConfig.model_fields.items():
+            if field_name in ("persona", "updated_at"):
+                continue
+            if field_name not in db_columns:
+                col_type = self._infer_column_type(field_info)
+                default = self._infer_default_value(field_info)
+                sql = f"ALTER TABLE chat_settings ADD COLUMN {field_name} {col_type} DEFAULT {default}"
+                self._db.execute(sql)
+                logger.info("chat_config: added column %s (%s DEFAULT %s)", field_name, col_type, default)
+                new_columns.add(field_name)
+        return new_columns
+
+    @staticmethod
+    def _get_base_type(annotation: object) -> type:
+        """Extract base Python type from a type annotation (handling Optional, Union, generics)."""
+        if annotation is type(None):
+            return type(None)
+        origin = typing.get_origin(annotation)
+        if origin is not None:
+            if origin is typing.Union:
+                non_none = [a for a in typing.get_args(annotation) if a is not type(None)]
+                if non_none:
+                    return ChatConfigRepository._get_base_type(non_none[0])
+                return type(None)
+            if origin is list:
+                return list
+            if origin is dict:
+                return dict
+            return origin
+        return annotation
+
+    @staticmethod
+    def _infer_column_type(field_info) -> str:
+        """Infer SQL column type string from a Pydantic FieldInfo."""
+        base = ChatConfigRepository._get_base_type(field_info.annotation)
+        return _TYPE_SQL.get(base, ("TEXT", "''"))[0]
+
+    @staticmethod
+    def _infer_default_value(field_info) -> str:
+        """Infer SQL DEFAULT expression from a Pydantic FieldInfo."""
+        base = ChatConfigRepository._get_base_type(field_info.annotation)
+        return _TYPE_SQL.get(base, ("TEXT", "''"))[1]
+
+    @staticmethod
+    def _to_bind_value(field_name: str, value: object) -> object:
+        """Convert a ChatConfig field value to a bindable SQL value."""
+        if value is None:
+            return None
+        field_info = ChatConfig.model_fields.get(field_name)
+        if field_info is None:
+            return value
+        base = ChatConfigRepository._get_base_type(field_info.annotation)
+        if base is bool:
+            return int(value)
+        if base in (list, dict):
+            return json.dumps(value, ensure_ascii=False)
+        return value
+
     def get(self, persona: str) -> ChatConfig:
         """Load config for persona, returning defaults if not found."""
         cursor = self._db.execute(
-            "SELECT persona, provider, model, api_key, base_url, system_prompt, "
-            "temperature, max_tokens, "
-            "max_tool_calls, updated_at, "
-            "auto_extract, extract_model, extract_max_tokens, "
-            "tool_result_max_chars, mcp_servers, enabled_skills, "
-            "reflection_enabled, reflection_threshold, reflection_min_interval_hours, "
-            "session_summarize, "
-            "retrieval_recency_weight, retrieval_importance_weight, retrieval_relevance_weight, "
-            "display_history_turns, "
-            "mental_model_enabled, mental_model_min_samples, "
-            "max_stored_messages, context_max_tokens, context_compression_threshold, "
-            "context_compression_mode, context_keep_recent_turns, "
-            "context_compress_system_prompt, context_compress_history, "
-            "memory_preload_count, enable_parallel_tools, "
-            "image_gen_enabled, image_gen_provider, image_gen_comfyui_url, "
-            "image_gen_comfyui_checkpoint, image_gen_comfyui_loras, "
-            "image_gen_comfyui_width, image_gen_comfyui_height, "
-            "image_gen_comfyui_steps, image_gen_comfyui_cfg, "
-            "image_gen_comfyui_sampler, image_gen_comfyui_scheduler, "
-            "image_gen_comfyui_seed, image_gen_comfyui_denoise, image_gen_max_width, image_gen_max_height, image_gen_self_portrait_prompt, "
-            "image_gen_comfyui_speed_lora_path, image_gen_comfyui_speed_lora_weight, "
-            "image_gen_comfyui_speed_lora_method, "
-            "enable_memory_tools, debug_mode, "
-            "dynamic_temperature, emotion_temperature_scale, top_p, "
-            "context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled, "
-            "retrieval_rrf_k, "
-            "dynamic_tool_selection, "
-            "voice_auto_play, voice_emotion_link, voice_model, voice_url, voice_volume, "
-            "irodori_num_steps, irodori_cfg_scale_text, irodori_cfg_scale_speaker, "
-            "irodori_cfg_scale_caption, irodori_chunk_min_chars, irodori_seed, "
-            "disabled_tools "
-            "FROM chat_settings WHERE persona = ?",
+            "SELECT * FROM chat_settings WHERE persona = ?",
             (persona,),
         )
         row = cursor.fetchone()
@@ -353,199 +402,43 @@ class ChatConfigRepository:
         return config
 
     def save(self, config: ChatConfig) -> None:
-        """Insert or replace config for persona."""
+        """Insert or replace config for persona. Auto-creates missing columns."""
         now = format_iso(get_now())
-        self._db.execute(
-            """
-            INSERT INTO chat_settings
-                (persona, provider, model, api_key, base_url, system_prompt,
-                 temperature, max_tokens, max_tool_calls,
-                 auto_extract, extract_model, extract_max_tokens,
-                 tool_result_max_chars, mcp_servers, enabled_skills,
-                 reflection_enabled, reflection_threshold, reflection_min_interval_hours,
-                 session_summarize,
-                 retrieval_recency_weight, retrieval_importance_weight, retrieval_relevance_weight,
-                 display_history_turns,
-                 mental_model_enabled, mental_model_min_samples,
-                 max_stored_messages, context_max_tokens, context_compression_threshold,
-                 context_compression_mode, context_keep_recent_turns,
-                  context_compress_system_prompt, context_compress_history,
-                  memory_preload_count, enable_parallel_tools,
-                    image_gen_enabled, image_gen_provider, image_gen_comfyui_url,
-                    image_gen_comfyui_checkpoint, image_gen_comfyui_loras,
-                    image_gen_comfyui_width, image_gen_comfyui_height,
-                    image_gen_comfyui_steps, image_gen_comfyui_cfg,
-                    image_gen_comfyui_sampler, image_gen_comfyui_scheduler,
-                    image_gen_comfyui_seed, image_gen_comfyui_denoise, image_gen_max_width, image_gen_max_height, image_gen_self_portrait_prompt,
-                    image_gen_comfyui_speed_lora_path, image_gen_comfyui_speed_lora_weight,
-                    image_gen_comfyui_speed_lora_method,
-                    enable_memory_tools, debug_mode,
-                    dynamic_temperature, emotion_temperature_scale, top_p,
-                     context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled,
-                     retrieval_rrf_k,
-                        dynamic_tool_selection,
-                          voice_auto_play, voice_emotion_link, voice_model, voice_url, voice_volume,
-                          irodori_num_steps, irodori_cfg_scale_text, irodori_cfg_scale_speaker,
-                          irodori_cfg_scale_caption, irodori_chunk_min_chars, irodori_seed,
-                           disabled_tools,
-                           updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(persona) DO UPDATE SET
-                provider=excluded.provider,
-                model=excluded.model,
-                api_key=excluded.api_key,
-                base_url=excluded.base_url,
-                system_prompt=excluded.system_prompt,
-                temperature=excluded.temperature,
-                max_tokens=excluded.max_tokens,
-                 max_tool_calls=excluded.max_tool_calls,
-                auto_extract=excluded.auto_extract,
-                extract_model=excluded.extract_model,
-                extract_max_tokens=excluded.extract_max_tokens,
-                tool_result_max_chars=excluded.tool_result_max_chars,
-                mcp_servers=excluded.mcp_servers,
-                enabled_skills=excluded.enabled_skills,
-                reflection_enabled=excluded.reflection_enabled,
-                reflection_threshold=excluded.reflection_threshold,
-                reflection_min_interval_hours=excluded.reflection_min_interval_hours,
-                session_summarize=excluded.session_summarize,
-                retrieval_recency_weight=excluded.retrieval_recency_weight,
-                retrieval_importance_weight=excluded.retrieval_importance_weight,
-                retrieval_relevance_weight=excluded.retrieval_relevance_weight,
-                display_history_turns=excluded.display_history_turns,
-                mental_model_enabled=excluded.mental_model_enabled,
-                mental_model_min_samples=excluded.mental_model_min_samples,
-                max_stored_messages=excluded.max_stored_messages,
-                context_max_tokens=excluded.context_max_tokens,
-                context_compression_threshold=excluded.context_compression_threshold,
-                context_compression_mode=excluded.context_compression_mode,
-                context_keep_recent_turns=excluded.context_keep_recent_turns,
-                context_compress_system_prompt=excluded.context_compress_system_prompt,
-                context_compress_history=excluded.context_compress_history,
-                 memory_preload_count=excluded.memory_preload_count,
-                 enable_parallel_tools=excluded.enable_parallel_tools,
-                 image_gen_enabled=excluded.image_gen_enabled,
-                 image_gen_provider=excluded.image_gen_provider,
-                 image_gen_comfyui_url=excluded.image_gen_comfyui_url,
-                 image_gen_comfyui_checkpoint=excluded.image_gen_comfyui_checkpoint,
-                 image_gen_comfyui_loras=excluded.image_gen_comfyui_loras,
-                 image_gen_comfyui_width=excluded.image_gen_comfyui_width,
-                 image_gen_comfyui_height=excluded.image_gen_comfyui_height,
-                 image_gen_comfyui_steps=excluded.image_gen_comfyui_steps,
-                 image_gen_comfyui_cfg=excluded.image_gen_comfyui_cfg,
-                 image_gen_comfyui_sampler=excluded.image_gen_comfyui_sampler,
-                 image_gen_comfyui_scheduler=excluded.image_gen_comfyui_scheduler,
-                 image_gen_comfyui_seed=excluded.image_gen_comfyui_seed,
-                 image_gen_comfyui_denoise=excluded.image_gen_comfyui_denoise,
-                 image_gen_max_width=excluded.image_gen_max_width,
-                 image_gen_max_height=excluded.image_gen_max_height,
-                 image_gen_self_portrait_prompt=excluded.image_gen_self_portrait_prompt,
-                 image_gen_comfyui_speed_lora_path=excluded.image_gen_comfyui_speed_lora_path,
-                 image_gen_comfyui_speed_lora_weight=excluded.image_gen_comfyui_speed_lora_weight,
-                 image_gen_comfyui_speed_lora_method=excluded.image_gen_comfyui_speed_lora_method,
-                 enable_memory_tools=excluded.enable_memory_tools,
-                 debug_mode=excluded.debug_mode,
-                 dynamic_temperature=excluded.dynamic_temperature,
-                 emotion_temperature_scale=excluded.emotion_temperature_scale,
-                 top_p=excluded.top_p,
-                 context_use_llm_summary=excluded.context_use_llm_summary,
-                 episode_consolidation_enabled=excluded.episode_consolidation_enabled,
-                 episode_search_enabled=excluded.episode_search_enabled,
-                 retrieval_rrf_k=excluded.retrieval_rrf_k,
-                 dynamic_tool_selection=excluded.dynamic_tool_selection,
-                 voice_auto_play=excluded.voice_auto_play,
-                    voice_emotion_link=excluded.voice_emotion_link,
-                     voice_model=excluded.voice_model,
-                     voice_url=excluded.voice_url,
-                     voice_volume=excluded.voice_volume,
-                    irodori_num_steps=excluded.irodori_num_steps,
-                    irodori_cfg_scale_text=excluded.irodori_cfg_scale_text,
-                    irodori_cfg_scale_speaker=excluded.irodori_cfg_scale_speaker,
-                    irodori_cfg_scale_caption=excluded.irodori_cfg_scale_caption,
-                    irodori_chunk_min_chars=excluded.irodori_chunk_min_chars,
-                    irodori_seed=excluded.irodori_seed,
-                    disabled_tools=excluded.disabled_tools,
-                  updated_at=excluded.updated_at
-            """,
-            (
-                config.persona,
-                config.provider,
-                config.model,
-                config.api_key,
-                config.base_url,
-                config.system_prompt,
-                config.temperature,
-                config.max_tokens,
-                config.max_tool_calls,
-                int(config.auto_extract),
-                config.extract_model,
-                config.extract_max_tokens,
-                config.tool_result_max_chars,
-                json.dumps(config.mcp_servers, ensure_ascii=False),
-                json.dumps(config.enabled_skills, ensure_ascii=False),
-                int(config.reflection_enabled),
-                config.reflection_threshold,
-                config.reflection_min_interval_hours,
-                int(config.session_summarize),
-                config.retrieval_recency_weight,
-                config.retrieval_importance_weight,
-                config.retrieval_relevance_weight,
-                config.display_history_turns,
-                int(config.mental_model_enabled),
-                config.mental_model_min_samples,
-                config.max_stored_messages,
-                config.context_max_tokens,
-                config.context_compression_threshold,
-                config.context_compression_mode,
-                config.context_keep_recent_turns,
-                int(config.context_compress_system_prompt),
-                int(config.context_compress_history),
-                config.memory_preload_count,
-                int(config.enable_parallel_tools),
-                int(config.image_gen_enabled),
-                config.image_gen_provider,
-                config.image_gen_comfyui_url,
-                config.image_gen_comfyui_checkpoint,
-                config.image_gen_comfyui_loras,
-                config.image_gen_comfyui_width,
-                config.image_gen_comfyui_height,
-                config.image_gen_comfyui_steps,
-                config.image_gen_comfyui_cfg,
-                config.image_gen_comfyui_sampler,
-                config.image_gen_comfyui_scheduler,
-                config.image_gen_comfyui_seed,
-                config.image_gen_comfyui_denoise,
-                config.image_gen_max_width,
-                config.image_gen_max_height,
-                config.image_gen_self_portrait_prompt,
-                config.image_gen_comfyui_speed_lora_path,
-                config.image_gen_comfyui_speed_lora_weight,
-                config.image_gen_comfyui_speed_lora_method,
-                int(config.enable_memory_tools),
-                int(config.debug_mode),
-                int(config.dynamic_temperature),
-                config.emotion_temperature_scale,
-                config.top_p,
-                int(config.context_use_llm_summary),
-                int(config.episode_consolidation_enabled),
-                int(config.episode_search_enabled),
-                config.retrieval_rrf_k,
-                int(config.dynamic_tool_selection),
-                int(config.voice_auto_play),
-                int(config.voice_emotion_link),
-                config.voice_model,
-                config.voice_url,
-                config.voice_volume,
-                config.irodori_num_steps,
-                config.irodori_cfg_scale_text,
-                config.irodori_cfg_scale_speaker,
-                config.irodori_cfg_scale_caption,
-                config.irodori_chunk_min_chars,
-                config.irodori_seed,
-                json.dumps(config.disabled_tools, ensure_ascii=False),
-                now,
-            ),
+
+        # 1. Introspect DB columns and auto-create missing ones
+        db_columns = self._get_db_columns()
+        db_columns = self._ensure_columns(db_columns)
+
+        # 2. Build dynamic INSERT + UPSERT
+        insert_fields: list[str] = []
+        bind_values: list[object] = []
+        update_set: list[str] = []
+
+        for field_name in ChatConfig.model_fields:
+            if field_name not in db_columns:
+                continue
+            insert_fields.append(field_name)
+            if field_name == "persona":
+                bind_values.append(config.persona)
+            elif field_name == "updated_at":
+                bind_values.append(now)
+            else:
+                value = getattr(config, field_name, None)
+                bind_values.append(self._to_bind_value(field_name, value))
+            if field_name != "persona":
+                update_set.append(f"{field_name}=excluded.{field_name}")
+
+        columns = ", ".join(insert_fields)
+        placeholders = ", ".join("?" for _ in insert_fields)
+        update_clause = ", ".join(update_set)
+
+        sql = (
+            f"INSERT INTO chat_settings ({columns})\n"
+            f"VALUES ({placeholders})\n"
+            f"ON CONFLICT(persona) DO UPDATE SET {update_clause}"
         )
+
+        self._db.execute(sql, bind_values)
         self._db.commit()
 
     def delete(self, persona: str) -> None:
