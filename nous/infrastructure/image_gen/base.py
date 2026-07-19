@@ -37,6 +37,7 @@ class ImageGenProvider(ABC):
         quality: str = "standard",
         n: int = 1,
         reference_image: bytes | None = None,
+        negative_prompt: str = "",
         **kwargs: Any,
     ) -> list[GeneratedImage]:
         """
@@ -48,6 +49,7 @@ class ImageGenProvider(ABC):
             quality: 品質 ("standard"|"hd")
             n: 生成枚数 (1-4)
             reference_image: img2img用参照画像のバイト列 (Noneの場合はtxt2img)
+            negative_prompt: ネガティブプロンプト（空文字の場合はプロバイダ標準値）
 
         Returns:
             生成された画像のリスト

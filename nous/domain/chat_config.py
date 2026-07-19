@@ -89,6 +89,7 @@ class ChatConfig(BaseModel):
     image_gen_max_height: int = 1200
     # 自画像生成用プロンプト（キャラ外見のSDタグ・LoRAトリガーワード・トーンなどを含む固定プロンプト文字列）
     image_gen_self_portrait_prompt: str = ""
+    image_gen_negative_prompt: str = ""  # negative prompt for image generation
     # 高速化 LoRA
     image_gen_comfyui_speed_lora_path: str = "lcm_lora_sdxl.safetensors"
     image_gen_comfyui_speed_lora_weight: float = 1.0

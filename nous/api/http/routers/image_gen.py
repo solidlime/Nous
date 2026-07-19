@@ -92,6 +92,7 @@ def register_image_gen_routes(mcp) -> None:
                 size=body.get("size", "512x512"),
                 quality="standard",
                 n=1,
+                negative_prompt=body.get("negative_prompt", ""),
             )
         except Exception as e:
             return JSONResponse({"error": f"Generation failed: {str(e)}"}, status_code=500)

@@ -279,7 +279,8 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             denoise=getattr(config, "image_gen_comfyui_denoise", 0.7),
         )
 
-        generated = await provider.generate(prompt=prompt, size=size, n=n)
+        negative_prompt = getattr(config, "image_gen_negative_prompt", "") or ""
+        generated = await provider.generate(prompt=prompt, size=size, n=n, negative_prompt=negative_prompt)
 
         # ── 画像をサーバー側に永続化 ──
         from pathlib import Path

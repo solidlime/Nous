@@ -422,6 +422,10 @@ def render_chat_tab() -> str:
                                         <textarea id="chat-image-gen-self-portrait-prompt" class="chat-field-input" placeholder="1girl, solo, purple eyes, short white hair, witch hat, holding ornate key-shaped staff, &lt;lora:herta_v1:0.8&gt;" rows="3" style="width:100%;resize:vertical;font-size:0.78rem;"></textarea>
                                     </div>
                                     <div>
+                                        <div class="chat-field-label" style="font-size:0.78rem;">ネガティブプロンプト <span style="font-weight:300;color:var(--text-dim);">(低画質・崩れ除外タグ)</span></div>
+                                        <textarea id="chat-image-gen-negative-prompt" class="chat-field-input" style="min-height:48px;width:100%;" placeholder="lowres, bad anatomy, bad hands, text, error"></textarea>
+                                    </div>
+                                    <div>
                                         <div style="display:flex;justify-content:space-between;align-items:center;">
                                             <span class="chat-field-label" style="font-size:0.78rem;">LoRA</span>
                                             <button type="button" id="chat-image-gen-lora-add" class="chat-btn-sm" style="font-size:0.72rem;">+ 追加</button>

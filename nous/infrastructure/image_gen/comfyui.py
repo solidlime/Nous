@@ -88,6 +88,7 @@ class ComfyUIProvider(ImageGenProvider):
         quality: str = "standard",
         n: int = 1,
         reference_image: bytes | None = None,
+        negative_prompt: str = "",
         **kwargs: Any,
     ) -> list[GeneratedImage]:
         """ComfyUI で画像生成（fire-and-forget + polling）
@@ -98,7 +99,7 @@ class ComfyUIProvider(ImageGenProvider):
         if reference_image is not None:
             image_filename = await self._upload_reference_image(reference_image)
 
-        workflow = self._build_workflow(prompt, size, n, image_filename=image_filename)
+        workflow = self._build_workflow(prompt, size, n, image_filename=image_filename, negative_prompt=negative_prompt)
 
         # POST /prompt — 最大 2 回リトライ
         prompt_id = await self._submit_workflow(workflow)
@@ -168,7 +169,7 @@ class ComfyUIProvider(ImageGenProvider):
 
         raise RuntimeError("ComfyUI generation timed out after 180s")
 
-    def _build_workflow(self, prompt: str, size: str, n: int, image_filename: str | None = None) -> dict:
+    def _build_workflow(self, prompt: str, size: str, n: int, image_filename: str | None = None, negative_prompt: str = "") -> dict:
         """ワークフロー JSON を構築（パラメータ駆動）。
 
         ノードID固定:
@@ -289,7 +290,7 @@ class ComfyUIProvider(ImageGenProvider):
         nodes["7"] = {
             "class_type": "CLIPTextEncode",
             "inputs": {
-                "text": "lowres, bad anatomy, bad hands, text, error",
+                "text": negative_prompt or "lowres, bad anatomy, bad hands, text, error",
                 "clip": ["4", 1],
             },
         }
