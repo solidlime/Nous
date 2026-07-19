@@ -102,7 +102,6 @@ def register_persona_routes(mcp) -> None:
 
             for _f in (
                 "environment",
-                "speech_style",
                 "fatigue",
                 "warmth",
                 "arousal",
@@ -197,7 +196,7 @@ def register_persona_routes(mcp) -> None:
 
             # State memories (speech/physical/mental) -- newest per tag for WebUI
             state_memories: dict[str, dict] = {}
-            for tag in ["speech_style", "physical_state", "mental_state"]:
+            for tag in ["physical_state", "mental_state"]:
                 try:
                     mems_result = ctx.memory_service.get_by_tags([tag], include_consumed=True)
                     if mems_result.is_ok and mems_result.value:

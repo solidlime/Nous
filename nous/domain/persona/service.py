@@ -97,7 +97,7 @@ class PersonaService:
         """Update physical/mental/environmental state fields.
 
         Accepts: environment, fatigue, warmth, arousal, heart_rate, pain.
-        (speech_style, physical_state, mental_state are persisted via
+        (physical_state, mental_state are persisted via
         memory_service.create_memory instead.)
         Updates only non-None values.
         """

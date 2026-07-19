@@ -9,7 +9,6 @@ import sqlite3  # noqa: TC003  -- runtime usage for sqlite3.Connection
 from datetime import datetime, timezone
 
 _STATE_MIGRATION_MAP: dict[str, tuple[list[str], str]] = {
-    "speech_style": (["speech_style", "speech"], "speech_style"),
     "physical_state": (["physical_state", "body"], "physical_state"),
     "mental_state": (["mental_state", "mind"], "mental_state"),
 }

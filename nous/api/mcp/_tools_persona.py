@@ -77,12 +77,11 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> str:
     current_time = get_now().strftime("%Y-%m-%d %H:%M")
     ctx.persona_service.record_conversation_time(persona)
 
-    # Read one-shot state memories (speech_style/physical_state/mental_state)
+    # Read one-shot state memories (physical_state/mental_state)
     import datetime as _dt
 
     one_shot_context: dict[str, str] = {}
     for tag_name, label in [
-        ("speech_style", "🗣️ 口調"),
         ("physical_state", "💪 身体状態"),
         ("mental_state", "🧠 精神状態"),
     ]:
@@ -135,7 +134,6 @@ async def _tool_update_context(
     environment: str | None = None,
     relationship_status: str | None = None,
     body_state: dict | None = None,
-    speech_style: str | None = None,
     context_note: str | None = None,
     user_info: dict | None = None,
     persona_info: dict | None = None,
@@ -166,9 +164,6 @@ async def _tool_update_context(
         for key in ("fatigue", "warmth", "arousal", "heart_rate", "pain"):
             if key in body_state and body_state[key] is not None:
                 physical_updates[key] = str(body_state[key])
-    if speech_style is not None:
-        physical_updates["speech_style"] = speech_style
-
     if physical_updates:
         result = ctx.persona_service.update_physical_state(persona, **physical_updates)
         if result.is_ok:

@@ -85,7 +85,6 @@ JSONのみ。コメント不要。不要なフィールドは省略可。
   - 感情: emotion + emotion_intensity（変化時のみ）
   - 状態: mental_state, physical_state, fatigue, warmth, arousal
   - ユーザー情報: user_name, user_nickname, user_preferred_address（ユーザーが自ら名乗ったり呼び方を変えた時のみ記録）
-  - 口調変化: speech_style（私の話し方・口調が大きく変わった時のみ記録）
 - inventory_update:
   - 物理的な持ち物（服・装飾品・道具・武器など）の具体的な言及があった場合のみ記述。
   - 感情・思想・人間関係などの抽象概念は絶対にアイテムとして保存しないこと。
@@ -391,9 +390,8 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
             if emotion:
                 ctx.persona_service.update_emotion(persona, emotion, float(intensity or 0.5), context="llm_suggested")
 
-            # speech_style/physical_state/mental_state → memories (one-shot consumption)
+            # physical_state/mental_state → memories (one-shot consumption)
             for key, tags in [
-                ("speech_style", ["speech_style", "speech"]),
                 ("physical_state", ["physical_state", "body"]),
                 ("mental_state", ["mental_state", "mind"]),
             ]:
