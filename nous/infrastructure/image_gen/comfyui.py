@@ -62,6 +62,13 @@ class ComfyUIProvider(ImageGenProvider):
             self._client = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=180.0, write=180.0, pool=5.0))
         return self._client
 
+    @staticmethod
+    def _normalize_lora_path(path: str) -> str:
+        """ComfyUI の LoraLoader が要求する .safetensors 拡張子を補完する。"""
+        if path and not path.endswith(".safetensors"):
+            return path + ".safetensors"
+        return path
+
     @property
     def provider_name(self) -> str:
         return "comfyui"
@@ -215,7 +222,7 @@ class ComfyUIProvider(ImageGenProvider):
 
         # キャラ LoRA
         for lora in self._loras:
-            path = lora.get("path", "")
+            path = self._normalize_lora_path(lora.get("path", ""))
             weight = lora.get("weight", 1.0)
             if not path:
                 continue
@@ -242,7 +249,7 @@ class ComfyUIProvider(ImageGenProvider):
                 "inputs": {
                     "model": [last_model_id, 0],
                     "clip": [last_clip_id, 1],
-                    "lora_name": self._speed_lora_path,
+                    "lora_name": self._normalize_lora_path(self._speed_lora_path),
                     "strength_model": self._speed_lora_weight,
                     "strength_clip": self._speed_lora_weight,
                 },
