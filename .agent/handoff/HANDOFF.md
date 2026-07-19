@@ -1,7 +1,7 @@
 # HANDOFF — 2026-07-20 (セッション2)
 
 ## セッション概要
-画像生成パイプラインの複数バグ修正・TTS前処理・設定UI改善。画像がチャットログに表示されない問題を追跡中。
+画像生成パイプラインの複数バグ修正・TTS前処理・設定UI改善。画像がチャットログに表示されない問題を修正済み（base64→Blob URL変換）。
 
 ## 完了したコミット（全プッシュ済み main → origin/main）
 ```
@@ -42,31 +42,23 @@ f6d24c4 feat: make ChatConfigRepository save() auto-create missing DB columns
 - `builtin.py:68`: 同一オブジェクト返却 → `dict(result)` 浅コピー
 - `inference.py:274`: `images` キーがLLMフォローアップ注入対象外だったのを修正
 
-### SSE/画像表示（進行中）
+### SSE/画像表示（完了）
 - SSE順序修正: `ToolResultSSE` → `ImageGenResultSSE` の順に入れ替え (0962c1d)
 - DOM簡略化: spinner/画像カードを `container.appendChild()` に (7875bfa)
+- **画像表示バグ修正**: base64→Blob URL + anchor + min-height + onerror (b13705d)
 
-## 未解決: 画像がチャットログに表示されない
+## 解決済み: 画像がチャットログに表示されない
 
-### 調査経過
-- SSE はバックエンドから正常送信 (`ImageGenResultSSE: yielding 1 image(s)`)
-- フロントエンドも受信確認 (ブラウザコンソール: `imagesCount:1, hasImages:true`)
-- `showImageGenResult()` の images check も通過
-- base64 データ有効 (1.35MB PNG, `iVBORw0KGgo` で始まる)
+### 原因（@oracle 診断）
+1.35MB base64 data URI を `img.src` に直接代入。Chrome の data URI 上限 (~2MB) に近く、デコードに静かに失敗。
 
-### @oracle レビュー結果（BLOCK判定）
-**根本原因**: 1.35MB base64 data URI を `img.src` に直接代入。Chrome の data URI 上限 (~2MB) に近く、デコードに静かに失敗している。
-
-### 修正指示（oracle推奨）
-1. **base64 → Blob URL 変換**: `atob()` + `Uint8Array` + `URL.createObjectURL(blob)` で上限なし
-2. **`anchor` 未使用バグ**: スピナー削除時に記録した `anchor` を `insertBefore(card, anchor)` で使う
-3. **`.chat-image-gen-card` に `min-height: 120px`** 追加 → 画像未表示時もカードが潰れない
-4. **`img.onerror` ハンドラ** 追加 → デコード失敗時のフィードバック
-
-### 修正対象ファイル
-- `nous/api/http/static/chat/chat-tools.js`: `showImageGenResult()` の base64→Blob変換 + anchor再導入 + onerror追加
-- `nous/api/http/static/chat.css`: `.chat-image-gen-card` に min-height + img に min-height
+### 修正 (b13705d)
+1. **base64 → Blob URL 変換**: `atob()` + `Uint8Array` + `URL.createObjectURL(blob)` + data URI fallback
+2. **`anchor` 再導入**: `insertBefore(card, anchor)` でスピナー位置に正しく挿入
+3. **min-height: 120px**: `.chat-image-gen-card` と内部 `img` に追加
+4. **`img.onerror` ハンドラ**: デコード失敗時にエラーメッセージ表示（`.image-gen-error` CSS付き）
 
 ### 注意点
 - サーバーは `/home/rausraus/code/Nous` で起動中 (PID 729890, `http://localhost:26262`)
+- ブラウザで画像生成を実行し、チャットログに画像が表示されるか確認すること
 - 開発環境DBは既に列追加済みだが、本番DBは次回 `save()` 時に自動修復される
