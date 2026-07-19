@@ -190,15 +190,8 @@ function showImageGenSpinner(evt) {
   _imageGenSpinnerId = "image-gen-spinner-" + Date.now();
   spinner.id = _imageGenSpinnerId;
 
-  // 画像生成ツールバブルの直後にスピナーを配置
-  var toolBubble = container.querySelector(".chat-tool-call:last-of-type");
-  if (toolBubble && toolBubble.nextSibling) {
-    container.insertBefore(spinner, toolBubble.nextSibling);
-  } else if (toolBubble) {
-    container.appendChild(spinner);
-  } else {
-    container.appendChild(spinner);
-  }
+  // スピナーをチャットログ末尾に追加
+  container.appendChild(spinner);
 
   scrollToBottom(container);
 }
@@ -260,21 +253,8 @@ function showImageGenResult(evt) {
     card.appendChild(imgEl);
     card.appendChild(meta);
 
-    // スピナーの後に画像カードを挿入（スピナーがあった位置に）
-    if (anchor && anchor.parentNode) {
-      console.log("[showImageGenResult] DOM insert: anchor path, container:", !!container);
-      container.insertBefore(card, anchor);
-      anchor = card.nextSibling; // 次の画像カードもこの後ろに
-    } else {
-      console.log("[showImageGenResult] DOM insert: fallback path, anchor:", !!anchor);
-      // フォールバック：ツールバブルの直後を探す
-      var toolBubble = container.querySelector(".chat-tool-call:last-of-type");
-      if (toolBubble && toolBubble.nextSibling) {
-        container.insertBefore(card, toolBubble.nextSibling);
-      } else {
-        container.appendChild(card);
-      }
-    }
+    // スピナーの後に画像カードを挿入
+    container.appendChild(card);
   });
 
   scrollToBottom(container);
