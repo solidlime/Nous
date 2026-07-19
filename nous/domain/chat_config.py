@@ -73,6 +73,8 @@ class ChatConfig(BaseModel):
     image_gen_comfyui_scheduler: str = "normal"
     image_gen_comfyui_seed: int = 0  # 0=ランダム
     image_gen_comfyui_denoise: float = 0.7
+    image_gen_max_width: int = 1200
+    image_gen_max_height: int = 1200
     # 自画像生成用プロンプト（キャラ外見のSDタグ・LoRAトリガーワード・トーンなどを含む固定プロンプト文字列）
     image_gen_self_portrait_prompt: str = ""
     # 高速化 LoRA
@@ -290,7 +292,7 @@ class ChatConfigRepository:
             "image_gen_comfyui_width, image_gen_comfyui_height, "
             "image_gen_comfyui_steps, image_gen_comfyui_cfg, "
             "image_gen_comfyui_sampler, image_gen_comfyui_scheduler, "
-            "image_gen_comfyui_seed, image_gen_comfyui_denoise, image_gen_self_portrait_prompt, "
+            "image_gen_comfyui_seed, image_gen_comfyui_denoise, image_gen_max_width, image_gen_max_height, image_gen_self_portrait_prompt, "
             "image_gen_comfyui_speed_lora_path, image_gen_comfyui_speed_lora_weight, "
             "image_gen_comfyui_speed_lora_method, "
             "enable_memory_tools, debug_mode, "
@@ -374,7 +376,7 @@ class ChatConfigRepository:
                     image_gen_comfyui_width, image_gen_comfyui_height,
                     image_gen_comfyui_steps, image_gen_comfyui_cfg,
                     image_gen_comfyui_sampler, image_gen_comfyui_scheduler,
-                    image_gen_comfyui_seed, image_gen_comfyui_denoise, image_gen_self_portrait_prompt,
+                    image_gen_comfyui_seed, image_gen_comfyui_denoise, image_gen_max_width, image_gen_max_height, image_gen_self_portrait_prompt,
                     image_gen_comfyui_speed_lora_path, image_gen_comfyui_speed_lora_weight,
                     image_gen_comfyui_speed_lora_method,
                     enable_memory_tools, debug_mode,
@@ -435,6 +437,8 @@ class ChatConfigRepository:
                  image_gen_comfyui_scheduler=excluded.image_gen_comfyui_scheduler,
                  image_gen_comfyui_seed=excluded.image_gen_comfyui_seed,
                  image_gen_comfyui_denoise=excluded.image_gen_comfyui_denoise,
+                 image_gen_max_width=excluded.image_gen_max_width,
+                 image_gen_max_height=excluded.image_gen_max_height,
                  image_gen_self_portrait_prompt=excluded.image_gen_self_portrait_prompt,
                  image_gen_comfyui_speed_lora_path=excluded.image_gen_comfyui_speed_lora_path,
                  image_gen_comfyui_speed_lora_weight=excluded.image_gen_comfyui_speed_lora_weight,
@@ -511,6 +515,8 @@ class ChatConfigRepository:
                 config.image_gen_comfyui_scheduler,
                 config.image_gen_comfyui_seed,
                 config.image_gen_comfyui_denoise,
+                config.image_gen_max_width,
+                config.image_gen_max_height,
                 config.image_gen_self_portrait_prompt,
                 config.image_gen_comfyui_speed_lora_path,
                 config.image_gen_comfyui_speed_lora_weight,
