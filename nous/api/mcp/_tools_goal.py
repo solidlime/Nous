@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from nous.domain.search.engine import SearchQuery
 from nous.domain.value_objects import importance_to_label
 
 logger = logging.getLogger(__name__)
@@ -130,21 +131,42 @@ async def _tool_goal_manage(
                 )
                 return {"ok": False, "error": f"Memory '{memory_key}' is not an active goal."}
         else:
-            tag_result = ctx.memory_service.get_by_tags(search_tags)
-            if not tag_result.is_ok:
-                await ctx.event_bus.publish(
-                    "tool.called",
-                    {
-                        "persona": persona,
-                        "tool_name": "goal_manage",
-                        "params_summary": f"operation={operation}, content={content[:50]}",
-                        "result_summary": str(tag_result.error),
-                        "success": False,
-                    },
-                )
-                return {"ok": False, "error": tag_result.error}
-            candidates = tag_result.value or []
-            match = next((m for m in candidates if content.strip().lower() == m.content.strip().lower()), None)
+            # Hybrid search first
+            ctx.search_engine.set_persona(persona)
+            search_query = SearchQuery(
+                text=content,
+                tags=search_tags,
+                top_k=3,
+                mode="hybrid",
+                vector_weight=1.0,
+                keyword_weight=0.5,
+            )
+            search_result = await ctx.search_engine.search(search_query)
+
+            match = None
+            if search_result.is_ok and search_result.value:
+                top = search_result.value[0]
+                if isinstance(top.score, (int, float)) and top.score > 0.3:
+                    match = top.memory
+
+            # Fallback: exact match by tags + content
+            if match is None:
+                tag_result = ctx.memory_service.get_by_tags(search_tags)
+                if not tag_result.is_ok:
+                    await ctx.event_bus.publish(
+                        "tool.called",
+                        {
+                            "persona": persona,
+                            "tool_name": "goal_manage",
+                            "params_summary": f"operation={operation}, content={content[:50]}",
+                            "result_summary": str(tag_result.error),
+                            "success": False,
+                        },
+                    )
+                    return {"ok": False, "error": tag_result.error}
+                candidates = tag_result.value or []
+                match = next((m for m in candidates if content.strip().lower() == m.content.strip().lower()), None)
+
             if match is None:
                 await ctx.event_bus.publish(
                     "tool.called",
