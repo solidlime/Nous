@@ -99,7 +99,7 @@ function renderAttachmentBadge(att) {
   area.appendChild(badge);
 }
 
-function openMediaViewer(url, type, mimeType) {
+function openMediaViewer(url, type, mimeType, data) {
   const overlay = document.getElementById("media-viewer-overlay");
   const inner = document.getElementById("media-viewer-inner");
   if (!overlay || !inner) return;
@@ -108,6 +108,36 @@ function openMediaViewer(url, type, mimeType) {
     const img = document.createElement("img");
     img.src = url;
     inner.appendChild(img);
+    // Prompt info display
+    if (data && (data.revised_prompt || data.negative_prompt)) {
+      const promptsDiv = document.createElement("div");
+      promptsDiv.className = "media-viewer-prompts";
+      if (data.revised_prompt) {
+        const label = document.createElement("div");
+        label.className = "prompt-label";
+        label.textContent = "生成プロンプト";
+        promptsDiv.appendChild(label);
+        const text = document.createElement("div");
+        text.className = "prompt-text";
+        text.textContent = data.revised_prompt;
+        promptsDiv.appendChild(text);
+      }
+      if (data.negative_prompt) {
+        const label = document.createElement("div");
+        label.className = "prompt-label";
+        label.textContent = "ネガティブプロンプト";
+        promptsDiv.appendChild(label);
+        const text = document.createElement("div");
+        text.className = "prompt-text";
+        text.textContent = data.negative_prompt;
+        promptsDiv.appendChild(text);
+      }
+      // Prevent click propagation to overlay (for future click-to-close)
+      promptsDiv.addEventListener("click", function (e) {
+        e.stopPropagation();
+      });
+      inner.appendChild(promptsDiv);
+    }
   } else if (type === "video") {
     const vid = document.createElement("video");
     vid.src = url;

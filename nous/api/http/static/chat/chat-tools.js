@@ -235,6 +235,9 @@ function showImageGenResult(evt) {
     }
     imgEl.alt = img.revised_prompt || "生成画像";
     imgEl.title = img.revised_prompt || "";
+    // Store prompt data for media viewer
+    imgEl.dataset.revisedPrompt = img.revised_prompt || "";
+    imgEl.dataset.negativePrompt = img.negative_prompt || "";
     imgEl.onerror = function () {
       console.error("[showImageGenResult] img decode failed, size:", img.base64?.length);
       imgEl.style.display = "none";
@@ -245,7 +248,10 @@ function showImageGenResult(evt) {
     };
     imgEl.onclick = function () {
       if (typeof openMediaViewer === "function") {
-        openMediaViewer(imgEl.src, "image");
+        openMediaViewer(imgEl.src, "image", null, {
+          revised_prompt: imgEl.dataset.revisedPrompt,
+          negative_prompt: imgEl.dataset.negativePrompt,
+        });
       } else {
         window.open(imgEl.src, "_blank");
       }

@@ -397,6 +397,9 @@ async function restoreChatHistory() {
                     }
                     imgEl.alt = img.revised_prompt || "生成画像";
                     imgEl.title = img.revised_prompt || "";
+                    // Store prompt data for media viewer
+                    imgEl.dataset.revisedPrompt = img.revised_prompt || "";
+                    imgEl.dataset.negativePrompt = img.negative_prompt || "";
                     imgEl.onerror = function() {
                       imgEl.style.display = "none";
                       var errDiv = document.createElement("div");
@@ -406,7 +409,10 @@ async function restoreChatHistory() {
                     };
                     imgEl.onclick = function() {
                       if (typeof openMediaViewer === "function") {
-                        openMediaViewer(imgEl.src, "image");
+                        openMediaViewer(imgEl.src, "image", null, {
+                          revised_prompt: imgEl.dataset.revisedPrompt,
+                          negative_prompt: imgEl.dataset.negativePrompt,
+                        });
                       } else {
                         window.open(imgEl.src, "_blank");
                       }
