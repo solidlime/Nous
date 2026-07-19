@@ -76,7 +76,7 @@ nous/
 | `item_search(query, category)` | インベントリ検索 |
 | `goal_manage(operation, content, importance, scope, memory_key)` | 目標管理。operation: `create/list/achieve/cancel`。scope: `self/interpersonal` |
 | `invoke_skill(name, task)` | スキル実行（隔離LLMコンテキスト） |
-| `irodori_tts(text, voice)` | 日本語TTS音声生成 |
+| `irodori_tts(text, voice)` | 日本語TTS音声生成。話速は ChatConfig `voice_speed` (0.25-4.0, default 1.0) で調整可能 |
 | `search(query, num_results, language)` | Web検索（SearXNG経由） |
 | `image_generate(prompt, size, quality, n, provider)` | 画像生成 |
 | `read_pdf(path)` | PDF解析（テキスト・テーブル・画像抽出） |
