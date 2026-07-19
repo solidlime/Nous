@@ -223,11 +223,23 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
                 {"type": "image_gen_start", "provider": provider_name, "prompt": prompt[:100], "n": n},
             )
 
-        # プロバイダ選択（ファクトリ経由）
+        # ── ChatConfig から ComfyUIProvider を直接構築 ──
         from nous.infrastructure.image_gen.base import ImageGenConfig
-        from nous.infrastructure.image_gen.factory import get_image_gen_provider
+        from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+        from nous.infrastructure.image_gen.factory import get_image_gen_provider  # noqa: F401 — kept for compat
 
-        comfyui_url = getattr(config, "image_gen_comfyui_url", "")
+        # LoRA リストを JSON からパース
+        loras_raw = getattr(config, "image_gen_comfyui_loras", "")
+        loras: list[dict] = []
+        if loras_raw:
+            try:
+                loras = json.loads(loras_raw)
+                if not isinstance(loras, list):
+                    loras = []
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        comfyui_url = getattr(config, "image_gen_comfyui_url", "") or "http://localhost:8188"
 
         gen_cfg = ImageGenConfig(
             provider=provider_name,
@@ -235,11 +247,22 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             size=size,
             quality=quality,
         )
-        provider = get_image_gen_provider(gen_cfg)
-        if provider is None:
-            if provider_name == "comfyui" and not gen_cfg.comfyui_url:
-                return {"status": "error", "message": "ComfyUI URL is not configured"}
-            return {"status": "error", "message": f"Unsupported provider: {provider_name}"}
+        provider = ComfyUIProvider(
+            api_url=gen_cfg.comfyui_url,
+            checkpoint=getattr(config, "image_gen_comfyui_checkpoint", "noobai-xl-epsilon-pred-11.safetensors"),
+            loras=loras,
+            speed_lora_path=getattr(config, "image_gen_comfyui_speed_lora_path", ""),
+            speed_lora_weight=getattr(config, "image_gen_comfyui_speed_lora_weight", 1.0),
+            speed_lora_method=getattr(config, "image_gen_comfyui_speed_lora_method", ""),
+            width=getattr(config, "image_gen_comfyui_width", 1024),
+            height=getattr(config, "image_gen_comfyui_height", 1024),
+            steps=getattr(config, "image_gen_comfyui_steps", 28),
+            cfg=getattr(config, "image_gen_comfyui_cfg", 5.5),
+            sampler=getattr(config, "image_gen_comfyui_sampler", "euler_ancestral"),
+            scheduler=getattr(config, "image_gen_comfyui_scheduler", "normal"),
+            seed=getattr(config, "image_gen_comfyui_seed", 0),
+            denoise=getattr(config, "image_gen_comfyui_denoise", 0.7),
+        )
 
         generated = await provider.generate(prompt=prompt, size=size, quality=quality, n=n)
 
