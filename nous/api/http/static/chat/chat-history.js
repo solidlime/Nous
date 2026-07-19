@@ -508,6 +508,69 @@ function exportChatHistory() {
 }
 
 // ------------------------------------------------------------------
+// Delete a chat message and all subsequent messages
+// ------------------------------------------------------------------
+async function deleteChatMessage(msgIndex) {
+  if (!S.persona) return;
+
+  const container = document.getElementById("chat-messages");
+  const allMsgs = container.querySelectorAll(".chat-msg");
+  const subsequentCount = allMsgs.length - msgIndex;
+
+  const confirmed = await showConfirm(
+    "このメッセージを削除しますか？以降の " + subsequentCount + " 件のメッセージも削除されます。"
+  );
+  if (!confirmed) return;
+
+  const sid = getChatSessionId();
+  try {
+    const result = await api(
+      "/api/chat/" +
+        encodeURIComponent(S.persona) +
+        "/sessions/" +
+        encodeURIComponent(sid) +
+        "/rollback",
+      { method: "POST", body: JSON.stringify({ keep_until: msgIndex }) }
+    );
+
+    // Remove DOM messages from msgIndex onwards
+    const currentMsgs = container.querySelectorAll(".chat-msg");
+    for (const msg of currentMsgs) {
+      if (parseInt(msg.dataset.msgIndex) >= msgIndex) msg.remove();
+    }
+
+    // Restore welcome if no messages left
+    if (container.querySelectorAll(".chat-msg").length === 0) {
+      resetToWelcome();
+    }
+
+    // Find last remaining user message for auto-regeneration
+    const remaining = result.remaining_messages || [];
+    let lastUserText = null;
+    for (let i = remaining.length - 1; i >= 0; i--) {
+      if (remaining[i].role === "user") {
+        lastUserText = remaining[i].content;
+        break;
+      }
+    }
+
+    if (lastUserText) {
+      const inputEl = document.getElementById("chat-input");
+      if (inputEl) {
+        inputEl.value = lastUserText;
+        inputEl.focus();
+        inputEl.dispatchEvent(new Event("input"));
+      }
+      setTimeout(() => chatSend(false), 100);
+    }
+
+    toast("🗑️ メッセージを削除しました", "success");
+  } catch (e) {
+    toast("削除失敗: " + e.message, "error");
+  }
+}
+
+// ------------------------------------------------------------------
 // Expose on N.Chat.history
 // ------------------------------------------------------------------
 N.Chat.history = {
@@ -515,6 +578,7 @@ N.Chat.history = {
   clear: clearChatHistory,
   rollback: rollbackChat,
   edit: editChatMessage,
+  delete: deleteChatMessage,
   export: exportChatHistory,
   reset: resetToWelcome,
   getSessionId: getChatSessionId,
@@ -525,6 +589,7 @@ window.restoreChatHistory = restoreChatHistory;
 window.clearChatHistory = clearChatHistory;
 window.rollbackChat = rollbackChat;
 window.editChatMessage = editChatMessage;
+window.deleteChatMessage = deleteChatMessage;
 window.exportChatHistory = exportChatHistory;
 window.resetToWelcome = resetToWelcome;
 window.getChatSessionId = getChatSessionId;
