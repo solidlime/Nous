@@ -54,9 +54,15 @@ function renderCodeBlock(lang, code) {
   const copyBtn = wrapper.querySelector(".hljs-copy-btn");
   if (copyBtn) {
     copyBtn.addEventListener("click", function () {
-      navigator.clipboard.writeText(code).then(function () {
-        toast("コピーしました", "success");
-      });
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        navigator.clipboard.writeText(code).then(function () {
+          toast("コピーしました", "success");
+        }).catch(function () {
+          _fallbackCopyMD(code);
+        });
+      } else {
+        _fallbackCopyMD(code);
+      }
     });
   }
   if (runnable) {
@@ -148,6 +154,28 @@ function safeMarkdown(text) {
     /* fallback to escaped text */
   }
   return esc(text).replace(/\n/g, "<br>");
+}
+
+// ------------------------------------------------------------------
+// Copy fallback (non-secure contexts)
+// ------------------------------------------------------------------
+function _fallbackCopyMD(text) {
+  var textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    document.execCommand("copy");
+    toast("コピーしました", "success");
+  } catch (e) {
+    toast("コピーに失敗しました", "error");
+  } finally {
+    document.body.removeChild(textarea);
+  }
 }
 
 // ------------------------------------------------------------------

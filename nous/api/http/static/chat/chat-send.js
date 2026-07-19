@@ -101,9 +101,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown) {
         const allText = Array.from(div.querySelectorAll(".chat-bubble"))
             .map(b => b.textContent)
             .join("\n");
-        navigator.clipboard
-            .writeText(allText)
-            .then(() => toast("コピーしました", "success"));
+        _copyToClipboard(allText);
     };
     actions.appendChild(copyBtn);
   }
@@ -597,6 +595,38 @@ async function chatSend(retry) {
 // ------------------------------------------------------------------
 N.Chat.send = chatSend;
 N.Chat.cancel = chatCancel;
+
+// ------------------------------------------------------------------
+// Clipboard helper — try modern API, fallback to execCommand
+// ------------------------------------------------------------------
+function _copyToClipboard(text) {
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    navigator.clipboard.writeText(text)
+      .then(function() { toast("コピーしました", "success"); })
+      .catch(function() { _fallbackCopy(text); });
+  } else {
+    _fallbackCopy(text);
+  }
+}
+
+function _fallbackCopy(text) {
+  var textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    document.execCommand("copy");
+    toast("コピーしました", "success");
+  } catch (e) {
+    toast("コピーに失敗しました", "error");
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
 
 // Expose globals for backward compat:
 window.chatSend = chatSend;

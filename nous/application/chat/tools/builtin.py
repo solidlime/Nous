@@ -305,6 +305,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             images_data.append({
                 "base64": img.base64,
                 "revised_prompt": img.revised_prompt,
+                "negative_prompt": getattr(img, "negative_prompt", "") or "",
                 "size": img.size,
                 "filename": str(img_path),
                 "url": url,

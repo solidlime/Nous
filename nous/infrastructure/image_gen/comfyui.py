@@ -105,7 +105,7 @@ class ComfyUIProvider(ImageGenProvider):
         prompt_id = await self._submit_workflow(workflow)
 
         # Poll /history — 最大 180 秒
-        return await self._poll_result(prompt_id, prompt, size, n)
+        return await self._poll_result(prompt_id, prompt, size, n, negative_prompt=negative_prompt)
 
     async def _upload_reference_image(self, image_bytes: bytes) -> str:
         """参照画像を ComfyUI の /upload/image にアップロードし、filename を返す。"""
@@ -137,7 +137,7 @@ class ComfyUIProvider(ImageGenProvider):
                     continue
         raise RuntimeError("ComfyUI generation failed after retries") from last_exc
 
-    async def _poll_result(self, prompt_id: str, prompt: str, size: str, n: int) -> list[GeneratedImage]:
+    async def _poll_result(self, prompt_id: str, prompt: str, size: str, n: int, negative_prompt: str = "") -> list[GeneratedImage]:
         """履歴をポーリングして生成画像を取得（最大 60 回 × 3s = 180s）。"""
         for _ in range(60):
             await asyncio.sleep(3)
@@ -161,7 +161,7 @@ class ComfyUIProvider(ImageGenProvider):
                         )
                         img_resp.raise_for_status()
                         b64 = base64.b64encode(img_resp.content).decode("utf-8")
-                        images.append(GeneratedImage(base64=b64, revised_prompt=prompt, size=size))
+                        images.append(GeneratedImage(base64=b64, revised_prompt=prompt, size=size, negative_prompt=negative_prompt))
                     except Exception:
                         continue
             if images:
