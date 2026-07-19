@@ -44,7 +44,7 @@ def render_memories_tab() -> str:
                 color: var(--text-muted); cursor: pointer; transition: all 0.2s;
             }
             .mode-btn.active {
-                background: rgba(167,139,250,0.25); color: var(--accent-purple); font-weight: 600;
+                background: rgba(var(--accent-blue-rgb), 0.25); color: var(--accent-blue); font-weight: 600;
             }
 
             /* ── Toolbar ── */
@@ -70,7 +70,7 @@ def render_memories_tab() -> str:
                 padding: 5px 10px; font-size: 0.8rem; border: none; background: transparent;
                 color: var(--text-muted); cursor: pointer; transition: all 0.2s;
             }
-            .view-btn.active { background: rgba(167,139,250,0.2); color: var(--accent-purple); }
+            .view-btn.active { background: rgba(var(--accent-blue-rgb), 0.2); color: var(--accent-blue); }
 
             /* ── Compact list view ── */
             .memory-compact {
@@ -78,7 +78,7 @@ def render_memories_tab() -> str:
                 border-bottom: 1px solid var(--glass-border); font-size: 0.82rem; cursor: pointer;
                 transition: background 0.2s;
             }
-            .memory-compact:hover { background: rgba(167,139,250,0.05); }
+            .memory-compact:hover { background: rgba(var(--accent-blue-rgb), 0.05); }
             .memory-compact:last-child { border-bottom: none; }
             .mem-compact-key {
                 font-family: monospace; color: var(--accent-purple); font-size: 0.75rem;
@@ -122,7 +122,7 @@ def render_memories_tab() -> str:
                 color: var(--text-primary); padding: 10px; font-size: 0.88rem;
                 font-family: inherit; resize: vertical; outline: none;
             }
-            .form-textarea:focus { border-color: var(--accent-purple); box-shadow: 0 0 0 3px rgba(167,139,250,0.2); }
+            .form-textarea:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 3px rgba(var(--accent-blue-rgb), 0.2); }
             html.light .form-textarea { background: rgba(139,92,246,0.06); }
 
             /* ── Tags input ── */
@@ -130,7 +130,7 @@ def render_memories_tab() -> str:
                 display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 10px; min-height: 38px; align-items: center;
                 background: rgba(255,255,255,0.06); border: 1px solid var(--glass-border); border-radius: 10px;
             }
-            .tags-input-wrap:focus-within { border-color: var(--accent-purple); box-shadow: 0 0 0 3px rgba(167,139,250,0.2); }
+            .tags-input-wrap:focus-within { border-color: var(--accent-blue); box-shadow: 0 0 0 3px rgba(var(--accent-blue-rgb), 0.2); }
             html.light .tags-input-wrap { background: rgba(139,92,246,0.06); }
             .tag-chip-edit {
                 display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px;
@@ -155,7 +155,7 @@ def render_memories_tab() -> str:
             input[type="range"].glass-range::-webkit-slider-thumb {
                 -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
                 background: var(--accent-purple); cursor: pointer; border: 2px solid var(--bg-secondary);
-                box-shadow: 0 0 8px rgba(167,139,250,0.4);
+                box-shadow: 0 0 8px rgba(var(--accent-blue-rgb), 0.4);
             }
             input[type="range"].glass-range::-moz-range-thumb {
                 width: 16px; height: 16px; border-radius: 50%; background: var(--accent-purple);
@@ -189,8 +189,8 @@ def render_memories_tab() -> str:
                 user-select: none;
             }
             .filter-tag.active {
-                background: rgba(167,139,250,0.2); color: var(--accent-purple);
-                border-color: rgba(167,139,250,0.4);
+                background: rgba(var(--accent-blue-rgb), 0.2); color: var(--accent-blue);
+                border-color: rgba(var(--accent-blue-rgb), 0.4);
             }
 
             /* ── Sort dropdown ── */

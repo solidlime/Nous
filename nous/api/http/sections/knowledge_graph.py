@@ -46,17 +46,17 @@ def render_graph_tab() -> str:
             }
             .graph-spinner {
               width: 36px; height: 36px;
-              border: 3px solid rgba(167,139,250,0.2);
-              border-top-color: var(--accent-purple, #a78bfa);
+              border: 3px solid rgba(var(--accent-blue-rgb), 0.2);
+              border-top-color: var(--accent-blue);
               border-radius: 50%;
               animation: graph-spin 0.8s linear infinite;
             }
 
             /* Active state for node-limit buttons */
             .graph-limit-btn.active {
-              background: rgba(167,139,250,0.35);
-              border-color: var(--accent-purple, #a78bfa);
-              box-shadow: 0 0 12px rgba(167,139,250,0.15);
+              background: rgba(var(--accent-blue-rgb), 0.35);
+              border-color: var(--accent-blue);
+              box-shadow: 0 0 12px rgba(var(--accent-blue-rgb), 0.15);
             }
 
             /* Detail panel backdrop - respects light/dark via variable */

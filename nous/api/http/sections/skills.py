@@ -10,7 +10,7 @@ def render_skills_tab() -> str:
                 <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="target"></i></span> Skills</h2>
                 <div style="display:flex;gap:8px;">
                     <button onclick="syncSkillsFromFiles()" title="data/skills/<name>/SKILL.md をDBに同期" style="padding:6px 14px;border-radius:8px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.25);color:var(--accent-green);font-size:0.82rem;cursor:pointer;font-weight:600;"><i data-lucide="folder-open"></i> ファイルから同期</button>
-                    <button onclick="showSkillForm()" style="padding:6px 16px;border-radius:8px;background:linear-gradient(135deg,var(--accent-purple),#7c3aed);border:none;color:white;font-size:0.85rem;cursor:pointer;font-weight:600;">+ 新規スキル</button>
+                    <button onclick="showSkillForm()" style="padding:6px 16px;border-radius:8px;background:var(--accent-blue);border:none;color:white;font-size:0.85rem;cursor:pointer;font-weight:600;">+ 新規スキル</button>
                 </div>
             </div>
             <div id="skill-form-area" style="display:none;margin-bottom:16px;" class="glass" style="padding:16px;">
@@ -26,7 +26,7 @@ def render_skills_tab() -> str:
                         <input type="text" id="skill-description" style="width:100%;background:rgba(255,255,255,0.06);border:1px solid var(--glass-border);border-radius:8px;padding:8px 10px;color:var(--text-primary);font-size:0.85rem;outline:none;" placeholder="スキルの簡潔な説明" />
                     </div>
                     <div style="display:flex;gap:8px;">
-                        <button onclick="saveSkill()" style="padding:7px 20px;border-radius:8px;background:linear-gradient(135deg,var(--accent-purple),#7c3aed);border:none;color:white;font-size:0.85rem;cursor:pointer;font-weight:600;">保存</button>
+                        <button onclick="saveSkill()" style="padding:7px 20px;border-radius:8px;background:var(--accent-blue);border:none;color:white;font-size:0.85rem;cursor:pointer;font-weight:600;">保存</button>
                         <button onclick="hideSkillForm()" style="padding:7px 16px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid var(--glass-border);color:var(--text-secondary);font-size:0.85rem;cursor:pointer;">キャンセル</button>
                     </div>
                 </div>

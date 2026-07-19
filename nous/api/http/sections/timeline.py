@@ -69,7 +69,7 @@ def render_timeline_tab() -> str:
                 }
                 #tl-container .vis-item.vis-selected {
                     border-color: var(--accent-purple) !important;
-                    box-shadow: 0 0 12px rgba(167,139,250,0.4);
+                    box-shadow: 0 0 12px rgba(var(--accent-blue-rgb), 0.4);
                 }
                 #tl-container .vis-item .vis-item-content {
                     padding: 4px 8px; white-space: nowrap; overflow: hidden;

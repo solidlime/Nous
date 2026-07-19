@@ -20,7 +20,7 @@ def render_settings_tab() -> str:
         .cat-reset-btn:hover { background: rgba(96,165,250,0.18); }
         .cat-toggle-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.9rem; padding: 2px 6px; transition: transform 0.2s; }
         .profile-chip { transition: all 0.2s; }
-        .profile-chip:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(167,139,250,0.2); }
+        .profile-chip:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(var(--accent-blue-rgb), 0.2); }
         </style>
         <!-- ========== SETTINGS TAB ========== -->
         <section id="tab-settings" class="tab-panel" role="tabpanel">
