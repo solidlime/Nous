@@ -1,6 +1,7 @@
 from nous.api.http.routers.admin import register_admin_routes
 from nous.api.http.routers.chat import register_chat_routes
 from nous.api.http.routers.events import register_events_routes
+from nous.api.http.routers.image_gen import register_image_gen_routes
 from nous.api.http.routers.item import register_item_routes
 from nous.api.http.routers.memory import register_memory_routes
 from nous.api.http.routers.persona import register_persona_routes
@@ -13,6 +14,7 @@ __all__ = [
     "register_admin_routes",
     "register_chat_routes",
     "register_events_routes",
+    "register_image_gen_routes",
     "register_item_routes",
     "register_memory_routes",
     "register_persona_routes",
