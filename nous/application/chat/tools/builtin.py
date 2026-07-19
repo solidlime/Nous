@@ -52,13 +52,15 @@ def _image_ref(b64_str: str, mime_type: str = "image/png") -> str:
 
 def truncate_tool_result(result: dict, max_chars: int) -> dict:
     """Truncate tool result string to avoid context overflow."""
-    has_images = "content_base64" in result or "artifacts" in result
+    _IMAGE_KEYS = ("content_base64", "artifacts", "images")
+    has_images = any(k in result for k in _IMAGE_KEYS)
     if has_images:
+        img_sources = [k for k in _IMAGE_KEYS if k in result]
+        imgs_count = len(result.get("images", [])) if "images" in result else None
         logger.info(
-            "truncate_tool_result: image data detected (content_base64=%s, artifacts=%d, content_type=%s)",
-            "yes" if "content_base64" in result else "no",
-            len(result.get("artifacts", [])),
-            result.get("content_type", "unknown"),
+            "truncate_tool_result: image data detected from %s (images_count=%s)",
+            img_sources,
+            imgs_count,
         )
     if not has_images:
         result_str = json.dumps(result, ensure_ascii=False)
@@ -69,7 +71,13 @@ def truncate_tool_result(result: dict, max_chars: int) -> dict:
             "truncated": True,
             "content": result_str[:max_chars] + f"... [truncated: {remaining} chars remaining]",
         }
-    text_parts = {k: v for k, v in result.items() if k not in ("content_base64", "artifacts")}
+    # Build text-only output (exclude all image keys, replace with summary)
+    exclude_keys = set(_IMAGE_KEYS)
+    text_parts = {k: v for k, v in result.items() if k not in exclude_keys}
+    if "images" in result:
+        imgs = result["images"]
+        n = len(imgs) if isinstance(imgs, list) else "?"
+        text_parts["images_summary"] = f"{n} image(s) generated (displayed in chat)"
     text_str = json.dumps(text_parts, ensure_ascii=False)
     if len(text_str) > max_chars:
         text_str = text_str[:max_chars] + "... [truncated]"
@@ -168,12 +176,6 @@ async def _handle_mcp_dispatch(tool_name: str, ctx: AppContext, config: ChatConf
 
 # ── Image generation ──
 
-_VALID_IMAGE_SIZES: frozenset[str] = frozenset({"1024x1024", "512x512", "768x768", "1280x720", "1920x1080"})
-_VALID_QUALITIES: frozenset[str] = frozenset({"standard", "hd"})
-_VALID_PROVIDERS: frozenset[str] = frozenset(
-    {"comfyui", "auto"}
-)
-
 
 async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
     """ComfyUIで画像を生成する"""
@@ -184,22 +186,33 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
     if not prompt:
         return {"status": "error", "message": "No prompt provided"}
 
-    # ── validate: size ──
-    size = str(tool_input.get("size", "1024x1024"))
-    if not re.match(r"^\d+x\d+$", size):
-        return {
-            "status": "error",
-            "message": f"Invalid size format: '{size}'. Expected 'WIDTHxHEIGHT' (e.g. '1024x1024').",
-        }
-    if size not in _VALID_IMAGE_SIZES:
-        valid = ", ".join(sorted(_VALID_IMAGE_SIZES))
-        return {"status": "error", "message": f"Unsupported size: '{size}'. Supported sizes: {valid}."}
-
-    # ── validate: quality ──
-    quality = str(tool_input.get("quality", "standard"))
-    if quality not in _VALID_QUALITIES:
-        valid = ", ".join(sorted(_VALID_QUALITIES))
-        return {"status": "error", "message": f"Unsupported quality: '{quality}'. Supported values: {valid}."}
+    # ── validate: size（LLM指定があればそれを使い、なければ設定値）──
+    size_input = tool_input.get("size")
+    if size_input is not None:
+        size = str(size_input)
+        m = re.match(r"^(\d+)x(\d+)$", size)
+        if not m:
+            return {
+                "status": "error",
+                "message": f"Invalid size format: '{size}'. Expected 'WIDTHxHEIGHT' (e.g. '1024x1024').",
+            }
+        w, h = int(m.group(1)), int(m.group(2))
+        max_w = getattr(config, "image_gen_max_width", 1200) or 1200
+        max_h = getattr(config, "image_gen_max_height", 1200) or 1200
+        if w > max_w or h > max_h:
+            return {
+                "status": "error",
+                "message": f"Size exceeds limit: '{size}'. Max {max_w}x{max_h}.",
+            }
+        if w < 64 or h < 64:
+            return {
+                "status": "error",
+                "message": f"Size too small: '{size}'. Minimum 64x64.",
+            }
+    else:
+        w = getattr(config, "image_gen_comfyui_width", 1024)
+        h = getattr(config, "image_gen_comfyui_height", 1024)
+        size = f"{w}x{h}"
 
     # ── validate: n (clamp 1-4) ──
     try:
@@ -208,19 +221,13 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
         return {"status": "error", "message": "Invalid value for 'n': must be an integer between 1 and 4."}
     n = max(1, min(4, n))
 
-    # ── validate: provider ──
-    provider_arg = str(tool_input.get("provider", "auto"))
-    if provider_arg not in _VALID_PROVIDERS:
-        valid = ", ".join(sorted(_VALID_PROVIDERS))
-        return {"status": "error", "message": f"Unsupported provider: '{provider_arg}'. Supported providers: {valid}."}
-
-    provider_name = getattr(config, "image_gen_provider", "comfyui") if provider_arg == "auto" else provider_arg
+    provider_name = "comfyui"
 
     # ── 自画像モード: キャラ外見プロンプトを自動注入 ──
     self_portrait = tool_input.get("self_portrait", False)
     portrait_mode = tool_input.get("mode", "full_body")
 
-    if self_portrait and isinstance(self_portrait, bool) and self_portrait:
+    if isinstance(self_portrait, bool) and self_portrait:
         self_prompt = getattr(config, "image_gen_self_portrait_prompt", "")
         if self_prompt:
             MODE_PREFIX = {
@@ -233,13 +240,6 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             prompt = f"{self_prompt}, {mode_prefix}, {prompt}"
 
     try:
-        # 開始イベントを送信
-        if hasattr(ctx, "event_bus") and ctx.event_bus is not None:
-            await ctx.event_bus.publish(
-                "sse_event",
-                {"type": "image_gen_start", "provider": provider_name, "prompt": prompt[:100], "n": n},
-            )
-
         # ── ChatConfig から ComfyUIProvider を直接構築 ──
         from nous.infrastructure.image_gen.base import ImageGenConfig
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
@@ -258,10 +258,9 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
         comfyui_url = getattr(config, "image_gen_comfyui_url", "") or "http://localhost:8188"
 
         gen_cfg = ImageGenConfig(
-            provider=provider_name,
+            provider="comfyui",
             comfyui_url=comfyui_url,
             size=size,
-            quality=quality,
         )
         provider = ComfyUIProvider(
             api_url=gen_cfg.comfyui_url,
@@ -270,8 +269,8 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             speed_lora_path=getattr(config, "image_gen_comfyui_speed_lora_path", ""),
             speed_lora_weight=getattr(config, "image_gen_comfyui_speed_lora_weight", 1.0),
             speed_lora_method=getattr(config, "image_gen_comfyui_speed_lora_method", ""),
-            width=getattr(config, "image_gen_comfyui_width", 1024),
-            height=getattr(config, "image_gen_comfyui_height", 1024),
+            width=w,
+            height=h,
             steps=getattr(config, "image_gen_comfyui_steps", 28),
             cfg=getattr(config, "image_gen_comfyui_cfg", 5.5),
             sampler=getattr(config, "image_gen_comfyui_sampler", "euler_ancestral"),
@@ -280,14 +279,14 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             denoise=getattr(config, "image_gen_comfyui_denoise", 0.7),
         )
 
-        generated = await provider.generate(prompt=prompt, size=size, quality=quality, n=n)
+        generated = await provider.generate(prompt=prompt, size=size, n=n)
 
         # ── 画像をサーバー側に永続化 ──
         from pathlib import Path
         from nous.config.settings import get_settings
         settings = get_settings()
         persona = getattr(ctx, "persona", "default")
-        images_dir = Path("nous/opt/memory") / persona / "images"
+        images_dir = Path(settings.data_root) / "opt" / "memory" / persona / "images"
         images_dir.mkdir(parents=True, exist_ok=True)
 
         import time as _time
@@ -324,6 +323,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             "status": "success",
             "message": summary,
             "images": images_data,
+            "provider": provider_name,
         }
 
     except Exception as e:

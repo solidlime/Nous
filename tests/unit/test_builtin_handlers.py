@@ -32,6 +32,8 @@ def mock_config():
     cfg.image_gen_enabled = True
     cfg.image_gen_provider = "comfyui"
     cfg.image_gen_comfyui_url = ""
+    cfg.image_gen_max_width = 1200
+    cfg.image_gen_max_height = 1200
     return cfg
 
 
@@ -71,15 +73,6 @@ class TestImageGenerateHandler:
         assert "No prompt" in result["message"]
 
     @pytest.mark.asyncio
-    async def test_image_invalid_provider(self, mock_ctx, mock_config):
-        """provider="unknown" → error"""
-        result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "provider": "unknown"})
-        assert result["status"] == "error"
-        assert "Unsupported provider" in result["message"]
-
-    # ── New validation tests ──
-
-    @pytest.mark.asyncio
     async def test_image_invalid_size_format(self, mock_ctx, mock_config):
         """size='abc' → error (format validation)"""
         result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "size": "abc"})
@@ -94,18 +87,11 @@ class TestImageGenerateHandler:
         assert "Invalid size format" in result["message"]
 
     @pytest.mark.asyncio
-    async def test_image_unsupported_size(self, mock_ctx, mock_config):
-        """size='200x200' → error (unsupported)"""
-        result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "size": "200x200"})
+    async def test_image_size_exceeds_limit(self, mock_ctx, mock_config):
+        """size='2000x2000' → error (exceeds 1200 limit)"""
+        result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "size": "2000x2000"})
         assert result["status"] == "error"
-        assert "Unsupported size" in result["message"]
-
-    @pytest.mark.asyncio
-    async def test_image_invalid_quality(self, mock_ctx, mock_config):
-        """quality='premium' → error"""
-        result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "quality": "premium"})
-        assert result["status"] == "error"
-        assert "Unsupported quality" in result["message"]
+        assert "Size exceeds limit" in result["message"]
 
     @pytest.mark.asyncio
     async def test_image_invalid_n_type(self, mock_ctx, mock_config):

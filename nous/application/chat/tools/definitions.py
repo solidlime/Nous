@@ -222,9 +222,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 },
                 "size": {
                     "type": "string",
-                    "enum": ["1024x1024", "512x512", "768x768", "1280x720", "1920x1080"],
-                    "description": "画像サイズ。1024x1024, 1280x720, 1920x1080 など。",
-                    "default": "1024x1024",
+                    "description": "画像サイズを WIDTHxHEIGHT 形式で指定（例: 1024x768, 512x512）。上限は設定の最大解像度に従う。省略時はデフォルト値を使用。",
                 },
                 "n": {
                     "type": "integer",
@@ -232,12 +230,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                     "minimum": 1,
                     "maximum": 4,
                     "default": 1,
-                },
-                "provider": {
-                    "type": "string",
-                    "enum": ["comfyui", "auto"],
-                    "description": "プロバイダ。autoでデフォルト。",
-                    "default": "auto",
                 },
                 "self_portrait": {
                     "type": "boolean",
