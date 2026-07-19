@@ -37,8 +37,20 @@
     --accent-teal: #64d2ff;
     --accent-indigo: #5856d6;
     
+    /* Accent RGB triples (for rgba(var(--...-rgb), alpha) usage) */
+    --accent-blue-rgb: 0, 122, 255;
+    --accent-purple-rgb: 191, 90, 242;
+    --accent-pink-rgb: 255, 55, 95;
+    --accent-green-rgb: 48, 209, 88;
+    --accent-yellow-rgb: 255, 214, 10;
+    --accent-orange-rgb: 255, 159, 10;
+    --accent-red-rgb: 255, 69, 58;
+    --accent-teal-rgb: 100, 210, 255;
+    --accent-indigo-rgb: 88, 86, 214;
+    
     /* Legacy aliases (mapped to Apple equivalents) */
     --accent-purple: var(--accent-indigo);
+    --accent-purple-rgb: var(--accent-indigo-rgb);
     
     /* Spacing & Radii */
     --card-radius: 12px;

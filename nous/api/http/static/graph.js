@@ -20,7 +20,7 @@ function _graphEdgeColor(isRelated) {
     var isLight = document.documentElement.classList.contains('light');
     if (isRelated) {
         return {
-            color:     isLight ? 'rgba(109,40,217,0.75)' : 'rgba(167,139,250,0.85)',
+            color:     isLight ? 'rgba(0,82,204,0.75)' : 'rgba(0,122,255,0.85)',
             highlight: isLight ? '#7c3aed' : '#c4b5fd',
             hover:     isLight ? '#7c3aed' : '#c4b5fd'
         };

@@ -183,7 +183,7 @@ function chartOpts(extra = {}) {
             {
               ...v,
               ticks: { color, ...(v.ticks || {}) },
-              grid: { color: "rgba(167,139,250,0.08)", ...(v.grid || {}) },
+              grid: { color: "rgba(0,122,255,0.08)", ...(v.grid || {}) },
             },
           ]),
         )

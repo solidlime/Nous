@@ -297,7 +297,7 @@ html.light .chat-tool-result-content {
   overflow-x: hidden;
   /* Custom scrollbar */
   scrollbar-width: thin;
-  scrollbar-color: rgba(167, 139, 250, 0.3) transparent;
+  scrollbar-color: rgba(var(--accent-blue-rgb), 0.3) transparent;
 }
 #settings-panel .settings-scroll-container::-webkit-scrollbar {
   width: 6px;
@@ -306,11 +306,11 @@ html.light .chat-tool-result-content {
   background: transparent;
 }
 #settings-panel .settings-scroll-container::-webkit-scrollbar-thumb {
-  background: rgba(167, 139, 250, 0.3);
+  background: rgba(var(--accent-blue-rgb), 0.3);
   border-radius: 3px;
 }
 #settings-panel .settings-scroll-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(167, 139, 250, 0.5);
+  background: rgba(var(--accent-blue-rgb), 0.5);
 }
 
 #settings-panel details {
@@ -330,14 +330,14 @@ html.light .chat-tool-result-content {
 }
 
 #settings-panel details:not([open]):hover {
-  border-color: rgba(167, 139, 250, 0.2);
+  border-color: rgba(var(--accent-blue-rgb), 0.2);
   background: var(--glass-bg-light);
   transform: translateX(2px);
 }
 
 #settings-panel details[open] {
-  border-color: rgba(167, 139, 250, 0.35);
-  background: rgba(167, 139, 250, 0.04);
+  border-color: rgba(var(--accent-blue-rgb), 0.35);
+  background: rgba(var(--accent-blue-rgb), 0.04);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
@@ -384,18 +384,18 @@ html.light .chat-tool-result-content {
 #settings-panel details[open] summary {
   background: linear-gradient(
     135deg,
-    rgba(167, 139, 250, 0.12) 0%,
-    rgba(167, 139, 250, 0.04) 100%
+    rgba(var(--accent-blue-rgb), 0.12) 0%,
+    rgba(var(--accent-blue-rgb), 0.04) 100%
   );
-  border-bottom-color: rgba(167, 139, 250, 0.2);
+  border-bottom-color: rgba(var(--accent-blue-rgb), 0.2);
   color: var(--text-primary);
 }
 
 #settings-panel summary:hover {
   background: linear-gradient(
     135deg,
-    rgba(167, 139, 250, 0.1) 0%,
-    rgba(167, 139, 250, 0.03) 100%
+    rgba(var(--accent-blue-rgb), 0.1) 0%,
+    rgba(var(--accent-blue-rgb), 0.03) 100%
   );
   color: var(--text-primary);
 }
@@ -469,14 +469,14 @@ html.light .chat-tool-result-content {
 }
 
 .chat-field-input:hover {
-  border-color: rgba(167, 139, 250, 0.25);
+  border-color: rgba(var(--accent-blue-rgb), 0.25);
   background: var(--glass-bg-subtle);
 }
 
 .chat-field-input:focus {
   border-color: var(--accent-purple);
-  background: rgba(167, 139, 250, 0.05);
-  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.1);
+  background: rgba(var(--accent-blue-rgb), 0.05);
+  box-shadow: 0 0 0 3px rgba(var(--accent-blue-rgb), 0.1);
 }
 
 .chat-field-input option {
@@ -536,7 +536,7 @@ input[type="range"].chat-field-input:focus {
 }
 
 .voice-status-checking {
-  background: rgba(167, 139, 250, 0.1);
+  background: rgba(var(--accent-blue-rgb), 0.1);
   color: var(--accent-purple);
 }
 .voice-status-checking .voice-status-dot {
@@ -844,8 +844,8 @@ input[type="range"].chat-field-input:focus {
   transition: all var(--duration-fast) var(--ease-apple);
 }
 .chat-welcome-cmd:hover {
-  background: rgba(167, 139, 250, 0.2);
-  border-color: rgba(167, 139, 250, 0.4);
+  background: rgba(var(--accent-blue-rgb), 0.2);
+  border-color: rgba(var(--accent-blue-rgb), 0.4);
 }
 /* Memory activity panel — Apple HIG */
 #memory-panel {

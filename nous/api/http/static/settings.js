@@ -373,7 +373,7 @@ function renderSettings(el, settings, status) {
 
     /* ── Global Apply for restart-required changes ── */
     html += '<div class="global-apply-section">';
-    html += '<button id="global-apply-btn" class="primary-btn" disabled style="padding:10px 24px;font-size:0.85rem;font-weight:600;border-radius:10px;background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(96,165,250,0.2));border:1px solid rgba(167,139,250,0.3);color:var(--text-primary);cursor:not-allowed;opacity:0.4;transition:all 0.2s"><i data-lucide="save"></i> Apply Restart-Required Changes</button>';
+    html += '<button id="global-apply-btn" class="primary-btn" disabled style="padding:10px 24px;font-size:0.85rem;font-weight:600;border-radius:10px;background:linear-gradient(135deg,rgba(var(--accent-blue-rgb),0.2),rgba(var(--accent-teal-rgb),0.2));border:1px solid rgba(var(--accent-blue-rgb),0.3);color:var(--text-primary);cursor:not-allowed;opacity:0.4;transition:all 0.2s"><i data-lucide="save"></i> Apply Restart-Required Changes</button>';
     html += '<span id="global-apply-status" class="setting-status"></span>';
     html += '<div id="global-apply-details" style="display:none;width:100%;margin-top:8px;font-size:0.78rem;color:var(--text-muted)"></div>';
     html += '</div>';
@@ -879,7 +879,7 @@ function renderSettingsProfiles() {
     var html = '';
     /* Built-in profiles */
     Object.keys(BUILTIN_PROFILES).forEach(function(name) {
-        html += '<button data-profile-action="load-builtin" data-profile-name="' + esc(name) + '" class="glass-btn profile-chip" style="padding:5px 14px;font-size:0.78rem;background:linear-gradient(135deg,rgba(167,139,250,0.15),rgba(244,114,182,0.15));border-color:rgba(167,139,250,0.3)">';
+        html += '<button data-profile-action="load-builtin" data-profile-name="' + esc(name) + '" class="glass-btn profile-chip" style="padding:5px 14px;font-size:0.78rem;background:linear-gradient(135deg,rgba(var(--accent-blue-rgb),0.15),rgba(var(--accent-pink-rgb),0.15));border-color:rgba(var(--accent-blue-rgb),0.3)">';
         html += '<i data-lucide="package"></i> ' + esc(name);
         html += '</button>';
     });

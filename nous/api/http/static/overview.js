@@ -320,7 +320,7 @@ async function loadOverview() {
                 invHtml += '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)" title="' + esc(desc) + '">' + esc(it.name) + '</span>';
                 if (it.quantity > 1) invHtml += '<span style="font-size:0.78rem;color:var(--text-muted)">x' + it.quantity + '</span>';
                 if (truncDesc) invHtml += '<span class="badge badge-purple" title="' + esc(desc) + '">' + esc(truncDesc) + '</span>';
-                invHtml += '<button data-item="' + esc(it.name) + '" onclick="openEditItemModal(this.dataset.item)" style="padding:2px 8px;border-radius:4px;border:1px solid rgba(167,139,250,0.3);background:rgba(167,139,250,0.08);color:var(--accent-purple);cursor:pointer;font-size:0.78rem" title="Edit item"><i data-lucide="pencil"></i></button>';
+                invHtml += '<button data-item="' + esc(it.name) + '" onclick="openEditItemModal(this.dataset.item)" style="padding:2px 8px;border-radius:4px;border:1px solid rgba(var(--accent-blue-rgb), 0.3);background:rgba(var(--accent-blue-rgb), 0.08);color:var(--accent-blue);cursor:pointer;font-size:0.78rem" title="Edit item"><i data-lucide="pencil"></i></button>';
                 invHtml += '<button data-item="' + esc(it.name) + '" onclick="deleteItem(this.dataset.item)" style="padding:2px 8px;border-radius:4px;border:1px solid rgba(255,100,100,0.3);background:rgba(255,100,100,0.08);color:#f87171;cursor:pointer;font-size:0.78rem" title="Delete item"><i data-lucide="trash-2"></i></button>';
                 invHtml += '</div>';
             });
@@ -505,7 +505,7 @@ async function loadOverview() {
         <div class="glass glass-hoverable p-6 mb-6">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
                 <div class="card-title" style="margin-bottom:0"><i data-lucide="backpack"></i> Inventory</div>
-                <button onclick="openAddItemModal()" style="padding:4px 14px;border-radius:6px;border:1px solid rgba(167,139,250,0.4);background:rgba(167,139,250,0.1);color:var(--accent-purple);cursor:pointer;font-size:0.82rem;font-weight:600">+ Add Item</button>
+                <button onclick="openAddItemModal()" style="padding:4px 14px;border-radius:6px;border:1px solid rgba(var(--accent-blue-rgb), 0.4);background:rgba(var(--accent-blue-rgb), 0.1);color:var(--accent-blue);cursor:pointer;font-size:0.82rem;font-weight:600">+ Add Item</button>
             </div>
             ${invHtml}
         </div>
@@ -522,7 +522,7 @@ async function loadOverview() {
         </div>
         <!-- Add Item Modal -->
         <div id="add-item-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center">
-            <div style="background:#1e1b2e;border:1px solid rgba(167,139,250,0.3);border-radius:14px;padding:28px;width:420px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,0.6)">
+            <div style="background:#1e1b2e;border:1px solid rgba(var(--accent-blue-rgb), 0.3);border-radius:14px;padding:28px;width:420px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,0.6)">
                 <div style="font-weight:700;font-size:1.05rem;margin-bottom:18px;color:var(--accent-purple)"><i data-lucide="plus"></i> Add Inventory Item</div>
                 <div style="display:flex;flex-direction:column;gap:12px">
                     <input id="new-item-name" type="text" placeholder="Item name *" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
@@ -532,13 +532,13 @@ async function loadOverview() {
                 </div>
                 <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
                     <button onclick="closeAddItemModal()" style="padding:7px 18px;border-radius:7px;border:1px solid var(--glass-border);background:var(--glass-bg);color:var(--text-muted);cursor:pointer;font-size:0.88rem">Cancel</button>
-                    <button onclick="saveNewItem()" style="padding:7px 18px;border-radius:7px;border:1px solid rgba(167,139,250,0.5);background:rgba(167,139,250,0.2);color:var(--accent-purple);cursor:pointer;font-size:0.88rem;font-weight:600">Save</button>
+                    <button onclick="saveNewItem()" style="padding:7px 18px;border-radius:7px;border:1px solid rgba(var(--accent-blue-rgb), 0.5);background:rgba(var(--accent-blue-rgb), 0.2);color:var(--accent-blue);cursor:pointer;font-size:0.88rem;font-weight:600">Save</button>
                 </div>
             </div>
         </div>
         <!-- Edit Item Modal -->
         <div id="edit-item-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center">
-            <div style="background:#1e1b2e;border:1px solid rgba(167,139,250,0.3);border-radius:14px;padding:28px;width:420px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,0.6)">
+            <div style="background:#1e1b2e;border:1px solid rgba(var(--accent-blue-rgb), 0.3);border-radius:14px;padding:28px;width:420px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,0.6)">
                 <div style="font-weight:700;font-size:1.05rem;margin-bottom:18px;color:var(--accent-purple)"><i data-lucide="pencil"></i> Edit Inventory Item</div>
                 <input type="hidden" id="edit-item-original-name" value="">
                 <div style="display:flex;flex-direction:column;gap:12px">
@@ -550,7 +550,7 @@ async function loadOverview() {
                 </div>
                 <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
                     <button onclick="closeEditItemModal()" style="padding:7px 18px;border-radius:7px;border:1px solid var(--glass-border);background:var(--glass-bg);color:var(--text-muted);cursor:pointer;font-size:0.88rem">Cancel</button>
-                    <button onclick="saveEditItem()" style="padding:7px 18px;border-radius:7px;border:1px solid rgba(167,139,250,0.5);background:rgba(167,139,250,0.2);color:var(--accent-purple);cursor:pointer;font-size:0.88rem;font-weight:600">Save</button>
+                    <button onclick="saveEditItem()" style="padding:7px 18px;border-radius:7px;border:1px solid rgba(var(--accent-blue-rgb), 0.5);background:rgba(var(--accent-blue-rgb), 0.2);color:var(--accent-blue);cursor:pointer;font-size:0.88rem;font-weight:600">Save</button>
                 </div>
             </div>
         </div>
@@ -586,7 +586,7 @@ async function loadOverview() {
         if (tlCtx) {
             S.charts['chart-timeline'] = new Chart(tlCtx, {
                 type: 'bar',
-                data: { labels: dayLabels, datasets: [{ label: 'Memories', data: dayCounts, backgroundColor: 'rgba(167,139,250,0.5)', borderColor: '#a78bfa', borderWidth: 1, borderRadius: 6 }] },
+                data: { labels: dayLabels, datasets: [{ label: 'Memories', data: dayCounts, backgroundColor: 'rgba(0,122,255,0.5)', borderColor: '#007aff', borderWidth: 1, borderRadius: 6 }] },
                 options: chartOpts({ plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: {} } })
             });
         }
