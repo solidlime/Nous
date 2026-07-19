@@ -239,6 +239,15 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                     "description": "プロバイダ。autoでデフォルト。",
                     "default": "auto",
                 },
+                "self_portrait": {
+                    "type": "boolean",
+                    "description": "キャラクター自身の画像を生成する場合はtrue。外部の画像や風景など、キャラ自身でない画像はfalse。",
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["full_body", "portrait", "selfie", "scene"],
+                    "description": "構図モード。full_body=全身, portrait=胸から上, selfie=自撮り風, scene=環境込み。self_portrait=trueのときのみ有効。",
+                },
             },
             "required": ["prompt"],
         },

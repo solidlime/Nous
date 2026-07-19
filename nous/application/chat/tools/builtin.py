@@ -216,6 +216,22 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
 
     provider_name = getattr(config, "image_gen_provider", "comfyui") if provider_arg == "auto" else provider_arg
 
+    # ── 自画像モード: キャラ外見プロンプトを自動注入 ──
+    self_portrait = tool_input.get("self_portrait", False)
+    portrait_mode = tool_input.get("mode", "full_body")
+
+    if self_portrait and isinstance(self_portrait, bool) and self_portrait:
+        self_prompt = getattr(config, "image_gen_self_portrait_prompt", "")
+        if self_prompt:
+            MODE_PREFIX = {
+                "full_body": "full body, standing, looking at viewer, ",
+                "portrait": "upper body, portrait, looking at viewer, ",
+                "selfie": "selfie, from below, mirror selfie, ",
+                "scene": "environment shot, full body, ",
+            }
+            mode_prefix = MODE_PREFIX.get(portrait_mode, MODE_PREFIX["full_body"])
+            prompt = f"{self_prompt}, {mode_prefix}, {prompt}"
+
     try:
         # 開始イベントを送信
         if hasattr(ctx, "event_bus") and ctx.event_bus is not None:
