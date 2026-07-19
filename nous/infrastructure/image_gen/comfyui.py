@@ -164,112 +164,92 @@ class ComfyUIProvider(ImageGenProvider):
     def _build_workflow(self, prompt: str, size: str, n: int, image_filename: str | None = None) -> dict:
         """ワークフロー JSON を構築（パラメータ駆動）。
 
+        ノードID固定:
+          4=CheckpointLoaderSimple, 3=KSampler, 5=EmptyLatentImage,
+          6=CLIPTextEncode(pos), 7=CLIPTextEncode(neg),
+          8=VAEDecode, 9=SaveImage, 10=VAEEncode, 11=LoadImage
+
+        LoRA ノードID: 12 から動的採番。
+
         image_filename が指定された場合、img2img ワークフロー
         （LoadImage → VAEEncode → KSampler(denoise<1.0)）を使用。
-        指定がない場合、従来の txt2img（EmptyLatentImage）を使用。
         """
         # ── seed: 0 はランダム ──
         seed = self._seed if self._seed != 0 else random.randint(0, 2**63 - 1)
 
-        if "x" in size:
-            parts = size.split("x")
-            w, h = int(parts[0]), int(parts[1])
-        else:
-            w = h = 512
+        # ── 1. CheckpointLoaderSimple (4) ──
+        nodes: dict[str, Any] = {
+            "4": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": self._checkpoint},
+            },
+        }
 
+        # ── 2. LoRA ノード (12, 13, ...) — 後続スライスで実装 ──
+        last_model_id: str = "4"
+
+        # ── 3. EmptyLatentImage (5) / VAEEncode(10)+LoadImage(11) ──
         if image_filename:
-            # ── img2img ワークフロー ────────────────────────────────
-            return {
-                "3": {
-                    "class_type": "KSampler",
-                    "inputs": {
-                        "seed": seed,
-                        "steps": self._steps,
-                        "cfg": self._cfg,
-                        "sampler_name": self._sampler,
-                        "scheduler": self._scheduler,
-                        "denoise": self._denoise,
-                        "model": ["4", 0],
-                        "positive": ["6", 0],
-                        "negative": ["7", 0],
-                        "latent_image": ["10", 0],  # VAEEncode からの latent
-                    },
-                },
-                "4": {
-                    "class_type": "CheckpointLoaderSimple",
-                    "inputs": {"ckpt_name": self._checkpoint},
-                },
-                "6": {
-                    "class_type": "CLIPTextEncode",
-                    "inputs": {"text": prompt, "clip": ["4", 1]},
-                },
-                "7": {
-                    "class_type": "CLIPTextEncode",
-                    "inputs": {
-                        "text": "lowres, bad anatomy, bad hands, text, error",
-                        "clip": ["4", 1],
-                    },
-                },
-                "8": {
-                    "class_type": "VAEDecode",
-                    "inputs": {"samples": ["3", 0], "vae": ["4", 2]},
-                },
-                "9": {
-                    "class_type": "SaveImage",
-                    "inputs": {"filename_prefix": "nous_comfyui", "images": ["8", 0]},
-                },
-                "10": {
-                    "class_type": "VAEEncode",
-                    "inputs": {"pixels": ["11", 0], "vae": ["4", 2]},
-                },
-                "11": {
-                    "class_type": "LoadImage",
-                    "inputs": {"image": image_filename},
-                },
+            nodes["10"] = {
+                "class_type": "VAEEncode",
+                "inputs": {"pixels": ["11", 0], "vae": ["4", 2]},
             }
+            nodes["11"] = {
+                "class_type": "LoadImage",
+                "inputs": {"image": image_filename},
+            }
+            latent_image: list[str | int] = ["10", 0]
+            denoise = self._denoise
         else:
-            # ── txt2img ワークフロー（従来） ────────────────────────
-            return {
-                "3": {
-                    "class_type": "KSampler",
-                    "inputs": {
-                        "seed": seed,
-                        "steps": self._steps,
-                        "cfg": self._cfg,
-                        "sampler_name": self._sampler,
-                        "scheduler": self._scheduler,
-                        "denoise": 1.0,
-                        "model": ["4", 0],
-                        "positive": ["6", 0],
-                        "negative": ["7", 0],
-                        "latent_image": ["5", 0],
-                    },
-                },
-                "4": {
-                    "class_type": "CheckpointLoaderSimple",
-                    "inputs": {"ckpt_name": self._checkpoint},
-                },
-                "5": {
-                    "class_type": "EmptyLatentImage",
-                    "inputs": {"width": w, "height": h, "batch_size": n},
-                },
-                "6": {
-                    "class_type": "CLIPTextEncode",
-                    "inputs": {"text": prompt, "clip": ["4", 1]},
-                },
-                "7": {
-                    "class_type": "CLIPTextEncode",
-                    "inputs": {
-                        "text": "lowres, bad anatomy, bad hands, text, error",
-                        "clip": ["4", 1],
-                    },
-                },
-                "8": {
-                    "class_type": "VAEDecode",
-                    "inputs": {"samples": ["3", 0], "vae": ["4", 2]},
-                },
-                "9": {
-                    "class_type": "SaveImage",
-                    "inputs": {"filename_prefix": "nous_comfyui", "images": ["8", 0]},
+            nodes["5"] = {
+                "class_type": "EmptyLatentImage",
+                "inputs": {
+                    "width": self._width,
+                    "height": self._height,
+                    "batch_size": n,
                 },
             }
+            latent_image = ["5", 0]
+            denoise = 1.0
+
+        # ── 4. CLIPTextEncode (6, 7) — clip は Checkpoint から直接 ──
+        nodes["6"] = {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": prompt, "clip": ["4", 1]},
+        }
+        nodes["7"] = {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "text": "lowres, bad anatomy, bad hands, text, error",
+                "clip": ["4", 1],
+            },
+        }
+
+        # ── 5. KSampler (3) — model は最後の LoRA または Checkpoint ──
+        nodes["3"] = {
+            "class_type": "KSampler",
+            "inputs": {
+                "seed": seed,
+                "steps": self._steps,
+                "cfg": self._cfg,
+                "sampler_name": self._sampler,
+                "scheduler": self._scheduler,
+                "denoise": denoise,
+                "model": [last_model_id, 0],
+                "positive": ["6", 0],
+                "negative": ["7", 0],
+                "latent_image": latent_image,
+            },
+        }
+
+        # ── 6. VAEDecode (8) + SaveImage (9) ──
+        nodes["8"] = {
+            "class_type": "VAEDecode",
+            "inputs": {"samples": ["3", 0], "vae": ["4", 2]},
+        }
+        nodes["9"] = {
+            "class_type": "SaveImage",
+            "inputs": {"filename_prefix": "nous_comfyui", "images": ["8", 0]},
+        }
+
+        return nodes

@@ -252,26 +252,39 @@ async def test_generate_multiple_images():
 # ============================================================
 
 
-def test_build_workflow_512x512():
-    """512x512のワークフローが正しく構築される"""
+def test_build_workflow_defaults():
+    """デフォルトのインスタンス変数が EmptyLatentImage に反映される"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
     provider = ComfyUIProvider()
     workflow = provider._build_workflow("cat", "512x512", 1)
 
-    assert workflow["5"]["inputs"]["width"] == 512
-    assert workflow["5"]["inputs"]["height"] == 512
+    # デフォルト width/height は __init__ の 1024 が使われる
+    assert workflow["5"]["inputs"]["width"] == 1024
+    assert workflow["5"]["inputs"]["height"] == 1024
     assert workflow["5"]["inputs"]["batch_size"] == 1
     assert workflow["6"]["inputs"]["text"] == "cat"
 
 
+def test_build_workflow_custom_dimensions():
+    """カスタム width/height が EmptyLatentImage に反映される"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(width=768, height=512)
+    workflow = provider._build_workflow("cat", "1024x1024", 1)
+
+    assert workflow["5"]["inputs"]["width"] == 768
+    assert workflow["5"]["inputs"]["height"] == 512
+
+
 def test_build_workflow_1024x1024():
-    """1024x1024のワークフローが正しく構築される"""
+    """1024x1024（デフォルト）のワークフローが正しく構築される"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
     provider = ComfyUIProvider()
     workflow = provider._build_workflow("dog", "1024x1024", 3)
 
+    # デフォルト width/height は 1024
     assert workflow["5"]["inputs"]["width"] == 1024
     assert workflow["5"]["inputs"]["height"] == 1024
     assert workflow["5"]["inputs"]["batch_size"] == 3
