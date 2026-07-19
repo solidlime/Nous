@@ -632,11 +632,11 @@ def render_chat_tab() -> str:
                                                     oninput="document.getElementById('chat-irodori-chunk-min-val').textContent=this.value"
                                                     style="width:100%;accent-color:var(--accent-purple);" />
                                             </div>
-                                            <!-- seed: number input, empty=random -->
+                                            <!-- seed: number input, 0=random -->
                                             <div>
-                                                <div class="chat-field-label" style="font-size:0.78rem;">乱数シード（空欄=ランダム）</div>
+                                                <div class="chat-field-label" style="font-size:0.78rem;">乱数シード（0=ランダム）</div>
                                                 <input type="number" id="chat-irodori-seed" class="chat-field-input"
-                                                    placeholder="ランダム"
+                                                    value="0" min="0"
                                                     style="width:100%;" />
                                             </div>
                                         </div>

@@ -148,7 +148,7 @@ class ChatConfig(BaseModel):
     irodori_cfg_scale_speaker: float = 5.0
     irodori_cfg_scale_caption: float = 4.2
     irodori_chunk_min_chars: int = 85
-    irodori_seed: int | None = None
+    irodori_seed: int = 0
     updated_at: str | None = None
 
     @field_validator("temperature")

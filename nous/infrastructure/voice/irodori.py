@@ -55,7 +55,7 @@ class IrodoriEngine(VoiceEngine):
         }
         if caption:
             extra_body_irodori["caption"] = caption
-        if self._advanced.seed is not None:
+        if self._advanced.seed is not None and self._advanced.seed != 0:
             extra_body_irodori["seed"] = self._advanced.seed
 
         payload = {
