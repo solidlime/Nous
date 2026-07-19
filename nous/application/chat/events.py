@@ -178,7 +178,7 @@ class ContextCompressedSSE:
 class ImageGenStartSSE:
     """画像生成開始イベント"""
 
-    provider: str  # "openai" | "stability"
+    provider: str  # "comfyui"
     prompt: str  # 生成プロンプト（先頭100文字）
     n: int  # 生成枚数
     type: str = "image_gen_start"
@@ -195,7 +195,7 @@ class ImageGenResultSSE:
     """画像生成結果イベント"""
 
     images: list  # [{base64: str, revised_prompt: str, size: str}]
-    provider: str  # "openai" | "stability"
+    provider: str  # "comfyui"
     type: str = "image_gen_result"
 
     def to_sse(self) -> str:

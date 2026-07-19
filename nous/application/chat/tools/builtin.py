@@ -167,7 +167,7 @@ async def _handle_mcp_dispatch(tool_name: str, ctx: AppContext, config: ChatConf
 
 # ── Image generation ──
 
-_VALID_IMAGE_SIZES: frozenset[str] = frozenset({"1024x1024", "1792x1024", "1024x1792", "512x512", "768x768"})
+_VALID_IMAGE_SIZES: frozenset[str] = frozenset({"1024x1024", "512x512", "768x768", "1280x720", "1920x1080"})
 _VALID_QUALITIES: frozenset[str] = frozenset({"standard", "hd"})
 _VALID_PROVIDERS: frozenset[str] = frozenset(
     {"comfyui", "auto"}
@@ -175,7 +175,7 @@ _VALID_PROVIDERS: frozenset[str] = frozenset(
 
 
 async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
-    """DALL-E 3またはStable Diffusionで画像を生成する"""
+    """ComfyUIで画像を生成する"""
     if not getattr(config, "image_gen_enabled", False):
         return {"status": "error", "message": "Image generation is disabled. Enable it in chat settings."}
 
@@ -226,7 +226,6 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
         # ── ChatConfig から ComfyUIProvider を直接構築 ──
         from nous.infrastructure.image_gen.base import ImageGenConfig
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
-        from nous.infrastructure.image_gen.factory import get_image_gen_provider  # noqa: F401 — kept for compat
 
         # LoRA リストを JSON からパース
         loras_raw = getattr(config, "image_gen_comfyui_loras", "")

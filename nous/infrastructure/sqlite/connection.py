@@ -217,8 +217,6 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     enable_parallel_tools INTEGER DEFAULT 1,
     image_gen_enabled INTEGER DEFAULT 0,
     image_gen_provider TEXT DEFAULT 'comfyui',
-    image_gen_dalle_model TEXT DEFAULT 'dall-e-3',
-    image_gen_stability_url TEXT DEFAULT '',
     image_gen_comfyui_url TEXT DEFAULT '',
     image_gen_comfyui_checkpoint TEXT DEFAULT 'noobaiXLNAIXL_epsilonPred11Version.safetensors',
     image_gen_comfyui_loras TEXT DEFAULT '[{"path":"TheHerta_Noob_bs1_noTE_trig_64-4-000100.safetensors","weight":1.0}]',
@@ -253,9 +251,6 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     irodori_cfg_scale_caption REAL DEFAULT 4.2,
     irodori_chunk_min_chars INTEGER DEFAULT 85,
     irodori_seed INTEGER,
-    image_gen_gemini_model TEXT DEFAULT 'google/gemini-2.5-flash-image',
-    image_gen_replicate_model TEXT DEFAULT 'black-forest-labs/flux-schnell',
-    image_gen_replicate_api_key TEXT DEFAULT '',
     disabled_tools TEXT DEFAULT '[]'
 );
 
@@ -484,19 +479,6 @@ class SQLiteConnection:
             ("image_gen_comfyui_speed_lora_method", "TEXT", "'lcm'"),
         ]
         for col, col_type, default in _comfyui_detail_migrations:
-            try:
-                memory_conn.execute(f"ALTER TABLE chat_settings ADD COLUMN {col} {col_type} DEFAULT {default}")
-                memory_conn.commit()
-                logger.info("Added %s column to chat_settings (migration)", col)
-            except sqlite3.OperationalError:
-                pass  # column already exists
-
-        # Migration: add image_gen_gemini_model, replicate fields if missing
-        for col, col_type, default in [
-            ("image_gen_gemini_model", "TEXT", "'google/gemini-2.5-flash-image'"),
-            ("image_gen_replicate_model", "TEXT", "'black-forest-labs/flux-schnell'"),
-            ("image_gen_replicate_api_key", "TEXT", "''"),
-        ]:
             try:
                 memory_conn.execute(f"ALTER TABLE chat_settings ADD COLUMN {col} {col_type} DEFAULT {default}")
                 memory_conn.commit()

@@ -222,15 +222,9 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 },
                 "size": {
                     "type": "string",
-                    "enum": ["1024x1024", "1792x1024", "1024x1792", "512x512", "768x768"],
-                    "description": "画像サイズ。DALL-E: 1024x1024/1792x1024/1024x1792。SD: 任意。",
+                    "enum": ["1024x1024", "512x512", "768x768", "1280x720", "1920x1080"],
+                    "description": "画像サイズ。1024x1024, 1280x720, 1920x1080 など。",
                     "default": "1024x1024",
-                },
-                "quality": {
-                    "type": "string",
-                    "enum": ["standard", "hd"],
-                    "description": "画質（DALL-E 3のみ）。standard/hd。",
-                    "default": "standard",
                 },
                 "n": {
                     "type": "integer",
