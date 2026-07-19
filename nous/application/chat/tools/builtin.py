@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -171,7 +170,7 @@ async def _handle_mcp_dispatch(tool_name: str, ctx: AppContext, config: ChatConf
 _VALID_IMAGE_SIZES: frozenset[str] = frozenset({"1024x1024", "1792x1024", "1024x1792", "512x512", "768x768"})
 _VALID_QUALITIES: frozenset[str] = frozenset({"standard", "hd"})
 _VALID_PROVIDERS: frozenset[str] = frozenset(
-    {"openai", "stability", "comfyui", "gemini", "replicate", "pollinations", "auto"}
+    {"comfyui", "auto"}
 )
 
 
@@ -214,7 +213,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
         valid = ", ".join(sorted(_VALID_PROVIDERS))
         return {"status": "error", "message": f"Unsupported provider: '{provider_arg}'. Supported providers: {valid}."}
 
-    provider_name = getattr(config, "image_gen_provider", "openai") if provider_arg == "auto" else provider_arg
+    provider_name = getattr(config, "image_gen_provider", "comfyui") if provider_arg == "auto" else provider_arg
 
     try:
         # 開始イベントを送信
@@ -228,37 +227,16 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
         from nous.infrastructure.image_gen.base import ImageGenConfig
         from nous.infrastructure.image_gen.factory import get_image_gen_provider
 
-        # comfyui_url: ChatConfig per-persona setting
         comfyui_url = getattr(config, "image_gen_comfyui_url", "")
-
-        # Gemini APIキー解決: RuntimeConfig → env → ChatConfig fallback
-        gemini_api_key = ""
-        if provider_name == "gemini":
-            from nous.config.runtime_config import RuntimeConfigManager
-
-            rm = RuntimeConfigManager()
-            gemini_api_key, _ = rm.get_effective_value("api_keys", "openrouter_api_key")
-            if not gemini_api_key:
-                gemini_api_key = os.environ.get("OPENROUTER_API_KEY", "")
-            if not gemini_api_key:
-                gemini_api_key = getattr(config, "api_key", "")
 
         gen_cfg = ImageGenConfig(
             provider=provider_name,
-            dalle_model=getattr(config, "image_gen_dalle_model", "dall-e-3"),
-            stability_url=getattr(config, "image_gen_stability_url", ""),
             comfyui_url=comfyui_url,
             size=size,
             quality=quality,
-            gemini_model=getattr(config, "image_gen_gemini_model", "google/gemini-2.5-flash-image"),
-            gemini_api_key=gemini_api_key,
-            replicate_model=getattr(config, "image_gen_replicate_model", "black-forest-labs/flux-schnell"),
-            replicate_api_key=getattr(config, "image_gen_replicate_api_key", ""),
         )
         provider = get_image_gen_provider(gen_cfg)
         if provider is None:
-            if provider_name == "stability" and not gen_cfg.stability_url:
-                return {"status": "error", "message": "Stable Diffusion URL is not configured"}
             if provider_name == "comfyui" and not gen_cfg.comfyui_url:
                 return {"status": "error", "message": "ComfyUI URL is not configured"}
             return {"status": "error", "message": f"Unsupported provider: {provider_name}"}
