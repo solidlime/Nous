@@ -204,6 +204,7 @@ function showImageGenSpinner(evt) {
 }
 
 function showImageGenResult(evt) {
+  console.log("[showImageGenResult] evt:", JSON.stringify({type: evt.type, imagesCount: evt.images?.length, hasImages: !!evt.images, spinnerId: _imageGenSpinnerId}));
   const container = findChatLogContainer();
   if (!container) return;
 
@@ -218,6 +219,7 @@ function showImageGenResult(evt) {
     _imageGenSpinnerId = null;
   }
 
+  console.log("[showImageGenResult] images check:", {images: !!evt.images, length: evt.images?.length});
   if (!evt.images || !evt.images.length) return;
 
   evt.images.forEach(function (img) {

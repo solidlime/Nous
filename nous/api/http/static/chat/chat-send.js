@@ -492,6 +492,7 @@ async function chatSend(retry) {
         } else if (evt.type === "image_gen_start") {
           showImageGenSpinner(evt);
         } else if (evt.type === "image_gen_result") {
+          console.log("[SSE] image_gen_result received:", Object.keys(evt), "images:", evt.images ? evt.images.length : "NONE");
           showImageGenResult(evt);
         } else if (evt.type === "error") {
           removeTypingIndicator();
