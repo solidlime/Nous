@@ -6,7 +6,6 @@
 "use strict";
 var S = window.S;
 
-let _ttsAbortController = null;
 let _connectionCheckTimer = null;
 let _currentAudio = null;       // 現在再生中の Audio 要素（seekbar用）
 let _currentAudioBtn = null;    // 対応する再生ボタン
@@ -189,6 +188,9 @@ async function testVoicePlayback() {
 /* ── Auto-play TTS on response ── */
 function autoPlayTts(text) {
   if (!S.persona || !text) return;
+  // Skip if already playing
+  if (_currentAudio && !_currentAudio.paused) return;
+
   // Strip markdown for TTS
   var plainText = text
     .replace(/```[\s\S]*?```/g, "コードブロック")
@@ -209,13 +211,14 @@ function autoPlayTts(text) {
     body: JSON.stringify(body),
   })
     .then(function (resp) {
-    if (resp.audio_base64) {
+      if (resp.audio_base64) {
         var audioUrl = "data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64;
         var audio = new Audio(audioUrl);
-        audio.volume = _getVolume();
-        audio.play().catch(function (err) {
-          console.warn("[AutoTTS] Play failed:", err.message);
-        });
+        // Find the last assistant message for seekbar + TTS button
+        var msgEls = document.querySelectorAll("#chat-messages .chat-msg");
+        var msgEl = msgEls.length ? msgEls[msgEls.length - 1] : null;
+        var ttsBtn = msgEl ? msgEl.querySelector(".chat-tts-btn") : null;
+        _setupAudio(audio, audioUrl, ttsBtn, msgEl);
       }
     })
     .catch(function (e) {
@@ -306,6 +309,16 @@ function initVoiceSection() {
   if (urlInput) {
     var debouncedCheck = _debounce(checkVoiceConnection, 500);
     urlInput.addEventListener("input", debouncedCheck);
+  }
+
+  // Real-time volume update: sync slider changes to currently playing audio
+  var volSlider = document.getElementById("chat-voice-volume");
+  if (volSlider) {
+    volSlider.addEventListener("input", function() {
+      if (_currentAudio) {
+        _currentAudio.volume = parseFloat(this.value);
+      }
+    });
   }
 }
 
