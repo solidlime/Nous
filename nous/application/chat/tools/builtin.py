@@ -271,7 +271,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
         from nous.config.settings import get_settings
         settings = get_settings()
         persona = getattr(ctx, "persona", "default")
-        images_dir = Path(settings.data_root) / "images" / persona
+        images_dir = Path("nous/opt/memory") / persona / "images"
         images_dir.mkdir(parents=True, exist_ok=True)
 
         import time as _time
