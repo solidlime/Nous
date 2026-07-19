@@ -767,7 +767,7 @@ function testImageGen() {
     scheduler: document.getElementById('chat-image-gen-scheduler')?.value || 'normal',
     seed: parseInt(document.getElementById('chat-image-gen-seed')?.value || '0'),
     denoise: parseFloat(document.getElementById('chat-image-gen-denoise')?.value || '0.7'),
-    prompt: '1girl, herta, honkai star rail, solo, smile',
+    prompt: document.getElementById('chat-image-gen-test-prompt')?.value.trim() || '1girl, herta, honkai star rail, solo, smile',
     negative_prompt: 'lowres, bad anatomy, bad hands, text, error',
   };
   

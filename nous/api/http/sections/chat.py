@@ -509,7 +509,10 @@ def render_chat_tab() -> str:
                                             </div>
                                         </div>
                                     </details>
-                                    <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+                                    <div>
+                                        <input type="text" id="chat-image-gen-test-prompt" class="chat-field-input" placeholder="テスト用プロンプト" value="1girl, herta, honkai star rail, solo, smile" style="width:100%;margin-bottom:4px;" />
+                                    </div>
+                                    <div style="display:flex;gap:8px;align-items:center;">
                                         <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="testImageGen()"><i data-lucide="play"></i> テスト生成</button>
                                         <span id="chat-image-test-status" style="font-size:0.72rem;color:var(--text-muted);min-height:16px;"></span>
                                     </div>
