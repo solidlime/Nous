@@ -202,6 +202,15 @@ async function editChatMessage(msgIndex) {
       });
       if (result.status === "ok") {
         bubble.textContent = newText;
+
+        // Check for subsequent messages → auto-regenerate
+        const container = document.getElementById("chat-messages");
+        const allMsgs = container.querySelectorAll(".chat-msg");
+        if (allMsgs.length > msgIndex + 1) {
+          cleanup();
+          await rollbackChat(msgIndex, true);
+          return;
+        }
         toast("メッセージを更新しました", "success");
       } else {
         toast("更新失敗: " + (result.error || "unknown"), "error");
