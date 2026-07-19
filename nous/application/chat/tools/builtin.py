@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 from typing import TYPE_CHECKING, Any
@@ -265,17 +266,33 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
 
         generated = await provider.generate(prompt=prompt, size=size, quality=quality, n=n)
 
+        # ── 画像をサーバー側に永続化 ──
+        from pathlib import Path
+        from nous.config.settings import get_settings
+        settings = get_settings()
+        persona = getattr(ctx, "persona", "default")
+        images_dir = Path(settings.data_root) / "images" / persona
+        images_dir.mkdir(parents=True, exist_ok=True)
+
+        import time as _time
+        timestamp = int(_time.time())
+
         # 結果を構築
-        images_data = [
-            {
+        images_data = []
+        for idx, img in enumerate(generated):
+            # ディスクに保存
+            img_bytes = base64.b64decode(img.base64)
+            filename = f"{timestamp}_{idx:02d}.png"
+            img_path = images_dir / filename
+            img_path.write_bytes(img_bytes)
+            images_data.append({
                 "base64": img.base64,
                 "revised_prompt": img.revised_prompt,
                 "size": img.size,
-            }
-            for img in generated
-        ]
+                "filename": str(img_path),
+            })
 
-        # 結果イベントを送信
+        # 結果イベントを送信（event_busは使われていないが後方互換のため残す）
         if hasattr(ctx, "event_bus") and ctx.event_bus is not None:
             await ctx.event_bus.publish(
                 "sse_event",
