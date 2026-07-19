@@ -500,6 +500,7 @@ input[type="range"].chat-field-input:focus {
 }
 
 /* Voice / TTS connection status indicator */
+.voice-status,
 #chat-voice-status {
   display: flex;
   align-items: center;
