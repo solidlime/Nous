@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -30,9 +30,8 @@ def mock_config():
     """Minimal ChatConfig mock."""
     cfg = MagicMock()
     cfg.image_gen_enabled = True
-    cfg.image_gen_provider = "openai"
-    cfg.image_gen_dalle_model = "dall-e-3"
-    cfg.image_gen_stability_url = ""
+    cfg.image_gen_provider = "comfyui"
+    cfg.image_gen_comfyui_url = ""
     return cfg
 
 
@@ -77,101 +76,6 @@ class TestImageGenerateHandler:
         result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "provider": "unknown"})
         assert result["status"] == "error"
         assert "Unsupported provider" in result["message"]
-
-    @pytest.mark.asyncio
-    async def test_image_stability_no_url(self, mock_ctx, mock_config):
-        """provider="stability" with no URL configured → error"""
-        result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "provider": "stability"})
-        assert result["status"] == "error"
-        assert "URL" in result["message"]
-
-    @pytest.mark.asyncio
-    async def test_image_openai_call(self, mock_ctx, mock_config):
-        """provider="openai" → DalleProvider generateが呼ばれる"""
-        mock_provider = AsyncMock()
-        mock_provider.provider_name = "openai"
-        mock_provider.generate.return_value = []
-
-        with (
-            patch("nous.infrastructure.image_gen.factory.DalleProvider", return_value=mock_provider) as mock_dalle,
-        ):
-            result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "provider": "openai"})
-
-        assert result["status"] == "success"
-        mock_dalle.assert_called_once_with(model="dall-e-3")
-        mock_provider.generate.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_image_openai_call_with_auto(self, mock_ctx, mock_config):
-        """provider="auto" → configのprovider (openai) が使われる"""
-        mock_provider = AsyncMock()
-        mock_provider.provider_name = "openai"
-        mock_provider.generate.return_value = []
-
-        with patch("nous.infrastructure.image_gen.factory.DalleProvider", return_value=mock_provider) as mock_dalle:
-            result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "provider": "auto"})
-
-        assert result["status"] == "success"
-        mock_dalle.assert_called_once_with(model="dall-e-3")
-
-    @pytest.mark.asyncio
-    async def test_image_stability_call(self, mock_ctx, mock_config):
-        """provider="stability" with URL → StabilityProvider generateが呼ばれる"""
-        mock_config.image_gen_stability_url = "http://sd:7860"
-        mock_provider = AsyncMock()
-        mock_provider.provider_name = "stability"
-        mock_provider.generate.return_value = []
-
-        with (
-            patch("nous.infrastructure.image_gen.factory.StabilityProvider", return_value=mock_provider) as mock_sd,
-        ):
-            result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "provider": "stability"})
-
-        assert result["status"] == "success"
-        mock_sd.assert_called_once_with(api_url="http://sd:7860")
-        mock_provider.generate.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_image_n_clamp_low(self, mock_ctx, mock_config):
-        """n=0 → clamp to 1"""
-        mock_provider = AsyncMock()
-        mock_provider.provider_name = "openai"
-        mock_provider.generate.return_value = []
-
-        with patch("nous.infrastructure.image_gen.factory.DalleProvider", return_value=mock_provider):
-            result = await _handle_image_generate(
-                mock_ctx, mock_config, {"prompt": "a cat", "provider": "openai", "n": 0}
-            )
-
-        assert result["status"] == "success"
-
-    @pytest.mark.asyncio
-    async def test_image_n_clamp_high(self, mock_ctx, mock_config):
-        """n=10 → clamp to 4"""
-        mock_provider = AsyncMock()
-        mock_provider.provider_name = "openai"
-        mock_provider.generate.return_value = []
-
-        with patch("nous.infrastructure.image_gen.factory.DalleProvider", return_value=mock_provider):
-            result = await _handle_image_generate(
-                mock_ctx, mock_config, {"prompt": "a cat", "provider": "openai", "n": 10}
-            )
-
-        assert result["status"] == "success"
-
-    @pytest.mark.asyncio
-    async def test_image_openai_dalle_model_config(self, mock_ctx, mock_config):
-        """configのdalle_modelがDalleProviderに伝搬する"""
-        mock_config.image_gen_dalle_model = "dall-e-2"
-        mock_provider = AsyncMock()
-        mock_provider.provider_name = "openai"
-        mock_provider.generate.return_value = []
-
-        with patch("nous.infrastructure.image_gen.factory.DalleProvider", return_value=mock_provider) as mock_dalle:
-            result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "provider": "openai"})
-
-        assert result["status"] == "success"
-        mock_dalle.assert_called_once_with(model="dall-e-2")
 
     # ── New validation tests ──
 
