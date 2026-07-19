@@ -506,6 +506,17 @@ def render_chat_tab() -> str:
                                             oninput="document.getElementById('chat-voice-volume-val').textContent=Math.round(this.value*100)+'%'"
                                             style="width:100%;accent-color:var(--accent-purple);" />
                                     </div>
+                                    <!-- Voice speed -->
+                                    <div>
+                                        <div style="display:flex;justify-content:space-between;">
+                                            <span class="chat-field-label" style="font-size:0.78rem;">話速</span>
+                                            <span id="chat-voice-speed-val" style="font-size:0.72rem;color:var(--accent-purple);">1.0x</span>
+                                        </div>
+                                        <input type="range" id="chat-voice-speed" class="chat-field-input"
+                                            min="0.25" max="4.0" step="0.25" value="1.0"
+                                            oninput="document.getElementById('chat-voice-speed-val').textContent=parseFloat(this.value).toFixed(2)+'x'"
+                                            style="width:100%;accent-color:var(--accent-purple);" />
+                                    </div>
                                     <!-- Irodori advanced params -->
                                     <details style="margin-top:12px;">
                                         <summary style="font-size:0.82rem;color:var(--text-muted);cursor:pointer;">詳細設定</summary>
@@ -610,8 +621,8 @@ def render_chat_tab() -> str:
                 <div id="media-viewer-inner" onclick="event.stopPropagation()"></div>
             </div>
             <!-- Memory edit modal -->
-            <div id="mem-edit-overlay" onclick="closeMemEdit()">
-                <div id="mem-edit-modal" onclick="event.stopPropagation()">
+            <div id="chat-mem-edit-overlay" onclick="closeMemEdit()">
+                <div id="chat-mem-edit-modal" onclick="event.stopPropagation()">
                     <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">メモリ編集</div>
                     <div>
                         <div class="mem-edit-label">内容</div>

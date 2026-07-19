@@ -209,6 +209,10 @@ function applyChatConfig(cfg) {
   var voiceVolume = document.getElementById("chat-voice-volume");
   if (voiceVolume) voiceVolume.value = cfg.voice_volume ?? 1.0;
   if (voiceVolume) document.getElementById("chat-voice-volume-val").textContent = Math.round((cfg.voice_volume ?? 1.0) * 100) + "%";
+  // Voice speed
+  var voiceSpeed = document.getElementById("chat-voice-speed");
+  if (voiceSpeed) voiceSpeed.value = cfg.voice_speed ?? 1.0;
+  if (voiceSpeed) document.getElementById("chat-voice-speed-val").textContent = (cfg.voice_speed ?? 1.0).toFixed(2) + "x";
   // Check connection status
   checkVoiceConnection();
   // Debug mode
@@ -436,6 +440,7 @@ async function saveChatConfig() {
     })(),
     // Voice volume
     voice_volume: parseFloat(document.getElementById("chat-voice-volume")?.value) ?? 1.0,
+    voice_speed: parseFloat(document.getElementById("chat-voice-speed")?.value) ?? 1.0,
   };
   const btn = document.querySelector(".chat-save-btn");
   if (btn) {
