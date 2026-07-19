@@ -222,6 +222,9 @@ class InferenceStep:
                 results = [await _exec_one(tc) for tc in pending_tool_calls]
 
             for tc, truncated, tool_result in results:
+                # ToolResultSSE must come FIRST so the tool bubble is in the DOM
+                # before showImageGenResult tries to insert the image card after it
+                yield ToolResultSSE(name=tc.tool_name, result=truncated, id=tc.tool_use_id)
                 # If tool result contains images, emit ImageGenResultSSE to frontend
                 if isinstance(tool_result, dict) and tool_result.get("images"):
                     imgs = tool_result["images"]
@@ -230,7 +233,6 @@ class InferenceStep:
                         provider=tool_result.get("provider", "comfyui"),
                         images=tool_result["images"],
                     )
-                yield ToolResultSSE(name=tc.tool_name, result=truncated, id=tc.tool_use_id)
                 turn_ctx.segments.append(
                     {"type": "tool_result", "name": tc.tool_name, "result": truncated, "id": tc.tool_use_id}
                 )
