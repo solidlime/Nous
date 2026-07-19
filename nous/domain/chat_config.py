@@ -60,13 +60,23 @@ class ChatConfig(BaseModel):
     enabled_skills: list[str] = ["search", "memory"]
     # 画像生成
     image_gen_enabled: bool = False
-    image_gen_provider: str = "openai"  # "openai" | "stability"
-    image_gen_dalle_model: str = "dall-e-3"  # "dall-e-2" | "dall-e-3"
-    image_gen_stability_url: str = ""  # SD WebUI APIエンドポイント
+    image_gen_provider: str = "comfyui"
     image_gen_comfyui_url: str = ""  # ComfyUI APIエンドポイント
-    image_gen_gemini_model: str = "google/gemini-2.5-flash-image"
-    image_gen_replicate_model: str = "black-forest-labs/flux-schnell"
-    image_gen_replicate_api_key: str = ""
+    # ComfyUI 詳細設定
+    image_gen_comfyui_checkpoint: str = "noobai-xl-epsilon-pred-11.safetensors"
+    image_gen_comfyui_loras: str = ""  # JSON: [{"path":"...","weight":1.0}]
+    image_gen_comfyui_width: int = 1024
+    image_gen_comfyui_height: int = 1024
+    image_gen_comfyui_steps: int = 28
+    image_gen_comfyui_cfg: float = 5.5
+    image_gen_comfyui_sampler: str = "euler_ancestral"
+    image_gen_comfyui_scheduler: str = "normal"
+    image_gen_comfyui_seed: int = 0  # 0=ランダム
+    image_gen_comfyui_denoise: float = 0.7
+    # 高速化 LoRA
+    image_gen_comfyui_speed_lora_path: str = ""  # 空=使用しない
+    image_gen_comfyui_speed_lora_weight: float = 1.0
+    image_gen_comfyui_speed_lora_method: str = "lcm"  # lcm, lightning, hyper, tcd
     enable_memory_tools: bool = True
     disabled_tools: list[str] = []
     # Generative Agents-style reflection
@@ -273,8 +283,14 @@ class ChatConfigRepository:
             "context_compression_mode, context_keep_recent_turns, "
             "context_compress_system_prompt, context_compress_history, "
             "memory_preload_count, enable_parallel_tools, "
-            "image_gen_enabled, image_gen_provider, image_gen_dalle_model, image_gen_stability_url, image_gen_comfyui_url, "
-            "image_gen_gemini_model, image_gen_replicate_model, image_gen_replicate_api_key, "
+            "image_gen_enabled, image_gen_provider, image_gen_comfyui_url, "
+            "image_gen_comfyui_checkpoint, image_gen_comfyui_loras, "
+            "image_gen_comfyui_width, image_gen_comfyui_height, "
+            "image_gen_comfyui_steps, image_gen_comfyui_cfg, "
+            "image_gen_comfyui_sampler, image_gen_comfyui_scheduler, "
+            "image_gen_comfyui_seed, image_gen_comfyui_denoise, "
+            "image_gen_comfyui_speed_lora_path, image_gen_comfyui_speed_lora_weight, "
+            "image_gen_comfyui_speed_lora_method, "
             "enable_memory_tools, debug_mode, "
             "dynamic_temperature, emotion_temperature_scale, top_p, "
             "context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled, "
@@ -351,8 +367,14 @@ class ChatConfigRepository:
                  context_compression_mode, context_keep_recent_turns,
                   context_compress_system_prompt, context_compress_history,
                   memory_preload_count, enable_parallel_tools,
-                    image_gen_enabled, image_gen_provider, image_gen_dalle_model, image_gen_stability_url, image_gen_comfyui_url,
-                    image_gen_gemini_model, image_gen_replicate_model, image_gen_replicate_api_key,
+                    image_gen_enabled, image_gen_provider, image_gen_comfyui_url,
+                    image_gen_comfyui_checkpoint, image_gen_comfyui_loras,
+                    image_gen_comfyui_width, image_gen_comfyui_height,
+                    image_gen_comfyui_steps, image_gen_comfyui_cfg,
+                    image_gen_comfyui_sampler, image_gen_comfyui_scheduler,
+                    image_gen_comfyui_seed, image_gen_comfyui_denoise,
+                    image_gen_comfyui_speed_lora_path, image_gen_comfyui_speed_lora_weight,
+                    image_gen_comfyui_speed_lora_method,
                     enable_memory_tools, debug_mode,
                     dynamic_temperature, emotion_temperature_scale, top_p,
                      context_use_llm_summary, episode_consolidation_enabled, episode_search_enabled,
@@ -363,7 +385,7 @@ class ChatConfigRepository:
                           irodori_cfg_scale_caption, irodori_chunk_min_chars, irodori_seed,
                            disabled_tools,
                            updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(persona) DO UPDATE SET
                 provider=excluded.provider,
                 model=excluded.model,
@@ -400,12 +422,20 @@ class ChatConfigRepository:
                  enable_parallel_tools=excluded.enable_parallel_tools,
                  image_gen_enabled=excluded.image_gen_enabled,
                  image_gen_provider=excluded.image_gen_provider,
-                 image_gen_dalle_model=excluded.image_gen_dalle_model,
-                 image_gen_stability_url=excluded.image_gen_stability_url,
                  image_gen_comfyui_url=excluded.image_gen_comfyui_url,
-                 image_gen_gemini_model=excluded.image_gen_gemini_model,
-                 image_gen_replicate_model=excluded.image_gen_replicate_model,
-                 image_gen_replicate_api_key=excluded.image_gen_replicate_api_key,
+                 image_gen_comfyui_checkpoint=excluded.image_gen_comfyui_checkpoint,
+                 image_gen_comfyui_loras=excluded.image_gen_comfyui_loras,
+                 image_gen_comfyui_width=excluded.image_gen_comfyui_width,
+                 image_gen_comfyui_height=excluded.image_gen_comfyui_height,
+                 image_gen_comfyui_steps=excluded.image_gen_comfyui_steps,
+                 image_gen_comfyui_cfg=excluded.image_gen_comfyui_cfg,
+                 image_gen_comfyui_sampler=excluded.image_gen_comfyui_sampler,
+                 image_gen_comfyui_scheduler=excluded.image_gen_comfyui_scheduler,
+                 image_gen_comfyui_seed=excluded.image_gen_comfyui_seed,
+                 image_gen_comfyui_denoise=excluded.image_gen_comfyui_denoise,
+                 image_gen_comfyui_speed_lora_path=excluded.image_gen_comfyui_speed_lora_path,
+                 image_gen_comfyui_speed_lora_weight=excluded.image_gen_comfyui_speed_lora_weight,
+                 image_gen_comfyui_speed_lora_method=excluded.image_gen_comfyui_speed_lora_method,
                  enable_memory_tools=excluded.enable_memory_tools,
                  debug_mode=excluded.debug_mode,
                  dynamic_temperature=excluded.dynamic_temperature,
@@ -467,12 +497,20 @@ class ChatConfigRepository:
                 int(config.enable_parallel_tools),
                 int(config.image_gen_enabled),
                 config.image_gen_provider,
-                config.image_gen_dalle_model,
-                config.image_gen_stability_url,
                 config.image_gen_comfyui_url,
-                config.image_gen_gemini_model,
-                config.image_gen_replicate_model,
-                config.image_gen_replicate_api_key,
+                config.image_gen_comfyui_checkpoint,
+                config.image_gen_comfyui_loras,
+                config.image_gen_comfyui_width,
+                config.image_gen_comfyui_height,
+                config.image_gen_comfyui_steps,
+                config.image_gen_comfyui_cfg,
+                config.image_gen_comfyui_sampler,
+                config.image_gen_comfyui_scheduler,
+                config.image_gen_comfyui_seed,
+                config.image_gen_comfyui_denoise,
+                config.image_gen_comfyui_speed_lora_path,
+                config.image_gen_comfyui_speed_lora_weight,
+                config.image_gen_comfyui_speed_lora_method,
                 int(config.enable_memory_tools),
                 int(config.debug_mode),
                 int(config.dynamic_temperature),
