@@ -130,7 +130,7 @@ def register_item_routes(mcp) -> None:
             body = await request.json()
         except Exception:
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
-        allowed = {"category", "description", "quantity", "tags"}
+        allowed = {"category", "description", "quantity", "tags", "item_name"}
         updates = {k: v for k, v in body.items() if k in allowed}
         if not updates:
             return JSONResponse({"error": "No valid fields to update"}, status_code=400)

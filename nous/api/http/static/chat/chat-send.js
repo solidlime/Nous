@@ -545,6 +545,15 @@ async function chatSend(retry) {
               assistantDiv.appendChild(notice);
             }
           }
+          // Show token usage info when available
+          if (evt.usage && assistantDiv) {
+            const u = evt.usage;
+            const tokenInfo = document.createElement("div");
+            tokenInfo.className = "chat-token-info";
+            tokenInfo.style.cssText = "font-size:0.72rem;color:var(--text-muted);margin-top:4px;opacity:0.7;";
+            tokenInfo.textContent = "🔤 " + u.prompt_tokens + "↑ " + u.completion_tokens + "↓ = " + u.total_tokens + " total";
+            assistantDiv.appendChild(tokenInfo);
+          }
         }
       }
       if (streamDone) break;

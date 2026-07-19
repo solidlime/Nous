@@ -119,6 +119,7 @@ class InferenceStep:
                 elif isinstance(event, DoneEvent):
                     # Provider finished streaming this turn.
                     _finish_reason = (event.finish_reason or "").lower()
+                    turn_ctx.usage = event.usage
                     if not current_text and not pending_tool_calls:
                         logger.warning(
                             "InferenceStep: provider finished with empty response (model=%s, turn=%d, finish=%s)",

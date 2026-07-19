@@ -57,9 +57,13 @@ class DebugInfoSSE:
 class DoneSSE:
     message: str = "completed"
     truncated: bool = False
+    usage: dict | None = None
 
     def to_sse(self) -> str:
-        return _sse_encode("done", {"message": self.message, "truncated": self.truncated})
+        data: dict = {"message": self.message, "truncated": self.truncated}
+        if self.usage:
+            data["usage"] = self.usage
+        return _sse_encode("done", data)
 
 
 @dataclass

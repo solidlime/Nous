@@ -102,7 +102,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                         "pain": {"type": "number"},
                     },
                 },
-                "speech_style": {"type": "string", "description": "話し方のスタイル記述"},
                 "relationship_status": {"type": "string", "description": "関係性の状態記述"},
                 "relationship_type": {"type": "string", "description": "関係性の種類"},
                 "context_note": {

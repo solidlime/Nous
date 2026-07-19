@@ -44,48 +44,6 @@ def mock_ctx():
 
 
 @pytest.mark.asyncio
-async def test_get_context_reads_speech_style_memory(mock_ctx):
-    """get_context が speech_style メモリを読み込み、消費する"""
-    from nous.api.mcp._tools_persona import _tool_get_context
-    from nous.domain.persona.entities import PersonaState
-
-    state = PersonaState(persona="test_persona")
-    mock_ctx.persona_service.get_context.return_value = Success(state)
-    mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
-    mock_ctx.persona_service.get_emotion_history.return_value = Success([])
-    mock_ctx.persona_service.get_body_state_history.return_value = Success([])
-    mock_ctx.memory_service.get_recent.return_value = Success([])
-    mock_ctx.equipment_service.get_equipment.return_value = Success({})
-    mock_ctx.persona_service.record_conversation_time.return_value = Success(None)
-
-    mem = _make_memory(
-        key="mem_speech_1",
-        content="speech_style: ツンデレ口調",
-        tags=["speech_style"],
-        created_at=datetime(2026, 7, 10, 12, 0),
-    )
-
-    # speech_style returns the mem, others return empty
-    def _get_by_tags_side(tags):
-        if "speech_style" in tags:
-            return Success([mem])
-        if "physical_state" in tags:
-            return Success([])
-        if "mental_state" in tags:
-            return Success([])
-        # Default for other tag queries (goal, reflection, etc.)
-        return Success([])
-
-    mock_ctx.memory_service.get_by_tags.side_effect = _get_by_tags_side
-
-    result = await _tool_get_context(mock_ctx, "test_persona")
-
-    assert "ツンデレ口調" in result
-    assert "前回セッションからの状態" in result
-    mock_ctx.memory_repo.consume_memory.assert_called_once_with("mem_speech_1")
-
-
-@pytest.mark.asyncio
 async def test_get_context_skips_consumed_memories(mock_ctx):
     """consumed 済みメモリは空リストが返る → 注入されない"""
     from nous.api.mcp._tools_persona import _tool_get_context

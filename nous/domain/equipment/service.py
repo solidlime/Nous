@@ -106,12 +106,16 @@ class EquipmentService:
         return result
 
     def update_item(self, name: str, **updates: object) -> Result[Item, DomainError]:
-        """Update item fields."""
+        """Update item fields. Supports renaming via item_name key."""
         existing = self._repo.find_item_by_name(name)
         if not existing.is_ok:
             return Failure(existing.error)
         if existing.value is None:
             return Failure(ItemNotFoundError(f"Item not found: {name}"))
+
+        # Map API key item_name → repo field name
+        if "item_name" in updates:
+            updates["name"] = updates.pop("item_name")
 
         updates["updated_at"] = get_now()
         result = self._repo.update_item(name, **updates)

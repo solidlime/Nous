@@ -798,32 +798,6 @@ class TestRunMemoryLLM:
         mock_ctx.persona_service.update_persona_info.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_context_update_creates_speech_style_memory(self, mock_ctx, mock_config):
-        """speech_style → memory, emotion → update_emotion."""
-        payload = {"user": "hello", "assistant": "hi"}
-        llm_result = {
-            "facts": [],
-            "goals": [],
-            "promises": [],
-            "context_update": {
-                "speech_style": "ツンデレ口調",
-                "emotion": "joy",
-            },
-            "inventory_update": {},
-        }
-
-        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
-            instance = mock_llm.return_value
-            instance.process = AsyncMock(return_value=llm_result)
-            await run_memory_llm(mock_ctx, mock_config, payload)
-
-        mock_ctx.memory_service.create_memory.assert_any_call(
-            content="speech_style: ツンデレ口調",
-            tags=["speech_style", "speech"],
-            importance=0.6,
-        )
-
-    @pytest.mark.asyncio
     async def test_context_update_no_state_change_skips_memory(self, mock_ctx, mock_config):
         """Empty context_update → no create_memory calls."""
         payload = {"user": "test", "assistant": "response"}
@@ -840,23 +814,23 @@ class TestRunMemoryLLM:
             instance.process = AsyncMock(return_value=llm_result)
             await run_memory_llm(mock_ctx, mock_config, payload)
 
-        # create_memory should not be called with speech_style/physical_state/mental_state keys
+        # create_memory should not be called with physical_state/mental_state keys
         for call in mock_ctx.memory_service.create_memory.call_args_list:
             _, kwargs = call
             content = kwargs.get("content", "")
             assert not any(
-                content.startswith(prefix) for prefix in ("speech_style:", "physical_state:", "mental_state:")
+                content.startswith(prefix) for prefix in ("physical_state:", "mental_state:")
             ), f"Memory should not be created: {content}"
 
     @pytest.mark.asyncio
     async def test_context_update_none_state_skips_memory(self, mock_ctx, mock_config):
-        """None values for speech_style/physical_state/mental_state → no memory creation."""
+        """None values for physical_state/mental_state → no memory creation."""
         payload = {"user": "test", "assistant": "response"}
         llm_result = {
             "facts": [],
             "goals": [],
             "promises": [],
-            "context_update": {"speech_style": None, "physical_state": None, "mental_state": None},
+            "context_update": {"physical_state": None, "mental_state": None},
             "inventory_update": {},
         }
 
@@ -870,5 +844,5 @@ class TestRunMemoryLLM:
             _, kwargs = call
             content = kwargs.get("content", "")
             assert not any(
-                content.startswith(prefix) for prefix in ("speech_style:", "physical_state:", "mental_state:")
+                content.startswith(prefix) for prefix in ("physical_state:", "mental_state:")
             ), f"Memory should not be created for None: {content}"

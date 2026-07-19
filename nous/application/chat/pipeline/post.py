@@ -172,7 +172,7 @@ class PostProcessStep:
             logger.warning("PostProcessStep: record_conversation_time failed: %s", e)
 
         # DoneSSE: memory_llmの前に送出（was_truncatedは事前に設定済み）
-        yield DoneSSE(truncated=turn_ctx.was_truncated)
+        yield DoneSSE(truncated=turn_ctx.was_truncated, usage=turn_ctx.usage)
 
         # MemoryLLM: DoneSSE後にawait実行（fire-and-forgetをやめて結果をSSEに含める）
         memory_result: dict = {}

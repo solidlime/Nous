@@ -47,6 +47,7 @@ class DoneEvent:
     full_content: str = ""
     tool_calls: list[ToolCallEvent] = field(default_factory=list)
     finish_reason: str = ""
+    usage: dict | None = None  # {"prompt_tokens": N, "completion_tokens": M, "total_tokens": T}
 
 
 @dataclass

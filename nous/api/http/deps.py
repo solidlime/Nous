@@ -49,7 +49,6 @@ class UpdateContextRequest(BaseModel):
     fatigue: float | None = None
     warmth: float | None = None
     arousal: float | None = None
-    speech_style: str | None = None
 
 
 def _safe_get_context(persona: str):

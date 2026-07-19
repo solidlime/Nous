@@ -356,7 +356,6 @@ class TestBuildContextSectionLightMode:
         state.last_conversation_time = None
         state.emotion = None
         state.mental_state = None
-        state.speech_style = None
         state.physical_state = None
         state.environment = None
         state.relationship_status = None
@@ -403,7 +402,6 @@ class TestBuildContextSectionNormalMode:
         state.last_conversation_time = None
         state.emotion = None
         state.mental_state = None
-        state.speech_style = None
         state.physical_state = None
         state.environment = None
         state.relationship_status = None
@@ -479,7 +477,6 @@ class TestBuildContextSectionTierContent:
         state.last_conversation_time = None
         state.emotion = None
         state.mental_state = None
-        state.speech_style = None
         state.physical_state = "少し疲れた"
         state.fatigue = 0.8
         state.pain = 0.0
@@ -518,7 +515,6 @@ class TestBuildContextSectionTierContent:
         state.last_conversation_time = None
         state.emotion = None
         state.mental_state = None
-        state.speech_style = None
         state.physical_state = None
         state.fatigue = None
         state.pain = None

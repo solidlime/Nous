@@ -127,6 +127,7 @@ class AnthropicProvider(LLMProvider):
 
             full_text = ""
             finish_reason = ""
+            usage_info: dict | None = None
             tool_calls_collected: list[ToolCallEvent] = []
             current_tool: dict | None = None
 
@@ -173,8 +174,16 @@ class AnthropicProvider(LLMProvider):
                             "stop_sequence": "stop",
                         }
                         finish_reason = reason_map.get(raw, raw)
+                        # Collect usage from message_delta event
+                        usage_attr = getattr(event, "usage", None)
+                        if usage_attr:
+                            usage_info = {
+                                "prompt_tokens": usage_attr.input_tokens,
+                                "completion_tokens": usage_attr.output_tokens,
+                                "total_tokens": usage_attr.input_tokens + usage_attr.output_tokens,
+                            }
 
-            yield DoneEvent(full_content=full_text, tool_calls=tool_calls_collected, finish_reason=finish_reason)
+            yield DoneEvent(full_content=full_text, tool_calls=tool_calls_collected, finish_reason=finish_reason, usage=usage_info)
 
         except Exception as e:
             yield ErrorEvent(message=str(e))

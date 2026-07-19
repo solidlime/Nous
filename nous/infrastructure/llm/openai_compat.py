@@ -126,14 +126,25 @@ class OpenAICompatProvider(LLMProvider):
             if openai_tools:
                 kwargs["tools"] = openai_tools
 
+            kwargs["stream_options"] = {"include_usage": True}
+
             full_text = ""
             finish_reason = ""
             tool_calls_collected: list[ToolCallEvent] = []
             # Accumulate tool call chunks by index
             pending_tool_calls: dict[int, dict] = {}
 
+            usage_info: dict | None = None
             async with await self._client.chat.completions.create(**kwargs) as stream:
                 async for chunk in stream:
+                    # Collect usage from streaming chunks (final chunk or usage-only chunk)
+                    if chunk.usage:
+                        usage_info = {
+                            "prompt_tokens": chunk.usage.prompt_tokens,
+                            "completion_tokens": chunk.usage.completion_tokens,
+                            "total_tokens": chunk.usage.total_tokens,
+                        }
+
                     delta = chunk.choices[0].delta if chunk.choices else None
                     if delta is None:
                         continue
@@ -177,7 +188,7 @@ class OpenAICompatProvider(LLMProvider):
                 tool_calls_collected.append(tc)
                 yield tc
 
-            yield DoneEvent(full_content=full_text, tool_calls=tool_calls_collected, finish_reason=finish_reason)
+            yield DoneEvent(full_content=full_text, tool_calls=tool_calls_collected, finish_reason=finish_reason, usage=usage_info)
 
         except Exception as e:
             yield ErrorEvent(message=str(e))

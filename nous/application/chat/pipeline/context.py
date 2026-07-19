@@ -35,5 +35,7 @@ class ChatTurnContext:
     tool_call_count: int = 0
     # InferenceStep が埋める (インタラクティブに追記)
     was_truncated: bool = False  # max_tokens到達による応答切断が発生したか
+    # LLM プロバイダーから返された usage 情報
+    usage: dict | None = None
     # セグメント順序記録（F2 履歴復元用: text/tool_call/tool_result の順序を保持）
     segments: list[dict] = field(default_factory=list)
