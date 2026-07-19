@@ -62,6 +62,16 @@ function appendChatMessage(role, content, timeStr, isMarkdown) {
       editChatMessage(msgIndex);
     };
     actions.appendChild(editBtn);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "chat-msg-action-btn delete";
+    deleteBtn.innerHTML = '<i data-lucide="trash-2"></i>';
+    deleteBtn.title = "削除";
+    deleteBtn.setAttribute("aria-label", "メッセージを削除");
+    deleteBtn.onclick = () => {
+      deleteChatMessage(msgIndex);
+    };
+    actions.appendChild(deleteBtn);
   } else if (role === "assistant") {
     const ttsBtn = document.createElement("button");
     ttsBtn.className = "chat-msg-action-btn chat-tts-btn";
