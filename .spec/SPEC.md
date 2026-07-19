@@ -1,3 +1,29 @@
+# SPEC — 技術仕様・要件定義
+
+## チャットメッセージ編集・削除・自動再生成
+
+### 機能要件
+- [x] FR-C1: ユーザーメッセージ編集後、後続メッセージが存在する場合は自動で切捨て+LLM再生成
+- [x] FR-C2: 最終メッセージの編集時は再生成しない（後続がないため）
+- [x] FR-C3: ユーザーメッセージ削除ボタン（trash-2アイコン）
+- [x] FR-C4: 削除時に確認ダイアログ（後続件数を表示）
+- [x] FR-C5: 削除後、直前のユーザーメッセージで自動再生成
+- [x] FR-C6: 削除ボタンは赤色ホバー効果
+
+### 設計方針
+- バックエンド変更なし（既存 `POST /rollback` API を流用）
+- ブランチ機構なしのフラット配列モデルを採用
+- 編集/削除 → truncate → 再生成の一貫したパイプライン
+
+### 変更ファイル
+| ファイル | 内容 |
+|---------|------|
+| `nous/api/http/static/chat/chat-history.js` | editChatMessage改造、deleteChatMessage追加 |
+| `nous/api/http/static/chat/chat-send.js` | 削除ボタン追加 |
+| `nous/api/http/static/chat.css` | 削除ボタンホバー色 |
+
+---
+
 # sentence-transformers → ONNX Runtime 置き換え 仕様（Path C: 直叩き）
 
 ## 背景

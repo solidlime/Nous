@@ -41,3 +41,9 @@
 
 - [x] T029: Docker イメージビルド検証 → 最終イメージ1.08GB、ビルド成功確認済み
 - [x] T102-104: mcp-hub CI 確認（docker-compose 正常） + requirements-dev.txt 整理 + CI改善（torch除去・SHAピン留め・timeout追加）
+
+### チャット編集・削除・再生成
+- [x] T105: chat-history.js — 編集後の自動再生成（後続メッセージがある場合のみ）
+- [x] T106: chat-history.js — deleteChatMessage() 追加（確認ダイアログ+ロールバック+直前メッセージで再生成）
+- [x] T107: chat-send.js — ユーザーメッセージに削除ボタン追加
+- [x] T108: chat.css — 削除ボタンホバー色（accent-red）
