@@ -114,6 +114,7 @@ class ChatConfig(BaseModel):
     voice_model: str = ""
     voice_url: str = ""
     voice_volume: float = 1.0
+    voice_speed: float = 1.0
     # Irodori advanced TTS parameters
     irodori_num_steps: int = 30
     irodori_cfg_scale_text: float = 3.2

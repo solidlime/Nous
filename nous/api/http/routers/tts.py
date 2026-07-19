@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse
@@ -79,22 +81,59 @@ def register_tts_routes(mcp) -> None:
             if isinstance(engine, IrodoriEngine):
                 engine._voice = voice_override  # noqa: SLF001
 
-        # get persona state for emotion (respect voice_emotion_link setting)
+        # get persona state for emotion + build caption
+        # Caption format: {emotion}{intensity}%\nPhysical: ...\nMental: ...
         emotion = "neutral"
-        speech_style = None
+        caption: str | None = None
         if chat_config.voice_emotion_link:
             state_result = ctx.persona_service.get_context(persona)
             if state_result.is_ok and state_result.value:
-                emotion = state_result.value.emotion or "neutral"
-                speech_style = state_result.value.speech_style
+                state = state_result.value
+                emotion = state.emotion or "neutral"
+                intensity_pct = int((state.emotion_intensity or 0.0) * 100)
+                caption_parts = [f"{emotion}{intensity_pct}%"]
+                # Read one-shot physical/mental from memories (tags)
+                import datetime as _dt
+
+                for tag_name, label in [("physical_state", "Physical"), ("mental_state", "Mental")]:
+                    mems_result = ctx.memory_service.get_by_tags([tag_name])
+                    if mems_result.is_ok and mems_result.value:
+                        latest = max(mems_result.value, key=lambda m: m.created_at or _dt.datetime.min)
+                        content = latest.content
+                        prefix = f"{tag_name}: "
+                        if content.startswith(prefix):
+                            content = content[len(prefix) :]
+                        if content.strip():
+                            caption_parts.append(f"{label}: {content}")
+                caption = "\n".join(caption_parts)
+
+        # ---- TTS audio cache ----
+        cache_dir = Path(ctx.settings.data_root) / "tts_cache" / persona
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_key = hashlib.sha256(f"{text}|{emotion}|{caption or ''}".encode()).hexdigest()
+        cache_path = cache_dir / f"{cache_key}.wav"
+
+        if cache_path.exists():
+            audio_bytes = cache_path.read_bytes()
+            logger.debug("TTS cache HIT: %s", cache_path)
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "audio_base64": base64.b64encode(audio_bytes).decode("ascii"),
+                    "format": "wav",
+                }
+            )
 
         try:
+            voice_speed = getattr(chat_config, "voice_speed", 1.0)
             audio_bytes = await engine.synthesize(
                 text=text,
                 emotion=emotion,
-                speech_style=speech_style,
-                caption=speech_style,
+                caption=caption,
+                speed=None if voice_speed == 1.0 else voice_speed,
             )
+            cache_path.write_bytes(audio_bytes)
+            logger.debug("TTS cache MISS: %s", cache_path)
             return JSONResponse(
                 {
                     "ok": True,

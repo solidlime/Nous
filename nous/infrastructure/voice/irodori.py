@@ -36,14 +36,14 @@ class IrodoriEngine(VoiceEngine):
         self,
         text: str,
         emotion: str,
-        speech_style: str | None = None,  # noqa: ARG002 — 将来の拡張用
         caption: str | None = None,
+        speed: float | None = None,
     ) -> bytes:
         """Irodori-TTS で音声合成しWAVバイト列を返す。
 
         接続エラーの場合は最大2回リトライする。
         """
-        speed = _EMOTION_SPEED.get(emotion, _DEFAULT_SPEED)
+        speed = speed if speed is not None else _EMOTION_SPEED.get(emotion, _DEFAULT_SPEED)
 
         extra_body_irodori: dict = {
             "num_steps": self._advanced.num_steps,
