@@ -177,6 +177,28 @@ class ComfyUIProvider(ImageGenProvider):
         # ── seed: 0 はランダム ──
         seed = self._seed if self._seed != 0 else random.randint(0, 2**63 - 1)
 
+        # ── 高速化 LoRA の自動オーバーライド ──
+        sampler = self._sampler
+        cfg = self._cfg
+        scheduler = self._scheduler
+        if self._speed_lora_path and self._speed_lora_method:
+            if self._speed_lora_method == "lcm":
+                sampler = "lcm"
+                cfg = 1.5
+                scheduler = "sgm_uniform"
+            elif self._speed_lora_method == "lightning":
+                sampler = "euler"
+                cfg = 0.0
+                scheduler = "sgm_uniform"
+            elif self._speed_lora_method == "hyper":
+                sampler = "euler"
+                cfg = 5.0
+                scheduler = "sgm_uniform"
+            elif self._speed_lora_method == "tcd":
+                sampler = "euler_ancestral"
+                cfg = 1.0
+                scheduler = "normal"
+
         # ── 1. CheckpointLoaderSimple (4) ──
         nodes: dict[str, Any] = {
             "4": {
@@ -185,8 +207,48 @@ class ComfyUIProvider(ImageGenProvider):
             },
         }
 
-        # ── 2. LoRA ノード (12, 13, ...) — 後続スライスで実装 ──
+        # ── 2. LoRA ノード (12, 13, ...) ──
+        # model/clip 連鎖: Checkpoint → LoraLoader → LoraLoader → ...
         last_model_id: str = "4"
+        last_clip_id: str = "4"
+        next_id = 12
+
+        # キャラ LoRA
+        for lora in self._loras:
+            path = lora.get("path", "")
+            weight = lora.get("weight", 1.0)
+            if not path:
+                continue
+            node_id = str(next_id)
+            nodes[node_id] = {
+                "class_type": "LoraLoader",
+                "inputs": {
+                    "model": [last_model_id, 0],
+                    "clip": [last_clip_id, 1],
+                    "lora_name": path,
+                    "strength_model": weight,
+                    "strength_clip": weight,
+                },
+            }
+            last_model_id = node_id
+            last_clip_id = node_id
+            next_id += 1
+
+        # 高速化 LoRA
+        if self._speed_lora_path:
+            node_id = str(next_id)
+            nodes[node_id] = {
+                "class_type": "LoraLoader",
+                "inputs": {
+                    "model": [last_model_id, 0],
+                    "clip": [last_clip_id, 1],
+                    "lora_name": self._speed_lora_path,
+                    "strength_model": self._speed_lora_weight,
+                    "strength_clip": self._speed_lora_weight,
+                },
+            }
+            last_model_id = node_id
+            next_id += 1
 
         # ── 3. EmptyLatentImage (5) / VAEEncode(10)+LoadImage(11) ──
         if image_filename:
@@ -231,9 +293,9 @@ class ComfyUIProvider(ImageGenProvider):
             "inputs": {
                 "seed": seed,
                 "steps": self._steps,
-                "cfg": self._cfg,
-                "sampler_name": self._sampler,
-                "scheduler": self._scheduler,
+                "cfg": cfg,
+                "sampler_name": sampler,
+                "scheduler": scheduler,
                 "denoise": denoise,
                 "model": [last_model_id, 0],
                 "positive": ["6", 0],
