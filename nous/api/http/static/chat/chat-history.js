@@ -373,6 +373,58 @@ async function restoreChatHistory() {
                 resultPre.textContent = resultStr;
                 details.appendChild(resultPre);
               }
+              // 画像生成結果があればレンダリング（履歴復元時）
+              if (seg.id && msg.tool_calls) {
+                var tc = msg.tool_calls.find(function(t) { return t.id === seg.id; });
+                if (tc && tc.result_raw && tc.result_raw.images && tc.result_raw.images.length) {
+                  tc.result_raw.images.forEach(function(img) {
+                    var card = document.createElement("div");
+                    card.className = "chat-image-gen-card";
+                    var imgEl = document.createElement("img");
+                    try {
+                      var binary = atob(img.base64);
+                      var bytes = new Uint8Array(binary.length);
+                      for (var b = 0; b < binary.length; b++) bytes[b] = binary.charCodeAt(b);
+                      var blob = new Blob([bytes], { type: "image/png" });
+                      imgEl.src = URL.createObjectURL(blob);
+                    } catch (e) {
+                      imgEl.src = "data:image/png;base64," + img.base64;
+                    }
+                    imgEl.alt = img.revised_prompt || "生成画像";
+                    imgEl.title = img.revised_prompt || "";
+                    imgEl.onerror = function() {
+                      imgEl.style.display = "none";
+                      var errDiv = document.createElement("div");
+                      errDiv.className = "image-gen-error";
+                      errDiv.textContent = "⚠️ 画像のデコードに失敗しました";
+                      card.insertBefore(errDiv, card.firstChild);
+                    };
+                    imgEl.onclick = function() {
+                      if (typeof openMediaViewer === "function") {
+                        openMediaViewer(imgEl.src, "image");
+                      } else {
+                        window.open(imgEl.src, "_blank");
+                      }
+                    };
+                    var meta = document.createElement("div");
+                    meta.className = "image-gen-meta";
+                    var rp = img.revised_prompt || "";
+                    if (rp) {
+                      var promptSpan = document.createElement("span");
+                      promptSpan.textContent = rp.length > 80 ? rp.substring(0, 80) + "..." : rp;
+                      promptSpan.style.fontStyle = "italic";
+                      meta.appendChild(promptSpan);
+                    }
+                    var sizeSpan = document.createElement("span");
+                    sizeSpan.textContent = (tc.result_raw.provider || "") + " · " + (img.size || "");
+                    meta.appendChild(sizeSpan);
+                    card.appendChild(imgEl);
+                    card.appendChild(meta);
+                    // tool_call div の後ろに挿入
+                    toolDiv.parentNode.insertBefore(card, toolDiv.nextSibling);
+                  });
+                }
+              }
             }
           }
         }
