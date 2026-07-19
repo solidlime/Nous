@@ -243,6 +243,8 @@ function applyChatConfig(cfg) {
   set("chat-image-gen-speed-lora-path", cfg.image_gen_comfyui_speed_lora_path);
   set("chat-image-gen-speed-lora-weight", cfg.image_gen_comfyui_speed_lora_weight);
   // LoRA リスト復元
+  var loraContainer = document.getElementById('chat-image-gen-lora-list');
+  if (loraContainer) loraContainer.innerHTML = '';
   if (cfg.image_gen_comfyui_loras) {
     try {
       var loras = JSON.parse(cfg.image_gen_comfyui_loras);
@@ -741,8 +743,40 @@ function updateImageGenSliderLabels() {
 
 function testImageGen() {
   var status = document.getElementById('chat-image-test-status');
-  if (status) status.textContent = 'テスト生成は準備中です...';
-  // TODO: 実際のテスト生成API呼び出し
+  if (!status) return;
+  status.textContent = '生成中...';
+  status.style.color = 'var(--text-muted)';
+  
+  var payload = {
+    checkpoint: document.getElementById('chat-image-gen-checkpoint')?.value || '',
+    loras: collectLoraRows(),
+    width: parseInt(document.getElementById('chat-image-gen-width')?.value || '1024'),
+    height: parseInt(document.getElementById('chat-image-gen-height')?.value || '1024'),
+    steps: parseInt(document.getElementById('chat-image-gen-steps')?.value || '28'),
+    cfg: parseFloat(document.getElementById('chat-image-gen-cfg')?.value || '5.5'),
+    sampler: document.getElementById('chat-image-gen-sampler')?.value || 'euler_ancestral',
+    scheduler: document.getElementById('chat-image-gen-scheduler')?.value || 'normal',
+    seed: parseInt(document.getElementById('chat-image-gen-seed')?.value || '0'),
+    denoise: parseFloat(document.getElementById('chat-image-gen-denoise')?.value || '0.7'),
+    prompt: '1girl, herta, honkai star rail, solo, smile',
+    negative_prompt: 'lowres, bad anatomy, bad hands, text, error',
+  };
+  
+  fetch('/api/chat/' + (S.persona || '') + '/image-gen/test', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.error) { status.textContent = '\ud83d\udd34 ' + d.error; status.style.color = 'var(--accent-red)'; return; }
+    status.textContent = '\u2705 \u751f\u6210\u5b8c\u4e86 (' + (d.images ? d.images.length : 0) + '\u679a)';
+    status.style.color = 'var(--accent-green)';
+  })
+  .catch(function(e) {
+    status.textContent = '\ud83d\udd34 ' + e.message;
+    status.style.color = 'var(--accent-red)';
+  });
 }
 
 function checkComfyUIHealth() {
@@ -779,6 +813,10 @@ function escHtml(s) {
     if (addBtn && !addBtn._bound) {
       addBtn._bound = true;
       addBtn.addEventListener('click', function() { addLoraRow('', 1.0); });
+    }
+    // ページロード時にComfyUI URLが設定済みなら疎通確認
+    if (document.getElementById('chat-image-gen-comfyui-url')?.value) {
+      checkComfyUIHealth();
     }
   }
   if (document.readyState !== 'loading') bind();
