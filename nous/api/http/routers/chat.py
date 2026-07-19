@@ -531,6 +531,36 @@ def register_chat_routes(mcp) -> None:
         mime_type = mime_type or "application/octet-stream"
         return FileResponse(str(file_path), media_type=mime_type)
 
+    @mcp.custom_route("/api/chat/{persona}/memory/images/{filename}", methods=["GET"])
+    async def memory_image_serve(request: Request) -> Response:
+        """Serve image generation results from memory storage."""
+        import mimetypes
+        import os
+        from pathlib import Path
+
+        from starlette.responses import FileResponse
+
+        persona = _resolve_persona_from_request(request)
+        ctx = _safe_get_context(persona)
+        if not ctx:
+            return JSONResponse({"error": "Persona not found"}, status_code=404)
+
+        filename = request.path_params.get("filename", "")
+        safe_name = os.path.basename(filename).replace("..", "").strip()
+        if not safe_name or not safe_name.lower().endswith(".png"):
+            return JSONResponse({"error": "Invalid filename"}, status_code=400)
+
+        from nous.config.settings import get_settings
+
+        settings = get_settings()
+        file_path = Path(settings.data_root) / "memory" / persona / "images" / safe_name
+        if not file_path.exists():
+            return JSONResponse({"error": "File not found"}, status_code=404)
+
+        mime_type, _ = mimetypes.guess_type(safe_name)
+        mime_type = mime_type or "image/png"
+        return FileResponse(str(file_path), media_type=mime_type)
+
     @mcp.custom_route("/api/chat/{persona}/tool", methods=["POST"])
     async def execute_chat_tool(request: Request) -> JSONResponse:
         """Execute a builtin memory tool directly (for slash commands)."""

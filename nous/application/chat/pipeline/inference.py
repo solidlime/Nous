@@ -236,13 +236,24 @@ class InferenceStep:
                 turn_ctx.segments.append(
                     {"type": "tool_result", "name": tc.tool_name, "result": truncated, "id": tc.tool_use_id}
                 )
+                # result_raw は DB 保存用: base64 を除去し url を残す（SSE では使わない）
+                result_for_log = tool_result
+                if isinstance(tool_result, dict) and tool_result.get("images"):
+                    result_for_log = dict(tool_result)
+                    result_for_log["images"] = [
+                        {
+                            k: v for k, v in img.items()
+                            if k != "base64"
+                        }
+                        for img in tool_result["images"]
+                    ]
                 turn_ctx.tool_calls_log.append(
                     {
                         "id": tc.tool_use_id,
                         "name": tc.tool_name,
                         "input": tc.tool_input,
                         "result": truncated,
-                        "result_raw": tool_result,
+                        "result_raw": result_for_log,
                     }
                 )
                 messages.append(

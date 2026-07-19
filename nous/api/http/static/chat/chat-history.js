@@ -381,14 +381,19 @@ async function restoreChatHistory() {
                     var card = document.createElement("div");
                     card.className = "chat-image-gen-card";
                     var imgEl = document.createElement("img");
-                    try {
-                      var binary = atob(img.base64);
-                      var bytes = new Uint8Array(binary.length);
-                      for (var b = 0; b < binary.length; b++) bytes[b] = binary.charCodeAt(b);
-                      var blob = new Blob([bytes], { type: "image/png" });
-                      imgEl.src = URL.createObjectURL(blob);
-                    } catch (e) {
-                      imgEl.src = "data:image/png;base64," + img.base64;
+                    // url 優先（ファイル配信エンドポイント経由）、なければ base64 にフォールバック
+                    if (img.url) {
+                      imgEl.src = img.url;
+                    } else if (img.base64) {
+                      try {
+                        var binary = atob(img.base64);
+                        var bytes = new Uint8Array(binary.length);
+                        for (var b = 0; b < binary.length; b++) bytes[b] = binary.charCodeAt(b);
+                        var blob = new Blob([bytes], { type: "image/png" });
+                        imgEl.src = URL.createObjectURL(blob);
+                      } catch (e) {
+                        imgEl.src = "data:image/png;base64," + img.base64;
+                      }
                     }
                     imgEl.alt = img.revised_prompt || "生成画像";
                     imgEl.title = img.revised_prompt || "";

@@ -301,11 +301,13 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             filename = f"{timestamp}_{idx:02d}.png"
             img_path = images_dir / filename
             img_path.write_bytes(img_bytes)
+            url = f"/api/chat/{persona}/memory/images/{filename}"
             images_data.append({
                 "base64": img.base64,
                 "revised_prompt": img.revised_prompt,
                 "size": img.size,
                 "filename": str(img_path),
+                "url": url,
             })
 
         # 結果イベントを送信（event_busは使われていないが後方互換のため残す）
