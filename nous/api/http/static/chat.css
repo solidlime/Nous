@@ -1,4 +1,4 @@
-/* ── Chat tab styles ── */
+/* ── Chat tab styles — Apple HIG ── */
 #chat-layout {
   display: flex;
   gap: 16px;
@@ -23,7 +23,7 @@
 }
 #chat-input-area {
   padding: 12px 16px;
-  border-top: 1px solid var(--glass-border);
+  border-top: 0.5px solid var(--separator-non-opaque);
   display: flex;
   gap: 10px;
   align-items: flex-end;
@@ -31,42 +31,42 @@
 #chat-input {
   flex: 1;
   background: var(--glass-bg-subtle);
-  border: 1px solid var(--glass-border);
-  border-radius: 12px;
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-md);
   padding: 12px 14px;
   color: var(--text-primary);
-  font-size: 0.9rem;
+  font-size: 1rem;
   resize: none;
   min-height: 44px;
   max-height: 160px;
   font-family: inherit;
   outline: none;
-  line-height: 1.5;
-  transition: border-color 0.2s;
+  line-height: 1.47;
+  transition: border-color var(--duration-fast) var(--ease-apple);
 }
 #chat-input:focus {
-  border-color: var(--accent-purple);
-  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15);
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.3);
 }
 #chat-input::placeholder {
   color: var(--text-muted);
 }
 #chat-send-btn {
   padding: 10px 20px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--accent-purple), #7c3aed);
+  border-radius: var(--radius-md);
+  background: var(--accent-blue);
   border: none;
   color: white;
-  font-size: 0.9rem;
+  font-size: 1rem;
   cursor: pointer;
   font-weight: 600;
-  transition: all 0.25s ease;
+  transition: all var(--duration-fast) var(--ease-apple);
   white-space: nowrap;
   align-self: flex-end;
 }
 #chat-send-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(167, 139, 250, 0.4);
+  background: var(--accent-blue);
+  box-shadow: none;
 }
 #chat-send-btn:disabled {
   opacity: 0.5;
@@ -78,7 +78,7 @@
   flex-direction: column;
   gap: 4px;
   max-width: 85%;
-  animation: fadeInUp 0.25s ease;
+  animation: fadeInUp 0.25s var(--ease-apple);
 }
 .chat-msg.user {
   align-self: flex-end;
@@ -90,28 +90,24 @@
 }
 .chat-bubble {
   padding: 10px 14px;
-  border-radius: 14px;
-  font-size: 0.9rem;
-  line-height: 1.6;
+  border-radius: var(--radius-lg);
+  font-size: 1rem;
+  line-height: 1.47;
   white-space: pre-wrap;
   word-break: break-word;
   max-width: min(85%, 720px);
 }
 .chat-msg.user .chat-bubble {
-  background: linear-gradient(
-    135deg,
-    rgba(167, 139, 250, 0.25),
-    rgba(124, 58, 237, 0.2)
-  );
-  border: 1px solid rgba(167, 139, 250, 0.3);
-  color: var(--text-primary);
-  border-bottom-right-radius: 4px;
+  background: var(--accent-blue);
+  border: none;
+  color: white;
+  border-bottom-right-radius: var(--radius-sm);
 }
 .chat-msg.assistant .chat-bubble {
   background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  color: var(--text-secondary);
-  border-bottom-left-radius: 4px;
+  border: 0.5px solid var(--glass-border);
+  color: var(--text-primary);
+  border-bottom-left-radius: var(--radius-sm);
 }
 .chat-time {
   font-size: 0.72rem;
@@ -121,22 +117,22 @@
 .chat-tool-call {
   font-size: 0.78rem;
   padding: 2px 8px;
-  border-radius: 8px;
-  background: rgba(96, 165, 250, 0.1);
-  border: 1px solid rgba(96, 165, 250, 0.2);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 122, 255, 0.1);
+  border: 0.5px solid rgba(0, 122, 255, 0.2);
   color: var(--accent-blue);
   margin: 4px 0;
 }
 .chat-tool-call.done {
-  border-color: rgba(52, 211, 153, 0.3);
-  background: rgba(52, 211, 153, 0.06);
+  border-color: rgba(48, 209, 88, 0.3);
+  background: rgba(48, 209, 88, 0.06);
 }
 .chat-tool-result {
   font-size: 0.78rem;
   padding: 2px 8px;
-  border-radius: 8px;
-  background: rgba(52, 211, 153, 0.08);
-  border: 1px solid rgba(52, 211, 153, 0.2);
+  border-radius: var(--radius-sm);
+  background: rgba(48, 209, 88, 0.08);
+  border: 0.5px solid rgba(48, 209, 88, 0.2);
   color: var(--accent-green);
   margin: 4px 0;
 }
@@ -165,29 +161,29 @@
   margin: 4px 0 4px 10px;
   white-space: pre-wrap;
   word-break: break-all;
-  color: rgba(220, 235, 255, 0.92);
+  color: var(--text-secondary);
   max-height: 200px;
   overflow-y: auto;
   font-size: 0.7rem;
   line-height: 1.4;
-  border-left: 2px solid rgba(96, 165, 250, 0.3);
+  border-left: 2px solid rgba(0, 122, 255, 0.3);
   padding-left: 8px;
 }
 .chat-tool-result-content {
-  border-left-color: rgba(52, 211, 153, 0.4);
-  color: rgba(160, 255, 200, 0.92);
+  border-left-color: rgba(48, 209, 88, 0.4);
+  color: var(--accent-green);
 }
 html.light .chat-tool-call {
-  color: rgba(30, 80, 200, 0.9);
+  color: var(--accent-blue);
 }
 html.light .chat-tool-result {
-  color: rgba(0, 120, 60, 0.9);
+  color: var(--accent-green);
 }
 html.light .chat-tool-detail {
-  color: rgba(30, 50, 120, 0.9);
+  color: var(--text-secondary);
 }
 html.light .chat-tool-result-content {
-  color: rgba(0, 100, 40, 0.9);
+  color: var(--accent-green);
 }
 .chat-typing {
   display: flex;
@@ -199,7 +195,7 @@ html.light .chat-tool-result-content {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent-purple);
+  background: var(--text-muted);
   animation: typingDot 1.2s ease-in-out infinite;
 }
 .chat-typing span:nth-child(2) {
@@ -220,13 +216,13 @@ html.light .chat-tool-result-content {
     opacity: 1;
   }
 }
-/* Message action buttons */
+/* Message action buttons — Apple HIG */
 .chat-msg-actions {
   display: flex;
   gap: 4px;
   margin-top: 4px;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity var(--duration-fast) var(--ease-apple);
 }
 .chat-msg:hover .chat-msg-actions,
 .chat-msg:focus-within .chat-msg-actions {
@@ -234,47 +230,47 @@ html.light .chat-tool-result-content {
 }
 .chat-msg-action-btn {
   background: none;
-  border: 1px solid var(--glass-border);
-  border-radius: 4px;
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   padding: 1px 6px;
   font-size: 0.68rem;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-fast) var(--ease-apple);
 }
 .chat-msg-action-btn:hover {
   color: var(--text-primary);
   background: var(--glass-bg);
 }
 .chat-msg-action-btn.retry:hover {
-  color: var(--accent-purple);
-  border-color: rgba(167, 139, 250, 0.4);
+  color: var(--accent-blue);
+  border-color: rgba(0, 122, 255, 0.4);
 }
 .chat-msg-action-btn.edit:hover {
   color: var(--accent-blue);
-  border-color: rgba(96, 165, 250, 0.4);
+  border-color: rgba(0, 122, 255, 0.4);
 }
 .chat-msg-action-btn.delete:hover {
   color: var(--accent-red);
-  border-color: rgba(248, 113, 113, 0.4);
+  border-color: rgba(255, 69, 58, 0.4);
 }
 
-/* Inline edit textarea — undo スタック非破壊 */
+/* Inline edit textarea — Apple HIG */
 .chat-edit-textarea {
   font-family: inherit;
   font-size: 0.88rem;
-  line-height: 1.5;
+  line-height: 1.47;
   padding: 8px 10px;
-  border: 1px solid var(--border, #444);
-  border-radius: 8px;
-  background: var(--bg-secondary, #1e1e2e);
-  color: var(--text-primary, #e0e0e0);
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg-subtle);
+  color: var(--text-primary);
   resize: vertical;
   outline: none;
 }
 .chat-edit-textarea:focus {
-  border-color: var(--accent-blue, #60a5fa);
-  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.25);
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.3);
 }
 /* Settings sidebar */
 #settings-panel {
@@ -559,7 +555,7 @@ input[type="range"].chat-field-input:focus {
   white-space: nowrap;
 }
 
-/* Settings sticky footer - enhanced */
+/* Settings sticky footer — Apple HIG */
 .settings-footer {
   position: sticky;
   bottom: 0;
@@ -574,63 +570,56 @@ input[type="range"].chat-field-input:focus {
   flex-direction: column;
   gap: 10px;
   z-index: 20;
-  border-top: 1px solid var(--glass-bg-subtle);
+  border-top: 0.5px solid var(--separator-non-opaque);
   margin-top: auto;
 }
 
 .chat-save-btn {
   width: 100%;
   padding: 10px;
-  border-radius: 10px;
-  background: linear-gradient(
-    135deg,
-    rgba(167, 139, 250, 0.18) 0%,
-    rgba(124, 58, 237, 0.12) 100%
-  );
-  border: 1px solid rgba(167, 139, 250, 0.35);
-  color: var(--accent-purple);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 122, 255, 0.15);
+  border: 0.5px solid rgba(0, 122, 255, 0.3);
+  color: var(--accent-blue);
   cursor: pointer;
   font-size: 0.88rem;
   font-weight: 600;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--duration-fast) var(--ease-apple);
   letter-spacing: 0.01em;
 }
 
 .chat-save-btn:hover {
-  background: linear-gradient(
-    135deg,
-    rgba(167, 139, 250, 0.28) 0%,
-    rgba(124, 58, 237, 0.2) 100%
-  );
-  border-color: rgba(167, 139, 250, 0.5);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(167, 139, 250, 0.25);
+  background: rgba(0, 122, 255, 0.25);
+  border-color: rgba(0, 122, 255, 0.5);
+  box-shadow: none;
+  transform: none;
 }
 
 .chat-save-btn:active {
-  transform: translateY(0);
+  transform: scale(0.98);
 }
 
 .chat-clear-btn {
   width: 100%;
   padding: 8px;
-  border-radius: 10px;
-  background: rgba(248, 113, 113, 0.08);
-  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 69, 58, 0.08);
+  border: 0.5px solid rgba(255, 69, 58, 0.2);
   color: var(--accent-red);
   cursor: pointer;
   font-size: 0.84rem;
   font-weight: 500;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--duration-fast) var(--ease-apple);
 }
 
 .chat-clear-btn:hover {
-  background: rgba(248, 113, 113, 0.14);
-  border-color: rgba(248, 113, 113, 0.35);
-  transform: translateY(-1px);
+  background: rgba(255, 69, 58, 0.14);
+  border-color: rgba(255, 69, 58, 0.35);
+  box-shadow: none;
+  transform: none;
 }
 
-/* Mobile responsive */
+/* Mobile responsive — Apple HIG */
 @media (max-width: 768px) {
   #chat-layout {
     flex-direction: column;
@@ -643,7 +632,6 @@ input[type="range"].chat-field-input:focus {
   #memory-panel {
     display: none;
   }
-  /* Mobile overlay when toggled open via toggleMemoryPanel() inline style */
   #memory-panel[style*="display: flex"] {
     position: fixed;
     top: 0;
@@ -652,7 +640,7 @@ input[type="range"].chat-field-input:focus {
     width: 280px;
     z-index: 1000;
     background: var(--bg-primary);
-    border-right: 1px solid var(--glass-border);
+    border-right: 0.5px solid var(--glass-border);
     overflow-y: auto;
   }
   #settings-panel {
@@ -663,7 +651,7 @@ input[type="range"].chat-field-input:focus {
     bottom: 0;
     z-index: 1000;
     background: var(--bg-primary);
-    transition: transform 0.3s ease;
+    transition: transform var(--duration-normal) var(--ease-apple);
   }
   #settings-panel.collapsed {
     transform: translateX(100%);
@@ -675,12 +663,12 @@ input[type="range"].chat-field-input:focus {
   .settings-panel-close {
     display: flex;
   }
-  /* Backdrop overlay for mobile settings */
   #settings-backdrop {
     display: none;
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(20px) saturate(180%);
     z-index: 999;
   }
   #settings-backdrop.visible {
@@ -694,28 +682,32 @@ input[type="range"].chat-field-input:focus {
 }
 .chat-sidebar-toggle {
   background: none;
-  border: 1px solid var(--glass-border);
-  border-radius: 6px;
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   padding: 2px 7px;
   font-size: 0.7rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--duration-fast) var(--ease-apple);
   margin-left: 6px;
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .chat-sidebar-toggle:hover {
   color: var(--text-primary);
   background: var(--glass-bg);
 }
-/* Settings panel close button (mobile) */
 .settings-panel-close {
   position: absolute;
   top: 12px;
   left: 12px;
   z-index: 20;
   background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: 6px;
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   width: 32px;
   height: 32px;
@@ -724,7 +716,7 @@ input[type="range"].chat-field-input:focus {
   justify-content: center;
   cursor: pointer;
   font-size: 1rem;
-  transition: all 0.2s;
+  transition: all var(--duration-fast) var(--ease-apple);
 }
 .settings-panel-close:hover {
   color: var(--text-primary);
@@ -761,31 +753,31 @@ input[type="range"].chat-field-input:focus {
   margin-top: 4px;
 }
 .chat-welcome-link {
-  color: var(--accent-purple);
+  color: var(--accent-blue);
   text-decoration: none;
   font-weight: 600;
-  transition: opacity 0.2s;
+  transition: opacity var(--duration-fast) var(--ease-apple);
 }
 .chat-welcome-link:hover {
   opacity: 0.8;
   text-decoration: underline;
 }
-/* ── Built-in badge ── */
+/* Built-in badge — Apple HIG */
 .builtin-badge {
   display: inline-flex;
   align-items: center;
-  background: var(--accent-purple);
+  background: var(--accent-blue);
   color: #fff;
   font-size: 0.65rem;
   font-weight: 600;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   letter-spacing: 0.02em;
   line-height: 1;
   white-space: nowrap;
   vertical-align: middle;
 }
-/* ── MCP Tool Toggle Switch ── */
+/* MCP Tool Toggle Switch — Apple HIG */
 .mcp-tool-toggle {
   position: relative;
   display: inline-block;
@@ -804,10 +796,10 @@ input[type="range"].chat-field-input:focus {
   position: absolute;
   cursor: pointer;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: var(--glass-bg, rgba(100,100,100,0.3));
-  border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
-  border-radius: 18px;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  background: var(--glass-bg-subtle);
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  transition: background var(--duration-fast) var(--ease-apple), border-color var(--duration-fast) var(--ease-apple);
 }
 .mcp-tool-toggle-slider::before {
   content: "";
@@ -816,20 +808,20 @@ input[type="range"].chat-field-input:focus {
   width: 12px;
   left: 2px;
   bottom: 2px;
-  background: var(--text-muted, #888);
+  background: var(--text-muted);
   border-radius: 50%;
-  transition: transform 0.2s ease, background 0.2s ease;
+  transition: transform var(--duration-fast) var(--ease-apple), background var(--duration-fast) var(--ease-apple);
 }
 .mcp-tool-toggle input:checked + .mcp-tool-toggle-slider {
-  background: rgba(139,92,246,0.25);
-  border-color: var(--accent-purple, #8b5cf6);
+  background: rgba(0, 122, 255, 0.25);
+  border-color: var(--accent-blue);
 }
 .mcp-tool-toggle input:checked + .mcp-tool-toggle-slider::before {
   transform: translateX(14px);
-  background: var(--accent-purple, #8b5cf6);
+  background: var(--accent-blue);
 }
 .mcp-tool-toggle input:focus-visible + .mcp-tool-toggle-slider {
-  outline: 2px solid var(--accent-purple, #8b5cf6);
+  outline: 2px solid var(--accent-blue);
   outline-offset: 2px;
 }
 .chat-welcome-commands {
@@ -843,19 +835,19 @@ input[type="range"].chat-field-input:focus {
 .chat-welcome-cmd {
   font-size: 0.72rem;
   padding: 3px 8px;
-  border-radius: 6px;
-  background: rgba(167, 139, 250, 0.1);
-  border: 1px solid rgba(167, 139, 250, 0.2);
-  color: var(--accent-purple);
-  font-family: "Cascadia Code", monospace;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 122, 255, 0.1);
+  border: 0.5px solid rgba(0, 122, 255, 0.2);
+  color: var(--accent-blue);
+  font-family: "SF Mono", "Cascadia Code", monospace;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-fast) var(--ease-apple);
 }
 .chat-welcome-cmd:hover {
   background: rgba(167, 139, 250, 0.2);
   border-color: rgba(167, 139, 250, 0.4);
 }
-/* Memory activity panel */
+/* Memory activity panel — Apple HIG */
 #memory-panel {
   width: 260px;
   flex-shrink: 0;
@@ -865,7 +857,7 @@ input[type="range"].chat-field-input:focus {
   overflow-y: auto;
   padding: 14px;
   background: var(--glass-bg-faint);
-  border-right: 1px solid var(--glass-border);
+  border-right: 0.5px solid var(--separator-non-opaque);
 }
 .memory-panel-title {
   font-size: 0.82rem;
@@ -881,12 +873,12 @@ input[type="range"].chat-field-input:focus {
   letter-spacing: 0.04em;
   margin-bottom: 6px;
   padding-bottom: 4px;
-  border-bottom: 1px solid var(--glass-bg-subtle);
+  border-bottom: 0.5px solid var(--separator-non-opaque);
 }
 .memory-item-card {
   background: var(--glass-bg-light);
-  border: 1px solid var(--glass-border);
-  border-radius: 8px;
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   padding: 7px 9px;
   font-size: 0.74rem;
   color: var(--text-secondary);
@@ -894,15 +886,15 @@ input[type="range"].chat-field-input:focus {
   margin-bottom: 5px;
   word-break: break-word;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--duration-fast) var(--ease-apple);
 }
 .memory-item-card:hover {
   background: var(--glass-bg-subtle);
-  border-color: rgba(167, 139, 250, 0.25);
+  border-color: rgba(0, 122, 255, 0.25);
 }
 .memory-item-card .mem-score {
   font-size: 0.68rem;
-  color: var(--accent-purple);
+  color: var(--accent-blue);
   margin-bottom: 3px;
   font-weight: 600;
 }
@@ -911,20 +903,20 @@ input[type="range"].chat-field-input:focus {
   gap: 4px;
   margin-top: 4px;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity var(--duration-fast) var(--ease-apple);
 }
 .memory-item-card:hover .mem-actions {
   opacity: 1;
 }
 .mem-action-btn {
   background: none;
-  border: 1px solid var(--glass-border);
-  border-radius: 4px;
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   padding: 1px 5px;
   font-size: 0.64rem;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-fast) var(--ease-apple);
 }
 .mem-action-btn:hover {
   color: var(--text-primary);
@@ -932,11 +924,11 @@ input[type="range"].chat-field-input:focus {
 }
 .mem-action-btn.done:hover {
   color: var(--accent-green);
-  border-color: rgba(52, 211, 153, 0.4);
+  border-color: rgba(48, 209, 88, 0.4);
 }
 .mem-action-btn.del:hover {
   color: var(--accent-red);
-  border-color: rgba(248, 113, 113, 0.4);
+  border-color: rgba(255, 69, 58, 0.4);
 }
 .memory-empty {
   font-size: 0.74rem;
@@ -945,9 +937,9 @@ input[type="range"].chat-field-input:focus {
   padding: 4px 0;
 }
 .reflection-insight {
-  background: rgba(167, 139, 250, 0.08);
-  border: 1px solid rgba(167, 139, 250, 0.2);
-  border-radius: 8px;
+  background: rgba(0, 122, 255, 0.08);
+  border: 0.5px solid rgba(0, 122, 255, 0.2);
+  border-radius: var(--radius-sm);
   padding: 7px 9px;
   font-size: 0.74rem;
   color: var(--text-secondary);
@@ -959,13 +951,13 @@ input[type="range"].chat-field-input:focus {
 }
 .mem-panel-toggle {
   background: none;
-  border: 1px solid var(--glass-border);
-  border-radius: 6px;
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   padding: 2px 7px;
   font-size: 0.7rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--duration-fast) var(--ease-apple);
   margin-left: 6px;
 }
 .mem-panel-toggle:hover {
@@ -991,20 +983,20 @@ input[type="range"].chat-field-input:focus {
 }
 
 #chat-cancel-btn {
-  background: rgba(248, 113, 113, 0.12);
-  border: 1px solid rgba(248, 113, 113, 0.3);
-  border-radius: 8px;
+  background: rgba(255, 69, 58, 0.12);
+  border: 0.5px solid rgba(255, 69, 58, 0.3);
+  border-radius: var(--radius-sm);
   color: var(--accent-red);
   padding: 8px 14px;
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 600;
-  transition: all 0.2s;
+  transition: all var(--duration-fast) var(--ease-apple);
 }
 #chat-cancel-btn:hover {
-  background: rgba(248, 113, 113, 0.22);
+  background: rgba(255, 69, 58, 0.22);
 }
-/* Attachment area */
+/* Attachment area — Apple HIG */
 #chat-attachments {
   display: flex;
   flex-wrap: wrap;
@@ -1021,8 +1013,8 @@ input[type="range"].chat-field-input:focus {
   align-items: center;
   gap: 5px;
   background: var(--glass-bg-subtle);
-  border: 1px solid var(--glass-border);
-  border-radius: 8px;
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   padding: 4px 8px;
   font-size: 0.78rem;
   color: var(--text-secondary);
@@ -1033,7 +1025,7 @@ input[type="range"].chat-field-input:focus {
   width: 36px;
   height: 36px;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -1041,7 +1033,7 @@ input[type="range"].chat-field-input:focus {
   width: 36px;
   height: 36px;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -1065,23 +1057,23 @@ input[type="range"].chat-field-input:focus {
   color: var(--accent-red);
 }
 #chat-input.dragover {
-  border-color: var(--accent-purple);
-  background: rgba(167, 139, 250, 0.08);
+  border-color: var(--accent-blue);
+  background: rgba(0, 122, 255, 0.08);
 }
-/* Media viewer overlay */
+/* Media viewer overlay — Apple HIG */
 #media-viewer-overlay {
   position: fixed;
   inset: 0;
   z-index: 9500;
   background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(20px) saturate(180%);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.2s ease, visibility 0.2s ease;
+  transition: opacity var(--duration-normal) var(--ease-apple), visibility var(--duration-normal) var(--ease-apple);
 }
 #media-viewer-overlay.visible {
   opacity: 1;
@@ -1094,15 +1086,15 @@ input[type="range"].chat-field-input:focus {
 #media-viewer-inner img {
   max-width: 90vw;
   max-height: 90vh;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   object-fit: contain;
 }
 #media-viewer-inner video {
   max-width: 90vw;
   max-height: 90vh;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
-/* Chat bubble markdown styles */
+/* Chat bubble markdown styles — Apple HIG */
 .chat-bubble h1,
 .chat-bubble h2,
 .chat-bubble h3,
@@ -1110,6 +1102,7 @@ input[type="range"].chat-field-input:focus {
   font-weight: 700;
   margin: 0.5em 0 0.25em;
   line-height: 1.3;
+  letter-spacing: -0.02em;
 }
 .chat-bubble h1 {
   font-size: 1.1em;
@@ -1137,11 +1130,11 @@ input[type="range"].chat-field-input:focus {
   border-radius: 3px;
   padding: 0.1em 0.3em;
   font-size: 0.85em;
-  font-family: "Cascadia Code", "Fira Code", "Noto Sans Mono CJK JP", monospace;
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Noto Sans Mono CJK JP", monospace;
 }
 .chat-bubble pre {
   background: rgba(0, 0, 0, 0.3);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 8px 10px;
   overflow-x: auto;
   margin: 0.4em 0;
@@ -1151,7 +1144,7 @@ input[type="range"].chat-field-input:focus {
   padding: 0;
 }
 .chat-bubble blockquote {
-  border-left: 3px solid var(--accent-purple);
+  border-left: 3px solid var(--accent-blue);
   padding-left: 8px;
   margin: 0.3em 0;
   opacity: 0.8;
@@ -1160,13 +1153,13 @@ input[type="range"].chat-field-input:focus {
   color: var(--accent-blue);
   text-decoration: underline;
 }
-/* Code block Run button styles */
+/* Code block Run button styles — Apple HIG */
 .hljs-block-wrapper {
   position: relative;
   margin: 0.5em 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  border: 1px solid var(--glass-border);
+  border: 0.5px solid var(--glass-border);
 }
 .hljs-block-header {
   display: flex;
@@ -1175,10 +1168,10 @@ input[type="range"].chat-field-input:focus {
   padding: 4px 8px;
   background: rgba(0, 0, 0, 0.3);
   font-size: 0.72rem;
-  border-bottom: 1px solid var(--glass-bg);
+  border-bottom: 0.5px solid var(--glass-bg);
 }
 .hljs-lang-badge {
-  color: rgba(96, 165, 250, 0.8);
+  color: var(--accent-blue);
   font-family: monospace;
   font-weight: 600;
 }
@@ -1189,26 +1182,26 @@ input[type="range"].chat-field-input:focus {
 .hljs-copy-btn,
 .hljs-run-btn {
   background: none;
-  border: 1px solid var(--glass-border);
-  border-radius: 4px;
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   padding: 2px 7px;
   font-size: 0.68rem;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-fast) var(--ease-apple);
 }
 .hljs-copy-btn:hover {
   border-color: var(--glass-border);
   color: var(--text-primary);
 }
 .hljs-run-btn {
-  border-color: rgba(52, 211, 153, 0.3);
-  color: rgba(52, 211, 153, 0.8);
+  border-color: rgba(48, 209, 88, 0.3);
+  color: rgba(48, 209, 88, 0.8);
 }
 .hljs-run-btn:hover {
-  border-color: rgba(52, 211, 153, 0.7);
-  background: rgba(52, 211, 153, 0.08);
-  color: rgba(52, 211, 153, 1);
+  border-color: rgba(48, 209, 88, 0.7);
+  background: rgba(48, 209, 88, 0.08);
+  color: rgba(48, 209, 88, 1);
 }
 .hljs-run-btn:disabled {
   opacity: 0.4;
@@ -1221,27 +1214,27 @@ input[type="range"].chat-field-input:focus {
   font-family: monospace;
   white-space: pre-wrap;
   word-break: break-all;
-  border-top: 1px solid var(--glass-bg-subtle);
+  border-top: 0.5px solid var(--glass-bg-subtle);
   max-height: 200px;
   overflow-y: auto;
 }
 .hljs-run-result.stdout {
-  color: #85e89d;
+  color: var(--accent-green);
 }
 .hljs-run-result.stderr {
-  color: #f97583;
+  color: var(--accent-red);
 }
 .hljs-run-result.running {
-  color: rgba(96, 165, 250, 0.7);
+  color: var(--accent-blue);
   font-style: italic;
 }
 .hljs-artifact-img {
   display: block;
   max-width: 100%;
-  border-top: 1px solid var(--glass-bg-subtle);
+  border-top: 0.5px solid var(--glass-bg-subtle);
   cursor: pointer;
 }
-/* Help icon */
+/* Help icon — Apple HIG */
 .chat-help-icon {
   display: inline-flex;
   align-items: center;
@@ -1250,35 +1243,34 @@ input[type="range"].chat-field-input:focus {
   height: 16px;
   font-size: 0.65rem;
   border-radius: 50%;
-  background: rgba(167, 139, 250, 0.15);
-  color: var(--accent-purple);
+  background: rgba(0, 122, 255, 0.15);
+  color: var(--accent-blue);
   cursor: help;
   margin-left: auto;
-  transition: all 0.2s;
+  transition: all var(--duration-fast) var(--ease-apple);
   flex-shrink: 0;
 }
 .chat-help-icon:hover {
-  background: rgba(167, 139, 250, 0.3);
+  background: rgba(0, 122, 255, 0.3);
   transform: scale(1.15);
 }
-/* Help tooltip (defined in base.css) */
-/* Chat message image styles */
+/* Chat message image styles — Apple HIG */
 .chat-bubble img {
   max-width: 100%;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   margin: 8px 0;
-  transition: transform 0.2s;
+  transition: transform var(--duration-fast) var(--ease-apple);
 }
 .chat-bubble img:hover {
   transform: scale(1.02);
 }
 
-/* ===== Image Generation ===== */
+/* ===== Image Generation — Apple HIG ===== */
 .chat-image-gen-card {
   margin: 8px 0;
-  border: 1px solid var(--glass-border);
-  border-radius: 8px;
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--bg-secondary);
 }
@@ -1287,7 +1279,7 @@ input[type="range"].chat-field-input:focus {
   max-width: 512px;
   display: block;
   cursor: pointer;
-  transition: opacity 0.2s;
+  transition: opacity var(--duration-fast) var(--ease-apple);
 }
 .chat-image-gen-card img:hover {
   opacity: 0.9;
@@ -1296,7 +1288,7 @@ input[type="range"].chat-field-input:focus {
   padding: 6px 10px;
   font-size: 0.75rem;
   color: var(--text-muted);
-  border-top: 1px solid var(--glass-border);
+  border-top: 0.5px solid var(--glass-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1313,7 +1305,7 @@ input[type="range"].chat-field-input:focus {
   width: 18px;
   height: 18px;
   border: 2px solid var(--glass-border);
-  border-top: 2px solid var(--accent-color, #6366f1);
+  border-top: 2px solid var(--accent-blue);
   border-radius: 50%;
   animation: gen-spin 0.8s linear infinite;
 }
@@ -1323,55 +1315,55 @@ input[type="range"].chat-field-input:focus {
   }
 }
 
-/* ── TE04: TTS Audio Button ── */
+/* TTS Audio Button — Apple HIG */
 .chat-tts-btn {
   background: none;
-  border: 1px solid var(--glass-border);
-  border-radius: 4px;
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   padding: 2px 5px;
   font-size: 0.68rem;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-fast) var(--ease-apple);
   display: inline-flex;
   align-items: center;
   gap: 3px;
   line-height: 1;
 }
 .chat-tts-btn:hover {
-  color: var(--accent-purple);
-  border-color: rgba(167, 139, 250, 0.4);
-  background: rgba(167, 139, 250, 0.08);
+  color: var(--accent-blue);
+  border-color: rgba(0, 122, 255, 0.4);
+  background: rgba(0, 122, 255, 0.08);
 }
 .chat-tts-btn:active {
   transform: scale(0.95);
 }
 .chat-tts-btn.playing {
   color: var(--accent-green);
-  border-color: rgba(52, 211, 153, 0.4);
-  background: rgba(52, 211, 153, 0.08);
+  border-color: rgba(48, 209, 88, 0.4);
+  background: rgba(48, 209, 88, 0.08);
 }
 .chat-tts-btn .tts-spinner {
   width: 10px;
   height: 10px;
   border: 1.5px solid var(--glass-border);
-  border-top-color: var(--accent-purple);
+  border-top-color: var(--accent-blue);
   border-radius: 50%;
   animation: gen-spin 0.8s linear infinite;
 }
 
-/* TTS seekbar — displayed under chat bubble during playback */
+/* TTS seekbar — Apple HIG */
 .tts-seekbar {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
   height: 4px;
   border-radius: 2px;
-  background: rgba(167, 139, 250, 0.15);
+  background: rgba(0, 122, 255, 0.15);
   outline: none;
   margin-top: 6px;
   cursor: pointer;
-  transition: height 0.15s;
+  transition: height var(--duration-fast);
 }
 .tts-seekbar:hover {
   height: 6px;
@@ -1382,10 +1374,10 @@ input[type="range"].chat-field-input:focus {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--accent-purple);
+  background: var(--accent-blue);
   cursor: pointer;
-  box-shadow: 0 0 6px rgba(167, 139, 250, 0.4);
-  transition: transform 0.15s;
+  box-shadow: none;
+  transition: transform var(--duration-fast);
 }
 .tts-seekbar::-webkit-slider-thumb:hover {
   transform: scale(1.3);
@@ -1395,7 +1387,7 @@ input[type="range"].chat-field-input:focus {
   height: 12px;
   border: none;
   border-radius: 50%;
-  background: var(--accent-purple);
+  background: var(--accent-blue);
   cursor: pointer;
-  box-shadow: 0 0 6px rgba(167, 139, 250, 0.4);
+  box-shadow: none;
 }

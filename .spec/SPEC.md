@@ -294,6 +294,153 @@ NoobAI-XL Epsilon 1.1 + Herta LoRA (weight 0.8) + LCM LoRA (weight 1.0)
 
 ---
 
+## 9. Nous WebUI の Apple Human Interface Guidelines リデザイン
+
+### 目的
+既存の濃紫グラスモーフィズムデザインを、Apple HIG（Human Interface Guidelines）に沿ったデザインに全面的にリデザインする。ダーク・ライト両モードに対応する。
+
+### 変更対象ファイル
+| ファイル | 役割 |
+|----------|------|
+| `nous/api/http/static/base.css` | グローバルデザインシステム（CSS変数、コンポーネント、レイアウト） |
+| `nous/api/http/static/chat.css` | チャットUI特化スタイル |
+| `nous/api/http/sections/base.py` | headタグ、フォント読み込み、メタタグ |
+
+### 設計方針
+1. **CSS変数ベースの変更**: HTML構造は原則変更しない。CSS変数の上書き + セレクタのスタイル変更のみ
+2. **外部CSSフレームワーク不使用**: Puppertino, GlassKit 等は導入しない
+3. **Tailwind CDN維持**: クラス名の変更は最小限に、主にCSS変数ベースの変更
+4. **JavaScript非接触**: JavaScriptには一切触らない
+5. **アニメーション**: 純粋なCSS transition/animation のみ
+
+### Apple HIG デザイン仕様
+
+#### 9-1. カラーパレット
+**ダークモード:**
+- 背景レベル: `#000000` (systemBackground), `#1c1c1e` (secondarySystemBackground), `#2c2c2e` (tertiarySystemBackground)
+- グループ背景: `#000000`, `#1c1c1e`
+- セパレータ: `#38383a` (opaque), `rgba(84,84,88,0.65)` (non-opaque)
+
+**ライトモード:**
+- 背景レベル: `#ffffff` (systemBackground), `#f2f2f7` (secondarySystemBackground), `#e5e5ea` (tertiarySystemBackground)
+- グループ背景: `#f2f2f7`, `#ffffff`
+
+**アクセント:**
+- プライマリアクセント: `#007aff` (AppleのAction Blue)
+- セカンダリアクセントは既存の感情色を活かしつつ彩度を調整
+- 全アクセント色をより落ち着いた Apple らしいトーンに
+
+**ガラス効果:**
+- `backdrop-filter: blur(20px) saturate(180%)`
+- 背景: `rgba(28,28,30,0.7)` (ダーク), `rgba(255,255,255,0.7)` (ライト)
+- ボーダー: `rgba(255,255,255,0.08)` (ダーク), `rgba(0,0,0,0.08)` (ライト)
+
+#### 9-2. タイポグラフィ
+- フォントスタック: `-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", "Inter", sans-serif`
+- 基本サイズ: 17px（Appleの標準ボディサイズ）
+- 見出し: SF Pro Display 相当（太めのウェイト、ネガティブレタースペーシング）
+- 行間: 1.47（Appleの標準）
+- コード/等幅は SF Mono 系に
+
+#### 9-3. コンポーネントの角丸
+- 小要素（ボタン、入力欄）: 8-10px
+- カード: 12-16px
+- モーダル: 20px
+- ピル型ボタン: 完全なカプセル（border-radius: 9999px）
+- チャット吹き出し: 18-20px（Apple Messages風）
+
+#### 9-4. シャドウ
+- **基本: 影を使わない**。Appleはカードやボタンに影をほとんど使わない
+- 唯一の例外: 浮遊要素に極小の影 `0 2px 8px rgba(0,0,0,0.08)` 程度
+- 現在の `--shadow-glow`（紫発光）は完全廃止
+- エレベーションは背景色の変化で表現
+
+#### 9-5. スペーシング
+- 基本グリッド: 4px刻み（8, 12, 16, 20, 24, 32, 40, 48, 64）
+- セクション間: 24-32px
+- コンテンツパディング: 16-20px
+- Appleの「空気感」＝余白を惜しまない
+
+#### 9-6. アニメーション
+- すべてのトランジションに `cubic-bezier(0.25, 0.1, 0.25, 1.0)`（Appleの標準イージング）
+- インタラクティブ要素のホバー: 0.2s
+- モーダル出現: spring風（`0.3s cubic-bezier(0.25, 0.1, 0.25, 1.0)`）
+- `prefers-reduced-motion` 対応必須
+
+#### 9-7. コンポーネント刷新
+**ヘッダー（.app-header）:**
+- フロストガラス背景（backdrop-filter blur）
+- 下部に `0.5px` のセパレータライン
+- タイトルは SF Pro Display の太字
+
+**タブバー（.tab-bar）:**
+- iOS風セグメンテッドコントロールに近づける
+- アクティブタブ: filled capsule 形状
+- 非アクティブ: 透過
+
+**ボタン（.glass-btn 他）:**
+- 紫グロー廃止
+- ホバー: 微妙な背景色変化のみ
+- プライマリボタン: `#007aff` 塗りつぶし + 白テキスト
+- セカンダリ: 透過 + ボーダー
+
+**入力欄（.glass-input 他）:**
+- フロストガラス背景
+- フォーカス: 青いリング（`#007aff`）、紫グロー廃止
+- iOS風の角丸
+
+**カード（.glass）:**
+- フロストガラスを維持しつつ、より透明感を
+- ボーダーをより繊細に
+- ホバー時の浮き上がりは最小限に
+
+**モーダル:**
+- Apple風の角丸（20px）
+- フロストガラスオーバーレイ
+- スケールアニメーションでの出現
+
+**トースト:**
+- iOS風の上部/下部固定
+- フロストガラス + 丸み
+
+**プログレスバー:**
+- Apple風の細いバー（4-6px高）
+- indeterminate アニメーションはApple風に
+
+#### 9-8. チャットUI（chat.css）
+- 吹き出しをApple Messages風に
+  - ユーザー: 青背景 `#007aff` + 白テキスト
+  - アシスタント: ダーク: `#2c2c2e` / ライト: `#e9e9eb`
+- タイピングインジケーター: iMessage風の三点アニメーション
+- 入力欄: iOS風の角丸テキストエリア
+- 設定パネル: iOS設定アプリ風の grouped リストスタイル
+
+#### 9-9. スクロールバー
+- 細く、オーバーレイ式
+- ダークモード: `rgba(255,255,255,0.2)`
+- ライトモード: `rgba(0,0,0,0.2)`
+
+#### 9-10. アクセシビリティ
+- 44px の最小タッチターゲット（Apple HIG標準）
+- フォーカスリング: `2px solid #007aff` + `2px offset`
+- コントラスト比: WCAG AA 以上
+
+### 実装手順
+1. `base.css` のCSS変数体系をApple HIG準拠に全置換
+2. 全コンポーネント（ボタン、カード、入力欄、モーダル、トースト等）のスタイルをApple風に刷新
+3. `chat.css` のチャットUIをiMessage風に変更
+4. ダーク・ライト両モードのCSS変数セットを作成
+5. `base.py` のheadセクションにInterフォントの読み込みを追加（Appleデバイス以外でのフォールバック用）
+6. レイアウトやレスポンシブの微調整
+
+### 検証方法
+- ダーク・ライト両モードでの視覚確認
+- デスクトップ・タブレット・モバイルの3ブレークポイント以上での表示確認
+- アクセシビリティ（WCAG 2.1 AA）の確認
+- `prefers-reduced-motion` 対応の確認
+
+---
+
 ### 8-4. ワークフロー動的化 [Phase 3]
 
 #### `comfyui.py` の変更

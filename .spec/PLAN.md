@@ -31,3 +31,10 @@
 - デフォルトモデル: NoobAI-XL Epsilon 1.1
 - LoRA 対応: LoraLoader ノード動的追加で初回から対応
 - ワークフローをパラメータ駆動に
+
+## Nous WebUI の Apple Human Interface Guidelines リデザイン
+- 既存の濃紫グラスモーフィズムデザインを、Apple HIG に沿ったデザインに全面的にリデザイン
+- ダーク・ライト両モードに対応
+- 対象ファイル: base.css, chat.css, base.py
+- 外部CSSフレームワーク不使用、Tailwind CDN維持、HTML構造原則変更なし
+- JavaScriptには一切触らない

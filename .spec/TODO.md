@@ -47,3 +47,12 @@
 - [x] T106: chat-history.js — deleteChatMessage() 追加（確認ダイアログ+ロールバック+直前メッセージで再生成）
 - [x] T107: chat-send.js — ユーザーメッセージに削除ボタン追加
 - [x] T108: chat.css — 削除ボタンホバー色（accent-red）
+
+### Apple HIG リデザイン
+- [x] T201: base.css — CSS変数体系をApple HIG準拠に全置換（カラーパレット、スペーシング、角丸、シャドウ）
+- [x] T202: base.css — 全コンポーネント（ボタン、カード、入力欄、モーダル、トースト等）のスタイルをApple風に刷新
+- [x] T203: chat.css — チャットUIをiMessage風に変更（吹き出し、タイピングインジケーター、入力欄）
+- [x] T204: base.css — ダーク・ライト両モードのCSS変数セット作成
+- [x] T205: base.py — headセクションにInterフォントの読み込みを追加
+- [x] T206: レイアウトやレスポンシブの微調整
+- [x] T207: アクセシビリティ（WCAG 2.1 AA）の確認
