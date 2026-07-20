@@ -2,7 +2,7 @@
 #tab-chat.active {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - var(--header-height) - var(--tabbar-height) - 48px);
+  height: calc(100dvh - var(--header-height) - var(--tabbar-height) - 48px);
 }
 #chat-layout {
   display: flex;
@@ -25,6 +25,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  contain: layout style;
 }
 #chat-input-area {
   padding: 12px 16px;
@@ -84,6 +85,7 @@
   gap: 4px;
   max-width: 85%;
   animation: fadeInUp 0.25s var(--ease-apple);
+  will-change: transform, opacity;
 }
 .chat-msg.user {
   align-self: flex-end;
@@ -576,7 +578,7 @@ input[type="range"].chat-field-input:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  z-index: 20;
+  z-index: var(--z-content);
   border-top: 0.5px solid var(--separator-non-opaque);
   margin-top: auto;
 }
@@ -644,7 +646,7 @@ input[type="range"].chat-field-input:focus {
     left: 0;
     bottom: 0;
     width: 280px;
-    z-index: 1000;
+    z-index: var(--z-modal);
     background: var(--bg-primary);
     border-right: 0.5px solid var(--glass-border);
     overflow-y: auto;
@@ -655,9 +657,10 @@ input[type="range"].chat-field-input:focus {
     top: 0;
     right: 0;
     bottom: 0;
-    z-index: 1000;
+    z-index: var(--z-modal);
     background: var(--bg-primary);
     transition: transform var(--duration-normal) var(--ease-apple);
+    will-change: transform;
   }
   #settings-panel.collapsed {
     transform: translateX(100%);
@@ -675,7 +678,7 @@ input[type="range"].chat-field-input:focus {
     inset: 0;
     background: rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(20px) saturate(180%);
-    z-index: 999;
+    z-index: var(--z-overlay);
   }
   #settings-backdrop.visible {
     display: block;
@@ -710,7 +713,7 @@ input[type="range"].chat-field-input:focus {
   position: absolute;
   top: 12px;
   left: 12px;
-  z-index: 20;
+  z-index: var(--z-content);
   background: var(--glass-bg);
   border: 0.5px solid var(--glass-border);
   border-radius: var(--radius-sm);
@@ -1087,7 +1090,7 @@ input[type="range"].chat-field-input:focus {
 }
 #media-viewer-inner {
   max-width: 90vw;
-  max-height: 90vh;
+  max-height: 90dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
