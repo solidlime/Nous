@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from datetime import timedelta
-from typing import TYPE_CHECKING
 
 from nous.domain.equipment.entities import (
     EquipmentHistory,
@@ -12,24 +11,17 @@ from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import format_iso, get_now, parse_iso
 from nous.infrastructure.logging.structured import get_logger
-
-if TYPE_CHECKING:
-    from nous.infrastructure.sqlite.connection import SQLiteConnection
+from nous.infrastructure.sqlite.base_repo import SQLiteRepository
 
 logger = get_logger(__name__)
 
 VALID_SLOTS = frozenset({"top", "bottom", "shoes", "outer", "head", "accessory_1", "accessory_2", "accessory_3"})
 
 
-class SQLiteEquipmentRepository:
+class SQLiteEquipmentRepository(SQLiteRepository):
     """SQLite-backed implementation of the EquipmentRepository protocol."""
 
-    def __init__(self, connection: SQLiteConnection) -> None:
-        self._conn = connection
-
-    @property
-    def _db(self):
-        return self._conn.get_inventory_db()
+    _db_method = "get_inventory_db"
 
     # ------------------------------------------------------------------
     # Item management
