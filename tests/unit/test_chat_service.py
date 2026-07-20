@@ -153,6 +153,99 @@ class TestTreeSessionWindow:
 
 
 # ─────────────────────────────────────────────────────────────
+# TreeSessionWindow 新機能 tests
+# ─────────────────────────────────────────────────────────────
+
+
+class TestTreeSessionWindowNew:
+    """TreeSessionWindow の新機能テスト"""
+
+    def test_add_returns_msg_id(self):
+        """add() は UUID 文字列を返す"""
+        win = TreeSessionWindow()
+        msg_id = win.add("user", "hello")
+        assert isinstance(msg_id, str)
+        assert len(msg_id) > 30  # UUID
+
+    def test_get_active_path_returns_correct_order(self):
+        """get_active_path() は追加順のパスを返す"""
+        win = TreeSessionWindow()
+        win.add("user", "hello")
+        win.add("assistant", "hi")
+        path = win.get_active_path()
+        assert len(path) == 2
+        assert path[0]["role"] == "user"
+        assert path[1]["role"] == "assistant"
+
+    def test_edit_message_updates_content(self):
+        """edit_message() は content を更新する"""
+        win = TreeSessionWindow()
+        msg_id = win.add("user", "hello")
+        updated = win.edit_message(msg_id, "hello world")
+        assert updated is not None
+        assert updated["content"] == "hello world"
+
+    def test_edit_message_returns_none_for_unknown_id(self):
+        """存在しないIDでは None を返す"""
+        win = TreeSessionWindow()
+        result = win.edit_message("nonexistent", "test")
+        assert result is None
+
+    def test_rollback_to_changes_active_leaf_only(self):
+        """rollback_to() は active_leaf_id のみ変更し、ノードは保持する"""
+        win = TreeSessionWindow()
+        uid = win.add("user", "hello")
+        win.add("assistant", "hi")
+        result = win.rollback_to(uid)
+        assert result is not None
+        assert result["new_active_leaf_id"] == uid
+        assert len(win.get_active_path()) == 1
+        # assistant ノードはまだ存在する
+        assert win.get_message_by_id(result["old_active_leaf_id"]) is not None
+
+    def test_delete_message_repairs_parenting(self):
+        """delete_message() は子の parent_id を付け替える"""
+        win = TreeSessionWindow()
+        uid = win.add("user", "q1")
+        aid = win.add("assistant", "a1")
+        uid2 = win.add("user", "q2")  # uid2 の親は aid
+        aid2 = win.add("assistant", "a2")
+        # aid を削除 → uid2 の parent_id が uid になるはず
+        deleted = win.delete_message(aid)
+        assert deleted is not None
+        # uid2 の親が uid になっている
+        node = win.get_message_by_id(uid2)
+        assert node is not None
+        assert node["parent_id"] == uid
+
+    def test_get_labeled_messages_uses_active_path(self):
+        """get_labeled_messages() は active_path を使う"""
+        win = TreeSessionWindow()
+        ts = datetime(2025, 1, 1, 12, 0, 0)
+        win.add("user", "hello", ts)
+        now = datetime(2025, 1, 1, 13, 0, 0)
+        msgs = win.get_labeled_messages(now)
+        assert len(msgs) == 1
+        assert msgs[0].role == "user"
+        assert msgs[0].content == "hello"
+
+    def test_get_message_by_id_after_rollback(self):
+        """ロールバック後も全ノードは get_message_by_id でアクセス可能"""
+        win = TreeSessionWindow()
+        uid = win.add("user", "q")
+        aid = win.add("assistant", "a")  # これは保存される
+        uid2 = win.add("user", "q2")  # これはアクティブパスに残る
+        aid2 = win.add("assistant", "a2")
+        win.rollback_to(uid)
+        # active_path には uid のみ
+        assert len(win.get_active_path()) == 1
+        # ただし全ノードは存在
+        assert win.get_message_by_id(aid) is not None
+        assert win.get_message_by_id(uid2) is not None
+        assert win.get_message_by_id(aid2) is not None
+
+
+# ─────────────────────────────────────────────────────────────
 # SessionManager tests
 # ─────────────────────────────────────────────────────────────
 
