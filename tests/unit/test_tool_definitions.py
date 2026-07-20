@@ -202,3 +202,29 @@ def test_conditional_tools_not_in_core():
     """CONDITIONAL_TOOLS のキーは CORE_ALWAYS_TOOLS と重複しない。"""
     overlap = set(CONDITIONAL_TOOLS) & CORE_ALWAYS_TOOLS
     assert not overlap, f"CONDITIONAL_TOOLS が CORE_ALWAYS_TOOLS と重複: {overlap}"
+
+
+def test_get_filtered_tools_excludes_image_gen_when_disabled():
+    """image_gen_enabled=False で image_generate が除外される。"""
+    mock_config = MagicMock()
+    mock_config.dynamic_tool_selection = True
+    mock_config.disabled_tools = []
+    mock_config.image_gen_enabled = False
+
+    result = get_filtered_tools(mock_config)
+    result_names = {td.name for td in result}
+
+    assert "image_generate" not in result_names, "image_generate should be excluded when image_gen_enabled=False"
+
+
+def test_get_filtered_tools_includes_image_gen_when_enabled():
+    """image_gen_enabled=True（デフォルト）で image_generate が含まれる。"""
+    mock_config = MagicMock()
+    mock_config.dynamic_tool_selection = True
+    mock_config.disabled_tools = []
+    mock_config.image_gen_enabled = True
+
+    result = get_filtered_tools(mock_config)
+    result_names = {td.name for td in result}
+
+    assert "image_generate" in result_names, "image_generate should be included when image_gen_enabled=True"

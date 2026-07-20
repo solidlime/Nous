@@ -277,6 +277,9 @@ def get_filtered_tools(config: ChatConfig) -> list[ToolDefinition]:
     # disabled_tools でフィルタリング
     if disabled:
         result = [t for t in result if t.name not in disabled]
+    # image_gen_enabled に基づいて image_generate をフィルタリング
+    if not getattr(config, "image_gen_enabled", False):
+        result = [t for t in result if t.name != "image_generate"]
     logger.debug(
         "Tools: %d always + %d conditional = %d total (disabled: %d)",
         len(always_tools),
