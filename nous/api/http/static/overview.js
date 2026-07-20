@@ -196,6 +196,18 @@ async function loadOverview() {
     const el = document.getElementById('overview-content');
     try {
         const data = await api('/api/dashboard/' + encodeURIComponent(S.persona));
+        // ── Self-portrait display ──
+        const portraitUrl = data.latest_self_portrait;
+        const portraitEl = document.getElementById('overview-portrait');
+        if (portraitUrl && portraitEl) {
+            portraitEl.style.display = 'block';
+            portraitEl.innerHTML = '<div class="glass p-4" style="text-align:center;max-width:400px;margin:0 auto 16px">'
+                + '<img src="' + esc(portraitUrl) + '" alt="Self Portrait" style="max-width:100%;max-height:300px;border-radius:8px;cursor:pointer" onclick="openMediaViewer(\'' + esc(portraitUrl) + '\',\'image\')">'
+                + '<div style="margin-top:6px;font-size:0.75rem;color:var(--text-muted)">Latest Self Portrait</div>'
+                + '</div>';
+        } else if (portraitEl) {
+            portraitEl.style.display = 'none';
+        }
         S.dashCache = data;
         const stats = data.stats || {};
         const ctx = data.context || {};

@@ -212,6 +212,20 @@ def register_persona_routes(mcp) -> None:
                 except Exception:
                     pass
 
+            # ── Latest self-portrait image ──
+            latest_self_portrait: str | None = None
+            try:
+                from pathlib import Path
+                from nous.config.settings import get_settings
+                images_dir = Path(get_settings().data_root) / "memory" / persona / "images"
+                if images_dir.is_dir():
+                    self_files = sorted(images_dir.glob("self_*.png"))
+                    if self_files:
+                        latest = self_files[-1]  # sorted alphabetically = chronological
+                        latest_self_portrait = f"/api/chat/{persona}/memory/images/{latest.name}"
+            except Exception:
+                pass
+
             return JSONResponse(
                 {
                     "persona": persona,
@@ -225,6 +239,7 @@ def register_persona_routes(mcp) -> None:
                     "goals": goals,
                     "relationship_highlights": rel_highlights,
                     "state_memories": state_memories,
+                    "latest_self_portrait": latest_self_portrait,
                 }
             )
         except Exception as exc:

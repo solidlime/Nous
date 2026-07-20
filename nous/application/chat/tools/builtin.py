@@ -308,7 +308,8 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
         for idx, img in enumerate(generated):
             # ディスクに保存
             img_bytes = base64.b64decode(img.base64)
-            filename = f"{timestamp}_{idx:02d}.png"
+            prefix = "self_" if self_portrait else ""
+            filename = f"{prefix}{timestamp}_{idx:02d}.png"
             img_path = images_dir / filename
             img_path.write_bytes(img_bytes)
             url = f"/api/chat/{persona}/memory/images/{filename}"
