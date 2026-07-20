@@ -538,7 +538,7 @@ class TestChatConfig:
 
     def test_get_effective_api_key_from_env(self, monkeypatch):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "env-key-123")
-        cfg = ChatConfig(persona="test", provider="anthropic", api_key="")
+        cfg = ChatConfig(persona="test", provider="anthropic", api_key=None)
         assert cfg.get_effective_api_key() == "env-key-123"
 
     def test_is_configured_with_key(self):
@@ -746,7 +746,7 @@ class TestChatConfigRepository:
         repo.save(cfg)
         repo.delete("p1")
         loaded = repo.get("p1")
-        assert loaded.api_key == ""
+        assert loaded.api_key is None
 
     def test_save_and_get_dynamic_temp_top_p(self):
         db = self._make_db()

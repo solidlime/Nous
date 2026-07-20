@@ -58,7 +58,7 @@ class ChatConfig(BaseModel):
     persona: str | None = None
     provider: str = "anthropic"
     model: str = ""
-    api_key: str = ""
+    api_key: str | None = None
     base_url: str = ""
     system_prompt: str = ""
     temperature: float = 0.7
@@ -239,8 +239,12 @@ class ChatConfig(BaseModel):
         return max(0.0, min(1.0, v))
 
     def get_effective_api_key(self) -> str:
-        """Return stored API key or fall back via RuntimeConfigManager."""
-        if self.api_key:
+        """Return stored API key or fall back via RuntimeConfigManager.
+
+        If api_key is explicitly set (even to empty string), return it as-is
+        and do NOT fall through to environment variables or RuntimeConfigManager.
+        """
+        if self.api_key is not None:
             return self.api_key
         # RuntimeConfigManager (reads NOUS_ANTHROPIC_API_KEY etc.)
         key_name = f"{self.provider}_api_key"
