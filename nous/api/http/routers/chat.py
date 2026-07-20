@@ -271,7 +271,11 @@ def register_chat_routes(mcp) -> None:
 
     @mcp.custom_route("/api/chat/{persona}/sessions/{session_id}", methods=["GET"])
     async def get_chat_session(request: Request) -> JSONResponse:
-        """F2: 会話履歴復元 — セッションのメッセージ一覧を返す。"""
+        """F2: 会話履歴復元 — セッションのメッセージ一覧を返す。
+
+        Response の各メッセージには `id` (UUID) フィールドが含まれる。
+        フロントエンドはこの `id` を使用して編集・ロールバック操作を行う。
+        """
         persona = _resolve_persona_from_request(request)
         ctx = _safe_get_context(persona)
         if not ctx:
@@ -306,11 +310,11 @@ def register_chat_routes(mcp) -> None:
         _session_manager.clear(persona, session_id)
         return JSONResponse({"deleted": True, "session_id": session_id})
 
-    @mcp.custom_route("/api/chat/{persona}/sessions/{session_id}/messages/{msg_index}", methods=["PUT"])
+    @mcp.custom_route("/api/chat/{persona}/sessions/{session_id}/messages/{msg_id}", methods=["PUT"])
     async def update_chat_message(request: Request) -> JSONResponse:
         """メッセージ 1 件の content を直接更新する（undo スタック非破壊）。
 
-        PUT /api/chat/{persona}/sessions/{session_id}/messages/{msg_index}
+        PUT /api/chat/{persona}/sessions/{session_id}/messages/{msg_id}
         Request body: {"content": "新しいテキスト"}
         Response: {"status": "ok", "updated_message": {...}}
         """
@@ -322,11 +326,9 @@ def register_chat_routes(mcp) -> None:
         if not session_id:
             return JSONResponse({"error": "session_id required"}, status_code=400)
 
-        try:
-            msg_index_str = request.path_params.get("msg_index", "")
-            msg_index = int(msg_index_str)
-        except (ValueError, TypeError):
-            return JSONResponse({"error": "msg_index must be an integer"}, status_code=400)
+        msg_id = request.path_params.get("msg_id", "")
+        if not msg_id:
+            return JSONResponse({"error": "msg_id is required"}, status_code=400)
 
         try:
             body = await request.json()
@@ -339,27 +341,27 @@ def register_chat_routes(mcp) -> None:
 
         try:
             from nous.application.chat.service import _session_manager
-            from nous.application.chat.session_store import SessionWindow
+            from nous.application.chat.session_store import TreeSessionWindow
 
             key = (persona, session_id)
             window = _session_manager._sessions.get(key)
 
             if window:
-                updated = window.update_message(msg_index, new_content.strip())
+                updated = window.edit_message(msg_id, new_content.strip())
             else:
                 db = ctx.connection.get_memory_db()
                 from nous.application.chat.session_store import _CHAT_SESSIONS_SCHEMA
 
                 db.execute(_CHAT_SESSIONS_SCHEMA)
                 db.commit()
-                window = SessionWindow.from_db(db, persona, session_id)
+                window = TreeSessionWindow.from_db(db, persona, session_id)
                 if window is None:
                     return JSONResponse({"error": "Session not found"}, status_code=404)
-                updated = window.update_message(msg_index, new_content.strip())
+                updated = window.edit_message(msg_id, new_content.strip())
 
             if updated is None:
                 return JSONResponse(
-                    {"error": f"Message index {msg_index} out of range"},
+                    {"error": f"Message ID {msg_id} not found"},
                     status_code=404,
                 )
             return JSONResponse({"status": "ok", "updated_message": updated})
@@ -369,12 +371,12 @@ def register_chat_routes(mcp) -> None:
 
     @mcp.custom_route("/api/chat/{persona}/sessions/{session_id}/rollback", methods=["POST"])
     async def rollback_chat_session(request: Request) -> JSONResponse:
-        """ロールバック: keep_until インデックスまでメッセージを保持し、以降を削除。
+        """ロールバック: from_id の位置までメッセージを保持し、以降を削除。
 
-        Request body: {"keep_until": int}
-        - keep_until=2 → インデックス 0,1 を保持、2以降を削除
+        Request body: {"from_id": "uuid-string"}
+        - from_id 以降（該当メッセージ含む）のアクティブパスを削除
 
-        Response: {"removed_count": N, "remaining_messages": [...],
+        Response: {"active_leaf_id": "...", "remaining_messages": [...],
                     "removed_user_text": "..." | null}
         """
         persona = _resolve_persona_from_request(request)
@@ -390,40 +392,50 @@ def register_chat_routes(mcp) -> None:
         except Exception:
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
-        keep_until = body.get("keep_until", 0)
-        if not isinstance(keep_until, int) or keep_until < 0:
-            return JSONResponse({"error": "keep_until must be non-negative integer"}, status_code=400)
+        from_id = str(body.get("from_id", "")).strip()
+        if not from_id:
+            return JSONResponse({"error": "from_id must be a non-empty string"}, status_code=400)
 
         try:
             from nous.application.chat.service import _session_manager
-            from nous.application.chat.session_store import SessionManager, SessionWindow
+            from nous.application.chat.session_store import SessionManager, TreeSessionWindow
 
             key = (persona, session_id)
             window = _session_manager._sessions.get(key)
 
             if window:
-                removed = window.truncate_to(keep_until)
+                # Capture old active path before rollback for removed_user_text
+                old_path = window.get_active_path()
+                result = window.rollback_to(from_id)
             else:
-                # Window not in memory — load from DB, truncate, persist
+                # Window not in memory — load from DB, rollback, persist
                 from nous.application.chat.session_store import _CHAT_SESSIONS_SCHEMA
 
                 db = ctx.connection.get_memory_db()
                 db.execute(_CHAT_SESSIONS_SCHEMA)
                 db.commit()
-                window = SessionWindow.from_db(db, persona, session_id)
+                window = TreeSessionWindow.from_db(db, persona, session_id)
                 if window is None:
                     return JSONResponse({"error": "Session not found"}, status_code=404)
-                removed = window.truncate_to(keep_until)
+                old_path = window.get_active_path()
+                result = window.rollback_to(from_id)
+
+            if result is None:
+                return JSONResponse(
+                    {"error": f"Message ID {from_id} not found"},
+                    status_code=404,
+                )
+
+            # Compute removed_user_text: last user message that was in old path but not in new path
+            new_path_ids = {msg["id"] for msg in window.get_active_path()}
+            removed_user_text = None
+            for msg in reversed(old_path):
+                if msg["id"] not in new_path_ids and msg["role"] == "user":
+                    removed_user_text = msg["content"]
+                    break
 
             db = ctx.connection.get_memory_db()
             remaining = SessionManager.get_messages(db, persona, session_id)
-
-            # Return the user message text that was just removed (if any) for input field population
-            removed_user_text = None
-            for msg in reversed(removed):
-                if msg["role"] == "user":
-                    removed_user_text = msg["content"]
-                    break
 
             # SSEでロールバックを通知
             try:
@@ -436,7 +448,7 @@ def register_chat_routes(mcp) -> None:
 
             return JSONResponse(
                 {
-                    "removed_count": len(removed),
+                    "active_leaf_id": from_id,
                     "remaining_messages": remaining,
                     "removed_user_text": removed_user_text,
                 }

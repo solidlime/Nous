@@ -707,10 +707,13 @@ class TestDashboardStateRestoration:
 
 @pytest.mark.integration
 class TestEditMessageEndpoint:
-    """PUT /api/chat/{persona}/sessions/{session_id}/messages/{msg_index}."""
+    """PUT /api/chat/{persona}/sessions/{session_id}/messages/{msg_id}."""
 
-    async def _create_persona_with_session(self, client, persona: str) -> str:
-        """Helper: create persona and insert a test message directly into session store."""
+    async def _create_persona_with_session(self, client, persona: str) -> tuple[str, str]:
+        """Helper: create persona and insert a test message directly into session store.
+
+        Returns (session_id, msg_id) tuple.
+        """
         # Create persona via POST /api/personas
         resp = await client.post("/api/personas", json={"name": persona})
         assert resp.status_code in (200, 201), f"Expected 200/201, got {resp.status_code}: {resp.text[:200]}"
@@ -724,24 +727,17 @@ class TestEditMessageEndpoint:
         db = ctx.connection.get_memory_db()
 
         window = _session_manager.get_or_create(persona, "main", db=db)
-        window.add("user", "test message")
+        msg_id = window.add("user", "test message")
         window.flush()
-        return "main"
-        return "main"
+        return "main", msg_id
 
     async def test_edit_message_ok(self, client):
         persona = "edit_test_ok"
-        await self._create_persona_with_session(client, persona)
+        session_id, msg_id = await self._create_persona_with_session(client, persona)
 
-        # Read session to get message index
-        resp = await client.get(f"/api/chat/{persona}/sessions/main")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert len(data["messages"]) >= 1
-
-        # Edit the first user message (index 0)
+        # Edit by msg_id
         resp = await client.put(
-            f"/api/chat/{persona}/sessions/main/messages/0",
+            f"/api/chat/{persona}/sessions/{session_id}/messages/{msg_id}",
             json={"content": "edited content"},
         )
         assert resp.status_code == 200
@@ -749,35 +745,114 @@ class TestEditMessageEndpoint:
         assert result["status"] == "ok"
         assert result["updated_message"]["content"] == "edited content"
         assert result["updated_message"]["role"] == "user"
+        assert "id" in result["updated_message"]
 
         # Verify persistence
-        resp = await client.get(f"/api/chat/{persona}/sessions/main")
+        resp = await client.get(f"/api/chat/{persona}/sessions/{session_id}")
         data = resp.json()
         assert data["messages"][0]["content"] == "edited content"
+        assert data["messages"][0]["id"] == msg_id
 
-    async def test_edit_message_out_of_range(self, client):
-        persona = "edit_test_oob"
+    async def test_edit_message_not_found(self, client):
+        persona = "edit_test_nf"
         await self._create_persona_with_session(client, persona)
 
+        # Non-existent UUID
+        fake_id = "00000000-0000-0000-0000-000000000000"
         resp = await client.put(
-            f"/api/chat/{persona}/sessions/main/messages/999",
+            f"/api/chat/{persona}/sessions/main/messages/{fake_id}",
             json={"content": "nope"},
         )
         assert resp.status_code == 404
 
     async def test_edit_message_empty_content(self, client):
         persona = "edit_test_empty"
-        await self._create_persona_with_session(client, persona)
+        _, msg_id = await self._create_persona_with_session(client, persona)
 
         resp = await client.put(
-            f"/api/chat/{persona}/sessions/main/messages/0",
+            f"/api/chat/{persona}/sessions/main/messages/{msg_id}",
             json={"content": ""},
         )
         assert resp.status_code == 400
 
     async def test_edit_message_nonexistent_persona(self, client):
         resp = await client.put(
-            "/api/chat/nonexistent/sessions/main/messages/0",
+            "/api/chat/nonexistent/sessions/main/messages/00000000-0000-0000-0000-000000000000",
             json={"content": "test"},
         )
         assert resp.status_code == 404
+
+
+@pytest.mark.integration
+class TestRollbackEndpoint:
+    """POST /api/chat/{persona}/sessions/{session_id}/rollback."""
+
+    async def _create_session_with_messages(self, client, persona: str, count: int = 3) -> tuple[str, str]:
+        """Helper: create persona and insert messages. Returns (session_id, last_msg_id)."""
+        resp = await client.post("/api/personas", json={"name": persona})
+        assert resp.status_code in (200, 201), f"Expected 200/201, got {resp.status_code}: {resp.text[:200]}"
+
+        from nous.application.chat.service import _session_manager
+        from nous.application.use_cases import AppContextRegistry
+
+        ctx = AppContextRegistry.get(persona)
+        assert ctx is not None, f"Context for '{persona}' not found"
+        db = ctx.connection.get_memory_db()
+
+        window = _session_manager.get_or_create(persona, "main", db=db)
+        assert count > 0, "count must be positive"
+        last_id = None
+        for i in range(count):
+            last_id = window.add("user" if i % 2 == 0 else "assistant", f"message {i}")
+        assert last_id is not None
+        window.flush()
+        return "main", last_id
+
+    async def test_rollback_ok(self, client):
+        persona = "rollback_ok"
+        session_id, last_id = await self._create_session_with_messages(client, persona, count=3)
+
+        # Read session to get first message id
+        resp = await client.get(f"/api/chat/{persona}/sessions/{session_id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["messages"]) == 3
+        first_msg_id = data["messages"][0]["id"]
+
+        # Rollback to first message (keep only first, remove rest)
+        resp = await client.post(
+            f"/api/chat/{persona}/sessions/{session_id}/rollback",
+            json={"from_id": first_msg_id},
+        )
+        assert resp.status_code == 200
+        result = resp.json()
+        assert "active_leaf_id" in result
+        assert result["active_leaf_id"] == first_msg_id
+        assert len(result["remaining_messages"]) == 1
+
+    async def test_rollback_invalid_id(self, client):
+        persona = "rollback_inv"
+        session_id, _ = await self._create_session_with_messages(client, persona, count=2)
+
+        fake_id = "99999999-9999-9999-9999-999999999999"
+        resp = await client.post(
+            f"/api/chat/{persona}/sessions/{session_id}/rollback",
+            json={"from_id": fake_id},
+        )
+        # Non-existent ID should return 404
+        assert resp.status_code == 404
+
+    async def test_rollback_missing_persona(self, client):
+        resp = await client.post(
+            "/api/chat/nonexistent/sessions/main/rollback",
+            json={"from_id": "00000000-0000-0000-0000-000000000000"},
+        )
+        assert resp.status_code == 404
+
+    async def test_rollback_empty_from_id(self, client):
+        """Empty from_id should be rejected."""
+        resp = await client.post(
+            "/api/chat/nonexistent/sessions/main/rollback",
+            json={"from_id": ""},
+        )
+        assert resp.status_code == 400
