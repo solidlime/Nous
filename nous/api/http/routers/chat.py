@@ -114,7 +114,6 @@ def register_chat_routes(mcp) -> None:
             "emotion_temperature_scale",
             "top_p",
             "context_use_llm_summary",
-            "episode_consolidation_enabled",
             "episode_search_enabled",
             "retrieval_rrf_k",
             "dynamic_tool_selection",

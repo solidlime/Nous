@@ -169,8 +169,6 @@ function applyChatConfig(cfg) {
     cfg.enable_parallel_tools !== false;
   document.getElementById("chat-llm-summary").checked =
     cfg.context_use_llm_summary !== false;
-  document.getElementById("chat-episode-consolidation").checked =
-    cfg.episode_consolidation_enabled !== false;
   document.getElementById("chat-episode-search").checked =
     cfg.episode_search_enabled !== false;
   document
@@ -347,7 +345,6 @@ async function saveChatConfig() {
     enable_parallel_tools: document.getElementById("chat-parallel-tools")
       .checked,
     context_use_llm_summary: getChecked("chat-llm-summary"),
-    episode_consolidation_enabled: getChecked("chat-episode-consolidation"),
     episode_search_enabled: getChecked("chat-episode-search"),
     max_tool_calls: parseInt(
       document.getElementById("chat-max-tool-calls")?.value || "5",
