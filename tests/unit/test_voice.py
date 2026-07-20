@@ -57,7 +57,7 @@ class TestIrodoriEngine:
 
     @pytest.fixture
     def config(self) -> IrodoriConfig:
-        return IrodoriConfig(url="http://irodori:8088/v1", voice="kiritan", timeout_seconds=30)
+        return IrodoriConfig(url="http://irodori:8088", voice="kiritan", timeout_seconds=30)
 
     def _make_irodori(self, config: IrodoriConfig):
         from nous.infrastructure.voice.irodori import IrodoriEngine
@@ -333,7 +333,7 @@ class TestVoiceFactory:
         from nous.infrastructure.voice.factory import get_voice_engine
         from nous.infrastructure.voice.irodori import IrodoriEngine
 
-        config = IrodoriConfig(url="http://localhost:8088/v1")
+        config = IrodoriConfig(url="http://localhost:8088")
         engine = get_voice_engine(config)
 
         assert isinstance(engine, IrodoriEngine)
