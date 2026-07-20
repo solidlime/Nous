@@ -91,8 +91,15 @@ async function loadChat() {
   if (!S.persona) return;
   await loadChatConfig();
   loadSkillsForChat();
+  // Disable input during async restore to prevent premature chatSend()
+  var _restoreInput = document.getElementById("chat-input");
+  var _restoreSendBtn = document.getElementById("chat-send-btn");
+  if (_restoreInput) _restoreInput.disabled = true;
+  if (_restoreSendBtn) _restoreSendBtn.disabled = true;
   await restoreChatHistory();
   setupChatInputHandler();
+  if (_restoreInput) _restoreInput.disabled = false;
+  if (_restoreSendBtn) _restoreSendBtn.disabled = false;
   loadChatCommitments();
   loadEquipment();
   setTimeout(() => {

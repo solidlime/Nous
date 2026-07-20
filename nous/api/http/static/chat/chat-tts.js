@@ -89,7 +89,7 @@ function _startSeekBar(audio, bar) {
 function _endSession(reason) {
   var session = _playbackSession;
   if (!session) return;
-  if (_playbackInterval) { clearInterval(_playbackInterval); _playbackInterval = null; }
+  if (session.interval) { clearInterval(session.interval); session.interval = null; }
   if (session.audio) {
     try { session.audio.pause(); } catch(e) {}
     session.audio.src = "";
