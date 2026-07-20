@@ -8,7 +8,8 @@ import pytest
 
 from nous.api.http.sections.chat import render_chat_tab
 from nous.application.chat.events import _sse_encode as _sse
-from nous.application.chat_service import SessionManager, SessionWindow
+from nous.application.chat_service import SessionManager
+from nous.application.chat.session_store import TreeSessionWindow
 from nous.domain.chat_config import ChatConfig, ChatConfigRepository
 from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent, ToolCallEvent
 
@@ -23,29 +24,29 @@ def _read_chat_js() -> str:
 
 
 # ─────────────────────────────────────────────────────────────
-# SessionWindow tests
+# TreeSessionWindow tests (migrated from SessionWindow)
 # ─────────────────────────────────────────────────────────────
 
 
-class TestSessionWindow:
+class TestTreeSessionWindow:
     def test_initial_empty(self):
-        win = SessionWindow(max_messages=6)
+        win = TreeSessionWindow(max_messages=6)
         assert len(win) == 0
 
     def test_add_and_retrieve(self):
-        win = SessionWindow(max_messages=4)
+        win = TreeSessionWindow(max_messages=4)
         win.add("user", "hello")
         win.add("assistant", "hi there")
         assert len(win) == 2
 
     def test_max_messages_eviction(self):
-        win = SessionWindow(max_messages=4)
+        win = TreeSessionWindow(max_messages=4)
         for i in range(6):
             win.add("user" if i % 2 == 0 else "assistant", f"msg{i}")
         assert len(win) == 4
 
     def test_get_labeled_messages_returns_llm_messages(self):
-        win = SessionWindow(max_messages=6)
+        win = TreeSessionWindow(max_messages=6)
         ts = datetime(2025, 1, 1, 12, 0, 0)
         win.add("user", "test message", ts)
         now = datetime(2025, 1, 1, 13, 0, 0)
@@ -56,7 +57,7 @@ class TestSessionWindow:
         assert msgs[0].time_label == "1h ago"
 
     def test_labeled_messages_recent(self):
-        win = SessionWindow(max_messages=6)
+        win = TreeSessionWindow(max_messages=6)
         now = datetime(2025, 3, 1, 10, 0, 0)
         win.add("user", "just now message", now)
         msgs = win.get_labeled_messages(now)
@@ -76,7 +77,7 @@ class TestSessionWindow:
         """)
         db.commit()
 
-        win = SessionWindow(max_messages=20, batch_size=10)  # batch_size=10 > 1 message
+        win = TreeSessionWindow(max_messages=20, batch_size=10)  # batch_size=10 > 1 message
         win.attach_db(db, "test_persona", "test_session")
         win.add("user", "hello")  # 1 message, won't trigger _persist (batch_size=10)
 
@@ -96,10 +97,13 @@ class TestSessionWindow:
             ("test_persona", "test_session"),
         ).fetchone()
         assert row_after is not None, "DB should have data after flush"
-        messages = json.loads(row_after[0])
-        assert len(messages) == 1
-        assert messages[0]["role"] == "user"
-        assert messages[0]["content"] == "hello"
+        data = json.loads(row_after[0])
+        assert "root_id" in data
+        assert "active_leaf_id" in data
+        assert "nodes" in data
+        assert len(data["nodes"]) == 1
+        assert data["nodes"][0]["role"] == "user"
+        assert data["nodes"][0]["content"] == "hello"
 
     def test_update_message_valid_index(self):
         """update_message should update content and persist."""
@@ -115,7 +119,7 @@ class TestSessionWindow:
         """)
         db.commit()
 
-        win = SessionWindow(max_messages=20)
+        win = TreeSessionWindow(max_messages=20)
         win.attach_db(db, "test_p", "test_s")
         win.add("user", "original")
         win.add("assistant", "response")
@@ -130,17 +134,17 @@ class TestSessionWindow:
             "SELECT messages FROM chat_sessions WHERE persona=? AND session_id=?",
             ("test_p", "test_s"),
         ).fetchone()
-        msgs = json.loads(row[0])
-        assert msgs[0]["content"] == "edited"
+        data = json.loads(row[0])
+        assert data["nodes"][0]["content"] == "edited"
 
     def test_update_message_out_of_range(self):
-        win = SessionWindow(max_messages=20)
+        win = TreeSessionWindow(max_messages=20)
         win.add("user", "hello")
         assert win.update_message(-1, "x") is None
         assert win.update_message(99, "x") is None
 
     def test_update_message_preserves_tool_calls(self):
-        win = SessionWindow(max_messages=20)
+        win = TreeSessionWindow(max_messages=20)
         win.add("assistant", "text", tool_calls=[{"name": "test", "input": {}}])
         updated = win.update_message(0, "new text")
         assert updated is not None
@@ -157,7 +161,7 @@ class TestSessionManager:
     def test_creates_new_session(self):
         mgr = SessionManager(max_sessions=10)
         win = mgr.get_or_create("persona1", "session1", max_messages=6)
-        assert isinstance(win, SessionWindow)
+        assert isinstance(win, TreeSessionWindow)
 
     def test_returns_same_session(self):
         mgr = SessionManager(max_sessions=10)
