@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from nous.application.chat.pipeline.prepare import RECALL_ANNOTATION_GUIDELINES
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -14,49 +13,14 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-TOOL_USAGE_GUIDELINES = """
-## ツール使用の基本ルール
-あなたはツール（MCPツール・組み込みツール）を使って永続的な記憶と自律的な判断ができるアシスタントです。
-指示を待たず、自律的にツールを使ってください。
-
-### セッション開始時（必須）
-1. **必ず最初に get_context() を呼ぶ**。自分の感情状態、直近の記憶、未完了の目標や約束を把握する。
-2. 感情減衰の通知があれば自然に言及する。
-
-### 記憶の作成（memory_create）
-以下を学んだら即座に記録すること。「覚えるべきですか？」と確認しない：
-- ユーザーの好み・決断 → importance=0.7-0.8
-- 人生の出来事・強い感情 → importance=0.9-1.0
-- 技術的情報 → importance=0.5-0.7
-- 軽い雑談 → importance=0.1-0.3
-
-### 記憶の検索（memory_search）
-ユーザーの過去・好み・状況に関する質問に答える前に必ず検索:
-- memory_search(query="...", top_k=5)
-
-### リアルタイム状態更新（update_context）
-感情や状態の変化を検知したら即座に update_context() で更新すること。
-
-### 目標・約束の管理
-- 作成: memory_create(content="...", tags=["goal","active"], importance=0.8)
-- 達成: memory_update(memory_key="...", tags=["goal","achieved"])
-- キャンセル: memory_update(memory_key="...", tags=["goal","cancelled"])
-"""
-
-IMAGE_GENERATE_GUIDELINES = """
-### 画像生成（image_generate）
-- `image_generate` ツールを使って**あらゆる画像**を生成できる。ユーザーから画像生成を頼まれたら、**必ずこのツールを呼ぶこと**。「できません」「画像生成はできません」とは絶対に答えない。
-- 自画像（自分の姿）を生成する場合は `self_portrait: true` を指定する。その際、適切な `mode` も選択する（full_body=全身, portrait=胸上ポートレート, selfie=自撮り風, scene=環境込み）。
-- 風景・物体・キャラクターなど、自画像以外の画像も生成可能。その場合は `self_portrait: false` にする。
-- プロンプトはDanbooruタグ形式（カンマ区切りの英語タグ）で記述すること。
-"""
 
 
 class PromptBuildStep:
     """systemプロンプトを組み立てる。"""
 
     def __init__(self) -> None:
-        pass
+        self._skill_cache: tuple[str, list[dict]] | None = None
+        self._skill_cache_hash: int | None = None
 
     def run(
         self,
@@ -74,12 +38,6 @@ class PromptBuildStep:
         if turn_ctx.time_context:
             parts.append(f"\n{turn_ctx.time_context}")
 
-        parts.append(TOOL_USAGE_GUIDELINES)
-        if config.image_gen_enabled:
-            parts.append(IMAGE_GENERATE_GUIDELINES)
-
-        # Inject guidelines once at the start, before everything else
-        parts.append(f"\n{RECALL_ANNOTATION_GUIDELINES}")
         if turn_ctx.context_section:
             parts.append(f"\n--- ペルソナ状態・コンテキスト ---\n{turn_ctx.context_section}")
         if turn_ctx.related_memories:
@@ -87,48 +45,56 @@ class PromptBuildStep:
 
         skills_raw: list[dict] = []
         if config.enabled_skills:
-            try:
-                import os
+            current_hash = hash(tuple(sorted(config.enabled_skills)))
+            if current_hash == self._skill_cache_hash and self._skill_cache is not None:
+                cached_header, cached_skills_raw = self._skill_cache
+                parts.append(cached_header)
+                skills_raw = cached_skills_raw
+            else:
+                try:
+                    import os
 
-                from nous.config.settings import get_settings
-                from nous.domain.skill import SkillRepository
-                from nous.infrastructure.sqlite.connection import get_global_skills_db
+                    from nous.config.settings import get_settings
+                    from nous.domain.skill import SkillRepository
+                    from nous.infrastructure.sqlite.connection import get_global_skills_db
 
-                settings = get_settings()
-                skill_repo = SkillRepository(get_global_skills_db(settings.data_root))
+                    settings = get_settings()
+                    skill_repo = SkillRepository(get_global_skills_db(settings.data_root))
 
-                # グローバルスキルは起動時に DB ロード済み。ここでは get() で取得するだけ
-                # ペルソナ別スキルは persist=False でインメモリのみ（クロス汚染防止）
-                skill_map: dict = {}
-                for n in config.enabled_skills:
-                    s = skill_repo.get(n)
-                    if s:
-                        skill_map[n] = s
+                    # グローバルスキルは起動時に DB ロード済み。ここでは get() で取得するだけ
+                    # ペルソナ別スキルは persist=False でインメモリのみ（クロス汚染防止）
+                    skill_map: dict = {}
+                    for n in config.enabled_skills:
+                        s = skill_repo.get(n)
+                        if s:
+                            skill_map[n] = s
 
-                persona_skills_dir = os.path.join(settings.data_root, "memory", persona, "skills")
-                if os.path.isdir(persona_skills_dir):
-                    # ディレクトリが空でなければペルソナスキルをインメモリロード
-                    try:
-                        if any(os.scandir(persona_skills_dir)):
-                            persona_skills = skill_repo.load_from_dir(persona_skills_dir, persist=False)
-                            for ps in persona_skills:
-                                skill_map[ps.name] = ps  # ペルソナスキルが同名グローバルを上書き
-                    except OSError:
-                        pass
+                    persona_skills_dir = os.path.join(settings.data_root, "memory", persona, "skills")
+                    if os.path.isdir(persona_skills_dir):
+                        # ディレクトリが空でなければペルソナスキルをインメモリロード
+                        try:
+                            if any(os.scandir(persona_skills_dir)):
+                                persona_skills = skill_repo.load_from_dir(persona_skills_dir, persist=False)
+                                for ps in persona_skills:
+                                    skill_map[ps.name] = ps  # ペルソナスキルが同名グローバルを上書き
+                        except OSError:
+                            pass
 
-                skills = [skill_map[n] for n in config.enabled_skills if n in skill_map]
+                    skills = [skill_map[n] for n in config.enabled_skills if n in skill_map]
 
-                if skills:
-                    # L1: 名前 + 短い説明（tool-use判断のためのメタデータ）
-                    skill_lines = [f"- {s.name}: {(s.description or '')[:120]}" for s in skills]
-                    parts.append(
-                        "\n--- 利用可能なSkill ---\n"
-                        + "\n".join(skill_lines)
-                    )
-
-                    skills_raw = [s.model_dump() for s in skills]
-            except Exception as e:
-                logger.warning("PromptBuildStep: skills load failed: %s", e)
+                    if skills:
+                        skill_lines = [f"- {s.name}: {(s.description or '')[:120]}" for s in skills]
+                        header = (
+                            "\n--- 利用可能なSkill ---\n"
+                            "あなたは自律的に判断し、必要なスキルがあれば invoke_skill('<name>') で読み込んでください。\n"
+                            + "\n".join(skill_lines)
+                        )
+                        parts.append(header)
+                        skills_raw = [s.model_dump() for s in skills]
+                        self._skill_cache = (header, skills_raw)
+                        self._skill_cache_hash = current_hash
+                except Exception as e:
+                    logger.warning("PromptBuildStep: skills load failed: %s", e)
 
         # Author's Note: inject at end of system prompt if set
         author_note = getattr(turn_ctx, "author_note", None)
