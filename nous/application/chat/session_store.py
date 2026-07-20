@@ -285,6 +285,7 @@ class TreeSessionWindow:
         self._persisted_count: int = 0
         self._batch_size: int = batch_size
         self._max_messages: int = max_messages
+        self._version: int = 0
         self.pending_memory_task: asyncio.Task | None = None
         self.evict_callback: Callable[[list[dict]], None] | None = None
 
@@ -415,6 +416,7 @@ class TreeSessionWindow:
             return None
         node = path[message_index]
         node["content"] = new_content
+        self._version += 1
         self._persist()
         return dict(node)
 
@@ -455,8 +457,13 @@ class TreeSessionWindow:
             self._active_leaf_id = None
         if message_index < self._persisted_count:
             self._persisted_count = message_index
+        self._version += 1
         self._persist()
         return removed
+
+    def get_version(self) -> int:
+        """現在のバージョンカウンターを返す（楽観的ロック用）。"""
+        return self._version
 
     # ── 内部メソッド ──────────────────────────────────────────
 
@@ -490,6 +497,7 @@ class TreeSessionWindow:
             data = {
                 "root_id": self._root_id,
                 "active_leaf_id": self._active_leaf_id,
+                "version": self._version,
                 "nodes": list(self._nodes.values()),
             }
             messages_json = json.dumps(data, ensure_ascii=False)
@@ -534,9 +542,10 @@ class TreeSessionWindow:
             window.attach_db(db, persona, session_id)
 
             if isinstance(data, dict):
-                # 新形式: {"root_id":..., "active_leaf_id":..., "nodes":[...]}
+                # 新形式: {"root_id":..., "active_leaf_id":..., "version":..., "nodes":[...]}
                 window._root_id = data.get("root_id")
                 window._active_leaf_id = data.get("active_leaf_id")
+                window._version = data.get("version", 0)
                 for node in data.get("nodes", []):
                     window._nodes[node["id"]] = node
             elif isinstance(data, list):
@@ -587,6 +596,7 @@ class TreeSessionWindow:
                 if seg.get("type") == "text":
                     seg["content"] = new_content
                     break
+        self._version += 1
         self._persist()
         return dict(node)
 
@@ -612,6 +622,7 @@ class TreeSessionWindow:
                     break
             self._root_id = new_root  # 全ノード削除時は None のまま
         del self._nodes[msg_id]
+        self._version += 1
         self._persist()
         return node
 
@@ -622,6 +633,7 @@ class TreeSessionWindow:
             return None
         old = self._active_leaf_id
         self._active_leaf_id = msg_id
+        self._version += 1
         self._persist()
         return {"old_active_leaf_id": old, "new_active_leaf_id": msg_id}
 

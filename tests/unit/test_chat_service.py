@@ -358,7 +358,94 @@ class TestTreeSessionWindowNew:
         text_segs = [s for s in segs if s.get("type") == "text"]
         assert len(text_segs) == 0  # text がないので変わらない
 
-    # ── Bug #4 tests are added in the next commit ──────────────
+    # ── Bug #4: 楽観的ロック ──────────────────────────────────
+
+    def test_version_starts_at_zero(self):
+        win = TreeSessionWindow()
+        assert win.get_version() == 0
+
+    def test_version_increments_on_edit(self):
+        win = TreeSessionWindow()
+        msg_id = win.add("user", "hello")
+        v1 = win.get_version()
+        win.edit_message(msg_id, "world")
+        assert win.get_version() == v1 + 1
+
+    def test_version_increments_on_delete(self):
+        win = TreeSessionWindow()
+        aid = win.add("assistant", "msg")
+        v1 = win.get_version()
+        win.delete_message(aid)
+        assert win.get_version() == v1 + 1
+
+    def test_version_increments_on_rollback(self):
+        win = TreeSessionWindow()
+        uid = win.add("user", "hello")
+        win.add("assistant", "hi")
+        v1 = win.get_version()
+        win.rollback_to(uid)
+        assert win.get_version() == v1 + 1
+
+    def test_version_persisted_and_restored(self):
+        """version は永続化され、from_db() で復元される"""
+        import json
+        import sqlite3
+
+        db = sqlite3.connect(":memory:")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                persona TEXT NOT NULL, session_id TEXT NOT NULL,
+                messages TEXT NOT NULL DEFAULT '[]',
+                timestamps TEXT NOT NULL DEFAULT '[]',
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (persona, session_id))
+        """)
+        db.commit()
+
+        win = TreeSessionWindow()
+        win.attach_db(db, "test", "s1")
+        win.add("user", "hello")
+        win.edit_message(list(win._nodes.keys())[0], "world")  # version → 1
+        win.delete_message(list(win._nodes.keys())[0])  # version → 2 (全部消える)
+        win.add("user", "again")
+        v_saved = win.get_version()
+        win.flush()
+
+        loaded = TreeSessionWindow.from_db(db, "test", "s1")
+        assert loaded is not None
+        assert loaded.get_version() == v_saved
+
+    def test_old_data_without_version_gets_zero(self):
+        """version がない旧データは from_db() で version=0 になる"""
+        import json
+        import sqlite3
+
+        db = sqlite3.connect(":memory:")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                persona TEXT NOT NULL, session_id TEXT NOT NULL,
+                messages TEXT NOT NULL DEFAULT '[]',
+                timestamps TEXT NOT NULL DEFAULT '[]',
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (persona, session_id))
+        """)
+        db.commit()
+
+        # version なしの新形式データ
+        data = {
+            "root_id": None,
+            "active_leaf_id": None,
+            "nodes": [],
+        }
+        db.execute(
+            "INSERT INTO chat_sessions VALUES (?, ?, ?, ?, ?)",
+            ("test", "s1", json.dumps(data), "[]", "2025-01-01T12:00:00"),
+        )
+        db.commit()
+
+        loaded = TreeSessionWindow.from_db(db, "test", "s1")
+        assert loaded is not None
+        assert loaded.get_version() == 0
 
 
 # ─────────────────────────────────────────────────────────────

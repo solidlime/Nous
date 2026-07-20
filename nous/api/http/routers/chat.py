@@ -315,8 +315,8 @@ def register_chat_routes(mcp) -> None:
         """メッセージ 1 件の content を直接更新する（undo スタック非破壊）。
 
         PUT /api/chat/{persona}/sessions/{session_id}/messages/{msg_id}
-        Request body: {"content": "新しいテキスト"}
-        Response: {"status": "ok", "updated_message": {...}}
+        Request body: {"content": "新しいテキスト", "expected_version": 3}
+        Response: {"status": "ok", "updated_message": {...}, "version": 4}
         """
         persona = _resolve_persona_from_request(request)
         ctx = _safe_get_context(persona)
@@ -339,6 +339,10 @@ def register_chat_routes(mcp) -> None:
         if not isinstance(new_content, str) or not new_content.strip():
             return JSONResponse({"error": "content must be a non-empty string"}, status_code=400)
 
+        expected_version = body.get("expected_version")
+        if expected_version is not None and not isinstance(expected_version, int):
+            return JSONResponse({"error": "expected_version must be an integer"}, status_code=400)
+
         try:
             from nous.application.chat.service import _session_manager
             from nous.application.chat.session_store import TreeSessionWindow
@@ -347,7 +351,17 @@ def register_chat_routes(mcp) -> None:
             window = _session_manager._sessions.get(key)
 
             if window:
+                # 楽観的ロックチェック
+                if expected_version is not None and window.get_version() != expected_version:
+                    return JSONResponse(
+                        {
+                            "error": "conflict",
+                            "current_version": window.get_version(),
+                        },
+                        status_code=409,
+                    )
                 updated = window.edit_message(msg_id, new_content.strip())
+                current_version = window.get_version()
             else:
                 db = ctx.connection.get_memory_db()
                 from nous.application.chat.session_store import _CHAT_SESSIONS_SCHEMA
@@ -357,14 +371,24 @@ def register_chat_routes(mcp) -> None:
                 window = TreeSessionWindow.from_db(db, persona, session_id)
                 if window is None:
                     return JSONResponse({"error": "Session not found"}, status_code=404)
+                # DBからロードした場合も expected_version チェック
+                if expected_version is not None and window.get_version() != expected_version:
+                    return JSONResponse(
+                        {
+                            "error": "conflict",
+                            "current_version": window.get_version(),
+                        },
+                        status_code=409,
+                    )
                 updated = window.edit_message(msg_id, new_content.strip())
+                current_version = window.get_version()
 
             if updated is None:
                 return JSONResponse(
                     {"error": f"Message ID {msg_id} not found"},
                     status_code=404,
                 )
-            return JSONResponse({"status": "ok", "updated_message": updated})
+            return JSONResponse({"status": "ok", "updated_message": updated, "version": current_version})
         except Exception as e:
             logger.exception("update_chat_message failed: %s", e)
             return JSONResponse({"error": str(e)}, status_code=500)
@@ -396,6 +420,10 @@ def register_chat_routes(mcp) -> None:
         if not from_id:
             return JSONResponse({"error": "from_id must be a non-empty string"}, status_code=400)
 
+        expected_version = body.get("expected_version")
+        if expected_version is not None and not isinstance(expected_version, int):
+            return JSONResponse({"error": "expected_version must be an integer"}, status_code=400)
+
         try:
             from nous.application.chat.service import _session_manager
             from nous.application.chat.session_store import SessionManager, TreeSessionWindow
@@ -404,9 +432,19 @@ def register_chat_routes(mcp) -> None:
             window = _session_manager._sessions.get(key)
 
             if window:
+                # 楽観的ロックチェック
+                if expected_version is not None and window.get_version() != expected_version:
+                    return JSONResponse(
+                        {
+                            "error": "conflict",
+                            "current_version": window.get_version(),
+                        },
+                        status_code=409,
+                    )
                 # Capture old active path before rollback for removed_user_text
                 old_path = window.get_active_path()
                 result = window.rollback_to(from_id)
+                current_version = window.get_version()
             else:
                 # Window not in memory — load from DB, rollback, persist
                 from nous.application.chat.session_store import _CHAT_SESSIONS_SCHEMA
@@ -417,8 +455,17 @@ def register_chat_routes(mcp) -> None:
                 window = TreeSessionWindow.from_db(db, persona, session_id)
                 if window is None:
                     return JSONResponse({"error": "Session not found"}, status_code=404)
+                if expected_version is not None and window.get_version() != expected_version:
+                    return JSONResponse(
+                        {
+                            "error": "conflict",
+                            "current_version": window.get_version(),
+                        },
+                        status_code=409,
+                    )
                 old_path = window.get_active_path()
                 result = window.rollback_to(from_id)
+                current_version = window.get_version()
 
             if result is None:
                 return JSONResponse(
@@ -451,6 +498,7 @@ def register_chat_routes(mcp) -> None:
                     "active_leaf_id": from_id,
                     "remaining_messages": remaining,
                     "removed_user_text": removed_user_text,
+                    "version": current_version,
                 }
             )
         except Exception as e:
