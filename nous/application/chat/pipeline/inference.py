@@ -11,7 +11,6 @@ from nous.application.chat.events import (
     ErrorSSE,
     ImageGenResultSSE,
     ImageGenStartSSE,
-    SkillLoadSSE,
     TextDeltaSSE,
     ToolCallSSE,
     ToolResultSSE,
@@ -42,16 +41,11 @@ class InferenceStep:
         turn_ctx: ChatTurnContext,
         registry: ToolRegistry,
         effective_temp: float | None = None,
-    ) -> AsyncIterator[TextDeltaSSE | ToolCallSSE | ToolResultSSE | ErrorSSE | ImageGenStartSSE | ImageGenResultSSE | SkillLoadSSE]:
+    ) -> AsyncIterator[TextDeltaSSE | ToolCallSSE | ToolResultSSE | ErrorSSE | ImageGenStartSSE | ImageGenResultSSE]:
         api_key = config.get_effective_api_key()
         if not api_key:
             yield ErrorSSE(message="APIキーが設定されていません。チャット設定でAPIキーを入力してください。")
             return
-
-        # スキル読み込み通知（セッション初回のみ発火）
-        if turn_ctx.skills_raw:
-            skill_names = [s.get("name", "?") for s in turn_ctx.skills_raw]
-            yield SkillLoadSSE(skill_names=skill_names)
 
         try:
             provider = get_provider(
