@@ -38,6 +38,67 @@ def _cleanup_expired_sessions(db: sqlite3.Connection, persona: str, ttl_days: in
         logger.warning("_cleanup_expired_sessions failed: %s", e)
 
 
+def _expand_segments(segments: list[dict], ts: datetime, now: datetime) -> list[LLMMessage]:
+    """Expand segment sequence into proper assistant/tool LLMMessage list.
+
+    Segments record the chronological order of text, tool_call, and tool_result
+    within one assistant turn. This method decomposes them into the
+    assistant(tool_calls) → tool → assistant(...) sequence expected by LLM APIs.
+    """
+    label = relative_time_str(ts, now)
+    result: list[LLMMessage] = []
+    current_text = ""
+    current_tool_calls: list[dict] = []
+
+    def _flush_assistant() -> None:
+        nonlocal current_text, current_tool_calls
+        if current_text or current_tool_calls:
+            result.append(
+                LLMMessage(
+                    role="assistant",
+                    content=current_text,
+                    timestamp=ts,
+                    time_label=label,
+                    tool_calls=list(current_tool_calls) if current_tool_calls else None,
+                )
+            )
+            current_text = ""
+            current_tool_calls = []
+
+    for seg in segments:
+        seg_type = seg.get("type", "")
+        if seg_type == "text":
+            current_text += seg.get("content", "")
+        elif seg_type == "tool_call":
+            current_tool_calls.append(
+                {
+                    "id": seg.get("id", ""),
+                    "name": seg.get("name", ""),
+                    "input": seg.get("input", {}),
+                }
+            )
+        elif seg_type == "tool_result":
+            _flush_assistant()
+            raw_result = seg.get("result", "")
+            if isinstance(raw_result, dict):
+                content = json.dumps(raw_result, ensure_ascii=False)
+            elif isinstance(raw_result, str):
+                content = raw_result
+            else:
+                content = str(raw_result)
+            result.append(
+                LLMMessage(
+                    role="tool",
+                    content=content,
+                    tool_call_id=seg.get("id", ""),
+                    timestamp=ts,
+                    time_label=label,
+                )
+            )
+    _flush_assistant()
+    return result
+
+
 class SessionWindow:
     def __init__(self, max_messages: int = 200, batch_size: int = 10) -> None:
         self._max_messages: int = max_messages
@@ -168,64 +229,8 @@ class SessionWindow:
 
     @staticmethod
     def _expand_segments(segments: list[dict], ts: datetime, now: datetime) -> list[LLMMessage]:
-        """Expand segment sequence into proper assistant/tool LLMMessage list.
-
-        Segments record the chronological order of text, tool_call, and tool_result
-        within one assistant turn. This method decomposes them into the
-        assistant(tool_calls) → tool → assistant(...) sequence expected by LLM APIs.
-        """
-        label = relative_time_str(ts, now)
-        result: list[LLMMessage] = []
-        current_text = ""
-        current_tool_calls: list[dict] = []
-
-        def _flush_assistant() -> None:
-            nonlocal current_text, current_tool_calls
-            if current_text or current_tool_calls:
-                result.append(
-                    LLMMessage(
-                        role="assistant",
-                        content=current_text,
-                        timestamp=ts,
-                        time_label=label,
-                        tool_calls=list(current_tool_calls) if current_tool_calls else None,
-                    )
-                )
-                current_text = ""
-                current_tool_calls = []
-
-        for seg in segments:
-            seg_type = seg.get("type", "")
-            if seg_type == "text":
-                current_text += seg.get("content", "")
-            elif seg_type == "tool_call":
-                current_tool_calls.append(
-                    {
-                        "id": seg.get("id", ""),
-                        "name": seg.get("name", ""),
-                        "input": seg.get("input", {}),
-                    }
-                )
-            elif seg_type == "tool_result":
-                _flush_assistant()
-                raw_result = seg.get("result", "")
-                if isinstance(raw_result, dict):
-                    content = json.dumps(raw_result, ensure_ascii=False)
-                elif isinstance(raw_result, str):
-                    content = raw_result
-                else:
-                    content = str(raw_result)
-                result.append(
-                    LLMMessage(
-                        role="tool",
-                        content=content,
-                        tool_call_id=seg.get("id", ""),
-                        timestamp=ts,
-                        time_label=label,
-                    )
-                )
-        _flush_assistant()
-        return result
+        """モジュールレベル関数に委譲。後方互換用。"""
+        return _expand_segments(segments, ts, now)
 
     def get_labeled_messages(self, now: datetime | None = None) -> list[LLMMessage]:
         if now is None:
@@ -363,7 +368,7 @@ class TreeSessionWindow:
             segments = node.get("segments")
             ts = datetime.fromisoformat(node["created_at"])
             if segments:
-                result.extend(_SessionWindow_old._expand_segments(segments, ts, now))
+                result.extend(_expand_segments(segments, ts, now))
             else:
                 label = relative_time_str(ts, now)
                 result.append(
@@ -424,12 +429,21 @@ class TreeSessionWindow:
             return []
         removed = path[message_index:]
         # 削除対象ノードとその子孫を全て削除
-        remove_ids = {n["id"] for n in removed}
-        # 子孫も走査して追加
-        for nid in list(remove_ids):
-            for other_id, other_node in list(self._nodes.items()):
-                if self._is_descendant(other_id, nid):
-                    remove_ids.add(other_id)
+        remove_set = {n["id"] for n in removed}
+        # O(n * depth) で子孫を収集
+        for other_id, other_node in list(self._nodes.items()):
+            if other_id in remove_set:
+                continue
+            current = other_node.get("parent_id")
+            while current is not None:
+                if current in remove_set:
+                    remove_set.add(other_id)
+                    break
+                current_node = self._nodes.get(current)
+                if current_node is None:
+                    break
+                current = current_node.get("parent_id")
+        remove_ids = remove_set
         for nid in remove_ids:
             self._nodes.pop(nid, None)
         # active_leaf を保持する最後のノードに
@@ -561,6 +575,7 @@ class TreeSessionWindow:
             return None
 
     def edit_message(self, msg_id: str, new_content: str) -> dict | None:
+        # TODO: segments フィールドの編集対応（ツールコールのインターリーブ表示用）。現在は content のみ更新。
         """メッセージをインプレース編集（Minimal B）。編集後永続化。"""
         node = self._nodes.get(msg_id)
         if node is None:
@@ -582,14 +597,20 @@ class TreeSessionWindow:
         # active_leaf_id が削除対象の子孫なら巻き戻し
         if self._is_descendant(self._active_leaf_id, msg_id):
             self._active_leaf_id = parent_id
-        # root_id が削除対象なら付け替え
+        # root_id が削除対象ならリペアレンティング後の最初の子を新しいルートに
         if self._root_id == msg_id:
-            self._root_id = parent_id
+            new_root = None
+            for n in self._nodes.values():
+                if n.get("parent_id") is None and n["id"] != msg_id:
+                    new_root = n["id"]
+                    break
+            self._root_id = new_root  # 全ノード削除時は None のまま
         del self._nodes[msg_id]
         self._persist()
         return node
 
     def rollback_to(self, msg_id: str) -> dict | None:
+        # TODO: ロールバックで分岐した古いパスの孤立ノードが _nodes に蓄積する。add() 時に len(_nodes) > max_messages * 3 でGC検討。
         """active_leaf_id を msg_id に差し替え。ノードは一切削除しない（非破壊ロールバック）。"""
         if msg_id not in self._nodes:
             return None
@@ -760,5 +781,4 @@ class SessionManager:
 
 
 # 後方互換エイリアス: SessionWindow → TreeSessionWindow
-_SessionWindow_old = SessionWindow  # TreeSessionWindow内部から旧クラス参照を保持
 SessionWindow = TreeSessionWindow
