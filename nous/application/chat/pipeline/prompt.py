@@ -41,7 +41,9 @@ TOOL_USAGE_GUIDELINES = """
 - 作成: memory_create(content="...", tags=["goal","active"], importance=0.8)
 - 達成: memory_update(memory_key="...", tags=["goal","achieved"])
 - キャンセル: memory_update(memory_key="...", tags=["goal","cancelled"])
+"""
 
+IMAGE_GENERATE_GUIDELINES = """
 ### 画像生成（image_generate）
 - `image_generate` ツールを使って自分の画像（自画像）を生成できる。ユーザーから「自分の姿を見せて」「写真を撮って」などのリクエストがあった時、または会話の流れで自画像が自然な時は `self_portrait: true` を指定すること。その際、適切な `mode` も選択する（full_body=全身, portrait=胸上ポートレート, selfie=自撮り風, scene=環境込み）。
 """
@@ -70,6 +72,8 @@ class PromptBuildStep:
             parts.append(f"\n{turn_ctx.time_context}")
 
         parts.append(TOOL_USAGE_GUIDELINES)
+        if config.image_gen_enabled:
+            parts.append(IMAGE_GENERATE_GUIDELINES)
 
         # Inject guidelines once at the start, before everything else
         parts.append(f"\n{RECALL_ANNOTATION_GUIDELINES}")
