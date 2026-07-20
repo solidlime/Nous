@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from nous.domain.language import LanguageResolver
 from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.factory import get_provider
 from nous.infrastructure.logging.structured import get_logger
@@ -15,14 +16,14 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _SUMMARIZE_PROMPT = """\
-以下の会話を2〜3文の日本語で簡潔に要約してください。
-重要な情報・決定事項・感情的な出来事を優先してください。
+Summarize the following conversation in 2-3 sentences in {language}.
+Prioritize important information, decisions, and emotional events.
 
-【会話】
+[Conversation]
 {conversation}
 
-【出力】
-要約文のみ。JSON不要。
+[Output]
+Summary only. No JSON.
 """
 
 
@@ -64,7 +65,12 @@ async def summarize_and_store(
     if not conversation_lines:
         return None
 
-    prompt = _SUMMARIZE_PROMPT.format(conversation="\n".join(conversation_lines))
+    language_resolver = LanguageResolver(config)
+    lang = language_resolver.resolve()
+    prompt = _SUMMARIZE_PROMPT.format(
+        language=LanguageResolver.display_name(lang),
+        conversation="\n".join(conversation_lines),
+    )
 
     try:
         provider = get_provider(config.provider, api_key, model, config.get_effective_base_url())

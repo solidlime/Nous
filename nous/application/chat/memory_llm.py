@@ -6,6 +6,7 @@ import contextlib
 import json
 from typing import TYPE_CHECKING
 
+from nous.domain.language import LanguageResolver
 from nous.domain.search.engine import SearchQuery
 from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.factory import get_provider
@@ -18,6 +19,8 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _MEMORY_LLM_PROMPT = """\
+[System Directive] All output content must be written in {language}.
+
 あなたは {persona_name} です。
 {persona_identity}
 
@@ -126,7 +129,10 @@ class MemoryLLM:
             logger.warning("MemoryLLM: provider init failed: %s", e)
             return {}
 
+        language_resolver = LanguageResolver(config)
+        lang = language_resolver.resolve(user_message=user_message)
         prompt = _MEMORY_LLM_PROMPT.format(
+            language=LanguageResolver.display_name(lang),
             persona_name=persona_name,
             persona_identity=persona_identity.strip() or f"あなたは {persona_name} として振る舞います。",
             context=context.strip() or "(情報なし)",

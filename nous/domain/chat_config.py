@@ -100,6 +100,8 @@ class ChatConfig(BaseModel):
     image_gen_comfyui_speed_lora_method: str = "lcm"  # lcm, lightning, hyper, tcd
     enable_memory_tools: bool = True
     disabled_tools: list[str] = []
+    # 中央言語設定（ADR-001）
+    language: str = "ja"  # "ja" | "en" | "zh" | "ko" | "auto"
     # Generative Agents-style reflection
     reflection_enabled: bool = True
     reflection_threshold: float = 1.0  # sum of importance scores to trigger reflection

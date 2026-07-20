@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from nous.domain.language import LanguageResolver
 from nous.infrastructure.llm.token_counter import TokenCounter
 from nous.infrastructure.logging.structured import get_logger
 
@@ -15,12 +16,14 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-SUMMARIZE_PROMPT = """以下の会話履歴を要約してください。重要な情報（ユーザーの発言、決定事項、好み、約束、感情的な出来事）を優先的に抽出し、300文字以内の日本語でまとめてください。
+SUMMARIZE_PROMPT = """Summarize the conversation history below, in {language}.
+Prioritize: user statements, decisions, preferences, promises, emotional events.
+Keep the summary within approximately 300 characters.
 
-会話履歴:
+Conversation history:
 {conversation}
 
-要約:"""
+Summary:"""
 
 
 class CompressStep:
@@ -223,7 +226,12 @@ class CompressStep:
         if not lines:
             return None
 
-        prompt = SUMMARIZE_PROMPT.format(conversation="\n".join(lines))
+        language_resolver = LanguageResolver(config)
+        lang = language_resolver.resolve()
+        prompt = SUMMARIZE_PROMPT.format(
+            language=LanguageResolver.display_name(lang),
+            conversation="\n".join(lines),
+        )
 
         from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, LLMMessage, TextDeltaEvent
         from nous.infrastructure.llm.factory import get_provider
