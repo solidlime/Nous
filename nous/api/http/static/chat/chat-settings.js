@@ -180,6 +180,8 @@ function applyChatConfig(cfg) {
         this.value + "%";
     });
   // Voice / TTS settings (TE04)
+  var voiceToggle = document.getElementById("chat-voice-enabled");
+  if (voiceToggle) voiceToggle.checked = cfg.voice_enabled || false;
   var voiceUrlInput = document.getElementById("chat-voice-url");
   if (voiceUrlInput) voiceUrlInput.value = cfg.voice_url || "";
   setChecked("chat-voice-emotion-link", cfg.voice_emotion_link !== false);
@@ -228,6 +230,9 @@ function applyChatConfig(cfg) {
     }
   }
 
+  // Image gen enabled toggle
+  var imgGenToggle = document.getElementById("chat-image-gen-enabled");
+  if (imgGenToggle) imgGenToggle.checked = cfg.image_gen_enabled || false;
   // 画像生成設定
   set("chat-image-gen-comfyui-url", cfg.image_gen_comfyui_url);
   set("chat-image-gen-checkpoint", cfg.image_gen_comfyui_checkpoint);
@@ -376,7 +381,7 @@ async function saveChatConfig() {
     ),
     debug_mode: getChecked("chat-debug-mode"),
     // 画像生成設定 — ComfyUI
-    image_gen_enabled: true,
+    image_gen_enabled: getChecked("chat-image-gen-enabled"),
     image_gen_comfyui_url: (document.getElementById("chat-image-gen-comfyui-url")?.value || "").trim(),
     image_gen_comfyui_checkpoint: document.getElementById("chat-image-gen-checkpoint")?.value || "noobaiXLNAIXL_epsilonPred11Version.safetensors",
     image_gen_comfyui_width: parseInt(document.getElementById("chat-image-gen-width")?.value || "1024"),
@@ -410,6 +415,7 @@ async function saveChatConfig() {
     // Voice volume
     voice_volume: parseFloat(document.getElementById("chat-voice-volume")?.value) ?? 1.0,
     voice_speed: parseFloat(document.getElementById("chat-voice-speed")?.value) ?? 1.0,
+    voice_enabled: getChecked("chat-voice-enabled"),
   };
   const btn = document.querySelector(".chat-save-btn");
   if (btn) {
