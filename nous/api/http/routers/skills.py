@@ -18,7 +18,7 @@ def _get_db():
     from nous.config.settings import get_settings
     from nous.infrastructure.sqlite.connection import get_global_skills_db
 
-    return get_global_skills_db(get_settings().data_root)
+    return get_global_skills_db(get_settings().skills_dir)
 
 
 def register_skills_routes(mcp) -> None:

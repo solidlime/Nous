@@ -74,7 +74,7 @@ class PromptBuildStep:
                     from nous.infrastructure.sqlite.connection import get_global_skills_db
 
                     settings = get_settings()
-                    skill_repo = SkillRepository(get_global_skills_db(settings.data_root))
+                    skill_repo = SkillRepository(get_global_skills_db(settings.skills_dir))
 
                     # グローバルスキルは起動時に DB ロード済み。ここでは get() で取得するだけ
                     # ペルソナ別スキルは persist=False でインメモリのみ（クロス汚染防止）

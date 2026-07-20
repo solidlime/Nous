@@ -175,7 +175,7 @@ def create_app() -> MemoryFastMCP:
         from nous.domain.skill import SkillRepository
         from nous.infrastructure.sqlite.connection import get_global_skills_db
 
-        skills_db = get_global_skills_db(settings.data_root)
+        skills_db = get_global_skills_db(settings.skills_dir)
         skill_repo = SkillRepository(skills_db)
         synced = skill_repo.load_from_dir(settings.skills_dir)
         if synced:

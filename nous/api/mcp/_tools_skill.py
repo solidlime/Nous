@@ -27,7 +27,7 @@ async def _tool_invoke_skill(ctx: AppContext, persona: str, name: str, task: str
     from nous.infrastructure.sqlite.connection import get_global_skills_db
 
     settings = get_settings()
-    skill_repo = SkillRepository(get_global_skills_db(settings.data_root))
+    skill_repo = SkillRepository(get_global_skills_db(settings.skills_dir))
 
     # persona スキルを優先。persist=False でグローバルDB汚染を防止
     persona_skills_dir = os.path.join(settings.data_root, "memory", persona, "skills")

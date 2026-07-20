@@ -348,7 +348,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
 async def _handle_list_skills(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
     """List all registered skills from the skill store."""
     try:
-        db = get_global_skills_db(get_settings().data_root)
+        db = get_global_skills_db(get_settings().skills_dir)
         if db is None:
             return {"status": "error", "message": "Skill store not available"}
 
