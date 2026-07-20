@@ -113,6 +113,28 @@ def create_app() -> MemoryFastMCP:
     # ディレクトリ構造を確保
     settings.ensure_directories()
 
+    # Seed default skills if directory is empty (Docker volume mount may have hidden bundled skills)
+    try:
+        _default_skills = Path("/opt/nous/default-skills")
+        _skills_path = Path(settings.skills_dir)
+        if _default_skills.exists() and _default_skills.is_dir():
+            _has_skills = any(
+                (_skills_path / d / "SKILL.md").exists()
+                for d in os.listdir(str(_skills_path))
+                if (_skills_path / d).is_dir()
+            ) if _skills_path.exists() else False
+            if not _has_skills:
+                import shutil
+                for item in _default_skills.iterdir():
+                    dest = _skills_path / item.name
+                    if item.is_dir() and not dest.exists():
+                        shutil.copytree(str(item), str(dest))
+                    elif item.is_file() and not dest.exists():
+                        shutil.copy2(str(item), str(dest))
+                logger.info("Seeded default skills from %s", str(_default_skills))
+    except Exception:
+        logger.debug("Skill seeding skipped", exc_info=True)
+
     # HF_HOME is already set at module level — no need to set again
 
     mcp = MemoryFastMCP(

@@ -50,6 +50,7 @@ COPY pyproject.toml ${APP_HOME}/
 
 # Copy global skill definitions (all skill dirs under data/skills/)
 COPY data/skills/ /data/skills/
+COPY data/skills/ /opt/nous/default-skills/
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash nous
