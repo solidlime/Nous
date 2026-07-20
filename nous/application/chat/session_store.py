@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import uuid as _uuid
 from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
@@ -260,6 +261,133 @@ class SessionWindow:
 
     def __len__(self) -> int:
         return len(self._messages)
+
+
+class TreeSessionWindow:
+    """ツリー構造でメッセージを管理するセッションウィンドウ。
+
+    各メッセージはUUIDで識別され、parent_idで親子関係を持つ。
+    編集はインプレース上書き、ロールバックはactive_leaf_id変更のみ（非破壊）。
+    """
+
+    def __init__(self, max_messages: int = 200, batch_size: int = 10) -> None:
+        self._nodes: dict[str, dict] = {}
+        self._root_id: str | None = None
+        self._active_leaf_id: str | None = None
+        self._db: sqlite3.Connection | None = None
+        self._persona: str = ""
+        self._session_id: str = ""
+        self._persisted_count: int = 0
+        self._batch_size: int = batch_size
+        self._max_messages: int = max_messages
+        self.pending_memory_task: asyncio.Task | None = None
+        self.evict_callback: Callable[[list[dict]], None] | None = None
+
+    def attach_db(self, db: sqlite3.Connection, persona: str, session_id: str) -> None:
+        """SQLite接続とセッション識別子を紐付ける。"""
+        self._db = db
+        self._persona = persona
+        self._session_id = session_id
+
+    def add(
+        self,
+        role: str,
+        content: str,
+        ts: datetime | None = None,
+        tool_calls: list[dict] | None = None,
+        segments: list[dict] | None = None,
+    ) -> str:
+        """メッセージをツリーに追加する。戻り値は生成したmsg_id。"""
+        node_id = str(_uuid.uuid4())
+        now = ts or get_now()
+        node: dict[str, object] = {
+            "id": node_id,
+            "parent_id": self._active_leaf_id,
+            "role": role,
+            "content": content,
+            "created_at": now.isoformat(),
+        }
+        if tool_calls:
+            node["tool_calls"] = tool_calls
+        if segments:
+            node["segments"] = segments
+
+        if self._root_id is None:
+            self._root_id = node_id
+            node["parent_id"] = None  # rootはparentを持たない
+
+        self._nodes[node_id] = node
+        self._active_leaf_id = node_id
+
+        # max_messages 超過チェック
+        path_len = self.get_message_count()
+        if path_len > self._max_messages:
+            overflow = path_len - self._max_messages
+            evicted = self._evict_oldest(overflow)
+            if evicted and self.evict_callback is not None:
+                with contextlib.suppress(Exception):
+                    self.evict_callback(evicted)
+
+        if len(self._nodes) - self._persisted_count >= self._batch_size:
+            self._persist()
+        return node_id
+
+    def get_active_path(self) -> list[dict]:
+        """active_leaf から root まで parent_id を辿り、逆順（時系列順）で返す。"""
+        if self._active_leaf_id is None:
+            return []
+        path: list[dict] = []
+        current_id: str | None = self._active_leaf_id
+        while current_id is not None:
+            node = self._nodes.get(current_id)
+            if node is None:
+                break
+            path.append(node)
+            current_id = node.get("parent_id")  # type: ignore[arg-type]
+        path.reverse()
+        return path
+
+    def get_message_count(self) -> int:
+        """アクティブパスのメッセージ数を返す。"""
+        return len(self.get_active_path())
+
+    def __len__(self) -> int:
+        return self.get_message_count()
+
+    def flush(self) -> None:
+        """即時永続化。"""
+        self._persist()
+
+    def _evict_oldest(self, count: int) -> list[dict]:
+        """アクティブパスのroot側から古いノードを削除する。"""
+        path = self.get_active_path()
+        if not path or count <= 0:
+            return []
+        if count >= len(path):
+            count = max(1, len(path) - 1)  # 最低1件は残す
+        evicted: list[dict] = []
+        for node in path[:count]:
+            nid = node["id"]
+            if nid in self._nodes:
+                evicted.append(self._nodes.pop(nid))
+        if count < len(path):
+            self._root_id = path[count]["id"]
+        self._persisted_count = max(0, self._persisted_count - count)
+        return evicted
+
+    def _is_descendant(self, node_id: str | None, ancestor_id: str | None) -> bool:
+        """node_id が ancestor_id の子孫かどうかを判定する。"""
+        if not node_id or not ancestor_id:
+            return False
+        current_id: str | None = node_id
+        while current_id is not None:
+            if current_id == ancestor_id:
+                return True
+            node = self._nodes.get(current_id)
+            if node is None:
+                break
+            current_id = node.get("parent_id")  # type: ignore[arg-type]
+        return False
 
 
 class SessionManager:
