@@ -438,6 +438,70 @@ class TreeSessionWindow:
         """指定されたIDのノードを返す。存在しなければNone。"""
         return self._nodes.get(msg_id)
 
+    @classmethod
+    def from_db(
+        cls,
+        db: sqlite3.Connection,
+        persona: str,
+        session_id: str,
+        max_messages: int = 200,
+    ) -> TreeSessionWindow | None:
+        """SQLiteから既存セッションをロードする。旧形式(list)から自動マイグレーションも行う。"""
+        try:
+            row = db.execute(
+                "SELECT messages, timestamps FROM chat_sessions WHERE persona=? AND session_id=?",
+                (persona, session_id),
+            ).fetchone()
+            if row is None:
+                return None
+
+            messages_raw = row["messages"] if hasattr(row, "keys") else row[0]
+            data = json.loads(messages_raw)
+
+            window = cls(max_messages=max_messages)
+            window.attach_db(db, persona, session_id)
+
+            if isinstance(data, dict):
+                # 新形式: {"root_id":..., "active_leaf_id":..., "nodes":[...]}
+                window._root_id = data.get("root_id")
+                window._active_leaf_id = data.get("active_leaf_id")
+                for node in data.get("nodes", []):
+                    window._nodes[node["id"]] = node
+            elif isinstance(data, list):
+                # 旧形式: list[dict] — 自動マイグレーション
+                timestamps_raw: list[str] = json.loads(
+                    row["timestamps"] if hasattr(row, "keys") else row[1]
+                )
+                prev_id: str | None = None
+                for msg, ts_str in zip(data, timestamps_raw, strict=False):
+                    node_id = str(_uuid.uuid4())
+                    ts = datetime.fromisoformat(ts_str)
+                    node: dict[str, object] = {
+                        "id": node_id,
+                        "parent_id": prev_id,
+                        "role": msg["role"],
+                        "content": msg["content"],
+                        "created_at": ts.isoformat(),
+                    }
+                    if msg.get("tool_calls"):
+                        node["tool_calls"] = msg["tool_calls"]
+                    if msg.get("segments"):
+                        node["segments"] = msg["segments"]
+                    window._nodes[node_id] = node
+                    if prev_id is None:
+                        window._root_id = node_id
+                    prev_id = node_id
+                window._active_leaf_id = prev_id
+                # マイグレーション後即座に新形式で保存
+                window._persist()
+
+            window._persisted_count = len(window._nodes)
+            logger.debug("TreeSessionWindow: loaded %d nodes from SQLite (persona=%s)", len(window._nodes), persona)
+            return window
+        except Exception as e:
+            logger.warning("TreeSessionWindow.from_db failed: %s", e)
+            return None
+
     def edit_message(self, msg_id: str, new_content: str) -> dict | None:
         """メッセージをインプレース編集（Minimal B）。編集後永続化。"""
         node = self._nodes.get(msg_id)
