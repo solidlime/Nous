@@ -1,93 +1,55 @@
-# SPEC — ディレクトリ構造リファクタリング
+# SPEC — コードリファクタリング (2026-07-20)
 
-## 1. 概要
-ペルソナ固有データを `{data_root}/persona/{persona_name}/` に集約し、
-Docker コンテナ内のデータルートを `/data` に統一するリファクタリング。
+## 背景
+30件超の重複コード・デッドコード・設計上の問題が検出された。コードベースの健全性を高める。
 
-## 2. データルート
-- **環境変数**: `NOUS_DATA_ROOT`（変更なし）
-- **デフォルト値**: `./data`（変更なし）
-- **Docker コンテナ内**: `/opt/nous` → `/data` に変更
+## P0: 設計上の重複解消
 
-## 3. ペルソナディレクトリ構造
+### P0-1: Repository基底クラス抽出
+- 5リポジトリ (memory_repo, entity_repo, equipment_repo, block_repo, strength_repo) が同一の `__init__` + `_db` プロパティパターンを持つ
+- `nous/infrastructure/sqlite/` に `base_repo.py` を作成し、共通の `__init__(self, connection: SQLiteConnection, persona: str)` を提供
+- 差分: `_db` が `memory_db` か `inventory_db` か → ファクトリメソッドかクラス変数で吸収
 
-### Before
-```
-{data_root}/memory/{persona_name}/
-├── memory.sqlite
-├── inventory.sqlite
-├── chat.db
-├── images/
-├── tts_cache/
-├── skills/
-└── config.json
-```
+### P0-2: Result型エラーハンドリング共通化
+- ドメインサービス3ファイル (memory/service.py, persona/service.py, equipment/service.py) で `if not result.is_ok: return Failure(result.error)` が25+回出現
+- ヘルパー関数 `unwrap_or_propagate(result, logger)` または Result 型自体へのメソッド追加を検討
+- 戻り値の型がSuccessの型を変えずにエラーだけ伝播するイディオム
 
-### After
-```
-{data_root}/persona/{persona_name}/
-├── memory.sqlite
-├── inventory.sqlite
-├── chat.db
-├── images/
-├── tts_cache/
-├── skills/
-└── config.json
-```
+### P0-3: body_decay ↔ emotion_decay 統合
+- `body_decay.py` と `emotion_decay.py` が半分以上コピペ
+- `compute_*_decay` / `apply_*_decay_if_needed` / ログ出力パターンが完全一致
+- `DecayProcessor` 基底クラスまたは共通関数に抽出
 
-## 4. Settings 変更
+### P0-4: デッドコード除去
+- `session_store.py:802` — `SessionWindow` の再定義 (F811)
+- `inference.py:6` — `logging` import 未使用
+- `skill.py:4` — `os` import 未使用
 
-| プロパティ | Before | After |
-|-----------|--------|-------|
-| `data_dir` | `{data_root}/memory` | **廃止** → `persona_dir` に置換 |
-| `persona_dir` | (なし) | `{data_root}/persona` |
-| `persona_path(name)` | (なし) | `{data_root}/persona/{name}` (新規メソッド) |
-| `skills_dir` | `/opt/nous/skills` | `/data/skills` |
-| `import_dir` | `{data_root}/import` | 変更なし |
-| `cache_dir` | `{data_root}/cache` | 変更なし |
-| `config_dir` | `{data_root}/config` | 変更なし |
+## P1: ボイラープレート削減
 
-## 5. 影響ファイル一覧
+### P1-1: MCPツール エラー応答統一
+- 4ファイル間で `{"error": str(e)}` と `"result_summary": str(e)` が混在
+- 共通のエラー応答ビルダー `mcp_error_result(error, success=False)` を作成し `result_summary` + `success` 形式に統一
 
-### Python コード
-| # | ファイル | 変更箇所 |
-|---|---------|---------|
-| 1 | `nous/config/settings.py` | `data_dir` → `persona_dir`/`persona_path()`, `skills_dir` 変更, `ensure_directories()` 更新 |
-| 2 | `nous/api/http/routers/persona.py` | `data_dir` → `persona_dir`, 画像パス変更 (L57-58, L70-73, L220-225, L329) |
-| 3 | `nous/api/http/routers/chat.py` | 画像URLパス `/memory/images/` → `/persona/images/` (L543) |
-| 4 | `nous/api/http/routers/tts.py` | TTSキャッシュパス (L116, L254) |
-| 5 | `nous/application/chat/pipeline/prompt.py` | persona_skills_dir (L85-89) |
-| 6 | `nous/application/chat/tools/builtin.py` | 画像保存パス (L300-301) |
-| 7 | `nous/api/mcp/_tools_skill.py` | persona_skills_dir (L32-34) |
-| 8 | `nous/domain/chat_config.py` | `_config_path()` (L462) |
-| 9 | `nous/main.py` | HF_HOME パス確認、必要なら更新 |
+### P1-2: HTTPルーター エラーハンドリング抽出
+- 6ファイルで `JSONResponse({"error": str(result.error)}, status_code=500)` が一字不変
+- `http_error_response(result)` ユーティリティに関数抽出
 
-### Docker / インフラ
-| # | ファイル | 変更内容 |
-|---|---------|---------|
-| 10 | `Dockerfile` | `NOUS_DATA_ROOT=/data`, `HF_HOME=/data/cache/huggingface`, skills COPY先変更 |
-| 11 | `docker-compose.yml` | ボリュームマウントコメント更新（実質変更不要、`${DATA_ROOT}:/data` は変わらずマウント先だけ変更） |
-| 12 | `docker-compose.dev.yml` | `./data:/data` に変更 |
+### P1-3: テストフィクスチャ conftest.py集約
+- `SQLiteConnection(str(tmp_path), "test")` が14ファイルで重複
+- `tests/unit/conftest.py` に `sqlite_conn` フィクスチャとして定義、全テストファイルから削除
 
-### ドキュメント
-| # | ファイル |
-|---|---------|
-| 13 | `CLAUDE.md` |
-| 14 | `README.md` |
-| 15 | `docs/` 配下 |
+## P2: 改善・整備
 
-### データ移行
-| # | 項目 |
-|---|-----|
-| 16 | `data/memory/{persona}/*` → `data/persona/{persona}/*` へ移動 |
-| 17 | `data/app/` 削除 |
+### P2-1: memory_repo.py 過剰try/except削減
+- 27メソッド中、参照系 (~15メソッド) はtry/except不要（rollback不要）
+- 更新系のみtry/exceptを残し、参照系はクリーンに
 
-## 6. 後方互換性
-- `data_dir` プロパティは非推奨 (deprecated) とし、`persona_dir` へのエイリアスとして残す（移行期間用）
-- 既存のデータ移行スクリプトは不要（ファイル移動のみで済む）
-- Qdrant コレクション名は変更なし（`memory_{persona_name}` のまま）
+### P2-2: pyproject.toml バージョン修正
+- `version = "3.0.0"` → `"3.5.0"` に実コードと一致させる
 
-## 7. 検証方針
-- `pytest` 実行（特に persona 関連テスト）
-- パス参照箇所の grep で取りこぼし確認
-- Docker ビルド確認
+### P2-3: value_objects二重定義整理
+- `memory/value_objects.py` の `ALLOWED_EMOTIONS = list(_VALID_EMOTIONS)` を削除し、直接 `_VALID_EMOTIONS` を参照
+
+### P2-4: _row_to_* 変換パターン共通化（後回し候補）
+- 6リポジトリに散らばる dict→dataclass 変換。型が異なるため共通化の抽象度が高く、テストリスク大 → 今回スコープ外とし、TODOにメモのみ残す

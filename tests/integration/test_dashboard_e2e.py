@@ -224,7 +224,7 @@ async def test_dashboard_html_loads(client):
     # Tailwind reference
     assert "tailwindcss" in html.lower() or "tailwind" in html.lower()
     # 5 tabs
-    for tab in ("Overview", "Analytics", "Memories", "Settings", "Admin"):
+    for tab in ("Overview", "Memories", "Settings", "Chat", "Activity"):
         assert tab in html, f"Tab '{tab}' not found in dashboard HTML"
 
 

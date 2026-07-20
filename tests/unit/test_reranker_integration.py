@@ -260,6 +260,6 @@ class TestAppContextRerankerInstantiation:
             {"model": "test-model", "enabled": False},
             patch_thread=True,
         ):
-            assert self.mock_thread.call_count == 1, (
-                f"Expected 1 Thread() call (vector store init), got {self.mock_thread.call_count}"
+            assert self.mock_thread.call_count == 2, (
+                f"Expected 2 Thread() calls (sudachi preload + vector store init), got {self.mock_thread.call_count}"
             )

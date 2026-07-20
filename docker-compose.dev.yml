@@ -15,6 +15,7 @@
 
 services:
   nous:
+    image: nous:dev
     # ソースをホストからマウント（コード変更が即反映）
     volumes:
       - ./nous:/app/nous

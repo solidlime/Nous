@@ -132,11 +132,9 @@ class TestMemoryCreate:
         ctx.memory_service.create_memory.return_value = Failure(RepositoryError("db error"))
         memory_create = tools["memory_create"]
         result = await memory_create(content="hi")
-        import json
-
-        data = json.loads(result)
-        assert data["ok"] is False
-        assert "db error" in data["error"].lower()
+        assert result["success"] is False
+        assert result["data"] is None
+        assert "db error" in result["result_summary"].lower()
 
     # ── Duplicate detection tests ──
 
@@ -578,11 +576,9 @@ class TestMemorySearch:
         ctx.search_engine._semantic = None
         memory_search = tools["memory_search"]
         result = await memory_search(query="test")
-        import json
-
-        data = json.loads(result)
-        assert data["ok"] is False
-        assert "vector store" in data["error"].lower()
+        assert result["success"] is False
+        assert result["data"] is None
+        assert "vector store" in result["result_summary"].lower()
 
     @pytest.mark.asyncio
     async def test_search_with_tags_filter(self, registered_tools):
