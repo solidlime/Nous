@@ -558,7 +558,7 @@ class TreeSessionWindow:
 class SessionManager:
     def __init__(self, max_sessions: int = 100) -> None:
         self._max = max_sessions
-        self._sessions: OrderedDict[tuple[str, str], SessionWindow] = OrderedDict()
+        self._sessions: OrderedDict[tuple[str, str], TreeSessionWindow] = OrderedDict()
 
     def get_or_create(
         self,
@@ -566,7 +566,7 @@ class SessionManager:
         session_id: str,
         max_messages: int = 200,
         db: sqlite3.Connection | None = None,
-    ) -> SessionWindow:
+    ) -> TreeSessionWindow:
         key = (persona, session_id)
         if key in self._sessions:
             self._sessions.move_to_end(key)
@@ -574,20 +574,20 @@ class SessionManager:
         if len(self._sessions) >= self._max:
             self._sessions.popitem(last=False)
 
-        window: SessionWindow | None = None
+        window: TreeSessionWindow | None = None
         if db is not None:
             try:
                 db.execute(_CHAT_SESSIONS_SCHEMA)
                 db.commit()
             except Exception as _e:
                 logger.warning("SessionStore: failed to init DB schema: %s", _e)
-            window = SessionWindow.from_db(db, persona, session_id, max_messages)
+            window = TreeSessionWindow.from_db(db, persona, session_id, max_messages)
             if window is None:
-                window = SessionWindow(max_messages=max_messages)
+                window = TreeSessionWindow(max_messages=max_messages)
                 window.attach_db(db, persona, session_id)
                 _cleanup_expired_sessions(db, persona)
         else:
-            window = SessionWindow(max_messages=max_messages)
+            window = TreeSessionWindow(max_messages=max_messages)
 
         self._sessions[key] = window
         return window
@@ -597,7 +597,12 @@ class SessionManager:
 
     @staticmethod
     def get_messages(db: sqlite3.Connection, persona: str, session_id: str) -> list[dict]:
-        """SQLite からセッションメッセージを返す（F2: 会話履歴復元用）。"""
+        """SQLite からセッションメッセージを返す（F2: 会話履歴復元用）。
+
+        新形式(dict)ではactive_pathを辿って時系列順に返す。
+        旧形式(list)からも読み取り可能（idフィールドは付与されない）。
+        戻り値: [{role, content, time, id?, tool_calls?, segments?}, ...]
+        """
         try:
             db.execute(_CHAT_SESSIONS_SCHEMA)
             row = db.execute(
@@ -606,28 +611,77 @@ class SessionManager:
             ).fetchone()
             if row is None:
                 return []
-            messages: list[dict] = json.loads(row[0] if not hasattr(row, "keys") else row["messages"])
-            timestamps_raw: list[str] = json.loads(row[1] if not hasattr(row, "keys") else row["timestamps"])
-            result = []
-            for msg, ts_str in zip(messages, timestamps_raw, strict=False):
-                try:
-                    dt = datetime.fromisoformat(ts_str)
-                    time_label = dt.strftime("%H:%M")
-                except ValueError:
-                    time_label = ""
-                entry: dict[str, object] = {"role": msg["role"], "content": msg["content"], "time": time_label}
-                if msg.get("tool_calls"):
-                    # Ensure all tool_calls have "id" field for backward compat
-                    fixed_tc = []
-                    for tc in msg["tool_calls"]:
-                        if "id" not in tc:
-                            tc = dict(tc, id="")
-                        fixed_tc.append(tc)
-                    entry["tool_calls"] = fixed_tc
-                if msg.get("segments"):
-                    entry["segments"] = msg["segments"]
-                result.append(entry)
-            return result
+            messages_raw = row[0] if not hasattr(row, "keys") else row["messages"]
+            data = json.loads(messages_raw)
+
+            # 旧形式: list[dict] — 従来の処理
+            if isinstance(data, list):
+                timestamps_raw: list[str] = json.loads(
+                    row[1] if not hasattr(row, "keys") else row["timestamps"]
+                )
+                result: list[dict] = []
+                for msg, ts_str in zip(data, timestamps_raw, strict=False):
+                    try:
+                        dt = datetime.fromisoformat(ts_str)
+                        time_label = dt.strftime("%H:%M")
+                    except ValueError:
+                        time_label = ""
+                    entry: dict[str, object] = {
+                        "role": msg["role"], "content": msg["content"], "time": time_label,
+                    }
+                    if msg.get("tool_calls"):
+                        fixed_tc = []
+                        for tc in msg["tool_calls"]:
+                            if "id" not in tc:
+                                tc = dict(tc, id="")
+                            fixed_tc.append(tc)
+                        entry["tool_calls"] = fixed_tc
+                    if msg.get("segments"):
+                        entry["segments"] = msg["segments"]
+                    result.append(entry)
+                return result
+
+            # 新形式: dict — ツリーからactive_pathを再構築
+            if isinstance(data, dict):
+                nodes_raw: dict[str, dict] = {n["id"]: n for n in data.get("nodes", [])}
+                active_leaf_id = data.get("active_leaf_id")
+                # active_path を構築
+                path: list[dict] = []
+                current_id: str | None = active_leaf_id
+                while current_id is not None:
+                    node = nodes_raw.get(current_id)
+                    if node is None:
+                        break
+                    path.append(node)
+                    current_id = node.get("parent_id")
+                path.reverse()
+
+                result = []
+                for node in path:
+                    try:
+                        dt = datetime.fromisoformat(node["created_at"])
+                        time_label = dt.strftime("%H:%M")
+                    except (ValueError, KeyError):
+                        time_label = ""
+                    entry = {
+                        "role": node["role"],
+                        "content": node["content"],
+                        "time": time_label,
+                        "id": node["id"],
+                    }
+                    if node.get("tool_calls"):
+                        fixed_tc = []
+                        for tc in node["tool_calls"]:
+                            if "id" not in tc:
+                                tc = dict(tc, id="")
+                            fixed_tc.append(tc)
+                        entry["tool_calls"] = fixed_tc
+                    if node.get("segments"):
+                        entry["segments"] = node["segments"]
+                    result.append(entry)
+                return result
+
+            return []
         except Exception as e:
             logger.warning("SessionManager.get_messages failed: %s", e)
             return []
