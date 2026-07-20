@@ -3,22 +3,50 @@
    ================================================================= */
 ;(function(N) {
 
+function _ensureContainer() {
+  var c = document.getElementById("toast-container");
+  if (!c) {
+    c = document.createElement("div");
+    c.id = "toast-container";
+    c.className = "toast-container";
+    document.body.appendChild(c);
+  }
+  return c;
+}
+
+function _limitToasts(container, max) {
+  var toasts = container.querySelectorAll(".toast");
+  while (toasts.length > max) {
+    toasts[0].remove();
+    toasts = container.querySelectorAll(".toast");
+  }
+}
+
 N.Core.toast = function toast(msg, type) {
   type = type || "info";
-  var c = document.getElementById("toast-container");
-  if (!c) return;
+  var c = _ensureContainer();
+  _limitToasts(c, 5);
   var t = document.createElement("div");
   t.className = "toast toast-" + type;
   t.textContent = msg;
   c.appendChild(t);
-  setTimeout(function() { t.remove(); }, 3200);
+  t.addEventListener("animationend", function() {
+    if (t.dataset.removed) return;
+    t.dataset.removed = "1";
+    t.remove();
+  }, { once: true });
+  setTimeout(function() {
+    if (t.dataset.removed) return;
+    t.dataset.removed = "1";
+    t.remove();
+  }, 3200);
 };
 
 /* Toast with action button (e.g. retry) */
 N.Core.toastAction = function toastAction(msg, type, actionLabel, actionFn) {
   type = type || "info";
-  var c = document.getElementById("toast-container");
-  if (!c) return;
+  var c = _ensureContainer();
+  _limitToasts(c, 5);
   var t = document.createElement("div");
   t.className = "toast toast-" + type;
   t.style.display = "flex";
@@ -34,12 +62,23 @@ N.Core.toastAction = function toastAction(msg, type, actionLabel, actionFn) {
     btn.className = "toast-action-btn";
     btn.onclick = function() {
       actionFn();
+      if (t.dataset.removed) return;
+      t.dataset.removed = "1";
       t.remove();
     };
     t.appendChild(btn);
   }
   c.appendChild(t);
-  setTimeout(function() { t.remove(); }, 5000);
+  t.addEventListener("animationend", function() {
+    if (t.dataset.removed) return;
+    t.dataset.removed = "1";
+    t.remove();
+  }, { once: true });
+  setTimeout(function() {
+    if (t.dataset.removed) return;
+    t.dataset.removed = "1";
+    t.remove();
+  }, 5000);
 };
 
 window.toast = N.Core.toast;

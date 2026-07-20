@@ -645,17 +645,21 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
    ============================================================ */
 .toast-container {
     container-type: inline-size;
-    position: fixed; bottom: 24px; right: 24px; z-index: var(--z-toast);
+    position: fixed; bottom: 0; right: 0; z-index: var(--z-toast);
     display: flex; flex-direction: column; gap: 8px;
+    padding: 0.75rem;
+    padding: calc(env(safe-area-inset-top) + 0.75rem) calc(env(safe-area-inset-right) + 0.75rem) calc(env(safe-area-inset-bottom) + 0.75rem) calc(env(safe-area-inset-left) + 0.75rem);
+    pointer-events: none;
 }
 .toast {
     padding: 12px 20px; border-radius: var(--radius-lg);
     font-size: clamp(0.85rem, 4cqi, 1rem); font-weight: 500;
     backdrop-filter: blur(20px) saturate(180%);
     border: 0.5px solid var(--glass-border);
-    animation: toastIn 0.3s var(--ease-apple), toastOut 0.3s var(--ease-apple) 2.7s forwards;
-    max-width: 360px;
+    animation: toastIn 0.3s var(--ease-apple), toastOut 0.3s var(--ease-apple) 2.9s forwards;
+    max-width: min(360px, calc(100vw - 2rem));
     will-change: transform, opacity;
+    pointer-events: auto;
 }
 .toast-success { background: rgba(48, 209, 88, 0.2); color: var(--accent-green); }
 .toast-error { background: rgba(255, 69, 58, 0.2); color: var(--accent-red); }
@@ -666,12 +670,17 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 .toast-action-btn {
   background: rgba(255, 255, 255, 0.15); border: 0.5px solid rgba(255, 255, 255, 0.25);
   border-radius: var(--radius-sm); color: var(--text-primary); padding: 4px 12px;
-  font-size: 0.78rem; cursor: pointer; white-space: nowrap;
+  font-size: 0.78rem; cursor: pointer; white-space: nowrap; min-height: 44px;
   transition: background var(--duration-fast) var(--ease-apple); flex-shrink: 0;
 }
 .toast-action-btn:hover { background: rgba(255, 255, 255, 0.25); }
 .toast-error .toast-action-btn { background: rgba(255, 69, 58, 0.2); border-color: rgba(255, 69, 58, 0.3); }
 .toast-error .toast-action-btn:hover { background: rgba(255, 69, 58, 0.3); }
+@media (prefers-reduced-motion: reduce) {
+    .toast {
+        animation: none !important;
+    }
+}
 
 /* ============================================================
    RESPONSIVE — Apple HIG 44px Touch Targets
@@ -844,8 +853,8 @@ h4, .tab-panel h4 {
     .mem-modal-overlay { padding: 8px; }
     .mem-modal { width: 100%; max-width: none; max-height: 90dvh; }
     #graph-container { height: 400px; }
-    .toast-container { left: 50%; transform: translateX(-50%); right: auto; bottom: 16px; }
-    .toast { max-width: 90vw; text-align: center; }
+    .toast-container { left: 0; right: 0; bottom: 0; padding: 0.5rem; padding: calc(env(safe-area-inset-top) + 0.5rem) calc(env(safe-area-inset-right) + 0.5rem) calc(env(safe-area-inset-bottom) + 0.5rem) calc(env(safe-area-inset-left) + 0.5rem); transform: none; }
+    .toast { max-width: none; width: 100%; text-align: center; }
     /* Chat: keep input area visible above keyboard */
     #chat-input-area { position: sticky; bottom: 0; background: var(--bg-primary); z-index: var(--z-content); }
     .glass-btn { min-height: 44px; min-width: 44px; }
