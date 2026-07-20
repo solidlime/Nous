@@ -58,11 +58,17 @@ class DoneSSE:
     message: str = "completed"
     truncated: bool = False
     usage: dict | None = None
+    user_msg_id: str = ""
+    assistant_msg_id: str = ""
 
     def to_sse(self) -> str:
         data: dict = {"message": self.message, "truncated": self.truncated}
         if self.usage:
             data["usage"] = self.usage
+        if self.user_msg_id:
+            data["user_msg_id"] = self.user_msg_id
+        if self.assistant_msg_id:
+            data["assistant_msg_id"] = self.assistant_msg_id
         return _sse_encode("done", data)
 
 

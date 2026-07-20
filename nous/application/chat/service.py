@@ -79,6 +79,15 @@ class ChatService:
         # InferenceStep + PostProcessStep: MCPプール共有
         async with MCPClientPool(config.mcp_servers) as mcp_pool:
             builtin = get_filtered_tools(config) if config.enable_memory_tools else []
+            _tool_names = [t.name for t in builtin]
+            has_img = "image_generate" in _tool_names
+            logger.warning(
+                "Chat tools assembled: image_gen_enabled=%s, tools=%d, has_image_generate=%s, names=%s",
+                getattr(config, "image_gen_enabled", "MISSING"),
+                len(builtin),
+                has_img,
+                _tool_names,
+            )
             registry = ToolRegistry(builtin, mcp_pool)
 
             session_messages = session.get_labeled_messages()
@@ -110,7 +119,8 @@ class ChatService:
 
             # Save user message BEFORE inference (so it's persisted even if client disconnects)
             now = get_now()
-            session.add("user", turn_ctx.user_message, now)
+            user_msg_id = session.add("user", turn_ctx.user_message, now)
+            turn_ctx.user_msg_id = user_msg_id
 
             # Collect and stream LLM response
             full_response = ""
@@ -126,13 +136,14 @@ class ChatService:
 
             # Save assistant response BEFORE PostProcessStep
             if full_response or turn_ctx.tool_calls_log:
-                session.add(
+                assistant_msg_id = session.add(
                     "assistant",
                     full_response,
                     get_now(),
                     tool_calls=turn_ctx.tool_calls_log if turn_ctx.tool_calls_log else None,
                     segments=turn_ctx.segments if turn_ctx.segments else None,
                 )
+                turn_ctx.assistant_msg_id = assistant_msg_id
                 turn_ctx.full_response = full_response
 
             # Publish chat.llm_response event
