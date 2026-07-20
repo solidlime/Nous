@@ -388,6 +388,64 @@ class TreeSessionWindow:
         """即時永続化。"""
         self._persist()
 
+    # ── SessionWindow 後方互換 ──────────────────────────────────
+
+    @property
+    def _messages(self) -> list[dict]:
+        """SessionWindow互換: アクティブパスを返す。"""
+        return self.get_active_path()
+
+    @property
+    def _timestamps(self) -> list[datetime]:
+        """SessionWindow互換: アクティブパスの created_at をdatetimeリストで返す。"""
+        return [
+            datetime.fromisoformat(n["created_at"])
+            for n in self.get_active_path()
+        ]
+
+    def update_message(self, message_index: int, new_content: str) -> dict | None:
+        """SessionWindow互換: インデックス指定でアクティブパス内のメッセージを編集。"""
+        path = self.get_active_path()
+        if message_index < 0 or message_index >= len(path):
+            return None
+        node = path[message_index]
+        node["content"] = new_content
+        self._persist()
+        return dict(node)
+
+    def truncate_to(self, message_index: int) -> list[dict]:
+        """SessionWindow互換: アクティブパスを指定インデックスまで切り詰める。"""
+        path = self.get_active_path()
+        if message_index < 0:
+            message_index = 0
+        if message_index > len(path):
+            message_index = len(path)
+        if message_index >= len(path):
+            return []
+        removed = path[message_index:]
+        # 削除対象ノードとその子孫を全て削除
+        remove_ids = {n["id"] for n in removed}
+        # 子孫も走査して追加
+        for nid in list(remove_ids):
+            for other_id, other_node in list(self._nodes.items()):
+                if self._is_descendant(other_id, nid):
+                    remove_ids.add(other_id)
+        for nid in remove_ids:
+            self._nodes.pop(nid, None)
+        # active_leaf を保持する最後のノードに
+        if message_index > 0:
+            self._active_leaf_id = path[message_index - 1]["id"]
+        elif path:
+            self._active_leaf_id = path[0]["id"]
+        else:
+            self._active_leaf_id = None
+        if message_index < self._persisted_count:
+            self._persisted_count = message_index
+        self._persist()
+        return removed
+
+    # ── 内部メソッド ──────────────────────────────────────────
+
     def _evict_oldest(self, count: int) -> list[dict]:
         """アクティブパスのroot側から古いノードを削除する。"""
         path = self.get_active_path()
