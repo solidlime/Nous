@@ -13,6 +13,18 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# 最小限のツール使用ガイドライン（自律性ブートストラップ + ツール→スキル熟読）
+TOOL_USAGE_GUIDELINES = """\
+--- 行動指針 ---
+あなたは自律的にツールを使い、ユーザーの指示を待たずに能動的に行動してください。
+ツールを使う前には、必ず invoke_skill('<スキル名>') で関連スキルを読み込むこと。
+
+主要ツール:
+- memory_create: 重要な情報を記録（好み・個人情報・出来事）
+- memory_search: 過去の記憶を検索
+- update_context: 感情・体調・環境を更新
+- goal_manage: 目標の作成・達成・取消
+- image_generate: 画像生成。依頼されたら必ず呼び、「できません」と拒否しないこと"""
 
 
 class PromptBuildStep:
@@ -37,6 +49,9 @@ class PromptBuildStep:
         # TIME_CONTEXT を先頭に注入（時空間の認識）
         if turn_ctx.time_context:
             parts.append(f"\n{turn_ctx.time_context}")
+
+        # ツール使用ガイドライン（自律性ブートストラップ）
+        parts.append(f"\n{TOOL_USAGE_GUIDELINES}")
 
         if turn_ctx.context_section:
             parts.append(f"\n--- ペルソナ状態・コンテキスト ---\n{turn_ctx.context_section}")
