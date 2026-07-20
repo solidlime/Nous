@@ -244,6 +244,78 @@ class TestTreeSessionWindowNew:
         assert win.get_message_by_id(uid2) is not None
         assert win.get_message_by_id(aid2) is not None
 
+    def test_flush_persists_tree_format(self):
+        """flush() で新JSON形式（root_id, active_leaf_id, nodes）が保存される"""
+        import json
+        import sqlite3
+
+        db = sqlite3.connect(":memory:")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                persona TEXT NOT NULL, session_id TEXT NOT NULL,
+                messages TEXT NOT NULL DEFAULT '[]',
+                timestamps TEXT NOT NULL DEFAULT '[]',
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (persona, session_id))
+        """)
+        db.commit()
+        win = TreeSessionWindow(max_messages=20, batch_size=100)
+        win.attach_db(db, "test", "s1")
+        win.add("user", "hello")
+        win.flush()
+        row = db.execute(
+            "SELECT messages FROM chat_sessions WHERE persona=? AND session_id=?",
+            ("test", "s1"),
+        ).fetchone()
+        assert row is not None
+        data = json.loads(row[0])
+        assert "root_id" in data
+        assert "active_leaf_id" in data
+        assert "nodes" in data
+
+    def test_from_db_migrates_old_flat_format(self):
+        """旧フラット配列形式を from_db() が自動マイグレーションする"""
+        import json
+        import sqlite3
+
+        db = sqlite3.connect(":memory:")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                persona TEXT NOT NULL, session_id TEXT NOT NULL,
+                messages TEXT NOT NULL DEFAULT '[]',
+                timestamps TEXT NOT NULL DEFAULT '[]',
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (persona, session_id))
+        """)
+        db.commit()
+        # 旧形式データ
+        old_messages = json.dumps([{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}])
+        old_timestamps = json.dumps(["2025-01-01T12:00:00", "2025-01-01T12:01:00"])
+        db.execute(
+            "INSERT INTO chat_sessions VALUES (?, ?, ?, ?, ?)",
+            ("test", "s1", old_messages, old_timestamps, "2025-01-01T12:00:00"),
+        )
+        db.commit()
+
+        win = TreeSessionWindow.from_db(db, "test", "s1")
+        assert win is not None
+        path = win.get_active_path()
+        assert len(path) == 2
+        # 全ノードが UUID を持つ
+        for node in path:
+            assert "id" in node
+            assert len(node["id"]) > 30
+        # parent_id がチェーンされている
+        assert path[0]["parent_id"] is None
+        assert path[1]["parent_id"] == path[0]["id"]
+
+    def test_max_messages_eviction(self):
+        """max_messages 超過時に古いノードが evict される"""
+        win = TreeSessionWindow(max_messages=4)
+        for i in range(6):
+            win.add("user" if i % 2 == 0 else "assistant", f"msg{i}")
+        assert win.get_message_count() <= 4
+
 
 # ─────────────────────────────────────────────────────────────
 # SessionManager tests
