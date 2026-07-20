@@ -20,24 +20,9 @@ import pytest
 from nous.api.mcp.middleware import resolve_persona_from_headers
 from nous.domain.shared.errors import MigrationError
 from nous.domain.shared.result import Failure
-from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.migration.importers.legacy_importer import LegacyImporter
 
 pytestmark = pytest.mark.unit
-
-
-# ---------------------------------------------------------------------------
-# Shared fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def sqlite_conn(tmp_path):
-    """Minimal SQLiteConnection for LegacyImporter tests."""
-    conn = SQLiteConnection(data_dir=str(tmp_path), persona="test")
-    conn.initialize_schema()
-    yield conn
-    conn.close()
 
 
 # ---------------------------------------------------------------------------

@@ -12,14 +12,6 @@ from nous.migration.importers.jsonl_importer import JSONLImporter
 
 
 @pytest.fixture
-def sqlite_conn(tmp_path):
-    conn = SQLiteConnection(data_dir=str(tmp_path), persona="test")
-    conn.initialize_schema()
-    yield conn
-    conn.close()
-
-
-@pytest.fixture
 def exporter():
     return JSONLExporter()
 

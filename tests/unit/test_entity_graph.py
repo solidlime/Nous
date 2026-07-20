@@ -7,21 +7,11 @@ import pytest
 from nous.domain.memory.entity_extractor import SimpleEntityExtractor
 from nous.domain.memory.graph import Entity, EntityRelation, EntityService
 from nous.domain.shared.time_utils import format_iso, get_now
-from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.entity_repo import SQLiteEntityRepository
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def sqlite_conn(tmp_path):
-    """Create a fresh SQLiteConnection with schema initialised."""
-    conn = SQLiteConnection(data_dir=str(tmp_path), persona="test")
-    conn.initialize_schema()
-    yield conn
-    conn.close()
 
 
 @pytest.fixture

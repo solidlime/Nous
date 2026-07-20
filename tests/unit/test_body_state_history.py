@@ -10,7 +10,6 @@ from nous.domain.persona.body_state import extract_body_metrics
 from nous.domain.persona.entities import PersonaState
 from nous.domain.persona.service import PersonaService
 from nous.domain.shared.time_utils import get_now
-from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.persona_repo import SQLitePersonaRepository
 
 PERSONA = "test_persona"
@@ -19,14 +18,6 @@ PERSONA = "test_persona"
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def sqlite_conn(tmp_path):
-    conn = SQLiteConnection(data_dir=str(tmp_path), persona="test")
-    conn.initialize_schema()
-    yield conn
-    conn.close()
 
 
 @pytest.fixture

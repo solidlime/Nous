@@ -11,7 +11,6 @@ from nous.domain.memory.service import MemoryService
 from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import get_now
-from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.memory_repo import SQLiteMemoryRepository
 
 # ---------------------------------------------------------------------------
@@ -151,15 +150,6 @@ def repo():
 @pytest.fixture
 def service(repo):
     return MemoryService(repo)
-
-
-@pytest.fixture
-def sqlite_conn(tmp_path):
-    """Create a fresh SQLiteConnection in a temp directory."""
-    conn = SQLiteConnection(data_dir=str(tmp_path), persona="test")
-    conn.initialize_schema()
-    yield conn
-    conn.close()
 
 
 @pytest.fixture

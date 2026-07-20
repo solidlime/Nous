@@ -6,7 +6,6 @@ import pytest
 
 from nous.domain.persona.entities import EmotionRecord
 from nous.domain.shared.time_utils import get_now
-from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.persona_repo import (
     SQLitePersonaRepository,
     _parse_or_none,
@@ -14,14 +13,6 @@ from nous.infrastructure.sqlite.persona_repo import (
 )
 
 PERSONA = "test_persona"
-
-
-@pytest.fixture
-def sqlite_conn(tmp_path):
-    conn = SQLiteConnection(data_dir=str(tmp_path), persona="test")
-    conn.initialize_schema()
-    yield conn
-    conn.close()
 
 
 @pytest.fixture

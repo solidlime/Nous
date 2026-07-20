@@ -11,7 +11,6 @@ from nous.domain.equipment.entities import Item
 from nous.domain.memory.entities import Memory, MemoryStrength
 from nous.domain.persona.entities import EmotionRecord
 from nous.domain.shared.time_utils import get_now
-from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.equipment_repo import SQLiteEquipmentRepository
 from nous.infrastructure.sqlite.memory_repo import SQLiteMemoryRepository
 from nous.infrastructure.sqlite.persona_repo import SQLitePersonaRepository
@@ -19,15 +18,6 @@ from nous.infrastructure.sqlite.persona_repo import SQLitePersonaRepository
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def sqlite_conn(tmp_path):
-    """Create a fresh SQLiteConnection in a temp directory."""
-    conn = SQLiteConnection(data_dir=str(tmp_path), persona="test")
-    conn.initialize_schema()
-    yield conn
-    conn.close()
 
 
 @pytest.fixture
