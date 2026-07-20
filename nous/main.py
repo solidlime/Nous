@@ -170,19 +170,6 @@ def create_app() -> MemoryFastMCP:
     # Mount static files for dashboard CSS/JS
     _mount_static_files(mcp)
 
-    # Auto-sync skills from filesystem at startup
-    try:
-        from nous.domain.skill import SkillRepository
-        from nous.infrastructure.sqlite.connection import get_global_skills_db
-
-        skills_db = get_global_skills_db(settings.skills_dir)
-        skill_repo = SkillRepository(skills_db)
-        synced = skill_repo.load_from_dir(settings.skills_dir)
-        if synced:
-            logger.info("Auto-synced %d skills from %s", len(synced), settings.skills_dir)
-    except Exception:
-        logger.exception("Skills auto-sync failed")
-
     # Start background workers
     from nous.application.workers.consolidation_worker import ConsolidationWorker
 
