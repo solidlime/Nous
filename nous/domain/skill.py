@@ -249,6 +249,22 @@ class SkillRepository:
             if persist:
                 skill = self.upsert(skill)
             result.append(skill)
+
+        # Cleanup: delete DB skills not present on disk (only when persist=True)
+        if persist and result:
+            disk_names = {s.name for s in result}
+            db_rows = self._db.execute("SELECT name FROM skills").fetchall()
+            orphan_names = [row[0] for row in db_rows if row[0] not in disk_names]
+            if orphan_names:
+                placeholders = ",".join("?" * len(orphan_names))
+                self._db.execute(
+                    f"DELETE FROM skills WHERE name IN ({placeholders})",
+                    tuple(orphan_names),
+                )
+                self._db.commit()
+                log = _get_logger()
+                log.info("Cleaned up %d orphaned skills from DB: %s", len(orphan_names), orphan_names)
+
         return result
 
 
