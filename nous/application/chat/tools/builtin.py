@@ -22,6 +22,21 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# ── 画像生成モード → ChatConfig 属性名・デフォルト値マッピング ──
+_MODE_PREFIX_CONFIG_KEYS: dict[str, str] = {
+    "full_body": "image_gen_full_body_prefix",
+    "portrait": "image_gen_portrait_prefix",
+    "selfie": "image_gen_selfie_prefix",
+    "scene": "image_gen_scene_prefix",
+}
+
+_MODE_PREFIX_DEFAULTS: dict[str, str] = {
+    "full_body": "full body, standing, looking at viewer, ",
+    "portrait": "upper body, portrait, looking at viewer, ",
+    "selfie": "selfie, from below, mirror selfie, ",
+    "scene": "environment shot, full body, ",
+}
+
 
 def filter_extra_tools(extra_tools: list[ToolDefinition]) -> list[ToolDefinition]:
     """MCP extra ツールから memory 系重複ツールを除外する。"""
@@ -230,13 +245,8 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
     if isinstance(self_portrait, bool) and self_portrait:
         self_prompt = getattr(config, "image_gen_self_portrait_prompt", "")
         if self_prompt:
-            mode_prefix_map = {
-                "full_body": getattr(config, "image_gen_full_body_prefix", "full body, standing, looking at viewer, "),
-                "portrait": getattr(config, "image_gen_portrait_prefix", "upper body, portrait, looking at viewer, "),
-                "selfie": getattr(config, "image_gen_selfie_prefix", "selfie, from below, mirror selfie, "),
-                "scene": getattr(config, "image_gen_scene_prefix", "environment shot, full body, "),
-            }
-            mode_prefix = mode_prefix_map.get(portrait_mode, "")
+            config_key = _MODE_PREFIX_CONFIG_KEYS.get(portrait_mode, "")
+            mode_prefix = getattr(config, config_key, _MODE_PREFIX_DEFAULTS.get(portrait_mode, ""))
             prompt = f"{self_prompt}, {mode_prefix}, {prompt}"
 
     try:
