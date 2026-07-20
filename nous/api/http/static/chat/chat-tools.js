@@ -177,6 +177,10 @@ async function execCodeBlock(code, language, resultEl, runBtn) {
 // ------------------------------------------------------------------
 let _imageGenSpinnerId = null;
 
+function _isNearBottom(c) {
+  return (c.scrollHeight - c.scrollTop - c.clientHeight) < 100;
+}
+
 function showImageGenSpinner(evt) {
   const container = findChatLogContainer();
   if (!container) return;
@@ -193,7 +197,7 @@ function showImageGenSpinner(evt) {
   // スピナーをチャットログ末尾に追加
   container.appendChild(spinner);
 
-  scrollToBottom(container);
+  if (_isNearBottom(container)) scrollToBottom(container);
 }
 
 function showImageGenResult(evt) {
@@ -229,6 +233,7 @@ function showImageGenResult(evt) {
       for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       var blob = new Blob([bytes], { type: "image/png" });
       imgEl.src = URL.createObjectURL(blob);
+      imgEl.onload = function() { URL.revokeObjectURL(this.src); };
     } catch (e) {
       console.warn("[showImageGenResult] Blob conversion failed, fallback to data URI:", e);
       imgEl.src = "data:image/png;base64," + img.base64;
@@ -239,6 +244,7 @@ function showImageGenResult(evt) {
     imgEl.dataset.revisedPrompt = img.revised_prompt || "";
     imgEl.dataset.negativePrompt = img.negative_prompt || "";
     imgEl.onerror = function () {
+      URL.revokeObjectURL(this.src);
       console.error("[showImageGenResult] img decode failed, size:", img.base64?.length);
       imgEl.style.display = "none";
       var errDiv = document.createElement("div");
@@ -285,7 +291,7 @@ function showImageGenResult(evt) {
     }
   });
 
-  scrollToBottom(container);
+  if (_isNearBottom(container)) scrollToBottom(container);
 }
 
 // ------------------------------------------------------------------

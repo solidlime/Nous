@@ -89,14 +89,16 @@ function _startSeekBar(audio, bar) {
 function _endSession(reason) {
   var session = _playbackSession;
   if (!session) return;
-  if (session.interval) clearInterval(session.interval);
-  if (session.seekBar) session.seekBar.remove();
-  var prompt = document.querySelector(".tts-play-prompt");
-  if (prompt) prompt.remove();
-  if (session.btn) {
-    session.btn.classList.remove("playing");
+  if (_playbackInterval) { clearInterval(_playbackInterval); _playbackInterval = null; }
+  if (session.audio) {
+    try { session.audio.pause(); } catch(e) {}
+    session.audio.src = "";
+    session.audio.load();
+    session.audio = null;
+  }
+  if (session.seekBar && document.contains(session.seekBar)) session.seekBar.remove();
+  if (session.btn && document.contains(session.btn)) {
     session.btn.innerHTML = '<i data-lucide="volume-2"></i>';
-    if (typeof lucide !== "undefined") lucide.createIcons();
   }
   _playbackSession = null;
 }

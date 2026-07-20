@@ -103,8 +103,8 @@ N.Core.connectSSE = function connectSSE(persona) {
       // Only sync if the rollback is for the current chat session (cross-tab sync)
       var currentPersona = (typeof S !== "undefined" && S.persona) ? S.persona : null;
       var currentSessionId = (typeof getChatSessionId === "function") ? getChatSessionId() : null;
-      var matchesSession = (!d.persona || d.persona === currentPersona) &&
-                           (!d.session_id || d.session_id === currentSessionId);
+      var matchesSession = currentPersona && d.persona === currentPersona &&
+                           currentSessionId && d.session_id === currentSessionId;
       if (matchesSession && typeof restoreChatHistory === "function") {
         restoreChatHistory(false);
       }

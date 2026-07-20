@@ -18,6 +18,7 @@ function updateMemoryPanel(retrieved, saved, goals) {
     String(s)
       .replace(/&/g, "&amp;")
       .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
   if (retrieved !== undefined) {
@@ -206,8 +207,8 @@ function showSessionSummarized(summary) {
 }
 
 function showContextCompressed(evt) {
-  const beforePct = Math.round((evt.before_tokens / evt.budget) * 100);
-  const afterPct = Math.round((evt.after_tokens / evt.budget) * 100);
+  const beforePct = evt.budget ? Math.round((evt.before_tokens / evt.budget) * 100) : 0;
+  const afterPct = evt.budget ? Math.round((evt.after_tokens / evt.budget) * 100) : 0;
   const savings = evt.before_tokens - evt.after_tokens;
   toast(
     "🧠 圧縮: " +
