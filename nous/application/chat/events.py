@@ -203,3 +203,14 @@ class ImageGenResultSSE:
             "image_gen_result",
             {"images": self.images, "provider": self.provider},
         )
+
+
+@dataclass
+class SkillLoadSSE:
+    """スキル読み込み完了イベント（セッション初回のみ発火）"""
+
+    skill_names: list[str]
+    type: str = "skill_load"
+
+    def to_sse(self) -> str:
+        return _sse_encode("skill_load", {"skill_names": self.skill_names})

@@ -880,6 +880,7 @@ class TestDynamicTemperatureInference:
         turn_ctx.user_message = "test"
         turn_ctx.system_prompt = "test sys"
         turn_ctx.tool_calls_log = []
+        turn_ctx.skills_raw = []
 
         registry = MagicMock()
 
@@ -935,6 +936,7 @@ class TestDynamicTemperatureInference:
         turn_ctx.user_message = "test"
         turn_ctx.system_prompt = "test sys"
         turn_ctx.tool_calls_log = []
+        turn_ctx.skills_raw = []
 
         registry = MagicMock()
         ctx = MagicMock()
@@ -986,6 +988,7 @@ class TestDynamicTemperatureInference:
         turn_ctx.user_message = "test"
         turn_ctx.system_prompt = "test sys"
         turn_ctx.tool_calls_log = []
+        turn_ctx.skills_raw = []
 
         registry = MagicMock()
         ctx = MagicMock()
