@@ -263,6 +263,9 @@ async function loadChatCommitments() {
 async function loadSkillsForChat() {
   try {
     const skills = await api("/api/skills");
+    // Filter enabledSkills to only include skills that exist on disk (BUG 4)
+    var validNames = new Set(skills.map(function(s) { return s.name; }));
+    CHAT.enabledSkills = CHAT.enabledSkills.filter(function(n) { return validNames.has(n); });
     renderSkillsList(skills, CHAT.enabledSkills);
   } catch (e) {
     console.error("[loadSkillsForChat] failed:", e);
