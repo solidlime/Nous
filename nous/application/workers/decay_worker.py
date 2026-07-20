@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class DecayWorker:
     """FSRS v6 power-law forgetting curve decay worker + periodic reflection."""
 
-    REFLECTION_INTERVAL = 50  # trigger reflection every N decay cycles
+    REFLECTION_INTERVAL = 24  # trigger reflection every N decay cycles (was 50; changed to 24 for more frequent periodic reflection ⑫)
 
     def __init__(
         self,

@@ -77,7 +77,7 @@ class MemoryContextSnapshot:
         )
 
     def to_text(self) -> str:
-        """Convert snapshot to a concise text for ClueGenerator prompt."""
+        """Convert snapshot to a concise text for LLM-based query expansion prompt."""
         lines: list[str] = ["=== Memory Context Snapshot ==="]
         lines.append(f"Total memories: {self.memory_count}")
         if self.top_tags:
