@@ -136,8 +136,6 @@ class ChatConfig(BaseModel):
     top_p: float | None = None
     # Dynamic tool selection (P22): True の時のみ条件付きツールを制限可
     dynamic_tool_selection: bool = True
-    # HiMem 2-tier: Episode Memory consolidation
-    episode_consolidation_enabled: bool = True
     episode_search_enabled: bool = True
     # Voice / TTS settings (TE04)
     voice_enabled: bool = False
