@@ -310,29 +310,25 @@ class TestAppContextMigration:
             assert ctx._session_event_recorder is None
             ctx.close()
 
-    def test_embedding_model_lazy_init(self, tmp_path):
-        """embedding_model property should lazily initialize EmbeddingModel (lines 183-185)."""
+    def test_embedding_model_init_and_access(self, tmp_path):
+        """embedding_model is eagerly created in __init__ for pre-warming (lines 168-179)."""
         from nous.application.use_cases import AppContext
         from nous.config.settings import Settings
 
         settings = Settings(data_root=str(tmp_path))
 
-        # Patch _init_vector_store to avoid eager embedding model creation
+        # Patch _init_vector_store to avoid eager vector store creation
         with patch.object(AppContext, "_init_vector_store", return_value=None):
             ctx = AppContext(settings, "test_persona")
-            # Before access, _embedding is None (lazy init preserved)
-            assert ctx._embedding is None
+            # After init, _embedding is immediately created for background preloading
+            assert ctx._embedding is not None
 
-            # Access should create EmbeddingModel
-            with patch("nous.application.use_cases.EmbeddingModel") as mock_embedding:
-                mock_emb = MagicMock()
-                mock_embedding.return_value = mock_emb
-                emb = ctx.embedding_model
-                assert emb is mock_emb
-                # Second access returns cached
-                emb2 = ctx.embedding_model
-                assert emb2 is mock_emb
-                mock_embedding.assert_called_once()
+            # Access embedding_model property — returns the same instance
+            emb = ctx.embedding_model
+            assert emb is ctx._embedding
+            # Second access returns cached
+            emb2 = ctx.embedding_model
+            assert emb2 is ctx._embedding
 
             ctx.close()
 

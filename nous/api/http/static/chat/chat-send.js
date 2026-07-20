@@ -393,7 +393,8 @@ async function chatSend(retry) {
   CHAT.abortController = new AbortController();
   sendBtn.style.display = "none";
   if (cancelBtn) cancelBtn.style.display = "";
-  statusEl.textContent = "応答中...";
+  statusEl.textContent = "記憶処理中...";
+  CHAT._firstContent = true;
 
   const sessionId = getChatSessionId();
   // F3: content_parts-based rendering — tracks interleaved text/tool_call/tool_result
@@ -461,6 +462,10 @@ async function chatSend(retry) {
         }
 
         if (evt.type === "text_delta") {
+          if (CHAT._firstContent) {
+            CHAT._firstContent = false;
+            statusEl.textContent = "応答中...";
+          }
           // F3: content_parts — create or continue text bubble inside assistant div
           if (!assistantDiv) {
             assistantDiv = _createAssistantDiv();
@@ -493,6 +498,7 @@ async function chatSend(retry) {
             });
           }
         } else if (evt.type === "tool_call") {
+          CHAT._firstContent = false;
           if (!assistantDiv) {
             assistantDiv = _createAssistantDiv();
           }
@@ -622,6 +628,7 @@ async function chatSend(retry) {
       _scrollListener = null;
     }
     CHAT._userScrolledUp = false;
+    CHAT._firstContent = false;
     _rafPending = false;
     sendBtn.style.display = "";
     if (cancelBtn) cancelBtn.style.display = "none";

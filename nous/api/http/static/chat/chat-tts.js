@@ -51,7 +51,7 @@ function _stripMarkdown(text) {
     .replace(/[*_~>#-]/g, "")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/[「」（）]/g, "")
-    .replace(/[―─—]/g, "...")
+    .replace(/[―─—]/g, "。")
     .trim();
 }
 

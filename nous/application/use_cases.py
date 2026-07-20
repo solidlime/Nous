@@ -165,6 +165,19 @@ class AppContext:
 
             threading.Thread(target=_safe_preload, daemon=True).start()
 
+        # EmbeddingModel のバックグラウンドプリロード (初回記憶検索の高速化)
+        import threading as _embed_threading
+
+        self._embedding = EmbeddingModel(config=self.settings.embedding)
+
+        def _preload_embedding() -> None:
+            try:
+                self._embedding._ensure_loaded()
+            except Exception:
+                logger.debug("EmbeddingModel preload failed (will lazy-load on first use)", exc_info=True)
+
+        _embed_threading.Thread(target=_preload_embedding, daemon=True).start()
+
         # Preload Sudachi dictionary in background (lazy-download on first use otherwise)
         import threading
 
@@ -201,6 +214,16 @@ class AppContext:
         import threading as _threading
 
         _threading.Thread(target=self._init_vector_store, daemon=True).start()
+
+        # SearchEngine バックグラウンドウォームアップ（初回検索のレイテンシ低減）
+        def _warmup_search_engine() -> None:
+            try:
+                _ = self.search_engine  # プロパティアクセスで全戦略を初期化
+                logger.debug("SearchEngine warmed up")
+            except Exception:
+                logger.debug("SearchEngine warmup failed (will init on first use)", exc_info=True)
+
+        _threading.Thread(target=_warmup_search_engine, daemon=True).start()
 
     @property
     def vector_store(self) -> QdrantVectorStore | None:
