@@ -140,6 +140,7 @@ class ChatConfig(BaseModel):
     episode_consolidation_enabled: bool = True
     episode_search_enabled: bool = True
     # Voice / TTS settings (TE04)
+    voice_enabled: bool = False
     voice_auto_play: bool = False
     voice_emotion_link: bool = True
     voice_model: str = ""

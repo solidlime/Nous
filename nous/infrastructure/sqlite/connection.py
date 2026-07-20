@@ -216,6 +216,7 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     memory_preload_count INTEGER DEFAULT 3,
     enable_parallel_tools INTEGER DEFAULT 1,
     image_gen_enabled INTEGER DEFAULT 0,
+    voice_enabled INTEGER DEFAULT 0,
     image_gen_provider TEXT DEFAULT 'comfyui',
     image_gen_comfyui_url TEXT DEFAULT '',
     image_gen_comfyui_checkpoint TEXT DEFAULT 'noobaiXLNAIXL_epsilonPred11Version.safetensors',
@@ -548,6 +549,14 @@ class SQLiteConnection:
                 )
         except Exception as e:
             logger.warning("enabled_skills migration skipped: %s", e)
+
+        # Migration: add voice_enabled column if missing (existing DBs)
+        try:
+            memory_conn.execute("ALTER TABLE chat_settings ADD COLUMN voice_enabled INTEGER DEFAULT 0")
+            memory_conn.commit()
+            logger.info("Added voice_enabled column to chat_settings (migration)")
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
         # Migration: drop unused housekeeping_threshold column
         try:
