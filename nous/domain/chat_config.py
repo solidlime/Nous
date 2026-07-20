@@ -450,6 +450,94 @@ class ChatConfigRepository:
         self._db.commit()
 
 
+# --- File-based repository (replaces SQLite chat_settings table) ---
+
+class ChatConfigFileRepository:
+    """JSON file-based CRUD for ChatConfig, stored per persona as config.json."""
+
+    def __init__(self, data_root: str) -> None:
+        self._data_root = data_root
+
+    def _config_path(self, persona: str) -> str:
+        return os.path.join(self._data_root, "memory", persona, "config.json")
+
+    def _migrate_from_sqlite(self, persona: str) -> dict | None:
+        """既存の memory.sqlite から chat_settings を読んで dict として返す。失敗時は None。"""
+        import sqlite3 as _sqlite3
+        db_path = os.path.join(self._data_root, "memory", persona, "memory.sqlite")
+        if not os.path.exists(db_path):
+            return None
+        try:
+            conn = _sqlite3.connect(db_path)
+            conn.row_factory = _sqlite3.Row
+            cursor = conn.execute("SELECT * FROM chat_settings WHERE persona = ?", (persona,))
+            row = cursor.fetchone()
+            conn.close()
+            if row is None:
+                return None
+            columns = [d[0] for d in cursor.description]
+            data = dict(zip(columns, row))
+            # JSON フィールドのパース
+            for jf in ("mcp_servers", "enabled_skills", "disabled_tools"):
+                if data.get(jf) is not None and isinstance(data.get(jf), str):
+                    try:
+                        data[jf] = json.loads(data[jf])
+                    except json.JSONDecodeError:
+                        data[jf] = []
+            # bool→int の逆変換 (SQLite は bool を INTEGER で保存している)
+            bool_fields = {k for k, fi in ChatConfig.model_fields.items()
+                           if ChatConfigRepository._get_base_type(fi.annotation) is bool}
+            for bf in bool_fields:
+                if bf in data and data[bf] is not None:
+                    data[bf] = bool(data[bf])
+            # 不要なキーを除去、None でないキーのみ
+            nullable = {"updated_at", "context_max_tokens", "top_p"}
+            result = {k: v for k, v in data.items()
+                      if k in ChatConfig.model_fields and (v is not None or k in nullable)}
+            return result
+        except Exception:
+            logger.warning("Migration from SQLite failed for persona '%s'", persona, exc_info=True)
+            return None
+
+    def get(self, persona: str) -> ChatConfig:
+        """config.json を読む。不在ならSQLiteから移行、それもなければデフォルト値。"""
+        path = self._config_path(persona)
+        if os.path.exists(path):
+            try:
+                with open(path, "r") as f:
+                    data = json.load(f)
+                return ChatConfig(**data)
+            except (json.JSONDecodeError, ValidationError) as e:
+                logger.warning("Corrupted config.json for '%s': %s, falling back", persona, e)
+
+        # マイグレーション試行
+        migrated = self._migrate_from_sqlite(persona)
+        if migrated:
+            try:
+                config = ChatConfig(**migrated)
+                self.save(config)
+                logger.info("Migrated chat_settings from SQLite to config.json for persona '%s'", persona)
+                return config
+            except ValidationError:
+                logger.warning("Migrated data invalid for '%s', using defaults", persona)
+
+        # デフォルト
+        config = ChatConfig(persona=persona)
+        self.save(config)
+        return config
+
+    def save(self, config: ChatConfig) -> None:
+        """config.json にアトミック書き込み (write-temp → rename)。"""
+        path = self._config_path(config.persona)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        data = config.model_dump(mode="json")
+        data["updated_at"] = format_iso(get_now())
+        tmp_path = path + ".tmp"
+        with open(tmp_path, "w") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, path)
+
+
 class ImageAttachment(BaseModel):
     """チャットに添付された画像。base64_data は data: URL プレフィックスなしの生Base64。"""
 
