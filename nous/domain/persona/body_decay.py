@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from nous.domain.persona.body_state import extract_body_metrics
+from nous.domain.persona.decay import compute_exponential_decay
 
 if TYPE_CHECKING:
     from nous.domain.persona.entities import PersonaState
@@ -29,17 +30,7 @@ _BODY_DECAY_CFG = {
 
 def compute_body_decay(current_value: float, target: float, half_life_hours: float, elapsed_hours: float) -> float:
     """指数関数的減衰で目標値に近づける。"""
-    if elapsed_hours <= 0:
-        return current_value
-    if abs(current_value - target) < 0.01:
-        return current_value
-    # 半減期ベースの減衰係数
-    decay_factor = 0.5 ** (elapsed_hours / half_life_hours)
-    new_value = target + (current_value - target) * decay_factor
-    # 目標に十分近ければ目標値に固定
-    if abs(new_value - target) < 0.01:
-        return target
-    return round(new_value, 4)
+    return compute_exponential_decay(current_value, target, half_life_hours, elapsed_hours, threshold=0.01)
 
 
 def compute_body_state_decay(state: PersonaState, elapsed_hours: float) -> dict[str, str]:

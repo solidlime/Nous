@@ -6,6 +6,8 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from nous.domain.persona.decay import compute_exponential_decay
+
 if TYPE_CHECKING:
     from nous.domain.persona.entities import PersonaState
     from nous.domain.persona.service import PersonaService
@@ -32,8 +34,8 @@ def compute_emotion_decay(intensity: float, elapsed_hours: float, half_life_hour
     if elapsed_hours <= 0 or intensity <= 0.0:
         return 0.0
     effective_half_life = half_life_hours * max(0.3, intensity)
-    factor = 0.5 ** (elapsed_hours / effective_half_life)
-    return max(0.0, round(intensity * factor, 4))
+    # emotion converges to 0.0 (neutral intensity)
+    return compute_exponential_decay(intensity, 0.0, effective_half_life, elapsed_hours)
 
 
 async def apply_emotion_decay_if_needed(

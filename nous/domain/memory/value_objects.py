@@ -3,9 +3,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from nous.domain.value_objects import _VALID_EMOTIONS, normalize_importance
-
-ALLOWED_EMOTIONS: list[str] = list(_VALID_EMOTIONS)
+from nous.domain.value_objects import _VALID_EMOTIONS as ALLOWED_EMOTIONS
+from nous.domain.value_objects import normalize_importance
 
 ALLOWED_PRIVACY_LEVELS: list[str] = ["internal", "shared", "secret"]
 
