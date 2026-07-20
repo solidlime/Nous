@@ -591,13 +591,13 @@ def _build_time_context(state, decay_note: str = "") -> str:
             if gap:
                 # 経過時間の表示
                 if elapsed_hours >= 720:
-                    time_str = f"{elapsed_hours / 720:.0f}ヶ月"
+                    time_str = f"{elapsed_hours / 720:.0f} months"
                 elif elapsed_hours >= 24:
-                    time_str = f"{elapsed_hours / 24:.0f}日"
+                    time_str = f"{elapsed_hours / 24:.0f} days"
                 elif elapsed_hours >= 1:
-                    time_str = f"{elapsed_hours:.0f}時間"
+                    time_str = f"{elapsed_hours:.0f} hours"
                 else:
-                    time_str = f"{elapsed_hours * 60:.0f}分"
+                    time_str = f"{elapsed_hours * 60:.0f} minutes"
                 lines.append(f"Time since last conversation: {time_str} ago ({gap})")
                 instruction = _GAP_INSTRUCTIONS.get(gap, "")
                 if instruction:

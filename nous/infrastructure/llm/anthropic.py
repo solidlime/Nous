@@ -33,8 +33,6 @@ class AnthropicProvider(LLMProvider):
         result = []
         for msg in messages:
             content = msg.content
-            if msg.time_label:
-                content = f"[{msg.time_label}] {content}"
 
             if msg.role == "assistant" and msg.tool_calls:
                 content_blocks: list[dict] = []

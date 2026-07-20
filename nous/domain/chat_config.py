@@ -204,7 +204,7 @@ class ChatConfig(BaseModel):
     @field_validator("display_history_turns")
     @classmethod
     def _clamp_display_history_turns(cls, v: int) -> int:
-        return max(1, min(200, v))
+        return max(1, min(5000, v))
 
     @field_validator("context_compression_threshold")
     @classmethod
