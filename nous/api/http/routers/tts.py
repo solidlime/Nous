@@ -51,9 +51,10 @@ def register_tts_routes(mcp) -> None:
         if not ctx:
             return JSONResponse({"ok": False, "error": "Persona not found"}, status_code=404)
 
-        from nous.domain.chat_config import ChatConfigRepository
+        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.config.settings import get_settings
 
-        chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
+        chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
         irodori_config = _get_irodori_config(ctx, chat_config)
         engine = get_voice_engine(irodori_config)
 
@@ -158,9 +159,10 @@ def register_tts_routes(mcp) -> None:
         if not ctx:
             return JSONResponse({"ok": False, "error": "Persona not found"}, status_code=404)
 
-        from nous.domain.chat_config import ChatConfigRepository
+        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.config.settings import get_settings
 
-        chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
+        chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
         irodori_config = _get_irodori_config(ctx, chat_config)
 
         # Query the Irodori TTS server for available models
@@ -201,9 +203,10 @@ def register_tts_routes(mcp) -> None:
         if not ctx:
             return JSONResponse({"ok": True, "connected": False, "error": "Persona not found"}, status_code=404)
 
-        from nous.domain.chat_config import ChatConfigRepository
+        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.config.settings import get_settings
 
-        chat_config = ChatConfigRepository(ctx.connection.get_memory_db()).get(persona)
+        chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
         irodori_config = _get_irodori_config(ctx, chat_config)
         base_url = irodori_config.url.rstrip("/")
 
