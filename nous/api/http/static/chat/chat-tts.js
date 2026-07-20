@@ -7,9 +7,7 @@
 var S = window.S;
 
 let _connectionCheckTimer = null;
-let _currentAudio = null;       // 現在再生中の Audio 要素（seekbar用）
-let _currentAudioBtn = null;    // 対応する再生ボタン
-let _seekBarInterval = null;    // シークバー更新タイマー
+let _playbackSession = null;    // { audio, btn, seekBar, interval } | null
 
 /* ── Connection status indicator ── */
 function _setStatus(state, text) {
@@ -58,32 +56,47 @@ function _createSeekBar(containerDiv) {
 }
 
 function _startSeekBar(audio, bar) {
-  if (_seekBarInterval) clearInterval(_seekBarInterval);
-  _seekBarInterval = setInterval(function() {
+  return setInterval(function() {
     if (!audio.duration || isNaN(audio.duration)) return;
     bar.max = audio.duration;
     bar.value = audio.currentTime;
   }, 50);
 }
 
+/* ── Session cleanup — single entry point ── */
+function _endSession(reason) {
+  var session = _playbackSession;
+  if (!session) return;
+  if (session.interval) clearInterval(session.interval);
+  if (session.seekBar) session.seekBar.remove();
+  var prompt = document.querySelector(".tts-play-prompt");
+  if (prompt) prompt.remove();
+  if (session.btn) {
+    session.btn.classList.remove("playing");
+    session.btn.innerHTML = '<i data-lucide="volume-2"></i>';
+    if (typeof lucide !== "undefined") lucide.createIcons();
+  }
+  _playbackSession = null;
+}
+
 function _removeSeekBar() {
-  if (_seekBarInterval) { clearInterval(_seekBarInterval); _seekBarInterval = null; }
-  var bar = document.querySelector(".tts-seekbar");
-  if (bar) bar.remove();
-  _currentAudio = null;
-  _currentAudioBtn = null;
+  _endSession("remove-seekbar");
 }
 
 /* ── Common audio setup ── */
 function _setupAudio(audio, audioUrl, btn, containerDiv) {
+  if (_playbackSession) _endSession("new-audio");
+  
   audio.volume = _getVolume();
+  var session = { audio: audio, btn: btn || null, seekBar: null, interval: null };
   
   if (containerDiv) {
     var seekBar = _createSeekBar(containerDiv);
     seekBar.oninput = function() {
       audio.currentTime = parseFloat(this.value);
     };
-    _startSeekBar(audio, seekBar);
+    session.seekBar = seekBar;
+    session.interval = _startSeekBar(audio, seekBar);
   }
   
   // btn再生中状態
@@ -95,30 +108,19 @@ function _setupAudio(audio, audioUrl, btn, containerDiv) {
   }
   
   audio.onended = function() {
-    _removeSeekBar();
-    if (btn) {
-      btn.classList.remove("playing");
-      btn.innerHTML = '<i data-lucide="volume-2"></i>';
-      if (typeof lucide !== "undefined") lucide.createIcons();
-    }
+    _endSession("ended");
   };
   
   audio.onerror = function() {
-    _removeSeekBar();
-    if (btn) {
-      btn.classList.remove("playing");
-      btn.innerHTML = '<i data-lucide="volume-2"></i>';
-      if (typeof lucide !== "undefined") lucide.createIcons();
-    }
     console.error("[TTS] Audio playback error");
+    _endSession("error");
   };
   
-  _currentAudio = audio;
-  _currentAudioBtn = btn;
+  _playbackSession = session;
   
   audio.play().catch(function(err) {
     console.error("[TTS] Play failed:", err);
-    _removeSeekBar();
+    _endSession("play-failed");
   });
 }
 
@@ -189,7 +191,7 @@ async function testVoicePlayback() {
 function autoPlayTts(text) {
   if (!S.persona || !text) return;
   // Skip if already playing
-  if (_currentAudio && !_currentAudio.paused) return;
+  if (_playbackSession && _playbackSession.audio && !_playbackSession.audio.paused) return;
 
   // Strip markdown for TTS
   var plainText = text
@@ -234,9 +236,9 @@ async function playTts(btn, text) {
   if (!S.persona || !text) return;
   
   // 一時停止中の再開
-  if (_currentAudio && btn.classList.contains("playing") && _currentAudioBtn === btn) {
-    if (_currentAudio.paused) {
-      _currentAudio.play();
+  if (_playbackSession && _playbackSession.btn === btn && btn.classList.contains("playing")) {
+    if (_playbackSession.audio.paused) {
+      _playbackSession.audio.play();
       btn.innerHTML = '<i data-lucide="pause"></i>';
       if (typeof lucide !== "undefined") lucide.createIcons();
       return;
@@ -244,17 +246,16 @@ async function playTts(btn, text) {
   }
   
   // 再生中の一時停止
-  if (_currentAudio && !_currentAudio.paused && _currentAudioBtn === btn) {
-    _currentAudio.pause();
+  if (_playbackSession && _playbackSession.btn === btn && !_playbackSession.audio.paused) {
+    _playbackSession.audio.pause();
     btn.innerHTML = '<i data-lucide="play"></i>';
     if (typeof lucide !== "undefined") lucide.createIcons();
     return;
   }
   
   // 別の音声再生中は停止
-  if (_currentAudio && _currentAudioBtn !== btn) {
-    _currentAudio.pause();
-    _removeSeekBar();
+  if (_playbackSession && _playbackSession.btn !== btn) {
+    _endSession("other-audio");
   }
   
   // Strip markdown
@@ -321,8 +322,8 @@ function initVoiceSection() {
   var volSlider = document.getElementById("chat-voice-volume");
   if (volSlider) {
     volSlider.addEventListener("input", function() {
-      if (_currentAudio) {
-        _currentAudio.volume = parseFloat(this.value);
+      if (_playbackSession && _playbackSession.audio) {
+        _playbackSession.audio.volume = parseFloat(this.value);
       }
     });
   }
