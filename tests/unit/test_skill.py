@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 from nous.domain.skill import Skill, SkillRepository, _parse_skill_md
 
@@ -313,9 +314,12 @@ Body content
 
 def test_skills_pre_installed():
     """Verify the 3 pre-installed skills exist and can be loaded from the project's data/skills/ directory."""
+    import os
+
     from tests.conftest import PROJECT_ROOT
 
-    skills_dir = PROJECT_ROOT / "data" / "skills"
+    # Use NOUS_SKILLS_DIR if set (e.g. CI), otherwise project-relative data/skills
+    skills_dir = Path(os.environ.get("NOUS_SKILLS_DIR", str(PROJECT_ROOT / "data" / "skills")))
     assert skills_dir.is_dir(), f"Skills directory not found: {skills_dir}"
 
     db = _make_db()
@@ -324,10 +328,12 @@ def test_skills_pre_installed():
 
     names = {s.name for s in skills}
 
-    assert len(skills) >= 3, f"Expected at least 3 skills, got {len(skills)}"
-    assert "verification-before-completion" in names, "Missing: verification-before-completion"
-    assert "systematic-debugging" in names, "Missing: systematic-debugging"
-    assert "test-driven-development" in names, "Missing: test-driven-development"
+    assert len(skills) >= 5, f"Expected at least 5 skills, got {len(skills)}"
+    assert "auto-memory" in names, "Missing: auto-memory"
+    assert "auto-self-portrait" in names, "Missing: auto-self-portrait"
+    assert "goal-coach" in names, "Missing: goal-coach"
+    assert "mood-sync" in names, "Missing: mood-sync"
+    assert "recall-weaver" in names, "Missing: recall-weaver"
 
     # Each skill must have a non-empty description and content
     for s in skills:

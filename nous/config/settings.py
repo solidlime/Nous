@@ -318,11 +318,8 @@ class Settings(BaseSettings):
         """設定ファイルディレクトリ: {data_root}/config"""
         return f"{self.data_root}/config"
 
-    skills_dir: str = Field(
-        default="/opt/nous/skills",
-        validation_alias="NOUS_SKILLS_DIR",
-        description="Global skills directory (persona-independent)",
-    )
+    skills_dir: str = "/opt/nous/skills"
+    """Global skills directory (persona-independent). Override via ``NOUS_SKILLS_DIR`` env var."""
 
     def ensure_directories(self) -> None:
         """起動時に必要なディレクトリを全て作成する。"""
