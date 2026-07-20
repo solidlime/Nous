@@ -3,29 +3,19 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
 
 from nous.domain.memory.graph import Entity, EntityGraph, EntityRelation
 from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import format_iso, get_now
 from nous.infrastructure.logging.structured import get_logger
-
-if TYPE_CHECKING:
-    from nous.infrastructure.sqlite.connection import SQLiteConnection
+from nous.infrastructure.sqlite.base_repo import SQLiteRepository
 
 logger = get_logger(__name__)
 
 
-class SQLiteEntityRepository:
+class SQLiteEntityRepository(SQLiteRepository):
     """SQLite-backed entity graph repository."""
-
-    def __init__(self, connection: SQLiteConnection) -> None:
-        self._conn = connection
-
-    @property
-    def _db(self):
-        return self._conn.get_memory_db()
 
     # ------------------------------------------------------------------
     # Entity CRUD
