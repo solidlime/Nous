@@ -118,6 +118,7 @@ def register_chat_routes(mcp) -> None:
             "episode_search_enabled",
             "retrieval_rrf_k",
             "dynamic_tool_selection",
+            "voice_enabled",
             "voice_auto_play",
             "voice_emotion_link",
             "voice_model",
