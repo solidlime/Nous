@@ -73,7 +73,7 @@ class IrodoriEngine(VoiceEngine):
         for attempt in range(_MAX_RETRIES):
             try:
                 async with httpx.AsyncClient(timeout=self._timeout) as client:
-                    resp = await client.post(f"{self._url}/audio/speech", json=payload)
+                    resp = await client.post(f"{self._url}/v1/audio/speech", json=payload)
                     resp.raise_for_status()
                     return resp.content
             except (httpx.ConnectError, httpx.TimeoutException) as e:
@@ -95,7 +95,7 @@ class IrodoriEngine(VoiceEngine):
         """サーバーに疎通確認する (GET /v1/models で確認)。"""
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
-                resp = await client.get(f"{self._url}/models")
+                resp = await client.get(f"{self._url}/v1/models")
                 return resp.status_code == 200
         except (httpx.ConnectError, httpx.TimeoutException):
             return False

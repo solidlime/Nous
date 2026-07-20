@@ -171,7 +171,7 @@ def register_tts_routes(mcp) -> None:
         base_url = irodori_config.url.rstrip("/")
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
-                resp = await client.get(f"{base_url}/models")
+                resp = await client.get(f"{base_url}/v1/models")
                 resp.raise_for_status()
                 models_data = resp.json()
         except Exception as e:
@@ -214,7 +214,7 @@ def register_tts_routes(mcp) -> None:
 
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
-                resp = await client.get(f"{base_url}/models")
+                resp = await client.get(f"{base_url}/v1/models")
                 models_data = resp.json() if resp.status_code == 200 else None
                 models = []
                 if models_data and isinstance(models_data, dict) and "data" in models_data:

@@ -32,6 +32,7 @@ Makefile.bak
 # Data (bind-mounted at runtime — except skills bundled as defaults)
 data/*
 !data/skills
+data/skills/*.sqlite*
 
 # Cache
 .cache/
@@ -49,6 +50,7 @@ Thumbs.db
 # Docs
 *.md
 !README.md
+!data/skills/**/*.md
 docs/
 
 # Output

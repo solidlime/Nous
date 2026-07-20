@@ -147,11 +147,11 @@ class IrodoriAdvancedParams(BaseModel):
 
 class IrodoriConfig(BaseModel):
     """Irodori-TTS connection configuration — provider settings only.
-    Env var: ``NOUS_IRODORI__URL`` (default: http://localhost:8088/v1)
+    Env var: ``NOUS_IRODORI__URL`` (default: http://localhost:8088)
     """
 
-    url: str = "http://localhost:8088/v1"
-    """Irodori-TTS-Server OpenAI-compatible API endpoint."""
+    url: str = "http://localhost:8088"
+    """Irodori-TTS-Server base URL (e.g. http://192.168.50.150:8088). /v1 prefix is added automatically."""
 
     voice: str = "default"
     """Default voice name."""
