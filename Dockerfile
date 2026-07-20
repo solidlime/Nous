@@ -48,6 +48,14 @@ RUN find /usr/local/lib/python3.12/site-packages \
 COPY nous/ ${APP_HOME}/nous/
 COPY pyproject.toml ${APP_HOME}/
 
+# Copy default global skills (auto-memory, auto-self-portrait, goal-coach, mood-sync, recall-weaver)
+# Exclude runtime sqlite files — the app creates them at startup
+COPY data/skills/auto-memory/ /opt/nous/skills/auto-memory/
+COPY data/skills/auto-self-portrait/ /opt/nous/skills/auto-self-portrait/
+COPY data/skills/goal-coach/ /opt/nous/skills/goal-coach/
+COPY data/skills/mood-sync/ /opt/nous/skills/mood-sync/
+COPY data/skills/recall-weaver/ /opt/nous/skills/recall-weaver/
+
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash nous
 

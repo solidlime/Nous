@@ -29,8 +29,9 @@ test_*.py
 Makefile
 Makefile.bak
 
-# Data (bind-mounted at runtime)
-data/
+# Data (bind-mounted at runtime — except skills bundled as defaults)
+data/*
+!data/skills
 
 # Cache
 .cache/
