@@ -86,37 +86,6 @@ def _build_relationship_context(ctx: AppContext) -> str:
     return "\n".join(lines)
 
 
-RECALL_ANNOTATION_GUIDELINES = """
-## Memory Recall Annotations
-Each memory includes annotations [certainty, time, source, kind] as hints.
-Express naturally — never output the labels literally.
-
-### Certainty
-- confident → state directly.  tentative → hedge ("I think...", "たしか...")
-- vague → strong hedge ("vaguely remember", "〜だった気がする")
-- forgotten → do NOT mention.
-
-### Time
-- recent/days_7 → "さっき", "この前"
-- days_30 → "こないだ", "a while ago"
-- days_90+ → "前に", "a few months back"
-- years → "昔", "long ago"
-
-### Source
-- user_stated → direct.  llm_inferred → slight hedge.
-- reflected → insight ("考えてみると...")
-- consolidated → summary of multiple memories.
-
-### Kind
-- episodic → include time/place context.
-- semantic → state as fact/preference.
-- prospective → frame as intention/reminder.
-
-IMPORTANT:
-- Express naturally in your persona's voice.
-- NEVER output annotation labels or technical terms (database, retrieved, record).
-"""
-
 
 def _compute_recency_decay(created_at: datetime | None) -> float:
     """Compute recency decay: exp(-λ * days_elapsed) with λ=0.5."""
@@ -128,6 +97,33 @@ def _compute_recency_decay(created_at: datetime | None) -> float:
         created_at = created_at.replace(tzinfo=UTC)
     days_elapsed = max(0.0, (now - created_at).total_seconds() / 86400.0)
     return math.exp(-_RECENCY_LAMBDA * days_elapsed)
+
+
+def _format_memory_hint(ann) -> str:
+    """アノテーションを自然な日本語のヒント文字列に変換。"""
+    cert_map = {"confident": "確か", "tentative": "たしか", "vague": "うろ覚え", "forgotten": ""}
+    cert = cert_map.get(ann.certainty, "")
+
+    time_map = {
+        "recent": "最近",
+        "days_7": "この前",
+        "days_30": "こないだ",
+        "days_90": "前に",
+        "years": "昔",
+        "long_ago": "ずっと前",
+    }
+    time_hint = time_map.get(ann.time_hint, "")
+
+    source_hint = ""
+    if ann.source_hint == "llm_inferred":
+        source_hint = "推測"
+    elif ann.source_hint == "reflected":
+        source_hint = "洞察"
+
+    parts = [p for p in [cert, time_hint, source_hint] if p]
+    if not parts:
+        return ""
+    return "（" + "・".join(parts) + "）"
 
 
 async def _search_memories(
@@ -231,10 +227,12 @@ async def _search_memories(
         )
         if not ann.should_mention:
             continue
-        lines.append(
-            f"[certainty: {ann.certainty}, time: {ann.time_hint}, source: {ann.source_hint}, kind: {ann.kind_hint}] "
-            f"{getattr(m, 'content', str(m))}"
-        )
+        hint = _format_memory_hint(ann)
+        content = getattr(m, "content", str(m))
+        if hint:
+            lines.append(f"{hint} {content}")
+        else:
+            lines.append(content)
     memories_list: list[object] = [m for _, m in top]
     debug_results = [
         {
@@ -511,28 +509,30 @@ _TIME_OF_DAY: list[tuple[int, str]] = [
 def _build_time_context(state, decay_note: str = "") -> str:
     """Build <TIME_CONTEXT> block for injection at the TOP of system prompt."""
     from zoneinfo import ZoneInfo
+    from nous.config.settings import get_settings
 
-    now_jst = get_now()
+    tz = get_settings().timezone
+    now_local = get_now(tz=tz)
 
     # 曜日
     days_ja = ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"]
-    weekday = days_ja[now_jst.weekday()]
+    weekday = days_ja[now_local.weekday()]
 
     # 時間帯
-    hour = now_jst.hour
+    hour = now_local.hour
     time_of_day = next((label for h, label in _TIME_OF_DAY if hour < h), "深夜")
 
     lines: list[str] = [
         "<TIME_CONTEXT>",
-        f"Now: {now_jst.strftime('%Y-%m-%d %H:%M')} (JST) — {weekday} {time_of_day}",
+        f"Now: {now_local.strftime('%Y-%m-%d %H:%M')} ({tz}) — {weekday} {time_of_day}",
     ]
 
     # 経過時間 + ギャップ分類 + 行動指示
     last_conv = getattr(state, "last_conversation_time", None)
     if last_conv:
         if last_conv.tzinfo is None:
-            last_conv = last_conv.replace(tzinfo=ZoneInfo("Asia/Tokyo"))
-        elapsed_hours = (now_jst - last_conv).total_seconds() / 3600.0
+            last_conv = last_conv.replace(tzinfo=ZoneInfo(tz))
+        elapsed_hours = (now_local - last_conv).total_seconds() / 3600.0
 
         if elapsed_hours > 0.25:  # 15分以上のギャップから表示
             gap = _classify_gap(elapsed_hours)
