@@ -46,13 +46,10 @@ class ServerConfig(BaseModel):
 
 
 class MemoRAGConfig(BaseModel):
-    """MemoRAG-inspired memory context snapshot and clue generation configuration."""
+    """MemoRAG-inspired memory context snapshot configuration."""
 
     enabled: bool = True
     """Enable MemoryContextSnapshot building (LLM-free, always safe to enable)."""
-
-    clue_generation_enabled: bool = False
-    """Enable LLM-based clue generation for memorag search mode (requires ChatConfig LLM)."""
 
     rebuild_threshold: int = 20
     """Rebuild snapshot when memory count increases by this many since last build."""

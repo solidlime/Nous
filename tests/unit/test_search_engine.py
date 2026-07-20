@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from nous.domain.memory.entities import Memory
-from nous.domain.search.clue_generator import ClueGenerator, _parse_clues
 from nous.domain.search.engine import SearchEngine, SearchQuery, SearchResult
 from nous.domain.search.ranker import ForgettingCurveRanker, RRFRanker
 from nous.domain.shared.result import Failure, Success
@@ -437,58 +436,6 @@ class TestSearchEngineDateRange:
         kw.search.assert_called_once_with("hello", limit=5, date_from=None, date_to=None)
 
 
-# ---------------------------------------------------------------------------
-# ClueGenerator tests (from test_clue_generator.py)
-# ---------------------------------------------------------------------------
-
-
-class TestParseClues:
-    def test_valid_json_array(self):
-        result = _parse_clues('["clue one", "clue two", "clue three"]')
-        assert result == ["clue one", "clue two", "clue three"]
-
-    def test_json_array_truncated_to_3(self):
-        result = _parse_clues('["a", "b", "c", "d"]')
-        assert len(result) == 3
-
-    def test_fallback_quoted_strings(self):
-        result = _parse_clues('Here are the clues: "first clue" and "second clue"')
-        assert "first clue" in result
-        assert "second clue" in result
-
-    def test_empty_on_garbage(self):
-        result = _parse_clues("no clues here at all")
-        assert result == []
-
-
-class TestClueGeneratorNoLLM:
-    @pytest.mark.asyncio
-    async def test_returns_empty_when_no_api_key(self):
-        gen = ClueGenerator()
-        config = MagicMock()
-        config.extract_model = ""
-        config.get_effective_model.return_value = "gpt-4"
-        config.get_effective_api_key.return_value = ""
-        config.get_effective_base_url.return_value = "https://api.openai.com/v1"
-        result = await gen.generate("context", "query", config)
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_returns_empty_when_no_model(self):
-        gen = ClueGenerator()
-        config = MagicMock()
-        config.extract_model = ""
-        config.get_effective_model.return_value = ""
-        config.get_effective_api_key.return_value = "sk-test"
-        result = await gen.generate("context", "query", config)
-        assert result == []
-
-
-# ---------------------------------------------------------------------------
-# MemoRAG search tests (from test_memorag_search.py)
-# ---------------------------------------------------------------------------
-
-
 def _make_memory(key: str):
     m = MagicMock()
     m.key = key
@@ -497,13 +444,13 @@ def _make_memory(key: str):
     return m
 
 
-def _make_engine(memorag_config=None, chat_config=None, memory_repo=None):
+def _make_engine(memorag_config=None, memory_repo=None):
     keyword = MagicMock()
     keyword.search.return_value = Success([(_make_memory("k1"), 0.9)])
     semantic = AsyncMock()
     semantic.search.return_value = Success([(_make_memory("k2"), 0.8)])
     return SearchEngine(
-        keyword, semantic, None, memory_repo=memory_repo, memorag_config=memorag_config, chat_config=chat_config
+        keyword, semantic, None, memory_repo=memory_repo, memorag_config=memorag_config
     )
 
 
@@ -514,48 +461,8 @@ class TestBestSearchMode:
         engine = _make_engine(memorag_config=config)
         assert engine.best_search_mode() == "hybrid"
 
-    def test_smart_when_enabled_no_llm(self):
+    def test_smart_when_enabled(self):
         config = MagicMock()
         config.enabled = True
-        config.clue_generation_enabled = True
-        chat = MagicMock()
-        chat.is_configured.return_value = False
-        engine = _make_engine(memorag_config=config, chat_config=chat)
-        assert engine.best_search_mode() == "smart"
-
-    def test_memorag_when_enabled_with_llm(self):
-        config = MagicMock()
-        config.enabled = True
-        config.clue_generation_enabled = True
-        chat = MagicMock()
-        chat.is_configured.return_value = True
-        engine = _make_engine(memorag_config=config, chat_config=chat)
-        assert engine.best_search_mode() == "memorag"
-
-    def test_smart_when_clue_disabled(self):
-        config = MagicMock()
-        config.enabled = True
-        config.clue_generation_enabled = False
         engine = _make_engine(memorag_config=config)
         assert engine.best_search_mode() == "smart"
-
-
-class TestMemoRAGSearchFallback:
-    @pytest.mark.asyncio
-    async def test_falls_back_to_smart_when_no_memory_repo(self):
-        config = MagicMock()
-        config.enabled = True
-        engine = _make_engine(memorag_config=config, memory_repo=None)
-        query = SearchQuery(text="test", mode="memorag", top_k=5)
-        result = await engine.search(query)
-        assert result.is_ok
-
-    @pytest.mark.asyncio
-    async def test_falls_back_when_memorag_disabled(self):
-        config = MagicMock()
-        config.enabled = False
-        repo = MagicMock()
-        engine = _make_engine(memorag_config=config, memory_repo=repo)
-        query = SearchQuery(text="test", mode="memorag", top_k=5)
-        result = await engine.search(query)
-        assert result.is_ok

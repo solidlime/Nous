@@ -75,10 +75,6 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
     },
     "memorag": {
         "enabled": {"hot_reload": True, "description": "Enable MemoryContextSnapshot building"},
-        "clue_generation_enabled": {
-            "hot_reload": True,
-            "description": "Enable LLM-based clue generation for memorag search mode",
-        },
         "rebuild_threshold": {
             "hot_reload": True,
             "description": "Rebuild snapshot when memory count increases by this many",
