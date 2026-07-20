@@ -375,6 +375,77 @@ class TreeSessionWindow:
         self._persisted_count = max(0, self._persisted_count - count)
         return evicted
 
+    def _persist(self) -> None:
+        """現在のツリー状態をSQLiteにupsertする。
+
+        保存形式 (messages カラム):
+        {"root_id": "...", "active_leaf_id": "...", "nodes": [...]}
+        timestamps カラムは空配列（created_at に統合済み）。
+        """
+        if self._db is None or not self._persona or not self._session_id:
+            return
+        try:
+            data = {
+                "root_id": self._root_id,
+                "active_leaf_id": self._active_leaf_id,
+                "nodes": list(self._nodes.values()),
+            }
+            messages_json = json.dumps(data, ensure_ascii=False)
+            timestamps_json = "[]"
+            now_str = get_now().isoformat()
+            self._db.execute(
+                "INSERT OR REPLACE INTO chat_sessions"
+                " (persona, session_id, messages, timestamps, updated_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (self._persona, self._session_id, messages_json, timestamps_json, now_str),
+            )
+            self._db.commit()
+            self._persisted_count = len(self._nodes)
+        except Exception as e:
+            logger.warning("TreeSessionWindow._persist failed: %s", e)
+
+    def get_message_by_id(self, msg_id: str) -> dict | None:
+        """指定されたIDのノードを返す。存在しなければNone。"""
+        return self._nodes.get(msg_id)
+
+    def edit_message(self, msg_id: str, new_content: str) -> dict | None:
+        """メッセージをインプレース編集（Minimal B）。編集後永続化。"""
+        node = self._nodes.get(msg_id)
+        if node is None:
+            return None
+        node["content"] = new_content
+        self._persist()
+        return dict(node)
+
+    def delete_message(self, msg_id: str) -> dict | None:
+        """ノードを削除し、子ノードを削除対象のparent_idにリペアレンティングする。"""
+        node = self._nodes.get(msg_id)
+        if node is None:
+            return None
+        parent_id = node.get("parent_id")
+        # リペアレンティング: 全子ノードのparent_idを削除対象のparent_idに付け替え
+        for n in self._nodes.values():
+            if n.get("parent_id") == msg_id:
+                n["parent_id"] = parent_id
+        # active_leaf_id が削除対象の子孫なら巻き戻し
+        if self._is_descendant(self._active_leaf_id, msg_id):
+            self._active_leaf_id = parent_id
+        # root_id が削除対象なら付け替え
+        if self._root_id == msg_id:
+            self._root_id = parent_id
+        del self._nodes[msg_id]
+        self._persist()
+        return node
+
+    def rollback_to(self, msg_id: str) -> dict | None:
+        """active_leaf_id を msg_id に差し替え。ノードは一切削除しない（非破壊ロールバック）。"""
+        if msg_id not in self._nodes:
+            return None
+        old = self._active_leaf_id
+        self._active_leaf_id = msg_id
+        self._persist()
+        return {"old_active_leaf_id": old, "new_active_leaf_id": msg_id}
+
     def _is_descendant(self, node_id: str | None, ancestor_id: str | None) -> bool:
         """node_id が ancestor_id の子孫かどうかを判定する。"""
         if not node_id or not ancestor_id:
