@@ -891,7 +891,9 @@ class TestChatService:
         import json
 
         assert any("error" in chunk for chunk in chunks)
-        payload = json.loads(chunks[0][6:].strip())
+        # Skip non-data SSE events (heartbeat comments ": ...")
+        data_chunks = [c for c in chunks if c.startswith("data: ")]
+        payload = json.loads(data_chunks[0][6:].strip())
         assert payload["type"] == "error"
         assert "APIキー" in payload["message"]
 
@@ -972,7 +974,9 @@ class TestChatService:
 
         import json
 
-        types = [json.loads(c[6:].strip())["type"] for c in chunks]
+        # Skip non-data SSE events (heartbeat comments ": ...")
+        data_chunks = [c for c in chunks if c.startswith("data: ")]
+        types = [json.loads(c[6:].strip())["type"] for c in data_chunks]
         assert "text_delta" in types
         assert "done" in types
 
@@ -1029,7 +1033,9 @@ class TestChatService:
 
         import json
 
-        types = [json.loads(c[6:].strip())["type"] for c in chunks]
+        # Skip non-data SSE events (heartbeat comments ": ...")
+        data_chunks = [c for c in chunks if c.startswith("data: ")]
+        types = [json.loads(c[6:].strip())["type"] for c in data_chunks]
         assert "tool_call" in types
         assert "tool_result" in types
         assert "done" in types

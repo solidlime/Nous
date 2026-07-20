@@ -55,6 +55,20 @@ class ChatService:
             },
         )
 
+        # Send SSE heartbeat immediately so the frontend stream reader doesn't time out
+        # during the potentially heavy PrepareStep (memory retrieval, context building).
+        yield ": heartbeat\n\n"
+
+        # Progressive disclosure: fast keyword search for immediate feedback
+        # Send memory_activity SSE with keyword-matched results before full PrepareStep
+        from nous.application.chat.events import MemoryActivitySSE
+        from nous.application.chat.pipeline.prepare import _search_keyword_fast
+
+        _last_assistant = session.get_last_assistant_content()
+        _fast_memories = await _search_keyword_fast(ctx, turn_ctx.user_message, _last_assistant, top_k=5)
+        if _fast_memories:
+            yield MemoryActivitySSE(retrieved=_fast_memories, saved=[], goals=[]).to_sse()
+
         # PrepareStep: pending_memory_task 待機 + EmotionDecay + コンテキスト取得
         await PrepareStep().run(ctx, session, turn_ctx, config=config)
 

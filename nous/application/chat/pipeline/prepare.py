@@ -245,6 +245,58 @@ async def _search_memories(
     return "\n".join(lines), {"queries": queries, "results": debug_results}, memories_list
 
 
+async def _search_keyword_fast(
+    ctx: AppContext,
+    user_message: str,
+    last_assistant: str | None,
+    top_k: int = 5,
+) -> list[dict]:
+    """Fast keyword-only memory search for progressive disclosure.
+
+    Returns a list of dicts suitable for MemoryActivitySSE.retrieved field:
+    [{"content": str, "score": float, "importance": float}, ...]
+    """
+    queries = [user_message]
+    if last_assistant:
+        queries.append(last_assistant[:200])
+
+    async def _run(q: str) -> list:
+        try:
+            result = await ctx.search_engine.search(
+                SearchQuery(text=q, top_k=top_k, mode="keyword")
+            )
+            return result.value if result.is_ok else []
+        except Exception:
+            return []
+
+    results = await asyncio.gather(*[_run(q) for q in queries])
+
+    # Deduplicate by content, keep first occurrence
+    seen: set[str] = set()
+    items: list[dict] = []
+    for result_list in results:
+        for item in result_list:
+            if isinstance(item, tuple):
+                mem = item[0]
+            elif hasattr(item, "memory"):
+                mem = item.memory
+            else:
+                mem = item
+            content = getattr(mem, "content", str(mem))
+            if content not in seen:
+                seen.add(content)
+                items.append({
+                    "content": content[:200],
+                    "score": 1.0,
+                    "importance": float(getattr(mem, "importance", 0.5)),
+                })
+                if len(items) >= top_k:
+                    break
+        if len(items) >= top_k:
+            break
+    return items[:top_k]
+
+
 async def _search_episodes(
     ctx: AppContext,
     query: str,
