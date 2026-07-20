@@ -216,8 +216,8 @@ async function rollbackChat(fromId, shouldResend) {
 
   try {
     const body = typeof fromId === "number"
-      ? { keep_until: fromId }
-      : { from_id: String(fromId) };
+      ? { keep_until: fromId, exclusive: !!shouldResend }
+      : { from_id: String(fromId), exclusive: !!shouldResend };
 
     const result = await api(
       "/api/chat/" +

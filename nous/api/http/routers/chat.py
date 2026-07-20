@@ -379,7 +379,17 @@ def register_chat_routes(mcp) -> None:
                         )
                     parent_id = node.get("parent_id")
                     if parent_id:
-                        result = window.rollback_to(parent_id)
+                        # Regenerate: when from_id is an assistant whose parent is
+                        # a user, roll back to before the user message so both are
+                        # excluded from active path (avoids duplicate on resend).
+                        target_id = parent_id
+                        if node.get("role") == "assistant":
+                            parent_node = window._nodes.get(parent_id)
+                            if parent_node and parent_node.get("role") == "user":
+                                gp_id = parent_node.get("parent_id")
+                                if gp_id:
+                                    target_id = gp_id
+                        result = window.rollback_to(target_id)
                     else:
                         old = window._active_leaf_id
                         window._active_leaf_id = None
@@ -418,7 +428,17 @@ def register_chat_routes(mcp) -> None:
                         )
                     parent_id = node.get("parent_id")
                     if parent_id:
-                        result = window.rollback_to(parent_id)
+                        # Regenerate: when from_id is an assistant whose parent is
+                        # a user, roll back to before the user message so both are
+                        # excluded from active path (avoids duplicate on resend).
+                        target_id = parent_id
+                        if node.get("role") == "assistant":
+                            parent_node = window._nodes.get(parent_id)
+                            if parent_node and parent_node.get("role") == "user":
+                                gp_id = parent_node.get("parent_id")
+                                if gp_id:
+                                    target_id = gp_id
+                        result = window.rollback_to(target_id)
                     else:
                         old = window._active_leaf_id
                         window._active_leaf_id = None
