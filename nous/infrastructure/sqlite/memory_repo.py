@@ -100,45 +100,33 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
 
     def find_by_key(self, key: str) -> Result[Memory | None, RepositoryError]:
         """Find a single memory by its key."""
-        try:
-            row = self._db.execute("SELECT * FROM memories WHERE key = ?", (key,)).fetchone()
-            if row is None:
-                return Success(None)
-            return Success(self._row_to_memory(row))
-        except Exception as e:
-            logger.error("Failed to find memory %s: %s", key, e)
-            return Failure(RepositoryError(str(e)))
+        row = self._db.execute("SELECT * FROM memories WHERE key = ?", (key,)).fetchone()
+        if row is None:
+            return Success(None)
+        return Success(self._row_to_memory(row))
 
     def find_recent(self, limit: int = 10, offset: int = 0) -> Result[list[Memory], RepositoryError]:
         """Return the most recently updated memories with optional pagination offset."""
-        try:
-            rows = self._db.execute(
-                f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-                (limit, offset),
-            ).fetchall()
-            return Success([self._row_to_memory(r) for r in rows])
-        except Exception as e:
-            logger.error("Failed to find recent memories: %s", e)
-            return Failure(RepositoryError(str(e)))
+        rows = self._db.execute(
+            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+        return Success([self._row_to_memory(r) for r in rows])
 
     def find_by_tags(self, tags: list[str], limit: int = 10) -> Result[list[Memory], RepositoryError]:
         """Find memories that contain any of the specified tags."""
-        try:
-            rows = self._db.execute(
-                f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY updated_at DESC"
-            ).fetchall()
-            result: list[Memory] = []
-            tag_set = set(tags)
-            for row in rows:
-                memory_tags = set(self._parse_json_list(row["tags"]))
-                if memory_tags & tag_set:
-                    result.append(self._row_to_memory(row))
-                    if len(result) >= limit:
-                        break
-            return Success(result)
-        except Exception as e:
-            logger.error("Failed to find memories by tags %s: %s", tags, e)
-            return Failure(RepositoryError(str(e)))
+        rows = self._db.execute(
+            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY updated_at DESC"
+        ).fetchall()
+        result: list[Memory] = []
+        tag_set = set(tags)
+        for row in rows:
+            memory_tags = set(self._parse_json_list(row["tags"]))
+            if memory_tags & tag_set:
+                result.append(self._row_to_memory(row))
+                if len(result) >= limit:
+                    break
+        return Success(result)
 
     def update(self, key: str, **kwargs: Any) -> Result[Memory, RepositoryError]:
         """Update specific fields of a memory."""
@@ -190,23 +178,15 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
 
     def count(self) -> Result[int, RepositoryError]:
         """Count total memories."""
-        try:
-            row = self._db.execute(f"SELECT COUNT(*) as cnt FROM memories WHERE {self._active_where()}").fetchone()
-            return Success(row["cnt"])
-        except Exception as e:
-            logger.error("Failed to count memories: %s", e)
-            return Failure(RepositoryError(str(e)))
+        row = self._db.execute(f"SELECT COUNT(*) as cnt FROM memories WHERE {self._active_where()}").fetchone()
+        return Success(row["cnt"])
 
     def find_all(self) -> Result[list[Memory], RepositoryError]:
         """Return all memories."""
-        try:
-            rows = self._db.execute(
-                f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY updated_at DESC"
-            ).fetchall()
-            return Success([self._row_to_memory(r) for r in rows])
-        except Exception as e:
-            logger.error("Failed to find all memories: %s", e)
-            return Failure(RepositoryError(str(e)))
+        rows = self._db.execute(
+            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY updated_at DESC"
+        ).fetchall()
+        return Success([self._row_to_memory(r) for r in rows])
 
     # ------------------------------------------------------------------
     # FTS5 full-text search
@@ -228,62 +208,58 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
         When ``valid_at`` is specified, only memories whose validity window
         covers that timestamp are returned (bi-temporal filtering).
         """
-        try:
-            fts_query = self._sanitize_fts_query(query)
-            if not fts_query:
-                return Success([])
+        fts_query = self._sanitize_fts_query(query)
+        if not fts_query:
+            return Success([])
 
-            conditions: list[str] = ["memories_fts MATCH ?"]
-            params: list = [fts_query]
+        conditions: list[str] = ["memories_fts MATCH ?"]
+        params: list = [fts_query]
 
-            # Exclude tombstoned
-            conditions.append("m.lifecycle_status != 'tombstoned'")
+        # Exclude tombstoned
+        conditions.append("m.lifecycle_status != 'tombstoned'")
 
-            # Date range filter
-            if date_from is not None or date_to is not None:
-                if date_from is not None and date_to is not None:
-                    conditions.append("m.created_at BETWEEN ? AND ?")
-                    params.extend([date_from.isoformat(), date_to.isoformat()])
-                elif date_from is not None:
-                    conditions.append("m.created_at >= ?")
-                    params.append(date_from.isoformat())
-                elif date_to is not None:
-                    conditions.append("m.created_at <= ?")
-                    params.append(date_to.isoformat())
+        # Date range filter
+        if date_from is not None or date_to is not None:
+            if date_from is not None and date_to is not None:
+                conditions.append("m.created_at BETWEEN ? AND ?")
+                params.extend([date_from.isoformat(), date_to.isoformat()])
+            elif date_from is not None:
+                conditions.append("m.created_at >= ?")
+                params.append(date_from.isoformat())
+            elif date_to is not None:
+                conditions.append("m.created_at <= ?")
+                params.append(date_to.isoformat())
 
-            # Temporal validity filter
-            if valid_at is not None:
-                iso = valid_at.isoformat()
-                conditions.append("(m.valid_from IS NULL OR m.valid_from <= ?)")
-                params.append(iso)
-                conditions.append("(m.valid_until IS NULL OR m.valid_until > ?)")
-                params.append(iso)
+        # Temporal validity filter
+        if valid_at is not None:
+            iso = valid_at.isoformat()
+            conditions.append("(m.valid_from IS NULL OR m.valid_from <= ?)")
+            params.append(iso)
+            conditions.append("(m.valid_until IS NULL OR m.valid_until > ?)")
+            params.append(iso)
 
-            where_clause = " AND ".join(conditions)
-            rows = self._db.execute(
-                f"""
-                SELECT m.*, rank
-                FROM memories_fts
-                JOIN memories m ON m.key = memories_fts.memories_key
-                WHERE {where_clause}
-                ORDER BY rank
-                LIMIT ?
-                """,  # noqa: S608  # nosec B608
-                [*params, top_k],
-            ).fetchall()
+        where_clause = " AND ".join(conditions)
+        rows = self._db.execute(
+            f"""
+            SELECT m.*, rank
+            FROM memories_fts
+            JOIN memories m ON m.key = memories_fts.memories_key
+            WHERE {where_clause}
+            ORDER BY rank
+            LIMIT ?
+            """,  # noqa: S608  # nosec B608
+            [*params, top_k],
+        ).fetchall()
 
-            scored: list[tuple[Memory, float]] = []
-            for row in rows:
-                memory = self._row_to_memory(row)
-                bm25 = row["rank"]
-                # BM25: lower = more relevant (usually -5 to 5)
-                # Normalize to 0-1: 1/(1+|bm25|)
-                score = 1.0 / (1.0 + abs(bm25))
-                scored.append((memory, score))
-            return Success(scored)
-        except Exception as e:
-            logger.error("FTS5 search failed for '%s': %s", query, e)
-            return Failure(RepositoryError(str(e)))
+        scored: list[tuple[Memory, float]] = []
+        for row in rows:
+            memory = self._row_to_memory(row)
+            bm25 = row["rank"]
+            # BM25: lower = more relevant (usually -5 to 5)
+            # Normalize to 0-1: 1/(1+|bm25|)
+            score = 1.0 / (1.0 + abs(bm25))
+            scored.append((memory, score))
+        return Success(scored)
 
     @staticmethod
     def _sanitize_fts_query(query: str) -> str:
@@ -323,51 +299,47 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
         When ``valid_at`` is specified, only memories whose validity window
         covers that timestamp are returned (bi-temporal filtering).
         """
-        try:
-            terms = [t for t in query.split() if t]
-            if not terms:
-                return Success([])
-            # Each term must match independently (AND logic)
-            conditions: list[str] = ["content LIKE ?" for _ in terms]  # noqa: UP028
-            params: list[str] = list(f"%{t}%" for t in terms)
+        terms = [t for t in query.split() if t]
+        if not terms:
+            return Success([])
+        # Each term must match independently (AND logic)
+        conditions: list[str] = ["content LIKE ?" for _ in terms]  # noqa: UP028
+        params: list[str] = list(f"%{t}%" for t in terms)
 
-            # Exclude tombstoned memories
-            conditions.append("lifecycle_status != 'tombstoned'")
+        # Exclude tombstoned memories
+        conditions.append("lifecycle_status != 'tombstoned'")
 
-            # Date range filter
-            if date_from is not None or date_to is not None:
-                if date_from is not None and date_to is not None:
-                    conditions.append("created_at BETWEEN ? AND ?")
-                    params.extend([date_from.isoformat(), date_to.isoformat()])
-                elif date_from is not None:
-                    conditions.append("created_at >= ?")
-                    params.append(date_from.isoformat())
-                elif date_to is not None:
-                    conditions.append("created_at <= ?")
-                    params.append(date_to.isoformat())
+        # Date range filter
+        if date_from is not None or date_to is not None:
+            if date_from is not None and date_to is not None:
+                conditions.append("created_at BETWEEN ? AND ?")
+                params.extend([date_from.isoformat(), date_to.isoformat()])
+            elif date_from is not None:
+                conditions.append("created_at >= ?")
+                params.append(date_from.isoformat())
+            elif date_to is not None:
+                conditions.append("created_at <= ?")
+                params.append(date_to.isoformat())
 
-            # Temporal validity filter
-            if valid_at is not None:
-                iso = valid_at.isoformat()
-                conditions.append("(valid_from IS NULL OR valid_from <= ?)")
-                params.append(iso)
-                conditions.append("(valid_until IS NULL OR valid_until > ?)")
-                params.append(iso)
+        # Temporal validity filter
+        if valid_at is not None:
+            iso = valid_at.isoformat()
+            conditions.append("(valid_from IS NULL OR valid_from <= ?)")
+            params.append(iso)
+            conditions.append("(valid_until IS NULL OR valid_until > ?)")
+            params.append(iso)
 
-            where_clause = " AND ".join(conditions)
-            rows = self._db.execute(
-                f"SELECT * FROM memories WHERE {where_clause} ORDER BY updated_at DESC",  # noqa: S608  # nosec B608
-                tuple(params),
-            ).fetchall()
-            scored: list[tuple[Memory, float]] = []
-            for row in rows:
-                score = self._simple_relevance_score(row["content"], query)
-                scored.append((self._row_to_memory(row), score))
-            scored.sort(key=lambda x: x[1], reverse=True)
-            return Success(scored[:limit])
-        except Exception as e:
-            logger.error("Failed to search memories for '%s': %s", query, e)
-            return Failure(RepositoryError(str(e)))
+        where_clause = " AND ".join(conditions)
+        rows = self._db.execute(
+            f"SELECT * FROM memories WHERE {where_clause} ORDER BY updated_at DESC",  # noqa: S608  # nosec B608
+            tuple(params),
+        ).fetchall()
+        scored: list[tuple[Memory, float]] = []
+        for row in rows:
+            score = self._simple_relevance_score(row["content"], query)
+            scored.append((self._row_to_memory(row), score))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return Success(scored[:limit])
 
     # ------------------------------------------------------------------
     # Memory versions
@@ -417,48 +389,27 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
 
     def get_versions(self, memory_key: str) -> Result[list[dict], RepositoryError]:
         """Get all version records for a memory, ordered by version."""
-        try:
-            rows = self._db.execute(
-                "SELECT * FROM memory_versions WHERE memory_key = ? ORDER BY version ASC",
-                (memory_key,),
-            ).fetchall()
-            return Success([dict(r) for r in rows])
-        except Exception as e:
-            logger.error("Failed to get versions for %s: %s", memory_key, e)
-            return Failure(RepositoryError(str(e)))
+        rows = self._db.execute(
+            "SELECT * FROM memory_versions WHERE memory_key = ? ORDER BY version ASC",
+            (memory_key,),
+        ).fetchall()
+        return Success([dict(r) for r in rows])
 
     def get_version(self, memory_key: str, version: int) -> Result[dict | None, RepositoryError]:
         """Get a specific version record."""
-        try:
-            row = self._db.execute(
-                "SELECT * FROM memory_versions WHERE memory_key = ? AND version = ?",
-                (memory_key, version),
-            ).fetchone()
-            return Success(dict(row) if row else None)
-        except Exception as e:
-            logger.error(
-                "Failed to get version %d for %s: %s",
-                version,
-                memory_key,
-                e,
-            )
-            return Failure(RepositoryError(str(e)))
+        row = self._db.execute(
+            "SELECT * FROM memory_versions WHERE memory_key = ? AND version = ?",
+            (memory_key, version),
+        ).fetchone()
+        return Success(dict(row) if row else None)
 
     def get_latest_version_number(self, memory_key: str) -> Result[int, RepositoryError]:
         """Get the latest version number for a memory, 0 if none."""
-        try:
-            row = self._db.execute(
-                "SELECT MAX(version) as max_ver FROM memory_versions WHERE memory_key = ?",
-                (memory_key,),
-            ).fetchone()
-            return Success(row["max_ver"] if row and row["max_ver"] is not None else 0)
-        except Exception as e:
-            logger.error(
-                "Failed to get latest version for %s: %s",
-                memory_key,
-                e,
-            )
-            return Failure(RepositoryError(str(e)))
+        row = self._db.execute(
+            "SELECT MAX(version) as max_ver FROM memory_versions WHERE memory_key = ?",
+            (memory_key,),
+        ).fetchone()
+        return Success(row["max_ver"] if row and row["max_ver"] is not None else 0)
 
     # ------------------------------------------------------------------
     # Paginated queries (dashboard)
@@ -476,48 +427,40 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
 
         Returns (memories, total_count) tuple.
         """
-        try:
-            conditions: list[str] = [self._active_where()]
-            params: list[str] = []
+        conditions: list[str] = [self._active_where()]
+        params: list[str] = []
 
-            if tag:
-                conditions.append("tags LIKE ?")
-                params.append(f"%{tag}%")
-            if query:
-                conditions.append("content LIKE ?")
-                params.append(f"%{query}%")
+        if tag:
+            conditions.append("tags LIKE ?")
+            params.append(f"%{tag}%")
+        if query:
+            conditions.append("content LIKE ?")
+            params.append(f"%{query}%")
 
-            where_clause = " WHERE " + " AND ".join(conditions)
-            order = "ASC" if sort_order.lower() == "asc" else "DESC"
+        where_clause = " WHERE " + " AND ".join(conditions)
+        order = "ASC" if sort_order.lower() == "asc" else "DESC"
 
-            count_row = self._db.execute(
-                f"SELECT COUNT(*) as cnt FROM memories{where_clause}",  # noqa: S608  # nosec B608
-                params,
-            ).fetchone()
-            total_count: int = count_row["cnt"]
+        count_row = self._db.execute(
+            f"SELECT COUNT(*) as cnt FROM memories{where_clause}",  # noqa: S608  # nosec B608
+            params,
+        ).fetchone()
+        total_count: int = count_row["cnt"]
 
-            offset = (page - 1) * per_page
-            rows = self._db.execute(
-                f"SELECT * FROM memories{where_clause} ORDER BY updated_at {order} LIMIT ? OFFSET ?",  # noqa: S608  # nosec B608
-                [*params, per_page, offset],
-            ).fetchall()
+        offset = (page - 1) * per_page
+        rows = self._db.execute(
+            f"SELECT * FROM memories{where_clause} ORDER BY updated_at {order} LIMIT ? OFFSET ?",  # noqa: S608  # nosec B608
+            [*params, per_page, offset],
+        ).fetchall()
 
-            return Success(([self._row_to_memory(r) for r in rows], total_count))
-        except Exception as e:
-            logger.error("Failed to find memories with pagination: %s", e)
-            return Failure(RepositoryError(str(e)))
+        return Success(([self._row_to_memory(r) for r in rows], total_count))
 
     def get_all_tags(self) -> Result[list[str], RepositoryError]:
         """Return a deduplicated list of all tags used across memories."""
-        try:
-            rows = self._db.execute(f"SELECT tags FROM memories WHERE {self._active_where()}").fetchall()
-            all_tags: set[str] = set()
-            for row in rows:
-                all_tags.update(self._parse_json_list(row["tags"]))
-            return Success(sorted(all_tags))
-        except Exception as e:
-            logger.error("Failed to get all tags: %s", e)
-            return Failure(RepositoryError(str(e)))
+        rows = self._db.execute(f"SELECT tags FROM memories WHERE {self._active_where()}").fetchall()
+        all_tags: set[str] = set()
+        for row in rows:
+            all_tags.update(self._parse_json_list(row["tags"]))
+        return Success(sorted(all_tags))
 
     def consume_memory(self, key: str) -> Result[None, RepositoryError]:
         """Mark a memory as consumed by setting last_consumed_at = now()."""  # noqa: D401
@@ -536,23 +479,19 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
 
     def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], RepositoryError]:
         """Get memories that contain ALL specified tags."""
-        try:
-            if not tags:
-                return Success([])
-            match_conditions = ["tags LIKE ?" for _ in tags]
-            params = [f'%"{t}"%' for t in tags]
-            all_conditions = [self._active_where(), *match_conditions]
-            if not include_consumed:
-                all_conditions.append("last_consumed_at IS NULL")
-            where = " AND ".join(all_conditions)
-            rows = self._db.execute(
-                f"SELECT * FROM memories WHERE {where} ORDER BY updated_at DESC",  # nosec B608
-                params,
-            ).fetchall()
-            return Success([self._row_to_memory(r) for r in rows])
-        except Exception as e:
-            logger.error("Failed to get memories by tags %s: %s", tags, e)
-            return Failure(RepositoryError(str(e)))
+        if not tags:
+            return Success([])
+        match_conditions = ["tags LIKE ?" for _ in tags]
+        params = [f'%"{t}"%' for t in tags]
+        all_conditions = [self._active_where(), *match_conditions]
+        if not include_consumed:
+            all_conditions.append("last_consumed_at IS NULL")
+        where = " AND ".join(all_conditions)
+        rows = self._db.execute(
+            f"SELECT * FROM memories WHERE {where} ORDER BY updated_at DESC",  # nosec B608
+            params,
+        ).fetchall()
+        return Success([self._row_to_memory(r) for r in rows])
 
     # ------------------------------------------------------------------
     # Smart recent + Search log + Gap alert
@@ -560,25 +499,21 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
 
     def find_smart_recent(self, limit: int = 8) -> Result[list[Memory], RepositoryError]:
         """Get memories ranked by importance * recency * strength."""
-        try:
-            rows = self._db.execute(
-                f"""
-                SELECT m.*,
-                    m.importance * 0.4 +
-                    (1.0 / (1.0 + (julianday('now') - julianday(m.created_at)) * 0.1)) * 0.3 +
-                    COALESCE(ms.strength, 0.5) * 0.3 AS smart_score
-                FROM memories m
-                LEFT JOIN memory_strength ms ON m.key = ms.memory_key
-                WHERE {self._active_where()}
-                ORDER BY smart_score DESC
-                LIMIT ?
-                """,
-                (limit,),
-            ).fetchall()
-            return Success([self._row_to_memory(r) for r in rows])
-        except Exception as e:
-            logger.error("Failed to get smart recent: %s", e)
-            return Failure(RepositoryError(str(e)))
+        rows = self._db.execute(
+            f"""
+            SELECT m.*,
+                m.importance * 0.4 +
+                (1.0 / (1.0 + (julianday('now') - julianday(m.created_at)) * 0.1)) * 0.3 +
+                COALESCE(ms.strength, 0.5) * 0.3 AS smart_score
+            FROM memories m
+            LEFT JOIN memory_strength ms ON m.key = ms.memory_key
+            WHERE {self._active_where()}
+            ORDER BY smart_score DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return Success([self._row_to_memory(r) for r in rows])
 
     def log_search(self, query: str, mode: str, result_count: int) -> Result[None, RepositoryError]:
         """Log a search query for topic detection."""
@@ -596,123 +531,103 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
 
     def get_recent_searches(self, limit: int = 5) -> Result[list[dict], RepositoryError]:
         """Get recent search queries."""
-        try:
-            rows = self._db.execute(
-                "SELECT query, mode, result_count, searched_at FROM search_log ORDER BY searched_at DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
-            return Success([dict(r) for r in rows])
-        except Exception as e:
-            logger.error("Failed to get recent searches: %s", e)
-            return Failure(RepositoryError(str(e)))
+        rows = self._db.execute(
+            "SELECT query, mode, result_count, searched_at FROM search_log ORDER BY searched_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return Success([dict(r) for r in rows])
 
     def count_decayed_important(
         self, min_importance: float = 0.7, max_strength: float = 0.3
     ) -> Result[int, RepositoryError]:
         """Count important memories that have decayed below strength threshold."""
-        try:
-            row = self._db.execute(
-                "SELECT COUNT(*) as cnt FROM memories m INNER JOIN memory_strength ms ON m.key = ms.memory_key WHERE m.importance >= ? AND ms.strength <= ?",
-                (min_importance, max_strength),
-            ).fetchone()
-            return Success(row["cnt"] if row else 0)
-        except Exception as e:
-            logger.error("Failed to count decayed: %s", e)
-            return Failure(RepositoryError(str(e)))
+        row = self._db.execute(
+            "SELECT COUNT(*) as cnt FROM memories m INNER JOIN memory_strength ms ON m.key = ms.memory_key WHERE m.importance >= ? AND ms.strength <= ?",
+            (min_importance, max_strength),
+        ).fetchone()
+        return Success(row["cnt"] if row else 0)
 
     def get_memory_index(self) -> Result[dict, RepositoryError]:
         """Get compressed memory index for context snapshot."""
-        try:
-            total = self._db.execute(f"SELECT COUNT(*) as cnt FROM memories WHERE {self._active_where()}").fetchone()[
-                "cnt"
-            ]
+        total = self._db.execute(f"SELECT COUNT(*) as cnt FROM memories WHERE {self._active_where()}").fetchone()[
+            "cnt"
+        ]
 
-            tag_rows = self._db.execute(f"""
-                SELECT tags FROM memories WHERE {self._active_where()} AND tags IS NOT NULL AND tags != '' AND tags != '[]'
-            """).fetchall()
-            tag_dist: dict[str, int] = {}
-            for row in tag_rows:
-                try:
-                    tags = json.loads(row["tags"]) if isinstance(row["tags"], str) else row["tags"]
-                    if isinstance(tags, list):
-                        for t in tags:
-                            tag_dist[t] = tag_dist.get(t, 0) + 1
-                except (json.JSONDecodeError, TypeError):
-                    pass
-            top_tags = sorted(tag_dist.items(), key=lambda x: x[1], reverse=True)[:10]
+        tag_rows = self._db.execute(f"""
+            SELECT tags FROM memories WHERE {self._active_where()} AND tags IS NOT NULL AND tags != '' AND tags != '[]'
+        """).fetchall()
+        tag_dist: dict[str, int] = {}
+        for row in tag_rows:
+            try:
+                tags = json.loads(row["tags"]) if isinstance(row["tags"], str) else row["tags"]
+                if isinstance(tags, list):
+                    for t in tags:
+                        tag_dist[t] = tag_dist.get(t, 0) + 1
+            except (json.JSONDecodeError, TypeError):
+                pass
+        top_tags = sorted(tag_dist.items(), key=lambda x: x[1], reverse=True)[:10]
 
-            emotion_rows = self._db.execute(f"""
-                SELECT emotion, COUNT(*) as cnt FROM memories
-                WHERE {self._active_where()} AND emotion IS NOT NULL AND emotion != ''
-                GROUP BY emotion ORDER BY cnt DESC
-            """).fetchall()
-            emotion_dist = [(r["emotion"], r["cnt"]) for r in emotion_rows[:8]]
-            emotion_others = max(0, len(emotion_rows) - 8)
+        emotion_rows = self._db.execute(f"""
+            SELECT emotion, COUNT(*) as cnt FROM memories
+            WHERE {self._active_where()} AND emotion IS NOT NULL AND emotion != ''
+            GROUP BY emotion ORDER BY cnt DESC
+        """).fetchall()
+        emotion_dist = [(r["emotion"], r["cnt"]) for r in emotion_rows[:8]]
+        emotion_others = max(0, len(emotion_rows) - 8)
 
-            timeline_rows = self._db.execute(f"""
-                SELECT strftime('%Y-%m', created_at) as month, COUNT(*) as cnt
-                FROM memories
-                WHERE {self._active_where()} AND created_at >= datetime('now', '-12 months')
-                GROUP BY month ORDER BY month
-            """).fetchall()
-            timeline = [(r["month"], r["cnt"]) for r in timeline_rows]
+        timeline_rows = self._db.execute(f"""
+            SELECT strftime('%Y-%m', created_at) as month, COUNT(*) as cnt
+            FROM memories
+            WHERE {self._active_where()} AND created_at >= datetime('now', '-12 months')
+            GROUP BY month ORDER BY month
+        """).fetchall()
+        timeline = [(r["month"], r["cnt"]) for r in timeline_rows]
 
-            high_imp = self._db.execute(
-                f"SELECT COUNT(*) as cnt FROM memories WHERE {self._active_where()} AND importance >= 0.8"
-            ).fetchone()["cnt"]
+        high_imp = self._db.execute(
+            f"SELECT COUNT(*) as cnt FROM memories WHERE {self._active_where()} AND importance >= 0.8"
+        ).fetchone()["cnt"]
 
-            return Success(
-                {
-                    "total": total,
-                    "top_tags": top_tags,
-                    "emotion_dist": emotion_dist,
-                    "emotion_others": emotion_others,
-                    "timeline": timeline,
-                    "high_importance_count": high_imp,
-                }
-            )
-        except Exception as e:
-            logger.error("Failed to get memory index: %s", e)
-            return Failure(RepositoryError(str(e)))
+        return Success(
+            {
+                "total": total,
+                "top_tags": top_tags,
+                "emotion_dist": emotion_dist,
+                "emotion_others": emotion_others,
+                "timeline": timeline,
+                "high_importance_count": high_imp,
+            }
+        )
 
     def find_relationship_highlights(self, limit: int = 5) -> Result[list, RepositoryError]:
         """Find important relationship-related memories."""
-        try:
-            rows = self._db.execute(
-                f"""
-                SELECT * FROM memories
-                WHERE importance >= 0.7
-                AND {self._active_where()}
-                AND (
-                    tags LIKE '%relationship%'
-                    OR tags LIKE '%first_meeting%'
-                    OR tags LIKE '%milestone%'
-                    OR tags LIKE '%promise%'
-                    OR tags LIKE '%important_moment%'
-                    OR tags LIKE '%nickname%'
-                    OR tags LIKE '%shared_experience%'
-                )
-                ORDER BY importance DESC, created_at ASC
-                LIMIT ?
-            """,
-                (limit,),
-            ).fetchall()
-            return Success([self._row_to_memory(r) for r in rows])
-        except Exception as e:
-            logger.error("Failed to find relationship highlights: %s", e)
-            return Failure(RepositoryError(str(e)))
+        rows = self._db.execute(
+            f"""
+            SELECT * FROM memories
+            WHERE importance >= 0.7
+            AND {self._active_where()}
+            AND (
+                tags LIKE '%relationship%'
+                OR tags LIKE '%first_meeting%'
+                OR tags LIKE '%milestone%'
+                OR tags LIKE '%promise%'
+                OR tags LIKE '%important_moment%'
+                OR tags LIKE '%nickname%'
+                OR tags LIKE '%shared_experience%'
+            )
+            ORDER BY importance DESC, created_at ASC
+            LIMIT ?
+        """,
+            (limit,),
+        ).fetchall()
+        return Success([self._row_to_memory(r) for r in rows])
 
     def find_top_by_importance(self, limit: int = 15) -> Result[list[Memory], RepositoryError]:
         """Find memories ranked purely by importance descending."""
-        try:
-            rows = self._db.execute(
-                f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY importance DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
-            return Success([self._row_to_memory(r) for r in rows])
-        except Exception as e:
-            logger.error("Failed to find top by importance: %s", e)
-            return Failure(RepositoryError(str(e)))
+        rows = self._db.execute(
+            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY importance DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return Success([self._row_to_memory(r) for r in rows])
 
     def tombstone(self, key: str) -> Result[None, RepositoryError]:
         """Logically delete a memory by setting lifecycle_status to 'tombstoned'."""
