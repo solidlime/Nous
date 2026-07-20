@@ -246,6 +246,9 @@ async function testVoicePlayback() {
 /* ── Auto-play TTS on response ── */
 function autoPlayTts(text) {
   if (!S.persona || !text) return;
+  // Gate: skip if voice is disabled
+  var _ve = document.getElementById("chat-voice-enabled");
+  if (_ve && !_ve.checked) return;
   // Cancel any pending auto-play request
   if (_autoTtsAbort) _autoTtsAbort.abort();
   _autoTtsAbort = new AbortController();
@@ -286,6 +289,9 @@ function autoPlayTts(text) {
 /* ── Inline TTS playback (chat bubble button) ── */
 async function playTts(btn, text) {
   if (!S.persona || !text) return;
+  // Gate: skip if voice is disabled
+  var _ve = document.getElementById("chat-voice-enabled");
+  if (_ve && !_ve.checked) return;
   
   // 一時停止中の再開
   if (_playbackSession && _playbackSession.btn === btn && btn.classList.contains("playing")) {
