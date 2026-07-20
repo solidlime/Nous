@@ -2,31 +2,22 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from nous.domain.memory.entities import Memory
 from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import format_iso, get_now
 from nous.infrastructure.logging.structured import get_logger
+from nous.infrastructure.sqlite.base_repo import SQLiteRepository
 from nous.infrastructure.sqlite.block_repo import SQLiteBlockMixin
 from nous.infrastructure.sqlite.strength_repo import SQLiteStrengthMixin
-
-if TYPE_CHECKING:
-    from nous.infrastructure.sqlite.connection import SQLiteConnection
 
 logger = get_logger(__name__)
 
 
-class SQLiteMemoryRepository(SQLiteBlockMixin, SQLiteStrengthMixin):
+class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthMixin):
     """SQLite-backed implementation of the MemoryRepository protocol."""
-
-    def __init__(self, connection: SQLiteConnection) -> None:
-        self._conn = connection
-
-    @property
-    def _db(self):
-        return self._conn.get_memory_db()
 
     @staticmethod
     def _active_where() -> str:
