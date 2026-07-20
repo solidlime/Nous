@@ -201,14 +201,10 @@ function showImageGenResult(evt) {
   const container = findChatLogContainer();
   if (!container) return;
 
-  // スピナーを検索（後で差し替えるため、削除前に位置を記録）
-  var anchor = null;
+  // スピナーを削除（位置記録は不要 — ツールコール基準で挿入）
   if (_imageGenSpinnerId) {
     var spinner = document.getElementById(_imageGenSpinnerId);
-    if (spinner) {
-      anchor = spinner.nextSibling;
-      spinner.remove();
-    }
+    if (spinner) spinner.remove();
     _imageGenSpinnerId = null;
   }
 
@@ -228,9 +224,24 @@ function showImageGenResult(evt) {
       var bytes = new Uint8Array(binary.length);
       for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       var blob = new Blob([bytes], { type: "image/png" });
-      imgEl.src = URL.createObjectURL(blob);
+      var blobUrl = URL.createObjectURL(blob);
+      imgEl.src = blobUrl;
+
+      // Blob URL はカードがDOM削除されるまで維持（クリック時のプレビューを可能に）
+      var observer = new MutationObserver(function(mutations) {
+        for (var m of mutations) {
+          for (var node of m.removedNodes) {
+            if (node === card || (node.contains && node.contains(card))) {
+              URL.revokeObjectURL(blobUrl);
+              observer.disconnect();
+              return;
+            }
+          }
+        }
+      });
+      observer.observe(container, { childList: true, subtree: true });
+
       imgEl.onload = function() {
-        URL.revokeObjectURL(this.src);
         if (typeof _isNearBottom !== 'undefined' && _isNearBottom(container)) scrollToBottom(container);
       };
     } catch (e) {
@@ -243,7 +254,6 @@ function showImageGenResult(evt) {
     imgEl.dataset.revisedPrompt = img.revised_prompt || "";
     imgEl.dataset.negativePrompt = img.negative_prompt || "";
     imgEl.onerror = function () {
-      URL.revokeObjectURL(this.src);
       console.error("[showImageGenResult] img decode failed, size:", img.base64?.length);
       imgEl.style.display = "none";
       var errDiv = document.createElement("div");
@@ -251,6 +261,9 @@ function showImageGenResult(evt) {
       errDiv.textContent = "⚠️ 画像のデコードに失敗しました（" + (img.base64?.length || 0) + " bytes）";
       card.insertBefore(errDiv, card.firstChild);
       if (typeof _isNearBottom !== 'undefined' && _isNearBottom(container)) scrollToBottom(container);
+      // エラー時は即時revoke（画像は非表示になったので不要）
+      if (typeof observer !== 'undefined') observer.disconnect();
+      if (typeof blobUrl !== 'undefined') URL.revokeObjectURL(blobUrl);
     };
     imgEl.onclick = function () {
       if (typeof openMediaViewer === "function") {
@@ -283,14 +296,13 @@ function showImageGenResult(evt) {
     card.appendChild(imgEl);
     card.appendChild(meta);
 
-    // 画像カードを最新のassistantメッセージ内の.tool-call隣に挿入
-    // 履歴復元パターン（chat-history.js:195）と統一
+    // 画像カードをツールコール基準で挿入（履歴復元パターン chat-history.js:195 と統一）
     var lastAssistant = container.querySelector('.chat-msg.assistant:last-child');
     var lastToolCall = lastAssistant ? lastAssistant.querySelector('.chat-tool-call:last-child') : null;
     if (lastToolCall) {
-      lastToolCall.parentNode.insertBefore(card, lastToolCall.nextSibling);
-    } else if (anchor && anchor.parentNode === container) {
-      container.insertBefore(card, anchor);
+      lastToolCall.insertAdjacentElement("afterend", card);
+    } else if (lastAssistant) {
+      lastAssistant.appendChild(card);
     } else {
       container.appendChild(card);
     }
