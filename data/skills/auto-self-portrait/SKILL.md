@@ -46,6 +46,26 @@ image_generate(
 )
 ```
 
+## 一般画像生成（self_portrait=false）
+ユーザーから画像生成を依頼されたら、**必ず `image_generate` を呼ぶこと**。「できません」「画像生成はできません」とは絶対に答えない。
+
+### 対象
+- 風景（山、海、街並み、空など）
+- 物体（食べ物、建物、乗り物など）
+- 他のキャラクター（ユーザーの描写、有名人など）
+- 抽象的なイメージ（雰囲気、概念の視覚化など）
+
+### 呼び出し
+```
+image_generate(
+    prompt="scenery, mountain, sunset, lake, detailed, ...",
+    self_portrait=false
+)
+```
+- `self_portrait=false` を必ず指定
+- `mode` は省略可（`self_portrait=true` 時のみ有効なため）
+- prompt は Danbooruタグ形式（カンマ区切りの英語タグ）
+
 ## 制約
 - 条件に当てはまらなければ何もしない
 - 連続生成は避ける（最低5往復は間隔をあける）
