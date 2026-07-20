@@ -425,8 +425,19 @@ async function chatSend(retry) {
     const decoder = new TextDecoder();
     let buffer = "";
     let streamDone = false;
+    var _rafPending = false;
+    var _scrollListener = null;
+    var chatMessages = document.getElementById("chat-messages");
 
     removeTypingIndicator();
+
+    // Track user scroll intent during streaming
+    CHAT._userScrolledUp = false;
+    _scrollListener = function _onChatScroll() {
+      var threshold = 80;
+      CHAT._userScrolledUp = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight > threshold;
+    };
+    chatMessages.addEventListener("scroll", _scrollListener, { passive: true });
 
     while (true) {
       const readPromise = reader.read();
@@ -462,10 +473,23 @@ async function chatSend(retry) {
             contentParts.push({ type: "text", bubble: currentTextBubble, content: "" });
           }
           currentTextContent += evt.content;
-          currentTextBubble.textContent = currentTextContent;
           contentParts[contentParts.length - 1].content = currentTextContent;
-          document.getElementById("chat-messages").scrollTop =
-            document.getElementById("chat-messages").scrollHeight;
+
+          // rAF-batched DOM update
+          if (!_rafPending) {
+            _rafPending = true;
+            requestAnimationFrame(function() {
+              _rafPending = false;
+              if (currentTextBubble) {
+                currentTextBubble.textContent = currentTextContent;
+              }
+              // Auto-scroll with user intent detection
+              var isAtBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 80;
+              if (isAtBottom || !CHAT._userScrolledUp) {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+              }
+            });
+          }
         } else if (evt.type === "tool_call") {
           if (!assistantDiv) {
             assistantDiv = _createAssistantDiv();
@@ -590,6 +614,12 @@ async function chatSend(retry) {
     CHAT.streaming = false;
     CHAT._streamingSince = null;
     CHAT.abortController = null;
+    if (_scrollListener) {
+      chatMessages.removeEventListener("scroll", _scrollListener);
+      _scrollListener = null;
+    }
+    CHAT._userScrolledUp = false;
+    _rafPending = false;
     sendBtn.style.display = "";
     if (cancelBtn) cancelBtn.style.display = "none";
     inputEl.focus();
