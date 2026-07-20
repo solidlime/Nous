@@ -14,7 +14,7 @@ from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
     from nous.application.chat.pipeline.context import ChatTurnContext
-    from nous.application.chat.session_store import SessionWindow
+    from nous.application.chat.session_store import TreeSessionWindow
     from nous.application.use_cases import AppContext
     from nous.domain.chat_config import ChatConfig
 
@@ -565,7 +565,7 @@ class PrepareStep:
     async def run(
         self,
         ctx: AppContext,
-        session: SessionWindow,
+        session: TreeSessionWindow,
         turn_ctx: ChatTurnContext,
         config: ChatConfig | None = None,
     ) -> None:

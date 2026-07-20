@@ -776,25 +776,25 @@ class TestDogfooding:
         assert loaded.enable_parallel_tools is False
 
     def test_sessionwindow_new_defaults(self):
-        """Verify SessionWindow uses new defaults (200 msg max)."""
-        from nous.application.chat.session_store import SessionWindow
+        """Verify TreeSessionWindow uses new defaults (200 msg max)."""
+        from nous.application.chat.session_store import TreeSessionWindow
 
-        w = SessionWindow()
+        w = TreeSessionWindow()
         assert w._max_messages == 200
         assert w.get_message_count() == 0
 
     def test_sessionwindow_custom_max_messages(self):
-        """Verify SessionWindow accepts max_messages parameter."""
-        from nous.application.chat.session_store import SessionWindow
+        """Verify TreeSessionWindow accepts max_messages parameter."""
+        from nous.application.chat.session_store import TreeSessionWindow
 
-        w = SessionWindow(max_messages=50)
+        w = TreeSessionWindow(max_messages=50)
         assert w._max_messages == 50
 
     def test_sessionwindow_default_max_messages(self):
-        """Verify SessionWindow default max_messages is 200."""
-        from nous.application.chat.session_store import SessionWindow
+        """Verify TreeSessionWindow default max_messages is 200."""
+        from nous.application.chat.session_store import TreeSessionWindow
 
-        w = SessionWindow()
+        w = TreeSessionWindow()
         assert w._max_messages == 200  # default
 
     def test_parallel_tools_flag_exists(self):

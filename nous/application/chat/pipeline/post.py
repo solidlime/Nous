@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from nous.application.chat.pipeline.context import ChatTurnContext
-    from nous.application.chat.session_store import SessionWindow
+    from nous.application.chat.session_store import TreeSessionWindow
     from nous.application.use_cases import AppContext
     from nous.domain.chat_config import ChatConfig
 
@@ -79,7 +79,7 @@ async def _safe_mental_model(ctx: AppContext, config: ChatConfig) -> None:
 async def _safe_episode_consolidation(
     ctx: AppContext,
     config: ChatConfig,
-    session: SessionWindow,
+    session: TreeSessionWindow,
 ) -> None:
     """Background task: run episode consolidation after DoneSSE."""
     if not config.episode_consolidation_enabled:
@@ -123,7 +123,7 @@ class PostProcessStep:
         self,
         ctx: AppContext,
         config: ChatConfig,
-        session: SessionWindow,
+        session: TreeSessionWindow,
         turn_ctx: ChatTurnContext,
         debug: bool = False,
     ) -> AsyncIterator[

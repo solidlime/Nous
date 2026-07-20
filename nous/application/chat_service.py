@@ -2,13 +2,14 @@
 
 from nous.application.chat import ChatService, SessionManager
 from nous.application.chat.memory_llm import MemoryLLM, run_memory_llm
-from nous.application.chat.session_store import SessionWindow
+from nous.application.chat.session_store import SessionWindow, TreeSessionWindow
 from nous.application.chat.tools import MEMORY_TOOLS
 
 __all__ = [
     "ChatService",
     "SessionManager",
     "SessionWindow",
+    "TreeSessionWindow",
     "MemoryLLM",
     "MEMORY_TOOLS",
     "run_memory_llm",

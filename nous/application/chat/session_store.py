@@ -363,7 +363,7 @@ class TreeSessionWindow:
             segments = node.get("segments")
             ts = datetime.fromisoformat(node["created_at"])
             if segments:
-                result.extend(SessionWindow._expand_segments(segments, ts, now))
+                result.extend(_SessionWindow_old._expand_segments(segments, ts, now))
             else:
                 label = relative_time_str(ts, now)
                 result.append(
@@ -757,3 +757,8 @@ class SessionManager:
         except Exception as e:
             logger.warning("SessionManager.delete_session failed: %s", e)
             return False
+
+
+# 後方互換エイリアス: SessionWindow → TreeSessionWindow
+_SessionWindow_old = SessionWindow  # TreeSessionWindow内部から旧クラス参照を保持
+SessionWindow = TreeSessionWindow
