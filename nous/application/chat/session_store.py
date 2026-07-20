@@ -575,12 +575,18 @@ class TreeSessionWindow:
             return None
 
     def edit_message(self, msg_id: str, new_content: str) -> dict | None:
-        # TODO: segments フィールドの編集対応（ツールコールのインターリーブ表示用）。現在は content のみ更新。
-        """メッセージをインプレース編集（Minimal B）。編集後永続化。"""
+        """メッセージをインプレース編集。segments 内の text も同時に更新。"""
         node = self._nodes.get(msg_id)
         if node is None:
             return None
         node["content"] = new_content
+        # segments 内の最初の text タイプセグメントも更新（ツールコールインタリーブ表示用）
+        segments = node.get("segments")
+        if segments:
+            for seg in segments:
+                if seg.get("type") == "text":
+                    seg["content"] = new_content
+                    break
         self._persist()
         return dict(node)
 

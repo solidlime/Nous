@@ -316,6 +316,50 @@ class TestTreeSessionWindowNew:
             win.add("user" if i % 2 == 0 else "assistant", f"msg{i}")
         assert win.get_message_count() <= 4
 
+    # ── Bug #3: segments 編集対応 ─────────────────────────────
+
+    def test_edit_message_updates_segments_text(self):
+        """edit_message() は text セグメントの content も更新する"""
+        win = TreeSessionWindow()
+        segments = [
+            {"type": "tool_call", "name": "search", "input": {"q": "test"}},
+            {"type": "text", "content": "old result"},
+        ]
+        msg_id = win.add("assistant", "old result", segments=segments)
+        updated = win.edit_message(msg_id, "new result")
+        assert updated is not None
+        assert updated["content"] == "new result"
+        # segments 内の text も更新されている
+        segs = updated.get("segments", [])
+        text_segs = [s for s in segs if s.get("type") == "text"]
+        assert len(text_segs) == 1
+        assert text_segs[0]["content"] == "new result"
+        # tool_call セグメントは更新されていない
+        tool_segs = [s for s in segs if s.get("type") == "tool_call"]
+        assert tool_segs[0]["input"]["q"] == "test"
+
+    def test_edit_message_no_segments_still_works(self):
+        """segments なし edit_message() は従来通り動作する"""
+        win = TreeSessionWindow()
+        msg_id = win.add("user", "hello")
+        updated = win.edit_message(msg_id, "world")
+        assert updated is not None
+        assert updated["content"] == "world"
+        assert "segments" not in updated
+
+    def test_edit_message_segments_no_text_type(self):
+        """text タイプがない segments では content のみ更新される"""
+        win = TreeSessionWindow()
+        segments = [{"type": "tool_call", "name": "search", "input": {}}]
+        msg_id = win.add("assistant", "result", segments=segments)
+        updated = win.edit_message(msg_id, "new result")
+        assert updated["content"] == "new result"
+        segs = updated.get("segments", [])
+        text_segs = [s for s in segs if s.get("type") == "text"]
+        assert len(text_segs) == 0  # text がないので変わらない
+
+    # ── Bug #4 tests are added in the next commit ──────────────
+
 
 # ─────────────────────────────────────────────────────────────
 # SessionManager tests
