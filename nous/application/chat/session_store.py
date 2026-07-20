@@ -354,6 +354,36 @@ class TreeSessionWindow:
     def __len__(self) -> int:
         return self.get_message_count()
 
+    def get_labeled_messages(self, now: datetime | None = None) -> list[LLMMessage]:
+        """アクティブパスのメッセージからLLMMessageリストを生成する。"""
+        if now is None:
+            now = get_now()
+        result: list[LLMMessage] = []
+        for node in self.get_active_path():
+            segments = node.get("segments")
+            ts = datetime.fromisoformat(node["created_at"])
+            if segments:
+                result.extend(SessionWindow._expand_segments(segments, ts, now))
+            else:
+                label = relative_time_str(ts, now)
+                result.append(
+                    LLMMessage(
+                        role=node["role"],
+                        content=node["content"],
+                        timestamp=ts,
+                        time_label=label,
+                        tool_calls=node.get("tool_calls"),
+                    )
+                )
+        return result
+
+    def get_last_assistant_content(self) -> str | None:
+        """アクティブパス内の直近アシスタント発言を返す。"""
+        for node in reversed(self.get_active_path()):
+            if node["role"] == "assistant":
+                return node["content"]
+        return None
+
     def flush(self) -> None:
         """即時永続化。"""
         self._persist()
