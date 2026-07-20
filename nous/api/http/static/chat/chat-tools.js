@@ -229,7 +229,10 @@ function showImageGenResult(evt) {
       for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       var blob = new Blob([bytes], { type: "image/png" });
       imgEl.src = URL.createObjectURL(blob);
-      imgEl.onload = function() { URL.revokeObjectURL(this.src); };
+      imgEl.onload = function() {
+        URL.revokeObjectURL(this.src);
+        if (typeof _isNearBottom !== 'undefined' && _isNearBottom(container)) scrollToBottom(container);
+      };
     } catch (e) {
       console.warn("[showImageGenResult] Blob conversion failed, fallback to data URI:", e);
       imgEl.src = "data:image/png;base64," + img.base64;
@@ -247,6 +250,7 @@ function showImageGenResult(evt) {
       errDiv.className = "image-gen-error";
       errDiv.textContent = "⚠️ 画像のデコードに失敗しました（" + (img.base64?.length || 0) + " bytes）";
       card.insertBefore(errDiv, card.firstChild);
+      if (typeof _isNearBottom !== 'undefined' && _isNearBottom(container)) scrollToBottom(container);
     };
     imgEl.onclick = function () {
       if (typeof openMediaViewer === "function") {
@@ -279,8 +283,13 @@ function showImageGenResult(evt) {
     card.appendChild(imgEl);
     card.appendChild(meta);
 
-    // スピナーがあった位置に画像カードを挿入
-    if (anchor && anchor.parentNode === container) {
+    // 画像カードを最新のassistantメッセージ内の.tool-call隣に挿入
+    // 履歴復元パターン（chat-history.js:195）と統一
+    var lastAssistant = container.querySelector('.chat-msg.assistant:last-child');
+    var lastToolCall = lastAssistant ? lastAssistant.querySelector('.chat-tool-call:last-child') : null;
+    if (lastToolCall) {
+      lastToolCall.parentNode.insertBefore(card, lastToolCall.nextSibling);
+    } else if (anchor && anchor.parentNode === container) {
       container.insertBefore(card, anchor);
     } else {
       container.appendChild(card);
