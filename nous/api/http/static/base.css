@@ -393,7 +393,7 @@ html.light .tab-bar { background: rgba(255, 255, 255, 0.7); }
     display: flex; align-items: center; gap: 8px;
 }
 .stat-value {
-    font-size: 2rem; font-weight: 700;
+    font-size: clamp(1.25rem, 8cqi, 2rem); font-weight: 700;
     color: var(--text-primary);
     letter-spacing: -0.02em;
 }
@@ -432,6 +432,15 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 }
 .memory-card:hover { background: var(--glass-bg-subtle); }
 .memory-card:last-child { border-bottom: none; }
+/* Container-adaptive: horizontal layout when container is wide enough */
+@container (min-width: 500px) {
+    .memory-card {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 16px;
+        align-items: start;
+    }
+}
 .memory-key {
     font-size: 0.82rem; font-weight: 600; color: var(--accent-blue);
     margin-bottom: 6px; font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Noto Sans Mono CJK JP', monospace;
@@ -635,12 +644,13 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
    TOAST NOTIFICATION — Apple HIG iOS Style
    ============================================================ */
 .toast-container {
+    container-type: inline-size;
     position: fixed; bottom: 24px; right: 24px; z-index: var(--z-toast);
     display: flex; flex-direction: column; gap: 8px;
 }
 .toast {
     padding: 12px 20px; border-radius: var(--radius-lg);
-    font-size: 1rem; font-weight: 500;
+    font-size: clamp(0.85rem, 4cqi, 1rem); font-weight: 500;
     backdrop-filter: blur(20px) saturate(180%);
     border: 0.5px solid var(--glass-border);
     animation: toastIn 0.3s var(--ease-apple), toastOut 0.3s var(--ease-apple) 2.7s forwards;
@@ -1094,6 +1104,13 @@ h4, .tab-panel h4 {
 }
 .tab-bar:active {
     cursor: grabbing;
+}
+
+/* ============================================================
+   CONTAINER QUERY UTILITY
+   ============================================================ */
+.container-aware {
+    container-type: inline-size;
 }
 
 /* ============================================================

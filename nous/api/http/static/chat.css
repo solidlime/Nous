@@ -19,6 +19,12 @@
   min-width: 0;
   overflow-x: hidden;
 }
+@container (min-width: 700px) {
+  #chat-main {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+}
 #chat-messages {
   flex: 1;
   overflow-y: auto;

@@ -44,6 +44,7 @@ markers = [
     "integration: Integration tests (requires DB)",
     "slow: Slow tests (embedding model loading etc)",
     "benchmark: Performance benchmark tests",
+    "ui: Visual regression tests (requires running server & Playwright)",
 ]
 
 [tool.coverage.run]

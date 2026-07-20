@@ -5,10 +5,15 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "lint:css": "stylelint '**/*.css' --ignore-pattern 'node_modules/**'",
+    "lint:css:fix": "stylelint '**/*.css' --ignore-pattern 'node_modules/**' --fix"
   },
   "devDependencies": {
     "jsdom": "^25.0.0",
+    "stylelint": "^17.14.1",
+    "stylelint-config-standard": "^40.0.0",
+    "stylelint-declaration-strict-value": "^1.11.1",
     "vitest": "^2.1.0"
   }
 }
