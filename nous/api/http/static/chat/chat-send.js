@@ -487,6 +487,8 @@ async function chatSend(retry) {
           showSessionSummarized(evt.summary);
         } else if (evt.type === "context_compressed") {
           showContextCompressed(evt);
+        } else if (evt.type === "skill_load") {
+          showSkillLoadNotification(evt);
         } else if (evt.type === "image_gen_start") {
           showImageGenSpinner(evt);
         } else if (evt.type === "image_gen_result") {

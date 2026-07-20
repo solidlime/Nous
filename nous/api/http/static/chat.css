@@ -1360,6 +1360,19 @@ input[type="range"].chat-field-input:focus {
   border-radius: 50%;
   animation: gen-spin 0.8s linear infinite;
 }
+.chat-skill-load-note {
+  padding: 6px 14px;
+  margin: 4px 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  background: var(--surface-2, #2a2a3e);
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 1;
+  transition: opacity 0.5s ease-out;
+}
 .image-gen-error {
   padding: 12px;
   color: var(--accent-red);

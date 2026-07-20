@@ -196,6 +196,29 @@ function showImageGenSpinner(evt) {
   scrollToBottom(container);
 }
 
+function showSkillLoadNotification(evt) {
+  var container = findChatLogContainer();
+  if (!container) return;
+
+  var skills = evt.skill_names || [];
+  if (skills.length === 0) return;
+
+  var note = document.createElement("div");
+  note.className = "chat-skill-load-note";
+  note.innerHTML = '<i data-lucide="sparkles"></i> スキル読み込み: ' + skills.join(", ");
+
+  // chat-messages の末尾に挿入
+  container.appendChild(note);
+  scrollToBottom(container);
+
+  // 5秒後にフェードアウトして削除
+  setTimeout(function() {
+    note.style.opacity = "0";
+    note.style.transition = "opacity 0.5s ease-out";
+    setTimeout(function() { note.remove(); }, 500);
+  }, 5000);
+}
+
 function showImageGenResult(evt) {
   console.log("[showImageGenResult] evt:", JSON.stringify({type: evt.type, imagesCount: evt.images?.length, hasImages: !!evt.images, spinnerId: _imageGenSpinnerId}));
   const container = findChatLogContainer();
@@ -331,6 +354,7 @@ window.handleFileToolCall = handleFileToolCall;
 window.execCodeBlock = execCodeBlock;
 window.showImageGenSpinner = showImageGenSpinner;
 window.showImageGenResult = showImageGenResult;
+window.showSkillLoadNotification = showSkillLoadNotification;
 window.fetchMcpTools = fetchMcpTools;
 window.toggleTool = toggleTool;
 
