@@ -401,6 +401,13 @@ def render_chat_tab() -> str:
                         <details data-category="image" id="chat-image-section">
                             <summary><i data-lucide="image"></i> 画像生成 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'image')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                                    <span class="chat-field-label" style="margin:0;">画像生成を有効化</span>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="chat-image-gen-enabled" />
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
                                 <div id="chat-image-options">
                                     <div id="chat-image-status" class="voice-status voice-status-checking" role="status" aria-live="polite">
                                         <span class="voice-status-dot"></span>
@@ -520,6 +527,13 @@ def render_chat_tab() -> str:
                         <details data-category="voice" id="chat-voice-section">
                             <summary><i data-lucide="volume-2"></i> 音声 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'voice')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                                    <span class="chat-field-label" style="margin:0;">音声合成を有効化</span>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="chat-voice-enabled" />
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
                                 <div id="chat-voice-options">
                                     <!-- Connection status -->
                                     <div id="chat-voice-status" class="voice-status voice-status-checking" role="status" aria-live="polite">
