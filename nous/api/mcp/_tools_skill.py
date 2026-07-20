@@ -24,12 +24,11 @@ async def _tool_invoke_skill(ctx: AppContext, persona: str, name: str, task: str
     """
     from nous.config.settings import get_settings
     from nous.domain.skill import SkillRepository
-    from nous.infrastructure.sqlite.connection import get_global_skills_db
 
     settings = get_settings()
-    skill_repo = SkillRepository(get_global_skills_db(settings.skills_dir))
+    skill_repo = SkillRepository()
 
-    # persona スキルを優先。persist=False でグローバルDB汚染を防止
+    # persona スキルを優先
     persona_skills_dir = os.path.join(settings.data_root, "memory", persona, "skills")
     if os.path.isdir(persona_skills_dir):
         persona_skills = skill_repo.load_from_dir(persona_skills_dir, persist=False)
@@ -38,8 +37,9 @@ async def _tool_invoke_skill(ctx: AppContext, persona: str, name: str, task: str
                 return {"ok": True, "result": s.content}
 
     # グローバルスキルにフォールバック
-    skill = skill_repo.get(name)
-    if not skill:
-        return {"ok": False, "error": f"Skill '{name}' not found"}
+    global_skills = skill_repo.load_from_dir(settings.skills_dir, persist=False)
+    for s in global_skills:
+        if s.name == name:
+            return {"ok": True, "result": s.content}
 
-    return {"ok": True, "result": skill.content}
+    return {"ok": False, "error": f"Skill '{name}' not found"}
