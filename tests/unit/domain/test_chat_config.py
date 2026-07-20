@@ -83,7 +83,6 @@ class TestChatConfigRepository:
                 emotion_temperature_scale REAL DEFAULT 0.2,
                 top_p REAL,
                 context_use_llm_summary INTEGER DEFAULT 1,
-                episode_consolidation_enabled INTEGER DEFAULT 1,
                 episode_search_enabled INTEGER DEFAULT 1,
                 dynamic_tool_selection INTEGER DEFAULT 1,
                 voice_auto_play INTEGER DEFAULT 0,
@@ -205,7 +204,6 @@ class TestSqliteMigration:
                 emotion_temperature_scale REAL DEFAULT 0.2,
                 top_p REAL,
                 context_use_llm_summary INTEGER DEFAULT 1,
-                episode_consolidation_enabled INTEGER DEFAULT 1,
                 episode_search_enabled INTEGER DEFAULT 1,
                 dynamic_tool_selection INTEGER DEFAULT 1
             )
@@ -342,7 +340,6 @@ class TestChatConfigRepositoryResilience:
             emotion_temperature_scale REAL DEFAULT 0.2,
             top_p REAL,
             context_use_llm_summary INTEGER DEFAULT 1,
-            episode_consolidation_enabled INTEGER DEFAULT 1,
             episode_search_enabled INTEGER DEFAULT 1,
             dynamic_tool_selection INTEGER DEFAULT 1,
             voice_auto_play INTEGER DEFAULT 0,
