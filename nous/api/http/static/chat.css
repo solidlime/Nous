@@ -1,9 +1,14 @@
 /* ── Chat tab styles — Apple HIG ── */
+#tab-chat.active {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--header-height) - var(--tabbar-height) - 48px);
+}
 #chat-layout {
   display: flex;
   gap: 16px;
-  height: calc(100vh - var(--header-height) - var(--tabbar-height) - 48px);
-  min-height: 500px;
+  flex: 1;
+  min-height: 0;
   overflow-x: hidden;
 }
 #chat-main {
@@ -233,8 +238,10 @@ html.light .chat-tool-result-content {
   border: 0.5px solid var(--glass-border);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  padding: 1px 6px;
-  font-size: 0.68rem;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  min-height: 32px;
+  min-width: 32px;
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease-apple);
 }
@@ -623,7 +630,6 @@ input[type="range"].chat-field-input:focus {
 @media (max-width: 768px) {
   #chat-layout {
     flex-direction: column;
-    height: auto;
   }
   #chat-messages {
     min-height: 350px;
@@ -1322,7 +1328,8 @@ input[type="range"].chat-field-input:focus {
   border-radius: var(--radius-md) var(--radius-md) 0 0;
   transition: opacity var(--duration-fast) var(--ease-apple);
   min-height: 120px;
-  object-fit: cover;
+  max-height: 400px;
+  object-fit: contain;
 }
 .chat-image-gen-card img:hover {
   opacity: 0.92;

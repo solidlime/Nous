@@ -534,6 +534,13 @@ async function restoreChatHistory() {
     const skel = document.getElementById("chat-history-skeleton");
     if (skel) skel.remove();
   }
+  // 最下部にスクロール
+  const c = document.getElementById("chat-messages");
+  if (c) {
+    requestAnimationFrame(function() {
+      c.scrollTop = c.scrollHeight;
+    });
+  }
 }
 
 // ------------------------------------------------------------------
