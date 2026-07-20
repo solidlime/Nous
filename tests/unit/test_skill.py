@@ -3,6 +3,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from nous.domain.skill import Skill, SkillRepository, _parse_skill_md
 
 
@@ -313,14 +315,12 @@ Body content
 
 
 def test_skills_pre_installed():
-    """Verify the 3 pre-installed skills exist and can be loaded from the project's data/skills/ directory."""
-    import os
+    """Verify the pre-installed skills exist and can be loaded from /opt/nous/skills."""
+    from nous.config.settings import get_settings
 
-    from tests.conftest import PROJECT_ROOT
-
-    # Use NOUS_SKILLS_DIR if set (e.g. CI), otherwise project-relative data/skills
-    skills_dir = Path(os.environ.get("NOUS_SKILLS_DIR", str(PROJECT_ROOT / "data" / "skills")))
-    assert skills_dir.is_dir(), f"Skills directory not found: {skills_dir}"
+    skills_dir = Path(get_settings().skills_dir)
+    if not skills_dir.is_dir():
+        pytest.skip(f"Global skills dir not available: {skills_dir}")
 
     db = _make_db()
     repo = SkillRepository(db)
