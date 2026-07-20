@@ -80,6 +80,9 @@ def _store_last_reflection_at(ctx: AppContext, ts: datetime) -> None:
     )
 
 
+# Per-turn reflection (⑪): 毎ターンの会話から即時的な洞察を抽出する。
+# 低レイテンシ・高頻度で動作し、会話の流れに即した気づきを生成する。
+# ⑫（DecayWorker経由の定期リフレクション）と併用。
 async def maybe_run_reflection(
     ctx: AppContext,
     config: ChatConfig,
@@ -201,6 +204,10 @@ def _parse_insights(text: str) -> list[str]:
 # -----------------------------------------------------------
 # New language-agnostic ReflectionEngine (Park et al. 2023)
 # -----------------------------------------------------------
+
+# Periodic reflection (⑫): 24時間周期で全記憶を対象に深い洞察を抽出する。
+# 高レイテンシ・低頻度で動作し、長期的なパターンや変化を捉える。
+# ⑪（ターンごとの即時リフレクション）と併用。
 
 
 class ReflectionEngine:
