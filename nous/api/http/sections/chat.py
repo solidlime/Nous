@@ -103,7 +103,7 @@ def render_chat_tab() -> str:
                     <!-- Mobile close button -->
                     <button id="settings-panel-close-btn" class="settings-panel-close" onclick="toggleSettingsPanel()" title="設定パネルを閉じる" aria-label="設定パネルを閉じる"><i data-lucide="x"></i></button>
                     <div class="settings-scroll-container">
-                        <div style="position:sticky;top:0;z-index:10;background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);font-size:0.9rem;font-weight:600;color:var(--text-primary);padding:12px 0 8px;margin:0 -16px 8px;border-bottom:1px solid var(--glass-border);display:flex;align-items:center;gap:8px;box-shadow:0 2px 12px rgba(0,0,0,0.1);">
+                        <div style="position:sticky;top:0;z-index:10;background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);font-size:0.9rem;font-weight:600;color:var(--text-primary);padding:12px 0 8px;margin:0 -16px 8px;border-bottom:1px solid var(--glass-border);display:flex;align-items:center;gap:8px;">
                             <span style="font-size:1.1rem;margin-left:16px;"><i data-lucide="settings"></i></span>
                             <span>チャット設定</span>
                         </div>

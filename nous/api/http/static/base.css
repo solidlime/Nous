@@ -325,11 +325,6 @@ html.light .tab-bar { background: rgba(255, 255, 255, 0.7); }
     opacity: 1;
     animation: fadeInUp 0.35s var(--ease-apple);
 }
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
 /* ============================================================
    CARD COMPONENTS — Apple HIG Style
    ============================================================ */
