@@ -1364,14 +1364,19 @@ input[type="range"].chat-field-input:focus {
   padding: 6px 14px;
   margin: 4px 0;
   font-size: 0.78rem;
-  color: var(--text-muted);
-  background: var(--surface-2, #2a2a3e);
+  color: var(--text-secondary);
+  background: var(--glass-bg-subtle);
+  border: 1px solid var(--glass-border);
   border-radius: 6px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   opacity: 1;
   transition: opacity 0.5s ease-out;
+}
+html.light .chat-skill-load-note {
+  color: var(--text-primary);
+  background: var(--glass-bg-light);
 }
 .image-gen-error {
   padding: 12px;
