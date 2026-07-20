@@ -40,7 +40,7 @@ class Skill(BaseModel):
 
 
 class SkillRepository:
-    def __init__(self, db: sqlite3.Connection) -> None:
+    def __init__(self, db: sqlite3.Connection | None = None) -> None:
         self._db = db
 
     @staticmethod
