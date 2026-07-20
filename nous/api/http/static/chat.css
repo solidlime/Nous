@@ -1521,3 +1521,8 @@ input[type="range"].chat-field-input:focus {
   transform: translateX(20px);
   background: #fff;
 }
+
+/* Collapse settings body when toggle is OFF */
+.settings-body-hidden {
+  display: none !important;
+}

@@ -181,7 +181,16 @@ function applyChatConfig(cfg) {
     });
   // Voice / TTS settings (TE04)
   var voiceToggle = document.getElementById("chat-voice-enabled");
-  if (voiceToggle) voiceToggle.checked = cfg.voice_enabled || false;
+  if (voiceToggle) {
+    voiceToggle.checked = cfg.voice_enabled || false;
+    var voiceOptions = document.getElementById("chat-voice-options");
+    if (voiceOptions) {
+      voiceOptions.classList.toggle("settings-body-hidden", !voiceToggle.checked);
+      voiceToggle.addEventListener("change", function() {
+        voiceOptions.classList.toggle("settings-body-hidden", !this.checked);
+      });
+    }
+  }
   var voiceUrlInput = document.getElementById("chat-voice-url");
   if (voiceUrlInput) voiceUrlInput.value = cfg.voice_url || "";
   setChecked("chat-voice-emotion-link", cfg.voice_emotion_link !== false);
@@ -232,7 +241,16 @@ function applyChatConfig(cfg) {
 
   // Image gen enabled toggle
   var imgGenToggle = document.getElementById("chat-image-gen-enabled");
-  if (imgGenToggle) imgGenToggle.checked = cfg.image_gen_enabled || false;
+  if (imgGenToggle) {
+    imgGenToggle.checked = cfg.image_gen_enabled || false;
+    var imgGenOptions = document.getElementById("chat-image-options");
+    if (imgGenOptions) {
+      imgGenOptions.classList.toggle("settings-body-hidden", !imgGenToggle.checked);
+      imgGenToggle.addEventListener("change", function() {
+        imgGenOptions.classList.toggle("settings-body-hidden", !this.checked);
+      });
+    }
+  }
   // 画像生成設定
   set("chat-image-gen-comfyui-url", cfg.image_gen_comfyui_url);
   set("chat-image-gen-checkpoint", cfg.image_gen_comfyui_checkpoint);
