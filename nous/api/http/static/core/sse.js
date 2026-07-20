@@ -100,8 +100,14 @@ N.Core.connectSSE = function connectSSE(persona) {
   es._sseHandlers["session.rollback"] = function handleSessionRollback(e) {
     try {
       var d = JSON.parse(e.data);
-      N.Core.toast("\ud83d\udd04 \u30bb\u30c3\u30b7\u30e7\u30f3\u304c\u30ed\u30fc\u30eb\u30d0\u30c3\u30af\u3055\u308c\u307e\u3057\u305f (" + (d.remaining_count || 0) + " \u30e1\u30c3\u30bb\u30fc\u30b8)", "info");
-      if (typeof restoreChatHistory === "function") restoreChatHistory();
+      // Only sync if the rollback is for the current chat session (cross-tab sync)
+      var currentPersona = (typeof S !== "undefined" && S.persona) ? S.persona : null;
+      var currentSessionId = (typeof getChatSessionId === "function") ? getChatSessionId() : null;
+      var matchesSession = (!d.persona || d.persona === currentPersona) &&
+                           (!d.session_id || d.session_id === currentSessionId);
+      if (matchesSession && typeof restoreChatHistory === "function") {
+        restoreChatHistory(false);
+      }
     } catch (err) { console.warn("[SSE parse] session.rollback:", err.message); }
   };
   es.addEventListener("session.rollback", es._sseHandlers["session.rollback"]);

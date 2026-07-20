@@ -398,7 +398,8 @@ async function editChatMessage(msgId) {
 // ------------------------------------------------------------------
 // Restore chat history from server on page load / persona switch
 // ------------------------------------------------------------------
-async function restoreChatHistory() {
+async function restoreChatHistory(showSkeleton) {
+  if (showSkeleton === undefined) showSkeleton = true;
   if (!S.persona) return;
   if (CHAT._justReset) {
     CHAT._justReset = false;
@@ -407,13 +408,15 @@ async function restoreChatHistory() {
   const sid = getChatSessionId();
   const container = document.getElementById("chat-messages");
   // Show loading skeleton while fetching history (Bug B3 fix: don't reset DOM before fetch)
-  const skeletonHtml =
-    '<div class="chat-msg assistant"><div class="chat-bubble" style="opacity:0.5"><div class="skeleton skeleton-text" style="width:80%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:60%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:40%;height:14px"></div></div></div>' +
-    '<div class="chat-msg user" style="align-self:flex-end"><div class="chat-bubble" style="opacity:0.5"><div class="skeleton skeleton-text" style="width:70%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:50%;height:14px"></div></div></div>';
-  const skeletonDiv = document.createElement("div");
-  skeletonDiv.id = "chat-history-skeleton";
-  skeletonDiv.innerHTML = skeletonHtml;
-  container.appendChild(skeletonDiv);
+  if (showSkeleton) {
+    const skeletonHtml =
+      '<div class="chat-msg assistant"><div class="chat-bubble" style="opacity:0.5"><div class="skeleton skeleton-text" style="width:80%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:60%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:40%;height:14px"></div></div></div>' +
+      '<div class="chat-msg user" style="align-self:flex-end"><div class="chat-bubble" style="opacity:0.5"><div class="skeleton skeleton-text" style="width:70%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:50%;height:14px"></div></div></div>';
+    const skeletonDiv = document.createElement("div");
+    skeletonDiv.id = "chat-history-skeleton";
+    skeletonDiv.innerHTML = skeletonHtml;
+    container.appendChild(skeletonDiv);
+  }
   try {
     const data = await api(
       "/api/chat/" +

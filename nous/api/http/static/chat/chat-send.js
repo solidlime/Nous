@@ -600,7 +600,7 @@ async function chatSend(retry) {
         part.type === "text" &&
         part.bubble &&
         part.content &&
-        part.bubble.textContent === part.content
+        part.bubble.innerHTML === part.bubble.textContent
       ) {
         part.bubble.innerHTML = safeMarkdown(part.content);
         part.bubble.querySelectorAll("img").forEach((img) => {
