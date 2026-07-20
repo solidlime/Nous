@@ -12,9 +12,7 @@ WORKDIR /build
 COPY requirements-prod.txt ./
 
 # Install Python dependencies (ONNX Runtime replaces PyTorch — no torch needed)
-RUN pip install --no-cache-dir uv && \
-    uv pip install --system -r requirements-prod.txt && \
-    uv cache clean
+RUN pip install --no-cache-dir --no-build-isolation -r requirements-prod.txt
 
 # Runtime stage: Copy only necessary files
 FROM python:3.12-slim
@@ -40,13 +38,10 @@ RUN apt-get update && \
 # Copy Python packages from builder
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 # Clean up Python cache and unnecessary files to reduce image size
-RUN find /usr/local/lib/python3.12/site-packages -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python3.12/site-packages -type d -name tests -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python3.12/site-packages -type d -name test -exec rm -rf {} + 2>/dev/null || true && \
-    find /usr/local/lib/python3.12/site-packages -type f -name '*.pyc' -delete && \
-    find /usr/local/lib/python3.12/site-packages -type f -name '*.pyo' -delete && \
-    find /usr/local/lib/python3.12/site-packages -type f -name '*.c' -delete && \
-    find /usr/local/lib/python3.12/site-packages -type f -name '*.h' -delete && \
+RUN find /usr/local/lib/python3.12/site-packages \
+    \( -type d \( -name __pycache__ -o -name tests -o -name test \) -prune -exec rm -rf {} + \) , \
+    \( -type f \( -name '*.pyc' -o -name '*.pyo' -o -name '*.c' -o -name '*.h' \) -delete \) \
+    2>/dev/null; true && \
     python3.12 -m pip uninstall -y pip 2>/dev/null || true
 
 # Copy application code (v2: memory_mcp package only)
