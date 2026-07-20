@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse, StreamingResponse
 
+from nous.api.http.routers._error_handlers import error_from_result
+
 from nous.api.http.deps import (
     _resolve_persona_from_request,
     _safe_get_context,
@@ -121,7 +123,7 @@ def register_admin_routes(mcp) -> None:
                 importer = LegacyImporter(ctx.connection, persona)
                 result = importer.import_from_zip(str(zip_path))
                 if not result.is_ok:
-                    return JSONResponse({"error": str(result.error)}, status_code=500)
+                    return error_from_result(result)
                 return JSONResponse(
                     {
                         "status": "ok",

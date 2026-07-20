@@ -8,6 +8,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from nous.domain.shared.result import Success
+from nous.infrastructure.sqlite.connection import SQLiteConnection
+
+
+@pytest.fixture
+def sqlite_conn(tmp_path):
+    """Shared SQLiteConnection with fully-initialised schema."""
+    conn = SQLiteConnection(data_dir=str(tmp_path), persona="test")
+    conn.initialize_schema()
+    yield conn
+    conn.close()
 
 
 @pytest.fixture
