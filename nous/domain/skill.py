@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
@@ -43,6 +46,12 @@ class SkillRepository:
     def __init__(self, db: sqlite3.Connection | None = None) -> None:
         self._db = db
 
+    def _require_db(self) -> sqlite3.Connection:
+        if self._db is None:
+            msg = "SkillRepository has no database connection (DB mode deprecated)"
+            raise RuntimeError(msg)
+        return self._db
+
     @staticmethod
     def _parse_metadata(raw: str | None) -> dict[str, str] | None:
         if raw is None:
@@ -75,10 +84,14 @@ class SkillRepository:
     _SELECT_COLS = "id, name, description, content, license, compatibility, metadata, created_at, updated_at"
 
     def list_all(self) -> list[Skill]:
+        if self._db is None:
+            return []
         rows = self._db.execute(f"SELECT {self._SELECT_COLS} FROM skills ORDER BY name").fetchall()
         return [self._row_to_skill(r) for r in rows]
 
     def get(self, name: str) -> Skill | None:
+        if self._db is None:
+            return None
         row = self._db.execute(
             f"SELECT {self._SELECT_COLS} FROM skills WHERE name = ?",
             (name,),
@@ -88,9 +101,10 @@ class SkillRepository:
         return self._row_to_skill(row)
 
     def save(self, skill: Skill) -> Skill:
+        db = self._require_db()
         now = format_iso(get_now())
         if skill.id is None:
-            cursor = self._db.execute(
+            cursor = db.execute(
                 "INSERT INTO skills (name, description, content, license, compatibility, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     skill.name,
@@ -103,7 +117,7 @@ class SkillRepository:
                     now,
                 ),
             )
-            self._db.commit()
+            db.commit()
             return Skill(
                 id=cursor.lastrowid,
                 name=skill.name,
@@ -116,7 +130,7 @@ class SkillRepository:
                 updated_at=now,
             )
         else:
-            self._db.execute(
+            db.execute(
                 "UPDATE skills SET name=?, description=?, content=?, license=?, compatibility=?, metadata=?, updated_at=? WHERE id=?",
                 (
                     skill.name,
@@ -129,7 +143,7 @@ class SkillRepository:
                     skill.id,
                 ),
             )
-            self._db.commit()
+            db.commit()
             return Skill(
                 id=skill.id,
                 name=skill.name,
@@ -143,10 +157,11 @@ class SkillRepository:
             )
 
     def upsert(self, skill: Skill) -> Skill:
+        db = self._require_db()
         now = format_iso(get_now())
         existing = self.get(skill.name)
         if existing is None:
-            cursor = self._db.execute(
+            cursor = db.execute(
                 "INSERT INTO skills (name, description, content, license, compatibility, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     skill.name,
@@ -159,7 +174,7 @@ class SkillRepository:
                     now,
                 ),
             )
-            self._db.commit()
+            db.commit()
             return Skill(
                 id=cursor.lastrowid,
                 name=skill.name,
@@ -172,7 +187,7 @@ class SkillRepository:
                 updated_at=now,
             )
         else:
-            self._db.execute(
+            db.execute(
                 "UPDATE skills SET description=?, content=?, license=?, compatibility=?, metadata=?, updated_at=? WHERE name=?",
                 (
                     skill.description,
@@ -184,7 +199,7 @@ class SkillRepository:
                     skill.name,
                 ),
             )
-            self._db.commit()
+            db.commit()
             return Skill(
                 id=existing.id,
                 name=skill.name,
@@ -198,8 +213,58 @@ class SkillRepository:
             )
 
     def delete(self, name: str) -> None:
+        if self._db is None:
+            return
         self._db.execute("DELETE FROM skills WHERE name = ?", (name,))
         self._db.commit()
+
+    @staticmethod
+    def _skill_to_md(skill: Skill) -> str:
+        """Serialize a Skill object to SKILL.md format with YAML frontmatter."""
+        lines = ["---"]
+        lines.append(f"name: {skill.name}")
+        if skill.description:
+            lines.append(f"description: {skill.description}")
+        if skill.license:
+            lines.append(f"license: {skill.license}")
+        if skill.compatibility:
+            lines.append(f"compatibility: {skill.compatibility}")
+        if skill.metadata:
+            lines.append(f"metadata: {json.dumps(skill.metadata, ensure_ascii=False)}")
+        lines.append("---")
+        lines.append("")
+        lines.append(skill.content)
+        return "\n".join(lines)
+
+    def save_to_file(self, skill: Skill, skills_dir: str | None = None) -> Path:
+        """Write a single skill to <skills_dir>/<name>/SKILL.md.
+
+        Creates the directory if it doesn't exist.
+        Returns the path to the written file.
+        """
+        if skills_dir is None:
+            from nous.config.settings import get_settings
+
+            skills_dir = get_settings().skills_dir
+        skill_dir = Path(skills_dir) / skill.name
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        skill_file = skill_dir / "SKILL.md"
+        skill_file.write_text(self._skill_to_md(skill), encoding="utf-8")
+        log = _get_logger()
+        log.info("Skill saved to file: %s", skill_file)
+        return skill_file
+
+    def delete_from_fs(self, name: str, skills_dir: str | None = None) -> None:
+        """Delete a skill directory <skills_dir>/<name>/ recursively."""
+        if skills_dir is None:
+            from nous.config.settings import get_settings
+
+            skills_dir = get_settings().skills_dir
+        skill_dir = Path(skills_dir) / name
+        if skill_dir.exists():
+            shutil.rmtree(skill_dir)
+            log = _get_logger()
+            log.info("Skill deleted from filesystem: %s", skill_dir)
 
     def load_from_dir(self, skills_dir: str | None = None, persist: bool = True) -> list[Skill]:
         """Scan <skills_dir>/<name>/SKILL.md files and optionally upsert them into the DB.
@@ -252,16 +317,17 @@ class SkillRepository:
 
         # Cleanup: delete DB skills not present on disk (only when persist=True)
         if persist and result:
+            db = self._require_db()
             disk_names = {s.name for s in result}
-            db_rows = self._db.execute("SELECT name FROM skills").fetchall()
+            db_rows = db.execute("SELECT name FROM skills").fetchall()
             orphan_names = [row[0] for row in db_rows if row[0] not in disk_names]
             if orphan_names:
                 placeholders = ",".join("?" * len(orphan_names))
-                self._db.execute(
+                db.execute(
                     f"DELETE FROM skills WHERE name IN ({placeholders})",
                     tuple(orphan_names),
                 )
-                self._db.commit()
+                db.commit()
                 log = _get_logger()
                 log.info("Cleaned up %d orphaned skills from DB: %s", len(orphan_names), orphan_names)
 
