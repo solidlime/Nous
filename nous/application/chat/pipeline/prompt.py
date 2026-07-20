@@ -24,7 +24,7 @@ TOOL_USAGE_GUIDELINES = """\
 - memory_search: 過去の記憶を検索
 - update_context: 感情・体調・環境を更新
 - goal_manage: 目標の作成・達成・取消
-- image_generate: 画像生成。依頼されたら必ず呼び、「できません」と拒否しないこと"""
+- image_generate: 風景・物体・人物などを描写する"""
 
 
 class PromptBuildStep:
