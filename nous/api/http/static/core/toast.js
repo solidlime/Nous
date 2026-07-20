@@ -30,11 +30,12 @@ N.Core.toast = function toast(msg, type) {
   t.className = "toast toast-" + type;
   t.textContent = msg;
   c.appendChild(t);
-  t.addEventListener("animationend", function() {
+  t.addEventListener("animationend", function(e) {
+    if (e.animationName !== "toastOut") return;
     if (t.dataset.removed) return;
     t.dataset.removed = "1";
     t.remove();
-  }, { once: true });
+  });
   setTimeout(function() {
     if (t.dataset.removed) return;
     t.dataset.removed = "1";
@@ -69,11 +70,12 @@ N.Core.toastAction = function toastAction(msg, type, actionLabel, actionFn) {
     t.appendChild(btn);
   }
   c.appendChild(t);
-  t.addEventListener("animationend", function() {
+  t.addEventListener("animationend", function(e) {
+    if (e.animationName !== "toastOut") return;
     if (t.dataset.removed) return;
     t.dataset.removed = "1";
     t.remove();
-  }, { once: true });
+  });
   setTimeout(function() {
     if (t.dataset.removed) return;
     t.dataset.removed = "1";

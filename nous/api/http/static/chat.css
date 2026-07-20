@@ -33,6 +33,7 @@
   flex-direction: column;
   gap: 12px;
   contain: layout style;
+  overscroll-behavior: contain;
 }
 #chat-input-area {
   padding: 12px 16px;
@@ -79,7 +80,9 @@
 }
 #chat-send-btn:hover:not(:disabled) {
   background: var(--accent-blue);
-  box-shadow: none;
+}
+#chat-send-btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 #chat-send-btn:disabled {
   opacity: 0.5;
@@ -249,8 +252,8 @@ html.light .chat-tool-result-content {
   color: var(--text-muted);
   padding: 6px 10px;
   font-size: 0.75rem;
-  min-height: 32px;
-  min-width: 32px;
+  min-height: 44px;
+  min-width: 44px;
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease-apple);
 }
