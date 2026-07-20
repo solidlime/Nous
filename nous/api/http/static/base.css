@@ -1,3 +1,6 @@
+@layer reset, base, tokens, components, utilities, overrides;
+
+@layer tokens {
 /* ============================================================
    ROOT VARIABLES & THEMING — Apple HIG
    ============================================================ */
@@ -124,11 +127,44 @@ html.light {
     --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.05);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08);
 }
+}
 
 /* ============================================================
    BASE STYLES — Apple HIG Typography
    ============================================================ */
-* { margin: 0; padding: 0; box-sizing: border-box; }
+/* ============================================================
+   CSS RESET — @layer reset (lowest priority)
+   ============================================================ */
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  img, picture, video, canvas, svg {
+    display: block;
+    max-width: 100%;
+  }
+  input, button, textarea, select {
+    font: inherit;
+  }
+  p, h1, h2, h3, h4, h5, h6 {
+    overflow-wrap: break-word;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    text-wrap: balance;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      interpolate-size: allow-keywords;
+    }
+  }
+}
 body {
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", "Inter", sans-serif;
     font-size: 17px;
@@ -697,8 +733,18 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 .animate-in { animation: fadeInUp 0.4s var(--ease-apple); }
 .mem-modal { transform: scale(0.95); transition: transform var(--duration-normal) var(--ease-apple); }
 .mem-modal-overlay.show .mem-modal { transform: scale(1); }
-.collapsible { max-height: 0; overflow: hidden; transition: max-height var(--duration-normal) var(--ease-apple); }
-.collapsible.open { max-height: 2000px; }
+.collapsible {
+    display: grid;
+    grid-template-rows: 0fr;
+    overflow: hidden;
+    transition: grid-template-rows var(--duration-normal) var(--ease-apple);
+}
+.collapsible.open {
+    grid-template-rows: 1fr;
+}
+.collapsible > * {
+    min-height: 0;
+}
 
 /* ── Custom scrollbar — Apple HIG thin overlay ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -729,18 +775,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
    TOOLTIP ENHANCEMENTS — Apple HIG Style
    ============================================================ */
 .chat-help-tooltip {
-    background: var(--glass-bg) !important;
-    backdrop-filter: blur(20px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-    border: 0.5px solid var(--glass-border) !important;
-    border-radius: var(--radius-md) !important;
-    box-shadow: var(--shadow-lg) !important;
-    font-size: 0.78rem !important;
-    color: var(--text-primary) !important;
-    max-width: 280px !important;
-    line-height: 1.6 !important;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    font-size: 0.78rem;
+    color: var(--text-primary);
+    max-width: 280px;
+    line-height: 1.6;
     z-index: var(--z-toast) !important;
-    padding: 12px 16px !important;
+    padding: 12px 16px;
 }
 
 /* ============================================================
@@ -783,11 +829,11 @@ h4, .tab-panel h4 {
     .tab-bar { flex-wrap: nowrap; overflow-x: auto; gap: 2px; padding: 6px 8px; }
     .tab-bar .tab-btn { flex: 0 0 auto; min-width: 0; font-size: 0.75rem; padding: 10px 10px; min-height: 44px; }
     .tab-bar .tab-btn svg { width: 14px; height: 14px; margin-right: 2px; }
-    .grid { grid-template-columns: 1fr !important; }
-    .stat-value { font-size: 1.5rem !important; }
+    .grid { grid-template-columns: 1fr; }
+    .stat-value { font-size: 1.5rem; }
     .mem-modal-overlay { padding: 8px; }
-    .mem-modal { width: 100% !important; max-width: none !important; max-height: 90dvh !important; }
-    #graph-container { height: 400px !important; }
+    .mem-modal { width: 100%; max-width: none; max-height: 90dvh; }
+    #graph-container { height: 400px; }
     .toast-container { left: 50%; transform: translateX(-50%); right: auto; bottom: 16px; }
     .toast { max-width: 90vw; text-align: center; }
     /* Chat: keep input area visible above keyboard */
@@ -796,8 +842,8 @@ h4, .tab-panel h4 {
     .glass-input { min-height: 44px; }
 }
 @media (max-width: 1024px) {
-    .lg\:grid-cols-4 { grid-template-columns: repeat(2, 1fr) !important; }
-    .lg\:grid-cols-3 { grid-template-columns: repeat(2, 1fr) !important; }
+    .lg\:grid-cols-4 { grid-template-columns: repeat(2, 1fr); }
+    .lg\:grid-cols-3 { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* ============================================================
