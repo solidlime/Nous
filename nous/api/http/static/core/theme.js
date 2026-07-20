@@ -13,7 +13,7 @@ N.Core.applyTheme = function applyTheme() {
       ? '<i data-lucide="moon"></i>'
       : '<i data-lucide="sun"></i>';
   }
-  if (typeof lucide !== "undefined") lucide.createIcons();
+  N.Core.refreshIcons();
 };
 
 N.Core.toggleTheme = function toggleTheme() {

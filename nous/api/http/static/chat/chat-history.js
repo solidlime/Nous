@@ -33,9 +33,7 @@ function resetToWelcome() {
                 <span class="chat-welcome-cmd">/invoke_skill</span>
             </div>
         </div>`;
-  setTimeout(() => {
-    if (typeof lucide !== "undefined") lucide.createIcons();
-  }, 50);
+  N.Core.refreshIcons();
 }
 
 // ------------------------------------------------------------------
@@ -389,9 +387,7 @@ async function editChatMessage(msgId) {
     }
   });
 
-  setTimeout(() => {
-    if (typeof lucide !== "undefined") lucide.createIcons();
-  }, 50);
+  N.Core.refreshIcons();
 
   function cancelEdit() {
     cleanup();
@@ -550,9 +546,7 @@ async function restoreChatHistory(showSkeleton) {
         }
       }
     }
-    setTimeout(() => {
-      if (typeof lucide !== "undefined") lucide.createIcons();
-    }, 50);
+    N.Core.refreshIcons();
   } catch (e) {
     console.error("[restoreChatHistory] failed:", e);
     toast("チャット履歴復元失敗: " + e.message, "error");

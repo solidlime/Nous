@@ -57,9 +57,7 @@ function appendToolEvent(eventType, data, targetDiv) {
       }
     }
     container.scrollTop = container.scrollHeight;
-    setTimeout(() => {
-      if (typeof lucide !== "undefined") lucide.createIcons();
-    }, 50);
+    N.Core.refreshIcons();
     return div;
   } else if (eventType === "tool_result") {
     let resultStr;
@@ -112,9 +110,7 @@ function appendToolEvent(eventType, data, targetDiv) {
         "</pre></details>";
       container.appendChild(div);
       container.scrollTop = container.scrollHeight;
-      setTimeout(() => {
-        if (typeof lucide !== "undefined") lucide.createIcons();
-      }, 50);
+      N.Core.refreshIcons();
       return div;
     }
   }

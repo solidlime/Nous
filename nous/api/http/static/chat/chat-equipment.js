@@ -97,10 +97,7 @@ function updateEquipmentPanel(update) {
 
   if (html) {
     list.innerHTML = html;
-    // Re-render Lucide icons in the equipment panel
-    setTimeout(() => {
-      if (typeof lucide !== "undefined") lucide.createIcons();
-    }, 10);
+    N.Core.refreshIcons();
   }
 }
 

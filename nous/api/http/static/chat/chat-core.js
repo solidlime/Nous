@@ -102,9 +102,7 @@ async function loadChat() {
   if (_restoreSendBtn) _restoreSendBtn.disabled = false;
   loadChatCommitments();
   loadEquipment();
-  setTimeout(() => {
-    if (typeof lucide !== "undefined") lucide.createIcons();
-  }, 100);
+  N.Core.refreshIcons();
 
   // Monitor persona selector changes (moved from chat.js)
   var __chatPersonaTries = 0;

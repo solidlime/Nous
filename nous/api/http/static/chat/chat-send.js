@@ -116,9 +116,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
 
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
-  setTimeout(() => {
-    if (typeof lucide !== "undefined") lucide.createIcons();
-  }, 50);
+  N.Core.refreshIcons();
   CHAT.messages.push(div);
   return div;
 }
@@ -221,9 +219,7 @@ function _createAssistantDiv() {
   actions.appendChild(copyBtn);
   div.appendChild(actions);
   container.appendChild(div);
-  setTimeout(() => {
-    if (typeof lucide !== "undefined") lucide.createIcons();
-  }, 50);
+  N.Core.refreshIcons();
   return div;
 }
 
