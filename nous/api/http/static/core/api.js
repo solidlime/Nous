@@ -10,6 +10,7 @@ N.Core.api = async function api(path, opts) {
       headers: Object.assign({ "Content-Type": "application/json" }, opts.headers || {}),
       method: opts.method,
       body: opts.body,
+      signal: opts.signal,
     });
     if (!resp.ok) {
       var err = await resp.json().catch(function() { return { error: resp.statusText }; });

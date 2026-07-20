@@ -8,6 +8,16 @@ var S = window.S;
 
 let _connectionCheckTimer = null;
 let _playbackSession = null;    // { audio, btn, seekBar, interval } | null
+let _autoplayUnlocked = false;
+let _autoTtsAbort = null;       // AbortController for auto-play requests
+
+/* ── Autoplay priming — unlock audio context on user gesture ── */
+function _unlockAutoplay() {
+  if (_autoplayUnlocked) return;
+  _autoplayUnlocked = true;
+  var silent = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=");
+  silent.play().then(function() { silent.pause(); }).catch(function() {});
+}
 
 /* ── Connection status indicator ── */
 function _setStatus(state, text) {
@@ -31,6 +41,19 @@ function _debounce(fn, ms) {
 function _getVolume() {
   var volEl = document.getElementById("chat-voice-volume");
   return volEl ? parseFloat(volEl.value) : 1.0;
+}
+
+/* ── Strip markdown for TTS ── */
+function _stripMarkdown(text) {
+  return text
+    .replace(/```[\s\S]*?```/g, "コードブロック")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/[*_~>#-]/g, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/「[^」]*」/g, "")
+    .replace(/（[^）]*）/g, "")
+    .replace(/[―─—]/g, "...")
+    .trim();
 }
 
 /* ── Seekbar management ── */
@@ -79,6 +102,36 @@ function _endSession(reason) {
   _playbackSession = null;
 }
 
+/* ── Play prompt for autoplay-blocked audio ── */
+function _showPlayPrompt(containerDiv, audio, btn) {
+  var prompt = document.createElement("div");
+  prompt.className = "tts-play-prompt";
+  prompt.textContent = "▶ タップで再生";
+  prompt.onclick = function() {
+    prompt.remove();
+    audio.play().then(function() {
+      if (!containerDiv.querySelector(".tts-seekbar")) {
+        var seekBar = _createSeekBar(containerDiv);
+        seekBar.oninput = function() { audio.currentTime = parseFloat(this.value); };
+        var interval = _startSeekBar(audio, seekBar);
+        if (_playbackSession) {
+          _playbackSession.seekBar = seekBar;
+          _playbackSession.interval = interval;
+        }
+      }
+      if (btn) {
+        btn.classList.add("playing");
+        btn.innerHTML = '<i data-lucide="pause"></i>';
+        if (typeof lucide !== "undefined") lucide.createIcons();
+      }
+    }).catch(function(err2) {
+      console.error("[TTS] Play prompt failed:", err2);
+      _endSession("play-prompt-failed");
+    });
+  };
+  containerDiv.appendChild(prompt);
+}
+
 function _removeSeekBar() {
   _endSession("remove-seekbar");
 }
@@ -119,8 +172,12 @@ function _setupAudio(audio, audioUrl, btn, containerDiv) {
   _playbackSession = session;
   
   audio.play().catch(function(err) {
-    console.error("[TTS] Play failed:", err);
-    _endSession("play-failed");
+    console.warn("[TTS] Autoplay blocked:", err.message);
+    if (containerDiv) {
+      _showPlayPrompt(containerDiv, audio, btn);
+    } else {
+      _endSession("autoplay-blocked");
+    }
   });
 }
 
@@ -190,19 +247,14 @@ async function testVoicePlayback() {
 /* ── Auto-play TTS on response ── */
 function autoPlayTts(text) {
   if (!S.persona || !text) return;
+  // Cancel any pending auto-play request
+  if (_autoTtsAbort) _autoTtsAbort.abort();
+  _autoTtsAbort = new AbortController();
   // Skip if already playing
   if (_playbackSession && _playbackSession.audio && !_playbackSession.audio.paused) return;
 
   // Strip markdown for TTS
-  var plainText = text
-    .replace(/```[\s\S]*?```/g, "コードブロック")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/[*_~>#-]/g, "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/「[^」]*」/g, "")
-    .replace(/（[^）]*）/g, "")
-    .replace(/[―─—]/g, "...")
-    .trim();
+  var plainText = _stripMarkdown(text);
   if (!plainText) return;
 
   var modelInput = document.getElementById("chat-voice-model");
@@ -214,6 +266,7 @@ function autoPlayTts(text) {
   api("/api/tts/" + encodeURIComponent(S.persona), {
     method: "POST",
     body: JSON.stringify(body),
+    signal: _autoTtsAbort.signal,
   })
     .then(function (resp) {
       if (resp.audio_base64) {
@@ -259,15 +312,7 @@ async function playTts(btn, text) {
   }
   
   // Strip markdown
-  const plainText = text
-    .replace(/```[\s\S]*?```/g, "コードブロック")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/[*_~>#-]/g, "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/「[^」]*」/g, "")
-    .replace(/（[^）]*）/g, "")
-    .replace(/[―─—]/g, "...")
-    .trim();
+  const plainText = _stripMarkdown(text);
   if (!plainText) return;
   
   btn.innerHTML = '<span class="tts-spinner"></span>';
@@ -309,6 +354,11 @@ function initVoiceSection() {
     if (section.open) {
       checkVoiceConnection();
     }
+  });
+
+  // Prime autoplay on first user gesture
+  ["click", "keydown", "touchstart"].forEach(function(ev) {
+    document.addEventListener(ev, _unlockAutoplay, { once: true, passive: true });
   });
 
   // Debounced connection check when URL input changes
