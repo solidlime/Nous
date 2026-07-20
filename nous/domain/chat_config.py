@@ -69,7 +69,7 @@ class ChatConfig(BaseModel):
     extract_max_tokens: int = 512
     tool_result_max_chars: int = 4000
     mcp_servers: list[dict] = []
-    enabled_skills: list[str] = ["search", "memory"]
+    enabled_skills: list[str] = ["auto-memory", "auto-self-portrait", "goal-coach", "mood-sync", "recall-weaver"]
     # 画像生成
     image_gen_enabled: bool = False
     image_gen_provider: str = "comfyui"

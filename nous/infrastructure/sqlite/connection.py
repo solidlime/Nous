@@ -194,7 +194,7 @@ CREATE TABLE IF NOT EXISTS chat_settings (
     extract_max_tokens INTEGER DEFAULT 512,
     tool_result_max_chars INTEGER DEFAULT 4000,
     mcp_servers TEXT DEFAULT '[]',
-    enabled_skills TEXT DEFAULT '["search","memory"]',
+    enabled_skills TEXT DEFAULT '["auto-memory","auto-self-portrait","goal-coach","mood-sync","recall-weaver"]',
     reflection_enabled INTEGER DEFAULT 1,
     reflection_threshold REAL DEFAULT 1.0,
     reflection_min_interval_hours REAL DEFAULT 1.0,
@@ -527,18 +527,24 @@ class SQLiteConnection:
         except Exception:
             pass
 
-        # Migration: enabled_skills default value correction (existing empty arrays)
+        # Migration: enabled_skills default value correction (migrate old defaults to persona skills)
         try:
-            cursor = memory_conn.execute("SELECT persona FROM chat_settings WHERE enabled_skills = '[]'")
-            empty_rows = cursor.fetchall()
-            if empty_rows:
+            NEW_DEFAULT = '["auto-memory","auto-self-portrait","goal-coach","mood-sync","recall-weaver"]'
+            OLD_DEFAULTS = ('[]', '["search","memory"]')
+            placeholders = ",".join("?" * len(OLD_DEFAULTS))
+            cursor = memory_conn.execute(
+                f"SELECT persona FROM chat_settings WHERE enabled_skills IN ({placeholders})",
+                OLD_DEFAULTS,
+            )
+            stale_rows = cursor.fetchall()
+            if stale_rows:
                 memory_conn.execute(
-                    "UPDATE chat_settings SET enabled_skills = ? WHERE enabled_skills = ?",
-                    ('["search","memory"]', "[]"),
+                    f"UPDATE chat_settings SET enabled_skills = ? WHERE enabled_skills IN ({placeholders})",
+                    (NEW_DEFAULT,) + OLD_DEFAULTS,
                 )
                 logger.info(
-                    "migrated %d chat_settings rows: enabled_skills '[]' → '[\"search\",\"memory\"]'",
-                    len(empty_rows),
+                    "migrated %d chat_settings rows: enabled_skills → persona skills",
+                    len(stale_rows),
                 )
         except Exception as e:
             logger.warning("enabled_skills migration skipped: %s", e)
