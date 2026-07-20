@@ -89,6 +89,13 @@ function hideHelpTooltip() {
 // ------------------------------------------------------------------
 async function loadChat() {
   if (!S.persona) return;
+  // Reset state to prevent cross-persona data leakage (BUG 2)
+  CHAT.mcpServers = [];
+  CHAT.mcpTools = [];
+  CHAT.mcpErrors = [];
+  CHAT.disabledTools.clear();
+  CHAT.enabledSkills = [];
+  CHAT.messages = [];
   await loadChatConfig();
   loadSkillsForChat();
   // Disable input during async restore to prevent premature chatSend()
@@ -103,31 +110,6 @@ async function loadChat() {
   loadChatCommitments();
   loadEquipment();
   N.Core.refreshIcons();
-
-  // Monitor persona selector changes (moved from chat.js)
-  var __chatPersonaTries = 0;
-  var __CHAT_PERSONA_MAX_TRIES = 20;
-  var __chatPersonaWatcher = setInterval(function() {
-    var sel = document.getElementById("persona-select");
-    if (!sel) {
-      __chatPersonaTries++;
-      if (__chatPersonaTries >= __CHAT_PERSONA_MAX_TRIES) {
-        console.warn("[chat] #persona-select not found, giving up");
-        clearInterval(__chatPersonaWatcher);
-      }
-      return;
-    }
-    if (!sel._chatBound) {
-      sel._chatBound = true;
-      sel.addEventListener("change", function() {
-        if (window.S && window.S.tab === "chat") {
-          loadChatConfig();
-          loadChatCommitments();
-        }
-      });
-      clearInterval(__chatPersonaWatcher);
-    }
-  }, 500);
 
   // ESC closes settings panel on mobile (moved from chat.js)
   document.addEventListener("keydown", function(e) {
@@ -274,6 +256,7 @@ async function loadChatCommitments() {
   } catch (e) {
     console.error("[loadChatCommitments] failed:", e);
     toast("リフレクション読込失敗: " + e.message, "error");
+    updateReflectionPanel([]);
   }
 }
 

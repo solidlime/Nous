@@ -295,6 +295,9 @@ function showImageGenResult(evt) {
 // ------------------------------------------------------------------
 async function fetchMcpTools() {
   if (!S.persona) return;
+  // Clear stale data before fetch to prevent cross-persona leakage (BUG 4)
+  CHAT.mcpTools = [];
+  CHAT.mcpErrors = [];
   try {
     const data = await api("/api/chat/" + encodeURIComponent(S.persona) + "/mcp-tools");
     CHAT.mcpTools = data.tools || [];
@@ -304,6 +307,8 @@ async function fetchMcpTools() {
     }
   } catch (e) {
     console.warn('MCP tools fetch failed:', e);
+    CHAT.mcpTools = [];
+    CHAT.mcpErrors = [];
   }
 }
 
