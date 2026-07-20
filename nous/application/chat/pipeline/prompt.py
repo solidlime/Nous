@@ -82,7 +82,7 @@ class PromptBuildStep:
                         skill_map[s.name] = s
 
                     # ペルソナ別スキル: 同名なら上書き
-                    persona_skills_dir = os.path.join(settings.data_root, "memory", persona, "skills")
+                    persona_skills_dir = os.path.join(settings.data_root, "persona", persona, "skills")
                     if os.path.isdir(persona_skills_dir):
                         try:
                             if any(os.scandir(persona_skills_dir)):

@@ -46,7 +46,7 @@ def run_auto_import(
         persona: str = zip_path.stem
         logger.info("Auto-importing '%s' from %s", persona, zip_path)
 
-        connection = SQLiteConnection(settings.data_dir, persona)
+        connection = SQLiteConnection(settings.persona_dir, persona)
         try:
             connection.initialize_schema()
 

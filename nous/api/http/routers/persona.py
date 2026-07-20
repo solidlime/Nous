@@ -53,7 +53,7 @@ def register_persona_routes(mcp) -> None:
     @mcp.custom_route("/api/personas", methods=["GET"])
     async def list_personas(request: Request) -> JSONResponse:
         settings = Settings()
-        data_dir = settings.data_dir
+        data_dir = settings.persona_dir
         data_path = Path(data_dir)
         if data_path.exists():
             personas = sorted([d.name for d in data_path.iterdir() if d.is_dir() and (d / "memory.sqlite").exists()])
@@ -67,7 +67,7 @@ def register_persona_routes(mcp) -> None:
 
         # Check if any personas exist; show setup screen if none.
         settings = Settings()
-        data_path = Path(settings.data_dir)
+        data_path = Path(settings.persona_dir)
         persona_count = 0
         if data_path.exists():
             persona_count = len([d for d in data_path.iterdir() if d.is_dir() and (d / "memory.sqlite").exists()])
@@ -217,12 +217,12 @@ def register_persona_routes(mcp) -> None:
             try:
                 from pathlib import Path
                 from nous.config.settings import get_settings
-                images_dir = Path(get_settings().data_root) / "memory" / persona / "images"
+                images_dir = Path(get_settings().data_root) / "persona" / persona / "images"
                 if images_dir.is_dir():
                     self_files = sorted(images_dir.glob("self_*.png"))
                     if self_files:
                         latest = self_files[-1]  # sorted alphabetically = chronological
-                        latest_self_portrait = f"/api/chat/{persona}/memory/images/{latest.name}"
+                        latest_self_portrait = f"/api/chat/{persona}/persona/images/{latest.name}"
             except Exception:
                 pass
 
@@ -307,7 +307,7 @@ def register_persona_routes(mcp) -> None:
                 status_code=400,
             )
         settings = Settings()
-        persona_dir = Path(settings.data_dir) / persona_name
+        persona_dir = Path(settings.persona_dir) / persona_name
         if persona_dir.exists():
             return JSONResponse({"error": f"Persona '{persona_name}' already exists"}, status_code=409)
         try:
@@ -326,8 +326,8 @@ def register_persona_routes(mcp) -> None:
     async def delete_persona(request: Request) -> JSONResponse:
         persona = _resolve_persona_from_request(request)
         settings = Settings()
-        persona_dir = (Path(settings.data_dir) / persona).resolve()
-        if not str(persona_dir).startswith(str(Path(settings.data_dir).resolve()) + "/"):
+        persona_dir = (Path(settings.persona_dir) / persona).resolve()
+        if not str(persona_dir).startswith(str(Path(settings.persona_dir).resolve()) + "/"):
             return JSONResponse({"error": "Invalid persona name"}, status_code=400)
         if not persona_dir.exists():
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)

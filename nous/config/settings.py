@@ -297,8 +297,18 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def data_dir(self) -> str:
-        """Persona別DB格納ディレクトリ: {data_root}/memory"""
-        return f"{self.data_root}/memory"
+        """DEPRECATED: Use persona_dir or persona_path() instead. 旧互換用。"""
+        return f"{self.data_root}/persona"
+
+    @computed_field
+    @property
+    def persona_dir(self) -> str:
+        """ペルソナ別データ格納ディレクトリ: {data_root}/persona"""
+        return f"{self.data_root}/persona"
+
+    def persona_path(self, persona_name: str) -> str:
+        """特定ペルソナのデータディレクトリパス: {data_root}/persona/{name}"""
+        return f"{self.persona_dir}/{persona_name}"
 
     @computed_field
     @property
@@ -321,13 +331,13 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def skills_dir(self) -> str:
-        """Skillsファイルディレクトリ（グローバル固定パス）"""
-        return "/opt/nous/skills"
+        """Skillsファイルディレクトリ（data_root内）"""
+        return f"{self.data_root}/skills"
 
     def ensure_directories(self) -> None:
         """起動時に必要なディレクトリを全て作成する。"""
         dirs = [
-            self.data_dir,
+            self.persona_dir,
             self.import_dir,
             Path(self.import_dir) / "done",
             self.cache_dir,

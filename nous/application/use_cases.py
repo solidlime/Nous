@@ -88,7 +88,7 @@ class AppContext:
     def __init__(self, settings: Settings, persona: str) -> None:
         self.settings = settings
         self.persona = persona
-        self.connection = SQLiteConnection(settings.data_dir, persona)
+        self.connection = SQLiteConnection(settings.persona_dir, persona)
         try:
             self.connection.initialize_schema()
         except Exception as e:

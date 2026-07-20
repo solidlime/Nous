@@ -89,7 +89,7 @@ def main() -> None:
 
 
 def _handle_import(args: argparse.Namespace, settings: Settings) -> None:
-    conn = SQLiteConnection(settings.data_dir, args.persona)
+    conn = SQLiteConnection(settings.persona_dir, args.persona)
     conn.initialize_schema()
 
     input_path = Path(args.input)
@@ -122,7 +122,7 @@ def _handle_import(args: argparse.Namespace, settings: Settings) -> None:
 
 
 def _handle_export(args: argparse.Namespace, settings: Settings) -> None:
-    conn = SQLiteConnection(settings.data_dir, args.persona)
+    conn = SQLiteConnection(settings.persona_dir, args.persona)
 
     exporter = JSONLExporter()
     result = exporter.export_persona(conn, args.persona, args.output)
@@ -137,7 +137,7 @@ def _handle_export(args: argparse.Namespace, settings: Settings) -> None:
 
 
 def _handle_stats(args: argparse.Namespace, settings: Settings) -> None:
-    conn = SQLiteConnection(settings.data_dir, args.persona)
+    conn = SQLiteConnection(settings.persona_dir, args.persona)
     db = conn.get_memory_db()
     inv = conn.get_inventory_db()
 

@@ -119,7 +119,7 @@ memory_search(query="goals", tags=["goal"])  # 全ステータス
 
 ### 永続化
 
-- **SQLite**: 記憶エントリ・ユーザー状態・装備・Personaコンテキスト（`{data_root}/memory/<persona>/`配下）
+- **SQLite**: 記憶エントリ・ユーザー状態・装備・Personaコンテキスト（`{data_root}/persona/<persona>/`配下）
 - **Qdrant**: ベクトルストア（`memory_<persona>` コレクション）
 - **設定**: `nous/config/settings.py` の Pydantic BaseSettings で管理。環境変数 `NOUS_*` プレフィックスで上書き可能。
 

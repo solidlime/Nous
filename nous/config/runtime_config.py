@@ -92,7 +92,7 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
     "general": {
         "timezone": {"hot_reload": True, "description": "Timezone"},
         "log_level": {"hot_reload": True, "description": "Log level"},
-        "data_dir": {"hot_reload": False, "description": "Data directory"},
+        "persona_dir": {"hot_reload": False, "description": "Persona data directory"},
         "import_dir": {"hot_reload": True, "description": "Auto-import directory"},
         "default_persona": {"hot_reload": True, "description": "Default persona"},
         "contradiction_threshold": {"hot_reload": True, "description": "Contradiction detection threshold"},

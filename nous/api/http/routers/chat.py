@@ -518,7 +518,7 @@ def register_chat_routes(mcp) -> None:
         mime_type = mime_type or "application/octet-stream"
         return FileResponse(str(file_path), media_type=mime_type)
 
-    @mcp.custom_route("/api/chat/{persona}/memory/images/{filename}", methods=["GET"])
+    @mcp.custom_route("/api/chat/{persona}/persona/images/{filename}", methods=["GET"])
     async def memory_image_serve(request: Request) -> Response:
         """Serve image generation results from memory storage."""
         import mimetypes
@@ -540,7 +540,7 @@ def register_chat_routes(mcp) -> None:
         from nous.config.settings import get_settings
 
         settings = get_settings()
-        file_path = Path(settings.data_root) / "memory" / persona / "images" / safe_name
+        file_path = Path(settings.data_root) / "persona" / persona / "images" / safe_name
         if not file_path.exists():
             return JSONResponse({"error": "File not found"}, status_code=404)
 

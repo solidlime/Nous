@@ -18,8 +18,8 @@ RUN pip install --no-cache-dir --no-build-isolation -r requirements-prod.txt
 FROM python:3.12-slim
 
 ENV APP_HOME=/app \
-    NOUS_DATA_ROOT=/opt/nous \
-    HF_HOME=/opt/nous/cache/huggingface \
+    NOUS_DATA_ROOT=/data \
+    HF_HOME=/data/cache/huggingface \
     PYTHONUNBUFFERED=1 \
     LANG=C.UTF-8 \
     TZ=UTC
@@ -50,11 +50,11 @@ COPY pyproject.toml ${APP_HOME}/
 
 # Copy default global skills (auto-memory, auto-self-portrait, goal-coach, mood-sync, recall-weaver)
 # Exclude runtime sqlite files — the app creates them at startup
-COPY data/skills/auto-memory/ /opt/nous/skills/auto-memory/
-COPY data/skills/auto-self-portrait/ /opt/nous/skills/auto-self-portrait/
-COPY data/skills/goal-coach/ /opt/nous/skills/goal-coach/
-COPY data/skills/mood-sync/ /opt/nous/skills/mood-sync/
-COPY data/skills/recall-weaver/ /opt/nous/skills/recall-weaver/
+COPY data/skills/auto-memory/ /data/skills/auto-memory/
+COPY data/skills/auto-self-portrait/ /data/skills/auto-self-portrait/
+COPY data/skills/goal-coach/ /data/skills/goal-coach/
+COPY data/skills/mood-sync/ /data/skills/mood-sync/
+COPY data/skills/recall-weaver/ /data/skills/recall-weaver/
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash nous

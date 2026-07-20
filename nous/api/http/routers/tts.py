@@ -113,7 +113,7 @@ def register_tts_routes(mcp) -> None:
         voice_speed = getattr(chat_config, "voice_speed", 1.0)
         from nous.config.settings import get_settings
         settings = get_settings()
-        cache_dir = Path(settings.data_root) / "memory" / persona / "tts_cache"
+        cache_dir = Path(settings.data_root) / "persona" / persona / "tts_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         cache_key = hashlib.sha256(f"{text}|{emotion}|{caption or ''}|{voice_speed}".encode()).hexdigest()
         cache_path = cache_dir / f"{cache_key}.wav"
@@ -251,7 +251,7 @@ def register_tts_routes(mcp) -> None:
         from nous.config.settings import get_settings
 
         settings = get_settings()
-        file_path = Path(settings.data_root) / "memory" / persona / "tts_cache" / safe_name
+        file_path = Path(settings.data_root) / "persona" / persona / "tts_cache" / safe_name
         if not file_path.exists():
             return JSONResponse({"error": "File not found"}, status_code=404)
 

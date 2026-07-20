@@ -29,7 +29,7 @@ async def _tool_invoke_skill(ctx: AppContext, persona: str, name: str, task: str
     skill_repo = SkillRepository()
 
     # persona スキルを優先
-    persona_skills_dir = os.path.join(settings.data_root, "memory", persona, "skills")
+    persona_skills_dir = os.path.join(settings.data_root, "persona", persona, "skills")
     if os.path.isdir(persona_skills_dir):
         persona_skills = skill_repo.load_from_dir(persona_skills_dir, persist=False)
         for s in persona_skills:

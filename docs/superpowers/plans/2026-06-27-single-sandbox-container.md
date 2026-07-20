@@ -176,8 +176,8 @@ CMD ["tail", "-f", "/dev/null"]
     restart: unless-stopped
     volumes:
       # 各ペルソナのデータをコンテナ内の /home/ にマウント
-      - ./data/memory/default/sandbox:/home/default
-      - ./data/memory/config/sandbox:/home/config
+      - ./data/persona/default/sandbox:/home/default
+      - ./data/persona/config/sandbox:/home/config
       # 追加ペルソナは動的に docker cp で対応（静的マウントは代表のみ）
     cap_drop:
       - ALL
@@ -1171,7 +1171,7 @@ git commit -m "test(sandbox): integration tests for single-container model"
 
 ### Task 4.1: データ移行スクリプト
 
-既存の `data/memory/{persona}/sandbox/` を新しい `/home/{persona}/` にマウントし直すだけなので、データ移行は不要。既存の sandbox データはそのまま使える。
+既存の `data/persona/{persona}/sandbox/` を新しい `/home/{persona}/` にマウントし直すだけなので、データ移行は不要。既存の sandbox データはそのまま使える。
 
 - [ ] **Step 1: 確認のみ。データ移行が不要であることを確認してスキップ。**
 
@@ -1198,7 +1198,7 @@ PLAN.md の柱A-2, 柱C を新しい方針で置き換える。
   - Dockerfile.sandbox: 言語非依存の最小イメージ
   - service.py: llm_sandbox → docker exec 全面書換
   - ペルソナ別ユーザー: `{persona}` で分離
-  - データ永続: `data/memory/{persona}/sandbox/` → `/home/{persona}/`
+  - データ永続: `data/persona/{persona}/sandbox/` → `/home/{persona}/`
   - ライブラリ: pip --user / npm --global でペルソナ別永続化
 ```
 

@@ -19,7 +19,7 @@ services:
     volumes:
       - ./nous:/app/nous
       # データ永続化（SQLite, HuggingFace cache, Sudachi, Qdrant 設定等）
-      - ./data:/opt/nous
+      - ./data:/data
       # 設定ファイル（.env と同じ効果）
       - ./.env:/app/.env:ro
     # command は継承（CMD ["python", "-m", "nous.main"]）

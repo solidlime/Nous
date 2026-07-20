@@ -151,7 +151,7 @@ def register_admin_routes(mcp) -> None:
     async def export_data(request: Request) -> StreamingResponse:
         persona = _resolve_persona_from_request(request)
         settings = Settings()
-        persona_dir = Path(settings.data_dir) / persona
+        persona_dir = Path(settings.persona_dir) / persona
         if not persona_dir.exists():
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:

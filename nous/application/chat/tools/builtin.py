@@ -297,7 +297,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
         from nous.config.settings import get_settings
         settings = get_settings()
         persona = getattr(ctx, "persona", "default")
-        images_dir = Path(settings.data_root) / "memory" / persona / "images"
+        images_dir = Path(settings.data_root) / "persona" / persona / "images"
         images_dir.mkdir(parents=True, exist_ok=True)
 
         import time as _time
@@ -312,7 +312,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             filename = f"{prefix}{timestamp}_{idx:02d}.png"
             img_path = images_dir / filename
             img_path.write_bytes(img_bytes)
-            url = f"/api/chat/{persona}/memory/images/{filename}"
+            url = f"/api/chat/{persona}/persona/images/{filename}"
             images_data.append({
                 "base64": img.base64,
                 "revised_prompt": img.revised_prompt,

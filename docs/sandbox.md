@@ -31,7 +31,7 @@ OpenSandbox MCP + Playwright MCP に移行した。
 | コード実行 | `llm-sandbox[docker]` Docker SDK 直接制御 | OpenSandbox Server + MCP |
 | ブラウザ操作 | カスタム `browser` ツール | Playwright MCP（外部） |
 | ファイル操作 | `sandbox_files` ツール | OpenSandbox `sandbox_files` |
-| ペルソナ分離 | バインドマウント `data/memory/{persona}/sandbox/` | OpenSandbox sandbox 単位のコンテナ分離 |
+| ペルソナ分離 | バインドマウント `data/persona/{persona}/sandbox/` | OpenSandbox sandbox 単位のコンテナ分離 |
 
 ---
 

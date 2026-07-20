@@ -58,13 +58,13 @@ class TestSettings:
         monkeypatch.delenv("NOUS_DATA_DIR", raising=False)
         s = Settings()
         assert s.timezone == "Asia/Tokyo"
-        assert s.data_dir == "./data/memory"
+        assert s.data_dir == "./data/persona"
         assert s.log_level == "INFO"
         assert s.default_persona is None
         assert s.server.port == 26262
         assert s.contradiction_threshold == 0.85
         assert s.duplicate_threshold == 0.90
-        assert s.skills_dir == "/opt/nous/skills", "skills_dir must be hardcoded"
+        assert s.skills_dir == "./data/skills", "skills_dir must be under data_root"
 
     def test_env_override_simple(self, monkeypatch):
         monkeypatch.setenv("NOUS_TIMEZONE", "UTC")
@@ -91,12 +91,12 @@ class TestSettings:
         monkeypatch.setenv("NOUS_DATA_ROOT", "/custom/data")
         s = Settings()
         assert s.data_root == "/custom/data"
-        assert s.data_dir == "/custom/data/memory"
+        assert s.data_dir == "/custom/data/persona"
         assert s.import_dir == "/custom/data/import"
         assert s.cache_dir == "/custom/data/cache"
         assert s.config_dir == "/custom/data/config"
         # skills_dir should NOT be affected by data_root
-        assert s.skills_dir == "/opt/nous/skills", "skills_dir must remain default when only data_root is set"
+        assert s.skills_dir == "/custom/data/skills", "skills_dir must follow data_root when set"
 
 class TestEnsureDirectories:
     """ensure_directories() should create expected directories, NOT

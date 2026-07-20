@@ -248,7 +248,14 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
 """
 
 class SQLiteConnection:
-    """SQLite connection manager with WAL mode and per-persona DB isolation."""
+    """SQLite connection manager with WAL mode and per-persona DB isolation.
+
+    Args:
+        data_dir: Base directory for per-persona data (i.e. persona_dir,
+                  typically ``{data_root}/persona``). DB files live at
+                  ``{data_dir}/{persona}/memory.sqlite`` etc.
+        persona: Persona identifier used to construct the DB path.
+    """
 
     def __init__(self, data_dir: str, persona: str) -> None:
         self.data_dir = data_dir

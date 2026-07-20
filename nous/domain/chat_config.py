@@ -459,12 +459,12 @@ class ChatConfigFileRepository:
         self._data_root = data_root
 
     def _config_path(self, persona: str) -> str:
-        return os.path.join(self._data_root, "memory", persona, "config.json")
+        return os.path.join(self._data_root, "persona", persona, "config.json")
 
     def _migrate_from_sqlite(self, persona: str) -> dict | None:
         """既存の memory.sqlite から chat_settings を読んで dict として返す。失敗時は None。"""
         import sqlite3 as _sqlite3
-        db_path = os.path.join(self._data_root, "memory", persona, "memory.sqlite")
+        db_path = os.path.join(self._data_root, "persona", persona, "memory.sqlite")
         if not os.path.exists(db_path):
             return None
         try:
