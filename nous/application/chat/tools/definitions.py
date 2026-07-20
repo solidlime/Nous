@@ -122,7 +122,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="invoke_skill",
-        description="登録済みスキルの内容を読み込む。スキル指示は既にシステムプロンプトに注入されているため、再確認したい時のみ使用する。",
+        description="登録済みスキルの内容を読み込む。システムプロンプトにはスキル名＋説明のみ含まれているので、スキルの詳細な指示が必要な時にこのツールで内容を取得すること。",
         input_schema={
             "type": "object",
             "properties": {

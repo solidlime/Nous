@@ -374,7 +374,7 @@ async def _handle_list_skills(ctx: AppContext, config: ChatConfig, tool_input: d
             "status": "ok",
             "skills": items,
             "count": len(items),
-            "note": "スキル指示はシステムプロンプトに注入済みです。再確認が必要な場合は invoke_skill ツールを使用してください。",
+            "note": "スキル詳細は invoke_skill('<name>') で取得してください。システムプロンプトにはスキル名と説明のみ含まれています。",
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}

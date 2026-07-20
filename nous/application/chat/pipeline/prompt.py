@@ -119,28 +119,6 @@ class PromptBuildStep:
                         + "\n".join(skill_lines)
                     )
 
-                    # L2: スキル本文を system prompt に直接注入（上限 4096 文字）
-                    MAX_SKILL_CONTENT_CHARS = 4096
-                    skill_contents: list[str] = []
-                    total = 0
-                    for s in skills:
-                        if not s.content:
-                            continue
-                        content_len = len(s.content)
-                        if total + content_len > MAX_SKILL_CONTENT_CHARS:
-                            logger.warning(
-                                "PromptBuildStep: skill content exceeds %d chars, truncating at %s",
-                                MAX_SKILL_CONTENT_CHARS, s.name,
-                            )
-                            break
-                        skill_contents.append(f"=== {s.name} ===\n{s.content}")
-                        total += content_len
-                    if skill_contents:
-                        parts.append(
-                            "\n--- スキル指示（以下の指示に従って自律的に行動せよ） ---\n\n"
-                            + "\n\n".join(skill_contents)
-                        )
-
                     skills_raw = [s.model_dump() for s in skills]
             except Exception as e:
                 logger.warning("PromptBuildStep: skills load failed: %s", e)
