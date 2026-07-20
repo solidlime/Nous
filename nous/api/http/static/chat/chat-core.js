@@ -262,8 +262,6 @@ async function loadChatCommitments() {
 
 async function loadSkillsForChat() {
   try {
-    // Auto-sync skills from filesystem on every chat tab open
-    await api("/api/skills/sync", { method: "POST" });
     const skills = await api("/api/skills");
     renderSkillsList(skills, CHAT.enabledSkills);
   } catch (e) {
