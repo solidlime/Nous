@@ -76,43 +76,6 @@ async def _safe_mental_model(ctx: AppContext, config: ChatConfig) -> None:
         logger.warning("background mental model failed", exc_info=True)
 
 
-async def _safe_episode_consolidation(
-    ctx: AppContext,
-    config: ChatConfig,
-    session: TreeSessionWindow,
-) -> None:
-    """Background task: run episode consolidation after DoneSSE."""
-    if not config.episode_consolidation_enabled:
-        return
-    try:
-        messages = list(session._messages) if hasattr(session, "_messages") else []
-        if len(messages) >= 4:
-            from nous.application.chat.pipeline.episode_consolidation import (
-                EpisodeConsolidation,
-            )
-            from nous.domain.memory.episode_segmenter import EpisodeSegmenter
-
-            seg_result = await EpisodeSegmenter().segment(
-                messages=messages,
-                config=config,
-            )
-            if seg_result.episodes:
-                consolidation_result = await EpisodeConsolidation().consolidate(
-                    episodes=seg_result.episodes,
-                    memory_service=ctx.memory_service,
-                    ctx=ctx,
-                    config=config,
-                    persona=ctx.persona,
-                )
-                logger.info(
-                    "background episode consolidation: %d episodes, %d memories created",
-                    len(seg_result.episodes),
-                    consolidation_result.memories_created,
-                )
-    except Exception:
-        logger.warning("background episode consolidation failed", exc_info=True)
-
-
 class PostProcessStep:
     """MemoryLLM await実行 + Reflection SSE + セッション更新 + debug_info/done SSEの送出。"""
 
@@ -288,5 +251,4 @@ class PostProcessStep:
         # Fire-and-forget: DoneSSE後に後処理を非同期タスクとして実行
         self._background_tasks.append(asyncio.create_task(_safe_reflection(ctx, config, memory_result, turn_ctx)))
         self._background_tasks.append(asyncio.create_task(_safe_mental_model(ctx, config)))
-        self._background_tasks.append(asyncio.create_task(_safe_episode_consolidation(ctx, config, session)))
         return
