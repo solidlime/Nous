@@ -14,6 +14,8 @@ var S = window.S;
 // Memory panel update (retrieved / saved / goals)
 // ------------------------------------------------------------------
 function updateMemoryPanel(retrieved, saved, goals) {
+  const panel = document.getElementById("memory-panel");
+  if (!panel || panel.style.display === "none") return;
   const escAttr = (s) =>
     String(s)
       .replace(/&/g, "&amp;")
