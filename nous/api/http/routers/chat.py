@@ -23,9 +23,10 @@ def register_chat_routes(mcp) -> None:
         ctx = _safe_get_context(persona)
         if not ctx:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
-        from nous.domain.chat_config import ChatConfig, ChatConfigRepository
+        from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository
+        from nous.config.settings import get_settings
 
-        repo = ChatConfigRepository(ctx.connection.get_memory_db())
+        repo = ChatConfigFileRepository(get_settings().data_root)
         try:
             config = repo.get(persona)
         except Exception:
@@ -44,93 +45,17 @@ def register_chat_routes(mcp) -> None:
         except Exception:
             return JSONResponse({"error": "Invalid JSON"}, status_code=400)
 
-        from nous.domain.chat_config import ChatConfig, ChatConfigRepository
+        from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository
+        from nous.config.settings import get_settings
 
-        repo = ChatConfigRepository(ctx.connection.get_memory_db())
+        repo = ChatConfigFileRepository(get_settings().data_root)
         current = repo.get(persona)
 
         update_data = current.model_dump()
-        for field_name in (
-            "provider",
-            "model",
-            "base_url",
-            "system_prompt",
-            "temperature",
-            "max_tokens",
-            "max_tool_calls",
-            "auto_extract",
-            "extract_model",
-            "extract_max_tokens",
-            "tool_result_max_chars",
-            "mcp_servers",
-            "enabled_skills",
-            "reflection_enabled",
-            "reflection_threshold",
-            "reflection_min_interval_hours",
-            "session_summarize",
-            "retrieval_recency_weight",
-            "retrieval_importance_weight",
-            "retrieval_relevance_weight",
-            "display_history_turns",
-            "mental_model_enabled",
-            "mental_model_min_samples",
-            "max_stored_messages",
-            "context_max_tokens",
-            "context_compression_threshold",
-            "context_compression_mode",
-            "context_keep_recent_turns",
-            "context_compress_system_prompt",
-            "context_compress_history",
-            "memory_preload_count",
-            "enable_parallel_tools",
-            "image_gen_enabled",
-            "image_gen_provider",
-            "image_gen_comfyui_url",
-            "image_gen_comfyui_checkpoint",
-            "image_gen_comfyui_loras",
-            "image_gen_comfyui_width",
-            "image_gen_comfyui_height",
-            "image_gen_comfyui_steps",
-            "image_gen_comfyui_cfg",
-            "image_gen_comfyui_sampler",
-            "image_gen_comfyui_scheduler",
-            "image_gen_comfyui_seed",
-            "image_gen_comfyui_denoise",
-            "image_gen_self_portrait_prompt",
-            "image_gen_max_width",
-            "image_gen_max_height",
-            "image_gen_negative_prompt",
-            "image_gen_full_body_prefix",
-            "image_gen_portrait_prefix",
-            "image_gen_selfie_prefix",
-            "image_gen_scene_prefix",
-            "voice_speed",
-            "image_gen_comfyui_speed_lora_path",
-            "image_gen_comfyui_speed_lora_weight",
-            "image_gen_comfyui_speed_lora_method",
-            "enable_memory_tools",
-            "debug_mode",
-            "dynamic_temperature",
-            "emotion_temperature_scale",
-            "top_p",
-            "context_use_llm_summary",
-            "episode_search_enabled",
-            "retrieval_rrf_k",
-            "dynamic_tool_selection",
-            "voice_enabled",
-            "voice_auto_play",
-            "voice_emotion_link",
-            "voice_model",
-            "voice_url",
-            "voice_volume",
-            "irodori_num_steps",
-            "irodori_cfg_scale_text",
-            "irodori_cfg_scale_speaker",
-            "irodori_cfg_scale_caption",
-            "irodori_chunk_min_chars",
-            "irodori_seed",
-            "disabled_tools",
-        ):
+        # 動的ホワイトリスト: persona, updated_at 以外の全フィールド
+        for field_name in ChatConfig.model_fields:
+            if field_name in ("persona", "updated_at"):
+                continue
             if field_name in body:
                 update_data[field_name] = body[field_name]
         if "api_key" in body and body["api_key"] and not str(body["api_key"]).endswith("****"):
@@ -151,9 +76,10 @@ def register_chat_routes(mcp) -> None:
         ctx = _safe_get_context(persona)
         if not ctx:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
-        from nous.domain.chat_config import ChatConfigRepository
+        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.config.settings import get_settings
 
-        repo = ChatConfigRepository(ctx.connection.get_memory_db())
+        repo = ChatConfigFileRepository(get_settings().data_root)
         config = repo.get(persona)
 
         if not config.mcp_servers:
@@ -217,9 +143,10 @@ def register_chat_routes(mcp) -> None:
             return StreamingResponse(empty(), media_type="text/event-stream")
 
         from nous.application.chat_service import ChatService
-        from nous.domain.chat_config import ChatConfigRepository
+        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.config.settings import get_settings
 
-        repo = ChatConfigRepository(ctx.connection.get_memory_db())
+        repo = ChatConfigFileRepository(get_settings().data_root)
         config = repo.get(persona)
         service = ChatService()
 
@@ -629,9 +556,10 @@ def register_chat_routes(mcp) -> None:
         if not ctx:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
         from nous.application.chat.tools.builtin import execute_tool
-        from nous.domain.chat_config import ChatConfigRepository
+        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.config.settings import get_settings
 
-        repo = ChatConfigRepository(ctx.connection.get_memory_db())
+        repo = ChatConfigFileRepository(get_settings().data_root)
         config = repo.get(persona)
 
         # Ensure search engine uses the correct persona for semantic search
