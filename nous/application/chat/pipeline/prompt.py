@@ -71,27 +71,24 @@ class PromptBuildStep:
 
                     from nous.config.settings import get_settings
                     from nous.domain.skill import SkillRepository
-                    from nous.infrastructure.sqlite.connection import get_global_skills_db
 
                     settings = get_settings()
-                    skill_repo = SkillRepository(get_global_skills_db(settings.skills_dir))
+                    skill_repo = SkillRepository()
 
-                    # グローバルスキルは起動時に DB ロード済み。ここでは get() で取得するだけ
-                    # ペルソナ別スキルは persist=False でインメモリのみ（クロス汚染防止）
+                    # グローバルスキル: FSから直接ロード
                     skill_map: dict = {}
-                    for n in config.enabled_skills:
-                        s = skill_repo.get(n)
-                        if s:
-                            skill_map[n] = s
+                    global_skills = skill_repo.load_from_dir(settings.skills_dir, persist=False)
+                    for s in global_skills:
+                        skill_map[s.name] = s
 
+                    # ペルソナ別スキル: 同名なら上書き
                     persona_skills_dir = os.path.join(settings.data_root, "memory", persona, "skills")
                     if os.path.isdir(persona_skills_dir):
-                        # ディレクトリが空でなければペルソナスキルをインメモリロード
                         try:
                             if any(os.scandir(persona_skills_dir)):
                                 persona_skills = skill_repo.load_from_dir(persona_skills_dir, persist=False)
                                 for ps in persona_skills:
-                                    skill_map[ps.name] = ps  # ペルソナスキルが同名グローバルを上書き
+                                    skill_map[ps.name] = ps
                         except OSError:
                             pass
 
