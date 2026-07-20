@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse
 
+from nous.api.http.routers._error_handlers import error_from_result
+
 from nous.api.http.deps import (
     _memory_to_dict,
     _resolve_persona_from_request,
@@ -56,7 +58,7 @@ def register_search_routes(mcp) -> None:
 
             result = await ctx.search_engine.search(query)
             if not result.is_ok:
-                return JSONResponse({"error": str(result.error)}, status_code=500)
+                return error_from_result(result)
             return JSONResponse(
                 {
                     "persona": persona,
@@ -90,7 +92,7 @@ def register_search_routes(mcp) -> None:
         try:
             result = ctx.persona_repo.get_emotion_history_by_days(persona, days)
             if not result.is_ok:
-                return JSONResponse({"error": str(result.error)}, status_code=500)
+                return error_from_result(result)
             grouped: dict[str, list[dict]] = defaultdict(list)
             for record in result.value:
                 date_str = record.timestamp.strftime("%Y-%m-%d") if record.timestamp else "unknown"
@@ -124,7 +126,7 @@ def register_search_routes(mcp) -> None:
         try:
             result = ctx.memory_repo.find_recent(limit=limit)
             if not result.is_ok:
-                return JSONResponse({"error": str(result.error)}, status_code=500)
+                return error_from_result(result)
             memories = result.value
 
             nodes = []

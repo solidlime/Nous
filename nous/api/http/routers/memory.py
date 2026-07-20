@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse
 
+from nous.api.http.routers._error_handlers import error_from_result
+
 from nous.api.http.deps import (
     CreateMemoryRequest,
     UpdateMemoryRequest,
@@ -52,7 +54,7 @@ def register_memory_routes(mcp) -> None:
         )
         if result.is_ok:
             return JSONResponse({"ok": True, "block_name": block_name})
-        return JSONResponse({"error": str(result.error)}, status_code=500)
+        return error_from_result(result)
 
     @mcp.custom_route("/api/blocks/{persona}/{block_name:path}", methods=["DELETE"])
     async def delete_block_http(request: Request) -> JSONResponse:
@@ -64,7 +66,7 @@ def register_memory_routes(mcp) -> None:
         result = ctx.memory_service.delete_block(block_name)
         if result.is_ok:
             return JSONResponse({"ok": True})
-        return JSONResponse({"error": str(result.error)}, status_code=500)
+        return error_from_result(result)
 
     @mcp.custom_route("/api/observations/{persona}", methods=["GET"])
     async def observations(request: Request) -> JSONResponse:
@@ -97,7 +99,7 @@ def register_memory_routes(mcp) -> None:
                 return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
             result = ctx.memory_service.get_recent(limit=limit)
             if not result.is_ok:
-                return JSONResponse({"error": str(result.error)}, status_code=500)
+                return error_from_result(result)
             return JSONResponse(
                 {
                     "persona": persona,
@@ -117,7 +119,7 @@ def register_memory_routes(mcp) -> None:
                 sort_order=sort_order,
             )
             if not result.is_ok:
-                return JSONResponse({"error": str(result.error)}, status_code=500)
+                return error_from_result(result)
             memories, total_count = result.value
             total_pages = (total_count + per_page - 1) // per_page
             return JSONResponse(
@@ -143,7 +145,7 @@ def register_memory_routes(mcp) -> None:
         try:
             result = ctx.memory_repo.get_all_strengths()
             if not result.is_ok:
-                return JSONResponse({"error": str(result.error)}, status_code=500)
+                return error_from_result(result)
             strengths = result.value
             buckets = [0] * 10
             for s in strengths:
@@ -193,7 +195,7 @@ def register_memory_routes(mcp) -> None:
                 sort_order=sort_order,
             )
             if not result.is_ok:
-                return JSONResponse({"error": str(result.error)}, status_code=500)
+                return error_from_result(result)
             memories, total_count = result.value
             return JSONResponse(
                 {
@@ -252,7 +254,7 @@ def register_memory_routes(mcp) -> None:
                 source_context=body.source_context,
             )
             if not result.is_ok:
-                return JSONResponse({"error": str(result.error)}, status_code=500)
+                return error_from_result(result)
             mem = result.value
             if ctx.vector_store is not None:
                 with contextlib.suppress(Exception):

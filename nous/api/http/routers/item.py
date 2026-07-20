@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse
 
+from nous.api.http.routers._error_handlers import error_from_result
+
 from nous.api.http.deps import (
     _resolve_persona_from_request,
     _safe_get_context,
@@ -35,7 +37,7 @@ def register_item_routes(mcp) -> None:
         try:
             result = ctx.equipment_service.search_items()
             if not result.is_ok:
-                return JSONResponse({"error": str(result.error)}, status_code=500)
+                return error_from_result(result)
             return JSONResponse({"persona": persona, "items": [_item_to_dict(it) for it in result.value]})
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
@@ -63,7 +65,7 @@ def register_item_routes(mcp) -> None:
                 body.get("tags"),
             )
             if not result.is_ok:
-                return JSONResponse({"error": str(result.error)}, status_code=500)
+                return error_from_result(result)
             return JSONResponse({"status": "ok", "item_name": item_name}, status_code=201)
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
@@ -87,7 +89,7 @@ def register_item_routes(mcp) -> None:
         try:
             result = ctx.equipment_service.equip(body, auto_add)
             if not result.is_ok:
-                return JSONResponse({"error": str(result.error)}, status_code=500)
+                return error_from_result(result)
             return JSONResponse({"status": "ok", "equipped": body})
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
@@ -111,7 +113,7 @@ def register_item_routes(mcp) -> None:
         try:
             result = ctx.equipment_service.unequip(slots)
             if not result.is_ok:
-                return JSONResponse({"error": str(result.error)}, status_code=500)
+                return error_from_result(result)
             return JSONResponse({"status": "ok", "unequipped": slots})
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
@@ -137,7 +139,7 @@ def register_item_routes(mcp) -> None:
         try:
             result = ctx.equipment_service.update_item(item_name, **updates)
             if not result.is_ok:
-                return JSONResponse({"error": str(result.error)}, status_code=500)
+                return error_from_result(result)
             return JSONResponse({"status": "ok", "item_name": item_name})
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
@@ -155,7 +157,7 @@ def register_item_routes(mcp) -> None:
         try:
             result = ctx.equipment_service.remove_item(item_name)
             if not result.is_ok:
-                return JSONResponse({"error": str(result.error)}, status_code=500)
+                return error_from_result(result)
             return JSONResponse({"status": "ok", "deleted": item_name})
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)

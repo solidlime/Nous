@@ -32,9 +32,9 @@ async def _tool_memory_create(
     memory_create if your emotional/physical state has changed, so the snapshot
     captures your latest state."""
     if not content:
-        return json.dumps({"ok": False, "error": "content is required"}, ensure_ascii=False)
+        return {"success": False, "data": None, "result_summary": "content is required"}
     if importance is not None and not (0.0 <= importance <= 1.0):
-        return json.dumps({"ok": False, "error": "importance must be between 0.0 and 1.0"}, ensure_ascii=False)
+        return {"success": False, "data": None, "result_summary": "importance must be between 0.0 and 1.0"}
     importance = importance if importance is not None else 0.5
 
     # ── Semantic duplicate check (same as builtin.py L128-147) ──
@@ -112,7 +112,7 @@ async def _tool_memory_create(
             },
         )
         return json.dumps({"ok": True, "key": result.value.key, "auto_emotion": True}, ensure_ascii=False)
-    return json.dumps({"ok": False, "error": str(result.error)}, ensure_ascii=False)
+    return {"success": False, "data": None, "result_summary": str(result.error)}
 
 
 async def _tool_memory_read(
@@ -195,7 +195,7 @@ async def _tool_memory_read(
                 "success": False,
             },
         )
-        return json.dumps({"ok": False, "error": str(memories_result.error)}, ensure_ascii=False)
+        return {"success": False, "data": None, "result_summary": str(memories_result.error)}
 
 
 async def _tool_memory_update(
@@ -218,54 +218,48 @@ async def _tool_memory_update(
     if query and not memory_key:
         search_result = await ctx.search_engine.search(SearchQuery(text=query, top_k=1))
         if not search_result.is_ok or not search_result.value:
-            return json.dumps({"ok": False, "error": f"No memory found for query: {query}"}, ensure_ascii=False)
+            return {"success": False, "data": None, "result_summary": f"No memory found for query: {query}"}
         item = search_result.value[0]
         mem = item[0] if isinstance(item, tuple) else item
         memory_key = getattr(mem, "key", "")
         if not memory_key:
-            return json.dumps({"ok": False, "error": "memory key not found"}, ensure_ascii=False)
+            return {"success": False, "data": None, "result_summary": "memory key not found"}
 
     # builtin からの new_content フォールバック
     if content is None and new_content is not None:
         content = new_content
 
     if not memory_key:
-        return json.dumps({"ok": False, "error": "memory_key is required for update"}, ensure_ascii=False)
+        return {"success": False, "data": None, "result_summary": "memory_key is required for update"}
 
     # ── Input validation ──
     if content is not None and len(content) > 50000:
-        return json.dumps({"ok": False, "error": "content too long (max 50000 chars)"}, ensure_ascii=False)
+        return {"success": False, "data": None, "result_summary": "content too long (max 50000 chars)"}
 
     if importance is not None and not (0.0 <= importance <= 1.0):
-        return json.dumps({"ok": False, "error": "importance must be between 0.0 and 1.0"}, ensure_ascii=False)
+        return {"success": False, "data": None, "result_summary": "importance must be between 0.0 and 1.0"}
 
     if emotion is not None and emotion not in _VALID_EMOTIONS:
-        return json.dumps({"ok": False, "error": f"invalid emotion: {emotion}"}, ensure_ascii=False)
+        return {"success": False, "data": None, "result_summary": f"invalid emotion: {emotion}"}
 
     if emotion_intensity is not None:
         try:
             emotion_intensity = float(emotion_intensity)
             emotion_intensity = max(0.0, min(1.0, emotion_intensity))
         except (TypeError, ValueError):
-            return json.dumps({"ok": False, "error": "emotion_intensity must be a number"}, ensure_ascii=False)
+            return {"success": False, "data": None, "result_summary": "emotion_intensity must be a number"}
 
     if tags is not None:
         if not isinstance(tags, list):
-            return json.dumps({"ok": False, "error": "tags must be a list"}, ensure_ascii=False)
+            return {"success": False, "data": None, "result_summary": "tags must be a list"}
         if not all(isinstance(t, str) for t in tags):
-            return json.dumps({"ok": False, "error": "all tags must be strings"}, ensure_ascii=False)
+            return {"success": False, "data": None, "result_summary": "all tags must be strings"}
         if any(len(t) > 100 for t in tags):
-            return json.dumps({"ok": False, "error": "tag too long (max 100 chars)"}, ensure_ascii=False)
+            return {"success": False, "data": None, "result_summary": "tag too long (max 100 chars)"}
 
     valid_privacy = {"internal", "private", "public"}
     if privacy_level is not None and privacy_level not in valid_privacy:
-        return json.dumps(
-            {
-                "ok": False,
-                "error": f"invalid privacy_level: {privacy_level}. Must be: {', '.join(sorted(valid_privacy))}",
-            },
-            ensure_ascii=False,
-        )
+        return {"success": False, "data": None, "result_summary": f"invalid privacy_level: {privacy_level}. Must be: {', '.join(sorted(valid_privacy))}"}
 
     updates: dict = {}
     if content is not None:
@@ -282,7 +276,7 @@ async def _tool_memory_update(
         updates["privacy_level"] = privacy_level
 
     if not updates:
-        return json.dumps({"ok": False, "error": "no fields to update"}, ensure_ascii=False)
+        return {"success": False, "data": None, "result_summary": "no fields to update"}
 
     result = ctx.memory_service.update_memory(memory_key, **updates)
     if result.is_ok:
@@ -298,7 +292,7 @@ async def _tool_memory_update(
             },
         )
         return json.dumps({"ok": True, "key": memory_key}, ensure_ascii=False)
-    return json.dumps({"ok": False, "error": str(result.error)}, ensure_ascii=False)
+    return {"success": False, "data": None, "result_summary": str(result.error)}
 
 
 async def _tool_memory_delete(
@@ -361,7 +355,7 @@ async def _tool_memory_search(
 ) -> str:
     """Search memories with hybrid retrieval."""
     if top_k is not None and (top_k < 1 or top_k > 200):
-        return json.dumps({"ok": False, "error": "top_k must be between 1 and 200"}, ensure_ascii=False)
+        return {"success": False, "data": None, "result_summary": "top_k must be between 1 and 200"}
     top_k = min(top_k or 5, 200)
     # Clamp RRF weights to [0.0, 1.0]
     importance_weight = max(0.0, min(1.0, importance_weight))
@@ -393,7 +387,7 @@ async def _tool_memory_search(
                 "success": False,
             },
         )
-        return json.dumps({"ok": False, "error": str(result.error)}, ensure_ascii=False)
+        return {"success": False, "data": None, "result_summary": str(result.error)}
     if not result.value:
         await ctx.event_bus.publish(
             "tool.called",
