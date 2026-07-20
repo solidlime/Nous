@@ -30,17 +30,17 @@ _REFLECTION_THRESHOLD_DEFAULT = 3.0
 _REFLECTION_MIN_INTERVAL_HOURS_DEFAULT = 1.0
 
 _REFLECTION_PROMPT = """\
-以下は最近記録された記憶・事実のリストです。
+Below is a list of recently recorded memories and facts.
 
 {memories}
 
-【指示】
-これらの記憶から、最も重要な3つの高次洞察を導き出してください。
-単なる事実の繰り返しではなく、パターン・傾向・本質的な理解を表す洞察にしてください。
+[Instruction]
+From these memories, derive the 3 most important high-level insights.
+Each insight should represent a pattern, tendency, or essential understanding — not a mere repetition of individual facts.
 
-【出力形式】
-JSONのみ。コメント不要。
-{{"insights": ["洞察1", "洞察2", "洞察3"]}}
+[Output format]
+JSON only. No commentary.
+{{"insights": ["insight1", "insight2", "insight3"]}}
 """
 
 # -----------------------------------------------------------
@@ -49,7 +49,7 @@ JSONのみ。コメント不要。
 
 
 def _get_last_reflection_at(ctx: AppContext) -> datetime | None:
-    """最後のリフレクション時刻をメタ記憶から取得する。"""
+    """Get the last reflection timestamp from meta-memory."""
     result = ctx.memory_service.get_by_tags([_REFLECTION_META_TAG])
     if not result.is_ok or not result.value:
         return None
@@ -64,7 +64,7 @@ def _get_last_reflection_at(ctx: AppContext) -> datetime | None:
 
 
 def _store_last_reflection_at(ctx: AppContext, ts: datetime) -> None:
-    """リフレクション時刻をメタ記憶として保存する（古いものを削除して置き換え）。"""
+    """Store reflection timestamp as meta-memory (delete old and replace)."""
     existing = ctx.memory_service.get_by_tags([_REFLECTION_META_TAG])
     if existing.is_ok and existing.value:
         for mem in existing.value:
@@ -85,15 +85,15 @@ async def maybe_run_reflection(
     config: ChatConfig,
     recent_importance_sum: float,
 ) -> list[str]:
-    """リフレクションを必要に応じて実行する。
+    """Run reflection when conditions are met.
 
     Args:
         ctx: AppContext
         config: ChatConfig
-        recent_importance_sum: 最近抽出されたファクトの importance 合計値
+        recent_importance_sum: Sum of importance values from recently extracted facts
 
     Returns:
-        生成された洞察文字列のリスト。リフレクション未実行時は空リスト。
+        List of generated insight strings. Empty list if reflection was skipped.
     """
     threshold: float = getattr(config, "reflection_threshold", _REFLECTION_THRESHOLD_DEFAULT)
     min_interval_hours: float = getattr(config, "reflection_min_interval_hours", _REFLECTION_MIN_INTERVAL_HOURS_DEFAULT)
@@ -101,7 +101,7 @@ async def maybe_run_reflection(
     if recent_importance_sum < threshold:
         return []
 
-    # 最後のリフレクションから十分な時間が経過しているか確認
+    # Check that enough time has passed since the last reflection
     now = datetime.now().astimezone()
     last_at = _get_last_reflection_at(ctx)
     if last_at is not None:
@@ -119,11 +119,11 @@ async def maybe_run_reflection(
     if not api_key or not extract_model:
         return []
 
-    # 最近24時間以内の記憶を最大20件取得
+    # Fetch up to 20 memories from the last 24 hours
     cutoff = now - timedelta(hours=24)
     recent_result = ctx.memory_service.get_recent(limit=20)
     if not recent_result.is_ok or not recent_result.value:
-        # フォールバック: スマートサーチで最近記憶を取得
+        # Fallback: use smart search to get recent memories
         search_result = await ctx.search_engine.search(SearchQuery(text="記憶 事実 出来事", top_k=20, mode="hybrid"))
         memories = []
         if search_result.is_ok:
@@ -183,7 +183,7 @@ async def maybe_run_reflection(
 
 
 def _parse_insights(text: str) -> list[str]:
-    """LLM出力から洞察リストをパースする。"""
+    """Parse insight list from LLM output."""
     text = text.strip()
     if text.startswith("```"):
         lines = text.splitlines()
