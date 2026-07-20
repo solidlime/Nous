@@ -637,9 +637,10 @@ async function deleteChatMessage(msgId) {
 
   try {
     const body = typeof msgId === "number"
-      ? { keep_until: msgId }
-      : { from_id: String(msgId) };
+      ? { keep_until: msgId, exclusive: true }
+      : { from_id: String(msgId), exclusive: true };
 
+    CHAT._justReset = true;
     const result = await api(
       "/api/chat/" +
         encodeURIComponent(S.persona) +
@@ -665,25 +666,6 @@ async function deleteChatMessage(msgId) {
 
     if (remaining.length === 0) {
       resetToWelcome();
-    }
-
-    // Find last remaining user message for auto-regeneration
-    let lastUserText = null;
-    for (let i = remaining.length - 1; i >= 0; i--) {
-      if (remaining[i].role === "user") {
-        lastUserText = remaining[i].content;
-        break;
-      }
-    }
-
-    if (lastUserText) {
-      const inputEl = document.getElementById("chat-input");
-      if (inputEl) {
-        inputEl.value = lastUserText;
-        inputEl.focus();
-        inputEl.dispatchEvent(new Event("input"));
-      }
-      setTimeout(() => chatSend(false), 100);
     }
 
     toast("🗑️ メッセージを削除しました", "success");

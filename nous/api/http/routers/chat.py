@@ -52,9 +52,9 @@ def register_chat_routes(mcp) -> None:
         current = repo.get(persona)
 
         update_data = current.model_dump()
-        # 動的ホワイトリスト: persona, updated_at 以外の全フィールド
+        # 動的ホワイトリスト: persona, updated_at, api_key 以外の全フィールド
         for field_name in ChatConfig.model_fields:
-            if field_name in ("persona", "updated_at"):
+            if field_name in ("persona", "updated_at", "api_key"):
                 continue
             if field_name in body:
                 update_data[field_name] = body[field_name]
@@ -369,7 +369,25 @@ def register_chat_routes(mcp) -> None:
                     )
                 # Capture old active path before rollback for removed_user_text
                 old_path = window.get_active_path()
-                result = window.rollback_to(from_id)
+                exclusive = body.get("exclusive", False)
+                if exclusive:
+                    node = window._nodes.get(from_id)
+                    if node is None:
+                        return JSONResponse(
+                            {"error": f"Message ID {from_id} not found"},
+                            status_code=404,
+                        )
+                    parent_id = node.get("parent_id")
+                    if parent_id:
+                        result = window.rollback_to(parent_id)
+                    else:
+                        old = window._active_leaf_id
+                        window._active_leaf_id = None
+                        window._version += 1
+                        window._persist()
+                        result = {"old_active_leaf_id": old, "new_active_leaf_id": None}
+                else:
+                    result = window.rollback_to(from_id)
                 current_version = window.get_version()
             else:
                 # Window not in memory — load from DB, rollback, persist
@@ -390,8 +408,27 @@ def register_chat_routes(mcp) -> None:
                         status_code=409,
                     )
                 old_path = window.get_active_path()
-                result = window.rollback_to(from_id)
+                exclusive = body.get("exclusive", False)
+                if exclusive:
+                    node = window._nodes.get(from_id)
+                    if node is None:
+                        return JSONResponse(
+                            {"error": f"Message ID {from_id} not found"},
+                            status_code=404,
+                        )
+                    parent_id = node.get("parent_id")
+                    if parent_id:
+                        result = window.rollback_to(parent_id)
+                    else:
+                        old = window._active_leaf_id
+                        window._active_leaf_id = None
+                        window._version += 1
+                        window._persist()
+                        result = {"old_active_leaf_id": old, "new_active_leaf_id": None}
+                else:
+                    result = window.rollback_to(from_id)
                 current_version = window.get_version()
+                _session_manager._sessions[key] = window
 
             if result is None:
                 return JSONResponse(
