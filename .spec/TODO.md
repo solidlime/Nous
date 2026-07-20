@@ -56,3 +56,22 @@
 - [x] T205: base.py — headセクションにInterフォントの読み込みを追加
 - [x] T206: レイアウトやレスポンシブの微調整
 - [x] T207: アクセシビリティ（WCAG 2.1 AA）の確認
+
+### Minimal B: parentIdツリー構造移行（チャット編集・削除リライト）
+- [ ] T301: session_store.py — TreeSessionWindow コア実装（add/edit/delete/rollback/get_active_path/persist/from_db）
+- [ ] T302: session_store.py — SessionManager 更新（TreeSessionWindow対応 + get_messages ID追加）
+- [ ] T303: events.py — DoneSSE に user_msg_id/assistant_msg_id 追加
+- [ ] T304: context.py — ChatTurnContext に user_msg_id/assistant_msg_id 追加
+- [ ] T305: service.py — session.add() 戻り値活用 + turn_ctx 保存
+- [ ] T306: post.py — DoneSSE に message_id 渡し
+- [ ] T307: chat.py — PUT /messages/{msg_id} 更新（index→ID）
+- [ ] T308: chat.py — POST /rollback 更新（keep_until→from_id）
+- [ ] T309: chat-send.js — appendChatMessage/_createAssistantDiv に data-msg-id
+- [ ] T310: chat-send.js — done イベントで msg_id を DOM に設定
+- [ ] T311: chat-history.js — editChatMessage IDベース
+- [ ] T312: chat-history.js — rollbackChat IDベース + DOM再構築
+- [ ] T313: chat-history.js — deleteChatMessage IDベース
+- [ ] T314: chat-history.js — restoreChatHistory data-msg-id 設定
+- [ ] T315: test_chat_service.py — TreeSessionWindow テスト群
+- [ ] T316: test_chat_service.py — 既存テスト TreeSessionWindow 移行
+- [ ] T317: 統合テスト実行 + 手動確認 + 旧SessionWindowクリーンアップ

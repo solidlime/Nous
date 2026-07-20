@@ -84,13 +84,135 @@ function getChatSessionId() {
 }
 
 // ------------------------------------------------------------------
+// Shared: append tool_call / tool_result / text bubble elements from segments
+// into the given message div. Uses restoreChatHistory's rendering logic.
+// ------------------------------------------------------------------
+function _appendSegmentsToBubble(msg, msgDiv) {
+  if (!msg.segments || !msg.segments.length) return;
+  var toolCallDivs = {};
+  for (var si = 0; si < msg.segments.length; si++) {
+    var seg = msg.segments[si];
+    if (seg.type === "text") {
+      var bubble = document.createElement("div");
+      bubble.className = "chat-bubble";
+      bubble.innerHTML = safeMarkdown(seg.content);
+      bubble.querySelectorAll("img").forEach(function(img) {
+        img.style.cssText = "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
+        img.addEventListener("click", function() { openMediaViewer(img.src, "image"); });
+      });
+      var timeDiv = msgDiv.querySelector(".chat-time");
+      if (timeDiv) msgDiv.insertBefore(bubble, timeDiv);
+      else msgDiv.appendChild(bubble);
+    } else if (seg.type === "tool_call") {
+      var inputStr;
+      try { inputStr = JSON.stringify(seg.input, null, 2); } catch (e) { inputStr = String(seg.input); }
+      var div = document.createElement("div");
+      div.className = "chat-tool-call done";
+      if (seg.id) div.dataset.toolId = seg.id;
+      div.innerHTML = '<details><summary><i data-lucide="wrench"></i> <strong>' +
+        esc(seg.name) + '</strong>' +
+        '<span class="chat-tool-status"> <i data-lucide="check"></i> 完了</span></summary>' +
+        '<pre class="chat-tool-detail">' + esc(inputStr) + '</pre></details>';
+      if (seg.id) toolCallDivs[seg.id] = div;
+      var timeDiv2 = msgDiv.querySelector(".chat-time");
+      if (timeDiv2) msgDiv.insertBefore(div, timeDiv2);
+      else msgDiv.appendChild(div);
+    } else if (seg.type === "tool_result") {
+      var toolDiv = seg.id ? toolCallDivs[seg.id] : null;
+      if (toolDiv) {
+        var resultStr;
+        try { resultStr = typeof seg.result === "object" ? JSON.stringify(seg.result, null, 2) : String(seg.result); }
+        catch (e) { resultStr = String(seg.result); }
+        var details = toolDiv.querySelector("details");
+        if (details) {
+          var resultPre = document.createElement("pre");
+          resultPre.className = "chat-tool-detail chat-tool-result-content";
+          resultPre.textContent = resultStr;
+          details.appendChild(resultPre);
+        }
+        // 画像生成結果があればレンダリング（履歴復元時）
+        if (seg.id && msg.tool_calls) {
+          var tc = msg.tool_calls.find(function(t) { return t.id === seg.id; });
+          if (tc && tc.result_raw && tc.result_raw.images && tc.result_raw.images.length) {
+            tc.result_raw.images.forEach(function(img) {
+              var card = document.createElement("div");
+              card.className = "chat-image-gen-card";
+              var imgEl = document.createElement("img");
+              if (img.url) {
+                imgEl.src = img.url;
+              } else if (img.base64) {
+                try {
+                  var binary = atob(img.base64);
+                  var bytes = new Uint8Array(binary.length);
+                  for (var b = 0; b < binary.length; b++) bytes[b] = binary.charCodeAt(b);
+                  var blob = new Blob([bytes], { type: "image/png" });
+                  imgEl.src = URL.createObjectURL(blob);
+                } catch (e) {
+                  imgEl.src = "data:image/png;base64," + img.base64;
+                }
+              }
+              imgEl.alt = img.revised_prompt || "生成画像";
+              imgEl.title = img.revised_prompt || "";
+              imgEl.dataset.revisedPrompt = img.revised_prompt || "";
+              imgEl.dataset.negativePrompt = img.negative_prompt || "";
+              imgEl.onerror = function() {
+                imgEl.style.display = "none";
+                var errDiv = document.createElement("div");
+                errDiv.className = "image-gen-error";
+                errDiv.textContent = "⚠️ 画像のデコードに失敗しました";
+                card.insertBefore(errDiv, card.firstChild);
+              };
+              imgEl.onclick = function() {
+                if (typeof openMediaViewer === "function") {
+                  openMediaViewer(imgEl.src, "image", null, {
+                    revised_prompt: imgEl.dataset.revisedPrompt,
+                    negative_prompt: imgEl.dataset.negativePrompt,
+                  });
+                } else {
+                  window.open(imgEl.src, "_blank");
+                }
+              };
+              var meta = document.createElement("div");
+              meta.className = "image-gen-meta";
+              var rp = img.revised_prompt || "";
+              if (rp) {
+                var promptSpan = document.createElement("span");
+                promptSpan.textContent = rp.length > 80 ? rp.substring(0, 80) + "..." : rp;
+                promptSpan.style.fontStyle = "italic";
+                meta.appendChild(promptSpan);
+              }
+              var sizeSpan = document.createElement("span");
+              sizeSpan.textContent = (tc.result_raw.provider || "") + " · " + (img.size || "");
+              meta.appendChild(sizeSpan);
+              card.appendChild(imgEl);
+              card.appendChild(meta);
+              toolDiv.parentNode.insertBefore(card, toolDiv.nextSibling);
+            });
+          }
+        }
+      }
+    }
+  }
+  // Remove empty bubble if appendChatMessage created one with no content
+  var emptyBubble = msgDiv.querySelector(".chat-bubble");
+  if (emptyBubble && !emptyBubble.innerHTML.trim()) emptyBubble.remove();
+  // Set time
+  var timeEl = msgDiv.querySelector(".chat-time");
+  if (timeEl && msg.time) timeEl.textContent = msg.time;
+}
+
+// ------------------------------------------------------------------
 // Rollback: undo messages from keep_until onwards, optionally auto-resend
 // ------------------------------------------------------------------
-async function rollbackChat(keepUntil, shouldResend) {
+async function rollbackChat(fromId, shouldResend) {
   if (!S.persona) return;
   const sid = getChatSessionId();
 
   try {
+    const body = typeof fromId === "number"
+      ? { keep_until: fromId }
+      : { from_id: String(fromId) };
+
     const result = await api(
       "/api/chat/" +
         encodeURIComponent(S.persona) +
@@ -99,46 +221,53 @@ async function rollbackChat(keepUntil, shouldResend) {
         "/rollback",
       {
         method: "POST",
-        body: JSON.stringify({ keep_until: keepUntil }),
+        body: JSON.stringify(body),
       },
     );
 
-    // Remove DOM messages from keep_until onwards
+    // DOM完全再構築: server response の remaining_messages から再描画
     const container = document.getElementById("chat-messages");
-    const allMsgs = container.querySelectorAll(".chat-msg");
-    for (const msg of allMsgs) {
-      if (parseInt(msg.dataset.msgIndex) >= keepUntil) {
-        msg.remove();
+    container.innerHTML = "";
+    const remaining = result.remaining_messages || [];
+    for (const msg of remaining) {
+      if (msg.segments) {
+        appendChatMessage(msg.role, "", msg.time, false, msg.id);
+        _appendSegmentsToBubble(msg, container.querySelector(".chat-msg:last-child"));
+      } else {
+        appendChatMessage(msg.role, msg.content, msg.time, msg.role === "assistant", msg.id);
       }
     }
 
     // Restore welcome if no messages left
-    if (container.querySelectorAll(".chat-msg").length === 0) {
+    if (remaining.length === 0) {
       resetToWelcome();
     }
 
-    if (result.removed_user_text) {
+    // 入力欄に最後のユーザーメッセージを設定
+    const lastUserText = result.removed_user_text ||
+      (function() {
+        for (let i = remaining.length - 1; i >= 0; i--) {
+          if (remaining[i].role === "user") return remaining[i].content;
+        }
+        return null;
+      })();
+
+    if (lastUserText) {
       const inputEl = document.getElementById("chat-input");
       if (inputEl) {
-        inputEl.value = result.removed_user_text;
+        inputEl.value = lastUserText;
         inputEl.focus();
         inputEl.dispatchEvent(new Event("input"));
       }
 
       if (shouldResend) {
-        // Small delay to let the DOM settle, then auto-send
         setTimeout(() => {
           chatSend(false);
         }, 100);
       }
     }
 
-    if (result.removed_count > 0) {
-      toast(
-        "🔄 " + result.removed_count + "件のメッセージを元に戻しました",
-        "info",
-      );
-    }
+    toast("🔄 ロールバックしました", "info");
   } catch (e) {
     toast("ロールバック失敗: " + e.message, "error");
   }
@@ -147,11 +276,14 @@ async function rollbackChat(keepUntil, shouldResend) {
 // ------------------------------------------------------------------
 // Inline edit: 編集ボタン用 — textarea.value 代入なし、undo スタック非破壊
 // ------------------------------------------------------------------
-async function editChatMessage(msgIndex) {
+async function editChatMessage(msgId) {
   if (!S.persona) return;
-  const msgDiv = document.querySelector(
-    '.chat-msg.user[data-msg-index="' + msgIndex + '"]',
-  );
+  let msgDiv;
+  if (typeof msgId === "number") {
+    msgDiv = document.querySelector('.chat-msg.user[data-msg-index="' + msgId + '"]');
+  } else {
+    msgDiv = document.querySelector('.chat-msg.user[data-msg-id="' + msgId + '"]');
+  }
   if (!msgDiv) return;
   const bubble = msgDiv.querySelector(".chat-bubble");
   if (!bubble) return;
@@ -195,7 +327,7 @@ async function editChatMessage(msgIndex) {
         "/sessions/" +
         encodeURIComponent(sid) +
         "/messages/" +
-        msgIndex;
+        msgId;
       const result = await api(url, {
         method: "PUT",
         body: JSON.stringify({ content: newText }),
@@ -203,12 +335,17 @@ async function editChatMessage(msgIndex) {
       if (result.status === "ok") {
         bubble.textContent = newText;
 
-        // Check for subsequent messages → auto-regenerate
+        // 編集後に後続メッセージがあれば自動再生成
         const container = document.getElementById("chat-messages");
-        const allMsgs = container.querySelectorAll(".chat-msg");
-        if (allMsgs.length > msgIndex + 1) {
+        const currentMsgEl = typeof msgId === "number"
+          ? container.querySelector('.chat-msg.user[data-msg-index="' + msgId + '"]')
+          : container.querySelector('.chat-msg.user[data-msg-id="' + msgId + '"]');
+        const allMsgEls = container.querySelectorAll(".chat-msg");
+        const allMsgs = Array.from(allMsgEls);
+        const currentIdx = allMsgs.indexOf(currentMsgEl);
+        if (currentIdx >= 0 && currentIdx < allMsgs.length - 1) {
           cleanup();
-          await rollbackChat(msgIndex, true);
+          await rollbackChat(msgId, true);
           return;
         }
         toast("メッセージを更新しました", "success");
@@ -313,140 +450,8 @@ async function restoreChatHistory() {
 
       // ── Segments-based rendering (F2: correct interleaving) ──
       if (msg.segments) {
-        // F3: inline content_parts rendering for correct interleaving
-        appendChatMessage(msg.role, "", msg.time, false);  // creates empty .chat-msg div
-        const msgDiv = msgContainer.querySelector(".chat-msg:last-child");
-        const toolCallDivs = {}; // id -> div
-
-        for (const seg of msg.segments) {
-          if (seg.type === "text") {
-            const bubble = document.createElement("div");
-            bubble.className = "chat-bubble";
-            bubble.innerHTML = safeMarkdown(seg.content);
-            bubble.querySelectorAll("img").forEach((img) => {
-              img.style.cssText =
-                "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
-              img.addEventListener("click", () =>
-                openMediaViewer(img.src, "image"),
-              );
-            });
-            const timeDiv = msgDiv.querySelector(".chat-time");
-            if (timeDiv) {
-              msgDiv.insertBefore(bubble, timeDiv);
-            } else {
-              msgDiv.appendChild(bubble);
-            }
-          } else if (seg.type === "tool_call") {
-            let inputStr;
-            try { inputStr = JSON.stringify(seg.input, null, 2); } catch (e) { inputStr = String(seg.input); }
-            const div = document.createElement("div");
-            div.className = "chat-tool-call done";
-            if (seg.id) div.dataset.toolId = seg.id;
-            div.innerHTML =
-              '<details><summary><i data-lucide="wrench"></i> <strong>' +
-              esc(seg.name) +
-              "</strong>" +
-              '<span class="chat-tool-status"> <i data-lucide="check"></i> 完了</span></summary>' +
-              '<pre class="chat-tool-detail">' +
-              esc(inputStr) +
-              "</pre></details>";
-            if (seg.id) toolCallDivs[seg.id] = div;
-            const timeDiv = msgDiv.querySelector(".chat-time");
-            if (timeDiv) {
-              msgDiv.insertBefore(div, timeDiv);
-            } else {
-              msgDiv.appendChild(div);
-            }
-          } else if (seg.type === "tool_result") {
-            const toolDiv = seg.id ? toolCallDivs[seg.id] : null;
-            if (toolDiv) {
-              let resultStr;
-              try {
-                resultStr = typeof seg.result === "object"
-                  ? JSON.stringify(seg.result, null, 2)
-                  : String(seg.result);
-              } catch (e) { resultStr = String(seg.result); }
-              const details = toolDiv.querySelector("details");
-              if (details) {
-                const resultPre = document.createElement("pre");
-                resultPre.className = "chat-tool-detail chat-tool-result-content";
-                resultPre.textContent = resultStr;
-                details.appendChild(resultPre);
-              }
-              // 画像生成結果があればレンダリング（履歴復元時）
-              if (seg.id && msg.tool_calls) {
-                var tc = msg.tool_calls.find(function(t) { return t.id === seg.id; });
-                if (tc && tc.result_raw && tc.result_raw.images && tc.result_raw.images.length) {
-                  tc.result_raw.images.forEach(function(img) {
-                    var card = document.createElement("div");
-                    card.className = "chat-image-gen-card";
-                    var imgEl = document.createElement("img");
-                    // url 優先（ファイル配信エンドポイント経由）、なければ base64 にフォールバック
-                    if (img.url) {
-                      imgEl.src = img.url;
-                    } else if (img.base64) {
-                      try {
-                        var binary = atob(img.base64);
-                        var bytes = new Uint8Array(binary.length);
-                        for (var b = 0; b < binary.length; b++) bytes[b] = binary.charCodeAt(b);
-                        var blob = new Blob([bytes], { type: "image/png" });
-                        imgEl.src = URL.createObjectURL(blob);
-                      } catch (e) {
-                        imgEl.src = "data:image/png;base64," + img.base64;
-                      }
-                    }
-                    imgEl.alt = img.revised_prompt || "生成画像";
-                    imgEl.title = img.revised_prompt || "";
-                    // Store prompt data for media viewer
-                    imgEl.dataset.revisedPrompt = img.revised_prompt || "";
-                    imgEl.dataset.negativePrompt = img.negative_prompt || "";
-                    imgEl.onerror = function() {
-                      imgEl.style.display = "none";
-                      var errDiv = document.createElement("div");
-                      errDiv.className = "image-gen-error";
-                      errDiv.textContent = "⚠️ 画像のデコードに失敗しました";
-                      card.insertBefore(errDiv, card.firstChild);
-                    };
-                    imgEl.onclick = function() {
-                      if (typeof openMediaViewer === "function") {
-                        openMediaViewer(imgEl.src, "image", null, {
-                          revised_prompt: imgEl.dataset.revisedPrompt,
-                          negative_prompt: imgEl.dataset.negativePrompt,
-                        });
-                      } else {
-                        window.open(imgEl.src, "_blank");
-                      }
-                    };
-                    var meta = document.createElement("div");
-                    meta.className = "image-gen-meta";
-                    var rp = img.revised_prompt || "";
-                    if (rp) {
-                      var promptSpan = document.createElement("span");
-                      promptSpan.textContent = rp.length > 80 ? rp.substring(0, 80) + "..." : rp;
-                      promptSpan.style.fontStyle = "italic";
-                      meta.appendChild(promptSpan);
-                    }
-                    var sizeSpan = document.createElement("span");
-                    sizeSpan.textContent = (tc.result_raw.provider || "") + " · " + (img.size || "");
-                    meta.appendChild(sizeSpan);
-                    card.appendChild(imgEl);
-                    card.appendChild(meta);
-                    // tool_call div の後ろに挿入
-                    toolDiv.parentNode.insertBefore(card, toolDiv.nextSibling);
-                  });
-                }
-              }
-            }
-          }
-        }
-        // Remove empty bubble if appendChatMessage created one with no content
-        const emptyBubble = msgDiv.querySelector(".chat-bubble");
-        if (emptyBubble && !emptyBubble.innerHTML.trim()) {
-          emptyBubble.remove();
-        }
-        // Set time
-        const timeEl = msgDiv.querySelector(".chat-time");
-        if (timeEl && msg.time) timeEl.textContent = msg.time;
+        appendChatMessage(msg.role, "", msg.time, false, msg.id);
+        _appendSegmentsToBubble(msg, msgContainer.querySelector(".chat-msg:last-child"));
         continue;
       }
 
@@ -489,6 +494,7 @@ async function restoreChatHistory() {
         msg.content,
         msg.time,
         msg.role === "assistant",
+        msg.id,
       );
       if (msg.role !== "assistant" && msg.tool_calls?.length) {
         for (const tc of msg.tool_calls) {
@@ -589,42 +595,60 @@ function exportChatHistory() {
 // ------------------------------------------------------------------
 // Delete a chat message and all subsequent messages
 // ------------------------------------------------------------------
-async function deleteChatMessage(msgIndex) {
+async function deleteChatMessage(msgId) {
   if (!S.persona) return;
 
   const container = document.getElementById("chat-messages");
   const allMsgs = container.querySelectorAll(".chat-msg");
-  const subsequentCount = allMsgs.length - msgIndex;
+
+  // 後続メッセージ数を計算
+  let subsequentCount = 0;
+  let found = false;
+  for (const msg of allMsgs) {
+    if (found) { subsequentCount++; continue; }
+    if (typeof msgId === "number") {
+      if (parseInt(msg.dataset.msgIndex) === msgId) found = true;
+    } else {
+      if (msg.dataset.msgId === msgId) found = true;
+    }
+  }
 
   const confirmed = await showConfirm(
     "このメッセージを削除しますか？以降の " + subsequentCount + " 件のメッセージも削除されます。"
   );
   if (!confirmed) return;
 
-  const sid = getChatSessionId();
   try {
+    const body = typeof msgId === "number"
+      ? { keep_until: msgId }
+      : { from_id: String(msgId) };
+
     const result = await api(
       "/api/chat/" +
         encodeURIComponent(S.persona) +
         "/sessions/" +
-        encodeURIComponent(sid) +
+        encodeURIComponent(getChatSessionId()) +
         "/rollback",
-      { method: "POST", body: JSON.stringify({ keep_until: msgIndex }) }
+      { method: "POST", body: JSON.stringify(body) }
     );
 
-    // Remove DOM messages from msgIndex onwards
-    const currentMsgs = container.querySelectorAll(".chat-msg");
-    for (const msg of currentMsgs) {
-      if (parseInt(msg.dataset.msgIndex) >= msgIndex) msg.remove();
+    // DOM完全再構築
+    container.innerHTML = "";
+    const remaining = result.remaining_messages || [];
+    for (const msg of remaining) {
+      if (msg.segments) {
+        appendChatMessage(msg.role, "", msg.time, false, msg.id);
+        _appendSegmentsToBubble(msg, container.querySelector(".chat-msg:last-child"));
+      } else {
+        appendChatMessage(msg.role, msg.content, msg.time, msg.role === "assistant", msg.id);
+      }
     }
 
-    // Restore welcome if no messages left
-    if (container.querySelectorAll(".chat-msg").length === 0) {
+    if (remaining.length === 0) {
       resetToWelcome();
     }
 
     // Find last remaining user message for auto-regeneration
-    const remaining = result.remaining_messages || [];
     let lastUserText = null;
     for (let i = remaining.length - 1; i >= 0; i--) {
       if (remaining[i].role === "user") {

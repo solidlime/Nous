@@ -152,3 +152,31 @@
 - httpx.AsyncClient モック: `mock_cls.return_value.__aenter__.return_value = mock_client` が必要（async context manager）
 - テスト26件: 全pass / ruff 0 errors
 - TE02f (漢字→ひらがな), TE02g (チャンク分割) はスキップ
+
+## Minimal B: チャットメッセージツリー構造移行 (2026-07-20)
+
+### 問題の根本原因
+フラット配列 + 整数インデックスベース操作が全バグの根源:
+1. 編集→即ロールバックで編集内容消失（編集したメッセージ自身もロールバックで削除）
+2. DOMインデックスとサーバーインデックス乖離（querySelectorAllで割当→再採番なし）
+3. segments 編集不可（update_messageがcontentのみ更新）
+4. 同時編集競合（OrderedDict + INSERT OR REPLACE）
+
+### 外部調査の学び (OpenWebUI / LibreChat)
+- 両者とも parentId adjacency list（ツリー構造）を採用
+- 編集 = ブランチ分岐（元メッセージ破壊しない）
+- 削除 = リペアレンティング（子を孤児にしない）
+- 現在位置 = リーフポインタ
+- OpenWebUI: デュアルライト（JSON blob + テーブル）だが同期問題あり
+- LibreChat: フラットリスト + クライアントサイド tree構築、個別削除機能は最近まで未実装
+
+### Minimal B 設計判断
+- 編集のみインプレース上書き（Minimal），ロールバックは active_leaf_id 差し替えのみ（非破壊）
+- 3-6ヶ月後に編集のブランチ分岐へアップグレード可能（データモデル変更不要）
+- UUID生成は uuid.uuid4()（uuid7 は pip install 制限により断念）
+- 後方互換: from_db() で旧フラット配列を検出 → 自動マイグレーション
+
+### 注意点
+- TreeSessionWindow は SessionWindow と一時的に並存（全移行完了後に削除）
+- post.py の episode_consolidation（L88）が session._messages 直参照 → TreeSessionWindow 移行時に要修正
+- DoneSSE に user_msg_id / assistant_msg_id 追加でフロントエンドとメッセージID同期

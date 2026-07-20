@@ -15,7 +15,7 @@ var CHAT = N.Chat.state;
 // ------------------------------------------------------------------
 // Append a chat message to the DOM
 // ------------------------------------------------------------------
-function appendChatMessage(role, content, timeStr, isMarkdown) {
+function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
   const container = document.getElementById("chat-messages");
   // Remove welcome message if present
   const welcome = container.querySelector(".chat-welcome");
@@ -27,6 +27,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown) {
   const div = document.createElement("div");
   div.className = "chat-msg " + role;
   div.dataset.msgIndex = msgIndex;
+  div.dataset.msgId = msgId || "";
   const bubble = document.createElement("div");
   bubble.className = "chat-bubble";
   if (isMarkdown && role === "assistant") {
@@ -59,7 +60,9 @@ function appendChatMessage(role, content, timeStr, isMarkdown) {
     editBtn.className = "chat-msg-action-btn edit";
     editBtn.innerHTML = '<i data-lucide="pencil"></i> 編集';
     editBtn.onclick = () => {
-      editChatMessage(msgIndex);
+      const mid = div.dataset.msgId;
+      const idx = parseInt(div.dataset.msgIndex);
+      editChatMessage(mid || idx);
     };
     actions.appendChild(editBtn);
 
@@ -69,7 +72,9 @@ function appendChatMessage(role, content, timeStr, isMarkdown) {
     deleteBtn.title = "削除";
     deleteBtn.setAttribute("aria-label", "メッセージを削除");
     deleteBtn.onclick = () => {
-      deleteChatMessage(msgIndex);
+      const mid = div.dataset.msgId;
+      const idx = parseInt(div.dataset.msgIndex);
+      deleteChatMessage(mid || idx);
     };
     actions.appendChild(deleteBtn);
   } else if (role === "assistant") {
@@ -89,8 +94,9 @@ function appendChatMessage(role, content, timeStr, isMarkdown) {
     retryBtn.className = "chat-msg-action-btn retry";
     retryBtn.innerHTML = '<i data-lucide="refresh-cw"></i> 再生成';
     retryBtn.onclick = () => {
-      // Rollback to the paired user message (at index-1) and auto-resend
-      rollbackChat(msgIndex, true);
+      const mid = div.dataset.msgId;
+      const idx = parseInt(div.dataset.msgIndex);
+      rollbackChat(mid || idx, true);
     };
     actions.appendChild(retryBtn);
     const copyBtn = document.createElement("button");
@@ -163,6 +169,7 @@ function _createAssistantDiv() {
   const div = document.createElement("div");
   div.className = "chat-msg assistant";
   div.dataset.msgIndex = msgIndex;
+  div.dataset.msgId = "";
   const timeDiv = document.createElement("div");
   timeDiv.className = "chat-time";
   timeDiv.textContent = new Date().toLocaleTimeString("ja-JP", {
@@ -191,7 +198,9 @@ function _createAssistantDiv() {
   retryBtn.className = "chat-msg-action-btn retry";
   retryBtn.innerHTML = '<i data-lucide="refresh-cw"></i> 再生成';
   retryBtn.onclick = () => {
-    rollbackChat(msgIndex, true);
+    const mid = div.dataset.msgId;
+    const idx = parseInt(div.dataset.msgIndex);
+    rollbackChat(mid || idx, true);
   };
   actions.appendChild(retryBtn);
   // Copy button
@@ -552,6 +561,20 @@ async function chatSend(retry) {
             tokenInfo.style.cssText = "font-size:0.72rem;color:var(--text-muted);margin-top:4px;opacity:0.7;";
             tokenInfo.textContent = "🔤 " + u.prompt_tokens + "↑ " + u.completion_tokens + "↓ = " + u.total_tokens + " total";
             assistantDiv.appendChild(tokenInfo);
+          }
+          // Set message IDs from server
+          if (evt.user_msg_id || evt.assistant_msg_id) {
+            if (evt.user_msg_id) {
+              const userMsgs = document.querySelectorAll(".chat-msg.user");
+              const lastUser = userMsgs[userMsgs.length - 1];
+              // Only set if not already assigned (retry may reuse existing msgId)
+              if (lastUser && !lastUser.dataset.msgId) {
+                lastUser.dataset.msgId = evt.user_msg_id;
+              }
+            }
+            if (evt.assistant_msg_id && assistantDiv) {
+              assistantDiv.dataset.msgId = evt.assistant_msg_id;
+            }
           }
         }
       }

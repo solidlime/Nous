@@ -1,5 +1,35 @@
 # SPEC — 2025-07-19
 
+## 0. Minimal B: parentIdツリー構造によるチャット編集・削除のリライト
+
+### 目的
+チャットメッセージをフラット配列+整数インデックスから UUID+parentId ツリー構造に移行し、
+編集・削除・ロールバックの全バグを根本解決する。
+
+### データモデル
+```
+各ノード: {id (UUID), parent_id, role, content, segments?, tool_calls?, created_at}
+セッション: {root_id, active_leaf_id, nodes: dict[id→node]}
+```
+
+### 操作セマンティクス
+| 操作 | 旧（flat index） | 新（Minimal B） |
+|------|-----------------|----------------|
+| 追加 | _messages.append | nodes[id]=node, active_leaf_id更新 |
+| 編集 | インプレース（index） | インプレース（id）← 据え置き |
+| 削除 | truncate_to 物理削除 | リペアレンティング |
+| ロールバック | truncate_to 物理削除 | active_leaf_id差し替えのみ（非破壊） |
+| 表示取得 | 配列そのまま | root→leafパス走査 |
+
+### 後方互換
+from_db() で旧形式（messagesがlist）を検出 → 自動マイグレーション（UUID+parentIdチェーン付与）
+
+### 参考
+- 計画書: `docs/superpowers/plans/2026-07-20-chat-minimal-b-tree.md`
+- ADR-002: Minimal B 採用（#081 判断）
+
+---
+
 ## 1. Memories タブ: 削除 405 エラー修正
 
 **現状**:
