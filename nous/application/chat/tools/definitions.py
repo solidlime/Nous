@@ -212,7 +212,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="image_generate",
-        description="画像生成。prompt必須（Danbooruタグ形式推奨）。nは1-4枚、size指定可。",
+        description="画像生成ツール。あなたはこのツールであらゆる画像を生成できる。prompt必須（Danbooruタグ形式推奨）。nは1-4枚、size指定可。",
         input_schema={
             "type": "object",
             "properties": {
