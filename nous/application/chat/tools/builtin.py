@@ -13,7 +13,7 @@ from nous.application.chat.tools.definitions import _NOUS_TOOL_NAMES
 from nous.config.settings import get_settings
 from nous.domain.skill import SkillRepository
 from nous.infrastructure.logging.structured import get_logger
-from nous.infrastructure.sqlite.connection import get_global_skills_db
+
 
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
@@ -348,18 +348,8 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
 async def _handle_list_skills(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
     """List all registered skills from the skill store."""
     try:
-        db = get_global_skills_db(get_settings().skills_dir)
-        if db is None:
-            return {"status": "error", "message": "Skill store not available"}
-
-        repo = SkillRepository(db)
-        skills = repo.list_all()
-
-        # Fallback: sync from filesystem if DB is empty
-        if not skills:
-            synced = repo.load_from_dir(get_settings().skills_dir)
-            if synced:
-                skills = repo.list_all()
+        repo = SkillRepository()
+        skills = repo.load_from_dir(get_settings().skills_dir, persist=False)
 
         items = [
             {
