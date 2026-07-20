@@ -11,6 +11,7 @@ var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
 var S = window.S;
 
 var CHAT = N.Chat.state;
+var _memoryActivityTimer = null;
 
 // ------------------------------------------------------------------
 // Append a chat message to the DOM
@@ -118,6 +119,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
   setTimeout(() => {
     if (typeof lucide !== "undefined") lucide.createIcons();
   }, 50);
+  CHAT.messages.push(div);
   return div;
 }
 
@@ -509,7 +511,8 @@ async function chatSend(retry) {
           statusEl.textContent = "応答中...";
         } else if (evt.type === "memory_activity") {
           updateMemoryPanel(evt.retrieved, evt.saved, evt.goals);
-          setTimeout(function() { loadChatCommitments(); }, 300);
+          if (_memoryActivityTimer) clearTimeout(_memoryActivityTimer);
+          _memoryActivityTimer = setTimeout(function() { loadChatCommitments(); }, 500);
         } else if (evt.type === "inventory_update") {
           updateEquipmentPanel(evt.update);
         } else if (evt.type === "reflection_start") {
@@ -630,7 +633,7 @@ async function chatSend(retry) {
         part.type === "text" &&
         part.bubble &&
         part.content &&
-        part.bubble.innerHTML === part.bubble.textContent
+        part.bubble.children.length === 0
       ) {
         part.bubble.innerHTML = safeMarkdown(part.content);
         part.bubble.querySelectorAll("img").forEach((img) => {

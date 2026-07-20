@@ -11,6 +11,8 @@ var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
 var S = window.S;
 
 var CHAT = N.Chat.state;
+var _historyGen = 0;
+var _restoreLock = false;
 
 // ------------------------------------------------------------------
 // Reset to welcome screen
@@ -40,6 +42,7 @@ function resetToWelcome() {
 // Clear chat history
 // ------------------------------------------------------------------
 async function clearChatHistory() {
+  if (typeof _endSession === "function") _endSession("rollback");
   if (CHAT.messages.length === 0) {
     resetToWelcome();
     return;
@@ -225,6 +228,8 @@ async function rollbackChat(fromId, shouldResend) {
       },
     );
 
+    // TTS session cleanup before DOM rebuild
+    if (typeof _endSession === "function") _endSession("rollback");
     // DOM完全再構築: server response の remaining_messages から再描画
     const container = document.getElementById("chat-messages");
     container.innerHTML = "";
@@ -405,6 +410,12 @@ async function restoreChatHistory(showSkeleton) {
     CHAT._justReset = false;
     return; // リセット直後は履歴を再取得しない
   }
+  // Generation counter — prevent stale response from overwriting newer data
+  var myGen = ++_historyGen;
+  // Exclusive lock — prevent concurrent restore calls
+  if (_restoreLock) return;
+  _restoreLock = true;
+  try {
   const sid = getChatSessionId();
   const container = document.getElementById("chat-messages");
   // Show loading skeleton while fetching history (Bug B3 fix: don't reset DOM before fetch)
@@ -427,6 +438,7 @@ async function restoreChatHistory(showSkeleton) {
     // Remove skeleton
     const skel = document.getElementById("chat-history-skeleton");
     if (skel) skel.remove();
+    if (myGen !== _historyGen) return; // 新しい呼び出しに敗退
     if (!data || !data.messages) {
       console.warn("[restoreChatHistory] unexpected response — data or messages missing:", data);
       S.historyLoadFailed = true;
@@ -550,6 +562,9 @@ async function restoreChatHistory(showSkeleton) {
       c.scrollTop = c.scrollHeight;
     });
   }
+  } finally {
+    _restoreLock = false;
+  }
 }
 
 // ------------------------------------------------------------------
@@ -635,6 +650,8 @@ async function deleteChatMessage(msgId) {
       { method: "POST", body: JSON.stringify(body) }
     );
 
+    // TTS session cleanup before DOM rebuild
+    if (typeof _endSession === "function") _endSession("rollback");
     // DOM完全再構築
     container.innerHTML = "";
     const remaining = result.remaining_messages || [];
