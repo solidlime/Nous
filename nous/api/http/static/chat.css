@@ -1315,7 +1315,6 @@ input[type="range"].chat-field-input:focus {
   border-radius: var(--radius-md);
   background: var(--bg-secondary);
   min-height: 120px;
-  overflow: hidden;
   transition: box-shadow var(--duration-fast) var(--ease-apple);
 }
 .chat-image-gen-card:hover {
@@ -1339,6 +1338,7 @@ input[type="range"].chat-field-input:focus {
   font-size: 0.75rem;
   color: var(--text-muted);
   border-top: 0.5px solid var(--glass-border);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
   display: flex;
   justify-content: space-between;
   align-items: center;
