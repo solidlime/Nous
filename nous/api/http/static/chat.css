@@ -1441,3 +1441,22 @@ input[type="range"].chat-field-input:focus {
   cursor: pointer;
   box-shadow: none;
 }
+
+/* TTS autoplay-blocked prompt */
+.tts-play-prompt {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  color: var(--accent-blue);
+  background: rgba(0, 122, 255, 0.08);
+  border: 1px solid rgba(0, 122, 255, 0.2);
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+}
+.tts-play-prompt:hover {
+  background: rgba(0, 122, 255, 0.14);
+  border-color: rgba(0, 122, 255, 0.35);
+}
