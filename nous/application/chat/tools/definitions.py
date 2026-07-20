@@ -122,14 +122,14 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="invoke_skill",
-        description="登録済みスキルを独立LLMコンテキストで実行。",
+        description="登録済みスキルの内容を読み込む。スキル指示は既にシステムプロンプトに注入されているため、再確認したい時のみ使用する。",
         input_schema={
             "type": "object",
             "properties": {
                 "name": {"type": "string", "description": "スキル名"},
-                "task": {"type": "string", "description": "スキルへの具体的な指示"},
+                "task": {"type": "string", "description": "スキルを呼び出す理由（任意。スキル内容を読み返す目的を簡潔に）"},
             },
-            "required": ["name", "task"],
+            "required": ["name"],
         },
     ),
     ToolDefinition(

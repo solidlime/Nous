@@ -81,27 +81,67 @@ class PromptBuildStep:
         skills_raw: list[dict] = []
         if config.enabled_skills:
             try:
+                import os
+
                 from nous.config.settings import get_settings
                 from nous.domain.skill import SkillRepository
                 from nous.infrastructure.sqlite.connection import get_global_skills_db
 
-                skill_repo = SkillRepository(get_global_skills_db(get_settings().data_root))
-                skills = [skill_repo.get(n) for n in config.enabled_skills]
-                skill_lines = []
-                for s in skills:
-                    if not s:
-                        continue
-                    # L1: name + short description only (~100 tokens/skill)
-                    desc = (s.description or "")[:120]
-                    line = f"- {s.name}: {desc}"
-                    skill_lines.append(line)
-                skills_raw = [s.model_dump() for s in skills if s]
-                if skill_lines:
+                settings = get_settings()
+                skill_repo = SkillRepository(get_global_skills_db(settings.data_root))
+
+                # グローバルスキルは起動時に DB ロード済み。ここでは get() で取得するだけ
+                # ペルソナ別スキルは persist=False でインメモリのみ（クロス汚染防止）
+                skill_map: dict = {}
+                for n in config.enabled_skills:
+                    s = skill_repo.get(n)
+                    if s:
+                        skill_map[n] = s
+
+                persona_skills_dir = os.path.join(settings.data_root, "memory", persona, "skills")
+                if os.path.isdir(persona_skills_dir):
+                    # ディレクトリが空でなければペルソナスキルをインメモリロード
+                    try:
+                        if any(os.scandir(persona_skills_dir)):
+                            persona_skills = skill_repo.load_from_dir(persona_skills_dir, persist=False)
+                            for ps in persona_skills:
+                                skill_map[ps.name] = ps  # ペルソナスキルが同名グローバルを上書き
+                    except OSError:
+                        pass
+
+                skills = [skill_map[n] for n in config.enabled_skills if n in skill_map]
+
+                if skills:
+                    # L1: 名前 + 短い説明（tool-use判断のためのメタデータ）
+                    skill_lines = [f"- {s.name}: {(s.description or '')[:120]}" for s in skills]
                     parts.append(
                         "\n--- 利用可能なSkill ---\n"
                         + "\n".join(skill_lines)
-                        + "\n\n各スキルの詳細な使い方は invoke_skill ツールで読み込めます。"
                     )
+
+                    # L2: スキル本文を system prompt に直接注入（上限 4096 文字）
+                    MAX_SKILL_CONTENT_CHARS = 4096
+                    skill_contents: list[str] = []
+                    total = 0
+                    for s in skills:
+                        if not s.content:
+                            continue
+                        content_len = len(s.content)
+                        if total + content_len > MAX_SKILL_CONTENT_CHARS:
+                            logger.warning(
+                                "PromptBuildStep: skill content exceeds %d chars, truncating at %s",
+                                MAX_SKILL_CONTENT_CHARS, s.name,
+                            )
+                            break
+                        skill_contents.append(f"=== {s.name} ===\n{s.content}")
+                        total += content_len
+                    if skill_contents:
+                        parts.append(
+                            "\n--- スキル指示（以下の指示に従って自律的に行動せよ） ---\n\n"
+                            + "\n\n".join(skill_contents)
+                        )
+
+                    skills_raw = [s.model_dump() for s in skills]
             except Exception as e:
                 logger.warning("PromptBuildStep: skills load failed: %s", e)
 

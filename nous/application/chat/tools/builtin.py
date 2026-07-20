@@ -373,18 +373,18 @@ async def _handle_list_skills(ctx: AppContext, config: ChatConfig, tool_input: d
             "status": "ok",
             "skills": items,
             "count": len(items),
-            "note": "L2 詳細（SKILL.md全文）は invoke_skill ツールで取得してください。",
+            "note": "スキル指示はシステムプロンプトに注入済みです。再確認が必要な場合は invoke_skill ツールを使用してください。",
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 
 async def _handle_invoke_skill(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
-    """Execute a skill via isolated LLM context. Delegates to _tool_invoke_skill."""
+    """スキルの内容をDBから取得して返す。別LLM呼び出しは行わない。"""
     name = tool_input.get("name", "")
     task = tool_input.get("task", "")
-    if not name or not task:
-        return {"status": "error", "message": "name and task are required"}
+    if not name:
+        return {"status": "error", "message": "name is required"}
     r = await _tool_invoke_skill(ctx, ctx.persona, name=name, task=task)
     if r.get("ok"):
         return {"status": "ok", "result": r.get("result", "(no response)")}

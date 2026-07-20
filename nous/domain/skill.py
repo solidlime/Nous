@@ -201,12 +201,15 @@ class SkillRepository:
         self._db.execute("DELETE FROM skills WHERE name = ?", (name,))
         self._db.commit()
 
-    def load_from_dir(self, skills_dir: str | None = None) -> list[Skill]:
-        """Scan <skills_dir>/<name>/SKILL.md files and upsert them into the DB.
+    def load_from_dir(self, skills_dir: str | None = None, persist: bool = True) -> list[Skill]:
+        """Scan <skills_dir>/<name>/SKILL.md files and optionally upsert them into the DB.
 
         Frontmatter (---block---) may contain `name` and `description` fields.
         The rest of the file becomes the system-prompt `content`.
         If no frontmatter is present the directory name is used as the skill name.
+
+        persist=False: parse files and return Skill objects in-memory without touching the DB.
+        Use this for per-persona skills to avoid cross-persona contamination.
         """
         from pathlib import Path
 
@@ -219,7 +222,7 @@ class SkillRepository:
         if not base.exists():
             return []
 
-        upserted: list[Skill] = []
+        result: list[Skill] = []
         for entry in sorted(base.iterdir()):
             if not entry.is_dir():
                 continue
@@ -235,19 +238,18 @@ class SkillRepository:
             p_license: str | None = parsed.get("license")  # type: ignore[assignment]
             p_compat: str | None = parsed.get("compatibility")  # type: ignore[assignment]
             p_meta: dict[str, str] | None = parsed.get("metadata")  # type: ignore[assignment]
-            upserted.append(
-                self.upsert(
-                    Skill(
-                        name=p_name,
-                        description=p_desc,
-                        content=p_content,
-                        license=p_license,
-                        compatibility=p_compat,
-                        metadata=p_meta,
-                    )
-                )
+            skill = Skill(
+                name=p_name,
+                description=p_desc,
+                content=p_content,
+                license=p_license,
+                compatibility=p_compat,
+                metadata=p_meta,
             )
-        return upserted
+            if persist:
+                skill = self.upsert(skill)
+            result.append(skill)
+        return result
 
 
 def _validate_name(name: str, dir_name: str) -> str:
