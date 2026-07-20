@@ -42,6 +42,11 @@ function resetToWelcome() {
 // Clear chat history
 // ------------------------------------------------------------------
 async function clearChatHistory() {
+  // Abort any active stream before clearing
+  if (CHAT.abortController) {
+    CHAT.abortController.abort();
+    CHAT.abortController = null;
+  }
   if (typeof _endSession === "function") _endSession("rollback");
   if (CHAT.messages.length === 0) {
     resetToWelcome();
@@ -338,7 +343,7 @@ async function editChatMessage(msgId) {
         body: JSON.stringify({ content: newText }),
       });
       if (result.status === "ok") {
-        bubble.textContent = newText;
+        bubble.innerHTML = typeof safeMarkdown === "function" ? safeMarkdown(newText) : newText;
 
         // 編集後に後続メッセージがあれば自動再生成
         const container = document.getElementById("chat-messages");
