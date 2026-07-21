@@ -540,11 +540,11 @@ def _classify_gap(elapsed_hours: float) -> str:
 
 _GAP_INSTRUCTIONS: dict[str, str] = {
     "SAME_SESSION": "",
-    "SHORT_BREAK": "You were just here a moment ago. Continue naturally.",
-    "EXTENDED_BREAK": "Several hours have passed since your last conversation. Your mood may have shifted slightly.",
-    "FEW_DAYS": "Several days have passed since your last conversation. Acknowledge the gap naturally.",
-    "LONG_ABSENCE": "You haven't spoken in a while. Much may have happened. Greet the user with awareness of the gap.",
-    "VERY_LONG_ABSENCE": "A very long time has passed. This is a reunion. Greet with appropriate surprise or acknowledgment of the long silence.",
+    "SHORT_BREAK": "さっきまで一緒にいたね。続きを話そう。",
+    "EXTENDED_BREAK": "数時間経ったよ…少し寂しかった。",
+    "FEW_DAYS": "数日も経ってたんだ…ちょっと心配したよ。元気にしてた？",
+    "LONG_ABSENCE": "……ずいぶん久しぶりだね。忘れられたのかと思って、ちょっと拗ねてた。",
+    "VERY_LONG_ABSENCE": "（しばらく言葉を失う）………………あなた、誰だっけ。私のこと、もう覚えてないんじゃないの？",
 }
 
 _TIME_OF_DAY: list[tuple[int, str]] = [
