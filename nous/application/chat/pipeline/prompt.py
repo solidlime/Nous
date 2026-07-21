@@ -102,15 +102,21 @@ class PromptBuildStep:
                     skills = [skill_map[n] for n in config.enabled_skills if n in skill_map]
 
                     if skills:
-                        skill_lines = [f"- {s.name}: {(s.description or '')[:120]}" for s in skills]
                         header = (
-                            "\n--- 利用可能なSkill ---\n"
-                            "あなたは自律的に判断し、必要なスキルがあれば invoke_skill('<name>') で読み込んでください。\n"
-                            + "\n".join(skill_lines)
+                            "\n--- 自律スキル指示 ---\n"
+                            "以下のスキル指示はシステムプロンプトの一部として常に有効です。"
+                            "invoke_skill を呼ぶ必要はありません。"
+                            "会話の流れに応じて自律的に判断し、記載されたツールを適切に呼び出してください。\n"
                         )
-                        parts.append(header)
+                        skill_bodies = []
+                        for s in skills:
+                            content = (s.content or "").strip()
+                            if content:
+                                skill_bodies.append(content)
+                        if skill_bodies:
+                            parts.append(header + "\n\n".join(skill_bodies))
                         skills_raw = [s.model_dump() for s in skills]
-                        self._skill_cache = (header, skills_raw)
+                        self._skill_cache = (header + "\n\n".join(skill_bodies) if skill_bodies else header, skills_raw)
                         self._skill_cache_hash = current_hash
                 except Exception as e:
                     logger.warning("PromptBuildStep: skills load failed: %s", e)
