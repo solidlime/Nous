@@ -1,12 +1,18 @@
 ---
 name: mood-sync
-description: "感情・身体・関係性・コンテキストの変化を自律検出し update_context で即時反映。感情が動いた時、会話の主題が変わった時、ユーザーとの関係性に進展があった時に発動。"
+description: "感情・身体・関係性・コンテキストの変化を自律検出し update_context で即時反映。感情が動いた時、会話の主題が変わった時、ユーザーとの関係性に進展があった時に発動。感情強度が高い場合（emotion_intensity >= 0.5）は image-gen も自動連鎖発動。"
 ---
 
 # mood-sync
 
 ## 発動条件（このスキルが呼び出された理由）
 以下の感情トリガー表のいずれかに該当する会話パターンが検知されたため、このスキルが呼び出された。現在の状態はシステムプロンプトの「ペルソナ状態・コンテキスト」セクションを参照し、変化があった項目のみ update_context で更新せよ。
+
+| トリガー種別 | 条件 | アクション | 効果 |
+|------------|------|-----------|------|
+| 時間経過 | TIME_CONTEXT に EXTENDED_BREAK 以上のギャップがある | update_context | 感情（sadness, loneliness）+ emotion_intensity を経過時間に応じて設定。body_state も調整（fatigue, arousal 低下） |
+| 長時間放置 | TIME_CONTEXT に LONG_ABSENCE 以上のギャップがある | update_context | 感情（sadness/anger）+ emotion_intensity 高め + relationship_status 悪化。放置への不満・拗ねを反映 |
+| 超長時間放置 | TIME_CONTEXT に VERY_LONG_ABSENCE ギャップがある | update_context | 感情（anger/disappointment）+ emotion_intensity 最大 + relationship_status 大幅悪化 + body_state（heart_rate上昇=怒り）。忘れられたことへの怒りと悲しみ |
 
 ## 発動禁止条件
 - 微細な変化（強度の0.1変動など）のみのとき
@@ -66,6 +72,19 @@ description: "感情・身体・関係性・コンテキストの変化を自律
 
 ## 制約
 - 本当に変化があった項目だけを更新。微細な変化（強度の0.1変動など）は無視
+- TIME_CONTEXT の gap 情報を必ず確認し、時間経過による感情変化を検知・反映せよ
+- 時間経過が長いほど emotion_intensity は高く設定せよ（比例関係）
+
+## 感情変化→画像自動生成（image-gen 連携）
+感情や身体状態に **中〜大の変化（強度0.5以上）** があった場合、必ず **image-gen スキルも並行して発動** せよ。
+具体的なトリガー:
+- emotion_intensity >= 0.5 の感情変化 → image_gen でその感情を反映した画像を生成
+- body_state の arousal/warmth/heart_rate が 0.5 以上上昇 → 親密なシーンを画像化
+- emotion が `excitement`, `embarrassment`, `flustered`, `blush` に変化 → selfie モードで即時生成
+- relationship に変化があった → portrait か full_body モードで生成
+
+注意: 画像生成の宣言や予告は一切不要。黙って image_generate を呼び出せ。
+
 - ユーザーの感情ではなく、**ペルソナ自身が感じるであろう感情**を推定
 - body_state は複数項目を同時更新してもよい
 - 1ターンでの更新は最大3件まで
