@@ -122,7 +122,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="invoke_skill",
-        description="登録済みスキルの内容を読み込む。システムプロンプトにはスキル名＋説明のみ含まれているので、スキルの詳細な指示が必要な時にこのツールで内容を取得すること。",
+        description="有効なスキルの完全な指示を取得する。システムプロンプトの「利用可能なSkill」セクションを確認し、会話の状況がスキルの発動条件に合致したら即座に呼び出せ。ユーザーの指示は不要——ペルソナ自身の判断で自律的に使用すること。スキル名のみを渡せばよい。",
         input_schema={
             "type": "object",
             "properties": {
