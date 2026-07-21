@@ -13,11 +13,10 @@ if TYPE_CHECKING:
 
 
 async def _tool_invoke_skill(ctx: AppContext, persona: str, name: str, task: str) -> dict:
-    """スキルの内容を返すだけ。別LLMは呼び出さない。
+    """スキルの完全な指示内容を返す。別LLMは呼び出さない。
 
-    ペルソナが system prompt に注入されたスキル指示を再確認したいときに使う。
-    スキル内容は prompt.py の PromptBuildStep で既に system prompt に注入されている。
-    このツールはそのフォールバック。
+    システムプロンプトにはスキル名と説明のみが注入され、スキルの詳細（content）は含まれていない。
+    ペルソナはこのツールを呼ぶことで初めてスキルの完全な指示を取得できる。
 
     検索順序: persona スキル（persist=False, インメモリ）→ グローバルスキルDB
     task パラメータは後方互換のため残しているが、現在は使用されていない。
