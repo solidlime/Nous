@@ -39,7 +39,6 @@ class SQLiteEquipmentRepository(SQLiteRepository):
                     "UPDATE items SET quantity = ?, updated_at = ? WHERE id = ?",
                     (new_qty, now, existing["id"]),
                 )
-                self._db.commit()
                 logger.info("Item quantity updated: %s -> %d", item.name, new_qty)
                 return Success(existing["id"])
 
@@ -59,7 +58,6 @@ class SQLiteEquipmentRepository(SQLiteRepository):
                     now,
                 ),
             )
-            self._db.commit()
             item_id = self._db.execute("SELECT id FROM items WHERE name = ?", (item.name,)).fetchone()["id"]
             logger.info("Item added: %s (id=%d)", item.name, item_id)
             return Success(item_id)
@@ -71,7 +69,6 @@ class SQLiteEquipmentRepository(SQLiteRepository):
         """Remove an item by name."""
         try:
             self._db.execute("DELETE FROM items WHERE name = ?", (name,))
-            self._db.commit()
             logger.info("Item removed: %s", name)
             return Success(None)
         except Exception as e:
@@ -125,7 +122,6 @@ class SQLiteEquipmentRepository(SQLiteRepository):
                 f"UPDATE items SET {set_clause} WHERE name = ?",  # noqa: S608  # nosec B608
                 values,
             )
-            self._db.commit()
 
             updated_row = self._db.execute(
                 "SELECT * FROM items WHERE name = ?",
@@ -147,6 +143,7 @@ class SQLiteEquipmentRepository(SQLiteRepository):
             return Failure(RepositoryError(f"Invalid slot: {slot}. Valid: {', '.join(sorted(VALID_SLOTS))}"))
         try:
             now = format_iso(get_now())
+            self._db.execute("BEGIN IMMEDIATE")
             self._db.execute(
                 """
                 INSERT INTO equipment_slots (slot, item_name, equipped_at)
@@ -168,6 +165,7 @@ class SQLiteEquipmentRepository(SQLiteRepository):
             logger.info("Equipped '%s' to slot '%s'", item_name, slot)
             return Success(None)
         except Exception as e:
+            self._db.rollback()
             logger.error("Failed to equip %s to %s: %s", item_name, slot, e)
             return Failure(RepositoryError(str(e)))
 
@@ -177,6 +175,7 @@ class SQLiteEquipmentRepository(SQLiteRepository):
             return Failure(RepositoryError(f"Invalid slot: {slot}. Valid: {', '.join(sorted(VALID_SLOTS))}"))
         try:
             now = format_iso(get_now())
+            self._db.execute("BEGIN IMMEDIATE")
             current = self._db.execute("SELECT item_name FROM equipment_slots WHERE slot = ?", (slot,)).fetchone()
             item_name = current["item_name"] if current else None
 
@@ -202,6 +201,7 @@ class SQLiteEquipmentRepository(SQLiteRepository):
             logger.info("Unequipped slot '%s'", slot)
             return Success(None)
         except Exception as e:
+            self._db.rollback()
             logger.error("Failed to unequip slot %s: %s", slot, e)
             return Failure(RepositoryError(str(e)))
 
@@ -278,7 +278,6 @@ class SQLiteEquipmentRepository(SQLiteRepository):
                     entry.details,
                 ),
             )
-            self._db.commit()
             return Success(None)
         except Exception as e:
             logger.error("Failed to add equipment history: %s", e)
