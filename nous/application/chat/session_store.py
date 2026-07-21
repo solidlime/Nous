@@ -33,7 +33,6 @@ def _cleanup_expired_sessions(db: sqlite3.Connection, persona: str, ttl_days: in
     try:
         cutoff = (datetime.now().astimezone() - timedelta(days=ttl_days)).isoformat()
         db.execute("DELETE FROM chat_sessions WHERE persona=? AND updated_at < ?", (persona, cutoff))
-        db.commit()
     except Exception as e:
         logger.warning("_cleanup_expired_sessions failed: %s", e)
 
@@ -192,7 +191,6 @@ class SessionWindow:
                 " VALUES (?, ?, ?, ?, ?)",
                 (self._persona, self._session_id, messages_json, timestamps_json, now_str),
             )
-            self._db.commit()
             self._persisted_count = len(self._messages)
         except Exception as e:
             logger.warning("SessionWindow._persist failed: %s", e)
@@ -509,7 +507,6 @@ class TreeSessionWindow:
                 " VALUES (?, ?, ?, ?, ?)",
                 (self._persona, self._session_id, messages_json, timestamps_json, now_str),
             )
-            self._db.commit()
             self._persisted_count = len(self._nodes)
         except Exception as e:
             logger.warning("TreeSessionWindow._persist failed: %s", e)
@@ -675,7 +672,6 @@ class SessionManager:
         if db is not None:
             try:
                 db.execute(_CHAT_SESSIONS_SCHEMA)
-                db.commit()
             except Exception as _e:
                 logger.warning("SessionStore: failed to init DB schema: %s", _e)
             window = TreeSessionWindow.from_db(db, persona, session_id, max_messages)
@@ -791,7 +787,6 @@ class SessionManager:
                 "DELETE FROM chat_sessions WHERE persona=? AND session_id=?",
                 (persona, session_id),
             )
-            db.commit()
             return True
         except Exception as e:
             logger.warning("SessionManager.delete_session failed: %s", e)
