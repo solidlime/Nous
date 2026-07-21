@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -118,8 +117,7 @@ def register_tts_routes(mcp) -> None:
         cache_dir.mkdir(parents=True, exist_ok=True)
         cache_key = hashlib.sha256(f"{text}|{emotion}|{caption or ''}|{voice_speed}".encode()).hexdigest()
         hash12 = cache_key[:12]
-        text_slug = re.sub(r'[^\w\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]+', '_', text[:40]).strip('_')
-        new_filename = f"{hash12}_{text_slug}.wav"
+        new_filename = f"{hash12}.wav"
         new_cache_path = cache_dir / new_filename
 
         # Backward-compatible cache lookup: try new format first, then glob old format
