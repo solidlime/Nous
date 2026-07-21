@@ -215,6 +215,30 @@ async function rollbackChat(fromId, shouldResend) {
   const sid = getChatSessionId();
 
   try {
+    // TTSキャッシュクリーンアップ: 削除対象のキャッシュURLを収集
+    var ttsCacheUrls = [];
+    var container = document.getElementById("chat-messages");
+    var allMsgs = container.querySelectorAll(".chat-msg.assistant");
+    if (typeof fromId === "number") {
+      for (var i = 0; i < allMsgs.length; i++) {
+        var idx = parseInt(allMsgs[i].dataset.msgIndex);
+        var exclusive = !!shouldResend;
+        if ((exclusive && idx >= fromId) || (!exclusive && idx > fromId)) {
+          if (allMsgs[i].dataset.ttsCacheUrl) {
+            ttsCacheUrls.push(allMsgs[i].dataset.ttsCacheUrl);
+          }
+        }
+      }
+    } else {
+      var found = false;
+      for (var j = 0; j < allMsgs.length; j++) {
+        if (found && allMsgs[j].dataset.ttsCacheUrl) {
+          ttsCacheUrls.push(allMsgs[j].dataset.ttsCacheUrl);
+        }
+        if (allMsgs[j].dataset.msgId === String(fromId)) found = true;
+      }
+    }
+
     const body = typeof fromId === "number"
       ? { keep_until: fromId, exclusive: !!shouldResend }
       : { from_id: String(fromId), exclusive: !!shouldResend };
@@ -233,6 +257,11 @@ async function rollbackChat(fromId, shouldResend) {
 
     // TTS session cleanup before DOM rebuild
     if (typeof _endSession === "function") _endSession("rollback");
+    // TTSキャッシュ削除
+    ttsCacheUrls.forEach(function(url) {
+      var filename = url.split("/").pop();
+      fetch("/api/tts/" + encodeURIComponent(S.persona) + "/cache/" + encodeURIComponent(filename), { method: "DELETE" }).catch(function() {});
+    });
     // DOM完全再構築: server response の remaining_messages から再描画
     const container = document.getElementById("chat-messages");
     container.innerHTML = "";
@@ -636,6 +665,29 @@ async function deleteChatMessage(msgId) {
   if (!confirmed) return;
 
   try {
+    // TTSキャッシュクリーンアップ: 削除対象のキャッシュURLを収集
+    var ttsCacheUrls = [];
+    var container2 = document.getElementById("chat-messages");
+    var allMsgs2 = container2.querySelectorAll(".chat-msg.assistant");
+    if (typeof msgId === "number") {
+      for (var k = 0; k < allMsgs2.length; k++) {
+        var idx2 = parseInt(allMsgs2[k].dataset.msgIndex);
+        if (idx2 >= msgId) {
+          if (allMsgs2[k].dataset.ttsCacheUrl) {
+            ttsCacheUrls.push(allMsgs2[k].dataset.ttsCacheUrl);
+          }
+        }
+      }
+    } else {
+      var found2 = false;
+      for (var m = 0; m < allMsgs2.length; m++) {
+        if (found2 && allMsgs2[m].dataset.ttsCacheUrl) {
+          ttsCacheUrls.push(allMsgs2[m].dataset.ttsCacheUrl);
+        }
+        if (allMsgs2[m].dataset.msgId === String(msgId)) found2 = true;
+      }
+    }
+
     const body = typeof msgId === "number"
       ? { keep_until: msgId, exclusive: true }
       : { from_id: String(msgId), exclusive: true };
@@ -652,6 +704,11 @@ async function deleteChatMessage(msgId) {
 
     // TTS session cleanup before DOM rebuild
     if (typeof _endSession === "function") _endSession("rollback");
+    // TTSキャッシュ削除
+    ttsCacheUrls.forEach(function(url) {
+      var filename = url.split("/").pop();
+      fetch("/api/tts/" + encodeURIComponent(S.persona) + "/cache/" + encodeURIComponent(filename), { method: "DELETE" }).catch(function() {});
+    });
     // DOM完全再構築
     container.innerHTML = "";
     const remaining = result.remaining_messages || [];
