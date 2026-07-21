@@ -41,7 +41,6 @@ class SessionEventRepository:
                 json.dumps(event.metadata, ensure_ascii=False) if event.metadata else None,
             ),
         )
-        self._db.commit()
         return self._db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     # ------------------------------------------------------------------
@@ -125,7 +124,6 @@ class SessionEventRepository:
             "DELETE FROM session_events WHERE session_id = ?",
             (session_id,),
         )
-        self._db.commit()
         return cursor.rowcount
 
     # ------------------------------------------------------------------

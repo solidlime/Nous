@@ -44,7 +44,6 @@ class SQLiteEntityRepository(SQLiteRepository):
                     entity.last_seen or now,
                 ),
             )
-            self._db.commit()
             return Success(None)
         except Exception as e:
             logger.error("Failed to save entity %s: %s", entity.id, e)
@@ -103,7 +102,6 @@ class SQLiteEntityRepository(SQLiteRepository):
                     relation.created_at or now,
                 ),
             )
-            self._db.commit()
             return Success(None)
         except Exception as e:
             logger.error("Failed to save relation %s->%s: %s", relation.source_entity, relation.target_entity, e)
@@ -143,7 +141,6 @@ class SQLiteEntityRepository(SQLiteRepository):
                 "INSERT OR IGNORE INTO memory_entities (memory_key, entity_id, role) VALUES (?, ?, ?)",
                 (memory_key, entity_id, role),
             )
-            self._db.commit()
             return Success(None)
         except Exception as e:
             logger.error("Failed to link memory %s → entity %s: %s", memory_key, entity_id, e)
