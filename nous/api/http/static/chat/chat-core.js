@@ -10,11 +10,20 @@ var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
 "use strict";
 var S = window.S;
 
+// --- Cookie helpers for panel state persistence ---
+function _getCookie(name) {
+  var match = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+function _setCookie(name, value) {
+  document.cookie = name + '=' + encodeURIComponent(value) + ';path=/;SameSite=Lax;max-age=31536000';
+}
+
 // --- State ---
 var CHAT = {
   streaming: false,
-  sidebarOpen: true,
-  memoryPanelOpen: true,
+  sidebarOpen: _getCookie("nous_sidebar") !== "0",
+  memoryPanelOpen: _getCookie("nous_memory_panel") !== "0",
   messages: [], // { role, content, time }
   mcpServers: [],
   enabledSkills: [],
@@ -281,6 +290,7 @@ function toggleSettingsPanel() {
   var backdrop = document.getElementById("settings-backdrop");
   var isMobile = window.innerWidth <= 768;
   CHAT.sidebarOpen = !CHAT.sidebarOpen;
+  _setCookie("nous_sidebar", CHAT.sidebarOpen ? "1" : "0");
   if (CHAT.sidebarOpen) {
     sidebar.style.width = isMobile ? "100%" : "360px";
     sidebar.style.display = "flex";
@@ -296,6 +306,7 @@ function toggleSettingsPanel() {
 function toggleMemoryPanel() {
   const panel = document.getElementById("memory-panel");
   CHAT.memoryPanelOpen = !CHAT.memoryPanelOpen;
+  _setCookie("nous_memory_panel", CHAT.memoryPanelOpen ? "1" : "0");
   if (!panel) return;
   if (CHAT.memoryPanelOpen) {
     panel.style.display = "flex";
