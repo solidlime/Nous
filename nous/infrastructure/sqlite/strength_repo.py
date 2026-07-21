@@ -49,10 +49,8 @@ class SQLiteStrengthMixin:
                     strength.valence,
                 ),
             )
-            self._db.commit()
             return Success(None)
         except Exception as e:
-            self._db.rollback()
             logger.error("Failed to save strength for %s: %s", strength.memory_key, e)
             return Failure(RepositoryError(str(e)))
 

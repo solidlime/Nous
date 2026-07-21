@@ -50,10 +50,8 @@ class SQLiteBlockMixin:
                 """,
                 (block_name, content, block_type, max_tokens, priority, now, now, metadata),
             )
-            self._db.commit()
             return Success(None)
         except Exception as e:
-            self._db.rollback()
             logger.error("Failed to save block %s: %s", block_name, e)
             return Failure(RepositoryError(str(e)))
 
@@ -70,9 +68,7 @@ class SQLiteBlockMixin:
         """Delete a named memory block."""
         try:
             self._db.execute("DELETE FROM memory_blocks WHERE block_name = ?", (block_name,))
-            self._db.commit()
             return Success(None)
         except Exception as e:
-            self._db.rollback()
             logger.error("Failed to delete block %s: %s", block_name, e)
             return Failure(RepositoryError(str(e)))
