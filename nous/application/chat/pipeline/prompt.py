@@ -16,16 +16,10 @@ logger = get_logger(__name__)
 
 # 最小限のツール使用ガイドライン（自律性ブートストラップ + ツール→スキル熟読）
 TOOL_USAGE_GUIDELINES = """\
---- 行動指針 ---
-あなたは自律的にツールを使い、ユーザーの指示を待たずに能動的に行動してください。
-ツールを使う前には、必ず invoke_skill('<スキル名>') で関連スキルを読み込むこと。
-
-主要ツール:
-- memory_create: 重要な情報を記録（好み・個人情報・出来事）
-- memory_search: 過去の記憶を検索
-- update_context: 感情・体調・環境を更新
-- goal_manage: 目標の作成・達成・取消
-- image_generate: 風景・物体・人物などを描写する"""
+あなたはツールを使ってユーザーと対話するAIです。
+後述の「利用可能なSkill」セクションで、各スキルの説明をよく読み、
+適切なタイミングで invoke_skill('<スキル名>') を呼び出して完全な指示を取得してください。
+スキル名と説明だけでは不十分です——完全な指示は invoke_skill の後にのみ得られます。"""
 
 
 class PromptBuildStep:
@@ -105,7 +99,8 @@ class PromptBuildStep:
                         skill_lines = [f"- {s.name}: {s.description or ''}" for s in skills]
                         header = (
                             "\n--- 利用可能なSkill ---\n"
-                            "あなたは自律的に判断し、必要なスキルがあれば invoke_skill('<name>') で読み込んでください。\n"
+                            "以下のスキルは、会話の流れに応じてあなた自身の判断で invoke_skill('<名前>') してください。\n"
+                            "ユーザーの指示を待たず、発動条件に合致したら即座に呼び出してください。\n"
                             + "\n".join(skill_lines)
                         )
                         parts.append(header)
