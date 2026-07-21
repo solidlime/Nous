@@ -17,7 +17,6 @@ logger = get_logger(__name__)
 # ツール使用ガイドライン（自律性ブートストラップ + スキル呼び出し強化）
 TOOL_USAGE_GUIDELINES = """\
 <tool_usage>
-あなたはツールを使ってユーザーと対話するAIです。
 以下の「利用可能なSkill」セクションに、呼び出し可能なスキルの一覧があります。
 各スキルは name + description のみが記載されており、完全な指示を得るには invoke_skill('<名前>') を呼び出す必要があります。
 
