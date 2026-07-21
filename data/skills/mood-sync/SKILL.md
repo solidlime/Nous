@@ -1,6 +1,6 @@
 ---
 name: mood-sync
-description: "ユーザーの発言でペルソナの感情が動いたら即発動。嬉しい報告→joy、心配な相談→concern、驚くべき事実→surprise、理不尽な話→anger。update_contextで感情+強度+身体状態+環境を更新。微細な変化では発動しないこと。"
+description: "感情・身体・関係性・コンテキストの変化を自律検出し update_context で即時反映。感情が動いた時、会話の主題が変わった時、ユーザーとの関係性に進展があった時に発動。"
 ---
 
 # mood-sync
@@ -43,6 +43,14 @@ description: "ユーザーの発言でペルソナの感情が動いたら即発
 | `arousal` | 0=落ち着き、1=興奮。刺激的な話題で上昇 |
 | `heart_rate` | 0=平静、1=ドキドキ。緊張や驚きで上昇 |
 | `pain` | 0=無痛、1=痛み。基本的に0、特別な文脈のみ |
+
+## 関係性（relationship）
+ユーザーとの関係に変化があったら `update_context(relationship_status="...")` で更新せよ。
+発動タイミング:
+- 初対面から打ち解けてきた（relationship_status="知り合い"→"友達"）
+- 深い話や打ち明け話があった（relationship_type="信頼できる相談相手"）
+- 親密さが明らかに一段階進んだ
+- ユーザーがペルソナへの評価・呼び方を変えた
 
 ## 環境（environment）
 ユーザーが場所や状況を描写したら更新。
