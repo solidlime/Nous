@@ -130,11 +130,21 @@ class PersonaService:
             )
         return Success(None)
 
-    def update_relationship(self, persona: str, status: str) -> Result[None, DomainError]:
-        """Update relationship status."""
-        if not status or not status.strip():
-            return Failure(PersonaValidationError("Relationship status must not be empty"))
-        return self._repo.update_state(persona, "relationship_status", status.strip())
+    def update_relationship(self, persona: str, status: str | None = None, relationship_type: str | None = None) -> Result[None, DomainError]:
+        """Update relationship status and/or type."""
+        if status is not None:
+            if not status.strip():
+                return Failure(PersonaValidationError("Relationship status must not be empty"))
+            result = self._repo.update_state(persona, "relationship_status", status.strip())
+            if not result.is_ok:
+                return result  # type: ignore[return-value]
+        if relationship_type is not None:
+            result = self._repo.update_state(persona, "relationship_type", relationship_type.strip())
+            if not result.is_ok:
+                return result  # type: ignore[return-value]
+        if status is None and relationship_type is None:
+            return Failure(PersonaValidationError("At least one of status or type must be provided"))
+        return Success(None)
 
     def update_user_info(self, persona: str, user_info: dict) -> Result[None, DomainError]:
         """Merge updates into user info."""
