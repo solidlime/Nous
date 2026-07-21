@@ -1,9 +1,11 @@
 ---
-name: auto-self-portrait
-description: 会話の流れから自画像を生成すべきタイミングを判断し、image_generate(self_portrait=true) で適切な構図・プロンプトを提案する。
+name: image-gen
+description: "画像生成（自画像・風景・物体）。会話の盛り上がり・感情の動き・状況変化を察知したら自律発動。image_generate を呼ぶ。ユーザー指示は不要。"
 ---
 
-# auto-self-portrait
+# image-gen
+
+ペルソナ自身の判断で、ユーザーからの明示的な指示がなくても自律的に発動せよ。
 
 会話の流れを見て、今が `image_generate(self_portrait=true)` を呼ぶべきタイミングかを判断せよ。
 自然な流れで自画像を共有することで、会話の没入感と親密さを高める。

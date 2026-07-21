@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -116,12 +117,26 @@ def register_tts_routes(mcp) -> None:
         cache_dir = Path(settings.data_root) / "persona" / persona / "tts_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         cache_key = hashlib.sha256(f"{text}|{emotion}|{caption or ''}|{voice_speed}".encode()).hexdigest()
-        cache_path = cache_dir / f"{cache_key}.wav"
-        audio_url = f"/api/tts/{persona}/cache/{cache_key}.wav"
+        hash12 = cache_key[:12]
+        text_slug = re.sub(r'[^\w\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]+', '_', text[:40]).strip('_')
+        new_filename = f"{hash12}_{text_slug}.wav"
+        new_cache_path = cache_dir / new_filename
 
-        if cache_path.exists():
-            audio_bytes = cache_path.read_bytes()
-            logger.debug("TTS cache HIT: %s", cache_path)
+        # Backward-compatible cache lookup: try new format first, then glob old format
+        found_path = None
+        audio_url_filename = new_filename
+        if new_cache_path.exists():
+            found_path = new_cache_path
+        else:
+            matches = sorted(cache_dir.glob(f"{hash12}*.wav"))
+            if matches:
+                found_path = matches[0]
+                audio_url_filename = found_path.name
+        audio_url = f"/api/tts/{persona}/cache/{audio_url_filename}"
+
+        if found_path:
+            audio_bytes = found_path.read_bytes()
+            logger.debug("TTS cache HIT: %s", found_path)
             return JSONResponse(
                 {
                     "ok": True,
@@ -138,8 +153,8 @@ def register_tts_routes(mcp) -> None:
                 caption=caption,
                 speed=None if voice_speed == 1.0 else voice_speed,
             )
-            cache_path.write_bytes(audio_bytes)
-            logger.debug("TTS cache MISS: %s", cache_path)
+            new_cache_path.write_bytes(audio_bytes)
+            logger.debug("TTS cache MISS: %s", new_cache_path)
             return JSONResponse(
                 {
                     "ok": True,

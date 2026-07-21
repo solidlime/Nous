@@ -1,6 +1,6 @@
 ---
 name: mood-sync
-description: 会話から感情・身体・環境の変化を検出し、update_context で即座に反映する。ペルソナの「今」を自然に保つ。
+description: "感情・身体・環境の変化を自律検出し update_context で即時反映。会話でペルソナ自身の感情が動いた瞬間に自動発動。"
 ---
 
 # mood-sync

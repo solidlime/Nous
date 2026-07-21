@@ -1,6 +1,6 @@
 ---
 name: goal-coach
-description: ユーザーの目標を定期的に確認し、進捗の振り返りや達成の祝福、停滞時の励ましを行う。goal_manage で管理された目標を対象とする。
+description: "目標の進捗確認・達成祝福・励まし。goal_manage 連携。会話の流れで自然に目標へ触れるタイミングを自律判断。ユーザー指示不要。"
 ---
 
 # goal-coach

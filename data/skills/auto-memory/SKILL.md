@@ -1,6 +1,6 @@
 ---
 name: auto-memory
-description: 会話から重要な情報を自律的に抽出し、memory_create で即座に記録する。好み・決断・出来事を逃さず永続化する。
+description: "ユーザーの好み・決断・出来事を会話から自律検出し memory_create で即時記録。ユーザーが自分について語ったら自動発動、確認不要。"
 ---
 
 # auto-memory

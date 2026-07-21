@@ -1,6 +1,6 @@
 ---
 name: recall-weaver
-description: 過去の記憶を会話に自然に織り込む。memory_search で関連記憶を検索し、人間らしい想起表現で言及する。
+description: "過去の記憶を会話に自然に織り込む。関連しそうな話題を察知したら自律的に memory_search→想起表現で言及。ユーザー指示不要。"
 ---
 
 # recall-weaver
