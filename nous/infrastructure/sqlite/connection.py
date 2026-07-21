@@ -276,7 +276,7 @@ class SQLiteConnection:
             if relative_path not in self._connections:
                 db_path = Path(self.data_dir) / relative_path
                 db_path.parent.mkdir(parents=True, exist_ok=True)
-                conn = sqlite3.connect(str(db_path), check_same_thread=False)
+                conn = sqlite3.connect(str(db_path), check_same_thread=False, isolation_level=None)
                 conn.execute("PRAGMA journal_mode=WAL")
                 conn.execute("PRAGMA foreign_keys=ON")
                 conn.row_factory = sqlite3.Row
@@ -288,7 +288,6 @@ class SQLiteConnection:
         """Create all tables if they don't exist."""
         memory_conn = self.get_memory_db()
         memory_conn.executescript(_MEMORY_SCHEMA + _CHAT_SESSIONS_SCHEMA)
-        memory_conn.commit()
         logger.info("Memory schema initialized for persona '%s'", self.persona)
 
         # Migration: add last_consumed_at if missing (existing DBs)
