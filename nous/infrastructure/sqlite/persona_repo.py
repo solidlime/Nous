@@ -108,6 +108,7 @@ class SQLitePersonaRepository(PersonaRepository):
         """
         try:
             now = format_iso(get_now())
+            self._db.execute("BEGIN IMMEDIATE")
             # Close current record
             self._db.execute(
                 """
@@ -129,6 +130,7 @@ class SQLitePersonaRepository(PersonaRepository):
             logger.info("State updated: persona=%s key=%s", persona, key)
             return Success(None)
         except Exception as e:
+            self._db.rollback()
             logger.error("Failed to update state %s/%s: %s", persona, key, e)
             return Failure(RepositoryError(str(e)))
 
@@ -171,7 +173,6 @@ class SQLitePersonaRepository(PersonaRepository):
                     record.context,
                 ),
             )
-            self._db.commit()
             logger.info("Emotion record added: %s (%.1f)", record.emotion, record.intensity)
             return Success(None)
         except Exception as e:
@@ -241,7 +242,6 @@ class SQLitePersonaRepository(PersonaRepository):
                     context,
                 ),
             )
-            self._db.commit()
             return Success(None)
         except Exception as e:
             logger.error("Failed to add body state record for '%s': %s", persona, e)
@@ -302,7 +302,6 @@ class SQLitePersonaRepository(PersonaRepository):
                 """,
                 (persona, key, value, now),
             )
-            self._db.commit()
             return Success(None)
         except Exception as e:
             logger.error("Failed to set user_info %s/%s: %s", persona, key, e)
@@ -319,7 +318,6 @@ class SQLitePersonaRepository(PersonaRepository):
                 """,
                 (persona, key, value, now),
             )
-            self._db.commit()
             return Success(None)
         except Exception as e:
             logger.error("Failed to set persona_info %s/%s: %s", persona, key, e)
