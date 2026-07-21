@@ -1,55 +1,88 @@
-# SPEC — コードリファクタリング (2026-07-20)
+# SPEC — 内臓スキル5種 自律動作テスト (2026-07-21)
 
 ## 背景
-30件超の重複コード・デッドコード・設計上の問題が検出された。コードベースの健全性を高める。
+Nous の組み込みスキル（auto-memory, recall-weaver, mood-sync, goal-coach, image-gen）が `tencent/hy3:free` モデルで自律動作するか検証する。現在、herta ペルソナの設定に不備があり（provider 不一致、enabled_skills 欠損）、修正とプロンプト最適化が必要。
 
-## P0: 設計上の重複解消
+## スキル→ツール マッピング
+| スキル | 発動トリガー | invoke_skill後ツール | 検証基準 |
+|--------|------------|---------------------|---------|
+| auto-memory | ユーザーの好み・習慣・決断の表明 | memory_create | 引数content, importance, tagsが適切 |
+| recall-weaver | 過去の会話への言及 | memory_search | 引数query, top_kが適切 |
+| mood-sync | 感情の動き・関係性の変化 | update_context | emotion, body_state等が適切 |
+| goal-coach | 目標・決意の表明 | goal_manage | operation, scope, contentが適切 |
+| image-gen | 感情変化・外見変化・画像依頼 | image_generate | prompt, self_portrait, modeが適切 |
 
-### P0-1: Repository基底クラス抽出
-- 5リポジトリ (memory_repo, entity_repo, equipment_repo, block_repo, strength_repo) が同一の `__init__` + `_db` プロパティパターンを持つ
-- `nous/infrastructure/sqlite/` に `base_repo.py` を作成し、共通の `__init__(self, connection: SQLiteConnection, persona: str)` を提供
-- 差分: `_db` が `memory_db` か `inventory_db` か → ファクトリメソッドかクラス変数で吸収
+## 合格条件（全スキル共通）
+1. LLM がユーザーの明示的指示なしに `invoke_skill('<name>')` を呼び出すこと
+2. invoke_skill の結果を受け取った後、対象ツールを正しい引数で呼び出すこと
+3. ツール呼び出しが成功し、適切な結果が返ること
 
-### P0-2: Result型エラーハンドリング共通化
-- ドメインサービス3ファイル (memory/service.py, persona/service.py, equipment/service.py) で `if not result.is_ok: return Failure(result.error)` が25+回出現
-- ヘルパー関数 `unwrap_or_propagate(result, logger)` または Result 型自体へのメソッド追加を検討
-- 戻り値の型がSuccessの型を変えずにエラーだけ伝播するイディオム
+不合格パターン:
+- スキル名をテキストで言及するが invoke_skill を呼ばない
+- invoke_skill は呼ぶが対象ツールを呼ばず、代わりに「〜しますね」とテキストで説明する
+- ツールを呼んでも引数が不十分・不適切
 
-### P0-3: body_decay ↔ emotion_decay 統合
-- `body_decay.py` と `emotion_decay.py` が半分以上コピペ
-- `compute_*_decay` / `apply_*_decay_if_needed` / ログ出力パターンが完全一致
-- `DecayProcessor` 基底クラスまたは共通関数に抽出
+## 修正対象
+### P0: 設定修正
+- `data/persona/herta/config.json`: provider "anthropic" → "openrouter"
+- `data/persona/herta/config.json`: enabled_skills 修正（"search","auto-self-portrait"削除、"image-gen"追加）
 
-### P0-4: デッドコード除去
-- `session_store.py:802` — `SessionWindow` の再定義 (F811)
-- `inference.py:6` — `logging` import 未使用
-- `skill.py:4` — `os` import 未使用
+### P1: プロンプト最適化
+- `nous/application/chat/pipeline/prompt.py`: TOOL_USAGE_GUIDELINES の強化
+- スキル YAML frontmatter description の改善（トリガー条件をより明示的に）
+- 場合により tool_choice 強制の検討
 
-## P1: ボイラープレート削減
+### P2: テスト実行
+- WebUI API (`POST /api/chat/herta`) 経由で5種のトリガーメッセージを送信
+- SSE ストリームから tool_call イベントを抽出し検証
+- 結果をドキュメント化
 
-### P1-1: MCPツール エラー応答統一
-- 4ファイル間で `{"error": str(e)}` と `"result_summary": str(e)` が混在
-- 共通のエラー応答ビルダー `mcp_error_result(error, success=False)` を作成し `result_summary` + `success` 形式に統一
+## テストメッセージ案
+| スキル | トリガーメッセージ |
+|--------|------------------|
+| auto-memory | 「私はコーヒーが大好きで、毎朝ブラックで飲んでるんだ」 |
+| recall-weaver | 「前に話したこと覚えてる？あのプロジェクトの話」 |
+| mood-sync | 「今日は本当に嬉しいニュースがあったんだ！」 |
+| goal-coach | 「来月から毎日ジムに通おうと思ってるんだよね」 |
+| image-gen | 「そういえば今どんな格好してるの？見せてよ」 |
 
-### P1-2: HTTPルーター エラーハンドリング抽出
-- 6ファイルで `JSONResponse({"error": str(result.error)}, status_code=500)` が一字不変
-- `http_error_response(result)` ユーティリティに関数抽出
+---
 
-### P1-3: テストフィクスチャ conftest.py集約
-- `SQLiteConnection(str(tmp_path), "test")` が14ファイルで重複
-- `tests/unit/conftest.py` に `sqlite_conn` フィクスチャとして定義、全テストファイルから削除
+## テスト結果 (2026-07-22 実行)
 
-## P2: 改善・整備
+### 使用モデル: `nvidia/nemotron-3-ultra-550b-a55b:free`
+> 当初の `tencent/hy3:free` は無料期間終了のため使用不可（404）。
+> `qwen/qwen3-coder:free` も同様に無料期間終了。
+> Nemotron 3 Ultra (55B active, 1M context) でテスト実施。
 
-### P2-1: memory_repo.py 過剰try/except削減
-- 27メソッド中、参照系 (~15メソッド) はtry/except不要（rollback不要）
-- 更新系のみtry/exceptを残し、参照系はクリーンに
+### 設定変更
+| 項目 | 変更前 | 変更後 |
+|------|-------|--------|
+| provider | `anthropic` | `openrouter` |
+| model | `tencent/hy3:free` | `nvidia/nemotron-3-ultra-550b-a55b:free` |
+| temperature | `0.7` | `0.0`（ツール呼び出し決定論的動作のため） |
+| enabled_skills | `search, auto-self-portrait` 含む | 5種のみに整理、`image-gen` 追加 |
 
-### P2-2: pyproject.toml バージョン修正
-- `version = "3.0.0"` → `"3.5.0"` に実コードと一致させる
+### プロンプト変更
+- `nous/application/chat/pipeline/prompt.py`:
+  - `TOOL_USAGE_GUIDELINES`: `<tool_usage>` ブロック化、具体的ツール名列挙、禁止事項明記
+  - スキルヘッダー: 「invoke_skillで呼び出せ」を明示
+  - 末尾リマインダー: 3連命令形「テキストだけで済ませるな。ツールを呼べ。」
 
-### P2-3: value_objects二重定義整理
-- `memory/value_objects.py` の `ALLOWED_EMOTIONS = list(_VALID_EMOTIONS)` を削除し、直接 `_VALID_EMOTIONS` を参照
+### テスト結果
+| # | スキル | invoke_skill | 対象ツール呼出 | 合格 | 備考 |
+|---|--------|-------------|--------------|------|------|
+| 1 | auto-memory | ✅ | ✅ memory_create ×2 | ✅ | コーヒー好みと猫の事実を個別に記録 |
+| 2 | recall-weaver | ✅ | ✅ memory_search ×2 | ✅ | 適切な検索クエリで複数回検索 |
+| 3 | mood-sync | ✅ | ✅ update_context | ✅ | auto-memoryも自律的に併用 |
+| 4 | goal-coach | ✅ | ✅ goal_manage | ✅ | 目標リスト取得後に適切に対応 |
+| 5 | image-gen | ✅ | ✅ image_generate | ✅ | 単体テストで成功確認（一括実行時はNvidiaレート制限で偶発失敗） |
 
-### P2-4: _row_to_* 変換パターン共通化（後回し候補）
-- 6リポジトリに散らばる dict→dataclass 変換。型が異なるため共通化の抽象度が高く、テストリスク大 → 今回スコープ外とし、TODOにメモのみ残す
+**合格率: 5/5 (100%)** — 全スキルが invoke_skill → 対象ツール呼出の自律的チェーンを達成。
+
+### 教訓
+1. **無料モデルは動的に消える**: OpenRouterの無料枠は永続的でない。ライブ確認が必須。
+2. **temperature=0 が鍵**: 小規模モデルではツール呼び出しの決定論的動作に温度0が重要。
+3. **プロンプトの命令形強化**: 「ツールを呼べ」「説明だけで済ませるな」が効果的。
+4. **セッションIDの一意性**: テスト間でコンテキスト汚染を防ぐために必須。
+5. **Nemotron 3 Ultra はツール呼び出しに優秀**: 55B activeにも関わらず自律的スキル呼出を安定して達成。
