@@ -217,8 +217,8 @@ async function rollbackChat(fromId, shouldResend) {
   try {
     // TTSキャッシュクリーンアップ: 削除対象のキャッシュURLを収集
     var ttsCacheUrls = [];
-    var container = document.getElementById("chat-messages");
-    var allMsgs = container.querySelectorAll(".chat-msg.assistant");
+    var cc = document.getElementById("chat-messages");
+    var allMsgs = cc.querySelectorAll(".chat-msg.assistant");
     if (typeof fromId === "number") {
       for (var i = 0; i < allMsgs.length; i++) {
         var idx = parseInt(allMsgs[i].dataset.msgIndex);
