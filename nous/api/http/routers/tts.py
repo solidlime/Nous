@@ -273,3 +273,24 @@ def register_tts_routes(mcp) -> None:
         mime_type, _ = mimetypes.guess_type(safe_name)
         mime_type = mime_type or "audio/wav"
         return FileResponse(str(file_path), media_type=mime_type)
+
+    @mcp.custom_route("/api/tts/{persona}/cache/{filename}", methods=["DELETE"])
+    async def delete_tts_cache(request: Request) -> JSONResponse:
+        """Delete a cached TTS audio file. Idempotent — returns deleted:false if not found."""
+        import os
+
+        persona = _resolve_persona_from_request(request)
+        filename = request.path_params.get("filename", "")
+        safe_name = os.path.basename(filename).replace("..", "").strip()
+        if not safe_name or not safe_name.lower().endswith(".wav"):
+            return JSONResponse({"ok": False, "error": "Invalid filename"}, status_code=400)
+
+        from nous.config.settings import get_settings
+
+        settings = get_settings()
+        file_path = Path(settings.data_root) / "persona" / persona / "tts_cache" / safe_name
+        if not file_path.exists():
+            return JSONResponse({"ok": True, "deleted": False})
+
+        file_path.unlink()
+        return JSONResponse({"ok": True, "deleted": True})
