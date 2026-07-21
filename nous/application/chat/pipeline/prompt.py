@@ -102,7 +102,7 @@ class PromptBuildStep:
                     skills = [skill_map[n] for n in config.enabled_skills if n in skill_map]
 
                     if skills:
-                        skill_lines = [f"- {s.name}: {(s.description or '')[:120]}" for s in skills]
+                        skill_lines = [f"- {s.name}: {s.description or ''}" for s in skills]
                         header = (
                             "\n--- 利用可能なSkill ---\n"
                             "あなたは自律的に判断し、必要なスキルがあれば invoke_skill('<name>') で読み込んでください。\n"
