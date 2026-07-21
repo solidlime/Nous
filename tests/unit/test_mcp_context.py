@@ -139,7 +139,7 @@ class TestUpdateContext:
         ):
             mock_reg_cls.get.return_value = ctx
             result = await update_context(relationship_status="friends")
-        assert "relationship(status=friends)" in result
+        assert "relationship=friends" in result
 
     @pytest.mark.asyncio
     async def test_update_nickname_shortcut(self, registered_tools):

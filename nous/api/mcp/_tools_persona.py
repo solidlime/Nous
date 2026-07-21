@@ -175,18 +175,11 @@ async def _tool_update_context(
         updated.append("context_note updated")
 
     if relationship_status is not None or relationship_type is not None:
-        result = ctx.persona_service.update_relationship(
-            persona,
-            status=relationship_status,
-            relationship_type=relationship_type,
-        )
-        if result.is_ok:
-            parts = []
-            if relationship_status is not None:
-                parts.append(f"status={relationship_status}")
-            if relationship_type is not None:
-                parts.append(f"type={relationship_type}")
-            updated.append(f"relationship({'/'.join(parts)})")
+        status = relationship_status or relationship_type
+        if status:
+            result = ctx.persona_service.update_relationship(persona, status)
+            if result.is_ok:
+                updated.append(f"relationship={status}")
 
     if user_info is not None:
         result = ctx.persona_service.update_user_info(persona, user_info)

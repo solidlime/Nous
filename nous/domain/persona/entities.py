@@ -15,7 +15,6 @@ class PersonaState:
     mental_state: str | None = None
     environment: str | None = None
     relationship_status: str | None = None
-    relationship_type: str | None = None  # 'friend' / 'close_friend' / 'crush' / 'dating' / 'partner' / 'rival' etc.
     appearance: str | None = None
     fatigue: float | None = None
     warmth: float | None = None
