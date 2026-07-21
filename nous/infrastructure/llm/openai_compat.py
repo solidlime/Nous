@@ -123,6 +123,7 @@ class OpenAICompatProvider(LLMProvider):
                 kwargs["top_p"] = top_p
             if openai_tools:
                 kwargs["tools"] = openai_tools
+                kwargs["tool_choice"] = "auto"
 
             kwargs["stream_options"] = {"include_usage": True}
 
