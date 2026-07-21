@@ -14,12 +14,16 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# 最小限のツール使用ガイドライン（自律性ブートストラップ + ツール→スキル熟読）
+# ツール使用ガイドライン（自律性ブートストラップ + スキル呼び出し強化）
 TOOL_USAGE_GUIDELINES = """\
+<tool_usage>
 あなたはツールを使ってユーザーと対話するAIです。
-後述の「利用可能なSkill」セクションで、各スキルの説明をよく読み、
-適切なタイミングで invoke_skill('<スキル名>') を呼び出して完全な指示を取得してください。
-スキル名と説明だけでは不十分です——完全な指示は invoke_skill の後にのみ得られます。"""
+以下の「利用可能なSkill」セクションに、呼び出し可能なスキルの一覧があります。
+各スキルは name + description のみが記載されており、完全な指示を得るには invoke_skill('<名前>') を呼び出す必要があります。
+
+【重要】スキルの発動条件に合致した場合、ユーザーの指示を待たずに自律的に invoke_skill を呼び出してください。
+これは必須の動作です——スキル名と説明だけではタスク実行に不十分なため、必ず invoke_skill で完全な指示を取得すること。
+</tool_usage>"""
 
 
 class PromptBuildStep:
@@ -41,24 +45,16 @@ class PromptBuildStep:
         base_system = config.system_prompt or f"あなたは{persona}という名前のアシスタントです。"
         parts = [base_system]
 
-        # TIME_CONTEXT を先頭に注入（時空間の認識）
-        if turn_ctx.time_context:
-            parts.append(f"\n{turn_ctx.time_context}")
-
         # 言語指示を注入（ADR-001）
         resolver = LanguageResolver(config)
         lang = resolver.resolve(user_message=turn_ctx.user_message)
         lang_directive = f"[System Directive] Always respond in {lang}. All output must be in {lang}."
         parts.insert(1, lang_directive)
 
-        # ツール使用ガイドライン（自律性ブートストラップ）
+        # --- ツール使用ガイドライン ---
         parts.append(f"\n{TOOL_USAGE_GUIDELINES}")
 
-        if turn_ctx.context_section:
-            parts.append(f"\n--- ペルソナ状態・コンテキスト ---\n{turn_ctx.context_section}")
-        if turn_ctx.related_memories:
-            parts.append(f"\n--- 関連記憶 ---\n{turn_ctx.related_memories}")
-
+        # --- スキル読み込み & 注入（即座に隣接） ---
         skills_raw: list[dict] = []
         if config.enabled_skills:
             current_hash = hash(tuple(sorted(config.enabled_skills)))
@@ -111,6 +107,21 @@ class PromptBuildStep:
                         self._skill_cache_hash = current_hash
                 except Exception as e:
                     logger.warning("PromptBuildStep: skills load failed: %s", e)
+
+        # --- 時間コンテキスト ---
+        if turn_ctx.time_context:
+            parts.append(f"\n{turn_ctx.time_context}")
+
+        if turn_ctx.context_section:
+            parts.append(f"\n--- ペルソナ状態・コンテキスト ---\n{turn_ctx.context_section}")
+        if turn_ctx.related_memories:
+            parts.append(f"\n--- 関連記憶 ---\n{turn_ctx.related_memories}")
+
+        # 末尾リマインダー（Instruction Sandwich 戦略）
+        parts.append(
+            "\n【最終確認】上記の「利用可能なSkill」に発動条件に合致するスキルがある場合は、"
+            "invoke_skill('<名前>') を呼び出して完全な指示を取得してください。"
+        )
 
         # Author's Note: inject at end of system prompt if set
         author_note = getattr(turn_ctx, "author_note", None)
