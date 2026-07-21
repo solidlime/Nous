@@ -373,6 +373,7 @@ async def _handle_list_skills(ctx: AppContext, config: ChatConfig, tool_input: d
 async def _handle_invoke_skill(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
     """スキルの内容をDBから取得して返す。別LLM呼び出しは行わない。"""
     name = tool_input.get("name", "")
+    logger.info("invoke_skill called: '%s'", name)
     task = tool_input.get("task", "")
     if not name:
         return {"status": "error", "message": "name is required"}
@@ -410,6 +411,7 @@ async def execute_tool(ctx: AppContext, config: ChatConfig, tool_name: str, tool
     Tools with ``__`` in the name are routed to ``MCPClientPool.call_tool()``
     for external MCP server execution.
     """
+    logger.info("tool called: '%s' args=%s", tool_name, json.dumps(tool_input, ensure_ascii=False)[:200])
     # ── MCP routing gate: tools with "__" go directly to MCP pool ──
     if "__" in tool_name:
         try:

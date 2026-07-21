@@ -96,6 +96,8 @@ class PromptBuildStep:
                     skills = [skill_map[n] for n in config.enabled_skills if n in skill_map]
 
                     if skills:
+                        skill_names = [s.name for s in skills]
+                        logger.info("PromptBuildStep: injecting %d skills: %s", len(skill_names), ", ".join(skill_names))
                         skill_lines = [f"- {s.name}: {s.description or ''}" for s in skills]
                         header = (
                             "\n--- 利用可能なSkill ---\n"

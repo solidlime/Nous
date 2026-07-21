@@ -33,12 +33,14 @@ async def _tool_invoke_skill(ctx: AppContext, persona: str, name: str, task: str
         persona_skills = skill_repo.load_from_dir(persona_skills_dir, persist=False)
         for s in persona_skills:
             if s.name == name:
+                logger.info("invoke_skill response: '%s' → %d lines returned", name, len(s.content.splitlines()))
                 return {"ok": True, "result": s.content}
 
     # グローバルスキルにフォールバック
     global_skills = skill_repo.load_from_dir(settings.skills_dir, persist=False)
     for s in global_skills:
         if s.name == name:
+            logger.info("invoke_skill response: '%s' → %d lines returned", name, len(s.content.splitlines()))
             return {"ok": True, "result": s.content}
 
     return {"ok": False, "error": f"Skill '{name}' not found"}
