@@ -32,6 +32,7 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
         """Persist a Memory entity. Returns the memory key on success."""
         try:
             now = format_iso(get_now())
+            self._db.execute("BEGIN IMMEDIATE")
             self._db.execute(
                 """
                 INSERT OR REPLACE INTO memories (
@@ -153,19 +154,18 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
                 f"UPDATE memories SET {set_clause} WHERE key = ?",  # noqa: S608  # nosec B608
                 values,
             )
-            self._db.commit()
 
             updated_row = self._db.execute("SELECT * FROM memories WHERE key = ?", (key,)).fetchone()
             logger.info("Memory updated: %s", key)
             return Success(self._row_to_memory(updated_row))
         except Exception as e:
-            self._db.rollback()
             logger.error("Failed to update memory %s: %s", key, e)
             return Failure(RepositoryError(str(e)))
 
     def delete(self, key: str) -> Result[None, RepositoryError]:
         """Delete a memory and its strength record."""
         try:
+            self._db.execute("BEGIN IMMEDIATE")
             self._db.execute("DELETE FROM memory_strength WHERE memory_key = ?", (key,))
             self._db.execute("DELETE FROM memories WHERE key = ?", (key,))
             self._db.commit()
@@ -374,7 +374,6 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
                     now,
                 ),
             )
-            self._db.commit()
             logger.info(
                 "Version %d saved for memory %s (%s)",
                 version,
@@ -383,7 +382,6 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
             )
             return Success(None)
         except Exception as e:
-            self._db.rollback()
             logger.error("Failed to save version for %s: %s", memory_key, e)
             return Failure(RepositoryError(str(e)))
 
@@ -470,10 +468,8 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
                 "UPDATE memories SET last_consumed_at = ? WHERE key = ?",
                 (now, key),
             )
-            self._db.commit()
             return Success(None)
         except Exception as e:
-            self._db.rollback()
             logger.error("Failed to consume memory %s: %s", key, e)
             return Failure(RepositoryError(str(e)))
 
@@ -522,10 +518,8 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
                 "INSERT INTO search_log (query, mode, result_count, searched_at) VALUES (?, ?, ?, datetime('now'))",
                 (query, mode, result_count),
             )
-            self._db.commit()
             return Success(None)
         except Exception as e:
-            self._db.rollback()
             logger.error("Failed to log search: %s", e)
             return Failure(RepositoryError(str(e)))
 
@@ -637,11 +631,9 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
                 "UPDATE memories SET lifecycle_status = 'tombstoned', updated_at = ? WHERE key = ?",
                 (now, key),
             )
-            self._db.commit()
             logger.info("Memory tombstoned: %s", key)
             return Success(None)
         except Exception as e:
-            self._db.rollback()
             logger.error("Failed to tombstone memory %s: %s", key, e)
             return Failure(RepositoryError(str(e)))
 
@@ -682,11 +674,9 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
                 f"UPDATE memories SET {set_clause} WHERE key = ?",  # noqa: S608  # nosec B608
                 values,
             )
-            self._db.commit()
             logger.info("Validity window updated for memory %s", memory_key)
             return Success(None)
         except Exception as e:
-            self._db.rollback()
             logger.error("Failed to update validity window for %s: %s", memory_key, e)
             return Failure(RepositoryError(str(e)))
 
