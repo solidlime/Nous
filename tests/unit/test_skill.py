@@ -330,7 +330,7 @@ def test_skills_pre_installed():
 
     assert len(skills) >= 5, f"Expected at least 5 skills, got {len(skills)}"
     assert "auto-memory" in names, "Missing: auto-memory"
-    assert "auto-self-portrait" in names, "Missing: auto-self-portrait"
+    assert "image-gen" in names, "Missing: image-gen"
     assert "goal-coach" in names, "Missing: goal-coach"
     assert "mood-sync" in names, "Missing: mood-sync"
     assert "recall-weaver" in names, "Missing: recall-weaver"
