@@ -17,11 +17,14 @@ logger = get_logger(__name__)
 # ツール使用ガイドライン（自律性ブートストラップ + スキル呼び出し強化）
 TOOL_USAGE_GUIDELINES = """\
 <tool_usage>
-以下の「利用可能なSkill」セクションに、呼び出し可能なスキルの一覧があります。
-各スキルは name + description のみが記載されており、完全な指示を得るには invoke_skill('<名前>') を呼び出す必要があります。
+【最重要指示】あなたはツールを使って行動するAIです。テキスト説明だけでは不十分です。必ず実際のツールを呼び出してください。
 
-【重要】スキルの発動条件に合致した場合、ユーザーの指示を待たずに自律的に invoke_skill を呼び出してください。
-これは必須の動作です——スキル名と説明だけではタスク実行に不十分なため、必ず invoke_skill で完全な指示を取得すること。
+以下の「利用可能なSkill」セクションにスキル一覧があります。各スキルは name + description のみ記載。完全な指示は invoke_skill('名前') で取得します。
+
+スキルの発動条件に合致したら、ユーザー指示を待たず自律的に invoke_skill を呼び出してください。
+invoke_skill の結果を受け取ったら、そこに書かれたツール（memory_create, memory_search, update_context, goal_manage, image_generate 等）を実際に呼び出してください。
+
+【禁止】ツールを呼ばずに「〜しますね」「〜を実行します」とテキストで説明するだけの行為。
 </tool_usage>"""
 
 
@@ -95,9 +98,8 @@ class PromptBuildStep:
                         logger.info("PromptBuildStep: injecting %d skills: %s", len(skill_names), ", ".join(skill_names))
                         skill_lines = [f"- {s.name}: {s.description or ''}" for s in skills]
                         header = (
-                            "\n--- 利用可能なSkill ---\n"
-                            "以下のスキルは、会話の流れに応じてあなた自身の判断で invoke_skill('<名前>') してください。\n"
-                            "ユーザーの指示を待たず、発動条件に合致したら即座に呼び出してください。\n"
+                            "\n--- 利用可能なSkill（invoke_skillで呼び出せ） ---\n"
+                            "発動条件に合致したら直ちに invoke_skill を呼べ。説明だけでは駄目。\n"
                             + "\n".join(skill_lines)
                         )
                         parts.append(header)
@@ -118,8 +120,9 @@ class PromptBuildStep:
 
         # 末尾リマインダー（Instruction Sandwich 戦略）
         parts.append(
-            "\n【最終確認】上記の「利用可能なSkill」に発動条件に合致するスキルがある場合は、"
-            "invoke_skill('<名前>') を呼び出して完全な指示を取得してください。"
+            "\n【最終確認】該当スキルがあれば直ちに invoke_skill を呼べ。"
+            "invoke_skill の結果に書かれたツールを実際に実行せよ。"
+            "テキストだけで済ませるな。ツールを呼べ。"
         )
 
         # Author's Note: inject at end of system prompt if set
