@@ -99,6 +99,7 @@ function _endSession(reason) {
   if (session.seekBar && document.contains(session.seekBar)) session.seekBar.remove();
   if (session.btn && document.contains(session.btn)) {
     session.btn.innerHTML = '<i data-lucide="volume-2"></i>';
+    if (typeof lucide !== "undefined") lucide.createIcons();
   }
   _playbackSession = null;
 }
@@ -109,6 +110,9 @@ function _showPlayPrompt(containerDiv, audio, btn) {
   prompt.className = "tts-play-prompt";
   prompt.textContent = "▶ タップで再生";
   prompt.onclick = function() {
+    // オーディオコンテキストのロック解除を再試行＆audio状態リセット
+    _unlockAutoplay();
+    try { audio.load(); } catch(e) {}
     prompt.remove();
     audio.play().then(function() {
       if (!containerDiv.querySelector(".tts-seekbar")) {
@@ -280,6 +284,10 @@ function autoPlayTts(text) {
         var msgEls = document.querySelectorAll("#chat-messages .chat-msg");
         var msgEl = msgEls.length ? msgEls[msgEls.length - 1] : null;
         var ttsBtn = msgEl ? msgEl.querySelector(".chat-tts-btn") : null;
+        // Store cache URL on message element for reuse
+        if (msgEl && resp.audio_url) {
+          msgEl.dataset.ttsCacheUrl = resp.audio_url;
+        }
         _setupAudio(audio, audioUrl, ttsBtn, msgEl);
       }
     })
@@ -294,7 +302,16 @@ async function playTts(btn, text) {
   // Gate: skip if voice is disabled
   var _ve = document.getElementById("chat-voice-enabled");
   if (_ve && !_ve.checked) return;
-  
+
+  // TTSキャッシュ再利用: 同じメッセージの音声が既に生成済みならAPIスキップ
+  var msgDiv = btn.closest(".chat-msg");
+  var cachedUrl = msgDiv && msgDiv.dataset.ttsCacheUrl;
+  if (cachedUrl && !_playbackSession) {
+    var audio = new Audio(cachedUrl);
+    _setupAudio(audio, cachedUrl, btn, msgDiv);
+    return;
+  }
+
   // 一時停止中の再開
   if (_playbackSession && _playbackSession.btn === btn && btn.classList.contains("playing")) {
     if (_playbackSession.audio.paused) {
