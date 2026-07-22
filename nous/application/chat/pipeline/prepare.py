@@ -49,20 +49,6 @@ def _build_relationship_context(ctx: AppContext) -> str:
     ).fetchone()
     active_days = row[0] if row else 0
 
-    # Time since last conversation
-    row = db.execute(
-        "SELECT value FROM context_state WHERE persona = ? AND key = 'last_conversation_time' AND valid_until IS NULL",
-        (persona,),
-    ).fetchone()
-    last_time_str = row[0] if row else None
-    days_since_last = None
-    if last_time_str:
-        try:
-            last_at = datetime.fromisoformat(last_time_str)
-            days_since_last = (now - last_at.replace(tzinfo=UTC)).days
-        except (ValueError, TypeError):
-            pass
-
     lines = ["\n--- 関係性コンテキスト ---"]
     if days_known == 0:
         lines.append("このユーザーと初めて会話する。")
@@ -70,18 +56,6 @@ def _build_relationship_context(ctx: AppContext) -> str:
         lines.append(f"昨日から知り合った。これまで {active_days} 日会話した。")
     else:
         lines.append(f"{days_known}日前から知り合い。これまで {active_days} 日会話した。")
-
-    if days_since_last is not None:
-        if days_since_last == 0:
-            pass  # Same day, skip
-        elif days_since_last == 1:
-            lines.append("前回の会話から1日経過。")
-        elif days_since_last < 7:
-            lines.append(f"前回の会話から{days_since_last}日経過。")
-        elif days_since_last < 30:
-            lines.append(f"前回の会話から{days_since_last}日経過。しばらく話していない。")
-        else:
-            lines.append(f"前回の会話から{days_since_last}日経過。長い間話していなかった。")
 
     return "\n".join(lines)
 
@@ -374,6 +348,17 @@ async def _build_context_section(
     compress_mode が "light"/"normal"/"aggressive" の場合は、
     重いセクション（reflection insight, mental model, session summary, emotion history）をスキップする。
     """
+    def _sanitize_text(text: str) -> str:
+        """文字化けを含む可能性のある文字列をサニタイズする。
+        UTF-8として不正なバイト列を含む場合は、安全な置換文字に置き換える。"""
+        if not text:
+            return text
+        try:
+            text.encode('utf-8').decode('utf-8')
+            return text
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            return text.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+
     t1: list[str] = []  # Tier 1: 現在の状態
     t2: list[str] = []  # Tier 2: 身体・環境
     t3: list[str] = []  # Tier 3: 参照情報
@@ -476,7 +461,9 @@ async def _build_context_section(
             if reflection_result.is_ok and reflection_result.value:
                 insights = [r.content for r in reflection_result.value[:3] if r.content]
                 if insights:
-                    t3.append("最近の洞察:\n" + "\n".join(f"  💡 {i}" for i in insights))
+                    sanitized = [_sanitize_text(i) for i in insights if i]
+                    if sanitized:
+                        t3.append("最近の洞察:\n" + "\n".join(f"  💡 {i}" for i in sanitized))
         except Exception as e:
             logger.debug("Failed to fetch reflections: %s", e)
 
@@ -487,7 +474,9 @@ async def _build_context_section(
             if mm_result.is_ok and mm_result.value:
                 patterns = [m.content for m in mm_result.value[:3] if m.content]
                 if patterns:
-                    t3.append("行動パターン:\n" + "\n".join(f"  🧩 {p}" for p in patterns))
+                    sanitized = [_sanitize_text(p) for p in patterns if p]
+                    if sanitized:
+                        t3.append("行動パターン:\n" + "\n".join(f"  🧩 {p}" for p in sanitized))
         except Exception as e:
             logger.debug("Failed to fetch mental models: %s", e)
 
@@ -498,7 +487,9 @@ async def _build_context_section(
             if summary_result.is_ok and summary_result.value:
                 summaries = [s.content for s in summary_result.value[:2] if s.content]
                 if summaries:
-                    t3.append("最近の会話要約:\n" + "\n".join(f"  📝 {s}" for s in summaries))
+                    sanitized = [_sanitize_text(s) for s in summaries if s]
+                    if sanitized:
+                        t3.append("最近の会話要約:\n" + "\n".join(f"  📝 {s}" for s in sanitized))
         except Exception as e:
             logger.debug("Failed to fetch session summaries: %s", e)
 
@@ -508,7 +499,7 @@ async def _build_context_section(
             equipped = {k: v for k, v in equip_result.value.items() if v}
             if equipped:
                 equip_lines = "\n".join(f"  {slot}: {item}" for slot, item in equipped.items())
-                t3.append(f"装備:\n{equip_lines}")
+                t3.append(f"あなたの現在の装備:\n{equip_lines}")
     except Exception as e:
         logger.debug("Failed to fetch equipment: %s", e)
 
@@ -517,7 +508,7 @@ async def _build_context_section(
     if t2:
         result += "\n\n【身体・環境】\n" + "\n".join(t2)
     if t3:
-        result += "\n\n【参照情報】\n" + "\n".join(t3)
+        result += "\n\n【あなたの記憶と洞察】\n" + "\n".join(t3)
     return result
 
 
@@ -586,21 +577,23 @@ def _build_time_context(state, decay_note: str = "") -> str:
     if last_conv:
         if last_conv.tzinfo is None:
             last_conv = last_conv.replace(tzinfo=ZoneInfo(tz))
-        elapsed_hours = (now_local - last_conv).total_seconds() / 3600.0
+        elapsed_seconds = (now_local - last_conv).total_seconds()
 
-        if elapsed_hours > 0.25:  # 15分以上のギャップから表示
-            gap = _classify_gap(elapsed_hours)
+        if elapsed_seconds > 900:  # 15分以上のギャップから表示
+            gap = _classify_gap(elapsed_seconds / 3600.0)
             if gap:
-                # 経過時間の表示
-                if elapsed_hours >= 720:
-                    time_str = f"{elapsed_hours / 720:.0f} months"
-                elif elapsed_hours >= 24:
-                    time_str = f"{elapsed_hours / 24:.0f} days"
-                elif elapsed_hours >= 1:
-                    time_str = f"{elapsed_hours:.0f} hours"
+                # 経過時間の表示（日本語、時間/分単位）
+                if elapsed_seconds >= 86400:  # 24時間以上
+                    days = elapsed_seconds / 86400
+                    if days >= 30:
+                        time_str = f"約{days / 30:.0f}ヶ月"
+                    else:
+                        time_str = f"約{days:.0f}日"
+                elif elapsed_seconds >= 3600:
+                    time_str = f"約{elapsed_seconds / 3600:.0f}時間"
                 else:
-                    time_str = f"{elapsed_hours * 60:.0f} minutes"
-                lines.append(f"Time since last conversation: {time_str} ago ({gap})")
+                    time_str = f"約{elapsed_seconds / 60:.0f}分"
+                lines.append(f"前回の会話から {time_str} 経過（{gap}）")
                 instruction = _GAP_INSTRUCTIONS.get(gap, "")
                 if instruction:
                     lines.append(instruction)
