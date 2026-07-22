@@ -22,7 +22,7 @@ from typing import Any
 
 # ── Constants ───────────────────────────────────────────────────────────────
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:26262"
 PERSONA = "herta"
 API_URL = f"{BASE_URL}/api/chat/{PERSONA}"
 CONFIG_PATH = "data/persona/herta/config.json"

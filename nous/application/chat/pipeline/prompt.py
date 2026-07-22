@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from nous.domain.language import LanguageResolver
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -17,19 +16,19 @@ logger = get_logger(__name__)
 # ツール使用ガイドライン（自律性ブートストラップ + スキル呼び出し強化）
 TOOL_USAGE_GUIDELINES = """\
 <tool_usage>
-【最重要指示】あなたはツールを使って行動するAIです。テキスト説明だけでは不十分です。必ず実際のツールを呼び出してください。
+【最重要指示】あなたは以下の能力を使えます。テキスト説明だけで済ませず、必ず実際に能力を発動してください。
 
 以下の「利用可能なSkill」セクションにスキル一覧があります。各スキルは name + description のみ記載。発動条件に合致したら、ユーザー指示を待たず自律的に invoke_skill を呼び出してください。
 
-invoke_skill の結果には、使用すべきツールと具体的な手順が記されています。その指示に忠実に従ってください。
+invoke_skill の結果には、従うべき手順・判断基準・ワークフローが記されています。その内容に忠実に従ってください。
 
-【禁止】ツールを呼ばずに「〜しますね」「〜を実行します」とテキストで説明するだけの行為。
+【禁止】能力を発動せずに「〜しますね」「〜を実行します」とテキストで説明するだけの行為。
 
 <cross_skill>
 いずれかのスキル・ツールを発動したら、関連する他のスキル・ツールも確認・発動してください。単独で終わらせないでください。
-各スキルの完全な指示には連鎖すべきツール・スキルが記載されています。invoke_skill の結果を読み、指示された連鎖に従ってください。
+各スキルの完全な指示には連鎖すべき後続スキルが記載されています。invoke_skill の結果を読み、指示された連鎖に従ってください。
 
-【絶対禁止】ツール発動を「〜しますね」などと予告する行為。黙って実行し、結果だけを自然に提示してください。
+【絶対禁止】能力発動を「〜しますね」などと予告する行為。黙って実行し、結果だけを自然に提示してください。
 【画像生成レート制限】image_generate は同一レスポンス内で最大1回まで。既に生成済みのターンでは追加生成しないこと。
 </cross_skill>
 </tool_usage>"""
@@ -53,12 +52,6 @@ class PromptBuildStep:
 
         base_system = config.system_prompt or f"あなたは{persona}です。"
         parts = [base_system]
-
-        # 言語指示を注入（ADR-001）
-        resolver = LanguageResolver(config)
-        lang = resolver.resolve(user_message=turn_ctx.user_message)
-        lang_directive = f"[System Directive] Always respond in {lang}. All output must be in {lang}."
-        parts.insert(1, lang_directive)
 
         # --- ツール使用ガイドライン ---
         parts.append(f"\n{TOOL_USAGE_GUIDELINES}")
@@ -121,16 +114,12 @@ class PromptBuildStep:
             parts.append(f"\n{turn_ctx.time_context}")
 
         if turn_ctx.context_section:
-            parts.append(f"\n--- ペルソナ状態・コンテキスト ---\n{turn_ctx.context_section}")
+            parts.append(f"\n--- あなたの現在の状態 ---\n{turn_ctx.context_section}")
         if turn_ctx.related_memories:
             parts.append(f"\n--- 関連記憶 ---\n{turn_ctx.related_memories}")
 
         # 末尾リマインダー（Instruction Sandwich 戦略）
-        parts.append(
-            "\n【最終確認】該当スキルがあれば直ちに invoke_skill を呼べ。"
-            "invoke_skill の結果に書かれたツールを実際に実行せよ。"
-            "テキストだけで済ませるな。ツールを呼べ。"
-        )
+        parts.append("\n【最終確認】必要な能力があれば黙って発動せよ。")
 
         # Author's Note: inject at end of system prompt if set
         author_note = getattr(turn_ctx, "author_note", None)

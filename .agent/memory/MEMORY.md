@@ -90,3 +90,9 @@
 - **DB設計の注意点**: `_resolve_last_conversation_time()` は memories テーブルの最新タイムスタンプを最優先。context_state の値は memories が存在しない場合のみ参照される。テスト時は memories をクリア＋古いエントリ挿入が必要。
 - **発見**: ツール呼出（ツールチェーン）とテキスト応答の一貫性が小規模モデルでは保証されない。ツールレベルでは sadness 検出＋悲しげ画像生成が成功しても、テキストは汎用挨拶になる場合がある。モデル品質に依存する課題。
 - **設計検証完了項目**: ペルソナ非依存パイプライン、mood-sync時間トリガー、クロススキル連鎖、画像生成レート制限、relationship_decay、全部正常動作。
+
+## テストモデル: openrouter/free (2026-07-22)
+- **方針**: 特定モデル固定ではなく `openrouter/free` で自動ルーティング。OpenRouterのAuto Exactoがツール呼出成功率で最適プロバイダを選択する。
+- **理由**: 無料モデルは予告なく終了する（hy3:free, qwen3-coder:free が404になった実績あり）。rate limit回避にも自動ルーティングが有効。
+- **設定**: `data/persona/{persona}/config.json` の `model` を `"openrouter/free"` に（.gitignore対象のためローカルのみ）。
+- **補足**: 特定モデルの動作検証が必要な場合は一時的に明示指定する。普段は自動ルーティング。

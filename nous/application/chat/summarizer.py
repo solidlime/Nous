@@ -101,6 +101,20 @@ async def summarize_and_store(
     if not summary:
         return None
 
+    # Byte-level BPE トークナイザ由来の文字化けチェック
+    # N'Ko, Mongolian, PUA, Surrogates の異常Unicodeブロック検出
+    _SUSPICIOUS_RANGES = [
+        (0x07C0, 0x07FF),   # N'Ko
+        (0x1800, 0x18AF),   # Mongolian
+        (0xE000, 0xF8FF),   # Private Use Area
+        (0xD800, 0xDFFF),   # Surrogates
+    ]
+    suspicious = [ch for ch in summary if any(lo <= ord(ch) <= hi for lo, hi in _SUSPICIOUS_RANGES)]
+    if suspicious and len(suspicious) / len(summary) > 0.1:
+        logger.warning("SessionSummarizer: discarding summary with %.0f%% suspicious chars",
+                       len(suspicious) / len(summary) * 100)
+        return None
+
     ctx.memory_service.create_memory(
         content=summary,
         importance=0.65,

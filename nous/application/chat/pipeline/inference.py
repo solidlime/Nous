@@ -92,7 +92,7 @@ class InferenceStep:
                 _debug_dir = "/data/tmp"
                 os.makedirs(_debug_dir, exist_ok=True)
                 _path = os.path.join(_debug_dir, f"prompt_{_ts}.txt")
-                with open(_path, "w") as _f:
+                with open(_path, "w", encoding="utf-8") as _f:
                     _f.write(f"=== SYSTEM PROMPT ({len(turn_ctx.system_prompt)} chars) ===\n")
                     _f.write(turn_ctx.system_prompt)
                     _f.write(f"\n\n=== MESSAGES ({len(messages)} total) ===\n")

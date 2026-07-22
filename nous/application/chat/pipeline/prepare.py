@@ -22,6 +22,20 @@ logger = get_logger(__name__)
 
 _RECENCY_LAMBDA = 0.5  # half-life ≈ 1.4 days
 
+# Byte-level BPEトークナイザ由来の文字化けで発生しうる異常Unicodeブロック。
+# N'Ko, Mongolian, PUA, Surrogates — いずれも通常の日本語/英語テキストでは出現しない。
+_SUSPICIOUS_RANGES: list[tuple[int, int]] = [
+    (0x07C0, 0x07FF),   # N'Ko
+    (0x1800, 0x18AF),   # Mongolian
+    (0xE000, 0xF8FF),   # Private Use Area
+    (0xD800, 0xDFFF),   # Surrogates (lone surrogates)
+]
+
+
+def _SUSPICIOUS_CP(cp: int) -> bool:
+    """Return True if the Unicode code point falls in a known suspicious block."""
+    return any(lo <= cp <= hi for lo, hi in _SUSPICIOUS_RANGES)
+
 
 def _build_relationship_context(ctx: AppContext) -> str:
     """Build relationship context summary from interaction history.
@@ -349,15 +363,26 @@ async def _build_context_section(
     重いセクション（reflection insight, mental model, session summary, emotion history）をスキップする。
     """
     def _sanitize_text(text: str) -> str:
-        """文字化けを含む可能性のある文字列をサニタイズする。
-        UTF-8として不正なバイト列を含む場合は、安全な置換文字に置き換える。"""
+        """LLMのByte-level BPEトークナイザ由来の文字化けを検出・除去する。
+        通常の日本語/英語テキストでは出現しない異常Unicodeブロック（N'Ko, Mongolian,
+        PUA, Surrogates）の文字が10%以上ならテキスト全体を破棄、それ未満なら該当文字のみ除去。"""
         if not text:
             return text
-        try:
-            text.encode('utf-8').decode('utf-8')
-            return text
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            return text.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+        suspicious = [
+            ch for ch in text
+            if _SUSPICIOUS_CP(ord(ch))
+        ]
+        if suspicious:
+            ratio = len(suspicious) / len(text)
+            if ratio > 0.1:
+                logger.warning("_sanitize_text: discarding text with %.0f%% suspicious chars (%d/%d)",
+                               ratio * 100, len(suspicious), len(text))
+                return ""
+            sanitized = "".join(ch for ch in text if not _SUSPICIOUS_CP(ord(ch)))
+            logger.info("_sanitize_text: removed %d suspicious chars (%.0f%%)",
+                        len(text) - len(sanitized), ratio * 100)
+            return sanitized
+        return text
 
     t1: list[str] = []  # Tier 1: 現在の状態
     t2: list[str] = []  # Tier 2: 身体・環境
