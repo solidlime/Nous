@@ -312,12 +312,9 @@ class CompressStep:
                     result.append(f"--- {header}\n" + "\n".join(kept))
                     trimmed = True
                     continue
-            elif "利用可能なSkill" in sec[:20]:
-                # Truncate long skill descriptions to ~500 chars
-                if len(sec) > 600:
-                    result.append(f"--- {sec[:500]}...")
-                    trimmed = True
-                    continue
+            # NOTE: 利用可能なSkill セクションはスキル発見層であり絶対保護対象。
+            # スキル情報の切り捨てはツール発見を阻害し、自律的 invoke_skill を不可能にする。
+            # 業界標準（Anthropic/OpenAI/LangChain）に従い、コア指示と同様に保護する。
             result.append(f"--- {sec}")
 
         if trimmed:
