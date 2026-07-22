@@ -88,3 +88,89 @@ def send_chat(message: str) -> list[dict]:
             return read_sse_stream(resp)
     except Exception as e:
         return [{"type": "error", "message": str(e)}]
+
+
+# ── Event Analysis ──────────────────────────────────────────────────────────
+
+def collect_tool_calls(events: list[dict]) -> list[dict]:
+    """Extract all tool_call events from SSE event list."""
+    return [e for e in events if e.get("type") == "tool_call"]
+
+
+def get_text_response(events: list[dict]) -> str:
+    """Concatenate text_delta content."""
+    return "".join(e.get("content", "") for e in events
+                   if e.get("type") == "text_delta")
+
+
+def check_invoke_skill_chain(
+    events: list[dict], expected_skill: str, expected_tool: str,
+) -> dict:
+    """Check if invoke_skill → expected_tool chain occurred."""
+    result = {
+        "invoke_skill_called": False,
+        "invoke_skill_args": None,
+        "target_tool_called": False,
+        "target_tool_args": None,
+        "error": None,
+    }
+    for ev in events:
+        t = ev.get("type", "")
+        if t == "error":
+            result["error"] = ev.get("message", "")
+        elif t == "tool_call":
+            name = ev.get("name", "")
+            inp = ev.get("input", {})
+            if name == "invoke_skill":
+                skill_name = inp.get("name", "") if isinstance(inp, dict) else ""
+                if skill_name == expected_skill:
+                    result["invoke_skill_called"] = True
+                    result["invoke_skill_args"] = inp
+            elif name == expected_tool:
+                result["target_tool_called"] = True
+                result["target_tool_args"] = inp
+    return result
+
+
+def check_tool_called(events: list[dict], tool_name: str) -> bool:
+    """Simple check: was a given tool called at least once?"""
+    return any(
+        ev.get("type") == "tool_call" and ev.get("name") == tool_name
+        for ev in events
+    )
+
+
+# ── Emotion Detection for Test 3 ────────────────────────────────────────────
+
+EMOTION_KEYWORDS = [
+    "sadness", "loneliness", "disappointment",
+    "sad", "lonely", "disappointed",
+]
+
+
+def check_emotion_in_update_context(events: list[dict]) -> dict:
+    """Check if update_context was called with sadness/loneliness/disappointment."""
+    result = {
+        "invoke_mood_sync_called": False,
+        "update_context_called": False,
+        "emotion_found": False,
+        "emotion_value": None,
+        "error": None,
+    }
+    for ev in events:
+        t = ev.get("type", "")
+        if t == "error":
+            result["error"] = ev.get("message", "")
+        elif t == "tool_call":
+            name = ev.get("name", "")
+            inp = ev.get("input", {})
+            if name == "invoke_skill" and isinstance(inp, dict) and inp.get("name") == "mood-sync":
+                result["invoke_mood_sync_called"] = True
+            elif name == "update_context":
+                result["update_context_called"] = True
+                raw = inp.get("emotion", "")
+                if raw:
+                    result["emotion_value"] = raw
+                    if any(kw in raw.lower() for kw in EMOTION_KEYWORDS):
+                        result["emotion_found"] = True
+    return result
