@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from nous.application.chat.events import (
@@ -83,6 +85,26 @@ class InferenceStep:
             current_text = ""
             _seg_text = ""  # text accumulator for segment ordering
             _finish_reason = ""  # set by DoneEvent handler inside stream loop
+
+            # Debug: capture the full prompt sent to LLM
+            if getattr(config, "debug_mode", False):
+                _ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                _debug_dir = "/tmp/nous_debug"
+                os.makedirs(_debug_dir, exist_ok=True)
+                _path = os.path.join(_debug_dir, f"prompt_{_ts}.txt")
+                with open(_path, "w") as _f:
+                    _f.write(f"=== SYSTEM PROMPT ({len(turn_ctx.system_prompt)} chars) ===\n")
+                    _f.write(turn_ctx.system_prompt)
+                    _f.write(f"\n\n=== MESSAGES ({len(messages)} total) ===\n")
+                    for _i, _m in enumerate(messages):
+                        role = _m.role if hasattr(_m, 'role') else '?'
+                        content = str(_m.content)[:2000] if hasattr(_m, 'content') else str(_m)[:2000]
+                        _f.write(f"\n[{_i}] {role}: {content}\n")
+                    _f.write(f"\n\n=== TOOLS ({len(all_tools)} total) ===\n")
+                    for _t in all_tools:
+                        name = _t.get("function", {}).get("name", "?") if isinstance(_t, dict) else getattr(_t, "name", "?")
+                        _f.write(f"  - {name}\n")
+                logger.info("Debug prompt saved: %s", _path)
 
             async for event in provider.stream(
                 messages=messages,
