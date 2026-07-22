@@ -604,6 +604,8 @@ def _build_time_context(state, decay_note: str = "") -> str:
                 instruction = _GAP_INSTRUCTIONS.get(gap, "")
                 if instruction:
                     lines.append(instruction)
+                # 放置を認識させる行動指示（事実フレーム、感情指定なし）
+                lines.append("放置されたことを考慮した応答をせよ。")
 
     # 減衰通知（主観的表現）
     if decay_note:
