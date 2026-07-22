@@ -106,8 +106,20 @@ class ChatService:
 
             session_messages = session.get_labeled_messages()
 
-            # CompressStep: コンテキスト圧縮（トークン予算超過時にシステムプロンプト・会話履歴を縮める）
+            # CompressStep: コンテキスト圧縮（トークン予算超過 / max_stored_messages 超過時に圧縮）
             messages = await CompressStep().run(ctx, config, turn_ctx, session_messages)
+
+            # max_stored_messages によるメッセージ数制限（LLMMessage数でカウント）
+            max_msgs = config.max_stored_messages
+            if len(messages) > max_msgs:
+                logger.info(
+                    "Truncated session messages: %d → %d (max_stored_messages=%d)",
+                    len(messages),
+                    max_msgs,
+                    max_msgs,
+                )
+                messages = messages[-max_msgs:]
+
             # Notify frontend if compression occurred
             comp_info = getattr(turn_ctx, "_compression_info", None)
             if comp_info:

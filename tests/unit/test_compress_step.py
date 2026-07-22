@@ -255,10 +255,13 @@ class TestCompressStep:
 
     @pytest.mark.asyncio
     async def test_tool_results_cleared(self):
-        """Old tool results should be replaced with [cleared] marker."""
+        """Old tool results should be replaced with status summary."""
         from nous.application.chat.pipeline.compress import CompressStep
 
-        config = _make_chat_config(context_max_tokens=200)
+        config = _make_chat_config(
+            context_max_tokens=200,
+            context_use_llm_summary=False,  # Disable Stage 3 to isolate Stage 2
+        )
         ctx = _dummy_app_context()
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=5))
         msgs = _messages_with_tool_results()
@@ -268,11 +271,11 @@ class TestCompressStep:
 
         result = await CompressStep().run(ctx, config, tctx, msgs)
 
-        cleared = [m for m in result if m.role == "tool" and "cleared" in (m.content or "")]
-        assert len(cleared) >= 1, f"Expected at least 1 cleared tool result, got {len(cleared)}"
+        replaced = [m for m in result if m.role == "tool" and "ツール実行" in (m.content or "")]
+        assert len(replaced) >= 1, f"Expected at least 1 replaced tool result, got {len(replaced)}"
 
-        # Most recent tool results should be preserved
-        recent_tools = [m for m in result[-10:] if m.role == "tool" and "cleared" not in (m.content or "")]
+        # Most recent tool results should be preserved (intact content)
+        recent_tools = [m for m in result[-10:] if m.role == "tool" and "x" in (m.content or "")]
         assert len(recent_tools) >= 1, "Recent tool results should be preserved"
 
     @pytest.mark.asyncio
@@ -280,7 +283,11 @@ class TestCompressStep:
         """Old messages should be truncated and marked with [旧]."""
         from nous.application.chat.pipeline.compress import CompressStep
 
-        config = _make_chat_config(context_max_tokens=200, context_keep_recent_turns=1)
+        config = _make_chat_config(
+            context_max_tokens=200,
+            context_keep_recent_turns=1,
+            context_use_llm_summary=False,  # Disable Stage 3 to isolate Stage 4
+        )
         ctx = _dummy_app_context()
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=5))
         msgs = _long_messages(num_pairs=10)
@@ -303,19 +310,22 @@ class TestCompressStep:
 
     @pytest.mark.asyncio
     async def test_compression_preserves_tool_call_ids(self):
-        """Cleared tool results should keep their tool_call_id for API compatibility."""
+        """Replaced tool results should keep their tool_call_id for API compatibility."""
         from nous.application.chat.pipeline.compress import CompressStep
 
-        config = _make_chat_config(context_max_tokens=200)
+        config = _make_chat_config(
+            context_max_tokens=200,
+            context_use_llm_summary=False,  # Disable Stage 3 to isolate Stage 2
+        )
         ctx = _dummy_app_context()
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=5))
         msgs = _messages_with_tool_results()
 
         result = await CompressStep().run(ctx, config, tctx, msgs)
 
-        cleared = [m for m in result if m.role == "tool" and "cleared" in (m.content or "")]
-        for msg in cleared:
-            assert msg.tool_call_id is not None, "Cleared tool results must retain tool_call_id"
+        replaced = [m for m in result if m.role == "tool" and "ツール実行" in (m.content or "")]
+        for msg in replaced:
+            assert msg.tool_call_id is not None, "Replaced tool results must retain tool_call_id"
 
     @pytest.mark.asyncio
     async def test_conversation_structure_preserved(self):
@@ -387,23 +397,24 @@ class TestCompressStep:
         # But tool results right at the end should be fine
 
     @pytest.mark.asyncio
-    async def test_compress_history_true_clears_tool_results(self):
-        """When context_compress_history=True and over budget, tool results get cleared."""
+    async def test_compress_history_true_replaces_tool_results(self):
+        """When context_compress_history=True and over budget, tool results get replaced."""
         from nous.application.chat.pipeline.compress import CompressStep
 
         config = _make_chat_config(
             context_max_tokens=1,  # Always over budget
             context_compress_history=True,
             context_compress_system_prompt=True,
+            context_use_llm_summary=False,  # Disable Stage 3 to isolate Stage 2
         )
         ctx = _dummy_app_context()
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=20))
         msgs = _messages_with_tool_results()
 
         result = await CompressStep().run(ctx, config, tctx, msgs)
-        # Some tool results should be cleared
-        cleared = [m for m in result if m.role == "tool" and "cleared" in (m.content or "")]
-        assert len(cleared) >= 1
+        # Some tool results should be replaced with status summary
+        replaced = [m for m in result if m.role == "tool" and "ツール実行" in (m.content or "")]
+        assert len(replaced) >= 1
 
     def test_trim_system_prompt_skill_section_truncated(self):
         """Long skill descriptions should be truncated."""
@@ -424,7 +435,7 @@ class TestCompressStep:
         assert len(result) < len(prompt) or "..." in result
 
     def test_clear_tool_results_with_few_assistant_msgs(self):
-        """When there are <= 3 assistant messages, no clearing happens."""
+        """When there are <= 3 assistant messages, no replacement happens."""
         from nous.application.chat.pipeline.compress import CompressStep
 
         msgs = [
@@ -436,10 +447,10 @@ class TestCompressStep:
         ]
         result = CompressStep._clear_old_tool_results(msgs)
         assert len(result) == len(msgs)
-        # No tool messages should be cleared
+        # No tool messages should be replaced
         for msg in result:
             if msg.role == "tool":
-                assert "cleared" not in (msg.content or "")
+                assert "ツール実行" not in (msg.content or "")
 
     def test_truncate_old_messages_short_content(self):
         """Messages with content <= 300 chars should not be truncated."""
