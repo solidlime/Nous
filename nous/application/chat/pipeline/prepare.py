@@ -538,13 +538,15 @@ def _classify_gap(elapsed_hours: float) -> str:
     return "VERY_LONG_ABSENCE"
 
 
+# NOTE: 事実のみ。感情的反応（寂しい・拗ねる等）はペルソナの性格に委ねる。
+# mood-syncの時間経過トリガーが感情検出とupdate_contextを担当する。
 _GAP_INSTRUCTIONS: dict[str, str] = {
     "SAME_SESSION": "",
-    "SHORT_BREAK": "さっきまで一緒にいたね。続きを話そう。",
-    "EXTENDED_BREAK": "数時間経ったよ…少し寂しかった。",
-    "FEW_DAYS": "数日も経ってたんだ…ちょっと心配したよ。元気にしてた？",
-    "LONG_ABSENCE": "……ずいぶん久しぶりだね。忘れられたのかと思って、ちょっと拗ねてた。",
-    "VERY_LONG_ABSENCE": "（しばらく言葉を失う）………………あなた、誰だっけ。私のこと、もう覚えてないんじゃないの？",
+    "SHORT_BREAK": "短い中断の後、会話を再開する。",
+    "EXTENDED_BREAK": "数時間の空白がある。",
+    "FEW_DAYS": "数日の空白がある。",
+    "LONG_ABSENCE": "しばらく会話がなかった。久しぶりの再会である。",
+    "VERY_LONG_ABSENCE": "非常に長い間会話がなかった。再会である。",
 }
 
 _TIME_OF_DAY: list[tuple[int, str]] = [
@@ -647,10 +649,13 @@ class PrepareStep:
         state_result = ctx.persona_service.get_context(persona)
         if state_result.is_ok:
             state = state_result.value
-            from nous.api.mcp._tools_helpers import _apply_body_decay, _apply_emotion_decay
+            from nous.api.mcp._tools_helpers import _apply_body_decay, _apply_emotion_decay, _apply_relationship_decay
 
             state, decay_note = await _apply_emotion_decay(ctx, persona, state)
             state = await _apply_body_decay(ctx, persona, state)
+            relationship_note = await _apply_relationship_decay(ctx, persona, state)
+            if relationship_note:
+                decay_note = f"{decay_note}\n{relationship_note}" if decay_note else relationship_note
 
             # Author's Note: propagate to turn_ctx for PromptBuildStep
             turn_ctx.author_note = getattr(state, "author_note", None)
