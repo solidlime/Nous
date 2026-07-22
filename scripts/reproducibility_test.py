@@ -374,3 +374,62 @@ def docker_restart():
         time.sleep(10)
     except FileNotFoundError:
         print("  ⚠️  docker コマンドが見つかりません。再起動をスキップ。")
+
+
+def run_test3() -> tuple[list[dict], int, int]:
+    """Run Test 3: time awareness (3 times)."""
+    print("\n--- テスト3: 時間認識 (3回) ---")
+    print("[DBセットアップ] 5日前のギャップを作成")
+    setup_time_gap_db()
+    docker_restart()
+
+    greetings = [
+        "おはよう、ヘルタ。",
+        "おはよう！久しぶり、ヘルタ。",
+        "やあヘルタ、元気してた？",
+    ]
+    total = len(greetings)
+    passed = 0
+    all_results: list[dict] = []
+
+    for i, msg in enumerate(greetings, start=1):
+        label = f"[{i}/{total}] time-gap #{i}"
+        events = send_chat(msg)
+        analysis = check_emotion_in_update_context(events)
+
+        invoke_ok = analysis["invoke_mood_sync_called"]
+        ctx_ok = analysis["update_context_called"]
+        emotion_ok = analysis["emotion_found"]
+        emotion_val = analysis.get("emotion_value", "")
+        passed_flag = invoke_ok and ctx_ok and emotion_ok
+
+        if passed_flag:
+            print(f"  {label}: ✅ update_context(emotion={emotion_val})")
+            passed += 1
+        else:
+            reasons = []
+            if not invoke_ok:
+                reasons.append("invoke_skill(mood-sync)未呼出")
+            if not ctx_ok:
+                reasons.append("update_context未呼出")
+            if not emotion_ok:
+                reasons.append(f"感情検出なし(emotion={emotion_val})")
+            if analysis.get("error"):
+                reasons.append(f"error={analysis['error']}")
+            print(f"  {label}: ❌ {'/'.join(reasons)}")
+            calls = collect_tool_calls(events)
+            if calls:
+                names = [f"{c.get('name','?')}" for c in calls]
+                print(f"          actual: {', '.join(names)}")
+            text = get_text_response(events)[:120]
+            if text:
+                print(f"          💬 {text}...")
+
+        all_results.append({
+            "rep": i, "passed": passed_flag,
+            "analysis": analysis, "prompt": msg,
+        })
+        if i < total:
+            time.sleep(TEST_INTERVAL)
+
+    return all_results, passed, total
