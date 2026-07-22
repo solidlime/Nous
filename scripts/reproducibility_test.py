@@ -232,7 +232,7 @@ SKILL_TEST_CASES: list[dict] = [
 
 def run_test1() -> tuple[list[dict], int, int]:
     """Run Test 1: single-skill autonomous invocation (15 tests)."""
-    print("\n--- テスト1: 単一スキル自律呼出 (5種×3回) ---")
+    print("\n--- テスト1: 単一スキル自律呼出 (5種×3回) ---", flush=True)
     all_results: list[dict] = []
     passed = 0
     total = sum(len(tc["prompts"]) for tc in SKILL_TEST_CASES)
@@ -251,7 +251,7 @@ def run_test1() -> tuple[list[dict], int, int]:
             passed_flag = invoke_ok and tool_ok
 
             if passed_flag:
-                print(f"  {label}: ✅ invoke_skill→{expected_tool}")
+                print(f"  {label}: ✅ invoke_skill→{expected_tool}", flush=True)
                 passed += 1
             else:
                 reasons = []
@@ -261,11 +261,11 @@ def run_test1() -> tuple[list[dict], int, int]:
                     reasons.append(f"{expected_tool}未呼出")
                 if analysis.get("error"):
                     reasons.append(f"error={analysis['error']}")
-                print(f"  {label}: ❌ {'/'.join(reasons)}")
+                print(f"  {label}: ❌ {'/'.join(reasons)}", flush=True)
                 calls = collect_tool_calls(events)
                 if calls:
                     names = [f"{c.get('name','?')}" for c in calls]
-                    print(f"          actual: {', '.join(names)}")
+                    print(f"          actual: {', '.join(names)}", flush=True)
 
             all_results.append({
                 "skill": skill, "rep": rep_idx, "passed": passed_flag,
@@ -282,33 +282,33 @@ def run_test1() -> tuple[list[dict], int, int]:
 def print_summary_line(label: str, passed: int, total: int) -> None:
     """Print a summary line with percentage."""
     pct = (passed / total * 100) if total > 0 else 0.0
-    print(f"  結果: {passed}/{total} 合格 ({pct:.1f}%)")
+    print(f"  結果: {passed}/{total} 合格 ({pct:.1f}%)", flush=True)
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
 
 def main() -> int:
     """Run all reproducibility tests and print results."""
-    print("=" * 50)
-    print("           Nous スキル再現性テスト")
-    print("=" * 50)
-    print(f"モデル: {MODEL}")
-    print(f"API: {API_URL}")
-    print()
+    print("=" * 50, flush=True)
+    print("           Nous スキル再現性テスト", flush=True)
+    print("=" * 50, flush=True)
+    print(f"モデル: {MODEL}", flush=True)
+    print(f"API: {API_URL}", flush=True)
+    print(flush=True)
 
     # Test 1
     _, t1_passed, t1_total = run_test1()
-    print()
+    print(flush=True)
     print_summary_line("テスト1", t1_passed, t1_total)
 
     # Test 2
     _, t2_passed, t2_total = run_test2()
-    print()
+    print(flush=True)
     print_summary_line("テスト2", t2_passed, t2_total)
 
     # Test 3
     _, t3_passed, t3_total = run_test3()
-    print()
+    print(flush=True)
     print_summary_line("テスト3", t3_passed, t3_total)
 
     # Overall
@@ -316,10 +316,10 @@ def main() -> int:
     total_all = t1_total + t2_total + t3_total
     total_pct = (total_passed / total_all * 100) if total_all > 0 else 0.0
 
-    print()
-    print("=" * 50)
-    print(f"総合: {total_passed}/{total_all} 合格 ({total_pct:.1f}%)")
-    print("=" * 50)
+    print(flush=True)
+    print("=" * 50, flush=True)
+    print(f"総合: {total_passed}/{total_all} 合格 ({total_pct:.1f}%)", flush=True)
+    print("=" * 50, flush=True)
 
     return 0 if total_passed == total_all else 1
 
@@ -335,7 +335,7 @@ IMAGE_GEN_PROMPTS = [
 
 def run_test2() -> tuple[list[dict], int, int]:
     """Run Test 2: image generation (3 times)."""
-    print("\n--- テスト2: 画像生成 (3回) ---")
+    print("\n--- テスト2: 画像生成 (3回) ---", flush=True)
     all_results: list[dict] = []
     passed = 0
     total = len(IMAGE_GEN_PROMPTS)
@@ -346,16 +346,16 @@ def run_test2() -> tuple[list[dict], int, int]:
         tool_ok = check_tool_called(events, "image_generate")
 
         if tool_ok:
-            print(f"  {label}: ✅ image_generate")
+            print(f"  {label}: ✅ image_generate", flush=True)
             passed += 1
         else:
             calls = collect_tool_calls(events)
             if calls:
                 names = [f"{c.get('name','?')}" for c in calls]
-                print(f"  {label}: ❌ image_generate未呼出 → actual: {', '.join(names)}")
+                print(f"  {label}: ❌ image_generate未呼出 → actual: {', '.join(names)}", flush=True)
             else:
                 text = get_text_response(events)[:100]
-                print(f"  {label}: ❌ ツール呼出なし → 応答: {text}...")
+                print(f"  {label}: ❌ ツール呼出なし → 応答: {text}...", flush=True)
 
         all_results.append({
             "rep": i, "passed": tool_ok,
@@ -373,7 +373,7 @@ def setup_time_gap_db():
     """Set up 5-day gap in the DB for time awareness tests."""
     db_path = Path(DB_PATH)
     if not db_path.exists():
-        print(f"  ⚠️  DB not found at {DB_PATH}, creating...")
+        print(f"  ⚠️  DB not found at {DB_PATH}, creating...", flush=True)
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
     conn = sqlite3.connect(str(db_path))
@@ -383,14 +383,14 @@ def setup_time_gap_db():
     now_iso = datetime.now(JST).isoformat()
 
     conn.execute("DELETE FROM memories")
-    print("  🗑️  memories テーブルをクリア")
+    print("  🗑️  memories テーブルをクリア", flush=True)
 
     dummy_key = f"dummy_{uuid.uuid4().hex[:12]}"
     conn.execute(
         "INSERT INTO memories (key, content, created_at, updated_at) VALUES (?, ?, ?, ?)",
         (dummy_key, "Test memory from 5 days ago.", five_days_ago_iso, five_days_ago_iso),
     )
-    print(f"  📝 5日前のダミーmemoryを挿入: {dummy_key}")
+    print(f"  📝 5日前のダミーmemoryを挿入: {dummy_key}", flush=True)
 
     conn.execute(
         "UPDATE context_state SET valid_until = ? WHERE key = 'last_conversation_time' AND valid_until IS NULL",
@@ -400,33 +400,33 @@ def setup_time_gap_db():
         "INSERT INTO context_state (persona, key, value, valid_from) VALUES (?, ?, ?, ?)",
         (PERSONA, "last_conversation_time", five_days_ago_iso, now_iso),
     )
-    print("  📝 last_conversation_time を5日前に設定")
+    print("  📝 last_conversation_time を5日前に設定", flush=True)
     conn.commit()
     conn.close()
-    print("  ✅ DBセットアップ完了")
+    print("  ✅ DBセットアップ完了", flush=True)
 
 
 def docker_restart():
     """Restart the nous Docker container to pick up DB changes."""
-    print("  🐳 Docker restart: nous")
+    print("  🐳 Docker restart: nous", flush=True)
     try:
         subprocess.run(["docker", "restart", "nous"],
                        capture_output=True, text=True, check=True)
-        print("  ⏳ 起動待機 5秒...")
+        print("  ⏳ 起動待機 5秒...", flush=True)
         time.sleep(5)
-        print("  ✅ Docker再起動完了")
+        print("  ✅ Docker再起動完了", flush=True)
     except subprocess.CalledProcessError as e:
-        print(f"  ❌ Docker再起動失敗: {e.stderr.strip() or e.stdout.strip()}")
-        print("  ⏳ 手動再起動を試行... 10秒待機")
+        print(f"  ❌ Docker再起動失敗: {e.stderr.strip() or e.stdout.strip()}", flush=True)
+        print("  ⏳ 手動再起動を試行... 10秒待機", flush=True)
         time.sleep(10)
     except FileNotFoundError:
-        print("  ⚠️  docker コマンドが見つかりません。再起動をスキップ。")
+        print("  ⚠️  docker コマンドが見つかりません。再起動をスキップ。", flush=True)
 
 
 def run_test3() -> tuple[list[dict], int, int]:
     """Run Test 3: time awareness (3 times)."""
-    print("\n--- テスト3: 時間認識 (3回) ---")
-    print("[DBセットアップ] 5日前のギャップを作成")
+    print("\n--- テスト3: 時間認識 (3回) ---", flush=True)
+    print("[DBセットアップ] 5日前のギャップを作成", flush=True)
     setup_time_gap_db()
     docker_restart()
 
@@ -451,7 +451,7 @@ def run_test3() -> tuple[list[dict], int, int]:
         passed_flag = invoke_ok and ctx_ok and emotion_ok
 
         if passed_flag:
-            print(f"  {label}: ✅ update_context(emotion={emotion_val})")
+            print(f"  {label}: ✅ update_context(emotion={emotion_val})", flush=True)
             passed += 1
         else:
             reasons = []
@@ -463,14 +463,14 @@ def run_test3() -> tuple[list[dict], int, int]:
                 reasons.append(f"感情検出なし(emotion={emotion_val})")
             if analysis.get("error"):
                 reasons.append(f"error={analysis['error']}")
-            print(f"  {label}: ❌ {'/'.join(reasons)}")
+            print(f"  {label}: ❌ {'/'.join(reasons)}", flush=True)
             calls = collect_tool_calls(events)
             if calls:
                 names = [f"{c.get('name','?')}" for c in calls]
-                print(f"          actual: {', '.join(names)}")
+                print(f"          actual: {', '.join(names)}", flush=True)
             text = get_text_response(events)[:120]
             if text:
-                print(f"          💬 {text}...")
+                print(f"          💬 {text}...", flush=True)
 
         all_results.append({
             "rep": i, "passed": passed_flag,
