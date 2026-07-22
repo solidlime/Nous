@@ -116,12 +116,12 @@ def register_tools(mcp: FastMCP) -> None:
         defer_vector: bool = False,
         skip_duplicate_check: bool = False,
     ) -> str:
-        """Create a memory. Use to record important user facts, preferences, events.
-        importance auto-evaluated via LLM when None and enrichment enabled.
-        tags: categorization tags. kind: Memory kind — episodic (specific event),
-        semantic (general fact), procedural (pattern), prospective (future plan).
-        defer_vector: skip immediate vector indexing.
-        skip_duplicate_check: skip semantic duplicate detection.
+        """記憶を作成する。あなたやユーザーに関する重要な事実・好み・出来事を記録せよ。
+        importance は None かつエンリッチメント有効時に LLM が自動評価。
+        tags: 分類タグ。kind: 記憶の種類 — episodic（具体的な出来事）、
+        semantic（一般的事実）、procedural（手順・パターン）、prospective（将来の予定・意図）。
+        defer_vector: 即時ベクターインデックスをスキップ。
+        skip_duplicate_check: 意味的重複チェックをスキップ。
 
         **Important**: Call context_update/update_context *before* memory_create
         if your emotional or physical state has changed. The system automatically
@@ -197,10 +197,10 @@ def register_tools(mcp: FastMCP) -> None:
         vector_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0,
         keyword_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 0.5,
     ) -> str:
-        """Search memories with hybrid retrieval. Use when conversation references past events
-        or you need context about the user. date_range: "7d","30d","昨日".
-        importance_weight/recency_weight: RRF scoring boosts (0.0-1.0).
-        vector_weight/keyword_weight: RRF source weights for semantic/keyword signals."""
+        """ハイブリッド検索で記憶を検索。会話が過去の出来事に言及したとき、またはあなたやユーザーについての文脈が必要なときに使用せよ。
+        date_range: "7d","30d","昨日"。
+        importance_weight/recency_weight: RRF スコアリングのブースト値 (0.0-1.0)。
+        vector_weight/keyword_weight: セマンティック/キーワード信号の RRF ソース重み。"""
         p = _resolve_persona()
         return await _tool_memory_search(
             AppContextRegistry.get(p),
