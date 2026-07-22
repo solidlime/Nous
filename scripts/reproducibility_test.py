@@ -22,7 +22,7 @@ from typing import Any
 
 # ── Constants ───────────────────────────────────────────────────────────────
 
-BASE_URL = "http://localhost:26262"
+BASE_URL = "http://localhost:8000"
 PERSONA = "herta"
 API_URL = f"{BASE_URL}/api/chat/{PERSONA}"
 CONFIG_PATH = "data/persona/herta/config.json"
@@ -324,10 +324,6 @@ def main() -> int:
     return 0 if total_passed == total_all else 1
 
 
-if __name__ == "__main__":
-    sys.exit(main())
-
-
 # ── Test 2: Image Generation (3 times) ─────────────────────────────────────
 
 IMAGE_GEN_PROMPTS = [
@@ -484,3 +480,8 @@ def run_test3() -> tuple[list[dict], int, int]:
             time.sleep(TEST_INTERVAL)
 
     return all_results, passed, total
+
+
+if __name__ == '__main__':
+    sys.exit(main())
+
