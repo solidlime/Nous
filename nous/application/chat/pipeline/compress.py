@@ -33,7 +33,7 @@ class CompressStep:
 
     圧縮段階（軽い順）:
     1. システムプロンプトの関連記憶セクションをトリム
-    2. 古いツール結果を [cleared] に置換
+    2. 古いツール結果をステータスサマリーに置換（成功/失敗/完了）
     3. LLMによる古い会話ターンの要約圧縮（予算超過時）— フルテキストで要約
     4. 古い会話メッセージを切り詰め（予算超過が続く場合のみ）
     """
@@ -54,6 +54,9 @@ class CompressStep:
         counter = TokenCounter(model)
         total = counter.count(turn_ctx.system_prompt) + counter.count_messages(session_messages, "")
 
+        # max_stored_messages 超過時は強制圧縮
+        force_compress = len(session_messages) > config.max_stored_messages
+
         if config.context_max_tokens is not None:
             model_max = config.context_max_tokens
         else:
@@ -62,7 +65,7 @@ class CompressStep:
         # Ensure budget never goes below 10% of model_max
         budget = max(budget, int(model_max * 0.1))
 
-        if total <= budget:
+        if not force_compress and total <= budget:
             logger.debug(
                 "CompressStep: %d/%d tokens (%.0f%%) — within budget, skip",
                 total,
@@ -324,11 +327,14 @@ class CompressStep:
 
     @staticmethod
     def _clear_old_tool_results(messages: list[LLMMessage]) -> list[LLMMessage]:
-        """Replace tool result contents older than 3 assistant turns with a compact marker.
+        """Replace tool result contents older than 3 assistant turns with status summary.
 
         We keep the most recent 3 assistant turns' tool results intact.
-        Tool results before that are replaced with '[cleared]'.
+        Tool results before that are replaced with a Japanese status summary
+        extracted from the JSON result (success/failure/complete).
         """
+        import json
+
         from nous.infrastructure.llm.base import LLMMessage
 
         # Find indices of assistant messages
@@ -340,23 +346,35 @@ class CompressStep:
         # Tool results before the 4th-to-last assistant message are fair game
         cutoff = assistant_indices[-4]  # Messages before this are old
 
-        cleared_count = 0
+        def _extract_status(content: str) -> str:
+            """Extract success/failure status from tool result JSON."""
+            try:
+                data = json.loads(content)
+                if isinstance(data, dict):
+                    success = data.get("success") or data.get("status") in ("success", "ok", True)
+                    return "[ツール実行: 成功]" if success else "[ツール実行: 失敗]"
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+            return "[ツール実行: 完了]"
+
+        replaced_count = 0
         result: list[LLMMessage] = []
         for i, msg in enumerate(messages):
             if msg.role == "tool" and i < cutoff:
+                status = _extract_status(msg.content or "")
                 result.append(
                     LLMMessage(
                         role="tool",
-                        content="[previous tool output cleared]",
+                        content=status,
                         tool_call_id=msg.tool_call_id,
                     )
                 )
-                cleared_count += 1
+                replaced_count += 1
             else:
                 result.append(msg)
 
-        if cleared_count:
-            logger.debug("CompressStep: cleared %d old tool results", cleared_count)
+        if replaced_count:
+            logger.debug("CompressStep: replaced %d old tool results with status summaries", replaced_count)
 
         return result
 
