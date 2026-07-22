@@ -277,6 +277,57 @@ def run_test1() -> tuple[list[dict], int, int]:
     return all_results, passed, total
 
 
+# ── Summary Helpers ─────────────────────────────────────────────────────────
+
+def print_summary_line(label: str, passed: int, total: int) -> None:
+    """Print a summary line with percentage."""
+    pct = (passed / total * 100) if total > 0 else 0.0
+    print(f"  結果: {passed}/{total} 合格 ({pct:.1f}%)")
+
+
+# ── Main ────────────────────────────────────────────────────────────────────
+
+def main() -> int:
+    """Run all reproducibility tests and print results."""
+    print("=" * 50)
+    print("           Nous スキル再現性テスト")
+    print("=" * 50)
+    print(f"モデル: {MODEL}")
+    print(f"API: {API_URL}")
+    print()
+
+    # Test 1
+    _, t1_passed, t1_total = run_test1()
+    print()
+    print_summary_line("テスト1", t1_passed, t1_total)
+
+    # Test 2
+    _, t2_passed, t2_total = run_test2()
+    print()
+    print_summary_line("テスト2", t2_passed, t2_total)
+
+    # Test 3
+    _, t3_passed, t3_total = run_test3()
+    print()
+    print_summary_line("テスト3", t3_passed, t3_total)
+
+    # Overall
+    total_passed = t1_passed + t2_passed + t3_passed
+    total_all = t1_total + t2_total + t3_total
+    total_pct = (total_passed / total_all * 100) if total_all > 0 else 0.0
+
+    print()
+    print("=" * 50)
+    print(f"総合: {total_passed}/{total_all} 合格 ({total_pct:.1f}%)")
+    print("=" * 50)
+
+    return 0 if total_passed == total_all else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+
 # ── Test 2: Image Generation (3 times) ─────────────────────────────────────
 
 IMAGE_GEN_PROMPTS = [
