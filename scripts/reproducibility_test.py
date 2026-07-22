@@ -272,3 +272,46 @@ def run_test1() -> tuple[list[dict], int, int]:
                 time.sleep(TEST_INTERVAL)
 
     return all_results, passed, total
+
+
+# ── Test 2: Image Generation (3 times) ─────────────────────────────────────
+
+IMAGE_GEN_PROMPTS = [
+    "今の気分を画像にして",
+    "今の気持ちを絵で表現して",
+    "今日の私の気分をイメージにして見せて",
+]
+
+
+def run_test2() -> tuple[list[dict], int, int]:
+    """Run Test 2: image generation (3 times)."""
+    print("\n--- テスト2: 画像生成 (3回) ---")
+    all_results: list[dict] = []
+    passed = 0
+    total = len(IMAGE_GEN_PROMPTS)
+
+    for i, prompt in enumerate(IMAGE_GEN_PROMPTS, start=1):
+        label = f"[{i}/{total}] image-gen #{i}"
+        events = send_chat(prompt)
+        tool_ok = check_tool_called(events, "image_generate")
+
+        if tool_ok:
+            print(f"  {label}: ✅ image_generate")
+            passed += 1
+        else:
+            calls = collect_tool_calls(events)
+            if calls:
+                names = [f"{c.get('name','?')}" for c in calls]
+                print(f"  {label}: ❌ image_generate未呼出 → actual: {', '.join(names)}")
+            else:
+                text = get_text_response(events)[:100]
+                print(f"  {label}: ❌ ツール呼出なし → 応答: {text}...")
+
+        all_results.append({
+            "rep": i, "passed": tool_ok,
+            "tool_calls": collect_tool_calls(events), "prompt": prompt,
+        })
+        if i < total:
+            time.sleep(TEST_INTERVAL)
+
+    return all_results, passed, total
