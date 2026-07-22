@@ -10,11 +10,14 @@ Usage:
 """
 
 import json
+import sqlite3
+import subprocess
 import sys
 import time
 import uuid
 import urllib.request
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import Any
 
 # ── Constants ───────────────────────────────────────────────────────────────
@@ -315,3 +318,59 @@ def run_test2() -> tuple[list[dict], int, int]:
             time.sleep(TEST_INTERVAL)
 
     return all_results, passed, total
+
+
+# ── Test 3: DB Setup ────────────────────────────────────────────────────────
+
+def setup_time_gap_db():
+    """Set up 5-day gap in the DB for time awareness tests."""
+    db_path = Path(DB_PATH)
+    if not db_path.exists():
+        print(f"  ⚠️  DB not found at {DB_PATH}, creating...")
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    five_days_ago = datetime.now(JST) - timedelta(days=5)
+    five_days_ago_iso = five_days_ago.isoformat()
+    now_iso = datetime.now(JST).isoformat()
+
+    conn.execute("DELETE FROM memories")
+    print("  🗑️  memories テーブルをクリア")
+
+    dummy_key = f"dummy_{uuid.uuid4().hex[:12]}"
+    conn.execute(
+        "INSERT INTO memories (key, content, created_at, updated_at) VALUES (?, ?, ?, ?)",
+        (dummy_key, "Test memory from 5 days ago.", five_days_ago_iso, five_days_ago_iso),
+    )
+    print(f"  📝 5日前のダミーmemoryを挿入: {dummy_key}")
+
+    conn.execute(
+        "UPDATE context_state SET valid_until = ? WHERE key = 'last_conversation_time' AND valid_until IS NULL",
+        (now_iso,),
+    )
+    conn.execute(
+        "INSERT INTO context_state (persona, key, value, valid_from) VALUES (?, ?, ?, ?)",
+        (PERSONA, "last_conversation_time", five_days_ago_iso, now_iso),
+    )
+    print("  📝 last_conversation_time を5日前に設定")
+    conn.commit()
+    conn.close()
+    print("  ✅ DBセットアップ完了")
+
+
+def docker_restart():
+    """Restart the nous Docker container to pick up DB changes."""
+    print("  🐳 Docker restart: nous")
+    try:
+        subprocess.run(["docker", "restart", "nous"],
+                       capture_output=True, text=True, check=True)
+        print("  ⏳ 起動待機 5秒...")
+        time.sleep(5)
+        print("  ✅ Docker再起動完了")
+    except subprocess.CalledProcessError as e:
+        print(f"  ❌ Docker再起動失敗: {e.stderr.strip() or e.stdout.strip()}")
+        print("  ⏳ 手動再起動を試行... 10秒待機")
+        time.sleep(10)
+    except FileNotFoundError:
+        print("  ⚠️  docker コマンドが見つかりません。再起動をスキップ。")
