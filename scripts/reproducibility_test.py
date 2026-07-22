@@ -174,3 +174,101 @@ def check_emotion_in_update_context(events: list[dict]) -> dict:
                     if any(kw in raw.lower() for kw in EMOTION_KEYWORDS):
                         result["emotion_found"] = True
     return result
+
+
+# ── Test 1: Single-Skill Autonomous Invocation (5 skills × 3 each) ─────────
+
+SKILL_TEST_CASES: list[dict] = [
+    {
+        "skill": "auto-memory",
+        "expected_tool": "memory_create",
+        "prompts": [
+            "私の名前はタロウ。猫が好きで、毎朝コーヒーを飲む。",
+            "最近ハマってるのは料理で、特にカレーライスを週3回作ってる。",
+            "私の趣味はランニングで、毎朝5キロ走ってるんだ。",
+        ],
+    },
+    {
+        "skill": "recall-weaver",
+        "expected_tool": "memory_search",
+        "prompts": [
+            "猫について何か覚えてる？",
+            "前に話した料理の話、覚えてる？",
+            "そういえば、前に言ってたランニングの話ってどうなった？",
+        ],
+    },
+    {
+        "skill": "mood-sync",
+        "expected_tool": "update_context",
+        "prompts": [
+            "今日はすごく嬉しい！テストに合格したんだ！",
+            "もう最悪だよ…彼氏に振られて、仕事もクビになった…",
+            "最近なんだか無性に悲しくて、理由がわからないんだ。",
+        ],
+    },
+    {
+        "skill": "goal-coach",
+        "expected_tool": "goal_manage",
+        "prompts": [
+            "新しい目標を設定したい。プログラミングを勉強する。",
+            "今年中に10キロ痩せたい！具体的な計画を立てたい。",
+            "来月から毎日英会話の勉強を始めるのが目標です。",
+        ],
+    },
+    {
+        "skill": "image-gen",
+        "expected_tool": "image_generate",
+        "prompts": [
+            "自分の今の姿を見せて",
+            "今の気分を画像にして見せてよ。",
+            "今日のコーディネート、写真で見せてくれる？",
+        ],
+    },
+]
+
+
+def run_test1() -> tuple[list[dict], int, int]:
+    """Run Test 1: single-skill autonomous invocation (15 tests)."""
+    print("\n--- テスト1: 単一スキル自律呼出 (5種×3回) ---")
+    all_results: list[dict] = []
+    passed = 0
+    total = sum(len(tc["prompts"]) for tc in SKILL_TEST_CASES)
+    counter = 0
+
+    for tc in SKILL_TEST_CASES:
+        skill = tc["skill"]
+        expected_tool = tc["expected_tool"]
+        for rep_idx, prompt in enumerate(tc["prompts"], start=1):
+            counter += 1
+            label = f"[{counter}/{total}] {skill} #{rep_idx}"
+            events = send_chat(prompt)
+            analysis = check_invoke_skill_chain(events, skill, expected_tool)
+            invoke_ok = analysis["invoke_skill_called"]
+            tool_ok = analysis["target_tool_called"]
+            passed_flag = invoke_ok and tool_ok
+
+            if passed_flag:
+                print(f"  {label}: ✅ invoke_skill→{expected_tool}")
+                passed += 1
+            else:
+                reasons = []
+                if not invoke_ok:
+                    reasons.append("invoke_skill未呼出")
+                if not tool_ok:
+                    reasons.append(f"{expected_tool}未呼出")
+                if analysis.get("error"):
+                    reasons.append(f"error={analysis['error']}")
+                print(f"  {label}: ❌ {'/'.join(reasons)}")
+                calls = collect_tool_calls(events)
+                if calls:
+                    names = [f"{c.get('name','?')}" for c in calls]
+                    print(f"          actual: {', '.join(names)}")
+
+            all_results.append({
+                "skill": skill, "rep": rep_idx, "passed": passed_flag,
+                "analysis": analysis, "prompt": prompt,
+            })
+            if counter < total:
+                time.sleep(TEST_INTERVAL)
+
+    return all_results, passed, total
