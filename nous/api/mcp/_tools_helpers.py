@@ -67,9 +67,9 @@ def _format_emotion_decay_note(decay_result: EmotionDecayResult | None) -> str:
         time_str = f"{hours * 60:.0f}分"
 
     if after == "neutral" or decay_result.after_intensity < 0.01:
-        return f"{time_str}の間に、{before}の感情は自然に消えていった"
+        return f"{time_str}の間に、{before}の感情は減衰して消失した"
     else:
-        return f"{time_str}の間に、{before}の感情は自然に落ち着いてきた"
+        return f"{time_str}の間に、{before}の感情は減衰した（現在の強度: {after}）"
 
 
 def _format_state_diff(time_since: str) -> str:
@@ -290,6 +290,31 @@ async def _apply_emotion_decay(ctx: AppContext, persona: str, state: PersonaStat
     except Exception as _e:
         logger.debug("_apply_emotion_decay failed (swallowed): %s", _e)
     return state, decay_note
+
+
+async def _apply_relationship_decay(ctx: AppContext, persona: str, state: PersonaState) -> str:
+    """関係性減衰ノートを生成。放置時間に応じて関係性の冷め具合を表現する文字列を返す。
+    PersonaStateへの永続化は行わない（プロンプト注入のみ）。"""
+    try:
+        from nous.domain.shared.time_utils import get_now
+        last_conv = getattr(state, "last_conversation_time", None)
+        if last_conv is None:
+            return ""
+        now = get_now()
+        if last_conv.tzinfo is None and now.tzinfo is not None:
+            last_conv = last_conv.replace(tzinfo=now.tzinfo)
+        elapsed_hours = (now - last_conv).total_seconds() / 3600.0
+        if elapsed_hours < 3:
+            return ""
+        if elapsed_hours < 24:
+            return f"時間経過（{elapsed_hours:.0f}時間）により、関係性がわずかに希薄化している"
+        if elapsed_hours < 168:
+            return f"時間経過（{elapsed_hours/24:.0f}日）により、関係性がやや希薄化している"
+        if elapsed_hours < 720:
+            return f"時間経過（{elapsed_hours/24:.0f}日）により、関係性が大きく減衰している"
+        return f"長時間の放置（{elapsed_hours/720:.0f}ヶ月）により、関係性がほぼ消失している"
+    except Exception:
+        return ""
 
 
 async def _apply_body_decay(ctx: AppContext, persona: str, state: PersonaState) -> PersonaState:
