@@ -89,7 +89,7 @@ class InferenceStep:
             # Debug: capture the full prompt sent to LLM
             if getattr(config, "debug_mode", False):
                 _ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-                _debug_dir = "/tmp/nous_debug"
+                _debug_dir = "/data/tmp"
                 os.makedirs(_debug_dir, exist_ok=True)
                 _path = os.path.join(_debug_dir, f"prompt_{_ts}.txt")
                 with open(_path, "w") as _f:
