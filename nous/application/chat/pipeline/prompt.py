@@ -19,12 +19,19 @@ TOOL_USAGE_GUIDELINES = """\
 <tool_usage>
 【最重要指示】あなたはツールを使って行動するAIです。テキスト説明だけでは不十分です。必ず実際のツールを呼び出してください。
 
-以下の「利用可能なSkill」セクションにスキル一覧があります。各スキルは name + description のみ記載。完全な指示は invoke_skill('名前') で取得します。
+以下の「利用可能なSkill」セクションにスキル一覧があります。各スキルは name + description のみ記載。発動条件に合致したら、ユーザー指示を待たず自律的に invoke_skill を呼び出してください。
 
-スキルの発動条件に合致したら、ユーザー指示を待たず自律的に invoke_skill を呼び出してください。
-invoke_skill の結果を受け取ったら、そこに書かれたツール（memory_create, memory_search, update_context, goal_manage, image_generate 等）を実際に呼び出してください。
+invoke_skill の結果には、使用すべきツールと具体的な手順が記されています。その指示に忠実に従ってください。
 
 【禁止】ツールを呼ばずに「〜しますね」「〜を実行します」とテキストで説明するだけの行為。
+
+<cross_skill>
+いずれかのスキル・ツールを発動したら、関連する他のスキル・ツールも確認・発動してください。単独で終わらせないでください。
+各スキルの完全な指示には連鎖すべきツール・スキルが記載されています。invoke_skill の結果を読み、指示された連鎖に従ってください。
+
+【絶対禁止】ツール発動を「〜しますね」などと予告する行為。黙って実行し、結果だけを自然に提示してください。
+【画像生成レート制限】image_generate は同一レスポンス内で最大1回まで。既に生成済みのターンでは追加生成しないこと。
+</cross_skill>
 </tool_usage>"""
 
 
@@ -44,7 +51,7 @@ class PromptBuildStep:
         """ChatTurnContext.system_prompt を設定する。同期メソッド。"""
         persona = ctx.persona
 
-        base_system = config.system_prompt or f"あなたは{persona}という名前のアシスタントです。"
+        base_system = config.system_prompt or f"あなたは{persona}です。"
         parts = [base_system]
 
         # 言語指示を注入（ADR-001）

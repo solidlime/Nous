@@ -238,7 +238,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
 
     provider_name = "comfyui"
 
-    # ── 自画像モード: キャラ外見プロンプトを自動注入 ──
+    # ── self-portrait mode: auto-inject persona appearance prompt ──
     self_portrait = tool_input.get("self_portrait", False)
     portrait_mode = tool_input.get("mode", "full_body")
 

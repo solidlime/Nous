@@ -240,7 +240,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 },
                 "self_portrait": {
                     "type": "boolean",
-                    "description": "キャラクター自身の画像を生成する場合はtrue。外部の画像や風景など、キャラ自身でない画像はfalse。",
+                    "description": "自分自身の画像を生成する場合はtrue。外部の画像や風景など、自分自身でない画像はfalse。",
                 },
                 "mode": {
                     "type": "string",
