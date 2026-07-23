@@ -25,6 +25,7 @@ class ToolDefinition:
     name: str
     description: str
     input_schema: dict
+    defer_loading: bool = False  # True: send via search_tools, not directly to LLM
 
 
 @dataclass
