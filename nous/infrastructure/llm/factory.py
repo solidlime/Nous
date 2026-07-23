@@ -2,29 +2,51 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .anthropic import AnthropicProvider
-
 if TYPE_CHECKING:
     from .base import LLMProvider
 
 
-def get_provider(provider: str, api_key: str, model: str, base_url: str = "") -> LLMProvider:
-    from .google import GeminiProvider
-    from .openai_compat import OpenAICompatProvider, _OPENAI_BASE_URL, _OPENROUTER_BASE_URL  # noqa: I001
+_PROVIDER_REGISTRY = {
+    "anthropic": {
+        "class": "anthropic",
+        "default_base_url": "",
+    },
+    "openai": {
+        "class": "openai_compat",
+        "default_base_url": "https://api.openai.com/v1",
+    },
+    "openrouter": {
+        "class": "openai_compat",
+        "default_base_url": "https://openrouter.ai/api/v1",
+    },
+    "google": {
+        "class": "gemini",
+        "default_base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+    },
+    "opencode_go": {
+        "class": "openai_compat",
+        "default_base_url": "https://opencode.ai/zen/go/v1",
+    },
+}
 
-    if provider == "anthropic":
+
+def get_provider(provider: str, api_key: str, model: str, base_url: str = "") -> LLMProvider:
+    entry = _PROVIDER_REGISTRY.get(provider)
+    if not entry:
+        raise ValueError(f"Unknown provider: {provider}")
+
+    resolved_base_url = base_url or entry["default_base_url"]
+    provider_class = entry["class"]
+
+    if provider_class == "anthropic":
+        from .anthropic import AnthropicProvider
+
         return AnthropicProvider(api_key=api_key, model=model)
-    elif provider == "openai":
-        return OpenAICompatProvider(api_key=api_key, model=model, base_url=base_url or _OPENAI_BASE_URL)
-    elif provider == "openrouter":
-        return OpenAICompatProvider(api_key=api_key, model=model, base_url=base_url or _OPENROUTER_BASE_URL)
-    elif provider == "google":
-        return GeminiProvider(api_key=api_key, model=model, base_url=base_url)
-    elif provider == "opencode_go":
-        return OpenAICompatProvider(
-            api_key=api_key,
-            model=model,
-            base_url=base_url or "https://opencode.ai/zen/go/v1",
-        )
+    elif provider_class == "gemini":
+        from .google import GeminiProvider
+
+        return GeminiProvider(api_key=api_key, model=model, base_url=resolved_base_url)
     else:
-        raise ValueError(f"Unknown LLM provider: {provider}. Supported: anthropic, openai, openrouter, google, opencode_go")
+        from .openai_compat import OpenAICompatProvider
+
+        return OpenAICompatProvider(api_key=api_key, model=model, base_url=resolved_base_url)
