@@ -12,7 +12,7 @@ from nous.application.chat.pipeline.prepare import PrepareStep
 from nous.application.chat.pipeline.prompt import PromptBuildStep
 from nous.application.chat.session_store import SessionManager
 from nous.application.chat.tools.definitions import get_filtered_tools
-from nous.application.chat.tools.registry import ToolRegistry
+from nous.application.chat.tools.registry import SEARCH_TOOLS_NAME, ToolRegistry
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.mcp_client import MCPClientPool
@@ -22,10 +22,63 @@ if TYPE_CHECKING:
 
     from nous.application.use_cases import AppContext
     from nous.domain.chat_config import ChatConfig
+    from nous.infrastructure.tools import ToolSearchEngine
 
 logger = get_logger(__name__)
 
 _session_manager = SessionManager()
+
+
+# ── Tool search engine (search_tools) ─────────────────────────────────────────
+
+
+async def _ensure_tool_index(registry: ToolRegistry) -> ToolSearchEngine | None:
+    """ツール検索エンジンを初期化し、deferred ツールを Qdrant にインデックスする。
+
+    失敗時は None を返し、search_tools は無効化される。
+    """
+    try:
+        from nous.config.settings import get_settings
+        from nous.infrastructure.embedding.model import EmbeddingModel
+        from nous.infrastructure.tools import ToolSearchEngine, ToolVectorStore
+        from qdrant_client import AsyncQdrantClient
+
+        settings = get_settings()
+        client = AsyncQdrantClient(url=settings.qdrant.url, api_key=settings.qdrant.api_key, timeout=10)
+        embed = EmbeddingModel()
+        vector_store = ToolVectorStore(client, embed)
+        await vector_store.ensure_collection()
+
+        deferred_tools = [t for t in registry.get_all_tools() if t.defer_loading]
+        if deferred_tools:
+            await vector_store.index_tools(deferred_tools)
+
+        engine = ToolSearchEngine(vector_store)
+        logger.info("Tool search engine initialized (%d deferred tools indexed)", len(deferred_tools))
+        return engine
+    except Exception as exc:
+        logger.warning("Tool search engine initialization failed (search_tools disabled): %s", exc)
+        return None
+
+
+async def _execute_search_tools(
+    engine: ToolSearchEngine,
+    registry: ToolRegistry,
+    config: ChatConfig,  # noqa: ARG001
+    tool_input: dict,
+) -> dict:
+    """search_tools 実行ハンドラ。deferred ツールを検索し、発見したツールを登録する。"""
+    query = tool_input.get("query", "")
+    top_k = int(tool_input.get("top_k", 5))
+    results = await engine.search(query, top_k)
+    for r in results:
+        registry.mark_discovered(r.tool_name)
+    items = [f"- {r.tool_name}: {r.description[:100]}..." for r in results]
+    return {
+        "status": "ok",
+        "tools": "\n".join(items),
+        "count": len(results),
+    }
 
 
 class ChatService:
@@ -107,6 +160,15 @@ class ChatService:
             # スキル一覧を invoke_skill ツールの description に注入（システムプロンプトから移行）
             if turn_ctx.skills_raw:
                 registry.add_skills_info(turn_ctx.skills_raw)
+
+            # ツール検索エンジンの初期化（search_tools 機能）
+            _search_engine = await _ensure_tool_index(registry)
+            if _search_engine:
+                _reg_ref = registry  # closure capture
+                registry.set_search_handler(
+                    lambda ctx, config, ti: _execute_search_tools(_search_engine, _reg_ref, config, ti)  # type:ignore[arg-type]
+                )
+                logger.info("search_tools handler registered (%d tools visible)", len(registry.get_visible_tools()))
 
             session_messages = session.get_labeled_messages()
 

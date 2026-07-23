@@ -80,6 +80,10 @@ class ToolRegistry:
         """search_tools で発見されたツールを追跡する。"""
         self._discovered_tools.add(tool_name)
 
+    def set_search_handler(self, handler: SearchHandler) -> None:
+        """search_tools 実行ハンドラを後から設定する。"""
+        self._search_handler = handler
+
     def is_mcp_tool(self, tool_name: str) -> bool:
         """MCPプール経由で呼ぶべきツールか判定する。"""
         return "__" in tool_name

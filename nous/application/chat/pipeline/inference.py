@@ -59,7 +59,6 @@ class InferenceStep:
             yield ErrorSSE(message=f"LLMプロバイダーの初期化に失敗: {e}")
             return
 
-        all_tools = registry.get_all_tools()
         messages = list(session_messages)
         if turn_ctx.images:
             parts: list[dict] = [{"type": "text", "text": turn_ctx.user_message}]
@@ -86,6 +85,9 @@ class InferenceStep:
             _seg_text = ""  # text accumulator for segment ordering
             _finish_reason = ""  # set by DoneEvent handler inside stream loop
 
+            # 各ループ反復で visible tools を再評価（search_tools で新発見を拾う）
+            visible_tools = registry.get_visible_tools()
+
             # Debug: capture the full prompt sent to LLM
             if getattr(config, "debug_mode", False):
                 _ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -100,8 +102,8 @@ class InferenceStep:
                         role = _m.role if hasattr(_m, 'role') else '?'
                         content = str(_m.content)[:2000] if hasattr(_m, 'content') else str(_m)[:2000]
                         _f.write(f"\n[{_i}] {role}: {content}\n")
-                    _f.write(f"\n\n=== TOOLS ({len(all_tools)} total) ===\n")
-                    for _t in all_tools:
+                    _f.write(f"\n\n=== TOOLS ({len(visible_tools)} total) ===\n")
+                    for _t in visible_tools:
                         name = _t.get("function", {}).get("name", "?") if isinstance(_t, dict) else getattr(_t, "name", "?")
                         _f.write(f"  - {name}\n")
                 logger.info("Debug prompt saved: %s", _path)
@@ -109,7 +111,7 @@ class InferenceStep:
             async for event in provider.stream(
                 messages=messages,
                 system=turn_ctx.system_prompt,
-                tools=all_tools,
+                tools=visible_tools,
                 temperature=temperature,
                 max_tokens=config.max_tokens,
                 top_p=config.top_p,
