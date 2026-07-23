@@ -24,13 +24,25 @@ class ToolVectorStore:
         self._client = client
         self._embedding = embedding
 
+    async def collection_exists(self) -> bool:
+        """Check if the tool_definitions collection exists in Qdrant."""
+        try:
+            collections = (await self._client.get_collections()).collections
+            return any(c.name == COLLECTION_NAME for c in collections)
+        except Exception:
+            return False
+
     async def ensure_collection(self) -> None:
         """Create collection if not exists."""
+        if await self.collection_exists():
+            logger.debug("ToolVectorStore: collection '%s' already exists", COLLECTION_NAME)
+            return
         dim = await self._embedding.async_dimension()
         await self._client.create_collection(
             collection_name=COLLECTION_NAME,
             vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
         )
+        logger.info("ToolVectorStore: created collection '%s' (dim=%d)", COLLECTION_NAME, dim)
 
     @staticmethod
     def _key_to_id(key: str) -> str:
