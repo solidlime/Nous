@@ -14,6 +14,7 @@ from .base import (
     ToolCallEvent,
     ToolDefinition,
 )
+from .cache_utils import build_openai_system_messages
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,7 @@ class OpenAICompatProvider(LLMProvider):
                     }
                 )
 
-        api_messages = [{"role": "system", "content": system}] + self._to_api_messages(messages)
+        api_messages = build_openai_system_messages(system) + self._to_api_messages(messages)
 
         try:
             kwargs: dict = {
