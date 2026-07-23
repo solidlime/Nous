@@ -37,8 +37,7 @@ class PromptBuildStep:
     """systemプロンプトを組み立てる。"""
 
     def __init__(self) -> None:
-        self._skill_cache: tuple[str, list[dict]] | None = None
-        self._skill_cache_hash: int | None = None
+        pass
 
     def run(
         self,
@@ -55,58 +54,43 @@ class PromptBuildStep:
         # --- ツール使用ガイドライン ---
         parts.append(f"\n{TOOL_USAGE_GUIDELINES}")
 
-        # --- スキル読み込み & 注入（即座に隣接） ---
+        # --- スキル読み込み ---
         skills_raw: list[dict] = []
         if config.enabled_skills:
-            current_hash = hash(tuple(sorted(config.enabled_skills)))
-            if current_hash == self._skill_cache_hash and self._skill_cache is not None:
-                cached_header, cached_skills_raw = self._skill_cache
-                parts.append(cached_header)
-                skills_raw = cached_skills_raw
-            else:
-                try:
-                    import os
+            try:
+                import os
 
-                    from nous.config.settings import get_settings
-                    from nous.domain.skill import SkillRepository
+                from nous.config.settings import get_settings
+                from nous.domain.skill import SkillRepository
 
-                    settings = get_settings()
-                    skill_repo = SkillRepository()
+                settings = get_settings()
+                skill_repo = SkillRepository()
 
-                    # グローバルスキル: FSから直接ロード
-                    skill_map: dict = {}
-                    global_skills = skill_repo.load_from_dir(settings.skills_dir, persist=False)
-                    for s in global_skills:
-                        skill_map[s.name] = s
+                # グローバルスキル: FSから直接ロード
+                skill_map: dict = {}
+                global_skills = skill_repo.load_from_dir(settings.skills_dir, persist=False)
+                for s in global_skills:
+                    skill_map[s.name] = s
 
-                    # ペルソナ別スキル: 同名なら上書き
-                    persona_skills_dir = os.path.join(settings.data_root, "persona", persona, "skills")
-                    if os.path.isdir(persona_skills_dir):
-                        try:
-                            if any(os.scandir(persona_skills_dir)):
-                                persona_skills = skill_repo.load_from_dir(persona_skills_dir, persist=False)
-                                for ps in persona_skills:
-                                    skill_map[ps.name] = ps
-                        except OSError:
-                            pass
+                # ペルソナ別スキル: 同名なら上書き
+                persona_skills_dir = os.path.join(settings.data_root, "persona", persona, "skills")
+                if os.path.isdir(persona_skills_dir):
+                    try:
+                        if any(os.scandir(persona_skills_dir)):
+                            persona_skills = skill_repo.load_from_dir(persona_skills_dir, persist=False)
+                            for ps in persona_skills:
+                                skill_map[ps.name] = ps
+                    except OSError:
+                        pass
 
-                    skills = [skill_map[n] for n in config.enabled_skills if n in skill_map]
+                skills = [skill_map[n] for n in config.enabled_skills if n in skill_map]
 
-                    if skills:
-                        skill_names = [s.name for s in skills]
-                        logger.info("PromptBuildStep: injecting %d skills: %s", len(skill_names), ", ".join(skill_names))
-                        skill_lines = [f"- {s.name}: {s.description or ''}" for s in skills]
-                        header = (
-                            "\n--- 利用可能なSkill ---\n"
-                            "発動条件に合致したら直ちに invoke_skill を呼べ。説明だけでは駄目。\n"
-                            + "\n".join(skill_lines)
-                        )
-                        parts.append(header)
-                        skills_raw = [s.model_dump() for s in skills]
-                        self._skill_cache = (header, skills_raw)
-                        self._skill_cache_hash = current_hash
-                except Exception as e:
-                    logger.warning("PromptBuildStep: skills load failed: %s", e)
+                if skills:
+                    skill_names = [s.name for s in skills]
+                    logger.info("PromptBuildStep: loaded %d skills: %s", len(skill_names), ", ".join(skill_names))
+                    skills_raw = [s.model_dump() for s in skills]
+            except Exception as e:
+                logger.warning("PromptBuildStep: skills load failed: %s", e)
 
         # --- 時間コンテキスト ---
         if turn_ctx.time_context:

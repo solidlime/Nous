@@ -104,6 +104,10 @@ class ChatService:
             )
             registry = ToolRegistry(builtin, mcp_pool)
 
+            # スキル一覧を invoke_skill ツールの description に注入（システムプロンプトから移行）
+            if turn_ctx.skills_raw:
+                registry.add_skills_info(turn_ctx.skills_raw)
+
             session_messages = session.get_labeled_messages()
 
             # CompressStep: コンテキスト圧縮（トークン予算超過 / max_stored_messages 超過時に圧縮）

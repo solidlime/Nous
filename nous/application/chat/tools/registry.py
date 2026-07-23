@@ -33,9 +33,28 @@ class ToolRegistry:
         self._extra = [t for t in filtered_extra if t.name not in builtin_names]
         self._mcp_pool = mcp_pool
 
+    def add_skills_info(self, skills: list[dict]) -> None:
+        """invoke_skill ツールの description に有効スキル一覧を動的注入する。"""
+        for i, tool in enumerate(self._builtin):
+            if tool.name == "invoke_skill":
+                base_desc = tool.description
+                if skills:
+                    skill_lines = [f"- {s.get('name', '?')}: {s.get('description', '')}" for s in skills]
+                    skill_list = "\n".join(skill_lines)
+                    new_desc = f"{base_desc}\n\n利用可能なスキル:\n{skill_list}"
+                else:
+                    new_desc = base_desc
+                # 新しい ToolDefinition を作成して置き換え
+                self._builtin[i] = ToolDefinition(
+                    name=tool.name,
+                    description=new_desc,
+                    input_schema=tool.input_schema,
+                )
+                break
+
     def get_all_tools(self) -> list[ToolDefinition]:
-        """重複除去済みの全ツールリストを返す。"""
-        return self._builtin + self._extra
+        """重複除去済みの全ツールリストを返す。builtin はアルファベット順（キャッシュ最適化） + MCP は末尾。"""
+        return sorted(self._builtin, key=lambda t: t.name) + self._extra
 
     def is_mcp_tool(self, tool_name: str) -> bool:
         """MCPプール経由で呼ぶべきツールか判定する。"""
