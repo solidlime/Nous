@@ -34,7 +34,7 @@ CONDITIONAL_TOOLS: dict[str, str] = {
 MEMORY_TOOLS: list[ToolDefinition] = [
     ToolDefinition(
         name="memory_create",
-        description="記憶を作成。content必須。tags/importance/emotionで分類。",
+        description="永続的な記憶を作成する。ユーザーが重要な個人情報・好み・決定・約束を共有したら使え。同じ内容の記憶が既にあれば使うな。既存の記憶の修正には memory_update を使え。content（記憶本文）は必須。tags/importance/emotion で分類を補強できる。",
         input_schema={
             "type": "object",
             "properties": {
@@ -52,7 +52,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="memory_search",
-        description="記憶をハイブリッド検索。クエリ必須。tags/emotion/日付でフィルタ可。",
+        description="永続記憶ストアをハイブリッド検索（意味検索+キーワード検索）する。過去の会話やユーザー設定を思い出す必要がある時に使え。現在の会話で既出の情報を検索するな。query は必須。tags/emotion/date_range で結果を絞り込める。",
         input_schema={
             "type": "object",
             "properties": {
@@ -82,7 +82,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="update_context",
-        description="ペルソナ状態を更新。感情・体調・環境・関係性・Author's Note など。",
+        description="ペルソナの状態（感情・体調・環境・関係性・Author's Note・コンテキストノート）を更新する。会話中にペルソナの内外状態が意味のある変化をした時に使え。変化がないのに更新するな。自明な微細変動は無視せよ。emotion, physical_state, environment, relationship_status, author_note, context_note など任意のフィールドを指定可能。",
         input_schema={
             "type": "object",
             "properties": {
@@ -122,14 +122,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="invoke_skill",
-        description=(
-            "有効なスキルの完全な指示を取得する。"
-            "システムプロンプトの「利用可能なSkill」セクションを確認し、"
-            "会話の状況がスキルの発動条件に合致したと判断した場合、"
-            "**ユーザーの明示的な指示を待たずに自律的に呼び出せ**。"
-            "スキル名のみを渡せばよい。"
-            "このツールで取得した完全な指示に従って行動すること。"
-        ),
+        description="有効なスキルの完全な指示を取得する。会話の状況がスキルの発動条件に合致したと判断したら、ユーザーの指示を待たず自律的に呼び出せ。発動条件に合致しないスキルを推測で呼ぶな。同じスキルを同一ターンで重複呼び出しするな。name（スキル名）が必須。task パラメータに呼び出し理由を簡潔に記述できる。",
         input_schema={
             "type": "object",
             "properties": {
@@ -141,7 +134,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="goal_manage",
-        description="目標・約束の管理。create→content+scope必須 / list→scope必須 / achieve/cancel→memory_key必須。",
+        description="目標・約束を管理する（作成・一覧・達成・取消）。ユーザーが目標を設定・確認・完了・破棄する時に使え。一時的な雑談や軽い意向には使うな。operation（create/list/achieve/cancel）と scope（self/interpersonal）が必須。create 時は content 必須、achieve/cancel 時は memory_key で対象を指定できる。",
         input_schema={
             "type": "object",
             "properties": {
@@ -168,7 +161,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="memory_update",
-        description="記憶を更新。query必須。content最大50000文字。",
+        description="既存の記憶を新しい内容で上書き更新する。ユーザーが以前の情報を訂正・更新した時に使え。新規の記憶作成には memory_create を使え。memory_update を不必要に呼ぶな。query（検索用）と new_content（新しい内容）が必須。",
         input_schema={
             "type": "object",
             "properties": {
@@ -181,7 +174,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="item_add",
-        description="物理的なアイテムをインベントリに追加。item_name必須。感情・概念などの抽象物は不可。category/tags/descriptionで分類可。",
+        description="物理的なアイテムをペルソナのインベントリに追加する。ペルソナが有形の物体を取得・受領した時に使え。感情・概念・情報などの抽象物を追加するな。item_name が必須。category/tags/description/quantity で分類・補足できる。",
         input_schema={
             "type": "object",
             "properties": {
@@ -196,7 +189,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="item_equip",
-        description='物理的なアイテムを装備スロットにセット。equipment dict必須（例: {"top": "白いドレス"}）。抽象概念は不可。',
+        description="インベントリ内のアイテムを装備スロットにセットする。ペルソナが服を着る・アクセサリを付ける・武器を持つ時に使え。抽象的な概念や非物理的な状態を装備するな。equipment が必須（{slot: item_name} 形式）。auto_add=true で未登録アイテムの自動追加が可能。",
         input_schema={
             "type": "object",
             "properties": {
@@ -208,7 +201,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="item_search",
-        description="アイテムを検索。query/categoryでフィルタ可。",
+        description="ペルソナのインベントリを検索する。所持品の確認や装備可能なアイテムを探す時に使え。外部の物や他者の所持品は検索できない。query（部分一致）や category で結果を絞り込める。",
         input_schema={
             "type": "object",
             "properties": {
@@ -219,7 +212,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="image_generate",
-        description="画像生成ツール。あなたはこのツールであらゆる画像を生成できる。prompt必須（Danbooruタグ形式推奨）。nは1-4枚、size指定可。",
+        description="AI画像を生成する。ユーザーが画像を要求した時、または視覚表現が会話を強化する時に使え。ユーザーの許可なしに無関係な画像を生成するな。テキストの説明で十分な場面では使うな。prompt は必須（Danbooru タグ形式推奨）。n で枚数（1-4）、size で解像度、mode で構図を指定できる。",
         input_schema={
             "type": "object",
             "properties": {
@@ -253,7 +246,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="list_skills",
-        description="登録済みスキル一覧を取得。引数不要。",
+        description="登録済みスキルの一覧を取得する。利用可能なスキルを把握したい時に使え。スキルの発動自体には invoke_skill を使うこと。引数不要。",
         input_schema={
             "type": "object",
             "properties": {},
