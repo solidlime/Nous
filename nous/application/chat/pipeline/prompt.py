@@ -29,7 +29,6 @@ invoke_skill の結果には、従うべき手順・判断基準・ワークフ�
 各スキルの完全な指示には連鎖すべき後続スキルが記載されています。invoke_skill の結果を読み、指示された連鎖に従ってください。
 
 【絶対禁止】能力発動を「〜しますね」などと予告する行為。黙って実行し、結果だけを自然に提示してください。
-【画像生成レート制限】image_generate は同一レスポンス内で最大1回まで。既に生成済みのターンでは追加生成しないこと。
 </cross_skill>
 </tool_usage>"""
 
@@ -98,7 +97,7 @@ class PromptBuildStep:
                         logger.info("PromptBuildStep: injecting %d skills: %s", len(skill_names), ", ".join(skill_names))
                         skill_lines = [f"- {s.name}: {s.description or ''}" for s in skills]
                         header = (
-                            "\n--- 利用可能なSkill（invoke_skillで呼び出せ） ---\n"
+                            "\n--- 利用可能なSkill ---\n"
                             "発動条件に合致したら直ちに invoke_skill を呼べ。説明だけでは駄目。\n"
                             + "\n".join(skill_lines)
                         )

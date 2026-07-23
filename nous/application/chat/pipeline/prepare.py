@@ -396,10 +396,6 @@ async def _build_context_section(
         intensity_label = "強い" if intensity > 0.6 else "やや強い" if intensity > 0.3 else "弱い"
         t1.append(f"感情: {state.emotion}（{intensity_label}）")
 
-    # Emotion decay notification
-    if decay_note:
-        t1.append(f"  Emotion: {decay_note}")
-
     # === Tier 2: 身体・環境 ===
     # Body state — show all 5 metrics with percentages (unified with MCP tools format)
     from nous.api.mcp._tools_helpers import _format_body_metrics
