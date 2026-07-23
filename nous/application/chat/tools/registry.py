@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from nous.application.chat.tools.builtin import execute_tool, filter_extra_tools, truncate_tool_result
@@ -17,6 +18,13 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# search_tools のツール名定数（definitions.py の循環インポート回避のためここで定義）
+SEARCH_TOOLS_NAME = "search_tools"
+
+if TYPE_CHECKING:
+    # 型エイリアス: search_tools ハンドラ（runtime では使わない）
+    SearchHandler = Callable[..., Awaitable[dict]]
+
 
 class ToolRegistry:
     """built-in + MCP ツールを統一管理し、重複を除去して提供する。"""
@@ -25,6 +33,7 @@ class ToolRegistry:
         self,
         builtin_tools: list[ToolDefinition],
         mcp_pool: MCPClientPool | None = None,
+        search_handler: SearchHandler | None = None,
     ) -> None:
         extra = mcp_pool.list_all_tools() if mcp_pool else []
         filtered_extra = filter_extra_tools(extra)
@@ -33,6 +42,8 @@ class ToolRegistry:
         self._builtin = list(builtin_tools)
         self._extra = [t for t in filtered_extra if t.name not in builtin_names]
         self._mcp_pool = mcp_pool
+        self._discovered_tools: set[str] = set()
+        self._search_handler: SearchHandler | None = search_handler
 
     def add_skills_info(self, skills: list[dict]) -> None:
         """invoke_skill ツールの description に有効スキル一覧を動的注入する。"""
@@ -57,6 +68,18 @@ class ToolRegistry:
         """重複除去済みの全ツールリストを返す。builtin はアルファベット順（キャッシュ最適化） + MCP は末尾。"""
         return sorted(self._builtin, key=lambda t: t.name) + self._extra
 
+    def get_visible_tools(self) -> list[ToolDefinition]:
+        """defer_loading=False のツール + セッション中に search_tools で発見済みのツールのみ返す。"""
+        all_tools = self.get_all_tools()
+        return [
+            t for t in all_tools
+            if not t.defer_loading or t.name in self._discovered_tools or t.name == SEARCH_TOOLS_NAME
+        ]
+
+    def mark_discovered(self, tool_name: str) -> None:
+        """search_tools で発見されたツールを追跡する。"""
+        self._discovered_tools.add(tool_name)
+
     def is_mcp_tool(self, tool_name: str) -> bool:
         """MCPプール経由で呼ぶべきツールか判定する。"""
         return "__" in tool_name
@@ -68,9 +91,14 @@ class ToolRegistry:
         tool_name: str,
         tool_input: dict,
     ) -> dict:
-        """ツール名に応じて built-in / MCP を自動ルーティングして実行する。"""
+        """ツール名に応じて search_tools / built-in / MCP を自動ルーティングして実行する。"""
         try:
-            if self.is_mcp_tool(tool_name):
+            if tool_name == SEARCH_TOOLS_NAME:
+                if self._search_handler is None:
+                    result = {"status": "error", "message": "Tool search handler not available"}
+                else:
+                    result = await self._search_handler(ctx, config, tool_input)
+            elif self.is_mcp_tool(tool_name):
                 if self._mcp_pool is None:
                     return {"status": "error", "message": "MCP pool not available"}
                 result = await self._mcp_pool.call_tool(tool_name, tool_input)
