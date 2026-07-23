@@ -119,7 +119,10 @@ class ForgettingCurveRanker:
             if strength_data is not None:
                 strength_val, stability = strength_data
                 if stability and stability > 0 and r.memory.created_at:
-                    elapsed_hours = (now - r.memory.created_at).total_seconds() / 3600
+                    created = r.memory.created_at
+                    if created.tzinfo is None:
+                        created = created.replace(tzinfo=UTC)
+                    elapsed_hours = (now - created).total_seconds() / 3600
                     recall = (1 + 19 * elapsed_hours / (stability * 24)) ** -0.5
                     new_score = r.score * (0.3 + 0.7 * recall)
                 else:

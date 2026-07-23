@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -72,6 +73,20 @@ class TestForgettingCurveRanker:
         ranked = ranker.rank(results, query)
         assert len(ranked) == 1
         assert ranked[0].score == pytest.approx(0.5)
+
+    def test_handles_naive_created_at(self) -> None:
+        """offset-naive created_at (from SQLite) must not crash when compared with offset-aware now."""
+        memory = MagicMock()
+        memory.key = "x"
+        memory.created_at = datetime(2024, 1, 1, 12, 0, 0)  # offset-naive, no tzinfo
+        memory.importance = 0.5
+        memory.emotion = None
+        result = SearchResult(memory=memory, score=1.0, source="keyword")
+        ranker = ForgettingCurveRanker(lambda key: (1.0, 100.0))  # stability > 0
+        query = SearchQuery(text="test")
+        ranked = ranker.rank([result], query)
+        assert len(ranked) == 1
+        assert ranked[0].score > 0
 
 
 class TestChainedRanker:
