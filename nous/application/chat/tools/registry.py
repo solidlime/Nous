@@ -8,10 +8,11 @@ from nous.application.chat.tools.builtin import execute_tool, filter_extra_tools
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
+from nous.infrastructure.llm.base import ToolDefinition
+
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
     from nous.domain.chat_config import ChatConfig
-    from nous.infrastructure.llm.base import ToolDefinition
     from nous.infrastructure.mcp_client import MCPClientPool
 
 logger = get_logger(__name__)
