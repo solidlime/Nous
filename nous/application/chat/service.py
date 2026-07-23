@@ -111,7 +111,7 @@ class ChatService:
 
             # max_stored_messages によるメッセージ数制限（LLMMessage数でカウント）
             max_msgs = config.max_stored_messages
-            if len(messages) > max_msgs:
+            if len(messages) >= max_msgs:
                 logger.info(
                     "Truncated session messages: %d → %d (max_stored_messages=%d)",
                     len(messages),

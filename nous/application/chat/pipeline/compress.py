@@ -55,7 +55,7 @@ class CompressStep:
         total = counter.count(turn_ctx.system_prompt) + counter.count_messages(session_messages, "")
 
         # max_stored_messages 超過時は強制圧縮
-        force_compress = len(session_messages) > config.max_stored_messages
+        force_compress = len(session_messages) >= config.max_stored_messages
 
         if config.context_max_tokens is not None:
             model_max = config.context_max_tokens
