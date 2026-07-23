@@ -18,7 +18,7 @@ TOOL_USAGE_GUIDELINES = """\
 <tool_usage>
 【最重要指示】あなたは以下の能力を使えます。テキスト説明だけで済ませず、必ず実際に能力を発動してください。
 
-以下の「利用可能なSkill」セクションにスキル一覧があります。各スキルは name + description のみ記載。発動条件に合致したら、ユーザー指示を待たず自律的に invoke_skill を呼び出してください。
+スキル一覧は invoke_skill ツールの description に記載されています。発動条件に合致したら、ユーザー指示を待たず自律的に invoke_skill を呼び出してください。
 
 invoke_skill の結果には、従うべき手順・判断基準・ワークフローが記されています。その内容に忠実に従ってください。
 
@@ -49,10 +49,16 @@ class PromptBuildStep:
         persona = ctx.persona
 
         base_system = config.system_prompt or f"あなたは{persona}です。"
-        parts = [base_system]
 
-        # --- ツール使用ガイドライン ---
-        parts.append(f"\n{TOOL_USAGE_GUIDELINES}")
+        # --- 静的パート（キャッシュ可能）---
+        static_parts = [
+            base_system,
+            f"\n{TOOL_USAGE_GUIDELINES}",
+            "\n【最終確認】必要な能力があれば黙って発動せよ。",
+        ]
+
+        # --- 動的パート（ターンごとに変化）---
+        dynamic_parts: list[str] = []
 
         # --- スキル読み込み ---
         skills_raw: list[dict] = []
@@ -94,20 +100,22 @@ class PromptBuildStep:
 
         # --- 時間コンテキスト ---
         if turn_ctx.time_context:
-            parts.append(f"\n{turn_ctx.time_context}")
+            dynamic_parts.append(f"\n{turn_ctx.time_context}")
 
         if turn_ctx.context_section:
-            parts.append(f"\n--- あなたの現在の状態 ---\n{turn_ctx.context_section}")
+            dynamic_parts.append(f"\n--- あなたの現在の状態 ---\n{turn_ctx.context_section}")
         if turn_ctx.related_memories:
-            parts.append(f"\n--- 関連記憶 ---\n{turn_ctx.related_memories}")
-
-        # 末尾リマインダー（Instruction Sandwich 戦略）
-        parts.append("\n【最終確認】必要な能力があれば黙って発動せよ。")
+            dynamic_parts.append(f"\n--- 関連記憶 ---\n{turn_ctx.related_memories}")
 
         # Author's Note: inject at end of system prompt if set
         author_note = getattr(turn_ctx, "author_note", None)
         if author_note:
-            parts.append(f"\n[Author's Note]\n{author_note}")
+            dynamic_parts.append(f"\n[Author's Note]\n{author_note}")
+
+        parts = static_parts
+        if dynamic_parts:
+            parts.append("\n<!-- __STATIC_END__ -->")
+            parts.extend(dynamic_parts)
 
         turn_ctx.system_prompt = "\n".join(parts)
         turn_ctx.skills_raw = skills_raw
