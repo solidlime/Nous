@@ -664,7 +664,19 @@ class SessionManager:
         key = (persona, session_id)
         if key in self._sessions:
             self._sessions.move_to_end(key)
-            return self._sessions[key]
+            window = self._sessions[key]
+            # max_messages 変更を同期
+            if window._max_messages != max_messages:
+                window._max_messages = max_messages
+                # 減った場合は超過分を即座に evict
+                path_len = window.get_message_count()
+                if path_len > max_messages:
+                    overflow = path_len - max_messages
+                    evicted = window._evict_oldest(overflow)
+                    if evicted and window.evict_callback is not None:
+                        with contextlib.suppress(Exception):
+                            window.evict_callback(evicted)
+            return window
         if len(self._sessions) >= self._max:
             self._sessions.popitem(last=False)
 
