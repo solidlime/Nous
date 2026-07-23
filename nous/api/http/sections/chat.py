@@ -117,6 +117,7 @@ def render_chat_tab() -> str:
                                         <option value="anthropic">Anthropic (Claude)</option>
                                         <option value="openai">OpenAI</option>
                                         <option value="openrouter">OpenRouter</option>
+                                        <option value="google">Google (Gemini)</option>
                                     </select>
                                 </div>
                                 <div>

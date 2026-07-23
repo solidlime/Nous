@@ -289,7 +289,7 @@ function onChatProviderChange() {
   const baseUrlRow = document.getElementById("chat-base-url-row");
   if (baseUrlRow) {
     baseUrlRow.style.display =
-      provider === "openrouter" || provider === "openai" ? "" : "none";
+      provider === "openrouter" || provider === "openai" || provider === "google" ? "" : "none";
   }
 }
 

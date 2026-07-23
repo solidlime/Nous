@@ -22,6 +22,7 @@ _ENV_API_KEYS: dict[str, str] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
+    "google": "GEMINI_API_KEY",
 }
 
 # Default model names per provider
@@ -29,6 +30,7 @@ _DEFAULT_MODELS: dict[str, str] = {
     "anthropic": "claude-opus-4-5",
     "openai": "gpt-4o",
     "openrouter": "openai/gpt-4o",
+    "google": "gemini-2.5-flash",
 }
 
 # Default base URLs per provider (empty means use SDK default)
@@ -36,6 +38,7 @@ _DEFAULT_BASE_URLS: dict[str, str] = {
     "anthropic": "",
     "openai": "",
     "openrouter": "https://openrouter.ai/api/v1",
+    "google": "",
 }
 
 
