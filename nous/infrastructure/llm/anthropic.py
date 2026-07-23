@@ -111,10 +111,24 @@ class AnthropicProvider(LLMProvider):
         api_messages = self._to_api_messages(messages)
 
         try:
+            # 静的パートのプロンプトキャッシュ（cache_control: ephemeral）
+            # <!-- __STATIC_END__ --> 境界で静的部分と動的部分を分離
+            _BOUNDARY = "<!-- __STATIC_END__ -->"
+            if _BOUNDARY in system:
+                static_part, _, dynamic_part = system.partition(_BOUNDARY)
+                system_content: list[dict] = [
+                    {"type": "text", "text": static_part, "cache_control": {"type": "ephemeral"}},
+                ]
+                if dynamic_part.strip():
+                    system_content.append({"type": "text", "text": dynamic_part})
+                system_param: str | list = system_content
+            else:
+                system_param = system
+
             kwargs: dict = {
                 "model": self.model,
                 "max_tokens": max_tokens,
-                "system": system,
+                "system": system_param,
                 "messages": api_messages,
                 "temperature": temperature,
             }
