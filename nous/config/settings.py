@@ -96,6 +96,8 @@ class MemoryEnrichmentConfig(BaseModel):
             return settings.openai_api_key
         if self.provider == "google" and settings.google_api_key:
             return settings.google_api_key
+        if self.provider == "opencode_go" and settings.opencode_go_api_key:
+            return settings.opencode_go_api_key
 
         # 3. RuntimeConfigManager fallback (hot-reload overrides)
         from nous.config.runtime_config import RuntimeConfigManager
@@ -111,6 +113,7 @@ class MemoryEnrichmentConfig(BaseModel):
             "anthropic": "ANTHROPIC_API_KEY",
             "openai": "OPENAI_API_KEY",
             "google": "GEMINI_API_KEY",
+            "opencode_go": "OPENCODE_GO_API_KEY",
         }
         env_var = _legacy_env_keys.get(self.provider, "")
         return os.environ.get(env_var, "")
@@ -232,6 +235,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openrouter_api_key: str = ""
     google_api_key: str = ""  # env: NOUS_GOOGLE_API_KEY
+    opencode_go_api_key: str = ""  # env: NOUS_OPENCODE_GO_API_KEY
 
     embedding: EmbeddingConfig = EmbeddingConfig()
     reranker: RerankerConfig = RerankerConfig()

@@ -20,5 +20,11 @@ def get_provider(provider: str, api_key: str, model: str, base_url: str = "") ->
         return OpenAICompatProvider(api_key=api_key, model=model, base_url=base_url or _OPENROUTER_BASE_URL)
     elif provider == "google":
         return GeminiProvider(api_key=api_key, model=model, base_url=base_url)
+    elif provider == "opencode_go":
+        return OpenAICompatProvider(
+            api_key=api_key,
+            model=model,
+            base_url=base_url or "https://opencode.ai/zen/go/v1",
+        )
     else:
-        raise ValueError(f"Unknown LLM provider: {provider}. Supported: anthropic, openai, openrouter, google")
+        raise ValueError(f"Unknown LLM provider: {provider}. Supported: anthropic, openai, openrouter, google, opencode_go")

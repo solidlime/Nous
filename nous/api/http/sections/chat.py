@@ -118,6 +118,7 @@ def render_chat_tab() -> str:
                                         <option value="openai">OpenAI</option>
                                         <option value="openrouter">OpenRouter</option>
                                         <option value="google">Google (Gemini)</option>
+                                        <option value="opencode_go">OpenCode Go (DeepSeek V4)</option>
                                     </select>
                                 </div>
                                 <div>
