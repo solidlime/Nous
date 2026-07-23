@@ -99,7 +99,7 @@ class CompressStep:
 
         # Re-check
         total = counter.count(turn_ctx.system_prompt) + counter.count_messages(session_messages, "")
-        if total <= budget:
+        if not force_compress and total <= budget:
             return session_messages
 
         # Stage 2: Clear old tool results
@@ -110,7 +110,7 @@ class CompressStep:
 
         # Re-check
         total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
-        if total <= budget:
+        if not force_compress and total <= budget:
             return list(messages)
 
         keep_recent = getattr(config, "context_keep_recent_turns", 2)
@@ -118,7 +118,7 @@ class CompressStep:
         # Stage 3: LLM-based summary of old conversation turns (runs BEFORE truncation)
         # Only runs when we're over budget and there's enough history worth summarizing
         if (
-            total > budget
+            (force_compress or total > budget)
             and getattr(config, "context_compress_history", True)
             and self._should_summarize(messages, config)
         ):
