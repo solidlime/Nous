@@ -218,7 +218,7 @@ def render_chat_tab() -> str:
                                   </select>
 
                                   <div class="chat-field-label">完全保持ターン数</div>
-                                  <input type="number" id="chat-keep-recent" class="chat-field-input" value="2" min="1" max="20" />
+                                  <input type="number" id="chat-keep-recent" class="chat-field-input" value="2" min="1" />
                                   <span class="setting-hint">AIが要約せず完全に保持する最新の会話ターン数です。表示履歴数より小さく設定することを推奨します。</span>
 
                                   <div class="chat-field-label">記憶プリロード数</div>

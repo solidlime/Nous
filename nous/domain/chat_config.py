@@ -221,7 +221,7 @@ class ChatConfig(BaseModel):
     @field_validator("context_keep_recent_turns")
     @classmethod
     def _clamp_keep_recent(cls, v: int) -> int:
-        return max(1, min(20, v))
+        return max(1, v)  # 上限撤廃
 
     @field_validator("memory_preload_count")
     @classmethod
