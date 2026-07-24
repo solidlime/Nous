@@ -114,18 +114,19 @@ async function loadTimeline() {
 
         _timelineItems = new vis.DataSet(items);
 
+        var isMobile = window.matchMedia('(max-width: 767px)').matches;
         const options = {
             height: '100%',
-            minHeight: '500px',
-            start: items.length > 0 ? new Date(items[items.length-1].start.getTime() - 86400000 * 7) : new Date(),
+            minHeight: isMobile ? '350px' : '500px',
+            start: items.length > 0 ? new Date(items[items.length-1].start.getTime() - 86400000 * (isMobile ? 3 : 7)) : new Date(),
             end: new Date(),
             zoomable: true,
             moveable: true,
             selectable: true,
             multiselect: false,
-            tooltip: { followMouse: true, overflowMethod: 'cap' },
-            margin: { item: { vertical: 8 } },
-            timeAxis: { scale: 'day', step: 1 },
+            tooltip: { followMouse: !isMobile, overflowMethod: 'cap' },
+            margin: { item: { vertical: isMobile ? 4 : 8 } },
+            timeAxis: { scale: isMobile ? 'day' : 'day', step: 1 },
             orientation: { axis: 'top' },
         };
 

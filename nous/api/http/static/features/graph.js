@@ -219,30 +219,34 @@ function renderNetwork(container, nodes, edges) {
     };
 
     var physicsEnabled = document.getElementById('graph-physics-toggle').checked;
+    var isMobile = window.matchMedia('(max-width: 767px)').matches;
 
     var options = {
         physics: {
             enabled: physicsEnabled,
             barnesHut: {
-                gravitationalConstant: -3000,
-                centralGravity: 0.3,
-                springLength: 120,
+                gravitationalConstant: isMobile ? -2000 : -3000,
+                centralGravity: isMobile ? 0.4 : 0.3,
+                springLength: isMobile ? 80 : 120,
                 springConstant: 0.04,
-                damping: 0.09
+                damping: isMobile ? 0.12 : 0.09
             },
-            stabilization: { iterations: 150, fit: true }
+            stabilization: { iterations: isMobile ? 80 : 150, fit: true }
         },
         interaction: {
-            hover: true,
+            hover: !isMobile,
             tooltipDelay: 200,
             hideEdgesOnDrag: true,
             hideEdgesOnZoom: true,
-            multiselect: false
+            multiselect: false,
+            dragNodes: true,
+            dragView: true,
+            zoomView: true
         },
         nodes: {
             shape: 'dot',
-            scaling: { min: 10, max: 40 },
-            font: { color: _graphFontColor(), size: 11 }
+            scaling: { min: isMobile ? 8 : 10, max: isMobile ? 30 : 40 },
+            font: { color: _graphFontColor(), size: isMobile ? 9 : 11 }
         },
         edges: {
             smooth: { type: 'continuous', roundness: 0.2 }
