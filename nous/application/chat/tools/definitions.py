@@ -176,7 +176,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="item_add",
-        defer_loading=True,
+        defer_loading=False,
         description="物理的なアイテムをペルソナのインベントリに追加する。ペルソナが有形の物体を取得・受領した時に使え。感情・概念・情報などの抽象物を追加するな。item_name が必須。category/tags/description/quantity で分類・補足できる。",
         input_schema={
             "type": "object",
@@ -192,7 +192,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="item_equip",
-        defer_loading=True,
+        defer_loading=False,
         description="インベントリ内のアイテムを装備スロットにセットする。ペルソナが服を着る・アクセサリを付ける・武器を持つ時に使え。抽象的な概念や非物理的な状態を装備するな。equipment が必須（{slot: item_name} 形式）。auto_add=true で未登録アイテムの自動追加が可能。",
         input_schema={
             "type": "object",
@@ -205,7 +205,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="item_search",
-        defer_loading=True,
+        defer_loading=False,
         description="ペルソナのインベントリを検索する。所持品の確認や装備可能なアイテムを探す時に使え。外部の物や他者の所持品は検索できない。query（部分一致）や category で結果を絞り込める。",
         input_schema={
             "type": "object",
@@ -217,7 +217,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="image_generate",
-        defer_loading=True,
+        defer_loading=False,
         description="AI画像を生成する。ユーザーが画像を要求した時、または視覚表現が会話を強化する時に使え。ユーザーの許可なしに無関係な画像を生成するな。テキストの説明で十分な場面では使うな。prompt は必須（Danbooru タグ形式推奨）。n で枚数（1-4）、size で解像度、mode で構図を指定できる。",
         input_schema={
             "type": "object",
@@ -252,7 +252,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="list_skills",
-        defer_loading=True,
+        defer_loading=False,
         description="登録済みスキルの一覧を取得する。利用可能なスキルを把握したい時に使え。スキルの発動自体には invoke_skill を使うこと。引数不要。",
         input_schema={
             "type": "object",

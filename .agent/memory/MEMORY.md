@@ -1,5 +1,12 @@
 # MEMORY
 
+## プロンプトキャッシュ共通化 (2026-07-24)
+- `cache_utils.py` 新規作成: `split_system_prompt()`, `build_anthropic_system()`, `build_openai_system_messages()`
+- `anthropic.py` のインライン `<!-- __STATIC_END__ -->` パース処理を `build_anthropic_system()` に委譲 (-11行)
+- `openai_compat.py` の system message 構築を `build_openai_system_messages()` に委譲
+- OpenAI/OpenRouter でも `cache_control: {"type": "ephemeral"}` が使えるようになった
+- 教訓: 両プロバイダで同じロジックがコピペされていた。3つ目のプロバイダが来る前に共通化できてよかった。
+
 ## Portrait Feature Removal (2026-07-18)
 - **削除ファイル**: Python 6件、JS/CSS 4件、テスト 3件 = 13ファイル
 - **部分削除ファイル**: 25ファイル（Python backend, JS frontend, HTML sections, docs）
