@@ -324,6 +324,22 @@ async function init() {
       const idx = e.key === "0" ? 9 : parseInt(e.key) - 1;
       if (idx < tabs.length) switchTab(tabs[idx]);
     }
+
+    // Arrow key tab navigation (Left / Right)
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      const tabBtns = document.querySelectorAll('.tab-btn[role="tab"]');
+      let currentIdx = -1;
+      tabBtns.forEach((btn, i) => {
+        if (btn === document.activeElement) currentIdx = i;
+      });
+      if (currentIdx === -1) return;
+      e.preventDefault();
+      const nextIdx = e.key === "ArrowRight"
+        ? (currentIdx + 1) % tabBtns.length
+        : (currentIdx - 1 + tabBtns.length) % tabBtns.length;
+      tabBtns[nextIdx].focus();
+      switchTab(tabBtns[nextIdx].dataset.tab);
+    }
   });
 }
 
