@@ -63,7 +63,10 @@ def render_head() -> str:
     <script src="/static/chat/chat-tts.js" defer></script>
     <script src="/static/chat/chat-voice.js" defer></script>
     <!-- Feature page scripts (defer so N.Core is available) -->
-    <script src="/static/overview.js" defer></script>
+    <script src="/static/features/overview/overview-core.js" defer></script>
+    <script src="/static/features/overview/overview-stats.js" defer></script>
+    <script src="/static/features/overview/overview-charts.js" defer></script>
+    <script src="/static/features/overview/overview-context.js" defer></script>
     <script src="/static/memories.js" defer></script>
     <script src="/static/settings.js" defer></script>
     <script src="/static/features/graph.js" defer></script>

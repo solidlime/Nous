@@ -1,3 +1,11 @@
+/* =================================================================
+   OVERVIEW CORE — State, initialization, CRUD helpers, main loader
+   Namespace: N.Features.Overview.*
+   Depends on: N.Core.* (esc, toast, api, truncate, relativeTime, fmtDate)
+               window.* (errorCard, safeSetHTML, Chart, lucide, destroyChart, chartOpts)
+   ================================================================= */
+N.Features.Overview = N.Features.Overview || {};
+
 ;(function() {
 var S = window.S;
 var { esc, toast, api, truncate, relativeTime, fmtDate } = window.Nous.Core;
@@ -618,4 +626,23 @@ async function loadOverview() {
     }
 }
 window.loadOverview = loadOverview;
+
+// Register in namespace
+Object.assign(N.Features.Overview, {
+    loadOverview: loadOverview,
+    showCreateBlock: showCreateBlock,
+    showEditBlock: showEditBlock,
+    hideBlockModal: hideBlockModal,
+    saveBlock: saveBlock,
+    deleteBlock: deleteBlock,
+    deleteItem: deleteItem,
+    openAddItemModal: openAddItemModal,
+    closeAddItemModal: closeAddItemModal,
+    saveNewItem: saveNewItem,
+    openEditItemModal: openEditItemModal,
+    closeEditItemModal: closeEditItemModal,
+    saveEditItem: saveEditItem,
+    changeEquipSlot: changeEquipSlot,
+    unequipSlot: unequipSlot,
+});
 })();
