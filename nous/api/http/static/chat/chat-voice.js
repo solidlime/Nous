@@ -19,7 +19,7 @@ function toggleVoiceInput() {
     _voiceRecognition.stop();
     _voiceRecognition = null;
     if (btn) {
-      btn.innerHTML = '<i data-lucide="mic"></i>';
+      safeSetHTML(btn, '<i data-lucide="mic"></i>');
       btn.style.color = "";
     }
     return;
@@ -29,7 +29,7 @@ function toggleVoiceInput() {
   _voiceRecognition.interimResults = false;
   _voiceRecognition.continuous = false;
   if (btn) {
-    btn.innerHTML = '<i data-lucide="circle-dot"></i>';
+    safeSetHTML(btn, '<i data-lucide="circle-dot"></i>');
     btn.style.color = "var(--accent-red)";
   }
   _voiceRecognition.onresult = (event) => {
@@ -41,7 +41,7 @@ function toggleVoiceInput() {
     }
     _voiceRecognition = null;
     if (btn) {
-      btn.innerHTML = '<i data-lucide="mic"></i>';
+      safeSetHTML(btn, '<i data-lucide="mic"></i>');
       btn.style.color = "";
     }
   };
@@ -49,13 +49,13 @@ function toggleVoiceInput() {
     toast("音声認識エラー", "error");
     _voiceRecognition = null;
     if (btn) {
-      btn.innerHTML = '<i data-lucide="mic"></i>';
+      safeSetHTML(btn, '<i data-lucide="mic"></i>');
       btn.style.color = "";
     }
   };
   _voiceRecognition.onend = () => {
     if (btn) {
-      btn.innerHTML = '<i data-lucide="mic"></i>';
+      safeSetHTML(btn, '<i data-lucide="mic"></i>');
       btn.style.color = "";
     }
   };
