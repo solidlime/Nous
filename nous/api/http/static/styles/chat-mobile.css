@@ -41,6 +41,13 @@
     background: var(--bg-primary);
     transition: transform var(--duration-normal) var(--ease-apple);
     will-change: transform;
+    display: flex;
+    flex-direction: column;
+  }
+  #settings-panel .settings-scroll-container {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   #settings-panel.collapsed {
     transform: translateX(100%);
