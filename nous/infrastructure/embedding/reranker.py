@@ -7,19 +7,19 @@ ONNX inference pipeline for search result re-ranking.
 from __future__ import annotations
 
 import os
-import threading
 
 import numpy as np
 import onnxruntime
 from huggingface_hub import snapshot_download
 from tokenizers import Tokenizer
 
+from nous.infrastructure.embedding._base import OnnxBaseModel
 from nous.infrastructure.logging.structured import get_logger
 
 logger = get_logger(__name__)
 
 
-class RerankerModel:
+class RerankerModel(OnnxBaseModel):
     """Lazy-loading reranker model for search result refinement.
 
     Uses ONNX Runtime + tokenizers instead of the old CrossEncoder backend.
@@ -31,11 +31,10 @@ class RerankerModel:
         model_name: str = "hotchpotch/japanese-reranker-xsmall-v2",
         enabled: bool = True,
     ) -> None:
+        super().__init__()
         self.model_name = model_name
         self.enabled = enabled
-        self._session: onnxruntime.InferenceSession | None = None
         self._tokenizer: Tokenizer | None = None
-        self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Public API
@@ -181,13 +180,6 @@ class RerankerModel:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-
-    def _ensure_loaded(self) -> None:
-        """Lazy-load model with double-checked locking."""
-        if self._session is None:
-            with self._lock:
-                if self._session is None:
-                    self._load_model()
 
     def _load_model(self) -> None:
         """Download ONNX model + tokenizer, create InferenceSession (CPU)."""
