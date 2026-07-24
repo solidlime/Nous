@@ -257,8 +257,8 @@ function showSkeleton(tabId) {
   )
     return;
   const content = container.querySelector('[id$="-content"]') || container;
-  content.innerHTML =
-    skeletons[tabId] || '<div class="skeleton skeleton-card glass"></div>';
+  safeSetHTML(content,
+    skeletons[tabId] || '<div class="skeleton skeleton-card glass"></div>');
 }
 
 /* =================================================================
@@ -366,13 +366,13 @@ async function init() {
     const data = await api("/api/personas");
     const personas = data.personas || [];
     const sel = document.getElementById("persona-select");
-    sel.innerHTML = "";
+    safeSetHTML(sel, "");
     if (personas.length === 0) {
-      sel.innerHTML = '<option value="">No personas found</option>';
-      document.getElementById("overview-content").innerHTML =
+      safeSetHTML(sel, '<option value="">No personas found</option>');
+      safeSetHTML(document.getElementById("overview-content"),
         '<div class="empty-state"><div class="empty-state-icon"><i data-lucide="user-plus"></i></div>' +
         '<div class="empty-state-text">Personasタブでペルソナを作成してください。</div>' +
-        '<button class="empty-state-cta" onclick="switchTab(\'personas\')"><i data-lucide="user-plus"></i> ペルソナを作成</button></div>';
+        '<button class="empty-state-cta" onclick="switchTab(\'personas\')"><i data-lucide="user-plus"></i> ペルソナを作成</button></div>');
       if (typeof lucide !== "undefined") lucide.createIcons();
       return;
     }
@@ -535,7 +535,7 @@ function toggleShortcutHelp() {
   overlay.className = "shortcut-help-overlay";
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-label", "Keyboard Shortcuts");
-  overlay.innerHTML =
+  safeSetHTML(overlay,
     '<div class="shortcut-help-modal">' +
     '<div class="shortcut-help-header">' +
     '<span>⌨ Keyboard Shortcuts</span>' +
@@ -549,7 +549,7 @@ function toggleShortcutHelp() {
     "<tr><td><kbd>Esc</kbd></td><td>Close modals / panels</td></tr>" +
     "<tr><td><kbd>?</kbd></td><td>Toggle this help</td></tr>" +
     "</table>" +
-    "</div></div>";
+    "</div></div>");
   document.body.appendChild(overlay);
   requestAnimationFrame(function () {
     overlay.classList.add("show");
@@ -614,7 +614,7 @@ function openCreatePersonaModal() {
     modal.id = 'create-persona-modal';
     modal.className = 'modal-overlay';
     modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
-    modal.innerHTML = '\
+    safeSetHTML(modal, '\
       <div style="background:var(--bg-secondary);border-radius:16px;padding:24px;min-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.3)">\
         <h2 style="margin:0 0 4px 0;font-size:1.2rem"><i data-lucide="user-plus"></i> Create Persona</h2>\
         <p style="color:var(--text-muted);font-size:0.85rem;margin:0 0 16px 0">Enter a name for the new persona.</p>\
@@ -625,7 +625,7 @@ function openCreatePersonaModal() {
             <button type="submit" class="glass-btn" style="background:var(--accent-purple);color:white">Create</button>\
           </div>\
         </form>\
-      </div>';
+      </div>');
     document.body.appendChild(modal);
     // Close on overlay click
     modal.addEventListener('click', function(e) {
