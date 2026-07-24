@@ -263,7 +263,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         name="search_tools",
         defer_loading=False,
         description=(
-            "利用可能なツールを説明文から検索する。"
             "必要な機能のツール名がわからない時、または一覧にない機能が必要な時に使え。"
             "明らかに存在しない機能を推測で検索するな。クエリに関連するツールがなければ「見つからない」と報告せよ。"
             "query（検索したい機能の説明）が必須。top_k で取得件数を指定できる。"
