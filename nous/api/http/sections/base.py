@@ -67,7 +67,10 @@ def render_head() -> str:
     <script src="/static/features/overview/overview-stats.js" defer></script>
     <script src="/static/features/overview/overview-charts.js" defer></script>
     <script src="/static/features/overview/overview-context.js" defer></script>
-    <script src="/static/memories.js" defer></script>
+    <script src="/static/features/memories/memories-core.js" defer></script>
+    <script src="/static/features/memories/memories-list.js" defer></script>
+    <script src="/static/features/memories/memories-search.js" defer></script>
+    <script src="/static/features/memories/memories-edit.js" defer></script>
     <script src="/static/features/settings/settings-validation.js" defer></script>
     <script src="/static/features/settings/settings-save.js" defer></script>
     <script src="/static/features/settings/settings-form.js" defer></script>
