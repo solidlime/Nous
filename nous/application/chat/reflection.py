@@ -10,6 +10,7 @@ import json
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from nous.domain.language import LanguageResolver
 from nous.domain.memory.reflection_schema import OUTPUT_FORMAT, REFLECTION_SCHEMA, ReflectionQuestion
 from nous.domain.search.engine import SearchQuery
 from nous.infrastructure.llm.base import LLMMessage
@@ -35,6 +36,7 @@ Below is a list of recently recorded memories and facts.
 {memories}
 
 [Instruction]
+Write in {language}.
 From these memories, derive the 3 most important high-level insights.
 Each insight should represent a pattern, tendency, or essential understanding — not a mere repetition of individual facts.
 
@@ -139,8 +141,13 @@ async def maybe_run_reflection(
     if not memories:
         return []
 
+    language_resolver = LanguageResolver(config)
+    lang = language_resolver.resolve()
     memory_lines = "\n".join(f"- [{m.importance:.1f}] {m.content[:120]}" for m in memories[:20])
-    prompt = _REFLECTION_PROMPT.format(memories=memory_lines)
+    prompt = _REFLECTION_PROMPT.format(
+        memories=memory_lines,
+        language=LanguageResolver.display_name(lang),
+    )
 
     try:
         provider = get_provider(config.provider, api_key, extract_model, config.get_effective_base_url())
@@ -225,9 +232,11 @@ class ReflectionEngine:
         self,
         schema: list[ReflectionQuestion] | None = None,
         logger: Any | None = None,
+        config: ChatConfig | None = None,
     ) -> None:
         self._schema = schema or REFLECTION_SCHEMA
         self._logger = logger or get_logger(self.__class__.__name__)
+        self._config = config
 
     # ---- public API ---------------------------------------------------
 
@@ -333,12 +342,20 @@ class ReflectionEngine:
             ensure_ascii=False,
         )
         memory_lines = "\n".join(f"- {getattr(m, 'content', str(m))}" for m in memories[-30:])
+
+        if self._config is not None:
+            resolver = LanguageResolver(self._config)
+            lang = resolver.resolve()
+            language_name = LanguageResolver.display_name(lang)
+        else:
+            language_name = "English"
+
         return (
             f"You are {persona}. Analyze the recent memories and generate insights.\n\n"
             f"Reflection tasks:\n{schema_desc}\n\n"
             f"Output format: {json.dumps(OUTPUT_FORMAT, ensure_ascii=False)}\n\n"
             f"Recent memories:\n{memory_lines}\n\n"
-            f"Generate insights in {persona}'s natural language. "
+            f"Generate insights in {language_name}. "
             "The reflection should reveal patterns, traits, or implications "
             "that are NOT explicitly stated in individual memories."
         )
