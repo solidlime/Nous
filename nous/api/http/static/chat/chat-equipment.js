@@ -96,7 +96,7 @@ function updateEquipmentPanel(update) {
   }
 
   if (html) {
-    list.innerHTML = html;
+    safeSetHTML(list, html);
     N.Core.refreshIcons();
   }
 }

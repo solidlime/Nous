@@ -31,7 +31,7 @@ function renderCodeBlock(lang, code) {
   // Build the wrapper HTML without inline onclick
   const wrapper = document.createElement("div");
   wrapper.className = "hljs-block-wrapper";
-  wrapper.innerHTML =
+  safeSetHTML(wrapper,
     '<div class="hljs-block-header">' +
     '<span class="hljs-lang-badge">' +
     esc(lang || "") +

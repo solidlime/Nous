@@ -63,12 +63,12 @@ function showCommandPopup(inputEl) {
     item.className = "chat-command-item" + (idx === 0 ? " active" : "");
     item.setAttribute("role", "option");
     item.setAttribute("aria-selected", idx === 0 ? "true" : "false");
-    item.innerHTML =
+    safeSetHTML(item,
       '<span class="cmd-name">' +
       cmd.name +
       '</span><span class="cmd-desc">' +
       cmd.desc +
-      "</span>";
+      "</span>");
     item.onclick = function () {
       inputEl.value = cmd.name + " ";
       inputEl.focus();

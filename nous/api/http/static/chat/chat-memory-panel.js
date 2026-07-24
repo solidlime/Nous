@@ -27,9 +27,9 @@ function updateMemoryPanel(retrieved, saved, goals) {
     const retrievedList = document.getElementById("memory-retrieved-list");
     if (retrievedList) {
       if (!retrieved || retrieved.length === 0) {
-        retrievedList.innerHTML = '<div class="memory-empty">なし</div>';
+        safeSetHTML(retrievedList, '<div class="memory-empty">なし</div>');
       } else {
-        retrievedList.innerHTML = retrieved
+        safeSetHTML(retrievedList, retrieved
           .map((m) => {
             const score = m.score != null ? parseFloat(m.score).toFixed(3) : "";
             const imp =
@@ -75,7 +75,7 @@ function updateMemoryPanel(retrieved, saved, goals) {
               "</div>"
             );
           })
-          .join("");
+          .join(""));
       }
     }
   }
@@ -83,9 +83,9 @@ function updateMemoryPanel(retrieved, saved, goals) {
     const savedList = document.getElementById("memory-saved-list");
     if (savedList) {
       if (!saved || saved.length === 0) {
-        savedList.innerHTML = '<div class="memory-empty">なし</div>';
+        safeSetHTML(savedList, '<div class="memory-empty">なし</div>');
       } else {
-        savedList.innerHTML = saved
+        safeSetHTML(savedList, saved
           .map((m) => {
             var _raw = typeof m.content === "object" && m.content !== null ? JSON.stringify(m.content) : String(m.content || "");
             const content = esc(_raw.substring(0, 80));
@@ -123,7 +123,7 @@ function updateMemoryPanel(retrieved, saved, goals) {
               "</div>"
             );
           })
-          .join("");
+          .join(""));
       }
     }
   }
@@ -131,9 +131,9 @@ function updateMemoryPanel(retrieved, saved, goals) {
     const goalsList = document.getElementById("memory-goals-list");
     if (goalsList) {
       if (!goals || goals.length === 0) {
-        goalsList.innerHTML = '<div class="memory-empty">なし</div>';
+        safeSetHTML(goalsList, '<div class="memory-empty">なし</div>');
       } else {
-        goalsList.innerHTML = goals
+        safeSetHTML(goalsList, goals
           .map((g) => {
             const key = g.key || "";
             return (
@@ -158,7 +158,7 @@ function updateMemoryPanel(retrieved, saved, goals) {
               "</div>"
             );
           })
-          .join("");
+          .join(""));
       }
     }
   }
@@ -170,38 +170,38 @@ function updateMemoryPanel(retrieved, saved, goals) {
 function showReflectionStart() {
   const header = document.getElementById("reflection-header");
   if (header) {
-    header.innerHTML =
-      '<i data-lucide="sparkles"></i> リフレクション (実行中...)';
+    safeSetHTML(header,
+      '<i data-lucide="sparkles"></i> リフレクション (実行中...)');
     if (typeof lucide !== "undefined") lucide.createIcons();
   }
   const list = document.getElementById("memory-reflection-list");
   if (list)
-    list.innerHTML =
-      '<div class="memory-empty" style="color:var(--accent-purple);">分析中...</div>';
+    safeSetHTML(list,
+      '<div class="memory-empty" style="color:var(--accent-purple);">分析中...</div>');
 }
 
 function updateReflectionPanel(insights) {
   const header = document.getElementById("reflection-header");
   if (header) {
-    header.innerHTML = '<i data-lucide="sparkles"></i> リフレクション';
+    safeSetHTML(header, '<i data-lucide="sparkles"></i> リフレクション');
     if (typeof lucide !== "undefined") lucide.createIcons();
   }
   const list = document.getElementById("memory-reflection-list");
   if (!list) return;
   if (!insights || insights.length === 0) {
-    list.innerHTML = '<div class="memory-empty">洞察なし</div>';
+    safeSetHTML(list, '<div class="memory-empty">洞察なし</div>');
     return;
   }
-  list.innerHTML = insights
+  safeSetHTML(list, insights
     .map((s) => '<div class="reflection-insight">' + esc(s) + "</div>")
-    .join("");
+    .join(""));
 }
 
 function showSessionSummarized(summary) {
   const statusEl = document.getElementById("chat-status");
   if (statusEl) {
-    statusEl.innerHTML =
-      '<i data-lucide="edit-3"></i> セッションを要約しました';
+    safeSetHTML(statusEl,
+      '<i data-lucide="edit-3"></i> セッションを要約しました');
     setTimeout(() => {
       if (statusEl) statusEl.textContent = "";
     }, 3000);
