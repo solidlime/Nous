@@ -60,4 +60,21 @@ N.Core.BODY_LABELS = {
   pain: '<i data-lucide="activity"></i> Pain',
 };
 
+/* Timeline emoji icons — used by timeline.js for emotion display */
+N.Core.EMOTION_ICONS = {
+  joy: '<i data-lucide="smile"></i>',       sadness: '<i data-lucide="frown"></i>',
+  anger: '<i data-lucide="angry"></i>',      love: '<i data-lucide="heart"></i>',
+  fear: '<i data-lucide="skull"></i>',       surprise: '<i data-lucide="sparkles"></i>',
+  neutral: '<i data-lucide="meh"></i>',      excitement: '<i data-lucide="star"></i>',
+  pride: '<i data-lucide="feather"></i>',    shame: '<i data-lucide="eye-off"></i>',
+  curiosity: '<i data-lucide="brain-circuit"></i>', anxiety: '<i data-lucide="activity"></i>',
+  frustration: '<i data-lucide="alert-triangle"></i>', nostalgia: '<i data-lucide="sunrise"></i>',
+  trust: '<i data-lucide="handshake"></i>',  loneliness: '<i data-lucide="frown"></i>',
+  contentment: '<i data-lucide="smile-plus"></i>',  awe: '<i data-lucide="sun"></i>',
+  relief: '<i data-lucide="wind"></i>',      disgust: '<i data-lucide="thumbs-down"></i>',
+  guilt: '<i data-lucide="heart-crack"></i>',
+  anticipation: '<i data-lucide="clock"></i>', happiness: '<i data-lucide="smile"></i>',
+  calm: '<i data-lucide="moon"></i>',
+};
+
 })(window.Nous);
