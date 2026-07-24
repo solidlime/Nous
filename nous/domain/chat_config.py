@@ -163,6 +163,7 @@ class ChatConfig(BaseModel):
     # === Auto-capture (moved from Settings) ===
     auto_capture_enabled: bool = False
     auto_capture_interval: int = 300
+    auto_capture_max_memories: int = 10
 
     # === Memory enrichment (moved from Settings) ===
     memory_enrichment_enabled: bool = False
@@ -171,18 +172,26 @@ class ChatConfig(BaseModel):
     memory_enrichment_llm: str = ""
     memory_enrichment_prompt_template: str = ""
     memory_enrichment_summary_granularity: str = "medium"
+    memory_enrichment_provider: str = ""
+    memory_enrichment_model: str = ""
+    memory_enrichment_base_url: str = ""
+    memory_enrichment_min_chars: int = 100
 
     # === Forgetting (moved from Settings) ===
     forgetting_enabled: bool = False
     forgetting_trigger_threshold: int = 100
     forgetting_forget_ratio: float = 0.2
     forgetting_forget_strength: float = 0.5
+    forgetting_decay_interval_seconds: int = 86400  # 24h default
+    forgetting_min_strength: float = 0.1
 
     # === MemoRAG (moved from Settings) ===
     memorag_chunk_size: int = 512
     memorag_chunk_overlap: int = 64
     memorag_top_k: int = 5
     memorag_similarity_threshold: float = 0.7
+    memorag_enabled: bool = False
+    memorag_snapshot_interval_hours: int = 24
 
     updated_at: str | None = None
 

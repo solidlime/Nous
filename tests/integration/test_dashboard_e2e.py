@@ -428,7 +428,7 @@ async def test_settings_get_all(client):
     assert "reload_status" in data
     settings = data["settings"]
     # Verify expected categories exist
-    for cat in ("server", "embedding", "reranker", "qdrant", "forgetting", "general"):
+    for cat in ("server", "embedding", "reranker", "qdrant", "general"):
         assert cat in settings, f"Missing category '{cat}'"
     # Verify structure of a setting entry
     tz_entry = settings["general"]["timezone"]
@@ -455,19 +455,6 @@ async def test_settings_update_timezone(client):
     tz = resp2.json()["settings"]["general"]["timezone"]
     assert tz["value"] == "US/Eastern"
     assert tz["source"] == "override"
-
-
-@pytest.mark.asyncio
-async def test_settings_update_worker(client):
-    """E13: PUT /api/settings forgetting.decay_interval_seconds → accepted."""
-    resp = await client.put(
-        "/api/settings",
-        json={"category": "forgetting", "key": "decay_interval_seconds", "value": 7200},
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["success"] is True
-    assert data["value"] == 7200
 
 
 @pytest.mark.asyncio
