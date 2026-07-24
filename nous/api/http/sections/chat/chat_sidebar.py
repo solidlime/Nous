@@ -1,103 +1,11 @@
-"""Chat tab section for the Nous Dashboard.
-
-Renders a fully-functional chat interface with SSE streaming,
-tool call visualization, and an inline settings panel.
-"""
+"""Chat settings sidebar — provider, MCP, TTS, image gen, context, and other settings."""
 
 import sys
 
 
-def render_chat_tab() -> str:
-    """Return the HTML for the Chat tab."""
+def render_chat_sidebar() -> str:
+    """Return the settings sidebar HTML with all configuration panels."""
     return f"""
-        <link rel="stylesheet" href="/static/chat.css">
-        <!-- ========== CHAT TAB ========== -->
-        <section id="tab-chat" class="tab-panel" role="tabpanel">
-            <div style="position:relative; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
-                <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="message-circle"></i></span> Chat</h2>
-                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-                    <button class="mem-panel-toggle" id="memory-panel-toggle-btn" onclick="toggleMemoryPanel()" title="記憶パネルを開閉" aria-label="記憶パネルの表示切替"><i data-lucide="brain"></i></button>
-                    <button class="chat-sidebar-toggle" onclick="toggleSettingsPanel()" id="chat-sidebar-toggle-btn" title="設定パネルを開閉" aria-label="設定パネルの表示切替"><i data-lucide="settings"></i></button>
-                </div>
-            </div>
-            <div id="chat-layout" class="glass" style="padding:0; overflow:hidden;">
-                <!-- Mobile backdrop for settings panel -->
-                <div id="settings-backdrop" onclick="toggleSettingsPanel()"></div>
-                <!-- Memory activity panel (left) -->
-                <div id="memory-panel">
-                    <div class="memory-panel-title"><i data-lucide="brain"></i> 記憶活動</div>
-
-                    <!-- Retrieved memories -->
-                    <div class="memory-panel-section">
-                        <div class="memory-section-header"><i data-lucide="download"></i> 取得された記憶</div>
-                        <div id="memory-retrieved-list">
-                            <div class="memory-empty">チャット中に自動更新されます</div>
-                        </div>
-                    </div>
-
-                    <!-- Saved memories -->
-                    <div class="memory-panel-section">
-                        <div class="memory-section-header"><i data-lucide="save"></i> 保存された記憶</div>
-                        <div id="memory-saved-list">
-                            <div class="memory-empty">チャット中に自動更新されます</div>
-                        </div>
-                    </div>
-
-                    <!-- Reflection -->
-                    <div class="memory-panel-section">
-                        <div class="memory-section-header" id="reflection-header"><i data-lucide="sparkles"></i> リフレクション</div>
-                        <div id="memory-reflection-list">
-                            <div class="memory-empty">リフレクション洞察がここに表示されます</div>
-                        </div>
-                    </div>
-
-                    <!-- Active goals -->
-                    <div class="memory-panel-section">
-                        <div class="memory-section-header"><i data-lucide="target"></i> アクティブな目標</div>
-                        <div id="memory-goals-list">
-                            <div class="memory-empty">チャット中に自動更新されます</div>
-                        </div>
-                    </div>
-
-                    <!-- Equipment -->
-                    <div class="memory-panel-section">
-                        <div class="memory-section-header"><i data-lucide="backpack"></i> 装備</div>
-                        <div id="memory-equipment-list" style="max-height:150px;overflow-y:auto;">
-                            <div class="memory-empty">会話中に装備変更があればここに表示されます</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Chat area -->
-                <div id="chat-main">
-                    <div id="chat-messages">
-                        <div class="chat-welcome" id="chat-welcome">
-                            <div class="chat-welcome-icon"><i data-lucide="message-circle"></i></div>
-                            <p>チャットを開始するには下のテキストボックスにメッセージを入力してください。</p>
-                            <p class="chat-welcome-hint">APIキーとプロバイダーを設定してください。<br><a href="#" onclick="toggleSettingsPanel();return false;" class="chat-welcome-link"><i data-lucide="settings"></i> 設定パネルを開く</a></p>
-                            <div class="chat-welcome-commands">
-                                <span class="chat-welcome-cmd">/memory</span>
-                                <span class="chat-welcome-cmd">/goal</span>
-                                <span class="chat-welcome-cmd">/help</span>
-                                <span class="chat-welcome-cmd">/search</span>
-                                <span class="chat-welcome-cmd">/image</span>
-                                <span class="chat-welcome-cmd">/invoke_skill</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="chat-status"></div>
-                    <div id="chat-attachments"></div>
-                    <div id="chat-input-area">
-                        <textarea id="chat-input" placeholder="メッセージを入力... (Enter で送信、Shift+Enter で改行)" rows="1" aria-label="チャットメッセージ入力"></textarea>
-                        <div style="display:flex;align-items:center;gap:6px;">
-                            <button id="chat-cancel-btn" class="chat-stop-btn" onclick="chatCancel()" style="display:none" aria-label="応答を停止"><i data-lucide="stop-circle"></i> 中止</button>
-                            <button id="chat-attach-btn" class="chat-action-btn" onclick="triggerFileAttach()" title="ファイル添付" aria-label="ファイルを添付"><i data-lucide="paperclip"></i></button>
-                            <button id="chat-voice-btn" class="chat-action-btn" onclick="toggleVoiceInput()" title="音声入力" aria-label="音声入力の切替"><i data-lucide="mic"></i></button>
-                            <button id="chat-export-btn" class="chat-action-btn" onclick="exportChatHistory()" title="会話をエクスポート" aria-label="会話履歴をエクスポート"><i data-lucide="download"></i></button>
-                            <button id="chat-send-btn" onclick="chatSend()" aria-label="メッセージを送信">送信</button>
-                        </div>
-                    </div>
-                </div>
                 <!-- Settings sidebar -->
                 <div id="settings-panel" class="glass" style="margin:0; border-radius:0; border-left:1px solid var(--glass-border); padding:0;">
                     <!-- Mobile close button -->
@@ -832,13 +740,4 @@ def render_chat_tab() -> str:
                         <button class="chat-clear-btn" onclick="clearChatHistory()" aria-label="会話履歴をリセット"><i data-lucide="trash-2"></i> 会話をリセット</button>
                         <div id="chat-config-status" style="font-size:0.75rem; text-align:center; min-height:16px;"></div>
                     </div>
-                </div>
-            </div>
-            <!-- highlight.js for syntax highlighting in chat bubbles -->
-            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" crossorigin="anonymous"></script>
-            <!-- Media viewer overlay -->
-            <div id="media-viewer-overlay" onclick="closeMediaViewer()">
-                <div id="media-viewer-inner" onclick="event.stopPropagation()"></div>
-            </div>
-        </section>"""
+                </div>"""

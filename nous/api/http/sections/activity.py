@@ -9,7 +9,7 @@ API consumed:
 
 from pathlib import Path
 
-_JS = (Path(__file__).resolve().parent.parent / "static/activity.js").read_text(encoding="utf-8")
+_JS = (Path(__file__).resolve().parent.parent / "static/features/activity.js").read_text(encoding="utf-8")
 
 
 def render_activity_tab() -> str:

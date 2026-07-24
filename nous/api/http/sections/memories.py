@@ -2,8 +2,11 @@
 
 from pathlib import Path
 
-_JS_DIR = Path(__file__).resolve().parent.parent / "static"
-_JS = (_JS_DIR / "memories.js").read_text(encoding="utf-8")
+_JS_DIR = Path(__file__).resolve().parent.parent / "static" / "features" / "memories"
+_JS = "".join(
+    (_JS_DIR / f).read_text(encoding="utf-8")
+    for f in ["memories-core.js", "memories-list.js", "memories-search.js", "memories-edit.js"]
+)
 
 
 def render_memories_tab() -> str:

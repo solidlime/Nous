@@ -17,7 +17,7 @@ Response shape (per entry):
 
 from pathlib import Path
 
-_JS = (Path(__file__).resolve().parent.parent / "static/timeline.js").read_text(encoding="utf-8")
+_JS = (Path(__file__).resolve().parent.parent / "static/features/timeline.js").read_text(encoding="utf-8")
 
 
 def render_timeline_tab() -> str:

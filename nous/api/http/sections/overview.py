@@ -2,7 +2,13 @@
 
 from pathlib import Path
 
-_JS = (Path(__file__).resolve().parent.parent / "static/overview.js").read_text(encoding="utf-8")
+_BASE = Path(__file__).resolve().parent.parent / "static/features/overview"
+_JS = (
+    (_BASE / "overview-core.js").read_text(encoding="utf-8")
+    + (_BASE / "overview-stats.js").read_text(encoding="utf-8")
+    + (_BASE / "overview-charts.js").read_text(encoding="utf-8")
+    + (_BASE / "overview-context.js").read_text(encoding="utf-8")
+)
 
 
 def render_overview_tab() -> str:

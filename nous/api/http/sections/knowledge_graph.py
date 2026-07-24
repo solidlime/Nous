@@ -21,7 +21,7 @@ Response shape:
 
 from pathlib import Path
 
-_JS = (Path(__file__).resolve().parent.parent / "static/graph.js").read_text(encoding="utf-8")
+_JS = (Path(__file__).resolve().parent.parent / "static/features/graph.js").read_text(encoding="utf-8")
 
 
 def render_graph_tab() -> str:

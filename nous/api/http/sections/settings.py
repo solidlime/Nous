@@ -33,7 +33,11 @@ def render_settings_tab() -> str:
         </section>"""
 
 
-_JS = (Path(__file__).resolve().parent.parent / "static" / "settings.js").read_text(encoding="utf-8")
+_JS_DIR = Path(__file__).resolve().parent.parent / "static" / "features" / "settings"
+_JS = "".join(
+    (_JS_DIR / f).read_text(encoding="utf-8")
+    for f in ["settings-validation.js", "settings-core.js", "settings-form.js", "settings-save.js"]
+)
 
 
 def render_settings_js() -> str:
