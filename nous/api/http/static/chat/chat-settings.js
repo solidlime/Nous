@@ -229,11 +229,11 @@ function applyChatConfig(cfg) {
   const statusEl = document.getElementById("chat-config-status");
   if (statusEl) {
     if (cfg.is_configured) {
-      statusEl.innerHTML =
-        '<span style="color:var(--accent-green)"><i data-lucide="check"></i> APIキー設定済み</span>';
+      safeSetHTML(statusEl,
+        '<span style="color:var(--accent-green)"><i data-lucide="check"></i> APIキー設定済み</span>');
     } else {
-      statusEl.innerHTML =
-        '<span style="color:var(--accent-yellow)"><i data-lucide="alert-triangle"></i> APIキー未設定</span>';
+      safeSetHTML(statusEl,
+        '<span style="color:var(--accent-yellow)"><i data-lucide="alert-triangle"></i> APIキー未設定</span>');
     }
   }
 
@@ -269,7 +269,7 @@ function applyChatConfig(cfg) {
   set("chat-image-gen-negative-prompt", cfg.image_gen_negative_prompt || "");
   // LoRA リスト復元
   var loraContainer = document.getElementById('chat-image-gen-lora-list');
-  if (loraContainer) loraContainer.innerHTML = '';
+  if (loraContainer) loraContainer.textContent = '';
   if (cfg.image_gen_comfyui_loras) {
     try {
       var loras = JSON.parse(cfg.image_gen_comfyui_loras);
@@ -496,7 +496,7 @@ async function saveChatConfig() {
   const btn = document.querySelector(".chat-save-btn");
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader"></i> 保存中...';
+    safeSetHTML(btn, '<i data-lucide="loader"></i> 保存中...');
     if (typeof lucide !== "undefined") lucide.createIcons();
   }
   try {
@@ -514,7 +514,7 @@ async function saveChatConfig() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = '<i data-lucide="save"></i> 設定を保存';
+      safeSetHTML(btn, '<i data-lucide="save"></i> 設定を保存');
       if (typeof lucide !== "undefined") lucide.createIcons();
     }
   }
@@ -550,7 +550,7 @@ function renderMcpJson(servers) {
   /* ── Render MCP server list with Built-in badges ── */
   var listEl = document.getElementById("chat-mcp-server-list");
   if (listEl) {
-    listEl.innerHTML = "";
+    safeSetHTML(listEl, "");
     (servers || []).forEach(function (srv) {
       var isBuiltin = srv._builtin === true;
       var row = document.createElement("div");
@@ -704,10 +704,10 @@ const BUILTIN_SKILLS = ["search"];
 function renderSkillsList(allSkills, enabledSkills) {
   const list = document.getElementById("chat-skills-list");
   if (!list) return;
-  list.innerHTML = "";
+  safeSetHTML(list, "");
   if (!allSkills || allSkills.length === 0) {
-    list.innerHTML =
-      '<div style="font-size:0.75rem;color:var(--text-muted);">スキルがありません</div>';
+    safeSetHTML(list,
+      '<div style="font-size:0.75rem;color:var(--text-muted);">スキルがありません</div>');
     return;
   }
   allSkills.forEach((skill) => {
@@ -808,7 +808,7 @@ function addLoraRow(path, weight) {
   var idx = container.children.length;
   var div = document.createElement('div');
   div.style.cssText = 'display:flex;gap:4px;align-items:center;';
-  div.innerHTML = '<input type="text" class="chat-field-input lora-path" value="' + escHtml(path || '') + '" placeholder="lora.safetensors" style="flex:1;font-size:0.82rem;">'
+  safeSetHTML(div, '<input type="text" class="chat-field-input lora-path" value="' + escHtml(path || '') + '" placeholder="lora.safetensors" style="flex:1;font-size:0.82rem;">'
     + '<input type="number" class="chat-field-input lora-weight" value="' + (weight || 1.0).toFixed(1) + '" min="0.1" max="2.0" step="0.1" style="width:55px;font-size:0.82rem;">'
     + '<button type="button" onclick="this.parentElement.remove()" style="color:var(--accent-red);background:none;border:none;cursor:pointer;font-size:1rem;">\u00d7</button>';
   container.appendChild(div);

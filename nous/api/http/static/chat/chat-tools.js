@@ -29,14 +29,14 @@ function appendToolEvent(eventType, data, targetDiv) {
     } catch (e) {
       inputStr = String(data.input);
     }
-    div.innerHTML =
+    safeSetHTML(div,
       '<details><summary><i data-lucide="wrench"></i> <strong>' +
       esc(data.name) +
       "</strong>" +
       '<span class="chat-tool-status">実行中...</span></summary>' +
       '<pre class="chat-tool-detail">' +
       esc(inputStr) +
-      "</pre></details>";
+      "</pre></details>");
     if (targetDiv) {
       // F3: inline insertion inside assistant div (before .chat-time)
       const timeDiv = targetDiv.querySelector(".chat-time");
@@ -88,7 +88,7 @@ function appendToolEvent(eventType, data, targetDiv) {
       : null;
     if (callDiv) {
       const statusEl = callDiv.querySelector(".chat-tool-status");
-      if (statusEl) statusEl.innerHTML = ' <i data-lucide="check"></i> 完了';
+      if (statusEl) safeSetHTML(statusEl, ' <i data-lucide="check"></i> 完了');
       const details = callDiv.querySelector("details");
       if (details) {
         const resultPre = document.createElement("pre");
@@ -101,13 +101,13 @@ function appendToolEvent(eventType, data, targetDiv) {
     } else {
       const div = document.createElement("div");
       div.className = "chat-tool-result";
-      div.innerHTML =
+      safeSetHTML(div,
         '<details><summary><i data-lucide="check"></i> <strong>' +
         esc(data.name) +
         "</strong></summary>" +
         '<pre class="chat-tool-detail chat-tool-result-content">' +
         esc(resultStr) +
-        "</pre></details>";
+        "</pre></details>");
       container.appendChild(div);
       container.scrollTop = container.scrollHeight;
       N.Core.refreshIcons();
@@ -183,9 +183,7 @@ function showImageGenSpinner(evt) {
 
   const spinner = document.createElement("div");
   spinner.className = "chat-image-gen-spinner";
-  spinner.innerHTML = '<div class="spinner"></div> ';
-  spinner.innerHTML +=
-    "画像を生成中... (" + esc(evt.provider) + ", " + evt.n + "枚)";
+  safeSetHTML(spinner, '<div class="spinner"></div> 画像を生成中... (' + esc(evt.provider) + ', ' + evt.n + '枚)');
 
   _imageGenSpinnerId = "image-gen-spinner-" + Date.now();
   spinner.id = _imageGenSpinnerId;
