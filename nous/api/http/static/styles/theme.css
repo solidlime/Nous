@@ -1,0 +1,111 @@
+/* ============================================================
+   FLOATING ORBS — Disabled (Apple HIG: clean background)
+   ============================================================ */
+.orb { display: none; }
+
+/* ============================================================
+   GLASSMORPHISM — Apple HIG Frosted Materials
+   ============================================================ */
+.glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    /* Prevent composite storms: only transition background/border, not transform */
+    transition: background var(--duration-fast) var(--ease-apple),
+                border-color var(--duration-fast) var(--ease-apple);
+    will-change: backdrop-filter;
+    contain: layout style paint;
+}
+.glass:hover {
+    background: var(--glass-hover);
+    box-shadow: none;
+}
+.glass-hoverable {
+    transition: transform var(--duration-normal) var(--ease-apple),
+                background var(--duration-normal) var(--ease-apple),
+                border-color var(--duration-normal) var(--ease-apple);
+    will-change: transform;
+}
+.glass-hoverable:hover {
+    transform: translateY(-1px);
+}
+.glass-static {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+.glass-input {
+    background: var(--glass-bg-subtle);
+    border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    padding: 8px 14px;
+    font-size: 1rem;
+    outline: none;
+    transition: all var(--duration-fast) var(--ease-apple);
+}
+html.light .glass-input { background: var(--glass-bg-subtle); }
+.glass-input:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.3);
+}
+.glass-input option { background: var(--bg-secondary); color: var(--text-primary); }
+html.light .glass-input option { background: var(--bg-primary); color: var(--text-primary); }
+.glass-btn {
+    background: var(--glass-bg-subtle);
+    border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all var(--duration-fast) var(--ease-apple);
+    white-space: nowrap;
+}
+.glass-btn:hover {
+    background: var(--glass-hover);
+    box-shadow: none;
+    transform: none;
+}
+.glass-btn:active { transform: scale(0.98); }
+.glass-btn-danger {
+    background: rgba(255, 69, 58, 0.15);
+    border-color: rgba(255, 69, 58, 0.3);
+}
+.glass-btn-danger:hover {
+    background: rgba(255, 69, 58, 0.25);
+    box-shadow: none;
+}
+.glass-btn-success {
+    background: rgba(48, 209, 88, 0.15);
+    border-color: rgba(48, 209, 88, 0.3);
+}
+.glass-btn-success:hover {
+    background: rgba(48, 209, 88, 0.25);
+    box-shadow: none;
+}
+
+/* ── Transitions & Animations — Apple HIG ── */
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.animate-in { animation: fadeInUp 0.4s var(--ease-apple); }
+
+/* ── Collapsible element (CSS grid-based) ── */
+.collapsible {
+    display: grid;
+    grid-template-rows: 0fr;
+    overflow: hidden;
+    transition: grid-template-rows var(--duration-normal) var(--ease-apple);
+}
+.collapsible.open {
+    grid-template-rows: 1fr;
+}
+.collapsible > * {
+    min-height: 0;
+}

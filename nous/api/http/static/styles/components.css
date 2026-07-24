@@ -1,0 +1,441 @@
+/* ============================================================
+   CARD COMPONENTS — Apple HIG Style
+   ============================================================ */
+.card-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+}
+.stat-value {
+    font-size: clamp(1.25rem, 8cqi, 2rem); font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+.stat-label { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+
+/* ============================================================
+   BADGES — Apple HIG Style
+   ============================================================ */
+.badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 0.72rem;
+    font-weight: 600;
+    border: 0.5px solid transparent;
+}
+.badge-purple { background: rgba(191, 90, 242, 0.15); color: var(--accent-purple); border-color: rgba(191, 90, 242, 0.3); }
+.badge-green { background: rgba(48, 209, 88, 0.15); color: var(--accent-green); border-color: rgba(48, 209, 88, 0.3); }
+.badge-pink { background: rgba(255, 55, 95, 0.15); color: var(--accent-pink); border-color: rgba(255, 55, 95, 0.3); }
+.badge-blue { background: rgba(0, 122, 255, 0.15); color: var(--accent-blue); border-color: rgba(0, 122, 255, 0.3); }
+.badge-yellow { background: rgba(255, 214, 10, 0.15); color: var(--accent-yellow); border-color: rgba(255, 214, 10, 0.3); }
+.badge-red { background: rgba(255, 69, 58, 0.15); color: var(--accent-red); border-color: rgba(255, 69, 58, 0.3); }
+.badge-gray { background: rgba(142, 142, 147, 0.15); color: var(--text-muted); border-color: rgba(142, 142, 147, 0.3); }
+html.light .badge-purple { color: var(--accent-purple); } html.light .badge-green { color: var(--accent-green); }
+html.light .badge-pink { color: var(--accent-pink); } html.light .badge-blue { color: var(--accent-blue); }
+html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red { color: var(--accent-red); }
+
+/* ============================================================
+   MEMORY CARDS — Apple HIG Style
+   ============================================================ */
+.memory-card {
+    padding: 16px 20px;
+    border-bottom: 0.5px solid var(--separator-non-opaque);
+    transition: background var(--duration-fast) var(--ease-apple);
+    border-radius: var(--radius-sm);
+}
+.memory-card:hover { background: var(--glass-bg-subtle); }
+.memory-card:last-child { border-bottom: none; }
+/* Container-adaptive: horizontal layout when container is wide enough */
+@container (min-width: 500px) {
+    .memory-card {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 16px;
+        align-items: start;
+    }
+}
+.memory-key {
+    font-size: 0.82rem; font-weight: 600; color: var(--accent-blue);
+    margin-bottom: 6px; font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Noto Sans Mono CJK JP', monospace;
+}
+.memory-content {
+    font-size: 0.88rem; color: var(--text-secondary);
+    line-height: 1.5; margin-bottom: 8px;
+}
+.memory-meta {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    font-size: 0.78rem; color: var(--text-muted);
+}
+
+/* ============================================================
+   SKELETON LOADING — Apple HIG Style
+   ============================================================ */
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+.skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--glass-bg-subtle);
+    border-radius: var(--radius-sm);
+}
+.skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        var(--glass-bg) 50%,
+        transparent 100%);
+    animation: shimmer 1.5s ease-in-out infinite;
+    will-change: transform;
+    transform: translateZ(0);
+}
+.skeleton-text { height: 16px; margin-bottom: 10px; border-radius: var(--radius-sm); }
+.skeleton-title { height: 24px; width: 60%; margin-bottom: 14px; border-radius: var(--radius-sm); }
+.skeleton-chart { height: 200px; border-radius: var(--radius-md); }
+.skeleton-card { height: 120px; margin-bottom: 12px; }
+.skeleton-line { height: 16px; margin-bottom: 8px; }
+.skeleton-line.short { width: 60%; }
+.skeleton-circle { width: 48px; height: 48px; border-radius: 50%; }
+
+/* ============================================================
+   PROGRESS BAR — Apple HIG Style
+   ============================================================ */
+.progress-wrap {
+    width: 100%; height: 4px; border-radius: 2px;
+    background: var(--glass-bg-subtle); overflow: hidden;
+}
+.progress-bar {
+    height: 100%; border-radius: 2px;
+    background: var(--accent-blue);
+    transition: width 0.5s var(--ease-apple);
+}
+.progress-indeterminate {
+    width: 40%;
+    animation: indeterminate 1.4s ease-in-out infinite;
+    will-change: transform;
+}
+@keyframes indeterminate {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+}
+
+/* ============================================================
+   SETTINGS FORM — Apple HIG Style
+   ============================================================ */
+.setting-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 0;
+    border-bottom: 0.5px solid var(--separator-non-opaque);
+    flex-wrap: wrap;
+}
+.setting-row:last-child { border-bottom: none; }
+.setting-label {
+    font-size: 1rem; font-weight: 500; color: var(--text-secondary);
+    min-width: 140px;
+}
+.setting-source {
+    font-size: 0.7rem; padding: 2px 8px; border-radius: var(--radius-pill);
+}
+.source-env { background: rgba(48, 209, 88, 0.15); color: var(--accent-green); }
+.source-override { background: rgba(0, 122, 255, 0.15); color: var(--accent-blue); }
+.source-default { background: rgba(142, 142, 147, 0.15); color: var(--text-muted); }
+.setting-label { position: relative; }
+.tooltip-icon { cursor: help; opacity: 0.6; font-size: 0.75rem; margin-left: 2px; }
+.tooltip-icon:hover { opacity: 1; }
+.setting-badge {
+    font-size: 0.65rem; padding: 2px 7px; border-radius: var(--radius-sm);
+    white-space: nowrap; flex-shrink: 0;
+    display: inline-flex; align-items: center; gap: 3px;
+}
+.badge-hot { background: rgba(48, 209, 88, 0.15); color: var(--accent-green); border: 0.5px solid rgba(48, 209, 88, 0.25); }
+.badge-restart { background: rgba(255, 159, 10, 0.15); color: var(--accent-orange); border: 0.5px solid rgba(255, 159, 10, 0.25); }
+.pw-toggle-btn {
+    transition: color var(--duration-fast) var(--ease-apple);
+}
+.pw-toggle-btn:hover { color: var(--accent-blue) !important; }
+
+/* ============================================================
+   AUTO-SAVE STATUS INDICATORS — Apple HIG Style
+   ============================================================ */
+.setting-status {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 0.72rem; font-weight: 500;
+    padding: 3px 10px; border-radius: var(--radius-sm);
+    white-space: nowrap; flex-shrink: 0;
+    opacity: 0; transition: opacity var(--duration-fast) var(--ease-apple);
+    min-width: 80px;
+}
+.setting-status.visible { opacity: 1; }
+.setting-status.status-saving {
+    background: rgba(255, 214, 10, 0.15); color: var(--accent-yellow);
+    border: 0.5px solid rgba(255, 214, 10, 0.25);
+}
+.setting-status.status-saved {
+    background: rgba(48, 209, 88, 0.15); color: var(--accent-green);
+    border: 0.5px solid rgba(48, 209, 88, 0.25);
+}
+.setting-status.status-error {
+    background: rgba(255, 69, 58, 0.15); color: var(--accent-red);
+    border: 0.5px solid rgba(255, 69, 58, 0.25);
+}
+.setting-status.status-reloading {
+    background: rgba(0, 122, 255, 0.15); color: var(--accent-blue);
+    border: 0.5px solid rgba(0, 122, 255, 0.25);
+}
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.setting-spinner {
+    display: inline-block; width: 12px; height: 12px;
+    border: 2px solid rgba(255, 214, 10, 0.3);
+    border-top-color: var(--accent-yellow);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    will-change: transform;
+}
+.setting-spinner.reloading {
+    border-color: rgba(0, 122, 255, 0.3);
+    border-top-color: var(--accent-blue);
+}
+.setting-inline-error {
+    display: none; width: 100%;
+    font-size: 0.72rem; color: var(--accent-red);
+    margin-top: 4px; padding: 4px 8px;
+    background: rgba(255, 69, 58, 0.08);
+    border-radius: var(--radius-sm); border-left: 2px solid var(--accent-red);
+}
+.setting-inline-error.visible { display: block; }
+.setting-restart-notice {
+    display: none; width: 100%;
+    font-size: 0.72rem; color: var(--accent-orange);
+    margin-top: 4px; padding: 4px 8px;
+    background: rgba(255, 159, 10, 0.08);
+    border-radius: var(--radius-sm); border-left: 2px solid var(--accent-orange);
+}
+.setting-restart-notice.visible { display: block; }
+
+/* ============================================================
+   GLOBAL APPLY SECTION — Apple HIG Style
+   ============================================================ */
+.global-apply-section {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 16px 20px; margin-top: 8px;
+    background: var(--glass-bg);
+    border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+.global-apply-section .primary-btn:hover:not(:disabled) {
+    background: var(--accent-blue);
+    box-shadow: none;
+    transform: none;
+}
+.global-apply-section .primary-btn:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+/* ============================================================
+   TOAST NOTIFICATION — Apple HIG iOS Style
+   ============================================================ */
+.toast-container {
+    position: fixed; bottom: 0; right: 0; z-index: var(--z-toast);
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 0.75rem;
+    padding: calc(env(safe-area-inset-top) + 0.75rem) calc(env(safe-area-inset-right) + 0.75rem) calc(env(safe-area-inset-bottom) + 0.75rem) calc(env(safe-area-inset-left) + 0.75rem);
+    pointer-events: none;
+}
+.toast {
+    padding: 12px 20px; border-radius: var(--radius-lg);
+    font-size: 0.85rem; font-weight: 500;
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 0.5px solid var(--glass-border);
+    animation: toastIn 0.3s var(--ease-apple), toastOut 0.3s var(--ease-apple) 2.9s forwards;
+    max-width: min(360px, calc(100vw - 2rem));
+    will-change: transform, opacity;
+    pointer-events: auto;
+}
+.toast-success { background: rgba(48, 209, 88, 0.2); color: var(--accent-green); }
+.toast-error { background: rgba(255, 69, 58, 0.2); color: var(--accent-red); }
+.toast-info { background: rgba(0, 122, 255, 0.2); color: var(--accent-blue); }
+.toast-warning { background: rgba(255, 214, 10, 0.2); color: var(--accent-yellow); }
+@keyframes toastIn { from { opacity:0; transform: translateX(40px); } to { opacity:1; transform: translateX(0); } }
+@keyframes toastOut { from { opacity:1; transform: translateX(0); } to { opacity:0; transform: translateX(40px); } }
+.toast-action-btn {
+  background: rgba(255, 255, 255, 0.15); border: 0.5px solid rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-sm); color: var(--text-primary); padding: 4px 12px;
+  font-size: 0.78rem; cursor: pointer; white-space: nowrap; min-height: 44px;
+  transition: background var(--duration-fast) var(--ease-apple); flex-shrink: 0;
+}
+.toast-action-btn:hover { background: rgba(255, 255, 255, 0.25); }
+.toast-error .toast-action-btn { background: rgba(255, 69, 58, 0.2); border-color: rgba(255, 69, 58, 0.3); }
+.toast-error .toast-action-btn:hover { background: rgba(255, 69, 58, 0.3); }
+@media (prefers-reduced-motion: reduce) {
+    .toast {
+        animation: none !important;
+        opacity: 1;
+        transition: opacity 0.2s ease;
+    }
+}
+
+/* ============================================================
+   MEMORY DETAIL MODAL — Apple HIG Style
+   ============================================================ */
+.mem-modal-overlay {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: var(--z-modal);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; backdrop-filter: blur(20px) saturate(180%);
+    visibility: hidden; opacity: 0;
+    transition: opacity var(--duration-normal) var(--ease-apple), visibility var(--duration-normal) var(--ease-apple);
+}
+.mem-modal-overlay.show {
+    visibility: visible; opacity: 1;
+}
+.mem-modal {
+    background: var(--bg-secondary); border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-xl); max-width: 700px; width: 100%;
+    max-height: 85dvh; overflow-y: auto; padding: 24px;
+    box-shadow: var(--shadow-lg);
+    transform: scale(0.95); transition: transform var(--duration-normal) var(--ease-apple);
+}
+.mem-modal-overlay.show .mem-modal { transform: scale(1); }
+.mem-modal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+.mem-modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; padding: 0 4px; line-height: 1; }
+.mem-modal-close:hover { color: var(--text-primary); }
+.mem-modal-content { white-space: pre-wrap; word-break: break-word; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.7; margin-bottom: 16px; padding: 12px; background: var(--glass-bg); border-radius: var(--radius-md); max-height: none; overflow: visible; }
+.mem-modal-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 6px 0; border-bottom: 0.5px solid var(--separator-non-opaque); font-size: 0.82rem; }
+.mem-modal-row:last-child { border-bottom: none; }
+.mem-modal-key { color: var(--text-muted); min-width: 100px; flex-shrink: 0; }
+
+/* ============================================================
+   EMPTY STATE — Apple HIG Style
+   ============================================================ */
+.empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 12px; padding: 48px 24px;
+    color: var(--text-muted); text-align: center;
+}
+.empty-state-icon { font-size: 3rem; opacity: 0.4; }
+.empty-state-text { font-size: 0.9rem; max-width: 320px; line-height: 1.6; }
+.empty-state-cta {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 20px; border-radius: var(--radius-pill);
+    background: rgba(0, 122, 255, 0.15); border: 0.5px solid rgba(0, 122, 255, 0.3);
+    color: var(--accent-blue); font-size: 1rem; font-weight: 600;
+    cursor: pointer; transition: all var(--duration-fast) var(--ease-apple); text-decoration: none;
+}
+.empty-state-cta:hover {
+    background: rgba(0, 122, 255, 0.25);
+    box-shadow: none;
+    transform: none;
+}
+.vis-empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    border: 0.5px dashed var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+/* ============================================================
+   CONFIRM MODAL — Apple HIG Style
+   ============================================================ */
+.confirm-overlay {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(20px) saturate(180%); z-index: var(--z-modal);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity var(--duration-normal) var(--ease-apple);
+}
+.confirm-overlay.show { opacity: 1; }
+.confirm-modal {
+    background: var(--bg-secondary);
+    border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-xl); padding: 24px;
+    max-width: 400px; width: 90%;
+    box-shadow: var(--shadow-lg);
+    transform: scale(0.95); transition: transform var(--duration-normal) var(--ease-apple);
+}
+.confirm-overlay.show .confirm-modal { transform: scale(1); }
+.confirm-modal h3 {
+    font-size: 1rem; font-weight: 600; color: var(--text-primary);
+    margin-bottom: 8px;
+}
+.confirm-modal p {
+    font-size: 0.85rem; color: var(--text-secondary);
+    margin-bottom: 20px; line-height: 1.5;
+}
+.confirm-modal-actions {
+    display: flex; gap: 10px; justify-content: flex-end;
+}
+
+/* ============================================================
+   KEYBOARD SHORTCUT HELP OVERLAY — Apple HIG Style
+   ============================================================ */
+.shortcut-help-overlay {
+    position: fixed; inset: 0; z-index: var(--z-modal);
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(20px) saturate(180%);
+    display: flex; align-items: center; justify-content: center;
+    visibility: hidden; opacity: 0;
+    transition: opacity var(--duration-normal) var(--ease-apple), visibility var(--duration-normal) var(--ease-apple);
+}
+.shortcut-help-overlay.show { visibility: visible; opacity: 1; }
+.shortcut-help-modal {
+    background: var(--bg-secondary);
+    border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-xl);
+    max-width: 420px; width: 90%;
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+}
+.shortcut-help-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 0.5px solid var(--separator-non-opaque);
+    font-weight: 600; font-size: 0.9rem;
+    color: var(--text-primary);
+}
+.shortcut-help-close {
+    background: none; border: none; color: var(--text-muted);
+    cursor: pointer; font-size: 1.2rem; padding: 2px 6px;
+    border-radius: var(--radius-sm); transition: all var(--duration-fast) var(--ease-apple);
+}
+.shortcut-help-close:hover { color: var(--text-primary); background: var(--glass-bg); }
+.shortcut-help-body { padding: 14px 18px; }
+.shortcut-help-body table { width: 100%; border-collapse: collapse; }
+.shortcut-help-body td {
+    padding: 8px 4px; font-size: 0.82rem;
+    border-bottom: 0.5px solid var(--separator-non-opaque);
+    color: var(--text-secondary);
+}
+.shortcut-help-body td:first-child { white-space: nowrap; padding-right: 16px; }
+.shortcut-help-body td:last-child { width: 100%; color: var(--text-muted); }
+.shortcut-help-body tr:last-child td { border-bottom: none; }
+.shortcut-help-body kbd {
+    display: inline-block; padding: 2px 7px; margin: 0 2px;
+    font-size: 0.72rem; font-family: inherit;
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-subtle);
+    border: 0.5px solid var(--glass-border);
+    color: var(--accent-blue);
+}
+
+/* ============================================================
+   COMPONENT RESPONSIVE OVERRIDES
+   ============================================================ */
+@media (max-width: 640px) {
+    .mem-modal-overlay { padding: 8px; }
+    .mem-modal { width: 100%; max-width: none; max-height: 90dvh; }
+    .toast-container { left: 0; right: 0; bottom: 0; padding: 0.5rem; padding: calc(env(safe-area-inset-top) + 0.5rem) calc(env(safe-area-inset-right) + 0.5rem) calc(env(safe-area-inset-bottom) + 0.5rem) calc(env(safe-area-inset-left) + 0.5rem); transform: none; }
+    .toast { max-width: none; width: 100%; text-align: center; }
+}

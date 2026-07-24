@@ -1,0 +1,120 @@
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  img, picture, video, canvas, svg {
+    display: block;
+    max-width: 100%;
+  }
+  input, button, textarea, select {
+    font: inherit;
+  }
+  p, h1, h2, h3, h4, h5, h6 {
+    overflow-wrap: break-word;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    text-wrap: balance;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      interpolate-size: allow-keywords;
+    }
+  }
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", "Inter", sans-serif;
+    font-size: 17px;
+    line-height: 1.47;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100dvh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+html.light body {
+    background: var(--bg-primary);
+}
+
+/* ── Custom scrollbar — Apple HIG thin overlay ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2); border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
+html.light ::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+}
+html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.3); }
+
+/* ── Consistent focus ring — Apple HIG Blue ── */
+:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+}
+
+/* Focus-visible indicators for specific interactive elements */
+.memory-card:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: -2px;
+    border-radius: var(--radius-sm);
+}
+.setting-row:focus-within {
+    background: var(--glass-bg-subtle);
+    border-radius: var(--radius-sm);
+}
+.act-event:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: -2px;
+    border-radius: var(--radius-sm);
+}
+.tl-detail-panel:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: -2px;
+}
+#graph-detail-panel:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: -2px;
+}
+.chat-message:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+.tab-bar .tab-btn:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+    border-radius: var(--radius-pill);
+}
+
+/* ── REDUCED MOTION — Apple HIG Accessibility ── */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    .orb { display: none; }
+    .tab-panel.active { animation: none; }
+    .skeleton { animation: none; }
+    .sse-connecting,
+    .sse-reconnecting { animation: none; }
+    .typingDot { animation: none; }
+}

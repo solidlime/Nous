@@ -31,7 +31,13 @@ def render_head() -> str:
     <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js" defer></script>
     <script src="https://unpkg.com/lucide@latest" defer></script>
-    <link rel="stylesheet" href="/static/base.css">
+    <link rel="stylesheet" href="/static/styles/variables.css">
+    <link rel="stylesheet" href="/static/styles/reset.css">
+    <link rel="stylesheet" href="/static/styles/layout.css">
+    <link rel="stylesheet" href="/static/styles/theme.css">
+    <link rel="stylesheet" href="/static/styles/components.css">
+    <link rel="stylesheet" href="/static/styles/chat.css">
+    <link rel="stylesheet" href="/static/styles/chat-mobile.css">
     <!-- Nous Core Modules (Phase 1: Foundation) -->
     <script src="/static/core/namespace.js" defer></script>
     <script src="/static/core/constants.js" defer></script>

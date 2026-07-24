@@ -1,0 +1,218 @@
+/* ============================================================
+   HEADER — Apple HIG Frosted Navigation Bar
+   ============================================================ */
+.app-header {
+    position: sticky; top: 0; z-index: var(--z-sticky);
+    background: rgba(28, 28, 30, 0.85);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 0.5px solid var(--separator-non-opaque);
+    padding: 14px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px;
+    contain: layout style paint;
+}
+html.light .app-header {
+    background: rgba(255, 255, 255, 0.85);
+}
+.app-header h1 {
+    font-size: 1.25rem; font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+.header-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* SSE status indicator */
+.sse-indicator {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  font-size: 0.85rem; transition: all var(--duration-fast) var(--ease-apple);
+}
+.sse-indicator svg { width: 16px; height: 16px; }
+.sse-connected { color: var(--accent-green); }
+.sse-connecting { color: var(--accent-yellow); animation: sse-pulse 1s ease-in-out infinite; }
+.sse-reconnecting { color: var(--accent-orange); animation: sse-pulse 0.6s ease-in-out infinite; }
+.sse-error { color: var(--accent-red); }
+@keyframes sse-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ============================================================
+   TAB BAR — Apple HIG Segmented Control Style
+   ============================================================ */
+.tab-bar {
+    position: sticky; top: 60px; z-index: var(--z-sticky);
+    display: flex; gap: 4px;
+    padding: 8px 24px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 0.5px solid var(--separator-non-opaque);
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    contain: layout style paint;
+}
+.tab-bar::-webkit-scrollbar { display: none; }
+html.light .tab-bar { background: rgba(255, 255, 255, 0.7); }
+.tab-btn {
+    padding: 10px 22px;
+    border-radius: var(--radius-pill);
+    border: 0.5px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: all var(--duration-fast) var(--ease-apple);
+    white-space: nowrap;
+}
+.tab-btn:hover {
+    color: var(--text-primary);
+    background: var(--glass-bg-subtle);
+    border-color: var(--glass-border);
+}
+.tab-btn.active {
+    color: var(--text-primary);
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    box-shadow: none;
+}
+
+.tab-btn svg {
+    width: 18px; height: 18px;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+/* ============================================================
+   MAIN CONTENT — Apple HIG Spacing
+   ============================================================ */
+.main-content {
+    position: relative; z-index: var(--z-content);
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+    overflow-x: hidden;
+}
+.tab-panel {
+    display: none;
+    opacity: 0;
+    contain: layout style paint;
+}
+.tab-panel.active {
+    display: block;
+    opacity: 1;
+    animation: fadeInUp 0.35s var(--ease-apple);
+    will-change: transform, opacity;
+}
+.tab-panel.active.no-first-anim { animation: none; }
+
+/* ============================================================
+   TAB HEADER CONSISTENCY & HEADING HIERARCHY — Apple HIG
+   ============================================================ */
+.tab-panel > div:first-child {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 0.5px solid var(--separator-non-opaque);
+}
+.tab-panel h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+}
+.tab-panel h2 span {
+    font-size: 1.4rem;
+}
+h3, .tab-panel h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+}
+h4, .tab-panel h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+/* ============================================================
+   SKIP-TO-CONTENT (Accessibility) — Apple HIG
+   ============================================================ */
+.skip-link {
+    position: absolute; top: -100px; left: 16px;
+    z-index: var(--z-toast); padding: 8px 16px;
+    background: var(--accent-blue); color: white;
+    border-radius: var(--radius-sm); font-weight: 600; text-decoration: none;
+    transition: top var(--duration-normal) var(--ease-apple);
+}
+.skip-link:focus { top: 16px; }
+
+/* ============================================================
+   TAB BAR GRAB CURSOR (Mobile affordance) — Apple HIG
+   ============================================================ */
+.tab-bar {
+    cursor: grab;
+}
+.tab-bar:active {
+    cursor: grabbing;
+}
+
+/* ============================================================
+   CONTAINER QUERY UTILITY
+   ============================================================ */
+.container-aware {
+    container-type: inline-size;
+}
+
+/* ============================================================
+   RESPONSIVE LAYOUT — Apple HIG
+   ============================================================ */
+@media (max-width: 768px) {
+    .app-header { padding: 10px 16px; }
+    .app-header h1 { font-size: 1rem; }
+    .tab-bar { padding: 6px 12px; }
+    .tab-btn { padding: 10px 14px; font-size: 0.82rem; min-height: 44px; }
+    .main-content { padding: 16px; }
+    .stat-value { font-size: 1.5rem; }
+    .glass-btn { min-height: 44px; min-width: 44px; }
+    .glass-input { min-height: 44px; }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+    .tab-bar {
+        padding: 8px 16px;
+        gap: 2px;
+    }
+    .tab-btn {
+        padding: 9px 16px;
+        font-size: 1rem;
+    }
+    .main-content {
+        padding: 20px;
+    }
+}
+
+@media (max-width: 640px) {
+    .tab-bar { flex-wrap: nowrap; overflow-x: auto; gap: 2px; padding: 6px 8px; }
+    .tab-bar .tab-btn { flex: 0 0 auto; min-width: 0; font-size: 0.75rem; padding: 10px 10px; min-height: 44px; }
+    .tab-bar .tab-btn svg { width: 14px; height: 14px; margin-right: 2px; }
+    .grid { grid-template-columns: 1fr; }
+    .stat-value { font-size: 1.5rem; }
+    #graph-container { height: 400px; }
+    .glass-btn { min-height: 44px; min-width: 44px; }
+    .glass-input { min-height: 44px; }
+}
+
+@media (max-width: 1024px) {
+    .lg\:grid-cols-4 { grid-template-columns: repeat(2, 1fr); }
+    .lg\:grid-cols-3 { grid-template-columns: repeat(2, 1fr); }
+}

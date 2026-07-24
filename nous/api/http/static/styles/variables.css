@@ -1,0 +1,130 @@
+@layer reset, base, tokens, components, utilities, overrides;
+
+@layer tokens {
+/* ============================================================
+   ROOT VARIABLES & THEMING — Apple HIG
+   ============================================================ */
+:root {
+    /* Background levels (Apple systemBackground, secondary, tertiary) */
+    --bg-primary: #1c1c1e;
+    --bg-secondary: #2c2c2e;
+    --bg-tertiary: #3a3a3c;
+    --bg-grouped: #000000;
+    --bg-grouped-secondary: #1c1c1e;
+
+    /* Glass / Frosted materials */
+    --glass-bg: rgba(28, 28, 30, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-hover: rgba(56, 56, 58, 0.6);
+    --glass-bg-subtle: rgba(44, 44, 46, 0.5);
+    --glass-bg-faint: rgba(28, 28, 30, 0.3);
+    --glass-bg-light: rgba(44, 44, 46, 0.4);
+
+    /* Separators */
+    --separator-opaque: #38383a;
+    --separator-non-opaque: rgba(84, 84, 88, 0.65);
+
+    /* Text hierarchy */
+    --text-primary: #ffffff;
+    --text-secondary: rgba(235, 235, 245, 0.6);
+    --text-muted: rgba(235, 235, 245, 0.6);
+
+    /* Accent colors (Apple-inspired) */
+    --accent-blue: #007aff;
+    --accent-purple: #bf5af2;
+    --accent-pink: #ff375f;
+    --accent-green: #30d158;
+    --accent-yellow: #ffd60a;
+    --accent-orange: #ff9f0a;
+    --accent-red: #ff453a;
+    --accent-teal: #64d2ff;
+    --accent-indigo: #5856d6;
+
+    /* Accent RGB triples (for rgba(var(--...-rgb), alpha) usage) */
+    --accent-blue-rgb: 0, 122, 255;
+    --accent-purple-rgb: 191, 90, 242;
+    --accent-pink-rgb: 255, 55, 95;
+    --accent-green-rgb: 48, 209, 88;
+    --accent-yellow-rgb: 255, 214, 10;
+    --accent-orange-rgb: 255, 159, 10;
+    --accent-red-rgb: 255, 69, 58;
+    --accent-teal-rgb: 100, 210, 255;
+    --accent-indigo-rgb: 88, 86, 214;
+
+    /* Legacy aliases (mapped to Apple equivalents) */
+    --accent-purple: var(--accent-indigo);
+    --accent-purple-rgb: var(--accent-indigo-rgb);
+
+    /* Spacing & Radii */
+    --card-radius: 12px;
+    --header-height: 60px;
+    --tabbar-height: 48px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-pill: 9999px;
+
+    /* Shadows (minimal — Apple style) */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+    /* Animation */
+    --ease-apple: cubic-bezier(0.25, 0.1, 0.25, 1.0);
+    --duration-fast: 0.15s;
+    --duration-normal: 0.25s;
+    --duration-slow: 0.35s;
+
+    /* Z-index scale — ensures consistent stacking order */
+    --z-base: 0;
+    --z-content: 1;
+    --z-sticky: 100;
+    --z-dropdown: 200;
+    --z-overlay: 300;
+    --z-modal: 400;
+    --z-toast: 500;
+    --z-debug: 9999;
+}
+html.light {
+    /* Light mode backgrounds */
+    --bg-primary: #ffffff;
+    --bg-secondary: #f2f2f7;
+    --bg-tertiary: #e5e5ea;
+    --bg-grouped: #f2f2f7;
+    --bg-grouped-secondary: #ffffff;
+
+    /* Light glass */
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(0, 0, 0, 0.08);
+    --glass-hover: rgba(242, 242, 247, 0.8);
+    --glass-bg-subtle: rgba(242, 242, 247, 0.5);
+    --glass-bg-faint: rgba(255, 255, 255, 0.3);
+    --glass-bg-light: rgba(242, 242, 247, 0.4);
+
+    /* Light separators */
+    --separator-opaque: #c6c6c8;
+    --separator-non-opaque: rgba(60, 60, 67, 0.12);
+
+    /* Light text */
+    --text-primary: #000000;
+    --text-secondary: rgba(60, 60, 67, 0.6);
+    --text-muted: rgba(60, 60, 67, 0.55);
+
+    /* Light accents (same hues, slightly adjusted) */
+    --accent-blue: #007aff;
+    --accent-purple: #af52de;
+    --accent-pink: #ff375f;
+    --accent-green: #34c759;
+    --accent-yellow: #ffcc00;
+    --accent-orange: #ff9500;
+    --accent-red: #ff3b30;
+    --accent-teal: #5ac8fa;
+    --accent-indigo: #5856d6;
+
+    /* Light shadows */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+}
