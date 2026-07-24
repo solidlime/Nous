@@ -199,10 +199,13 @@ def create_app() -> MemoryFastMCP:
     consolidation_worker.start()
 
     # Start MemoRAG context snapshot worker
+    from nous.domain.chat_config import ChatConfig
+
+    default_config = ChatConfig()
     if settings.memorag.enabled:
         from nous.application.workers.context_snapshot_worker import ContextSnapshotWorker
 
-        snapshot_worker = ContextSnapshotWorker(settings)
+        snapshot_worker = ContextSnapshotWorker(settings, config=default_config)
         snapshot_worker.start()
 
     return mcp
