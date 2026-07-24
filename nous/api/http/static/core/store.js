@@ -41,6 +41,24 @@ var store = {
     });
   },
 
+  syncFrom: function(obj, prefix) {
+    prefix = prefix || '';
+    var self = this;
+    Object.keys(obj).forEach(function(key) {
+      var storeKey = prefix ? prefix + '.' + key : key;
+      var desc = Object.getOwnPropertyDescriptor(obj, key);
+      if (desc && !desc.get && !desc.set && desc.configurable !== false && typeof obj[key] !== 'function') {
+        if (_state[storeKey] === undefined) _state[storeKey] = obj[key];
+        Object.defineProperty(obj, key, {
+          get: function() { return _state[storeKey]; },
+          set: function(v) { self.set(storeKey, v); },
+          enumerable: true,
+          configurable: true
+        });
+      }
+    });
+  },
+
   dump: function() {
     return JSON.parse(JSON.stringify(_state));
   },
