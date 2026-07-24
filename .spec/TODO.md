@@ -1,21 +1,34 @@
-# TODO — Phase 10: Usability Hardening — Keyboard Accessibility ✅
+# TODO — Phase 11: Mobile Responsiveness (2026-07-25)
 
-## Update (2026-07-25): 完了
-- スキップリンク (base.py) は既存。hrefを `#tab-content` → `#main-content` に修正、main要素にid+tabindex="-1"付与 ✅
-- モーダル (core/modal.js) は全て完了済み（フォーカストラップ、aria、Escape、復元） ✅
-- チャットはEnter/Shift+Enter問題なし ✅
-- 不足項目のみ実装:
+## ベースライン: 390×844, 768px未満
 
-### Increment 1: スキップリンク修正 + aria属性追加
-- [x] `sections/base.py` — skip-link href `#tab-content` → `#main-content`、mainに id+tabindex="-1"
-- [x] `core/toast.js` — fallback containerに aria-live/role/aria-atomic、各toastに role="status"
-- [x] `features/settings/settings-form.js` — validation error divに role="alert"
-- [x] コミット: `bacad16` — feat: add skip-link target, toast aria/role attrs, settings validation role=alert
+## Increment 1: ハンバーガーメニュー + ナビゲーション
+- [ ] `base.js` — ハンバーガーボタン生成（init()内）、ドロワーメニューの開閉ロジック、バックドロップ、Escape/メニュー外クリック閉じる
+- [ ] `styles/layout.css` — 768px未満でtab-bar隠し、ハンバーガーボタン表示、ドロワーメニューアニメーション
+- [ ] コミット: hamburger menu with drawer navigation
 
-### Increment 2: タブ矢印キーナビゲーション
-- [x] `base.js` — ArrowLeft/ArrowRight でタブ切替（WAI-ARIA tabs pattern）
-- [x] コミット: `3468506` — feat: add arrow key navigation for tabs (Left/Right)
+## Increment 2: テーブルレスポンシブ + メモリカード
+- [ ] `nous/api/http/sections/skills.py` — <th> と <td> に data-label 属性追加
+- [ ] `styles/components.css` — @media (max-width: 767px) テーブルカードビュー、メモリカード1カラム、44pxタップターゲット
+- [ ] コミット: responsive tables and memory cards
 
-### Increment 3: activity.js キーボード対応
-- [x] `features/activity.js` — セッションヘッダーに tabindex="0" role="button"、Enter/Space keydown
-- [x] コミット: `c4f54db` — feat: add keyboard support for activity session headers
+## Increment 3: チャット設定パネル（モバイルオーバーレイ）
+- [ ] `chat/chat-settings.js` — モバイル用タイトルバー・閉じるボタン
+- [ ] `styles/chat-mobile.css` — 全画面オーバーレイ + 固定保存ボタン
+- [ ] コミット: chat settings panel mobile overlay
+
+## Increment 4: トーストモバイル調整 + 全般モバイル調整
+- [ ] `core/toast.js` — スワイプ消去、最大2制限
+- [ ] `styles/components.css` — トーストモバイルスタイル
+- [ ] `styles/layout.css` — max-width:100vw防止、フォームモバイル、ペルソナセレクター拡大、prefers-reduced-motion確認
+- [ ] コミット: mobile toast and general responsive adjustments
+
+## Increment 5: vis.js モバイル調整 + フォームモバイル
+- [ ] `features/graph.js` — matchMedia で物理演算調整
+- [ ] `features/timeline.js` — モバイル時ズーム調整
+- [ ] `features/settings/settings-form.js` — フォームモバイルレイアウト
+- [ ] コミット: vis.js mobile physics and form mobile layout
+
+## 検証
+- [ ] `cd nous/api/http/static && npm test` → 71 PASS
+- [ ] CSS lint: `npm run lint:css` → PASS

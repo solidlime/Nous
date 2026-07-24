@@ -185,6 +185,74 @@ h4, .tab-panel h4 {
     .stat-value { font-size: 1.5rem; }
     .glass-btn { min-height: 44px; min-width: 44px; }
     .glass-input { min-height: 44px; }
+    .hamburger-btn { display: inline-flex; }
+}
+
+/* ============================================================
+   HAMBURGER / DRAWER — Mobile Navigation
+   ============================================================ */
+.hamburger-btn {
+    display: none;
+    align-items: center; justify-content: center;
+    min-width: 44px; min-height: 44px;
+    padding: 8px;
+    font-size: 1.2rem;
+}
+
+/* Backdrop */
+.nav-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px) saturate(180%);
+    -webkit-backdrop-filter: blur(8px) saturate(180%);
+    z-index: var(--z-overlay);
+}
+.nav-backdrop.visible { display: block; }
+
+/* Drawer */
+.nav-drawer {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: min(320px, 85vw);
+    background: var(--bg-secondary);
+    border-left: 0.5px solid var(--glass-border);
+    z-index: var(--z-modal);
+    transform: translateX(100%);
+    transition: transform var(--duration-normal) var(--ease-apple);
+    will-change: transform;
+    display: flex; flex-direction: column;
+    overflow-y: auto;
+}
+.nav-drawer.open { transform: translateX(0); }
+.nav-drawer-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 18px;
+    border-bottom: 0.5px solid var(--separator-non-opaque);
+    flex-shrink: 0;
+}
+.nav-drawer-items {
+    display: flex; flex-direction: column;
+    padding: 8px 0;
+}
+.nav-drawer-item {
+    display: flex; align-items: center;
+    padding: 14px 18px;
+    min-height: 44px;
+    font-size: 0.92rem;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--duration-fast) var(--ease-apple);
+}
+.nav-drawer-item:hover { background: var(--glass-bg-subtle); }
+.nav-drawer-item:active { background: var(--glass-hover); }
+
+/* Hide tab-bar on small screens — show hamburger instead */
+@media (max-width: 767px) {
+    .tab-bar { display: none; }
+    .hamburger-btn { display: inline-flex; }
 }
 
 @media (min-width: 769px) and (max-width: 1024px) {

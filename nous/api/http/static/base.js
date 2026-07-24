@@ -288,6 +288,103 @@ async function init() {
    // Event: Theme toggle
   document.getElementById("dark-toggle").onclick = toggleTheme;
 
+  // ── Hamburger menu (mobile) ──
+  function buildHamburgerMenu() {
+    var existing = document.getElementById("hamburger-btn");
+    if (existing) return; // already built
+
+    var headerControls = document.querySelector(".header-controls");
+    if (!headerControls) return;
+
+    // Hamburger button
+    var hamBtn = document.createElement("button");
+    hamBtn.id = "hamburger-btn";
+    hamBtn.className = "glass-btn hamburger-btn";
+    hamBtn.setAttribute("aria-label", "Toggle navigation");
+    hamBtn.setAttribute("aria-expanded", "false");
+    hamBtn.setAttribute("role", "button");
+    hamBtn.setAttribute("tabindex", "0");
+    safeSetHTML(hamBtn, '<i data-lucide="menu"></i>');
+    headerControls.insertBefore(hamBtn, headerControls.firstChild);
+
+    // Backdrop
+    var backdrop = document.createElement("div");
+    backdrop.id = "nav-backdrop";
+    backdrop.className = "nav-backdrop";
+
+    // Drawer
+    var drawer = document.createElement("nav");
+    drawer.id = "nav-drawer";
+    drawer.className = "nav-drawer";
+    drawer.setAttribute("role", "navigation");
+    drawer.setAttribute("aria-label", "Mobile navigation");
+
+    var drawerHeader = document.createElement("div");
+    drawerHeader.className = "nav-drawer-header";
+    safeSetHTML(drawerHeader, '<span style="font-weight:600;font-size:1rem;color:var(--text-primary)"><i data-lucide="layout-dashboard"></i> Pages</span>' +
+      '<button id="nav-drawer-close" class="glass-btn" style="padding:6px 10px;min-height:44px;min-width:44px" aria-label="Close navigation"><i data-lucide="x"></i></button>');
+    drawer.appendChild(drawerHeader);
+
+    // Build menu items from existing tab buttons
+    var tabBtns = document.querySelectorAll(".tab-btn");
+    var menuList = document.createElement("div");
+    menuList.className = "nav-drawer-items";
+    tabBtns.forEach(function(btn) {
+      var item = document.createElement("button");
+      item.className = "nav-drawer-item";
+      item.setAttribute("data-tab", btn.dataset.tab);
+      item.setAttribute("role", "menuitem");
+      item.textContent = btn.textContent.trim();
+      item.addEventListener("click", function() {
+        switchTab(btn.dataset.tab);
+        closeNavDrawer();
+      });
+      menuList.appendChild(item);
+    });
+    drawer.appendChild(menuList);
+    document.body.appendChild(backdrop);
+    document.body.appendChild(drawer);
+
+    // Open / close
+    hamBtn.addEventListener("click", openNavDrawer);
+    hamBtn.addEventListener("keydown", function(e) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openNavDrawer();
+      }
+    });
+    document.getElementById("nav-drawer-close").addEventListener("click", closeNavDrawer);
+    backdrop.addEventListener("click", closeNavDrawer);
+
+    function openNavDrawer() {
+      backdrop.classList.add("visible");
+      drawer.classList.add("open");
+      hamBtn.setAttribute("aria-expanded", "true");
+      document.body.style.overflow = "hidden";
+      setTimeout(function() {
+        document.getElementById("nav-drawer-close").focus();
+      }, 100);
+    }
+
+    function closeNavDrawer() {
+      backdrop.classList.remove("visible");
+      drawer.classList.remove("open");
+      hamBtn.setAttribute("aria-expanded", "false");
+      document.body.style.overflow = "";
+      hamBtn.focus();
+    }
+
+    window._closeNavDrawer = closeNavDrawer;
+
+    // Escape closes drawer
+    document.addEventListener("keydown", function _drawerEsc(e) {
+      if (e.key === "Escape" && drawer.classList.contains("open")) {
+        closeNavDrawer();
+      }
+    });
+  }
+  buildHamburgerMenu();
+
   // Global API error handler — toast with retry
   window.addEventListener("api:error", function _handleApiError(e) {
     var d = e.detail;

@@ -103,3 +103,10 @@
 - **理由**: 無料モデルは予告なく終了する（hy3:free, qwen3-coder:free が404になった実績あり）。rate limit回避にも自動ルーティングが有効。
 - **設定**: `data/persona/{persona}/config.json` の `model` を `"openrouter/free"` に（.gitignore対象のためローカルのみ）。
 - **補足**: 特定モデルの動作検証が必要な場合は一時的に明示指定する。普段は自動ルーティング。
+
+## Phase 10: Keyboard Accessibility Hardening (2026-07-25)
+- **skip-link target**: `#tab-content` は存在しない要素を指していた → `#main-content` に修正 + main要素にid付与
+- **toast fallback container**: HTMLテンプレートには aria-live が付いていたが、JSの `_ensureContainer()` フォールバックには欠落 → setAttributeで追加
+- **activity.js non-button toggles**: session header が `<div onclick>` のみでキーボード非対応 → tabindex/role=button + keydown delegation
+- **設定フォーム validation error**: `role="alert"` 欠落 → 追加
+- **教訓**: a11y修正は「欠けている属性の追加」が基本。JSフォールバックパスがHTMLテンプレートと同期していないケースが多い。
