@@ -63,16 +63,16 @@ async function loadActivity(reset = false) {
         if (reset) {
             ACT.offset = 0;
             ACT.sessions = {};
-            feed.innerHTML = '';
+            feed.textContent = '';
         }
 
         if (events.length === 0 && ACT.offset === 0) {
-            feed.innerHTML =
+            safeSetHTML(feed,
                 '<div class="empty-state">' +
                 '<div class="empty-state-icon"><i data-lucide="activity"></i></div>' +
                 '<div class="empty-state-text">まだアクティビティがありません。<br>Chatで会話を始めるとセッションが記録されます。</div>' +
                 '<button class="empty-state-cta" onclick="switchTab(\'chat\')"><i data-lucide="message-circle"></i> Chatを開く</button>' +
-                '</div>';
+                '</div>');
             if (typeof lucide !== 'undefined') lucide.createIcons();
             return;
         }
@@ -111,11 +111,11 @@ async function loadActivity(reset = false) {
 
         if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
-        feed.innerHTML =
+        safeSetHTML(feed,
             '<div class="empty-state">' +
             '<div class="empty-state-icon"><i data-lucide="alert-triangle"></i></div>' +
             '<div class="empty-state-text">Failed to load: ' + esc(e.message) + '</div>' +
-            '</div>';
+            '</div>');
     }
 }
 window.loadActivity = loadActivity;
@@ -182,7 +182,7 @@ function renderActivityFeed() {
         html += '</div></div>';
     }
 
-    feed.innerHTML = html;
+    safeSetHTML(feed, html);
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
@@ -217,7 +217,7 @@ function toggleActivitySession(sid) {
                 if (hasDetail) h += '<div class="act-event-detail">' + esc(ev.detail) + '</div>';
                 h += '</div></div>';
             }
-            body.innerHTML = h;
+            safeSetHTML(body, h);
             if (typeof lucide !== 'undefined') lucide.createIcons();
         }
     } else {
