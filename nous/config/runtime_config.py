@@ -20,23 +20,6 @@ logger = get_logger(__name__)
 
 # Settings metadata: which settings can be hot-reloaded
 SETTINGS_META: dict[str, dict[str, dict]] = {
-    "api_keys": {
-        "anthropic_api_key": {
-            "hot_reload": True,
-            "description": "Global fallback Anthropic API key (ChatConfig per-persona key takes priority)",
-            "masked": True,
-        },
-        "openai_api_key": {
-            "hot_reload": True,
-            "description": "Global fallback OpenAI API key (ChatConfig per-persona key takes priority)",
-            "masked": True,
-        },
-        "openrouter_api_key": {
-            "hot_reload": True,
-            "description": "Global fallback OpenRouter API key (ChatConfig per-persona key takes priority)",
-            "masked": True,
-        },
-    },
     "server": {
         "host": {"hot_reload": False, "description": "Server bind address"},
         "port": {"hot_reload": False, "description": "Server port"},
@@ -84,10 +67,6 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
             "hot_reload": True,
             "description": "Minimum hours between automatic snapshot rebuilds",
         },
-    },
-    "plugin": {
-        "enabled": {"hot_reload": True, "description": "Enable plugin API access"},
-        "api_key": {"hot_reload": True, "description": "Plugin API key", "masked": True},
     },
     "general": {
         "timezone": {"hot_reload": True, "description": "Timezone"},

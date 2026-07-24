@@ -23,7 +23,6 @@ const BUILTIN_PROFILES = {
 };
 
 const CATEGORY_ICONS = {
-    api_keys: '<i data-lucide="key"></i>',
     server: '<i data-lucide="monitor"></i>',
     embedding: '<i data-lucide="brain"></i>',
     reranker: '<i data-lucide="search"></i>',
@@ -32,13 +31,10 @@ const CATEGORY_ICONS = {
     memory_enrichment: '<i data-lucide="sparkles"></i>',
     auto_capture: '<i data-lucide="camera"></i>',
     memorag: '<i data-lucide="layers"></i>',
-
-    plugin: '<i data-lucide="puzzle"></i>',
     general: '<i data-lucide="settings"></i>'
 };
 
 const CATEGORY_DESCRIPTIONS = {
-    api_keys: 'Global API keys for LLM providers. Used as fallback for non-chat subsystems (memory enrichment, etc.). ChatConfig per-persona API keys take priority for chat.',
     server: 'Server bind address and port. Changes require a full server restart.',
     embedding: 'Embedding model configuration for vector search. Reload takes 10-60s.',
     reranker: 'Cross-encoder reranker for search result quality. Reload takes 5-30s.',
@@ -47,16 +43,14 @@ const CATEGORY_DESCRIPTIONS = {
     memory_enrichment: 'Auto-evaluate importance and relations via LLM after memory creation.',
     auto_capture: '自動メモリキャプチャ設定',
     memorag: 'MemoRAG設定',
-
-    plugin: '外部プラグインAPI設定',
     general: 'General settings: timezone, logging, thresholds, search engine.'
 };
 
 /* ── Category display order (consistent across renders) ── */
 const CATEGORY_ORDER = [
-    'api_keys', 'general', 'server', 'embedding', 'reranker',
+    'general', 'server', 'embedding', 'reranker',
     'qdrant', 'forgetting', 'memory_enrichment',
-    'auto_capture', 'memorag', 'plugin'
+    'auto_capture', 'memorag'
 ];
 
 /* ═══════════════════════════════════════════════════════════════════
