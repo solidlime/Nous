@@ -90,11 +90,26 @@ class AppContext:
         self.settings = settings
         self.persona = persona
         self._config = config
-        self.connection = SQLiteConnection(settings.persona_dir, persona)
+        self._init_storage()
+        self._init_enricher()
+        self._init_services()
+        self._init_vector()
+        self._preload_background()
+
+    # ------------------------------------------------------------------
+    # Private factory methods (called in order from __init__)
+    # ------------------------------------------------------------------
+
+    def _init_storage(self) -> None:
+        """Initialize SQLite connection, repositories, and entity service.
+
+        Must run first — downstream methods depend on connection and repos.
+        """
+        self.connection = SQLiteConnection(self.settings.persona_dir, self.persona)
         try:
             self.connection.initialize_schema()
         except Exception as e:
-            logging.getLogger("nous").warning("Schema initialization failed for persona '%s': %s", persona, e)
+            logging.getLogger("nous").warning("Schema initialization failed for persona '%s': %s", self.persona, e)
             # Continue - migration will attempt repair, and if it also fails,
             # AppContext will still be created but functionality may be degraded
 
@@ -110,8 +125,13 @@ class AppContext:
 
         self.entity_service = EntityService(self.entity_repo)
 
-        # Create MemoryEnricher if configured (best-effort enrichment)
-        enricher = None
+    def _init_enricher(self) -> None:
+        """Resolve LLM provider settings and create MemoryEnricher if configured.
+
+        Depends on: _init_storage (self._config, self.settings).
+        Best-effort; failure results in enricher=None (logged as debug).
+        """
+        enricher: MemoryEnricher | None = None
         cfg = self._config
         mem_enrich_enabled = cfg.memory_enrichment_enabled if cfg else self.settings.memory_enrichment.enabled
         if mem_enrich_enabled:
@@ -152,7 +172,13 @@ class AppContext:
                     base_url=base_url,
                     min_chars=min_chars,
                 )
+        self._enricher = enricher
 
+    def _init_services(self) -> None:
+        """Create EventBus and all domain services.
+
+        Depends on: _init_storage (repos, entity_service), _init_enricher (self._enricher).
+        """
         # EventBus (must be created before services)
         from nous.application.event_bus import EventBus
 
@@ -162,64 +188,10 @@ class AppContext:
         self.memory_service = MemoryService(
             self.memory_repo,
             entity_service=self.entity_service,
-            enricher=enricher,
+            enricher=self._enricher,
         )
         self.persona_service = PersonaService(self.persona_repo, event_bus=self.event_bus)
         self.equipment_service = EquipmentService(self.equipment_repo)
-
-        # Vector store (lazy)
-        self._vector_store: QdrantVectorStore | None = None
-        self._embedding: EmbeddingModel | None = None
-        self._reranker: RerankerModel | None = None
-        self._search_engine: SearchEngine | None = None
-
-        # Instantiate reranker model
-        from nous.infrastructure.embedding.reranker import RerankerModel
-
-        self._reranker = RerankerModel(
-            model_name=self.settings.reranker.model,
-            enabled=self.settings.reranker.enabled,
-        )
-
-        # Preload reranker model in background thread (avoid blocking first search)
-        if self._reranker.enabled:
-            import threading
-
-            def _safe_preload() -> None:
-                try:
-                    self._reranker._load_model()
-                except Exception:
-                    logger.debug("Reranker preload failed (will lazy-load on first use)")
-
-            threading.Thread(target=_safe_preload, daemon=True).start()
-
-        # EmbeddingModel のバックグラウンドプリロード (初回記憶検索の高速化)
-        import threading as _embed_threading
-
-        self._embedding = EmbeddingModel(config=self.settings.embedding)
-
-        def _preload_embedding() -> None:
-            try:
-                self._embedding._ensure_loaded()
-            except Exception:
-                logger.debug("EmbeddingModel preload failed (will lazy-load on first use)", exc_info=True)
-
-        _embed_threading.Thread(target=_preload_embedding, daemon=True).start()
-
-        # Preload Sudachi dictionary in background (lazy-download on first use otherwise)
-        import threading
-
-        def _safe_preload_sudachi() -> None:
-            try:
-                from nous.domain.memory.sudachi_extractor import SudachiExtractor
-
-                # Trigger dict download by creating instance and calling extract
-                SudachiExtractor().extract("")
-                logger.debug("Sudachi dictionary preloaded successfully")
-            except Exception:
-                logger.debug("Sudachi preload failed (will retry on first use)", exc_info=True)
-
-        threading.Thread(target=_safe_preload_sudachi, daemon=True).start()
 
         # Initialize SessionEventRecorder (best-effort, don't fail startup)
         try:
@@ -236,14 +208,81 @@ class AppContext:
             self._session_event_repo = None
             self._session_event_recorder = None
 
-        # Kick off vector store init in background thread to avoid blocking
-        # persona creation / startup (Qdrant may be unavailable or slow).
+    def _init_vector(self) -> None:
+        """Initialize embedding model, reranker, and vector store placeholders.
+
+        Depends on: _init_storage (self.settings).
+        Models are instantiated here; background preloading happens in _preload_background.
+        """
+        # Vector store (lazy)
+        self._vector_store: QdrantVectorStore | None = None
+        self._embedding: EmbeddingModel | None = None
+        self._reranker: RerankerModel | None = None
+        self._search_engine: SearchEngine | None = None
+
+        # Instantiate reranker model
+        from nous.infrastructure.embedding.reranker import RerankerModel
+
+        self._reranker = RerankerModel(
+            model_name=self.settings.reranker.model,
+            enabled=self.settings.reranker.enabled,
+        )
+
+        # EmbeddingModel (eager init; preload thread launched in _preload_background)
+        self._embedding = EmbeddingModel(config=self.settings.embedding)
+
+    def _preload_background(self) -> None:
+        """Start background daemon threads for model preloading and warmup.
+
+        Depends on: _init_vector (self._reranker, self._embedding),
+        _init_storage (self.memory_repo, etc.), _init_services (self.event_bus).
+        All threads are daemon — they never block shutdown.
+        """
+        # 1. Reranker model preload
+        if self._reranker.enabled:
+            import threading
+
+            def _safe_preload() -> None:
+                try:
+                    self._reranker._load_model()
+                except Exception:
+                    logger.debug("Reranker preload failed (will lazy-load on first use)")
+
+            threading.Thread(target=_safe_preload, daemon=True).start()
+
+        # 2. Embedding model preload
+        import threading as _embed_threading
+
+        def _preload_embedding() -> None:
+            try:
+                self._embedding._ensure_loaded()
+            except Exception:
+                logger.debug("EmbeddingModel preload failed (will lazy-load on first use)", exc_info=True)
+
+        _embed_threading.Thread(target=_preload_embedding, daemon=True).start()
+
+        # 3. Sudachi dictionary preload (lazy-download on first use otherwise)
+        import threading
+
+        def _safe_preload_sudachi() -> None:
+            try:
+                from nous.domain.memory.sudachi_extractor import SudachiExtractor
+
+                # Trigger dict download by creating instance and calling extract
+                SudachiExtractor().extract("")
+                logger.debug("Sudachi dictionary preloaded successfully")
+            except Exception:
+                logger.debug("Sudachi preload failed (will retry on first use)", exc_info=True)
+
+        threading.Thread(target=_safe_preload_sudachi, daemon=True).start()
+
+        # 4. Vector store background init (Qdrant may be unavailable or slow)
         # The vector_store property handles lazy-init on first access.
         import threading as _threading
 
         _threading.Thread(target=self._init_vector_store, daemon=True).start()
 
-        # SearchEngine バックグラウンドウォームアップ（初回検索のレイテンシ低減）
+        # 5. SearchEngine background warmup (reduce latency on first search)
         def _warmup_search_engine() -> None:
             try:
                 _ = self.search_engine  # プロパティアクセスで全戦略を初期化
