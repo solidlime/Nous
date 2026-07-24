@@ -2,7 +2,7 @@ pre-commit:
   commands:
     ruff-format:
       glob: "*.py"
-      run: ruff format memory_mcp/ tests/
+      run: ruff format nous/ tests/
     ruff-check:
       glob: "*.py"
-      run: ruff check memory_mcp/ tests/
+      run: ruff check nous/ tests/
