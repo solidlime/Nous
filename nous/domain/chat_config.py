@@ -160,6 +160,30 @@ class ChatConfig(BaseModel):
     irodori_cfg_scale_caption: float = 4.2
     irodori_chunk_min_chars: int = 85
     irodori_seed: int = 0
+    # === Auto-capture (moved from Settings) ===
+    auto_capture_enabled: bool = False
+    auto_capture_interval: int = 300
+
+    # === Memory enrichment (moved from Settings) ===
+    memory_enrichment_enabled: bool = False
+    memory_enrichment_auto_run: bool = False
+    memory_enrichment_interval: int = 60
+    memory_enrichment_llm: str = ""
+    memory_enrichment_prompt_template: str = ""
+    memory_enrichment_summary_granularity: str = "medium"
+
+    # === Forgetting (moved from Settings) ===
+    forgetting_enabled: bool = False
+    forgetting_trigger_threshold: int = 100
+    forgetting_forget_ratio: float = 0.2
+    forgetting_forget_strength: float = 0.5
+
+    # === MemoRAG (moved from Settings) ===
+    memorag_chunk_size: int = 512
+    memorag_chunk_overlap: int = 64
+    memorag_top_k: int = 5
+    memorag_similarity_threshold: float = 0.7
+
     updated_at: str | None = None
 
     @field_validator("temperature")
