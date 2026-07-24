@@ -11,14 +11,12 @@ const BUILTIN_PROFILES = {
         server: { host: '0.0.0.0', port: 26262 },
         embedding: { model: 'onnx-community/ruri-v3-30m-ONNX', device: 'cpu' },
         reranker: { model: 'hotchpotch/japanese-reranker-xsmall-v2', enabled: true },
-        general: { log_level: 'DEBUG', contradiction_threshold: 0.85, duplicate_threshold: 0.90 },
-        forgetting: { enabled: true, decay_interval_seconds: 3600, min_strength: 0.005, emotion_half_life_hours: 24.0 }
+        general: { log_level: 'DEBUG', contradiction_threshold: 0.85, duplicate_threshold: 0.90 }
     },
     'Production': {
         embedding: { model: 'onnx-community/ruri-v3-30m-ONNX', device: 'auto' },
         reranker: { model: 'hotchpotch/japanese-reranker-xsmall-v2', enabled: true },
-        general: { log_level: 'WARNING', contradiction_threshold: 0.85, duplicate_threshold: 0.90 },
-        forgetting: { enabled: true, decay_interval_seconds: 1800, min_strength: 0.005, emotion_half_life_hours: 24.0 }
+        general: { log_level: 'WARNING', contradiction_threshold: 0.85, duplicate_threshold: 0.90 }
     }
 };
 
@@ -27,10 +25,6 @@ const CATEGORY_ICONS = {
     embedding: '<i data-lucide="brain"></i>',
     reranker: '<i data-lucide="search"></i>',
     qdrant: '<i data-lucide="package"></i>',
-    forgetting: '<i data-lucide="eraser"></i>',
-    memory_enrichment: '<i data-lucide="sparkles"></i>',
-    auto_capture: '<i data-lucide="camera"></i>',
-    memorag: '<i data-lucide="layers"></i>',
     general: '<i data-lucide="settings"></i>'
 };
 
@@ -39,18 +33,13 @@ const CATEGORY_DESCRIPTIONS = {
     embedding: 'Embedding model configuration for vector search. Reload takes 10-60s.',
     reranker: 'Cross-encoder reranker for search result quality. Reload takes 5-30s.',
     qdrant: 'Qdrant vector database connection settings.',
-    forgetting: 'Ebbinghaus forgetting curve for automatic memory decay.',
-    memory_enrichment: 'Auto-evaluate importance and relations via LLM after memory creation.',
-    auto_capture: '自動メモリキャプチャ設定',
-    memorag: 'MemoRAG設定',
     general: 'General settings: timezone, logging, thresholds, search engine.'
 };
 
 /* ── Category display order (consistent across renders) ── */
 const CATEGORY_ORDER = [
     'general', 'server', 'embedding', 'reranker',
-    'qdrant', 'forgetting', 'memory_enrichment',
-    'auto_capture', 'memorag'
+    'qdrant'
 ];
 
 /* ═══════════════════════════════════════════════════════════════════
