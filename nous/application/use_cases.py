@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from nous.config.settings import Settings
+    from nous.domain.chat_config import ChatConfig
     from nous.infrastructure.embedding.reranker import RerankerModel
 
 
@@ -85,9 +86,10 @@ class QdrantSemanticSearch:
 class AppContext:
     """Dependency injection container for the application."""
 
-    def __init__(self, settings: Settings, persona: str) -> None:
+    def __init__(self, settings: Settings, persona: str, config: ChatConfig | None = None) -> None:
         self.settings = settings
         self.persona = persona
+        self._config = config
         self.connection = SQLiteConnection(settings.persona_dir, persona)
         try:
             self.connection.initialize_schema()
@@ -110,19 +112,45 @@ class AppContext:
 
         # Create MemoryEnricher if configured (best-effort enrichment)
         enricher = None
-        if self.settings.memory_enrichment.enabled:
-            api_key = self.settings.memory_enrichment.get_effective_api_key(self.settings)
+        cfg = self._config
+        mem_enrich_enabled = cfg.memory_enrichment_enabled if cfg else self.settings.memory_enrichment.enabled
+        if mem_enrich_enabled:
+            if cfg:
+                provider = cfg.memory_enrichment_provider or ""
+                model = cfg.memory_enrichment_model or ""
+                base_url = cfg.memory_enrichment_base_url or ""
+                min_chars = cfg.memory_enrichment_min_chars
+                # Resolve API key from settings (ChatConfig doesn't have per-provider keys)
+                api_key = ""
+                if provider == "openrouter":
+                    api_key = self.settings.openrouter_api_key
+                elif provider == "anthropic":
+                    api_key = self.settings.anthropic_api_key
+                elif provider == "openai":
+                    api_key = self.settings.openai_api_key
+                elif provider == "google":
+                    api_key = self.settings.google_api_key
+                elif provider == "opencode_go":
+                    api_key = self.settings.opencode_go_api_key
+                if not api_key:
+                    from nous.config.runtime_config import RuntimeConfigManager
+                    key_name = f"{provider}_api_key"
+                    value, _ = RuntimeConfigManager().get_effective_value("api_keys", key_name)
+                    api_key = value or ""
+            else:
+                provider = self.settings.memory_enrichment.provider
+                api_key = self.settings.memory_enrichment.get_effective_api_key(self.settings)
+                model = self.settings.memory_enrichment.model
+                base_url = self.settings.memory_enrichment.base_url
+                min_chars = self.settings.memory_enrichment.min_chars
             if api_key:
-                from nous.infrastructure.llm.memory_enricher import (
-                    MemoryEnricher,
-                )
-
+                from nous.infrastructure.llm.memory_enricher import MemoryEnricher
                 enricher = MemoryEnricher(
-                    provider=self.settings.memory_enrichment.provider,
+                    provider=provider,
                     api_key=api_key,
-                    model=self.settings.memory_enrichment.model,
-                    base_url=self.settings.memory_enrichment.base_url,
-                    min_chars=self.settings.memory_enrichment.min_chars,
+                    model=model,
+                    base_url=base_url,
+                    min_chars=min_chars,
                 )
 
         # EventBus (must be created before services)
@@ -267,12 +295,22 @@ class AppContext:
                 EmotionRecallBiasRanker(),
                 TopicAffinityRanker(),
             )
+            # Build memorag config from ChatConfig or fallback to Settings
+            if self._config:
+                memorag_config = {
+                    "chunk_size": self._config.memorag_chunk_size,
+                    "chunk_overlap": self._config.memorag_chunk_overlap,
+                    "top_k": self._config.memorag_top_k,
+                    "similarity_threshold": self._config.memorag_similarity_threshold,
+                }
+            else:
+                memorag_config = self.settings.memorag
             self._search_engine = SearchEngine(
                 keyword,
                 semantic,
                 ranker,
                 memory_repo=self.memory_repo,
-                memorag_config=self.settings.memorag,
+                memorag_config=memorag_config,
                 reranker=self._reranker,
                 entity_service=self.entity_service,
             )
@@ -330,7 +368,7 @@ class AppContextRegistry:
         cls._settings = settings
 
     @classmethod
-    def get(cls, persona: str) -> AppContext:
+    def get(cls, persona: str, config: ChatConfig | None = None) -> AppContext:
         if persona in cls._contexts:
             return cls._contexts[persona]
 
@@ -339,13 +377,19 @@ class AppContextRegistry:
 
             cls._settings = Settings()
 
-        ctx = AppContext(cls._settings, persona)
+        ctx = AppContext(cls._settings, persona, config=config)
         cls._contexts[persona] = ctx
 
-        if cls._settings.forgetting.enabled:
+        forgetting_enabled = config.forgetting_enabled if config else cls._settings.forgetting.enabled
+        if forgetting_enabled:
             from nous.application.workers.decay_worker import DecayWorker
 
-            decay_worker = DecayWorker(ctx, cls._settings.forgetting.decay_interval_seconds)
+            decay_interval = (
+                config.forgetting_decay_interval_seconds
+                if config
+                else cls._settings.forgetting.decay_interval_seconds
+            )
+            decay_worker = DecayWorker(ctx, decay_interval, config=config)
             decay_worker.start()
 
         return ctx
