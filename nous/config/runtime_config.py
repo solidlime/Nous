@@ -38,36 +38,6 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "api_key": {"hot_reload": True, "description": "Qdrant API key", "masked": True},
         "collection_prefix": {"hot_reload": True, "description": "Collection name prefix"},
     },
-    "forgetting": {
-        "enabled": {"hot_reload": True, "description": "Enable forgetting curve"},
-        "decay_interval_seconds": {"hot_reload": True, "description": "Decay worker interval (seconds)"},
-        "min_strength": {"hot_reload": True, "description": "Minimum memory strength"},
-        "emotion_half_life_hours": {"hot_reload": True, "description": "Base half-life for emotion decay (hours)"},
-    },
-    "memory_enrichment": {
-        "enabled": {"hot_reload": True, "description": "Auto-evaluate importance & relations via LLM"},
-        "provider": {"hot_reload": True, "description": "LLM provider (anthropic/openai/openrouter)"},
-        "api_key": {"hot_reload": True, "description": "LLM API key", "masked": True},
-        "model": {"hot_reload": True, "description": "LLM model for enrichment"},
-        "base_url": {"hot_reload": True, "description": "LLM API base URL"},
-        "min_chars": {"hot_reload": True, "description": "Min content length to trigger enrichment"},
-    },
-    "auto_capture": {
-        "enabled": {"hot_reload": True, "description": "Auto-capture memories at end of each chat turn"},
-        "max_memories": {"hot_reload": True, "description": "Maximum memories to create per session"},
-    },
-    "memorag": {
-        "enabled": {"hot_reload": True, "description": "Enable MemoryContextSnapshot building"},
-        "rebuild_threshold": {
-            "hot_reload": True,
-            "description": "Rebuild snapshot when memory count increases by this many",
-        },
-        "snapshot_top_memories": {"hot_reload": True, "description": "Number of top-importance memories in snapshot"},
-        "snapshot_interval_hours": {
-            "hot_reload": True,
-            "description": "Minimum hours between automatic snapshot rebuilds",
-        },
-    },
     "general": {
         "timezone": {"hot_reload": True, "description": "Timezone"},
         "log_level": {"hot_reload": True, "description": "Log level"},
