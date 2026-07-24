@@ -98,7 +98,7 @@ function _endSession(reason) {
   }
   if (session.seekBar && document.contains(session.seekBar)) session.seekBar.remove();
   if (session.btn && document.contains(session.btn)) {
-    session.btn.innerHTML = '<i data-lucide="volume-2"></i>';
+    safeSetHTML(session.btn, '<i data-lucide="volume-2"></i>');
     if (typeof lucide !== "undefined") lucide.createIcons();
   }
   _playbackSession = null;
@@ -126,7 +126,7 @@ function _showPlayPrompt(containerDiv, audio, btn) {
       }
       if (btn) {
         btn.classList.add("playing");
-        btn.innerHTML = '<i data-lucide="pause"></i>';
+        safeSetHTML(btn, '<i data-lucide="pause"></i>');
         if (typeof lucide !== "undefined") lucide.createIcons();
       }
     }).catch(function(err2) {
@@ -160,7 +160,7 @@ function _setupAudio(audio, audioUrl, btn, containerDiv) {
   // btn再生中状態
   if (btn) {
     btn.classList.add("playing");
-    btn.innerHTML = '<i data-lucide="pause"></i>';
+    safeSetHTML(btn, '<i data-lucide="pause"></i>');
     btn.disabled = false;
     if (typeof lucide !== "undefined") lucide.createIcons();
   }
@@ -316,7 +316,7 @@ async function playTts(btn, text) {
   if (_playbackSession && _playbackSession.btn === btn && btn.classList.contains("playing")) {
     if (_playbackSession.audio.paused) {
       _playbackSession.audio.play();
-      btn.innerHTML = '<i data-lucide="pause"></i>';
+      safeSetHTML(btn, '<i data-lucide="pause"></i>');
       if (typeof lucide !== "undefined") lucide.createIcons();
       return;
     }
@@ -325,7 +325,7 @@ async function playTts(btn, text) {
   // 再生中の一時停止
   if (_playbackSession && _playbackSession.btn === btn && !_playbackSession.audio.paused) {
     _playbackSession.audio.pause();
-    btn.innerHTML = '<i data-lucide="play"></i>';
+    safeSetHTML(btn, '<i data-lucide="play"></i>');
     if (typeof lucide !== "undefined") lucide.createIcons();
     return;
   }
@@ -339,7 +339,7 @@ async function playTts(btn, text) {
   const plainText = _stripMarkdown(text);
   if (!plainText) return;
   
-  btn.innerHTML = '<span class="tts-spinner"></span>';
+  safeSetHTML(btn, '<span class="tts-spinner"></span>');
   btn.disabled = true;
   
   try {
@@ -356,13 +356,13 @@ async function playTts(btn, text) {
       _setupAudio(audio, audioUrl, btn, btn.closest(".chat-msg"));
     } else {
       console.warn("[TTS] Synthesis failed:", resp.error || "unknown");
-      btn.innerHTML = '<i data-lucide="volume-2"></i>';
+      safeSetHTML(btn, '<i data-lucide="volume-2"></i>');
       btn.disabled = false;
       if (typeof lucide !== "undefined") lucide.createIcons();
     }
   } catch (e) {
     console.error("[TTS] Request error:", e.message);
-    btn.innerHTML = '<i data-lucide="volume-2"></i>';
+    safeSetHTML(btn, '<i data-lucide="volume-2"></i>');
     btn.disabled = false;
     if (typeof lucide !== "undefined") lucide.createIcons();
   }
