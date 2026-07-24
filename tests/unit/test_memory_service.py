@@ -36,6 +36,12 @@ class InMemoryMemoryRepository:
         self._store[memory.key] = memory
         return Success(memory.key)
 
+    def find_by_content_exact(self, content: str) -> Result[Memory | None, RepositoryError]:
+        for m in self._store.values():
+            if m.content.lower() == content.strip().lower():
+                return Success(m)
+        return Success(None)
+
     def find_by_key(self, key: str) -> Result[Memory | None, RepositoryError]:
         return Success(self._store.get(key))
 

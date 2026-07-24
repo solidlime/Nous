@@ -45,5 +45,9 @@ class ConfigError(DomainError):
     """Configuration error."""
 
 
+class DuplicateMemoryError(DomainError):
+    """Memory content duplicates an existing memory."""
+
+
 class VectorStoreError(DomainError):
     """Vector store operation failed."""

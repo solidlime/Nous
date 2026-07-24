@@ -107,6 +107,16 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
             return Success(None)
         return Success(self._row_to_memory(row))
 
+    def find_by_content_exact(self, content: str) -> Result[Memory | None, RepositoryError]:
+        """Find a memory by exact content match (case-insensitive, excludes tombstoned)."""
+        row = self._db.execute(
+            f"SELECT * FROM memories WHERE LOWER(content) = LOWER(?) AND {self._active_where()} LIMIT 1",
+            (content.strip(),),
+        ).fetchone()
+        if row is None:
+            return Success(None)
+        return Success(self._row_to_memory(row))
+
     def find_recent(self, limit: int = 10, offset: int = 0) -> Result[list[Memory], RepositoryError]:
         """Return the most recently updated memories with optional pagination offset."""
         rows = self._db.execute(
