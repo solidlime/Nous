@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -77,24 +76,17 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> dict:
     current_time = get_now().strftime("%Y-%m-%d %H:%M")
     ctx.persona_service.record_conversation_time(persona)
 
-    # Read one-shot state memories (physical_state/mental_state)
-    import datetime as _dt
-
+    # Read one-shot state memories (physical_state/mental_state) via service
     one_shot_context: dict[str, str] = {}
     for tag_name, label in [
         ("physical_state", "💪 身体状態"),
         ("mental_state", "🧠 精神状態"),
     ]:
-        mems_result = ctx.memory_service.get_by_tags([tag_name])
+        mems_result = ctx.memory_service.get_and_consume_one_shot(tag_name)
         if mems_result.is_ok and mems_result.value:
-            latest = sorted(mems_result.value, key=lambda m: m.created_at or _dt.datetime.min, reverse=True)[0]
-            content = latest.content.replace(f"{tag_name}: ", "", 1)
-            one_shot_context[label] = content
-            # Mark consumed. Failure swallowed — data loss worse than double-display.
-            import contextlib as _ctxlib
-
-            with _ctxlib.suppress(Exception):
-                ctx.memory_repo.consume_memory(latest.key)
+            latest = mems_result.value[0]
+            cleaned = latest.content.replace(f"{tag_name}: ", "", 1)
+            one_shot_context[label] = cleaned
 
     result_text = _format_lightweight_response(
         state,
@@ -190,36 +182,10 @@ async def _tool_update_context(
         pi = dict(persona_info)
         if nickname:
             pi["nickname"] = nickname
-        goals_from_pi = pi.pop("goals", None)
-
-        if goals_from_pi is not None:
-            if isinstance(goals_from_pi, str):
-                try:
-                    goals_from_pi = json.loads(goals_from_pi)
-                except Exception:
-                    goals_from_pi = [goals_from_pi] if goals_from_pi else []
-            for goal_text in goals_from_pi or []:
-                if goal_text:
-                    existing = ctx.memory_service.get_by_tags(["goal", "active"])
-                    existing_contents = [m.content for m in (existing.value or [])]
-                    if goal_text not in existing_contents:
-                        from nous.domain.memory.entities import Memory as _Memory
-                        from nous.domain.shared.time_utils import generate_memory_key, get_now
-
-                        mem = _Memory(
-                            key=generate_memory_key(),
-                            content=goal_text,
-                            created_at=get_now(),
-                            tags=["goal", "active"],
-                            importance=0.8,
-                            emotion="anticipation",
-                        )
-                        ctx.memory_service.save_memory(mem)
-
-        if pi:
-            result = ctx.persona_service.update_persona_info(persona, pi)
-            if result.is_ok:
-                updated.append("persona_info updated")
+        # goals are extracted and persisted by PersonaService.update_persona_info internally
+        result = ctx.persona_service.update_persona_info(persona, pi)
+        if result.is_ok:
+            updated.append("persona_info updated")
     elif nickname:
         result = ctx.persona_service.update_persona_info(persona, {"nickname": nickname})
         if result.is_ok:

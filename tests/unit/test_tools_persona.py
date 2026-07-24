@@ -52,7 +52,7 @@ async def test_get_context_skips_consumed_memories(mock_ctx):
     state = PersonaState(persona="test_persona")
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
-    mock_ctx.memory_service.get_by_tags.return_value = Success([])  # all empty = consumed
+    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])  # consumed = empty
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success([])
@@ -65,3 +65,59 @@ async def test_get_context_skips_consumed_memories(mock_ctx):
     assert result["ok"] is True
     assert "前回セッションからの状態" not in result["result"]
     assert "口調" not in result["result"]
+
+
+@pytest.mark.asyncio
+async def test_get_context_includes_one_shot_memories(mock_ctx):
+    """one-shot メモリが存在する場合は結果に含まれる"""
+    from nous.api.mcp._tools_persona import _tool_get_context
+    from nous.domain.persona.entities import PersonaState
+
+    state = PersonaState(persona="test_persona")
+    mock_ctx.persona_service.get_context.return_value = Success(state)
+    mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
+    mock_ctx.memory_service.get_and_consume_one_shot.side_effect = [
+        Success([_make_memory("m1", content="physical_state: 元気", tags=["physical_state"])]),
+        Success([]),  # mental_state: consumed
+    ]
+    mock_ctx.persona_service.get_emotion_history.return_value = Success([])
+    mock_ctx.persona_service.get_body_state_history.return_value = Success([])
+    mock_ctx.memory_service.get_recent.return_value = Success([])
+    mock_ctx.equipment_service.get_equipment.return_value = Success({})
+    mock_ctx.persona_service.record_conversation_time.return_value = Success(None)
+
+    result = await _tool_get_context(mock_ctx, "test_persona")
+    assert result["ok"] is True
+    assert "💪 身体状態" in result["result"]
+    assert "元気" in result["result"]
+    # mental_state consumed → not shown
+    assert "🧠 精神状態" not in result["result"]
+
+
+@pytest.mark.asyncio
+async def test_get_context_both_one_shot_present(mock_ctx):
+    """両方の one-shot メモリが存在する場合、両方とも表示される"""
+    from nous.api.mcp._tools_persona import _tool_get_context
+    from nous.domain.persona.entities import PersonaState
+
+    state = PersonaState(persona="test_persona")
+    mock_ctx.persona_service.get_context.return_value = Success(state)
+    mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
+    mock_ctx.memory_service.get_and_consume_one_shot.side_effect = [
+        Success([_make_memory("m1", content="physical_state: 元気", tags=["physical_state"])]),
+        Success([_make_memory("m2", content="mental_state: 集中", tags=["mental_state"])]),
+    ]
+    mock_ctx.persona_service.get_emotion_history.return_value = Success([])
+    mock_ctx.persona_service.get_body_state_history.return_value = Success([])
+    mock_ctx.memory_service.get_recent.return_value = Success([])
+    mock_ctx.equipment_service.get_equipment.return_value = Success({})
+    mock_ctx.persona_service.record_conversation_time.return_value = Success(None)
+
+    result = await _tool_get_context(mock_ctx, "test_persona")
+    assert result["ok"] is True
+    assert "💪 身体状態" in result["result"]
+    assert "元気" in result["result"]
+    assert "🧠 精神状態" in result["result"]
+    assert "集中" in result["result"]
