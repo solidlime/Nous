@@ -14,6 +14,7 @@ from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import format_iso, get_now, parse_iso
 from nous.infrastructure.logging.structured import get_logger
+from nous.infrastructure.sqlite._utils import _parse_or_none
 
 if TYPE_CHECKING:
     from nous.infrastructure.sqlite.connection import SQLiteConnection
@@ -414,12 +415,3 @@ def _safe_float(value: str | None) -> float | None:
     except (ValueError, TypeError):
         return None
 
-
-def _parse_or_none(value: str | None):
-    """Parse ISO datetime or return None."""
-    if not value:
-        return None
-    try:
-        return parse_iso(value)
-    except Exception:
-        return None
