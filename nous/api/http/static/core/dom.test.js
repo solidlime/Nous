@@ -69,3 +69,29 @@ describe('N.Core.truncate', () => {
     expect(N.truncate(0, 5)).toBe('');
   });
 });
+
+describe('N.Core.safeSetHTML', () => {
+  it('falls back to textContent when DOMPurify is unavailable', () => {
+    const el = document.createElement('div');
+    N.safeSetHTML(el, '<b>bold</b>');
+    expect(el.innerHTML).toBe('&lt;b&gt;bold&lt;/b&gt;');
+    expect(el.textContent).toBe('<b>bold</b>');
+  });
+
+  it('handles empty string', () => {
+    const el = document.createElement('div');
+    N.safeSetHTML(el, '');
+    expect(el.textContent).toBe('');
+  });
+
+  it('handles plain text without tags', () => {
+    const el = document.createElement('div');
+    N.safeSetHTML(el, 'hello world');
+    expect(el.textContent).toBe('hello world');
+  });
+
+  it('is accessible as window.safeSetHTML', () => {
+    expect(typeof window.safeSetHTML).toBe('function');
+    expect(window.safeSetHTML).toBe(N.safeSetHTML);
+  });
+});
