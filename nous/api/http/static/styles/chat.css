@@ -638,67 +638,6 @@ input[type="range"].chat-field-input:focus {
   transform: none;
 }
 
-/* Mobile responsive — Apple HIG */
-@media (max-width: 768px) {
-  #chat-layout {
-    flex-direction: column;
-  }
-  #chat-messages {
-    min-height: 350px;
-    max-height: 50dvh;
-  }
-  #memory-panel {
-    display: none;
-  }
-  #memory-panel[style*="display: flex"] {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 280px;
-    z-index: var(--z-modal);
-    background: var(--bg-primary);
-    border-right: 0.5px solid var(--glass-border);
-    overflow-y: auto;
-  }
-  #settings-panel {
-    width: 100%;
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    z-index: var(--z-modal);
-    background: var(--bg-primary);
-    transition: transform var(--duration-normal) var(--ease-apple);
-    will-change: transform;
-  }
-  #settings-panel.collapsed {
-    transform: translateX(100%);
-  }
-  #settings-panel .settings-scroll-container {
-    padding: 12px;
-    padding-top: 48px;
-  }
-  .settings-panel-close {
-    display: flex;
-  }
-  #settings-backdrop {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(20px) saturate(180%);
-    z-index: var(--z-overlay);
-  }
-  #settings-backdrop.visible {
-    display: block;
-  }
-}
-@media (min-width: 769px) {
-  .settings-panel-close {
-    display: none;
-  }
-}
 .chat-sidebar-toggle {
   background: none;
   border: 0.5px solid var(--glass-border);
@@ -982,23 +921,6 @@ input[type="range"].chat-field-input:focus {
 .mem-panel-toggle:hover {
   color: var(--text-primary);
   background: var(--glass-bg);
-}
-@media (max-width: 900px) {
-  #memory-panel {
-    display: none;
-  }
-}
-@media (min-width: 900px) and (max-width: 1100px) {
-  #chat-layout {
-    gap: 8px;
-  }
-  #settings-panel {
-    width: 300px;
-  }
-  #memory-panel {
-    width: 220px;
-    padding: 10px;
-  }
 }
 
 #chat-cancel-btn {
@@ -1528,4 +1450,110 @@ input[type="range"].chat-field-input:focus {
 /* Collapse settings body when toggle is OFF */
 .settings-body-hidden {
   display: none !important;
+}
+
+/* ============================================================
+   CHAT-STYLE ELEMENTS (moved from base.css) — Apple HIG Style
+   ============================================================ */
+
+/* Tooltip enhancements */
+.chat-help-tooltip {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    font-size: 0.78rem;
+    color: var(--text-primary);
+    max-width: 280px;
+    line-height: 1.6;
+    z-index: var(--z-toast) !important;
+    padding: 12px 16px;
+}
+
+/* Chat stop button */
+.chat-stop-btn {
+    background: none;
+    border: 0.5px solid rgba(255, 69, 58, 0.4);
+    border-radius: var(--radius-sm);
+    color: var(--accent-red);
+    padding: 6px 14px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-apple);
+}
+.chat-stop-btn:hover {
+    background: rgba(255, 69, 58, 0.15);
+    border-color: rgba(255, 69, 58, 0.6);
+}
+
+/* Chat action buttons (voice, export) */
+.chat-action-btn {
+    background: none;
+    border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-apple);
+}
+.chat-action-btn:hover {
+    color: var(--text-primary);
+    background: var(--glass-bg);
+}
+
+/* Command suggestion popup */
+.chat-command-popup {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 4px;
+    background: var(--bg-secondary);
+    border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: var(--z-dropdown);
+    min-width: 260px;
+    box-shadow: var(--shadow-lg);
+}
+.chat-command-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; border-radius: var(--radius-sm);
+    cursor: pointer; font-size: 0.82rem;
+    color: var(--text-secondary);
+    transition: background var(--duration-fast) var(--ease-apple);
+}
+.chat-command-item:hover, .chat-command-item.active {
+    background: var(--glass-bg-subtle);
+    color: var(--text-primary);
+}
+.chat-command-item .cmd-name {
+    font-weight: 600; color: var(--accent-blue);
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    min-width: 100px;
+}
+.chat-command-item .cmd-desc {
+    color: var(--text-muted); font-size: 0.78rem;
+}
+
+/* Settings panel sticky header */
+.settings-sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-content);
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 0.5px solid var(--separator-non-opaque);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: none;
+    margin: 0 -16px 12px;
+    contain: layout style paint;
 }

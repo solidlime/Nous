@@ -6,7 +6,6 @@ import sys as _sys  # Keep sys accessible for f-string eval
 def render_chat_layout_prefix() -> str:
     """Return the opening HTML (CSS link, section, header, layout container, backdrop)."""
     return f"""
-        <link rel="stylesheet" href="/static/chat.css">
         <!-- ========== CHAT TAB ========== -->
         <section id="tab-chat" class="tab-panel" role="tabpanel">
             <div style="position:relative; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
