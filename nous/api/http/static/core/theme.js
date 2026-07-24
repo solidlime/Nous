@@ -24,4 +24,10 @@ N.Core.toggleTheme = function toggleTheme() {
 
 window.applyTheme = N.Core.applyTheme;
 window.toggleTheme = N.Core.toggleTheme;
+
+/* N.Components.theme alias */
+N.Components.theme = {
+  apply: N.Core.applyTheme,
+  toggle: N.Core.toggleTheme,
+};
 })(window.Nous);

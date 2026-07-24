@@ -43,6 +43,10 @@ def render_head() -> str:
     <script src="/static/core/modal.js" defer></script>
     <script src="/static/core/theme.js" defer></script>
     <script src="/static/core/sse.js" defer></script>
+    <!-- UI Components (Phase 5) — registered as N.Components.* -->
+    <script src="/static/components/skeleton.js" defer></script>
+    <script src="/static/components/memory-card.js" defer></script>
+    <script src="/static/components/chart.js" defer></script>
     <!-- Base application shell — must load before feature scripts -->
     <script src="/static/base.js" defer></script>
     <!-- Chat modules (Phase 3) -->

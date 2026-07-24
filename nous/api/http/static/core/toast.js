@@ -84,4 +84,14 @@ N.Core.toastAction = function toastAction(msg, type, actionLabel, actionFn) {
 };
 
 window.toast = N.Core.toast;
+
+/* N.Components.toast alias */
+N.Components.toast = {
+  show: N.Core.toast,
+  info: function(msg) { N.Core.toast(msg, "info"); },
+  success: function(msg) { N.Core.toast(msg, "success"); },
+  error: function(msg) { N.Core.toast(msg, "error"); },
+  warning: function(msg) { N.Core.toast(msg, "warning"); },
+  action: N.Core.toastAction,
+};
 })(window.Nous);
