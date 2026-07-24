@@ -133,8 +133,10 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
     def update(self, key: str, **kwargs: Any) -> Result[Memory, RepositoryError]:
         """Update specific fields of a memory."""
         try:
+            self._db.execute("BEGIN IMMEDIATE")
             existing = self._db.execute("SELECT * FROM memories WHERE key = ?", (key,)).fetchone()
             if existing is None:
+                self._db.rollback()
                 return Failure(RepositoryError(f"Memory not found: {key}"))
 
             updates: dict[str, Any] = {}
@@ -157,9 +159,11 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
             )
 
             updated_row = self._db.execute("SELECT * FROM memories WHERE key = ?", (key,)).fetchone()
+            self._db.commit()
             logger.info("Memory updated: %s", key)
             return Success(self._row_to_memory(updated_row))
         except Exception as e:
+            self._db.rollback()
             logger.error("Failed to update memory %s: %s", key, e)
             return Failure(RepositoryError(str(e)))
 
