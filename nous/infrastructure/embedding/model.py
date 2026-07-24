@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import threading
 
 import numpy as np
 import onnxruntime
@@ -17,6 +16,7 @@ from huggingface_hub import snapshot_download
 from tokenizers import Tokenizer
 
 from nous.config.settings import EmbeddingConfig
+from nous.infrastructure.embedding._base import OnnxBaseModel
 from nous.infrastructure.logging.structured import get_logger
 
 logger = get_logger(__name__)
@@ -25,7 +25,7 @@ _QUERY_PREFIX = "検索クエリ: "
 _DOCUMENT_PREFIX = "検索文書: "
 
 
-class EmbeddingModel:
+class EmbeddingModel(OnnxBaseModel):
     """Lazy-loading embedding model backed by ONNX Runtime + tokenizers.
 
     Thread-safe (double-checked locking).  Provides sync and async encode
@@ -38,11 +38,10 @@ class EmbeddingModel:
         self,
         config: EmbeddingConfig | None = None,
     ) -> None:
+        super().__init__()
         self.config = config or EmbeddingConfig()
-        self._session: onnxruntime.InferenceSession | None = None
         self._tokenizer: Tokenizer | None = None
         self._dimension: int | None = None
-        self._lock = threading.Lock()
         self._tok_name: str = "cl-nagoya/ruri-v3-30m"
 
     # ------------------------------------------------------------------
@@ -218,13 +217,6 @@ class EmbeddingModel:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-
-    def _ensure_loaded(self) -> None:
-        """Lazy-load model with double-checked locking."""
-        if self._session is None:
-            with self._lock:
-                if self._session is None:
-                    self._load_model()
 
     def _load_model(self) -> None:
         """Download ONNX model + tokenizer, create InferenceSession."""

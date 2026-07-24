@@ -9,6 +9,7 @@ from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import format_iso, get_now
 from nous.infrastructure.logging.structured import get_logger
+from nous.infrastructure.sqlite._utils import _parse_json_list
 from nous.infrastructure.sqlite.base_repo import SQLiteRepository
 from nous.infrastructure.sqlite.block_repo import SQLiteBlockMixin
 from nous.infrastructure.sqlite.strength_repo import SQLiteStrengthMixin
@@ -122,7 +123,7 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
         result: list[Memory] = []
         tag_set = set(tags)
         for row in rows:
-            memory_tags = set(self._parse_json_list(row["tags"]))
+            memory_tags = set(_parse_json_list(row["tags"]))
             if memory_tags & tag_set:
                 result.append(self._row_to_memory(row))
                 if len(result) >= limit:
@@ -457,7 +458,7 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
         rows = self._db.execute(f"SELECT tags FROM memories WHERE {self._active_where()}").fetchall()
         all_tags: set[str] = set()
         for row in rows:
-            all_tags.update(self._parse_json_list(row["tags"]))
+            all_tags.update(_parse_json_list(row["tags"]))
         return Success(sorted(all_tags))
 
     def consume_memory(self, key: str) -> Result[None, RepositoryError]:
@@ -685,17 +686,6 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _parse_json_list(value: str | None) -> list[str]:
-        """Safely parse a JSON-encoded list from a database field."""
-        if not value:
-            return []
-        try:
-            parsed = json.loads(value)
-            return parsed if isinstance(parsed, list) else []
-        except (json.JSONDecodeError, TypeError):
-            return []
-
-    @staticmethod
     def _parse_json_dict(value: str | None) -> dict | None:
         """Parse a JSON dict column. Returns None for empty/null."""
         if not value:
@@ -726,14 +716,14 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
             importance=row["importance"] or 0.5,
             emotion=row["emotion"] or "neutral",
             emotion_intensity=row["emotion_intensity"] or 0.0,
-            tags=self._parse_json_list(row["tags"]),
+            tags=_parse_json_list(row["tags"]),
             privacy_level=row["privacy_level"] or "internal",
             physical_state=row["physical_state"],
             mental_state=row["mental_state"],
             environment=row["environment"],
             relationship_status=row["relationship_status"],
             source_context=row["source_context"],
-            related_keys=self._parse_json_list(row["related_keys"]),
+            related_keys=_parse_json_list(row["related_keys"]),
             summary_ref=row["summary_ref"],
             equipped_items=row["equipped_items"],
             access_count=row["access_count"] or 0,
