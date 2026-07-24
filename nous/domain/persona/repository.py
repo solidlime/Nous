@@ -26,7 +26,6 @@ class PersonaRepository(Protocol):
 
     def get_current_state(self, persona: str) -> Result[PersonaState, RepositoryError]: ...
 
-    @abstractmethod
     def update_state(
         self,
         persona: str,
@@ -35,7 +34,6 @@ class PersonaRepository(Protocol):
         source: str | None = None,
     ) -> Result[None, RepositoryError]: ...
 
-    @abstractmethod
     def get_state_history(
         self, persona: str, key: str, limit: int = 20
     ) -> Result[list[ContextEntry], RepositoryError]: ...
@@ -44,17 +42,14 @@ class PersonaRepository(Protocol):
     # Emotion history
     # ------------------------------------------------------------------
 
-    @abstractmethod
     def add_emotion_record(self, persona: str, record: EmotionRecord) -> Result[None, RepositoryError]: ...
 
-    @abstractmethod
     def get_emotion_history(self, persona: str, limit: int = 20) -> Result[list[EmotionRecord], RepositoryError]: ...
 
     # ------------------------------------------------------------------
     # Body state history
     # ------------------------------------------------------------------
 
-    @abstractmethod
     def add_body_state_record(
         self,
         persona: str,
@@ -62,7 +57,6 @@ class PersonaRepository(Protocol):
         context: str | None = None,
     ) -> Result[None, RepositoryError]: ...
 
-    @abstractmethod
     def get_body_state_history(
         self, persona: str, limit: int = 20
     ) -> Result[list[BodyStateRecord], RepositoryError]: ...
@@ -71,14 +65,10 @@ class PersonaRepository(Protocol):
     # User / Persona info
     # ------------------------------------------------------------------
 
-    @abstractmethod
     def set_user_info(self, persona: str, key: str, value: str) -> Result[None, RepositoryError]: ...
 
-    @abstractmethod
     def set_persona_info(self, persona: str, key: str, value: str) -> Result[None, RepositoryError]: ...
 
-    @abstractmethod
     def get_user_info(self, persona: str) -> Result[dict, RepositoryError]: ...
 
-    @abstractmethod
     def get_persona_info(self, persona: str) -> Result[dict, RepositoryError]: ...

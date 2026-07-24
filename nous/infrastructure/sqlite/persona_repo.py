@@ -15,22 +15,13 @@ from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import format_iso, get_now, parse_iso
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.sqlite._utils import _parse_or_none
-
-if TYPE_CHECKING:
-    from nous.infrastructure.sqlite.connection import SQLiteConnection
+from nous.infrastructure.sqlite.base_repo import SQLiteRepository
 
 logger = get_logger(__name__)
 
 
-class SQLitePersonaRepository(PersonaRepository):
-    """SQLite-backed implementation of the PersonaRepository interface."""
-
-    def __init__(self, connection: SQLiteConnection) -> None:
-        self._conn = connection
-
-    @property
-    def _db(self):
-        return self._conn.get_memory_db()
+class SQLitePersonaRepository(SQLiteRepository):
+    """SQLite-backed implementation of the PersonaRepository protocol."""
 
     # ------------------------------------------------------------------
     # Persona state (bi-temporal)
