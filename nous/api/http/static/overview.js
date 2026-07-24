@@ -4,7 +4,7 @@ var { esc, toast, api, truncate, relativeTime, fmtDate } = window.Nous.Core;
 
 // --- Block CRUD helpers (global scope) ---
 function showCreateBlock() {
-    document.getElementById('block-modal-title').innerHTML = '<i data-lucide="pencil"></i> New Block';
+    safeSetHTML(document.getElementById('block-modal-title'), '<i data-lucide="pencil"></i> New Block');
     document.getElementById('block-modal-mode').value = 'create';
     document.getElementById('block-modal-name').value = '';
     document.getElementById('block-modal-name').disabled = false;
@@ -15,7 +15,7 @@ function showCreateBlock() {
 window.showCreateBlock = showCreateBlock;
 
 function showEditBlock(name, content, priority) {
-    document.getElementById('block-modal-title').innerHTML = '<i data-lucide="pencil"></i> Edit Block: ' + esc(name);
+    safeSetHTML(document.getElementById('block-modal-title'), '<i data-lucide="pencil"></i> Edit Block: ' + esc(name));
     document.getElementById('block-modal-mode').value = 'edit';
     document.getElementById('block-modal-name').value = name;
     document.getElementById('block-modal-name').disabled = true;
@@ -201,10 +201,10 @@ async function loadOverview() {
         const portraitEl = document.getElementById('overview-portrait');
         if (portraitUrl && portraitEl) {
             portraitEl.style.display = 'block';
-            portraitEl.innerHTML = '<div class="glass p-4" style="text-align:center;max-width:400px;margin:0 auto 16px">'
+            safeSetHTML(portraitEl, '<div class="glass p-4" style="text-align:center;max-width:400px;margin:0 auto 16px">'
                 + '<img src="' + esc(portraitUrl) + '" alt="Self Portrait" style="max-width:100%;max-height:300px;border-radius:8px;cursor:pointer" onclick="openMediaViewer(\'' + esc(portraitUrl) + '\',\'image\')">'
                 + '<div style="margin-top:6px;font-size:0.75rem;color:var(--text-muted)">Latest Self Portrait</div>'
-                + '</div>';
+                + '</div>');
         } else if (portraitEl) {
             portraitEl.style.display = 'none';
         }
@@ -359,7 +359,7 @@ async function loadOverview() {
         const dayCounts = Object.values(dayMap);
 
         // --- Render (new section order) ---
-        el.innerHTML = `
+        safeSetHTML(el, `
         <!-- Profile & Relationship -->
         <div class="glass glass-hoverable p-6 mb-6">
             <div class="card-title"><i data-lucide="user"></i> Profile &amp; Relationship</div>
@@ -589,7 +589,7 @@ async function loadOverview() {
                     <button onclick="saveBlock()" class="glass-btn" style="padding:8px 20px;background:var(--accent);color:white">Save</button>
                 </div>
             </div>
-        </div>`;
+        </div>`);
 
         // --- Charts ---
         destroyChart('chart-timeline');
@@ -613,7 +613,7 @@ async function loadOverview() {
         }
         if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
-        el.innerHTML = errorCard('Failed to load overview: ' + e.message);
+        safeSetHTML(el, errorCard('Failed to load overview: ' + e.message));
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 }
