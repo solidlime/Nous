@@ -120,6 +120,20 @@ async function loadChat() {
   loadEquipment();
   N.Core.refreshIcons();
 
+  // --- Restore panel open/closed state from cookies to DOM ---
+  if (!CHAT.sidebarOpen) {
+    var _settingsPanel = document.getElementById("settings-panel");
+    if (_settingsPanel && !_settingsPanel.classList.contains("collapsed")) {
+      _settingsPanel.classList.add("collapsed");
+    }
+  }
+  if (!CHAT.memoryPanelOpen) {
+    var _memoryPanel = document.getElementById("memory-panel");
+    if (_memoryPanel) {
+      _memoryPanel.style.display = "none";
+    }
+  }
+
   // ESC closes settings panel on mobile (moved from chat.js)
   document.addEventListener("keydown", function(e) {
     if (e.key === "Escape" && CHAT.sidebarOpen) {
