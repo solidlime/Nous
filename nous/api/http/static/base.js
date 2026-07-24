@@ -37,107 +37,24 @@ window.EMOTION_BAR_COLORS = EMOTION_BAR_COLORS;
 window.BODY_BAR_COLORS = BODY_BAR_COLORS;
 window.BODY_LABELS = BODY_LABELS;
 
+/* ── Delegate to N.Components.memoryCard (defined in components/memory-card.js) ── */
 function renderBodyStateBars(bodyState) {
-  if (!bodyState) return "";
-  const keys = Object.keys(bodyState).filter(
-    (k) => BODY_LABELS[k] && bodyState[k] != null,
-  );
-  if (keys.length === 0) return "";
-  let html =
-    '<div class="mem-modal-row"><span class="mem-modal-key">Body</span><span style="display:flex;flex-direction:column;gap:6px;flex:1">';
-  keys.forEach(function (k) {
-    const val = bodyState[k];
-    const color = BODY_BAR_COLORS[k] || BODY_BAR_COLORS.fatigue;
-    const label = BODY_LABELS[k];
-    const pct = Math.round(val * 100);
-    html += '<div style="display:flex;align-items:center;gap:8px">';
-    html +=
-      '<span style="font-size:0.75rem;color:var(--text-muted);min-width:70px">' +
-      label +
-      "</span>";
-    html +=
-      '<div style="flex:1;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden">';
-    html +=
-      '<div style="height:100%;width:' +
-      pct +
-      "%;background:" +
-      color +
-      ';border-radius:3px"></div>';
-    html += "</div>";
-    html +=
-      '<span style="font-size:0.75rem;color:var(--text-muted);min-width:32px;text-align:right">' +
-      pct +
-      "%</span>";
-    html += "</div>";
-  });
-  html += "</span></div>";
-  return html;
+  return N.Components.memoryCard.renderBodyStateBars(bodyState);
 }
 window.renderBodyStateBars = renderBodyStateBars;
 
 function renderEmotionBars(emotion, emotion_intensity) {
-  if (!emotion) return "";
-  const pct = Math.round((emotion_intensity || 0) * 100);
-  if (pct <= 0) return "";
-  const color = EMOTION_BAR_COLORS[emotion] || EMOTION_BAR_COLORS.neutral;
-  return (
-    '<div class="mem-modal-row"><span class="mem-modal-key">Emotion</span><span style="display:flex;flex-direction:column;gap:6px;flex:1">' +
-    '<div style="display:flex;align-items:center;gap:8px">' +
-    '<span style="font-size:0.75rem;color:var(--text-muted);min-width:70px;text-transform:capitalize">' +
-    esc(emotion) +
-    "</span>" +
-    '<div style="flex:1;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden">' +
-    '<div style="height:100%;width:' +
-    pct +
-    "%;background:" +
-    color +
-    ';border-radius:3px"></div>' +
-    "</div>" +
-    '<span style="font-size:0.75rem;color:var(--text-muted);min-width:32px;text-align:right">' +
-    pct +
-    "%</span>" +
-    "</div></span></div>"
-  );
+  return N.Components.memoryCard.renderEmotionBars(emotion, emotion_intensity);
 }
 window.renderEmotionBars = renderEmotionBars;
 
-/* Compact emotion badges for list/card views */
 function renderEmotionBadges(emotion, emotion_intensity) {
-  if (!emotion) return "";
-  const pct = Math.round((emotion_intensity || 0) * 100);
-  const color = EMOTION_COLORS[emotion] || "#94a3b8";
-  return (
-    '<span style="font-size:0.65rem;display:inline-block;padding:1px 5px;border-radius:3px;background:' +
-    color +
-    "22;color:" +
-    color +
-    ";border:1px solid " +
-    color +
-    '44;margin-right:3px">' +
-    esc(emotion) +
-    " " +
-    pct +
-    "%</span>"
-  );
+  return N.Components.memoryCard.renderEmotionBadges(emotion, emotion_intensity);
 }
 window.renderEmotionBadges = renderEmotionBadges;
 
-/* Compact body state indicator for list/card views - shows all 5 metrics */
 function renderBodyStateCompact(bodyState) {
-  if (!bodyState) return "";
-  const keys = Object.keys(bodyState).filter(function (k) {
-    return BODY_LABELS[k] && bodyState[k] != null && bodyState[k] > 0;
-  });
-  if (keys.length === 0) return "";
-  let html = '<span style="font-size:0.65rem;color:var(--text-muted)">';
-  keys.forEach(function (k) {
-    const val = bodyState[k];
-    const pct = Math.round(val * 100);
-    const emoji = BODY_LABELS[k].split(" ")[0];
-    html += emoji + pct + "% ";
-  });
-  html += "</span>";
-  return html;
+  return N.Components.memoryCard.renderBodyStateCompact(bodyState);
 }
 window.renderBodyStateCompact = renderBodyStateCompact;
 
@@ -157,108 +74,34 @@ function setStoredPersona(persona) {
 /* =================================================================
    CHART HELPERS
    ================================================================= */
+/* ── Delegate to N.Components.chart (defined in components/chart.js) ── */
 function destroyChart(id) {
-  if (S.charts[id]) {
-    S.charts[id].destroy();
-    delete S.charts[id];
-  }
+  N.Components.chart.destroy(id);
 }
 window.destroyChart = destroyChart;
-function chartOpts(extra = {}) {
-  const color =
-    getComputedStyle(document.documentElement)
-      .getPropertyValue("--text-muted")
-      .trim() || "#94a3b8";
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { labels: { color, font: { size: 11 } } },
-      ...extra.plugins,
-    },
-    scales: extra.scales
-      ? Object.fromEntries(
-          Object.entries(extra.scales).map(([k, v]) => [
-            k,
-            {
-              ...v,
-              ticks: { color, ...(v.ticks || {}) },
-              grid: { color: "rgba(0,122,255,0.08)", ...(v.grid || {}) },
-            },
-          ]),
-        )
-      : undefined,
-  };
+function chartOpts(extra) {
+  return N.Components.chart.defaults(extra);
 }
 window.chartOpts = chartOpts;
 
 /* =================================================================
    SKELETON HELPERS
    ================================================================= */
+/* ── Delegate to N.Components.skeleton (defined in components/skeleton.js) ── */
 function skeletonCard() {
-  return '<div class="glass p-6"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text" style="width:80%"></div><div class="skeleton skeleton-text" style="width:60%"></div></div>';
+  return N.Components.skeleton.card();
 }
 function errorCard(msg) {
-  return (
-    '<div class="glass p-6 text-center" style="color:var(--accent-red)"><p style="font-size:1.2rem;margin-bottom:8px"><i data-lucide="alert-triangle"></i></p><p>' +
-    esc(msg) +
-    "</p></div>"
-  );
+  return N.Components.skeleton.errorCard(msg);
 }
 window.errorCard = errorCard;
 
 /* =================================================================
    SKELETON LOADING
    ================================================================= */
+/* ── Delegate to N.Components.skeleton (defined in components/skeleton.js) ── */
 function showSkeleton(tabId) {
-  const container = document.getElementById("tab-" + tabId);
-  if (!container) return;
-  const skeletons = {
-    overview:
-      '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">' +
-      '<div class="skeleton skeleton-card glass"></div>'.repeat(4) +
-      '</div><div class="grid grid-cols-1 lg:grid-cols-2 gap-6">' +
-      '<div class="skeleton glass" style="height:200px"></div>'.repeat(2) +
-      "</div>",
-    analytics:
-      '<div class="skeleton skeleton-chart glass mb-6"></div>' +
-      '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">' +
-      '<div class="skeleton glass" style="height:200px"></div>'.repeat(2) +
-      "</div>",
-    memories:
-      '<div class="skeleton skeleton-line mb-4" style="height:48px"></div>' +
-      '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">' +
-      '<div class="skeleton skeleton-card glass"></div>'.repeat(6) +
-      "</div>",
-    settings:
-      '<div class="skeleton glass mb-4" style="height:160px"></div>'.repeat(3),
-    graph: '<div class="skeleton glass" style="height:600px"></div>',
-    "import-export":
-      '<div class="skeleton glass mb-4" style="height:200px"></div>' +
-      '<div class="skeleton glass" style="height:200px"></div>',
-    personas:
-      '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">' +
-      '<div class="skeleton skeleton-card glass"></div>'.repeat(3) +
-      "</div>",
-    admin: '<div class="skeleton glass" style="height:300px"></div>',
-    timeline: '<div class="skeleton glass" style="height:500px"></div>',
-  };
-  /* graph / import-export / personas / chat / timeline manage their own loading state via
-       inner elements (#graph-loading, #persona-grid, #export-preview, #chat-messages, #tl-loading).
-       Replacing their innerHTML would destroy those elements and cause
-       silent failures in the corresponding load functions. */
-  if (
-    tabId === "graph" ||
-    tabId === "import-export" ||
-    tabId === "personas" ||
-    tabId === "chat" ||
-    tabId === "timeline" ||
-    tabId === "activity"
-  )
-    return;
-  const content = container.querySelector('[id$="-content"]') || container;
-  safeSetHTML(content,
-    skeletons[tabId] || '<div class="skeleton skeleton-card glass"></div>');
+  N.Components.skeleton.show(tabId);
 }
 
 /* =================================================================
