@@ -37,6 +37,25 @@ var CHAT = {
 };
 N.Chat.state = CHAT;
 
+// Bridge CHAT state to centralized store
+if (window.Nous && window.Nous.Core && window.Nous.Core.store) {
+  var _cs = N.Core.store;
+  _cs.init({
+    streaming: CHAT.streaming,
+    sidebarOpen: CHAT.sidebarOpen,
+    memoryPanelOpen: CHAT.memoryPanelOpen,
+    messages: [],
+    mcpServers: [],
+    enabledSkills: [],
+    mcpTools: [],
+    mcpErrors: [],
+    attachments: [],
+    _nextTurnReady: CHAT._nextTurnReady,
+    _justReset: CHAT._justReset
+  });
+  _cs.syncFrom(CHAT);
+}
+
 // --- Help texts (used by showHelpTooltip) ---
 var HELP_TEXTS = {
   core: "プロバイダー（Anthropic/OpenAI/OpenRouter）・モデル・APIキー・Temperature・MaxTokens など、LLM API への接続に必要な基本設定です。",

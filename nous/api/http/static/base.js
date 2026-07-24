@@ -354,13 +354,8 @@ async function init() {
       dashCache: null,
       initTime: Date.now(),
     });
-    // Bridge: keep S object for backward compat, backed by store
-    (function() {
-      var store = window.Nous.Core.store;
-      Object.keys(S).forEach(function(k) {
-        if (store.get(k) === undefined) store.set(k, S[k]);
-      });
-    })();
+    // Bridge: bi-directional sync — S reads/writes go through store
+    window.Nous.Core.store.syncFrom(S);
   }
 
   // Theme
