@@ -439,3 +439,113 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
     .toast-container { left: 0; right: 0; bottom: 0; padding: 0.5rem; padding: calc(env(safe-area-inset-top) + 0.5rem) calc(env(safe-area-inset-right) + 0.5rem) calc(env(safe-area-inset-bottom) + 0.5rem) calc(env(safe-area-inset-left) + 0.5rem); transform: none; }
     .toast { max-width: none; width: 100%; text-align: center; }
 }
+
+/* ============================================================
+   RESPONSIVE TABLES — Mobile card view
+   ============================================================ */
+@media (max-width: 767px) {
+    /*
+     * Wrap any table in overflow-x:auto by default
+     * For tables that need card-view conversion, use .table-card-mobile
+     */
+    .table-card-mobile,
+    .table-card-mobile > table {
+        display: block;
+        width: 100%;
+    }
+    .table-card-mobile thead {
+        display: none; /* hide header on mobile */
+    }
+    .table-card-mobile tbody,
+    .table-card-mobile tr {
+        display: block;
+        width: 100%;
+    }
+    .table-card-mobile tr {
+        padding: 12px 16px;
+        border-bottom: 0.5px solid var(--separator-non-opaque);
+    }
+    .table-card-mobile tr:last-child {
+        border-bottom: none;
+    }
+    .table-card-mobile td {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 0 !important;
+        text-align: left !important;
+        border: none;
+        font-size: 0.82rem;
+    }
+    .table-card-mobile td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: var(--text-muted);
+        min-width: 80px;
+        flex-shrink: 0;
+        font-size: 0.75rem;
+    }
+    /* Actions cell: avoid label for button-only cells */
+    .table-card-mobile td[data-label="操作"] {
+        display: flex;
+        gap: 8px;
+        padding-top: 8px !important;
+        justify-content: flex-start;
+    }
+    .table-card-mobile td[data-label="操作"]::before {
+        display: none;
+    }
+}
+
+/* ============================================================
+   RESPONSIVE MEMORY CARDS — 1 column grid on mobile
+   ============================================================ */
+@media (max-width: 767px) {
+    #mem-list .memory-card {
+        padding: 12px 14px;
+    }
+    #mem-list .memory-compact {
+        padding: 10px 12px;
+        min-height: 44px;
+    }
+    /* Expand tap targets for memory cards */
+    .memory-card {
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .memory-card:active {
+        background: var(--glass-hover);
+    }
+    /* Full-width memory search/controls */
+    #mem-search {
+        min-width: 100% !important;
+        margin-bottom: 8px;
+    }
+    .mem-toolbar {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .mem-toolbar .glass-btn,
+    .mem-toolbar .glass-input {
+        min-height: 44px;
+        font-size: 0.78rem;
+    }
+    .view-toggle .view-btn {
+        min-height: 44px;
+        min-width: 44px;
+        padding: 8px 12px;
+    }
+    /* Adv search panel mobile */
+    .adv-search-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+    }
+    .adv-search-row .glass-input {
+        width: 100%;
+    }
+    .adv-search-label {
+        min-width: auto;
+        font-size: 0.75rem;
+    }
+}

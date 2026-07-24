@@ -31,13 +31,13 @@ def render_skills_tab() -> str:
                     </div>
                 </div>
             </div>
-            <div id="skills-table-area" class="glass" style="padding:0;overflow:hidden;">
-                <table style="width:100%;border-collapse:collapse;">
+            <div id="skills-table-area" class="glass table-responsive-wrap" style="padding:0;overflow:hidden;">
+                <table class="table-card-mobile" style="width:100%;border-collapse:collapse;">
                     <thead>
                         <tr style="border-bottom:1px solid var(--glass-border);">
-                            <th style="padding:10px 16px;text-align:left;font-size:0.8rem;color:var(--text-muted);font-weight:600;">名前</th>
-                            <th style="padding:10px 16px;text-align:left;font-size:0.8rem;color:var(--text-muted);font-weight:600;">説明</th>
-                            <th style="padding:10px 16px;text-align:right;font-size:0.8rem;color:var(--text-muted);font-weight:600;">操作</th>
+                            <th style="padding:10px 16px;text-align:left;font-size:0.8rem;color:var(--text-muted);font-weight:600;" data-label="名前">名前</th>
+                            <th style="padding:10px 16px;text-align:left;font-size:0.8rem;color:var(--text-muted);font-weight:600;" data-label="説明">説明</th>
+                            <th style="padding:10px 16px;text-align:right;font-size:0.8rem;color:var(--text-muted);font-weight:600;" data-label="操作">操作</th>
                         </tr>
                     </thead>
                     <tbody id="skills-tbody"></tbody>
@@ -81,11 +81,11 @@ function renderSkillsTable(skills) {
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid var(--glass-border)';
         safeSetHTML(tr, `
-            <td style="padding:10px 16px;font-size:0.85rem;color:var(--text-primary);font-weight:500;">${esc(skill.name)}</td>
-            <td style="padding:10px 16px;font-size:0.82rem;color:var(--text-secondary);">${esc(skill.description || '')}</td>
-            <td style="padding:10px 16px;text-align:right;display:flex;gap:6px;justify-content:flex-end;">
-                <button onclick="editSkill(${JSON.stringify(JSON.stringify(skill))})" style="padding:4px 12px;border-radius:6px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.2);color:var(--accent-blue);font-size:0.78rem;cursor:pointer;">編集</button>
-                <button onclick="deleteSkill('${esc(skill.name)}')" style="padding:4px 12px;border-radius:6px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);color:var(--accent-red);font-size:0.78rem;cursor:pointer;">削除</button>
+            <td style="padding:10px 16px;font-size:0.85rem;color:var(--text-primary);font-weight:500;" data-label="名前">${esc(skill.name)}</td>
+            <td style="padding:10px 16px;font-size:0.82rem;color:var(--text-secondary);" data-label="説明">${esc(skill.description || '')}</td>
+            <td style="padding:10px 16px;text-align:right;display:flex;gap:6px;justify-content:flex-end;" data-label="操作">
+                <button onclick="editSkill(${JSON.stringify(JSON.stringify(skill))})" style="padding:4px 12px;border-radius:6px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.2);color:var(--accent-blue);font-size:0.78rem;cursor:pointer;min-height:44px;min-width:44px;">編集</button>
+                <button onclick="deleteSkill('${esc(skill.name)}')" style="padding:4px 12px;border-radius:6px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);color:var(--accent-red);font-size:0.78rem;cursor:pointer;min-height:44px;min-width:44px;">削除</button>
             </td>`;
         tbody.appendChild(tr);
     });
