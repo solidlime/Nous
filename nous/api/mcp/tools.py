@@ -102,7 +102,10 @@ def register_tools(mcp: FastMCP) -> None:
         """Get persona state and memory overview. Call FIRST at session start.
         Lightweight: active commitments + essential story + body/emotion state (~500-800 tokens)."""
         p = _resolve_persona()
-        return await _tool_get_context(AppContextRegistry.get(p), p)
+        r = await _tool_get_context(AppContextRegistry.get(p), p)
+        if r.get("ok"):
+            return r.get("result", "")
+        return f"Error: {r.get('error', 'unknown')}"
 
     # memory_create
     @_tool("memory_create")
@@ -250,7 +253,7 @@ def register_tools(mcp: FastMCP) -> None:
         user_info: {name, nickname, preferred_address}. persona_info: {nickname, ...}.
         author_note: persistent system prompt injection. author_note_frequency: 'always' | 'every_n' | 'on_emotion_change'."""
         p = _resolve_persona()
-        return await _tool_update_context(
+        r = await _tool_update_context(
             AppContextRegistry.get(p),
             p,
             emotion=emotion,
@@ -268,6 +271,9 @@ def register_tools(mcp: FastMCP) -> None:
             author_note=author_note,
             author_note_frequency=author_note_frequency,
         )
+        if r.get("ok"):
+            return r.get("result", "")
+        return f"Error: {r.get('error', 'unknown')}"
 
     # ── Item tools (split from unified item) ──
 

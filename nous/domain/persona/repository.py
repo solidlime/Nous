@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from nous.domain.persona.entities import (
@@ -14,8 +13,9 @@ if TYPE_CHECKING:
     from nous.domain.shared.result import Result
 
 
-class PersonaRepository(ABC):
-    """Abstract interface for persona data storage.
+@runtime_checkable
+class PersonaRepository(Protocol):
+    """Protocol interface for persona data storage.
 
     All persona persistence backends must implement these methods.
     """
@@ -24,7 +24,6 @@ class PersonaRepository(ABC):
     # Persona state
     # ------------------------------------------------------------------
 
-    @abstractmethod
     def get_current_state(self, persona: str) -> Result[PersonaState, RepositoryError]: ...
 
     @abstractmethod

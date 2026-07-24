@@ -21,7 +21,7 @@ from nous.api.mcp._tools_helpers import (  # noqa: E402
 )
 
 
-async def _tool_get_context(ctx: AppContext, persona: str) -> str:
+async def _tool_get_context(ctx: AppContext, persona: str) -> dict:
     """Get persona state and memory overview. Call FIRST at session start.
     Lightweight: active commitments + essential story + body/emotion state (~500-800 tokens)."""
     state_result = ctx.persona_service.get_context(persona)
@@ -36,7 +36,7 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> str:
                 "success": False,
             },
         )
-        return f"Error: {state_result.error}"
+        return {"ok": False, "error": state_result.error}
     state = state_result.value
 
     state, decay_note = await _apply_emotion_decay(ctx, persona, state)
@@ -121,7 +121,7 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> str:
             "success": True,
         },
     )
-    return result_text
+    return {"ok": True, "result": result_text}
 
 
 async def _tool_update_context(
@@ -141,7 +141,7 @@ async def _tool_update_context(
     relationship_type: str | None = None,
     author_note: str | None = None,
     author_note_frequency: str | None = None,
-) -> str:
+) -> dict:
     """Update persona state. context_note: short note on current activity for session continuity.
     body_state: {fatigue, warmth, arousal, heart_rate, pain (0.0-1.0)}.
     author_note: constant context injected into system prompt.
@@ -234,7 +234,7 @@ async def _tool_update_context(
         updated.append(f"frequency={author_note_frequency}")
 
     if not updated:
-        return "No changes made (all parameters were None)"
+        return {"ok": True, "result": "No changes made (all parameters were None)"}
     await ctx.event_bus.publish(
         "context.updated",
         {
@@ -247,7 +247,7 @@ async def _tool_update_context(
             "author_note_frequency": author_note_frequency,
         },
     )
-    return f"Context updated: {', '.join(updated)}"
+    return {"ok": True, "result": f"Context updated: {', '.join(updated)}"}
 
 
 # --- Item tools ---

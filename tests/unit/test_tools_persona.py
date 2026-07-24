@@ -62,5 +62,6 @@ async def test_get_context_skips_consumed_memories(mock_ctx):
     result = await _tool_get_context(mock_ctx, "test_persona")
 
     # consumed はスキップされるので注入されない
-    assert "前回セッションからの状態" not in result
-    assert "口調" not in result
+    assert result["ok"] is True
+    assert "前回セッションからの状態" not in result["result"]
+    assert "口調" not in result["result"]
