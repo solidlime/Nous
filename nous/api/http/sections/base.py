@@ -4,6 +4,8 @@ Provides the shared HTML head, navigation bar, utility JavaScript,
 and the overall page shell that section-specific renderers plug into.
 """
 
+import json
+
 from nous import __version__
 
 # ---------------------------------------------------------------------------
@@ -115,12 +117,15 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str, initial_p
     Uses string concatenation (NOT f-strings) because the embedded
     JavaScript relies on ``${}`` template literals.
     """
-    # Inject initial persona as a JS variable so the SPA can pre-select it
+    # Inject initial persona as a JS variable so the SPA can pre-select it.
+    # json.dumps produces a valid JSON / JS string literal with proper escaping,
+    # and the &#x2F; prevents HTML parser from misinterpreting </script> as tag close.
     if initial_persona:
-        safe_persona = (
-            initial_persona.replace("\\", "\\\\").replace('"', '\\"').replace("<", "").replace(">", "").replace("&", "")
+        persona_init_script = (
+            '<script>window.__INITIAL_PERSONA__='
+            + json.dumps(initial_persona, ensure_ascii=False).replace("</", "<\\/")
+            + ';</script>\n'
         )
-        persona_init_script = '<script>window.__INITIAL_PERSONA__="' + safe_persona + '";</script>\n'
     else:
         persona_init_script = ""
 
