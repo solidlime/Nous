@@ -14,6 +14,7 @@ from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
+    from nous.domain.chat_config import ChatConfig
 
 logger = get_logger(__name__)
 
@@ -111,6 +112,7 @@ async def run_auto_capture(
     persona: str,
     messages: list[dict],
     max_memories: int | None = None,
+    config: ChatConfig | None = None,
 ) -> list[str]:
     """Extract key information from recent messages and save as memories.
 
@@ -119,17 +121,22 @@ async def run_auto_capture(
         persona: Target persona.
         messages: Session messages [{"role": ..., "content": ...}, ...].
         max_memories: Max memories to create per call. Falls back to
-                      ctx.settings.auto_capture.max_memories if None.
+                      config.auto_capture_max_memories if None.
+        config: ChatConfig for settings. Falls back to ctx.settings if None.
 
     Returns:
         List of created memory keys.
     """
-    if not ctx.settings.auto_capture.enabled:
+    if config is None and not getattr(ctx.settings, 'auto_capture', None):
+        return []
+
+    enabled = config.auto_capture_enabled if config else ctx.settings.auto_capture.enabled
+    if not enabled:
         logger.debug("Auto-capture disabled")
         return []
 
     if max_memories is None:
-        max_memories = ctx.settings.auto_capture.max_memories
+        max_memories = config.auto_capture_max_memories if config else ctx.settings.auto_capture.max_memories
 
     created_keys: list[str] = []
     candidate_count = 0
