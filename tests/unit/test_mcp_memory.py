@@ -138,11 +138,12 @@ class TestMemoryCreate:
     async def test_create_memory_duplicate_detected(self, registered_tools):
         """Duplicate content should return duplicate status without creating memory."""
         tools, ctx, _ = registered_tools
-        ctx.search_engine.search.return_value = Success(
-            [
-                _search_result("mem_dup", score=0.89),
-            ]
+        from nous.domain.shared.errors import DuplicateMemoryError
+
+        ctx.memory_service.create_memory.return_value = Failure(
+            DuplicateMemoryError("similar", similar_to=[{"key": "mem_dup", "content": "similar content", "score": 0.89}])
         )
+        ctx.persona_service.get_state_snapshot.return_value = ("neutral", 0.0, {}, None)
         memory_create = tools["memory_create"]
         result = await memory_create(content="similar content")
 
@@ -153,17 +154,12 @@ class TestMemoryCreate:
         assert data["status"] == "duplicate"
         assert len(data["similar_to"]) >= 1
         assert data["similar_to"][0]["key"] == "mem_dup"
-        ctx.memory_service.create_memory.assert_not_called()
+        ctx.memory_service.create_memory.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_create_memory_skip_duplicate_check(self, registered_tools):
         """skip_duplicate_check=True should bypass duplicate detection."""
         tools, ctx, _ = registered_tools
-        ctx.search_engine.search.return_value = Success(
-            [
-                _search_result("mem_dup", score=0.89),
-            ]
-        )
         ctx.persona_service.get_state_snapshot.return_value = ("neutral", 0.0, {}, None)
         ctx.memory_service.create_memory.return_value = Success(_mem("mem_new"))
         memory_create = tools["memory_create"]
@@ -180,11 +176,6 @@ class TestMemoryCreate:
     async def test_create_memory_no_duplicate(self, registered_tools):
         """Low-similarity content should not trigger duplicate detection."""
         tools, ctx, _ = registered_tools
-        ctx.search_engine.search.return_value = Success(
-            [
-                _search_result("mem_low", score=0.3),
-            ]
-        )
         ctx.persona_service.get_state_snapshot.return_value = ("neutral", 0.0, {}, None)
         ctx.memory_service.create_memory.return_value = Success(_mem("mem_new"))
         memory_create = tools["memory_create"]
@@ -197,18 +188,18 @@ class TestMemoryCreate:
         assert data["key"] == "mem_new"
         ctx.memory_service.create_memory.assert_called_once()
 
-    # ── DB exact-match duplicate detection ──
+    # ── Duplicate via service (replaces old DB exact-match detection) ──
 
     @pytest.mark.asyncio
-    async def test_create_memory_db_exact_duplicate_detected(self, registered_tools):
-        """Exact same content in DB should return duplicate status via DB check."""
+    async def test_create_memory_duplicate_via_service(self, registered_tools):
+        """Service-level DuplicateMemoryError with duplicate_key should return duplicate status."""
         tools, ctx, _ = registered_tools
-        # Mock the DB connection to return an existing record
-        mock_db = MagicMock()
-        mock_db.execute.return_value.fetchone.return_value = ("mem_exact_dup",)
-        ctx.connection = MagicMock()
-        ctx.connection.get_memory_db.return_value = mock_db
+        from nous.domain.shared.errors import DuplicateMemoryError
 
+        ctx.memory_service.create_memory.return_value = Failure(
+            DuplicateMemoryError("identical content", duplicate_key="mem_exact_dup")
+        )
+        ctx.persona_service.get_state_snapshot.return_value = ("neutral", 0.0, {}, None)
         memory_create = tools["memory_create"]
         result = await memory_create(content="identical content")
 
@@ -218,17 +209,12 @@ class TestMemoryCreate:
         assert data["ok"] is True
         assert data["status"] == "duplicate"
         assert data["duplicate_of"] == "mem_exact_dup"
-        ctx.memory_service.create_memory.assert_not_called()
+        ctx.memory_service.create_memory.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_create_memory_db_exact_duplicate_no_match(self, registered_tools):
-        """No matching content in DB should proceed to normal creation."""
+    async def test_create_memory_service_success(self, registered_tools):
+        """Normal creation proceeds when no duplicate."""
         tools, ctx, _ = registered_tools
-        # Mock the DB connection to return None (no duplicate)
-        mock_db = MagicMock()
-        mock_db.execute.return_value.fetchone.return_value = None
-        ctx.connection = MagicMock()
-        ctx.connection.get_memory_db.return_value = mock_db
         ctx.persona_service.get_state_snapshot.return_value = ("neutral", 0.0, {}, None)
         ctx.memory_service.create_memory.return_value = Success(_mem("mem_new"))
 

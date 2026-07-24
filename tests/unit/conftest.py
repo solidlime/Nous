@@ -25,6 +25,7 @@ def mock_app_context():
     """Comprehensive mock app context with all common services."""
     ctx = MagicMock()
     ctx.memory_service = MagicMock()
+    ctx.memory_service.create_memory = AsyncMock()
     ctx.memory_service.count_memories.return_value = Success(0)
     ctx.search_engine = AsyncMock()
     ctx.search_engine.set_persona = MagicMock(return_value=None)

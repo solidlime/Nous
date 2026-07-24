@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from nous.domain.search.engine import SearchQuery
+from nous.domain.shared.errors import DuplicateMemoryError
 from nous.domain.value_objects import _VALID_EMOTIONS, normalize_importance
 
 logger = logging.getLogger(__name__)
@@ -37,52 +38,6 @@ async def _tool_memory_create(
         return {"success": False, "data": None, "result_summary": "importance must be between 0.0 and 1.0"}
     importance = importance if importance is not None else 0.5
 
-    # ── Semantic duplicate check (same as builtin.py L128-147) ──
-    if not skip_duplicate_check and content:
-        search_result = await ctx.search_engine.search(SearchQuery(text=content, top_k=3))
-        if search_result.is_ok and search_result.value:
-            duplicates = [
-                {
-                    "key": item.memory.key,
-                    "content": item.memory.content[:100],
-                    "score": item.score,
-                }
-                for item in search_result.value
-                if item.score >= 0.75
-            ]
-            if duplicates:
-                return json.dumps(
-                    {
-                        "ok": True,
-                        "status": "duplicate",
-                        "message": "Similar memory already exists",
-                        "similar_to": duplicates,
-                    },
-                    ensure_ascii=False,
-                )
-
-    # ── Exact-match duplicate check via direct DB (guards against parallel inserts) ──
-    if not skip_duplicate_check and content and persona:
-        try:
-            db = ctx.connection.get_memory_db()
-            row = db.execute(
-                "SELECT key FROM memories WHERE LOWER(content) = LOWER(?) AND lifecycle_status != 'tombstoned' LIMIT 1",
-                (content.strip(),),
-            ).fetchone()
-            if row:
-                return json.dumps(
-                    {
-                        "ok": True,
-                        "status": "duplicate",
-                        "duplicate_of": row[0],
-                        "message": f"Identical content already exists (key: {row[0]}). Skipped.",
-                        "auto_emotion": False,
-                    },
-                    ensure_ascii=False,
-                )
-        except Exception:
-            pass  # Fall through to normal creation if check fails
-
     # Auto-snapshot current persona state
     emotion_snap, intensity_snap, body_snap, snapped_at = ctx.persona_service.get_state_snapshot(persona)
 
@@ -97,10 +52,9 @@ async def _tool_memory_create(
         emotion_intensity=intensity_snap,
         body_state=body_snap,
         state_snapped_at=snapped_at,
+        skip_duplicate_check=skip_duplicate_check,
     )
     if result.is_ok:
-        if not defer_vector and ctx.vector_store:
-            await ctx.vector_store.upsert(persona, result.value.key, content)
         await ctx.event_bus.publish(
             "memory.created",
             {
@@ -112,6 +66,17 @@ async def _tool_memory_create(
             },
         )
         return json.dumps({"ok": True, "key": result.value.key, "auto_emotion": True}, ensure_ascii=False)
+
+    # Handle duplicate errors with the same response format as before
+    if isinstance(result.error, DuplicateMemoryError):
+        dup = result.error
+        response: dict = {"ok": True, "status": "duplicate", "message": str(dup)}
+        if dup.similar_to:
+            response["similar_to"] = dup.similar_to
+        if dup.duplicate_key:
+            response["duplicate_of"] = dup.duplicate_key
+        return json.dumps(response, ensure_ascii=False)
+
     return {"success": False, "data": None, "result_summary": str(result.error)}
 
 
@@ -280,8 +245,6 @@ async def _tool_memory_update(
 
     result = ctx.memory_service.update_memory(memory_key, **updates)
     if result.is_ok:
-        if ctx.vector_store and "content" in updates:
-            await ctx.vector_store.upsert(persona, memory_key, updates["content"])
         await ctx.event_bus.publish(
             "memory.updated",
             {
@@ -325,8 +288,6 @@ async def _tool_memory_delete(
 
     result = ctx.memory_service.delete_memory(key)
     if result.is_ok:
-        if ctx.vector_store:
-            await ctx.vector_store.delete(persona, key)
         await ctx.event_bus.publish(
             "memory.deleted",
             {
