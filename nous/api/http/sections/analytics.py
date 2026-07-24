@@ -21,7 +21,7 @@ def render_analytics_js() -> str:
     const el = document.getElementById('analytics-content');
     try {
         if (typeof Chart === 'undefined') {
-            el.innerHTML = errorCard('Chart.js library not available. Please check internet connectivity.');
+            safeSetHTML(el, errorCard('Chart.js library not available. Please check internet connectivity.'));
             return;
         }
         const [emoData, strData] = await Promise.all([
@@ -65,7 +65,7 @@ def render_analytics_js() -> str:
         destroyChart('chart-emotions');
         destroyChart('chart-strength');
 
-        el.innerHTML = `
+        safeSetHTML(el, `
         <div class="glass p-6 mb-6">
             <div class="card-title" style="justify-content:space-between;flex-wrap:wrap">
                 <span><i data-lucide="message-circle"></i> Emotion Timeline</span>
@@ -88,7 +88,7 @@ def render_analytics_js() -> str:
                 <div><span style="color:var(--text-muted)">Strong (&gt;0.7):</span> <span style="color:var(--accent-green);font-weight:600">${strong}</span></div>
             </div>
             <div style="height:250px;position:relative">${strengthEmpty ? '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-muted)">No memory strength data yet \u2014 memories need to be recalled first</div>' : '<canvas id="chart-strength"></canvas>'}</div>
-        </div>`;
+        </div>`);
 
         // Emotion days buttons
         document.querySelectorAll('.emo-days-btn').forEach(btn => {
@@ -105,14 +105,14 @@ def render_analytics_js() -> str:
             // Dynamic legend from actual datasets
             var legendEl = document.getElementById('emo-legend');
             if (legendEl) {
-                legendEl.innerHTML = datasets.map(function(ds) {
+                safeSetHTML(legendEl, datasets.map(function(ds) {
                     return '<span style="display:inline-flex;align-items:center;gap:4px;color:var(--text-muted)">' +
                         '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + ds.borderColor + '"></span>' +
                         ds.label + '</span>';
                 }).join('');
             }
         } else if (emoCtx) {
-            emoCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">No emotion data for this period</div>';
+            safeSetHTML(emoCtx.parentElement, '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">No emotion data for this period</div>');
         }
 
         const strCtx = document.getElementById('chart-strength');
@@ -140,6 +140,6 @@ def render_analytics_js() -> str:
 
         updateLastTime();
     } catch (e) {
-        el.innerHTML = errorCard('Failed to load analytics: ' + e.message);
+        safeSetHTML(el, errorCard('Failed to load analytics: ' + e.message));
     }
 }"""

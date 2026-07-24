@@ -41,7 +41,7 @@ def render_admin_js() -> str:
         "        const uptimeMs = Date.now() - S.initTime;\n"
         "        const uptimeStr = uptimeMs < 3600000 ? Math.floor(uptimeMs/60000) + 'm' : Math.floor(uptimeMs/3600000) + 'h ' + Math.floor((uptimeMs%3600000)/60000) + 'm';\n"
         "\n"
-        "        el.innerHTML = `\n"
+        "        safeSetHTML(el, `\n"
         '        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">\n'
         '            <div class="glass p-6">\n'
         '                <div class="card-title"><i data-lucide="refresh-cw"></i> Rebuild Vector Store</div>\n'
@@ -69,7 +69,7 @@ def render_admin_js() -> str:
         '                    <div style="display:flex;justify-content:space-between"><span style="color:var(--text-muted)">Persona</span><span style="font-weight:600">${esc(S.persona)}</span></div>\n'
         "                </div>\n"
         "            </div>\n"
-        "        </div>`;\n"
+        "        </div>`);\n"
         "\n"
         "        // Rebuild button\n"
         "        document.getElementById('rebuild-btn').onclick = async () => {\n"
@@ -77,13 +77,13 @@ def render_admin_js() -> str:
         "            const statusEl = document.getElementById('rebuild-status');\n"
         "            btn.disabled = true;\n"
         "            btn.textContent = '<i data-lucide=\"clock\"></i> Rebuilding...';\n"
-        '            statusEl.innerHTML = \'<div class="progress-wrap"><div class="progress-bar progress-indeterminate"></div></div>\';\n'
+        '            safeSetHTML(statusEl, \'<div class="progress-wrap"><div class="progress-bar progress-indeterminate"></div></div>\');\n'
         "            try {\n"
         "                await api('/api/admin/rebuild/' + encodeURIComponent(S.persona), { method: 'POST' });\n"
-        '                statusEl.innerHTML = \'<span style="color:var(--accent-green)"><i data-lucide="check-circle"></i> Rebuild started successfully</span>\';\n'
+        '                safeSetHTML(statusEl, \'<span style="color:var(--accent-green)"><i data-lucide="check-circle"></i> Rebuild started successfully</span>\');\n'
         "                toast('Vector rebuild initiated', 'success');\n"
         "            } catch (e) {\n"
-        "                statusEl.innerHTML = '<span style=\"color:var(--accent-red)\"><i data-lucide=\"x-circle\"></i> ' + esc(e.message) + '</span>';\n"
+        "                safeSetHTML(statusEl, '<span style=\"color:var(--accent-red)\"><i data-lucide=\"x-circle\"></i> ' + esc(e.message) + '</span>');\n"
         "                toast('Rebuild failed: ' + e.message, 'error');\n"
         "            }\n"
         "            btn.disabled = false;\n"
@@ -91,7 +91,7 @@ def render_admin_js() -> str:
         "        };\n"
         "        updateLastTime();\n"
         "    } catch (e) {\n"
-        "        el.innerHTML = errorCard('Failed to load admin: ' + e.message);\n"
+        "        safeSetHTML(el, errorCard('Failed to load admin: ' + e.message));\n"
         "    }\n"
         "}"
     )

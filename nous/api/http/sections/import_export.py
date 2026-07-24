@@ -194,7 +194,7 @@ async function importData(file) {
         }).join('');
 
         results.style.display = 'block';
-        results.innerHTML =
+        safeSetHTML(results,
             '<div style="color:var(--text-primary);font-weight:600;margin-bottom:8px">\u2705 Import Successful</div>'
             + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">'
             + cards
@@ -261,14 +261,14 @@ async function loadExportPreview() {
         var equip = data.equipment || {};
         var equipCount = Object.values(equip).filter(function(v) { return v; }).length;
 
-        el.innerHTML =
+        safeSetHTML(el,
             '<div style="display:flex;gap:16px;flex-wrap:wrap">'
             + '<span>\uD83D\uDCDD <strong>' + (stats.total_count || 0) + '</strong> memories</span>'
             + '<span>\uD83C\uDF92 <strong>' + items.length + '</strong> items</span>'
             + '<span>\u2694\uFE0F <strong>' + equipCount + '</strong> equipped slots</span>'
             + '</div>';
     } catch (e) {
-        el.innerHTML = '<span style="color:#ef4444">Failed to load preview</span>';
+        safeSetHTML(el, '<span style="color:#ef4444">Failed to load preview</span>');
     }
 }
 """

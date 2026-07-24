@@ -71,7 +71,7 @@ function renderSkillsTable(skills) {
     const tbody = document.getElementById('skills-tbody');
     const empty = document.getElementById('skills-empty');
     if (!tbody) return;
-    tbody.innerHTML = '';
+    tbody.textContent = '';
     if (!skills || skills.length === 0) {
         if (empty) empty.style.display = 'block';
         return;
@@ -80,7 +80,7 @@ function renderSkillsTable(skills) {
     skills.forEach(skill => {
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid var(--glass-border)';
-        tr.innerHTML = `
+        safeSetHTML(tr, `
             <td style="padding:10px 16px;font-size:0.85rem;color:var(--text-primary);font-weight:500;">${esc(skill.name)}</td>
             <td style="padding:10px 16px;font-size:0.82rem;color:var(--text-secondary);">${esc(skill.description || '')}</td>
             <td style="padding:10px 16px;text-align:right;display:flex;gap:6px;justify-content:flex-end;">
