@@ -19,7 +19,7 @@ var _restoreLock = false;
 // ------------------------------------------------------------------
 function resetToWelcome() {
   const container = document.getElementById("chat-messages");
-  container.innerHTML = `
+  safeSetHTML(container, `
         <div class="chat-welcome" id="chat-welcome">
             <div class="chat-welcome-icon"><i data-lucide="message-circle"></i></div>
             <p>チャットを開始するには下のテキストボックスにメッセージを入力してください。</p>
@@ -32,7 +32,7 @@ function resetToWelcome() {
                 <span class="chat-welcome-cmd">/image</span>
                 <span class="chat-welcome-cmd">/invoke_skill</span>
             </div>
-        </div>`;
+        </div>`);
   N.Core.refreshIcons();
 }
 
@@ -101,7 +101,7 @@ function _appendSegmentsToBubble(msg, msgDiv) {
     if (seg.type === "text") {
       var bubble = document.createElement("div");
       bubble.className = "chat-bubble";
-      bubble.innerHTML = safeMarkdown(seg.content);
+      safeSetHTML(bubble, safeMarkdown(seg.content));
       bubble.querySelectorAll("img").forEach(function(img) {
         img.style.cssText = "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
         img.addEventListener("click", function() { openMediaViewer(img.src, "image"); });
@@ -115,10 +115,10 @@ function _appendSegmentsToBubble(msg, msgDiv) {
       var div = document.createElement("div");
       div.className = "chat-tool-call done";
       if (seg.id) div.dataset.toolId = seg.id;
-      div.innerHTML = '<details><summary><i data-lucide="wrench"></i> <strong>' +
+      safeSetHTML(div, '<details><summary><i data-lucide="wrench"></i> <strong>' +
         esc(seg.name) + '</strong>' +
         '<span class="chat-tool-status"> <i data-lucide="check"></i> 完了</span></summary>' +
-        '<pre class="chat-tool-detail">' + esc(inputStr) + '</pre></details>';
+        '<pre class="chat-tool-detail">' + esc(inputStr) + '</pre></details>');
       if (seg.id) toolCallDivs[seg.id] = div;
       var timeDiv2 = msgDiv.querySelector(".chat-time");
       if (timeDiv2) msgDiv.insertBefore(div, timeDiv2);
@@ -264,7 +264,7 @@ async function rollbackChat(fromId, shouldResend) {
     });
     // DOM完全再構築: server response の remaining_messages から再描画
     const container = document.getElementById("chat-messages");
-    container.innerHTML = "";
+    container.textContent = "";
     const remaining = result.remaining_messages || [];
     for (const msg of remaining) {
       if (msg.segments) {
@@ -349,7 +349,7 @@ async function editChatMessage(msgId) {
 
   const saveBtn = document.createElement("button");
   saveBtn.className = "chat-msg-action-btn";
-  saveBtn.innerHTML = '<i data-lucide="check"></i> 保存';
+  safeSetHTML(saveBtn, '<i data-lucide="check"></i> 保存');
   saveBtn.onclick = async () => {
     const newText = textarea.value.trim();
     if (!newText || newText === originalText) {
@@ -370,7 +370,7 @@ async function editChatMessage(msgId) {
         body: JSON.stringify({ content: newText }),
       });
       if (result.status === "ok") {
-        bubble.innerHTML = typeof safeMarkdown === "function" ? safeMarkdown(newText) : newText;
+        safeSetHTML(bubble, typeof safeMarkdown === "function" ? safeMarkdown(newText) : newText);
 
         // 編集後に後続メッセージがあれば自動再生成
         const container = document.getElementById("chat-messages");
@@ -398,7 +398,7 @@ async function editChatMessage(msgId) {
 
   const cancelBtn = document.createElement("button");
   cancelBtn.className = "chat-msg-action-btn";
-  cancelBtn.innerHTML = '<i data-lucide="x"></i> キャンセル';
+  safeSetHTML(cancelBtn, '<i data-lucide="x"></i> キャンセル');
   cancelBtn.onclick = cancelEdit;
 
   btnBar.appendChild(saveBtn);
@@ -455,7 +455,7 @@ async function restoreChatHistory(showSkeleton) {
       '<div class="chat-msg user" style="align-self:flex-end"><div class="chat-bubble" style="opacity:0.5"><div class="skeleton skeleton-text" style="width:70%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:50%;height:14px"></div></div></div>';
     const skeletonDiv = document.createElement("div");
     skeletonDiv.id = "chat-history-skeleton";
-    skeletonDiv.innerHTML = skeletonHtml;
+    safeSetHTML(skeletonDiv, skeletonHtml);
     container.appendChild(skeletonDiv);
   }
   try {
@@ -489,7 +489,7 @@ async function restoreChatHistory(showSkeleton) {
     const msgs = data.messages.slice(-maxMsgs);
     // Successful fetch — now safe to reset DOM (Bug B3 fix: only reset after fetch succeeds)
     CHAT.messages = [];
-    container.innerHTML = "";
+    container.textContent = "";
     for (const msg of msgs) {
       const msgContainer = document.getElementById("chat-messages");
 
@@ -520,7 +520,7 @@ async function restoreChatHistory(showSkeleton) {
           } catch (e) {
             resultStr = String(tc.result);
           }
-          div.innerHTML =
+          safeSetHTML(div,
             '<details><summary><i data-lucide="wrench"></i> <strong>' +
             esc(tc.name) +
             "</strong>" +
@@ -530,7 +530,7 @@ async function restoreChatHistory(showSkeleton) {
             "</pre>" +
             '<pre class="chat-tool-detail chat-tool-result-content">' +
             esc(resultStr) +
-            "</pre></details>";
+            "</pre></details>");
           msgContainer.appendChild(div);
         }
       }
@@ -560,7 +560,7 @@ async function restoreChatHistory(showSkeleton) {
           } catch (e) {
             resultStr = String(tc.result);
           }
-          div.innerHTML =
+          safeSetHTML(div,
             '<details><summary><i data-lucide="wrench"></i> <strong>' +
             esc(tc.name) +
             "</strong>" +
@@ -570,7 +570,7 @@ async function restoreChatHistory(showSkeleton) {
             "</pre>" +
             '<pre class="chat-tool-detail chat-tool-result-content">' +
             esc(resultStr) +
-            "</pre></details>";
+            "</pre></details>");
           msgContainer.appendChild(div);
         }
       }
@@ -710,7 +710,7 @@ async function deleteChatMessage(msgId) {
       fetch("/api/tts/" + encodeURIComponent(S.persona) + "/cache/" + encodeURIComponent(filename), { method: "DELETE" }).catch(function() {});
     });
     // DOM完全再構築
-    container.innerHTML = "";
+    container.textContent = "";
     const remaining = result.remaining_messages || [];
     for (const msg of remaining) {
       if (msg.segments) {
@@ -725,7 +725,7 @@ async function deleteChatMessage(msgId) {
       resetToWelcome();
     }
 
-    toast("🗑️ メッセージを削除しました", "success");
+    toast("�️ メッセージを削除しました", "success");
   } catch (e) {
     toast("削除失敗: " + e.message, "error");
   }
