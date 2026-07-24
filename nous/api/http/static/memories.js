@@ -182,7 +182,7 @@ function renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSe
     html += '<span class="adv-search-label">Emotion</span>';
     html += '<select id="adv-emotion" class="glass-input" style="font-size:0.8rem">';
     html += '<option value="">Any</option>';
-    var emos = ['joy','sadness','anger','fear','surprise','disgust','love','neutral','anticipation','trust','anxiety','excitement','frustration','nostalgia','pride','shame','guilt','loneliness','contentment','curiosity','awe','relief'];
+    var emos = Object.keys(N.Core.EMOTION_COLORS).sort();
     for (var ei = 0; ei < emos.length; ei++) {
         html += '<option value="' + emos[ei] + '"' + (S.mem.emotion === emos[ei] ? ' selected' : '') + '>' + emos[ei] + '</option>';
     }
@@ -546,8 +546,7 @@ function openMemModal(mem) {
 
     /* Body State */
     if (mem.body_state) {
-        var bodyKeys = ['fatigue','warmth','arousal','heart_rate','pain'];
-        /* Constants now from core/constants.js via adapter globals */
+        var bodyKeys = Object.keys(N.Core.BODY_BAR_COLORS);
         var hasBody = bodyKeys.some(function(k){ return mem.body_state[k] != null; });
         if (hasBody) {
             h += '<div class=\"mem-modal-row\"><span class=\"mem-modal-key\">Body</span><span style=\"display:flex;flex-direction:column;gap:6px;flex:1\">';
