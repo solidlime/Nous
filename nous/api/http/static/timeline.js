@@ -29,15 +29,16 @@ function buildEmotionLegend() {
         var style = getEmotionStyle(emos[i]);
         html += '<span><span class="tl-legend-dot" style="background:' + style.border + '"></span>' + style.emoji + ' ' + emos[i] + '</span>';
     }
-    legend.innerHTML = html;
+    safeSetHTML(legend, html);
     // Populate emotion filter dropdown
     const sel = document.getElementById('tl-emotion');
     if (sel) {
-        sel.innerHTML = '<option value="">すべて</option>';
+        var optionsHtml = '<option value="">すべて</option>';
         for (var j = 0; j < emos.length; j++) {
             var s = getEmotionStyle(emos[j]);
-            sel.innerHTML += '<option value="' + emos[j] + '">' + s.emoji + ' ' + emos[j] + '</option>';
+            optionsHtml += '<option value="' + emos[j] + '">' + s.emoji + ' ' + emos[j] + '</option>';
         }
+        safeSetHTML(sel, optionsHtml);
     }
     setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
 }
@@ -83,11 +84,11 @@ async function loadTimeline() {
         if (_timeline) { _timeline.destroy(); _timeline = null; }
 
         if (allMemories.length === 0) {
-            container.innerHTML = '<div class="empty-state">' +
+            safeSetHTML(container, '<div class="empty-state">' +
                 '<div class="empty-state-icon"><i data-lucide="clock"></i></div>' +
                 '<div class="empty-state-text">まだタイムラインがありません。<br>記憶を作成するとここに表示されます。</div>' +
-                '<button class="empty-state-cta" onclick="switchTab(\'chat\')"><i data-lucide="message-circle"></i> Chatを開く</button>' +
-                '</div>';
+                '<button class="empty-state-cta" onclick="switchTab(\'memories\')"><i data-lucide="message-circle"></i> 記憶を作成</button>' +
+                '</div>');
             setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
             return;
         }
@@ -155,7 +156,7 @@ function showTimelineDetail(mem) {
     if (!panel) return;
     document.getElementById('tl-detail-content').textContent = mem.content || '';
     const style = getEmotionStyle(mem.emotion || 'neutral');
-    document.getElementById('tl-detail-emotion').innerHTML = style.emoji + ' ' + esc(mem.emotion || 'neutral');
+    safeSetHTML(document.getElementById('tl-detail-emotion'), style.emoji + ' ' + esc(mem.emotion || 'neutral'));
     document.getElementById('tl-detail-importance').textContent = (mem.importance != null ? mem.importance.toFixed(2) : '0.50');
     document.getElementById('tl-detail-time').textContent = mem.created_at
         ? new Date(mem.created_at).toLocaleString('ja-JP') : '—';
@@ -188,7 +189,7 @@ function showTimelineDetail(mem) {
     if (mem.emotion) {
         bodyHtml += '<div style="margin-bottom:16px">' + renderEmotionBars(mem.emotion, mem.emotion_intensity) + '</div>';
     }
-    document.getElementById('tl-detail-body').innerHTML = bodyHtml;
+    safeSetHTML(document.getElementById('tl-detail-body'), bodyHtml);
 
     panel.classList.add('open');
     setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
