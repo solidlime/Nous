@@ -53,40 +53,22 @@ class SQLiteConnection:
 
     def initialize_schema(self) -> None:
         """Create all tables if they don't exist."""
+        from nous.infrastructure.sqlite.migrations import run_migrations
+
         memory_conn = self.get_memory_db()
         memory_conn.executescript(_MEMORY_SCHEMA + _CHAT_SESSIONS_SCHEMA)
-        logger.info("Memory schema initialized for persona '%s'", self.persona)
-
-        # Migration: add last_consumed_at if missing (existing DBs)
-        try:
-            memory_conn.execute("ALTER TABLE memories ADD COLUMN last_consumed_at TEXT")
-            memory_conn.commit()
-            logger.info("Added last_consumed_at column to memories (migration)")
-        except sqlite3.OperationalError:
-            pass  # column already exists
-
-        # One-shot migration: context_state -> memories (temporary)
-        try:
-            from nous.infrastructure.sqlite.migration_one_shot import (  # noqa: PLC0415
-                migrate_context_state_to_memories,
-            )
-
-            migrated = migrate_context_state_to_memories(memory_conn, self.persona)
-            if migrated:
-                memory_conn.commit()
-                logger.info("One-shot migration: %d state records -> memories", migrated)
-        except Exception:
-            pass
-
-        # Initialize FTS5 full-text search index
         self._init_fts_schema(memory_conn)
+        run_migrations(memory_conn, self.persona)
+        logger.info("Memory schema initialized for persona '%s'", self.persona)
 
         inventory_conn = self.get_inventory_db()
         inventory_conn.executescript(_INVENTORY_SCHEMA)
 
         # Migration: accessories → accessory_1 rename (slot expansion v1)
         try:
-            cursor = inventory_conn.execute("SELECT COUNT(*) as cnt FROM equipment_slots WHERE slot = 'accessories'")
+            cursor = inventory_conn.execute(
+                "SELECT COUNT(*) as cnt FROM equipment_slots WHERE slot = 'accessories'"
+            )
             if cursor.fetchone()["cnt"] > 0:
                 inventory_conn.execute(
                     "UPDATE equipment_slots SET slot = 'accessory_1' WHERE slot = 'accessories'"
@@ -143,16 +125,6 @@ class SQLiteConnection:
             END
             """
         )
-        # Backfill FTS5 index if empty (migration from non-FTS5 DB)
-        count = conn.execute("SELECT COUNT(*) as cnt FROM memories_fts").fetchone()["cnt"]
-        if count == 0:
-            existing = conn.execute("SELECT COUNT(*) as cnt FROM memories").fetchone()["cnt"]
-            if existing > 0:
-                conn.execute(
-                    "INSERT INTO memories_fts(rowid, content, memories_key) SELECT rowid, content, key FROM memories"
-                )
-                logger.info("FTS5 index backfilled: %d documents", existing)
-        conn.commit()
         logger.info("FTS5 schema initialized for persona '%s'", self.persona)
 
     def close(self) -> None:
