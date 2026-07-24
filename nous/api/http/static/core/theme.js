@@ -9,9 +9,9 @@ N.Core.applyTheme = function applyTheme() {
   document.documentElement.className = dark ? "dark" : "light";
   var toggleEl = document.getElementById("dark-toggle");
   if (toggleEl) {
-    toggleEl.innerHTML = dark
+    safeSetHTML(toggleEl, dark
       ? '<i data-lucide="moon"></i>'
-      : '<i data-lucide="sun"></i>';
+      : '<i data-lucide="sun"></i>');
   }
   N.Core.refreshIcons();
 };

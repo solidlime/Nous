@@ -16,7 +16,7 @@ N.Core.showConfirm = function showConfirm(message, onConfirm, onCancel) {
   overlay.className = "confirm-overlay";
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
-  overlay.innerHTML =
+  safeSetHTML(overlay,
     '<div class="confirm-modal">' +
     '<h3 id="confirm-title">確認</h3>' +
     "<p>" +
@@ -25,7 +25,7 @@ N.Core.showConfirm = function showConfirm(message, onConfirm, onCancel) {
     '<div class="confirm-modal-actions">' +
     '<button class="glass-btn" id="confirm-cancel-btn">キャンセル</button>' +
     '<button class="glass-btn glass-btn-danger" id="confirm-ok-btn">OK</button>' +
-    "</div></div>";
+    "</div></div>");
   overlay.setAttribute("aria-labelledby", "confirm-title");
   document.body.appendChild(overlay);
   requestAnimationFrame(function() { overlay.classList.add("show"); });
@@ -68,7 +68,7 @@ N.Core.showAlert = function showAlert(message) {
   overlay.className = "confirm-overlay";
   overlay.setAttribute("role", "alertdialog");
   overlay.setAttribute("aria-modal", "true");
-  overlay.innerHTML =
+  safeSetHTML(overlay,
     '<div class="confirm-modal">' +
     '<h3 id="alert-title">通知</h3>' +
     "<p>" +
@@ -76,7 +76,7 @@ N.Core.showAlert = function showAlert(message) {
     "</p>" +
     '<div class="confirm-modal-actions">' +
     '<button class="glass-btn glass-btn-success" id="alert-ok-btn">OK</button>' +
-    "</div></div>";
+    "</div></div>");
   overlay.setAttribute("aria-labelledby", "alert-title");
   document.body.appendChild(overlay);
   requestAnimationFrame(function() { overlay.classList.add("show"); });
