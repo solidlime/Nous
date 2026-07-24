@@ -17,6 +17,10 @@ function _ensureContainer() {
   return c;
 }
 
+function _getMaxToasts() {
+  return window.matchMedia('(max-width: 767px)').matches ? 2 : 5;
+}
+
 function _limitToasts(container, max) {
   var toasts = container.querySelectorAll(".toast");
   while (toasts.length > max) {
@@ -25,33 +29,79 @@ function _limitToasts(container, max) {
   }
 }
 
-N.Core.toast = function toast(msg, type) {
-  type = type || "info";
-  var c = _ensureContainer();
-  _limitToasts(c, 5);
-  var t = document.createElement("div");
-  t.className = "toast toast-" + type;
-  t.setAttribute("role", "status");
-  t.textContent = msg;
-  c.appendChild(t);
-  t.addEventListener("animationend", function(e) {
+/* Swipe-to-dismiss for mobile toasts */
+function _enableSwipeDismiss(t) {
+  var startX = 0, startY = 0, dist = 0, moved = false;
+  t.addEventListener("touchstart", function(e) {
+    var touch = e.touches[0];
+    startX = touch.clientX;
+    startY = touch.clientY;
+    dist = 0;
+    moved = false;
+    t.style.transition = "none";
+  }, {passive: true});
+  t.addEventListener("touchmove", function(e) {
+    var touch = e.touches[0];
+    dist = touch.clientX - startX;
+    var dy = Math.abs(touch.clientY - startY);
+    if (dy > Math.abs(dist) * 1.5) return; // vertical scroll, not swipe
+    if (Math.abs(dist) > 10) {
+      moved = true;
+      t.style.transform = "translateX(" + dist + "px)";
+      t.style.opacity = Math.max(0, 1 - Math.abs(dist) / 150);
+    }
+  }, {passive: true});
+  t.addEventListener("touchend", function(e) {
+    t.style.transition = "";
+    t.style.transform = "";
+    t.style.opacity = "";
+    if (moved && Math.abs(dist) > 80) {
+      if (t.dataset.removed) return;
+      t.dataset.removed = "1";
+      t.style.transition = "transform 0.2s ease, opacity 0.2s ease";
+      t.style.transform = "translateX(" + (dist > 0 ? 100 : -100) + "%)";
+      t.style.opacity = "0";
+      setTimeout(function() { t.remove(); }, 200);
+    }
+  }, {passive: true});
+}
+
+function _attachToast(t) {
+  _enableSwipeDismiss(t);
+  t.addEventListener("animationend", function _onAnimEnd(e) {
     if (e.animationName !== "toastOut") return;
     if (t.dataset.removed) return;
     t.dataset.removed = "1";
     t.remove();
   });
+}
+
+function _autoRemove(t, delay) {
   setTimeout(function() {
     if (t.dataset.removed) return;
     t.dataset.removed = "1";
     t.remove();
-  }, 3200);
+  }, delay);
+}
+
+N.Core.toast = function toast(msg, type) {
+  type = type || "info";
+  var c = _ensureContainer();
+  _limitToasts(c, _getMaxToasts());
+  var t = document.createElement("div");
+  t.className = "toast toast-" + type;
+  t.setAttribute("role", "status");
+  t.textContent = msg;
+  c.appendChild(t);
+  _attachToast(t);
+  _autoRemove(t, 3200);
 };
 
 /* Toast with action button (e.g. retry) */
 N.Core.toastAction = function toastAction(msg, type, actionLabel, actionFn) {
   type = type || "info";
   var c = _ensureContainer();
-  _limitToasts(c, 5);
+  _limitToasts(c, _getMaxToasts());
   var t = document.createElement("div");
   t.className = "toast toast-" + type;
   t.setAttribute("role", "status");
@@ -75,17 +125,8 @@ N.Core.toastAction = function toastAction(msg, type, actionLabel, actionFn) {
     t.appendChild(btn);
   }
   c.appendChild(t);
-  t.addEventListener("animationend", function(e) {
-    if (e.animationName !== "toastOut") return;
-    if (t.dataset.removed) return;
-    t.dataset.removed = "1";
-    t.remove();
-  });
-  setTimeout(function() {
-    if (t.dataset.removed) return;
-    t.dataset.removed = "1";
-    t.remove();
-  }, 5000);
+  _attachToast(t);
+  _autoRemove(t, 5000);
 };
 
 window.toast = N.Core.toast;

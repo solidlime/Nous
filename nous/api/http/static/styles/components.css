@@ -433,11 +433,19 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 /* ============================================================
    COMPONENT RESPONSIVE OVERRIDES
    ============================================================ */
+@media (max-width: 767px) {
+    .toast-container {
+        left: 0; right: 0; bottom: 0;
+        padding: 0.5rem;
+        padding: calc(env(safe-area-inset-top) + 0.5rem) calc(env(safe-area-inset-right) + 0.5rem) calc(env(safe-area-inset-bottom) + 0.5rem) calc(env(safe-area-inset-left) + 0.5rem);
+        transform: none;
+        align-items: center;
+    }
+    .toast { max-width: calc(100% - 2rem); width: 100%; text-align: center; }
+}
 @media (max-width: 640px) {
     .mem-modal-overlay { padding: 8px; }
     .mem-modal { width: 100%; max-width: none; max-height: 90dvh; }
-    .toast-container { left: 0; right: 0; bottom: 0; padding: 0.5rem; padding: calc(env(safe-area-inset-top) + 0.5rem) calc(env(safe-area-inset-right) + 0.5rem) calc(env(safe-area-inset-bottom) + 0.5rem) calc(env(safe-area-inset-left) + 0.5rem); transform: none; }
-    .toast { max-width: none; width: 100%; text-align: center; }
 }
 
 /* ============================================================
@@ -547,5 +555,46 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
     .adv-search-label {
         min-width: auto;
         font-size: 0.75rem;
+    }
+}
+
+/* ============================================================
+   RESPONSIVE FORMS — Mobile layout
+   ============================================================ */
+@media (max-width: 767px) {
+    .setting-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+        padding: 10px 0;
+    }
+    .setting-row .setting-label {
+        min-width: auto;
+        font-size: 0.85rem;
+    }
+    .setting-row input,
+    .setting-row select,
+    .setting-row textarea,
+    .setting-row .glass-input {
+        width: 100%;
+        min-height: 44px;
+    }
+    .setting-row .glass-btn {
+        min-height: 44px;
+    }
+    /* Save button sticky at bottom */
+    .global-apply-section {
+        position: sticky;
+        bottom: 0;
+        margin: 0;
+        border-radius: 0;
+        z-index: var(--z-sticky);
+        padding: 12px 16px;
+        box-shadow: 0 -4px 12px rgba(0,0,0,0.1);
+    }
+    .global-apply-section .primary-btn {
+        width: 100%;
+        min-height: 44px;
+        justify-content: center;
     }
 }

@@ -284,3 +284,27 @@ h4, .tab-panel h4 {
     .lg\:grid-cols-4 { grid-template-columns: repeat(2, 1fr); }
     .lg\:grid-cols-3 { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ============================================================
+   GENERAL MOBILE SAFEGUARDS
+   ============================================================ */
+@media (max-width: 767px) {
+    /* Ensure persona-select has 44px min tap target */
+    #persona-select {
+        min-height: 44px;
+        font-size: 0.85rem;
+    }
+    /* Ensure main content never overflows viewport */
+    .main-content {
+        max-width: 100%;
+    }
+    .section-panel {
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+    /* Apply safe animation handling */
+    @media (prefers-reduced-motion: reduce) {
+        .nav-drawer { transition: none; }
+        .nav-backdrop { transition: none; }
+    }
+}
