@@ -1,3 +1,8 @@
+/* =================================================================
+   ACTIVITY TAB — Session event viewer
+   Namespace: N.Features.Activity.*
+   ================================================================= */
+N.Features.Activity = N.Features.Activity || {};
 
 ;(function() {
 var S = window.S;
@@ -230,4 +235,12 @@ function toggleActivityDetail(el) {
     el.classList.toggle('expanded');
 }
 window.toggleActivityDetail = toggleActivityDetail;
+
+// Register in namespace
+Object.assign(N.Features.Activity, {
+    loadActivity: loadActivity,
+    toggleActivitySession: toggleActivitySession,
+    toggleActivityDetail: toggleActivityDetail,
+    renderActivityFeed: renderActivityFeed,
+});
 })();

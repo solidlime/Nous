@@ -1,3 +1,9 @@
+/* =================================================================
+   MEMORY TIMELINE — vis-timeline interactive memory visualization
+   Namespace: N.Features.Timeline.*
+   ================================================================= */
+N.Features.Timeline = N.Features.Timeline || {};
+
 ;(function() {
 var S = window.S;
 var { esc, api } = window.Nous.Core;
@@ -226,5 +232,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('tab-timeline')?.classList.contains('active')) {
         setTimeout(loadTimeline, 200);
     }
+});
+
+// Register in namespace
+Object.assign(N.Features.Timeline, {
+    loadTimeline: loadTimeline,
+    showTimelineDetail: showTimelineDetail,
+    closeTimelineDetail: closeTimelineDetail,
+    getEmotionStyle: getEmotionStyle,
+    buildEmotionLegend: buildEmotionLegend,
 });
 })();

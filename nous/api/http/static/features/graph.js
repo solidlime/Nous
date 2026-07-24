@@ -1,3 +1,8 @@
+/* ================================================================
+ *  Knowledge Graph — vis-network interactive memory visualization
+ *  Namespace: N.Features.Graph.*
+ *  ================================================================ */
+N.Features.Graph = N.Features.Graph || {};
 
 ;(function() {
 var S = window.S;
@@ -440,4 +445,17 @@ function _graphRefilter() {
         }
     });
 })();
+
+// Register in namespace
+Object.assign(N.Features.Graph, {
+    loadGraph: loadGraph,
+    populateGraphFilters: populateGraphFilters,
+    buildVisData: buildVisData,
+    buildTooltip: buildTooltip,
+    applyGraphFilters: applyGraphFilters,
+    renderNetwork: renderNetwork,
+    openGraphDetailPanel: openGraphDetailPanel,
+    closeGraphDetailPanel: closeGraphDetailPanel,
+    _graphRefilter: _graphRefilter,
+});
 })();

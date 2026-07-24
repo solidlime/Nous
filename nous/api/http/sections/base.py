@@ -66,9 +66,9 @@ def render_head() -> str:
     <script src="/static/overview.js" defer></script>
     <script src="/static/memories.js" defer></script>
     <script src="/static/settings.js" defer></script>
-    <script src="/static/timeline.js" defer></script>
-    <script src="/static/activity.js" defer></script>
-    <script src="/static/graph.js" defer></script>
+    <script src="/static/features/graph.js" defer></script>
+    <script src="/static/features/timeline.js" defer></script>
+    <script src="/static/features/activity.js" defer></script>
 </head>"""
 
 
