@@ -112,16 +112,17 @@ class PostProcessStep:
 
         # Auto-capture: セッション会話から重要情報を記憶として抽出
         try:
-            if ctx.settings.auto_capture.enabled and session._messages:
+            if config.auto_capture_enabled and session._messages:
                 from nous.application.chat.pipeline.auto_capture import run_auto_capture
 
                 self._background_tasks.append(
                     asyncio.create_task(
                         run_auto_capture(
                             ctx=ctx,
+                            config=config,
                             persona=ctx.persona,
                             messages=list(session._messages),
-                            max_memories=ctx.settings.auto_capture.max_memories,
+                            max_memories=config.auto_capture_max_memories,
                         )
                     )
                 )
