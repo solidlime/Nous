@@ -9,6 +9,11 @@ import pytest
 
 from nous.domain.equipment.entities import Item
 from nous.domain.memory.entities import Memory, MemoryStrength
+from nous.domain.memory.repository import (
+    MemoryAuxiliaryRepository,
+    MemoryRepository,
+    MemoryStrengthRepository,
+)
 from nous.domain.persona.entities import EmotionRecord
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.sqlite.equipment_repo import SQLiteEquipmentRepository
@@ -300,3 +305,18 @@ class TestSQLiteEquipmentRepo:
         result = equipment_repo.list_items(category="clothing")
         assert result.is_ok
         assert len(result.unwrap()) == 1
+
+
+# ---------------------------------------------------------------------------
+# Protocol Satisfaction Tests (ISP 3-way split)
+# ---------------------------------------------------------------------------
+
+
+class TestMemoryRepositoryProtocolSatisfaction:
+    """SQLiteMemoryRepository が 3 つの Protocol をすべて満たすことの確認."""
+
+    def test_satisfies_core_memory_repository(self, memory_repo: SQLiteMemoryRepository):
+        assert isinstance(memory_repo, MemoryRepository), "Core MemoryRepository Protocol を満たしていません"
+
+    def test_satisfies_strength_repository(self, memory_repo: SQLiteMemoryRepository):
+        assert isinstance(memory_repo, MemoryStrengthRepository), "MemoryStrengthRepository Protocol を満たしていません"

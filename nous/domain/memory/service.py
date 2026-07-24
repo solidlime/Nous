@@ -22,7 +22,11 @@ from nous.domain.value_objects import normalize_emotion, normalize_importance
 
 if TYPE_CHECKING:
     from nous.domain.memory.contradiction import ContradictionDetector
-    from nous.domain.memory.repository import MemoryRepository
+    from nous.domain.memory.repository import (
+        MemoryAuxiliaryRepository,
+        MemoryRepository,
+        MemoryStrengthRepository,
+    )
     from nous.domain.search.engine import SearchEngine
     from nous.infrastructure.llm.memory_enricher import MemoryEnricher
 
@@ -38,6 +42,8 @@ class MemoryService:
         link_repo: object | None = None,
         search_engine: SearchEngine | None = None,
         contradiction_detector: ContradictionDetector | None = None,
+        strength_repo: MemoryStrengthRepository | None = None,
+        aux_repo: MemoryAuxiliaryRepository | None = None,
     ) -> None:
         self._repo = repo
         self._entity_service = entity_service
@@ -45,6 +51,8 @@ class MemoryService:
         self._link_repo = link_repo
         self._search_engine = search_engine
         self._contradiction_detector = contradiction_detector
+        self._strength_repo = strength_repo
+        self._aux_repo = aux_repo
 
     def save_memory(self, mem: Memory) -> Result[Memory, DomainError]:
         """Save a pre-constructed memory entity directly to the repository."""

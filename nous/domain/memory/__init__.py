@@ -5,7 +5,11 @@ from nous.domain.memory.entity_extractor import SimpleEntityExtractor
 from nous.domain.memory.memory_link import LINK_TYPES, MemoryLink
 from nous.domain.memory.recall_annotator import RecallAnnotation, RecallAnnotator
 from nous.domain.memory.recall_governor import RecallGovernor
-from nous.domain.memory.repository import MemoryRepository
+from nous.domain.memory.repository import (
+    MemoryAuxiliaryRepository,
+    MemoryRepository,
+    MemoryStrengthRepository,
+)
 from nous.domain.memory.service import MemoryService
 
 # SudachiExtractor / HybridEntityExtractor は __getattr__ で遅延ロード
@@ -28,10 +32,12 @@ __all__ = [
     "HybridEntityExtractor",
     "LINK_TYPES",
     "Memory",
+    "MemoryAuxiliaryRepository",
     "MemoryLink",
     "MemoryRepository",
     "MemoryService",
     "MemoryStrength",
+    "MemoryStrengthRepository",
     "RecallAnnotator",
     "RecallAnnotation",
     "RecallGovernor",

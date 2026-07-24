@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class MemoryRepository(Protocol):
-    """Repository interface for memory persistence."""
+    """Core repository interface for memory CRUD, keyword search, and consume."""
 
     def save(self, memory: Memory) -> Result[str, RepositoryError]: ...
 
@@ -28,13 +28,21 @@ class MemoryRepository(Protocol):
 
     def count(self) -> Result[int, RepositoryError]: ...
 
+    def find_all(self) -> Result[list[Memory], RepositoryError]: ...
+
     def search_keyword(
         self, query: str, limit: int = 10, date_from: datetime | None = None, date_to: datetime | None = None
     ) -> Result[list[tuple[Memory, float]], RepositoryError]: ...
 
-    def find_all(self) -> Result[list[Memory], RepositoryError]: ...
+    def consume_memory(self, key: str) -> Result[None, RepositoryError]:
+        """Mark a memory as consumed by setting last_consumed_at = now(). Atomic, single-query."""
+        ...
 
-    # Memory strength
+
+@runtime_checkable
+class MemoryStrengthRepository(Protocol):
+    """Repository interface for memory strength operations."""
+
     def get_strength(self, key: str) -> Result[MemoryStrength | None, RepositoryError]: ...
 
     def save_strength(self, strength: MemoryStrength) -> Result[None, RepositoryError]: ...
@@ -42,6 +50,11 @@ class MemoryRepository(Protocol):
     def get_all_strengths(
         self,
     ) -> Result[list[MemoryStrength], RepositoryError]: ...
+
+
+@runtime_checkable
+class MemoryAuxiliaryRepository(Protocol):
+    """Extended repository interface for blocks, versions, goals, pagination, etc."""
 
     # Memory blocks (Core Memory)
     def get_block(self, block_name: str) -> Result[dict | None, RepositoryError]: ...
@@ -88,7 +101,7 @@ class MemoryRepository(Protocol):
         self, min_importance: float = 0.7, max_strength: float = 0.3
     ) -> Result[int, RepositoryError]: ...
 
-    # Context Intelligence C
+    # Context Intelligence
     def get_memory_index(self) -> Result[dict, RepositoryError]: ...
 
     def find_relationship_highlights(self, limit: int = 5) -> Result[list, RepositoryError]: ...
@@ -103,17 +116,15 @@ class MemoryRepository(Protocol):
         valid_until: datetime | None = None,
     ) -> Result[None, RepositoryError]: ...
 
-    # Goals / Promises / Pagination / Tags (used by HTTP routes via ctx.memory_repo)
+    # Goals / Promises (planned: tag-based retrieval via get_by_tags)
     def get_goals(self) -> Result[list[dict], RepositoryError]: ...
 
     def get_promises(self) -> Result[list[dict], RepositoryError]: ...
 
-    def consume_memory(self, key: str) -> Result[None, RepositoryError]:
-        """Mark a memory as consumed by setting last_consumed_at = now(). Atomic, single-query."""
-        ...
-
+    # Tags (include_consumed variant; note: find_by_tags is in core MemoryRepository)
     def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], RepositoryError]: ...
 
+    # Pagination + all tags
     def find_with_pagination(
         self,
         page: int = 1,
@@ -124,3 +135,16 @@ class MemoryRepository(Protocol):
     ) -> Result[tuple[list[Memory], int], RepositoryError]: ...
 
     def get_all_tags(self) -> Result[list[str], RepositoryError]: ...
+
+    # Lifecycle (logical delete)
+    def tombstone(self, key: str) -> Result[None, RepositoryError]: ...
+
+    # FTS5 full-text search
+    def search_fts(
+        self,
+        query: str,
+        top_k: int = 10,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        valid_at: datetime | None = None,
+    ) -> Result[list[tuple[Memory, float]], RepositoryError]: ...
