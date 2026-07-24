@@ -55,6 +55,10 @@ class MemoryService:
         self._strength_repo = strength_repo
         self._aux_repo = aux_repo
 
+    def set_search_engine(self, search_engine) -> None:
+        """公開API経由で検索エンジンを注入する（循環参照回避のため後付け注入）。"""
+        self._search_engine = search_engine
+
     def save_memory(self, mem: Memory) -> Result[Memory, DomainError]:
         """Save a pre-constructed memory entity directly to the repository."""
         return self._repo.save(mem)
@@ -240,26 +244,16 @@ class MemoryService:
             with contextlib.suppress(Exception):
                 self._create_hebbian_links(memory)
 
-        # Memory evolution: enrich semantically related memories (best-effort, non-blocking)
-        if self._search_engine is not None:
-            asyncio.create_task(
-                self._evolve_related_memories(
-                    content=content,
-                    new_memory_key=memory.key,
-                )
+        # Memory evolution + contradiction invalidation (background, non-blocking)
+        # TaskGroup でラップし、内部例外を適切に捕捉する
+        asyncio.create_task(
+            self._run_background_evolution(
+                content=content,
+                memory_key=memory.key,
+                persona=persona or "default",
+                valid_from=now,
             )
-
-        # Contradiction invalidation: detect similar existing memories and
-        # close their validity windows (best-effort, non-blocking)
-        if self._contradiction_detector is not None and self._contradiction_detector.available:
-            asyncio.create_task(
-                self._invalidate_contradicted_memory(
-                    new_content=content.strip(),
-                    new_memory_key=memory.key,
-                    persona=persona or "default",
-                    valid_from=now,
-                )
-            )
+        )
 
         return Success(memory)
 
@@ -421,8 +415,41 @@ class MemoryService:
             return "temporal"
         return "semantic"
 
+    async def _run_background_evolution(
+        self,
+        content: str,
+        memory_key: str,
+        persona: str,
+        valid_from,
+    ) -> None:
+        """Run memory evolution and contradiction detection in background TaskGroup."""
+        try:
+            async with asyncio.TaskGroup() as tg:
+                if self._search_engine is not None:
+                    tg.create_task(
+                        self._evolve_related_memories(
+                            content=content,
+                            new_memory_key=memory_key,
+                        )
+                    )
+                if self._contradiction_detector is not None and self._contradiction_detector.available:
+                    tg.create_task(
+                        self._invalidate_contradicted_memory(
+                            new_content=content.strip(),
+                            new_memory_key=memory_key,
+                            persona=persona,
+                            valid_from=valid_from,
+                        )
+                    )
+        except Exception:
+            import logging
+            _log = logging.getLogger(__name__)
+            _log.exception("Background memory evolution/contradiction detection failed")
+
     def _get_session_memories(self, _new_memory: Memory) -> list:
         """Return memories recently accessed in the current conversation turn.
+
+        TODO(blocked): session_eventテーブル実装待ち
 
         Stub implementation — always returns empty list.
         Will be wired to session_event table or in-memory turn context

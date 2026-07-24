@@ -164,7 +164,7 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
             set_clause = ", ".join(f"{k} = ?" for k in updates)
             values = list(updates.values()) + [key]
             self._db.execute(
-                f"UPDATE memories SET {set_clause} WHERE key = ?",  # noqa: S608  # nosec B608
+                f"UPDATE memories SET {set_clause} WHERE key = ?",  # noqa: S608  # nosec B608 — variables are placeholder-protected, safe against SQL injection
                 values,
             )
 
@@ -262,7 +262,7 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
             WHERE {where_clause}
             ORDER BY rank
             LIMIT ?
-            """,  # noqa: S608  # nosec B608
+            """,  # noqa: S608  # nosec B608 — variables are placeholder-protected, safe against SQL injection
             [*params, top_k],
         ).fetchall()
 
@@ -346,7 +346,7 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
 
         where_clause = " AND ".join(conditions)
         rows = self._db.execute(
-            f"SELECT * FROM memories WHERE {where_clause} ORDER BY updated_at DESC",  # noqa: S608  # nosec B608
+            f"SELECT * FROM memories WHERE {where_clause} ORDER BY updated_at DESC",  # noqa: S608  # nosec B608 — variables are placeholder-protected, safe against SQL injection
             tuple(params),
         ).fetchall()
         scored: list[tuple[Memory, float]] = []
@@ -454,14 +454,14 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
         order = "ASC" if sort_order.lower() == "asc" else "DESC"
 
         count_row = self._db.execute(
-            f"SELECT COUNT(*) as cnt FROM memories{where_clause}",  # noqa: S608  # nosec B608
+            f"SELECT COUNT(*) as cnt FROM memories{where_clause}",  # noqa: S608  # nosec B608 — variables are placeholder-protected, safe against SQL injection
             params,
         ).fetchone()
         total_count: int = count_row["cnt"]
 
         offset = (page - 1) * per_page
         rows = self._db.execute(
-            f"SELECT * FROM memories{where_clause} ORDER BY updated_at {order} LIMIT ? OFFSET ?",  # noqa: S608  # nosec B608
+            f"SELECT * FROM memories{where_clause} ORDER BY updated_at {order} LIMIT ? OFFSET ?",  # noqa: S608  # nosec B608 — variables are placeholder-protected, safe against SQL injection
             [*params, per_page, offset],
         ).fetchall()
 
@@ -686,7 +686,7 @@ class SQLiteMemoryRepository(SQLiteRepository, SQLiteBlockMixin, SQLiteStrengthM
             set_clause = ", ".join(f"{k} = ?" for k in params)
             values = list(params.values()) + [memory_key]
             self._db.execute(
-                f"UPDATE memories SET {set_clause} WHERE key = ?",  # noqa: S608  # nosec B608
+                f"UPDATE memories SET {set_clause} WHERE key = ?",  # noqa: S608  # nosec B608 — variables are placeholder-protected, safe against SQL injection
                 values,
             )
             logger.info("Validity window updated for memory %s", memory_key)

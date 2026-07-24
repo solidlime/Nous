@@ -67,3 +67,49 @@ jobs:
       # Unit tests should not require a running Qdrant instance
       - name: Run unit tests
         run: pytest tests/unit/ -q --timeout=60
+
+  # ------------------------------------------------------------------
+  # Typecheck: mypy static analysis
+  # ------------------------------------------------------------------
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-prod.txt -r requirements-dev.txt
+
+      - name: Run mypy
+        run: mypy nous/
+
+  # ------------------------------------------------------------------
+  # Integration tests: ASGI transport based integration tests
+  # ------------------------------------------------------------------
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-prod.txt -r requirements-dev.txt
+
+      - name: Run integration tests
+        run: pytest tests/integration/ -q --timeout=60

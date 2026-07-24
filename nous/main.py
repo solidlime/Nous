@@ -189,9 +189,6 @@ def create_app() -> MemoryFastMCP:
             status_code=200 if status["status"] == "healthy" else 503,
         )
 
-    # Mount static files for dashboard CSS/JS
-    _mount_static_files(mcp)
-
     # Start background workers
     from nous.application.workers.consolidation_worker import ConsolidationWorker
 
