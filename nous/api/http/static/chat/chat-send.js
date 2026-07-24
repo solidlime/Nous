@@ -32,7 +32,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
   const bubble = document.createElement("div");
   bubble.className = "chat-bubble";
   if (isMarkdown && role === "assistant") {
-    bubble.innerHTML = safeMarkdown(content);
+    safeSetHTML(bubble, safeMarkdown(content));
     // メッセージ内の画像にクリックイベント追加
     bubble.querySelectorAll("img").forEach((img) => {
       img.style.cssText =
@@ -59,7 +59,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
   if (role === "user") {
     const editBtn = document.createElement("button");
     editBtn.className = "chat-msg-action-btn edit";
-    editBtn.innerHTML = '<i data-lucide="pencil"></i> 編集';
+    safeSetHTML(editBtn, '<i data-lucide="pencil"></i> 編集');
     editBtn.onclick = () => {
       const mid = div.dataset.msgId;
       const idx = parseInt(div.dataset.msgIndex);
@@ -69,7 +69,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
 
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "chat-msg-action-btn delete";
-    deleteBtn.innerHTML = '<i data-lucide="trash-2"></i>';
+    safeSetHTML(deleteBtn, '<i data-lucide="trash-2"></i>');
     deleteBtn.title = "削除";
     deleteBtn.setAttribute("aria-label", "メッセージを削除");
     deleteBtn.onclick = () => {
@@ -81,7 +81,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
   } else if (role === "assistant") {
     const ttsBtn = document.createElement("button");
     ttsBtn.className = "chat-msg-action-btn chat-tts-btn";
-    ttsBtn.innerHTML = '<i data-lucide="volume-2"></i>';
+    safeSetHTML(ttsBtn, '<i data-lucide="volume-2"></i>');
     ttsBtn.title = "音声で再生";
     ttsBtn.setAttribute("aria-label", "音声で再生");
     ttsBtn.onclick = () => {
@@ -93,7 +93,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
     actions.appendChild(ttsBtn);
     const retryBtn = document.createElement("button");
     retryBtn.className = "chat-msg-action-btn retry";
-    retryBtn.innerHTML = '<i data-lucide="refresh-cw"></i> 再生成';
+    safeSetHTML(retryBtn, '<i data-lucide="refresh-cw"></i> 再生成');
     retryBtn.onclick = () => {
       const mid = div.dataset.msgId;
       const idx = parseInt(div.dataset.msgIndex);
@@ -102,7 +102,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
     actions.appendChild(retryBtn);
     const copyBtn = document.createElement("button");
     copyBtn.className = "chat-msg-action-btn";
-    copyBtn.innerHTML = '<i data-lucide="clipboard-list"></i>';
+    safeSetHTML(copyBtn, '<i data-lucide="clipboard-list"></i>');
     copyBtn.title = "コピー";
     copyBtn.onclick = () => {
         const allText = Array.from(div.querySelectorAll(".chat-bubble"))
@@ -129,8 +129,8 @@ function showTypingIndicator() {
   const typing = document.createElement("div");
   typing.id = "chat-typing";
   typing.className = "chat-msg assistant";
-  typing.innerHTML =
-    '<div class="chat-bubble chat-typing"><span></span><span></span><span></span></div>';
+  safeSetHTML(typing,
+    '<div class="chat-bubble chat-typing"><span></span><span></span><span></span></div>');
   container.appendChild(typing);
   container.scrollTop = container.scrollHeight;
 }
@@ -183,7 +183,7 @@ function _createAssistantDiv() {
   // TTS manual play button
   const ttsBtn = document.createElement("button");
   ttsBtn.className = "chat-msg-action-btn chat-tts-btn";
-  ttsBtn.innerHTML = '<i data-lucide="volume-2"></i>';
+  safeSetHTML(ttsBtn, '<i data-lucide="volume-2"></i>');
   ttsBtn.title = "音声で再生";
   ttsBtn.setAttribute("aria-label", "音声で再生");
   ttsBtn.onclick = () => {
@@ -196,7 +196,7 @@ function _createAssistantDiv() {
   // Retry / regenerate button
   const retryBtn = document.createElement("button");
   retryBtn.className = "chat-msg-action-btn retry";
-  retryBtn.innerHTML = '<i data-lucide="refresh-cw"></i> 再生成';
+  safeSetHTML(retryBtn, '<i data-lucide="refresh-cw"></i> 再生成');
   retryBtn.onclick = () => {
     const mid = div.dataset.msgId;
     const idx = parseInt(div.dataset.msgIndex);
@@ -206,7 +206,7 @@ function _createAssistantDiv() {
   // Copy button
   const copyBtn = document.createElement("button");
   copyBtn.className = "chat-msg-action-btn";
-  copyBtn.innerHTML = '<i data-lucide="clipboard-list"></i>';
+  safeSetHTML(copyBtn, '<i data-lucide="clipboard-list"></i>');
   copyBtn.title = "コピー";
   copyBtn.onclick = () => {
     const allText = Array.from(div.querySelectorAll(".chat-bubble"))
@@ -373,7 +373,7 @@ async function chatSend(retry) {
   const attNames = CHAT.attachments.map((a) => a.filename);
   CHAT.attachments = [];
   const attArea = document.getElementById("chat-attachments");
-  if (attArea) attArea.innerHTML = "";
+  if (attArea) attArea.textContent = "";
 
   // Show user message with filename display
   const displayMsg =
@@ -507,8 +507,8 @@ async function chatSend(retry) {
           currentTextContent = "";
           const toolDiv = appendToolEvent("tool_call", evt, assistantDiv);
           contentParts.push({ type: "tool_call", div: toolDiv, id: evt.id, name: evt.name });
-          statusEl.innerHTML =
-            '<i data-lucide="wrench"></i> ' + esc(evt.name) + " を実行中...";
+          safeSetHTML(statusEl,
+            '<i data-lucide="wrench"></i> ' + esc(evt.name) + " を実行中...");
         } else if (evt.type === "tool_result") {
           appendToolEvent("tool_result", evt);
           currentTextBubble = null; // ensure next text_delta creates new bubble
@@ -548,7 +548,7 @@ async function chatSend(retry) {
           let allText = "";
           for (const part of contentParts) {
             if (part.type === "text" && part.bubble && part.content) {
-              part.bubble.innerHTML = safeMarkdown(part.content);
+              safeSetHTML(part.bubble, safeMarkdown(part.content));
               part.bubble.querySelectorAll("img").forEach((img) => {
                 img.style.cssText =
                   "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
@@ -642,7 +642,7 @@ async function chatSend(retry) {
         part.content &&
         part.bubble.children.length === 0
       ) {
-        part.bubble.innerHTML = safeMarkdown(part.content);
+        safeSetHTML(part.bubble, safeMarkdown(part.content));
         part.bubble.querySelectorAll("img").forEach((img) => {
           img.style.cssText =
             "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
