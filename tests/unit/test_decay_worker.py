@@ -25,6 +25,12 @@ def _make_ctx(strengths: list[MemoryStrength], min_strength: float = 0.01) -> Ma
     return ctx
 
 
+def _make_config(min_strength: float = 0.01) -> MagicMock:
+    cfg = MagicMock()
+    cfg.forgetting_min_strength = min_strength
+    return cfg
+
+
 class TestDecayWorker:
     def test_decay_cycle_applies_decay(self) -> None:
         """_decay_cycle() は全 strength レコードに decay を適用する"""

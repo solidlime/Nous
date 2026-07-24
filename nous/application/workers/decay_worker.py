@@ -10,6 +10,7 @@ from nous.domain.shared.time_utils import get_now
 if TYPE_CHECKING:
     from nous.application.chat.reflection import ReflectionEngine
     from nous.application.use_cases import AppContext
+    from nous.domain.chat_config import ChatConfig
     from nous.infrastructure.llm.base import LLMProvider
 
 
@@ -24,11 +25,13 @@ class DecayWorker:
         interval_seconds: int = 3600,
         reflection_engine: ReflectionEngine | None = None,
         llm_provider: LLMProvider | None = None,
+        config: ChatConfig | None = None,
     ) -> None:
         self.context = context
         self.interval = interval_seconds
         self._reflection_engine = reflection_engine
         self._llm_provider = llm_provider
+        self._config = config
         self._running = False
         self._thread: threading.Thread | None = None
         self._cycle_count = 0
@@ -87,7 +90,8 @@ class DecayWorker:
                             lifecycle_status="archived",
                         )
 
-            if new_strength_val < self.context.settings.forgetting.min_strength:
+            min_strength = self._config.forgetting_min_strength if self._config else self.context.settings.forgetting.min_strength
+            if new_strength_val < min_strength:
                 continue
 
             strength.strength = new_strength_val
