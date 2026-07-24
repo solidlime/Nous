@@ -209,7 +209,7 @@ function renderSettings(el, settings, status) {
             html += '<button class="setting-reset-btn" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '" style="' + (isDiff ? '' : 'display:none;') + 'padding:4px 10px;font-size:0.72rem;background:none;border:1px solid var(--glass-border);border-radius:6px;color:var(--text-muted);cursor:pointer">↩ Reset</button>';
 
             /* Validation error placeholder */
-            html += '<div class="setting-validation-error" style="display:none;width:100%;font-size:0.72rem;color:var(--accent-red);margin-top:2px"></div>';
+            html += '<div class="setting-validation-error" role="alert" style="display:none;width:100%;font-size:0.72rem;color:var(--accent-red);margin-top:2px"></div>';
 
             html += '</div>'; /* end setting-row */
         });

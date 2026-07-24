@@ -1,21 +1,18 @@
-# PLAN — 内臓スキル5種テスト (2026-07-21)
+# PLAN — Phase 10: Usability Hardening — Keyboard Accessibility (2026-07-25)
 
 ## 目的
-OpenRouterの `tencent/hy3:free` モデルを使って、Nousの組み込みスキル5種がWebUIチャット経由で自律的に動作することを確認する。
-スキルがLLMの指示ではなく自律的に invoke_skill → 対象ツール を呼び出すことが合格条件。
+全機能のキーボード操作到達性を確保する。タブナビゲーション・モーダルフォーカストラップ・スキップリンク・フォームラベル・トーストa11y対応。
 
-## 背景
-- Nousには5つの組み込みスキルが `data/skills/` 配下に存在: auto-memory, goal-coach, image-gen, mood-sync, recall-weaver
-- 各スキルはシステムプロンプトに name + description のみ注入され、LLMが `invoke_skill()` を呼ぶことで完全な指示を取得する二段階構造
-- hertaペルソナでテストする
+## スコープ
+1. **タブナビゲーション** — `role="tablist"`, `role="tab"`, 矢印キー操作
+2. **モーダル** — フォーカストラップ、フォーカス復元、aria属性、Escape
+3. **チャット入力** — 既存キーボード操作確認
+4. **設定パネル/フォーム** — ラベル、エラー通知
+5. **トースト通知** — aria-live属性確認
+6. **スキップリンク** — 最初のTabで表示される「メインコンテンツへスキップ」
+7. **全ボタン** — キーボード操作可能確認
 
-## 偵察で見つかった問題
-1. herta/config.json で provider が "anthropic" → "openrouter" に修正必要
-2. enabled_skills に存在しない "search", "auto-self-portrait" が含まれ、"image-gen" が欠落 → 修正必要
-3. プロンプトエンジニアリングが無料モデル向けに最適化されていない可能性
-
-## やること
-1. 設定修正 (provider + enabled_skills)
-2. プロンプト最適化 (TOOL_USAGE_GUIDELINES + スキルdescription)
-3. WebUI API経由のテスト実行
-4. 結果分析 → スキル/プロンプト再調整
+## 制約
+- 既存動作を壊さない
+- 最小限の変更
+- 1コミット100行以内

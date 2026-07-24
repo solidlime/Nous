@@ -9,6 +9,9 @@ function _ensureContainer() {
     c = document.createElement("div");
     c.id = "toast-container";
     c.className = "toast-container";
+    c.setAttribute("role", "status");
+    c.setAttribute("aria-live", "polite");
+    c.setAttribute("aria-atomic", "true");
     document.body.appendChild(c);
   }
   return c;
@@ -28,6 +31,7 @@ N.Core.toast = function toast(msg, type) {
   _limitToasts(c, 5);
   var t = document.createElement("div");
   t.className = "toast toast-" + type;
+  t.setAttribute("role", "status");
   t.textContent = msg;
   c.appendChild(t);
   t.addEventListener("animationend", function(e) {
@@ -50,6 +54,7 @@ N.Core.toastAction = function toastAction(msg, type, actionLabel, actionFn) {
   _limitToasts(c, 5);
   var t = document.createElement("div");
   t.className = "toast toast-" + type;
+  t.setAttribute("role", "status");
   t.style.display = "flex";
   t.style.alignItems = "center";
   t.style.gap = "10px";

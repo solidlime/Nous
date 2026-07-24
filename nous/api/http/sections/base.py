@@ -151,7 +151,7 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str, initial_p
     return (
         "<!DOCTYPE html>\n"
         '<html lang="ja" class="dark">\n' + render_head() + "\n<body>\n"
-        '    <a href="#tab-content" class="skip-link">メインコンテンツにスキップ</a>\n'
+        '    <a href="#main-content" class="skip-link">メインコンテンツにスキップ</a>\n'
         "    <!-- Background Orbs -->\n"
         '    <div class="orb orb-1"></div>\n'
         '    <div class="orb orb-2"></div>\n'
@@ -181,7 +181,7 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str, initial_p
         "    </header>\n"
         "\n" + nav_html + "\n"
         "\n"
-        '    <main class="main-content">\n' + tab_contents + "\n"
+        '    <main id="main-content" class="main-content" tabindex="-1">\n' + tab_contents + "\n"
         "    </main>\n"
         "\n"
         "    <!-- Memory Detail Modal -->\n"
