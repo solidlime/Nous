@@ -60,7 +60,7 @@ async function loadGraph() {
         }
 
     } catch (e) {
-        if (container) container.innerHTML = errorCard('Failed to load graph: ' + e.message);
+        if (container) safeSetHTML(container, errorCard('Failed to load graph: ' + e.message));
     } finally {
         var l = document.getElementById('graph-loading');
         if (l) l.style.display = 'none';
@@ -83,18 +83,18 @@ function populateGraphFilters(nodes) {
     var emotionFilter = document.getElementById('graph-emotion-filter');
     if (!tagFilter || !emotionFilter) return;
     var currentTags = Array.from(tagFilter.selectedOptions).map(function(o) { return o.value; }).filter(Boolean);
-    tagFilter.innerHTML = '<option value="">All Tags</option>' +
+    safeSetHTML(tagFilter, '<option value="">All Tags</option>' +
         Array.from(tagSet).sort().map(function(t) {
             return '<option value="' + esc(t) + '"' +
                    (currentTags.includes(t) ? ' selected' : '') + '>' + esc(t) + '</option>';
-        }).join('');
+        }).join(''));
 
     var currentEmo = emotionFilter.value;
-    emotionFilter.innerHTML = '<option value="">All Emotions</option>' +
+    safeSetHTML(emotionFilter, '<option value="">All Emotions</option>' +
         Array.from(emotionSet).sort().map(function(e) {
             return '<option value="' + esc(e) + '"' +
                    (currentEmo === e ? ' selected' : '') + '>' + esc(e) + '</option>';
-        }).join('');
+        }).join(''));
 }
 
 /* ---- Build vis-network DataSet arrays ---- */
@@ -157,7 +157,7 @@ function buildTooltip(n) {
         h += '<div style="margin-bottom:4px;color:#94a3b8">&#128173; ' + esc(n.emotion) + '</div>';
     }
     h += '<div style="color:#94a3b8">&#11088; Importance: ' + ((n.importance || 0) * 100).toFixed(0) + '%</div>';
-    el.innerHTML = h;
+    safeSetHTML(el, h);
     return el;
 }
 
@@ -193,7 +193,7 @@ function applyGraphFilters(visNodes, visEdges) {
 
 function renderNetwork(container, nodes, edges) {
     if (typeof vis === 'undefined') {
-        container.innerHTML = errorCard('vis-network library not available. Please check internet connectivity.');
+        safeSetHTML(container, errorCard('vis-network library not available. Please check internet connectivity.'));
         return;
     }
     var loading = document.getElementById('graph-loading');
@@ -202,12 +202,12 @@ function renderNetwork(container, nodes, edges) {
     if (nodes.length === 0) {
         if (graphNetwork) { graphNetwork.destroy(); graphNetwork = null; }
         if (loading) loading.style.display = 'none';
-        container.innerHTML =
+        safeSetHTML(container,
             '<div class="empty-state">' +
             '<div class="empty-state-icon"><i data-lucide="share-2"></i></div>' +
             '<div class="empty-state-text">まだグラフに表示できる記憶がありません。<br>記憶を作成するとここに表示されます。</div>' +
             '<button class="empty-state-cta" onclick="switchTab(\'memories\')"><i data-lucide="brain"></i> 記憶を作成</button>' +
-            '</div>';
+            '</div>');
         return;
     }
 
@@ -364,7 +364,7 @@ function openGraphDetailPanel(data) {
         html += '</div>';
     }
 
-    body.innerHTML = html;
+    safeSetHTML(body, html);
     panel.style.right = '0';
     overlay.style.display = 'block';
 }

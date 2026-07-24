@@ -112,7 +112,7 @@ async function loadMemories(page) {
         bindMemoryEvents();
         updateLastTime();
     } catch (e) {
-        el.innerHTML = errorCard('Failed to load memories: ' + e.message);
+        safeSetHTML(el, errorCard('Failed to load memories: ' + e.message));
     }
 }
 
@@ -287,7 +287,7 @@ function renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSe
         html += '<button class="glass-btn mem-page-btn" data-page="' + (S.mem.page + 1) + '"' + (S.mem.page >= totalPages ? ' disabled style="opacity:0.4;pointer-events:none"' : '') + '>Next <i data-lucide="chevron-right"></i></button>';
         html += '</div>';
     }
-    el.innerHTML = html;
+    safeSetHTML(el, html);
 }
 window.loadMemories = loadMemories;
 
@@ -593,7 +593,7 @@ function openMemModal(mem) {
     h += '<button class="glass-btn glass-btn-success" id="mem-modal-edit-btn">\u270F\uFE0F Edit</button>';
     h += '</div>';
 
-    content.innerHTML = h;
+    safeSetHTML(content, h);
     overlay.classList.add('show');
     /* Guard: remove first to prevent duplicate listeners on rapid reopen */
     document.removeEventListener('keydown', _memModalKeyHandler);
@@ -637,7 +637,7 @@ function _renderEditTags() {
         var chip = document.createElement('span');
         chip.className = 'tag-chip-edit';
         chip.style.cssText = '--chip-hue:' + hue;
-        chip.innerHTML = esc(tag) + ' <span class="tag-chip-remove" data-tidx="' + idx + '"><i data-lucide="x"></i></span>';
+        safeSetHTML(chip, esc(tag) + ' <span class="tag-chip-remove" data-tidx="' + idx + '"><i data-lucide="x"></i></span>');
         wrap.insertBefore(chip, inp);
     });
     /* Bind remove buttons */
