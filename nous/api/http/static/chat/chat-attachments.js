@@ -60,7 +60,7 @@ function renderAttachmentBadge(att) {
     badge.appendChild(vid);
   } else if (isAudio) {
     const icon = document.createElement("span");
-    icon.innerHTML = '<i data-lucide="volume-2"></i>';
+    safeSetHTML(icon, '<i data-lucide="volume-2"></i>');
     badge.appendChild(icon);
     badge.style.cursor = "pointer";
     badge.onclick = () => openMediaViewer(att.url, "audio", att.mime_type);
@@ -68,15 +68,15 @@ function renderAttachmentBadge(att) {
     const icon = document.createElement("span");
     const ext = att.filename.split(".").pop().toLowerCase();
     if (ext === "pdf") {
-      icon.innerHTML = '<i data-lucide="book"></i>';
+      safeSetHTML(icon, '<i data-lucide="book"></i>');
       badge.appendChild(icon);
       badge.style.cursor = "pointer";
       badge.onclick = () => openMediaViewer(att.url, "pdf");
     } else {
-      icon.innerHTML =
+      safeSetHTML(icon,
         ext === "zip" || ext === "tar" || ext === "gz"
           ? '<i data-lucide="package"></i>'
-          : '<i data-lucide="file-text"></i>';
+          : '<i data-lucide="file-text"></i>');
       badge.appendChild(icon);
     }
   }
@@ -88,7 +88,7 @@ function renderAttachmentBadge(att) {
 
   const removeBtn = document.createElement("button");
   removeBtn.className = "attach-remove";
-  removeBtn.innerHTML = '<i data-lucide="x"></i>';
+  safeSetHTML(removeBtn, '<i data-lucide="x"></i>');
   removeBtn.onclick = () => {
     CHAT.attachments = CHAT.attachments.filter(
       (a) => a.filename !== att.filename,
@@ -103,7 +103,7 @@ function openMediaViewer(url, type, mimeType, data) {
   const overlay = document.getElementById("media-viewer-overlay");
   const inner = document.getElementById("media-viewer-inner");
   if (!overlay || !inner) return;
-  inner.innerHTML = "";
+  inner.textContent = "";
   if (type === "image") {
     const img = document.createElement("img");
     img.src = url;
@@ -145,17 +145,17 @@ function openMediaViewer(url, type, mimeType, data) {
     vid.autoplay = true;
     inner.appendChild(vid);
   } else if (type === "pdf") {
-    inner.innerHTML =
+    safeSetHTML(inner,
       '<iframe src="' +
       esc(url) +
-      '" width="100%" height="80vh" style="border:none;border-radius:8px;"></iframe>';
+      '" width="100%" height="80vh" style="border:none;border-radius:8px;"></iframe>');
   } else if (type === "audio") {
-    inner.innerHTML =
+    safeSetHTML(inner,
       '<audio controls autoplay style="max-width:90vw;"><source src="' +
       esc(url) +
       '" type="' +
       esc(mimeType || "audio/mpeg") +
-      '"></audio>';
+      '"></audio>');
   } else {
     const vid = document.createElement("video");
     vid.src = url;
@@ -181,7 +181,7 @@ function closeMediaViewer() {
   if (inner) {
     const vid = inner.querySelector("video");
     if (vid) vid.pause();
-    inner.innerHTML = "";
+    inner.textContent = "";
   }
 }
 
