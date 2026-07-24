@@ -685,6 +685,10 @@ def render_chat_tab() -> str:
                                     <div class="chat-field-label">実行間隔（秒）</div>
                                     <input type="number" id="chat-auto-capture-interval" class="chat-field-input" min="60" step="1" value="300" />
                                 </div>
+                                <div>
+                                    <div class="chat-field-label">最大メモリ数</div>
+                                    <input type="number" id="chat-auto-capture-max-memories" class="chat-field-input" min="1" max="50" step="1" value="10" />
+                                </div>
                             </div>
                         </details>
                         <!-- Memory enrichment (moved from Settings) -->
@@ -704,6 +708,22 @@ def render_chat_tab() -> str:
                                 <div>
                                     <div class="chat-field-label">実行間隔（分）</div>
                                     <input type="number" id="chat-memory-enrichment-interval" class="chat-field-input" min="1" step="1" value="60" />
+                                </div>
+                                <div>
+                                    <div class="chat-field-label">プロバイダ</div>
+                                    <input type="text" id="chat-memory-enrichment-provider" class="chat-field-input" placeholder="例: openrouter" />
+                                </div>
+                                <div>
+                                    <div class="chat-field-label">モデル</div>
+                                    <input type="text" id="chat-memory-enrichment-model" class="chat-field-input" placeholder="例: openai/gpt-4o-mini" />
+                                </div>
+                                <div>
+                                    <div class="chat-field-label">Base URL</div>
+                                    <input type="text" id="chat-memory-enrichment-base-url" class="chat-field-input" placeholder="https://openrouter.ai/api/v1" />
+                                </div>
+                                <div>
+                                    <div class="chat-field-label">最小文字数</div>
+                                    <input type="number" id="chat-memory-enrichment-min-chars" class="chat-field-input" min="10" step="1" value="100" />
                                 </div>
                                 <div>
                                     <div class="chat-field-label">使用LLM</div>
@@ -737,6 +757,19 @@ def render_chat_tab() -> str:
                                     <input type="number" id="chat-forgetting-trigger-threshold" class="chat-field-input" min="1" step="1" value="100" />
                                 </div>
                                 <div>
+                                    <div class="chat-field-label">減衰間隔（秒）</div>
+                                    <input type="number" id="chat-forgetting-decay-interval-seconds" class="chat-field-input" min="60" step="1" value="86400" />
+                                </div>
+                                <div>
+                                    <div style="display:flex;justify-content:space-between;">
+                                        <span class="chat-field-label">最小強度</span>
+                                        <span id="chat-forgetting-min-strength-val" style="font-size:0.72rem;color:var(--accent-purple);">0.10</span>
+                                    </div>
+                                    <input type="range" id="chat-forgetting-min-strength" class="chat-field-input" min="0" max="1" step="0.05" value="0.1"
+                                        oninput="document.getElementById('chat-forgetting-min-strength-val').textContent=parseFloat(this.value).toFixed(2)"
+                                        style="width:100%;accent-color:var(--accent-purple);" />
+                                </div>
+                                <div>
                                     <div style="display:flex;justify-content:space-between;">
                                         <span class="chat-field-label">忘却対象率</span>
                                         <span id="chat-forgetting-forget-ratio-val" style="font-size:0.72rem;color:var(--accent-purple);">0.20</span>
@@ -760,6 +793,11 @@ def render_chat_tab() -> str:
                         <details data-category="memorag">
                             <summary><i data-lucide="search"></i> MemoRAG</summary>
                             <div class="details-body">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <input type="checkbox" id="chat-memorag-enabled"
+                                        style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
+                                    <label for="chat-memorag-enabled" class="chat-field-label" style="margin:0;cursor:pointer;">MemoRAG有効</label>
+                                </div>
                                 <div>
                                     <div class="chat-field-label">チャンクサイズ</div>
                                     <input type="number" id="chat-memorag-chunk-size" class="chat-field-input" min="64" step="1" value="512" />
@@ -780,6 +818,10 @@ def render_chat_tab() -> str:
                                     <input type="range" id="chat-memorag-similarity-threshold" class="chat-field-input" min="0" max="1" step="0.05" value="0.7"
                                         oninput="document.getElementById('chat-memorag-similarity-threshold-val').textContent=parseFloat(this.value).toFixed(2)"
                                         style="width:100%;accent-color:var(--accent-purple);" />
+                                </div>
+                                <div>
+                                    <div class="chat-field-label">スナップショット間隔（時間）</div>
+                                    <input type="number" id="chat-memorag-snapshot-interval-hours" class="chat-field-input" min="1" step="1" value="24" />
                                 </div>
                             </div>
                         </details>

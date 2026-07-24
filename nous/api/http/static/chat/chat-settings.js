@@ -281,23 +281,35 @@ function applyChatConfig(cfg) {
   // === Auto-capture (moved from Settings) ===
   setChecked("chat-auto-capture-enabled", cfg.auto_capture_enabled === true);
   set("chat-auto-capture-interval", cfg.auto_capture_interval ?? 300);
+  set("chat-auto-capture-max-memories", cfg.auto_capture_max_memories ?? 10);
   // === Memory enrichment (moved from Settings) ===
   setChecked("chat-memory-enrichment-enabled", cfg.memory_enrichment_enabled === true);
   setChecked("chat-memory-enrichment-auto-run", cfg.memory_enrichment_auto_run === true);
   set("chat-memory-enrichment-interval", cfg.memory_enrichment_interval ?? 60);
+  set("chat-memory-enrichment-provider", cfg.memory_enrichment_provider || "");
+  set("chat-memory-enrichment-model", cfg.memory_enrichment_model || "");
+  set("chat-memory-enrichment-base-url", cfg.memory_enrichment_base_url || "");
+  set("chat-memory-enrichment-min-chars", cfg.memory_enrichment_min_chars ?? 100);
   set("chat-memory-enrichment-llm", cfg.memory_enrichment_llm || "");
   set("chat-memory-enrichment-prompt-template", cfg.memory_enrichment_prompt_template || "");
   set("chat-memory-enrichment-summary-granularity", cfg.memory_enrichment_summary_granularity || "medium");
   // === Forgetting (moved from Settings) ===
   setChecked("chat-forgetting-enabled", cfg.forgetting_enabled === true);
   set("chat-forgetting-trigger-threshold", cfg.forgetting_trigger_threshold ?? 100);
+  set("chat-forgetting-decay-interval-seconds", cfg.forgetting_decay_interval_seconds ?? 86400);
+  set("chat-forgetting-min-strength", cfg.forgetting_min_strength ?? 0.1);
   set("chat-forgetting-forget-ratio", cfg.forgetting_forget_ratio ?? 0.2);
   set("chat-forgetting-forget-strength", cfg.forgetting_forget_strength ?? 0.5);
+  // Sync min-strength display
+  var fs = document.getElementById("chat-forgetting-min-strength");
+  if (fs) document.getElementById("chat-forgetting-min-strength-val").textContent = parseFloat(fs.value).toFixed(2);
   // === MemoRAG (moved from Settings) ===
+  setChecked("chat-memorag-enabled", cfg.memorag_enabled === true);
   set("chat-memorag-chunk-size", cfg.memorag_chunk_size ?? 512);
   set("chat-memorag-chunk-overlap", cfg.memorag_chunk_overlap ?? 64);
   set("chat-memorag-top-k", cfg.memorag_top_k ?? 5);
   set("chat-memorag-similarity-threshold", cfg.memorag_similarity_threshold ?? 0.7);
+  set("chat-memorag-snapshot-interval-hours", cfg.memorag_snapshot_interval_hours ?? 24);
   // URLが設定済みなら疎通確認を自動実行
   if (cfg.image_gen_comfyui_url) {
     checkComfyUIHealth();
@@ -418,23 +430,32 @@ async function saveChatConfig() {
     // === Auto-capture (moved from Settings) ===
     auto_capture_enabled: getChecked("chat-auto-capture-enabled"),
     auto_capture_interval: parseInt(document.getElementById("chat-auto-capture-interval")?.value || "300"),
+    auto_capture_max_memories: parseInt(document.getElementById("chat-auto-capture-max-memories")?.value || "10"),
     // === Memory enrichment (moved from Settings) ===
     memory_enrichment_enabled: getChecked("chat-memory-enrichment-enabled"),
     memory_enrichment_auto_run: getChecked("chat-memory-enrichment-auto-run"),
     memory_enrichment_interval: parseInt(document.getElementById("chat-memory-enrichment-interval")?.value || "60"),
+    memory_enrichment_provider: document.getElementById("chat-memory-enrichment-provider")?.value.trim() || "",
+    memory_enrichment_model: document.getElementById("chat-memory-enrichment-model")?.value.trim() || "",
+    memory_enrichment_base_url: document.getElementById("chat-memory-enrichment-base-url")?.value.trim() || "",
+    memory_enrichment_min_chars: parseInt(document.getElementById("chat-memory-enrichment-min-chars")?.value || "100"),
     memory_enrichment_llm: document.getElementById("chat-memory-enrichment-llm")?.value.trim() || "",
     memory_enrichment_prompt_template: document.getElementById("chat-memory-enrichment-prompt-template")?.value.trim() || "",
     memory_enrichment_summary_granularity: document.getElementById("chat-memory-enrichment-summary-granularity")?.value || "medium",
     // === Forgetting (moved from Settings) ===
     forgetting_enabled: getChecked("chat-forgetting-enabled"),
     forgetting_trigger_threshold: parseInt(document.getElementById("chat-forgetting-trigger-threshold")?.value || "100"),
+    forgetting_decay_interval_seconds: parseInt(document.getElementById("chat-forgetting-decay-interval-seconds")?.value || "86400"),
+    forgetting_min_strength: parseFloat(document.getElementById("chat-forgetting-min-strength")?.value || "0.1"),
     forgetting_forget_ratio: parseFloat(document.getElementById("chat-forgetting-forget-ratio")?.value || "0.2"),
     forgetting_forget_strength: parseFloat(document.getElementById("chat-forgetting-forget-strength")?.value || "0.5"),
     // === MemoRAG (moved from Settings) ===
+    memorag_enabled: getChecked("chat-memorag-enabled"),
     memorag_chunk_size: parseInt(document.getElementById("chat-memorag-chunk-size")?.value || "512"),
     memorag_chunk_overlap: parseInt(document.getElementById("chat-memorag-chunk-overlap")?.value || "64"),
     memorag_top_k: parseInt(document.getElementById("chat-memorag-top-k")?.value || "5"),
     memorag_similarity_threshold: parseFloat(document.getElementById("chat-memorag-similarity-threshold")?.value || "0.7"),
+    memorag_snapshot_interval_hours: parseInt(document.getElementById("chat-memorag-snapshot-interval-hours")?.value || "24"),
     // 画像生成設定 — ComfyUI
     image_gen_enabled: getChecked("chat-image-gen-enabled"),
     image_gen_comfyui_url: (document.getElementById("chat-image-gen-comfyui-url")?.value || "").trim(),
