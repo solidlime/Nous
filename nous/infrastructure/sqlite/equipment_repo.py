@@ -9,8 +9,9 @@ from nous.domain.equipment.entities import (
 )
 from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
-from nous.domain.shared.time_utils import format_iso, get_now, parse_iso
+from nous.domain.shared.time_utils import format_iso, get_now
 from nous.infrastructure.logging.structured import get_logger
+from nous.infrastructure.sqlite._utils import _parse_json_list, _parse_or_none
 from nous.infrastructure.sqlite.base_repo import SQLiteRepository
 
 logger = get_logger(__name__)
@@ -314,16 +315,6 @@ class SQLiteEquipmentRepository(SQLiteRepository):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _parse_json_list(value: str | None) -> list[str]:
-        if not value:
-            return []
-        try:
-            parsed = json.loads(value)
-            return parsed if isinstance(parsed, list) else []
-        except (json.JSONDecodeError, TypeError):
-            return []
-
     def _row_to_item(self, row) -> Item:
         return Item(
             id=row["id"],
@@ -332,7 +323,7 @@ class SQLiteEquipmentRepository(SQLiteRepository):
             description=row["description"],
             visual_desc=row["visual_desc"] if "visual_desc" in row else None,  # noqa: SIM401 (sqlite3.Row has no .get)
             quantity=row["quantity"] or 1,
-            tags=self._parse_json_list(row["tags"]),
+            tags=_parse_json_list(row["tags"]),
             created_at=_parse_or_none(row["created_at"]),
             updated_at=_parse_or_none(row["updated_at"]),
         )
@@ -347,13 +338,3 @@ class SQLiteEquipmentRepository(SQLiteRepository):
             timestamp=_parse_or_none(row["timestamp"]),
             details=row["details"],
         )
-
-
-def _parse_or_none(value: str | None):
-    """Parse ISO datetime or return None."""
-    if not value:
-        return None
-    try:
-        return parse_iso(value)
-    except Exception:
-        return None
