@@ -193,6 +193,11 @@ class AppContext:
         self.persona_service = PersonaService(self.persona_repo, event_bus=self.event_bus)
         self.equipment_service = EquipmentService(self.equipment_repo)
 
+        # Vector store sync via event handlers (replaces direct calls from MCP tools)
+        self.event_bus.subscribe("memory.created", self._on_memory_vector_upsert)
+        self.event_bus.subscribe("memory.updated", self._on_memory_vector_upsert)
+        self.event_bus.subscribe("memory.deleted", self._on_memory_vector_delete)
+
         # Initialize SessionEventRecorder (best-effort, don't fail startup)
         try:
             from nous.application.session_event_recorder import SessionEventRecorder
@@ -394,6 +399,42 @@ class AppContext:
 
     def close(self) -> None:
         self.connection.close()
+
+    # ── Vector store sync event handlers ──
+
+    async def _on_memory_vector_upsert(self, event_type: str, data: dict) -> None:
+        """Sync memory to vector store when created or updated.
+
+        Best-effort: failures are logged as warnings and never interrupt the
+        main flow. If vector_store is not yet initialized, the sync is skipped
+        (the memory will be indexed on next background init or explicit call).
+        """
+        if self._vector_store is None:
+            return
+        try:
+            key = data.get("key", "")
+            persona = data.get("persona", self.persona)
+            mem_result = self.memory_repo.find_by_key(key)
+            if mem_result.is_ok and mem_result.value is not None:
+                await self._vector_store.upsert(persona, key, mem_result.value.content)
+            else:
+                logger.warning("Vector sync: memory not found for key: %s", key)
+        except Exception:
+            logger.warning("Vector sync failed for memory: %s", data.get("key", "?"), exc_info=True)
+
+    async def _on_memory_vector_delete(self, event_type: str, data: dict) -> None:
+        """Delete memory vector when tombstoned.
+
+        Best-effort: failures are logged as warnings.
+        """
+        if self._vector_store is None:
+            return
+        try:
+            key = data.get("key", "")
+            persona = data.get("persona", self.persona)
+            await self._vector_store.delete(persona, key)
+        except Exception:
+            logger.warning("Vector delete failed for memory: %s", data.get("key", "?"), exc_info=True)
 
 
 class AppContextRegistry:
