@@ -244,7 +244,7 @@ def register_memory_routes(mcp) -> None:
             logger.exception("Validation error: %s", exc)
             return JSONResponse({"error": "Validation error"}, status_code=422)
         try:
-            result = ctx.memory_service.create_memory(
+            result = await ctx.memory_service.create_memory(
                 content=body.content,
                 importance=body.importance,
                 emotion=body.emotion,

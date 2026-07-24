@@ -48,6 +48,16 @@ class ConfigError(DomainError):
 class DuplicateMemoryError(DomainError):
     """Memory content duplicates an existing memory."""
 
+    def __init__(
+        self,
+        message: str,
+        duplicate_key: str | None = None,
+        similar_to: list[dict] | None = None,
+    ) -> None:
+        self.duplicate_key = duplicate_key
+        self.similar_to = similar_to
+        super().__init__(message)
+
 
 class VectorStoreError(DomainError):
     """Vector store operation failed."""

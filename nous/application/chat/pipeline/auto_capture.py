@@ -173,7 +173,7 @@ async def run_auto_capture(
                 pass  # Fall through to normal creation if check fails
 
             try:
-                result = ctx.memory_service.create_memory(
+                result = await ctx.memory_service.create_memory(
                     content=text,
                     importance=importance,
                     tags=["auto_captured", category],

@@ -69,7 +69,7 @@ async def _tool_goal_manage(
         create_tags = ["goal", "active"]
         if scope == "interpersonal":
             create_tags.append("interpersonal")
-        result = ctx.memory_service.create_memory(
+        result = await ctx.memory_service.create_memory(
             content=content,
             importance=importance,
             tags=create_tags,

@@ -73,12 +73,16 @@ def _store_last_reflection_at(ctx: AppContext, ts: datetime) -> None:
             if mem.content.startswith("last_reflection_at:"):
                 ctx.memory_service.delete_memory(mem.key)
 
-    ctx.memory_service.create_memory(
-        content=f"last_reflection_at: {ts.isoformat()}",
-        importance=0.1,
-        tags=[_REFLECTION_META_TAG],
-        emotion="neutral",
-        persona=ctx.persona,
+    import asyncio as _asyncio
+
+    _asyncio.run(
+        ctx.memory_service.create_memory(
+            content=f"last_reflection_at: {ts.isoformat()}",
+            importance=0.1,
+            tags=[_REFLECTION_META_TAG],
+            emotion="neutral",
+            persona=ctx.persona,
+        )
     )
 
 
@@ -179,7 +183,9 @@ async def maybe_run_reflection(
         return []
 
     for insight in insights:
-        ctx.memory_service.create_memory(
+    import asyncio as _asyncio
+
+    _asyncio.run(ctx.memory_service.create_memory(
             content=insight,
             importance=0.9,
             tags=["reflection"],

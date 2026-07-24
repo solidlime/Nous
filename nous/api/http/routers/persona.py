@@ -275,7 +275,7 @@ def register_persona_routes(mcp) -> None:
         imported = 0
         skipped = 0
         for msg in messages:
-            res = ctx.memory_service.create_memory(
+            res = await ctx.memory_service.create_memory(
                 content=msg.content,
                 importance=0.4,
                 emotion="neutral",

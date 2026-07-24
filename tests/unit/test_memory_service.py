@@ -36,12 +36,6 @@ class InMemoryMemoryRepository:
         self._store[memory.key] = memory
         return Success(memory.key)
 
-    def find_by_content_exact(self, content: str) -> Result[Memory | None, RepositoryError]:
-        for m in self._store.values():
-            if m.content.lower() == content.strip().lower():
-                return Success(m)
-        return Success(None)
-
     def find_by_key(self, key: str) -> Result[Memory | None, RepositoryError]:
         return Success(self._store.get(key))
 
@@ -72,6 +66,29 @@ class InMemoryMemoryRepository:
         if key not in self._store:
             return Failure(RepositoryError(f"Not found: {key}"))
         self._store[key].lifecycle_status = "tombstoned"
+        return Success(None)
+
+    def consume_memory(self, key: str) -> Result[None, RepositoryError]:
+        mem = self._store.get(key)
+        if mem is not None:
+            from datetime import datetime, timezone
+            mem.last_consumed_at = datetime.now(timezone.utc)
+        return Success(None)
+
+    def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], RepositoryError]:
+        tag_set = set(tags)
+        results = []
+        for m in self._store.values():
+            if set(m.tags) & tag_set:
+                if not include_consumed and m.last_consumed_at is not None:
+                    continue
+                results.append(m)
+        return Success(results)
+
+    def find_by_content_exact(self, content: str) -> Result[Memory | None, RepositoryError]:
+        for m in self._store.values():
+            if m.content.lower() == content.strip().lower():
+                return Success(m)
         return Success(None)
 
     def count(self) -> Result[int, RepositoryError]:
@@ -208,64 +225,64 @@ def service_factory():
 
 
 class TestCreateMemory:
-    def test_create_success(self, service: MemoryService):
-        result = service.create_memory(content="Hello world", importance=0.7)
+    async def test_create_success(self, service: MemoryService):
+        result = await service.create_memory(content="Hello world", importance=0.7)
         assert result.is_ok
         memory = result.unwrap()
         assert memory.content == "Hello world"
         assert memory.importance == 0.7
 
-    def test_create_strips_whitespace(self, service: MemoryService):
-        result = service.create_memory(content="  spaced  ")
+    async def test_create_strips_whitespace(self, service: MemoryService):
+        result = await service.create_memory(content="  spaced  ")
         assert result.is_ok
         assert result.unwrap().content == "spaced"
 
-    def test_create_empty_content_fails(self, service: MemoryService):
-        result = service.create_memory(content="")
+    async def test_create_empty_content_fails(self, service: MemoryService):
+        result = await service.create_memory(content="")
         assert not result.is_ok
 
-    def test_create_whitespace_only_fails(self, service: MemoryService):
-        result = service.create_memory(content="   ")
+    async def test_create_whitespace_only_fails(self, service: MemoryService):
+        result = await service.create_memory(content="   ")
         assert not result.is_ok
 
-    def test_create_with_tags(self, service: MemoryService):
-        result = service.create_memory(content="tagged", tags=["a", "b"])
+    async def test_create_with_tags(self, service: MemoryService):
+        result = await service.create_memory(content="tagged", tags=["a", "b"])
         assert result.is_ok
         assert result.unwrap().tags == ["a", "b"]
 
-    def test_importance_clamped(self, service: MemoryService):
-        r = service.create_memory(content="high", importance=2.0)
+    async def test_importance_clamped(self, service: MemoryService):
+        r = await service.create_memory(content="high", importance=2.0)
         assert r.is_ok
         assert r.unwrap().importance == 1.0
 
 
 class TestGetMemory:
-    def test_get_existing(self, service: MemoryService):
-        created = service.create_memory(content="find me").unwrap()
+    async def test_get_existing(self, service: MemoryService):
+        created = (await service.create_memory(content="find me")).unwrap()
         result = service.get_memory(created.key)
         assert result.is_ok
         assert result.unwrap().content == "find me"
 
-    def test_get_nonexistent(self, service: MemoryService):
+    async def test_get_nonexistent(self, service: MemoryService):
         result = service.get_memory("memory_99999999999999")
         assert not result.is_ok
 
 
 class TestUpdateMemory:
-    def test_update_content(self, service: MemoryService):
-        created = service.create_memory(content="original").unwrap()
+    async def test_update_content(self, service: MemoryService):
+        created = (await service.create_memory(content="original")).unwrap()
         result = service.update_memory(created.key, content="modified")
         assert result.is_ok
         assert result.unwrap().content == "modified"
 
-    def test_update_nonexistent(self, service: MemoryService):
+    async def test_update_nonexistent(self, service: MemoryService):
         result = service.update_memory("memory_99999999999999", content="x")
         assert not result.is_ok
 
 
 class TestDeleteMemory:
-    def test_delete_existing(self, service: MemoryService):
-        created = service.create_memory(content="remove me").unwrap()
+    async def test_delete_existing(self, service: MemoryService):
+        created = (await service.create_memory(content="remove me")).unwrap()
         result = service.delete_memory(created.key)
         assert result.is_ok
         # Verify it's tombstoned (logical delete, not physical)
@@ -277,27 +294,27 @@ class TestDeleteMemory:
         assert repo_result.is_ok
         assert repo_result.unwrap().lifecycle_status == "tombstoned"
 
-    def test_delete_nonexistent(self, service: MemoryService):
+    async def test_delete_nonexistent(self, service: MemoryService):
         result = service.delete_memory("memory_99999999999999")
         assert not result.is_ok
 
 
 class TestGetRecent:
-    def test_returns_most_recent(self, service: MemoryService):
+    async def test_returns_most_recent(self, service: MemoryService):
         keys = []
         for i in range(5):
             with patch(
                 "nous.domain.memory.service.generate_memory_key",
                 return_value=f"memory_2025010100000{i}",
             ):
-                r = service.create_memory(content=f"memory {i}")
+                r = await service.create_memory(content=f"memory {i}")
                 assert r.is_ok
                 keys.append(r.unwrap().key)
         result = service.get_recent(limit=3)
         assert result.is_ok
         assert len(result.unwrap()) == 3
 
-    def test_empty_repo(self, service: MemoryService):
+    async def test_empty_repo(self, service: MemoryService):
         result = service.get_recent()
         assert result.is_ok
         assert result.unwrap() == []
@@ -311,17 +328,17 @@ class TestGetStats:
         assert stats["total_count"] == 0
         assert stats["tag_distribution"] == {}
 
-    def test_stats_with_data(self, service: MemoryService):
+    async def test_stats_with_data(self, service: MemoryService):
         with patch(
             "nous.domain.memory.service.generate_memory_key",
             return_value="memory_20250101000001",
         ):
-            service.create_memory(content="a", tags=["food"], emotion="joy")
+            await service.create_memory(content="a", tags=["food"], emotion="joy")
         with patch(
             "nous.domain.memory.service.generate_memory_key",
             return_value="memory_20250101000002",
         ):
-            service.create_memory(content="b", tags=["food", "travel"], emotion="sadness")
+            await service.create_memory(content="b", tags=["food", "travel"], emotion="sadness")
         result = service.get_stats()
         assert result.is_ok
         stats = result.unwrap()
@@ -333,16 +350,16 @@ class TestGetStats:
 
 
 class TestBoostRecall:
-    def test_boost_creates_strength_if_missing(self, service: MemoryService):
-        created = service.create_memory(content="remember").unwrap()
+    async def test_boost_creates_strength_if_missing(self, service: MemoryService):
+        created = (await service.create_memory(content="remember")).unwrap()
         result = service.boost_recall(created.key)
         assert result.is_ok
         strength = result.unwrap()
         assert strength.recall_count == 1
         assert strength.stability == 1.5
 
-    def test_boost_increments(self, service: MemoryService, repo: InMemoryMemoryRepository):
-        created = service.create_memory(content="recall").unwrap()
+    async def test_boost_increments(self, service: MemoryService, repo: InMemoryMemoryRepository):
+        created = (await service.create_memory(content="recall")).unwrap()
         service.boost_recall(created.key)
         result = service.boost_recall(created.key)
         assert result.is_ok
@@ -426,10 +443,10 @@ class TestMemoryBlocks:
 
 
 class TestGetStatsTopN:
-    def test_top_n_truncates_tag_distribution(self, service):
+    async def test_top_n_truncates_tag_distribution(self, service):
         # 25個のユニークタグを持つメモリを作成
         for i in range(25):
-            service.create_memory(content=f"mem {i}", tags=[f"tag_{i:02d}"])
+            await service.create_memory(content=f"mem {i}", tags=[f"tag_{i:02d}"])
 
         result = service.get_stats(top_n=20)
         assert result.is_ok
@@ -438,9 +455,9 @@ class TestGetStatsTopN:
         assert "tag_distribution_note" in stats
         assert "5" in stats["tag_distribution_note"]
 
-    def test_top_n_custom_value(self, service):
+    async def test_top_n_custom_value(self, service):
         for i in range(5):
-            service.create_memory(content=f"mem {i}", tags=[f"tag_{i}"])
+            await service.create_memory(content=f"mem {i}", tags=[f"tag_{i}"])
 
         result = service.get_stats(top_n=3)
         assert result.is_ok
@@ -449,9 +466,9 @@ class TestGetStatsTopN:
         assert "tag_distribution_note" in stats
         assert "2" in stats["tag_distribution_note"]
 
-    def test_top_n_no_note_when_within_limit(self, service):
+    async def test_top_n_no_note_when_within_limit(self, service):
         for i in range(3):
-            service.create_memory(content=f"mem {i}", tags=[f"tag_{i}"])
+            await service.create_memory(content=f"mem {i}", tags=[f"tag_{i}"])
 
         result = service.get_stats(top_n=10)
         assert result.is_ok
@@ -459,7 +476,7 @@ class TestGetStatsTopN:
         assert len(stats["tag_distribution"]) == 3
         assert "tag_distribution_note" not in stats
 
-    def test_top_n_truncates_emotion_distribution(self, service):
+    async def test_top_n_truncates_emotion_distribution(self, service):
         # 22種の感情でメモリを作成（各1個）
         emotions = [
             "joy",
@@ -486,7 +503,7 @@ class TestGetStatsTopN:
             "relief",
         ]
         for i, em in enumerate(emotions):
-            service.create_memory(content=f"mem_{i}", emotion=em)
+            await service.create_memory(content=f"mem_{i}", emotion=em)
 
         result = service.get_stats(top_n=10)
         assert result.is_ok
@@ -497,35 +514,35 @@ class TestGetStatsTopN:
 
 
 class TestTagValidation:
-    def test_create_too_many_tags_fails(self, service):
+    async def test_create_too_many_tags_fails(self, service):
         tags = [f"tag{i}" for i in range(21)]
-        result = service.create_memory(content="too many tags", tags=tags)
+        result = await service.create_memory(content="too many tags", tags=tags)
         assert not result.is_ok
 
-    def test_create_exactly_20_tags_ok(self, service):
+    async def test_create_exactly_20_tags_ok(self, service):
         tags = [f"tag{i}" for i in range(20)]
-        result = service.create_memory(content="max tags", tags=tags)
+        result = await service.create_memory(content="max tags", tags=tags)
         assert result.is_ok
         assert len(result.unwrap().tags) == 20
 
-    def test_create_tag_too_long_fails(self, service):
+    async def test_create_tag_too_long_fails(self, service):
         long_tag = "a" * 51
-        result = service.create_memory(content="long tag", tags=[long_tag])
+        result = await service.create_memory(content="long tag", tags=[long_tag])
         assert not result.is_ok
 
-    def test_create_tag_exactly_50_chars_ok(self, service):
+    async def test_create_tag_exactly_50_chars_ok(self, service):
         tag_50 = "a" * 50
-        result = service.create_memory(content="exact tag length", tags=[tag_50])
+        result = await service.create_memory(content="exact tag length", tags=[tag_50])
         assert result.is_ok
 
-    def test_update_too_many_tags_fails(self, service):
-        created = service.create_memory(content="base memory").unwrap()
+    async def test_update_too_many_tags_fails(self, service):
+        created = (await service.create_memory(content="base memory")).unwrap()
         tags = [f"tag{i}" for i in range(21)]
         result = service.update_memory(created.key, tags=tags)
         assert not result.is_ok
 
-    def test_update_tag_too_long_fails(self, service):
-        created = service.create_memory(content="base memory").unwrap()
+    async def test_update_tag_too_long_fails(self, service):
+        created = (await service.create_memory(content="base memory")).unwrap()
         long_tag = "b" * 51
         result = service.update_memory(created.key, tags=[long_tag])
         assert not result.is_ok
@@ -534,60 +551,60 @@ class TestTagValidation:
 class TestMemoryEnrichment:
     """Test that create_memory correctly interacts with the MemoryEnricher."""
 
-    def test_skips_enrichment_when_importance_explicitly_set(self, repo, service_factory):
+    async def test_skips_enrichment_when_importance_explicitly_set(self, repo, service_factory):
         """When importance != 0.5, enrichment should not be called."""
         mock_enricher = MagicMock()
         svc = service_factory(repo, enricher=mock_enricher)
 
-        svc.create_memory(content="This is a meaningful memory about John.", importance=0.9)
+        await svc.create_memory(content="This is a meaningful memory about John.", importance=0.9)
 
         mock_enricher.enrich.assert_not_called()
 
-    def test_calls_enricher_when_importance_is_default_0_5(self, repo, service_factory):
+    async def test_calls_enricher_when_importance_is_default_0_5(self, repo, service_factory):
         """When importance is default 0.5, enrichment should be called."""
         mock_enricher = MagicMock()
         mock_enricher.enrich.return_value = EnrichmentResult(importance=0.8, relations=[])
         svc = service_factory(repo, enricher=mock_enricher)
 
-        result = svc.create_memory(content="This is a meaningful memory about John.")
+        result = await svc.create_memory(content="This is a meaningful memory about John.")
         assert result.is_ok
 
         mock_enricher.enrich.assert_called_once()
 
-    def test_enricher_updates_importance_on_memory(self, repo, service_factory):
+    async def test_enricher_updates_importance_on_memory(self, repo, service_factory):
         """When enricher returns importance != 0.5, the memory importance is updated."""
         mock_enricher = MagicMock()
         mock_enricher.enrich.return_value = EnrichmentResult(importance=0.9, relations=[])
         svc = service_factory(repo, enricher=mock_enricher)
 
-        result = svc.create_memory(content="This is an important memory.")
+        result = await svc.create_memory(content="This is an important memory.")
         assert result.is_ok
         memory = result.unwrap()
         assert memory.importance == 0.9
 
-    def test_enricher_does_not_override_explicit_importance(self, repo, service_factory):
+    async def test_enricher_does_not_override_explicit_importance(self, repo, service_factory):
         """When importance is explicitly set, enricher is not called."""
         mock_enricher = MagicMock()
         svc = service_factory(repo, enricher=mock_enricher)
 
-        result = svc.create_memory(content="Memory with explicit importance", importance=0.3)
+        result = await svc.create_memory(content="Memory with explicit importance", importance=0.3)
         assert result.is_ok
         memory = result.unwrap()
         assert memory.importance == 0.3
         mock_enricher.enrich.assert_not_called()
 
-    def test_enricher_failure_does_not_block_create(self, repo, service_factory):
+    async def test_enricher_failure_does_not_block_create(self, repo, service_factory):
         """When enricher raises an exception, memory creation still succeeds."""
         mock_enricher = MagicMock()
         mock_enricher.enrich.side_effect = RuntimeError("LLM down")
         svc = service_factory(repo, enricher=mock_enricher)
 
-        result = svc.create_memory(content="This memory should still be created.")
+        result = await svc.create_memory(content="This memory should still be created.")
         assert result.is_ok
         memory = result.unwrap()
         assert memory.content == "This memory should still be created."
 
-    def test_enricher_relations_added_through_entity_service(self, repo, service_factory):
+    async def test_enricher_relations_added_through_entity_service(self, repo, service_factory):
         """When enricher returns relations, entity_service.add_relation is called."""
         mock_enricher = MagicMock()
         mock_enricher.enrich.return_value = EnrichmentResult(
@@ -604,7 +621,7 @@ class TestMemoryEnrichment:
         mock_entity_service = MagicMock()
         svc = service_factory(repo, enricher=mock_enricher, entity_service=mock_entity_service)
 
-        result = svc.create_memory(content="Alice knows Bob.")
+        result = await svc.create_memory(content="Alice knows Bob.")
         assert result.is_ok
 
         mock_entity_service.add_relation.assert_called_once_with(

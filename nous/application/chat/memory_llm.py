@@ -300,7 +300,7 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
                 if hit_score > 0.85:
                     logger.debug("MemoryLLM: skipping duplicate fact (score=%.2f): %s", hit_score, content[:60])
                     continue
-            mem_result = ctx.memory_service.create_memory(
+            mem_result = await ctx.memory_service.create_memory(
                 content=content,
                 importance=float(fact.get("importance", 0.6)),
                 tags=fact.get("tags", ["auto_extract"]),
@@ -336,7 +336,7 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
                     if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
                         logger.debug("MemoryLLM: skipping duplicate goal: %s", content[:60])
                         continue
-                mem_result = ctx.memory_service.create_memory(
+                mem_result = await ctx.memory_service.create_memory(
                     content=content,
                     importance=0.75,
                     tags=["goal", "active"],
@@ -376,7 +376,7 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
                     if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
                         logger.debug("MemoryLLM: skipping duplicate interpersonal goal: %s", content[:60])
                         continue
-                mem_result = ctx.memory_service.create_memory(
+                mem_result = await ctx.memory_service.create_memory(
                     content=content,
                     importance=0.8,
                     tags=["goal", "active", "interpersonal"],
@@ -403,7 +403,7 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
             ]:
                 val = ctx_update.get(key)
                 if val is not None and str(val).strip():
-                    mem_result = ctx.memory_service.create_memory(
+                    mem_result = await ctx.memory_service.create_memory(
                         content=f"{key}: {val}",
                         tags=tags,
                         importance=0.6,

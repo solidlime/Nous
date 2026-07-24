@@ -86,7 +86,7 @@ async def _tool_memory_create(
     # Auto-snapshot current persona state
     emotion_snap, intensity_snap, body_snap, snapped_at = ctx.persona_service.get_state_snapshot(persona)
 
-    result = ctx.memory_service.create_memory(
+    result = await ctx.memory_service.create_memory(
         content=content,
         importance=importance,
         tags=tags,

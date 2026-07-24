@@ -46,7 +46,7 @@ def svc(repo):
 
 
 @pytest.fixture()
-def seeded_svc(svc):
+async def seeded_svc(svc):
     """MemoryService with pre-seeded memories for search/filter tests."""
     seeds = [
         ("ユーザーはラーメンが好きです。毎日でも食べたい。", ["food", "preference"], "joy"),
@@ -56,7 +56,7 @@ def seeded_svc(svc):
         ("友達とカフェでコーヒーを飲んだ。楽しかった。", ["social", "food"], "joy"),
     ]
     for content, tags, emotion in seeds:
-        svc.create_memory(content=content, tags=tags, emotion=emotion, importance=0.6)
+        await svc.create_memory(content=content, tags=tags, emotion=emotion, importance=0.6)
     return svc
 
 
@@ -68,52 +68,52 @@ def seeded_svc(svc):
 class TestMemoryCRUD:
     """Full create → read → update → delete lifecycle."""
 
-    def test_create_memory_returns_ok(self, svc):
-        result = svc.create_memory(content="テスト記憶です", importance=0.7)
+    async def test_create_memory_returns_ok(self, svc):
+        result = await svc.create_memory(content="テスト記憶です", importance=0.7)
         assert result.is_ok
         mem = result.value
         assert mem.key
         assert mem.content == "テスト記憶です"
         assert mem.importance == 0.7
 
-    def test_create_memory_normalizes_emotion(self, svc):
-        result = svc.create_memory(content="感情テスト", emotion="JOY")
+    async def test_create_memory_normalizes_emotion(self, svc):
+        result = await svc.create_memory(content="感情テスト", emotion="JOY")
         assert result.is_ok
         assert result.value.emotion == "joy"
 
-    def test_create_memory_empty_content_rejected(self, svc):
-        result = svc.create_memory(content="  ")
+    async def test_create_memory_empty_content_rejected(self, svc):
+        result = await svc.create_memory(content="  ")
         assert not result.is_ok
 
-    def test_get_memory_by_key(self, svc):
-        key = svc.create_memory(content="取得テスト").value.key
+    async def test_get_memory_by_key(self, svc):
+        key = (await svc.create_memory(content="取得テスト")).value.key
         result = svc.get_memory(key)
         assert result.is_ok
         assert result.value.content == "取得テスト"
 
-    def test_get_memory_nonexistent(self, svc):
+    async def test_get_memory_nonexistent(self, svc):
         result = svc.get_memory("nonexistent_key_xyz")
         assert not result.is_ok
 
-    def test_update_memory_content(self, svc):
-        key = svc.create_memory(content="元のコンテンツ").value.key
+    async def test_update_memory_content(self, svc):
+        key = (await svc.create_memory(content="元のコンテンツ")).value.key
         result = svc.update_memory(key, content="更新後のコンテンツ")
         assert result.is_ok
         updated = svc.get_memory(key).value
         assert updated.content == "更新後のコンテンツ"
 
-    def test_update_memory_importance(self, svc):
-        key = svc.create_memory(content="重要度テスト", importance=0.3).value.key
+    async def test_update_memory_importance(self, svc):
+        key = (await svc.create_memory(content="重要度テスト", importance=0.3)).value.key
         svc.update_memory(key, importance=0.9)
         assert svc.get_memory(key).value.importance == 0.9
 
-    def test_update_memory_tags(self, svc):
-        key = svc.create_memory(content="タグテスト", tags=["old"]).value.key
+    async def test_update_memory_tags(self, svc):
+        key = (await svc.create_memory(content="タグテスト", tags=["old"])).value.key
         svc.update_memory(key, tags=["new", "updated"])
         assert svc.get_memory(key).value.tags == ["new", "updated"]
 
-    def test_delete_memory(self, svc):
-        key = svc.create_memory(content="削除テスト").value.key
+    async def test_delete_memory(self, svc):
+        key = (await svc.create_memory(content="削除テスト")).value.key
         del_result = svc.delete_memory(key)
         assert del_result.is_ok
         # Verify tombstoned (logical delete) — get_memory excludes tombstoned
@@ -124,24 +124,24 @@ class TestMemoryCRUD:
         assert repo_result.is_ok
         assert repo_result.value.lifecycle_status == "tombstoned"
 
-    def test_delete_nonexistent_memory(self, svc):
+    async def test_delete_nonexistent_memory(self, svc):
         result = svc.delete_memory("does_not_exist")
         assert not result.is_ok
 
-    def test_get_recent(self, seeded_svc):
+    async def test_get_recent(self, seeded_svc):
         result = seeded_svc.get_recent(limit=3)
         assert result.is_ok
         assert len(result.value) <= 3
         assert len(result.value) > 0
 
-    def test_get_stats(self, seeded_svc):
+    async def test_get_stats(self, seeded_svc):
         result = seeded_svc.get_stats()
         assert result.is_ok
         stats = result.value
         assert stats.get("total_count", 0) >= 5
 
-    def test_create_with_all_fields(self, svc):
-        result = svc.create_memory(
+    async def test_create_with_all_fields(self, svc):
+        result = await svc.create_memory(
             content="フルフィールドテスト",
             importance=0.85,
             emotion="curiosity",
@@ -309,8 +309,8 @@ class TestSearch:
 class TestMemoryVersioning:
     """Version 1 is recorded automatically on create."""
 
-    def test_create_records_version_1(self, svc, repo):
-        key = svc.create_memory(content="バージョンテスト").value.key
+    async def test_create_records_version_1(self, svc, repo):
+        key = (await svc.create_memory(content="バージョンテスト")).value.key
         history = svc.get_memory_history(key)
         assert history.is_ok
         versions = history.value

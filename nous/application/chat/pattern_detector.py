@@ -61,11 +61,15 @@ def _store_last_abstraction_at(ctx: AppContext, type_tag: str, ts: datetime) -> 
             if mem.content.startswith(prefix):
                 ctx.memory_service.delete_memory(mem.key)
 
-    ctx.memory_service.create_memory(
-        content=f"{prefix} {ts.isoformat()}",
-        importance=0.1,
-        tags=[_MENTAL_MODEL_META_TAG],
-        emotion="neutral",
+    import asyncio as _asyncio
+
+    _asyncio.run(
+        ctx.memory_service.create_memory(
+            content=f"{prefix} {ts.isoformat()}",
+            importance=0.1,
+            tags=[_MENTAL_MODEL_META_TAG],
+            emotion="neutral",
+        )
     )
 
 
@@ -192,7 +196,7 @@ async def maybe_run_mental_model(
             # Store each model as a memory
             _source_keys = [m.key for m in recent]
             for model_content in models:
-                ctx.memory_service.create_memory(
+                await ctx.memory_service.create_memory(
                     content=model_content,
                     importance=_MENTAL_MODEL_IMPORTANCE,
                     tags=list(_MENTAL_MODEL_TAGS),

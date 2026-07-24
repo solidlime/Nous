@@ -190,7 +190,9 @@ class ConsolidationWorker:
         """Save the consolidated memory and link it to sources."""
         avg_importance = sum(m.importance for m in sources) / len(sources) if sources else 0.5
 
-        result = ctx.memory_service.create_memory(
+        import asyncio as _asyncio
+
+        result = _asyncio.run(ctx.memory_service.create_memory(
             content=content,
             importance=avg_importance,
             emotion="neutral",
@@ -199,7 +201,7 @@ class ConsolidationWorker:
             privacy_level="private",
             source_context="consolidation_worker",
             related_keys=[m.key for m in sources],
-        )
+        ))
 
         if result.is_ok:
             logger.info(

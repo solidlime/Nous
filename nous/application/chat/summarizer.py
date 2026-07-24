@@ -115,7 +115,7 @@ async def summarize_and_store(
                        len(suspicious) / len(summary) * 100)
         return None
 
-    ctx.memory_service.create_memory(
+    await ctx.memory_service.create_memory(
         content=summary,
         importance=0.65,
         tags=["session_summary"],

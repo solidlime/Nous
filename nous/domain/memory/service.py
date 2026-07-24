@@ -13,6 +13,7 @@ from nous.domain.memory.type_classifier import auto_tags
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.errors import (
     DomainError,
+    DuplicateMemoryError,
     MemoryNotFoundError,
     MemoryValidationError,
 )
@@ -58,7 +59,50 @@ class MemoryService:
         """Save a pre-constructed memory entity directly to the repository."""
         return self._repo.save(mem)
 
-    def create_memory(
+    async def _check_duplicate(self, content: str) -> DuplicateMemoryError | None:
+        """Check for duplicate content via semantic search + exact match.
+
+        Returns DuplicateMemoryError with details if found, None otherwise.
+        Best-effort: failures are silently swallowed (fall through to creation).
+        """
+        # 1. Semantic similarity check (async)
+        if self._search_engine is not None:
+            try:
+                search_result = await self._search_engine.search(SearchQuery(text=content, top_k=3))
+                if search_result.is_ok and search_result.value:
+                    duplicates = [
+                        {
+                            "key": item.memory.key,
+                            "content": item.memory.content[:100],
+                            "score": item.score,
+                        }
+                        for item in search_result.value
+                        if item.score >= 0.75
+                    ]
+                    if duplicates:
+                        return DuplicateMemoryError(
+                            "Similar memory already exists",
+                            duplicate_key=None,
+                            similar_to=duplicates,
+                        )
+            except Exception:
+                pass  # Fall through to exact check
+
+        # 2. Exact match check (sync, via repository)
+        try:
+            exact = self._repo.find_by_content_exact(content)
+            if exact.is_ok and exact.value is not None:
+                return DuplicateMemoryError(
+                    f"Identical content already exists (key: {exact.value.key}). Skipped.",
+                    duplicate_key=exact.value.key,
+                    similar_to=None,
+                )
+        except Exception:
+            pass  # Fall through to normal creation
+
+        return None
+
+    async def create_memory(
         self,
         content: str,
         importance: float = 0.5,
@@ -73,6 +117,7 @@ class MemoryService:
         kind: str = "semantic",
         source_type: str = "user_stated",
         confidence: float = 1.0,
+        skip_duplicate_check: bool = False,
         **extra_fields: object,
     ) -> Result[Memory, DomainError]:
         """Create and persist a new memory entry.
@@ -80,14 +125,20 @@ class MemoryService:
         emotion and emotion_intensity are single-field values for the memory.
         body_state and state_snapped_at are set by the caller after capturing
         current persona state (see PersonaService.get_state_snapshot).
-        body_state and state_snapped_at are set by the caller after capturing
-        current persona state (see PersonaService.get_state_snapshot).
 
         persona is used for contradiction detection invalidation. When omitted
         the caller should ensure persona-scoped isolation at the DB layer.
+
+        skip_duplicate_check: If True, skips semantic + exact duplicate detection.
         """
         if not content or not content.strip():
             return Failure(MemoryValidationError("Content must not be empty"))
+
+        # ── Duplicate check (async semantic + sync exact) ──
+        if not skip_duplicate_check:
+            dup_error = await self._check_duplicate(content)
+            if dup_error is not None:
+                return Failure(dup_error)
 
         # Auto-classify content and add type tag if not already present
         type_hints = auto_tags(content.strip(), tags)
@@ -589,6 +640,21 @@ class MemoryService:
     def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], DomainError]:
         """Get memories that contain ALL specified tags."""
         return self._repo.get_by_tags(tags, include_consumed=include_consumed)
+
+    def get_and_consume_one_shot(self, tag: str) -> Result[list[Memory], DomainError]:
+        """Get the latest memory with the given tag and mark it as consumed.
+
+        Used for one-shot state memories (e.g., physical_state, mental_state).
+        Returns a list with the latest memory if found, else empty list.
+        """
+        result = self._repo.get_by_tags([tag])
+        if not result.is_ok or not result.value:
+            return Success([])
+        memories = sorted(result.value, key=lambda m: m.created_at or get_now(), reverse=True)
+        latest = memories[0]
+        with contextlib.suppress(Exception):
+            self._repo.consume_memory(latest.key)
+        return Success([latest])
 
     # --- Smart Recent + Search Log + Gap Alert ---
 

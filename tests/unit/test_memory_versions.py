@@ -163,9 +163,9 @@ def sqlite_repo(sqlite_conn):
 
 
 class TestMemoryVersioning:
-    def test_create_records_version_1(self, service: MemoryService, repo: InMemoryVersionedRepository):
+    async def test_create_records_version_1(self, service: MemoryService, repo: InMemoryVersionedRepository):
         """作成時にversion 1が記録される"""
-        result = service.create_memory(content="test memory")
+        result = await service.create_memory(content="test memory")
         assert result.is_ok
         key = result.value.key
         versions = repo.get_versions(key).value
@@ -175,9 +175,9 @@ class TestMemoryVersioning:
         assert versions[0]["content"] == "test memory"
         assert versions[0]["changed_by"] == "user"
 
-    def test_update_increments_version(self, service: MemoryService, repo: InMemoryVersionedRepository):
+    async def test_update_increments_version(self, service: MemoryService, repo: InMemoryVersionedRepository):
         """更新時にバージョンが増加する"""
-        created = service.create_memory(content="original").unwrap()
+        created = (await service.create_memory(content="original")).unwrap()
         service.update_memory(created.key, content="modified")
         versions = repo.get_versions(created.key).value
         assert len(versions) == 2
@@ -186,17 +186,17 @@ class TestMemoryVersioning:
         assert versions[1]["version"] == 2
         assert versions[1]["change_type"] == "update"
 
-    def test_delete_records_final_version(self, service: MemoryService, repo: InMemoryVersionedRepository):
+    async def test_delete_records_final_version(self, service: MemoryService, repo: InMemoryVersionedRepository):
         """削除時にdelete版が記録される"""
-        created = service.create_memory(content="to delete").unwrap()
+        created = (await service.create_memory(content="to delete")).unwrap()
         service.delete_memory(created.key)
         versions = repo.get_versions(created.key).value
         assert len(versions) == 2
         assert versions[-1]["change_type"] == "delete"
 
-    def test_get_history(self, service: MemoryService):
+    async def test_get_history(self, service: MemoryService):
         """変更履歴が取得できる"""
-        created = service.create_memory(content="history test").unwrap()
+        created = (await service.create_memory(content="history test")).unwrap()
         service.update_memory(created.key, content="updated")
         result = service.get_memory_history(created.key)
         assert result.is_ok
@@ -205,9 +205,9 @@ class TestMemoryVersioning:
         assert history[0]["change_type"] == "create"
         assert history[1]["change_type"] == "update"
 
-    def test_version_metadata_contains_snapshot(self, service: MemoryService, repo: InMemoryVersionedRepository):
+    async def test_version_metadata_contains_snapshot(self, service: MemoryService, repo: InMemoryVersionedRepository):
         """更新版のmetadataに変更前スナップショットが含まれる"""
-        created = service.create_memory(content="original", importance=0.5).unwrap()
+        created = (await service.create_memory(content="original", importance=0.5)).unwrap()
         service.update_memory(created.key, content="changed")
         versions = repo.get_versions(created.key).value
         update_version = versions[1]
@@ -215,9 +215,9 @@ class TestMemoryVersioning:
         assert update_version["metadata"]["content"] == "original"
         assert update_version["metadata"]["importance"] == 0.5
 
-    def test_multiple_updates_version_sequence(self, service: MemoryService, repo: InMemoryVersionedRepository):
+    async def test_multiple_updates_version_sequence(self, service: MemoryService, repo: InMemoryVersionedRepository):
         """複数回の更新でバージョン番号が正しくインクリメントされる"""
-        created = service.create_memory(content="v1").unwrap()
+        created = (await service.create_memory(content="v1")).unwrap()
         service.update_memory(created.key, content="v2")
         service.update_memory(created.key, content="v3")
         versions = repo.get_versions(created.key).value
