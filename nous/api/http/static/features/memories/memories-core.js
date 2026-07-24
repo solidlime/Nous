@@ -5,7 +5,7 @@
                N.Features.Memories.* (renderMemoryList, openMemModalByKey,
                  openCreateModal, toggleSelectMode, toggleAdvancedSearch,
                  applyAdvancedSearch, clearAdvancedSearch, batchDeleteMemories, _addEditTag)
-               window.S, window.errorCard, window.safeSetHTML, window.updateLastTime
+                window.S, window.safeSetHTML, window.updateLastTime
    ================================================================= */
 N.Features.Memories = N.Features.Memories || {};
 
@@ -77,6 +77,7 @@ function _filterMemories(arr) {
 async function loadMemories(page) {
     if (page != null) S.mem.page = page;
     var el = document.getElementById('memories-content');
+    N.Components.skeleton.show('memories');
 
     /* Build tag dropdown options from cache */
     var tagOptions = '<option value="">All Tags</option>';
@@ -118,11 +119,17 @@ async function loadMemories(page) {
             totalPages = data.total_pages || 1;
             totalCount = data.total_count || 0;
         }
+        if (!memories || memories.length === 0) {
+            safeSetHTML(el, N.Components.skeleton.emptyState('file-text', 'No memories', 'Try adjusting your search or create a new memory.'));
+            updateLastTime();
+            return;
+        }
         N.Features.Memories.renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSearch, allKnownTags);
         bindMemoryEvents();
         updateLastTime();
     } catch (e) {
-        safeSetHTML(el, errorCard('Failed to load memories: ' + e.message));
+        console.error('memories load failed:', e);
+        safeSetHTML(el, N.Components.skeleton.errorCard('Failed to load memories', function(){ loadMemories(); }));
     }
 }
 window.loadMemories = loadMemories;

@@ -2,7 +2,7 @@
    OVERVIEW CORE — State, initialization, CRUD helpers, main loader
    Namespace: N.Features.Overview.*
    Depends on: N.Core.* (esc, toast, api, truncate, relativeTime, fmtDate)
-               window.* (errorCard, safeSetHTML, Chart, lucide, destroyChart, chartOpts)
+               window.* (safeSetHTML, Chart, lucide, destroyChart, chartOpts)
    ================================================================= */
 N.Features.Overview = N.Features.Overview || {};
 
@@ -202,8 +202,14 @@ window.unequipSlot = unequipSlot;
 
 async function loadOverview() {
     const el = document.getElementById('overview-content');
+    N.Components.skeleton.show('overview');
     try {
         const data = await api('/api/dashboard/' + encodeURIComponent(S.persona));
+        if (!data || Object.keys(data).length === 0) {
+            safeSetHTML(el, N.Components.skeleton.emptyState('pie-chart', 'Overview', 'No stats available for this persona yet.'));
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+            return;
+        }
         // ── Self-portrait display ──
         const portraitUrl = data.latest_self_portrait;
         const portraitEl = document.getElementById('overview-portrait');
@@ -621,7 +627,8 @@ async function loadOverview() {
         }
         if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
-        safeSetHTML(el, errorCard('Failed to load overview: ' + e.message));
+        console.error('overview load failed:', e);
+        safeSetHTML(el, N.Components.skeleton.errorCard('Failed to load dashboard stats', function(){ loadOverview(); }));
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 }

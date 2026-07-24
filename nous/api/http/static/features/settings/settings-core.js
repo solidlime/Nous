@@ -1,7 +1,7 @@
 /* =================================================================
    SETTINGS CORE — State, initialization, data loading
    Namespace: N.Features.Settings.*
-   Depends on: N.Core.* (api, safeSetHTML, errorCard)
+   Depends on: N.Core.* (api, safeSetHTML)
                N.Features.Settings.renderSettings (settings-form.js)
                window.S, window.loadSettings, window.switchTab
    ================================================================= */
@@ -17,6 +17,7 @@ var { api } = window.Nous.Core;
 
 async function loadSettings() {
     const el = document.getElementById('settings-content');
+    N.Components.skeleton.show('settings');
     try {
         const [resp, status] = await Promise.all([
             api('/api/settings'),
@@ -28,7 +29,8 @@ async function loadSettings() {
         N.Features.Settings.renderSettings(el, settingsData, status);
         updateLastTime();
     } catch (e) {
-        safeSetHTML(el, errorCard('Failed to load settings: ' + e.message));
+        console.error('settings load failed:', e);
+        safeSetHTML(el, N.Components.skeleton.errorCard('Failed to load settings', function(){ loadSettings(); }));
     }
 }
 window.loadSettings = loadSettings;

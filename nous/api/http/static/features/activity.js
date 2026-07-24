@@ -72,12 +72,7 @@ async function loadActivity(reset = false) {
         }
 
         if (events.length === 0 && ACT.offset === 0) {
-            safeSetHTML(feed,
-                '<div class="empty-state">' +
-                '<div class="empty-state-icon"><i data-lucide="activity"></i></div>' +
-                '<div class="empty-state-text">まだアクティビティがありません。<br>Chatで会話を始めるとセッションが記録されます。</div>' +
-                '<button class="empty-state-cta" onclick="switchTab(\'chat\')"><i data-lucide="message-circle"></i> Chatを開く</button>' +
-                '</div>');
+            safeSetHTML(feed, N.Components.skeleton.emptyState('activity', 'Activity', 'No session activity recorded yet.'));
             if (typeof lucide !== 'undefined') lucide.createIcons();
             return;
         }
@@ -116,11 +111,8 @@ async function loadActivity(reset = false) {
 
         if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
-        safeSetHTML(feed,
-            '<div class="empty-state">' +
-            '<div class="empty-state-icon"><i data-lucide="alert-triangle"></i></div>' +
-            '<div class="empty-state-text">Failed to load: ' + esc(e.message) + '</div>' +
-            '</div>');
+        console.error('activity load failed:', e);
+        safeSetHTML(feed, N.Components.skeleton.errorCard('Failed to load activity', function(){ loadActivity(true); }));
     }
 }
 window.loadActivity = loadActivity;

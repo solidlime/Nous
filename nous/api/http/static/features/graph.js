@@ -65,7 +65,8 @@ async function loadGraph() {
         }
 
     } catch (e) {
-        if (container) safeSetHTML(container, errorCard('Failed to load graph: ' + e.message));
+        console.error('graph load failed:', e);
+        if (el) safeSetHTML(el, N.Components.skeleton.errorCard('Failed to load graph data', function(){ loadGraph(); }));
     } finally {
         var l = document.getElementById('graph-loading');
         if (l) l.style.display = 'none';
@@ -198,7 +199,7 @@ function applyGraphFilters(visNodes, visEdges) {
 
 function renderNetwork(container, nodes, edges) {
     if (typeof vis === 'undefined') {
-        safeSetHTML(container, errorCard('vis-network library not available. Please check internet connectivity.'));
+        safeSetHTML(container, N.Components.skeleton.errorCard('vis-network library not available. Please check internet connectivity.', function(){ loadGraph(); }));
         return;
     }
     var loading = document.getElementById('graph-loading');
@@ -207,12 +208,8 @@ function renderNetwork(container, nodes, edges) {
     if (nodes.length === 0) {
         if (graphNetwork) { graphNetwork.destroy(); graphNetwork = null; }
         if (loading) loading.style.display = 'none';
-        safeSetHTML(container,
-            '<div class="empty-state">' +
-            '<div class="empty-state-icon"><i data-lucide="share-2"></i></div>' +
-            '<div class="empty-state-text">まだグラフに表示できる記憶がありません。<br>記憶を作成するとここに表示されます。</div>' +
-            '<button class="empty-state-cta" onclick="switchTab(\'memories\')"><i data-lucide="brain"></i> 記憶を作成</button>' +
-            '</div>');
+        safeSetHTML(container, N.Components.skeleton.emptyState('share-2', 'Knowledge Graph', 'No connections found. Memories with relationships will appear here.'));
+        if (typeof lucide !== 'undefined') lucide.createIcons();
         return;
     }
 

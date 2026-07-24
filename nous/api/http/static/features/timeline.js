@@ -90,11 +90,7 @@ async function loadTimeline() {
         if (_timeline) { _timeline.destroy(); _timeline = null; }
 
         if (allMemories.length === 0) {
-            safeSetHTML(container, '<div class="empty-state">' +
-                '<div class="empty-state-icon"><i data-lucide="clock"></i></div>' +
-                '<div class="empty-state-text">まだタイムラインがありません。<br>記憶を作成するとここに表示されます。</div>' +
-                '<button class="empty-state-cta" onclick="switchTab(\'memories\')"><i data-lucide="message-circle"></i> 記憶を作成</button>' +
-                '</div>');
+            safeSetHTML(container, N.Components.skeleton.emptyState('clock', 'Timeline', 'No timed memories yet.'));
             setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
             return;
         }
@@ -151,7 +147,9 @@ async function loadTimeline() {
         });
 
     } catch (e) {
-        if (loading) { loading.textContent = '読み込み失敗: ' + e.message; loading.style.display = 'flex'; }
+        console.error('timeline load failed:', e);
+        safeSetHTML(container, N.Components.skeleton.errorCard('Failed to load timeline', function(){ loadTimeline(); }));
+        if (loading) loading.style.display = 'none';
     }
 }
 
