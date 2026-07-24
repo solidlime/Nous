@@ -143,7 +143,7 @@ function renderActivityFeed() {
         const openClass = sess.open ? ' open' : '';
 
         html += '<div class="act-session' + openClass + '" data-session="' + esc(sid) + '">';
-        html += '<div class="act-session-header" onclick="toggleActivitySession(\'' + esc(sid) + '\')">';
+        html += '<div class="act-session-header" tabindex="0" role="button" onclick="toggleActivitySession(\'' + esc(sid) + '\')">';
         html += '<span class="act-chevron">▶</span>';
         html += '<span class="act-session-id">' + esc(sid) + '</span>';
         html += '<span class="act-session-meta">';
@@ -227,6 +227,17 @@ function toggleActivityDetail(el) {
     el.classList.toggle('expanded');
 }
 window.toggleActivityDetail = toggleActivityDetail;
+
+// Keyboard: Enter/Space on session headers and event detail toggles
+document.addEventListener("keydown", function(e) {
+    if (e.key === "Enter" || e.key === " ") {
+        var target = e.target.closest(".act-session-header, .act-event[onclick]");
+        if (target) {
+            e.preventDefault();
+            target.click();
+        }
+    }
+});
 
 // Register in namespace
 Object.assign(N.Features.Activity, {
