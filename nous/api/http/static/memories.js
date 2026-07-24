@@ -259,7 +259,7 @@ function renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSe
             var checked = S.mem.selected.has(key) ? ' checked' : '';
             var tags = (m.context_tags || m.tags || []);
             var tagsHtml = tags.map(function(t){ return tagChipHtml(t); }).join(' ');
-            var emoColor = window.EMOTION_COLORS[m.emotion] || '#94a3b8';
+            var emoColor = N.Core.EMOTION_COLORS[m.emotion] || '#94a3b8';
             var emoHtml = m.emotion ? '<span class=\"badge\" style=\"background:' + emoColor + '22;color:' + emoColor + ';border:1px solid ' + emoColor + '44\">' + esc(m.emotion) + (m.emotion_intensity != null ? '(' + m.emotion_intensity.toFixed(1) + ')' : '') + '</span>' : '';
             var emotionBadgesHtml = renderEmotionBadges(m.emotion, m.emotion_intensity);
             var strHtml = m.strength != null ? '<span style=\"color:var(--accent-yellow)\"><i data-lucide="zap"></i>' + m.strength.toFixed(2) + '</span>' : '';
@@ -478,7 +478,7 @@ function openMemModal(mem) {
 
     var tags = (mem.tags || []);
     var tagsHtml = tags.map(function(t){ return tagChipHtml(t); }).join(' ');
-    var emoColor = window.EMOTION_COLORS[mem.emotion] || '#94a3b8';
+    var emoColor = N.Core.EMOTION_COLORS[mem.emotion] || '#94a3b8';
 
     var h = '';
     h += '<div class="mem-modal-header">';
@@ -556,9 +556,9 @@ function openMemModal(mem) {
                     var val = mem.body_state[k];
                     var pct = Math.round(val * 100);
                     h += '<div style=\"display:flex;align-items:center;gap:8px\">';
-                    h += '<span style=\"font-size:0.75rem;color:var(--text-muted);min-width:80px\">' + window.BODY_LABELS[k] + '</span>';
+                    h += '<span style=\"font-size:0.75rem;color:var(--text-muted);min-width:80px\">' + N.Core.BODY_LABELS[k] + '</span>';
                     h += '<div style=\"flex:1;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden\">';
-                    h += '<div style=\"height:100%;width:' + pct + '%;background:' + window.BODY_BAR_COLORS[k] + ';border-radius:3px\"></div>';
+                    h += '<div style=\"height:100%;width:' + pct + '%;background:' + N.Core.BODY_BAR_COLORS[k] + ';border-radius:3px\"></div>';
                     h += '</div>';
                     h += '<span style=\"font-size:0.75rem;color:var(--text-muted);min-width:32px;text-align:right\">' + pct + '%</span>';
                     h += '</div>';

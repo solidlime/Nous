@@ -103,7 +103,7 @@ function buildVisData(nodes, edges) {
     var fontColor = _graphFontColor();
 
     var visNodes = nodes.map(function(n) {
-        var emoColor = window.EMOTION_COLORS[n.emotion] || '#94a3b8';
+        var emoColor = N.Core.EMOTION_COLORS[n.emotion] || '#94a3b8';
         var sz = 10 + (n.importance || 0.5) * 30;
         var nodeLabel = truncate(n.content, 20) || n.key || 'Unknown';
         return {
@@ -302,7 +302,7 @@ function openGraphDetailPanel(data) {
         return '<span class="badge badge-purple">' + esc(t) + '</span>';
     }).join(' ');
 
-    var emoColor = window.EMOTION_COLORS[data.emotion] || '#94a3b8';
+    var emoColor = N.Core.EMOTION_COLORS[data.emotion] || '#94a3b8';
 
     var html = '';
     /* Key */

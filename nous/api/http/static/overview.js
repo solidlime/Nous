@@ -414,7 +414,7 @@ async function loadOverview() {
                 ${(function() {
                     /* Constants now from core/constants.js via adapter globals */
                     if (ctx.emotion) {
-                        var barGrad = window.EMOTION_BAR_COLORS[ctx.emotion] || window.EMOTION_BAR_COLORS.neutral;
+                        var barGrad = N.Core.EMOTION_BAR_COLORS[ctx.emotion] || N.Core.EMOTION_BAR_COLORS.neutral;
                         var pct = (ctx.emotion_intensity || 0) * 100;
                         pct = Math.round(pct);
                         return '<div style="margin-bottom:12px">' +
@@ -452,7 +452,7 @@ async function loadOverview() {
                         <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.fatigue != null ? (stats.fatigue * 100).toFixed(0) + '%' : '--'}</span>
                     </div>
                     <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.fatigue != null ? (stats.fatigue * 100).toFixed(1) : 0}%;background:${window.BODY_BAR_COLORS.fatigue};border-radius:3px;transition:width 0.4s ease"></div>
+                        <div style="height:100%;width:${stats.fatigue != null ? (stats.fatigue * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.fatigue};border-radius:3px;transition:width 0.4s ease"></div>
                     </div>
                 </div>
                 <div>
@@ -461,7 +461,7 @@ async function loadOverview() {
                         <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.warmth != null ? (stats.warmth * 100).toFixed(0) + '%' : '--'}</span>
                     </div>
                     <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.warmth != null ? (stats.warmth * 100).toFixed(1) : 0}%;background:${window.BODY_BAR_COLORS.warmth};border-radius:3px;transition:width 0.4s ease"></div>
+                        <div style="height:100%;width:${stats.warmth != null ? (stats.warmth * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.warmth};border-radius:3px;transition:width 0.4s ease"></div>
                     </div>
                 </div>
                 <div>
@@ -470,7 +470,7 @@ async function loadOverview() {
                         <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.arousal != null ? (stats.arousal * 100).toFixed(0) + '%' : '--'}</span>
                     </div>
                     <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.arousal != null ? (stats.arousal * 100).toFixed(1) : 0}%;background:${window.BODY_BAR_COLORS.arousal};border-radius:3px;transition:width 0.4s ease"></div>
+                        <div style="height:100%;width:${stats.arousal != null ? (stats.arousal * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.arousal};border-radius:3px;transition:width 0.4s ease"></div>
                     </div>
                 </div>
                 <div>
@@ -479,7 +479,7 @@ async function loadOverview() {
                         <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.heart_rate != null ? (stats.heart_rate * 100).toFixed(0) + '%' : '--'}</span>
                     </div>
                     <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.heart_rate != null ? (stats.heart_rate * 100).toFixed(1) : 0}%;background:${window.BODY_BAR_COLORS.heart_rate};border-radius:3px;transition:width 0.4s ease"></div>
+                        <div style="height:100%;width:${stats.heart_rate != null ? (stats.heart_rate * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.heart_rate};border-radius:3px;transition:width 0.4s ease"></div>
                     </div>
                 </div>
                 <div>
@@ -488,7 +488,7 @@ async function loadOverview() {
                         <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.pain != null ? (stats.pain * 100).toFixed(0) + '%' : '--'}</span>
                     </div>
                     <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.pain != null ? (stats.pain * 100).toFixed(1) : 0}%;background:${window.BODY_BAR_COLORS.pain};border-radius:3px;transition:width 0.4s ease"></div>
+                        <div style="height:100%;width:${stats.pain != null ? (stats.pain * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.pain};border-radius:3px;transition:width 0.4s ease"></div>
                     </div>
                 </div>
             </div>
@@ -607,7 +607,7 @@ async function loadOverview() {
         if (tgCtx && allTags.length) {
             S.charts['chart-tags'] = new Chart(tgCtx, {
                 type: 'doughnut',
-                data: { labels: allTags.map(t=>t[0]), datasets: [{ data: allTags.map(t=>t[1]), backgroundColor: window.CHART_COLORS.slice(0, allTags.length), borderWidth: 0 }] },
+                data: { labels: allTags.map(t=>t[0]), datasets: [{ data: allTags.map(t=>t[1]), backgroundColor: N.Core.CHART_COLORS.slice(0, allTags.length), borderWidth: 0 }] },
                 options: { ...chartOpts(), cutout: '60%' }
             });
         }
