@@ -64,7 +64,7 @@ async function doAutoSave(cat, key, inputId, value) {
 
     /* Show saving state */
     statusEl.className = 'setting-status status-saving visible';
-    statusEl.innerHTML = '<span class="setting-spinner"></span> Saving...';
+    safeSetHTML(statusEl, '<span class="setting-spinner"></span> Saving...');
 
     /* Clear previous error */
     var row = input ? input.closest('.setting-row') : null;
@@ -79,7 +79,7 @@ async function doAutoSave(cat, key, inputId, value) {
 
         /* Show saved state */
         statusEl.className = 'setting-status status-saved visible';
-        statusEl.innerHTML = '✓ Saved';
+                safeSetHTML(statusEl, '✓ Saved');
 
         /* Update source badge to "override" */
         if (row) {
@@ -87,7 +87,7 @@ async function doAutoSave(cat, key, inputId, value) {
             if (srcEl) {
                 srcEl.className = 'setting-source source-override';
                 srcEl.title = 'Set via WebUI override';
-                srcEl.innerHTML = '<i data-lucide="edit-3"></i> override';
+                            safeSetHTML(srcEl, '<i data-lucide="edit-3"></i> override');
             }
             /* Show reset button and diff dot */
             var resetBtn = row.querySelector('.setting-reset-btn');
@@ -99,7 +99,7 @@ async function doAutoSave(cat, key, inputId, value) {
         /* Start polling for reload categories */
         if (RELOAD_CATEGORIES.has(cat)) {
             statusEl.className = 'setting-status status-reloading visible';
-            statusEl.innerHTML = '<span class="setting-spinner reloading"></span> Reloading...';
+            safeSetHTML(statusEl, '<span class="setting-spinner reloading"></span> Reloading...');
             startStatusPoll();
         }
 
@@ -121,7 +121,7 @@ async function doAutoSave(cat, key, inputId, value) {
         /* Show error state */
         var errMsg = e.message || 'Save failed';
         statusEl.className = 'setting-status status-error visible';
-        statusEl.innerHTML = '✕ Error';
+        safeSetHTML(statusEl, '✕ Error');
         if (errEl) {
             errEl.textContent = errMsg;
             errEl.className = 'setting-inline-error visible';
@@ -151,7 +151,7 @@ async function loadSettings() {
         renderSettings(el, settingsData, status);
         updateLastTime();
     } catch (e) {
-        el.innerHTML = errorCard('Failed to load settings: ' + e.message);
+        safeSetHTML(el, errorCard('Failed to load settings: ' + e.message));
     }
 }
 
@@ -361,7 +361,7 @@ function renderSettings(el, settings, status) {
     html += '<div id="global-apply-details" style="display:none;width:100%;margin-top:8px;font-size:0.78rem;color:var(--text-muted)"></div>';
     html += '</div>';
 
-    el.innerHTML = html;
+    safeSetHTML(el, html);
 
     /* ═══════════════════════ EVENT BINDING ═══════════════════════ */
 
@@ -403,7 +403,7 @@ function renderSettings(el, settings, status) {
             if (!input) return;
             var isPassword = input.type === 'password';
             input.type = isPassword ? 'text' : 'password';
-            this.innerHTML = isPassword ? '<i data-lucide="eye-off"></i>' : '<i data-lucide="eye"></i>';
+            safeSetHTML(this, isPassword ? '<i data-lucide="eye-off"></i>' : '<i data-lucide="eye"></i>');
             if (typeof lucide !== 'undefined') lucide.createIcons();
         };
     });
@@ -422,12 +422,12 @@ function renderSettings(el, settings, status) {
                 btn.disabled = false;
                 btn.style.opacity = '1';
                 btn.style.cursor = 'pointer';
-                btn.innerHTML = '<i data-lucide="save"></i> Apply ' + count + ' Change' + (count > 1 ? 's' : '');
+                safeSetHTML(btn, '<i data-lucide="save"></i> Apply ' + count + ' Change' + (count > 1 ? 's' : ''));
             } else {
                 btn.disabled = true;
                 btn.style.opacity = '0.4';
                 btn.style.cursor = 'not-allowed';
-                btn.innerHTML = '<i data-lucide="save"></i> Apply Restart-Required Changes';
+                safeSetHTML(btn, '<i data-lucide="save"></i> Apply Restart-Required Changes');
             }
             if (typeof lucide !== 'undefined') lucide.createIcons();
         }
@@ -467,8 +467,8 @@ function renderSettings(el, settings, status) {
             var entries = Object.values(dirtyFields);
             if (entries.length === 0) return;
             btn.disabled = true;
-            btn.innerHTML = '<span class="setting-spinner"></span> Applying...';
-            if (statusEl) { statusEl.className = 'setting-status status-saving visible'; statusEl.innerHTML = '<span class="setting-spinner"></span> Saving...'; }
+            safeSetHTML(btn, '<span class="setting-spinner"></span> Applying...');
+            if (statusEl) { statusEl.className = 'setting-status status-saving visible'; safeSetHTML(statusEl, '<span class="setting-spinner"></span> Saving...'); }
             if (detailsEl) { detailsEl.style.display = 'none'; detailsEl.textContent = ''; }
 
             var saved = 0, failed = 0, restartNeeded = false;
@@ -490,7 +490,7 @@ function renderSettings(el, settings, status) {
                         if (srcEl) {
                             srcEl.className = 'setting-source source-override';
                             srcEl.title = 'Set via WebUI override';
-                            srcEl.innerHTML = '<i data-lucide="edit-3"></i> override';
+                safeSetHTML(srcEl, '<i data-lucide="edit-3"></i> override');
                         }
                     }
                 } catch (err) {
@@ -506,7 +506,7 @@ function renderSettings(el, settings, status) {
             if (failed > 0) {
                 var failKeys = (window.__settings_failed_keys || []).slice();
                 window.__settings_failed_keys = null;
-                if (statusEl) { statusEl.className = 'setting-status status-error visible'; statusEl.innerHTML = '✕ ' + failed + ' failed'; }
+                if (statusEl) { statusEl.className = 'setting-status status-error visible'; safeSetHTML(statusEl, '✕ ' + failed + ' failed'); }
                 /* Log batch failures in a structured way */
                 if (failKeys.length > 3) {
                     console.group('[settings] batch save failures');
@@ -515,14 +515,14 @@ function renderSettings(el, settings, status) {
                 }
                 toast('<i data-lucide="alert-triangle"></i> ' + failed + ' failed: ' + failKeys.join(', '), 'error');
             } else if (restartNeeded) {
-                if (statusEl) { statusEl.className = 'setting-status status-saved visible'; statusEl.innerHTML = '✓ Saved — restart to apply'; }
+                if (statusEl) { statusEl.className = 'setting-status status-saved visible'; safeSetHTML(statusEl, '✓ Saved — restart to apply'); }
                 if (detailsEl) {
                     detailsEl.style.display = 'block';
                     detailsEl.textContent = 'Changes saved. Server restart is required for: ' + entries.map(function(e) { return e.key; }).join(', ');
                     detailsEl.style.color = 'var(--accent-orange)';
                 }
             } else {
-                if (statusEl) { statusEl.className = 'setting-status status-saved visible'; statusEl.innerHTML = '✓ All saved'; }
+                if (statusEl) { statusEl.className = 'setting-status status-saved visible'; safeSetHTML(statusEl, '✓ All saved'); }
             }
 
             toast(restartNeeded
@@ -723,7 +723,7 @@ async function resetField(cat, key, defaultVal) {
             var statusEl = document.getElementById('status-' + inputId);
             if (statusEl) {
                 statusEl.className = 'setting-status status-saved visible';
-                statusEl.innerHTML = '✓ Saved';
+        safeSetHTML(statusEl, '✓ Saved');
                 setTimeout(function() { statusEl.classList.remove('visible'); }, 2000);
             }
             /* Update internal data */
@@ -742,7 +742,7 @@ async function resetField(cat, key, defaultVal) {
                 if (srcEl) {
                     srcEl.className = 'setting-source source-default';
                     srcEl.title = 'Using default value';
-                    srcEl.innerHTML = '<i data-lucide="clipboard-list"></i> default';
+                    safeSetHTML(srcEl, '<i data-lucide="clipboard-list"></i> default');
                 }
             }
             /* Start polling for reload categories */
@@ -882,7 +882,7 @@ function renderSettingsProfiles() {
         html += '</div>';
     });
     if (!html) html = '<span style="font-size:0.8rem;color:var(--text-muted)">No profiles yet</span>';
-    container.innerHTML = html;
+    safeSetHTML(container, html);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -907,13 +907,13 @@ function startStatusPoll() {
                     if (s && (s.status === 'ready' || s.status === 'success')) {
                         document.querySelectorAll('[data-category="' + cat + '"] .setting-status.status-reloading').forEach(function(el) {
                             el.className = 'setting-status status-saved visible';
-                            el.innerHTML = '✓ Ready';
+                            safeSetHTML(el, '✓ Ready');
                             setTimeout(function() { el.classList.remove('visible'); }, 2000);
                         });
                     } else if (s && s.status === 'error') {
                         document.querySelectorAll('[data-category="' + cat + '"] .setting-status.status-reloading').forEach(function(el) {
                             el.className = 'setting-status status-error visible';
-                            el.innerHTML = '✕ Error';
+                            safeSetHTML(el, '✕ Error');
                             setTimeout(function() { el.classList.remove('visible'); }, 3000);
                         });
                     }
@@ -961,11 +961,11 @@ function updateCategoryStatusBanners(rs) {
             var existing = card.querySelector('.cat-reload-status');
             if (statusHtml) {
                 if (existing) {
-                    existing.innerHTML = statusHtml;
+                    safeSetHTML(existing, statusHtml);
                 } else {
                     var div = document.createElement('div');
                     div.className = 'cat-reload-status';
-                    div.innerHTML = statusHtml;
+                    safeSetHTML(div, statusHtml);
                     var body = card.querySelector('.cat-body');
                     if (body) body.insertAdjacentElement('beforebegin', div);
                 }
