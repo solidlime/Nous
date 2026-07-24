@@ -722,7 +722,7 @@ class TestPromptBuildStepAuthorNote:
     @pytest.mark.asyncio
     async def test_decision_creates_memory(self):
         """決定表現を含むメッセージ -> メモリが作成される."""
-        from unittest.mock import MagicMock
+        from unittest.mock import AsyncMock, MagicMock
 
         from nous.application.chat.pipeline.auto_capture import run_auto_capture
 
@@ -734,7 +734,7 @@ class TestPromptBuildStepAuthorNote:
 
         fake_memory = MagicMock()
         fake_memory.key = "mem_key_001"
-        ctx.memory_service.create_memory.return_value = Success(fake_memory)
+        ctx.memory_service.create_memory = AsyncMock(return_value=Success(fake_memory))
         ctx.vector_store = None
 
         result = await run_auto_capture(ctx, "test", [{"role": "user", "content": "来週からジムに通うことにした。"}])
@@ -747,7 +747,7 @@ class TestPromptBuildStepAuthorNote:
     @pytest.mark.asyncio
     async def test_max_memories_enforced(self):
         """max_memories の上限が機能する."""
-        from unittest.mock import MagicMock
+        from unittest.mock import AsyncMock, MagicMock
 
         from nous.application.chat.pipeline.auto_capture import run_auto_capture
 
@@ -758,7 +758,7 @@ class TestPromptBuildStepAuthorNote:
 
         fake_memory = MagicMock()
         fake_memory.key = "mem_key_xxx"
-        ctx.memory_service.create_memory.return_value = Success(fake_memory)
+        ctx.memory_service.create_memory = AsyncMock(return_value=Success(fake_memory))
         ctx.vector_store = None
 
         result = await run_auto_capture(
@@ -778,7 +778,7 @@ class TestPromptBuildStepAuthorNote:
     @pytest.mark.asyncio
     async def test_no_match_creates_no_memories(self):
         """パターンに合致しないメッセージ -> メモリ作成されない."""
-        from unittest.mock import MagicMock
+        from unittest.mock import AsyncMock, MagicMock
 
         from nous.application.chat.pipeline.auto_capture import run_auto_capture
 
@@ -787,6 +787,7 @@ class TestPromptBuildStepAuthorNote:
         ctx.settings.auto_capture.max_memories = 5
         ctx.persona = "test"
 
+        # No match expected → create_memory never awaited, no AsyncMock needed
         result = await run_auto_capture(
             ctx, "test", [{"role": "user", "content": "今日はいい天気ですね。何か食べましょう。"}]
         )
@@ -796,7 +797,7 @@ class TestPromptBuildStepAuthorNote:
     @pytest.mark.asyncio
     async def test_assistant_message_also_scanned(self):
         """アシスタントの応答もスキャン対象."""
-        from unittest.mock import MagicMock
+        from unittest.mock import AsyncMock, MagicMock
 
         from nous.application.chat.pipeline.auto_capture import run_auto_capture
 
@@ -808,7 +809,7 @@ class TestPromptBuildStepAuthorNote:
 
         fake_memory = MagicMock()
         fake_memory.key = "mem_key_asst"
-        ctx.memory_service.create_memory.return_value = Success(fake_memory)
+        ctx.memory_service.create_memory = AsyncMock(return_value=Success(fake_memory))
         ctx.vector_store = None
 
         result = await run_auto_capture(
@@ -823,7 +824,7 @@ class TestPromptBuildStepAuthorNote:
     @pytest.mark.asyncio
     async def test_memory_service_failure_handled_gracefully(self):
         """memory_service.create_memory の失敗が例外を伝播させない."""
-        from unittest.mock import MagicMock
+        from unittest.mock import AsyncMock, MagicMock
 
         from nous.application.chat.pipeline.auto_capture import run_auto_capture
 
@@ -832,7 +833,7 @@ class TestPromptBuildStepAuthorNote:
         ctx.settings.auto_capture.max_memories = 5
         ctx.persona = "test"
 
-        ctx.memory_service.create_memory.return_value = Failure(DomainError("DB error"))
+        ctx.memory_service.create_memory = AsyncMock(return_value=Failure(DomainError("DB error")))
 
         result = await run_auto_capture(ctx, "test", [{"role": "user", "content": "来週からジムに通うことにした。"}])
         assert result == []

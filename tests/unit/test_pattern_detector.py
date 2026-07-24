@@ -45,7 +45,7 @@ def _make_mock_ctx():
     ctx.persona = "test_persona"
 
     memory_service = MagicMock()
-    memory_service.create_memory = MagicMock(return_value=Success(MagicMock()))
+    memory_service.create_memory = AsyncMock(return_value=Success(MagicMock()))
     memory_service.delete_memory = MagicMock(return_value=Success(None))
     memory_service.get_by_tags = MagicMock(return_value=Success([]))
 
@@ -136,25 +136,28 @@ class TestGetLastAbstractionAt:
 class TestStoreLastAbstractionAt:
     """Tests for _store_last_abstraction_at()."""
 
-    def test_stores_meta_memory(self):
+    @pytest.mark.asyncio
+    async def test_stores_meta_memory(self):
         ctx = _make_mock_ctx()
         _set_get_by_tags(ctx, {"_meta": []})
         ts = datetime.now().astimezone()
-        _store_last_abstraction_at(ctx, "decision", ts)
+        await _store_last_abstraction_at(ctx, "decision", ts)
         ctx.memory_service.create_memory.assert_called_once()
 
-    def test_replaces_existing_meta(self):
+    @pytest.mark.asyncio
+    async def test_replaces_existing_meta(self):
         old_meta = _make_memory(
             key="old_meta", content="last_decision_abstraction: 2024-01-01T00:00:00", tags=[_MENTAL_MODEL_META_TAG]
         )
         ctx = _make_mock_ctx()
         _set_get_by_tags(ctx, {"_meta": [old_meta]})
         ts = datetime.now().astimezone()
-        _store_last_abstraction_at(ctx, "decision", ts)
+        await _store_last_abstraction_at(ctx, "decision", ts)
         ctx.memory_service.delete_memory.assert_called_once_with("old_meta")
         ctx.memory_service.create_memory.assert_called_once()
 
-    def test_replaces_only_matching_type(self):
+    @pytest.mark.asyncio
+    async def test_replaces_only_matching_type(self):
         old_meta_1 = _make_memory(
             key="meta_1", content="last_decision_abstraction: 2024-01-01T00:00:00", tags=[_MENTAL_MODEL_META_TAG]
         )
@@ -164,7 +167,7 @@ class TestStoreLastAbstractionAt:
         ctx = _make_mock_ctx()
         _set_get_by_tags(ctx, {"_meta": [old_meta_1, old_meta_2]})
         ts = datetime.now().astimezone()
-        _store_last_abstraction_at(ctx, "decision", ts)
+        await _store_last_abstraction_at(ctx, "decision", ts)
         ctx.memory_service.delete_memory.assert_called_once_with("meta_1")
 
 

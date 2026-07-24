@@ -52,7 +52,7 @@ def _get_last_abstraction_at(ctx: AppContext, type_tag: str) -> datetime | None:
     return None
 
 
-def _store_last_abstraction_at(ctx: AppContext, type_tag: str, ts: datetime) -> None:
+async def _store_last_abstraction_at(ctx: AppContext, type_tag: str, ts: datetime) -> None:
     """指定タイプの抽象化時刻をメタ記憶として保存する（古いものを削除して置き換え）。"""
     prefix = f"last_{type_tag}_abstraction:"
     existing = ctx.memory_service.get_by_tags([_MENTAL_MODEL_META_TAG])
@@ -61,15 +61,11 @@ def _store_last_abstraction_at(ctx: AppContext, type_tag: str, ts: datetime) -> 
             if mem.content.startswith(prefix):
                 ctx.memory_service.delete_memory(mem.key)
 
-    import asyncio as _asyncio
-
-    _asyncio.run(
-        ctx.memory_service.create_memory(
-            content=f"{prefix} {ts.isoformat()}",
-            importance=0.1,
-            tags=[_MENTAL_MODEL_META_TAG],
-            emotion="neutral",
-        )
+    await ctx.memory_service.create_memory(
+        content=f"{prefix} {ts.isoformat()}",
+        importance=0.1,
+        tags=[_MENTAL_MODEL_META_TAG],
+        emotion="neutral",
     )
 
 
@@ -205,7 +201,7 @@ async def maybe_run_mental_model(
                 )
 
             # Update last abstraction time for this type tag
-            _store_last_abstraction_at(ctx, type_tag, datetime.now().astimezone())
+            await _store_last_abstraction_at(ctx, type_tag, datetime.now().astimezone())
 
             all_models.extend(models)
             logger.info(

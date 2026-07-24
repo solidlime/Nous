@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -76,7 +76,7 @@ class TestReflectionEngine:
             r.value = {"key": "mem_new"}
             return r
 
-        svc.create_memory = MagicMock(side_effect=create_memory_side_effect)
+        svc.create_memory = AsyncMock(side_effect=create_memory_side_effect)
         return svc
 
     @pytest.fixture
@@ -241,7 +241,7 @@ class TestReflectionEngineEdgeCases:
             r.is_ok = kwargs.get("content", "").startswith("First")
             return r
 
-        svc.create_memory = MagicMock(side_effect=create_side)
+        svc.create_memory = AsyncMock(side_effect=create_side)
 
         llm_instance = MagicMock()
 

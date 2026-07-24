@@ -121,10 +121,10 @@ class TestMaybeRunReflectionPersona:
         mem.key = "mem_001"
         recent_result.value = [mem]
         ctx.memory_service.get_recent.return_value = recent_result
-        # create_memory returns success
+        # create_memory is async, use AsyncMock
         create_result = MagicMock()
         create_result.is_ok = True
-        ctx.memory_service.create_memory.return_value = create_result
+        ctx.memory_service.create_memory = AsyncMock(return_value=create_result)
         # get_by_tags for last_reflection check — return empty
         tags_result = MagicMock()
         tags_result.is_ok = True

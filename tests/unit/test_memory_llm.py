@@ -639,6 +639,7 @@ class TestRunMemoryLLM:
         ctx.persona = "test_persona"
         ctx.persona_service = MagicMock()
         ctx.memory_service = MagicMock()
+        ctx.memory_service.create_memory = AsyncMock()
         ctx.equipment_service = MagicMock()
         ctx.search_engine = MagicMock()
 

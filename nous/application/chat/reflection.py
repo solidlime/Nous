@@ -65,7 +65,7 @@ def _get_last_reflection_at(ctx: AppContext) -> datetime | None:
     return None
 
 
-def _store_last_reflection_at(ctx: AppContext, ts: datetime) -> None:
+async def _store_last_reflection_at(ctx: AppContext, ts: datetime) -> None:
     """Store reflection timestamp as meta-memory (delete old and replace)."""
     existing = ctx.memory_service.get_by_tags([_REFLECTION_META_TAG])
     if existing.is_ok and existing.value:
@@ -73,16 +73,12 @@ def _store_last_reflection_at(ctx: AppContext, ts: datetime) -> None:
             if mem.content.startswith("last_reflection_at:"):
                 ctx.memory_service.delete_memory(mem.key)
 
-    import asyncio as _asyncio
-
-    _asyncio.run(
-        ctx.memory_service.create_memory(
-            content=f"last_reflection_at: {ts.isoformat()}",
-            importance=0.1,
-            tags=[_REFLECTION_META_TAG],
-            emotion="neutral",
-            persona=ctx.persona,
-        )
+    await ctx.memory_service.create_memory(
+        content=f"last_reflection_at: {ts.isoformat()}",
+        importance=0.1,
+        tags=[_REFLECTION_META_TAG],
+        emotion="neutral",
+        persona=ctx.persona,
     )
 
 
@@ -183,9 +179,7 @@ async def maybe_run_reflection(
         return []
 
     for insight in insights:
-    import asyncio as _asyncio
-
-    _asyncio.run(ctx.memory_service.create_memory(
+        await ctx.memory_service.create_memory(
             content=insight,
             importance=0.9,
             tags=["reflection"],
@@ -193,7 +187,7 @@ async def maybe_run_reflection(
             persona=ctx.persona,
         )
 
-    _store_last_reflection_at(ctx, now)
+    await _store_last_reflection_at(ctx, now)
     logger.info("ReflectionEngine: stored %d insights for persona=%s", len(insights), ctx.persona)
     return insights
 
@@ -321,7 +315,7 @@ class ReflectionEngine:
             content = insight.get("insight", "")
             if not content:
                 continue
-            mem_result = memory_service.create_memory(
+            mem_result = await memory_service.create_memory(
                 persona=persona,
                 content=content,
                 kind="semantic",
