@@ -160,6 +160,28 @@ function hideHelpTooltip() {
   }
 }
 
+// Prevent help icon click from toggling parent details/summary, and toggle tooltip on click
+var _helpClickBound = false;
+function _bindHelpIconClicks() {
+  if (_helpClickBound) return;
+  _helpClickBound = true;
+  document.addEventListener("click", function(e) {
+    var icon = e.target.closest(".chat-help-icon");
+    if (!icon) return;
+    e.stopPropagation();
+    e.preventDefault();
+    var match = (icon.getAttribute("onmouseenter") || "").match(/showHelp\(event,\s*'([^']+)'\)/);
+    if (!match) return;
+    var category = match[1];
+    var existing = document.querySelector(".chat-help-tooltip");
+    if (existing) {
+      hideHelpTooltip();
+    } else {
+      showHelpTooltip({ target: icon, currentTarget: icon }, category);
+    }
+  }, true);
+}
+
 // ------------------------------------------------------------------
 // Chat initialization
 // ------------------------------------------------------------------
@@ -186,6 +208,7 @@ async function loadChat() {
   loadChatCommitments();
   N.Chat.equipment.load();
   N.Core.refreshIcons();
+  _bindHelpIconClicks();
 
   // --- Restore panel open/closed state from cookies to DOM ---
   var _settingsPanel = document.getElementById("settings-panel");
