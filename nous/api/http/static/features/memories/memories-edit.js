@@ -128,7 +128,7 @@ function openMemModal(mem) {
 
     /* Emotion bar */
     if (mem.emotion) {
-        h += '<div style=\"margin-bottom:16px\">' + renderEmotionBars(mem.emotion, mem.emotion_intensity) + '</div>';
+        h += '<div style=\"margin-bottom:16px\">' + N.Components.memoryCard.renderEmotionBars(mem.emotion, mem.emotion_intensity) + '</div>';
     }
 
     /* Created at */
@@ -299,7 +299,7 @@ async function saveMemory() {
    deleteMemory
    ================================================================ */
 async function deleteMemory(key) {
-    showConfirm('この記憶を削除しますか？この操作は取り消せません。', async function() {
+    N.Components.modal.showConfirm('この記憶を削除しますか？この操作は取り消せません。', async function() {
         try {
             await api('/api/memories/' + encodeURIComponent(S.persona) + '/' + encodeURIComponent(key), {
                 method: 'DELETE'
@@ -320,7 +320,7 @@ async function deleteMemory(key) {
 async function batchDeleteMemories() {
     var keys = Array.from(S.mem.selected);
     if (keys.length === 0) { toast('No memories selected', 'error'); return; }
-    showConfirm(keys.length + '件の記憶を削除しますか？この操作は取り消せません。', async function() {
+    N.Components.modal.showConfirm(keys.length + '件の記憶を削除しますか？この操作は取り消せません。', async function() {
         var ok = 0, failures = [];
         for (var i = 0; i < keys.length; i++) {
             try {

@@ -224,7 +224,10 @@ function chatInputKeydownHandler(e) {
         S.slashCommandIndex--;
         updateSlashSelection(items);
       }
-    } else if (e.key === "Enter" && !e.shiftKey) {
+    } else if (e.key === "Enter" && e.shiftKey) {
+      // Shift+Enter in popup: send (handled by main handler below, skip popup select)
+      return;
+    } else if (e.key === "Enter") {
       e.preventDefault();
       if (S.slashCommandIndex >= 0 && S.slashCommandIndex < items.length) {
         items[S.slashCommandIndex].click();
@@ -237,7 +240,7 @@ function chatInputKeydownHandler(e) {
     }
     // Escape continues to default handler below
   }
-  if (e.key === "Enter" && !e.shiftKey) {
+  if (e.key === "Enter" && e.shiftKey) {
     e.preventDefault();
     const val = input.value.trim();
     hideCommandPopup();
@@ -290,15 +293,15 @@ async function loadChatCommitments() {
       "/api/chat/" + encodeURIComponent(S.persona) + "/commitments",
     );
     if (Array.isArray(data.goals)) {
-      updateMemoryPanel(undefined, undefined, data.goals);
+      N.Chat.memoryPanel.update(undefined, undefined, data.goals);
     }
     if (data.insights && data.insights.length > 0) {
-      updateReflectionPanel(data.insights);
+      N.Chat.memoryPanel.updateReflection(data.insights);
     }
   } catch (e) {
     console.error("[loadChatCommitments] failed:", e);
     toast("リフレクション読込失敗: " + e.message, "error");
-    updateReflectionPanel([]);
+    N.Chat.memoryPanel.updateReflection([]);
   }
 }
 
@@ -387,7 +390,7 @@ function renderDebugPanel(anchorEl, data) {
 N.Chat.core = {
   showHelp: showHelpTooltip,
   hideHelp: hideHelpTooltip,
-  load: loadChat,
+  loadChat: loadChat,
   setupInput: setupChatInputHandler,
   setupInputWithObserver: setupChatInputHandlerWithObserver,
   keydown: chatInputKeydownHandler,

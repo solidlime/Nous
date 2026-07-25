@@ -226,7 +226,7 @@ function applyChatConfig(cfg) {
   if (voiceSpeed) voiceSpeed.value = cfg.voice_speed ?? 1.0;
   if (voiceSpeed) document.getElementById("chat-voice-speed-val").textContent = (cfg.voice_speed ?? 1.0).toFixed(2) + "x";
   // Check connection status
-  checkVoiceConnection();
+  N.Chat.tts.checkConnection();
   // Debug mode
   setChecked("chat-debug-mode", cfg.debug_mode === true);
   const statusEl = document.getElementById("chat-config-status");

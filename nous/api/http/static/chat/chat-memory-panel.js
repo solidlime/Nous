@@ -245,7 +245,7 @@ async function deleteMemCard(key) {
         },
       );
       toast("メモリを削除しました", "success");
-      loadChatCommitments(); // refresh panels
+      N.Chat.core.loadCommitments(); // refresh panels
     } catch (e) {
       toast("削除失敗: " + e.message, "error");
     }
@@ -267,7 +267,7 @@ async function completeGoal(key, content) {
     );
     if (resp.status === "ok") {
       toast("目標を達成しました: " + (resp.updated || content), "success");
-      loadChatCommitments();
+      N.Chat.core.loadCommitments();
     } else {
       toast("完了失敗: " + (resp.message || ""), "error");
     }

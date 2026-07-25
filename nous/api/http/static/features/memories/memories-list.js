@@ -135,8 +135,8 @@ function renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSe
             var tagsHtml = tags.slice(0, 3).map(function(t){ return N.Features.Memories.tagChipHtml(t); }).join(' ');
             var impPct = m.importance != null ? (m.importance * 100) : 0;
             var timeStr = m.created_at ? relativeTime(m.created_at) : '';
-            var bodyCompactHtml = renderBodyStateCompact(m.body_state);
-            var emotionCompactHtml = renderEmotionBadges(m.emotion, m.emotion_intensity);
+            var bodyCompactHtml = N.Components.memoryCard.renderBodyStateCompact(m.body_state);
+            var emotionCompactHtml = N.Components.memoryCard.renderEmotionBadges(m.emotion, m.emotion_intensity);
 
             html += '<div class=\"memory-compact\" data-memkey=\"' + esc(key) + '\">';
             html += '<span class=\"' + cbClass + '\"><input type=\"checkbox\" class=\"mem-checkbox\" data-key=\"' + esc(key) + '\"' + checked + '></span>';
@@ -156,11 +156,11 @@ function renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSe
             var tagsHtml = tags.map(function(t){ return N.Features.Memories.tagChipHtml(t); }).join(' ');
             var emoColor = N.Core.EMOTION_COLORS[m.emotion] || '#94a3b8';
             var emoHtml = m.emotion ? '<span class=\"badge\" style=\"background:' + emoColor + '22;color:' + emoColor + ';border:1px solid ' + emoColor + '44\">' + esc(m.emotion) + (m.emotion_intensity != null ? '(' + m.emotion_intensity.toFixed(1) + ')' : '') + '</span>' : '';
-            var emotionBadgesHtml = renderEmotionBadges(m.emotion, m.emotion_intensity);
+            var emotionBadgesHtml = N.Components.memoryCard.renderEmotionBadges(m.emotion, m.emotion_intensity);
             var strHtml = m.strength != null ? '<span style=\"color:var(--accent-yellow)\"><i data-lucide="zap"></i>' + m.strength.toFixed(2) + '</span>' : '';
             var timeHtml = m.created_at ? '<span>\uD83D\uDCC5 ' + relativeTime(m.created_at) + '</span>' : '';
             var scoreHtml = m._score != null ? '<span class=\"badge badge-green\">Score: ' + m._score.toFixed(3) + '</span>' : '';
-            var bodyCardHtml = renderBodyStateCompact(m.body_state);
+            var bodyCardHtml = N.Components.memoryCard.renderBodyStateCompact(m.body_state);
             html += '<div class="memory-card" style="cursor:pointer" data-memkey="' + esc(key) + '">';
             html += '<div style=\"display:flex;align-items:center;gap:8px\">';
             html += '<span class=\"' + cbClass + '\"><input type=\"checkbox\" class=\"mem-checkbox\" data-key=\"' + esc(key) + '\"' + checked + '></span>';

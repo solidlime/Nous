@@ -517,24 +517,24 @@ async function chatSend(retry) {
           contentParts.push({ type: "tool_result", id: evt.id, result: evt.result });
           statusEl.textContent = "応答中...";
         } else if (evt.type === "memory_activity") {
-          updateMemoryPanel(evt.retrieved, evt.saved, evt.goals);
+          N.Chat.memoryPanel.update(evt.retrieved, evt.saved, evt.goals);
           if (_memoryActivityTimer) clearTimeout(_memoryActivityTimer);
-          _memoryActivityTimer = setTimeout(function() { loadChatCommitments(); }, 500);
+          _memoryActivityTimer = setTimeout(function() { N.Chat.core.loadCommitments(); }, 500);
         } else if (evt.type === "inventory_update") {
-          updateEquipmentPanel(evt.update);
+          N.Chat.equipment.update(evt.update);
         } else if (evt.type === "reflection_start") {
-          showReflectionStart();
+          N.Chat.memoryPanel.showReflection();
         } else if (evt.type === "reflection_done") {
-          updateReflectionPanel(evt.insights);
+          N.Chat.memoryPanel.updateReflection(evt.insights);
         } else if (evt.type === "session_summarized") {
-          showSessionSummarized(evt.summary);
+          N.Chat.memoryPanel.sessionSummarized(evt.summary);
         } else if (evt.type === "context_compressed") {
-          showContextCompressed(evt);
+          N.Chat.memoryPanel.contextCompressed(evt);
         } else if (evt.type === "image_gen_start") {
-          showImageGenSpinner(evt);
+          N.Chat.tools.showGenSpinner(evt);
         } else if (evt.type === "image_gen_result") {
           console.log("[SSE] image_gen_result received:", Object.keys(evt), "images:", evt.images ? evt.images.length : "NONE");
-          showImageGenResult(evt);
+          N.Chat.tools.showGenResult(evt);
         } else if (evt.type === "error") {
           removeTypingIndicator();
           toast("エラー: " + evt.message, "error");

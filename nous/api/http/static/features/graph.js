@@ -345,14 +345,14 @@ function openGraphDetailPanel(data) {
     /* Emotion bar */
     if (data.emotion) {
         html += '<div style="margin-bottom:16px">';
-        html += renderEmotionBars(data.emotion, data.emotion_intensity);
+        html += N.Components.memoryCard.renderEmotionBars(data.emotion, data.emotion_intensity);
         html += '</div>';
     }
 
     /* Body state bars */
     if (data.body_state && Object.keys(data.body_state).length > 0) {
         html += '<div style="margin-bottom:16px">';
-        html += renderBodyStateBars(data.body_state);
+        html += N.Components.memoryCard.renderBodyStateBars(data.body_state);
         html += '</div>';
     }
 
