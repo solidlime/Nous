@@ -298,10 +298,17 @@ html.light .chat-tool-result-content {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
-#settings-panel.collapsed {
-  width: 0;
-  overflow: hidden;
+/* Desktop collapsed: zero-width hide */
+@media (min-width: 769px) {
+  #settings-panel.collapsed {
+    width: 0 !important;
+    min-width: 0;
+    overflow: hidden;
+    border-left: none !important;
+    padding: 0 !important;
+  }
 }
 
 /* Settings accordion - scrollable container */
@@ -576,8 +583,7 @@ input[type="range"].chat-field-input:focus {
 
 /* Settings sticky footer — Apple HIG */
 .settings-footer {
-  position: sticky;
-  bottom: 0;
+  flex-shrink: 0;
   background: linear-gradient(
     to top,
     var(--bg-primary) 0%,

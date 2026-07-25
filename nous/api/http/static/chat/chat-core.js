@@ -141,10 +141,20 @@ async function loadChat() {
   N.Core.refreshIcons();
 
   // --- Restore panel open/closed state from cookies to DOM ---
-  if (!CHAT.sidebarOpen) {
-    var _settingsPanel = document.getElementById("settings-panel");
-    if (_settingsPanel && !_settingsPanel.classList.contains("collapsed")) {
+  var _settingsPanel = document.getElementById("settings-panel");
+  if (_settingsPanel) {
+    if (CHAT.sidebarOpen) {
+      // Ensure panel is open: remove collapsed class, clear inline overrides
+      _settingsPanel.classList.remove("collapsed");
+      _settingsPanel.style.removeProperty("width");
+      _settingsPanel.style.display = "flex";
+    } else {
+      // Ensure panel is closed: add collapsed class
       _settingsPanel.classList.add("collapsed");
+      var _isMobile = window.innerWidth <= 768;
+      if (!_isMobile) {
+        _settingsPanel.style.width = "0";
+      }
     }
   }
   if (!CHAT.memoryPanelOpen) {
@@ -326,13 +336,25 @@ function toggleSettingsPanel() {
   CHAT.sidebarOpen = !CHAT.sidebarOpen;
   _setCookie("nous_sidebar", CHAT.sidebarOpen ? "1" : "0");
   if (CHAT.sidebarOpen) {
-    sidebar.style.width = isMobile ? "100%" : "360px";
-    sidebar.style.display = "flex";
+    // Open: clear collapsed state and restore dimensions
     sidebar.classList.remove("collapsed");
+    sidebar.style.removeProperty("width");
+    sidebar.style.display = "flex";
+    if (isMobile) {
+      sidebar.style.width = "100%";
+    }
     if (isMobile && backdrop) backdrop.classList.add("visible");
   } else {
-    sidebar.style.width = "0";
+    // Close: apply collapsed state
     sidebar.classList.add("collapsed");
+    if (isMobile) {
+      // Mobile: let CSS transform handle the slide-out
+      sidebar.style.removeProperty("width");
+    } else {
+      // Desktop: zero-width hide
+      sidebar.style.width = "0";
+      sidebar.style.removeProperty("display");
+    }
     if (backdrop) backdrop.classList.remove("visible");
   }
 }
