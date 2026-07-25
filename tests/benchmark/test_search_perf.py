@@ -34,8 +34,8 @@ def test_rrf_ranker_100(benchmark):
 def test_rrf_ranker_1000(benchmark):
     """Benchmark RRF ranking with 1000 results."""
     ranker = RRFRanker()
-    memories = make_memories(100)
-    results = [SearchResult(memories[i % 100], score=0.9 - i * 0.0001, source="keyword") for i in range(1000)]
+    memories = make_memories(1000)
+    results = [SearchResult(memories[i], score=0.9 - i * 0.0001, source="keyword") for i in range(1000)]
     query = SearchQuery(text="Python 機械学習", top_k=10)
     benchmark(ranker.rank, results, query)
 
