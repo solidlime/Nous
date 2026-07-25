@@ -143,11 +143,33 @@ class TrimmerMixin:
         recent = messages[-keep_count:]
         removed_count = len(messages) - keep_count
 
+        # Build a brief summary of cut user messages for context
+        old_messages = messages[:-keep_count]
+        user_msgs = [m for m in old_messages if m.role == "user" and m.content]
+        summary_parts: list[str] = []
+        if user_msgs:
+            # Pick first few and last few user messages as highlights
+            sample = []
+            n_sample = min(6, len(user_msgs))
+            if n_sample <= 6:
+                sample = user_msgs
+            else:
+                half = n_sample // 2
+                sample = user_msgs[:half] + user_msgs[-half:]
+            for m in sample:
+                snippet = (m.content or "")[:80].replace("\n", " ")
+                summary_parts.append(f"  - {snippet}")
+
+        summary_text = ""
+        if summary_parts:
+            summary_text = "\n削除された会話のハイライト:\n" + "\n".join(summary_parts)
+
         # Insert a system notice in place of removed messages
         note = LLMMessage(
             role="assistant",
             content=(
                 f"[システム: 過去{removed_count}件のメッセージを切り詰めました。"
+                f"{summary_text}\n"
                 f"直近{keep_recent_turns}ターンのみ保持しています。]"
             ),
         )
