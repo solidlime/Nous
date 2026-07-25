@@ -198,7 +198,7 @@ function _bindHelpIconListeners() {
 
   // --- Hover in (mouseover bubbles, unlike mouseenter) ---
   document.addEventListener("mouseover", function(e) {
-    var icon = e.target.closest(".chat-help-icon");
+    var icon = e.target && e.target.nodeType === 1 ? e.target.closest(".chat-help-icon") : null;
     if (!icon) return;
     if (icon === _activeTooltipIcon) return; // already showing for this icon
     if (_justClickedOff) return;             // suppress after click-to-unpin
@@ -208,7 +208,7 @@ function _bindHelpIconListeners() {
 
   // --- Hover out (mouseleave with capture for reliable leave detection) ---
   document.addEventListener("mouseleave", function(e) {
-    var icon = e.target.closest(".chat-help-icon");
+    var icon = e.target && e.target.nodeType === 1 ? e.target.closest(".chat-help-icon") : null;
     if (!icon) return;
     // Don't hide if mouse moved to child element or to the tooltip itself
     if (_isMouseStillOnIcon(icon, e.relatedTarget)) return;
@@ -219,7 +219,7 @@ function _bindHelpIconListeners() {
 
   // --- Click: toggle pin ---
   document.addEventListener("click", function(e) {
-    var icon = e.target.closest(".chat-help-icon");
+    var icon = e.target && e.target.nodeType === 1 ? e.target.closest(".chat-help-icon") : null;
     if (!icon) return;
     e.stopPropagation();
     e.preventDefault();
