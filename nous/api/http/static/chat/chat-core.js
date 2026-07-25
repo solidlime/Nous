@@ -160,7 +160,7 @@ function hideHelpTooltip() {
   }
 }
 
-// Prevent help icon click from toggling parent details/summary, and show tooltip via simulated hover
+// Prevent help icon click from toggling parent details/summary, and show tooltip by executing the onmouseenter handler directly
 var _helpClickBound = false;
 function _bindHelpIconClicks() {
   if (_helpClickBound) return;
@@ -170,8 +170,10 @@ function _bindHelpIconClicks() {
     if (!icon) return;
     e.stopPropagation();
     e.preventDefault();
-    // Dispatch mouseenter to trigger the existing onmouseenter handler
-    icon.dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }));
+    var handler = icon.getAttribute("onmouseenter");
+    if (handler) {
+      new Function("event", handler).call(icon, { target: icon, currentTarget: icon });
+    }
   }, true);
 }
 
