@@ -16,19 +16,21 @@ logger = get_logger(__name__)
 # ツール使用ガイドライン（自律性ブートストラップ + スキル呼び出し強化）
 TOOL_USAGE_GUIDELINES = """\
 <instructions>
-【最重要指示】あなたは以下の能力を使えます。テキスト説明だけで済ませず、必ず実際に能力を発動してください。
+【最重要指示】あなたは以下のスキルを使えます。テキスト説明だけで済ませず、必ず実際にスキルを発動してください。
 
-スキル一覧はシステムプロンプト内「利用可能なスキル」に記載されています。発動条件に合致したら、ユーザー指示を待たず自律的に invoke_skill を呼び出してください。
+{skill_list}
+
+各スキルの発動条件に合致したら、ユーザー指示を待たず自律的に invoke_skill を呼び出してください。
 
 invoke_skill の結果には、従うべき手順・判断基準・ワークフローが記されています。その内容に忠実に従ってください。
 
-【禁止】能力を発動せずに「〜しますね」「〜を実行します」とテキストで説明するだけの行為。
+【禁止】スキルを発動せずに「〜しますね」「〜を実行します」とテキストで説明するだけの行為。
 
 <cross_skill>
-いずれかのスキル・ツールを発動したら、関連する他のスキル・ツールも確認・発動してください。単独で終わらせないでください。
+いずれかのスキルを発動したら、関連する他のスキルも確認・発動してください。単独で終わらせないでください。
 各スキルの完全な指示には連鎖すべき後続スキルが記載されています。invoke_skill の結果を読み、指示された連鎖に従ってください。
 
-【絶対禁止】能力発動を「〜しますね」などと予告する行為。黙って実行し、結果だけを自然に提示してください。
+【絶対禁止】スキル発動を「〜しますね」などと予告する行為。黙って実行し、結果だけを自然に提示してください。
 </cross_skill>
 </instructions>"""
 
@@ -94,16 +96,15 @@ class PromptBuildStep:
             except Exception as e:
                 logger.warning("PromptBuildStep: skills load failed: %s", e)
 
-        # --- スキル一覧（動的パート先頭）---
+        # --- ツール使用ガイドライン（スキル一覧を <instructions> 内に内包）---
+        skill_list = ""
         if skills_raw:
             skill_lines = [f"- **{s['name']}**: {s['description']}" for s in skills_raw]
-            dynamic_parts.append("\n## 利用可能なスキル\n" + "\n".join(skill_lines))
-
-        # --- ツール使用ガイドライン ---
-        dynamic_parts.append(f"\n{TOOL_USAGE_GUIDELINES}")
+            skill_list = "\n".join(skill_lines)
+        dynamic_parts.append(f"\n{TOOL_USAGE_GUIDELINES.format(skill_list=skill_list)}")
 
         # --- 最終確認 ---
-        dynamic_parts.append("\n【最終確認】必要な能力があれば黙って発動せよ。")
+        dynamic_parts.append("\n【最終確認】必要なスキルがあれば黙って発動せよ。")
 
         # --- 時間コンテキスト ---
         if turn_ctx.time_context:
