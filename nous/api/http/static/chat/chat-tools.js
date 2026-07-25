@@ -296,15 +296,25 @@ function showImageGenResult(evt) {
     card.appendChild(imgEl);
     card.appendChild(meta);
 
-    // 画像カードをツールコール基準で挿入（履歴復元パターン chat-history.js:195 と統一）
-    var lastAssistant = container.querySelector('.chat-msg.assistant:last-child');
-    var lastToolCall = lastAssistant ? lastAssistant.querySelector('.chat-tool-call:last-child') : null;
-    if (lastToolCall) {
-      lastToolCall.insertAdjacentElement("afterend", card);
-    } else if (lastAssistant) {
-      lastAssistant.appendChild(card);
+    // 画像カードを該当ツールコールの直後に挿入（tool_use_id で特定）
+    var targetToolCall = null;
+    if (evt.tool_use_id) {
+      targetToolCall = container.querySelector('.chat-tool-call[data-tool-id="' + CSS.escape(evt.tool_use_id) + '"]');
+    }
+    // Fallback: tool_use_id がない場合（古いイベント）は lastToolCall
+    if (!targetToolCall) {
+      var lastAssistant = container.querySelector('.chat-msg.assistant:last-child');
+      targetToolCall = lastAssistant ? lastAssistant.querySelector('.chat-tool-call:last-child') : null;
+    }
+    if (targetToolCall) {
+      targetToolCall.insertAdjacentElement("afterend", card);
     } else {
-      container.appendChild(card);
+      var lastAssistant = container.querySelector('.chat-msg.assistant:last-child');
+      if (lastAssistant) {
+        lastAssistant.appendChild(card);
+      } else {
+        container.appendChild(card);
+      }
     }
   });
 
