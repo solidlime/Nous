@@ -285,6 +285,26 @@ async def _do_create_persona(persona_name: str) -> dict:
     }
 
 
+async def _do_delete_persona(persona: str) -> dict:
+    """Delete a persona by name. Returns status dict or error dict."""
+    settings = Settings()
+    persona_dir = (Path(settings.persona_dir) / persona).resolve()
+    root = Path(settings.persona_dir).resolve()
+    if not str(persona_dir).startswith(str(root) + "/"):
+        return {"error": "Invalid persona name"}
+    if not persona_dir.exists():
+        return {"error": f"Persona '{persona}' not found"}
+    try:
+        if persona in AppContextRegistry._contexts:
+            AppContextRegistry._contexts[persona].close()
+            del AppContextRegistry._contexts[persona]
+        shutil.rmtree(persona_dir)
+        return {"status": "ok", "deleted": persona}
+    except Exception:
+        logger.exception("delete_persona failure")
+        return {"error": "Internal server error"}
+
+
 # ── HTTP adapter layer — 元の関数名を維持 ───────────────────────────────
 
 
@@ -368,6 +388,16 @@ async def create_persona(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=201)
 
 
+async def delete_persona(request: Request) -> JSONResponse:
+    """DELETE /api/personas/{persona} — delete a persona."""
+    persona = _resolve_persona_from_request(request)
+    result = await _do_delete_persona(persona)
+    if "error" in result:
+        status_code = 400 if "Invalid" in result["error"] else 404 if "not found" in result["error"] else 500
+        return JSONResponse(result, status_code=status_code)
+    return JSONResponse(result)
+
+
 def register_persona_routes(mcp) -> None:
     mcp.custom_route("/health", methods=["GET"])(health)
     mcp.custom_route("/api/personas", methods=["GET"])(list_personas)
@@ -376,25 +406,7 @@ def register_persona_routes(mcp) -> None:
     mcp.custom_route("/api/dashboard/{persona}", methods=["GET"])(dashboard_data)
     mcp.custom_route("/api/import-conversation/{persona}", methods=["POST"])(import_conversation)
     mcp.custom_route("/api/personas", methods=["POST"])(create_persona)
-
-    @mcp.custom_route("/api/personas/{persona}", methods=["DELETE"])
-    async def delete_persona(request: Request) -> JSONResponse:
-        persona = _resolve_persona_from_request(request)
-        settings = Settings()
-        persona_dir = (Path(settings.persona_dir) / persona).resolve()
-        if not str(persona_dir).startswith(str(Path(settings.persona_dir).resolve()) + "/"):
-            return JSONResponse({"error": "Invalid persona name"}, status_code=400)
-        if not persona_dir.exists():
-            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
-        try:
-            if persona in AppContextRegistry._contexts:
-                AppContextRegistry._contexts[persona].close()
-                del AppContextRegistry._contexts[persona]
-            shutil.rmtree(persona_dir)
-            return JSONResponse({"status": "ok", "deleted": persona})
-        except Exception as exc:
-            logger.exception("Unexpected error: %s", exc)
-            return JSONResponse({"error": "Internal server error"}, status_code=500)
+    mcp.custom_route("/api/personas/{persona}", methods=["DELETE"])(delete_persona)
 
     @mcp.custom_route("/api/personas/{persona}/card.png", methods=["GET"])
     async def sillytavern_card(request: Request) -> Response:
