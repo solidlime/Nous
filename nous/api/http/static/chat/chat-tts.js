@@ -5,7 +5,7 @@
 (function(N) {
 "use strict";
 var C = N.Core;
-var toast = C.toast, safeSetHTML = C.safeSetHTML;
+var api = C.api, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var S = window.S;
 
 let _connectionCheckTimer = null;
