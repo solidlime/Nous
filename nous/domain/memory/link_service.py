@@ -14,23 +14,57 @@ class MemoryLinkService:
         self,
         link_repo: object | None,
         search_engine_ref: list,
+        session_event_repo: object | None = None,
     ) -> None:
         self._link_repo = link_repo
         self._search_engine_ref = search_engine_ref
+        self._session_event_repo = session_event_repo
 
     @property
     def _search_engine(self) -> SearchEngine | None:
         return self._search_engine_ref[0] if self._search_engine_ref else None
 
-    def _get_session_memories(self, _new_memory: Memory) -> list:
+    def _get_session_memories(
+        self,
+        _new_memory: Memory,
+        session_id: str | None = None,
+    ) -> list:
         """Return memories recently accessed in the current conversation turn.
 
-        TODO(blocked): session_eventテーブル実装待ち
+        Queries session_event table for tool.called events (memory_create,
+        memory_read) in the current session, then extracts the referenced
+        memory keys.
 
-        Stub implementation — always returns empty list.
-        Will be wired to session_event table or in-memory turn context
-        in a follow-up task.
+        Returns empty list when session_event_repo is unavailable or
+        session_id is not set (the current state — session_id is not yet
+        recorded in session_events, so plumbing is wired but inert).
         """
+        if session_id is None or self._session_event_repo is None:
+            return []
+
+        try:
+            events = self._session_event_repo.get_by_session(
+                session_id, limit=20
+            )
+        except Exception:
+            return []
+
+        memory_keys: list[str] = []
+        for event in events:
+            if event.event_type != "tool.called":
+                continue
+            summary = event.summary or ""
+            if "memory_create" not in summary and "memory_read" not in summary:
+                continue
+
+            # Extract memory key from result_summary patterns:
+            # "memory_read: ✓ Read memory: <key>"
+            if "Read memory:" in summary:
+                key = summary.split("Read memory:")[-1].strip()
+                if key:
+                    memory_keys.append(key)
+
+        # TODO: lookup Memory objects via repo when available
         return []
 
     @staticmethod
@@ -42,7 +76,11 @@ class MemoryLinkService:
             return "temporal"
         return "semantic"
 
-    def _create_hebbian_links(self, new_memory: Memory) -> None:
+    def _create_hebbian_links(
+        self,
+        new_memory: Memory,
+        session_id: str | None = None,
+    ) -> None:
         """Generate Hebbian links between *new_memory* and recently accessed memories.
 
         Hebbian co-fire principle: only memories accessed in the same conversation
@@ -52,7 +90,7 @@ class MemoryLinkService:
         if self._link_repo is None:
             return
 
-        co_accessed = self._get_session_memories(new_memory)
+        co_accessed = self._get_session_memories(new_memory, session_id)
         for candidate in co_accessed[:5]:  # max 5 links per new memory
             if candidate.key == new_memory.key:
                 continue
