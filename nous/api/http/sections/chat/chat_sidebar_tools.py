@@ -49,7 +49,7 @@ def _render_auto_capture_section() -> str:
     return """
                         <!-- Auto-capture (moved from Settings) -->
                         <details data-category="auto_capture">
-                            <summary><i data-lucide="camera"></i> 自動キャプチャ</summary>
+                            <summary><i data-lucide="camera"></i> 自動キャプチャ<span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'auto_capture')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-auto-capture-enabled"

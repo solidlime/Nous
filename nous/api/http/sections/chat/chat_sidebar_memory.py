@@ -137,7 +137,7 @@ def _render_memory_enrichment_section() -> str:
     return """
                         <!-- Memory enrichment (moved from Settings) -->
                         <details data-category="memory_enrichment">
-                            <summary><i data-lucide="layers"></i> 記憶エンリッチメント</summary>
+                            <summary><i data-lucide="layers"></i> 記憶エンリッチメント<span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'memory_enrichment')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-memory-enrichment-enabled"
@@ -194,7 +194,7 @@ def _render_forgetting_section() -> str:
     return """
                         <!-- Forgetting (moved from Settings) -->
                         <details data-category="forgetting">
-                            <summary><i data-lucide="eraser"></i> 忘却機構</summary>
+                            <summary><i data-lucide="eraser"></i> 忘却機構<span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'forgetting')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-forgetting-enabled"

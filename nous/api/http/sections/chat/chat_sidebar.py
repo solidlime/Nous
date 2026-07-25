@@ -36,7 +36,7 @@ def _render_memorag_section() -> str:
     return """
                         <!-- MemoRAG (moved from Settings) -->
                         <details data-category="memorag">
-                            <summary><i data-lucide="search"></i> MemoRAG</summary>
+                            <summary><i data-lucide="search"></i> MemoRAG<span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'memorag')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-memorag-enabled"
