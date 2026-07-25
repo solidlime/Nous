@@ -16,8 +16,8 @@ def register_skills_routes(mcp) -> None:
 
     @mcp.custom_route("/api/skills", methods=["GET"])
     async def list_skills(request: Request) -> JSONResponse:
-        from nous.domain.skill import SkillRepository
         from nous.config.settings import get_settings
+        from nous.domain.skill import SkillRepository
 
         repo = SkillRepository()
         skills = repo.load_from_dir(get_settings().skills_dir, persist=False)
@@ -25,8 +25,8 @@ def register_skills_routes(mcp) -> None:
 
     @mcp.custom_route("/api/skills", methods=["POST"])
     async def create_skill(request: Request) -> JSONResponse:
-        from nous.domain.skill import Skill, SkillRepository
         from nous.config.settings import get_settings
+        from nous.domain.skill import Skill, SkillRepository
 
         try:
             body = await request.json()
@@ -51,8 +51,8 @@ def register_skills_routes(mcp) -> None:
 
     @mcp.custom_route("/api/skills/{name}", methods=["PUT"])
     async def update_skill(request: Request) -> JSONResponse:
-        from nous.domain.skill import Skill, SkillRepository
         from nous.config.settings import get_settings
+        from nous.domain.skill import Skill, SkillRepository
 
         skill_name = request.path_params["name"]
         try:
@@ -74,8 +74,8 @@ def register_skills_routes(mcp) -> None:
 
     @mcp.custom_route("/api/skills/{name}", methods=["DELETE"])
     async def delete_skill(request: Request) -> JSONResponse:
-        from nous.domain.skill import SkillRepository
         from nous.config.settings import get_settings
+        from nous.domain.skill import SkillRepository
 
         skill_name = request.path_params["name"]
         repo = SkillRepository()

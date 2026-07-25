@@ -1,4 +1,4 @@
-.PHONY: lint test test-all typecheck coverage ci
+.PHONY: lint test test-all typecheck coverage coverage-fail bandit ci
 
 lint:
 	ruff check . && ruff format --check .
@@ -15,4 +15,10 @@ typecheck:
 coverage:
 	pytest --cov=nous --cov-report=term
 
-ci: lint typecheck test-all coverage
+coverage-fail:
+	pytest --cov=nous --cov-fail-under=70 --cov-report=term
+
+bandit:
+	bandit -r nous/ -ll
+
+ci: lint typecheck test-all bandit coverage-fail

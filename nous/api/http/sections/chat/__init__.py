@@ -1,6 +1,6 @@
 """Chat tab package — integrates all chat sub-modules."""
 
-from .chat_layout import render_chat_layout_prefix, render_chat_main, render_chat_layout_suffix
+from .chat_layout import render_chat_layout_prefix, render_chat_layout_suffix, render_chat_main
 from .chat_memory_panel import render_chat_memory_panel
 from .chat_sidebar import render_chat_sidebar
 

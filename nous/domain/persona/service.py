@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from nous.application.event_bus import EventBus
-    from nous.domain.memory.entities import Memory
     from nous.domain.memory.service import MemoryService
     from nous.domain.persona.repository import PersonaRepository
 

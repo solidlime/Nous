@@ -23,8 +23,8 @@ def register_chat_routes(mcp) -> None:
         ctx = _safe_get_context(persona)
         if not ctx:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
-        from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository
         from nous.config.settings import get_settings
+        from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository
 
         repo = ChatConfigFileRepository(get_settings().data_root)
         try:
@@ -45,8 +45,8 @@ def register_chat_routes(mcp) -> None:
         except Exception:
             return JSONResponse({"error": "Invalid JSON"}, status_code=400)
 
-        from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository
         from nous.config.settings import get_settings
+        from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository
 
         repo = ChatConfigFileRepository(get_settings().data_root)
         current = repo.get(persona)
@@ -76,8 +76,8 @@ def register_chat_routes(mcp) -> None:
         ctx = _safe_get_context(persona)
         if not ctx:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
-        from nous.domain.chat_config import ChatConfigFileRepository
         from nous.config.settings import get_settings
+        from nous.domain.chat_config import ChatConfigFileRepository
 
         repo = ChatConfigFileRepository(get_settings().data_root)
         config = repo.get(persona)
@@ -143,8 +143,8 @@ def register_chat_routes(mcp) -> None:
             return StreamingResponse(empty(), media_type="text/event-stream")
 
         from nous.application.chat_service import ChatService
-        from nous.domain.chat_config import ChatConfigFileRepository
         from nous.config.settings import get_settings
+        from nous.domain.chat_config import ChatConfigFileRepository
 
         repo = ChatConfigFileRepository(get_settings().data_root)
         config = repo.get(persona)
@@ -613,8 +613,8 @@ def register_chat_routes(mcp) -> None:
         if not ctx:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
         from nous.application.chat.tools.builtin import execute_tool
-        from nous.domain.chat_config import ChatConfigFileRepository
         from nous.config.settings import get_settings
+        from nous.domain.chat_config import ChatConfigFileRepository
 
         repo = ChatConfigFileRepository(get_settings().data_root)
         config = repo.get(persona)

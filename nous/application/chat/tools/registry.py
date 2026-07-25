@@ -7,9 +7,8 @@ from typing import TYPE_CHECKING
 
 from nous.application.chat.tools.builtin import execute_tool, filter_extra_tools, truncate_tool_result
 from nous.domain.shared.time_utils import get_now
-from nous.infrastructure.logging.structured import get_logger
-
 from nous.infrastructure.llm.base import ToolDefinition
+from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext

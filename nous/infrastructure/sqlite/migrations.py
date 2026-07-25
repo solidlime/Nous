@@ -7,12 +7,8 @@ times against the same database.
 from __future__ import annotations
 
 import sqlite3
-from typing import TYPE_CHECKING
 
 from nous.infrastructure.logging.structured import get_logger
-
-if TYPE_CHECKING:
-    pass
 
 logger = get_logger(__name__)
 

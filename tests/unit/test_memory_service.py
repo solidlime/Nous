@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
@@ -71,8 +72,8 @@ class InMemoryMemoryRepository:
     def consume_memory(self, key: str) -> Result[None, RepositoryError]:
         mem = self._store.get(key)
         if mem is not None:
-            from datetime import datetime, timezone
-            mem.last_consumed_at = datetime.now(timezone.utc)
+            from datetime import datetime
+            mem.last_consumed_at = datetime.now(UTC)
         return Success(None)
 
     def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], RepositoryError]:

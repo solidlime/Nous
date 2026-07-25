@@ -180,7 +180,7 @@ def print_result(result: dict, index: int):
         args = json.dumps(result["invoke_skill_args"], ensure_ascii=False)
         print(f"  ✅ invoke_skill('{skill}') 呼び出し成功: {args}")
     else:
-        print(f"  ❌ invoke_skill 未呼び出し")
+        print("  ❌ invoke_skill 未呼び出し")
 
     # 対象ツール結果
     expected = TEST_CASES[index]["expected_tool"]
@@ -209,19 +209,19 @@ def diagnose(result: dict, test_case: dict):
     """不合格時の診断情報を出力。"""
     if result["invoke_skill_called"] and not result["target_tool_called"]:
         print(f"  🔍 診断: invoke_skill は呼ばれたが {test_case['expected_tool']} が呼ばれていない")
-        print(f"     可能性: スキル内容を読んだ後、テキスト説明で済ませている")
+        print("     可能性: スキル内容を読んだ後、テキスト説明で済ませている")
         print(f"     残りテキスト: {result['text_response'][-200:]}")
     elif not result["invoke_skill_called"]:
         if result["all_tool_calls"]:
-            print(f"  🔍 診断: invoke_skill をスキップして直接ツールを呼んでいる")
+            print("  🔍 診断: invoke_skill をスキップして直接ツールを呼んでいる")
         else:
-            print(f"  🔍 診断: ツール呼び出しが一切ない。テキストのみの応答")
+            print("  🔍 診断: ツール呼び出しが一切ない。テキストのみの応答")
 
 
 def main():
     print("=" * 60)
     print("  Nous 内臓スキル 自律動作テスト")
-    print(f"  モデル: tencent/hy3:free (OpenRouter)")
+    print("  モデル: tencent/hy3:free (OpenRouter)")
     print(f"  API: {BASE_URL}/api/chat/{PERSONA}")
     print("=" * 60)
 
@@ -242,7 +242,7 @@ def main():
 
         # レート制限回避: Nemotronは激しいので多めに間隔
         if i < len(TEST_CASES) - 1:
-            print(f"  ⏳ レート制限待機 8秒...")
+            print("  ⏳ レート制限待機 8秒...")
             time.sleep(8)
 
     # サマリー

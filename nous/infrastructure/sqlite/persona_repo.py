@@ -8,7 +8,6 @@ from nous.domain.persona.entities import (
     EmotionRecord,
     PersonaState,
 )
-from nous.domain.persona.repository import PersonaRepository
 from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import format_iso, get_now, parse_iso

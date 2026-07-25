@@ -778,7 +778,7 @@ class TestPromptBuildStepAuthorNote:
     @pytest.mark.asyncio
     async def test_no_match_creates_no_memories(self):
         """パターンに合致しないメッセージ -> メモリ作成されない."""
-        from unittest.mock import AsyncMock, MagicMock
+        from unittest.mock import MagicMock
 
         from nous.application.chat.pipeline.auto_capture import run_auto_capture
 
@@ -1033,8 +1033,9 @@ class TestBuildTimeContext:
 
     def test_output_structure(self):
         """<TIME_CONTEXT>...</TIME_CONTEXT> で囲まれている"""
-        from nous.application.chat.pipeline.prepare import _build_time_context
         from unittest.mock import MagicMock
+
+        from nous.application.chat.pipeline.prepare import _build_time_context
 
         state = MagicMock()
         state.last_conversation_time = None
@@ -1044,8 +1045,9 @@ class TestBuildTimeContext:
 
     def test_contains_now_and_weekday(self):
         """出力に Now: と曜日が含まれる"""
-        from nous.application.chat.pipeline.prepare import _build_time_context
         from unittest.mock import MagicMock
+
+        from nous.application.chat.pipeline.prepare import _build_time_context
 
         state = MagicMock()
         state.last_conversation_time = None
@@ -1055,8 +1057,9 @@ class TestBuildTimeContext:
 
     def test_no_gap_when_no_last_conversation(self):
         """last_conversation_time が None の場合、ギャップ表示なし"""
-        from nous.application.chat.pipeline.prepare import _build_time_context
         from unittest.mock import MagicMock
+
+        from nous.application.chat.pipeline.prepare import _build_time_context
 
         state = MagicMock()
         state.last_conversation_time = None

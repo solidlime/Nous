@@ -6,8 +6,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from starlette.responses import JSONResponse
-from starlette.responses import FileResponse, Response
+from starlette.responses import FileResponse, JSONResponse, Response
 
 from nous.api.http.deps import _resolve_persona_from_request, _safe_get_context
 from nous.infrastructure.voice.factory import get_voice_engine
@@ -51,8 +50,8 @@ def register_tts_routes(mcp) -> None:
         if not ctx:
             return JSONResponse({"ok": False, "error": "Persona not found"}, status_code=404)
 
-        from nous.domain.chat_config import ChatConfigFileRepository
         from nous.config.settings import get_settings
+        from nous.domain.chat_config import ChatConfigFileRepository
 
         chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
         irodori_config = _get_irodori_config(ctx, chat_config)
@@ -172,8 +171,8 @@ def register_tts_routes(mcp) -> None:
         if not ctx:
             return JSONResponse({"ok": False, "error": "Persona not found"}, status_code=404)
 
-        from nous.domain.chat_config import ChatConfigFileRepository
         from nous.config.settings import get_settings
+        from nous.domain.chat_config import ChatConfigFileRepository
 
         chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
         irodori_config = _get_irodori_config(ctx, chat_config)
@@ -216,8 +215,8 @@ def register_tts_routes(mcp) -> None:
         if not ctx:
             return JSONResponse({"ok": True, "connected": False, "error": "Persona not found"}, status_code=404)
 
-        from nous.domain.chat_config import ChatConfigFileRepository
         from nous.config.settings import get_settings
+        from nous.domain.chat_config import ChatConfigFileRepository
 
         chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
         irodori_config = _get_irodori_config(ctx, chat_config)

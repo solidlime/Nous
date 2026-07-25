@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Protocol
 
-import pytest
-
 from nous.domain.persona.repository import PersonaRepository
 from nous.infrastructure.sqlite.persona_repo import (
     SQLitePersonaRepository,

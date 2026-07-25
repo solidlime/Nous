@@ -1,341 +1,334 @@
-# Nous v3.5.0 — リファクタリング指示書
+# Nous v3.5.0 — リファクタリング指示書 (2026-07-25 更新)
 
-> 作成: 2026-07-25 | コードベース全探索 + 3並列探索タスクの結果に基づく総合分析
-> 対象: `nous/` 全189 Pythonファイル、84テストファイル、6 persona設定
-
----
-
-## 1. コードベース主要指標
-
-| 指標 | 値 | 判断 |
-|------|:--:|------|
-| Pythonファイル数 | 189 | 適正規模 |
-| 総行数 | ~29,352 | — |
-| テスト数 | 1,337 pass / 7 skip | 高いテストカバレッジ |
-| 500行超ファイル | 15 | **注意**: 分解推奨 |
-| 800行超ファイル | 3 | **要対応**: session_store(809), memory_repo(776), prepare(748) |
-| `# noqa:` 抑制 | 49箇所 | **高い**: 多くはSQLインジェクション抑制 |
-| `# nosec` 抑制 | 13箇所 | **高い**: bandit警告の抑制 |
-| 未管理 `asyncio.create_task` | 8箇所 | **注意**: タスクリークの可能性 |
-| レポジトリ内 `node_modules` | 63MB | **問題**: Viteビルド成果物がGit管理下 |
+> **作成**: 2026-07-25 | コードベース全探索 + 4並列探索タスクの結果に基づく総合分析
+> **対象**: `nous/` 全211 Pythonファイル、92テストファイル、6ペルソナ設定
+> **前提**: Phase 1〜4 は完了済み。本指示書は現状の残存負債に焦点を当てる。
 
 ---
 
-## 2. 🔴 クリティカル（即時対応推奨）
+## Objective
 
-### 2.1 `asyncio.create_task()` のタスクリーク
+既存仕様を壊さず、残存する技術的負債を安全に削減し、今後変更しやすい状態にすること。
 
-| ファイル:行 | 問題 |
-|---|---|
-| `nous/domain/memory/service.py:245` | `create_task(_evolve_related_memories(...))` — 戻り値未保持 |
-| `nous/domain/memory/service.py:255` | `create_task(_invalidate_contradicted_memory(...))` — 戻り値未保持 |
-| `nous/application/chat/pipeline/post.py:119` | `create_task(...)` — 戻り値未保持 |
-| `nous/application/chat/pipeline/prepare.py:695,702` | 戻り値一部保持、一部未保持 |
-
-**リスク**: 未捕捉の例外がタスク消滅。メモリ進化・矛盾検出がサイレント失敗する。
-**対応**: 戻り値をリストで保持し、`done` コールバックで例外ログ。または `TaskGroup` に移行。
-
-### 2.2 SQLインジェクション抑制の濫用
-
-`nous/infrastructure/sqlite/memory_repo.py` 他で `f"SELECT * FROM memories WHERE {where_clause}"` + `# noqa: S608 # nosec B608` が多数。
-
-| ファイル | 件数 | 行例 |
-|---|---|---|
-| `memory_repo.py` | 10+ | L348-349: `f"SELECT * FROM memories WHERE {where_clause}"` |
-| `persona_repo.py` | — | 同様パターン |
-| `equipment_repo.py` | — | 同様パターン |
-
-**対応**: `WHERE {where_clause}` は文字列連結だが実際はプレースホルダで保護済み。ただし可読性と監査性のため、クエリビルダークラスに抽出し `# noqa` を削除。
-
-### 2.3 `_get_session_memories` スタブ実装
-
-**ファイル**: `nous/domain/memory/service.py:424-431`
-```python
-def _get_session_memories(self, _new_memory: Memory) -> list:
-    """Return memories recently accessed in the current conversation turn.
-    Stub implementation — always returns empty list.
-    Will be wired to session_event table or in-memory turn context
-    in a follow-up task."""
-    return []
-```
-**影響**: Hebbianリンク機能が完全に無効化されている（`_create_hebbian_links` は呼ばれているが常に空リストでリンク生成されない）。
-**対応**: `session_event` テーブルから直近ターンのアクセスメモリを問い合わせる実装を追加する。
-
-### 2.4 `node_modules` がGit管理下
-
-**問題**: `nous/api/http/static/node_modules/` が 63MB でコミットされている。
-**対応**: `.gitignore` に `node_modules/` を追加、`git rm --cached` で追跡解除。CIビルドステップで `npm ci` を追加。
+**絶対にしないこと**: 見た目の綺麗さを目的とした全面書き換え、古いコードを全て悪と決めつけた削除、無関係な整形や「ついで」のリファクタリング。
 
 ---
 
-## 3. 🟡 アーキテクチャ債務
+## Project Understanding
 
-### 3.1 `Result[T, E]` 型のモナド連鎖不在
+### プロジェクト概要
+- **Nous v3.5.0**: MCP対応の永続記憶サーバー。Claude Desktop / OpenCode用。
+- **技術スタック**: Python 3.12+, FastMCP + FastAPI + Uvicorn, SQLite (WAL), Qdrant, ONNX Runtime
+- **19 MCPツール**: `get_context`, `memory_create/read/update/delete/search/stats`, `update_context`, `goal_manage`, `item_*`, `invoke_skill`, `search`, `image_generate`, `read_pdf`, `irodori_tts`, `sandbox`, `sandbox_files`, `list_skills`
+- **主要ワークフロー**: チャットパイプライン (Prepare → ContextLoader → PromptBuild → Compress → Inference → Post)
+- **エントリポイント**: `nous/main.py` → `create_app()` → FastMCPサーバー (port 26262)
+- **DB**: ペルソナごとに `memory.sqlite` (15テーブル+FTS5) + `inventory.sqlite` + `config.json`
+- **フロントエンド**: Vanilla JS SPA, `N.*` 名前空間, `static/` 配下に50ファイル配置済み
 
-**ファイル**: `nous/domain/shared/result.py` (53行)
-
-現在 `Success.map()` と `Failure.map()` のみ。以下のパターンがコードベース全体に氾濫:
-```python
-result = self._repo.find_by_key(key)
-if not result.is_ok:
-    return Failure(result.error)
-if result.value is None:
-    return Failure(MemoryNotFoundError(...))
-return Success(result.value)
+### アーキテクチャ
 ```
-
-**提案**: `and_then` / `or_else` / `unwrap_or_raise` を追加し、ドメインサービス全体のネストを削減。
-```python
-# 追加すべきメソッド
-def and_then(self, f: Callable[[T], Result[U, E]]) -> Result[U, E]: ...
-def or_else(self, f: Callable[[E], Result[T, F]]) -> Result[T, F]: ...
+config → domain ← application → infrastructure ← api
 ```
+- **domain**: 純粋Python dataclass。`MemoryService` は5サブサービスのFacade（417行）
+- **application**: パイプライン型。`AppContextRegistry` がDIコンテナ相当
+- **infrastructure**: SQLite/Qdrant/LLM/埋め込みの実装詳細
+- **api**: MCPツール (12個) + HTTPルーター (11個)
 
-### 3.2 `MemoryService` の責務過多
-
-**ファイル**: `nous/domain/memory/service.py` (689行)
-
-単一クラスが担当している責務:
-- メモリ CRUD (create/read/update/delete)
-- 重複検出 (セマンティック + テキスト)
-- 自動タグ分類
-- エンリッチメント (LLM呼出)
-- Hebbianリンク生成
-- メモリ進化 (A-MEM + HiMem矛盾分類)
-- バイテンポラル無効化
-- コアメモリブロック管理
-- バージョン履歴
-- 統計
-- 検索ログ
-
-**提案**: 
-- `MemoryWriteService` — create/update/delete + 重複検出
-- `MemoryEvolutionService` — 進化・矛盾検出・Hebbianリンク
-- `MemoryBlockService` — コアメモリブロック
-- `MemoryQueryService` — read/search/stats
-
-### 3.3 `ChatConfig` の肥大化
-
-**ファイル**: `nous/domain/chat_config.py` (602行)
-
-50+フィールドのPydanticモデル。SQLシリアライズも内包。
-**提案**: 設定をカテゴリ別に分割:
-- `ProviderConfig` (LLM接続設定)
-- `SessionConfig` (セッション管理設定)
-- `CompressionConfig` (コンテキスト圧縮設定)
-- `ToolConfig` (MCPツール設定)
-
-### 3.4 `SQLiteRepository` 基底クラスの責務不足
-
-**ファイル**: `nous/infrastructure/sqlite/base_repo.py` (28行)
-
-現在は DB選択 (`_db_method`) のみ。しかし全リポジトリで繰り返されるパターン:
-- `_row_to_entity()` 変換
-- `_active_where()` フィルタ
-- エラー→`RepositoryError` ラップ
-- `_execute()` + `fetchall()` パターン
-
-**提案**: 基底クラスに共通CRUDテンプレートメソッドパターンを抽出。
-```python
-class SQLiteRepository:
-    def _execute_query(self, sql, params) -> list[sqlite3.Row]: ...
-    def _execute_single(self, sql, params) -> sqlite3.Row | None: ...
-    def _execute_write(self, sql, params) -> None: ...
-```
-
-### 3.5 プライベート属性の外部書き換え
-
-`nous/application/use_cases.py:361-362`:
-```python
-memory_service._search_engine = ...  # 循環参照回避のための後付け注入
-```
-**提案**: `MemoryService` に `set_search_engine()` メソッドを追加し、公開API経由で注入。
+### 完了済みのリファクタリング（再実装禁止）
+- Phase 1: asyncioタスクリーク修正、CI改善、Makefile導入
+- Phase 2: `Result[T,E]` 拡張、`SQLiteRepository` 基底クラス、`MemoryService` 5-subservice分割
+- Phase 3: 5大規模ファイル分解 (`session_store` 3分割, `memory_repo` Mixin 3分割, `prepare` 3分割, `compress` Mixin 2分割, `memory_llm` 2分割)
+- Phase 4: `ChatConfig` 4-subconfig分割 (Provider/Session/Compression/Tool) + Pact契約テスト + CI coverage/bandit
+- WebUIリファクタリング: 15フェーズ、38JSモジュール、N.*名前空間統合
 
 ---
 
-## 4. 🟠 コード品質（大規模ファイル分解）
+## Behaviors To Preserve
 
-### 4.1 `session_store.py` (809行)
+### 絶対に壊してはいけない
+1. **19 MCPツールの入出力形式**: 外部LLMクライアントが依存。契約テスト (Pact) があるので、ツール変更時は必ず `pytest tests/contracts/` を通過させること
+2. **HTTP APIエンドポイント**: WebUIのSPAが依存。エンドポイントの削除・改名・レスポンス形式変更禁止
+3. **DBスキーマ**: `memories` テーブル42カラム、バイテンポラル (`valid_from/valid_until`)、FTS5全文検索、memory_links構造。ALTER TABLE 以外の破壊的変更禁止
+4. **ペルソナ分離**: 各ペルソナの `memory.sqlite` + `inventory.sqlite` + `config.json` は独立。他ペルソナのデータを読み書きしてはいけない
+5. **config.json のシリアライズ形式**: `ChatConfig` のFacadeがフラットJSONを生成。キー名変更・削除は互換性破壊
+6. **チャットパイプラインのステップ順序**: Prepare→ContextLoader→PromptBuild→Compress→Inference→Post の順序と各ステップの責務は維持
 
-`SessionWindow` + `TreeNodeSessionWindow` + `SessionManager` が1ファイル。
-**提案**: `session_window.py` + `tree_session.py` + `session_manager.py` に3分割。
-
-### 4.2 `memory_repo.py` (776行)
-
-CRUD + FTS全文検索 + キーワード検索 + バージョン管理 + ページネーション + ブロック + 強度 + 統計が1ファイル。
-**提案**: 
-- `memory_crud_repo.py` (find_by_key, save, update, tombstone, find_all, count)
-- `memory_search_repo.py` (search_keyword, FTS)
-- `memory_aux_repo.py` (versions, blocks, strength, pagination, stats, links)
-
-### 4.3 `prepare.py` (748行)
-
-パイプラインの準備ステップ。感情減衰、コンテキスト取得、記憶検索、チャンク作成が混在。
-**提案**: ステップを分割:
-- `emotion_decay.py` (感情減衰計算)
-- `context_loader.py` (コンテキスト読み込み)
-- `memory_retriever.py` (記憶検索・チャンク作成)
-
-### 4.4 `compress.py` (425行)
-
-LLMテキスト要約とメッセージ切り詰めの両方を担当。
-**提案**: `summarizer.py` (LLM要約) + `trimmer.py` (メッセージ切り詰め) に分割。
-
-### 4.5 `memory_llm.py` (487行)
-
-プロンプト構築 + LLM呼出 + JSONパース + 結果適用が1ファイル。
-**提案**: `memory_extractor.py` (抽出ロジック) + `memory_prompts.py` (プロンプト定義) に分割。
+### 注意すべき境界
+- **認証**: `PersonaMiddleware` が Bearerトークン/X-Persona/環境変数でペルソナ解決。このフローを変更する場合は全クライアントの設定変更が必要
+- **非同期タスク管理**: `post.py` の `_background_tasks` リスト管理、`asyncio.create_task` の7箇所は現在適切に追跡済み。新規追加時は必ず追跡すること
+- **外部MCP連携**: Playwright MCP (port 8931) + OpenSandbox MCP (port 8001-8003)。接続URL・プロトコル変更禁止
 
 ---
 
-## 5. 🟡 CI/CD改善
+## Non-Negotiables
 
-### 5.1 現状
+1. **最初に `git status` を確認する**: 既存の未コミット変更と自分の変更を混ぜない
+2. **編集前にbaseline検証結果を記録する**: `make test` と `make lint` の結果を保存
+3. **変更は小さく戻しやすい単位にする**: 1コミット = 1関心事
+4. **無関係な整形や「ついで」のリファクタリングをしない**: スコープ厳守
+5. **既存挙動を勝手に変えない**: テストが失敗したら、まず実装側が間違っていると疑う
+6. **正しさが不明な場合は実装を止めて質問する**: 推測でDBやAPIを変更しない
+7. **各フェーズごとに検証する**: `make test` が通ることを毎回確認
+8. **最後に実行したコマンドと結果を報告する**
 
-| チェック | CI (ci.yml) | 備考 |
-|----------|:---:|------|
-| ruff check | ✅ | |
-| ruff format --check | ✅ | |
-| pytest unit | ✅ | `tests/unit/` のみ |
-| pytest integration | ❌ | 手動実行のみ |
-| mypy type check | ❌ | 設定はあるがCI未実施 |
-| coverage threshold | ❌ | 設定はあるがCI未実施 |
-| bandit security | ❌ | dev依存にはあるがCI未実施 |
-| docker build test | docker.yml | PRでは実行されない |
+---
 
-### 5.2 追加すべき項目
+## Stop And Ask Conditions
 
-1. **`mypy nous/`** — 型チェックをCIに追加
-2. **`pytest tests/integration/`** — 統合テストをCIに追加
-3. **`pytest --cov=nous --cov-fail-under=70`** — カバレッジ下限強制
-4. **`bandit -r nous/`** — セキュリティlint
-5. **PRでのDocker buildテスト** — `docker build` のdry-run
+以下の状況では実装を中断し、ユーザーに確認すること：
 
-### 5.3 Makefile不在
+1. **DBスキーマ変更が必要になった場合**: ALTER TABLE は `migration_one_shot.py` パターンに従う。バージョン管理なしなので変更の冪等性に注意
+2. **`ChatConfig` のフィールド名を変更する場合**: `config.json` の互換性が壊れる。`model_validator(mode="before")` で旧名を受け付ける必要あり
+3. **MCPツールのパラメータやレスポンス形式を変更する場合**: Pact契約テストが失敗する。Consumer側（外部LLM）の更新も必要
+4. **`static/` のJSファイルを削除する場合**: HTML sections (`sections/chat/chat_sidebar.py` 等) の `onclick` 参照がないか確認
+5. **認証・課金・通知・外部APIに関わる変更**: 影響範囲が広いため要確認
+6. **コードの意味が複数解釈できる場合**: テストと実装が矛盾している、削除候補のコードが本当に不要か判断できない場合
+7. **複数の設計案があり、プロダクト判断が必要な場合**
 
-頻出コマンドの再入力が開発者負担。以下を推奨:
-```makefile
-.PHONY: lint test typecheck coverage ci
+---
 
-lint:
-	ruff check . && ruff format --check .
+## Baseline Commands
 
-test:
-	pytest tests/unit/ -q
+```bash
+# 品質ゲート（全てパスすること）
+make lint         # ruff check + ruff format --check
+make test         # pytest tests/unit/ -q
+make test-all     # pytest -q（全テスト）
+make typecheck    # mypy nous/
+make coverage-fail  # pytest --cov=nous --cov-fail-under=70
+make bandit       # bandit -r nous/ -ll
+make ci           # lint → typecheck → test-all → bandit → coverage-fail
 
-test-all:
-	pytest -q
-
-typecheck:
-	mypy nous/
-
-coverage:
-	pytest --cov=nous --cov-report=term
-
-ci: lint typecheck test-all coverage
+# 個別確認
+pytest tests/unit/test_chat_config.py -v  # ChatConfigのテスト
+pytest tests/contracts/ -v                 # Pact契約テスト
+pytest tests/integration/ -v               # 統合テスト
 ```
 
 ---
 
-## 6. 🟡 テスト改善
+## Debt Map
 
-### 6.1 空ディレクトリ
+### 🔴 Critical（残存なし）
+Phase 1〜4 ですべて解消済み。
 
-| パス | 状態 |
-|------|------|
-| `tests/unit/api/http/routers/` | 空 — 削除 or ルーターUT作成 |
-| `tests/unit/api/mcp/` | 空 — 削除 or MCPツールUT作成 |
+### 🟡 High Priority
 
-### 6.2 不足テスト
+| ID | 負債 | ファイル | 行数 | 根拠 |
+|----|------|---------|:---:|------|
+| D1 | **chat_sidebar.py の巨大f-string** | `nous/api/http/sections/chat/chat_sidebar.py` | 743 | 743行のPython f-string。HTML/CSS/JSが1つの文字列に埋め込まれ、テスト不可能・保守困難。全sections中最大 |
+| D2 | **chat.py ルーターの全エンドポイントネスト** | `nous/api/http/routers/chat.py` | 643 | 1つの `register_chat_routes` 関数に全エンドポイントがネスト。独立テスト不可。広範な `except Exception` |
+| D3 | **persona.py ルーターのエラーハンドリング** | `nous/api/http/routers/persona.py` | 593 | 同様のネストパターン + 多くの `except Exception` + `pass` で例外を握りつぶし |
 
-| 対象 | 現状 | 推奨 |
-|------|------|------|
-| HTTPルーター | 統合テストのみ | UT追加 (ルーター単位) |
-| MCPツール | 統合テスト + 一部UT | ツール単位UT追加 |
-| EventBus | テストなし | pub/subの単体テスト |
-| `ChatConfig` シリアライズ | テストあり | 十分 |
-| パイプライン各ステップ | 部分的 | Compress/AutoCaptureのUT追加 |
+### 🟠 Medium Priority
 
-### 6.3 契約テスト不在
+| ID | 負債 | ファイル | 行数 | 根拠 |
+|----|------|---------|:---:|------|
+| D4 | **広範な `except Exception` パターン** | `routers/admin.py` 他、全体で204箇所 | - | `except Exception as exc: pass` や `except Exception: return JSONResponse(...)` がエラー情報を隠蔽。特に `admin.py` が顕著 |
+| D5 | **`_get_session_memories` スタブ** | `nous/domain/memory/service.py:424-431` | 8 | Hebbianリンクが完全無効。MEMORY.md記載の配管は完了しているがデータ投入がない |
+| D6 | **マイグレーションシステムのバージョン不在** | `nous/infrastructure/sqlite/migrations.py` | - | バージョン番号なし、全累積実行。現在のDB状態をプログラムから判断できない |
+| D7 | **`hub.db` の用途不明ファイル** | `data/hub.db` | - | ファイルは存在するが読み取り不能。死にデータの可能性。削除して動作確認が必要 |
+| D8 | **`memory_aux_repo.py` の責務過多** | `nous/infrastructure/sqlite/memory_aux_repo.py` | 345 | ページネーション・ブロック・強度・統計・バージョンが1ファイル。適度だがさらなる分割余地あり |
+| D9 | **`legacy_importer.py` のエラーハンドリング** | `nous/migration/importers/legacy_importer.py` | 756 | 6箇所の `except Exception: pass` が移行エラーを完全に隠蔽 |
 
-MCPツールは外部LLMエージェントが主な消費者。ツール間の互換性テスト (Pact等) が不在。
-**提案**: MCPツールの入出力スキーマをPactファイル化し、CIで破壊的変更を検出。
+### 🟢 Low Priority / Suggestions
 
----
-
-## 7. 🟢 クイックウィン（1時間以内で対応可能）
-
-| # | 内容 | ファイル | 工数 |
-|:--|------|------|:--:|
-| 1 | `_compute_recency_decay` の `_` 化 + 未使用警告の抑制 | `prepare.py:78-80` | 5分 |
-| 2 | `main.py:192` の重複 `_mount_static_files(mcp)` 削除 | `main.py:192` | 5分 |
-| 3 | `.gitignore` に `node_modules/` 追加 | `.gitignore` | 2分 |
-| 4 | `commit 5111bb6 "aa"` のrebase確認 | Git操作 | 10分 |
-| 5 | `_get_session_memories` スタブに `TODO(blocked)` コメント追加 | `service.py:424` | 2分 |
-| 6 | `use_cases.py` の `_search_engine` 直接代入を setter経由に | `use_cases.py:361` | 15分 |
-| 7 | `memory_repo.py` の `noqa: S608` に説明コメント追加 | `memory_repo.py` | 15分 |
-| 8 | Makefile追加 (lint/test/typecheck/ci) | ルート | 15分 |
+| ID | 負債 | ファイル | 根拠 |
+|----|------|---------|------|
+| D10 | `os.path` と `pathlib` の混在 | `nous/main.py:24` | `os.path.join` でパスを構築しつつ、`Path(__file__).resolve().parent` も併用 |
+| D11 | 空のテストディレクトリ | `tests/unit/api/http/` | ルーター単位のUTがない（統合テストのみ） |
+| D12 | フロントエンドJSの大型ファイル | `static/features/overview/overview-core.js` (45KB), `static/chat/chat-settings.js` (43KB) | モジュラー化済みだが各ファイルは依然大きい。機能単位でのさらなる分割が望ましい |
+| D13 | ベンチマークテストのコピペミス | `tests/benchmark/test_search_perf.py:37` | `make_memories(100)` を3回呼んでいるが1000件テストでは使われていない |
+| D14 | Screenshot baselines 未生成 | `tests/ui/screenshots/` | `.gitkeep` のみ。初回実行時に `--update-snapshots` が必要 |
 
 ---
 
-## 8. 📋 優先度マトリクス
+## Implementation Phases
 
-```
-影響度 高
-  │
-  │  2.3 スタブ (#3)    │  2.1 タスクリーク (#1)
-  │  5.2 CI改善 (#6)    │  2.2 SQL抑制濫用 (#2)
-  │  3.2 責務過多(#5)   │  2.4 node_modules (#4)
-  │  3.1 Result連鎖(#3) │
-  ├────────────────────┼──────────────────
-  │  7.x クイックウィン│  3.3~3.5 設計改善
-  │  6.1 空ディレクトリ│  4.x ファイル分解
-  │                    │  6.2 不足テスト
-  │                    │  6.3 契約テスト
-  └────────────────────┴──────────────────→ 工数 大
+各フェーズは独立して実施可能。依存関係は明示する。
 
-#1 = タスクリーク, #2 = SQL抑制, #3 = スタブ+Result, #4 = node_modules,
-#5 = 責務分割, #6 = CI改善
+### Phase 1: 検証基盤の確認（必須・最初）
+
+**目的**: 現状のテストが全て通ることを確認し、baselineを記録する。
+
+```bash
+make lint          # ruff check + format
+make test          # ユニットテスト
+make typecheck     # mypy
+make bandit        # セキュリティスキャン
 ```
 
----
+**成果物**: 各コマンドの実行結果（PASS/FAILの記録）
 
-## 9. 推奨実施順序
-
-### フェーズ1: 安全基盤 (1~2日)
-1. `asyncio.create_task()` のタスクリーク修正
-2. CIに `mypy` + 統合テスト追加
-3. Makefile導入
-4. `.gitignore` に `node_modules` 追加
-
-### フェーズ2: 設計改善 (3~5日)
-5. `MemoryService` 責務分割
-6. `Result[T,E]` に `and_then`/`or_else` 追加
-7. `SQLiteRepository` 基底クラス強化
-
-### フェーズ3: コード清掃 (2~4日)
-8. 大規模ファイルの分解 (session_store, memory_repo, prepare)
-9. 空ディレクトリ削除 + 不足UT追加
-10. `_get_session_memories` スタブ実装
-
-### フェーズ4: 発展 (1~3日)
-11. MCPツールの契約テスト導入
-12. `ChatConfig` 分割
-13. カバレッジ下限のCI強制
+**注意**: `git status` で未コミット変更がないことを確認すること。既存の変更がある場合は先にコミットするか、stashすること。
 
 ---
 
-## 10. ドキュメント同期要件
+### Phase 2: 安全な整理（独立実行可能）
 
-本リファクタリングの各フェーズ完了時に以下を更新すること (`AGENTS.md` ルールより):
+#### 2.1: D7 — `hub.db` の確認と削除判定
+- **ファイル**: `data/hub.db`
+- **方法**: コードベース全体で `hub.db` を grep し、参照がないことを確認
+- **検証**: 参照がない場合、削除してサーバー起動確認
+- **リスク**: 低。参照がなければ安全に削除可能
 
-| 変更種別 | 更新対象 |
-|----------|---------|
-| API/MCP ツール変更 | `docs/llm_usage_guide.md` |
-| アーキテクチャ変更 | `docs/architecture.md` (存在すれば) |
-| 設定変更 | `README.md` の環境変数セクション |
-| コードのみ (内部リファクタ) | コミットメッセージに `[skip-docs]` |
+#### 2.2: D11 — 空テストディレクトリの整理
+- **ファイル**: `tests/unit/api/http/`
+- **方法**: ディレクトリが空であることを確認。空なら削除するか、ルーターUTを作成する方針を決定
+- **注意**: `tests/unit/api/http/` が空でも `tests/unit/api/` が存在する理由を確認（`test_cors.py` 等があるため）
+- **リスク**: 最低。ディレクトリ削除のみ
+
+#### 2.3: D13 — ベンチマークテストの修正
+- **ファイル**: `tests/benchmark/test_search_perf.py:37`
+- **方法**: `make_memories(100)` の3回呼び出しが不要なら1回に統合
+- **検証**: `pytest tests/benchmark/ -v`
+- **リスク**: 最低
 
 ---
 
-*本指示書はコードベースの静的解析と探索結果に基づきます。実際の作業開始前に `nous/infrastructure/sqlite/memory_repo.py` の全 `# noqa` / `# nosec` 箇所と、全 `asyncio.create_task()` 呼出箇所の詳細確認（コードリーディング）を推奨します。*
+### Phase 3: エラーハンドリング改善（Phase 2完了後）
+
+#### 3.1: D9 — `legacy_importer.py` の `except Exception: pass` 撲滅
+- **ファイル**: `nous/migration/importers/legacy_importer.py`
+- **場所**: 6箇所 (L88, 179, 213, 249, 283, 324)
+- **方法**: 各 `except Exception: pass` を最低限 `logger.warning("Import skip: ...", exc_info=True)` に変更
+- **リスク**: 低。ログ追加のみ、制御フロー変更なし
+- **検証**: `pytest tests/unit/test_jsonl_importer.py -v`
+
+#### 3.2: D4 — ルーターの `except Exception` 改善
+- **ファイル**: `nous/api/http/routers/admin.py` (最も顕著), `chat.py`, `persona.py`
+- **方法**: 
+  1. 各 `except Exception` に `logger.exception()` を追加（デバッグ情報の確保）
+  2. `pass` で握りつぶしている箇所は、具体的な例外型に絞る
+- **注意**: エラーレスポンスの形式を変更しないこと（WebUIが依存）
+- **リスク**: 中。エラーハンドリング変更はフロントエンドのエラー表示に影響する可能性あり
+- **検証**: `pytest tests/integration/test_http_api.py -v` + `pytest tests/integration/test_error_handling.py -v`
+
+---
+
+### Phase 4: 構造改善（Phase 3完了後）
+
+#### 4.1: D8 — `memory_aux_repo.py` の分割
+- **ファイル**: `nous/infrastructure/sqlite/memory_aux_repo.py` (345行)
+- **現在の責務**: ページネーション、メモリブロック、メモリ強度、統計、バージョン管理
+- **提案**: 
+  - `memory_aux_repo.py` → ページネーション + バルク操作のみに
+  - `memory_block_repo.py` → メモリブロックCRUD
+  - `memory_strength_repo.py` → 強度計算（既存 `strength_repo.py` と統合）
+- **後方互換**: `memory_repo.py` 経由でアクセスできるよう再エクスポートを維持
+- **リスク**: 中。複数ファイルにまたがる変更。全既存importパスの確認必須
+- **検証**: `pytest tests/unit/test_sqlite_repos.py tests/unit/test_memory_strength.py -v`
+
+#### 4.2: D5 — `_get_session_memories` スタブの実装
+- **ファイル**: `nous/domain/memory/service.py:424-431`
+- **現状**: 常に `[]` を返す。Hebbianリンク (`_create_hebbian_links`) が無効
+- **前提**: `session_event_repo` は既に注入済み (MEMORY.md Phase 3.7)
+- **方法**: `session_event_repo` から `session_id` に紐づく直近のイベントを問い合わせ、アクセスされたメモリキーを抽出
+- **注意**: MEMORY.md記載の「データ投入がない」問題を解決するには、`post.py` でセッションイベント記録も実装する必要がある
+- **リスク**: 中。未テストのコードパスを有効化する。段階的に有効化すること
+- **検証**: `pytest tests/unit/test_memory_links.py -v`
+
+---
+
+### Phase 5: 大規模ファイル分割（Phase 4完了後、慎重に）
+
+#### 5.1: D1 — chat_sidebar.py のテンプレート分離
+- **ファイル**: `nous/api/http/sections/chat/chat_sidebar.py` (743行)
+- **方法**:
+  1. 各 `<details>` ブロックを個別のテンプレート関数に抽出（`_render_provider_section()`, `_render_mcp_section()` 等）
+  2. `render_chat_sidebar()` は各セクションを呼び出すオーケストレーターに
+  3. インラインCSSを `static/styles/` に移動（該当するスタイルのみ）
+- **注意**: 
+  - `onclick`, `onchange`, `onmouseenter` 等のJSハンドラ名を変更しない
+  - `<i data-lucide="...">` のアイコン名を変更しない
+  - `id` 属性値を変更しない（JSが `document.getElementById` で参照）
+- **リスク**: 高。JSのDOM参照が壊れる可能性。変更後はWebUIの全タブ + チャット機能の手動確認必須
+- **検証**: 
+  1. `pytest tests/integration/test_dashboard_e2e.py -v`
+  2. 手動: チャット設定パネルの全項目表示・操作確認
+  3. 手動: プロバイダ切り替え、MCPツール設定、TTS設定、画像生成設定
+
+#### 5.2: D2 — chat.py ルーターのエンドポイント分離
+- **ファイル**: `nous/api/http/routers/chat.py` (643行)
+- **方法**:
+  1. `register_chat_routes` 内の各 `async def` エンドポイントをモジュールレベル関数に抽出
+  2. `register_chat_routes` は各関数を `mcp.custom_route` で登録するだけの薄い層に
+  3. 共通のヘルパー（`_resolve_persona`, `_safe_get_context`）は `deps.py` から再利用
+- **注意**: エンドポイントURL、HTTPメソッド、レスポンス形式を一切変更しない
+- **リスク**: 中。関数のスコープ変更によるクロージャ変数の参照切れに注意
+- **検証**: `pytest tests/integration/test_http_routers.py tests/integration/test_http_api.py -v`
+
+---
+
+### Phase 6: 提案フェーズ（自動実装禁止、要レビュー）
+
+以下の項目は実装前にユーザー確認が必要。提案のみ行い、勝手に実装しないこと。
+
+#### 6.1: D6 — マイグレーションバージョニングの導入
+- **提案**: `_migration_version` テーブルを追加し、マイグレーション番号を管理
+- **影響**: DBスキーマ追加。既存ペルソナ全員のDBに新テーブル作成
+- **要確認**: データ整合性リスクと引き換えに導入する価値があるか
+
+#### 6.2: D3 — persona.py ルーターの分割
+- **提案**: `register_persona_routes` をエンドポイント単位の小関数に分解
+- **影響**: 中。ルーターの内部構造変更のみ、API互換性は維持
+
+#### 6.3: D12 — フロントエンドJSのさらなる分割
+- **提案**: `overview-core.js` (45KB), `chat-settings.js` (43KB), `settings-form.js` (33KB) の分割
+- **影響**: HTML sections の `<script>` タグ変更が必要。ロード順序の管理が複雑化
+- **要確認**: 現在の構造で運用上の問題があるか
+
+---
+
+## Verification Requirements
+
+各フェーズ完了時に以下を実行し、結果を報告すること：
+
+| フェーズ | 必須検証 | 追加検証 |
+|---------|---------|---------|
+| Phase 1 | `make lint && make test && make typecheck && make bandit` | — |
+| Phase 2 | `make test` | フェーズ内容に応じた個別テスト |
+| Phase 3 | `make test && make test-all` | `pytest tests/integration/ -v` |
+| Phase 4 | `make test && make test-all && make typecheck` | `pytest tests/unit/test_* -v` (該当ファイル) |
+| Phase 5 | `make ci` (全品質ゲート) | WebUI手動確認 + `pytest tests/integration/ -v` |
+
+---
+
+## Reporting Format
+
+各フェーズ完了時に以下の形式で報告すること：
+
+```
+### Phase X 完了報告
+
+**実行コマンドと結果**:
+- `make lint` → PASS/FAIL
+- `make test` → X passed, Y failed
+- （その他実行したコマンド）
+
+**変更ファイル**:
+- path/to/file1.py: 変更内容（1行要約）
+- path/to/file2.py: 変更内容（1行要約）
+
+**発生した問題**:
+- （あれば）
+
+**未確認の懸念**:
+- （あれば）
+```
+
+---
+
+## Out-of-scope Items
+
+以下の項目は本指示書のスコープ外：
+
+1. **新機能の追加**: リファクタリングのみ。機能追加は別タスク
+2. **フレームワークの変更**: FastMCP → 他フレームワークへの移行は禁止
+3. **DBエンジンの変更**: SQLite → PostgreSQL 等の移行は禁止
+4. **フロントエンドフレームワークの導入**: React/Vue 等への移行は禁止。Vanilla JSのまま改善
+5. **テストフレームワークの変更**: pytest → 他への移行は禁止
+6. **Pythonバージョンの変更**: 3.12 固定
+7. **ペルソナデータの修正**: `data/persona/*/` の内容は一切触らない
+8. **ドキュメントの大規模書き換え**: 変更に伴う最小限の更新のみ
+9. **Node.jsビルドシステムの導入**: 現在のViteベースのビルドを維持

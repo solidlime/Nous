@@ -4,7 +4,6 @@ Provides the shared HTML head, navigation bar, utility JavaScript,
 and the overall page shell that section-specific renderers plug into.
 """
 
-import json
 
 from nous import __version__
 

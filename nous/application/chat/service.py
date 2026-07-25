@@ -12,7 +12,7 @@ from nous.application.chat.pipeline.prepare import PrepareStep
 from nous.application.chat.pipeline.prompt import PromptBuildStep
 from nous.application.chat.session_store import SessionManager
 from nous.application.chat.tools.definitions import get_filtered_tools
-from nous.application.chat.tools.registry import SEARCH_TOOLS_NAME, ToolRegistry
+from nous.application.chat.tools.registry import ToolRegistry
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.mcp_client import MCPClientPool
@@ -38,10 +38,11 @@ async def _ensure_tool_index(registry: ToolRegistry) -> ToolSearchEngine | None:
     失敗時は None を返し、search_tools は無効化される。
     """
     try:
+        from qdrant_client import AsyncQdrantClient
+
         from nous.config.settings import get_settings
         from nous.infrastructure.embedding.model import EmbeddingModel
         from nous.infrastructure.tools import ToolSearchEngine, ToolVectorStore
-        from qdrant_client import AsyncQdrantClient
 
         settings = get_settings()
         client = AsyncQdrantClient(url=settings.qdrant.url, api_key=settings.qdrant.api_key, timeout=10)

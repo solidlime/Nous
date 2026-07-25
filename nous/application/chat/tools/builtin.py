@@ -14,7 +14,6 @@ from nous.config.settings import get_settings
 from nous.domain.skill import SkillRepository
 from nous.infrastructure.logging.structured import get_logger
 
-
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
     from nous.domain.chat_config import ChatConfig
@@ -294,6 +293,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
 
         # ── 画像をサーバー側に永続化 ──
         from pathlib import Path
+
         from nous.config.settings import get_settings
         settings = get_settings()
         persona = getattr(ctx, "persona", "default")

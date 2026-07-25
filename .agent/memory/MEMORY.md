@@ -1,5 +1,52 @@
 # MEMORY
 
+## Phase 4: 発展 — ChattConfig 分割 + 契約テスト + CI強化 (2026-07-25)
+- **commits**: f4627f3〜8bc43a7 (ChatConfig 6件), 65ffe5e (Pact contract tests)
+- ChatConfig 4サブ設定分割: Provider ↔ Session ↔ Compression ↔ Tool、Facade で後方互換
+- Pact契約テスト: 18 consumer tests、Provider検証、pact-python v3.4.0 + HTTP Pact
+- CI: coverage (--cov-fail-under=70) + bandit ジョブ追加、Makefile 同期
+
+### 教訓
+1. **Pydantic Facade with __getattr__**: サブ設定をPydantic内包でも `__getattr__` で透過アクセス可能。既存呼び出し元を壊さない。
+2. **ChatConfig 混在初期化**: `model_validator(mode="before")` で flat kwargs と model instance の両方を受け付ける重要な防衛コード。
+3. **Pact fixture スコープ**: pact-python v3.4.0 は同一インスタンス複数 serve() でFFI競合 → fixture scope を function に。
+4. **fixer がコミットし忘れるケース**: Git操作の最終確認は orchestrator が行うこと。fix-9 は実装だけしてコミットを忘れていた。
+
+## Phase 3: コード清掃 — 大規模ファイル分解 (2026-07-25)
+- **5並列 fixer** で5ファイル→13ファイルに分解（31ファイル、+2934/-3093行）
+- **commits**: 9c7c8ee, 273754c, 530de21, d71a932, ca3e424, fc7b696, 8ff3fe7, 37468fb, e2b7e52, 7e6eca3
+- **全13新ファイル import 検証: PASS**、ruff クリーン
+
+### 分解実績
+| 元ファイル (行数) | 分割先 | パターン |
+|---|---|---|
+| session_store.py (809) | session_window + tree_session + session_manager | クラス別分割 + 再エクスポート |
+| memory_repo.py (776) | crud + search + aux | Mixin 多重継承 |
+| prepare.py (748) | emotion_decay + context_loader + memory_retriever | 関数分割 + 再エクスポート |
+| compress.py (425) | summarizer + trimmer | Mixin 多重継承 |
+| memory_llm.py (487) | memory_extractor + memory_prompts | クラス分割 + 再エクスポート |
+
+### _get_session_memories 配管実装 (3.7)
+- `session_id` を `create_memory` → `_create_hebbian_links` → `_get_session_memories` に伝搬
+- `session_event_repo` を `MemoryLinkService` に注入
+- **現状**: `session_id` 未記録のため空リスト返却。後続でイベント記録すれば自動有効化
+- 教訓: 相互依存がある機能は「配管だけ先に実装」で後続作業のブロックを回避
+
+### 教訓
+1. **並列 fixer は大規模分解に有効**: 5ファイル独立分割を同時実行し、数分で全部完了。
+2. **Mixin パターン vs 再エクスポート**: 単一クラス分割は Mixin、独立クラス群は再エクスポート。どちらも後方互換を保つ。
+3. **Facade パターンの境界線引きは oracle に任せろ**: 3-way 案を却下され5-way案で品質確保。
+4. **セッションID伝搬の設計**: `getattr(ctx, 'session_id', None)` で安全に将来の値を受け取れる。
+
+## Phase 2: アーキテクチャリファクタリング (2026-07-25)
+- **commits**: 5828f6f (Result + base_repo), 4015ec1 (MemoryService split)
+- Result[T,E]: and_then/or_else追加でモナド連鎖可能に
+- SQLiteRepository: _execute_query/single/write テンプレートメソッド追加
+- MemoryService: 716行→5-subservice Facade 分割（Write/Enrich/Link/Evolution/Query）
+- create_memory は Facade に残す（oracle 指摘: 3関心のオーケストレーションハブ）
+- _search_engine 注入は mutable wrapper `[None]` パターン
+- 全テストパス（unit 86/86, integration 31/31）、ruff クリーン
+
 ## WebUI リファクタリング完了 (2026-07-25)
 - **ビフォー**: 29 JSファイル、~400KB、モノリス6ファイル（最大53KB）、グローバル window 汚染、二重状態管理、CSS 2ファイル
 - **アフター**: 15フェーズ、50+コミット、~38JSファイル（モジュール分割済み）、`N.*` 名前空間統一、Pub/Sub store完備

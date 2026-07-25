@@ -1,11 +1,10 @@
 """Chat tab layout — container, message area, and input area HTML."""
 
-import sys as _sys  # Keep sys accessible for f-string eval
 
 
 def render_chat_layout_prefix() -> str:
     """Return the opening HTML (CSS link, section, header, layout container, backdrop)."""
-    return f"""
+    return """
         <!-- ========== CHAT TAB ========== -->
         <section id="tab-chat" class="tab-panel" role="tabpanel">
             <div style="position:relative; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
@@ -23,7 +22,7 @@ def render_chat_layout_prefix() -> str:
 
 def render_chat_main() -> str:
     """Return the chat main area (messages, status, attachments, input area)."""
-    return f"""
+    return """
 
                 <!-- Chat area -->
                 <div id="chat-main">
@@ -59,7 +58,7 @@ def render_chat_main() -> str:
 
 def render_chat_layout_suffix() -> str:
     """Return the closing HTML (layout close, highlight.js, media viewer, section close)."""
-    return f"""
+    return """
             </div>
             <!-- highlight.js for syntax highlighting in chat bubbles -->
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">

@@ -14,9 +14,9 @@ import sqlite3
 import subprocess
 import sys
 import time
-import uuid
 import urllib.request
-from datetime import datetime, timezone, timedelta
+import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 

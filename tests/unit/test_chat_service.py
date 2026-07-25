@@ -8,8 +8,8 @@ import pytest
 
 from nous.api.http.sections.chat import render_chat_tab
 from nous.application.chat.events import _sse_encode as _sse
-from nous.application.chat_service import SessionManager
 from nous.application.chat.session_store import TreeSessionWindow
+from nous.application.chat_service import SessionManager
 from nous.domain.chat_config import ChatConfig, ChatConfigRepository
 from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent, ToolCallEvent
 
@@ -388,7 +388,6 @@ class TestTreeSessionWindowNew:
 
     def test_version_persisted_and_restored(self):
         """version は永続化され、from_db() で復元される"""
-        import json
         import sqlite3
 
         db = sqlite3.connect(":memory:")

@@ -8,12 +8,11 @@ from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse, StreamingResponse
 
-from nous.api.http.routers._error_handlers import error_from_result
-
 from nous.api.http.deps import (
     _resolve_persona_from_request,
     _safe_get_context,
 )
+from nous.api.http.routers._error_handlers import error_from_result
 from nous.config.settings import Settings
 from nous.infrastructure.logging.structured import get_logger
 
@@ -40,6 +39,7 @@ def register_admin_routes(mcp) -> None:
         try:
             body = await request.json()
         except Exception:
+            logger.exception("update_settings: invalid JSON body")
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         category = body.get("category")
         key = body.get("key")

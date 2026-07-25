@@ -85,8 +85,8 @@ class LegacyImporter:
         try:
             target_db = self.target.get_memory_db()
             counts["memories"] = target_db.execute("SELECT COUNT(*) as c FROM memories").fetchone()["c"]
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Import skip: %s", exc, exc_info=True)
 
         return Success(counts)
 
@@ -176,7 +176,8 @@ class LegacyImporter:
                     ),
                 )
                 count += 1
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Import skip: %s", exc, exc_info=True)
                 continue
 
         target_db.commit()
@@ -210,7 +211,8 @@ class LegacyImporter:
                     ),
                 )
                 count += 1
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Import skip: %s", exc, exc_info=True)
                 continue
 
         target_db.commit()
@@ -246,7 +248,8 @@ class LegacyImporter:
                     ),
                 )
                 count += 1
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Import skip: %s", exc, exc_info=True)
                 continue
 
         target_db.commit()
@@ -280,7 +283,8 @@ class LegacyImporter:
                     ),
                 )
                 count += 1
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Import skip: %s", exc, exc_info=True)
                 continue
 
         target_db.commit()
@@ -321,7 +325,8 @@ class LegacyImporter:
                     (persona, key, value, valid_from, valid_until, change_source),
                 )
                 count += 1
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Import skip: %s", exc, exc_info=True)
                 continue
 
         target_db.commit()

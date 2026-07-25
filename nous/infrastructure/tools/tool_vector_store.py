@@ -3,14 +3,14 @@ from __future__ import annotations
 import hashlib
 from typing import TYPE_CHECKING
 
-import numpy as np
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
-    from nous.infrastructure.embedding.model import EmbeddingModel
     from qdrant_client import AsyncQdrantClient
+
+    from nous.infrastructure.embedding.model import EmbeddingModel
 
 logger = get_logger(__name__)
 

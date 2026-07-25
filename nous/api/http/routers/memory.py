@@ -5,8 +5,6 @@ from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse
 
-from nous.api.http.routers._error_handlers import error_from_result
-
 from nous.api.http.deps import (
     CreateMemoryRequest,
     UpdateMemoryRequest,
@@ -15,6 +13,7 @@ from nous.api.http.deps import (
     _safe_get_context,
     _strength_to_dict,
 )
+from nous.api.http.routers._error_handlers import error_from_result
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:

@@ -10,7 +10,6 @@ import pytest
 from nous.domain.equipment.entities import Item
 from nous.domain.memory.entities import Memory, MemoryStrength
 from nous.domain.memory.repository import (
-    MemoryAuxiliaryRepository,
     MemoryRepository,
     MemoryStrengthRepository,
 )

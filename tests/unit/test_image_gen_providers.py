@@ -1,8 +1,6 @@
 """画像生成プロバイダの単体テスト"""
 
-from unittest.mock import MagicMock
 
-import pytest
 
 
 # ============================================================

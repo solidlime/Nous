@@ -37,7 +37,8 @@ def detect_language(text: str) -> str | None:
         return None
 
     try:
-        from langdetect import detect as _detect, DetectorFactory
+        from langdetect import DetectorFactory
+        from langdetect import detect as _detect
 
         DetectorFactory.seed = 0
         return _detect(text)

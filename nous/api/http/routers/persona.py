@@ -216,6 +216,7 @@ def register_persona_routes(mcp) -> None:
             latest_self_portrait: str | None = None
             try:
                 from pathlib import Path
+
                 from nous.config.settings import get_settings
                 images_dir = Path(get_settings().data_root) / "persona" / persona / "images"
                 if images_dir.is_dir():

@@ -3,7 +3,7 @@
 
 def render_chat_memory_panel() -> str:
     """Return the memory activity panel HTML."""
-    return f"""<!-- Memory activity panel (left) -->
+    return """<!-- Memory activity panel (left) -->
                 <div id="memory-panel">
                     <div class="memory-panel-title"><i data-lucide="brain"></i> 記憶活動</div>
 

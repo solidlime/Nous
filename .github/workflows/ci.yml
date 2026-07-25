@@ -114,3 +114,49 @@ jobs:
 
       - name: Run integration tests
         run: pytest tests/integration/ -q --timeout=60
+
+  # ------------------------------------------------------------------
+  # Coverage: test coverage with threshold enforcement
+  # ------------------------------------------------------------------
+  coverage:
+    needs: [test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-prod.txt -r requirements-dev.txt
+
+      - name: Run coverage
+        run: pytest --cov=nous --cov-fail-under=70 --cov-report=term
+
+  # ------------------------------------------------------------------
+  # Security: bandit static analysis
+  # ------------------------------------------------------------------
+  bandit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install bandit
+        run: pip install bandit
+
+      - name: Run bandit
+        run: bandit -r nous/ -ll

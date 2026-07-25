@@ -5,12 +5,11 @@ from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse
 
-from nous.api.http.routers._error_handlers import error_from_result
-
 from nous.api.http.deps import (
     _resolve_persona_from_request,
     _safe_get_context,
 )
+from nous.api.http.routers._error_handlers import error_from_result
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
