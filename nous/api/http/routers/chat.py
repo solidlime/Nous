@@ -43,6 +43,7 @@ def register_chat_routes(mcp) -> None:
         try:
             body = await request.json()
         except Exception:
+            logger.exception("save_chat_config: invalid JSON body")
             return JSONResponse({"error": "Invalid JSON"}, status_code=400)
 
         from nous.config.settings import get_settings
@@ -64,6 +65,7 @@ def register_chat_routes(mcp) -> None:
         try:
             new_config = ChatConfig(**update_data)
         except Exception as e:
+            logger.exception("save_chat_config: config validation failed")
             return JSONResponse({"error": f"Invalid config: {e}"}, status_code=400)
 
         repo.save(new_config)
@@ -124,6 +126,7 @@ def register_chat_routes(mcp) -> None:
         try:
             body = await request.json()
         except Exception:
+            logger.exception("chat_endpoint: invalid JSON body")
 
             async def bad_request():
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Invalid JSON'})}\n\n"
@@ -259,6 +262,7 @@ def register_chat_routes(mcp) -> None:
         try:
             body = await request.json()
         except Exception:
+            logger.exception("update_chat_message: invalid JSON body")
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
         new_content = body.get("content")
@@ -340,6 +344,7 @@ def register_chat_routes(mcp) -> None:
         try:
             body = await request.json()
         except Exception:
+            logger.exception("rollback_chat_session: invalid JSON body")
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
         from_id = str(body.get("from_id", "")).strip()
@@ -474,6 +479,7 @@ def register_chat_routes(mcp) -> None:
                     {"persona": persona, "session_id": session_id, "remaining_count": len(remaining)},
                 )
             except Exception:
+                logger.exception("rollback_chat_session: SSE publish failed")
                 pass  # 通知失敗はロールバック自体を失敗させない
 
             return JSONResponse(
@@ -640,4 +646,5 @@ def register_chat_routes(mcp) -> None:
                 }
             )
         except Exception as e:
+            logger.exception("execute_chat_tool: tool execution failed")
             return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
