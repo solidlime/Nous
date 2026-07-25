@@ -1,7 +1,20 @@
 from __future__ import annotations
 
+import json
+from typing import TYPE_CHECKING
+
+from starlette.responses import JSONResponse
+
+from nous.api.http.routers.chat.chat_stream import (
+    _do_delete_chat_session,
+    _do_get_chat_session,
+    _resolve_request,
+)
 from nous.application.event_bus import SESSION_ROLLBACK
 from nous.infrastructure.logging.structured import get_logger
+
+if TYPE_CHECKING:
+    from starlette.requests import Request
 
 logger = get_logger(__name__)
 
@@ -142,3 +155,113 @@ async def _do_rollback_chat_session(persona: str, ctx, session_id: str, body: di
         "removed_user_text": removed_user_text,
         "version": current_version,
     }
+
+
+# ── HTTP adapter layer ─────────────────────────────────────────────
+
+
+async def get_chat_session(request: Request) -> JSONResponse:
+    """GET /api/chat/{persona}/sessions/{session_id} — return session messages."""
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": "Persona not found"}, status_code=404)
+    session_id = request.path_params.get("session_id", "")
+    if not session_id:
+        return JSONResponse({"error": "session_id required"}, status_code=400)
+    return JSONResponse(await _do_get_chat_session(persona, ctx, session_id))
+
+
+async def delete_chat_session(request: Request) -> JSONResponse:
+    """DELETE /api/chat/{persona}/sessions/{session_id} — delete a session."""
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": "Persona not found"}, status_code=404)
+    session_id = request.path_params.get("session_id", "")
+    if not session_id:
+        return JSONResponse({"error": "session_id required"}, status_code=400)
+    return JSONResponse(await _do_delete_chat_session(persona, ctx, session_id))
+
+
+async def update_chat_message(request: Request) -> JSONResponse:
+    """PUT /api/chat/{persona}/sessions/{session_id}/messages/{msg_id} — update message.
+
+    Request body: {"content": "...", "expected_version": N}
+    Response: {"status": "ok", "updated_message": {...}, "version": N+1}
+    """
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": "Persona not found"}, status_code=404)
+
+    session_id = request.path_params.get("session_id", "")
+    if not session_id:
+        return JSONResponse({"error": "session_id required"}, status_code=400)
+
+    msg_id = request.path_params.get("msg_id", "")
+    if not msg_id:
+        return JSONResponse({"error": "msg_id is required"}, status_code=400)
+
+    try:
+        body = await request.json()
+    except (json.JSONDecodeError, TypeError):
+        logger.exception("update_chat_message: invalid JSON body")
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    new_content = body.get("content")
+    if not isinstance(new_content, str) or not new_content.strip():
+        return JSONResponse({"error": "content must be a non-empty string"}, status_code=400)
+
+    expected_version = body.get("expected_version")
+    if expected_version is not None and not isinstance(expected_version, int):
+        return JSONResponse({"error": "expected_version must be an integer"}, status_code=400)
+
+    try:
+        result = await _do_update_chat_message(persona, ctx, session_id, msg_id, body)
+    except Exception as e:  # 最終防衛線
+        logger.exception("update_chat_message failed: %s", e)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+    if result.get("error") == "conflict":
+        return JSONResponse(result, status_code=409)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
+
+
+async def rollback_chat_session(request: Request) -> JSONResponse:
+    """POST /api/chat/{persona}/sessions/{session_id}/rollback — rollback session.
+
+    Request body: {"from_id": "uuid-string", "expected_version": N, "exclusive": bool}
+    """
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": "Persona not found"}, status_code=404)
+
+    session_id = request.path_params.get("session_id", "")
+    if not session_id:
+        return JSONResponse({"error": "session_id required"}, status_code=400)
+
+    try:
+        body = await request.json()
+    except (json.JSONDecodeError, TypeError):
+        logger.exception("rollback_chat_session: invalid JSON body")
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    from_id = str(body.get("from_id", "")).strip()
+    if not from_id:
+        return JSONResponse({"error": "from_id must be a non-empty string"}, status_code=400)
+
+    expected_version = body.get("expected_version")
+    if expected_version is not None and not isinstance(expected_version, int):
+        return JSONResponse({"error": "expected_version must be an integer"}, status_code=400)
+
+    try:
+        result = await _do_rollback_chat_session(persona, ctx, session_id, body)
+    except Exception as e:  # 最終防衛線
+        logger.exception("rollback_chat_session failed: %s", e)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+    if result.get("error") == "conflict":
+        return JSONResponse(result, status_code=409)
+    if "error" in result:
+        return JSONResponse(result, status_code=404)
+    return JSONResponse(result)
