@@ -304,7 +304,7 @@ class TestGetRecent:
         keys = []
         for i in range(5):
             with patch(
-                "nous.domain.memory.service.generate_memory_key",
+                "nous.domain.memory.write_service.generate_memory_key",
                 return_value=f"memory_2025010100000{i}",
             ):
                 r = await service.create_memory(content=f"memory {i}")
@@ -330,12 +330,12 @@ class TestGetStats:
 
     async def test_stats_with_data(self, service: MemoryService):
         with patch(
-            "nous.domain.memory.service.generate_memory_key",
+            "nous.domain.memory.write_service.generate_memory_key",
             return_value="memory_20250101000001",
         ):
             await service.create_memory(content="a", tags=["food"], emotion="joy")
         with patch(
-            "nous.domain.memory.service.generate_memory_key",
+            "nous.domain.memory.write_service.generate_memory_key",
             return_value="memory_20250101000002",
         ):
             await service.create_memory(content="b", tags=["food", "travel"], emotion="sadness")

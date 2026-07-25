@@ -7,22 +7,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from datetime import datetime
 
-from nous.domain.memory.contradiction import ContradictionType
-from nous.domain.memory.entities import Memory, MemoryStrength
-from nous.domain.memory.type_classifier import auto_tags
-from nous.domain.search.engine import SearchQuery
-from nous.domain.shared.errors import (
-    DomainError,
-    DuplicateMemoryError,
-    MemoryNotFoundError,
-    MemoryValidationError,
-)
-from nous.domain.shared.result import Failure, Result, Success
-from nous.domain.shared.time_utils import generate_memory_key, get_now
-from nous.domain.value_objects import normalize_emotion, normalize_importance
-
-if TYPE_CHECKING:
     from nous.domain.memory.contradiction import ContradictionDetector
+    from nous.domain.memory.entities import Memory, MemoryStrength
     from nous.domain.memory.repository import (
         MemoryAuxiliaryRepository,
         MemoryRepository,
@@ -31,9 +17,24 @@ if TYPE_CHECKING:
     from nous.domain.search.engine import SearchEngine
     from nous.infrastructure.llm.memory_enricher import MemoryEnricher
 
+from nous.domain.memory.enrich_service import MemoryEnrichService
+from nous.domain.memory.evolution_service import MemoryEvolutionService
+from nous.domain.memory.link_service import MemoryLinkService
+from nous.domain.memory.query_service import MemoryQueryService
+from nous.domain.memory.type_classifier import auto_tags
+from nous.domain.memory.write_service import MemoryWriteService
+from nous.domain.shared.errors import (
+    DomainError,
+    MemoryNotFoundError,
+    MemoryValidationError,
+)
+from nous.domain.shared.result import Failure, Result, Success
+from nous.domain.shared.time_utils import get_now
+from nous.domain.value_objects import normalize_emotion
+
 
 class MemoryService:
-    """Domain service for memory operations."""
+    """Domain service for memory operations — Facade over 5 sub-services."""
 
     def __init__(
         self,
@@ -47,64 +48,42 @@ class MemoryService:
         aux_repo: MemoryAuxiliaryRepository | None = None,
     ) -> None:
         self._repo = repo
+        # Mutable wrapper for late search_engine injection (see use_cases.py:362)
+        self._search_engine_ref: list = [search_engine]
+        # Keep for inline entity extraction hook in create_memory
         self._entity_service = entity_service
-        self._enricher = enricher
         self._link_repo = link_repo
-        self._search_engine = search_engine
         self._contradiction_detector = contradiction_detector
         self._strength_repo = strength_repo
         self._aux_repo = aux_repo
 
-    def set_search_engine(self, search_engine) -> None:
+        # Sub-services
+        self._write_service = MemoryWriteService(repo, self._search_engine_ref)
+        self._enrich_service = MemoryEnrichService(
+            enricher, entity_service, repo
+        )
+        self._link_service = MemoryLinkService(link_repo, self._search_engine_ref)
+        self._evolution_service = MemoryEvolutionService(
+            self._search_engine_ref, repo, enricher, link_repo,
+            contradiction_detector,
+        )
+        self._query_service = MemoryQueryService(repo)
+
+    def set_search_engine(self, search_engine: SearchEngine) -> None:
         """公開API経由で検索エンジンを注入する（循環参照回避のため後付け注入）。"""
-        self._search_engine = search_engine
+        self._search_engine_ref[0] = search_engine
+
+    # ------------------------------------------------------------------
+    # Simple repository wrappers
+    # ------------------------------------------------------------------
 
     def save_memory(self, mem: Memory) -> Result[Memory, DomainError]:
         """Save a pre-constructed memory entity directly to the repository."""
         return self._repo.save(mem)
 
-    async def _check_duplicate(self, content: str) -> DuplicateMemoryError | None:
-        """Check for duplicate content via semantic search + exact match.
-
-        Returns DuplicateMemoryError with details if found, None otherwise.
-        Best-effort: failures are silently swallowed (fall through to creation).
-        """
-        # 1. Semantic similarity check (async)
-        if self._search_engine is not None:
-            try:
-                search_result = await self._search_engine.search(SearchQuery(text=content, top_k=3))
-                if search_result.is_ok and search_result.value:
-                    duplicates = [
-                        {
-                            "key": item.memory.key,
-                            "content": item.memory.content[:100],
-                            "score": item.score,
-                        }
-                        for item in search_result.value
-                        if item.score >= 0.75
-                    ]
-                    if duplicates:
-                        return DuplicateMemoryError(
-                            "Similar memory already exists",
-                            duplicate_key=None,
-                            similar_to=duplicates,
-                        )
-            except Exception:
-                pass  # Fall through to exact check
-
-        # 2. Exact match check (sync, via repository)
-        try:
-            exact = self._repo.find_by_content_exact(content)
-            if exact.is_ok and exact.value is not None:
-                return DuplicateMemoryError(
-                    f"Identical content already exists (key: {exact.value.key}). Skipped.",
-                    duplicate_key=exact.value.key,
-                    similar_to=None,
-                )
-        except Exception:
-            pass  # Fall through to normal creation
-
-        return None
+    # ------------------------------------------------------------------
+    # create_memory — full orchestration
+    # ------------------------------------------------------------------
 
     async def create_memory(
         self,
@@ -138,37 +117,29 @@ class MemoryService:
         if not content or not content.strip():
             return Failure(MemoryValidationError("Content must not be empty"))
 
-        # ── Duplicate check (async semantic + sync exact) ──
+        # ── 1. Duplicate check ──
         if not skip_duplicate_check:
-            dup_error = await self._check_duplicate(content)
+            dup_error = await self._write_service._check_duplicate(content)
             if dup_error is not None:
                 return Failure(dup_error)
 
-        # Auto-classify content and add type tag if not already present
+        # ── 2. Auto-classify content type ──
         type_hints = auto_tags(content.strip(), tags)
         if type_hints:
             tags = list(tags or []) + type_hints
 
-        # Validate tags
-        if tags:
-            if len(tags) > 20:
-                return Failure(MemoryValidationError(f"Too many tags: {len(tags)} (max 20)"))
-            for tag in tags:
-                if len(tag) > 50:
-                    return Failure(MemoryValidationError(f"Tag too long: '{tag[:20]}...' (max 50 chars)"))
+        # ── 3. Validate tags ──
+        tag_error = self._write_service._validate_tags(tags)
+        if tag_error is not None:
+            return Failure(tag_error)
 
-        emotion = normalize_emotion(emotion)
-        now = get_now()
-        key = generate_memory_key()
-        memory = Memory(
-            key=key,
-            content=content.strip(),
-            created_at=now,
-            updated_at=now,
-            importance=normalize_importance(importance),
+        # ── 4. Build memory entity ──
+        memory, key, now = self._write_service._build_memory_entity(
+            content=content,
+            importance=importance,
             emotion=emotion,
-            emotion_intensity=normalize_importance(emotion_intensity),
-            tags=tags or [],
+            emotion_intensity=emotion_intensity,
+            tags=tags,
             privacy_level=privacy_level,
             source_context=source_context,
             body_state=body_state,
@@ -176,13 +147,15 @@ class MemoryService:
             kind=kind,
             source_type=source_type,
             confidence=confidence,
-            **{k: v for k, v in extra_fields.items() if hasattr(Memory, k)},
+            **extra_fields,
         )
+
+        # ── 5. Persist ──
         result = self._repo.save(memory)
         if not result.is_ok:
             return Failure(result.error)
 
-        # Record version 1
+        # ── 6. Version 1 ──
         self._repo.save_version(
             memory_key=key,
             version=1,
@@ -192,7 +165,7 @@ class MemoryService:
             change_type="create",
         )
 
-        # Entity extraction hook (best-effort, never blocks create)
+        # ── 7. Entity extraction hook (best-effort) ──
         if self._entity_service is not None:
             with contextlib.suppress(Exception):
                 self._entity_service.extract_and_link(
@@ -201,53 +174,23 @@ class MemoryService:
                     tags=tags,
                 )
 
-        # Memory enrichment: auto-evaluate importance + extract relations (best-effort)
-        if self._enricher is not None and importance == 0.5:
-            with contextlib.suppress(Exception):
-                # Extract entities using Sudachi NER (accurate path) for LLM context.
-                # create_memory is sync — call SudachiExtractor directly (no await needed).
-                from nous.domain.memory.sudachi_extractor import (
-                    SudachiExtractor,
-                )
+        # ── 8. Enrichment ──
+        self._enrich_service.enrich_memory(
+            memory=memory,
+            content=content,
+            type_hints=type_hints,
+            key=key,
+            importance=importance,
+        )
 
-                sudachi = SudachiExtractor()
-                accurate = sudachi.extract(content.strip())
-                # Convert list[dict] with keys {name, type, start, end} → list[tuple[str, str]]
-                extracted_entities = [(e["name"], e["type"]) for e in accurate]
-                enrichment = self._enricher.enrich(
-                    content=content.strip(),
-                    type_tags=type_hints or [],
-                    entities=extracted_entities,
-                )
-                if enrichment is not None:
-                    # Update importance if auto-evaluated differently
-                    if enrichment.importance != 0.5:
-                        clamped = normalize_importance(enrichment.importance)
-                        memory.importance = clamped
-                        with contextlib.suppress(Exception):
-                            self._repo.update(key, importance=clamped)
-
-                    # Register auto-extracted relations
-                    if enrichment.relations and self._entity_service is not None:
-                        for rel in enrichment.relations:
-                            with contextlib.suppress(Exception):
-                                self._entity_service.add_relation(
-                                    source=rel.source_entity,
-                                    target=rel.target_entity,
-                                    relation_type=rel.relation_type,
-                                    memory_key=key,
-                                    confidence=rel.confidence,
-                                )
-
-        # Hebbian co-activation links: associate with co-accessed memories
+        # ── 9. Hebbian co-activation links ──
         if self._link_repo is not None:
             with contextlib.suppress(Exception):
-                self._create_hebbian_links(memory)
+                self._link_service._create_hebbian_links(memory)
 
-        # Memory evolution + contradiction invalidation (background, non-blocking)
-        # TaskGroup でラップし、内部例外を適切に捕捉する
+        # ── 10. Background evolution ──
         asyncio.create_task(
-            self._run_background_evolution(
+            self._evolution_service._run_background_evolution(
                 content=content,
                 memory_key=memory.key,
                 persona=persona or "default",
@@ -257,216 +200,9 @@ class MemoryService:
 
         return Success(memory)
 
-    async def _evolve_related_memories(
-        self,
-        content: str,
-        new_memory_key: str,
-        max_related: int = 3,
-    ) -> None:
-        """After creating a new memory, find semantically similar existing
-        memories and enrich them by updating context and strengthening links.
-
-        This implements the A-MEM pattern (arXiv:2502.12110) + HiMem-style
-        3-op contradiction classification (ADD / UPDATE / DELETE).
-
-        Steps:
-        1. Find semantically similar existing memories.
-        2. Run HiMem contradiction classification:
-           - EXTENDABLE → update existing memory's metadata only.
-           - CONTRADICTORY → tombstone existing memory.
-           - INDEPENDENT → no action (both coexist).
-        3. Update access metadata, Hebbian links, and summary_ref on
-           surviving memories.
-
-        All steps are best-effort and never block the caller.
-        """
-        # Only run for substantive content (avoids enriching noise)
-        if len(content) < 30:
-            return
-
-        try:
-            # Semantically search for similar existing memories
-            similar = await self._search_engine.search(
-                SearchQuery(
-                    text=content,
-                    top_k=max_related,
-                    mode="semantic",
-                    similarity_threshold=0.8,
-                )
-            )
-            if not similar.is_ok or not similar.value:
-                return
-
-            # --- HiMem-style 3-op contradiction classification ---
-            tombstoned_keys: set[str] = set()
-
-            if self._enricher is not None:
-                candidates = [
-                    {
-                        "key": r.memory.key,
-                        "content": r.memory.content,
-                        "similarity": r.score,
-                    }
-                    for r in similar.value
-                    if r.memory.key != new_memory_key
-                ]
-                if candidates:
-                    result = self._enricher.classify_contradiction(
-                        new_content=content,
-                        existing_memories=candidates,
-                    )
-                    if result is not None and result.existing_memory_key:
-                        if result.type == ContradictionType.EXTENDABLE:
-                            updates = dict(result.updated_fields or {})
-                            if updates:
-                                self._repo.update(result.existing_memory_key, **updates)
-                        elif result.type == ContradictionType.CONTRADICTORY:
-                            self._repo.tombstone(result.existing_memory_key)
-                            tombstoned_keys.add(result.existing_memory_key)
-                        # INDEPENDENT: do nothing, both coexist
-
-            # --- Existing evolution logic (skip tombstoned) ---
-            for result in similar.value:
-                existing = result.memory
-                if existing.key == new_memory_key or existing.key in tombstoned_keys:
-                    continue
-
-                # 1. Update access metadata on existing memory
-                existing.access_count += 1
-                existing.last_accessed = get_now()
-                self._repo.update(
-                    existing.key,
-                    access_count=existing.access_count,
-                    last_accessed=existing.last_accessed,
-                )
-
-                # 2. Create or strengthen Hebbian link
-                if self._link_repo is not None:
-                    self._link_repo.upsert(new_memory_key, existing.key, "semantic")
-
-                # 3. Update summary_ref on existing memory (record that
-                #    newer information exists about this topic)
-                if not existing.summary_ref:
-                    self._repo.update(existing.key, summary_ref=new_memory_key)
-
-        except Exception:
-            # Evolution is best-effort, never blocks the main flow
-            pass
-
-    async def _invalidate_contradicted_memory(
-        self,
-        new_content: str,
-        new_memory_key: str,
-        persona: str,
-        valid_from: datetime,
-    ) -> None:
-        """Find existing memories that contradict the new content and close
-        their validity windows (set ``valid_until = valid_from``).
-
-        This is the core bi-temporal invalidation: old facts don't disappear,
-        they just become "no longer valid" from the new fact's timestamp.
-        The old memory remains queryable with ``valid_at`` filters.
-        """
-        if self._contradiction_detector is None:
-            return
-        try:
-            report = await self._contradiction_detector.find_potential_contradictions(
-                content=new_content,
-                persona=persona,
-                exclude_key=new_memory_key,
-            )
-            if not report.is_ok or not report.value.candidates:
-                return
-
-            threshold = report.value.threshold
-            for candidate in report.value.candidates:
-                if candidate.similarity >= threshold:
-                    self._repo.update_validity_window(
-                        memory_key=candidate.memory_key,
-                        valid_until=valid_from,
-                    )
-        except Exception:
-            # Invalidation is best-effort, never blocks the main flow
-            pass
-
-    def _create_hebbian_links(self, new_memory: Memory) -> None:
-        """Generate Hebbian links between *new_memory* and recently accessed memories.
-
-        Hebbian co-fire principle: only memories accessed in the same conversation
-        turn are linked.  Similarity-based linking (cosine >= 0.8) is deferred to
-        a future async search-engine integration.
-        """
-        if self._link_repo is None:
-            return
-
-        co_accessed = self._get_session_memories(new_memory)
-        for candidate in co_accessed[:5]:  # max 5 links per new memory
-            if candidate.key == new_memory.key:
-                continue
-            link_type = self._classify_link_type(new_memory, candidate)
-            self._link_repo.upsert(new_memory.key, candidate.key, link_type)
-
-    @staticmethod
-    def _classify_link_type(m1: Memory, m2: Memory) -> str:
-        """Classify the associative link type between two memories."""
-        if m1.emotion and m2.emotion and m1.emotion == m2.emotion:
-            return "emotional"
-        if m1.kind == "episodic" and m2.kind == "episodic":
-            return "temporal"
-        return "semantic"
-
-    async def _run_background_evolution(
-        self,
-        content: str,
-        memory_key: str,
-        persona: str,
-        valid_from,
-    ) -> None:
-        """Run memory evolution and contradiction detection in background TaskGroup."""
-        try:
-            async with asyncio.TaskGroup() as tg:
-                if self._search_engine is not None:
-                    tg.create_task(
-                        self._evolve_related_memories(
-                            content=content,
-                            new_memory_key=memory_key,
-                        )
-                    )
-                if self._contradiction_detector is not None and self._contradiction_detector.available:
-                    tg.create_task(
-                        self._invalidate_contradicted_memory(
-                            new_content=content.strip(),
-                            new_memory_key=memory_key,
-                            persona=persona,
-                            valid_from=valid_from,
-                        )
-                    )
-        except Exception:
-            import logging
-            _log = logging.getLogger(__name__)
-            _log.exception("Background memory evolution/contradiction detection failed")
-
-    def _get_session_memories(self, _new_memory: Memory) -> list:
-        """Return memories recently accessed in the current conversation turn.
-
-        TODO(blocked): session_eventテーブル実装待ち
-
-        Stub implementation — always returns empty list.
-        Will be wired to session_event table or in-memory turn context
-        in a follow-up task.
-        """
-        return []
-
-    def get_memory(self, key: str) -> Result[Memory, DomainError]:
-        """Retrieve a memory by key (excludes tombstoned memories)."""
-        result = self._repo.find_by_key(key)
-        if not result.is_ok:
-            return Failure(result.error)
-        if result.value is None:
-            return Failure(MemoryNotFoundError(f"Memory not found: {key}"))
-        if getattr(result.value, "lifecycle_status", "active") == "tombstoned":
-            return Failure(MemoryNotFoundError(f"Memory deleted: {key}"))
-        return Success(result.value)
+    # ------------------------------------------------------------------
+    # update_memory — stays in Facade (versioning consistency)
+    # ------------------------------------------------------------------
 
     def update_memory(self, key: str, **updates: object) -> Result[Memory, DomainError]:
         """Update fields of an existing memory."""
@@ -491,11 +227,9 @@ class MemoryService:
             updates["emotion"] = normalize_emotion(str(updates["emotion"]))
         if "tags" in updates and updates["tags"]:
             tag_list = updates["tags"]
-            if len(tag_list) > 20:
-                return Failure(MemoryValidationError(f"Too many tags: {len(tag_list)} (max 20)"))
-            for tag in tag_list:
-                if len(str(tag)) > 50:
-                    return Failure(MemoryValidationError(f"Tag too long: '{str(tag)[:20]}...' (max 50 chars)"))
+            tag_error = self._write_service._validate_tags(tag_list)
+            if tag_error is not None:
+                return Failure(tag_error)
         result = self._repo.update(key, **updates)
         if not result.is_ok:
             return Failure(result.error)
@@ -513,6 +247,10 @@ class MemoryService:
         )
 
         return Success(result.value)
+
+    # ------------------------------------------------------------------
+    # delete_memory — stays in Facade (versioning consistency)
+    # ------------------------------------------------------------------
 
     def delete_memory(self, key: str) -> Result[None, DomainError]:
         """Tombstone a memory by key (logical delete).
@@ -547,13 +285,21 @@ class MemoryService:
 
         return self._repo.tombstone(key)
 
+    # ------------------------------------------------------------------
+    # Query delegation
+    # ------------------------------------------------------------------
+
+    def get_memory(self, key: str) -> Result[Memory, DomainError]:
+        """Retrieve a memory by key (excludes tombstoned memories)."""
+        return self._query_service.get_memory(key)
+
     def get_recent(self, limit: int = 10, offset: int = 0) -> Result[list[Memory], DomainError]:
         """Get most recent memories with optional pagination offset."""
-        return self._repo.find_recent(limit=limit, offset=offset)
+        return self._query_service.get_recent(limit=limit, offset=offset)
 
     def count_memories(self) -> Result[int, DomainError]:
         """Count total non-tombstoned memories."""
-        return self._repo.count()
+        return self._query_service.count_memories()
 
     def get_stats(self, top_n: int = 20) -> Result[dict, DomainError]:
         """Get memory statistics.
@@ -561,42 +307,7 @@ class MemoryService:
         Args:
             top_n: Maximum number of entries to return in tag/emotion distributions (default 20).
         """
-        count_result = self._repo.count()
-        if not count_result.is_ok:
-            return Failure(count_result.error)
-
-        all_result = self._repo.find_all()
-        if not all_result.is_ok:
-            return Failure(all_result.error)
-
-        memories = all_result.value
-        tag_dist: dict[str, int] = {}
-        emotion_dist: dict[str, int] = {}
-        for m in memories:
-            for tag in m.tags:
-                tag_dist[tag] = tag_dist.get(tag, 0) + 1
-            emotion_dist[m.emotion] = emotion_dist.get(m.emotion, 0) + 1
-
-        total_count = count_result.value
-        tagged_count = sum(1 for m in memories if m.tags)
-
-        # Sort by count descending and truncate to top_n
-        sorted_tags = sorted(tag_dist.items(), key=lambda x: -x[1])
-        sorted_emotions = sorted(emotion_dist.items(), key=lambda x: -x[1])
-        hidden_tags = max(0, len(sorted_tags) - top_n)
-        hidden_emotions = max(0, len(sorted_emotions) - top_n)
-
-        result: dict = {
-            "total_count": total_count,
-            "tag_distribution": dict(sorted_tags[:top_n]),
-            "emotion_distribution": dict(sorted_emotions[:top_n]),
-            "tagged_ratio": tagged_count / total_count if total_count > 0 else None,
-        }
-        if hidden_tags:
-            result["tag_distribution_note"] = f"+ {hidden_tags} more tags (use top_n to see more)"
-        if hidden_emotions:
-            result["emotion_distribution_note"] = f"+ {hidden_emotions} more emotion types"
-        return Success(result)
+        return self._query_service.get_stats(top_n=top_n)
 
     def boost_recall(self, key: str, emotion_intensity: float | None = None) -> Result[MemoryStrength, DomainError]:
         """Boost memory strength on recall.
@@ -606,27 +317,31 @@ class MemoryService:
             emotion_intensity: Current emotion intensity used as proxy for valence
                 (Bower 1981 emotion-congruent recall). Stored in strength.valence.
         """
-        strength_result = self._repo.get_strength(key)
-        if not strength_result.is_ok:
-            return Failure(strength_result.error)
+        return self._query_service.boost_recall(key, emotion_intensity=emotion_intensity)
 
-        strength = strength_result.value
-        if strength is None:
-            strength = MemoryStrength(memory_key=key)
+    def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], DomainError]:
+        """Get memories that contain ALL specified tags."""
+        return self._query_service.get_by_tags(tags, include_consumed=include_consumed)
 
-        # Store current emotion intensity as valence for emotion-congruent recall
-        if emotion_intensity is not None:
-            strength.valence = emotion_intensity
+    def get_memory_history(self, key: str) -> Result[list[dict], DomainError]:
+        """Get version history for a memory."""
+        return self._query_service.get_memory_history(key)
 
-        strength.boost_on_recall(emotion_intensity=emotion_intensity or 0.0)
-        strength.last_recall = get_now()
+    def get_and_consume_one_shot(self, tag: str) -> Result[list[Memory], DomainError]:
+        """Get the latest memory with the given tag and mark it as consumed.
 
-        save_result = self._repo.save_strength(strength)
-        if not save_result.is_ok:
-            return Failure(save_result.error)
-        return Success(strength)
+        Used for one-shot state memories (e.g., physical_state, mental_state).
+        Returns a list with the latest memory if found, else empty list.
+        """
+        return self._query_service.get_and_consume_one_shot(tag)
 
-    # --- Core Memory (Memory Blocks) ---
+    def get_memory_index(self) -> Result[dict, DomainError]:
+        """Get compressed memory index."""
+        return self._query_service.get_memory_index()
+
+    # ------------------------------------------------------------------
+    # Block management
+    # ------------------------------------------------------------------
 
     def write_block(
         self,
@@ -656,34 +371,13 @@ class MemoryService:
         """List all memory blocks."""
         return self._repo.list_blocks()
 
-    def get_memory_history(self, key: str) -> Result[list[dict], DomainError]:
-        """Get version history for a memory."""
-        return self._repo.get_versions(key)
-
     def delete_block(self, block_name: str) -> Result[None, DomainError]:
         """Delete a named memory block."""
         return self._repo.delete_block(block_name)
 
-    def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], DomainError]:
-        """Get memories that contain ALL specified tags."""
-        return self._repo.get_by_tags(tags, include_consumed=include_consumed)
-
-    def get_and_consume_one_shot(self, tag: str) -> Result[list[Memory], DomainError]:
-        """Get the latest memory with the given tag and mark it as consumed.
-
-        Used for one-shot state memories (e.g., physical_state, mental_state).
-        Returns a list with the latest memory if found, else empty list.
-        """
-        result = self._repo.get_by_tags([tag])
-        if not result.is_ok or not result.value:
-            return Success([])
-        memories = sorted(result.value, key=lambda m: m.created_at or get_now(), reverse=True)
-        latest = memories[0]
-        with contextlib.suppress(Exception):
-            self._repo.consume_memory(latest.key)
-        return Success([latest])
-
-    # --- Smart Recent + Search Log + Gap Alert ---
+    # ------------------------------------------------------------------
+    # Smart Recent + Search Log + Gap Alert
+    # ------------------------------------------------------------------
 
     def get_smart_recent(self, limit: int = 8) -> Result[list[Memory], DomainError]:
         """Get memories ranked by smart score (importance * recency * strength)."""
@@ -701,11 +395,9 @@ class MemoryService:
         """Count important memories with low strength."""
         return self._repo.count_decayed_important()
 
-    # --- Context Intelligence C ---
-
-    def get_memory_index(self) -> Result[dict, DomainError]:
-        """Get compressed memory index."""
-        return self._repo.get_memory_index()
+    # ------------------------------------------------------------------
+    # Context Intelligence C
+    # ------------------------------------------------------------------
 
     def get_top_by_importance(self, limit: int = 15) -> Result[list[Memory], DomainError]:
         """Get memories ranked by importance descending."""
