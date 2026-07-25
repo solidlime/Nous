@@ -18,8 +18,9 @@ function addLoraRow(path, weight) {
   var div = document.createElement('div');
   div.style.cssText = 'display:flex;gap:4px;align-items:center;';
   safeSetHTML(div, '<input type="text" class="chat-field-input lora-path" value="' + escHtml(path || '') + '" placeholder="lora.safetensors" style="flex:1;font-size:0.82rem;">'
-    + '<input type="number" class="chat-field-input lora-weight" value="' + (weight || 1.0).toFixed(1) + '" min="0.1" max="2.0" step="0.1" style="width:55px;font-size:0.82rem;">'
-    + '<button type="button" onclick="this.parentElement.remove()" style="color:var(--accent-red);background:none;border:none;cursor:pointer;font-size:1rem;">\u00d7</button>');
+    + '<input type="number" class="chat-field-input lora-weight" value="' + (weight ?? 1.0).toFixed(1) + '" min="0.1" max="2.0" step="0.1" style="width:55px;font-size:0.82rem;">'
+    + '<button type="button" class="lora-delete-btn" style="color:var(--accent-red);background:none;border:none;cursor:pointer;font-size:1rem;">\u00d7</button>');
+  div.querySelector('.lora-delete-btn').addEventListener('click', function() { div.remove(); });
   container.appendChild(div);
 }
 
