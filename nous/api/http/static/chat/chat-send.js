@@ -508,8 +508,15 @@ async function chatSend(retry) {
           currentTextContent = "";
           const toolDiv = N.Chat.tools.append("tool_call", evt, assistantDiv);
           contentParts.push({ type: "tool_call", div: toolDiv, id: evt.id, name: evt.name });
-          safeSetHTML(statusEl,
-            '<i data-lucide="wrench"></i> ' + esc(evt.name) + " を実行中...");
+          // image_generate は image_gen_start が専用のスピナー表示を行うので、
+          // ここでは generic な「…を実行中」ではなく専用テキストを表示して重複を避ける
+          if (evt.name === "image_generate") {
+            safeSetHTML(statusEl,
+              '<i data-lucide="image"></i> 画像を生成中...');
+          } else {
+            safeSetHTML(statusEl,
+              '<i data-lucide="wrench"></i> ' + esc(evt.name) + " を実行中...");
+          }
         } else if (evt.type === "tool_result") {
           N.Chat.tools.append("tool_result", evt);
           currentTextBubble = null; // ensure next text_delta creates new bubble
