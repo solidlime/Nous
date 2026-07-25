@@ -112,6 +112,6 @@ async def chat_endpoint(request: Request) -> StreamingResponse:
 
     return StreamingResponse(
         _do_chat(persona, ctx, user_message, session_id, debug_mode, images),
-        media_type="text/event-stream",
+        media_type="text/event-stream; charset=utf-8",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
