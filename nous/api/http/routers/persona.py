@@ -70,6 +70,22 @@ async def _do_list_personas() -> list:
     return []
 
 
+async def _do_dashboard_page(persona: str | None = None) -> str:
+    """Return rendered dashboard HTML for persona, or setup page if no personas exist."""
+    if persona is None:
+        settings = Settings()
+        data_path = Path(settings.persona_dir)
+        persona_count = 0
+        if data_path.exists():
+            persona_count = len([d for d in data_path.iterdir() if d.is_dir() and (d / "memory.sqlite").exists()])
+        if persona_count == 0:
+            return _render_setup_page()
+
+    from nous.api.http.dashboard import render_dashboard
+
+    return render_dashboard(persona)
+
+
 # ── HTTP adapter layer — 元の関数名を維持 ───────────────────────────────
 
 
@@ -83,32 +99,22 @@ async def list_personas(request: Request) -> JSONResponse:
     return JSONResponse({"personas": await _do_list_personas()})
 
 
+async def dashboard_page(request: Request) -> HTMLResponse:
+    """GET / — root dashboard or setup page."""
+    return HTMLResponse(await _do_dashboard_page())
+
+
+async def dashboard_page_persona(request: Request) -> HTMLResponse:
+    """GET /dashboard/{persona} — persona-specific dashboard."""
+    persona = _resolve_persona_from_request(request)
+    return HTMLResponse(await _do_dashboard_page(persona))
+
+
 def register_persona_routes(mcp) -> None:
     mcp.custom_route("/health", methods=["GET"])(health)
     mcp.custom_route("/api/personas", methods=["GET"])(list_personas)
-
-    @mcp.custom_route("/", methods=["GET"])
-    async def dashboard_page(request: Request) -> HTMLResponse:
-        from nous.api.http.dashboard import render_dashboard
-
-        # Check if any personas exist; show setup screen if none.
-        settings = Settings()
-        data_path = Path(settings.persona_dir)
-        persona_count = 0
-        if data_path.exists():
-            persona_count = len([d for d in data_path.iterdir() if d.is_dir() and (d / "memory.sqlite").exists()])
-
-        if persona_count == 0:
-            return HTMLResponse(_render_setup_page())
-
-        return HTMLResponse(render_dashboard())
-
-    @mcp.custom_route("/dashboard/{persona}", methods=["GET"])
-    async def dashboard_page_persona(request: Request) -> HTMLResponse:
-        from nous.api.http.dashboard import render_dashboard
-
-        persona = _resolve_persona_from_request(request)
-        return HTMLResponse(render_dashboard(persona))
+    mcp.custom_route("/", methods=["GET"])(dashboard_page)
+    mcp.custom_route("/dashboard/{persona}", methods=["GET"])(dashboard_page_persona)
 
     @mcp.custom_route("/api/dashboard/{persona}", methods=["GET"])
     async def dashboard_data(request: Request) -> JSONResponse:
