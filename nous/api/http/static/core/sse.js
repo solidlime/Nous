@@ -89,7 +89,13 @@ N.Core.connectSSE = function connectSSE(persona) {
         var labels = { fatigue: "\ud83d\udd25", warmth: "\ud83c\udf3c", arousal: "\u26a1", heart_rate: "\ud83d\udc93", pain: "\ud83d\udcaa" };
         var parts = Object.entries(d.states)
           .filter(function(kv) { return kv[1] != null; })
-          .map(function(kv) { return (labels[kv[0]] || kv[0]) + " " + Math.round(Number(kv[1]) * 100) + "%"; });
+          .map(function(kv) {
+            var val = Number(kv[1]);
+            if (isNaN(val)) {
+              return (labels[kv[0]] || kv[0]) + " " + kv[1];
+            }
+            return (labels[kv[0]] || kv[0]) + " " + Math.round(val * 100) + "%";
+          });
         if (parts.length) {
           N.Core.toast("\ud83e\udda0 \u4f53\u8abf\u5909\u66f4: " + parts.join(" "), "info");
         }
