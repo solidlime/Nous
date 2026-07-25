@@ -171,6 +171,8 @@ function applyChatConfig(cfg) {
     cfg.context_use_llm_summary !== false;
   document.getElementById("chat-episode-search").checked =
     cfg.episode_search_enabled !== false;
+  document.getElementById("chat-show-timestamps").checked =
+    cfg.show_message_timestamps === true;
   document
     .getElementById("chat-compression-threshold")
     .addEventListener("input", function () {
@@ -378,6 +380,7 @@ async function saveChatConfig() {
       .checked,
     context_use_llm_summary: getChecked("chat-llm-summary"),
     episode_search_enabled: getChecked("chat-episode-search"),
+    show_message_timestamps: getChecked("chat-show-timestamps"),
     max_tool_calls: parseInt(
       document.getElementById("chat-max-tool-calls")?.value || "5",
     ),

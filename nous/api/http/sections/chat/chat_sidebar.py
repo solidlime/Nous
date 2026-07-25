@@ -161,12 +161,16 @@ def _render_context_section() -> str:
                                     <input type="checkbox" id="chat-llm-summary" checked>
                                     <label for="chat-llm-summary" style="font-size:0.8rem;">LLM要約圧縮</label>
                                   </div>
-                                  <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
-                                    <input type="checkbox" id="chat-episode-search" checked>
-                                    <label for="chat-episode-search" style="font-size:0.8rem;">エピソード検索</label>
-                                  </div>
-                                  </div>
-                                </details>
+                                   <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+                                     <input type="checkbox" id="chat-episode-search" checked>
+                                     <label for="chat-episode-search" style="font-size:0.8rem;">エピソード検索</label>
+                                   </div>
+                                   <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+                                     <input type="checkbox" id="chat-show-timestamps">
+                                     <label for="chat-show-timestamps" style="font-size:0.8rem;">メッセージにタイムスタンプを表示</label>
+                                   </div>
+                                   </div>
+                                 </details>
                             </div>
                         </details>"""
 
