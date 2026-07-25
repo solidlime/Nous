@@ -19,6 +19,7 @@ class SessionConfig(BaseModel):
     language: str = "ja"  # "ja" | "en" | "zh" | "ko" | "auto"
     debug_mode: bool = False
     display_history_turns: int = 10
+    show_message_timestamps: bool = False  # チャットメッセージにタイムスタンプを表示
     session_summarize: bool = True
     episode_search_enabled: bool = True
 
