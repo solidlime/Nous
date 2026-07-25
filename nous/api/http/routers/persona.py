@@ -269,6 +269,22 @@ async def _do_import_conversation(persona: str, ctx, file_path: str) -> dict:
     return {"imported": imported, "skipped": skipped, "message": f"Imported {imported} messages"}
 
 
+async def _do_create_persona(persona_name: str) -> dict:
+    """Create a new persona. Returns status dict or error dict."""
+    settings = Settings()
+    persona_dir = Path(settings.persona_dir) / persona_name
+    if persona_dir.exists():
+        return {"error": f"Persona '{persona_name}' already exists"}
+    ctx = AppContextRegistry.get(persona_name)
+    if ctx is None:
+        return {"error": "Failed to initialize persona"}
+    return {
+        "status": "ok",
+        "persona": persona_name,
+        "message": f"Persona '{persona_name}' created",
+    }
+
+
 # ── HTTP adapter layer — 元の関数名を維持 ───────────────────────────────
 
 
@@ -330,6 +346,28 @@ async def import_conversation(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+async def create_persona(request: Request) -> JSONResponse:
+    """POST /api/personas — create a new persona."""
+    try:
+        body = await request.json()
+    except Exception:
+        logger.exception("create_persona: invalid JSON body")
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+    persona_name = (body.get("name") or "").strip()
+    if not persona_name:
+        return JSONResponse({"error": "Field 'name' is required"}, status_code=400)
+    if not _PERSONA_PATTERN.match(persona_name):
+        return JSONResponse(
+            {"error": "ペルソナ名には英数字・ハイフン・アンダースコアのみ使用できます"},
+            status_code=400,
+        )
+    result = await _do_create_persona(persona_name)
+    if "error" in result:
+        status = 409 if "already exists" in result["error"] else 500
+        return JSONResponse(result, status_code=status)
+    return JSONResponse(result, status_code=201)
+
+
 def register_persona_routes(mcp) -> None:
     mcp.custom_route("/health", methods=["GET"])(health)
     mcp.custom_route("/api/personas", methods=["GET"])(list_personas)
@@ -337,37 +375,7 @@ def register_persona_routes(mcp) -> None:
     mcp.custom_route("/dashboard/{persona}", methods=["GET"])(dashboard_page_persona)
     mcp.custom_route("/api/dashboard/{persona}", methods=["GET"])(dashboard_data)
     mcp.custom_route("/api/import-conversation/{persona}", methods=["POST"])(import_conversation)
-
-    @mcp.custom_route("/api/personas", methods=["POST"])
-    async def create_persona(request: Request) -> JSONResponse:
-        try:
-            body = await request.json()
-        except Exception:
-            logger.exception("create_persona: invalid JSON body")
-            return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
-        persona_name = body.get("name")
-        if not persona_name:
-            return JSONResponse({"error": "Field 'name' is required"}, status_code=400)
-        if not _PERSONA_PATTERN.match(persona_name):
-            return JSONResponse(
-                {"error": "ペルソナ名には英数字・ハイフン・アンダースコアのみ使用できます"},
-                status_code=400,
-            )
-        settings = Settings()
-        persona_dir = Path(settings.persona_dir) / persona_name
-        if persona_dir.exists():
-            return JSONResponse({"error": f"Persona '{persona_name}' already exists"}, status_code=409)
-        try:
-            ctx = AppContextRegistry.get(persona_name)
-            if ctx is None:
-                return JSONResponse({"error": "Failed to initialize persona"}, status_code=500)
-            return JSONResponse(
-                {"status": "ok", "persona": persona_name, "message": f"Persona '{persona_name}' created"},
-                status_code=201,
-            )
-        except Exception as exc:
-            logger.exception("Unexpected error: %s", exc)
-            return JSONResponse({"error": "Internal server error"}, status_code=500)
+    mcp.custom_route("/api/personas", methods=["POST"])(create_persona)
 
     @mcp.custom_route("/api/personas/{persona}", methods=["DELETE"])
     async def delete_persona(request: Request) -> JSONResponse:
