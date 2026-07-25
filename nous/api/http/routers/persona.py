@@ -313,6 +313,26 @@ async def _do_sillytavern_card(persona: str, ctx) -> bytes:
     return _build_sillytavern_card(state_result.value)
 
 
+async def _do_update_persona_profile(persona: str, ctx, body: dict) -> dict:
+    """Update persona profile fields. Returns status dict or error dict."""
+    updated = []
+    if "user_info" in body and isinstance(body["user_info"], dict):
+        result = ctx.persona_service.update_user_info(persona, body["user_info"])
+        if result.is_ok:
+            updated.append("user_info")
+    if "persona_info" in body and isinstance(body["persona_info"], dict):
+        result = ctx.persona_service.update_persona_info(persona, body["persona_info"])
+        if result.is_ok:
+            updated.append("persona_info")
+    if "relationship_status" in body:
+        result = ctx.persona_service.update_relationship(persona, body["relationship_status"])
+        if result.is_ok:
+            updated.append("relationship_status")
+    if not updated:
+        return {"error": "No valid fields to update"}
+    return {"status": "ok", "updated": updated}
+
+
 # ── HTTP adapter layer — 元の関数名を維持 ───────────────────────────────
 
 
@@ -418,6 +438,27 @@ async def sillytavern_card(request: Request) -> Response:
         return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
+async def update_persona_profile(request: Request) -> JSONResponse:
+    """PUT /api/personas/{persona}/profile — update persona profile."""
+    persona = _resolve_persona_from_request(request)
+    ctx = _safe_get_context(persona)
+    if ctx is None:
+        return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
+    try:
+        body = await request.json()
+    except Exception:
+        logger.exception("update_persona_profile: invalid JSON body")
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+    try:
+        result = await _do_update_persona_profile(persona, ctx, body)
+        if "error" in result:
+            return JSONResponse(result, status_code=400)
+        return JSONResponse(result)
+    except Exception as exc:
+        logger.exception("Unexpected error: %s", exc)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
 def register_persona_routes(mcp) -> None:
     mcp.custom_route("/health", methods=["GET"])(health)
     mcp.custom_route("/api/personas", methods=["GET"])(list_personas)
@@ -428,38 +469,7 @@ def register_persona_routes(mcp) -> None:
     mcp.custom_route("/api/personas", methods=["POST"])(create_persona)
     mcp.custom_route("/api/personas/{persona}", methods=["DELETE"])(delete_persona)
     mcp.custom_route("/api/personas/{persona}/card.png", methods=["GET"])(sillytavern_card)
-
-    @mcp.custom_route("/api/personas/{persona}/profile", methods=["PUT"])
-    async def update_persona_profile(request: Request) -> JSONResponse:
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if ctx is None:
-            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
-        try:
-            body = await request.json()
-        except Exception:
-            logger.exception("update_persona_profile: invalid JSON body")
-            return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
-        try:
-            updated = []
-            if "user_info" in body and isinstance(body["user_info"], dict):
-                result = ctx.persona_service.update_user_info(persona, body["user_info"])
-                if result.is_ok:
-                    updated.append("user_info")
-            if "persona_info" in body and isinstance(body["persona_info"], dict):
-                result = ctx.persona_service.update_persona_info(persona, body["persona_info"])
-                if result.is_ok:
-                    updated.append("persona_info")
-            if "relationship_status" in body:
-                result = ctx.persona_service.update_relationship(persona, body["relationship_status"])
-                if result.is_ok:
-                    updated.append("relationship_status")
-            if not updated:
-                return JSONResponse({"error": "No valid fields to update"}, status_code=400)
-            return JSONResponse({"status": "ok", "updated": updated})
-        except Exception as exc:
-            logger.exception("Unexpected error: %s", exc)
-            return JSONResponse({"error": "Internal server error"}, status_code=500)
+    mcp.custom_route("/api/personas/{persona}/profile", methods=["PUT"])(update_persona_profile)
 
 
 def _build_sillytavern_card(state: PersonaState) -> bytes:
