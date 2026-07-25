@@ -120,12 +120,28 @@ class PrepareStep:
                     top_k=max(preload_count, 1) if preload_count > 0 else 100,
                 )
             )
-            turn_ctx.context_section, (turn_ctx.related_memories, debug, memories_list) = await asyncio.gather(
-                context_task, memory_task
+            results = await asyncio.gather(
+                context_task, memory_task, return_exceptions=True
             )
-            turn_ctx.memory_debug = debug
-            turn_ctx.memories_raw = debug.get("results", [])
-            turn_ctx.memories_objects = memories_list
+            context_section = results[0]
+            memory_result = results[1]
+
+            if isinstance(context_section, Exception):
+                logger.warning("PrepareStep: context_section build failed: %s", context_section)
+                context_section = ""
+            if isinstance(memory_result, Exception):
+                logger.warning("PrepareStep: memory search failed: %s", memory_result)
+                turn_ctx.related_memories = ""
+                turn_ctx.memory_debug = {}
+                turn_ctx.memories_raw = []
+                turn_ctx.memories_objects = []
+            else:
+                turn_ctx.related_memories, debug, memories_list = memory_result
+                turn_ctx.memory_debug = debug
+                turn_ctx.memories_raw = debug.get("results", [])
+                turn_ctx.memories_objects = memories_list
+
+            turn_ctx.context_section = context_section
 
             # HiMem 2-tier: Episode Memory fallback when Note Memory insufficient
             if config.episode_search_enabled:

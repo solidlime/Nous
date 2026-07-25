@@ -58,7 +58,8 @@ async def _do_chat(
     repo = ChatConfigFileRepository(get_settings().data_root)
     config = repo.get(persona)
     service = ChatService()
-    ctx.search_engine.set_persona(persona)
+    if ctx.search_engine is not None:
+        ctx.search_engine.set_persona(persona)
 
     async for chunk in service.chat(ctx, config, session_id, user_message, debug=debug, images=images or []):
         yield chunk
