@@ -224,7 +224,7 @@ function showContextCompressed(evt) {
       "%→" +
       afterPct +
       "% 予算比) " +
-      ((-savings / evt.before_tokens) * 100).toFixed(0) +
+      ((savings / evt.before_tokens) * 100).toFixed(0) +
       "%削減",
     "info",
   );
