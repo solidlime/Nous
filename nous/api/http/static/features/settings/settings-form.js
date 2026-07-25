@@ -1,49 +1,20 @@
 /* =================================================================
-   SETTINGS FORM — Rendering, search/filter, category toggle
+   SETTINGS FORM — Rendering + event binding
    Namespace: N.Features.Settings.*
    Depends on: N.Core.* (api, esc, toast, safeSetHTML, lucide)
                N.Features.Settings.* (validateField, debounceAutoSave, startStatusPoll,
                  resetField, resetCategory, saveSettingsProfile, loadSettingsProfile,
-                 deleteSettingsProfile, renderSettingsProfiles, BUILTIN_PROFILES)
-                window.S, N.Core.animateCards, window.lucide
+                 deleteSettingsProfile, renderSettingsProfiles, BUILTIN_PROFILES,
+                 CATEGORY_ICONS, CATEGORY_DESCRIPTIONS, CATEGORY_ORDER,
+                 sourceIcon, filterSettings, toggleCategory)
+                 window.S, N.Core.animateCards, window.lucide
+   Constants / icons / search / toggle → settings-ui.js
    ================================================================= */
 N.Features.Settings = N.Features.Settings || {};
 
 ;(function() {
 var S = window.S;
 var { esc, toast, api, safeSetHTML } = window.Nous.Core;
-
-const CATEGORY_ICONS = {
-    server: '<i data-lucide="monitor"></i>',
-    embedding: '<i data-lucide="brain"></i>',
-    reranker: '<i data-lucide="search"></i>',
-    qdrant: '<i data-lucide="package"></i>',
-    general: '<i data-lucide="settings"></i>'
-};
-
-const CATEGORY_DESCRIPTIONS = {
-    server: 'Server bind address and port. Changes require a full server restart.',
-    embedding: 'Embedding model configuration for vector search. Reload takes 10-60s.',
-    reranker: 'Cross-encoder reranker for search result quality. Reload takes 5-30s.',
-    qdrant: 'Qdrant vector database connection settings.',
-    general: 'General settings: timezone, logging, thresholds, search engine.'
-};
-
-/* ── Category display order (consistent across renders) ── */
-const CATEGORY_ORDER = [
-    'general', 'server', 'embedding', 'reranker',
-    'qdrant'
-];
-
-/* ═══════════════════════════════════════════════════════════════════
-   SOURCE ICON
-   ═══════════════════════════════════════════════════════════════════ */
-
-function sourceIcon(src) {
-    if (src === 'env') return '<span class="setting-source source-env" title="Set via environment variable"><i data-lucide="globe"></i> env</span>';
-    if (src === 'override') return '<span class="setting-source source-override" title="Set via WebUI override"><i data-lucide="edit-3"></i> override</span>';
-    return '<span class="setting-source source-default" title="Using default value"><i data-lucide="clipboard-list"></i> default</span>';
-}
 
 /* ═══════════════════════════════════════════════════════════════════
    RENDER SETTINGS
@@ -66,13 +37,13 @@ function renderSettings(el, settings, status) {
     html += '<div class="glass p-4 mb-6" style="position:sticky;top:120px;z-index:30">';
     html += '<div style="position:relative">';
     html += '<span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:0.9rem"><i data-lucide="search"></i></span>';
-    html += '<input id="settings-search" type="text" class="glass-input" placeholder="Search settings..." style="width:100%;padding-left:38px;padding-right:36px;font-size:0.9rem" oninput="filterSettings(this.value)">';
+    html += '<input id="settings-search" type="text" class="glass-input" placeholder="Search settings..." style="width:100%;padding-left:38px;padding-right:36px;font-size:0.9rem" oninput="N.Features.Settings.filterSettings(this.value)">';
     html += '<button id="settings-search-clear" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.85rem;display:none" onclick="document.getElementById(\'settings-search\');N.Features.Settings.filterSettings(\'\')"><i data-lucide="x"></i></button>';
     html += '</div>';
     html += '</div>';
 
     /* ── Category cards ── */
-    var sortedCats = CATEGORY_ORDER.filter(function(c) { return settings[c]; });
+    var sortedCats = N.Features.Settings.CATEGORY_ORDER.filter(function(c) { return settings[c]; });
     /* Append any categories not in CATEGORY_ORDER (future-proofing) */
     Object.keys(settings).forEach(function(c) {
         if (c !== 'reload_status' && sortedCats.indexOf(c) === -1) sortedCats.push(c);
@@ -84,9 +55,9 @@ function renderSettings(el, settings, status) {
         var hasFields = Object.values(fields).some(function(f) { return typeof f === 'object' && f !== null; });
         if (!hasFields) return;
 
-        var icon = CATEGORY_ICONS[cat] || '<i data-lucide="settings"></i>';
+        var icon = N.Features.Settings.CATEGORY_ICONS[cat] || '<i data-lucide="settings"></i>';
         var catLabel = cat.replace(/_/g, ' ').replace(/\b\w/g, function(l) { return l.toUpperCase(); });
-        var catDesc = CATEGORY_DESCRIPTIONS[cat] || '';
+        var catDesc = N.Features.Settings.CATEGORY_DESCRIPTIONS[cat] || '';
 
         /* Diff detection for category */
         var hasDiffs = false;
@@ -164,7 +135,7 @@ function renderSettings(el, settings, status) {
             html += '</div>';
 
             /* Source icon */
-            html += sourceIcon(src);
+            html += N.Features.Settings.sourceIcon(src);
 
             /* Input element */
             var autosaveAttr = hot ? ' data-autosave="true"' : '';
@@ -253,12 +224,12 @@ function renderSettings(el, settings, status) {
     var searchClearBtn = document.getElementById('settings-search-clear');
     if (searchClearBtn) searchClearBtn.onclick = function() {
         document.getElementById('settings-search').value = '';
-        filterSettings('');
+        N.Features.Settings.filterSettings('');
     };
 
     /* Category toggle buttons */
     document.querySelectorAll('.cat-toggle-btn').forEach(function(btn) {
-        btn.onclick = function() { toggleCategory(this.dataset.toggleCat); };
+        btn.onclick = function() { N.Features.Settings.toggleCategory(this.dataset.toggleCat); };
     });
 
     /* Category reset buttons */
@@ -507,73 +478,9 @@ function renderSettings(el, settings, status) {
     N.Core.animateCards(el);
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   SEARCH / FILTER
-   ═══════════════════════════════════════════════════════════════════ */
-
-function filterSettings(query) {
-    var q = query.toLowerCase().trim();
-    var clearBtn = document.getElementById('settings-search-clear');
-    if (clearBtn) clearBtn.style.display = q ? 'block' : 'none';
-
-    document.querySelectorAll('.setting-category-card').forEach(function(card) {
-        var catText = (card.dataset.searchtext || '').toLowerCase();
-        var rows = card.querySelectorAll('.setting-row');
-
-        if (!q) {
-            card.style.display = '';
-            rows.forEach(function(r) { r.style.display = ''; });
-            return;
-        }
-
-        var catMatch = catText.includes(q);
-        var anyRowMatch = false;
-
-        rows.forEach(function(r) {
-            var rowText = (r.dataset.searchtext || '').toLowerCase();
-            if (catMatch || rowText.includes(q)) {
-                r.style.display = '';
-                anyRowMatch = true;
-            } else {
-                r.style.display = 'none';
-            }
-        });
-
-        card.style.display = (catMatch || anyRowMatch) ? '' : 'none';
-
-        /* Auto-expand matching categories */
-        if (catMatch || anyRowMatch) {
-            var cat = card.dataset.category;
-            var body = document.getElementById('cat-body-' + cat);
-            var toggle = document.getElementById('cat-toggle-' + cat);
-            if (body) body.style.display = 'block';
-            if (toggle) toggle.textContent = '▼';
-        }
-    });
-}
-/* N.Features.Settings.filterSettings registered below */
-
-/* ═══════════════════════════════════════════════════════════════════
-   CATEGORY TOGGLE
-   ═══════════════════════════════════════════════════════════════════ */
-
-function toggleCategory(catId) {
-    var body = document.getElementById('cat-body-' + catId);
-    var toggle = document.getElementById('cat-toggle-' + catId);
-    if (!body || !toggle) return;
-    if (body.style.display === 'none') {
-        body.style.display = 'block';
-        toggle.textContent = '▼';
-    } else {
-        body.style.display = 'none';
-        toggle.textContent = '▶';
-    }
-}
+// filterSettings, toggleCategory, sourceIcon → settings-ui.js
 
 Object.assign(N.Features.Settings, {
-    sourceIcon: sourceIcon,
     renderSettings: renderSettings,
-    filterSettings: filterSettings,
-    toggleCategory: toggleCategory,
 });
 })();

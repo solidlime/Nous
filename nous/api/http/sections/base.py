@@ -82,6 +82,7 @@ def render_head() -> str:
     <script src="/static/features/memories/memories-edit.js" defer></script>
     <script src="/static/features/settings/settings-validation.js" defer></script>
     <script src="/static/features/settings/settings-save.js" defer></script>
+    <script src="/static/features/settings/settings-ui.js" defer></script>
     <script src="/static/features/settings/settings-form.js" defer></script>
     <script src="/static/features/settings/settings-core.js" defer></script>
     <script src="/static/features/graph.js" defer></script>
