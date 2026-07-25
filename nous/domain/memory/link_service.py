@@ -65,7 +65,7 @@ class MemoryLinkService:
                     memory_keys.append(key)
 
         # TODO: lookup Memory objects via repo when available
-        return []
+        return memory_keys
 
     @staticmethod
     def _classify_link_type(m1: Memory, m2: Memory) -> str:
