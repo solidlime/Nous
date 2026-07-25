@@ -6,7 +6,7 @@ N.Features.Timeline = N.Features.Timeline || {};
 
 ;(function() {
 var S = window.S;
-var { esc, api } = window.Nous.Core;
+var { esc, api, safeSetHTML } = window.Nous.Core;
 
 /* =================================================================
    MEMORY TIMELINE
@@ -154,7 +154,7 @@ async function loadTimeline() {
     }
 }
 
-window.loadTimeline = loadTimeline;
+/* N.Features.Timeline.loadTimeline registered below */
 
 function showTimelineDetail(mem) {
     const panel = document.getElementById('tl-detail-panel');
@@ -204,7 +204,7 @@ function closeTimelineDetail() {
     document.getElementById('tl-detail-panel')?.classList.remove('open');
 }
 
-window.closeTimelineDetail = closeTimelineDetail;
+/* N.Features.Timeline.closeTimelineDetail registered below */
 
 // Initialize — watch tab activation via DOM class changes (replaces switchTab monkey-patch)
 document.addEventListener('DOMContentLoaded', () => {

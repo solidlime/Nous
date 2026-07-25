@@ -95,9 +95,6 @@ N.Core.showAlert = function showAlert(message) {
   });
 };
 
-window.showConfirm = N.Core.showConfirm;
-window.showAlert = N.Core.showAlert;
-
 /* N.Components.modal alias */
 N.Components.modal = {
   confirm: N.Core.showConfirm,

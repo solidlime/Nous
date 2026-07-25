@@ -4,9 +4,11 @@
    ================================================================= */
 ;(function(N) {
 var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast;
+var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var showConfirm = C.showConfirm, showAlert = C.showAlert;
 var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
+var safeMarkdown = N.Chat.markdown && N.Chat.markdown.render;
+var appendChatMessage = N.Chat.ui && N.Chat.ui.append;
 "use strict";
 var S = window.S;
 
@@ -104,7 +106,7 @@ function _appendSegmentsToBubble(msg, msgDiv) {
       safeSetHTML(bubble, safeMarkdown(seg.content));
       bubble.querySelectorAll("img").forEach(function(img) {
         img.style.cssText = "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
-        img.addEventListener("click", function() { openMediaViewer(img.src, "image"); });
+        img.addEventListener("click", function() { N.Chat.attachments.openViewer(img.src, "image"); });
       });
       var timeDiv = msgDiv.querySelector(".chat-time");
       if (timeDiv) msgDiv.insertBefore(bubble, timeDiv);
@@ -169,8 +171,8 @@ function _appendSegmentsToBubble(msg, msgDiv) {
                 card.insertBefore(errDiv, card.firstChild);
               };
               imgEl.onclick = function() {
-                if (typeof openMediaViewer === "function") {
-                  openMediaViewer(imgEl.src, "image", null, {
+                if (typeof N.Chat.attachments.openViewer === "function") {
+                  N.Chat.attachments.openViewer(imgEl.src, "image", null, {
                     revised_prompt: imgEl.dataset.revisedPrompt,
                     negative_prompt: imgEl.dataset.negativePrompt,
                   });
@@ -744,15 +746,5 @@ N.Chat.history = {
   reset: resetToWelcome,
   getSessionId: getChatSessionId,
 };
-
-// Expose globals:
-window.restoreChatHistory = restoreChatHistory;
-window.clearChatHistory = clearChatHistory;
-window.rollbackChat = rollbackChat;
-window.editChatMessage = editChatMessage;
-window.deleteChatMessage = deleteChatMessage;
-window.exportChatHistory = exportChatHistory;
-window.resetToWelcome = resetToWelcome;
-window.getChatSessionId = getChatSessionId;
 
 })(window.Nous);

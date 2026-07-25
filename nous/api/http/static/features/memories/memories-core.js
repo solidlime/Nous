@@ -11,7 +11,7 @@ N.Features.Memories = N.Features.Memories || {};
 
 ;(function() {
 var S = window.S;
-var { esc, toast, api, truncate, relativeTime, showConfirm } = window.Nous.Core;
+var { esc, toast, api, truncate, relativeTime, showConfirm, safeSetHTML } = window.Nous.Core;
 
 /* ── State initialization ── */
 if (S && S.mem) Object.assign(S.mem, {
@@ -132,7 +132,7 @@ async function loadMemories(page) {
         safeSetHTML(el, N.Components.skeleton.errorCard('Failed to load memories', function(){ loadMemories(); }));
     }
 }
-window.loadMemories = loadMemories;
+/* N.Features.Memories.loadMemories registered below */
 
 /* ================================================================
    bindMemoryEvents

@@ -4,7 +4,7 @@
    ================================================================= */
 ;(function(N) {
 var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast;
+var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var showConfirm = C.showConfirm, showAlert = C.showAlert;
 var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
 "use strict";
@@ -286,12 +286,14 @@ N.Chat.memoryPanel = {
 };
 
 // Expose globals:
-window.updateMemoryPanel = updateMemoryPanel;
-window.showReflectionStart = showReflectionStart;
-window.updateReflectionPanel = updateReflectionPanel;
-window.showSessionSummarized = showSessionSummarized;
-window.showContextCompressed = showContextCompressed;
-window.deleteMemCard = deleteMemCard;
-window.completeGoal = completeGoal;
+N.Chat.memoryPanel = {
+  update: updateMemoryPanel,
+  showReflection: showReflectionStart,
+  updateReflection: updateReflectionPanel,
+  sessionSummarized: showSessionSummarized,
+  contextCompressed: showContextCompressed,
+  deleteCard: deleteMemCard,
+  completeGoal: completeGoal,
+};
 
 })(window.Nous);

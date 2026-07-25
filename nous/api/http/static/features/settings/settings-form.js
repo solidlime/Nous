@@ -11,7 +11,7 @@ N.Features.Settings = N.Features.Settings || {};
 
 ;(function() {
 var S = window.S;
-var { esc, toast, api } = window.Nous.Core;
+var { esc, toast, api, safeSetHTML, errorCard } = window.Nous.Core;
 
 const CATEGORY_ICONS = {
     server: '<i data-lucide="monitor"></i>',
@@ -477,7 +477,7 @@ function renderSettings(el, settings, status) {
                 }
             }
             toast('<i data-lucide="check-circle"></i> All settings reset to defaults (' + count + ' changes)', 'success');
-            setTimeout(function() { window.loadSettings(); }, 500);
+            setTimeout(function() { N.Features.Settings.loadSettings(); }, 500);
         } catch (e) {
             toast('<i data-lucide="x-circle"></i> Reset failed: ' + e.message, 'error');
         }
@@ -550,7 +550,7 @@ function filterSettings(query) {
         }
     });
 }
-window.filterSettings = filterSettings;
+/* N.Features.Settings.filterSettings registered below */
 
 /* ═══════════════════════════════════════════════════════════════════
    CATEGORY TOGGLE

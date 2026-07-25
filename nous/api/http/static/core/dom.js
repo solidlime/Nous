@@ -24,9 +24,6 @@ N.Core.refreshIcons = function() {
   });
 };
 
-window.esc = N.Core.esc;
-window.truncate = N.Core.truncate;
-
 /**
  * Safely set innerHTML via DOMPurify.
  * Falls back to textContent if DOMPurify is unavailable.
@@ -56,5 +53,4 @@ N.Core.safeSetHTML = function safeSetHTML(element, html) {
   }
 };
 
-window.safeSetHTML = N.Core.safeSetHTML;
 })(window.Nous);

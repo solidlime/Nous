@@ -9,7 +9,7 @@ N.Features.Memories = N.Features.Memories || {};
 
 ;(function() {
 var S = window.S;
-var { esc, toast, api, relativeTime, showConfirm } = window.Nous.Core;
+var { esc, toast, api, relativeTime, showConfirm, safeSetHTML } = window.Nous.Core;
 
 /* ================================================================
    openMemModalByKey — Fetch memory by key and open modal
@@ -148,7 +148,7 @@ function openMemModal(mem) {
 
     /* Action buttons */
     h += '<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">';
-    h += '<button class="glass-btn glass-btn-danger" onclick="deleteMemory(\'' + esc(mem.key).replace(/'/g,'\\\'') + '\')">\uD83D\uDDD1 Delete</button>';
+    h += '<button class="glass-btn glass-btn-danger" onclick="N.Features.Memories.deleteMemory(\'' + esc(mem.key).replace(/'/g,'\\\'') + '\')">\uD83D\uDDD1 Delete</button>';
     h += '<button class="glass-btn glass-btn-success" id="mem-modal-edit-btn">\u270F\uFE0F Edit</button>';
     h += '</div>';
 
@@ -160,7 +160,7 @@ function openMemModal(mem) {
     var editBtn = document.getElementById('mem-modal-edit-btn');
     if (editBtn) editBtn.onclick = function() { openEditModal(mem); };
 }
-window.openMemModal = openMemModal;
+/* N.Features.Memories.openMemModal registered below */
 
 /* ================================================================
    closeMemModal — companion to openMemModal (rich version)
@@ -171,7 +171,7 @@ function closeMemModal() {
     overlay.classList.remove('show');
     document.removeEventListener('keydown', _memModalKeyHandler);
 }
-window.closeMemModal = closeMemModal;
+/* N.Features.Memories.closeMemModal registered below */
 
 function _memModalKeyHandler(e) {
     if (e.key === 'Escape') closeMemModal();
@@ -233,7 +233,7 @@ function openEditModal(mem) {
 
     document.getElementById('mem-edit-overlay').classList.add('active');
 }
-window.openEditModal = openEditModal;
+/* N.Features.Memories.openEditModal registered below */
 
 function openCreateModal() {
     document.getElementById('edit-modal-title').textContent = 'New Memory';
@@ -257,7 +257,7 @@ function openCreateModal() {
 function closeEditModal() {
     document.getElementById('mem-edit-overlay').classList.remove('active');
 }
-window.closeEditModal = closeEditModal;
+/* N.Features.Memories.closeEditModal registered below */
 
 /* ================================================================
    saveMemory
@@ -293,7 +293,7 @@ async function saveMemory() {
         toast('Save failed: ' + e.message, 'error');
     }
 }
-window.saveMemory = saveMemory;
+/* N.Features.Memories.saveMemory registered below */
 
 /* ================================================================
    deleteMemory
@@ -312,7 +312,7 @@ async function deleteMemory(key) {
         }
     });
 }
-window.deleteMemory = deleteMemory;
+/* N.Features.Memories.deleteMemory registered below */
 
 /* ================================================================
    batchDeleteMemories

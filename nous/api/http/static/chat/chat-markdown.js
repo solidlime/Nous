@@ -4,7 +4,7 @@
    ================================================================= */
 ;(function(N) {
 var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast;
+var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var showConfirm = C.showConfirm, showAlert = C.showAlert;
 var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
 "use strict";
@@ -185,9 +185,5 @@ N.Chat.markdown = {
   render: safeMarkdown,
   renderCode: renderCodeBlock,
 };
-
-// Also expose globally for other files that reference these directly:
-window.safeMarkdown = safeMarkdown;
-window.renderCodeBlock = renderCodeBlock;
 
 })(window.Nous);

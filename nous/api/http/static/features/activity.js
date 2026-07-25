@@ -6,7 +6,7 @@ N.Features.Activity = N.Features.Activity || {};
 
 ;(function() {
 var S = window.S;
-var { esc, api, relativeTime } = window.Nous.Core;
+var { esc, api, relativeTime, safeSetHTML } = window.Nous.Core;
 
 /* =================================================================
    ACTIVITY TAB
@@ -115,7 +115,7 @@ async function loadActivity(reset = false) {
         safeSetHTML(feed, N.Components.skeleton.errorCard('Failed to load activity', function(){ loadActivity(true); }));
     }
 }
-window.loadActivity = loadActivity;
+/* N.Features.Activity.loadActivity registered below */
 
 function renderActivityFeed() {
     const feed = document.getElementById('act-feed');
@@ -221,12 +221,12 @@ function toggleActivitySession(sid) {
         sessionEl.classList.remove('open');
     }
 }
-window.toggleActivitySession = toggleActivitySession;
+/* N.Features.Activity.toggleActivitySession registered below */
 
 function toggleActivityDetail(el) {
     el.classList.toggle('expanded');
 }
-window.toggleActivityDetail = toggleActivityDetail;
+/* N.Features.Activity.toggleActivityDetail registered below */
 
 // Keyboard: Enter/Space on session headers and event detail toggles
 document.addEventListener("keydown", function(e) {

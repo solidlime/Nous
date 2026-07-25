@@ -129,8 +129,6 @@ N.Core.toastAction = function toastAction(msg, type, actionLabel, actionFn) {
   _autoRemove(t, 5000);
 };
 
-window.toast = N.Core.toast;
-
 /* N.Components.toast alias */
 N.Components.toast = {
   show: N.Core.toast,

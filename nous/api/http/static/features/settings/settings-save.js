@@ -9,7 +9,7 @@ N.Features.Settings = N.Features.Settings || {};
 
 ;(function() {
 var S = window.S;
-var { esc, toast, api } = window.Nous.Core;
+var { esc, toast, api, safeSetHTML } = window.Nous.Core;
 
 const BUILTIN_PROFILES = {
     'Development': {
@@ -169,7 +169,7 @@ async function resetField(cat, key, defaultVal) {
             if (RELOAD_CATEGORIES.has(cat)) startStatusPoll();
         } else {
             /* Restart-required field: reload to show updated source badge */
-            setTimeout(function() { window.loadSettings(); }, 800);
+            setTimeout(function() { N.Features.Settings.loadSettings(); }, 800);
         }
     } catch (e) {
         toast('<i data-lucide="x-circle"></i> Reset failed: ' + e.message, 'error');
@@ -193,7 +193,7 @@ async function resetCategory(cat) {
         if (RELOAD_CATEGORIES.has(cat)) {
             startStatusPoll();
         } else {
-            setTimeout(function() { window.loadSettings(); }, 800);
+            setTimeout(function() { N.Features.Settings.loadSettings(); }, 800);
         }
     } catch (e) {
         toast('<i data-lucide="x-circle"></i> Reset failed: ' + e.message, 'error');
@@ -310,7 +310,7 @@ async function loadSettingsProfile(name, profile) {
             }
         }
         toast('<i data-lucide="check-circle"></i> Loaded profile "' + esc(name) + '" (' + count + ' settings)', 'success');
-        setTimeout(function() { window.loadSettings(); }, 1000);
+            setTimeout(function() { N.Features.Settings.loadSettings(); }, 1000);
     } catch (e) {
         toast('<i data-lucide="x-circle"></i> Failed to load profile: ' + e.message, 'error');
     }

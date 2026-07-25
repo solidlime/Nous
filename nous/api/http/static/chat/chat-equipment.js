@@ -4,6 +4,8 @@
    ================================================================= */
 (function(N) {
 "use strict";
+var C = N.Core;
+var safeSetHTML = C.safeSetHTML;
 var S = window.S;
 
 var CHAT = N.Chat.state;
@@ -105,8 +107,5 @@ N.Chat.equipment = {
   load: loadEquipment,
   update: updateEquipmentPanel,
 };
-
-window.loadEquipment = loadEquipment;
-window.updateEquipmentPanel = updateEquipmentPanel;
 
 })(window.Nous);

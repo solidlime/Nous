@@ -9,7 +9,7 @@ def render_chat_sidebar() -> str:
                 <!-- Settings sidebar -->
                 <div id="settings-panel" class="glass" style="margin:0; border-radius:0; border-left:1px solid var(--glass-border); padding:0;">
                     <!-- Mobile close button -->
-                    <button id="settings-panel-close-btn" class="settings-panel-close" onclick="toggleSettingsPanel()" title="設定パネルを閉じる" aria-label="設定パネルを閉じる"><i data-lucide="x"></i></button>
+                    <button id="settings-panel-close-btn" class="settings-panel-close" onclick="N.Chat.core.toggleSettings()" title="設定パネルを閉じる" aria-label="設定パネルを閉じる"><i data-lucide="x"></i></button>
                     <div class="settings-scroll-container">
                         <div style="position:sticky;top:0;z-index:10;background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);font-size:0.9rem;font-weight:600;color:var(--text-primary);padding:12px 0 8px;margin:0 -16px 8px;border-bottom:1px solid var(--glass-border);display:flex;align-items:center;gap:8px;">
                             <span style="font-size:1.1rem;margin-left:16px;"><i data-lucide="settings"></i></span>
@@ -17,11 +17,11 @@ def render_chat_sidebar() -> str:
                         </div>
                         <!-- Provider / Model / API -->
                         <details data-category="core" open>
-                            <summary><i data-lucide="wrench"></i> 基本設定 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'core')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="wrench"></i> 基本設定 <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'core')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div>
                                     <div class="chat-field-label">プロバイダー</div>
-                                    <select id="chat-provider" class="chat-field-input" onchange="onChatProviderChange()">
+                                    <select id="chat-provider" class="chat-field-input" onchange="N.Chat.settings.onProviderChange()">
                                         <option value="anthropic">Anthropic (Claude)</option>
                                         <option value="openai">OpenAI</option>
                                         <option value="openrouter">OpenRouter</option>
@@ -86,7 +86,7 @@ def render_chat_sidebar() -> str:
                         </details>
                         <!-- Context & System Prompt -->
                         <details data-category="context">
-                            <summary><i data-lucide="message-circle"></i> コンテキスト <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'context')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="message-circle"></i> コンテキスト <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'context')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div>
                                     <div class="chat-field-label">表示履歴 (turns) <span style="color:var(--text-muted);font-size:0.7rem;">（ページロード時に遡る件数）</span></div>
@@ -161,7 +161,7 @@ def render_chat_sidebar() -> str:
                         </details>
                         <!-- Memory extraction -->
                         <details data-category="memory">
-                            <summary><i data-lucide="brain"></i> 記憶・抽出 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'memory')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="brain"></i> 記憶・抽出 <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'memory')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-auto-extract" checked
@@ -186,13 +186,13 @@ def render_chat_sidebar() -> str:
                         </details>
                         <!-- MCP Servers -->
                         <details data-category="tools">
-                            <summary><i data-lucide="battery-charging"></i> MCPサーバー <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'tools')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="battery-charging"></i> MCPサーバー <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'tools')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body" id="chat-mcp-section">
                                 <div id="chat-mcp-server-list" style="display:flex;flex-direction:column;gap:2px;margin-bottom:8px;"></div>
                                 <div>
                                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                                         <div style="font-size:0.72rem;color:var(--text-muted);">Claude の mcp.json 形式で貼り付け・編集できます</div>
-                                        <button type="button" id="chat-mcp-format-btn" class="mem-action-btn" style="font-size:0.65rem;padding:2px 8px;" onclick="formatMcpJson()" title="JSONを整形">整形</button>
+                                        <button type="button" id="chat-mcp-format-btn" class="mem-action-btn" style="font-size:0.65rem;padding:2px 8px;" onclick="N.Chat.settings.formatMcpJson()" title="JSONを整形">整形</button>
                                     </div>
                                     <textarea id="chat-mcp-json" class="chat-field-input" rows="6"
                                         style="resize:vertical;min-height:100px;font-family:monospace;font-size:0.73rem;line-height:1.45;"
@@ -212,14 +212,14 @@ def render_chat_sidebar() -> str:
                         </details>
                         <!-- Skills -->
                         <details data-category="skills">
-                            <summary><i data-lucide="target"></i> Skills <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'skills')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="target"></i> Skills <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'skills')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body" id="chat-skills-section">
                                 <div id="chat-skills-list" style="display:flex;flex-direction:column;gap:4px;"></div>
                             </div>
                         </details>
                         <!-- Reflection -->
                         <details data-category="reflection">
-                            <summary><i data-lucide="sparkles"></i> リフレクション <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'reflection')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="sparkles"></i> リフレクション <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'reflection')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-reflection-enabled" checked
@@ -247,7 +247,7 @@ def render_chat_sidebar() -> str:
                         </details>
                         <!-- Mental Model -->
                         <details data-category="mental">
-                            <summary><i data-lucide="puzzle"></i> メンタルモデル <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'mental')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="puzzle"></i> メンタルモデル <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'mental')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-mental-model-enabled" checked
@@ -263,7 +263,7 @@ def render_chat_sidebar() -> str:
                         </details>
                         <!-- Retrieval weights -->
                         <details data-category="weights">
-                            <summary><i data-lucide="scale"></i> 検索重み <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'weights')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="scale"></i> 検索重み <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'weights')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div>
                                     <div class="chat-field-label" style="display:flex;justify-content:space-between;">
@@ -305,7 +305,7 @@ def render_chat_sidebar() -> str:
                         </details>
                         <!-- 画像生成 -->
                         <details data-category="image" id="chat-image-section">
-                            <summary><i data-lucide="image"></i> 画像生成 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'image')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="image"></i> 画像生成 <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'image')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
                                     <span class="chat-field-label" style="margin:0;">画像生成を有効化</span>
@@ -423,7 +423,7 @@ def render_chat_sidebar() -> str:
                                         </div>
                                     </details>
                                     <div style="display:flex;gap:8px;align-items:center;">
-                                        <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="testImageGen()"><i data-lucide="play"></i> テスト生成</button>
+                                        <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="N.Chat.settings.testImageGen()"><i data-lucide="play"></i> テスト生成</button>
                                         <span id="chat-image-test-status" style="font-size:0.72rem;color:var(--text-muted);min-height:16px;"></span>
                                     </div>
                                 </div>
@@ -431,7 +431,7 @@ def render_chat_sidebar() -> str:
                         </details>
                         <!-- Voice / TTS (TE04) -->
                         <details data-category="voice" id="chat-voice-section">
-                            <summary><i data-lucide="volume-2"></i> 音声 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'voice')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="volume-2"></i> 音声 <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'voice')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
                                     <span class="chat-field-label" style="margin:0;">音声合成を有効化</span>
@@ -571,7 +571,7 @@ def render_chat_sidebar() -> str:
                         </details>
                         <!-- Debug & Other -->
                         <details data-category="other">
-                            <summary><i data-lucide="bug"></i> デバッグ・その他 <span class="chat-help-icon" onmouseenter="showHelpTooltip(event, 'other')" title="説明を表示" onmouseleave="hideHelpTooltip()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="bug"></i> デバッグ・その他 <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'other')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-debug-mode"

@@ -1,34 +1,28 @@
-# TODO — Phase 11: Mobile Responsiveness (2026-07-25)
+# TODO — Phase 1: 安全基盤リファクタリング (2026-07-25) — COMPLETE
 
-## ベースライン: 390×844, 768px未満
+## Increment 1: クイックウィン（機械的変更）
+- [x] 1.1 `_compute_recency_decay` をプライベート化 — 既に対応済み（変更不要）
+- [x] 1.2 `main.py:192` の重複 `_mount_static_files(mcp)` 削除
+- [x] 1.3 `.gitignore` に `node_modules/` 追加 + `git rm --cached` — 既に.gitignore済み、追跡なし
+- [x] 1.5 `_get_session_memories` スタブに `TODO(blocked)` コメント — `service.py`
+- [x] 1.6 `use_cases.py` の `_search_engine` 直接代入を setter 経由に
+- [x] 1.7 `memory_repo.py` の `noqa: S608` に説明コメント追加
+- [x] 1.8 Makefile 追加（プロジェクトルート）
 
-## Increment 1: ハンバーガーメニュー + ナビゲーション
-- [ ] `base.js` — ハンバーガーボタン生成（init()内）、ドロワーメニューの開閉ロジック、バックドロップ、Escape/メニュー外クリック閉じる
-- [ ] `styles/layout.css` — 768px未満でtab-bar隠し、ハンバーガーボタン表示、ドロワーメニューアニメーション
-- [ ] コミット: hamburger menu with drawer navigation
+## Increment 2: asyncio タスクリーク修正（TaskGroup移行）
+- [x] 2.1 `service.py:245` — `create_task(_evolve_related_memories())` → TaskGroup化
+- [x] 2.2 `service.py:255` — `create_task(_invalidate_contradicted_memory())` → TaskGroup化
+- [x] 2.3 `post.py:119` — 調査の結果、`_background_tasks` で管理済み（変更不要）
+- [x] 2.4 `prepare.py:695,702` — 調査の結果、`asyncio.gather()` で適切に await 済み（変更不要）
 
-## Increment 2: テーブルレスポンシブ + メモリカード
-- [ ] `nous/api/http/sections/skills.py` — <th> と <td> に data-label 属性追加
-- [ ] `styles/components.css` — @media (max-width: 767px) テーブルカードビュー、メモリカード1カラム、44pxタップターゲット
-- [ ] コミット: responsive tables and memory cards
-
-## Increment 3: チャット設定パネル（モバイルオーバーレイ）
-- [ ] `chat/chat-settings.js` — モバイル用タイトルバー・閉じるボタン
-- [ ] `styles/chat-mobile.css` — 全画面オーバーレイ + 固定保存ボタン
-- [ ] コミット: chat settings panel mobile overlay
-
-## Increment 4: トーストモバイル調整 + 全般モバイル調整
-- [ ] `core/toast.js` — スワイプ消去、最大2制限
-- [ ] `styles/components.css` — トーストモバイルスタイル
-- [ ] `styles/layout.css` — max-width:100vw防止、フォームモバイル、ペルソナセレクター拡大、prefers-reduced-motion確認
-- [ ] コミット: mobile toast and general responsive adjustments
-
-## Increment 5: vis.js モバイル調整 + フォームモバイル
-- [ ] `features/graph.js` — matchMedia で物理演算調整
-- [ ] `features/timeline.js` — モバイル時ズーム調整
-- [ ] `features/settings/settings-form.js` — フォームモバイルレイアウト
-- [ ] コミット: vis.js mobile physics and form mobile layout
+## Increment 3: CI改善
+- [x] 3.1 `mypy nous/` を CI（ci.yml）に追加
+- [x] 3.2 `pytest tests/integration/` を CI に追加
 
 ## 検証
-- [ ] `cd nous/api/http/static && npm test` → 71 PASS
-- [ ] CSS lint: `npm run lint:css` → PASS
+- [x] `ruff check` → 全PASS
+- [x] importチェック → OK
+- [x] メソッド存在確認 → `set_search_engine`, `_run_background_evolution`, `TODO(blocked)` 全確認
+- [ ] `pytest tests/unit/` → メモリ不足により未実行（要サーバー再起動後）
+- [ ] `mypy nous/` → 未実行
+- [ ] サーバー起動確認 → 未実行

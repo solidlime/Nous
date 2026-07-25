@@ -4,6 +4,8 @@
    ================================================================= */
 (function(N) {
 "use strict";
+var C = N.Core;
+var esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var S = window.S;
 
 var CHAT = N.Chat.state;
@@ -189,6 +191,7 @@ N.Chat.attachments = {
   upload: uploadAttachment,
   openViewer: openMediaViewer,
   closeViewer: closeMediaViewer,
+  trigger: triggerFileAttach,
 };
 
 function triggerFileAttach() {
@@ -207,10 +210,5 @@ function triggerFileAttach() {
   document.body.appendChild(input);
   input.click();
 }
-
-window.uploadAttachment = uploadAttachment;
-window.openMediaViewer = openMediaViewer;
-window.closeMediaViewer = closeMediaViewer;
-window.triggerFileAttach = triggerFileAttach;
 
 })(window.Nous);

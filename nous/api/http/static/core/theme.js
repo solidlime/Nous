@@ -3,6 +3,7 @@
    ================================================================= */
 ;(function(N) {
 "use strict";
+var safeSetHTML = N.Core.safeSetHTML;
 
 N.Core.applyTheme = function applyTheme() {
   var dark = localStorage.getItem("mmcp-dark") !== "false";
@@ -21,9 +22,6 @@ N.Core.toggleTheme = function toggleTheme() {
   localStorage.setItem("mmcp-dark", isDark ? "false" : "true");
   N.Core.applyTheme();
 };
-
-window.applyTheme = N.Core.applyTheme;
-window.toggleTheme = N.Core.toggleTheme;
 
 /* N.Components.theme alias */
 N.Components.theme = {

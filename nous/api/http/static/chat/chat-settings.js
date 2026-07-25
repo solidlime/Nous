@@ -4,7 +4,7 @@
    ================================================================= */
 ;(function(N) {
 var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast;
+var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var showConfirm = C.showConfirm, showAlert = C.showAlert;
 var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
 "use strict";
@@ -925,22 +925,17 @@ N.Chat.settings = {
   load: loadChatConfig,
   apply: applyChatConfig,
   save: saveChatConfig,
+  onProviderChange: onChatProviderChange,
+  renderMcpJson: renderMcpJson,
+  parseMcpJson: parseMcpJson,
+  renderSkills: renderSkillsList,
+  loosenJson: loosenJson,
+  formatMcpJson: formatMcpJson,
+  checkComfyUI: checkComfyUIHealth,
+  updateSliderLabels: updateImageGenSliderLabels,
+  testImageGen: testImageGen,
+  addLoraRow: addLoraRow,
+  collectLoraRows: collectLoraRows,
 };
-
-window.loadChatConfig = loadChatConfig;
-window.applyChatConfig = applyChatConfig;
-window.onChatProviderChange = onChatProviderChange;
-window.saveChatConfig = saveChatConfig;
-window.renderMcpJson = renderMcpJson;
-window.parseMcpJson = parseMcpJson;
-window.renderSkillsList = renderSkillsList;
-window.loosenJson = loosenJson;
-window.formatMcpJson = formatMcpJson;
-window.checkComfyUIHealth = checkComfyUIHealth;
-window.updateImageGenSliderLabels = updateImageGenSliderLabels;
-window.testImageGen = testImageGen;
-
-window.addLoraRow = addLoraRow;
-window.collectLoraRows = collectLoraRows;
 
 })(window.Nous);

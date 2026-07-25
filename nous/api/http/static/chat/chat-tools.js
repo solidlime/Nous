@@ -5,9 +5,11 @@
    ================================================================= */
 ;(function(N) {
 var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast;
+var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var showConfirm = C.showConfirm, showAlert = C.showAlert;
 var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
+var findChatLogContainer = N.Chat.ui && N.Chat.ui.findLog;
+var scrollToBottom = N.Chat.ui && N.Chat.ui.scrollToBottom;
 "use strict";
 var S = window.S;
 
@@ -264,8 +266,8 @@ function showImageGenResult(evt) {
       if (typeof blobUrl !== 'undefined') URL.revokeObjectURL(blobUrl);
     };
     imgEl.onclick = function () {
-      if (typeof openMediaViewer === "function") {
-        openMediaViewer(imgEl.src, "image", null, {
+      if (typeof N.Chat.attachments.openViewer === "function") {
+        N.Chat.attachments.openViewer(imgEl.src, "image", null, {
           revised_prompt: imgEl.dataset.revisedPrompt,
           negative_prompt: imgEl.dataset.negativePrompt,
         });
@@ -339,7 +341,7 @@ function toggleTool(toolName) {
     CHAT.disabledTools.add(toolName);
   }
   // 即時保存
-  if (typeof saveChatConfig === 'function') saveChatConfig();
+  if (typeof N.Chat.settings.save === 'function') N.Chat.settings.save();
 }
 
 // ------------------------------------------------------------------
@@ -347,17 +349,12 @@ function toggleTool(toolName) {
 // ------------------------------------------------------------------
 N.Chat.tools = {
   append: appendToolEvent,
+  handleFile: handleFileToolCall,
+  execCode: execCodeBlock,
+  showGenSpinner: showImageGenSpinner,
+  showGenResult: showImageGenResult,
   fetch: fetchMcpTools,
   toggle: toggleTool,
 };
-
-// Expose globals:
-window.appendToolEvent = appendToolEvent;
-window.handleFileToolCall = handleFileToolCall;
-window.execCodeBlock = execCodeBlock;
-window.showImageGenSpinner = showImageGenSpinner;
-window.showImageGenResult = showImageGenResult;
-window.fetchMcpTools = fetchMcpTools;
-window.toggleTool = toggleTool;
 
 })(window.Nous);

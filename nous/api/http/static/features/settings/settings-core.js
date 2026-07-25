@@ -9,7 +9,7 @@ N.Features.Settings = N.Features.Settings || {};
 
 ;(function() {
 var S = window.S;
-var { api } = window.Nous.Core;
+var { api, safeSetHTML } = window.Nous.Core;
 
 /* ═══════════════════════════════════════════════════════════════════
    LOAD SETTINGS
@@ -33,7 +33,7 @@ async function loadSettings() {
         safeSetHTML(el, N.Components.skeleton.errorCard('Failed to load settings', function(){ loadSettings(); }));
     }
 }
-window.loadSettings = loadSettings;
+/* N.Features.Settings.loadSettings registered below */
 
 /* ── Clean up status polling when leaving the settings tab ── */
 document.addEventListener('DOMContentLoaded', function() {

@@ -4,9 +4,10 @@
    ================================================================= */
 ;(function(N) {
 var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast;
+var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var showConfirm = C.showConfirm, showAlert = C.showAlert;
 var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
+var safeMarkdown = N.Chat.markdown && N.Chat.markdown.render;
 "use strict";
 var S = window.S;
 
@@ -37,7 +38,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
     bubble.querySelectorAll("img").forEach((img) => {
       img.style.cssText =
         "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
-      img.addEventListener("click", () => openMediaViewer(img.src, "image"));
+      img.addEventListener("click", () => N.Chat.attachments.openViewer(img.src, "image"));
     });
   } else {
     bubble.textContent = content;
@@ -553,7 +554,7 @@ async function chatSend(retry) {
                 img.style.cssText =
                   "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
                 img.addEventListener("click", () =>
-                  openMediaViewer(img.src, "image"),
+                  N.Chat.attachments.openViewer(img.src, "image"),
                 );
               });
               allText += part.content + "\n";
@@ -646,7 +647,7 @@ async function chatSend(retry) {
         part.bubble.querySelectorAll("img").forEach((img) => {
           img.style.cssText =
             "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
-          img.addEventListener("click", () => openMediaViewer(img.src, "image"));
+          img.addEventListener("click", () => N.Chat.attachments.openViewer(img.src, "image"));
         });
       }
     }
@@ -658,6 +659,13 @@ async function chatSend(retry) {
 // ------------------------------------------------------------------
 N.Chat.send = chatSend;
 N.Chat.cancel = chatCancel;
+N.Chat.ui = {
+  append: appendChatMessage,
+  showTyping: showTypingIndicator,
+  removeTyping: removeTypingIndicator,
+  scrollToBottom: scrollToBottom,
+  findLog: findChatLogContainer,
+};
 
 // ------------------------------------------------------------------
 // Clipboard helper — try modern API, fallback to execCommand
@@ -690,16 +698,5 @@ function _fallbackCopy(text) {
     document.body.removeChild(textarea);
   }
 }
-
-// Expose globals for backward compat:
-window.chatSend = chatSend;
-window.chatCancel = chatCancel;
-window.appendChatMessage = appendChatMessage;
-window.showTypingIndicator = showTypingIndicator;
-window.removeTypingIndicator = removeTypingIndicator;
-window.scrollToBottom = scrollToBottom;
-window.findChatLogContainer = findChatLogContainer;
-window._createAssistantDiv = _createAssistantDiv;
-window._createTextBubble = _createTextBubble;
 
 })(window.Nous);

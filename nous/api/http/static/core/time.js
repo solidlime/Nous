@@ -20,6 +20,4 @@ N.Core.fmtDate = function fmtDate(iso) {
   });
 };
 
-window.relativeTime = N.Core.relativeTime;
-window.fmtDate = N.Core.fmtDate;
 })(window.Nous);

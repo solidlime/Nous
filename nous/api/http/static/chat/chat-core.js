@@ -124,19 +124,19 @@ async function loadChat() {
   CHAT.disabledTools.clear();
   CHAT.enabledSkills = [];
   CHAT.messages = [];
-  await loadChatConfig();
+  await N.Chat.settings.load();
   loadSkillsForChat();
   // Disable input during async restore to prevent premature chatSend()
   var _restoreInput = document.getElementById("chat-input");
   var _restoreSendBtn = document.getElementById("chat-send-btn");
   if (_restoreInput) _restoreInput.disabled = true;
   if (_restoreSendBtn) _restoreSendBtn.disabled = true;
-  await restoreChatHistory();
+  await N.Chat.history.restore();
   setupChatInputHandler();
   if (_restoreInput) _restoreInput.disabled = false;
   if (_restoreSendBtn) _restoreSendBtn.disabled = false;
   loadChatCommitments();
-  loadEquipment();
+  N.Chat.equipment.load();
   N.Core.refreshIcons();
 
   // --- Restore panel open/closed state from cookies to DOM ---
@@ -382,19 +382,21 @@ function renderDebugPanel(anchorEl, data) {
 }
 
 // ------------------------------------------------------------------
-// Expose as global functions for backward compat (Phase 3 → Phase 9)
+// Expose on N.Chat.core
 // ------------------------------------------------------------------
-window.showHelpTooltip = showHelpTooltip;
-window.hideHelpTooltip = hideHelpTooltip;
-window.loadChat = loadChat;
-window.setupChatInputHandler = setupChatInputHandler;
-window.setupChatInputHandlerWithObserver = setupChatInputHandlerWithObserver;
-window.chatInputKeydownHandler = chatInputKeydownHandler;
-window.chatInputInputHandler = chatInputInputHandler;
-window.loadChatCommitments = loadChatCommitments;
-window.loadSkillsForChat = loadSkillsForChat;
-window.toggleSettingsPanel = toggleSettingsPanel;
-window.toggleMemoryPanel = toggleMemoryPanel;
-window.renderDebugPanel = renderDebugPanel;
+N.Chat.core = {
+  showHelp: showHelpTooltip,
+  hideHelp: hideHelpTooltip,
+  load: loadChat,
+  setupInput: setupChatInputHandler,
+  setupInputWithObserver: setupChatInputHandlerWithObserver,
+  keydown: chatInputKeydownHandler,
+  input: chatInputInputHandler,
+  loadCommitments: loadChatCommitments,
+  loadSkills: loadSkillsForChat,
+  toggleSettings: toggleSettingsPanel,
+  toggleMemory: toggleMemoryPanel,
+  debug: renderDebugPanel,
+};
 
 })(window.Nous);

@@ -8,7 +8,7 @@ N.Features.Overview = N.Features.Overview || {};
 
 ;(function() {
 var S = window.S;
-var { esc, toast, api, truncate, relativeTime, fmtDate } = window.Nous.Core;
+var { esc, toast, api, truncate, relativeTime, fmtDate, safeSetHTML } = window.Nous.Core;
 
 // --- Block CRUD helpers (global scope) ---
 function showCreateBlock() {
@@ -20,7 +20,7 @@ function showCreateBlock() {
     document.getElementById('block-modal-priority').value = '0';
     document.getElementById('block-edit-modal').style.display = 'flex';
 }
-window.showCreateBlock = showCreateBlock;
+/* N.Features.Overview.showCreateBlock registered below */
 
 function showEditBlock(name, content, priority) {
     safeSetHTML(document.getElementById('block-modal-title'), '<i data-lucide="pencil"></i> Edit Block: ' + esc(name));
@@ -31,12 +31,12 @@ function showEditBlock(name, content, priority) {
     document.getElementById('block-modal-priority').value = priority || 0;
     document.getElementById('block-edit-modal').style.display = 'flex';
 }
-window.showEditBlock = showEditBlock;
+/* N.Features.Overview.showEditBlock registered below */
 
 function hideBlockModal() {
     document.getElementById('block-edit-modal').style.display = 'none';
 }
-window.hideBlockModal = hideBlockModal;
+/* N.Features.Overview.hideBlockModal registered below */
 
 async function saveBlock() {
     var name = document.getElementById('block-modal-name').value.trim();
@@ -54,7 +54,7 @@ async function saveBlock() {
         loadOverview();
     } catch (e) { toast('Failed to save block: ' + e.message, 'error'); }
 }
-window.saveBlock = saveBlock;
+/* N.Features.Overview.saveBlock registered below */
 
 async function deleteBlock(name) {
     if (!confirm('Delete block "' + name + '"?')) return;
@@ -64,7 +64,7 @@ async function deleteBlock(name) {
         loadOverview();
     } catch (e) { toast('Failed: ' + e.message, 'error'); }
 }
-window.deleteBlock = deleteBlock;
+/* N.Features.Overview.deleteBlock registered below */
 
 // --- Inventory CRUD helpers (global scope) ---
 async function deleteItem(itemName) {
@@ -76,13 +76,13 @@ async function deleteItem(itemName) {
         toast('Failed to delete item: ' + e.message, 'error');
     }
 }
-window.deleteItem = deleteItem;
+/* N.Features.Overview.deleteItem registered below */
 
 function openAddItemModal() {
     const m = document.getElementById('add-item-modal');
     if (m) { m.style.display = 'flex'; }
 }
-window.openAddItemModal = openAddItemModal;
+/* N.Features.Overview.openAddItemModal registered below */
 
 function closeAddItemModal() {
     const m = document.getElementById('add-item-modal');
@@ -92,7 +92,7 @@ function closeAddItemModal() {
         if (el) el.value = id === 'new-item-qty' ? '1' : '';
     });
 }
-window.closeAddItemModal = closeAddItemModal;
+/* N.Features.Overview.closeAddItemModal registered below */
 
 async function saveNewItem() {
     const nameEl = document.getElementById('new-item-name');
@@ -113,7 +113,7 @@ async function saveNewItem() {
         toast('Failed to add item: ' + e.message, 'error');
     }
 }
-window.saveNewItem = saveNewItem;
+/* N.Features.Overview.saveNewItem registered below */
 
 // --- Edit item ---
 function openEditItemModal(itemName) {
@@ -133,12 +133,12 @@ function openEditItemModal(itemName) {
     document.getElementById('edit-item-tags').value = (item.tags || []).join(', ');
     document.getElementById('edit-item-modal').style.display = 'flex';
 }
-window.openEditItemModal = openEditItemModal;
+/* N.Features.Overview.openEditItemModal registered below */
 
 function closeEditItemModal() {
     document.getElementById('edit-item-modal').style.display = 'none';
 }
-window.closeEditItemModal = closeEditItemModal;
+/* N.Features.Overview.closeEditItemModal registered below */
 
 async function saveEditItem() {
     var originalName = document.getElementById('edit-item-original-name').value;
@@ -168,7 +168,7 @@ async function saveEditItem() {
         toast('Failed to update item: ' + e.message, 'error');
     }
 }
-window.saveEditItem = saveEditItem;
+/* N.Features.Overview.saveEditItem registered below */
 
 async function changeEquipSlot(slot, itemName) {
     try {
@@ -184,7 +184,7 @@ async function changeEquipSlot(slot, itemName) {
         toast('Failed to change equipment: ' + e.message, 'error');
     }
 }
-window.changeEquipSlot = changeEquipSlot;
+/* N.Features.Overview.changeEquipSlot registered below */
 
 async function unequipSlot(slot) {
     try {
@@ -198,7 +198,7 @@ async function unequipSlot(slot) {
         toast('Failed to unequip: ' + e.message, 'error');
     }
 }
-window.unequipSlot = unequipSlot;
+/* N.Features.Overview.unequipSlot registered below */
 
 async function loadOverview() {
     const el = document.getElementById('overview-content');
@@ -216,7 +216,7 @@ async function loadOverview() {
         if (portraitUrl && portraitEl) {
             portraitEl.style.display = 'block';
             safeSetHTML(portraitEl, '<div class="glass p-4" style="text-align:center;max-width:400px;margin:0 auto 16px">'
-                + '<img src="' + esc(portraitUrl) + '" alt="Self Portrait" style="max-width:100%;max-height:300px;border-radius:8px;cursor:pointer" onclick="openMediaViewer(\'' + esc(portraitUrl) + '\',\'image\')">'
+                + '<img src="' + esc(portraitUrl) + '" alt="Self Portrait" style="max-width:100%;max-height:300px;border-radius:8px;cursor:pointer" onclick="N.Chat.attachments.openViewer(\'' + esc(portraitUrl) + '\',\'image\')">'
                 + '<div style="margin-top:6px;font-size:0.75rem;color:var(--text-muted)">Latest Self Portrait</div>'
                 + '</div>');
         } else if (portraitEl) {
@@ -632,7 +632,7 @@ async function loadOverview() {
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 }
-window.loadOverview = loadOverview;
+/* N.Features.Overview.loadOverview registered below */
 
 // Register in namespace
 Object.assign(N.Features.Overview, {

@@ -4,6 +4,8 @@
    ================================================================= */
 (function(N) {
 "use strict";
+var C = N.Core;
+var esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 
 let _voiceRecognition = null;
 
@@ -65,7 +67,5 @@ function toggleVoiceInput() {
 N.Chat.voice = {
   toggle: toggleVoiceInput,
 };
-
-window.toggleVoiceInput = toggleVoiceInput;
 
 })(window.Nous);

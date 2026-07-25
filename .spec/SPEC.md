@@ -1,96 +1,118 @@
-# SPEC — Phase 1: 安全基盤リファクタリング
+# SPEC — Phase 2: 設計改善
 
 ## 出典
-`refactor-instructions.md` 第2章・第5章・第7章に基づく
+`refactor-instructions.md` 第3章「アーキテクチャ債務」
 
 ---
 
-## SPEC-1: クイックウィン（8項目・約1時間）
+## SPEC-2.1: `Result[T, E]` にモナド連鎖メソッド追加
 
-### 1.1 `_compute_recency_decay` の未使用警告抑制
-**対象**: `nous/application/chat/pipeline/prepare.py:78-80`
-**内容**: 関数名を `_compute_recency_decay` に変更（プライベート化）。呼び出し元も更新。
-
-### 1.2 `main.py:192` の重複 `_mount_static_files(mcp)` 削除
-**対象**: `nous/main.py`
-**内容**: 2回目の `_mount_static_files(mcp)` 呼び出しが重複。削除する。
-
-### 1.3 `.gitignore` に `node_modules/` 追加
-**対象**: `.gitignore`
-**内容**: `node_modules/` を追加し、`git rm --cached -r nous/api/http/static/node_modules/` で追跡解除。
-
-### 1.4 `commit 5111bb6 "aa"` のrebase確認
-**対象**: Git操作
-**内容**: `git log --oneline` で確認。必要ならrebase。
-
-### 1.5 `_get_session_memories` スタブに `TODO(blocked)` コメント追加
-**対象**: `nous/domain/memory/service.py:424-431`
-**内容**: ドキュメンテーション文字列に `TODO(blocked): session_eventテーブル実装待ち` を追記。
-
-### 1.6 `use_cases.py` の `_search_engine` 直接代入をsetter経由に
-**対象**: `nous/application/use_cases.py:361-362`
-**内容**: `memory_service._search_engine = ...` → `memory_service.set_search_engine(...)` に変更。`MemoryService` に `set_search_engine()` メソッドを追加。
-
-### 1.7 `memory_repo.py` の `noqa: S608` に説明コメント追加
-**対象**: `nous/infrastructure/sqlite/memory_repo.py`
-**内容**: 全 `# noqa: S608 # nosec B608` に「文字列連結だが全変数はプレースホルダ経由で保護済み」の説明を追加。
-
-### 1.8 Makefile追加
-**対象**: `Makefile` (プロジェクトルート)
-**内容**:
-```makefile
-.PHONY: lint test test-all typecheck coverage ci
-
-lint:
-	ruff check . && ruff format --check .
-
-test:
-	pytest tests/unit/ -q
-
-test-all:
-	pytest -q
-
-typecheck:
-	mypy nous/
-
-coverage:
-	pytest --cov=nous --cov-report=term
-
-ci: lint typecheck test-all coverage
+**現状**: `Success.map()` と `Failure.map()` のみ。全ドメインサービスで以下のボイラープレートが氾濫:
+```python
+result = self._repo.find_by_key(key)
+if not result.is_ok:
+    return Failure(result.error)
+if result.value is None:
+    return Failure(MemoryNotFoundError(...))
+return Success(result.value)
 ```
 
----
+**追加メソッド** (`nous/domain/shared/result.py`):
+```python
+# Success
+def and_then(self, f: Callable[[T], Result[U, E]]) -> Result[U, E]:
+    """Chain another Result-returning operation."""
+    return f(self.value)
 
-## SPEC-2: `asyncio.create_task()` タスクリーク修正（クリティカル）
+def or_else(self, f: Callable[[E], Result[T, F]]) -> Result[T, F]:
+    return self  # Success なのでスキップ
 
-**リスク**: 未捕捉例外がタスク消滅。メモリ進化・矛盾検出がサイレント失敗。
+# Failure
+def and_then(self, f: Callable) -> Failure[E]:
+    return self  # Failure なのでスキップ
 
-| # | ファイル:行 | 内容 |
-|---|-----------|------|
-| 2.1 | `nous/domain/memory/service.py:245` | `create_task(_evolve_related_memories(...))` |
-| 2.2 | `nous/domain/memory/service.py:255` | `create_task(_invalidate_contradicted_memory(...))` |
-| 2.3 | `nous/application/chat/pipeline/post.py:119` | `create_task(...)` |
-| 2.4 | `nous/application/chat/pipeline/prepare.py:695,702` | 一部保持・一部未保持 |
+def or_else(self, f: Callable[[E], Result[T, F]]) -> Result[T, F]:
+    """Recover from error with fallback operation."""
+    return f(self.error)
+```
 
-**対応方針**: 戻り値をリストで保持し、`add_done_callback` で例外ログ。または `asyncio.TaskGroup`（Python 3.11+）に移行。
-
----
-
-## SPEC-3: CI改善
-
-| # | 内容 |
-|---|------|
-| 3.1 | `mypy nous/` を CI (ci.yml) に追加 |
-| 3.2 | `pytest tests/integration/` を CI に追加 |
-| 3.3 | カバレッジ下限強制 `--cov=nous --cov-fail-under=70` はフェーズ4に延期（現状のカバレッジ状況を先に確認）|
-| 3.4 | `bandit -r nous/` は多数の既存 `# nosec` があるためフェーズ4に延期 |
+**影響範囲**: 既存の `map` 呼び出しのみで、破壊的変更なし。新メソッドは純粋な追加。
 
 ---
 
-## SPEC-4: `.gitignore` + `node_modules` 追跡解除
+## SPEC-2.2: `SQLiteRepository` 基底クラス強化
 
-**内容**: SPEC-1.3 と重複。`node_modules/` を `.gitignore` に追加 + `git rm --cached` でGit追跡から外す。
-**参考**: `refactor-instructions.md` 2.4節「node_modules がGit管理下 (63MB)」
+**現状** (28行): `_db_method` と `_db` プロパティのみ。
+
+**追加するテンプレートメソッド**:
+```python
+def _execute_query(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
+    """Execute SELECT and return all rows."""
+
+def _execute_single(self, sql: str, params: tuple = ()) -> sqlite3.Row | None:
+    """Execute SELECT and return first row or None."""
+
+def _execute_write(self, sql: str, params: tuple = ()) -> None:
+    """Execute INSERT/UPDATE/DELETE."""
+```
+
+**利用方法**: 各リポジトリの `self._db.execute(sql, params).fetchall()` → `self._execute_query(sql, params)` に置換。エラーハンドリングを基底クラスに一元化。
+
+---
+
+## SPEC-2.3: `MemoryService` 責務分割（最重要）【#081 レビュー済】
+
+**現状** (`nous/domain/memory/service.py`, 716行): 単一クラスが10+責務を担当。
+
+### 分割方針: **5-service Facade パターン**
+
+`MemoryService` を公開APIのファサードとして維持し、内部で5つのサブサービスに委譲する。
+**`create_memory` は Facade に残す** — 書込・エンリッチメント・リンク生成・進化の3関心をオーケストレーションするハブのため。
+各サブサービスは互いを知らず、Facade だけが全サブサービスを知る一方向依存。
+
+### サブサービス構成
+
+| 新クラス | ファイル | 責務 | 元のメソッド |
+|---------|---------|------|------------|
+| `MemoryWriteService` | `write_service.py` | 重複検出, バリデーション, repo.save | `_check_duplicate`, `_validate_tags`, `_build_memory_entity` |
+| `MemoryEnrichService` | `enrich_service.py` | エンリッチメント, Sudachi抽出 | `create_memory` L204-240 の抽出（`_enrich_memory` として新規メソッド化） |
+| `MemoryLinkService` | `link_service.py` | Hebbianリンク生成 | `_create_hebbian_links`, `_classify_link_type`, `_get_session_memories` |
+| `MemoryEvolutionService` | `evolution_service.py` | 進化, 矛盾検出, 背景実行 | `_evolve_related_memories`, `_invalidate_contradicted_memory`, `_run_background_evolution` |
+| `MemoryQueryService` | `query_service.py` | 読取, 統計 | `get_memory`, `get_memory_stats`, `get_recent`, `boost_recall`, `get_by_tags`, `get_memory_index`, `get_version_history` |
+
+### MemoryService ファサードの責務（分割後）
+- **`create_memory`** — 全体オーケストレーション（WriteService → EnrichService → LinkService → EvolutionService(background)）
+- `save_memory`（単純なリポジトリラッパー）
+- `update_memory`, `tombstone_memory`（バージョニング一貫性のため Facade に残す）
+- ブロック管理（`MemoryBlockService` は次のフェーズで）
+- `set_search_engine`（注入ポイント、全サブサービスに伝播）
+
+### ファイル構成（分割後）
+```
+nous/domain/memory/
+├── service.py            # MemoryService（ファサード、〜300行に縮小）
+├── write_service.py      # MemoryWriteService（〜80行）
+├── enrich_service.py     # MemoryEnrichService（〜50行）
+├── link_service.py       # MemoryLinkService（〜100行）
+├── evolution_service.py  # MemoryEvolutionService（〜200行）
+├── query_service.py      # MemoryQueryService（〜150行）
+├── entities.py           # 既存
+├── repository.py         # 既存
+├── ...                   # 既存
+```
+
+### 非破壊的移行
+1. `_enrich_memory` メソッドを新規作成（create_memory L204-240 の抽出）
+2. 各サブサービスファイルを新規作成し、該当メソッドを移動
+3. `MemoryService.__init__` でサブサービスをインスタンス化、依存注入
+4. Facade は委譲を維持。`_repo` は Facade に残す（テスト互換性）
+5. 全呼び出し元は変更不要
+
+### #081 レビューで指摘されたリスクと対策
+- **`_enrich_memory` が存在しない**: → 新規メソッド化してから EnrichService に移動
+- **WriteService→EvolutionService 結合**: → Facade が両方を指揮することで回避
+- **`_get_session_memories` は LinkService に**: → QueryService には移さない
+- **`_repo` 直接アクセスするテスト**: → Facade に `_repo` を残し互換性維持
 
 ---
 
@@ -98,8 +120,7 @@ ci: lint typecheck test-all coverage
 
 | # | 検証項目 | 方法 |
 |---|---------|------|
-| V1 | Python単体テスト | `pytest tests/unit/ -q --timeout=60` |
-| V2 | lint | `ruff check nous/ tests/` |
-| V3 | 型チェック | `mypy nous/`（初回は警告多数を許容） |
-| V4 | サーバー起動 | `curl -f http://localhost:26262/health` |
-| V5 | CI設定の構文 | `act` または GitHub Actions UI 確認 |
+| V1 | Python単体テスト | `pytest tests/unit/ -q --timeout=60`（メモリ許容時） |
+| V2 | importチェーン | `python3 -c "from nous.domain.memory.service import MemoryService"` |
+| V3 | lint | `ruff check nous/domain/memory/` |
+| V4 | 呼び出し元破壊なし | `grep -r "memory_service\." nous/ --include="*.py"` で既存API維持確認 |

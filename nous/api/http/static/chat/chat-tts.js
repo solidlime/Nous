@@ -4,6 +4,8 @@
    ================================================================= */
 (function(N) {
 "use strict";
+var C = N.Core;
+var toast = C.toast, safeSetHTML = C.safeSetHTML;
 var S = window.S;
 
 let _connectionCheckTimer = null;
@@ -416,10 +418,5 @@ N.Chat.tts = {
   play: playTts,
   autoPlay: autoPlayTts,
 };
-
-window.checkVoiceConnection = checkVoiceConnection;
-window.testVoicePlayback = testVoicePlayback;
-window.playTts = playTts;
-window.autoPlayTts = autoPlayTts;
 
 })(window.Nous);

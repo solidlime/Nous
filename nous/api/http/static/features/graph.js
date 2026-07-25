@@ -6,7 +6,7 @@ N.Features.Graph = N.Features.Graph || {};
 
 ;(function() {
 var S = window.S;
-var { esc, api, truncate } = window.Nous.Core;
+var { esc, api, truncate, safeSetHTML } = window.Nous.Core;
 
 /* ================================================================
  *  Knowledge Graph — vis-network interactive memory visualization
@@ -73,7 +73,7 @@ async function loadGraph() {
         if (loading) loading.style.display = 'none';
     }
 }
-window.loadGraph = loadGraph;
+/* N.Features. KnowledgeGraph.loadGraph registered below */
 
 /* ---- Populate filter dropdowns ---- */
 
@@ -280,7 +280,7 @@ function renderNetwork(container, nodes, edges) {
             var node = dataSet.nodes.get(nodeId);
             if (node && node._data) {
                 var d = node._data;
-                openMemModal({
+                N.Features.Memories.openMemModal({
                     memory_key:  d.key,
                     content:     d.content,
                     tags:        d.tags,

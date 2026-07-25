@@ -130,15 +130,13 @@ N.Core.connectSSE = function connectSSE(persona) {
   N.Core._sse = es;
 };
 
-window.connectSSE = N.Core.connectSSE;
-
 /* Memories tab debounced refresh — called from memory SSE handlers */
 var _memoriesRefreshTimer = null;
 function _scheduleMemoriesRefresh() {
     if (_memoriesRefreshTimer) clearTimeout(_memoriesRefreshTimer);
     _memoriesRefreshTimer = setTimeout(function() {
-        if (typeof S !== "undefined" && S.tab === "memories" && typeof loadMemories === "function") {
-            loadMemories();
+        if (typeof S !== "undefined" && S.tab === "memories" && typeof N.Features.Memories.loadMemories === "function") {
+            N.Features.Memories.loadMemories();
         }
         _memoriesRefreshTimer = null;
     }, 500);

@@ -90,8 +90,8 @@ describe('N.Core.safeSetHTML', () => {
     expect(el.textContent).toBe('hello world');
   });
 
-  it('is accessible as window.safeSetHTML', () => {
-    expect(typeof window.safeSetHTML).toBe('function');
-    expect(window.safeSetHTML).toBe(N.safeSetHTML);
+  it('is accessible as N.Core.safeSetHTML', () => {
+    expect(typeof N.safeSetHTML).toBe('function');
+    expect(N.safeSetHTML).toBe(N.safeSetHTML);
   });
 });
