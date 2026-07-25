@@ -144,7 +144,12 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
                     "CompressStep: Stage 3 — LLM summarization failed, proceeding to truncation",
                 )
 
-        # Re-check after Stage 3 (if summarization already meets budget, skip truncation)
+        # Stage 4: Always truncate when keep_recent > 0 (independent of token budget)
+        # When keep_recent == 0, skip truncation — fall back to token-budget-only behavior
+        if keep_recent > 0 and getattr(config, "context_compress_history", True):
+            messages = self._truncate_old_messages(list(messages), keep_recent)
+
+        # Re-check budget for logging/SSE notification
         total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
         if total <= budget:
             logger.info("CompressStep: after compression: %d tokens", total)
@@ -154,11 +159,6 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
                 "budget": budget,
             }
             return list(messages)
-
-        # Stage 4: Truncate old messages (runs only if budget still exceeded after Stage 3)
-        if getattr(config, "context_compress_history", True):
-            messages = self._truncate_old_messages(list(messages), keep_recent)
-            total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
 
         logger.info("CompressStep: after compression: %d tokens", total)
         # Store compression info for SSE notification
