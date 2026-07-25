@@ -44,7 +44,7 @@ def render_chat_main() -> str:
                     <div id="chat-status"></div>
                     <div id="chat-attachments"></div>
                     <div id="chat-input-area">
-                        <textarea id="chat-input" placeholder="メッセージを入力... (Shift+Enter で送信、Enter で改行)" rows="1" aria-label="チャットメッセージ入力"></textarea>
+                        <textarea id="chat-input" placeholder="メッセージを入力... (Ctrl+Enter で送信、Enter で改行)" rows="1" aria-label="チャットメッセージ入力"></textarea>
                         <div style="display:flex;align-items:center;gap:6px;">
                             <button id="chat-cancel-btn" class="chat-stop-btn" onclick="N.Chat.cancel()" style="display:none" aria-label="応答を停止"><i data-lucide="stop-circle"></i> 中止</button>
                             <button id="chat-attach-btn" class="chat-action-btn" onclick="N.Chat.attachments.trigger()" title="ファイル添付" aria-label="ファイルを添付"><i data-lucide="paperclip"></i></button>
