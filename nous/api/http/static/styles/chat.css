@@ -1479,13 +1479,14 @@ input[type="range"].chat-field-input:focus {
     padding: 12px 16px;
     opacity: 0;
     transform: scale(0.95) translateY(-4px);
-    transition: opacity 0.18s var(--ease-apple), transform 0.18s var(--ease-apple);
+    /* transition removed — moved to .visible */
     pointer-events: none;
 }
 .chat-help-tooltip.visible {
     opacity: 1;
     transform: scale(1) translateY(0);
     pointer-events: auto;
+    transition: opacity 0.18s var(--ease-apple), transform 0.18s var(--ease-apple);
 }
 .chat-help-icon:focus-visible {
     outline: 2px solid var(--accent-blue);
