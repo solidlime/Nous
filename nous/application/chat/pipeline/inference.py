@@ -108,6 +108,13 @@ class InferenceStep:
                         _f.write(f"  - {name}\n")
                 logger.info("Debug prompt saved: %s", _path)
 
+            # タイムスタンプ注入（設定ON時のみ）
+            if getattr(config, "show_message_timestamps", False):
+                for msg in messages:
+                    if msg.timestamp and msg.role in ("user", "assistant"):
+                        ts_str = msg.timestamp.strftime("%H:%M")
+                        msg.content = f"[{ts_str}] {msg.content}"
+
             async for event in provider.stream(
                 messages=messages,
                 system=turn_ctx.system_prompt,

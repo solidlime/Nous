@@ -1024,6 +1024,244 @@ class TestDynamicTemperatureInference:
 
 
 # ──────────────────────────────────────────────
+# TA05: Timestamp Injection — show_message_timestamps
+# ──────────────────────────────────────────────
+
+
+class TestTimestampInjection:
+    """InferenceStep が show_message_timestamps 設定に応じてメッセージにタイムスタンプを付与する。"""
+
+    @pytest.mark.asyncio
+    async def test_timestamps_injected_when_enabled(self):
+        """show_message_timestamps=True で user/assistant メッセージに [HH:MM] が付与される。"""
+        from datetime import datetime
+        from unittest.mock import MagicMock, patch
+
+        from nous.application.chat.pipeline.inference import InferenceStep
+        from nous.infrastructure.llm.base import LLMMessage, TextDeltaEvent
+
+        captured_messages = [None]
+
+        async def _mock_stream(**kwargs):
+            captured_messages[0] = kwargs.get("messages", [])
+            yield TextDeltaEvent(content="")
+
+        mock_provider = MagicMock()
+        mock_provider.stream = _mock_stream
+
+        config = MagicMock()
+        config.temperature = 0.7
+        config.max_tokens = 100
+        config.provider = "anthropic"
+        config.get_effective_api_key.return_value = "test-key"
+        config.get_effective_model.return_value = "claude-3"
+        config.get_effective_base_url.return_value = ""
+        config.max_tool_calls = 0
+        config.enable_parallel_tools = True
+        config.tool_result_max_chars = 4000
+        config.top_p = None
+        config.show_message_timestamps = True
+
+        turn_ctx = MagicMock()
+        turn_ctx.images = []
+        turn_ctx.tool_call_count = 0
+        turn_ctx.full_response = ""
+        turn_ctx.user_message = "test"
+        turn_ctx.system_prompt = "test sys"
+        turn_ctx.tool_calls_log = []
+        turn_ctx.skills_raw = []
+
+        registry = MagicMock()
+        ctx = MagicMock()
+
+        ts1 = datetime(2025, 6, 15, 14, 30, 0)
+        ts2 = datetime(2025, 6, 15, 14, 31, 0)
+        session_messages = [
+            LLMMessage(role="user", content="hello", timestamp=ts1),
+            LLMMessage(role="assistant", content="hi there", timestamp=ts2),
+        ]
+
+        with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
+            async for _ in InferenceStep().run(ctx, config, session_messages, turn_ctx, registry):
+                pass
+
+        assert captured_messages[0] is not None
+        # Check the two session messages had timestamps injected
+        assert captured_messages[0][0].content == "[14:30] hello"
+        assert captured_messages[0][1].content == "[14:31] hi there"
+
+    @pytest.mark.asyncio
+    async def test_no_timestamps_when_disabled(self):
+        """show_message_timestamps=False では content が変更されない。"""
+        from datetime import datetime
+        from unittest.mock import MagicMock, patch
+
+        from nous.application.chat.pipeline.inference import InferenceStep
+        from nous.infrastructure.llm.base import LLMMessage, TextDeltaEvent
+
+        captured_messages = [None]
+
+        async def _mock_stream(**kwargs):
+            captured_messages[0] = kwargs.get("messages", [])
+            yield TextDeltaEvent(content="")
+
+        mock_provider = MagicMock()
+        mock_provider.stream = _mock_stream
+
+        config = MagicMock()
+        config.temperature = 0.7
+        config.max_tokens = 100
+        config.provider = "anthropic"
+        config.get_effective_api_key.return_value = "test-key"
+        config.get_effective_model.return_value = "claude-3"
+        config.get_effective_base_url.return_value = ""
+        config.max_tool_calls = 0
+        config.enable_parallel_tools = True
+        config.tool_result_max_chars = 4000
+        config.top_p = None
+        config.show_message_timestamps = False
+
+        turn_ctx = MagicMock()
+        turn_ctx.images = []
+        turn_ctx.tool_call_count = 0
+        turn_ctx.full_response = ""
+        turn_ctx.user_message = "test"
+        turn_ctx.system_prompt = "test sys"
+        turn_ctx.tool_calls_log = []
+        turn_ctx.skills_raw = []
+
+        registry = MagicMock()
+        ctx = MagicMock()
+
+        ts = datetime(2025, 6, 15, 14, 30, 0)
+        session_messages = [
+            LLMMessage(role="user", content="hello", timestamp=ts),
+        ]
+
+        with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
+            async for _ in InferenceStep().run(ctx, config, session_messages, turn_ctx, registry):
+                pass
+
+        assert captured_messages[0] is not None
+        assert captured_messages[0][0].content == "hello"
+
+    @pytest.mark.asyncio
+    async def test_tool_messages_skipped(self):
+        """tool ロールのメッセージにはタイムスタンプが付与されない。"""
+        from datetime import datetime
+        from unittest.mock import MagicMock, patch
+
+        from nous.application.chat.pipeline.inference import InferenceStep
+        from nous.infrastructure.llm.base import LLMMessage, TextDeltaEvent
+
+        captured_messages = [None]
+
+        async def _mock_stream(**kwargs):
+            captured_messages[0] = kwargs.get("messages", [])
+            yield TextDeltaEvent(content="")
+
+        mock_provider = MagicMock()
+        mock_provider.stream = _mock_stream
+
+        config = MagicMock()
+        config.temperature = 0.7
+        config.max_tokens = 100
+        config.provider = "anthropic"
+        config.get_effective_api_key.return_value = "test-key"
+        config.get_effective_model.return_value = "claude-3"
+        config.get_effective_base_url.return_value = ""
+        config.max_tool_calls = 0
+        config.enable_parallel_tools = True
+        config.tool_result_max_chars = 4000
+        config.top_p = None
+        config.show_message_timestamps = True
+
+        turn_ctx = MagicMock()
+        turn_ctx.images = []
+        turn_ctx.tool_call_count = 0
+        turn_ctx.full_response = ""
+        turn_ctx.user_message = "test"
+        turn_ctx.system_prompt = "test sys"
+        turn_ctx.tool_calls_log = []
+        turn_ctx.skills_raw = []
+
+        registry = MagicMock()
+        ctx = MagicMock()
+
+        ts = datetime(2025, 6, 15, 14, 30, 0)
+        session_messages = [
+            LLMMessage(role="user", content="hi", timestamp=ts),
+            LLMMessage(role="tool", content='{"result": "ok"}', timestamp=ts),
+        ]
+
+        with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
+            async for _ in InferenceStep().run(ctx, config, session_messages, turn_ctx, registry):
+                pass
+
+        assert captured_messages[0] is not None
+        assert captured_messages[0][0].content == "[14:30] hi"
+        # tool message should NOT have timestamp prefix
+        assert captured_messages[0][1].content == '{"result": "ok"}'
+
+    @pytest.mark.asyncio
+    async def test_none_timestamp_skipped(self):
+        """timestamp=None のメッセージはスキップされる。"""
+        from datetime import datetime
+        from unittest.mock import MagicMock, patch
+
+        from nous.application.chat.pipeline.inference import InferenceStep
+        from nous.infrastructure.llm.base import LLMMessage, TextDeltaEvent
+
+        captured_messages = [None]
+
+        async def _mock_stream(**kwargs):
+            captured_messages[0] = kwargs.get("messages", [])
+            yield TextDeltaEvent(content="")
+
+        mock_provider = MagicMock()
+        mock_provider.stream = _mock_stream
+
+        config = MagicMock()
+        config.temperature = 0.7
+        config.max_tokens = 100
+        config.provider = "anthropic"
+        config.get_effective_api_key.return_value = "test-key"
+        config.get_effective_model.return_value = "claude-3"
+        config.get_effective_base_url.return_value = ""
+        config.max_tool_calls = 0
+        config.enable_parallel_tools = True
+        config.tool_result_max_chars = 4000
+        config.top_p = None
+        config.show_message_timestamps = True
+
+        turn_ctx = MagicMock()
+        turn_ctx.images = []
+        turn_ctx.tool_call_count = 0
+        turn_ctx.full_response = ""
+        turn_ctx.user_message = "test"
+        turn_ctx.system_prompt = "test sys"
+        turn_ctx.tool_calls_log = []
+        turn_ctx.skills_raw = []
+
+        registry = MagicMock()
+        ctx = MagicMock()
+
+        ts = datetime(2025, 6, 15, 14, 30, 0)
+        session_messages = [
+            LLMMessage(role="user", content="with ts", timestamp=ts),
+            LLMMessage(role="user", content="no ts", timestamp=None),
+        ]
+
+        with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
+            async for _ in InferenceStep().run(ctx, config, session_messages, turn_ctx, registry):
+                pass
+
+        assert captured_messages[0] is not None
+        assert captured_messages[0][0].content == "[14:30] with ts"
+        assert captured_messages[0][1].content == "no ts"
+
+
+# ──────────────────────────────────────────────
 # PrepareStep — _build_time_context
 # ──────────────────────────────────────────────
 
