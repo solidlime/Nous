@@ -301,7 +301,7 @@ async function rollbackChat(fromId, shouldResend) {
 
       if (shouldResend) {
         setTimeout(() => {
-          chatSend(false);
+          N.Chat.send(false);
         }, 100);
       }
     }
