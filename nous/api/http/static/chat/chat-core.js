@@ -308,7 +308,7 @@ async function loadSkillsForChat() {
     // Filter enabledSkills to only include skills that exist on disk (BUG 4)
     var validNames = new Set(skills.map(function(s) { return s.name; }));
     CHAT.enabledSkills = CHAT.enabledSkills.filter(function(n) { return validNames.has(n); });
-    renderSkillsList(skills, CHAT.enabledSkills);
+    (N.Chat.settings.renderSkills || function(){})(skills, CHAT.enabledSkills);
   } catch (e) {
     console.error("[loadSkillsForChat] failed:", e);
     toast("スキル読込失敗: " + e.message, "error");

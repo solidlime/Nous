@@ -1,6 +1,7 @@
 /* =================================================================
-   CHAT SETTINGS — Configuration panel, MCP JSON, skills list
+   CHAT SETTINGS — Configuration panel (load/apply/save)
    Extracted from chat.js (Phase 3, Batch 1)
+   MCP → chat-settings-mcp.js, Image → chat-settings-image.js
    ================================================================= */
 ;(function(N) {
 var C = N.Core;
@@ -80,7 +81,7 @@ function applyChatConfig(cfg) {
   }
   onChatProviderChange();
   N.Chat.state.mcpServers = cfg.mcp_servers || [];
-  renderMcpJson(N.Chat.state.mcpServers);
+  N.Chat.settings.renderMcpJson(N.Chat.state.mcpServers);
   // Auto-fetch MCP tools for per-server display
   if (N.Chat.tools && N.Chat.tools.fetch) {
     N.Chat.tools.fetch();
@@ -275,11 +276,11 @@ function applyChatConfig(cfg) {
   if (cfg.image_gen_comfyui_loras) {
     try {
       var loras = JSON.parse(cfg.image_gen_comfyui_loras);
-      loras.forEach(function(l) { addLoraRow(l.path, l.weight); });
+      loras.forEach(function(l) { N.Chat.settings.addLoraRow(l.path, l.weight); });
     } catch(e) { console.error('LoRA JSON parse error:', e); }
   }
   // スライダー値表示更新
-  updateImageGenSliderLabels();
+  N.Chat.settings.updateSliderLabels();
   // === Auto-capture (moved from Settings) ===
   setChecked("chat-auto-capture-enabled", cfg.auto_capture_enabled === true);
   set("chat-auto-capture-interval", cfg.auto_capture_interval ?? 300);
@@ -314,7 +315,7 @@ function applyChatConfig(cfg) {
   set("chat-memorag-snapshot-interval-hours", cfg.memorag_snapshot_interval_hours ?? 24);
   // URLが設定済みなら疎通確認を自動実行
   if (cfg.image_gen_comfyui_url) {
-    checkComfyUIHealth();
+    N.Chat.settings.checkComfyUI();
   }
 }
 
@@ -392,13 +393,13 @@ async function saveChatConfig() {
       document.getElementById("chat-extract-max-tokens")?.value || "512",
     ),
     enable_memory_tools: getChecked("chat-enable-memory-tools"),
-    mcp_servers: parseMcpJson(),
+    mcp_servers: N.Chat.settings.parseMcpJson(),
     tool_result_max_chars: parseInt(
       document.getElementById("chat-tool-result-max")?.value || "4000",
     ),
-    enabled_skills: BUILTIN_SKILLS.concat(
+    enabled_skills: (N.Chat.settings.BUILTIN_SKILLS || ["search"]).concat(
       (N.Chat.state.enabledSkills || []).filter(function (s) {
-        return !BUILTIN_SKILLS.includes(s);
+        return !(N.Chat.settings.BUILTIN_SKILLS || ["search"]).includes(s);
       }),
     ),
     disabled_tools: Array.from(N.Chat.state.disabledTools || []),
@@ -476,7 +477,7 @@ async function saveChatConfig() {
     image_gen_comfyui_speed_lora_method: document.getElementById("chat-image-gen-speed-lora-method")?.value || "",
     image_gen_comfyui_speed_lora_path: document.getElementById("chat-image-gen-speed-lora-path")?.value || "",
     image_gen_comfyui_speed_lora_weight: parseFloat(document.getElementById("chat-image-gen-speed-lora-weight")?.value || "1.0"),
-    image_gen_comfyui_loras: JSON.stringify(collectLoraRows()),
+    image_gen_comfyui_loras: JSON.stringify(N.Chat.settings.collectLoraRows()),
     image_gen_self_portrait_prompt: document.getElementById("chat-image-gen-self-portrait-prompt")?.value || "",
     image_gen_negative_prompt: document.getElementById("chat-image-gen-negative-prompt")?.value || "",
     // Voice / TTS settings (TE04)
@@ -524,421 +525,18 @@ async function saveChatConfig() {
 }
 
 // ------------------------------------------------------------------
-// MCP JSON rendering / parsing
+// Note: MCP JSON rendering/parsing → chat-settings-mcp.js
+//       ComfyUI helpers → chat-settings-image.js
 // ------------------------------------------------------------------
-function renderMcpJson(servers) {
-  const ta = document.getElementById("chat-mcp-json");
-  if (!ta) return;
-  if (!servers || servers.length === 0) {
-    ta.value = '{\n  "mcpServers": {}\n}';
-    return;
-  }
-  const mcpServers = {};
-  (servers || []).forEach((srv) => {
-    const entry = {};
-    if (srv.transport === "http") {
-      entry.url = srv.url || "";
-      if (srv.headers && Object.keys(srv.headers).length)
-        entry.headers = srv.headers;
-    } else {
-      entry.command = srv.command || "";
-      if (srv.args && srv.args.length) entry.args = srv.args;
-      if (srv.headers && Object.keys(srv.headers).length)
-        entry.env = srv.headers;
-    }
-    mcpServers[srv.name] = entry;
-  });
-  ta.value = JSON.stringify({ mcpServers }, null, 2);
-
-  /* ── Render MCP server list with Built-in badges ── */
-  var listEl = document.getElementById("chat-mcp-server-list");
-  if (listEl) {
-    safeSetHTML(listEl, "");
-    (servers || []).forEach(function (srv) {
-      var isBuiltin = srv._builtin === true;
-      var row = document.createElement("div");
-      row.style.cssText =
-        "display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--glass-border);";
-      var nameSpan = document.createElement("span");
-      nameSpan.style.cssText =
-        "font-size:0.82rem;color:var(--text-secondary);font-weight:500;";
-      nameSpan.textContent = srv.name;
-      row.appendChild(nameSpan);
-      if (isBuiltin) {
-        var badge = document.createElement("span");
-        badge.className = "builtin-badge";
-        badge.textContent = "Built-in";
-        row.appendChild(badge);
-      }
-      var spacer = document.createElement("span");
-      spacer.style.cssText = "flex:1;";
-      row.appendChild(spacer);
-      if (!isBuiltin) {
-        var delBtn = document.createElement("button");
-        delBtn.className = "mem-action-btn del";
-        delBtn.textContent = "削除";
-        delBtn.style.cssText = "font-size:0.68rem;padding:2px 8px;";
-        delBtn.onclick = function () {
-          N.Chat.state.mcpServers = N.Chat.state.mcpServers.filter(function (s) {
-            return s.name !== srv.name;
-          });
-          renderMcpJson(N.Chat.state.mcpServers);
-        };
-        row.appendChild(delBtn);
-      }
-      listEl.appendChild(row);
-      renderMcpServerTools(listEl, srv);
-    });
-  }
-}
-
-function renderMcpServerTools(listEl, srv) {
-  var toolsForServer = (N.Chat.state.mcpTools || []).filter(function(t) {
-    return t.server === srv.name;
-  });
-  if (!toolsForServer.length) return;
-
-  var collapsed = false;
-
-  var head = document.createElement("div");
-  head.style.cssText =
-    "font-size:0.6rem;color:var(--text-muted);cursor:pointer;user-select:none;padding:1px 4px;";
-  head.textContent = "▼ tools (" + toolsForServer.length + ")";
-
-  var body = document.createElement("div");
-  body.style.cssText =
-    "display:flex;flex-wrap:wrap;gap:3px;padding:2px 0 4px 8px;";
-
-  toolsForServer.forEach(function(tool) {
-    var enabled =
-      !(N.Chat.state.disabledTools &&
-        N.Chat.state.disabledTools.has(tool.name));
-    var badge = document.createElement("span");
-    badge.textContent = tool.name;
-    badge.title = (tool.description || "").slice(0, 100);
-    badge.style.cssText =
-      "font-size:0.6rem;padding:1px 5px;border-radius:3px;border:1px solid var(--glass-border);cursor:pointer;" +
-      (enabled
-        ? "background:var(--glass-bg);color:var(--text-secondary);"
-        : "background:var(--bg-secondary);color:var(--text-muted);opacity:0.5;text-decoration:line-through;");
-    badge.onclick = function(ev) {
-      ev.stopPropagation();
-      N.Chat.tools.toggle(tool.name);
-      renderMcpJson(N.Chat.state.mcpServers);
-    };
-    body.appendChild(badge);
-  });
-
-  head.onclick = function() {
-    collapsed = !collapsed;
-    body.style.display = collapsed ? "none" : "flex";
-    head.textContent =
-      (collapsed ? "▶" : "▼") + " tools (" + toolsForServer.length + ")";
-  };
-
-  var wrapper = document.createElement("div");
-  wrapper.style.cssText =
-    "border-bottom:1px solid var(--glass-border);margin-bottom:2px;";
-  wrapper.appendChild(head);
-  wrapper.appendChild(body);
-  listEl.appendChild(wrapper);
-}
-
-function parseMcpJson() {
-  const ta = document.getElementById("chat-mcp-json");
-  const errEl = document.getElementById("chat-mcp-json-error");
-  if (!ta) return N.Chat.state.mcpServers;
-  if (errEl) errEl.style.display = "none";
-  const raw = ta.value.trim();
-  if (!raw || raw === '{\n  "mcpServers": {}\n}') return [];
-  try {
-    const parsed = JSON.parse(raw);
-    const dict = parsed.mcpServers || {};
-    /* Preserve _builtin flags from original N.Chat.state.mcpServers */
-    var builtinMap = {};
-    (N.Chat.state.mcpServers || []).forEach(function (s) {
-      if (s._builtin) builtinMap[s.name] = true;
-    });
-    return Object.entries(dict).map(([name, cfg]) => ({
-      name,
-      transport: cfg.url ? "http" : "stdio",
-      url: cfg.url || "",
-      command: cfg.command || "",
-      args: cfg.args || [],
-      headers: cfg.headers || cfg.env || {},
-      enabled: true,
-      _builtin: builtinMap[name] || false,
-    }));
-  } catch (e) {
-    // Try loosened JSON parsing
-    try {
-      const loosened = loosenJson(raw);
-      const parsed = JSON.parse(loosened);
-      const dict = parsed.mcpServers || {};
-      var builtinMap = {};
-      (N.Chat.state.mcpServers || []).forEach(function (s) {
-        if (s._builtin) builtinMap[s.name] = true;
-      });
-      return Object.entries(dict).map(([name, cfg]) => ({
-        name,
-        transport: cfg.url ? "http" : "stdio",
-        url: cfg.url || "",
-        command: cfg.command || "",
-        args: cfg.args || [],
-        headers: cfg.headers || cfg.env || {},
-        enabled: true,
-        _builtin: builtinMap[name] || false,
-      }));
-    } catch (e2) {
-      if (errEl) {
-        errEl.textContent = "JSON形式エラー: " + e2.message;
-        errEl.style.display = "";
-      }
-      return N.Chat.state.mcpServers;
-    }
-  }
-}
 
 // ------------------------------------------------------------------
-// Skills list rendering
-// ------------------------------------------------------------------
-const BUILTIN_SKILLS = ["search"];
-
-function renderSkillsList(allSkills, enabledSkills) {
-  const list = document.getElementById("chat-skills-list");
-  if (!list) return;
-  safeSetHTML(list, "");
-  if (!allSkills || allSkills.length === 0) {
-    safeSetHTML(list,
-      '<div style="font-size:0.75rem;color:var(--text-muted);">スキルがありません</div>');
-    return;
-  }
-  allSkills.forEach((skill) => {
-    const enabled = (enabledSkills || []).includes(skill.name);
-    const isBuiltin = BUILTIN_SKILLS.includes(skill.name);
-    const item = document.createElement("div");
-    item.style.cssText = "display:flex;align-items:center;gap:8px;";
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = enabled;
-    cb.id = "skill-cb-" + skill.name;
-    cb.style.cssText =
-      "width:14px;height:14px;accent-color:var(--accent-purple);cursor:pointer;";
-    if (isBuiltin) {
-      cb.disabled = true;
-      cb.title = "Built-in スキルは削除できません";
-    }
-    cb.addEventListener("change", () => {
-      if (cb.checked) {
-        if (!N.Chat.state.enabledSkills.includes(skill.name))
-          N.Chat.state.enabledSkills.push(skill.name);
-      } else {
-        N.Chat.state.enabledSkills = N.Chat.state.enabledSkills.filter((n) => n !== skill.name);
-      }
-      saveChatConfig();
-    });
-    const label = document.createElement("label");
-    label.htmlFor = cb.id;
-    label.style.cssText =
-      "font-size:0.78rem;color:var(--text-secondary);cursor:pointer;display:inline-flex;align-items:center;gap:6px;";
-    label.title = skill.description || "";
-    label.textContent = skill.name;
-    if (isBuiltin) {
-      var badge = document.createElement("span");
-      badge.className = "builtin-badge";
-      badge.textContent = "Built-in";
-      label.appendChild(badge);
-    }
-    item.appendChild(cb);
-    item.appendChild(label);
-    list.appendChild(item);
-  });
-}
-
-// ------------------------------------------------------------------
-// JSON utilities
-// ------------------------------------------------------------------
-function loosenJson(text) {
-  var s = text.trim();
-  if (!s) return s;
-  // Remove // line comments
-  s = s.replace(/\/\/.*$/gm, '');
-  // Remove /* */ block comments
-  s = s.replace(/\/\*[\s\S]*?\*\//g, '');
-  // Convert single-quoted keys/values to double-quoted (simple heuristic)
-  s = s.replace(/'([^']*)'/g, function(m, inner) {
-    return '"' + inner.replace(/"/g, '\\"') + '"';
-  });
-  // Quote unquoted keys: /(\s*)(\w+)(\s*):/ → $1"$2"$3:
-  s = s.replace(/([{,]\s*)([a-zA-Z_]\w*)(\s*:)/g, '$1"$2"$3');
-  // Remove trailing commas before } or ]
-  s = s.replace(/,(\s*[}\]])/g, '$1');
-  return s;
-}
-
-async function formatMcpJson() {
-  var ta = document.getElementById("chat-mcp-json");
-  var errDiv = document.getElementById("chat-mcp-json-error");
-  if (!ta) return;
-  var raw = ta.value.trim();
-  if (!raw) { ta.value = '{\n  "mcpServers": {}\n}'; return; }
-  try {
-    // Try strict first
-    var parsed = JSON.parse(raw);
-    ta.value = JSON.stringify(parsed, null, 2);
-    if (errDiv) errDiv.style.display = "none";
-  } catch (e) {
-    // Try loosened
-    try {
-      var parsed2 = JSON.parse(loosenJson(raw));
-      ta.value = JSON.stringify(parsed2, null, 2);
-      if (errDiv) errDiv.style.display = "none";
-    } catch (e2) {
-      if (errDiv) {
-        errDiv.textContent = "整形できません: " + e2.message;
-        errDiv.style.display = "block";
-      }
-    }
-  }
-}
-
-// ------------------------------------------------------------------
-// ComfyUI helper functions
-// ------------------------------------------------------------------
-function addLoraRow(path, weight) {
-  var container = document.getElementById('chat-image-gen-lora-list');
-  if (!container) return;
-  var idx = container.children.length;
-  var div = document.createElement('div');
-  div.style.cssText = 'display:flex;gap:4px;align-items:center;';
-  safeSetHTML(div, '<input type="text" class="chat-field-input lora-path" value="' + escHtml(path || '') + '" placeholder="lora.safetensors" style="flex:1;font-size:0.82rem;">'
-    + '<input type="number" class="chat-field-input lora-weight" value="' + (weight || 1.0).toFixed(1) + '" min="0.1" max="2.0" step="0.1" style="width:55px;font-size:0.82rem;">'
-    + '<button type="button" onclick="this.parentElement.remove()" style="color:var(--accent-red);background:none;border:none;cursor:pointer;font-size:1rem;">\u00d7</button>';
-  container.appendChild(div);
-}
-
-function collectLoraRows() {
-  var container = document.getElementById('chat-image-gen-lora-list');
-  if (!container) return [];
-  var result = [];
-  container.querySelectorAll('.lora-path').forEach(function(input, i) {
-    var path = input.value.trim();
-    if (path) {
-      var weightEl = container.querySelectorAll('.lora-weight')[i];
-      result.push({path: path, weight: parseFloat(weightEl ? weightEl.value : 1.0)});
-    }
-  });
-  return result;
-}
-
-function updateImageGenSliderLabels() {
-  // HTML側の oninput で処理するため、ここでは何もしない
-}
-
-function testImageGen() {
-  var status = document.getElementById('chat-image-test-status');
-  if (!status) return;
-  status.textContent = '生成中...';
-  status.style.color = 'var(--text-muted)';
-  
-  var payload = {
-    checkpoint: document.getElementById('chat-image-gen-checkpoint')?.value || '',
-    loras: collectLoraRows(),
-    width: parseInt(document.getElementById('chat-image-gen-width')?.value || '1024'),
-    height: parseInt(document.getElementById('chat-image-gen-height')?.value || '1024'),
-    steps: parseInt(document.getElementById('chat-image-gen-steps')?.value || '28'),
-    cfg: parseFloat(document.getElementById('chat-image-gen-cfg')?.value || '5.5'),
-    sampler: document.getElementById('chat-image-gen-sampler')?.value || 'euler_ancestral',
-    scheduler: document.getElementById('chat-image-gen-scheduler')?.value || 'normal',
-    seed: parseInt(document.getElementById('chat-image-gen-seed')?.value || '0'),
-    denoise: parseFloat(document.getElementById('chat-image-gen-denoise')?.value || '0.7'),
-    prompt: document.getElementById('chat-image-gen-self-portrait-prompt')?.value.trim() || '1girl, herta, honkai star rail, solo, smile',
-    negative_prompt: 'lowres, bad anatomy, bad hands, text, error',
-  };
-  
-  fetch('/api/chat/' + (S.persona || '') + '/image-gen/test', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(payload)
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(d) {
-    if (d.error) { status.textContent = '\ud83d\udd34 ' + d.error; status.style.color = 'var(--accent-red)'; return; }
-    status.textContent = '\u2705 \u751f\u6210\u5b8c\u4e86 (' + (d.images ? d.images.length : 0) + '\u679a)';
-    status.style.color = 'var(--accent-green)';
-  })
-  .catch(function(e) {
-    status.textContent = '\ud83d\udd34 ' + e.message;
-    status.style.color = 'var(--accent-red)';
-  });
-}
-
-function checkComfyUIHealth() {
-  var url = document.getElementById('chat-image-gen-comfyui-url').value.trim();
-  var status = document.getElementById('chat-image-status');
-  if (!url) { status.textContent = '⚠ URLを入力してください'; status.style.color = 'var(--accent-yellow)'; return; }
-  status.textContent = '確認中...';
-  status.style.color = 'var(--text-secondary)';
-  var controller = new AbortController();
-  var timeoutId = setTimeout(function() { controller.abort(); }, 10000);
-  fetch('/api/image-gen/health?url=' + encodeURIComponent(url), { signal: controller.signal })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      clearTimeout(timeoutId);
-      if (d.healthy) {
-        status.textContent = '🟢 接続OK';
-        status.style.color = 'var(--accent-green)';
-      } else {
-        status.textContent = '🔴 ' + (d.error || '接続失敗');
-        status.style.color = 'var(--accent-red)';
-      }
-    })
-    .catch(function(e) {
-      clearTimeout(timeoutId);
-      status.textContent = '🔴 ' + (e.name === 'AbortError' ? 'タイムアウト' : e.message);
-      status.style.color = 'var(--accent-red)';
-    });
-}
-
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-// イベントリスナー初期化 (DOMContentLoaded 安全策)
-(function initImageGenEvents() {
-  function bind() {
-    var addBtn = document.getElementById('chat-image-gen-lora-add');
-    if (addBtn && !addBtn._bound) {
-      addBtn._bound = true;
-      addBtn.addEventListener('click', function() { addLoraRow('', 1.0); });
-    }
-    // ページロード時にComfyUI URLが設定済みなら疎通確認
-    if (document.getElementById('chat-image-gen-comfyui-url')?.value) {
-      checkComfyUIHealth();
-    }
-  }
-  if (document.readyState !== 'loading') bind();
-  else document.addEventListener('DOMContentLoaded', bind);
-})();
-
-// ------------------------------------------------------------------
-// Register namespace and global backward-compat aliases
+// Register namespace (MCP/Image additions in chat-settings-mcp.js / chat-settings-image.js)
 // ------------------------------------------------------------------
 N.Chat.settings = {
   load: loadChatConfig,
   apply: applyChatConfig,
   save: saveChatConfig,
   onProviderChange: onChatProviderChange,
-  renderMcpJson: renderMcpJson,
-  parseMcpJson: parseMcpJson,
-  renderSkills: renderSkillsList,
-  loosenJson: loosenJson,
-  formatMcpJson: formatMcpJson,
-  checkComfyUI: checkComfyUIHealth,
-  updateSliderLabels: updateImageGenSliderLabels,
-  testImageGen: testImageGen,
-  addLoraRow: addLoraRow,
-  collectLoraRows: collectLoraRows,
 };
 
 })(window.Nous);

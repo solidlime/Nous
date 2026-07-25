@@ -323,8 +323,8 @@ async function fetchMcpTools() {
     const data = await api("/api/chat/" + encodeURIComponent(S.persona) + "/mcp-tools");
     CHAT.mcpTools = data.tools || [];
     CHAT.mcpErrors = data.errors || [];
-    if (typeof renderMcpJson === 'function') {
-      renderMcpJson(CHAT.mcpServers || []);
+    if (typeof N.Chat.settings.renderMcpJson === 'function') {
+      N.Chat.settings.renderMcpJson(CHAT.mcpServers || []);
     }
   } catch (e) {
     console.warn('MCP tools fetch failed:', e);

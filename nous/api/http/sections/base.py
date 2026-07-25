@@ -57,6 +57,8 @@ def render_head() -> str:
     <!-- Chat modules (Phase 3) -->
     <script src="/static/chat/chat-core.js" defer></script>
     <script src="/static/chat/chat-settings.js" defer></script>
+    <script src="/static/chat/chat-settings-mcp.js" defer></script>
+    <script src="/static/chat/chat-settings-image.js" defer></script>
     <script src="/static/chat/chat-markdown.js" defer></script>
     <script src="/static/chat/chat-send.js" defer></script>
     <script src="/static/chat/chat-history.js" defer></script>
