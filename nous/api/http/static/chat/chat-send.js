@@ -581,6 +581,11 @@ async function chatSend(retry) {
               assistantDiv.remove();
             }
           }
+          // Re-enable send immediately, keep SSE reader alive for memory_activity
+          CHAT.streaming = false;
+          CHAT._streamingSince = null;
+          sendBtn.style.display = "";
+          if (cancelBtn) cancelBtn.style.display = "none";
           statusEl.textContent = "記憶を整理中...";
           // Show truncation notice when response was auto-continued
           if (evt.truncated) {
