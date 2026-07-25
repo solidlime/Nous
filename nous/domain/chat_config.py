@@ -105,9 +105,16 @@ class ChatConfig(BaseModel):
             placed = False
             for cfg_name, sub_cls in _SUB_CONFIG_MAP.items():
                 if k in sub_cls.model_fields:
-                    existing = result.setdefault(cfg_name, {})
-                    if isinstance(existing, dict):
+                    existing = result.get(cfg_name)
+                    if existing is None:
+                        result[cfg_name] = {k: v}
+                    elif isinstance(existing, dict):
                         existing[k] = v
+                    elif isinstance(existing, BaseModel):
+                        # model instance → dict 変換してマージ
+                        merged = existing.model_dump()
+                        merged[k] = v
+                        result[cfg_name] = merged
                     placed = True
                     break
             if not placed:
