@@ -6,12 +6,12 @@ import contextlib
 import json
 from typing import TYPE_CHECKING
 
+from nous.application.chat.memory_prompts import _MEMORY_LLM_PROMPT
 from nous.domain.language import LanguageResolver
 from nous.domain.search.engine import SearchQuery
 from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.factory import get_provider
 from nous.infrastructure.logging.structured import get_logger
-from nous.application.chat.memory_prompts import _MEMORY_LLM_PROMPT
 
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
@@ -194,7 +194,9 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
         context_str, commitments_str, inventory_str = await _build_memory_llm_context(ctx)
         persona_name = ctx.persona or "assistant"
         persona_identity = (config.system_prompt or "").strip()
-        result = await MemoryLLM().process(
+        from nous.application.chat.memory_llm import MemoryLLM as _MemoryLLM
+
+        result = await _MemoryLLM().process(
             config,
             user_message,
             assistant_response,
