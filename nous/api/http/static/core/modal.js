@@ -3,6 +3,7 @@
    ================================================================= */
 ;(function(N) {
 "use strict";
+var safeSetHTML = N.Core.safeSetHTML;
 
 N.Core.showConfirm = function showConfirm(message, onConfirm, onCancel) {
   // Promise-based: showConfirm(msg) returns Promise<boolean>
