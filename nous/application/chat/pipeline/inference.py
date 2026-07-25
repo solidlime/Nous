@@ -72,9 +72,9 @@ class InferenceStep:
                         },
                     }
                 )
-            messages.append(LLMMessage(role="user", content=turn_ctx.user_message, content_parts=parts))
+            messages.append(LLMMessage(role="user", content=turn_ctx.user_message, content_parts=parts, timestamp=datetime.now()))
         else:
-            messages.append(LLMMessage(role="user", content=turn_ctx.user_message))
+            messages.append(LLMMessage(role="user", content=turn_ctx.user_message, timestamp=datetime.now()))
 
         temperature = effective_temp if effective_temp is not None else config.temperature
         max_continuation_rounds = 3
@@ -92,7 +92,7 @@ class InferenceStep:
             if getattr(config, "show_message_timestamps", False):
                 for msg in messages:
                     if msg.timestamp and msg.role in ("user", "assistant"):
-                        ts_str = msg.timestamp.strftime("%Y-%m-%d %H:%M")
+                        ts_str = msg.timestamp.strftime("%Y-%m-%d %H:%M JST")
                         msg.content = f"[{ts_str}] {msg.content}"
 
             # Debug: capture the full prompt sent to LLM
