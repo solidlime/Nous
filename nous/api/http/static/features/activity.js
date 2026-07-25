@@ -143,7 +143,7 @@ function renderActivityFeed() {
         const openClass = sess.open ? ' open' : '';
 
         html += '<div class="act-session' + openClass + '" data-session="' + esc(sid) + '">';
-        html += '<div class="act-session-header" tabindex="0" role="button" onclick="toggleActivitySession(\'' + esc(sid) + '\')">';
+        html += '<div class="act-session-header" tabindex="0" role="button" onclick="N.Features.Activity.toggleActivitySession(\'' + esc(sid) + '\')">';
         html += '<span class="act-chevron">▶</span>';
         html += '<span class="act-session-id">' + esc(sid) + '</span>';
         html += '<span class="act-session-meta">';
@@ -165,7 +165,7 @@ function renderActivityFeed() {
             const label = ACT_LABELS[ev.event_type] || ev.event_type;
             const hasDetail = ev.detail && ev.detail.length > 0;
             html += '<div class="act-event type-' + esc(ev.event_type) + '"';
-            if (hasDetail) html += ' onclick="toggleActivityDetail(this)" style="cursor:pointer"';
+            if (hasDetail) html += ' onclick="N.Features.Activity.toggleActivityDetail(this)" style="cursor:pointer"';
             html += '>';
             html += '<span class="act-event-icon">' + icon + '</span>';
             html += '<div class="act-event-body">';
@@ -205,7 +205,7 @@ function toggleActivitySession(sid) {
                 const label = ACT_LABELS[ev.event_type] || ev.event_type;
                 const hasDetail = ev.detail && ev.detail.length > 0;
                 h += '<div class="act-event type-' + esc(ev.event_type) + '"';
-                if (hasDetail) h += ' onclick="toggleActivityDetail(this)" style="cursor:pointer"';
+                if (hasDetail) h += ' onclick="N.Features.Activity.toggleActivityDetail(this)" style="cursor:pointer"';
                 h += '>';
                 h += '<span class="act-event-icon">' + icon + '</span>';
                 h += '<div class="act-event-body">';
