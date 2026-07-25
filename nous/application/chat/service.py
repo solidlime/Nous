@@ -256,11 +256,20 @@ class ChatService:
                         },
                     )
 
-            async for post_event in PostProcessStep().run(ctx, config, session, turn_ctx, debug=debug):
-                yield post_event.to_sse()
+                # Force-persist to SQLite BEFORE PostProcessStep (which sends DoneSSE)
+                # so reload-after-response doesn't lose messages
+                session.flush()
 
-            # Force-persist to SQLite immediately so GET /api/chat/.../sessions/:id returns current data
-            session.flush()
+            try:
+                async for post_event in PostProcessStep().run(ctx, config, session, turn_ctx, debug=debug):
+                    yield post_event.to_sse()
+            except Exception:
+                logger.exception("Chat pipeline crashed")
+                from nous.application.chat.events import ErrorSSE
+                yield ErrorSSE(message="チャット処理中に内部エラーが発生しました。").to_sse()
+            finally:
+                # Always persist, even on GeneratorExit (client disconnect during PostProcessStep)
+                session.flush()
         except Exception:
             logger.exception("Chat pipeline crashed")
             from nous.application.chat.events import ErrorSSE
