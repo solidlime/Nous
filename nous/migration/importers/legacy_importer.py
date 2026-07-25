@@ -86,7 +86,7 @@ class LegacyImporter:
             target_db = self.target.get_memory_db()
             counts["memories"] = target_db.execute("SELECT COUNT(*) as c FROM memories").fetchone()["c"]
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Import skip: %s", exc, exc_info=True)
+            logger.warning("Could not refresh memory count after persona_context import: %s", exc, exc_info=True)
 
         return Success(counts)
 
@@ -177,7 +177,7 @@ class LegacyImporter:
                 )
                 count += 1
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Import skip: %s", exc, exc_info=True)
+                logger.warning("Skipping invalid memory entry during import: %s", exc, exc_info=True)
                 continue
 
         target_db.commit()
@@ -212,7 +212,7 @@ class LegacyImporter:
                 )
                 count += 1
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Import skip: %s", exc, exc_info=True)
+                logger.warning("Skipping invalid memory_strength entry during import: %s", exc, exc_info=True)
                 continue
 
         target_db.commit()
@@ -249,7 +249,7 @@ class LegacyImporter:
                 )
                 count += 1
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Import skip: %s", exc, exc_info=True)
+                logger.warning("Skipping invalid memory_blocks entry during import: %s", exc, exc_info=True)
                 continue
 
         target_db.commit()
@@ -284,7 +284,7 @@ class LegacyImporter:
                 )
                 count += 1
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Import skip: %s", exc, exc_info=True)
+                logger.warning("Skipping invalid emotion_history entry during import: %s", exc, exc_info=True)
                 continue
 
         target_db.commit()
@@ -326,7 +326,7 @@ class LegacyImporter:
                 )
                 count += 1
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Import skip: %s", exc, exc_info=True)
+                logger.warning("Skipping invalid user_state entry during import: %s", exc, exc_info=True)
                 continue
 
         target_db.commit()
@@ -363,6 +363,7 @@ class LegacyImporter:
                 )
                 count += 1
             except Exception:  # noqa: BLE001
+                logger.warning("Skipping invalid goal entry during import", exc_info=True)
                 continue
 
         target_db.commit()
@@ -399,6 +400,7 @@ class LegacyImporter:
                 )
                 count += 1
             except Exception:  # noqa: BLE001
+                logger.warning("Skipping invalid promise entry during import", exc_info=True)
                 continue
 
         target_db.commit()
