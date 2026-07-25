@@ -3,7 +3,7 @@
    Namespace: N.Features.Settings.*
    Depends on: N.Core.* (api, safeSetHTML)
                N.Features.Settings.renderSettings (settings-form.js)
-               window.S, window.loadSettings, window.switchTab
+               window.S
    ================================================================= */
 N.Features.Settings = N.Features.Settings || {};
 
@@ -27,7 +27,7 @@ async function loadSettings() {
         S.settingsData = settingsData;
         S.settingsReloadStatus = status;
         N.Features.Settings.renderSettings(el, settingsData, status);
-        updateLastTime();
+        N.Core.updateLastTime();
     } catch (e) {
         console.error('settings load failed:', e);
         safeSetHTML(el, N.Components.skeleton.errorCard('Failed to load settings', function(){ loadSettings(); }));
@@ -37,9 +37,9 @@ async function loadSettings() {
 
 /* ── Clean up status polling when leaving the settings tab ── */
 document.addEventListener('DOMContentLoaded', function() {
-    const origSwitchTab = switchTab;
-    if (typeof switchTab !== 'undefined') {
-        switchTab = function(tabId) {
+    const origSwitchTab = N.Core.switchTab;
+    if (typeof origSwitchTab === 'function') {
+        N.Core.switchTab = function(tabId) {
             /* Leaving settings tab → stop polling */
             if (S.tab === 'settings' && tabId !== 'settings') {
                 if (S.statusPoll) {

@@ -5,7 +5,7 @@
                N.Features.Memories.* (renderMemoryList, openMemModalByKey,
                  openCreateModal, toggleSelectMode, toggleAdvancedSearch,
                  applyAdvancedSearch, clearAdvancedSearch, batchDeleteMemories, _addEditTag)
-                window.S, window.safeSetHTML, window.updateLastTime
+                window.S
    ================================================================= */
 N.Features.Memories = N.Features.Memories || {};
 
@@ -121,12 +121,12 @@ async function loadMemories(page) {
         }
         if (!memories || memories.length === 0) {
             safeSetHTML(el, N.Components.skeleton.emptyState('file-text', 'No memories', 'Try adjusting your search or create a new memory.'));
-            updateLastTime();
+            N.Core.updateLastTime();
             return;
         }
         N.Features.Memories.renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSearch, allKnownTags);
         bindMemoryEvents();
-        updateLastTime();
+        N.Core.updateLastTime();
     } catch (e) {
         console.error('memories load failed:', e);
         safeSetHTML(el, N.Components.skeleton.errorCard('Failed to load memories', function(){ loadMemories(); }));

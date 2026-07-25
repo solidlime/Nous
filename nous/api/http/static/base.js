@@ -1,4 +1,5 @@
 ;(function() {
+var N = window.Nous;
 
 /* =================================================================
    STATE
@@ -18,46 +19,7 @@ window.S = S;
    CORE — Import from modules (replaces legacy global definitions)
    ================================================================= */
 var C = window.Nous.Core;
-var esc = C.esc, toast = C.toast, api = C.api;
-var showConfirm = C.showConfirm, showAlert = C.showAlert;
-var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
-var applyTheme = C.applyTheme, toggleTheme = C.toggleTheme, connectSSE = C.connectSSE;
-
-/* =================================================================
-   CONSTANTS
-   ================================================================= */
-var CHART_COLORS = C.CHART_COLORS;
-var EMOTION_COLORS = C.EMOTION_COLORS;
-var EMOTION_BAR_COLORS = C.EMOTION_BAR_COLORS;
-var BODY_BAR_COLORS = C.BODY_BAR_COLORS;
-var BODY_LABELS = C.BODY_LABELS;
-window.CHART_COLORS = CHART_COLORS;
-window.EMOTION_COLORS = EMOTION_COLORS;
-window.EMOTION_BAR_COLORS = EMOTION_BAR_COLORS;
-window.BODY_BAR_COLORS = BODY_BAR_COLORS;
-window.BODY_LABELS = BODY_LABELS;
-
-/* ── Delegate to N.Components.memoryCard (defined in components/memory-card.js) ── */
-function renderBodyStateBars(bodyState) {
-  return N.Components.memoryCard.renderBodyStateBars(bodyState);
-}
-window.renderBodyStateBars = renderBodyStateBars;
-
-function renderEmotionBars(emotion, emotion_intensity) {
-  return N.Components.memoryCard.renderEmotionBars(emotion, emotion_intensity);
-}
-window.renderEmotionBars = renderEmotionBars;
-
-function renderEmotionBadges(emotion, emotion_intensity) {
-  return N.Components.memoryCard.renderEmotionBadges(emotion, emotion_intensity);
-}
-window.renderEmotionBadges = renderEmotionBadges;
-
-function renderBodyStateCompact(bodyState) {
-  return N.Components.memoryCard.renderBodyStateCompact(bodyState);
-}
-window.renderBodyStateCompact = renderBodyStateCompact;
-
+var safeSetHTML = C.safeSetHTML;
 
 /* Persona storage helpers — write to both keys for backward compatibility */
 function getStoredPersona() {
@@ -71,35 +33,11 @@ function setStoredPersona(persona) {
   localStorage.setItem("mmcp-persona", persona);
   localStorage.setItem("selected_persona", persona);
 }
-/* =================================================================
-   CHART HELPERS
-   ================================================================= */
-/* ── Delegate to N.Components.chart (defined in components/chart.js) ── */
-function destroyChart(id) {
-  N.Components.chart.destroy(id);
-}
-window.destroyChart = destroyChart;
-function chartOpts(extra) {
-  return N.Components.chart.defaults(extra);
-}
-window.chartOpts = chartOpts;
 
-/* =================================================================
-   SKELETON HELPERS
-   ================================================================= */
-/* ── Delegate to N.Components.skeleton (defined in components/skeleton.js) ── */
-function skeletonCard() {
-  return N.Components.skeleton.card();
-}
-function errorCard(msg) {
-  return N.Components.skeleton.errorCard(msg);
-}
-window.errorCard = errorCard;
 
 /* =================================================================
    SKELETON LOADING
    ================================================================= */
-/* ── Delegate to N.Components.skeleton (defined in components/skeleton.js) ── */
 function showSkeleton(tabId) {
   N.Components.skeleton.show(tabId);
 }
@@ -133,25 +71,27 @@ function switchTab(tab) {
     if (typeof lucide !== "undefined") lucide.createIcons();
   }, 100);
 }
-window.switchTab = switchTab;
+N.Core.switchTab = switchTab;
+var TAB_LOADERS = {
+  overview:  function() { return N.Features.Overview.loadOverview(); },
+  analytics: null,
+  memories:  function() { return N.Features.Memories.loadMemories(); },
+  timeline:  function() { return N.Features.Timeline.loadTimeline(); },
+  graph:     function() { return N.Features.Graph.loadGraph(); },
+  'import-export': null,
+  personas:  null,
+  chat:      function() { return N.Chat.core.loadChat(); },
+  settings:  function() { return N.Features.Settings.loadSettings(); },
+  admin:     null,
+  activity:  function() { return N.Features.Activity.loadActivity(true); },
+};
 function loadTab(tab) {
   if (!S.persona && tab !== "settings" && tab !== "personas") return;
-  var fn;
-   var loaderName = 'load' + tab.charAt(0).toUpperCase() + tab.slice(1);
-   fn = typeof window[loaderName] === 'function' ? window[loaderName] : null;
+  var fn = TAB_LOADERS[tab];
   if (fn) {
-    if (tab === "activity") {
-      (function () { fn(true); })();
-    } else {
-      fn();
-    }
+    fn();
   } else {
-    // Retry after a tick in case loader script hasn't executed yet
-    setTimeout(function deferTab() {
-      var deferFn = typeof window[loaderName] === 'function' ? window[loaderName] : null;
-      if (deferFn) deferFn();
-      else console.warn("[loadTab] loader not found:", loaderName);
-    }, 10);
+    console.warn("[loadTab] loader not found for tab:", tab);
   }
 }
 
@@ -170,7 +110,7 @@ function updateLastTime() {
         second: "2-digit",
       });
 }
-window.updateLastTime = updateLastTime;
+N.Core.updateLastTime = updateLastTime;
 
 /* =================================================================
    PAGE CLEANUP (beforeunload)
@@ -202,11 +142,11 @@ async function init() {
   }
 
   // Theme
-  applyTheme();
+  C.applyTheme();
 
   // Load personas
   try {
-    const data = await api("/api/personas");
+    const data = await C.api("/api/personas");
     const personas = data.personas || [];
     const sel = document.getElementById("persona-select");
     safeSetHTML(sel, "");
@@ -241,17 +181,17 @@ async function init() {
     S.persona = _target;
     sel.value = _target;
     syncDeleteBtn();
-    connectSSE(_target);
+    C.connectSSE(_target);
     switchTab(S.tab);
   } catch (e) {
-    toast("Failed to load personas: " + e.message, "error");
+    C.toast("Failed to load personas: " + e.message, "error");
   }
 
   // Event: Persona change
   document.getElementById("persona-select").onchange = (e) => {
     S.persona = e.target.value;
     setStoredPersona(e.target.value);
-    connectSSE(e.target.value);
+    C.connectSSE(e.target.value);
     syncDeleteBtn();
     S.dashCache = null;
     // Reset pagination/search without losing extended properties from memories.js
@@ -286,7 +226,7 @@ async function init() {
   }
 
    // Event: Theme toggle
-  document.getElementById("dark-toggle").onclick = toggleTheme;
+  document.getElementById("dark-toggle").onclick = C.toggleTheme;
 
   // ── Hamburger menu (mobile) ──
   function buildHamburgerMenu() {
@@ -374,7 +314,7 @@ async function init() {
       hamBtn.focus();
     }
 
-    window._closeNavDrawer = closeNavDrawer;
+    N.Core._closeNavDrawer = closeNavDrawer;
 
     // Escape closes drawer
     document.addEventListener("keydown", function _drawerEsc(e) {
@@ -393,11 +333,11 @@ async function init() {
     if (typeof known === "function") {
       known(d.message || "API error", "error", "再試行", function() {
         fetch(d.path, { method: "GET" }).then(function(r) {
-          if (r.ok) { toast("再試行成功", "success"); }
+          if (r.ok) { C.toast("再試行成功", "success"); }
         }).catch(function() {});
       });
     } else {
-      toast(d.message || "API error", "error");
+      C.toast(d.message || "API error", "error");
     }
   });
 
@@ -605,7 +545,7 @@ function submitCreatePersona(e) {
   var nameInput = document.getElementById('new-persona-name');
   var name = nameInput.value.trim();
   if (!name) return false;
-  api('/api/personas', {method: 'POST', body: JSON.stringify({name: name})}).then(function(data) {
+  C.api('/api/personas', {method: 'POST', body: JSON.stringify({name: name})}).then(function(data) {
     closeCreatePersonaModal();
     var sel = document.getElementById('persona-select');
     var exists = Array.from(sel.options).some(function(o) { return o.value === name; });
@@ -617,11 +557,9 @@ function submitCreatePersona(e) {
     }
     sel.value = name;
     sel.dispatchEvent(new Event('change', {bubbles: true}));
-    if (typeof toast === 'function') toast('Persona "' + name + '" created.', 'success');
-    else if (typeof N !== 'undefined' && N.Core && N.Core.toast) N.Core.toast('Persona "' + name + '" created.', 'success');
+    C.toast('Persona "' + name + '" created.', 'success');
   }).catch(function(err) {
-    if (typeof toast === 'function') toast('Failed: ' + err.message, 'error');
-    else if (typeof N !== 'undefined' && N.Core && N.Core.toast) N.Core.toast('Failed: ' + err.message, 'error');
+    C.toast('Failed: ' + err.message, 'error');
   });
   return false;
 }
@@ -636,14 +574,14 @@ function deleteCurrentPersona() {
   var name = sel.value;
   if (!name || name === 'None') return;
   if (!confirm('Delete persona "' + name + '"? This cannot be undone.')) return;
-  api('/api/personas/' + encodeURIComponent(name), {method: 'DELETE'}).then(function(data) {
+  C.api('/api/personas/' + encodeURIComponent(name), {method: 'DELETE'}).then(function(data) {
     var opt = sel.querySelector('option[value="' + name.replace(/"/g, '\\"') + '"]');
     if (opt) opt.remove();
     var first = sel.options[0];
     if (first) { sel.value = first.value; sel.dispatchEvent(new Event('change', {bubbles: true})); }
-    if (typeof N !== 'undefined' && N.Core && N.Core.toast) N.Core.toast('Persona "' + name + '" deleted.', 'success');
+    C.toast('Persona "' + name + '" deleted.', 'success');
   }).catch(function(err) {
-    if (typeof N !== 'undefined' && N.Core && N.Core.toast) N.Core.toast('Delete failed: ' + err.message, 'error');
+    C.toast('Delete failed: ' + err.message, 'error');
   });
 }
 window.deleteCurrentPersona = deleteCurrentPersona;

@@ -5,13 +5,13 @@
                N.Features.Settings.* (validateField, debounceAutoSave, startStatusPoll,
                  resetField, resetCategory, saveSettingsProfile, loadSettingsProfile,
                  deleteSettingsProfile, renderSettingsProfiles, BUILTIN_PROFILES)
-               window.* (S, animateCards, errorCard, loadSettings, lucide)
+                window.S, N.Core.animateCards, window.lucide
    ================================================================= */
 N.Features.Settings = N.Features.Settings || {};
 
 ;(function() {
 var S = window.S;
-var { esc, toast, api, safeSetHTML, errorCard } = window.Nous.Core;
+var { esc, toast, api, safeSetHTML } = window.Nous.Core;
 
 const CATEGORY_ICONS = {
     server: '<i data-lucide="monitor"></i>',
@@ -503,7 +503,7 @@ function renderSettings(el, settings, status) {
     }
 
     N.Features.Settings.renderSettingsProfiles();
-    animateCards(el);
+    N.Core.animateCards(el);
 }
 
 /* ═══════════════════════════════════════════════════════════════════

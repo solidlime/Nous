@@ -606,14 +606,14 @@ async function loadOverview() {
         </div>`);
 
         // --- Charts ---
-        destroyChart('chart-timeline');
-        destroyChart('chart-tags');
+        N.Components.chart.destroy('chart-timeline');
+        N.Components.chart.destroy('chart-tags');
         const tlCtx = document.getElementById('chart-timeline');
         if (tlCtx) {
             S.charts['chart-timeline'] = new Chart(tlCtx, {
                 type: 'bar',
                 data: { labels: dayLabels, datasets: [{ label: 'Memories', data: dayCounts, backgroundColor: 'rgba(0,122,255,0.5)', borderColor: '#007aff', borderWidth: 1, borderRadius: 6 }] },
-                options: chartOpts({ plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: {} } })
+                options: N.Components.chart.defaults({ plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: {} } })
             });
         }
         const allTags = Object.entries(tagDist).sort((a,b) => b[1]-a[1]).slice(0, 8);
@@ -622,7 +622,7 @@ async function loadOverview() {
             S.charts['chart-tags'] = new Chart(tgCtx, {
                 type: 'doughnut',
                 data: { labels: allTags.map(t=>t[0]), datasets: [{ data: allTags.map(t=>t[1]), backgroundColor: N.Core.CHART_COLORS.slice(0, allTags.length), borderWidth: 0 }] },
-                options: { ...chartOpts(), cutout: '60%' }
+                options: { ...N.Components.chart.defaults(), cutout: '60%' }
             });
         }
         if (typeof lucide !== 'undefined') lucide.createIcons();

@@ -192,7 +192,7 @@ function showTimelineDetail(mem) {
         }
     }
     if (mem.emotion) {
-        bodyHtml += '<div style="margin-bottom:16px">' + renderEmotionBars(mem.emotion, mem.emotion_intensity) + '</div>';
+        bodyHtml += '<div style="margin-bottom:16px">' + N.Components.memoryCard.renderEmotionBars(mem.emotion, mem.emotion_intensity) + '</div>';
     }
     safeSetHTML(document.getElementById('tl-detail-body'), bodyHtml);
 
