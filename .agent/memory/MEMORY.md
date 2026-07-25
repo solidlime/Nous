@@ -1,5 +1,32 @@
 # MEMORY
 
+## WebUI リファクタリング完了 (2026-07-25)
+- **ビフォー**: 29 JSファイル、~400KB、モノリス6ファイル（最大53KB）、グローバル window 汚染、二重状態管理、CSS 2ファイル
+- **アフター**: 15フェーズ、50+コミット、~38JSファイル（モジュール分割済み）、`N.*` 名前空間統一、Pub/Sub store完備
+- **構造**: `static/core/` (11), `static/chat/` (12), `static/features/` (12+サブモジュール), `static/components/` (3), `static/styles/` (7), `sections/chat/` (7Python)
+- **達成**:
+  - 定数重複除去（`memories.js` の感情22種ハードコード → `N.Core.EMOTION_COLORS`） (P1)
+  - `store.syncFrom()` で `S` と `CHAT` を双方向同期（P2）
+  - `N.Core.safeSetHTML()` で全 `innerHTML` を DOMPurify経由に統一（P3）
+  - Python側 `.replace()` エスケープ → `json.dumps()` に置換（P4）
+  - `components/` に skeleton/memory-card/chart を抽出、modal/toast/theme エイリアス追加（P5）
+  - 機能タブ3モノリス（overview/settings/memories, 42-53KB）→ `features/` サブモジュール（P6）
+  - `sections/chat.py` (75KB) → `sections/chat/` 7モジュールにPython分割（P7）
+  - `base.css`(41KB)+`chat.css`(35KB) → `styles/` 7ファイル（P8）
+  - 全タブ loading/empty/error 状態ハンドリング追加（P9）
+  - キーボードa11y: フォーカストラップ、矢印キータブ切替、skip-link修正（P10）
+  - 本格モバイル対応: ハンバーガーメニュー、チャットオーバーレイ、タッチ最適化（P11）
+  - `window.*` 汚染除去 → `N.*` 名前空間に統一（43ファイル、P12）
+  - 後方互換アダプター層除去、`__INITIAL_PERSONA__` 削除（P13）
+  - 統合テスト CI 組み込み（P14）
+  - 残留 `window.__settings_failed_keys` → ローカル変数化（P15）
+- **教訓**:
+  - `Object.defineProperty` で store の双方向同期を透過的に実装 → 全49箇所の直接参照を修正不要に
+  - 機能タブ分割では overview のようにモノリシックな HTML レンダリングはスタブ化が限界 → 将来の部分リファクタリング必要
+  - Python文字列連結の分割は純粋な切り出しで対応可能、テンプレートエンジン不要
+  - CSS分割は `@layer` とロード順の管理がカスケード維持の鍵
+  - フェーズ分割（15段階）と各フェーズでのテスト検証により、大規模リファクタリングでも安定性を維持
+
 ## プロンプトキャッシュ共通化 (2026-07-24)
 - `cache_utils.py` 新規作成: `split_system_prompt()`, `build_anthropic_system()`, `build_openai_system_messages()`
 - `anthropic.py` のインライン `<!-- __STATIC_END__ -->` パース処理を `build_anthropic_system()` に委譲 (-11行)
