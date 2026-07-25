@@ -68,9 +68,9 @@ function applyChatConfig(cfg) {
   );
   if (dynTempCb && emotionScaleEl) {
     emotionScaleEl.disabled = !dynTempCb.checked;
-    dynTempCb.addEventListener("change", function () {
+    dynTempCb.onchange = function () {
       emotionScaleEl.disabled = !this.checked;
-    });
+    };
   }
   // Top P display sync
   const topPVal = document.getElementById("chat-top-p-val");
@@ -162,24 +162,18 @@ function applyChatConfig(cfg) {
   set("chat-compression-mode", cfg.context_compression_mode || "auto");
   set("chat-keep-recent", cfg.context_keep_recent_turns ?? 2);
   set("chat-memory-preload", cfg.memory_preload_count ?? 3);
-  document.getElementById("chat-compress-system").checked =
-    cfg.context_compress_system_prompt !== false;
-  document.getElementById("chat-compress-history").checked =
-    cfg.context_compress_history !== false;
-  document.getElementById("chat-parallel-tools").checked =
-    cfg.enable_parallel_tools !== false;
-  document.getElementById("chat-llm-summary").checked =
-    cfg.context_use_llm_summary !== false;
-  document.getElementById("chat-episode-search").checked =
-    cfg.episode_search_enabled !== false;
-  document.getElementById("chat-show-timestamps").checked =
-    cfg.show_message_timestamps === true;
-  document
-    .getElementById("chat-compression-threshold")
-    .addEventListener("input", function () {
-      document.getElementById("threshold-display").textContent =
-        this.value + "%";
-    });
+  var el;
+  el = document.getElementById("chat-compress-system"); if (el) el.checked = cfg.context_compress_system_prompt !== false;
+  el = document.getElementById("chat-compress-history"); if (el) el.checked = cfg.context_compress_history !== false;
+  el = document.getElementById("chat-parallel-tools"); if (el) el.checked = cfg.enable_parallel_tools !== false;
+  el = document.getElementById("chat-llm-summary"); if (el) el.checked = cfg.context_use_llm_summary !== false;
+  el = document.getElementById("chat-episode-search"); if (el) el.checked = cfg.episode_search_enabled !== false;
+  el = document.getElementById("chat-show-timestamps"); if (el) el.checked = cfg.show_message_timestamps === true;
+  var compThresh = document.getElementById("chat-compression-threshold");
+  if (compThresh) compThresh.oninput = function () {
+    document.getElementById("threshold-display").textContent =
+      this.value + "%";
+  };
   // Voice / TTS settings (TE04)
   var voiceToggle = document.getElementById("chat-voice-enabled");
   if (voiceToggle) {
@@ -187,9 +181,9 @@ function applyChatConfig(cfg) {
     var voiceOptions = document.getElementById("chat-voice-options");
     if (voiceOptions) {
       voiceOptions.classList.toggle("settings-body-hidden", !voiceToggle.checked);
-      voiceToggle.addEventListener("change", function() {
+      voiceToggle.onchange = function() {
         voiceOptions.classList.toggle("settings-body-hidden", !this.checked);
-      });
+      };
     }
   }
   var voiceUrlInput = document.getElementById("chat-voice-url");
@@ -247,9 +241,9 @@ function applyChatConfig(cfg) {
     var imgGenOptions = document.getElementById("chat-image-options");
     if (imgGenOptions) {
       imgGenOptions.classList.toggle("settings-body-hidden", !imgGenToggle.checked);
-      imgGenToggle.addEventListener("change", function() {
+      imgGenToggle.onchange = function() {
         imgGenOptions.classList.toggle("settings-body-hidden", !this.checked);
-      });
+      };
     }
   }
   // 画像生成設定
