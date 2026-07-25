@@ -1,7 +1,9 @@
 /* =================================================================
-   OVERVIEW CORE — State, initialization, CRUD helpers, main loader
+   OVERVIEW CORE — Main loader, modals, charts, namespace registration
    Namespace: N.Features.Overview.*
    Depends on: N.Core.* (esc, toast, api, truncate, relativeTime, fmtDate)
+               overview-blocks.js (Block CRUD)
+               overview-inventory.js (Inventory CRUD)
                window.* (safeSetHTML, Chart, lucide, destroyChart, chartOpts)
    ================================================================= */
 N.Features.Overview = N.Features.Overview || {};
@@ -9,196 +11,6 @@ N.Features.Overview = N.Features.Overview || {};
 ;(function() {
 var S = window.S;
 var { esc, toast, api, truncate, relativeTime, fmtDate, safeSetHTML } = window.Nous.Core;
-
-// --- Block CRUD helpers (global scope) ---
-function showCreateBlock() {
-    safeSetHTML(document.getElementById('block-modal-title'), '<i data-lucide="pencil"></i> New Block');
-    document.getElementById('block-modal-mode').value = 'create';
-    document.getElementById('block-modal-name').value = '';
-    document.getElementById('block-modal-name').disabled = false;
-    document.getElementById('block-modal-content').value = '';
-    document.getElementById('block-modal-priority').value = '0';
-    document.getElementById('block-edit-modal').style.display = 'flex';
-}
-/* N.Features.Overview.showCreateBlock registered below */
-
-function showEditBlock(name, content, priority) {
-    safeSetHTML(document.getElementById('block-modal-title'), '<i data-lucide="pencil"></i> Edit Block: ' + esc(name));
-    document.getElementById('block-modal-mode').value = 'edit';
-    document.getElementById('block-modal-name').value = name;
-    document.getElementById('block-modal-name').disabled = true;
-    document.getElementById('block-modal-content').value = content || '';
-    document.getElementById('block-modal-priority').value = priority || 0;
-    document.getElementById('block-edit-modal').style.display = 'flex';
-}
-/* N.Features.Overview.showEditBlock registered below */
-
-function hideBlockModal() {
-    document.getElementById('block-edit-modal').style.display = 'none';
-}
-/* N.Features.Overview.hideBlockModal registered below */
-
-async function saveBlock() {
-    var name = document.getElementById('block-modal-name').value.trim();
-    var content = document.getElementById('block-modal-content').value.trim();
-    var priority = parseInt(document.getElementById('block-modal-priority').value) || 0;
-    if (!name || !content) { toast('Block name and content required', 'error'); return; }
-    try {
-        await api('/api/blocks/' + encodeURIComponent(S.persona), {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({block_name: name, content: content, priority: priority})
-        });
-        hideBlockModal();
-        toast('Block saved!', 'success');
-        loadOverview();
-    } catch (e) { toast('Failed to save block: ' + e.message, 'error'); }
-}
-/* N.Features.Overview.saveBlock registered below */
-
-async function deleteBlock(name) {
-    if (!confirm('Delete block "' + name + '"?')) return;
-    try {
-        await api('/api/blocks/' + encodeURIComponent(S.persona) + '/' + encodeURIComponent(name), {method: 'DELETE'});
-        toast('Block deleted', 'success');
-        loadOverview();
-    } catch (e) { toast('Failed: ' + e.message, 'error'); }
-}
-/* N.Features.Overview.deleteBlock registered below */
-
-// --- Inventory CRUD helpers (global scope) ---
-async function deleteItem(itemName) {
-    if (!confirm('Delete item: ' + itemName + '?')) return;
-    try {
-        await api('/api/items/' + encodeURIComponent(S.persona) + '/' + encodeURIComponent(itemName), {method:'DELETE'});
-        loadOverview();
-    } catch (e) {
-        toast('Failed to delete item: ' + e.message, 'error');
-    }
-}
-/* N.Features.Overview.deleteItem registered below */
-
-function openAddItemModal() {
-    const m = document.getElementById('add-item-modal');
-    if (m) { m.style.display = 'flex'; }
-}
-/* N.Features.Overview.openAddItemModal registered below */
-
-function closeAddItemModal() {
-    const m = document.getElementById('add-item-modal');
-    if (m) { m.style.display = 'none'; }
-    ['new-item-name','new-item-category','new-item-desc','new-item-qty'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = id === 'new-item-qty' ? '1' : '';
-    });
-}
-/* N.Features.Overview.closeAddItemModal registered below */
-
-async function saveNewItem() {
-    const nameEl = document.getElementById('new-item-name');
-    const name = (nameEl ? nameEl.value : '').trim();
-    if (!name) { toast('Item name is required', 'error'); return; }
-    const category = (document.getElementById('new-item-category') || {}).value || '';
-    const desc = (document.getElementById('new-item-desc') || {}).value || '';
-    const qty = parseInt((document.getElementById('new-item-qty') || {}).value || '1', 10) || 1;
-    try {
-        await api('/api/items/' + encodeURIComponent(S.persona), {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({item_name: name, category: category || null, description: desc || null, quantity: qty})
-        });
-        closeAddItemModal();
-        loadOverview();
-    } catch (e) {
-        toast('Failed to add item: ' + e.message, 'error');
-    }
-}
-/* N.Features.Overview.saveNewItem registered below */
-
-// --- Edit item ---
-function openEditItemModal(itemName) {
-    var item = null;
-    if (S.dashCache && S.dashCache.items) {
-        var items = S.dashCache.items;
-        for (var i = 0; i < items.length; i++) {
-            if (items[i].name === itemName) { item = items[i]; break; }
-        }
-    }
-    if (!item) { toast('Item not found in cache', 'error'); return; }
-    document.getElementById('edit-item-original-name').value = itemName;
-    document.getElementById('edit-item-name').value = item.name || '';
-    document.getElementById('edit-item-category').value = item.category || '';
-    document.getElementById('edit-item-desc').value = item.description || '';
-    document.getElementById('edit-item-qty').value = item.quantity || 1;
-    document.getElementById('edit-item-tags').value = (item.tags || []).join(', ');
-    document.getElementById('edit-item-modal').style.display = 'flex';
-}
-/* N.Features.Overview.openEditItemModal registered below */
-
-function closeEditItemModal() {
-    document.getElementById('edit-item-modal').style.display = 'none';
-}
-/* N.Features.Overview.closeEditItemModal registered below */
-
-async function saveEditItem() {
-    var originalName = document.getElementById('edit-item-original-name').value;
-    var name = document.getElementById('edit-item-name').value.trim();
-    var category = document.getElementById('edit-item-category').value.trim() || null;
-    var description = document.getElementById('edit-item-desc').value.trim() || null;
-    var qty = parseInt(document.getElementById('edit-item-qty').value, 10) || 1;
-    var tagsStr = document.getElementById('edit-item-tags').value.trim();
-    var tags = tagsStr ? tagsStr.split(',').map(function(t) { return t.trim(); }).filter(Boolean) : [];
-    if (!name) { toast('Item name is required', 'error'); return; }
-    try {
-        await api('/api/items/' + encodeURIComponent(S.persona) + '/' + encodeURIComponent(originalName), {
-            method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                item_name: name,
-                category: category,
-                description: description,
-                quantity: qty,
-                tags: tags
-            })
-        });
-        closeEditItemModal();
-        toast('Item updated!', 'success');
-        loadOverview();
-    } catch (e) {
-        toast('Failed to update item: ' + e.message, 'error');
-    }
-}
-/* N.Features.Overview.saveEditItem registered below */
-
-async function changeEquipSlot(slot, itemName) {
-    try {
-        const body = {};
-        body[slot] = itemName;
-        await api('/api/items/' + encodeURIComponent(S.persona) + '/equip', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify(body)
-        });
-        loadOverview();
-    } catch (e) {
-        toast('Failed to change equipment: ' + e.message, 'error');
-    }
-}
-/* N.Features.Overview.changeEquipSlot registered below */
-
-async function unequipSlot(slot) {
-    try {
-        await api('/api/items/' + encodeURIComponent(S.persona) + '/unequip', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({slots: [slot]})
-        });
-        loadOverview();
-    } catch (e) {
-        toast('Failed to unequip: ' + e.message, 'error');
-    }
-}
-/* N.Features.Overview.unequipSlot registered below */
 
 async function loadOverview() {
     const el = document.getElementById('overview-content');
@@ -634,22 +446,8 @@ async function loadOverview() {
 }
 /* N.Features.Overview.loadOverview registered below */
 
-// Register in namespace
+// Register in namespace (CRUD helpers live in overview-blocks.js / overview-inventory.js)
 Object.assign(N.Features.Overview, {
     loadOverview: loadOverview,
-    showCreateBlock: showCreateBlock,
-    showEditBlock: showEditBlock,
-    hideBlockModal: hideBlockModal,
-    saveBlock: saveBlock,
-    deleteBlock: deleteBlock,
-    deleteItem: deleteItem,
-    openAddItemModal: openAddItemModal,
-    closeAddItemModal: closeAddItemModal,
-    saveNewItem: saveNewItem,
-    openEditItemModal: openEditItemModal,
-    closeEditItemModal: closeEditItemModal,
-    saveEditItem: saveEditItem,
-    changeEquipSlot: changeEquipSlot,
-    unequipSlot: unequipSlot,
 });
 })();
