@@ -70,7 +70,7 @@ function renderCodeBlock(lang, code) {
     const resultEl = wrapper.querySelector(".hljs-run-result");
     if (runBtn && resultEl) {
       runBtn.addEventListener("click", function () {
-        execCodeBlock(code, lang || "python", resultEl, runBtn);
+        N.Chat.tools.execCode(code, lang || "python", resultEl, runBtn);
       });
     }
   }
