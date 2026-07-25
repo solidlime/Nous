@@ -162,7 +162,7 @@ class TrimmerMixin:
 
         summary_text = ""
         if summary_parts:
-            summary_text = "\n削除された会話のハイライト:\n" + "\n".join(summary_parts)
+            summary_text = "\n切り詰めた会話のハイライト:\n" + "\n".join(summary_parts)
 
         # Insert a system notice in place of removed messages
         note = LLMMessage(
