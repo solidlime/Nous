@@ -174,6 +174,7 @@ def register_persona_routes(mcp) -> None:
                     linked_count = linked_row["cnt"] if linked_row else 0
                     stats["linked_ratio"] = min(linked_count / total_count, 1.0)
             except Exception:
+                logger.exception("dashboard_data: linked_ratio calculation failed")
                 pass
 
             # Relationship highlights from memory tags
@@ -192,6 +193,7 @@ def register_persona_routes(mcp) -> None:
                         for m in rel_result.value
                     ]
             except Exception:
+                logger.exception("dashboard_data: relationship highlights failed")
                 pass
 
             # State memories (speech/physical/mental) -- newest per tag for WebUI
@@ -210,6 +212,7 @@ def register_persona_routes(mcp) -> None:
                             "created_at": latest.created_at.isoformat() if latest.created_at else None,
                         }
                 except Exception:
+                    logger.exception("dashboard_data: state memories failed")
                     pass
 
             # ── Latest self-portrait image ──
@@ -225,6 +228,7 @@ def register_persona_routes(mcp) -> None:
                         latest = self_files[-1]  # sorted alphabetically = chronological
                         latest_self_portrait = f"/api/chat/{persona}/persona/images/{latest.name}"
             except Exception:
+                logger.exception("dashboard_data: self portrait lookup failed")
                 pass
 
             return JSONResponse(
@@ -256,6 +260,7 @@ def register_persona_routes(mcp) -> None:
         try:
             body = await request.json()
         except Exception:
+            logger.exception("import_conversation: invalid JSON body")
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         file_path = body.get("file_path", "").strip()
         if not file_path:
@@ -298,6 +303,7 @@ def register_persona_routes(mcp) -> None:
         try:
             body = await request.json()
         except Exception:
+            logger.exception("create_persona: invalid JSON body")
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         persona_name = body.get("name")
         if not persona_name:
@@ -367,6 +373,7 @@ def register_persona_routes(mcp) -> None:
         try:
             body = await request.json()
         except Exception:
+            logger.exception("update_persona_profile: invalid JSON body")
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         try:
             updated = []
