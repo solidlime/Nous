@@ -527,6 +527,7 @@ async function chatSend(retry) {
           N.Chat.memoryPanel.update(evt.retrieved, evt.saved, evt.goals);
           if (_memoryActivityTimer) clearTimeout(_memoryActivityTimer);
           _memoryActivityTimer = setTimeout(function() { N.Chat.core.loadCommitments(); }, 500);
+          statusEl.textContent = "";
         } else if (evt.type === "inventory_update") {
           N.Chat.equipment.update(evt.update);
         } else if (evt.type === "reflection_start") {
@@ -580,7 +581,7 @@ async function chatSend(retry) {
               assistantDiv.remove();
             }
           }
-          statusEl.textContent = "";
+          statusEl.textContent = "記憶を整理中...";
           // Show truncation notice when response was auto-continued
           if (evt.truncated) {
             const notice = document.createElement("div");
