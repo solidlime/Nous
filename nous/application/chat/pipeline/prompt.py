@@ -18,7 +18,7 @@ TOOL_USAGE_GUIDELINES = """\
 <tool_usage>
 【最重要指示】あなたは以下の能力を使えます。テキスト説明だけで済ませず、必ず実際に能力を発動してください。
 
-スキル一覧は invoke_skill ツールの description に記載されています。発動条件に合致したら、ユーザー指示を待たず自律的に invoke_skill を呼び出してください。
+スキル一覧はシステムプロンプト内「利用可能なスキル」に記載されています。発動条件に合致したら、ユーザー指示を待たず自律的に invoke_skill を呼び出してください。
 
 invoke_skill の結果には、従うべき手順・判断基準・ワークフローが記されています。その内容に忠実に従ってください。
 
@@ -51,11 +51,7 @@ class PromptBuildStep:
         base_system = config.system_prompt or f"あなたは{persona}です。"
 
         # --- 静的パート（キャッシュ可能）---
-        static_parts = [
-            base_system,
-            f"\n{TOOL_USAGE_GUIDELINES}",
-            "\n【最終確認】必要な能力があれば黙って発動せよ。",
-        ]
+        static_parts = [base_system]
 
         # --- 動的パート（ターンごとに変化）---
         dynamic_parts: list[str] = []
@@ -97,6 +93,17 @@ class PromptBuildStep:
                     skills_raw = [s.model_dump() for s in skills]
             except Exception as e:
                 logger.warning("PromptBuildStep: skills load failed: %s", e)
+
+        # --- スキル一覧（動的パート先頭）---
+        if skills_raw:
+            skill_lines = [f"- **{s['name']}**: {s['description']}" for s in skills_raw]
+            dynamic_parts.append("\n## 利用可能なスキル\n" + "\n".join(skill_lines))
+
+        # --- ツール使用ガイドライン ---
+        dynamic_parts.append(f"\n{TOOL_USAGE_GUIDELINES}")
+
+        # --- 最終確認 ---
+        dynamic_parts.append("\n【最終確認】必要な能力があれば黙って発動せよ。")
 
         # --- 時間コンテキスト ---
         if turn_ctx.time_context:

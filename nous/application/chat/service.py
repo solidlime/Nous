@@ -163,10 +163,6 @@ class ChatService:
                 )
                 registry = ToolRegistry(builtin, mcp_pool)
 
-                # スキル一覧を invoke_skill ツールの description に注入（システムプロンプトから移行）
-                if turn_ctx.skills_raw:
-                    registry.add_skills_info(turn_ctx.skills_raw)
-
                 # ツール検索エンジンの初期化（search_tools 機能）
                 _search_engine = await _ensure_tool_index(registry)
                 if _search_engine:
