@@ -227,13 +227,13 @@ function chatInputKeydownHandler(e) {
       e.preventDefault();
       if (S.slashCommandIndex < items.length - 1) {
         S.slashCommandIndex++;
-        updateSlashSelection(items);
+        N.Chat.commands.updateSlashSelection(items);
       }
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       if (S.slashCommandIndex > 0) {
         S.slashCommandIndex--;
-        updateSlashSelection(items);
+        N.Chat.commands.updateSlashSelection(items);
       }
     } else if (e.key === "Enter") {
       e.preventDefault();

@@ -160,6 +160,7 @@ N.Chat.commands = {
   popup: showCommandPopup,
   hide: hideCommandPopup,
   handle: handleSlashCommand,
+  updateSlashSelection: updateSlashSelection,
 };
 
 })(window.Nous);
