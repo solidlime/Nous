@@ -2,15 +2,27 @@
 
 All functions are designed to be *idempotent* — safe to run multiple
 times against the same database.
+
+Migration version tracking
+--------------------------
+Migrations are assigned sequential version numbers.  A ``_migration_version``
+table (created by :meth:`~nous.infrastructure.sqlite.connection.SQLiteConnection.initialize_schema`)
+records which versions have been applied.  On each run, only pending
+migrations are executed.
 """
 
 from __future__ import annotations
 
 import sqlite3
+from datetime import UTC, datetime
 
 from nous.infrastructure.logging.structured import get_logger
 
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 def run_migrations(db_conn: sqlite3.Connection, persona: str) -> None:
@@ -23,10 +35,53 @@ def run_migrations(db_conn: sqlite3.Connection, persona: str) -> None:
     persona:
         Persona identifier used for logging and one-shot migration scoping.
     """
-    _migrate_add_last_consumed_at(db_conn)
-    _migrate_fts_backfill(db_conn)
-    _migrate_context_state_to_memories(db_conn, persona)
+    _ensure_version_table(db_conn)
+    current = _get_current_version(db_conn)
+
+    for version, desc, func in MIGRATIONS:
+        if version > current:
+            logger.info(
+                "Applying v%d: %s (persona='%s')", version, desc, persona
+            )
+            func(db_conn, persona)
+            _record_version(db_conn, version)
+
     logger.info("Migrations complete for persona '%s'", persona)
+
+
+# ---------------------------------------------------------------------------
+# Version helpers
+# ---------------------------------------------------------------------------
+
+
+def _ensure_version_table(db_conn: sqlite3.Connection) -> None:
+    """Create ``_migration_version`` if it somehow doesn't exist yet."""
+    db_conn.execute(
+        "CREATE TABLE IF NOT EXISTS _migration_version ("
+        "    version INTEGER PRIMARY KEY,"
+        "    applied_at TEXT NOT NULL"
+        ")"
+    )
+
+
+def _get_current_version(db_conn: sqlite3.Connection) -> int:
+    """Return the highest applied migration version (0 = none)."""
+    try:
+        row = db_conn.execute(
+            "SELECT COALESCE(MAX(version), 0) AS v FROM _migration_version"
+        ).fetchone()
+        return row["v"]
+    except sqlite3.OperationalError:
+        return 0
+
+
+def _record_version(db_conn: sqlite3.Connection, version: int) -> None:
+    """Record that *version* was successfully applied."""
+    db_conn.execute(
+        "INSERT INTO _migration_version(version, applied_at) VALUES (?, ?)",
+        (version, datetime.now(UTC).isoformat()),
+    )
+    db_conn.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +89,9 @@ def run_migrations(db_conn: sqlite3.Connection, persona: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _migrate_add_last_consumed_at(db_conn: sqlite3.Connection) -> None:
+def _migrate_add_last_consumed_at(
+    db_conn: sqlite3.Connection, persona: str  # noqa: ARG001
+) -> None:
     """Add ``last_consumed_at`` column to ``memories`` if missing."""
     try:
         db_conn.execute("ALTER TABLE memories ADD COLUMN last_consumed_at TEXT")
@@ -44,7 +101,9 @@ def _migrate_add_last_consumed_at(db_conn: sqlite3.Connection) -> None:
         pass  # column already exists
 
 
-def _migrate_fts_backfill(db_conn: sqlite3.Connection) -> None:
+def _migrate_fts_backfill(
+    db_conn: sqlite3.Connection, persona: str  # noqa: ARG001
+) -> None:
     """Backfill the FTS5 index from the ``memories`` table when empty.
 
     This handles the case of an existing database that was created before the
@@ -89,3 +148,16 @@ def _migrate_context_state_to_memories(
             )
     except Exception:  # noqa: S110
         pass
+
+
+# ---------------------------------------------------------------------------
+# Migration registry  (ordered by version)
+# ---------------------------------------------------------------------------
+# Defined at module level so ``run_migrations`` can reference it.  All helper
+# functions are already defined above by this point.
+
+MIGRATIONS = [
+    (1, "Add last_consumed_at column to memories", _migrate_add_last_consumed_at),
+    (2, "Backfill FTS5 index", _migrate_fts_backfill),
+    (3, "Transfer context_state records into memories", _migrate_context_state_to_memories),
+]

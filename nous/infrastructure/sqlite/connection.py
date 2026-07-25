@@ -58,6 +58,12 @@ class SQLiteConnection:
         memory_conn = self.get_memory_db()
         memory_conn.executescript(_MEMORY_SCHEMA + _CHAT_SESSIONS_SCHEMA)
         self._init_fts_schema(memory_conn)
+        memory_conn.execute(
+            "CREATE TABLE IF NOT EXISTS _migration_version ("
+            "    version INTEGER PRIMARY KEY,"
+            "    applied_at TEXT NOT NULL"
+            ")"
+        )
         run_migrations(memory_conn, self.persona)
         logger.info("Memory schema initialized for persona '%s'", self.persona)
 
