@@ -15,6 +15,7 @@ class SessionConfig(BaseModel):
     """セッション管理・メモリ設定。"""
 
     # 基本設定
+    system_prompt: str = ""
     language: str = "ja"  # "ja" | "en" | "zh" | "ko" | "auto"
     debug_mode: bool = False
     display_history_turns: int = 10

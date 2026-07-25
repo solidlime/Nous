@@ -1,49 +1,34 @@
+"""ChatConfig — 全設定を集約するFacade Pydanticモデル。
+
+ProviderConfig / SessionConfig / CompressionConfig / ToolConfig の4つの
+サブ設定を内包し、後方互換のため全フィールドに直接アクセスできる。
+"""
+
 from __future__ import annotations
 
 import json
 import logging
 import os
 import typing
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ValidationError, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
-from nous.config.runtime_config import RuntimeConfigManager
+from nous.domain.compression_config import CompressionConfig
+
+# Sub-config imports
+from nous.domain.provider_config import ProviderConfig
+from nous.domain.session_config import SessionConfig
 from nous.domain.shared.time_utils import format_iso, get_now
-from nous.domain.value_objects import normalize_importance
+from nous.domain.tool_config import ToolConfig
+
+if TYPE_CHECKING:
+    from pydantic.fields import FieldInfo
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import sqlite3
-
-# Backward-compat env var names for API keys per provider (legacy, without NOUS_ prefix)
-_ENV_API_KEYS: dict[str, str] = {
-    "anthropic": "ANTHROPIC_API_KEY",
-    "openai": "OPENAI_API_KEY",
-    "openrouter": "OPENROUTER_API_KEY",
-    "google": "GEMINI_API_KEY",
-    "opencode_go": "OPENCODE_GO_API_KEY",
-}
-
-# Default model names per provider
-_DEFAULT_MODELS: dict[str, str] = {
-    "anthropic": "claude-opus-4-5",
-    "openai": "gpt-4o",
-    "openrouter": "openai/gpt-4o",
-    "google": "gemini-2.5-flash",
-    "opencode_go": "deepseek-v4-pro",
-}
-
-# Default base URLs per provider (empty means use SDK default)
-_DEFAULT_BASE_URLS: dict[str, str] = {
-    "anthropic": "",
-    "openai": "",
-    "openrouter": "https://openrouter.ai/api/v1",
-    "google": "",
-    "opencode_go": "",
-}
-
 
 # 後方互換のため定数は残すが内容は空（各 persona 個別生成）
 DEFAULT_MCP_SERVERS: list[dict] = []
@@ -59,258 +44,146 @@ _TYPE_SQL: dict[type, tuple[str, str]] = {
     type(None): ("TEXT", "NULL"),
 }
 
+# Sub-config field name → class mapping
+_SUB_CONFIG_MAP: dict[str, type[BaseModel]] = {
+    "provider_config": ProviderConfig,
+    "session_config": SessionConfig,
+    "compression_config": CompressionConfig,
+    "tool_config": ToolConfig,
+}
+
+
+# ──────────────────────────────────────────────
+# Facade
+# ──────────────────────────────────────────────
+
 
 class ChatConfig(BaseModel):
+    """全設定を集約するFacade。
+
+    内部で ProviderConfig / SessionConfig / CompressionConfig / ToolConfig の
+    4つのサブ設定を保持。後方互換のため、サブ設定の全フィールドに
+    直接アクセスできる (``ChatConfig().api_key`` / ``ChatConfig().model`` 等)。
+    シリアライズ時は自動的にフラット化される。
+    """
+
     persona: str | None = None
-    provider: str = "anthropic"
-    model: str = ""
-    api_key: str | None = None
-    base_url: str = ""
-    system_prompt: str = ""
-    temperature: float = 0.7
-    max_tokens: int = 8192
-    max_tool_calls: int = 5
-    auto_extract: bool = True
-    extract_model: str = ""
-    extract_max_tokens: int = 512
-    tool_result_max_chars: int = 4000
-    mcp_servers: list[dict] = []
-    enabled_skills: list[str] = []
-    # 画像生成
-    image_gen_enabled: bool = False
-    image_gen_provider: str = "comfyui"
-    image_gen_comfyui_url: str = ""  # ComfyUI APIエンドポイント
-    # ComfyUI 詳細設定
-    image_gen_comfyui_checkpoint: str = ""
-    image_gen_comfyui_loras: str = "[]"
-    image_gen_comfyui_width: int = 1024
-    image_gen_comfyui_height: int = 1024
-    image_gen_comfyui_steps: int = 28
-    image_gen_comfyui_cfg: float = 5.5
-    image_gen_comfyui_sampler: str = "euler_ancestral"
-    image_gen_comfyui_scheduler: str = "normal"
-    image_gen_comfyui_seed: int = 0  # 0=ランダム
-    image_gen_comfyui_denoise: float = 0.7
-    image_gen_max_width: int = 1200
-    image_gen_max_height: int = 1200
-    # 自画像生成用プロンプト（キャラ外見のSDタグ・LoRAトリガーワード・トーンなどを含む固定プロンプト文字列）
-    image_gen_self_portrait_prompt: str = ""
-    image_gen_negative_prompt: str = ""  # negative prompt for image generation
-    image_gen_full_body_prefix: str = "full body, standing, looking at viewer, "
-    image_gen_portrait_prefix: str = "upper body, portrait, looking at viewer, "
-    image_gen_selfie_prefix: str = "selfie, from below, mirror selfie, "
-    image_gen_scene_prefix: str = "environment shot, full body, "
-    # 高速化 LoRA
-    image_gen_comfyui_speed_lora_path: str = "lcm_lora_sdxl.safetensors"
-    image_gen_comfyui_speed_lora_weight: float = 1.0
-    image_gen_comfyui_speed_lora_method: str = "lcm"  # lcm, lightning, hyper, tcd
-    enable_memory_tools: bool = True
-    disabled_tools: list[str] = []
-    # 中央言語設定（ADR-001）
-    language: str = "ja"  # "ja" | "en" | "zh" | "ko" | "auto"
-    # Generative Agents-style reflection
-    reflection_enabled: bool = True
-    reflection_threshold: float = 1.0  # sum of importance scores to trigger reflection
-    reflection_min_interval_hours: float = 1.0
-    # Mental Model abstraction
-    mental_model_enabled: bool = True
-    mental_model_min_samples: int = 3
-    # Session summarization
-    session_summarize: bool = True
-    # Retrieval composite scoring weights
-    retrieval_recency_weight: float = 0.3
-    retrieval_importance_weight: float = 0.3
-    retrieval_relevance_weight: float = 0.4
-    retrieval_rrf_k: float = 5.0  # RRF k parameter for memory search relevance scoring
-    # Chat history display (separate from context window)
-    display_history_turns: int = 10
-    debug_mode: bool = False
-    # === Context compression (v2.1) ===
-    # (max_window_turns removed — use max_stored_messages)
-    max_stored_messages: int = 200
-    context_max_tokens: int | None = None  # None = auto-detect from model
-    context_compression_threshold: float = 0.8  # 0.5-1.0
-    context_compression_mode: str = "auto"  # "light" | "normal" | "aggressive"
-    context_keep_recent_turns: int = 2
-    context_compress_system_prompt: bool = True
-    context_compress_history: bool = True
-    memory_preload_count: int = 3  # 0=all, N=preload top N
-    enable_parallel_tools: bool = True
-    # LLM context summarization (CompressStep Stage 4)
-    context_use_llm_summary: bool = True
-    # Dynamic temperature + top_p (TA02)
-    dynamic_temperature: bool = True
-    emotion_temperature_scale: float = 0.2
-    top_p: float | None = None
-    # Dynamic tool selection (P22): True の時のみ条件付きツールを制限可
-    dynamic_tool_selection: bool = True
-    episode_search_enabled: bool = True
-    # Voice / TTS settings (TE04)
-    voice_enabled: bool = False
-    voice_auto_play: bool = False
-    voice_emotion_link: bool = True
-    voice_model: str = ""
-    voice_url: str = ""
-    voice_volume: float = 1.0
-    voice_speed: float = 1.0
-    # Irodori advanced TTS parameters
-    irodori_num_steps: int = 30
-    irodori_cfg_scale_text: float = 3.2
-    irodori_cfg_scale_speaker: float = 5.0
-    irodori_cfg_scale_caption: float = 4.2
-    irodori_chunk_min_chars: int = 85
-    irodori_seed: int = 0
-    # === Auto-capture (moved from Settings) ===
-    auto_capture_enabled: bool = False
-    auto_capture_interval: int = 300
-    auto_capture_max_memories: int = 10
-
-    # === Memory enrichment (moved from Settings) ===
-    memory_enrichment_enabled: bool = False
-    memory_enrichment_auto_run: bool = False
-    memory_enrichment_interval: int = 60
-    memory_enrichment_llm: str = ""
-    memory_enrichment_prompt_template: str = ""
-    memory_enrichment_summary_granularity: str = "medium"
-    memory_enrichment_provider: str = ""
-    memory_enrichment_model: str = ""
-    memory_enrichment_base_url: str = ""
-    memory_enrichment_min_chars: int = 100
-
-    # === Forgetting (moved from Settings) ===
-    forgetting_enabled: bool = False
-    forgetting_trigger_threshold: int = 100
-    forgetting_forget_ratio: float = 0.2
-    forgetting_forget_strength: float = 0.5
-    forgetting_decay_interval_seconds: int = 86400  # 24h default
-    forgetting_min_strength: float = 0.1
-
-    # === MemoRAG (moved from Settings) ===
-    memorag_chunk_size: int = 512
-    memorag_chunk_overlap: int = 64
-    memorag_top_k: int = 5
-    memorag_similarity_threshold: float = 0.7
-    memorag_enabled: bool = False
-    memorag_snapshot_interval_hours: int = 24
-
     updated_at: str | None = None
+    provider_config: ProviderConfig = Field(default_factory=ProviderConfig)
+    session_config: SessionConfig = Field(default_factory=SessionConfig)
+    compression_config: CompressionConfig = Field(default_factory=CompressionConfig)
+    tool_config: ToolConfig = Field(default_factory=ToolConfig)
 
-    @field_validator("temperature")
-    @classmethod
-    def _clamp_temperature(cls, v: float) -> float:
-        return max(0.0, min(2.0, v))
+    # ── コンストラクタ ──────────────────────────
 
-    @field_validator("max_tokens")
-    @classmethod
-    def _clamp_max_tokens(cls, v: int) -> int:
-        return max(1, min(32768, v))
+    def __init__(self, /, **data: Any) -> None:
+        # Pydantic v2 は __init__ で model_validator(mode="before") を呼ぶので、
+        # フラットキーワードは validator で自動分配される。
+        super().__init__(**data)
 
-    @field_validator("max_tool_calls")
-    @classmethod
-    def _clamp_tool_calls(cls, v: int) -> int:
-        return max(0, min(20, v))
+    # ── model_validator: フラットキーワードをサブ設定に分配 ──
 
-    @field_validator("extract_max_tokens")
+    @model_validator(mode="before")
     @classmethod
-    def _clamp_extract_max_tokens(cls, v: int) -> int:
-        return max(64, min(2048, v))
+    def _distribute_flat_fields(cls, data: Any) -> Any:
+        """Accept flat field names (api_key, model, ...) AND nested configs."""
+        if not isinstance(data, dict):
+            return data
 
-    @field_validator("tool_result_max_chars")
-    @classmethod
-    def _clamp_tool_result_max_chars(cls, v: int) -> int:
-        return max(500, min(100000, v))
+        # サブ設定の全フィールド名セット
+        all_sub_keys: set[str] = set()
+        for sub_cls in _SUB_CONFIG_MAP.values():
+            all_sub_keys.update(sub_cls.model_fields)
 
-    @field_validator("reflection_threshold")
-    @classmethod
-    def _clamp_reflection_threshold(cls, v: float) -> float:
-        return max(0.1, min(100.0, v))
+        # フラットキーが1つでもあるか？
+        if not any(k in all_sub_keys for k in data):
+            return data  # そのまま通過（既にネスト形式）
 
-    @field_validator("reflection_min_interval_hours")
-    @classmethod
-    def _clamp_reflection_interval(cls, v: float) -> float:
-        return max(0.0, min(168.0, v))
+        # フラットキーを対応するサブ設定 dict に振り分け
+        result: dict[str, Any] = {}
+        for k, v in data.items():
+            placed = False
+            for cfg_name, sub_cls in _SUB_CONFIG_MAP.items():
+                if k in sub_cls.model_fields:
+                    existing = result.setdefault(cfg_name, {})
+                    if isinstance(existing, dict):
+                        existing[k] = v
+                    placed = True
+                    break
+            if not placed:
+                result[k] = v
+        return result
 
-    @field_validator("retrieval_recency_weight", "retrieval_importance_weight", "retrieval_relevance_weight")
-    @classmethod
-    def _clamp_retrieval_weights(cls, v: float) -> float:
-        return normalize_importance(v)
+    # ── __getattr__: 後方互換のためのフィールド委譲 ──
 
-    @field_validator("retrieval_rrf_k")
-    @classmethod
-    def _clamp_retrieval_rrf_k(cls, v: float) -> float:
-        return max(0.1, min(100.0, v))
+    def __getattr__(self, name: str) -> Any:
+        for sub in (
+            self.provider_config,
+            self.session_config,
+            self.compression_config,
+            self.tool_config,
+        ):
+            if hasattr(sub, name):
+                return getattr(sub, name)
+        msg = f"'{type(self).__name__}' has no attribute '{name}'"
+        raise AttributeError(msg)
 
-    @field_validator("display_history_turns")
-    @classmethod
-    def _clamp_display_history_turns(cls, v: int) -> int:
-        return max(1, min(5000, v))
+    def __setattr__(self, name: str, value: Any) -> None:
+        for sub in (
+            self.provider_config,
+            self.session_config,
+            self.compression_config,
+            self.tool_config,
+        ):
+            if name in type(sub).model_fields:
+                setattr(sub, name, value)
+                return
+        super().__setattr__(name, value)
 
-    @field_validator("context_compression_threshold")
-    @classmethod
-    def _clamp_compression_threshold(cls, v: float) -> float:
-        return max(0.5, min(1.0, v))
+    # ── シリアライズ: フラット化 ──
 
-    @field_validator("context_compression_mode")
-    @classmethod
-    def _validate_compression_mode(cls, v: str) -> str:
-        if v not in ("auto", "light", "normal", "aggressive"):
-            return "auto"
-        return v
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        d = super().model_dump(**kwargs)
+        # サブ設定をフラットに展開
+        for cfg_field in (
+            "provider_config",
+            "session_config",
+            "compression_config",
+            "tool_config",
+        ):
+            sub = d.pop(cfg_field, None)
+            if isinstance(sub, dict):
+                d.update(sub)
+        return d
 
-    @field_validator("context_keep_recent_turns")
-    @classmethod
-    def _clamp_keep_recent(cls, v: int) -> int:
-        return max(1, v)  # 上限撤廃
+    # ── 全フラットフィールド一覧（Repository で使用） ──
 
-    @field_validator("memory_preload_count")
     @classmethod
-    def _clamp_preload_count(cls, v: int) -> int:
-        return max(0, min(20, v))
+    def _all_flat_fields(cls) -> dict[str, FieldInfo]:
+        """Return all fields including sub-config fields flattened."""
+        fields: dict[str, FieldInfo] = {}
+        for name, info in cls.model_fields.items():
+            sub_cls = _SUB_CONFIG_MAP.get(name)
+            if sub_cls is not None:
+                for sub_name, sub_info in sub_cls.model_fields.items():
+                    fields[sub_name] = sub_info
+            else:
+                fields[name] = info
+        return fields
 
-    @field_validator("emotion_temperature_scale")
-    @classmethod
-    def _clamp_emotion_temperature_scale(cls, v: float) -> float:
-        return max(0.0, min(1.0, v))
-
-    @field_validator("top_p")
-    @classmethod
-    def _clamp_top_p(cls, v: float | None) -> float | None:
-        if v is None:
-            return None
-        return max(0.0, min(1.0, v))
+    # ── 後方互換ヘルパーメソッド（ProviderConfig に委譲） ──
 
     def get_effective_api_key(self) -> str:
-        """Return stored API key or fall back via RuntimeConfigManager.
-
-        If api_key is explicitly set (even to empty string), return it as-is
-        and do NOT fall through to environment variables or RuntimeConfigManager.
-        """
-        if self.api_key is not None:
-            return self.api_key
-        # RuntimeConfigManager (reads NOUS_ANTHROPIC_API_KEY etc.)
-        key_name = f"{self.provider}_api_key"
-        value, _ = RuntimeConfigManager().get_effective_value("api_keys", key_name)
-        if value:
-            return value
-        # Backward compat: old env vars without NOUS_ prefix
-        env_var = _ENV_API_KEYS.get(self.provider, "")
-        return os.environ.get(env_var, "")
+        return self.provider_config.get_effective_api_key()
 
     def get_effective_model(self) -> str:
-        """Return stored model name or default for the provider."""
-        if self.model:
-            return self.model
-        return _DEFAULT_MODELS.get(self.provider, "")
+        return self.provider_config.get_effective_model()
 
     def get_effective_base_url(self) -> str:
-        """Return stored base URL or provider default."""
-        if self.base_url:
-            return self.base_url
-        return _DEFAULT_BASE_URLS.get(self.provider, "")
+        return self.provider_config.get_effective_base_url()
 
     def is_configured(self) -> bool:
-        """Return True if provider has an API key available."""
-        return bool(self.get_effective_api_key())
+        return self.provider_config.is_configured()
 
     def to_safe_dict(self) -> dict:
         """Return config as dict with API key masked."""
@@ -323,6 +196,11 @@ class ChatConfig(BaseModel):
         d["effective_model"] = self.get_effective_model()
         d["effective_base_url"] = self.get_effective_base_url()
         return d
+
+
+# ──────────────────────────────────────────────
+# Repository: SQLite CRUD (自動マイグレーション付き)
+# ──────────────────────────────────────────────
 
 
 class ChatConfigRepository:
@@ -341,7 +219,7 @@ class ChatConfigRepository:
     def _ensure_columns(self, db_columns: set[str]) -> set[str]:
         """Add missing ChatConfig columns to chat_settings. Returns updated column set."""
         new_columns = set(db_columns)
-        for field_name, field_info in ChatConfig.model_fields.items():
+        for field_name, field_info in ChatConfig._all_flat_fields().items():
             if field_name in ("persona", "updated_at"):
                 continue
             if field_name not in db_columns:
@@ -389,7 +267,8 @@ class ChatConfigRepository:
         """Convert a ChatConfig field value to a bindable SQL value."""
         if value is None:
             return None
-        field_info = ChatConfig.model_fields.get(field_name)
+        all_fields = ChatConfig._all_flat_fields()
+        field_info = all_fields.get(field_name)
         if field_info is None:
             return value
         base = ChatConfigRepository._get_base_type(field_info.annotation)
@@ -424,7 +303,8 @@ class ChatConfigRepository:
 
         # Build kwargs: only pass known ChatConfig fields, skip None unless nullable
         nullable = {"updated_at", "context_max_tokens", "top_p"}
-        kwargs = {k: v for k, v in data.items() if k in ChatConfig.model_fields and (v is not None or k in nullable)}
+        all_fields = ChatConfig._all_flat_fields()
+        kwargs = {k: v for k, v in data.items() if k in all_fields and (v is not None or k in nullable)}
 
         # Construct with resilience — strip invalid fields on ValidationError
         try:
@@ -463,7 +343,7 @@ class ChatConfigRepository:
         bind_values: list[object] = []
         update_set: list[str] = []
 
-        for field_name in ChatConfig.model_fields:
+        for field_name in ChatConfig._all_flat_fields():
             if field_name not in db_columns:
                 continue
             insert_fields.append(field_name)
@@ -495,7 +375,10 @@ class ChatConfigRepository:
         self._db.commit()
 
 
-# --- File-based repository (replaces SQLite chat_settings table) ---
+# ──────────────────────────────────────────────
+# File-based repository (replaces SQLite chat_settings table)
+# ──────────────────────────────────────────────
+
 
 class ChatConfigFileRepository:
     """JSON file-based CRUD for ChatConfig, stored per persona as config.json."""
@@ -509,6 +392,7 @@ class ChatConfigFileRepository:
     def _migrate_from_sqlite(self, persona: str) -> dict | None:
         """既存の memory.sqlite から chat_settings を読んで dict として返す。失敗時は None。"""
         import sqlite3 as _sqlite3
+
         db_path = os.path.join(self._data_root, "persona", persona, "memory.sqlite")
         if not os.path.exists(db_path):
             return None
@@ -521,7 +405,7 @@ class ChatConfigFileRepository:
             if row is None:
                 return None
             columns = [d[0] for d in cursor.description]
-            data = dict(zip(columns, row))
+            data = dict(zip(columns, row, strict=False))
             # JSON フィールドのパース
             for jf in ("mcp_servers", "enabled_skills", "disabled_tools"):
                 if data.get(jf) is not None and isinstance(data.get(jf), str):
@@ -530,15 +414,20 @@ class ChatConfigFileRepository:
                     except json.JSONDecodeError:
                         data[jf] = []
             # bool→int の逆変換 (SQLite は bool を INTEGER で保存している)
-            bool_fields = {k for k, fi in ChatConfig.model_fields.items()
-                           if ChatConfigRepository._get_base_type(fi.annotation) is bool}
+            all_fields = ChatConfig._all_flat_fields()
+            bool_fields = {
+                k for k, fi in all_fields.items()
+                if ChatConfigRepository._get_base_type(fi.annotation) is bool
+            }
             for bf in bool_fields:
                 if bf in data and data[bf] is not None:
                     data[bf] = bool(data[bf])
             # 不要なキーを除去、None でないキーのみ
             nullable = {"updated_at", "context_max_tokens", "top_p"}
-            result = {k: v for k, v in data.items()
-                      if k in ChatConfig.model_fields and (v is not None or k in nullable)}
+            result = {
+                k: v for k, v in data.items()
+                if k in all_fields and (v is not None or k in nullable)
+            }
             return result
         except Exception:
             logger.warning("Migration from SQLite failed for persona '%s'", persona, exc_info=True)
@@ -549,7 +438,7 @@ class ChatConfigFileRepository:
         path = self._config_path(persona)
         if os.path.exists(path):
             try:
-                with open(path, "r") as f:
+                with open(path) as f:
                     data = json.load(f)
                 return ChatConfig(**data)
             except (json.JSONDecodeError, ValidationError) as e:
@@ -583,6 +472,11 @@ class ChatConfigFileRepository:
         os.replace(tmp_path, path)
 
 
+# ──────────────────────────────────────────────
+# ImageAttachment (チャットに添付された画像)
+# ──────────────────────────────────────────────
+
+
 class ImageAttachment(BaseModel):
     """チャットに添付された画像。base64_data は data: URL プレフィックスなしの生Base64。"""
 
@@ -598,5 +492,7 @@ class ImageAttachment(BaseModel):
         # 余裕をもって判定: パディング除去後の有効長
         decoded_estimate = len(v) * 3 // 4
         if decoded_estimate > max_bytes:
-            raise ValueError(f"Image data exceeds 10MB limit (estimated {decoded_estimate} bytes > {max_bytes} bytes)")
+            raise ValueError(
+                f"Image data exceeds 10MB limit (estimated {decoded_estimate} bytes > {max_bytes} bytes)"
+            )
         return v
