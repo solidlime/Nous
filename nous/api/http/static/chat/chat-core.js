@@ -200,7 +200,7 @@ function setupChatInputHandler() {
     input.classList.remove("dragover");
     const files = Array.from(e.dataTransfer.files);
     for (const file of files) {
-      await uploadAttachment(file);
+      await N.Chat.attachments.upload(file);
     }
   });
 }
