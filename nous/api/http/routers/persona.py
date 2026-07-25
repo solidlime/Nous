@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 from dataclasses import asdict
 from datetime import datetime
@@ -52,6 +53,7 @@ async def _do_health() -> dict:
         qdrant_ok = True
         client.close()
     except Exception:
+        logger.warning("Health check: Qdrant unreachable")
         qdrant_ok = False
 
     return {
@@ -172,7 +174,7 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
             stats["linked_ratio"] = min(linked_count / total_count, 1.0)
     except Exception:
         logger.exception("dashboard_data: linked_ratio calculation failed")
-        pass
+        # 非致命的、ダッシュボードはリンク比率なしで表示継続
 
     # Relationship highlights from memory tags
     rel_highlights: list[dict] = []
@@ -191,7 +193,7 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
             ]
     except Exception:
         logger.exception("dashboard_data: relationship highlights failed")
-        pass
+        # 非致命的、ハイライトなしで表示継続
 
     # State memories (speech/physical/mental) -- newest per tag for WebUI
     state_memories: dict[str, dict] = {}
@@ -210,7 +212,7 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
                 }
         except Exception:
             logger.exception("dashboard_data: state memories failed")
-            pass
+            # 非致命的、状態メモリなしで表示継続
 
     # ── Latest self-portrait image ──
     latest_self_portrait: str | None = None
@@ -223,7 +225,7 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
                 latest_self_portrait = f"/api/chat/{persona}/persona/images/{latest.name}"
     except Exception:
         logger.exception("dashboard_data: self portrait lookup failed")
-        pass
+        # 非致命的、ポートレートなしで表示継続
 
     return {
         "persona": persona,
@@ -300,6 +302,7 @@ async def _do_delete_persona(persona: str) -> dict:
             del AppContextRegistry._contexts[persona]
         shutil.rmtree(persona_dir)
         return {"status": "ok", "deleted": persona}
+    # 最終防衛線: 予期せぬ削除エラー
     except Exception:
         logger.exception("delete_persona failure")
         return {"error": "Internal server error"}
@@ -364,6 +367,7 @@ async def dashboard_data(request: Request) -> JSONResponse:
         return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
     try:
         return JSONResponse(await _do_dashboard_data(persona, ctx))
+    # 最終防衛線
     except Exception as exc:
         logger.exception("Unexpected error: %s", exc)
         return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -376,7 +380,7 @@ async def import_conversation(request: Request) -> JSONResponse:
         return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
     try:
         body = await request.json()
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         logger.exception("import_conversation: invalid JSON body")
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
     file_path = (body.get("file_path") or "").strip()
@@ -388,6 +392,7 @@ async def import_conversation(request: Request) -> JSONResponse:
         return JSONResponse({"error": f"File not found: {file_path}"}, status_code=404)
     except ValueError:
         return JSONResponse({"error": "Unsupported or invalid conversation file format"}, status_code=422)
+    # 最終防衛線
     except Exception as exc:
         logger.exception("Conversation parse error: %s", exc)
         return JSONResponse({"error": "Failed to parse conversation file"}, status_code=500)
@@ -398,7 +403,7 @@ async def create_persona(request: Request) -> JSONResponse:
     """POST /api/personas — create a new persona."""
     try:
         body = await request.json()
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         logger.exception("create_persona: invalid JSON body")
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
     persona_name = (body.get("name") or "").strip()
@@ -446,7 +451,7 @@ async def update_persona_profile(request: Request) -> JSONResponse:
         return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
     try:
         body = await request.json()
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         logger.exception("update_persona_profile: invalid JSON body")
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
     try:
@@ -454,6 +459,7 @@ async def update_persona_profile(request: Request) -> JSONResponse:
         if "error" in result:
             return JSONResponse(result, status_code=400)
         return JSONResponse(result)
+    # 最終防衛線
     except Exception as exc:
         logger.exception("Unexpected error: %s", exc)
         return JSONResponse({"error": "Internal server error"}, status_code=500)
