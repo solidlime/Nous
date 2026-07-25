@@ -21,6 +21,10 @@ ocr = [
     "pytesseract>=0.3.10",
     "pdfplumber>=0.11.0",
 ]
+contract = [
+    "pact-python>=3.4.0,<4.0",
+    "requests>=2.31.0",
+]
 
 [tool.ruff]
 target-version = "py312"
@@ -46,6 +50,8 @@ markers = [
     "slow: Slow tests (embedding model loading etc)",
     "benchmark: Performance benchmark tests",
     "ui: Visual regression tests (requires running server & Playwright)",
+    "contract: Contract tests using Pact (consumer-driven contract testing)",
+    "provider_verify: Provider verification tests (requires running server)",
 ]
 
 [tool.coverage.run]
