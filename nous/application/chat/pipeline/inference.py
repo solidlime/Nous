@@ -262,6 +262,7 @@ class InferenceStep:
                     yield ImageGenResultSSE(
                         provider=tool_result.get("provider", "comfyui"),
                         images=tool_result["images"],
+                        tool_use_id=tc.tool_use_id,
                     )
                 turn_ctx.segments.append(
                     {"type": "tool_result", "name": tc.tool_name, "result": truncated, "id": tc.tool_use_id}
