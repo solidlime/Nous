@@ -48,7 +48,7 @@ function renderCodeBlock(lang, code) {
     '">' +
     highlighted +
     "</code></pre>" +
-    '<div class="hljs-run-result" style="display:none;"></div>';
+    '<div class="hljs-run-result" style="display:none;"></div>');
 
   // Attach event listeners via addEventListener (no inline onclick)
   const copyBtn = wrapper.querySelector(".hljs-copy-btn");

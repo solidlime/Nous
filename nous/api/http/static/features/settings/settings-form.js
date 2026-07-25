@@ -189,16 +189,8 @@ function renderSettings(el, settings, status) {
         html += '</div>'; /* end category card */
     });
 
-    /* ── Source legend & action buttons ── */
+    /* ── Action buttons ── */
     html += '<div class="glass p-6">';
-    html += '<div class="card-title"><i data-lucide="info"></i> Configuration Source Priority</div>';
-    html += '<div style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:16px">';
-    html += '<span class="setting-source source-env"><i data-lucide="globe"></i> env</span>';
-    html += '<span style="margin:0 8px;color:var(--text-muted)">&gt;</span>';
-    html += '<span class="setting-source source-override"><i data-lucide="edit-3"></i> override</span>';
-    html += '<span style="margin:0 8px;color:var(--text-muted)">&gt;</span>';
-    html += '<span class="setting-source source-default"><i data-lucide="clipboard-list"></i> default</span>';
-    html += '</div>';
     html += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
     html += '<button id="export-config-btn" class="glass-btn-success glass-btn"><i data-lucide="download"></i> Export Config</button>';
     html += '<button id="reset-config-btn" class="glass-btn-danger glass-btn"><i data-lucide="trash-2"></i> Reset All to Defaults</button>';

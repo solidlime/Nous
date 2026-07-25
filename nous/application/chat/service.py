@@ -96,6 +96,10 @@ class ChatService:
         db = ctx.connection.get_memory_db()
         session = _session_manager.get_or_create(persona, session_id, max_messages=config.max_stored_messages, db=db)
 
+        # Propagate session_id to AppContext so MCP tools can use it for
+        # Hebbian co-activation linking via MemoryLinkService.
+        ctx.session_id = session_id
+
         turn_ctx = ChatTurnContext(session_id=session_id, user_message=user_message, images=images or [])
 
         # Publish chat.message event for server-side history

@@ -7,6 +7,8 @@ var C = N.Core;
 var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var showConfirm = C.showConfirm, showAlert = C.showAlert;
 var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
+var renderEmotionBadges = N.Components.memoryCard.renderEmotionBadges;
+var renderBodyStateCompact = N.Components.memoryCard.renderBodyStateCompact;
 "use strict";
 var S = window.S;
 
@@ -69,7 +71,7 @@ function updateMemoryPanel(retrieved, saved, goals) {
                   extra +
                   "</div>"
                 : "") +
-              '<div class="mem-actions"><button class="mem-action-btn del" onclick="event.stopPropagation();deleteMemCard(\'' +
+              '<div class="mem-actions"><button class="mem-action-btn del" onclick="event.stopPropagation();N.Chat.memoryPanel.deleteCard(\'' +
               escAttr(key) +
               "')\">削除</button></div>" +
               "</div>"
@@ -117,7 +119,7 @@ function updateMemoryPanel(retrieved, saved, goals) {
                   extra +
                   "</div>"
                 : "") +
-              '<div class="mem-actions"><button class="mem-action-btn del" onclick="event.stopPropagation();deleteMemCard(\'' +
+              '<div class="mem-actions"><button class="mem-action-btn del" onclick="event.stopPropagation();N.Chat.memoryPanel.deleteCard(\'' +
               escAttr(key) +
               "')\">削除</button></div>" +
               "</div>"
@@ -148,11 +150,11 @@ function updateMemoryPanel(retrieved, saved, goals) {
               '">' +
               '<i data-lucide="target"></i> ' +
               esc((g.content || "").substring(0, 80)) +
-              '<div class="mem-actions"><button class="mem-action-btn done" onclick="event.stopPropagation();completeGoal(\'' +
+              '<div class="mem-actions"><button class="mem-action-btn done" onclick="event.stopPropagation();N.Chat.memoryPanel.completeGoal(\'' +
               escAttr(key) +
               "','" +
               escAttr((g.content || "").substring(0, 50)) +
-              '\')">完了</button><button class="mem-action-btn del" onclick="event.stopPropagation();deleteMemCard(\'' +
+              '\')">完了</button><button class="mem-action-btn del" onclick="event.stopPropagation();N.Chat.memoryPanel.deleteCard(\'' +
               escAttr(key) +
               "')\">削除</button></div>" +
               "</div>"

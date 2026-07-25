@@ -42,7 +42,7 @@ function showHelpCommand() {
   msg += "**キーボードショートカット**\n\n";
   msg += "`Alt+1` ~ `Alt+0` — タブ切り替え\n";
   msg += "`Ctrl+F` — 検索\n";
-  msg += "`Enter` — 送信 / `Shift+Enter` — 改行\n";
+  msg += "`Enter` — 改行 / `Shift+Enter` — 送信\n";
   appendChatMessage("assistant", msg, timeStr, true);
 }
 

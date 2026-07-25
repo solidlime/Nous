@@ -48,7 +48,12 @@ var store = {
       var storeKey = prefix ? prefix + '.' + key : key;
       var desc = Object.getOwnPropertyDescriptor(obj, key);
       if (desc && !desc.get && !desc.set && desc.configurable !== false && typeof obj[key] !== 'function') {
-        if (_state[storeKey] === undefined) _state[storeKey] = obj[key];
+        if (_state[storeKey] === undefined) {
+            _state[storeKey] = obj[key];
+          } else if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key]) &&
+                     typeof _state[storeKey] === 'object' && _state[storeKey] !== null && !Array.isArray(_state[storeKey])) {
+            Object.assign(_state[storeKey], obj[key]);
+          }
         Object.defineProperty(obj, key, {
           get: function() { return _state[storeKey]; },
           set: function(v) { self.set(storeKey, v); },

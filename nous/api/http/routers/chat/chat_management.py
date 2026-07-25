@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import json
+from typing import TYPE_CHECKING
+
+from starlette.responses import JSONResponse, Response
+
+from nous.api.http.routers.chat.chat_stream import _resolve_request
 from nous.config.settings import get_settings
 from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository
 from nous.infrastructure.logging.structured import get_logger
+
+if TYPE_CHECKING:
+    from starlette.requests import Request
 
 logger = get_logger(__name__)
 
@@ -188,3 +197,129 @@ async def _do_memory_image_serve(persona: str, ctx, filename: str) -> dict | Non
     mime_type, _ = mimetypes.guess_type(filename)
     mime_type = mime_type or "image/png"
     return {"file_path": str(file_path), "mime_type": mime_type}
+
+
+# ── HTTP adapter layer ─────────────────────────────────────────────
+
+
+async def get_chat_config(request: Request) -> JSONResponse:
+    """GET /api/chat/{persona}/config — return chat configuration."""
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": "Persona not found"}, status_code=404)
+    return JSONResponse(await _do_get_chat_config(persona, ctx))
+
+
+async def save_chat_config(request: Request) -> JSONResponse:
+    """POST /api/chat/{persona}/config — update chat configuration."""
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": "Persona not found"}, status_code=404)
+    try:
+        body = await request.json()
+    except (json.JSONDecodeError, TypeError):
+        logger.exception("save_chat_config: invalid JSON body")
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+    try:
+        result = await _do_save_chat_config(persona, ctx, body)
+    except Exception:  # 最終防衛線: Pydantic/domain validation
+        logger.exception("save_chat_config: config validation failed")
+        return JSONResponse({"error": "Invalid config"}, status_code=400)
+    return JSONResponse(result)
+
+
+async def list_mcp_tools(request: Request) -> JSONResponse:
+    """GET /api/chat/{persona}/mcp-tools — return MCP tools list."""
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": "Persona not found"}, status_code=404)
+    return JSONResponse(await _do_list_mcp_tools(persona, ctx))
+
+
+async def get_chat_commitments(request: Request) -> JSONResponse:
+    """GET /api/chat/{persona}/commitments — return active goals and insights."""
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": "Persona not found"}, status_code=404)
+    return JSONResponse(await _do_get_commitments(persona, ctx))
+
+
+async def attachment_upload(request: Request) -> JSONResponse:
+    """POST /api/chat/{persona}/attachment/upload — upload file attachment."""
+    from starlette.datastructures import UploadFile  # noqa: TC002
+
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": "Persona not found"}, status_code=404)
+
+    form = await request.form()
+    upload = form.get("file")
+    if not isinstance(upload, UploadFile) or not upload:
+        return JSONResponse({"error": "file field required"}, status_code=400)
+
+    filename = upload.filename or "upload"
+    file_bytes = await upload.read()
+    return JSONResponse(await _do_attachment_upload(persona, ctx, filename, file_bytes))
+
+
+async def attachment_serve(request: Request) -> Response:
+    """GET /api/chat/{persona}/attachment/{filename} — serve uploaded file."""
+    import os
+
+    from starlette.responses import FileResponse
+
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": "Persona not found"}, status_code=404)
+
+    filename = request.path_params.get("filename", "")
+    safe_name = os.path.basename(filename).replace("..", "").strip()
+    if not safe_name:
+        return JSONResponse({"error": "Invalid filename"}, status_code=400)
+
+    result = await _do_attachment_serve(persona, ctx, safe_name)
+    if result is None:
+        return JSONResponse({"error": "File not found"}, status_code=404)
+
+    return FileResponse(result["file_path"], media_type=result["mime_type"])
+
+
+async def memory_image_serve(request: Request) -> Response:
+    """GET /api/chat/{persona}/persona/images/{filename} — serve generated image."""
+    import os
+
+    from starlette.responses import FileResponse
+
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": "Persona not found"}, status_code=404)
+
+    filename = request.path_params.get("filename", "")
+    safe_name = os.path.basename(filename).replace("..", "").strip()
+    if not safe_name or not safe_name.lower().endswith(".png"):
+        return JSONResponse({"error": "Invalid filename"}, status_code=400)
+
+    result = await _do_memory_image_serve(persona, ctx, safe_name)
+    if result is None:
+        return JSONResponse({"error": "File not found"}, status_code=404)
+
+    return FileResponse(result["file_path"], media_type=result["mime_type"])
+
+
+async def execute_chat_tool(request: Request) -> JSONResponse:
+    """POST /api/chat/{persona}/tool — execute a builtin memory tool."""
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": "Persona not found"}, status_code=404)
+
+    body = await request.json()
+    tool_name = body.get("tool", "")
+    if not tool_name:
+        return JSONResponse({"status": "error", "message": "tool name required"}, status_code=400)
+
+    try:
+        result = await _do_execute_chat_tool(persona, ctx, body)
+        return JSONResponse(result)
+    except Exception:  # 最終防衛線
+        logger.exception("execute_chat_tool: tool execution failed")
+        return JSONResponse({"status": "error", "message": "Tool execution failed"}, status_code=500)

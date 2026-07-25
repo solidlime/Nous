@@ -1,5 +1,9 @@
 # MEMORY
 
+## ドッグフーディングテストの注意点 (2026-07-25)
+- **テストはローカル、配信はDockerイメージ**: ユーザーは `docker compose up` で起動したコンテナ（`ghcr.io/solidlime/nous:latest`）を使う。ローカルでコードを修正してもコンテナには反映されない。
+- **コード修正後のテスト手順**: (1) 修正 → (2) `docker build -t ghcr.io/solidlime/nous:latest .` → (3) `docker compose down && docker compose up -d` → (4) ブラウザ検証
+
 ## Phase 4: 発展 — ChattConfig 分割 + 契約テスト + CI強化 (2026-07-25)
 - **commits**: f4627f3〜8bc43a7 (ChatConfig 6件), 65ffe5e (Pact contract tests)
 - ChatConfig 4サブ設定分割: Provider ↔ Session ↔ Compression ↔ Tool、Facade で後方互換

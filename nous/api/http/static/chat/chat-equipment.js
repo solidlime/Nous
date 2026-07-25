@@ -5,7 +5,7 @@
 (function(N) {
 "use strict";
 var C = N.Core;
-var safeSetHTML = C.safeSetHTML;
+var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var S = window.S;
 
 var CHAT = N.Chat.state;

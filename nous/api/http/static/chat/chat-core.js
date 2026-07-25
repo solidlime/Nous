@@ -5,6 +5,7 @@
 ;(function(N) {
 var C = N.Core;
 var api = C.api, esc = C.esc, toast = C.toast;
+function hideCommandPopup() { return N.Chat.commands.hide(); }
 var showConfirm = C.showConfirm, showAlert = C.showAlert;
 var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
 "use strict";
@@ -224,9 +225,6 @@ function chatInputKeydownHandler(e) {
         S.slashCommandIndex--;
         updateSlashSelection(items);
       }
-    } else if (e.key === "Enter" && e.shiftKey) {
-      // Shift+Enter in popup: send (handled by main handler below, skip popup select)
-      return;
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (S.slashCommandIndex >= 0 && S.slashCommandIndex < items.length) {

@@ -90,11 +90,25 @@ class AppContext:
         self.settings = settings
         self.persona = persona
         self._config = config
+        self._current_session_id: str | None = None
         self._init_storage()
         self._init_enricher()
         self._init_services()
         self._init_vector()
         self._preload_background()
+
+    @property
+    def session_id(self) -> str | None:
+        """Current chat session ID, set by ChatService.chat().
+
+        Used by MCP tools to propagate session context to
+        MemoryLinkService for Hebbian co-activation linking.
+        """
+        return self._current_session_id
+
+    @session_id.setter
+    def session_id(self, value: str | None) -> None:
+        self._current_session_id = value
 
     # ------------------------------------------------------------------
     # Private factory methods (called in order from __init__)
@@ -184,11 +198,24 @@ class AppContext:
 
         self.event_bus = EventBus()
 
+        # Initialize SessionEventRepository before MemoryService so it can
+        # be injected for Hebbian co-activation linking (D5/N6 fix).
+        try:
+            from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
+
+            self._session_event_repo = SessionEventRepository(self.connection)
+        except Exception as e:
+            import logging as _logging
+
+            _logging.getLogger("nous").warning("SessionEventRepository init failed: %s", e)
+            self._session_event_repo = None
+
         # Services
         self.memory_service = MemoryService(
             self.memory_repo,
             entity_service=self.entity_service,
             enricher=self._enricher,
+            session_event_repo=self._session_event_repo,
         )
         self.persona_service = PersonaService(self.persona_repo, event_bus=self.event_bus)
         self.equipment_service = EquipmentService(self.equipment_repo)
@@ -199,11 +226,10 @@ class AppContext:
         self.event_bus.subscribe("memory.deleted", self._on_memory_vector_delete)
 
         # Initialize SessionEventRecorder (best-effort, don't fail startup)
+        # Uses self._session_event_repo already created in _init_services above.
         try:
             from nous.application.session_event_recorder import SessionEventRecorder
-            from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
 
-            self._session_event_repo = SessionEventRepository(self.connection)
             self._session_event_recorder = SessionEventRecorder(self.event_bus, self._session_event_repo)
             self._session_event_recorder.start()
         except Exception as e:
