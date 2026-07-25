@@ -21,8 +21,8 @@ from nous.infrastructure.logging.structured import get_logger, setup_logging
 
 # Set HF_HOME early, before any module triggers huggingface_hub import
 # This must happen before huggingface_hub.constants is evaluated
-_data_root = os.environ.get("NOUS_DATA_ROOT", os.path.join(os.path.dirname(__file__), "..", "data"))
-os.environ.setdefault("HF_HOME", os.path.join(_data_root, "cache", "huggingface"))
+_data_root = os.environ.get("NOUS_DATA_ROOT", str(Path(__file__).resolve().parent.parent / "data"))
+os.environ.setdefault("HF_HOME", str(Path(_data_root) / "cache" / "huggingface"))
 
 # ── Monkey-patch Tool.run() to re-raise McpError (preserves JSON-RPC error codes) ──
 # FastMCP's Tool.run() wraps all exceptions in ToolError, but McpError must
@@ -88,7 +88,7 @@ def _mount_static_files(mcp: MemoryFastMCP) -> None:
     @mcp.custom_route("/static/{filepath:path}", methods=["GET", "HEAD"])
     async def serve_static(request: Request):  # noqa: F821
         filepath = request.path_params.get("filepath", "").lstrip("/")
-        safe_path = os.path.normpath(filepath).replace("\\", "/").lstrip("/")
+        safe_path = Path(filepath).as_posix().lstrip("/")
         if ".." in safe_path.split("/"):
             return Response("Forbidden", status_code=403)
 
@@ -118,13 +118,18 @@ def create_app() -> MemoryFastMCP:
         _default_skills = Path("/opt/nous/default-skills")
         _skills_path = Path(settings.skills_dir)
         if _default_skills.exists() and _default_skills.is_dir():
-            _has_skills = any(
-                (_skills_path / d / "SKILL.md").exists()
-                for d in os.listdir(str(_skills_path))
-                if (_skills_path / d).is_dir()
-            ) if _skills_path.exists() else False
+            _has_skills = (
+                any(
+                    (_skills_path / d / "SKILL.md").exists()
+                    for d in os.listdir(str(_skills_path))
+                    if (_skills_path / d).is_dir()
+                )
+                if _skills_path.exists()
+                else False
+            )
             if not _has_skills:
                 import shutil
+
                 for item in _default_skills.iterdir():
                     dest = _skills_path / item.name
                     if item.is_dir() and not dest.exists():
