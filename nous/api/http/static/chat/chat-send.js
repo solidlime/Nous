@@ -191,7 +191,7 @@ function _createAssistantDiv() {
     const allText = Array.from(div.querySelectorAll(".chat-bubble"))
       .map(b => b.textContent)
       .join("\n");
-    playTts(ttsBtn, allText);
+    N.Chat.tts.play(ttsBtn, allText);
   };
   actions.appendChild(ttsBtn);
   // Retry / regenerate button
@@ -201,7 +201,7 @@ function _createAssistantDiv() {
   retryBtn.onclick = () => {
     const mid = div.dataset.msgId;
     const idx = parseInt(div.dataset.msgIndex);
-    rollbackChat(mid || idx, true);
+    N.Chat.history.rollback(mid || idx, true);
   };
   actions.appendChild(retryBtn);
   // Copy button
