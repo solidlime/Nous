@@ -64,7 +64,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
     editBtn.onclick = () => {
       const mid = div.dataset.msgId;
       const idx = parseInt(div.dataset.msgIndex);
-      editChatMessage(mid || idx);
+      N.Chat.history.edit(mid || idx);
     };
     actions.appendChild(editBtn);
 
@@ -76,7 +76,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
     deleteBtn.onclick = () => {
       const mid = div.dataset.msgId;
       const idx = parseInt(div.dataset.msgIndex);
-      deleteChatMessage(mid || idx);
+      N.Chat.history.delete(mid || idx);
     };
     actions.appendChild(deleteBtn);
   } else if (role === "assistant") {
@@ -89,7 +89,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
         const allText = Array.from(div.querySelectorAll(".chat-bubble"))
             .map(b => b.textContent)
             .join("\n");
-        playTts(ttsBtn, allText);
+        N.Chat.tts.play(ttsBtn, allText);
     };
     actions.appendChild(ttsBtn);
     const retryBtn = document.createElement("button");
@@ -98,7 +98,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
     retryBtn.onclick = () => {
       const mid = div.dataset.msgId;
       const idx = parseInt(div.dataset.msgIndex);
-      rollbackChat(mid || idx, true);
+      N.Chat.history.rollback(mid || idx, true);
     };
     actions.appendChild(retryBtn);
     const copyBtn = document.createElement("button");
@@ -397,7 +397,7 @@ async function chatSend(retry) {
   statusEl.textContent = "記憶処理中...";
   CHAT._firstContent = true;
 
-  const sessionId = getChatSessionId();
+  const sessionId = N.Chat.history.getSessionId();
   // F3: content_parts-based rendering — tracks interleaved text/tool_call/tool_result
   let contentParts = [];       // [{type:"text"|"tool_call"|"tool_result", ...}]
   let assistantDiv = null;
@@ -506,12 +506,12 @@ async function chatSend(retry) {
           // End current text bubble — next text_delta will create a new one
           currentTextBubble = null;
           currentTextContent = "";
-          const toolDiv = appendToolEvent("tool_call", evt, assistantDiv);
+          const toolDiv = N.Chat.tools.append("tool_call", evt, assistantDiv);
           contentParts.push({ type: "tool_call", div: toolDiv, id: evt.id, name: evt.name });
           safeSetHTML(statusEl,
             '<i data-lucide="wrench"></i> ' + esc(evt.name) + " を実行中...");
         } else if (evt.type === "tool_result") {
-          appendToolEvent("tool_result", evt);
+          N.Chat.tools.append("tool_result", evt);
           currentTextBubble = null; // ensure next text_delta creates new bubble
           currentTextContent = "";
           contentParts.push({ type: "tool_result", id: evt.id, result: evt.result });
@@ -543,7 +543,7 @@ async function chatSend(retry) {
           break;
         } else if (evt.type === "debug_info") {
           console.debug("[debug_info received]", Object.keys(evt));
-          renderDebugPanel(assistantDiv, evt);
+          N.Chat.core.debug(assistantDiv, evt);
         } else if (evt.type === "done") {
           // F3: render all text parts as final markdown
           let allText = "";
@@ -563,7 +563,7 @@ async function chatSend(retry) {
           // TE04: Auto-play TTS for all text
           var voiceAutoPlay = document.getElementById("chat-voice-auto-play");
           if (voiceAutoPlay && voiceAutoPlay.checked && allText.trim()) {
-            autoPlayTts(allText.trim());
+            N.Chat.tts.autoPlay(allText.trim());
           }
           // Clean up: remove assistant div if it has no content (text or tools)
           if (assistantDiv) {
