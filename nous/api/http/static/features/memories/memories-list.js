@@ -124,7 +124,7 @@ function renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSe
         html += '<div class="empty-state">' +
             '<div class="empty-state-icon"><i data-lucide="brain"></i></div>' +
             '<div class="empty-state-text">まだ記憶がありません。<br>Chatタブで「記憶して」と話しかけてみてください。</div>' +
-            '<button class="empty-state-cta" onclick="switchTab(\'chat\')"><i data-lucide="message-circle"></i> Chatを開く</button>' +
+            '<button class="empty-state-cta" data-tab="chat"><i data-lucide="message-circle"></i> Chatを開く</button>' +
             '</div>';
     } else if (S.mem.viewMode === 'compact') {
         /* ── Compact view ── */

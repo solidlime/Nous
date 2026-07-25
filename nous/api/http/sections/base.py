@@ -130,24 +130,12 @@ def render_utilities_js() -> str:
 # ---------------------------------------------------------------------------
 
 
-def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str, initial_persona: str | None = None) -> str:
+def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str) -> str:
     """Compose the full HTML page.
 
     Uses string concatenation (NOT f-strings) because the embedded
     JavaScript relies on ``${}`` template literals.
     """
-    # Inject initial persona as a JS variable so the SPA can pre-select it.
-    # json.dumps produces a valid JSON / JS string literal with proper escaping,
-    # and the &#x2F; prevents HTML parser from misinterpreting </script> as tag close.
-    if initial_persona:
-        persona_init_script = (
-            '<script>window.__INITIAL_PERSONA__='
-            + json.dumps(initial_persona, ensure_ascii=False).replace("</", "<\\/")
-            + ';</script>\n'
-        )
-    else:
-        persona_init_script = ""
-
     return (
         "<!DOCTYPE html>\n"
         '<html lang="ja" class="dark">\n' + render_head() + "\n<body>\n"
@@ -170,10 +158,10 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str, initial_p
         '            <select id="persona-select" class="glass-input" title="Select persona">\n'
         '                <option value="">Loading...</option>\n'
         "            </select>\n"
-        '            <button id="create-persona-btn" class="glass-btn" title="Create new persona" onclick="openCreatePersonaModal()">\n'
+        '            <button id="create-persona-btn" class="glass-btn" title="Create new persona">\n'
         '              <i data-lucide="user-plus"></i>\n'
         "            </button>\n"
-        '            <button id="delete-persona-btn" class="glass-btn" title="Delete current persona" onclick="deleteCurrentPersona()" style="display:none">\n'
+        '            <button id="delete-persona-btn" class="glass-btn" title="Delete current persona" style="display:none">\n'
         '              <i data-lucide="trash-2"></i>\n'
         "            </button>\n"
         '            <button id="dark-toggle" class="glass-btn" title="Toggle theme"><i data-lucide="moon"></i></button>\n'
@@ -185,13 +173,12 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str, initial_p
         "    </main>\n"
         "\n"
         "    <!-- Memory Detail Modal -->\n"
-        '    <div id="mem-modal-overlay" class="mem-modal-overlay" onclick="if(event.target===this)closeMemModal()">\n'
+        '    <div id="mem-modal-overlay" class="mem-modal-overlay">\n'
         '        <div class="mem-modal" id="mem-modal-content"></div>\n'
         "    </div>\n"
         "\n"
         "    <!-- Toast container -->\n"
         '    <div id="toast-container" class="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>\n'
-        "\n" + persona_init_script + "\n"
         "</body>\n"
         "</html>"
     )

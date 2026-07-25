@@ -57,6 +57,6 @@ def render_dashboard(persona: str | None = None) -> str:
 
     import re
 
-    html = render_layout_shell(nav_html, tab_contents, tab_js, initial_persona=persona)
+    html = render_layout_shell(nav_html, tab_contents, tab_js)
     # Clean lone surrogates that break UTF-8 encoding (U+D800-U+DFFF)
     return re.sub(r"[\ud800-\udfff]", "\ufffd", html)

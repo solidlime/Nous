@@ -155,7 +155,7 @@ async function init() {
       safeSetHTML(document.getElementById("overview-content"),
         '<div class="empty-state"><div class="empty-state-icon"><i data-lucide="user-plus"></i></div>' +
         '<div class="empty-state-text">Personasタブでペルソナを作成してください。</div>' +
-        '<button class="empty-state-cta" onclick="switchTab(\'personas\')"><i data-lucide="user-plus"></i> ペルソナを作成</button></div>');
+        '<button class="empty-state-cta" data-tab="personas"><i data-lucide="user-plus"></i> ペルソナを作成</button></div>');
       if (typeof lucide !== "undefined") lucide.createIcons();
       return;
     }
@@ -165,12 +165,10 @@ async function init() {
       opt.textContent = p;
       sel.appendChild(opt);
     });
-    // 優先度: __INITIAL_PERSONA__ > localStorage > personas[0]
+    // Select persona: localStorage > first available
     const savedPersona = localStorage.getItem("mmcp-persona");
     let _target = null;
-    if (window.__INITIAL_PERSONA__) {
-      _target = window.__INITIAL_PERSONA__;
-    } else if (
+    if (
       savedPersona &&
       personas.some((p) => (p.id || p) === savedPersona)
     ) {
@@ -227,6 +225,30 @@ async function init() {
 
    // Event: Theme toggle
   document.getElementById("dark-toggle").onclick = C.toggleTheme;
+
+    // Event: Create persona (replaces inline onclick from base.py)
+  document.getElementById("create-persona-btn").onclick = openCreatePersonaModal;
+
+  // Event: Delete persona (replaces inline onclick from base.py)
+  document.getElementById("delete-persona-btn").onclick = deleteCurrentPersona;
+
+  // Event: Close memory modal on backdrop click (replaces inline onclick from base.py)
+  document.getElementById("mem-modal-overlay").addEventListener("click", function(e) {
+    if (e.target === this) {
+      if (typeof N.Features.Memories.closeMemModal === "function") {
+        N.Features.Memories.closeMemModal();
+      }
+    }
+  });
+
+  // Event delegation: .empty-state-cta buttons (dynamically created via safeSetHTML)
+  document.getElementById("main-content").addEventListener("click", function(e) {
+    var btn = e.target.closest(".empty-state-cta");
+    if (btn && btn.dataset.tab) {
+      e.preventDefault();
+      switchTab(btn.dataset.tab);
+    }
+  });
 
   // ── Hamburger menu (mobile) ──
   function buildHamburgerMenu() {
@@ -383,8 +405,7 @@ async function init() {
 /* =================================================================
    STAGGERED CARD ANIMATION
    ================================================================= */
-window.init = init;
-
+/* animateCards exported as N.Core.animateCards for settings-form.js */
 function animateCards(container) {
   if (!container) return;
   const cards = container.querySelectorAll(".glass");
@@ -398,7 +419,7 @@ function animateCards(container) {
     }, i * 60);
   });
 }
-window.animateCards = animateCards;
+N.Core.animateCards = animateCards;
 
 /* =================================================================
    KEYBOARD SHORTCUTS (Ctrl+F / Escape / ? help)
@@ -435,7 +456,7 @@ function toggleShortcutHelp() {
     '<div class="shortcut-help-modal">' +
     '<div class="shortcut-help-header">' +
     '<span>⌨ Keyboard Shortcuts</span>' +
-    '<button class="shortcut-help-close" onclick="toggleShortcutHelp()" aria-label="Close shortcuts"><i data-lucide="x"></i></button>' +
+    '<button class="shortcut-help-close" id="shortcut-help-close-btn" aria-label="Close shortcuts"><i data-lucide="x"></i></button>' +
     "</div>" +
     '<div class="shortcut-help-body">' +
     "<table>" +
@@ -447,13 +468,15 @@ function toggleShortcutHelp() {
     "</table>" +
     "</div></div>");
   document.body.appendChild(overlay);
+  document.getElementById("shortcut-help-close-btn").onclick = function() {
+    toggleShortcutHelp();
+  };
   requestAnimationFrame(function () {
     overlay.classList.add("show");
     overlay.querySelector(".shortcut-help-close").focus();
   });
   if (typeof lucide !== "undefined") lucide.createIcons();
 }
-window.toggleShortcutHelp = toggleShortcutHelp;
 
 /* Global ? key listener for shortcut help */
 document.addEventListener("keydown", function (e) {
@@ -514,10 +537,10 @@ function openCreatePersonaModal() {
       <div style="background:var(--bg-secondary);border-radius:16px;padding:24px;min-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.3)">\
         <h2 style="margin:0 0 4px 0;font-size:1.2rem"><i data-lucide="user-plus"></i> Create Persona</h2>\
         <p style="color:var(--text-muted);font-size:0.85rem;margin:0 0 16px 0">Enter a name for the new persona.</p>\
-        <form onsubmit="return submitCreatePersona(event)" style="display:flex;flex-direction:column;gap:12px">\
+        <form id="create-persona-form" style="display:flex;flex-direction:column;gap:12px">\
           <input id="new-persona-name" type="text" placeholder="e.g. assistant, friend, scholar" class="glass-input" style="width:100%;padding:10px" required autofocus>\
           <div style="display:flex;gap:8px;justify-content:flex-end">\
-            <button type="button" class="glass-btn" onclick="closeCreatePersonaModal()">Cancel</button>\
+            <button type="button" id="create-persona-cancel" class="glass-btn">Cancel</button>\
             <button type="submit" class="glass-btn" style="background:var(--accent-purple);color:white">Create</button>\
           </div>\
         </form>\
@@ -527,6 +550,10 @@ function openCreatePersonaModal() {
     modal.addEventListener('click', function(e) {
       if (e.target === modal) closeCreatePersonaModal();
     });
+    // Submit handler (replaces inline onsubmit)
+    document.getElementById("create-persona-form").onsubmit = submitCreatePersona;
+    // Cancel button (replaces inline onclick)
+    document.getElementById("create-persona-cancel").onclick = closeCreatePersonaModal;
   }
   modal.style.display = 'flex';
   setTimeout(function() {
@@ -564,11 +591,6 @@ function submitCreatePersona(e) {
   return false;
 }
 
-// Export to global scope
-window.openCreatePersonaModal = openCreatePersonaModal;
-window.closeCreatePersonaModal = closeCreatePersonaModal;
-window.submitCreatePersona = submitCreatePersona;
-
 function deleteCurrentPersona() {
   var sel = document.getElementById('persona-select');
   var name = sel.value;
@@ -584,7 +606,6 @@ function deleteCurrentPersona() {
     C.toast('Delete failed: ' + err.message, 'error');
   });
 }
-window.deleteCurrentPersona = deleteCurrentPersona;
 
 // Escape key closes persona modal
 document.addEventListener('keydown', function(e) {
