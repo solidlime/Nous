@@ -36,7 +36,7 @@ async def _do_save_chat_config(persona: str, ctx, body: dict) -> dict:
     current = repo.get(persona)
 
     update_data = current.model_dump()
-    for field_name in ChatConfig.model_fields:
+    for field_name in ChatConfig._all_flat_fields():
         if field_name in ("persona", "updated_at", "api_key"):
             continue
         if field_name in body:
