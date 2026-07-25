@@ -1050,6 +1050,7 @@ class TestTimestampInjection:
         mock_provider.stream = _mock_stream
 
         config = MagicMock()
+        config.debug_mode = False
         config.temperature = 0.7
         config.max_tokens = 100
         config.provider = "anthropic"
@@ -1109,6 +1110,7 @@ class TestTimestampInjection:
         mock_provider.stream = _mock_stream
 
         config = MagicMock()
+        config.debug_mode = False
         config.temperature = 0.7
         config.max_tokens = 100
         config.provider = "anthropic"
@@ -1164,6 +1166,7 @@ class TestTimestampInjection:
         mock_provider.stream = _mock_stream
 
         config = MagicMock()
+        config.debug_mode = False
         config.temperature = 0.7
         config.max_tokens = 100
         config.provider = "anthropic"
@@ -1222,6 +1225,7 @@ class TestTimestampInjection:
         mock_provider.stream = _mock_stream
 
         config = MagicMock()
+        config.debug_mode = False
         config.temperature = 0.7
         config.max_tokens = 100
         config.provider = "anthropic"
