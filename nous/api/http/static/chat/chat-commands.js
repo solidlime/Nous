@@ -5,7 +5,7 @@
 (function(N) {
 "use strict";
 var C = N.Core;
-var esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
+var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var appendChatMessage = N.Chat.ui && N.Chat.ui.append;
 var showTypingIndicator = N.Chat.ui && N.Chat.ui.showTyping;
 var removeTypingIndicator = N.Chat.ui && N.Chat.ui.removeTyping;
