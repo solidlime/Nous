@@ -340,6 +340,7 @@ function renderSettings(el, settings, status) {
         });
 
         btn.addEventListener('click', async function() {
+            var _failedKeys;
             var entries = Object.values(dirtyFields);
             if (entries.length === 0) return;
             btn.disabled = true;
@@ -373,14 +374,14 @@ function renderSettings(el, settings, status) {
                     failed++;
                     var catKey = e.cat + '.' + e.key;
                     console.warn('[settings] save failed:', catKey, err.message || err);
-                    if (!window.__settings_failed_keys) window.__settings_failed_keys = [];
-                    window.__settings_failed_keys.push(catKey);
+                    if (!_failedKeys) _failedKeys = [];
+                    _failedKeys.push(catKey);
                 }
             }
 
             if (failed > 0) {
-                var failKeys = (window.__settings_failed_keys || []).slice();
-                window.__settings_failed_keys = null;
+                var failKeys = (_failedKeys || []).slice();
+                _failedKeys = null;
                 if (statusEl) { statusEl.className = 'setting-status status-error visible'; safeSetHTML(statusEl, '✕ ' + failed + ' failed'); }
                 if (failKeys.length > 3) {
                     console.group('[settings] batch save failures');
