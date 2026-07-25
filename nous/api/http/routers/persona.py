@@ -305,6 +305,14 @@ async def _do_delete_persona(persona: str) -> dict:
         return {"error": "Internal server error"}
 
 
+async def _do_sillytavern_card(persona: str, ctx) -> bytes:
+    """Build SillyTavern card PNG bytes from persona state."""
+    state_result = ctx.persona_service.get_context(persona)
+    if not state_result.is_ok:
+        raise ValueError("Failed to get persona context")
+    return _build_sillytavern_card(state_result.value)
+
+
 # ── HTTP adapter layer — 元の関数名を維持 ───────────────────────────────
 
 
@@ -398,6 +406,18 @@ async def delete_persona(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+async def sillytavern_card(request: Request) -> Response:
+    """GET /api/personas/{persona}/card.png — export SillyTavern character card."""
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
+    try:
+        png_bytes = await _do_sillytavern_card(persona, ctx)
+        return Response(content=png_bytes, media_type="image/png")
+    except ValueError:
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
 def register_persona_routes(mcp) -> None:
     mcp.custom_route("/health", methods=["GET"])(health)
     mcp.custom_route("/api/personas", methods=["GET"])(list_personas)
@@ -407,22 +427,7 @@ def register_persona_routes(mcp) -> None:
     mcp.custom_route("/api/import-conversation/{persona}", methods=["POST"])(import_conversation)
     mcp.custom_route("/api/personas", methods=["POST"])(create_persona)
     mcp.custom_route("/api/personas/{persona}", methods=["DELETE"])(delete_persona)
-
-    @mcp.custom_route("/api/personas/{persona}/card.png", methods=["GET"])
-    async def sillytavern_card(request: Request) -> Response:
-        """Export persona as SillyTavern v3 character card (PNG with tEXt metadata)."""
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if ctx is None:
-            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
-
-        state_result = ctx.persona_service.get_context(persona)
-        if not state_result.is_ok:
-            return JSONResponse({"error": "Internal server error"}, status_code=500)
-
-        state = state_result.value  # type: ignore[union-attr]
-        png_bytes = _build_sillytavern_card(state)
-        return Response(content=png_bytes, media_type="image/png")
+    mcp.custom_route("/api/personas/{persona}/card.png", methods=["GET"])(sillytavern_card)
 
     @mcp.custom_route("/api/personas/{persona}/profile", methods=["PUT"])
     async def update_persona_profile(request: Request) -> JSONResponse:
