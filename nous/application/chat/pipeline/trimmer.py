@@ -125,46 +125,37 @@ class TrimmerMixin:
 
     @staticmethod
     def _truncate_old_messages(messages: list[LLMMessage], keep_recent_turns: int) -> list[LLMMessage]:
-        """Truncate older user/assistant messages to 300 chars.
+        """Cut off old messages beyond keep_recent_turns, keeping only recent ones intact.
 
-        Keeps the most recent N turns intact; truncates everything before that.
-        Tool messages are left as-is (handled by _clear_old_tool_results).
+        Old messages (user/assistant/tool) before the last N turns are removed entirely
+        and replaced with a single system notice. This is a hard cutoff — messages
+        beyond the window are NOT visible to the LLM.
+
+        When keep_recent_turns == 0, no truncation is performed.
         """
         from nous.infrastructure.llm.base import LLMMessage
 
         keep_count = keep_recent_turns * 2  # user + assistant = one turn
-        if len(messages) <= keep_count:
+        if keep_recent_turns == 0 or len(messages) <= keep_count:
             return messages
 
-        result: list[LLMMessage] = []
-        truncated_count = 0
+        # Keep only the last keep_count messages intact
+        recent = messages[-keep_count:]
+        removed_count = len(messages) - keep_count
 
-        for i, msg in enumerate(messages):
-            if i < len(messages) - keep_count and msg.role in ("user", "assistant"):
-                content = msg.content or ""
-                if len(content) > 300:
-                    result.append(
-                        LLMMessage(
-                            role=msg.role,
-                            content=f"[旧]{content[:300]}...",
-                            timestamp=msg.timestamp,
-                            time_label=msg.time_label or "(旧)",
-                            tool_call_id=msg.tool_call_id,
-                            tool_calls=msg.tool_calls,
-                            content_parts=msg.content_parts,
-                        )
-                    )
-                    truncated_count += 1
-                else:
-                    result.append(msg)
-            else:
-                result.append(msg)
+        # Insert a system notice in place of removed messages
+        note = LLMMessage(
+            role="assistant",
+            content=(
+                f"[システム: 過去{removed_count}件のメッセージを切り詰めました。"
+                f"直近{keep_recent_turns}ターンのみ保持しています。]"
+            ),
+        )
 
-        if truncated_count:
-            logger.debug(
-                "CompressStep: truncated %d old messages (kept %d recent turns)",
-                truncated_count,
-                keep_recent_turns,
-            )
+        logger.debug(
+            "CompressStep: removed %d old messages (kept %d recent turns)",
+            removed_count,
+            keep_recent_turns,
+        )
 
-        return result
+        return [note] + recent

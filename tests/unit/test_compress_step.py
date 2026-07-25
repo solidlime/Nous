@@ -198,10 +198,13 @@ class TestCompressStep:
     @pytest.mark.asyncio
     @pytest.mark.asyncio
     async def test_no_compression_when_under_budget(self):
-        """When under budget, messages pass through unchanged."""
+        """When under budget and keep_recent_turns=0, messages pass through unchanged."""
         from nous.application.chat.pipeline.compress import CompressStep
 
-        config = _make_chat_config(context_max_tokens=1_000_000)  # Huge budget
+        config = _make_chat_config(
+            context_max_tokens=1_000_000,  # Huge budget
+            context_keep_recent_turns=0,    # Disable Stage 0 truncation
+        )
         ctx = _dummy_app_context()
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=5))
         msgs = _long_messages(num_pairs=3)
@@ -260,6 +263,7 @@ class TestCompressStep:
 
         config = _make_chat_config(
             context_max_tokens=200,
+            context_keep_recent_turns=0,  # Disable Stage 0 to isolate Stage 2
             context_use_llm_summary=False,  # Disable Stage 3 to isolate Stage 2
         )
         ctx = _dummy_app_context()
@@ -280,7 +284,7 @@ class TestCompressStep:
 
     @pytest.mark.asyncio
     async def test_old_messages_truncated(self):
-        """Old messages should be truncated and marked with [旧]."""
+        """Old messages should be removed entirely and replaced with a [システム:] notice."""
         from nous.application.chat.pipeline.compress import CompressStep
 
         config = _make_chat_config(
@@ -296,16 +300,20 @@ class TestCompressStep:
 
         result = await CompressStep().run(ctx, config, tctx, msgs)
 
-        # Count truncated messages
-        truncated = [m for m in result if m.role in ("user", "assistant") and (m.content or "").startswith("[旧]")]
-        assert len(truncated) > 0, f"Expected some truncated messages, got {len(truncated)}"
+        # Old messages are REMOVED entirely — result should be much shorter
+        # Stage 0: 20 msgs → [システムnotice] + last_2_msgs = 3 msgs
+        assert len(result) < len(msgs), f"Expected fewer messages after truncation: {len(result)}"
 
-        # Most recent 2 messages should NOT be truncated (keep_recent_turns=1)
+        # Should contain the [システム:] notice
+        notices = [m for m in result if "[システム:" in (m.content or "")]
+        assert len(notices) == 1, f"Expected exactly 1 system notice, got {len(notices)}"
+
+        # Most recent 2 messages should be preserved intact (keep_recent_turns=1)
         last_two = result[-2:]
         for msg in last_two:
-            if msg.role in ("user", "assistant"):
-                assert not (msg.content or "").startswith("[旧]"), (
-                    f"Recent message should not be truncated: {msg.content[:50]}..."
+            if msg.role in ("user", "assistant") and msg.content:
+                assert "[システム:" not in msg.content, (
+                    f"Recent message should not be the notice: {msg.content[:50]}..."
                 )
 
     @pytest.mark.asyncio
@@ -315,6 +323,7 @@ class TestCompressStep:
 
         config = _make_chat_config(
             context_max_tokens=200,
+            context_keep_recent_turns=0,  # Disable Stage 0 to isolate Stage 2
             context_use_llm_summary=False,  # Disable Stage 3 to isolate Stage 2
         )
         ctx = _dummy_app_context()
@@ -385,6 +394,7 @@ class TestCompressStep:
             context_max_tokens=1,  # Always over budget
             context_compress_history=False,  # Skip history compression
             context_compress_system_prompt=True,
+            context_keep_recent_turns=0,  # Disable Stage 0 truncation
         )
         ctx = _dummy_app_context()
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=20))
@@ -405,6 +415,7 @@ class TestCompressStep:
             context_max_tokens=1,  # Always over budget
             context_compress_history=True,
             context_compress_system_prompt=True,
+            context_keep_recent_turns=0,  # Disable Stage 0 truncation to isolate Stage 2
             context_use_llm_summary=False,  # Disable Stage 3 to isolate Stage 2
         )
         ctx = _dummy_app_context()
@@ -453,7 +464,7 @@ class TestCompressStep:
                 assert "ツール実行" not in (msg.content or "")
 
     def test_truncate_old_messages_short_content(self):
-        """Messages with content <= 300 chars should not be truncated."""
+        """Old messages should be removed entirely, not content-truncated."""
         from nous.application.chat.pipeline.compress import CompressStep
 
         msgs = [
@@ -464,12 +475,13 @@ class TestCompressStep:
         ]
         # keep_recent_turns=1 → keep last 2 messages intact
         result = CompressStep._truncate_old_messages(msgs, keep_recent_turns=1)
-        # First 2 should not be truncated (content already short)
-        for msg in result[:2]:
-            if msg.role in ("user", "assistant"):
-                assert not (msg.content or "").startswith("[旧]"), (
-                    f"Short message should not be truncated: {msg.content}"
-                )
+        # Old messages are REMOVED: [システムnotice] + last_2_msgs = 3 total
+        assert len(result) == 3, f"Expected 3 messages (notice + 2 recent), got {len(result)}"
+        # First message is the system notice
+        assert "[システム:" in (result[0].content or "")
+        # Last 2 messages are preserved intact
+        assert result[1].content == "Another short"
+        assert result[2].content == "Another response"
 
     def test_truncate_old_messages_within_keep_count(self):
         """When total messages <= keep_recent_turns*2, no truncation."""
@@ -481,8 +493,10 @@ class TestCompressStep:
         ]
         result = CompressStep._truncate_old_messages(msgs, keep_recent_turns=5)
         assert len(result) == len(msgs)
-        for msg in result:
-            assert not (msg.content or "").startswith("[旧]")
+        assert result is msgs  # Same object reference = no modification
+        # Content should be unchanged
+        assert result[0].content == "Short"
+        assert result[1].content == "Response"
 
     @pytest.mark.asyncio
     async def test_stage2_under_budget_after_clear(self):
@@ -524,12 +538,9 @@ class TestCompressStep:
 
         result = await CompressStep().run(ctx, config, tctx, msgs)
         assert isinstance(result, list)
-        # Messages should NOT be truncated (stage 1 alone did the job)
-        for msg in result:
-            if msg.role in ("user", "assistant"):
-                assert not (msg.content or "").startswith("[旧]"), (
-                    "Messages should not be truncated after stage 1 alone"
-                )
+        # Messages should be preserved (stage 1 alone did the job)
+        # No [旧] or [システム:] check needed: keep_recent_turns=1, 2 msgs <= 2 → no truncation
+        assert len(result) == 2
 
     @pytest.mark.asyncio
     async def test_return_after_stage2_clear_only(self):
@@ -593,7 +604,7 @@ class TestCompressStep:
 
         config = _make_chat_config(
             context_max_tokens=200,
-            context_keep_recent_turns=1,
+            context_keep_recent_turns=0,  # Disable Stage 0 to test Stage 3
             api_key="sk-test",
             context_use_llm_summary=True,
         )
@@ -618,7 +629,7 @@ class TestCompressStep:
 
         config = _make_chat_config(
             context_max_tokens=200,
-            context_keep_recent_turns=1,
+            context_keep_recent_turns=0,  # Disable Stage 0 to test Stage 3
             api_key="sk-test",
             context_use_llm_summary=True,
         )
@@ -646,6 +657,7 @@ class TestCompressStep:
             context_max_tokens=100000,
             api_key="sk-test",
             context_use_llm_summary=True,
+            context_keep_recent_turns=0,  # Disable Stage 0 to test Stage 3 skip
         )
         ctx = _dummy_app_context()
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=2))

@@ -36,7 +36,7 @@ class CompressionConfig(BaseModel):
     @field_validator("context_keep_recent_turns")
     @classmethod
     def _clamp_keep_recent(cls, v: int) -> int:
-        return max(1, v)  # 上限撤廃
+        return max(0, v)  # 0 = truncation無効化
 
     @field_validator("memory_preload_count")
     @classmethod

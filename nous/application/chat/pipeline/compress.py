@@ -26,11 +26,11 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
 
     パイプライン位置: PromptBuildStep → CompressStep → InferenceStep
 
-    圧縮段階（軽い順）:
+    圧縮段階:
+    0. 常時メッセージ切り詰め (context_keep_recent_turns) ← 予算・force_compressとは独立して常時実行
     1. システムプロンプトの関連記憶セクションをトリム
     2. 古いツール結果をステータスサマリーに置換（成功/失敗/完了）
     3. LLMによる古い会話ターンの要約圧縮（予算超過時）— フルテキストで要約
-    4. 古い会話メッセージを切り詰め（予算超過が続く場合のみ）
     """
 
     async def run(
@@ -45,9 +45,24 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
         Returns:
             圧縮後のメッセージリスト（変更不要ならそのまま返す）
         """
+        # ──────────────────────────────────────────────────────────────
+        # Stage 0: 常時メッセージ切り詰め (context_keep_recent_turns)
+        # budget/force_compressとは独立して常時実行。
+        # 途中で有効にしても即座に古いメッセージをぶったぎる。
+        # keep_recent == 0 の場合はスキップ（全履歴保持）。
+        # ──────────────────────────────────────────────────────────────
+        keep_recent = getattr(config, "context_keep_recent_turns", 2)
+        if keep_recent > 0 and getattr(config, "context_compress_history", True):
+            messages = self._truncate_old_messages(session_messages, keep_recent)
+        else:
+            messages = session_messages
+
+        # ──────────────────────────────────────────────────────────────
+        # Token budget calculation
+        # ──────────────────────────────────────────────────────────────
         model = config.get_effective_model()
         counter = TokenCounter(model)
-        total = counter.count(turn_ctx.system_prompt) + counter.count_messages(session_messages, "")
+        total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
 
         # max_stored_messages 超過時は強制圧縮
         force_compress = len(session_messages) >= config.max_stored_messages
@@ -67,7 +82,7 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
                 budget,
                 total * 100 / budget if budget else 0,
             )
-            return session_messages
+            return messages
 
         logger.info(
             "CompressStep: %d/%d tokens (%.0f%%) — OVER budget, compressing...",
@@ -93,25 +108,20 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
             )
 
         # Re-check
-        total = counter.count(turn_ctx.system_prompt) + counter.count_messages(session_messages, "")
+        total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
         if not force_compress and total <= budget:
-            return session_messages
+            return messages
 
         # Stage 2: Clear old tool results
         if getattr(config, "context_compress_history", True):
-            messages = self._clear_old_tool_results(session_messages)
-        else:
-            messages = session_messages
+            messages = self._clear_old_tool_results(messages)
 
         # Re-check
         total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
         if not force_compress and total <= budget:
             return list(messages)
 
-        keep_recent = getattr(config, "context_keep_recent_turns", 2)
-
-        # Stage 3: LLM-based summary of old conversation turns (runs BEFORE truncation)
-        # Only runs when we're over budget and there's enough history worth summarizing
+        # Stage 3: LLM-based summary of old conversation turns
         if (
             (force_compress or total > budget)
             and getattr(config, "context_compress_history", True)
@@ -141,15 +151,10 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
                     )
             except Exception:
                 logger.warning(
-                    "CompressStep: Stage 3 — LLM summarization failed, proceeding to truncation",
+                    "CompressStep: Stage 3 — LLM summarization failed, proceeding",
                 )
 
-        # Stage 4: Always truncate when keep_recent > 0 (independent of token budget)
-        # When keep_recent == 0, skip truncation — fall back to token-budget-only behavior
-        if keep_recent > 0 and getattr(config, "context_compress_history", True):
-            messages = self._truncate_old_messages(list(messages), keep_recent)
-
-        # Re-check budget for logging/SSE notification
+        # Final budget check for logging/SSE notification
         total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
         if total <= budget:
             logger.info("CompressStep: after compression: %d tokens", total)
@@ -161,7 +166,6 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
             return list(messages)
 
         logger.info("CompressStep: after compression: %d tokens", total)
-        # Store compression info for SSE notification
         turn_ctx._compression_info = {
             "before_tokens": before_total,
             "after_tokens": total,
