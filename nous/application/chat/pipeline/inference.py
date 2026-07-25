@@ -88,6 +88,13 @@ class InferenceStep:
             # 各ループ反復で visible tools を再評価（search_tools で新発見を拾う）
             visible_tools = registry.get_visible_tools()
 
+            # タイムスタンプ注入（設定ON時のみ）— debug dumpより先に注入
+            if getattr(config, "show_message_timestamps", False):
+                for msg in messages:
+                    if msg.timestamp and msg.role in ("user", "assistant"):
+                        ts_str = msg.timestamp.strftime("%Y-%m-%d %H:%M")
+                        msg.content = f"[{ts_str}] {msg.content}"
+
             # Debug: capture the full prompt sent to LLM
             if getattr(config, "debug_mode", False):
                 _ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -107,13 +114,6 @@ class InferenceStep:
                         name = _t.get("function", {}).get("name", "?") if isinstance(_t, dict) else getattr(_t, "name", "?")
                         _f.write(f"  - {name}\n")
                 logger.info("Debug prompt saved: %s", _path)
-
-            # タイムスタンプ注入（設定ON時のみ）
-            if getattr(config, "show_message_timestamps", False):
-                for msg in messages:
-                    if msg.timestamp and msg.role in ("user", "assistant"):
-                        ts_str = msg.timestamp.strftime("%Y-%m-%d %H:%M")
-                        msg.content = f"[{ts_str}] {msg.content}"
 
             async for event in provider.stream(
                 messages=messages,
