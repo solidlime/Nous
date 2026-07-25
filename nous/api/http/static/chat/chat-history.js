@@ -214,6 +214,14 @@ function _appendSegmentsToBubble(msg, msgDiv) {
 // ------------------------------------------------------------------
 async function rollbackChat(fromId, shouldResend) {
   if (!S.persona) return;
+  // Resolve numeric index to UUID (streaming messages may not have msgId yet)
+  if (typeof fromId === "number") {
+    var c = document.getElementById("chat-messages");
+    if (c) {
+      var el = c.querySelector('.chat-msg[data-msg-index="' + fromId + '"]');
+      if (el && el.dataset.msgId) fromId = el.dataset.msgId;
+    }
+  }
   const sid = getChatSessionId();
 
   try {
@@ -317,6 +325,14 @@ async function rollbackChat(fromId, shouldResend) {
 // ------------------------------------------------------------------
 async function editChatMessage(msgId) {
   if (!S.persona) return;
+  // Resolve numeric index to UUID (streaming messages may not have msgId yet)
+  if (typeof msgId === "number") {
+    var c = document.getElementById("chat-messages");
+    if (c) {
+      var el = c.querySelector('.chat-msg[data-msg-index="' + msgId + '"]');
+      if (el && el.dataset.msgId) msgId = el.dataset.msgId;
+    }
+  }
   let msgDiv;
   if (typeof msgId === "number") {
     msgDiv = document.querySelector('.chat-msg.user[data-msg-index="' + msgId + '"]');
@@ -645,6 +661,14 @@ function exportChatHistory() {
 // ------------------------------------------------------------------
 async function deleteChatMessage(msgId) {
   if (!S.persona) return;
+  // Resolve numeric index to UUID (streaming messages may not have msgId yet)
+  if (typeof msgId === "number") {
+    var c = document.getElementById("chat-messages");
+    if (c) {
+      var el = c.querySelector('.chat-msg[data-msg-index="' + msgId + '"]');
+      if (el && el.dataset.msgId) msgId = el.dataset.msgId;
+    }
+  }
 
   const container = document.getElementById("chat-messages");
   const allMsgs = container.querySelectorAll(".chat-msg");
