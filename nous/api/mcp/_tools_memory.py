@@ -53,6 +53,7 @@ async def _tool_memory_create(
         body_state=body_snap,
         state_snapped_at=snapped_at,
         skip_duplicate_check=skip_duplicate_check,
+        session_id=getattr(ctx, "session_id", None),
     )
     if result.is_ok:
         await ctx.event_bus.publish(
