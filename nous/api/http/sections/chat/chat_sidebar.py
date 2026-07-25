@@ -3,9 +3,9 @@
 import sys
 
 
-def render_chat_sidebar() -> str:
-    """Return the settings sidebar HTML with all configuration panels."""
-    return f"""
+def _render_sidebar_header() -> str:
+    """Sidebar opening div, close button, scroll container, sticky title."""
+    return """
                 <!-- Settings sidebar -->
                 <div id="settings-panel" class="glass" style="margin:0; border-radius:0; border-left:1px solid var(--glass-border); padding:0;">
                     <!-- Mobile close button -->
@@ -14,7 +14,12 @@ def render_chat_sidebar() -> str:
                         <div style="position:sticky;top:0;z-index:10;background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);font-size:0.9rem;font-weight:600;color:var(--text-primary);padding:12px 0 8px;margin:0 -16px 8px;border-bottom:1px solid var(--glass-border);display:flex;align-items:center;gap:8px;">
                             <span style="font-size:1.1rem;margin-left:16px;"><i data-lucide="settings"></i></span>
                             <span>チャット設定</span>
-                        </div>
+                        </div>"""
+
+
+def _render_core_section() -> str:
+    """Provider, model, API key, temperature settings."""
+    return """
                         <!-- Provider / Model / API -->
                         <details data-category="core" open>
                             <summary><i data-lucide="wrench"></i> 基本設定 <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'core')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
@@ -83,7 +88,12 @@ def render_chat_sidebar() -> str:
                                     <input type="number" id="chat-max-tokens" class="chat-field-input" min="1" max="131072" value="8192" />
                                 </div>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_context_section() -> str:
+    """Context display, system prompt, compression, parallel tools."""
+    return """
                         <!-- Context & System Prompt -->
                         <details data-category="context">
                             <summary><i data-lucide="message-circle"></i> コンテキスト <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'context')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
@@ -158,7 +168,12 @@ def render_chat_sidebar() -> str:
                                   </div>
                                 </details>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_memory_section() -> str:
+    """Memory extraction settings — auto-extract, models, memory tools."""
+    return """
                         <!-- Memory extraction -->
                         <details data-category="memory">
                             <summary><i data-lucide="brain"></i> 記憶・抽出 <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'memory')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
@@ -183,7 +198,12 @@ def render_chat_sidebar() -> str:
                                     <label for="chat-enable-memory-tools" class="chat-field-label" style="margin:0;cursor:pointer;">LLMに組み込みメモリツールを渡す</label>
                                 </div>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_mcp_section(sys_executable: str) -> str:
+    """MCP server config — server list, JSON editor, tool result limit."""
+    return f"""
                         <!-- MCP Servers -->
                         <details data-category="tools">
                             <summary><i data-lucide="battery-charging"></i> MCPサーバー <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'tools')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
@@ -196,7 +216,7 @@ def render_chat_sidebar() -> str:
                                     </div>
                                     <textarea id="chat-mcp-json" class="chat-field-input" rows="6"
                                         style="resize:vertical;min-height:100px;font-family:monospace;font-size:0.73rem;line-height:1.45;"
-                                        placeholder='[{{&#10;  "name": "memory-mcp",&#10;  "command": "{sys.executable}",&#10;  "args": ["-m", "nous.main"],&#10;  "env": {{}}&#10;}}]'></textarea>
+                                        placeholder='[{{&#10;  "name": "memory-mcp",&#10;  "command": "{sys_executable}",&#10;  "args": ["-m", "nous.main"],&#10;  "env": {{}}&#10;}}]'></textarea>
                                     <div id="chat-mcp-json-error" style="font-size:0.72rem;color:var(--accent-red);margin-top:3px;display:none;"></div>
                                 </div>
                                 <div>
@@ -209,14 +229,24 @@ def render_chat_sidebar() -> str:
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_skills_section() -> str:
+    """Skills list container."""
+    return """
                         <!-- Skills -->
                         <details data-category="skills">
                             <summary><i data-lucide="target"></i> Skills <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'skills')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body" id="chat-skills-section">
                                 <div id="chat-skills-list" style="display:flex;flex-direction:column;gap:4px;"></div>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_reflection_section() -> str:
+    """Reflection toggle, threshold, interval, session summary."""
+    return """
                         <!-- Reflection -->
                         <details data-category="reflection">
                             <summary><i data-lucide="sparkles"></i> リフレクション <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'reflection')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
@@ -244,7 +274,12 @@ def render_chat_sidebar() -> str:
                                     <label for="chat-session-summarize" class="chat-field-label" style="margin:0;cursor:pointer;">セッション要約</label>
                                 </div>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_mental_section() -> str:
+    """Mental model extraction toggle and min samples."""
+    return """
                         <!-- Mental Model -->
                         <details data-category="mental">
                             <summary><i data-lucide="puzzle"></i> メンタルモデル <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'mental')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
@@ -260,7 +295,12 @@ def render_chat_sidebar() -> str:
                                         min="1" max="20" value="3" />
                                 </div>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_weights_section() -> str:
+    """Retrieval weight sliders — recency, importance, relevance, RRF k."""
+    return """
                         <!-- Retrieval weights -->
                         <details data-category="weights">
                             <summary><i data-lucide="scale"></i> 検索重み <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'weights')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
@@ -302,7 +342,12 @@ def render_chat_sidebar() -> str:
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_image_section() -> str:
+    """Image generation settings — ComfyUI, checkpoint, LoRA, resolution."""
+    return """
                         <!-- 画像生成 -->
                         <details data-category="image" id="chat-image-section">
                             <summary><i data-lucide="image"></i> 画像生成 <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'image')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
@@ -428,7 +473,12 @@ def render_chat_sidebar() -> str:
                                     </div>
                                 </div>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_voice_section() -> str:
+    """Voice/TTS settings — Irodori server, voice model, advanced params."""
+    return """
                         <!-- Voice / TTS (TE04) -->
                         <details data-category="voice" id="chat-voice-section">
                             <summary><i data-lucide="volume-2"></i> 音声 <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'voice')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
@@ -568,7 +618,12 @@ def render_chat_sidebar() -> str:
                                     </div>
                                 </div>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_debug_section() -> str:
+    """Debug mode toggle."""
+    return """
                         <!-- Debug & Other -->
                         <details data-category="other">
                             <summary><i data-lucide="bug"></i> デバッグ・その他 <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'other')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
@@ -579,7 +634,12 @@ def render_chat_sidebar() -> str:
                                     <label for="chat-debug-mode" class="chat-field-label" style="margin:0;cursor:pointer;"><i data-lucide="bug"></i> デバッグモード</label>
                                 </div>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_auto_capture_section() -> str:
+    """Auto-capture settings — interval, max memories."""
+    return """
                         <!-- Auto-capture (moved from Settings) -->
                         <details data-category="auto_capture">
                             <summary><i data-lucide="camera"></i> 自動キャプチャ</summary>
@@ -598,7 +658,12 @@ def render_chat_sidebar() -> str:
                                     <input type="number" id="chat-auto-capture-max-memories" class="chat-field-input" min="1" max="50" step="1" value="10" />
                                 </div>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_memory_enrichment_section() -> str:
+    """Memory enrichment settings — auto-run, LLM config, granularity."""
+    return """
                         <!-- Memory enrichment (moved from Settings) -->
                         <details data-category="memory_enrichment">
                             <summary><i data-lucide="layers"></i> 記憶エンリッチメント</summary>
@@ -650,7 +715,12 @@ def render_chat_sidebar() -> str:
                                     </select>
                                 </div>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_forgetting_section() -> str:
+    """Forgetting mechanism — threshold, decay, strength sliders."""
+    return """
                         <!-- Forgetting (moved from Settings) -->
                         <details data-category="forgetting">
                             <summary><i data-lucide="eraser"></i> 忘却機構</summary>
@@ -696,7 +766,12 @@ def render_chat_sidebar() -> str:
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_memorag_section() -> str:
+    """MemoRAG settings — chunk size, overlap, top-k, similarity threshold."""
+    return """
                         <!-- MemoRAG (moved from Settings) -->
                         <details data-category="memorag">
                             <summary><i data-lucide="search"></i> MemoRAG</summary>
@@ -732,7 +807,12 @@ def render_chat_sidebar() -> str:
                                     <input type="number" id="chat-memorag-snapshot-interval-hours" class="chat-field-input" min="1" step="1" value="24" />
                                 </div>
                             </div>
-                        </details>
+                        </details>"""
+
+
+def _render_sidebar_footer() -> str:
+    """Sticky footer buttons and settings-panel closing div."""
+    return """
                     </div>
                     <!-- Sticky footer buttons -->
                     <div class="settings-footer">
@@ -741,3 +821,26 @@ def render_chat_sidebar() -> str:
                         <div id="chat-config-status" style="font-size:0.75rem; text-align:center; min-height:16px;"></div>
                     </div>
                 </div>"""
+
+
+def render_chat_sidebar() -> str:
+    """Return the settings sidebar HTML with all configuration panels."""
+    return "".join([
+        _render_sidebar_header(),
+        _render_core_section(),
+        _render_context_section(),
+        _render_memory_section(),
+        _render_mcp_section(sys.executable),
+        _render_skills_section(),
+        _render_reflection_section(),
+        _render_mental_section(),
+        _render_weights_section(),
+        _render_image_section(),
+        _render_voice_section(),
+        _render_debug_section(),
+        _render_auto_capture_section(),
+        _render_memory_enrichment_section(),
+        _render_forgetting_section(),
+        _render_memorag_section(),
+        _render_sidebar_footer(),
+    ])
