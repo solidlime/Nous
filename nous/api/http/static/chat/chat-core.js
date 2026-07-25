@@ -254,13 +254,13 @@ function chatInputKeydownHandler(e) {
     hideCommandPopup();
     // Slash commands
     if (val.startsWith("/memory ")) {
-      handleSlashCommand("memory_create", {
+      N.Chat.commands.handle("memory_create", {
         content: val.slice(8).trim(),
         importance: 0.7,
         tags: [],
       });
     } else if (val.startsWith("/goal ")) {
-      handleSlashCommand("goal_manage", {
+      N.Chat.commands.handle("goal_manage", {
         operation: "create",
         content: val.slice(6).trim(),
         importance: 0.8,
@@ -268,9 +268,9 @@ function chatInputKeydownHandler(e) {
     } else if (val === "/help" || val.startsWith("/help ")) {
       input.value = "";
       input.style.height = "auto";
-      showHelpCommand();
+      N.Chat.commands.show();
     } else {
-      chatSend();
+      N.Chat.send();
     }
   }
   if (e.key === "Escape") {
@@ -285,7 +285,7 @@ function chatInputInputHandler() {
   input.style.height = Math.min(input.scrollHeight, 160) + "px";
   // Show command popup when typing /
   if (input.value.startsWith("/")) {
-    showCommandPopup(input);
+    N.Chat.commands.popup(input);
   } else {
     hideCommandPopup();
   }
