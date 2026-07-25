@@ -288,7 +288,7 @@ _TIME_OF_DAY: list[tuple[int, str]] = [
 ]
 
 
-def _build_time_context(state, decay_note: str = "") -> str:
+def _build_time_context(state) -> str:
     """Build <TIME_CONTEXT> block for injection at the TOP of system prompt."""
     from zoneinfo import ZoneInfo
 
@@ -337,10 +337,6 @@ def _build_time_context(state, decay_note: str = "") -> str:
                     lines.append(instruction)
                 # 放置を認識させる行動指示（事実フレーム、感情指定なし）
                 lines.append("放置されたことを考慮した応答をせよ。")
-
-    # 減衰通知（主観的表現）
-    if decay_note:
-        lines.append(f"Emotion update: {decay_note}")
 
     lines.append("</time>")
     return "\n".join(lines)
