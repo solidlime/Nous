@@ -35,7 +35,7 @@ async def _do_get_chat_config(persona: str, ctx) -> dict:
     repo = ChatConfigFileRepository(get_settings().data_root)
     try:
         config = repo.get(persona)
-    except Exception:
+    except Exception:  # 設定読み込み失敗時のフォールバック
         logger.warning("get_chat_config: repo.get(%r) failed, returning defaults", persona)
         config = ChatConfig(persona=persona)
     return config.to_safe_dict()
@@ -87,7 +87,8 @@ async def _do_list_mcp_tools(persona: str, ctx) -> dict:
                         "server": server_name,
                     }
                 )
-    except Exception as e:
+    except Exception as e:  # MCPプール接続失敗は非致命的
+        logger.warning("get_chat_tools: tool retrieval failed: %s", e)
         errors_out.append(str(e))
 
     return {"tools": tools_out, "errors": errors_out}
@@ -122,7 +123,7 @@ async def _do_get_commitments(persona: str, ctx) -> dict:
         goal_result = ctx.memory_service.get_by_tags(["goal", "active"])
         if goal_result.is_ok and goal_result.value:
             goals = [{"content": m.content, "key": m.key} for m in goal_result.value]
-    except Exception as e:
+    except Exception as e:  # 目標/洞察の取得失敗は非致命的
         logger.warning("get_chat_commitments: goals failed: %s", e)
 
     try:
@@ -134,7 +135,7 @@ async def _do_get_commitments(persona: str, ctx) -> dict:
                 reverse=True,
             )
             insights = [m.content for m in sorted_refs[:5]]
-    except Exception as e:
+    except Exception as e:  # 目標/洞察の取得失敗は非致命的
         logger.warning("get_chat_commitments: insights failed: %s", e)
 
     return {"goals": goals, "insights": insights}
@@ -287,7 +288,7 @@ async def _do_rollback_chat_session(persona: str, ctx, session_id: str, body: di
         )
     except Exception:
         logger.exception("rollback_chat_session: SSE publish failed")
-        pass
+        # 公開失敗は非致命的、ロールバックは継続
 
     return {
         "active_leaf_id": from_id,
@@ -404,14 +405,14 @@ async def save_chat_config(request: Request) -> JSONResponse:
         return JSONResponse({"error": "Persona not found"}, status_code=404)
     try:
         body = await request.json()
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         logger.exception("save_chat_config: invalid JSON body")
         return JSONResponse({"error": "Invalid JSON"}, status_code=400)
     try:
         result = await _do_save_chat_config(persona, ctx, body)
-    except Exception as e:
+    except Exception:  # 最終防衛線: Pydantic/domain validation
         logger.exception("save_chat_config: config validation failed")
-        return JSONResponse({"error": f"Invalid config: {e}"}, status_code=400)
+        return JSONResponse({"error": "Invalid config"}, status_code=400)
     return JSONResponse(result)
 
 
@@ -435,7 +436,7 @@ async def chat_endpoint(request: Request) -> StreamingResponse:
 
     try:
         body = await request.json()
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         logger.exception("chat_endpoint: invalid JSON body")
 
         async def bad_request():
@@ -512,7 +513,7 @@ async def update_chat_message(request: Request) -> JSONResponse:
 
     try:
         body = await request.json()
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         logger.exception("update_chat_message: invalid JSON body")
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
@@ -526,9 +527,9 @@ async def update_chat_message(request: Request) -> JSONResponse:
 
     try:
         result = await _do_update_chat_message(persona, ctx, session_id, msg_id, body)
-    except Exception as e:
+    except Exception as e:  # 最終防衛線
         logger.exception("update_chat_message failed: %s", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
     if result.get("error") == "conflict":
         return JSONResponse(result, status_code=409)
@@ -552,7 +553,7 @@ async def rollback_chat_session(request: Request) -> JSONResponse:
 
     try:
         body = await request.json()
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         logger.exception("rollback_chat_session: invalid JSON body")
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
@@ -566,9 +567,9 @@ async def rollback_chat_session(request: Request) -> JSONResponse:
 
     try:
         result = await _do_rollback_chat_session(persona, ctx, session_id, body)
-    except Exception as e:
+    except Exception as e:  # 最終防衛線
         logger.exception("rollback_chat_session failed: %s", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
     if result.get("error") == "conflict":
         return JSONResponse(result, status_code=409)
@@ -653,9 +654,9 @@ async def execute_chat_tool(request: Request) -> JSONResponse:
     try:
         result = await _do_execute_chat_tool(persona, ctx, body)
         return JSONResponse(result)
-    except Exception as e:
+    except Exception:  # 最終防衛線
         logger.exception("execute_chat_tool: tool execution failed")
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+        return JSONResponse({"status": "error", "message": "Tool execution failed"}, status_code=500)
 
 
 # ── route registration (薄い登録層) ─────────────────────────────────
