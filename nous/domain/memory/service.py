@@ -46,6 +46,7 @@ class MemoryService:
         contradiction_detector: ContradictionDetector | None = None,
         strength_repo: MemoryStrengthRepository | None = None,
         aux_repo: MemoryAuxiliaryRepository | None = None,
+        session_event_repo: object | None = None,
     ) -> None:
         self._repo = repo
         # Mutable wrapper for late search_engine injection (see use_cases.py:362)
@@ -56,13 +57,17 @@ class MemoryService:
         self._contradiction_detector = contradiction_detector
         self._strength_repo = strength_repo
         self._aux_repo = aux_repo
+        self._session_event_repo = session_event_repo
 
         # Sub-services
         self._write_service = MemoryWriteService(repo, self._search_engine_ref)
         self._enrich_service = MemoryEnrichService(
             enricher, entity_service, repo
         )
-        self._link_service = MemoryLinkService(link_repo, self._search_engine_ref)
+        self._link_service = MemoryLinkService(
+            link_repo, self._search_engine_ref,
+            session_event_repo=session_event_repo,
+        )
         self._evolution_service = MemoryEvolutionService(
             self._search_engine_ref, repo, enricher, link_repo,
             contradiction_detector,
@@ -101,6 +106,7 @@ class MemoryService:
         source_type: str = "user_stated",
         confidence: float = 1.0,
         skip_duplicate_check: bool = False,
+        session_id: str | None = None,
         **extra_fields: object,
     ) -> Result[Memory, DomainError]:
         """Create and persist a new memory entry.
@@ -113,6 +119,9 @@ class MemoryService:
         the caller should ensure persona-scoped isolation at the DB layer.
 
         skip_duplicate_check: If True, skips semantic + exact duplicate detection.
+
+        session_id: If provided, enables session-scoped Hebbian linking via
+        the session_event table.
         """
         if not content or not content.strip():
             return Failure(MemoryValidationError("Content must not be empty"))
@@ -186,7 +195,7 @@ class MemoryService:
         # ── 9. Hebbian co-activation links ──
         if self._link_repo is not None:
             with contextlib.suppress(Exception):
-                self._link_service._create_hebbian_links(memory)
+                self._link_service._create_hebbian_links(memory, session_id)
 
         # ── 10. Background evolution ──
         asyncio.create_task(
