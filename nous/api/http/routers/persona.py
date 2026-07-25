@@ -15,7 +15,7 @@ from nous.api.http.deps import (
     _safe_get_context,
 )
 from nous.application.use_cases import AppContextRegistry
-from nous.config.settings import Settings
+from nous.config.settings import Settings, get_settings
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -86,6 +86,161 @@ async def _do_dashboard_page(persona: str | None = None) -> str:
     return render_dashboard(persona)
 
 
+async def _do_dashboard_data(persona: str, ctx) -> dict:
+    """Return dashboard data dict for persona."""
+    stats_result = ctx.memory_service.get_stats()
+    stats = stats_result.value if stats_result.is_ok else {}
+
+    context_result = ctx.persona_service.get_context(persona)
+    context = asdict(context_result.value) if context_result.is_ok else {}
+    for _dt_key in ("last_conversation_time", "last_state_update"):
+        if _dt_key in context and context[_dt_key] is not None:
+            context[_dt_key] = context[_dt_key].isoformat()
+
+    for _f in (
+        "environment",
+        "fatigue",
+        "warmth",
+        "arousal",
+        "heart_rate",
+        "pain",
+    ):
+        stats[_f] = context.get(_f)
+
+    recent_result = ctx.memory_service.get_recent(limit=5)
+    recent = [_memory_to_dict(m) for m in recent_result.value] if recent_result.is_ok else []
+
+    blocks_result = ctx.memory_service.list_blocks()
+    blocks = blocks_result.value if blocks_result.is_ok else []
+
+    equip_result = ctx.equipment_service.get_equipment()
+    equipment = equip_result.value if equip_result.is_ok else {}
+
+    items_result = ctx.equipment_service.search_items()
+    items_raw = items_result.value if items_result.is_ok else []
+    items = []
+    for it in items_raw:
+        d = asdict(it)
+        for k in ("created_at", "updated_at"):
+            if k in d and d[k] is not None:
+                d[k] = d[k].isoformat()
+        items.append(d)
+
+    strength_result = ctx.memory_repo.get_all_strengths()
+    strengths_raw = strength_result.value if strength_result.is_ok else []
+    strength_values = [s.strength for s in strengths_raw]
+    strengths_summary = {
+        "total": len(strength_values),
+        "avg": round(sum(strength_values) / len(strength_values), 3) if strength_values else None,
+        "min": round(min(strength_values), 3) if strength_values else None,
+        "max": round(max(strength_values), 3) if strength_values else None,
+    }
+
+    # Helper: sort goals by status priority (active first), then by recency
+    _status_priority = {"active": 0, "fulfilled": 1, "achieved": 1, "cancelled": 2}
+    _max_commitments = 30
+
+    goals_result = ctx.memory_repo.get_by_tags(["goal"])
+    _goals_raw = goals_result.value if goals_result.is_ok else []
+    _goals_sorted = sorted(
+        _goals_raw,
+        key=lambda m: (
+            _status_priority.get(
+                next((t for t in (m.tags or []) if t in ("active", "achieved", "cancelled")), "active"),
+                99,
+            ),
+            -(m.created_at.timestamp() if m.created_at else 0),
+        ),
+    )
+    goals = [
+        {
+            "content": m.content,
+            "status": next((t for t in (m.tags or []) if t in ("active", "achieved", "cancelled")), "active"),
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+            "key": m.key,
+        }
+        for m in _goals_sorted[:_max_commitments]
+    ]
+
+    try:
+        total_count = stats.get("total_count", 0)
+        if total_count > 0:
+            linked_row = ctx.entity_repo._db.execute(
+                "SELECT COUNT(DISTINCT memory_key) AS cnt FROM memory_entities WHERE memory_key != ''"
+            ).fetchone()
+            linked_count = linked_row["cnt"] if linked_row else 0
+            stats["linked_ratio"] = min(linked_count / total_count, 1.0)
+    except Exception:
+        logger.exception("dashboard_data: linked_ratio calculation failed")
+        pass
+
+    # Relationship highlights from memory tags
+    rel_highlights: list[dict] = []
+    try:
+        rel_result = ctx.memory_repo.find_relationship_highlights(limit=10)
+        if rel_result.is_ok and rel_result.value:
+            rel_highlights = [
+                {
+                    "content": m.content,
+                    "key": m.key,
+                    "importance": m.importance,
+                    "tags": m.tags or [],
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                }
+                for m in rel_result.value
+            ]
+    except Exception:
+        logger.exception("dashboard_data: relationship highlights failed")
+        pass
+
+    # State memories (speech/physical/mental) -- newest per tag for WebUI
+    state_memories: dict[str, dict] = {}
+    for tag in ["physical_state", "mental_state"]:
+        try:
+            mems_result = ctx.memory_service.get_by_tags([tag], include_consumed=True)
+            if mems_result.is_ok and mems_result.value:
+                latest = max(mems_result.value, key=lambda m: m.created_at or datetime.min)
+                prefix = f"{tag}: "
+                content = latest.content
+                if content.startswith(prefix):
+                    content = content[len(prefix) :]
+                state_memories[tag] = {
+                    "content": content,
+                    "created_at": latest.created_at.isoformat() if latest.created_at else None,
+                }
+        except Exception:
+            logger.exception("dashboard_data: state memories failed")
+            pass
+
+    # ── Latest self-portrait image ──
+    latest_self_portrait: str | None = None
+    try:
+        images_dir = Path(get_settings().data_root) / "persona" / persona / "images"
+        if images_dir.is_dir():
+            self_files = sorted(images_dir.glob("self_*.png"))
+            if self_files:
+                latest = self_files[-1]  # sorted alphabetically = chronological
+                latest_self_portrait = f"/api/chat/{persona}/persona/images/{latest.name}"
+    except Exception:
+        logger.exception("dashboard_data: self portrait lookup failed")
+        pass
+
+    return {
+        "persona": persona,
+        "stats": stats,
+        "context": context,
+        "recent": recent,
+        "blocks": blocks,
+        "equipment": equipment,
+        "items": items,
+        "strengths": strengths_summary,
+        "goals": goals,
+        "relationship_highlights": rel_highlights,
+        "state_memories": state_memories,
+        "latest_self_portrait": latest_self_portrait,
+    }
+
+
 # ── HTTP adapter layer — 元の関数名を維持 ───────────────────────────────
 
 
@@ -110,178 +265,24 @@ async def dashboard_page_persona(request: Request) -> HTMLResponse:
     return HTMLResponse(await _do_dashboard_page(persona))
 
 
+async def dashboard_data(request: Request) -> JSONResponse:
+    """GET /api/dashboard/{persona} — dashboard data JSON."""
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
+    try:
+        return JSONResponse(await _do_dashboard_data(persona, ctx))
+    except Exception as exc:
+        logger.exception("Unexpected error: %s", exc)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
 def register_persona_routes(mcp) -> None:
     mcp.custom_route("/health", methods=["GET"])(health)
     mcp.custom_route("/api/personas", methods=["GET"])(list_personas)
     mcp.custom_route("/", methods=["GET"])(dashboard_page)
     mcp.custom_route("/dashboard/{persona}", methods=["GET"])(dashboard_page_persona)
-
-    @mcp.custom_route("/api/dashboard/{persona}", methods=["GET"])
-    async def dashboard_data(request: Request) -> JSONResponse:
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if ctx is None:
-            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
-        try:
-            stats_result = ctx.memory_service.get_stats()
-            stats = stats_result.value if stats_result.is_ok else {}
-
-            context_result = ctx.persona_service.get_context(persona)
-            context = asdict(context_result.value) if context_result.is_ok else {}
-            for _dt_key in ("last_conversation_time", "last_state_update"):
-                if _dt_key in context and context[_dt_key] is not None:
-                    context[_dt_key] = context[_dt_key].isoformat()
-
-            for _f in (
-                "environment",
-                "fatigue",
-                "warmth",
-                "arousal",
-                "heart_rate",
-                "pain",
-            ):
-                stats[_f] = context.get(_f)
-
-            recent_result = ctx.memory_service.get_recent(limit=5)
-            recent = [_memory_to_dict(m) for m in recent_result.value] if recent_result.is_ok else []
-
-            blocks_result = ctx.memory_service.list_blocks()
-            blocks = blocks_result.value if blocks_result.is_ok else []
-
-            equip_result = ctx.equipment_service.get_equipment()
-            equipment = equip_result.value if equip_result.is_ok else {}
-
-            items_result = ctx.equipment_service.search_items()
-            items_raw = items_result.value if items_result.is_ok else []
-            items = []
-            for it in items_raw:
-                d = asdict(it)
-                for k in ("created_at", "updated_at"):
-                    if k in d and d[k] is not None:
-                        d[k] = d[k].isoformat()
-                items.append(d)
-
-            strength_result = ctx.memory_repo.get_all_strengths()
-            strengths_raw = strength_result.value if strength_result.is_ok else []
-            strength_values = [s.strength for s in strengths_raw]
-            strengths_summary = {
-                "total": len(strength_values),
-                "avg": round(sum(strength_values) / len(strength_values), 3) if strength_values else None,
-                "min": round(min(strength_values), 3) if strength_values else None,
-                "max": round(max(strength_values), 3) if strength_values else None,
-            }
-
-            # Helper: sort goals by status priority (active first), then by recency
-            _status_priority = {"active": 0, "fulfilled": 1, "achieved": 1, "cancelled": 2}
-            _max_commitments = 30
-
-            goals_result = ctx.memory_repo.get_by_tags(["goal"])
-            _goals_raw = goals_result.value if goals_result.is_ok else []
-            _goals_sorted = sorted(
-                _goals_raw,
-                key=lambda m: (
-                    _status_priority.get(
-                        next((t for t in (m.tags or []) if t in ("active", "achieved", "cancelled")), "active"),
-                        99,
-                    ),
-                    -(m.created_at.timestamp() if m.created_at else 0),
-                ),
-            )
-            goals = [
-                {
-                    "content": m.content,
-                    "status": next((t for t in (m.tags or []) if t in ("active", "achieved", "cancelled")), "active"),
-                    "created_at": m.created_at.isoformat() if m.created_at else None,
-                    "key": m.key,
-                }
-                for m in _goals_sorted[:_max_commitments]
-            ]
-
-            try:
-                total_count = stats.get("total_count", 0)
-                if total_count > 0:
-                    linked_row = ctx.entity_repo._db.execute(
-                        "SELECT COUNT(DISTINCT memory_key) AS cnt FROM memory_entities WHERE memory_key != ''"
-                    ).fetchone()
-                    linked_count = linked_row["cnt"] if linked_row else 0
-                    stats["linked_ratio"] = min(linked_count / total_count, 1.0)
-            except Exception:
-                logger.exception("dashboard_data: linked_ratio calculation failed")
-                pass
-
-            # Relationship highlights from memory tags
-            rel_highlights: list[dict] = []
-            try:
-                rel_result = ctx.memory_repo.find_relationship_highlights(limit=10)
-                if rel_result.is_ok and rel_result.value:
-                    rel_highlights = [
-                        {
-                            "content": m.content,
-                            "key": m.key,
-                            "importance": m.importance,
-                            "tags": m.tags or [],
-                            "created_at": m.created_at.isoformat() if m.created_at else None,
-                        }
-                        for m in rel_result.value
-                    ]
-            except Exception:
-                logger.exception("dashboard_data: relationship highlights failed")
-                pass
-
-            # State memories (speech/physical/mental) -- newest per tag for WebUI
-            state_memories: dict[str, dict] = {}
-            for tag in ["physical_state", "mental_state"]:
-                try:
-                    mems_result = ctx.memory_service.get_by_tags([tag], include_consumed=True)
-                    if mems_result.is_ok and mems_result.value:
-                        latest = max(mems_result.value, key=lambda m: m.created_at or datetime.min)
-                        prefix = f"{tag}: "
-                        content = latest.content
-                        if content.startswith(prefix):
-                            content = content[len(prefix) :]
-                        state_memories[tag] = {
-                            "content": content,
-                            "created_at": latest.created_at.isoformat() if latest.created_at else None,
-                        }
-                except Exception:
-                    logger.exception("dashboard_data: state memories failed")
-                    pass
-
-            # ── Latest self-portrait image ──
-            latest_self_portrait: str | None = None
-            try:
-                from pathlib import Path
-
-                from nous.config.settings import get_settings
-                images_dir = Path(get_settings().data_root) / "persona" / persona / "images"
-                if images_dir.is_dir():
-                    self_files = sorted(images_dir.glob("self_*.png"))
-                    if self_files:
-                        latest = self_files[-1]  # sorted alphabetically = chronological
-                        latest_self_portrait = f"/api/chat/{persona}/persona/images/{latest.name}"
-            except Exception:
-                logger.exception("dashboard_data: self portrait lookup failed")
-                pass
-
-            return JSONResponse(
-                {
-                    "persona": persona,
-                    "stats": stats,
-                    "context": context,
-                    "recent": recent,
-                    "blocks": blocks,
-                    "equipment": equipment,
-                    "items": items,
-                    "strengths": strengths_summary,
-                    "goals": goals,
-                    "relationship_highlights": rel_highlights,
-                    "state_memories": state_memories,
-                    "latest_self_portrait": latest_self_portrait,
-                }
-            )
-        except Exception as exc:
-            logger.exception("Unexpected error: %s", exc)
-            return JSONResponse({"error": "Internal server error"}, status_code=500)
+    mcp.custom_route("/api/dashboard/{persona}", methods=["GET"])(dashboard_data)
 
     @mcp.custom_route("/api/import-conversation/{persona}", methods=["POST"])
     async def import_conversation(request: Request) -> JSONResponse:
