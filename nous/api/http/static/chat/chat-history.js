@@ -222,6 +222,11 @@ async function rollbackChat(fromId, shouldResend) {
       if (el && el.dataset.msgId) fromId = el.dataset.msgId;
     }
   }
+  // 応答処理中でmsgIdが空文字列のままの場合 → 操作不能
+  if (typeof fromId === "number") {
+    toast("応答処理中のため操作できません。しばらくお待ちください。", "warning");
+    return;
+  }
   const sid = getChatSessionId();
 
   try {
@@ -332,6 +337,11 @@ async function editChatMessage(msgId) {
       var el = c.querySelector('.chat-msg[data-msg-index="' + msgId + '"]');
       if (el && el.dataset.msgId) msgId = el.dataset.msgId;
     }
+  }
+  // 応答処理中でmsgIdが空文字列のままの場合 → 操作不能
+  if (typeof msgId === "number") {
+    toast("応答処理中のため操作できません。しばらくお待ちください。", "warning");
+    return;
   }
   let msgDiv;
   if (typeof msgId === "number") {
@@ -668,6 +678,11 @@ async function deleteChatMessage(msgId) {
       var el = c.querySelector('.chat-msg[data-msg-index="' + msgId + '"]');
       if (el && el.dataset.msgId) msgId = el.dataset.msgId;
     }
+  }
+  // 応答処理中でmsgIdが空文字列のままの場合 → 操作不能
+  if (typeof msgId === "number") {
+    toast("応答処理中のため操作できません。しばらくお待ちください。", "warning");
+    return;
   }
 
   const container = document.getElementById("chat-messages");
