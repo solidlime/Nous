@@ -66,7 +66,7 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
     ):
         stats[_f] = context.get(_f)
 
-    recent_result = ctx.memory_service.get_recent(limit=5)
+    recent_result = ctx.memory_service.get_recent(limit=50)
     recent = [_memory_to_dict(m) for m in recent_result.value] if recent_result.is_ok else []
 
     blocks_result = ctx.memory_service.list_blocks()
