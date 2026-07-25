@@ -436,6 +436,8 @@ async function loadOverview() {
                 data: { labels: allTags.map(t=>t[0]), datasets: [{ data: allTags.map(t=>t[1]), backgroundColor: N.Core.CHART_COLORS.slice(0, allTags.length), borderWidth: 0 }] },
                 options: { ...N.Components.chart.defaults(), cutout: '60%' }
             });
+        } else if (tgCtx) {
+            tgCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-muted);font-size:0.85rem;">タグがありません</div>';
         }
         if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
