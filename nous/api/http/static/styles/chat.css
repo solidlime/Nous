@@ -1227,7 +1227,7 @@ input[type="range"].chat-field-input:focus {
   border-radius: 50%;
   background: rgba(0, 122, 255, 0.15);
   color: var(--accent-blue);
-  cursor: help;
+  cursor: pointer;
   margin-left: auto;
   transition: all var(--duration-fast) var(--ease-apple);
   flex-shrink: 0;
@@ -1464,6 +1464,7 @@ input[type="range"].chat-field-input:focus {
 
 /* Tooltip enhancements */
 .chat-help-tooltip {
+    position: fixed;
     background: var(--glass-bg);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -1476,6 +1477,26 @@ input[type="range"].chat-field-input:focus {
     line-height: 1.6;
     z-index: var(--z-toast) !important;
     padding: 12px 16px;
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+    transition: opacity 0.18s var(--ease-apple), transform 0.18s var(--ease-apple);
+    pointer-events: none;
+}
+.chat-help-tooltip.visible {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    pointer-events: auto;
+}
+.chat-help-icon:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+    border-radius: 50%;
+}
+@media (max-width: 768px) {
+    .chat-help-tooltip {
+        max-width: min(260px, calc(100vw - 32px));
+        font-size: 0.82rem;
+    }
 }
 
 /* Chat stop button */

@@ -130,51 +130,123 @@ var HELP_TEXTS = {
 // ------------------------------------------------------------------
 // Tooltip helpers
 // ------------------------------------------------------------------
-function showHelpTooltip(event, category) {
-  const existing = document.querySelector(".chat-help-tooltip");
-  if (existing) existing.remove();
+var _helpPinned = false;
+var _helpCategory = null;
 
-  const tooltip = document.createElement("div");
+function showHelpTooltip(event, category) {
+  _removeHelpTooltip();
+  _helpCategory = category;
+
+  var tooltip = document.createElement("div");
   tooltip.className = "chat-help-tooltip";
   tooltip.textContent = HELP_TEXTS[category] || "説明はありません。";
+  tooltip.setAttribute("role", "tooltip");
+  tooltip.id = "chat-help-tooltip";
 
-  const rect = event.target.getBoundingClientRect();
-  tooltip.style.left = rect.right + 10 + "px";
-  tooltip.style.top = rect.top - 5 + "px";
+  var icon = event.target.closest(".chat-help-icon") || event.target;
+  var rect = icon.getBoundingClientRect();
+  var isMobile = window.innerWidth <= 768;
 
   document.body.appendChild(tooltip);
-  requestAnimationFrame(() => tooltip.classList.add("visible"));
 
-  // 画面右端チェック
-  const tr = tooltip.getBoundingClientRect();
-  if (tr.right > window.innerWidth - 10) {
-    tooltip.style.left = rect.left - tr.width - 10 + "px";
+  if (isMobile) {
+    // モバイル: アイコン下部中央に表示
+    tooltip.style.top = rect.bottom + 8 + "px";
+    tooltip.style.left = rect.left + rect.width / 2 + "px";
+    tooltip.style.transform = "translateX(-50%)";
+  } else {
+    // デスクトップ: アイコン右側に表示
+    tooltip.style.left = rect.right + 10 + "px";
+    tooltip.style.top = rect.top - 5 + "px";
+  }
+
+  requestAnimationFrame(function() {
+    tooltip.classList.add("visible");
+    // 画面端オーバーフローチェック
+    var tr = tooltip.getBoundingClientRect();
+    if (tr.right > window.innerWidth - 10) {
+      tooltip.style.left = (isMobile ? rect.left + rect.width / 2 - tr.width : rect.left - tr.width - 10) + "px";
+    }
+    if (isMobile && tr.bottom > window.innerHeight - 10) {
+      tooltip.style.top = rect.top - tr.height - 8 + "px";
+    }
+  });
+}
+
+function _removeHelpTooltip() {
+  var tooltip = document.querySelector(".chat-help-tooltip");
+  if (tooltip) {
+    tooltip.classList.remove("visible");
+    setTimeout(function() { if (tooltip.parentNode) tooltip.remove(); }, 200);
   }
 }
 
 function hideHelpTooltip() {
-  const tooltip = document.querySelector(".chat-help-tooltip");
-  if (tooltip) {
-    tooltip.classList.remove("visible");
-    setTimeout(() => tooltip.remove(), 200);
-  }
+  if (_helpPinned) return;
+  _removeHelpTooltip();
+  _helpCategory = null;
 }
 
-// Prevent help icon click from toggling parent details/summary, and show tooltip by executing the onmouseenter handler directly
-var _helpClickBound = false;
-function _bindHelpIconClicks() {
-  if (_helpClickBound) return;
-  _helpClickBound = true;
+// Delegated event binding for help icons (click, hover, keyboard)
+var _helpListenersBound = false;
+function _bindHelpIconListeners() {
+  if (_helpListenersBound) return;
+  _helpListenersBound = true;
+
+  // Click: toggle pinned tooltip, stop propagation to prevent details toggle
   document.addEventListener("click", function(e) {
     var icon = e.target.closest(".chat-help-icon");
     if (!icon) return;
     e.stopPropagation();
     e.preventDefault();
-    var handler = icon.getAttribute("onmouseenter");
-    if (handler) {
-      new Function("event", handler).call(icon, { target: icon, currentTarget: icon });
+
+    var category = icon.getAttribute("data-category");
+    if (!category) return;
+
+    if (_helpPinned && _helpCategory === category) {
+      // 同じアイコンをクリック → 閉じる
+      _helpPinned = false;
+      _removeHelpTooltip();
+      _helpCategory = null;
+    } else {
+      // 新規表示 or 別カテゴリに切替
+      _helpPinned = true;
+      showHelpTooltip({ target: icon }, category);
     }
   }, true);
+
+  // Hover: show tooltip (non-pinned)
+  document.addEventListener("mouseenter", function(e) {
+    var icon = e.target.closest(".chat-help-icon");
+    if (!icon || _helpPinned) return;
+    var category = icon.getAttribute("data-category");
+    if (category) showHelpTooltip({ target: icon }, category);
+  }, true);
+
+  // Hover out: hide if not pinned
+  document.addEventListener("mouseleave", function(e) {
+    var icon = e.target.closest(".chat-help-icon");
+    if (!icon) return;
+    if (!_helpPinned) hideHelpTooltip();
+  }, true);
+
+  // Outside click: close pinned tooltip
+  document.addEventListener("click", function(e) {
+    if (!_helpPinned) return;
+    if (e.target.closest(".chat-help-icon") || e.target.closest(".chat-help-tooltip")) return;
+    _helpPinned = false;
+    _removeHelpTooltip();
+    _helpCategory = null;
+  });
+
+  // Escape: close pinned tooltip
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape" && _helpPinned) {
+      _helpPinned = false;
+      _removeHelpTooltip();
+      _helpCategory = null;
+    }
+  });
 }
 
 // ------------------------------------------------------------------
@@ -203,7 +275,7 @@ async function loadChat() {
   loadChatCommitments();
   N.Chat.equipment.load();
   N.Core.refreshIcons();
-  _bindHelpIconClicks();
+  _bindHelpIconListeners();
 
   // --- Restore panel open/closed state from cookies to DOM ---
   var _settingsPanel = document.getElementById("settings-panel");
@@ -313,7 +385,7 @@ function chatInputKeydownHandler(e) {
     }
     // Escape continues to default handler below
   }
-  if (e.key === "Enter" && e.shiftKey) {
+  if (e.key === "Enter" && e.ctrlKey) {
     e.preventDefault();
     const val = input.value.trim();
     hideCommandPopup();

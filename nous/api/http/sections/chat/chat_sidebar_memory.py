@@ -6,7 +6,7 @@ def _render_memory_section() -> str:
     return """
                         <!-- Memory extraction -->
                         <details data-category="memory">
-                            <summary><i data-lucide="brain"></i> 記憶・抽出 <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'memory')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="brain"></i> 記憶・抽出 <span class="chat-help-icon" data-category="memory" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-auto-extract" checked
@@ -36,7 +36,7 @@ def _render_reflection_section() -> str:
     return """
                         <!-- Reflection -->
                         <details data-category="reflection">
-                            <summary><i data-lucide="sparkles"></i> リフレクション <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'reflection')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="sparkles"></i> リフレクション <span class="chat-help-icon" data-category="reflection" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-reflection-enabled" checked
@@ -69,7 +69,7 @@ def _render_mental_section() -> str:
     return """
                         <!-- Mental Model -->
                         <details data-category="mental">
-                            <summary><i data-lucide="puzzle"></i> メンタルモデル <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'mental')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="puzzle"></i> メンタルモデル <span class="chat-help-icon" data-category="mental" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-mental-model-enabled" checked
@@ -90,7 +90,7 @@ def _render_weights_section() -> str:
     return """
                         <!-- Retrieval weights -->
                         <details data-category="weights">
-                            <summary><i data-lucide="scale"></i> 検索重み <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'weights')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="scale"></i> 検索重み <span class="chat-help-icon" data-category="weights" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div>
                                     <div class="chat-field-label" style="display:flex;justify-content:space-between;">
@@ -137,7 +137,7 @@ def _render_memory_enrichment_section() -> str:
     return """
                         <!-- Memory enrichment (moved from Settings) -->
                         <details data-category="memory_enrichment">
-                            <summary><i data-lucide="layers"></i> 記憶エンリッチメント<span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'memory_enrichment')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="layers"></i> 記憶エンリッチメント<span class="chat-help-icon" data-category="memory_enrichment" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-memory-enrichment-enabled"
@@ -194,7 +194,7 @@ def _render_forgetting_section() -> str:
     return """
                         <!-- Forgetting (moved from Settings) -->
                         <details data-category="forgetting">
-                            <summary><i data-lucide="eraser"></i> 忘却機構<span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'forgetting')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="eraser"></i> 忘却機構<span class="chat-help-icon" data-category="forgetting" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-forgetting-enabled"

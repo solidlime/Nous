@@ -6,7 +6,7 @@ def _render_mcp_section(sys_executable: str) -> str:
     return f"""
                         <!-- MCP Servers -->
                         <details data-category="tools">
-                            <summary><i data-lucide="battery-charging"></i> MCPサーバー <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'tools')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="battery-charging"></i> MCPサーバー <span class="chat-help-icon" data-category="tools" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body" id="chat-mcp-section">
                                 <div id="chat-mcp-server-list" style="display:flex;flex-direction:column;gap:2px;margin-bottom:8px;"></div>
                                 <div>
@@ -37,7 +37,7 @@ def _render_skills_section() -> str:
     return """
                         <!-- Skills -->
                         <details data-category="skills">
-                            <summary><i data-lucide="target"></i> Skills <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'skills')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="target"></i> Skills <span class="chat-help-icon" data-category="skills" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body" id="chat-skills-section">
                                 <div id="chat-skills-list" style="display:flex;flex-direction:column;gap:4px;"></div>
                             </div>
@@ -49,7 +49,7 @@ def _render_auto_capture_section() -> str:
     return """
                         <!-- Auto-capture (moved from Settings) -->
                         <details data-category="auto_capture">
-                            <summary><i data-lucide="camera"></i> 自動キャプチャ<span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'auto_capture')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="camera"></i> 自動キャプチャ<span class="chat-help-icon" data-category="auto_capture" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-auto-capture-enabled"

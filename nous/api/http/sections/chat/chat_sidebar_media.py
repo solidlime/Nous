@@ -6,7 +6,7 @@ def _render_image_section() -> str:
     return """
                         <!-- 画像生成 -->
                         <details data-category="image" id="chat-image-section">
-                            <summary><i data-lucide="image"></i> 画像生成 <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'image')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="image"></i> 画像生成 <span class="chat-help-icon" data-category="image" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
                                     <span class="chat-field-label" style="margin:0;">画像生成を有効化</span>
@@ -137,7 +137,7 @@ def _render_voice_section() -> str:
     return """
                         <!-- Voice / TTS (TE04) -->
                         <details data-category="voice" id="chat-voice-section">
-                            <summary><i data-lucide="volume-2"></i> 音声 <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'voice')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="volume-2"></i> 音声 <span class="chat-help-icon" data-category="voice" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
                                     <span class="chat-field-label" style="margin:0;">音声合成を有効化</span>

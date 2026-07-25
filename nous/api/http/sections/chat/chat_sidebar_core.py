@@ -20,7 +20,7 @@ def _render_core_section() -> str:
     return """
                         <!-- Provider / Model / API -->
                         <details data-category="core" open>
-                            <summary><i data-lucide="wrench"></i> 基本設定 <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'core')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="wrench"></i> 基本設定 <span class="chat-help-icon" data-category="core" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div>
                                     <div class="chat-field-label">プロバイダー</div>
@@ -94,7 +94,7 @@ def _render_context_section() -> str:
     return """
                         <!-- Context & System Prompt -->
                         <details data-category="context">
-                            <summary><i data-lucide="message-circle"></i> コンテキスト <span class="chat-help-icon" onmouseenter="N.Chat.core.showHelp(event, 'context')" title="説明を表示" onmouseleave="N.Chat.core.hideHelp()"><i data-lucide="help-circle"></i></span></summary>
+                            <summary><i data-lucide="message-circle"></i> コンテキスト <span class="chat-help-icon" data-category="context" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div>
                                     <div class="chat-field-label">表示履歴 (turns) <span style="color:var(--text-muted);font-size:0.7rem;">（ページロード時に遡る件数）</span></div>
