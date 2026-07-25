@@ -36,7 +36,7 @@ N.Core.safeSetHTML = function safeSetHTML(element, html) {
         "p","ul","ol","li","h1","h2","h3","h4","h5","h6","table","thead",
         "tbody","tr","td","th","details","summary","form","input","label","select",
         "option","textarea","button","blockquote","hr","del","ins","sup",
-        "sub","dl","dt","dd","abbr","small","mark","wbr","svg","path",
+        "sub","dl","dt","dd","abbr","small","mark","wbr","canvas","svg","path",
         "circle","rect","line","polyline","polygon",
       ],
       ALLOWED_ATTR: [

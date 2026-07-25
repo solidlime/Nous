@@ -10,7 +10,7 @@ N.Features.Memories = N.Features.Memories || {};
 
 ;(function() {
 var S = window.S;
-var { esc, truncate, relativeTime } = window.Nous.Core;
+var { esc, truncate, relativeTime, safeSetHTML } = window.Nous.Core;
 
 /* ================================================================
    renderMemoryList
