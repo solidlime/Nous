@@ -306,7 +306,7 @@ def _build_time_context(state, decay_note: str = "") -> str:
     time_of_day = next((label for h, label in _TIME_OF_DAY if hour < h), "深夜")
 
     lines: list[str] = [
-        "<TIME_CONTEXT>",
+        "<time>",
         f"Now: {now_local.strftime('%Y-%m-%d %H:%M')} ({tz}) — {weekday} {time_of_day}",
     ]
 
@@ -342,5 +342,5 @@ def _build_time_context(state, decay_note: str = "") -> str:
     if decay_note:
         lines.append(f"Emotion update: {decay_note}")
 
-    lines.append("</TIME_CONTEXT>")
+    lines.append("</time>")
     return "\n".join(lines)
