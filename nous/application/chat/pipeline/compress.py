@@ -56,9 +56,9 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
             model_max = config.context_max_tokens
         else:
             model_max = TokenCounter.get_model_max_tokens(model)
-        budget = int(model_max * config.context_compression_threshold - (config.max_tokens or 4096))
-        # Ensure budget never goes below 10% of model_max
-        budget = max(budget, int(model_max * 0.1))
+        budget = int(model_max * config.context_compression_threshold)
+        # Ensure budget never goes below 200
+        budget = max(budget, 200)
 
         if not force_compress and total <= budget:
             logger.debug(
