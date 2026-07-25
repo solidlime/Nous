@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse
@@ -131,6 +132,7 @@ def register_memory_routes(mcp) -> None:
                     "memories": [_memory_to_dict(m) for m in memories],
                 }
             )
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -159,6 +161,7 @@ def register_memory_routes(mcp) -> None:
                     "histogram": histogram,
                 }
             )
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -205,6 +208,7 @@ def register_memory_routes(mcp) -> None:
                     "offset": offset,
                 }
             )
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -223,6 +227,7 @@ def register_memory_routes(mcp) -> None:
             if not result.is_ok:
                 return JSONResponse({"error": str(result.error)}, status_code=404)
             return JSONResponse({"persona": persona, "memory": _memory_to_dict(result.value)})
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -235,7 +240,7 @@ def register_memory_routes(mcp) -> None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
             raw = await request.json()
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         try:
             body = CreateMemoryRequest(**raw)
@@ -262,6 +267,7 @@ def register_memory_routes(mcp) -> None:
                 {"status": "ok", "memory": _memory_to_dict(mem)},
                 status_code=201,
             )
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -277,7 +283,7 @@ def register_memory_routes(mcp) -> None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
             raw = await request.json()
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         try:
             body = UpdateMemoryRequest(**raw)
@@ -296,6 +302,7 @@ def register_memory_routes(mcp) -> None:
                 with contextlib.suppress(Exception):
                     await ctx.vector_store.upsert(persona, mem.key, mem.content)
             return JSONResponse({"status": "ok", "memory": _memory_to_dict(mem)})
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -317,6 +324,7 @@ def register_memory_routes(mcp) -> None:
                 with contextlib.suppress(Exception):
                     await ctx.vector_store.delete(persona, key)
             return JSONResponse({"status": "ok", "deleted": key})
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)

@@ -72,6 +72,7 @@ def register_search_routes(mcp) -> None:
                     ],
                 }
             )
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -111,6 +112,7 @@ def register_search_routes(mcp) -> None:
                     "history": dict(grouped),
                 }
             )
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -184,6 +186,7 @@ def register_search_routes(mcp) -> None:
                     "edge_count": len(edges),
                 }
             )
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)

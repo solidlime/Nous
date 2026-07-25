@@ -126,7 +126,7 @@ Phase 1〜4 ですべて解消済み。
 |----|------|---------|:---:|------|
 | D4 | **広範な `except Exception` パターン** | `routers/admin.py` 他、全体で204箇所 | - | `except Exception as exc: pass` や `except Exception: return JSONResponse(...)` がエラー情報を隠蔽。特に `admin.py` が顕著 |
 | D5 | **`_get_session_memories` スタブ** | `nous/domain/memory/service.py:424-431` | 8 | Hebbianリンクが完全無効。MEMORY.md記載の配管は完了しているがデータ投入がない |
-| D6 | **マイグレーションシステムのバージョン不在** | `nous/infrastructure/sqlite/migrations.py` | - | バージョン番号なし、全累積実行。現在のDB状態をプログラムから判断できない |
+| D6 | ✅ | **マイグレーションシステムのバージョン不在** | `nous/infrastructure/sqlite/migrations.py` | `_migration_version` テーブル追加。v1/v2/v3 バージョン番号 + 未適用のみ実行（commit: `4a6a7ea`） |
 | D7 | **`hub.db` の用途不明ファイル** | `data/hub.db` | - | ファイルは存在するが読み取り不能。死にデータの可能性。削除して動作確認が必要 |
 | D8 | **`memory_aux_repo.py` の責務過多** | `nous/infrastructure/sqlite/memory_aux_repo.py` | 345 | ページネーション・ブロック・強度・統計・バージョンが1ファイル。適度だがさらなる分割余地あり |
 | D9 | **`legacy_importer.py` のエラーハンドリング** | `nous/migration/importers/legacy_importer.py` | 756 | 6箇所の `except Exception: pass` が移行エラーを完全に隠蔽 |
@@ -137,7 +137,7 @@ Phase 1〜4 ですべて解消済み。
 |----|------|---------|------|
 | D10 | ✅ | `os.path` と `pathlib` の混在 | `nous/main.py` | 5箇所の `os.path.join` → `Path` 統一。`import os` は `os.environ`/`os.listdir` で維持（commit: `b170b8e`） |
 | D11 | ✅ | 空のテストディレクトリ | `tests/unit/api/http/` | 削除済み |
-| D12 | ⏳ | フロントエンドJSの大型ファイル | `static/` 配下 | Phase 6.3 提案（自動実装禁止） |
+| D12 | ✅ | フロントエンドJSの大型ファイル | `static/` 配下 | 3ファイル→8ファイルに分割。IIFEスコープバグ2件も修正（commits: `fbe0bc5`, `62974a5`, `bbe0f38`） |
 | D13 | ✅ | ベンチマークテストのコピペミス | `tests/benchmark/test_search_perf.py` | `make_memories(100)` → `(1000)` 修正（commit: `6a18c3b`） |
 | D14 | ✅ | Screenshot baselines 未生成 | `tests/ui/` | 削除。現在不要と判断 |
 

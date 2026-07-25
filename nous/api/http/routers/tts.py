@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -62,13 +63,14 @@ def register_tts_routes(mcp) -> None:
             ok = await engine.health_check()
             if not ok:
                 return JSONResponse({"ok": False, "error": "Voice engine health check failed"}, status_code=503)
+        # TTSエンジン未起動時の早期リターン
         except Exception:
             return JSONResponse({"ok": False, "error": "Voice engine unreachable"}, status_code=503)
 
         # parse request body
         try:
             body = await request.json()
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             body = {}
         text = body.get("text", "")
         if not text:
@@ -111,6 +113,7 @@ def register_tts_routes(mcp) -> None:
         # ---- TTS audio cache ----
         voice_speed = getattr(chat_config, "voice_speed", 1.0)
         from nous.config.settings import get_settings
+
         settings = get_settings()
         cache_dir = Path(settings.data_root) / "persona" / persona / "tts_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
@@ -160,8 +163,8 @@ def register_tts_routes(mcp) -> None:
                     "format": "wav",
                 }
             )
-        except Exception as e:
-            return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+        except Exception:
+            return JSONResponse({"ok": False, "error": "Voice synthesis failed"}, status_code=500)
 
     @mcp.custom_route("/api/tts/{persona}/voices", methods=["GET"])
     async def list_voices(request: Request) -> JSONResponse:
@@ -186,13 +189,14 @@ def register_tts_routes(mcp) -> None:
                 resp = await client.get(f"{base_url}/v1/models")
                 resp.raise_for_status()
                 models_data = resp.json()
-        except Exception as e:
+        # 音声一覧取得失敗時のフォールバック
+        except Exception:
             # Fallback: return configured voice as the only known one
             return JSONResponse(
                 {
                     "ok": True,
                     "voices": [{"id": irodori_config.voice, "name": irodori_config.voice, "source": "config"}],
-                    "note": f"Could not query server: {e}",
+                    "note": "Could not query server for voice list",
                 }
             )
 
@@ -234,19 +238,23 @@ def register_tts_routes(mcp) -> None:
                         mid = item.get("id", "")
                         if mid:
                             models.append({"id": mid, "name": mid})
-                return JSONResponse({
+                return JSONResponse(
+                    {
+                        "ok": True,
+                        "connected": True,
+                        "url": base_url,
+                        "models": models,
+                    }
+                )
+        except Exception:
+            return JSONResponse(
+                {
                     "ok": True,
-                    "connected": True,
+                    "connected": False,
                     "url": base_url,
-                    "models": models,
-                })
-        except Exception as e:
-            return JSONResponse({
-                "ok": True,
-                "connected": False,
-                "url": base_url,
-                "error": str(e),
-            })
+                    "error": "Connection check failed",
+                }
+            )
 
     @mcp.custom_route("/api/tts/{persona}/cache/{filename}", methods=["GET"])
     async def serve_tts_cache(request: Request) -> Response:

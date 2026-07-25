@@ -671,7 +671,9 @@ def register_chat_routes(mcp) -> None:
     mcp.custom_route("/api/chat/{persona}/commitments", methods=["GET"])(get_chat_commitments)
     mcp.custom_route("/api/chat/{persona}/sessions/{session_id}", methods=["GET"])(get_chat_session)
     mcp.custom_route("/api/chat/{persona}/sessions/{session_id}", methods=["DELETE"])(delete_chat_session)
-    mcp.custom_route("/api/chat/{persona}/sessions/{session_id}/messages/{msg_id}", methods=["PUT"])(update_chat_message)
+    mcp.custom_route("/api/chat/{persona}/sessions/{session_id}/messages/{msg_id}", methods=["PUT"])(
+        update_chat_message
+    )
     mcp.custom_route("/api/chat/{persona}/sessions/{session_id}/rollback", methods=["POST"])(rollback_chat_session)
     mcp.custom_route("/api/chat/{persona}/attachment/upload", methods=["POST"])(attachment_upload)
     mcp.custom_route("/api/chat/{persona}/attachment/{filename}", methods=["GET"])(attachment_serve)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import asdict
 from typing import TYPE_CHECKING
 
@@ -38,6 +39,7 @@ def register_item_routes(mcp) -> None:
             if not result.is_ok:
                 return error_from_result(result)
             return JSONResponse({"persona": persona, "items": [_item_to_dict(it) for it in result.value]})
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -50,7 +52,7 @@ def register_item_routes(mcp) -> None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
             body = await request.json()
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         item_name = body.get("item_name")
         if not item_name:
@@ -66,6 +68,7 @@ def register_item_routes(mcp) -> None:
             if not result.is_ok:
                 return error_from_result(result)
             return JSONResponse({"status": "ok", "item_name": item_name}, status_code=201)
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -78,7 +81,7 @@ def register_item_routes(mcp) -> None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
             body = await request.json()
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         if not isinstance(body, dict) or not body:
             return JSONResponse({"error": "Body must be a non-empty dict of {slot: item_name}"}, status_code=400)
@@ -90,6 +93,7 @@ def register_item_routes(mcp) -> None:
             if not result.is_ok:
                 return error_from_result(result)
             return JSONResponse({"status": "ok", "equipped": body})
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -102,7 +106,7 @@ def register_item_routes(mcp) -> None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
             body = await request.json()
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         slots = body.get("slots", [])
         if isinstance(slots, str):
@@ -114,6 +118,7 @@ def register_item_routes(mcp) -> None:
             if not result.is_ok:
                 return error_from_result(result)
             return JSONResponse({"status": "ok", "unequipped": slots})
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -129,7 +134,7 @@ def register_item_routes(mcp) -> None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
             body = await request.json()
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         allowed = {"category", "description", "quantity", "tags", "item_name"}
         updates = {k: v for k, v in body.items() if k in allowed}
@@ -140,6 +145,7 @@ def register_item_routes(mcp) -> None:
             if not result.is_ok:
                 return error_from_result(result)
             return JSONResponse({"status": "ok", "item_name": item_name})
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -158,6 +164,7 @@ def register_item_routes(mcp) -> None:
             if not result.is_ok:
                 return error_from_result(result)
             return JSONResponse({"status": "ok", "deleted": item_name})
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)

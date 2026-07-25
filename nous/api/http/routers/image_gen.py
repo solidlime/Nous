@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import TYPE_CHECKING
 
@@ -26,11 +27,13 @@ def register_image_gen_routes(mcp) -> None:
 
         checker = ImageGenHealthChecker(url)
         healthy = await checker.check()
-        return JSONResponse({
-            "healthy": healthy,
-            "url": url,
-            "message": "ComfyUI is reachable" if healthy else "ComfyUI is unreachable",
-        })
+        return JSONResponse(
+            {
+                "healthy": healthy,
+                "url": url,
+                "message": "ComfyUI is reachable" if healthy else "ComfyUI is unreachable",
+            }
+        )
 
     @mcp.custom_route("/api/chat/{persona}/image-gen/test", methods=["POST"])
     async def test_image_gen(request: Request) -> JSONResponse:
@@ -42,7 +45,7 @@ def register_image_gen_routes(mcp) -> None:
 
         try:
             body = await request.json()
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
         from nous.config.settings import get_settings
@@ -65,14 +68,14 @@ def register_image_gen_routes(mcp) -> None:
             loras_raw = getattr(config, "image_gen_comfyui_loras", "")
             loras: list[dict] = []
             if loras_raw:
-                try:
+                with contextlib.suppress(json.JSONDecodeError, TypeError):
                     loras = json.loads(loras_raw)
-                except (json.JSONDecodeError, TypeError):
-                    pass
 
         provider = ComfyUIProvider(
             api_url=comfyui_url,
-            checkpoint=getattr(config, "image_gen_comfyui_checkpoint", "noobaiXLNAIXL_epsilonPred11Version.safetensors"),
+            checkpoint=getattr(
+                config, "image_gen_comfyui_checkpoint", "noobaiXLNAIXL_epsilonPred11Version.safetensors"
+            ),
             loras=loras,
             speed_lora_path=getattr(config, "image_gen_comfyui_speed_lora_path", ""),
             speed_lora_weight=getattr(config, "image_gen_comfyui_speed_lora_weight", 1.0),
@@ -95,17 +98,21 @@ def register_image_gen_routes(mcp) -> None:
                 n=1,
                 negative_prompt=body.get("negative_prompt", ""),
             )
-        except Exception as e:
-            return JSONResponse({"error": f"Generation failed: {str(e)}"}, status_code=500)
+        except Exception:
+            return JSONResponse({"error": "Image generation failed"}, status_code=500)
 
         if not generated:
             return JSONResponse({"error": "No images generated"}, status_code=500)
 
-        return JSONResponse({
-            "ok": True,
-            "images": [{
-                "base64": generated[0].base64,
-                "revised_prompt": generated[0].revised_prompt,
-                "size": generated[0].size,
-            }],
-        })
+        return JSONResponse(
+            {
+                "ok": True,
+                "images": [
+                    {
+                        "base64": generated[0].base64,
+                        "revised_prompt": generated[0].revised_prompt,
+                        "size": generated[0].size,
+                    }
+                ],
+            }
+        )

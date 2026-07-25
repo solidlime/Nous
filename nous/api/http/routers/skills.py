@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse
@@ -30,7 +31,7 @@ def register_skills_routes(mcp) -> None:
 
         try:
             body = await request.json()
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
         name = (body.get("name") or "").strip()
@@ -57,7 +58,7 @@ def register_skills_routes(mcp) -> None:
         skill_name = request.path_params["name"]
         try:
             body = await request.json()
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
         skill = Skill(

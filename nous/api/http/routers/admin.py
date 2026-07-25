@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -30,6 +31,7 @@ def register_admin_routes(mcp) -> None:
 
             config = RuntimeConfigManager()
             return JSONResponse(config.get_all())
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -38,7 +40,7 @@ def register_admin_routes(mcp) -> None:
     async def update_settings(request: Request) -> JSONResponse:
         try:
             body = await request.json()
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             logger.exception("update_settings: invalid JSON body")
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         category = body.get("category")
@@ -58,6 +60,7 @@ def register_admin_routes(mcp) -> None:
                 return JSONResponse(content=result, status_code=200)
             status_code = 200 if result.get("success") else 400
             return JSONResponse(result, status_code=status_code)
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -73,6 +76,7 @@ def register_admin_routes(mcp) -> None:
                     "reload_status": config.reload_status.get_all(),
                 }
             )
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -92,6 +96,7 @@ def register_admin_routes(mcp) -> None:
                 {"status": "accepted", "message": f"Rebuild started for '{persona}'"},
                 status_code=202,
             )
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -134,6 +139,7 @@ def register_admin_routes(mcp) -> None:
             finally:
                 if zip_path.exists():
                     zip_path.unlink()
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
@@ -163,6 +169,7 @@ def register_admin_routes(mcp) -> None:
                 media_type="application/zip",
                 headers={"Content-Disposition": f'attachment; filename="{persona}_export.zip"'},
             )
+        # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)

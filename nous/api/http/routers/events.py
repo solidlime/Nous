@@ -100,6 +100,7 @@ def register_events_routes(mcp) -> None:
                         yield ": keepalive\n\n"
             except asyncio.CancelledError:
                 pass
+            # SSEストリーミング中の非致命的エラー
             except Exception as e:
                 logger.debug("SSE stream error for persona '%s': %s", persona, e)
             finally:
@@ -143,7 +144,7 @@ def register_events_routes(mcp) -> None:
         # 1. Parse JSON body
         try:
             body: dict[str, Any] = await request.json()
-        except Exception:
+        except (json.JSONDecodeError, TypeError):
             return JSONResponse({"error": "Invalid JSON"}, status_code=400)
 
         # 2. Extract required fields
@@ -240,6 +241,7 @@ def register_events_routes(mcp) -> None:
             try:
                 repo.insert(event)
                 inserted += 1
+            # イベント単位のエラーはスキップして継続
             except Exception:
                 logger.exception("Failed to insert session event for persona '%s'", persona)
                 skipped += 1
@@ -255,6 +257,7 @@ def register_events_routes(mcp) -> None:
                     "skipped": skipped,
                 },
             )
+        # 公開失敗は非致命的
         except Exception:
             logger.exception("Failed to publish events.ingested event for persona '%s'", persona)
 
