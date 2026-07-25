@@ -160,7 +160,7 @@ function hideHelpTooltip() {
   }
 }
 
-// Prevent help icon click from toggling parent details/summary, and toggle tooltip on click
+// Prevent help icon click from toggling parent details/summary, and show tooltip via simulated hover
 var _helpClickBound = false;
 function _bindHelpIconClicks() {
   if (_helpClickBound) return;
@@ -170,15 +170,8 @@ function _bindHelpIconClicks() {
     if (!icon) return;
     e.stopPropagation();
     e.preventDefault();
-    var match = (icon.getAttribute("onmouseenter") || "").match(/showHelp\(event,\s*'([^']+)'\)/);
-    if (!match) return;
-    var category = match[1];
-    var existing = document.querySelector(".chat-help-tooltip");
-    if (existing) {
-      hideHelpTooltip();
-    } else {
-      showHelpTooltip({ target: icon, currentTarget: icon }, category);
-    }
+    // Dispatch mouseenter to trigger the existing onmouseenter handler
+    icon.dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }));
   }, true);
 }
 
