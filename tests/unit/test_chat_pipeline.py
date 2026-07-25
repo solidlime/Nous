@@ -1088,8 +1088,8 @@ class TestTimestampInjection:
 
         assert captured_messages[0] is not None
         # Check the two session messages had timestamps injected
-        assert captured_messages[0][0].content == "[14:30] hello"
-        assert captured_messages[0][1].content == "[14:31] hi there"
+        assert captured_messages[0][0].content == "[2025-06-15 14:30] hello"
+        assert captured_messages[0][1].content == "[2025-06-15 14:31] hi there"
 
     @pytest.mark.asyncio
     async def test_no_timestamps_when_disabled(self):
@@ -1202,7 +1202,7 @@ class TestTimestampInjection:
                 pass
 
         assert captured_messages[0] is not None
-        assert captured_messages[0][0].content == "[14:30] hi"
+        assert captured_messages[0][0].content == "[2025-06-15 14:30] hi"
         # tool message should NOT have timestamp prefix
         assert captured_messages[0][1].content == '{"result": "ok"}'
 
@@ -1261,7 +1261,7 @@ class TestTimestampInjection:
                 pass
 
         assert captured_messages[0] is not None
-        assert captured_messages[0][0].content == "[14:30] with ts"
+        assert captured_messages[0][0].content == "[2025-06-15 14:30] with ts"
         assert captured_messages[0][1].content == "no ts"
 
 

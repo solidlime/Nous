@@ -112,7 +112,7 @@ class InferenceStep:
             if getattr(config, "show_message_timestamps", False):
                 for msg in messages:
                     if msg.timestamp and msg.role in ("user", "assistant"):
-                        ts_str = msg.timestamp.strftime("%H:%M")
+                        ts_str = msg.timestamp.strftime("%Y-%m-%d %H:%M")
                         msg.content = f"[{ts_str}] {msg.content}"
 
             async for event in provider.stream(
