@@ -279,17 +279,12 @@ function applyChatConfig(cfg) {
   setChecked("chat-auto-capture-enabled", cfg.auto_capture_enabled === true);
   set("chat-auto-capture-interval", cfg.auto_capture_interval ?? 300);
   set("chat-auto-capture-max-memories", cfg.auto_capture_max_memories ?? 10);
-  // === Memory enrichment (moved from Settings) ===
+  // === Memory enrichment (simplified) ===
   setChecked("chat-memory-enrichment-enabled", cfg.memory_enrichment_enabled === true);
+  set("chat-memory-enrichment-model", cfg.memory_enrichment_model || "");
   setChecked("chat-memory-enrichment-auto-run", cfg.memory_enrichment_auto_run === true);
   set("chat-memory-enrichment-interval", cfg.memory_enrichment_interval ?? 60);
-  set("chat-memory-enrichment-provider", cfg.memory_enrichment_provider || "");
-  set("chat-memory-enrichment-model", cfg.memory_enrichment_model || "");
-  set("chat-memory-enrichment-base-url", cfg.memory_enrichment_base_url || "");
-  set("chat-memory-enrichment-min-chars", cfg.memory_enrichment_min_chars ?? 100);
-  set("chat-memory-enrichment-llm", cfg.memory_enrichment_llm || "");
   set("chat-memory-enrichment-prompt-template", cfg.memory_enrichment_prompt_template || "");
-  set("chat-memory-enrichment-summary-granularity", cfg.memory_enrichment_summary_granularity || "medium");
   // === Forgetting (moved from Settings) ===
   setChecked("chat-forgetting-enabled", cfg.forgetting_enabled === true);
   set("chat-forgetting-trigger-threshold", cfg.forgetting_trigger_threshold ?? 100);
@@ -429,17 +424,12 @@ async function saveChatConfig() {
     auto_capture_enabled: getChecked("chat-auto-capture-enabled"),
     auto_capture_interval: parseInt(document.getElementById("chat-auto-capture-interval")?.value || "300"),
     auto_capture_max_memories: parseInt(document.getElementById("chat-auto-capture-max-memories")?.value || "10"),
-    // === Memory enrichment (moved from Settings) ===
+    // === Memory enrichment (simplified) ===
     memory_enrichment_enabled: getChecked("chat-memory-enrichment-enabled"),
+    memory_enrichment_model: document.getElementById("chat-memory-enrichment-model")?.value.trim() || "",
     memory_enrichment_auto_run: getChecked("chat-memory-enrichment-auto-run"),
     memory_enrichment_interval: parseInt(document.getElementById("chat-memory-enrichment-interval")?.value || "60"),
-    memory_enrichment_provider: document.getElementById("chat-memory-enrichment-provider")?.value.trim() || "",
-    memory_enrichment_model: document.getElementById("chat-memory-enrichment-model")?.value.trim() || "",
-    memory_enrichment_base_url: document.getElementById("chat-memory-enrichment-base-url")?.value.trim() || "",
-    memory_enrichment_min_chars: parseInt(document.getElementById("chat-memory-enrichment-min-chars")?.value || "100"),
-    memory_enrichment_llm: document.getElementById("chat-memory-enrichment-llm")?.value.trim() || "",
     memory_enrichment_prompt_template: document.getElementById("chat-memory-enrichment-prompt-template")?.value.trim() || "",
-    memory_enrichment_summary_granularity: document.getElementById("chat-memory-enrichment-summary-granularity")?.value || "medium",
     // === Forgetting (moved from Settings) ===
     forgetting_enabled: getChecked("chat-forgetting-enabled"),
     forgetting_trigger_threshold: parseInt(document.getElementById("chat-forgetting-trigger-threshold")?.value || "100"),

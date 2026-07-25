@@ -149,12 +149,13 @@ class AppContext:
         cfg = self._config
         mem_enrich_enabled = cfg.memory_enrichment_enabled if cfg else self.settings.memory_enrichment.enabled
         if mem_enrich_enabled:
+            # Use global MemoryEnrichmentConfig for provider/base_url/min_chars;
+            # model can be overridden via session config.
+            provider = self.settings.memory_enrichment.provider
+            base_url = self.settings.memory_enrichment.base_url
+            min_chars = self.settings.memory_enrichment.min_chars
             if cfg:
-                provider = cfg.memory_enrichment_provider or ""
-                model = cfg.memory_enrichment_model or ""
-                base_url = cfg.memory_enrichment_base_url or ""
-                min_chars = cfg.memory_enrichment_min_chars
-                # Resolve API key from settings (ChatConfig doesn't have per-provider keys)
+                model = cfg.memory_enrichment_model or self.settings.memory_enrichment.model
                 api_key = ""
                 if provider == "openrouter":
                     api_key = self.settings.openrouter_api_key
@@ -172,11 +173,8 @@ class AppContext:
                     value, _ = RuntimeConfigManager().get_effective_value("api_keys", key_name)
                     api_key = value or ""
             else:
-                provider = self.settings.memory_enrichment.provider
                 api_key = self.settings.memory_enrichment.get_effective_api_key(self.settings)
                 model = self.settings.memory_enrichment.model
-                base_url = self.settings.memory_enrichment.base_url
-                min_chars = self.settings.memory_enrichment.min_chars
             if api_key:
                 from nous.infrastructure.llm.memory_enricher import MemoryEnricher
                 enricher = MemoryEnricher(

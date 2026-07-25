@@ -133,7 +133,7 @@ def _render_weights_section() -> str:
 
 
 def _render_memory_enrichment_section() -> str:
-    """Memory enrichment settings — auto-run, LLM config, granularity."""
+    """Memory enrichment settings — auto-run, model, interval, advanced prompt template."""
     return """
                         <!-- Memory enrichment (moved from Settings) -->
                         <details data-category="memory_enrichment">
@@ -144,6 +144,10 @@ def _render_memory_enrichment_section() -> str:
                                         style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
                                     <label for="chat-memory-enrichment-enabled" class="chat-field-label" style="margin:0;cursor:pointer;">記憶エンリッチメント有効</label>
                                 </div>
+                                <div>
+                                    <div class="chat-field-label">モデル <span style="color:var(--text-muted);font-size:0.7rem;">（空白でチャットと同モデル）</span></div>
+                                    <input type="text" id="chat-memory-enrichment-model" class="chat-field-input" placeholder="例: openai/gpt-4o-mini" />
+                                </div>
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <input type="checkbox" id="chat-memory-enrichment-auto-run"
                                         style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
@@ -153,37 +157,12 @@ def _render_memory_enrichment_section() -> str:
                                     <div class="chat-field-label">実行間隔（分）</div>
                                     <input type="number" id="chat-memory-enrichment-interval" class="chat-field-input" min="1" step="1" value="60" />
                                 </div>
-                                <div>
-                                    <div class="chat-field-label">プロバイダ</div>
-                                    <input type="text" id="chat-memory-enrichment-provider" class="chat-field-input" placeholder="例: openrouter" />
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">モデル</div>
-                                    <input type="text" id="chat-memory-enrichment-model" class="chat-field-input" placeholder="例: openai/gpt-4o-mini" />
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">Base URL</div>
-                                    <input type="text" id="chat-memory-enrichment-base-url" class="chat-field-input" placeholder="https://openrouter.ai/api/v1" />
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">最小文字数</div>
-                                    <input type="number" id="chat-memory-enrichment-min-chars" class="chat-field-input" min="10" step="1" value="100" />
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">使用LLM</div>
-                                    <input type="text" id="chat-memory-enrichment-llm" class="chat-field-input" placeholder="（空白でチャットと同モデル）" />
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">プロンプトテンプレート</div>
-                                    <textarea id="chat-memory-enrichment-prompt-template" class="chat-field-input" rows="3" style="resize:vertical;font-size:0.78rem;"></textarea>
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">摘要粒度</div>
-                                    <select id="chat-memory-enrichment-summary-granularity" class="chat-field-input">
-                                        <option value="fine">細かめ</option>
-                                        <option value="medium" selected>中程度</option>
-                                        <option value="coarse">大まか</option>
-                                    </select>
+                                <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border-subtle);">
+                                    <button type="button" class="chat-advanced-toggle" onclick="(function(btn){var b=btn.nextElementSibling;b.style.display=b.style.display==='none'?'':'none';})(this)" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.72rem;padding:2px 0;">▼ 詳細設定（プロンプトテンプレート）</button>
+                                    <div style="display:none;margin-top:4px;">
+                                        <div class="chat-field-label">プロンプトテンプレート</div>
+                                        <textarea id="chat-memory-enrichment-prompt-template" class="chat-field-input" rows="4" style="resize:vertical;font-size:0.78rem;font-family:monospace;"></textarea>
+                                    </div>
                                 </div>
                             </div>
                         </details>"""

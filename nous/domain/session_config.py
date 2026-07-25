@@ -63,13 +63,24 @@ class SessionConfig(BaseModel):
     memory_enrichment_enabled: bool = False
     memory_enrichment_auto_run: bool = False
     memory_enrichment_interval: int = 60
-    memory_enrichment_llm: str = ""
-    memory_enrichment_prompt_template: str = ""
-    memory_enrichment_summary_granularity: str = "medium"
-    memory_enrichment_provider: str = ""
     memory_enrichment_model: str = ""
-    memory_enrichment_base_url: str = ""
-    memory_enrichment_min_chars: int = 100
+    memory_enrichment_prompt_template: str = (
+        "あなたは記憶分析アシスタントです。与えられた記憶テキストを分析し、以下の2つをJSON形式で出力してください：\n\n"
+        "1. **importance**: この記憶の重要度を0.0（全く重要でない）〜1.0（極めて重要）の浮動小数点数で評価してください。\n"
+        "   - 0.0-0.3: 日常的な些事、一時的な感情\n"
+        "   - 0.4-0.6: 通常の出来事、一般的な情報\n"
+        "   - 0.7-0.8: 重要な出来事、強い感情を伴う体験\n"
+        "   - 0.9-1.0: 人生を変える出来事、核となる記憶\n\n"
+        "2. **relations**: テキスト内のエンティティ（人名、場所、概念など）間の関係性を抽出してください。\n"
+        "   各関係は以下の形式です：\n"
+        "   - source: 関係の主体（エンティティ名）\n"
+        "   - target: 関係の対象（エンティティ名）\n"
+        "   - type: 関係タイプ（knows, works_with, manages, created, located_in, part_of, related_to のいずれか）\n"
+        "   - confidence: 抽出の確信度（0.0〜1.0）\n\n"
+        "出力は必ず以下のJSON形式に従ってください：\n"
+        '{"importance": 0.5, "relations": [{"source": "entity1", "target": "entity2", "type": "knows", "confidence": 0.9}]}\n\n'
+        "関係が見つからない場合は relations を空配列にしてください。"
+    )
 
     # Forgetting
     forgetting_enabled: bool = False
