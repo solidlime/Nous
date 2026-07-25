@@ -47,7 +47,7 @@ function openMemModal(mem) {
     h += '<span style="font-family:monospace;font-size:0.85rem;color:var(--accent-purple)">' + esc(mem.key) + '</span>';
     h += '<button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + esc(mem.key).replace(/'/g,'\\\'') + '\');window.Nous.Core.toast(\'Key copied!\',\'info\')" title="Copy key">\uD83D\uDCCB</button>';
     h += '</div></div>';
-    h += '<button class="mem-modal-close" onclick="closeMemModal()"><i data-lucide="x"></i></button>';
+    h += '<button class="mem-modal-close" onclick="N.Features.Memories.closeMemModal()"><i data-lucide="x"></i></button>';
     h += '</div>';
 
     /* Full content */

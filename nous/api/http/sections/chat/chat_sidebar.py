@@ -563,7 +563,7 @@ def render_chat_sidebar() -> str:
                                     </details>
                                     <!-- Test playback -->
                                     <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
-                                        <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="testVoicePlayback()" aria-label="音声をテスト再生"><i data-lucide="play"></i> テスト再生</button>
+                                        <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="N.Chat.tts.test()" aria-label="音声をテスト再生"><i data-lucide="play"></i> テスト再生</button>
                                         <span id="chat-voice-test-status" style="font-size:0.72rem;color:var(--text-muted);min-height:16px;"></span>
                                     </div>
                                 </div>
@@ -736,8 +736,8 @@ def render_chat_sidebar() -> str:
                     </div>
                     <!-- Sticky footer buttons -->
                     <div class="settings-footer">
-                        <button class="chat-save-btn" onclick="saveChatConfig()" aria-label="チャット設定を保存"><i data-lucide="save"></i> 設定を保存</button>
-                        <button class="chat-clear-btn" onclick="clearChatHistory()" aria-label="会話履歴をリセット"><i data-lucide="trash-2"></i> 会話をリセット</button>
+                        <button class="chat-save-btn" onclick="N.Chat.settings.save()" aria-label="チャット設定を保存"><i data-lucide="save"></i> 設定を保存</button>
+                        <button class="chat-clear-btn" onclick="N.Chat.history.clear()" aria-label="会話履歴をリセット"><i data-lucide="trash-2"></i> 会話をリセット</button>
                         <div id="chat-config-status" style="font-size:0.75rem; text-align:center; min-height:16px;"></div>
                     </div>
                 </div>"""
