@@ -159,6 +159,33 @@ async function loadMemories(page) {
     dashboardHtml += blocksListHtml;
     dashboardHtml += '</div>';
 
+    // Goals section
+    var goalsListHtml = '';
+    var effectiveGoals = ds.goals || [];
+    if (effectiveGoals.length > 0) {
+        effectiveGoals.forEach(function(item) {
+            var content = typeof item === 'string' ? item : (item.content || item.description || item.title || JSON.stringify(item));
+            var status = typeof item === 'object' ? (item.status || 'active').toLowerCase() : 'active';
+            var icon;
+            if (status === 'active') icon = '<i data-lucide="refresh-cw"></i>';
+            else if (status === 'achieved' || status === 'fulfilled') icon = '<i data-lucide="check-circle"></i>';
+            else if (status === 'cancelled') icon = '<i data-lucide="x-circle"></i>';
+            else icon = '<i data-lucide="refresh-cw"></i>';
+            goalsListHtml += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0">';
+            goalsListHtml += '<span>' + icon + '</span>';
+            goalsListHtml += '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)">' + esc(content) + '</span>';
+            var ts = typeof item === 'object' && (item.created_at || item.date);
+            if (ts) goalsListHtml += '<span style="font-size:0.72rem;color:var(--text-muted)">' + relativeTime(ts) + '</span>';
+            goalsListHtml += '</div>';
+        });
+    } else {
+        goalsListHtml = '<span style="color:var(--text-muted)">No goals</span>';
+    }
+    dashboardHtml += '<div class="glass glass-hoverable p-6 mb-6">';
+    dashboardHtml += '<div class="card-title"><i data-lucide="target"></i> Goals <span style="opacity:0.6;font-weight:400;font-size:0.78rem;text-transform:none;letter-spacing:0">(' + effectiveGoals.length + ')</span></div>';
+    dashboardHtml += '<div style="max-height:240px;overflow-y:auto;padding-right:4px">' + goalsListHtml + '</div>';
+    dashboardHtml += '</div>';
+
     // Charts placeholders
     dashboardHtml += '<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">';
     dashboardHtml += '<div class="glass p-6"><div class="card-title"><i data-lucide="calendar"></i> 7-Day Timeline</div><div style="height:220px;position:relative"><canvas id="chart-timeline"></canvas></div></div>';
