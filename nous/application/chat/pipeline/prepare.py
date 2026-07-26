@@ -100,7 +100,10 @@ class PrepareStep:
             )
 
             # TIME_CONTEXT ブロック（システムプロンプト先頭注入用）
-            turn_ctx.time_context = _build_time_context(state)
+            if getattr(config, "show_message_timestamps", False):
+                turn_ctx.time_context = _build_time_context(state)
+            else:
+                turn_ctx.time_context = ""
 
             # context_section 構築
             last_assistant = session.get_last_assistant_content()
