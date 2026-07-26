@@ -62,15 +62,31 @@ class InferenceStep:
         messages = list(session_messages)
         if turn_ctx.images:
             if not provider.supports_vision():
-                logger.warning(
-                    "Provider %s does not support vision, %d images will be ignored",
+                logger.info(
+                    "Provider %s does not support vision, captioning %d images",
                     config.provider,
                     len(turn_ctx.images),
                 )
-                turn_ctx.user_message = (
-                    f"[User attached {len(turn_ctx.images)} image(s) but current model does not support vision]\n"
-                    f"{turn_ctx.user_message}"
+                from nous.infrastructure.llm.image_caption import ImageCaptioner
+
+                captioner = ImageCaptioner(config=config.tool_config)
+                captions = await captioner.caption_batch(turn_ctx.images)
+                caption_text = "\n".join(
+                    f"[Image {i+1}]: {c}" for i, c in enumerate(captions) if c
                 )
+                if caption_text:
+                    turn_ctx.user_message = (
+                        f"{turn_ctx.user_message}\n\n---\nAttached images described:\n{caption_text}"
+                    )
+                else:
+                    logger.warning(
+                        "Image captioning failed for %d images, attaching fallback note",
+                        len(turn_ctx.images),
+                    )
+                    turn_ctx.user_message = (
+                        f"[User attached {len(turn_ctx.images)} image(s) but current model does not support vision]\n"
+                        f"{turn_ctx.user_message}"
+                    )
                 messages.append(LLMMessage(role="user", content=turn_ctx.user_message, timestamp=datetime.now()))
             else:
                 parts: list[dict] = [{"type": "text", "text": turn_ctx.user_message}]
