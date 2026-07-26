@@ -37,6 +37,21 @@ _MODE_PREFIX_DEFAULTS: dict[str, str] = {
 }
 
 
+def _dedup_prompt_tags(combined: str) -> str:
+    """Remove duplicate comma-separated tags (case-insensitive, order-preserving)."""
+    seen: set[str] = set()
+    parts: list[str] = []
+    for tag in combined.split(","):
+        stripped = tag.strip()
+        if not stripped:
+            continue
+        key = stripped.lower()
+        if key not in seen:
+            seen.add(key)
+            parts.append(stripped)
+    return ", ".join(parts)
+
+
 def filter_extra_tools(extra_tools: list[ToolDefinition]) -> list[ToolDefinition]:
     """MCP extra ツールから memory 系重複ツールを除外する。"""
     return [t for t in extra_tools if t.name.split("__")[-1] not in _NOUS_TOOL_NAMES]
@@ -246,7 +261,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
         if self_prompt:
             config_key = _MODE_PREFIX_CONFIG_KEYS.get(portrait_mode, "")
             mode_prefix = getattr(config, config_key, _MODE_PREFIX_DEFAULTS.get(portrait_mode, ""))
-            prompt = f"{self_prompt}, {mode_prefix}, {prompt}"
+            prompt = _dedup_prompt_tags(f"{self_prompt}, {mode_prefix}, {prompt}")
 
     try:
         # ── ChatConfig から ComfyUIProvider を直接構築 ──
