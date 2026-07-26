@@ -45,7 +45,7 @@ async function loadOverview() {
                 const prompt = img.revised_prompt || '';
                 const tooltipAttr = prompt ? ' title="' + esc(prompt) + '"' : '';
                 const badgeHtml = img.is_self_portrait ? '<span class="image-history-badge">🖼️ SP</span>' : '';
-                genImagesHtml += '<div class="image-history-thumb"' + tooltipAttr + ' onclick="N.Chat.attachments.openViewer(\'' + esc(img.url) + '\',\'image\',null,{revised_prompt:\'' + esc(prompt).replace(/'/g, "\\'") + '\'})">';
+                genImagesHtml += '<div class="image-history-thumb"' + tooltipAttr + ' onclick="N.Chat.attachments.openViewer(\'' + esc(img.url) + '\',\'image\',null,{revised_prompt:\'' + esc(prompt).replace(/'/g, "\\'") + '\',negative_prompt:\'' + esc(img.negative_prompt || '').replace(/'/g, "\\'") + '\'})">';
                 genImagesHtml += '<img src="' + esc(img.url) + '" alt="' + esc(img.filename) + '" loading="lazy">';
                 genImagesHtml += badgeHtml;
                 genImagesHtml += '</div>';

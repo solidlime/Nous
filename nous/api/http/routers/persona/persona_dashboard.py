@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -200,6 +201,31 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
     except Exception:
         logger.exception("dashboard_data: generated images lookup failed")
         # 非致命的、画像履歴なしで表示継続
+
+    # ── Enrich generated_images with prompt data from message metadata ──
+    if generated_images:
+        try:
+            db = ctx.connection.get_memory_db()
+            rows = db.execute(
+                "SELECT metadata FROM messages WHERE metadata LIKE '%image_generation%'"
+            ).fetchall()
+            prompt_lookup: dict[str, dict[str, str]] = {}
+            for (meta_str,) in rows:
+                try:
+                    meta = json.loads(meta_str)
+                    if meta.get("type") == "image_generation" and meta.get("filename"):
+                        prompt_lookup[meta["filename"]] = {
+                            "revised_prompt": meta.get("prompt", ""),
+                            "negative_prompt": meta.get("negative_prompt", ""),
+                        }
+                except (json.JSONDecodeError, TypeError):
+                    continue
+            for img in generated_images:
+                info = prompt_lookup.get(img.get("filename", ""), {})
+                img["revised_prompt"] = info.get("revised_prompt", "")
+                img["negative_prompt"] = info.get("negative_prompt", "")
+        except Exception:
+            logger.debug("dashboard_data: prompt enrichment skipped")
 
     # Chat background / standing picture URLs from config
     chat_background_url = ""
