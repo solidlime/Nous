@@ -26,44 +26,142 @@ async function loadOverview() {
         const stats = data.stats || {};
         const ctx = data.context || {};
 
-        // ── Portrait + Parameters 2-column ──
+        // ── Portrait + Tabbed Persona Status Panel ──
         const portraitUrl = data.latest_self_portrait;
         const portraitEl = document.getElementById('overview-portrait');
         const emoColor = N.Core.EMOTION_COLORS[ctx.emotion] || '#94a3b8';
-        const _ovParams = [
-            { label: 'Emotion', pct: Math.round((ctx.emotion_intensity || 0) * 100), color: emoColor },
-            { label: 'Fatigue', pct: Math.round((stats.fatigue || 0) * 100), color: '#f87171' },
-            { label: 'Warmth', pct: Math.round((stats.warmth || 0) * 100), color: '#f9a8d4' },
-            { label: 'Arousal', pct: Math.round((stats.arousal || 0) * 100), color: '#5856d6' },
-            { label: 'Heart', pct: Math.round((stats.heart_rate || 0) * 100), color: '#ef4444' },
-            { label: 'Pain', pct: Math.round((stats.pain || 0) * 100), color: '#f59e0b' },
-        ];
-        let _ovParamsHtml = _ovParams.map(function(p) {
-            return '<div class="ov-param-row">'
-                + '<div class="ov-param-header"><span class="ov-param-label">' + p.label + '</span>'
-                + '<span class="ov-param-value">' + p.pct + '%</span></div>'
-                + '<div class="ov-param-bar"><div class="ov-param-fill" style="width:' + p.pct + '%;background:' + p.color + '"></div></div>'
-                + '</div>';
-        }).join('');
+        const emoIntensityPct = Math.round((ctx.emotion_intensity || 0) * 100);
+        const emoBarColor = N.Core.EMOTION_BAR_COLORS[ctx.emotion] || N.Core.EMOTION_BAR_COLORS.neutral || '#94a3b8';
+
+        // State memories for Main tab
+        const sm2 = data.state_memories || {};
+        const physContent = (sm2.physical_state?.content) || ctx.physical_state || '--';
+        const mentContent = (sm2.mental_state?.content) || ctx.mental_state || '--';
+        const relStatus = ctx.relationship_status || ctx.relationship_type || '--';
+
+        // Main tab: emotion + states + body metrics
+        const mainTabHtml =
+            '<div style="margin-bottom:16px">'
+            + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+            + '<span style="font-size:0.82rem;font-weight:600;color:var(--text-secondary)">' + (ctx.emotion ? esc(ctx.emotion) : 'Emotion') + '</span>'
+            + '<span style="font-size:0.82rem;font-weight:600;color:var(--text-muted);font-variant-numeric:tabular-nums">' + (ctx.emotion ? emoIntensityPct + '%' : '--') + '</span>'
+            + '</div>'
+            + '<div style="height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden">'
+            + '<div style="height:100%;width:' + (ctx.emotion ? emoIntensityPct : 0) + '%;background:' + emoBarColor + ';border-radius:4px;transition:width 0.6s cubic-bezier(0.25,0.46,0.45,0.94)"></div>'
+            + '</div></div>'
+            + '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">'
+            + '<div><span style="font-size:0.78rem;color:var(--text-muted)">Physical: </span><span style="font-size:0.85rem;color:var(--text-secondary)">' + esc(physContent) + '</span></div>'
+            + '<div><span style="font-size:0.78rem;color:var(--text-muted)">Mental: </span><span style="font-size:0.85rem;color:var(--text-secondary)">' + esc(mentContent) + '</span></div>'
+            + '<div><span style="font-size:0.78rem;color:var(--text-muted)">Relationship: </span><span style="font-size:0.85rem;color:var(--accent-pink);font-weight:600">' + esc(relStatus) + '</span></div>'
+            + '<div style="display:flex;align-items:center;gap:6px"><span style="font-size:0.78rem;color:var(--text-muted)">Environment: </span>' + (stats.environment ? '<span class="badge badge-blue">' + esc(stats.environment) + '</span>' : '<span style="font-size:0.82rem;color:var(--text-muted)">--</span>') + '</div>'
+            + '</div>'
+            + '<div style="font-size:0.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:10px">Body State</div>'
+            + '<div style="display:flex;flex-direction:column;gap:10px">'
+            + [['fatigue','Fatigue','#f87171'],['warmth','Warmth','#f9a8d4'],['arousal','Arousal','#5856d6'],['heart_rate','Heart Rate','#ef4444'],['pain','Pain','#f59e0b']].map(function(b) {
+                var v = stats[b[0]];
+                var pct = v != null ? Math.round(v * 100) : 0;
+                var label = v != null ? (v * 100).toFixed(0) + '%' : '--';
+                return '<div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'
+                    + '<span style="font-size:0.76rem;color:var(--text-muted)">' + b[1] + '</span>'
+                    + '<span style="font-size:0.76rem;color:var(--text-secondary);font-weight:600;font-variant-numeric:tabular-nums">' + label + '</span>'
+                    + '</div>'
+                    + '<div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">'
+                    + '<div style="height:100%;width:' + pct + '%;background:' + b[2] + ';border-radius:3px;transition:width 0.6s cubic-bezier(0.25,0.46,0.45,0.94)"></div>'
+                    + '</div></div>';
+            }).join('')
+            + '</div>';
+
+        // Equipment tab
+        var equipTabHtml2 = '';
+        if (ctx.equipped_items && ctx.equipped_items.length > 0) {
+            equipTabHtml2 = '<div style="display:grid;gap:6px">' + ctx.equipped_items.map(function(item) {
+                var name = typeof item === 'string' ? item : (item.name || JSON.stringify(item));
+                return '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--glass-bg-subtle);border:1px solid var(--glass-border);border-radius:8px">'
+                    + '<span class="badge badge-blue">' + esc(name) + '</span></div>';
+            }).join('') + '</div>';
+        } else {
+            equipTabHtml2 = '<div style="color:var(--text-muted);font-size:0.85rem;padding:12px 0">No equipped items</div>';
+        }
+
+        // Goals tab
+        var goalsTabHtml2 = '';
+        var effectiveGoals2 = data.goals || [];
+        if (effectiveGoals2.length > 0) {
+            goalsTabHtml2 = '<div style="display:flex;flex-direction:column;gap:4px">' + effectiveGoals2.map(function(item) {
+                var content = typeof item === 'string' ? item : (item.content || item.description || item.title || JSON.stringify(item));
+                var status = typeof item === 'object' ? (item.status || 'active').toLowerCase() : 'active';
+                var icon = status === 'achieved' || status === 'fulfilled' ? '<i data-lucide="check-circle"></i>' : status === 'cancelled' ? '<i data-lucide="x-circle"></i>' : '<i data-lucide="refresh-cw"></i>';
+                return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0">'
+                    + '<span style="color:var(--accent-green)">' + icon + '</span>'
+                    + '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)">' + esc(content) + '</span></div>';
+            }).join('') + '</div>';
+        } else {
+            goalsTabHtml2 = '<div style="color:var(--text-muted);font-size:0.85rem;padding:12px 0">No goals</div>';
+        }
+
+        // Stats tab
+        var blocksSummaryHtml2 = '';
+        if (data.blocks && data.blocks.length > 0) {
+            blocksSummaryHtml2 = '<div style="margin-top:16px"><div style="font-size:0.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px">Core Memory Blocks</div>'
+                + '<div style="display:flex;flex-direction:column;gap:4px">' + data.blocks.map(function(b) {
+                    var name = typeof b === 'string' ? b : (b.name || b.block_name || 'block');
+                    var content = typeof b === 'object' ? (b.content || b.value || '') : '';
+                    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--glass-border)">'
+                        + '<span style="font-weight:600;color:var(--accent-purple);font-size:0.82rem">' + esc(name) + '</span>'
+                        + (content ? '<span style="flex:1;font-size:0.78rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(truncate(String(content), 60)) + '</span>' : '')
+                        + '</div>';
+                }).join('') + '</div></div>';
+        }
+        var statsTabHtml2 =
+            '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px">'
+            + '<div style="background:var(--glass-bg-subtle);border:1px solid var(--glass-border);border-radius:10px;padding:14px;text-align:center">'
+            + '<div style="font-size:1.3rem;font-weight:700;color:var(--text-primary);font-variant-numeric:tabular-nums">' + (stats.total_count ?? '--') + '</div>'
+            + '<div style="font-size:0.72rem;color:var(--text-muted);font-weight:500">Total Memories</div></div>'
+            + '<div style="background:var(--glass-bg-subtle);border:1px solid var(--glass-border);border-radius:10px;padding:14px;text-align:center">'
+            + '<div style="font-size:1.3rem;font-weight:700;color:var(--accent-green);font-variant-numeric:tabular-nums">' + ((data.strengths || {}).avg ?? '--') + '</div>'
+            + '<div style="font-size:0.72rem;color:var(--text-muted);font-weight:500">Avg Strength</div></div>'
+            + '</div>'
+            + blocksSummaryHtml2;
+
         if (portraitEl) {
             portraitEl.style.setProperty('--emo-glow', emoColor);
+            portraitEl.style.display = 'grid';
+            portraitEl.className = 'ov-portrait-2col';
+            var portraitLeftHtml = '';
             if (portraitUrl) {
-                portraitEl.style.display = 'grid';
-                portraitEl.className = 'ov-portrait-2col';
-                safeSetHTML(portraitEl,
-                    '<div class="ov-portrait-left" onclick="N.Chat.attachments.openViewer(\'' + esc(portraitUrl) + '\',\'image\')">'
+                portraitLeftHtml = '<div class="ov-portrait-left" onclick="N.Chat.attachments.openViewer(\'' + esc(portraitUrl) + '\',\'image\')">'
                     + '<img src="' + esc(portraitUrl) + '" alt="Self Portrait" class="ov-portrait-img">'
                     + '<div class="ov-portrait-label">Latest Self Portrait</div>'
-                    + '</div>'
-                    + '<div class="ov-params-right">' + _ovParamsHtml + '</div>'
-                );
+                    + '</div>';
             } else {
-                portraitEl.style.display = 'grid';
-                portraitEl.className = 'ov-portrait-2col ov-no-portrait';
-                safeSetHTML(portraitEl,
-                    '<div class="ov-params-right" style="flex:1">' + _ovParamsHtml + '</div>'
-                );
+                portraitEl.classList.add('ov-no-portrait');
             }
+            safeSetHTML(portraitEl,
+                portraitLeftHtml
+                + '<div class="ov-params-right">'
+                + '<div class="ov-tab-btns">'
+                + '<button class="ov-tab-btn active" data-ovtab="main">Main</button>'
+                + '<button class="ov-tab-btn" data-ovtab="equipment">Equipment</button>'
+                + '<button class="ov-tab-btn" data-ovtab="goals">Goals</button>'
+                + '<button class="ov-tab-btn" data-ovtab="stats">Stats</button>'
+                + '</div>'
+                + '<div class="ov-tab-panel" id="ov-panel-main">' + mainTabHtml + '</div>'
+                + '<div class="ov-tab-panel" id="ov-panel-equipment" style="display:none">' + equipTabHtml2 + '</div>'
+                + '<div class="ov-tab-panel" id="ov-panel-goals" style="display:none">' + goalsTabHtml2 + '</div>'
+                + '<div class="ov-tab-panel" id="ov-panel-stats" style="display:none">' + statsTabHtml2 + '</div>'
+                + '</div>'
+            );
+            // Tab switching for the new panel
+            var tabBtns = portraitEl.querySelectorAll('.ov-tab-btn');
+            tabBtns.forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    tabBtns.forEach(function(b) { b.classList.remove('active'); });
+                    btn.classList.add('active');
+                    portraitEl.querySelectorAll('.ov-tab-panel').forEach(function(p) { p.style.display = 'none'; });
+                    var target = portraitEl.querySelector('#ov-panel-' + btn.dataset.ovtab);
+                    if (target) target.style.display = '';
+                });
+            });
         }
 
         // ── Generated Images History Grid ──
@@ -93,57 +191,6 @@ async function loadOverview() {
             }
         }
         S.dashCache = data;
-        const equip = data.equipment || {};
-        const items = data.items || [];
-        const str = data.strengths || {};
-
-        // --- State memories: prefer state_memories, fallback to context_state ---
-        const sm = data.state_memories || {};
-        const physicalContent = (sm.physical_state?.content) || ctx.physical_state;
-        const mentalContent = (sm.mental_state?.content) || ctx.mental_state;
-        // --- Build tag/emotion distributions from stats ---
-        const tagDist = stats.tag_distribution || {};
-        const emoDist = stats.emotion_distribution || {};
-        const topTags = Object.entries(tagDist).sort((a,b) => b[1]-a[1]).slice(0,5);
-        const topEmo = Object.entries(emoDist).sort((a,b) => b[1]-a[1]).slice(0,5);
-
-        // --- Memory Type Distribution (decision/milestone/preference/problem/emotional) ---
-        const MEMORY_TYPES = {
-            'decision':  {color: 'badge-blue',   icon: '<i data-lucide="compass"></i>'},
-            'milestone': {color: 'badge-green',  icon: '<i data-lucide="trophy"></i>'},
-            'preference':{color: 'badge-purple', icon: '<i data-lucide="heart"></i>'},
-            'problem':   {color: 'badge-red',    icon: '<i data-lucide="alert-triangle"></i>'},
-            'emotional': {color: 'badge-pink',   icon: '<i data-lucide="heart"></i>'},
-        };
-        const memTypeCounts = {};
-        Object.entries(MEMORY_TYPES).forEach(([k]) => {
-            if (tagDist[k]) memTypeCounts[k] = tagDist[k];
-        });
-        const hasMemTypes = Object.keys(memTypeCounts).length > 0;
-
-        // --- Equipment display ---
-        const EQUIP_SLOTS = ['top','bottom','shoes','outer','head','accessory_1','accessory_2','accessory_3'];
-        let equipHtml = '<div style="display:grid;gap:6px;margin-top:8px">';
-        EQUIP_SLOTS.forEach(slot => {
-            const current = equip[slot];
-            const itemName = typeof current === 'string' ? current : (current ? (current.name || '') : '');
-            equipHtml += '<div style="display:flex;align-items:center;gap:8px">';
-            equipHtml += '<span class="badge badge-blue" style="min-width:80px;text-align:center">' + esc(slot) + '</span>';
-            if (itemName) {
-                equipHtml += '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)">' + esc(itemName) + '</span>';
-                equipHtml += '<button data-slot="' + esc(slot) + '" onclick="N.Features.Overview.unequipSlot(this.dataset.slot)" style="font-size:0.72rem;padding:2px 8px;border-radius:4px;border:1px solid var(--glass-border);background:var(--glass-bg);color:var(--text-muted);cursor:pointer" title="Unequip"><i data-lucide="x"></i></button>';
-            } else {
-                equipHtml += '<span style="flex:1;font-size:0.82rem;color:var(--text-muted);font-style:italic">empty</span>';
-                const slotItems = items.filter(it => it.name);
-                if (slotItems.length > 0) {
-                    equipHtml += '<select data-slot="' + esc(slot) + '" onchange="if(this.value) N.Features.Overview.changeEquipSlot(this.dataset.slot, this.value)" style="font-size:0.78rem;background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:4px;color:var(--text-secondary);padding:2px 4px"><option value="">equip...</option>';
-                    slotItems.forEach(it => { equipHtml += '<option value="' + esc(it.name) + '">' + esc(it.name) + '</option>'; });
-                    equipHtml += '</select>';
-                }
-            }
-            equipHtml += '</div>';
-        });
-        equipHtml += '</div>';
 
         // --- Core blocks ---
         let blocksHtml = '';
@@ -168,59 +215,6 @@ async function loadOverview() {
             blocksHtml = '<span style="color:var(--text-muted)">No core memory blocks</span>';
         }
 
-        // --- Goals ---
-        function getStatusIcon(status) {
-            if (status === 'active') return '<i data-lucide="refresh-cw"></i>';
-            if (status === 'achieved' || status === 'fulfilled') return '<i data-lucide="check-circle"></i>';
-            if (status === 'cancelled') return '<i data-lucide="x-circle"></i>';
-            return '<i data-lucide="refresh-cw"></i>';
-        }
-
-        function renderGoalItems(goalItems, label) {
-            if (!goalItems || goalItems.length === 0) return '<span style="color:var(--text-muted)">No ' + label + '</span>';
-            let html = '';
-            goalItems.forEach(item => {
-                const content = typeof item === 'string' ? item : (item.content || item.description || item.title || JSON.stringify(item));
-                const status = typeof item === 'object' ? (item.status || 'active').toLowerCase() : 'active';
-                const icon = getStatusIcon(status);
-                html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0">';
-                html += '<span>' + icon + '</span>';
-                html += '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)">' + esc(content) + '</span>';
-                const ts = typeof item === 'object' && (item.created_at || item.date);
-                if (ts) html += '<span style="font-size:0.72rem;color:var(--text-muted)">' + relativeTime(ts) + '</span>';
-                html += '</div>';
-            });
-            return html;
-        }
-
-        const effectiveGoals = data.goals || [];
-
-        // --- Profile: user_info / persona_info / relationship ---
-        const userInfo = ctx.user_info || {};
-        const personaInfo = ctx.persona_info || {};
-        const relStatus = ctx.relationship_status || ctx.relationship_type || '--';
-
-        // --- Inventory items HTML ---
-        let invHtml = '';
-        if (items.length === 0) {
-            invHtml = '<span style="color:var(--text-muted)">No items in inventory</span>';
-        } else {
-            invHtml = '<div style="display:grid;gap:4px">';
-            items.forEach(it => {
-                const desc = it.description || '';
-                const truncDesc = desc.length > 40 ? desc.slice(0, 40) + '...' : desc;
-                invHtml += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)">';
-                invHtml += '<span class="badge badge-blue">' + esc(it.category || 'item') + '</span>';
-                invHtml += '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)" title="' + esc(desc) + '">' + esc(it.name) + '</span>';
-                if (it.quantity > 1) invHtml += '<span style="font-size:0.78rem;color:var(--text-muted)">x' + it.quantity + '</span>';
-                if (truncDesc) invHtml += '<span class="badge badge-purple" title="' + esc(desc) + '">' + esc(truncDesc) + '</span>';
-                invHtml += '<button data-item="' + esc(it.name) + '" onclick="N.Features.Overview.openEditItemModal(this.dataset.item)" style="padding:2px 8px;border-radius:4px;border:1px solid rgba(var(--accent-blue-rgb), 0.3);background:rgba(var(--accent-blue-rgb), 0.08);color:var(--accent-blue);cursor:pointer;font-size:0.78rem" title="Edit item"><i data-lucide="pencil"></i></button>';
-                invHtml += '<button data-item="' + esc(it.name) + '" onclick="N.Features.Overview.deleteItem(this.dataset.item)" style="padding:2px 8px;border-radius:4px;border:1px solid rgba(255,100,100,0.3);background:rgba(255,100,100,0.08);color:#f87171;cursor:pointer;font-size:0.78rem" title="Delete item"><i data-lucide="trash-2"></i></button>';
-                invHtml += '</div>';
-            });
-            invHtml += '</div>';
-        }
-
         // --- Recent memories grouped by date (for 7-day chart) ---
         const recent = data.recent || [];
         const dayMap = {};
@@ -240,165 +234,8 @@ async function loadOverview() {
         const dayLabels = Object.keys(dayMap).map(d => fmtDate(d));
         const dayCounts = Object.values(dayMap);
 
-        // --- Render unified game status panel ---
-        // Build tab content
-        const profileTabHtml = `
-            <div class="ov-profile-grid">
-                <div class="ov-profile-section">
-                    <div class="ov-profile-title">Relationship</div>
-                    <div style="font-size:0.9rem;color:var(--accent-pink);font-weight:600;margin-bottom:12px">${esc(relStatus)}</div>
-                    ${ctx.last_conversation_time ? `<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px"><span style="font-size:0.78rem;color:var(--text-muted)"><i data-lucide="clock"></i> Last session:</span><span class="badge badge-blue">${relativeTime(ctx.last_conversation_time)}</span></div>` : ''}
-                    <div class="ov-profile-title">User Info</div>
-                    ${Object.entries(userInfo).length ? Object.entries(userInfo).map(([k,v]) => `<div class="ov-profile-item"><span class="ov-profile-key">${esc(k.replace(/_/g,' '))}</span><span class="ov-profile-value">${esc(String(v))}</span></div>`).join('') : '<span style="color:var(--text-muted)">No user info</span>'}
-                </div>
-                <div class="ov-profile-section">
-                    <div class="ov-profile-title">Persona Info</div>
-                    ${(() => { const _GOALS_KEYS = new Set(['goals','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GOALS_KEYS.has(k)); return filtered.length ? filtered.map(([k,v]) => `<div class="ov-profile-item"><span class="ov-profile-key">${esc(k.replace(/_/g,' '))}</span><span class="ov-profile-value" style="color:var(--accent-purple)">${esc(String(v))}</span></div>`).join('') : '<span style="color:var(--text-muted)">No persona info</span>'; })()}
-                </div>
-            </div>`;
-
-        const statsTabHtml = `
-            <div class="ov-stats-grid">
-                <div class="ov-stat-card">
-                    <div class="ov-stat-value">${stats.total_count ?? '--'}</div>
-                    <div class="ov-stat-label">Total Memories</div>
-                </div>
-                <div class="ov-stat-card">
-                    <div class="ov-stat-value" style="color:var(--accent-green)">${str.avg ?? '--'}</div>
-                    <div class="ov-stat-label">Avg Strength</div>
-                </div>
-                <div class="ov-stat-card">
-                    <div class="ov-stat-value" style="color:var(--accent-blue)">${stats.tagged_ratio != null ? (stats.tagged_ratio * 100).toFixed(1) + '%' : '--'}</div>
-                    <div class="ov-stat-label">Tagged</div>
-                </div>
-                <div class="ov-stat-card">
-                    <div class="ov-stat-value" style="color:var(--accent-yellow)">${stats.linked_ratio != null ? (stats.linked_ratio * 100).toFixed(1) + '%' : '--'}</div>
-                    <div class="ov-stat-label">Linked</div>
-                </div>
-            </div>
-            <div class="ov-emotion-bar">
-                <div class="ov-emotion-header">
-                    <span class="ov-emotion-name">${ctx.emotion ? esc(ctx.emotion) : 'Emotion'}</span>
-                    <span class="ov-emotion-pct">${ctx.emotion ? Math.round((ctx.emotion_intensity || 0) * 100) + '%' : '--'}</span>
-                </div>
-                <div class="ov-emotion-track">
-                    <div class="ov-emotion-fill" style="width:${ctx.emotion ? Math.round((ctx.emotion_intensity || 0) * 100) : 0}%;background:${ctx.emotion ? (N.Core.EMOTION_BAR_COLORS[ctx.emotion] || N.Core.EMOTION_BAR_COLORS.neutral) : 'var(--text-muted)'}"></div>
-                </div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
-                <div><span style="font-size:0.78rem;color:var(--text-muted)">Physical: </span><span style="font-size:0.85rem">${esc(physicalContent || '--')}</span></div>
-                <div><span style="font-size:0.78rem;color:var(--text-muted)">Mental: </span><span style="font-size:0.85rem">${esc(mentalContent || '--')}</span></div>
-                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:0.78rem;color:var(--text-muted);min-width:78px"><i data-lucide="globe"></i> Env:</span>${stats.environment ? '<span class="badge badge-blue">' + esc(stats.environment) + '</span>' : '<span style="color:var(--text-muted);font-size:0.82rem">--</span>'}</div>
-            </div>
-            <div class="ov-distribution">
-                <div class="ov-distribution-title">Top Tags</div>
-                <div class="ov-distribution-tags">${topTags.length ? topTags.map(([t,c]) => '<span class="badge badge-purple">' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join('') : '<span style="color:var(--text-muted)">--</span>'}</div>
-            </div>
-            ${hasMemTypes ? `<div class="ov-distribution">
-                <div class="ov-distribution-title">Memory Types</div>
-                <div class="ov-distribution-tags">${Object.entries(memTypeCounts).map(([t,c]) => '<span class="badge ' + MEMORY_TYPES[t].color + '">' + MEMORY_TYPES[t].icon + ' ' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join('')}</div>
-            </div>` : ''}
-            <div class="ov-distribution">
-                <div class="ov-distribution-title">Top Emotions</div>
-                <div class="ov-distribution-tags">${topEmo.length ? topEmo.map(([e,c]) => '<span class="badge badge-pink">' + esc(e) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join('') : '<span style="color:var(--text-muted)">--</span>'}</div>
-            </div>
-            <div class="ov-goals-list">
-                <div style="font-size:0.8rem;font-weight:600;color:var(--accent-green);margin-bottom:8px">Goals <span style="opacity:0.6;font-weight:400">(${effectiveGoals.length}件)</span></div>
-                ${renderGoalItems(effectiveGoals, 'goals')}
-            </div>`;
-
-        const equipTabHtml = `
-            <div class="ov-equip-grid">
-                ${EQUIP_SLOTS.map(slot => {
-                    const current = equip[slot];
-                    const itemName = typeof current === 'string' ? current : (current ? (current.name || '') : '');
-                    return `<div class="ov-equip-slot">
-                        <span class="ov-equip-slot-name">${esc(slot)}</span>
-                        ${itemName ? `
-                            <span class="ov-equip-item">${esc(itemName)}</span>
-                            <div class="ov-equip-actions">
-                                <button data-slot="${esc(slot)}" onclick="N.Features.Overview.unequipSlot(this.dataset.slot)" class="ov-equip-btn" title="Unequip"><i data-lucide="x"></i></button>
-                            </div>
-                        ` : `
-                            <span class="ov-equip-empty">empty</span>
-                            ${(() => {
-                                const slotItems = items.filter(it => it.name);
-                                if (slotItems.length > 0) {
-                                    return `<select data-slot="${esc(slot)}" onchange="if(this.value) N.Features.Overview.changeEquipSlot(this.dataset.slot, this.value)" class="ov-equip-select"><option value="">equip...</option>${slotItems.map(it => `<option value="${esc(it.name)}">${esc(it.name)}</option>`).join('')}</select>`;
-                                }
-                                return '';
-                            })()}
-                        `}
-                    </div>`;
-                }).join('')}
-            </div>`;
-
-        const bodyTabHtml = `
-            <div class="ov-body-grid">
-                <div class="ov-body-item">
-                    <div class="ov-body-header">
-                        <span class="ov-body-label"><i data-lucide="flame"></i> Fatigue</span>
-                        <span class="ov-body-value">${stats.fatigue != null ? (stats.fatigue * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div class="ov-body-track">
-                        <div class="ov-body-fill" style="width:${stats.fatigue != null ? (stats.fatigue * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.fatigue}"></div>
-                    </div>
-                </div>
-                <div class="ov-body-item">
-                    <div class="ov-body-header">
-                        <span class="ov-body-label"><i data-lucide="flower"></i> Warmth</span>
-                        <span class="ov-body-value">${stats.warmth != null ? (stats.warmth * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div class="ov-body-track">
-                        <div class="ov-body-fill" style="width:${stats.warmth != null ? (stats.warmth * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.warmth}"></div>
-                    </div>
-                </div>
-                <div class="ov-body-item">
-                    <div class="ov-body-header">
-                        <span class="ov-body-label"><i data-lucide="zap"></i> Arousal</span>
-                        <span class="ov-body-value">${stats.arousal != null ? (stats.arousal * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div class="ov-body-track">
-                        <div class="ov-body-fill" style="width:${stats.arousal != null ? (stats.arousal * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.arousal}"></div>
-                    </div>
-                </div>
-                <div class="ov-body-item">
-                    <div class="ov-body-header">
-                        <span class="ov-body-label"><i data-lucide="heart-pulse"></i> Heart Rate</span>
-                        <span class="ov-body-value">${stats.heart_rate != null ? (stats.heart_rate * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div class="ov-body-track">
-                        <div class="ov-body-fill" style="width:${stats.heart_rate != null ? (stats.heart_rate * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.heart_rate}"></div>
-                    </div>
-                </div>
-                <div class="ov-body-item">
-                    <div class="ov-body-header">
-                        <span class="ov-body-label"><i data-lucide="activity"></i> Pain</span>
-                        <span class="ov-body-value">${stats.pain != null ? (stats.pain * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div class="ov-body-track">
-                        <div class="ov-body-fill" style="width:${stats.pain != null ? (stats.pain * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.pain}"></div>
-                    </div>
-                </div>
-            </div>`;
-
         // Build main HTML
         safeSetHTML(el, `
-        <!-- Unified Game Status Panel -->
-        <div class="ov-status-panel">
-            <div class="ov-tabs">
-                <button class="ov-tab active" data-tab="profile"><i data-lucide="user"></i> Profile</button>
-                <button class="ov-tab" data-tab="stats"><i data-lucide="bar-chart-3"></i> Stats</button>
-                <button class="ov-tab" data-tab="equipment"><i data-lucide="shield"></i> Equipment</button>
-                <button class="ov-tab" data-tab="body"><i data-lucide="activity"></i> Body</button>
-            </div>
-            <div class="ov-tab-content">
-                <div id="ov-tab-profile" class="ov-tab-pane active">${profileTabHtml}</div>
-                <div id="ov-tab-stats" class="ov-tab-pane">${statsTabHtml}</div>
-                <div id="ov-tab-equipment" class="ov-tab-pane">${equipTabHtml}</div>
-                <div id="ov-tab-body" class="ov-tab-pane">${bodyTabHtml}</div>
-            </div>
-        </div>
         <!-- Core Memory Blocks -->
         <div class="glass glass-hoverable p-6 mb-6">
             <div class="card-title" style="justify-content:space-between">
@@ -419,14 +256,6 @@ async function loadOverview() {
             `).join('')}
             </div>
         </div>` : ''}
-        <!-- Inventory -->
-        <div class="glass glass-hoverable p-6 mb-6">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-                <div class="card-title" style="margin-bottom:0"><i data-lucide="backpack"></i> Inventory</div>
-                <button onclick="N.Features.Overview.openAddItemModal()" style="padding:4px 14px;border-radius:6px;border:1px solid rgba(var(--accent-blue-rgb), 0.4);background:rgba(var(--accent-blue-rgb), 0.1);color:var(--accent-blue);cursor:pointer;font-size:0.82rem;font-weight:600">+ Add Item</button>
-            </div>
-            ${invHtml}
-        </div>
         <!-- Charts -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div class="glass p-6">
@@ -498,20 +327,6 @@ async function loadOverview() {
                 </div>
             </div>
         </div>`);
-
-        // Setup tab switching
-        const tabButtons = el.querySelectorAll('.ov-tab');
-        const tabPanes = el.querySelectorAll('.ov-tab-pane');
-        tabButtons.forEach(btn => {
-            btn.addEventListener('click', function() {
-                const targetTab = this.dataset.tab;
-                tabButtons.forEach(b => b.classList.remove('active'));
-                tabPanes.forEach(p => p.classList.remove('active'));
-                this.classList.add('active');
-                const targetPane = el.querySelector('#ov-tab-' + targetTab);
-                if (targetPane) targetPane.classList.add('active');
-            });
-        });
 
         // --- Charts ---
         N.Components.chart.destroy('chart-timeline');

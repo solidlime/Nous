@@ -1666,7 +1666,7 @@ input[type="range"].chat-field-input:focus {
 }
 .ov-portrait-img {
     max-width: 100%;
-    max-height: 260px;
+    max-height: 400px;
     border-radius: 10px;
     object-fit: contain;
     transition: transform 0.2s var(--ease-apple);
@@ -2096,5 +2096,62 @@ input[type="range"].chat-field-input:focus {
     .ov-tab {
         padding: 10px 14px;
         font-size: 0.78rem;
+    }
+}
+
+/* ===== Portrait Tab Panel — Pill Buttons ===== */
+.ov-tab-btns {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.ov-tab-btns::-webkit-scrollbar {
+    display: none;
+}
+.ov-tab-btn {
+    padding: 4px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--glass-bg-subtle);
+    border: 1px solid var(--glass-border);
+    opacity: 0.5;
+    transition: all var(--duration-fast) var(--ease-apple);
+    white-space: nowrap;
+    min-height: 28px;
+}
+.ov-tab-btn:hover {
+    opacity: 0.8;
+    background: var(--glass-bg-light);
+}
+.ov-tab-btn.active {
+    opacity: 1;
+    color: var(--text-primary);
+    box-shadow: 0 0 8px -2px var(--emo-glow, var(--accent-blue));
+    border-color: var(--emo-glow, var(--accent-blue));
+}
+.ov-tab-panel {
+    /* tab content container */
+}
+@media (max-width: 640px) {
+    .ov-portrait-2col {
+        grid-template-columns: 1fr;
+    }
+    .ov-portrait-left {
+        border-right: none;
+        border-bottom: 0.5px solid var(--glass-border);
+        padding: 16px;
+    }
+    .ov-portrait-img {
+        max-height: 200px;
+    }
+    .ov-tab-btns {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
 }
