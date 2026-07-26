@@ -55,8 +55,10 @@ function toggleVoiceInput() {
     inputEl.value = _voiceBaseText + (interimText ? " " + interimText : "");
     inputEl.dispatchEvent(new Event("input"));
   };
-  _voiceRecognition.onerror = () => {
-    toast("音声認識エラー", "error");
+  _voiceRecognition.onerror = (event) => {
+    var errMsg = event.error || "unknown";
+    console.error("SpeechRecognition error:", errMsg, event.message || "");
+    toast("音声認識エラー: " + errMsg, "error");
     _voiceRecognition = null;
     if (btn) {
       safeSetHTML(btn, '<i data-lucide="mic"></i>');
@@ -70,7 +72,17 @@ function toggleVoiceInput() {
       btn.style.color = "";
     }
   };
-  _voiceRecognition.start();
+  try {
+    _voiceRecognition.start();
+  } catch (e) {
+    console.error("SpeechRecognition.start() failed:", e);
+    toast("音声認識の開始に失敗: " + (e.message || e), "error");
+    _voiceRecognition = null;
+    if (btn) {
+      safeSetHTML(btn, '<i data-lucide="mic"></i>');
+      btn.style.color = "";
+    }
+  }
 }
 
 N.Chat.voice = {
