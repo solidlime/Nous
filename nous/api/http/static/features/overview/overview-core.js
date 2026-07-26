@@ -34,30 +34,24 @@ async function loadOverview() {
             portraitEl.style.display = 'none';
         }
 
-        // ── Generated Images History Grid ──
-        const imagesGridEl = document.getElementById('overview-images-grid');
-        if (imagesGridEl) {
-            const genImages = data.generated_images || [];
-            if (genImages.length > 0) {
-                let gridHtml = '<div class="glass glass-hoverable p-6 mb-6">';
-                gridHtml += '<div class="card-title"><i data-lucide="images"></i> Generated Images</div>';
-                gridHtml += '<div class="image-history-grid">';
-                genImages.forEach(img => {
-                    const prompt = img.revised_prompt || '';
-                    const tooltipAttr = prompt ? ' title="' + esc(prompt) + '"' : '';
-                    const badgeHtml = img.is_self_portrait ? '<span class="image-history-badge">🖼️ SP</span>' : '';
-                    gridHtml += '<div class="image-history-thumb"' + tooltipAttr + ' onclick="N.Chat.attachments.openViewer(\'' + esc(img.url) + '\',\'image\',null,{revised_prompt:\'' + esc(prompt).replace(/'/g, "\\'") + '\'})">';
-                    gridHtml += '<img src="' + esc(img.url) + '" alt="' + esc(img.filename) + '" loading="lazy">';
-                    gridHtml += badgeHtml;
-                    gridHtml += '</div>';
-                });
-                gridHtml += '</div>';
-                gridHtml += '</div>';
-                imagesGridEl.style.display = 'block';
-                safeSetHTML(imagesGridEl, gridHtml);
-            } else {
-                imagesGridEl.style.display = 'none';
-            }
+        // ── Generated Images History Grid (built here, rendered in template below) ──
+        let genImagesHtml = '';
+        const genImages = data.generated_images || [];
+        if (genImages.length > 0) {
+            genImagesHtml = '<div class="glass glass-hoverable p-6 mb-6">';
+            genImagesHtml += '<div class="card-title"><i data-lucide="images"></i> Generated Images</div>';
+            genImagesHtml += '<div class="image-history-grid">';
+            genImages.forEach(img => {
+                const prompt = img.revised_prompt || '';
+                const tooltipAttr = prompt ? ' title="' + esc(prompt) + '"' : '';
+                const badgeHtml = img.is_self_portrait ? '<span class="image-history-badge">🖼️ SP</span>' : '';
+                genImagesHtml += '<div class="image-history-thumb"' + tooltipAttr + ' onclick="N.Chat.attachments.openViewer(\'' + esc(img.url) + '\',\'image\',null,{revised_prompt:\'' + esc(prompt).replace(/'/g, "\\'") + '\'})">';
+                genImagesHtml += '<img src="' + esc(img.url) + '" alt="' + esc(img.filename) + '" loading="lazy">';
+                genImagesHtml += badgeHtml;
+                genImagesHtml += '</div>';
+            });
+            genImagesHtml += '</div>';
+            genImagesHtml += '</div>';
         }
         S.dashCache = data;
         const stats = data.stats || {};
@@ -215,7 +209,7 @@ async function loadOverview() {
         <div class="ov-hero">
             <div id="hero-portrait-slot"></div>
             <div class="ov-status-panel">
-                <!-- Quick Status -->
+                <!-- Quick Status + Profile -->
                 <div class="ov-quick">
                     <div class="ov-section-title"><i data-lucide="user"></i> Status</div>
                     ${(function(){
@@ -231,23 +225,11 @@ async function loadOverview() {
                     })()}
                     <div class="ov-quick-row"><span class="ov-quick-label">Relationship</span><span class="ov-quick-value" style="color:var(--accent-pink);font-weight:600">${esc(relStatus)}</span></div>
                     ${ctx.last_conversation_time ? '<div class="ov-quick-row"><span class="ov-quick-label"><i data-lucide="clock"></i> Last</span><span class="ov-quick-value">' + relativeTime(ctx.last_conversation_time) + '</span></div>' : ''}
+                    ${Object.entries(userInfo).length ? Object.entries(userInfo).map(([k,v]) => '<div class="ov-quick-row"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value">' + esc(String(v)) + '</span></div>').join('') : ''}
+                    ${(() => { const _GK = new Set(['goals','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GK.has(k)); return filtered.length ? filtered.map(([k,v]) => '<div class="ov-quick-row"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value" style="color:var(--accent-purple)">' + esc(String(v)) + '</span></div>').join('') : ''; })()}
                     <div class="ov-quick-row"><span class="ov-quick-label">Physical</span><span class="ov-quick-value">${esc(physicalContent || '--')}</span></div>
                     <div class="ov-quick-row"><span class="ov-quick-label">Mental</span><span class="ov-quick-value">${esc(mentalContent || '--')}</span></div>
                     ${stats.environment ? '<div class="ov-quick-row"><span class="ov-quick-label">Environment</span><span class="ov-quick-value"><span class="badge badge-blue">' + esc(stats.environment) + '</span></span></div>' : ''}
-                </div>
-
-                <!-- Memory Stats -->
-                <div class="glass p-4" style="border-radius:var(--radius-md);backdrop-filter:blur(20px) saturate(180%)">
-                    <div class="ov-section-title"><i data-lucide="bar-chart-3"></i> Memory</div>
-                    <div class="ov-stats-grid">
-                        <div class="ov-stat-card"><div class="stat-value">${stats.total_count ?? '--'}</div><div class="stat-label">Total</div></div>
-                        <div class="ov-stat-card"><div class="stat-value" style="color:var(--accent-green)">${str.avg ?? '--'}</div><div class="stat-label">Avg Strength</div></div>
-                        <div class="ov-stat-card"><div class="stat-value" style="color:var(--accent-blue)">${stats.tagged_ratio != null ? (stats.tagged_ratio * 100).toFixed(1) + '%' : '--'}</div><div class="stat-label">Tagged</div></div>
-                        <div class="ov-stat-card"><div class="stat-value" style="color:var(--accent-yellow)">${stats.linked_ratio != null ? (stats.linked_ratio * 100).toFixed(1) + '%' : '--'}</div><div class="stat-label">Linked</div></div>
-                    </div>
-                    ${topTags.length ? '<div style="margin-bottom:6px">' + topTags.map(([t,c]) => '<span class="badge badge-purple">' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join(' ') + '</div>' : ''}
-                    ${hasMemTypes ? '<div style="margin-bottom:6px">' + Object.entries(memTypeCounts).map(([t,c]) => '<span class="badge ' + MEMORY_TYPES[t].color + '">' + MEMORY_TYPES[t].icon + ' ' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join(' ') + '</div>' : ''}
-                    ${topEmo.length ? '<div>' + topEmo.map(([e,c]) => '<span class="badge badge-pink">' + esc(e) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join(' ') + '</div>' : ''}
                 </div>
 
                 <!-- Body Sensations -->
@@ -274,11 +256,18 @@ async function loadOverview() {
                     </div>
                 </div>
 
-                <!-- Profile Info -->
+                <!-- Memory Stats -->
                 <div class="glass p-4" style="border-radius:var(--radius-md);backdrop-filter:blur(20px) saturate(180%)">
-                    <div class="ov-section-title"><i data-lucide="user-circle"></i> Profile</div>
-                    ${Object.entries(userInfo).length ? Object.entries(userInfo).map(([k,v]) => '<div class="ov-quick-row"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value">' + esc(String(v)) + '</span></div>').join('') : '<span style="color:var(--text-muted);font-size:0.82rem">No user info</span>'}
-                    ${(() => { const _GOALS_KEYS = new Set(['goals','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GOALS_KEYS.has(k)); return filtered.length ? filtered.map(([k,v]) => '<div class="ov-quick-row"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value" style="color:var(--accent-purple)">' + esc(String(v)) + '</span></div>').join('') : '<span style="color:var(--text-muted);font-size:0.8rem">No persona info</span>'; })()}
+                    <div class="ov-section-title"><i data-lucide="bar-chart-3"></i> Memory</div>
+                    <div class="ov-stats-grid">
+                        <div class="ov-stat-card"><div class="stat-value">${stats.total_count ?? '--'}</div><div class="stat-label">Total</div></div>
+                        <div class="ov-stat-card"><div class="stat-value" style="color:var(--accent-green)">${str.avg ?? '--'}</div><div class="stat-label">Avg Strength</div></div>
+                        <div class="ov-stat-card"><div class="stat-value" style="color:var(--accent-blue)">${stats.tagged_ratio != null ? (stats.tagged_ratio * 100).toFixed(1) + '%' : '--'}</div><div class="stat-label">Tagged</div></div>
+                        <div class="ov-stat-card"><div class="stat-value" style="color:var(--accent-yellow)">${stats.linked_ratio != null ? (stats.linked_ratio * 100).toFixed(1) + '%' : '--'}</div><div class="stat-label">Linked</div></div>
+                    </div>
+                    ${topTags.length ? '<div style="margin-bottom:6px">' + topTags.map(([t,c]) => '<span class="badge badge-purple">' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join(' ') + '</div>' : ''}
+                    ${hasMemTypes ? '<div style="margin-bottom:6px">' + Object.entries(memTypeCounts).map(([t,c]) => '<span class="badge ' + MEMORY_TYPES[t].color + '">' + MEMORY_TYPES[t].icon + ' ' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join(' ') + '</div>' : ''}
+                    ${topEmo.length ? '<div>' + topEmo.map(([e,c]) => '<span class="badge badge-pink">' + esc(e) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join(' ') + '</div>' : ''}
                 </div>
             </div>
         </div>
@@ -324,6 +313,7 @@ async function loadOverview() {
             </div>
             ${invHtml}
         </div>
+        ${genImagesHtml}
         <!-- Charts -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div class="glass p-6">
