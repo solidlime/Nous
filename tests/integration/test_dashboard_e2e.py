@@ -275,8 +275,8 @@ async def test_dashboard_data_with_memories(seeded_client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["persona"] == "testpersona"
-    # recent returns up to 5 (dashboard fetches limit=5)
-    assert len(data["recent"]) <= 5
+    # recent returns up to 50 (dashboard fetches limit=50)
+    assert len(data["recent"]) <= 50
     assert len(data["recent"]) > 0
     # strengths summary
     assert data["strengths"]["total"] == 6
