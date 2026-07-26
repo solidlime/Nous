@@ -43,6 +43,7 @@ class SearchQuery:
     keyword_weight: float = 0.5  # RRF weight for keyword (FTS5 + plain) signal
     similarity_threshold: float = 0.85  # cosine similarity flag threshold
     valid_at: datetime | None = None  # Only return memories valid at this timestamp
+    kind: str | None = None  # episodic / semantic / procedural / prospective
 
 
 @dataclass
@@ -105,6 +106,7 @@ class SearchEngine:
         if not result.is_ok:
             return result
         filtered = self._filter_by_emotion(result.value, query.emotion)
+        filtered = self._filter_by_kind(filtered, query.kind)
         if query.valid_at is not None:
             filtered = self._filter_by_valid_at(filtered, query.valid_at)
         return Success(filtered)
@@ -119,6 +121,20 @@ class SearchEngine:
             return results
         target = normalize_emotion(emotion)
         return [r for r in results if normalize_emotion(r.memory.emotion) == target]
+
+    @staticmethod
+    def _filter_by_kind(
+        results: list[SearchResult],
+        kind: str | None,
+    ) -> list[SearchResult]:
+        """Post-filter results by memory kind."""
+        if kind is None:
+            return results
+        from nous.domain.memory.entities import VALID_KINDS
+
+        if kind not in VALID_KINDS:
+            return results
+        return [r for r in results if r.memory.kind == kind]
 
     @staticmethod
     def _filter_by_valid_at(
@@ -321,6 +337,7 @@ class SearchEngine:
                 recency_weight=query.recency_weight,
                 vector_weight=query.vector_weight,
                 keyword_weight=query.keyword_weight,
+                kind=query.kind,
             )
             result = await self._hybrid_search(sub)
             if result.is_ok:
