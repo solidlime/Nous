@@ -22,17 +22,48 @@ async function loadOverview() {
             if (typeof lucide !== 'undefined') lucide.createIcons();
             return;
         }
-        // ── Self-portrait display ──
+        // ── Extract core data early for portrait+params ──
+        const stats = data.stats || {};
+        const ctx = data.context || {};
+
+        // ── Portrait + Parameters 2-column ──
         const portraitUrl = data.latest_self_portrait;
         const portraitEl = document.getElementById('overview-portrait');
-        if (portraitUrl && portraitEl) {
-            portraitEl.style.display = 'block';
-            safeSetHTML(portraitEl, '<div class="glass p-4" style="text-align:center;max-width:400px;margin:0 auto 16px">'
-                + '<img src="' + esc(portraitUrl) + '" alt="Self Portrait" style="max-width:100%;max-height:300px;border-radius:8px;cursor:pointer" onclick="N.Chat.attachments.openViewer(\'' + esc(portraitUrl) + '\',\'image\')">'
-                + '<div style="margin-top:6px;font-size:0.75rem;color:var(--text-muted)">Latest Self Portrait</div>'
-                + '</div>');
-        } else if (portraitEl) {
-            portraitEl.style.display = 'none';
+        const emoColor = N.Core.EMOTION_COLORS[ctx.emotion] || '#94a3b8';
+        const _ovParams = [
+            { label: 'Emotion', pct: Math.round((ctx.emotion_intensity || 0) * 100), color: emoColor },
+            { label: 'Fatigue', pct: Math.round((stats.fatigue || 0) * 100), color: '#f87171' },
+            { label: 'Warmth', pct: Math.round((stats.warmth || 0) * 100), color: '#f9a8d4' },
+            { label: 'Arousal', pct: Math.round((stats.arousal || 0) * 100), color: '#5856d6' },
+            { label: 'Heart', pct: Math.round((stats.heart_rate || 0) * 100), color: '#ef4444' },
+            { label: 'Pain', pct: Math.round((stats.pain || 0) * 100), color: '#f59e0b' },
+        ];
+        let _ovParamsHtml = _ovParams.map(function(p) {
+            return '<div class="ov-param-row">'
+                + '<div class="ov-param-header"><span class="ov-param-label">' + p.label + '</span>'
+                + '<span class="ov-param-value">' + p.pct + '%</span></div>'
+                + '<div class="ov-param-bar"><div class="ov-param-fill" style="width:' + p.pct + '%;background:' + p.color + '"></div></div>'
+                + '</div>';
+        }).join('');
+        if (portraitEl) {
+            portraitEl.style.setProperty('--emo-glow', emoColor);
+            if (portraitUrl) {
+                portraitEl.style.display = 'grid';
+                portraitEl.className = 'ov-portrait-2col';
+                safeSetHTML(portraitEl,
+                    '<div class="ov-portrait-left" onclick="N.Chat.attachments.openViewer(\'' + esc(portraitUrl) + '\',\'image\')">'
+                    + '<img src="' + esc(portraitUrl) + '" alt="Self Portrait" class="ov-portrait-img">'
+                    + '<div class="ov-portrait-label">Latest Self Portrait</div>'
+                    + '</div>'
+                    + '<div class="ov-params-right">' + _ovParamsHtml + '</div>'
+                );
+            } else {
+                portraitEl.style.display = 'grid';
+                portraitEl.className = 'ov-portrait-2col ov-no-portrait';
+                safeSetHTML(portraitEl,
+                    '<div class="ov-params-right" style="flex:1">' + _ovParamsHtml + '</div>'
+                );
+            }
         }
 
         // ── Generated Images History Grid ──
@@ -61,8 +92,6 @@ async function loadOverview() {
             }
         }
         S.dashCache = data;
-        const stats = data.stats || {};
-        const ctx = data.context || {};
         const equip = data.equipment || {};
         const items = data.items || [];
         const str = data.strengths || {};
