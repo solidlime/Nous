@@ -46,6 +46,7 @@ N.Core.safeSetHTML = function safeSetHTML(element, html) {
         "aria-*","role","type","value","placeholder","checked","disabled",
         "selected","for","name","required","min","max","step","pattern",
         "autocomplete","rows","cols","readonly","tabindex",
+        "onclick","onchange",
       ],
     });
   } else {
