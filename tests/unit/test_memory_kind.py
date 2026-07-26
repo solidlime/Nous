@@ -59,3 +59,8 @@ class TestMemoryKind:
         for kind in VALID_KINDS:
             m = _make_memory(kind=kind)
             assert m.kind == kind
+
+    def test_chat_kind_no_longer_valid(self) -> None:
+        """'chat' was removed from VALID_KINDS; passing it should raise."""
+        with pytest.raises(ValueError, match="Invalid kind"):
+            _make_memory(kind="chat")
