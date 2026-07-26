@@ -247,6 +247,7 @@ def register_tools(mcp: FastMCP) -> None:
         relationship_type: str | None = None,
         author_note: str | None = None,
         author_note_frequency: str | None = None,
+        appearance: str | None = None,
     ) -> str:
         """Update persona state. context_note: short note on current activity (session continuity).
         body_state: {fatigue, warmth, arousal, heart_rate, pain (0.0-1.0)} — numeric body metrics.
@@ -254,7 +255,8 @@ def register_tools(mcp: FastMCP) -> None:
         physical_state / mental_state / environment: free-text descriptions.
         relationship_status / relationship_type: interpersonal context.
         user_info: {name, nickname, preferred_address}. persona_info: {nickname, ...}.
-        author_note: persistent system prompt injection. author_note_frequency: 'always' | 'every_n' | 'on_emotion_change'."""
+        author_note: persistent system prompt injection. author_note_frequency: 'always' | 'every_n' | 'on_emotion_change'.
+        appearance: free-text description of current appearance (clothing, hair, accessories)."""
         p = _resolve_persona()
         r = await _tool_update_context(
             AppContextRegistry.get(p),
@@ -273,6 +275,7 @@ def register_tools(mcp: FastMCP) -> None:
             relationship_type=relationship_type,
             author_note=author_note,
             author_note_frequency=author_note_frequency,
+            appearance=appearance,
         )
         if r.get("ok"):
             return r.get("result", "")

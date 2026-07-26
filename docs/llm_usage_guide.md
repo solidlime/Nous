@@ -202,6 +202,15 @@ update_context(
 )
 ```
 
+### Appearance (for persona agents)
+
+```python
+# Update persona's current appearance (clothing, hair, accessories)
+update_context(appearance="白いワンピース、髪を下ろしている、麦わら帽子")
+```
+
+> **Note (日本語)**: `appearance` は自由記述。現在の外見を簡潔に記述する。mood-sync スキルが外見変化を検知して自動更新する。
+
 ### User info (bi-temporal — history is preserved)
 
 ```python
