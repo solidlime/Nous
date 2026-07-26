@@ -150,6 +150,18 @@ def _migrate_context_state_to_memories(
         pass
 
 
+def _migrate_cleanup_orphan_strengths_v4(
+    db_conn: sqlite3.Connection, persona: str  # noqa: ARG001
+) -> None:
+    """Delete orphan memory_strength records whose memory_key has been removed."""
+    cursor = db_conn.execute(
+        "DELETE FROM memory_strength WHERE memory_key NOT IN (SELECT key FROM memories)"
+    )
+    delete_count = cursor.rowcount
+    db_conn.commit()
+    logger.info("Cleaned up %d orphan memory_strength records", delete_count)
+
+
 # ---------------------------------------------------------------------------
 # Migration registry  (ordered by version)
 # ---------------------------------------------------------------------------
@@ -160,4 +172,5 @@ MIGRATIONS = [
     (1, "Add last_consumed_at column to memories", _migrate_add_last_consumed_at),
     (2, "Backfill FTS5 index", _migrate_fts_backfill),
     (3, "Transfer context_state records into memories", _migrate_context_state_to_memories),
+    (4, "cleanup_orphan_strengths", _migrate_cleanup_orphan_strengths_v4),
 ]
