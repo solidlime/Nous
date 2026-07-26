@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 from nous.domain.memory.entities import MemoryStrength
 from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
@@ -50,6 +52,17 @@ class SQLiteStrengthMixin:
                 ),
             )
             return Success(None)
+        except sqlite3.IntegrityError as e:
+            msg = str(e)
+            if "FOREIGN KEY" in msg:
+                logger.warning(
+                    "FK violation saving strength for %s (memory may be deleted): %s",
+                    strength.memory_key,
+                    e,
+                )
+            else:
+                logger.error("Failed to save strength for %s: %s", strength.memory_key, e)
+            return Failure(RepositoryError(str(e)))
         except Exception as e:
             logger.error("Failed to save strength for %s: %s", strength.memory_key, e)
             return Failure(RepositoryError(str(e)))
