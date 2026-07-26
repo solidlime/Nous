@@ -83,46 +83,6 @@ async function loadOverview() {
             equipTabHtml2 = '<div style="color:var(--text-muted);font-size:0.85rem;padding:12px 0">No equipped items</div>';
         }
 
-        // Goals tab
-        var goalsTabHtml2 = '';
-        var effectiveGoals2 = data.goals || [];
-        if (effectiveGoals2.length > 0) {
-            goalsTabHtml2 = '<div style="display:flex;flex-direction:column;gap:4px">' + effectiveGoals2.map(function(item) {
-                var content = typeof item === 'string' ? item : (item.content || item.description || item.title || JSON.stringify(item));
-                var status = typeof item === 'object' ? (item.status || 'active').toLowerCase() : 'active';
-                var icon = status === 'achieved' || status === 'fulfilled' ? '<i data-lucide="check-circle"></i>' : status === 'cancelled' ? '<i data-lucide="x-circle"></i>' : '<i data-lucide="refresh-cw"></i>';
-                return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0">'
-                    + '<span style="color:var(--accent-green)">' + icon + '</span>'
-                    + '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)">' + esc(content) + '</span></div>';
-            }).join('') + '</div>';
-        } else {
-            goalsTabHtml2 = '<div style="color:var(--text-muted);font-size:0.85rem;padding:12px 0">No goals</div>';
-        }
-
-        // Stats tab
-        var blocksSummaryHtml2 = '';
-        if (data.blocks && data.blocks.length > 0) {
-            blocksSummaryHtml2 = '<div style="margin-top:16px"><div style="font-size:0.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px">Core Memory Blocks</div>'
-                + '<div style="display:flex;flex-direction:column;gap:4px">' + data.blocks.map(function(b) {
-                    var name = typeof b === 'string' ? b : (b.name || b.block_name || 'block');
-                    var content = typeof b === 'object' ? (b.content || b.value || '') : '';
-                    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--glass-border)">'
-                        + '<span style="font-weight:600;color:var(--accent-purple);font-size:0.82rem">' + esc(name) + '</span>'
-                        + (content ? '<span style="flex:1;font-size:0.78rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(truncate(String(content), 60)) + '</span>' : '')
-                        + '</div>';
-                }).join('') + '</div></div>';
-        }
-        var statsTabHtml2 =
-            '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px">'
-            + '<div style="background:var(--glass-bg-subtle);border:1px solid var(--glass-border);border-radius:10px;padding:14px;text-align:center">'
-            + '<div style="font-size:1.3rem;font-weight:700;color:var(--text-primary);font-variant-numeric:tabular-nums">' + (stats.total_count ?? '--') + '</div>'
-            + '<div style="font-size:0.72rem;color:var(--text-muted);font-weight:500">Total Memories</div></div>'
-            + '<div style="background:var(--glass-bg-subtle);border:1px solid var(--glass-border);border-radius:10px;padding:14px;text-align:center">'
-            + '<div style="font-size:1.3rem;font-weight:700;color:var(--accent-green);font-variant-numeric:tabular-nums">' + ((data.strengths || {}).avg ?? '--') + '</div>'
-            + '<div style="font-size:0.72rem;color:var(--text-muted);font-weight:500">Avg Strength</div></div>'
-            + '</div>'
-            + blocksSummaryHtml2;
-
         if (portraitEl) {
             portraitEl.style.setProperty('--emo-glow', emoColor);
             portraitEl.style.display = 'grid';
@@ -142,13 +102,9 @@ async function loadOverview() {
                 + '<div class="ov-tab-btns">'
                 + '<button class="ov-tab-btn active" data-ovtab="main">Main</button>'
                 + '<button class="ov-tab-btn" data-ovtab="equipment">Equipment</button>'
-                + '<button class="ov-tab-btn" data-ovtab="goals">Goals</button>'
-                + '<button class="ov-tab-btn" data-ovtab="stats">Stats</button>'
                 + '</div>'
                 + '<div class="ov-tab-panel" id="ov-panel-main">' + mainTabHtml + '</div>'
                 + '<div class="ov-tab-panel" id="ov-panel-equipment" style="display:none">' + equipTabHtml2 + '</div>'
-                + '<div class="ov-tab-panel" id="ov-panel-goals" style="display:none">' + goalsTabHtml2 + '</div>'
-                + '<div class="ov-tab-panel" id="ov-panel-stats" style="display:none">' + statsTabHtml2 + '</div>'
                 + '</div>'
             );
             // Tab switching for the new panel
@@ -233,9 +189,46 @@ async function loadOverview() {
         }
         const dayLabels = Object.keys(dayMap).map(d => fmtDate(d));
         const dayCounts = Object.values(dayMap);
+        const tagDist = stats.tag_distribution || {};
+        const effectiveGoals = data.goals || [];
+
+        // --- Goals HTML ---
+        function getStatusIcon(status) {
+            if (status === 'active') return '<i data-lucide="refresh-cw"></i>';
+            if (status === 'achieved' || status === 'fulfilled') return '<i data-lucide="check-circle"></i>';
+            if (status === 'cancelled') return '<i data-lucide="x-circle"></i>';
+            return '<i data-lucide="refresh-cw"></i>';
+        }
+        let goalsHtml = '';
+        if (effectiveGoals.length > 0) {
+            goalsHtml = '<div style="display:flex;flex-direction:column;gap:4px">' + effectiveGoals.map(function(item) {
+                var content = typeof item === 'string' ? item : (item.content || item.description || item.title || JSON.stringify(item));
+                var status = typeof item === 'object' ? (item.status || 'active').toLowerCase() : 'active';
+                var icon = getStatusIcon(status);
+                return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0">'
+                    + '<span style="color:var(--accent-green)">' + icon + '</span>'
+                    + '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)">' + esc(content) + '</span></div>';
+            }).join('') + '</div>';
+        } else {
+            goalsHtml = '<span style="color:var(--text-muted)">No goals</span>';
+        }
 
         // Build main HTML
         safeSetHTML(el, `
+        <!-- Memory Stats -->
+        <div class="glass glass-hoverable p-6 mb-6">
+            <div class="card-title"><i data-lucide="bar-chart-3"></i> Memory Stats</div>
+            <div class="ov-stats-grid">
+                <div class="ov-stat-card">
+                    <div class="ov-stat-value">${stats.total_count ?? '--'}</div>
+                    <div class="ov-stat-label">Total Memories</div>
+                </div>
+                <div class="ov-stat-card">
+                    <div class="ov-stat-value" style="color:var(--accent-green)">${((data.strengths || {}).avg ?? '--')}</div>
+                    <div class="ov-stat-label">Avg Strength</div>
+                </div>
+            </div>
+        </div>
         <!-- Core Memory Blocks -->
         <div class="glass glass-hoverable p-6 mb-6">
             <div class="card-title" style="justify-content:space-between">
@@ -243,6 +236,11 @@ async function loadOverview() {
                 <button onclick="N.Features.Overview.showCreateBlock()" class="glass-btn" style="padding:4px 12px;font-size:0.78rem"><i data-lucide="plus"></i> New Block</button>
             </div>
             ${blocksHtml}
+        </div>
+        <!-- Goals -->
+        <div class="glass glass-hoverable p-6 mb-6">
+            <div class="card-title"><i data-lucide="target"></i> Goals</div>
+            ${goalsHtml}
         </div>
         <!-- Relationship Highlights (from memory tags) -->
         ${data.relationship_highlights && data.relationship_highlights.length > 0 ? `
