@@ -1738,3 +1738,363 @@ input[type="range"].chat-field-input:focus {
         max-height: 200px;
     }
 }
+
+/* ===== Unified Game Status Panel — Glassmorphism ===== */
+.ov-status-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+/* Tab navigation */
+.ov-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--glass-border);
+    background: var(--glass-bg-faint);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.ov-tabs::-webkit-scrollbar {
+    display: none;
+}
+.ov-tab {
+    padding: 12px 20px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-apple);
+    white-space: nowrap;
+    position: relative;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.ov-tab:hover {
+    color: var(--text-secondary);
+    background: var(--glass-bg-subtle);
+}
+.ov-tab.active {
+    color: var(--accent-blue);
+    background: var(--glass-bg);
+}
+.ov-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent-blue);
+    border-radius: 1px 1px 0 0;
+}
+.ov-tab i {
+    width: 16px;
+    height: 16px;
+}
+
+/* Tab content */
+.ov-tab-content {
+    padding: 20px;
+}
+.ov-tab-pane {
+    display: none;
+}
+.ov-tab-pane.active {
+    display: block;
+}
+
+/* Profile section */
+.ov-profile-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+.ov-profile-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.ov-profile-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--glass-border);
+}
+.ov-profile-item {
+    display: flex;
+    gap: 8px;
+    padding: 6px 0;
+    font-size: 0.85rem;
+}
+.ov-profile-key {
+    color: var(--text-muted);
+    min-width: 120px;
+    font-weight: 500;
+}
+.ov-profile-value {
+    color: var(--text-secondary);
+}
+
+/* Stats section */
+.ov-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.ov-stat-card {
+    background: var(--glass-bg-subtle);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    transition: all var(--duration-fast) var(--ease-apple);
+}
+.ov-stat-card:hover {
+    background: var(--glass-bg-light);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.ov-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    font-variant-numeric: tabular-nums;
+}
+.ov-stat-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+/* Emotion bar */
+.ov-emotion-bar {
+    margin-bottom: 20px;
+}
+.ov-emotion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.ov-emotion-name {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+.ov-emotion-pct {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.ov-emotion-track {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.ov-emotion-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* Tags and emotions distribution */
+.ov-distribution {
+    margin-bottom: 20px;
+}
+.ov-distribution-title {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+.ov-distribution-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* Equipment section */
+.ov-equip-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+.ov-equip-slot {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--glass-bg-subtle);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    transition: all var(--duration-fast) var(--ease-apple);
+}
+.ov-equip-slot:hover {
+    background: var(--glass-bg-light);
+    border-color: rgba(var(--accent-blue-rgb), 0.3);
+}
+.ov-equip-slot-name {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--accent-blue);
+    min-width: 80px;
+    text-align: center;
+    padding: 4px 8px;
+    background: rgba(var(--accent-blue-rgb), 0.1);
+    border-radius: 6px;
+}
+.ov-equip-item {
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+.ov-equip-empty {
+    flex: 1;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+.ov-equip-actions {
+    display: flex;
+    gap: 6px;
+}
+.ov-equip-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.72rem;
+    transition: all var(--duration-fast) var(--ease-apple);
+}
+.ov-equip-btn:hover {
+    color: var(--text-primary);
+    background: var(--glass-bg-subtle);
+}
+.ov-equip-select {
+    font-size: 0.78rem;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    padding: 4px 8px;
+    cursor: pointer;
+}
+
+/* Body sensations section */
+.ov-body-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+.ov-body-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.ov-body-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.ov-body-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.ov-body-value {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.ov-body-track {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.ov-body-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* Goals section */
+.ov-goals-list {
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.ov-goal-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--glass-border);
+}
+.ov-goal-item:last-child {
+    border-bottom: none;
+}
+.ov-goal-icon {
+    color: var(--accent-green);
+    flex-shrink: 0;
+}
+.ov-goal-content {
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+.ov-goal-time {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .ov-profile-grid {
+        grid-template-columns: 1fr;
+    }
+    .ov-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .ov-equip-grid {
+        grid-template-columns: 1fr;
+    }
+    .ov-body-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+@media (max-width: 480px) {
+    .ov-stats-grid {
+        grid-template-columns: 1fr;
+    }
+    .ov-body-grid {
+        grid-template-columns: 1fr;
+    }
+    .ov-tab {
+        padding: 10px 14px;
+        font-size: 0.78rem;
+    }
+}

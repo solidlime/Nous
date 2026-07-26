@@ -68,6 +68,7 @@ async function loadOverview() {
 
         // ── Generated Images History Grid ──
         const imagesGridEl = document.getElementById('overview-images-grid');
+        let generatedImagesHtml = '';
         if (imagesGridEl) {
             const genImages = data.generated_images || [];
             if (genImages.length > 0) {
@@ -85,8 +86,8 @@ async function loadOverview() {
                 });
                 gridHtml += '</div>';
                 gridHtml += '</div>';
-                imagesGridEl.style.display = 'block';
-                safeSetHTML(imagesGridEl, gridHtml);
+                generatedImagesHtml = gridHtml;
+                imagesGridEl.style.display = 'none';
             } else {
                 imagesGridEl.style.display = 'none';
             }
@@ -239,139 +240,163 @@ async function loadOverview() {
         const dayLabels = Object.keys(dayMap).map(d => fmtDate(d));
         const dayCounts = Object.values(dayMap);
 
-        // --- Render (new section order) ---
-        safeSetHTML(el, `
-        <!-- Profile & Relationship -->
-        <div class="glass glass-hoverable p-6 mb-6">
-            <div class="card-title"><i data-lucide="user"></i> Profile &amp; Relationship</div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;font-weight:600">Relationship</div>
+        // --- Render unified game status panel ---
+        // Build tab content
+        const profileTabHtml = `
+            <div class="ov-profile-grid">
+                <div class="ov-profile-section">
+                    <div class="ov-profile-title">Relationship</div>
                     <div style="font-size:0.9rem;color:var(--accent-pink);font-weight:600;margin-bottom:12px">${esc(relStatus)}</div>
                     ${ctx.last_conversation_time ? `<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px"><span style="font-size:0.78rem;color:var(--text-muted)"><i data-lucide="clock"></i> Last session:</span><span class="badge badge-blue">${relativeTime(ctx.last_conversation_time)}</span></div>` : ''}
-                    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;font-weight:600">User Info</div>
-                    ${Object.entries(userInfo).length ? Object.entries(userInfo).map(([k,v]) => `<div style="display:flex;gap:8px;padding:4px 0;font-size:0.85rem"><span style="color:var(--text-muted);min-width:120px">${esc(k.replace(/_/g,' '))}</span><span style="color:var(--text-secondary)">${esc(String(v))}</span></div>`).join('') : '<span style="color:var(--text-muted)">No user info</span>'}
+                    <div class="ov-profile-title">User Info</div>
+                    ${Object.entries(userInfo).length ? Object.entries(userInfo).map(([k,v]) => `<div class="ov-profile-item"><span class="ov-profile-key">${esc(k.replace(/_/g,' '))}</span><span class="ov-profile-value">${esc(String(v))}</span></div>`).join('') : '<span style="color:var(--text-muted)">No user info</span>'}
                 </div>
-                <div>
-                    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;font-weight:600">Persona Info</div>
-                    ${(() => { const _GOALS_KEYS = new Set(['goals','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GOALS_KEYS.has(k)); return filtered.length ? filtered.map(([k,v]) => `<div style="display:flex;gap:8px;padding:4px 0;font-size:0.85rem"><span style="color:var(--text-muted);min-width:120px">${esc(k.replace(/_/g,' '))}</span><span style="color:var(--accent-purple)">${esc(String(v))}</span></div>`).join('') : '<span style="color:var(--text-muted)">No persona info</span>'; })()}
+                <div class="ov-profile-section">
+                    <div class="ov-profile-title">Persona Info</div>
+                    ${(() => { const _GOALS_KEYS = new Set(['goals','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GOALS_KEYS.has(k)); return filtered.length ? filtered.map(([k,v]) => `<div class="ov-profile-item"><span class="ov-profile-key">${esc(k.replace(/_/g,' '))}</span><span class="ov-profile-value" style="color:var(--accent-purple)">${esc(String(v))}</span></div>`).join('') : '<span style="color:var(--text-muted)">No persona info</span>'; })()}
+                </div>
+            </div>`;
+
+        const statsTabHtml = `
+            <div class="ov-stats-grid">
+                <div class="ov-stat-card">
+                    <div class="ov-stat-value">${stats.total_count ?? '--'}</div>
+                    <div class="ov-stat-label">Total Memories</div>
+                </div>
+                <div class="ov-stat-card">
+                    <div class="ov-stat-value" style="color:var(--accent-green)">${str.avg ?? '--'}</div>
+                    <div class="ov-stat-label">Avg Strength</div>
+                </div>
+                <div class="ov-stat-card">
+                    <div class="ov-stat-value" style="color:var(--accent-blue)">${stats.tagged_ratio != null ? (stats.tagged_ratio * 100).toFixed(1) + '%' : '--'}</div>
+                    <div class="ov-stat-label">Tagged</div>
+                </div>
+                <div class="ov-stat-card">
+                    <div class="ov-stat-value" style="color:var(--accent-yellow)">${stats.linked_ratio != null ? (stats.linked_ratio * 100).toFixed(1) + '%' : '--'}</div>
+                    <div class="ov-stat-label">Linked</div>
                 </div>
             </div>
-        </div>
-        <!-- Memory Stats -->
-        <div class="glass glass-hoverable p-6 mb-6">
-            <div class="card-title"><i data-lucide="bar-chart-3"></i> Memory Stats</div>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                <div><div class="stat-value">${stats.total_count ?? '--'}</div><div class="stat-label">Total Memories</div></div>
-                <div><div class="stat-value" style="color:var(--accent-green)">${str.avg ?? '--'}</div><div class="stat-label">Avg Strength</div></div>
-                <div><div class="stat-value" style="color:var(--accent-blue)">${stats.tagged_ratio != null ? (stats.tagged_ratio * 100).toFixed(1) + '%' : '--'}</div><div class="stat-label">Tagged</div></div>
-                <div><div class="stat-value" style="color:var(--accent-yellow)">${stats.linked_ratio != null ? (stats.linked_ratio * 100).toFixed(1) + '%' : '--'}</div><div class="stat-label">Linked</div></div>
+            <div class="ov-emotion-bar">
+                <div class="ov-emotion-header">
+                    <span class="ov-emotion-name">${ctx.emotion ? esc(ctx.emotion) : 'Emotion'}</span>
+                    <span class="ov-emotion-pct">${ctx.emotion ? Math.round((ctx.emotion_intensity || 0) * 100) + '%' : '--'}</span>
+                </div>
+                <div class="ov-emotion-track">
+                    <div class="ov-emotion-fill" style="width:${ctx.emotion ? Math.round((ctx.emotion_intensity || 0) * 100) : 0}%;background:${ctx.emotion ? (N.Core.EMOTION_BAR_COLORS[ctx.emotion] || N.Core.EMOTION_BAR_COLORS.neutral) : 'var(--text-muted)'}"></div>
+                </div>
             </div>
-            <div style="margin-bottom:10px">
-                <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Top Tags</div>
-                <div style="display:flex;flex-wrap:wrap;gap:6px">${topTags.length ? topTags.map(([t,c]) => '<span class="badge badge-purple">' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join('') : '<span style="color:var(--text-muted)">--</span>'}</div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
+                <div><span style="font-size:0.78rem;color:var(--text-muted)">Physical: </span><span style="font-size:0.85rem">${esc(physicalContent || '--')}</span></div>
+                <div><span style="font-size:0.78rem;color:var(--text-muted)">Mental: </span><span style="font-size:0.85rem">${esc(mentalContent || '--')}</span></div>
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:0.78rem;color:var(--text-muted);min-width:78px"><i data-lucide="globe"></i> Env:</span>${stats.environment ? '<span class="badge badge-blue">' + esc(stats.environment) + '</span>' : '<span style="color:var(--text-muted);font-size:0.82rem">--</span>'}</div>
             </div>
-            ${hasMemTypes ? `<div style="margin-bottom:10px">
-                <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Memory Types</div>
-                <div style="display:flex;flex-wrap:wrap;gap:6px">${Object.entries(memTypeCounts).map(([t,c]) => '<span class="badge ' + MEMORY_TYPES[t].color + '">' + MEMORY_TYPES[t].icon + ' ' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join('')}</div>
+            <div class="ov-distribution">
+                <div class="ov-distribution-title">Top Tags</div>
+                <div class="ov-distribution-tags">${topTags.length ? topTags.map(([t,c]) => '<span class="badge badge-purple">' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join('') : '<span style="color:var(--text-muted)">--</span>'}</div>
+            </div>
+            ${hasMemTypes ? `<div class="ov-distribution">
+                <div class="ov-distribution-title">Memory Types</div>
+                <div class="ov-distribution-tags">${Object.entries(memTypeCounts).map(([t,c]) => '<span class="badge ' + MEMORY_TYPES[t].color + '">' + MEMORY_TYPES[t].icon + ' ' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join('')}</div>
             </div>` : ''}
-            <div>
-                <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Top Emotions</div>
-                <div style="display:flex;flex-wrap:wrap;gap:6px">${topEmo.length ? topEmo.map(([e,c]) => '<span class="badge badge-pink">' + esc(e) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join('') : '<span style="color:var(--text-muted)">--</span>'}</div>
+            <div class="ov-distribution">
+                <div class="ov-distribution-title">Top Emotions</div>
+                <div class="ov-distribution-tags">${topEmo.length ? topEmo.map(([e,c]) => '<span class="badge badge-pink">' + esc(e) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join('') : '<span style="color:var(--text-muted)">--</span>'}</div>
             </div>
-        </div>
-        <!-- Goals -->
-        <div class="glass glass-hoverable p-6 mb-6">
-            <div class="card-title"><i data-lucide="target"></i> Goals</div>
-            <div>
+            <div class="ov-goals-list">
                 <div style="font-size:0.8rem;font-weight:600;color:var(--accent-green);margin-bottom:8px">Goals <span style="opacity:0.6;font-weight:400">(${effectiveGoals.length}件)</span></div>
-                <div style="max-height:240px;overflow-y:auto;padding-right:4px">${renderGoalItems(effectiveGoals, 'goals')}</div>
+                ${renderGoalItems(effectiveGoals, 'goals')}
+            </div>`;
+
+        const equipTabHtml = `
+            <div class="ov-equip-grid">
+                ${EQUIP_SLOTS.map(slot => {
+                    const current = equip[slot];
+                    const itemName = typeof current === 'string' ? current : (current ? (current.name || '') : '');
+                    return `<div class="ov-equip-slot">
+                        <span class="ov-equip-slot-name">${esc(slot)}</span>
+                        ${itemName ? `
+                            <span class="ov-equip-item">${esc(itemName)}</span>
+                            <div class="ov-equip-actions">
+                                <button data-slot="${esc(slot)}" onclick="N.Features.Overview.unequipSlot(this.dataset.slot)" class="ov-equip-btn" title="Unequip"><i data-lucide="x"></i></button>
+                            </div>
+                        ` : `
+                            <span class="ov-equip-empty">empty</span>
+                            ${(() => {
+                                const slotItems = items.filter(it => it.name);
+                                if (slotItems.length > 0) {
+                                    return `<select data-slot="${esc(slot)}" onchange="if(this.value) N.Features.Overview.changeEquipSlot(this.dataset.slot, this.value)" class="ov-equip-select"><option value="">equip...</option>${slotItems.map(it => `<option value="${esc(it.name)}">${esc(it.name)}</option>`).join('')}</select>`;
+                                }
+                                return '';
+                            })()}
+                        `}
+                    </div>`;
+                }).join('')}
+            </div>`;
+
+        const bodyTabHtml = `
+            <div class="ov-body-grid">
+                <div class="ov-body-item">
+                    <div class="ov-body-header">
+                        <span class="ov-body-label"><i data-lucide="flame"></i> Fatigue</span>
+                        <span class="ov-body-value">${stats.fatigue != null ? (stats.fatigue * 100).toFixed(0) + '%' : '--'}</span>
+                    </div>
+                    <div class="ov-body-track">
+                        <div class="ov-body-fill" style="width:${stats.fatigue != null ? (stats.fatigue * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.fatigue}"></div>
+                    </div>
+                </div>
+                <div class="ov-body-item">
+                    <div class="ov-body-header">
+                        <span class="ov-body-label"><i data-lucide="flower"></i> Warmth</span>
+                        <span class="ov-body-value">${stats.warmth != null ? (stats.warmth * 100).toFixed(0) + '%' : '--'}</span>
+                    </div>
+                    <div class="ov-body-track">
+                        <div class="ov-body-fill" style="width:${stats.warmth != null ? (stats.warmth * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.warmth}"></div>
+                    </div>
+                </div>
+                <div class="ov-body-item">
+                    <div class="ov-body-header">
+                        <span class="ov-body-label"><i data-lucide="zap"></i> Arousal</span>
+                        <span class="ov-body-value">${stats.arousal != null ? (stats.arousal * 100).toFixed(0) + '%' : '--'}</span>
+                    </div>
+                    <div class="ov-body-track">
+                        <div class="ov-body-fill" style="width:${stats.arousal != null ? (stats.arousal * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.arousal}"></div>
+                    </div>
+                </div>
+                <div class="ov-body-item">
+                    <div class="ov-body-header">
+                        <span class="ov-body-label"><i data-lucide="heart-pulse"></i> Heart Rate</span>
+                        <span class="ov-body-value">${stats.heart_rate != null ? (stats.heart_rate * 100).toFixed(0) + '%' : '--'}</span>
+                    </div>
+                    <div class="ov-body-track">
+                        <div class="ov-body-fill" style="width:${stats.heart_rate != null ? (stats.heart_rate * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.heart_rate}"></div>
+                    </div>
+                </div>
+                <div class="ov-body-item">
+                    <div class="ov-body-header">
+                        <span class="ov-body-label"><i data-lucide="activity"></i> Pain</span>
+                        <span class="ov-body-value">${stats.pain != null ? (stats.pain * 100).toFixed(0) + '%' : '--'}</span>
+                    </div>
+                    <div class="ov-body-track">
+                        <div class="ov-body-fill" style="width:${stats.pain != null ? (stats.pain * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.pain}"></div>
+                    </div>
+                </div>
+            </div>`;
+
+        // Build main HTML
+        safeSetHTML(el, `
+        <!-- Unified Game Status Panel -->
+        <div class="ov-status-panel">
+            <div class="ov-tabs">
+                <button class="ov-tab active" data-tab="profile"><i data-lucide="user"></i> Profile</button>
+                <button class="ov-tab" data-tab="stats"><i data-lucide="bar-chart-3"></i> Stats</button>
+                <button class="ov-tab" data-tab="equipment"><i data-lucide="shield"></i> Equipment</button>
+                <button class="ov-tab" data-tab="body"><i data-lucide="activity"></i> Body</button>
             </div>
-        </div>
-        <!-- Emotion -->
-        <div class="glass glass-hoverable p-6 mb-6">
-            <div class="card-title"><i data-lucide="sparkles"></i> Emotion</div>
-            <div>
-                ${(function() {
-                    /* Constants now from core/constants.js via adapter globals */
-                    if (ctx.emotion) {
-                        var barGrad = N.Core.EMOTION_BAR_COLORS[ctx.emotion] || N.Core.EMOTION_BAR_COLORS.neutral;
-                        var pct = (ctx.emotion_intensity || 0) * 100;
-                        pct = Math.round(pct);
-                        return '<div style="margin-bottom:12px">' +
-                            '<div style="margin-bottom:8px">' +
-                            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">' +
-                            '<span style="font-size:0.78rem;color:var(--text-muted)">' + esc(ctx.emotion) + '</span>' +
-                            '<span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">' + pct + '%</span>' +
-                            '</div>' +
-                            '<div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">' +
-                            '<div style="height:100%;width:' + pct + '%;background:' + barGrad + ';border-radius:3px;transition:width 0.4s ease"></div>' +
-                            '</div>' +
-                            '</div></div>';
-                    }
-                    return '<div style="font-size:0.9rem;color:var(--text-muted);margin-bottom:12px">--</div>';
-                })()}
-                <div style="display:flex;flex-direction:column;gap:6px">
-                    <div><span style="font-size:0.78rem;color:var(--text-muted)">Physical: </span><span style="font-size:0.85rem">${esc(physicalContent || '--')}</span></div>
-                    <div><span style="font-size:0.78rem;color:var(--text-muted)">Mental: </span><span style="font-size:0.85rem">${esc(mentalContent || '--')}</span></div>
-                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:0.78rem;color:var(--text-muted);min-width:78px"><i data-lucide="globe"></i> Env:</span>${stats.environment ? '<span class="badge badge-blue">' + esc(stats.environment) + '</span>' : '<span style="color:var(--text-muted);font-size:0.82rem">--</span>'}</div>
-                </div>
-            </div>
-        </div>
-        <!-- Equipment -->
-        <div class="glass glass-hoverable p-6 mb-6">
-            <div class="card-title"><i data-lucide="shield"></i> Equipment</div>
-            ${equipHtml}
-        </div>
-        <!-- Body Sensations -->
-        <div class="glass glass-hoverable p-6 mb-6">
-            <div class="card-title"><i data-lucide="activity"></i> Body Sensations</div>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-                <div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-                        <span style="font-size:0.78rem;color:var(--text-muted)"><i data-lucide="flame"></i> Fatigue</span>
-                        <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.fatigue != null ? (stats.fatigue * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.fatigue != null ? (stats.fatigue * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.fatigue};border-radius:3px;transition:width 0.4s ease"></div>
-                    </div>
-                </div>
-                <div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-                        <span style="font-size:0.78rem;color:var(--text-muted)"><i data-lucide="flower"></i> Warmth</span>
-                        <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.warmth != null ? (stats.warmth * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.warmth != null ? (stats.warmth * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.warmth};border-radius:3px;transition:width 0.4s ease"></div>
-                    </div>
-                </div>
-                <div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-                        <span style="font-size:0.78rem;color:var(--text-muted)"><i data-lucide="zap"></i> Arousal</span>
-                        <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.arousal != null ? (stats.arousal * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.arousal != null ? (stats.arousal * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.arousal};border-radius:3px;transition:width 0.4s ease"></div>
-                    </div>
-                </div>
-                <div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-                        <span style="font-size:0.78rem;color:var(--text-muted)"><i data-lucide="heart-pulse"></i> Heart Rate</span>
-                        <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.heart_rate != null ? (stats.heart_rate * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.heart_rate != null ? (stats.heart_rate * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.heart_rate};border-radius:3px;transition:width 0.4s ease"></div>
-                    </div>
-                </div>
-                <div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-                        <span style="font-size:0.78rem;color:var(--text-muted)"><i data-lucide="activity"></i> Pain</span>
-                        <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.pain != null ? (stats.pain * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.pain != null ? (stats.pain * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.pain};border-radius:3px;transition:width 0.4s ease"></div>
-                    </div>
-                </div>
+            <div class="ov-tab-content">
+                <div id="ov-tab-profile" class="ov-tab-pane active">${profileTabHtml}</div>
+                <div id="ov-tab-stats" class="ov-tab-pane">${statsTabHtml}</div>
+                <div id="ov-tab-equipment" class="ov-tab-pane">${equipTabHtml}</div>
+                <div id="ov-tab-body" class="ov-tab-pane">${bodyTabHtml}</div>
             </div>
         </div>
         <!-- Core Memory Blocks -->
@@ -413,6 +438,8 @@ async function loadOverview() {
                 <div style="height:220px;position:relative"><canvas id="chart-tags"></canvas></div>
             </div>
         </div>
+        <!-- Generated Images (moved to bottom) -->
+        ${generatedImagesHtml}
         <!-- Add Item Modal -->
         <div id="add-item-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center">
             <div style="background:#1e1b2e;border:1px solid rgba(var(--accent-blue-rgb), 0.3);border-radius:14px;padding:28px;width:420px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,0.6)">
@@ -471,6 +498,20 @@ async function loadOverview() {
                 </div>
             </div>
         </div>`);
+
+        // Setup tab switching
+        const tabButtons = el.querySelectorAll('.ov-tab');
+        const tabPanes = el.querySelectorAll('.ov-tab-pane');
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const targetTab = this.dataset.tab;
+                tabButtons.forEach(b => b.classList.remove('active'));
+                tabPanes.forEach(p => p.classList.remove('active'));
+                this.classList.add('active');
+                const targetPane = el.querySelector('#ov-tab-' + targetTab);
+                if (targetPane) targetPane.classList.add('active');
+            });
+        });
 
         // --- Charts ---
         N.Components.chart.destroy('chart-timeline');
