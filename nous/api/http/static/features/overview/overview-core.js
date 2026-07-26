@@ -120,29 +120,32 @@ async function loadOverview() {
         <div class="ov-hero">
             <div id="hero-portrait-slot"></div>
             <div class="ov-status-panel">
-                <!-- 1. Emotion Bar (standalone, prominent) -->
-                ${(function(){
-                    var emoColor = N.Core.EMOTION_COLORS[ctx.emotion] || N.Core.EMOTION_COLORS.neutral;
-                    var pct = Math.round((ctx.emotion_intensity || 0) * 100);
-                    return '<div class="ov-emotion-section" style="border-color:' + emoColor + '44;margin-bottom:0">'
-                        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
-                        + '<span style="font-size:0.9rem;font-weight:700;color:' + emoColor + '">' + esc(ctx.emotion || 'neutral') + '</span>'
-                        + '<span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">' + pct + '%</span>'
-                        + '</div>'
-                        + '<div class="ov-emotion-bar-wrap"><div class="ov-emotion-bar-fill" style="width:' + pct + '%;background:' + (N.Core.EMOTION_BAR_COLORS[ctx.emotion] || N.Core.EMOTION_BAR_COLORS.neutral) + '"></div></div>'
-                        + '</div>';
-                })()}
-
-                <!-- 2. Profile Info -->
+                <!-- 1. Profile & Relationship -->
                 <div class="glass p-4" style="border-radius:var(--radius-md);backdrop-filter:blur(20px) saturate(180%)">
-                    <div class="ov-section-title"><i data-lucide="user-circle"></i> Profile</div>
+                    <div class="ov-section-title"><i data-lucide="user-circle"></i> Profile &amp; Relationship</div>
                     ${Object.entries(userInfo).length ? Object.entries(userInfo).map(([k,v]) => '<div class="ov-quick-row" style="padding:2px 0"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value">' + esc(String(v)) + '</span></div>').join('') : '<span style="color:var(--text-muted);font-size:0.82rem">No user info</span>'}
                     ${(() => { const _GK = new Set(['goals','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GK.has(k)); return filtered.length ? filtered.map(([k,v]) => '<div class="ov-quick-row" style="padding:2px 0"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value" style="color:var(--accent-purple)">' + esc(String(v)) + '</span></div>').join('') : ''; })()}
+                    <div class="ov-quick-row"><span class="ov-quick-label">Relationship</span><span class="ov-quick-value" style="color:var(--accent-pink);font-weight:600">${esc(relStatus)}</span></div>
+                    ${ctx.last_conversation_time ? '<div class="ov-quick-row"><span class="ov-quick-label"><i data-lucide="clock"></i> Last</span><span class="ov-quick-value">' + relativeTime(ctx.last_conversation_time) + '</span></div>' : ''}
+                    <div class="ov-quick-row"><span class="ov-quick-label">Physical</span><span class="ov-quick-value">${esc(physicalContent || '--')}</span></div>
+                    <div class="ov-quick-row"><span class="ov-quick-label">Mental</span><span class="ov-quick-value">${esc(mentalContent || '--')}</span></div>
+                    ${stats.environment ? '<div class="ov-quick-row"><span class="ov-quick-label">Environment</span><span class="ov-quick-value"><span class="badge badge-blue">' + esc(stats.environment) + '</span></span></div>' : ''}
                 </div>
 
-                <!-- 3. Body Sensations -->
+                <!-- 2. Status (Emotion + Body) -->
                 <div class="glass p-4" style="border-radius:var(--radius-md);backdrop-filter:blur(20px) saturate(180%)">
-                    <div class="ov-section-title"><i data-lucide="activity"></i> Body</div>
+                    <div class="ov-section-title"><i data-lucide="activity"></i> Status</div>
+                    ${(function(){
+                        var emoColor = N.Core.EMOTION_COLORS[ctx.emotion] || N.Core.EMOTION_COLORS.neutral;
+                        var pct = Math.round((ctx.emotion_intensity || 0) * 100);
+                        return '<div class="ov-emotion-section" style="border-color:' + emoColor + '44;margin-bottom:12px">'
+                            + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
+                            + '<span style="font-size:0.85rem;font-weight:700;color:' + emoColor + '">' + esc(ctx.emotion || 'neutral') + '</span>'
+                            + '<span style="font-size:0.75rem;color:var(--text-secondary);font-weight:600">' + pct + '%</span>'
+                            + '</div>'
+                            + '<div class="ov-emotion-bar-wrap"><div class="ov-emotion-bar-fill" style="width:' + pct + '%;background:' + (N.Core.EMOTION_BAR_COLORS[ctx.emotion] || N.Core.EMOTION_BAR_COLORS.neutral) + '"></div></div>'
+                            + '</div>';
+                    })()}
                     <div class="ov-body-grid">
                         ${(['fatigue','warmth','arousal','heart_rate','pain']).map(k => {
                             var val = stats[k];
@@ -162,16 +165,6 @@ async function loadOverview() {
                             }
                         }).join('')}
                     </div>
-                </div>
-
-                <!-- 4. Quick Info -->
-                <div class="ov-quick">
-                    <div class="ov-section-title"><i data-lucide="user"></i> Status</div>
-                    <div class="ov-quick-row"><span class="ov-quick-label">Relationship</span><span class="ov-quick-value" style="color:var(--accent-pink);font-weight:600">${esc(relStatus)}</span></div>
-                    ${ctx.last_conversation_time ? '<div class="ov-quick-row"><span class="ov-quick-label"><i data-lucide="clock"></i> Last</span><span class="ov-quick-value">' + relativeTime(ctx.last_conversation_time) + '</span></div>' : ''}
-                    <div class="ov-quick-row"><span class="ov-quick-label">Physical</span><span class="ov-quick-value">${esc(physicalContent || '--')}</span></div>
-                    <div class="ov-quick-row"><span class="ov-quick-label">Mental</span><span class="ov-quick-value">${esc(mentalContent || '--')}</span></div>
-                    ${stats.environment ? '<div class="ov-quick-row"><span class="ov-quick-label">Environment</span><span class="ov-quick-value"><span class="badge badge-blue">' + esc(stats.environment) + '</span></span></div>' : ''}
                 </div>
 
             </div>
