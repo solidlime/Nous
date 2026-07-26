@@ -11,7 +11,7 @@ N.Features.Memories = N.Features.Memories || {};
 
 ;(function() {
 var S = window.S;
-var { esc, toast, api, truncate, relativeTime, showConfirm, safeSetHTML } = window.Nous.Core;
+var { esc, toast, api, truncate, relativeTime, showConfirm, safeSetHTML, fmtDate } = window.Nous.Core;
 
 /* ── State initialization ── */
 if (S && S.mem) Object.assign(S.mem, {
@@ -78,6 +78,97 @@ async function loadMemories(page) {
     if (page != null) S.mem.page = page;
     var el = document.getElementById('memories-content');
     N.Components.skeleton.show('memories');
+
+    // --- Dashboard stats/stats/blocks/charts（Overview から移設）---
+    if (!S.dashCache) {
+        S.dashCache = await api('/api/dashboard/' + encodeURIComponent(S.persona));
+    }
+    const ds = S.dashCache;
+    const stats = ds.stats || {};
+    const str = ds.strengths || {};
+
+    // Build stats HTML
+    const tagDist = stats.tag_distribution || {};
+    const emoDist = stats.emotion_distribution || {};
+    const topTags = Object.entries(tagDist).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const topEmo = Object.entries(emoDist).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+    const MEMORY_TYPES = {
+        'decision':  {color:'badge-blue',   icon:'<i data-lucide="compass"></i>'},
+        'milestone': {color:'badge-green',  icon:'<i data-lucide="trophy"></i>'},
+        'preference':{color:'badge-purple', icon:'<i data-lucide="heart"></i>'},
+        'problem':   {color:'badge-red',    icon:'<i data-lucide="alert-triangle"></i>'},
+        'emotional': {color:'badge-pink',   icon:'<i data-lucide="heart"></i>'},
+    };
+    const memTypeCounts = {};
+    Object.entries(MEMORY_TYPES).forEach(([k])=>{ if(tagDist[k]) memTypeCounts[k]=tagDist[k]; });
+    const hasMemTypes = Object.keys(memTypeCounts).length > 0;
+
+    // Build blocks list HTML
+    var blocksListHtml = '';
+    if (ds.blocks && ds.blocks.length > 0) {
+        ds.blocks.forEach(b => {
+            const name = typeof b === 'string' ? b : (b.name || b.block_name || 'block');
+            const content = typeof b === 'object' ? (b.content || b.value || '') : '';
+            const priority = typeof b === 'object' ? b.priority : null;
+            blocksListHtml += '<div style="padding:10px 0;border-bottom:1px solid var(--glass-border)">';
+            blocksListHtml += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
+            blocksListHtml += '<span style="font-weight:600;color:var(--accent-purple);font-size:0.85rem">' + esc(name) + '</span>';
+            if (priority != null) blocksListHtml += '<span class="badge badge-yellow">P' + esc(String(priority)) + '</span>';
+            blocksListHtml += '<div style="display:flex;gap:6px;margin-left:auto">';
+            blocksListHtml += '<button class="glass-btn" data-bname="' + esc(name) + '" data-bcontent="' + esc(content) + '" data-bpriority="' + (priority||0) + '" onclick="var el=this;N.Features.Overview.showEditBlock(el.dataset.bname,el.dataset.bcontent,parseInt(el.dataset.bpriority||0))" style="padding:3px 10px;font-size:0.75rem"><i data-lucide="pencil"></i> Edit</button>';
+            blocksListHtml += '<button class="glass-btn" data-bname="' + esc(name) + '" onclick="N.Features.Overview.deleteBlock(this.dataset.bname)" style="padding:3px 10px;font-size:0.75rem;color:var(--accent-red)"><i data-lucide="trash-2"></i> Delete</button>';
+            blocksListHtml += '</div></div>';
+            if (content) blocksListHtml += '<div style="font-size:0.82rem;color:var(--text-muted)">' + esc(truncate(String(content), 80)) + '</div>';
+            blocksListHtml += '</div>';
+        });
+    } else {
+        blocksListHtml = '<span style="color:var(--text-muted)">No core memory blocks</span>';
+    }
+
+    // Build chart data
+    const recent = ds.recent || [];
+    const dayMap = {};
+    const now = new Date();
+    for (let i=6;i>=0;i--) { const d=new Date(now); d.setDate(d.getDate()-i); dayMap[d.toISOString().slice(0,10)]=0; }
+    recent.forEach(m=>{ const d=(m.created_at||'').slice(0,10); if(d in dayMap) dayMap[d]++; });
+    if (stats.daily_counts) { Object.entries(stats.daily_counts).forEach(([d,c])=>{ if(d in dayMap) dayMap[d]=c; }); }
+    const dayLabels = Object.keys(dayMap).map(d=>fmtDate(d));
+    const dayCounts = Object.values(dayMap);
+
+    // Render dashboard sections atop memories list
+    var dashboardHtml = '';
+
+    // Memory Stats
+    dashboardHtml += '<div class="glass glass-hoverable p-6 mb-6">';
+    dashboardHtml += '<div class="card-title"><i data-lucide="bar-chart-3"></i> Memory Stats</div>';
+    dashboardHtml += '<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">';
+    dashboardHtml += '<div><div class="stat-value">' + (stats.total_count ?? '--') + '</div><div class="stat-label">Total Memories</div></div>';
+    dashboardHtml += '<div><div class="stat-value" style="color:var(--accent-green)">' + (str.avg ?? '--') + '</div><div class="stat-label">Avg Strength</div></div>';
+    dashboardHtml += '<div><div class="stat-value" style="color:var(--accent-blue)">' + (stats.tagged_ratio != null ? (stats.tagged_ratio*100).toFixed(1)+'%' : '--') + '</div><div class="stat-label">Tagged</div></div>';
+    dashboardHtml += '<div><div class="stat-value" style="color:var(--accent-yellow)">' + (stats.linked_ratio != null ? (stats.linked_ratio*100).toFixed(1)+'%' : '--') + '</div><div class="stat-label">Linked</div></div>';
+    dashboardHtml += '</div>';
+    if (topTags.length) { dashboardHtml += '<div style="margin-bottom:6px">' + topTags.map(([t,c])=>'<span class="badge badge-purple">'+esc(t)+' <span style="opacity:0.7">('+c+')</span></span>').join(' ')+'</div>'; }
+    if (hasMemTypes) { dashboardHtml += '<div style="margin-bottom:6px">' + Object.entries(memTypeCounts).map(([t,c])=>'<span class="badge '+MEMORY_TYPES[t].color+'">'+MEMORY_TYPES[t].icon+' '+esc(t)+' <span style="opacity:0.7">('+c+')</span></span>').join(' ')+'</div>'; }
+    if (topEmo.length) { dashboardHtml += '<div>' + topEmo.map(([e,c])=>'<span class="badge badge-pink">'+esc(e)+' <span style="opacity:0.7">('+c+')</span></span>').join(' ')+'</div>'; }
+    dashboardHtml += '</div>';
+
+    // Core Memory Blocks
+    dashboardHtml += '<div class="glass glass-hoverable p-6 mb-6">';
+    dashboardHtml += '<div class="card-title" style="justify-content:space-between"><span>&#129504; Core Memory Blocks</span><button onclick="N.Features.Overview.showCreateBlock()" class="glass-btn" style="padding:4px 12px;font-size:0.78rem"><i data-lucide="plus"></i> New Block</button></div>';
+    dashboardHtml += blocksListHtml;
+    dashboardHtml += '</div>';
+
+    // Charts placeholders
+    dashboardHtml += '<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">';
+    dashboardHtml += '<div class="glass p-6"><div class="card-title"><i data-lucide="calendar"></i> 7-Day Timeline</div><div style="height:220px;position:relative"><canvas id="chart-timeline"></canvas></div></div>';
+    dashboardHtml += '<div class="glass p-6"><div class="card-title"><i data-lucide="tag"></i> Tag Distribution</div><div style="height:220px;position:relative"><canvas id="chart-tags"></canvas></div></div>';
+    dashboardHtml += '</div>';
+
+    // Inject dashboard HTML at the beginning of the memories content area
+    safeSetHTML(el, dashboardHtml + '<div id="memories-list-section"></div>');
+    // Redirect subsequent rendering to the list section
+    el = document.getElementById('memories-list-section');
 
     /* Build tag dropdown options from cache */
     var tagOptions = '<option value="">All Tags</option>';
