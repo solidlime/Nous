@@ -1274,7 +1274,7 @@ class TestBuildTimeContext:
     """_build_time_context() の出力検証"""
 
     def test_output_structure(self):
-        """<TIME_CONTEXT>...</TIME_CONTEXT> で囲まれている"""
+        """<time_context>...</time_context> で囲まれ、末尾に否定例付き指示が付加される"""
         from unittest.mock import MagicMock
 
         from nous.application.chat.pipeline.prepare import _build_time_context
@@ -1282,8 +1282,10 @@ class TestBuildTimeContext:
         state = MagicMock()
         state.last_conversation_time = None
         result = _build_time_context(state)
-        assert result.startswith("<TIME_CONTEXT>")
-        assert result.endswith("</TIME_CONTEXT>")
+        assert result.startswith("<time_context>")
+        assert "</time_context>" in result
+        assert "応答テキストにこの時刻情報やタグをそのまま出力しない" in result
+        assert "【内部参照情報】" in result
 
     def test_contains_now_and_weekday(self):
         """出力に Now: と曜日が含まれる"""
@@ -1322,7 +1324,7 @@ class TestBuildTimeContext:
         state2 = MagicMock()
         state2.last_conversation_time = recent_conv
 
-        with patch("nous.application.chat.pipeline.prepare.get_now", return_value=fixed_now):
+        with patch("nous.application.chat.pipeline.context_loader.get_now", return_value=fixed_now):
             result = _build_time_context(state2)
         # 10min < 15min threshold → no gap
         assert "Time since last conversation" not in result
