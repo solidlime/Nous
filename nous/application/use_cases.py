@@ -215,7 +215,7 @@ class AppContext:
             enricher=self._enricher,
             session_event_repo=self._session_event_repo,
         )
-        self.persona_service = PersonaService(self.persona_repo, event_bus=self.event_bus)
+        self.persona_service = PersonaService(self.persona_repo, event_bus=self.event_bus, memory_service=self.memory_service)
         self.equipment_service = EquipmentService(self.equipment_repo)
 
         # Vector store sync via event handlers (replaces direct calls from MCP tools)

@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from typing import Any
+from datetime import timedelta
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
 from nous.domain.memory.entities import Memory
-from nous.domain.persona.entities import EmotionRecord
 from nous.domain.persona.service import PersonaService
 from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
+from nous.domain.shared.time_utils import get_now
+
+if TYPE_CHECKING:
+    from nous.domain.persona.entities import EmotionRecord
 
 PERSONA = "test_persona"
 
@@ -32,12 +35,13 @@ class FakeMemoryService:
 
     def update_memory(self, key: str, **updates: Any) -> Result[Memory, RepositoryError]:
         self.updated.append((key, updates))
+        now = get_now()
         return Success(
             Memory(
                 key=key,
                 content="",
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
+                created_at=now,
+                updated_at=now,
             )
         )
 
@@ -116,7 +120,7 @@ class TestEmotionPropagation:
         mem_service: FakeMemoryService,
     ):
         """Memory created within propagation window gets emotion update."""
-        now = datetime.now()
+        now = get_now()
         mem_service.memories = [
             Memory(
                 key="mem_recent",
@@ -140,7 +144,7 @@ class TestEmotionPropagation:
         mem_service: FakeMemoryService,
     ):
         """Memories older than propagation window are not updated."""
-        now = datetime.now()
+        now = get_now()
         old = Memory(
             key="mem_old",
             content="old memory",
@@ -189,7 +193,7 @@ class TestEmotionPropagation:
         mem_service: FakeMemoryService,
     ):
         """update_memory failure is silently swallowed."""
-        now = datetime.now()
+        now = get_now()
         mem_service.memories = [
             Memory(
                 key="mem_bad",
@@ -200,8 +204,6 @@ class TestEmotionPropagation:
         ]
 
         # Replace update_memory to simulate failure
-        orig_update = mem_service.update_memory
-
         def failing_update(key: str, **updates: Any) -> Failure:
             return Failure(RepositoryError("fail"))
 
