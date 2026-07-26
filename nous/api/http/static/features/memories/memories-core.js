@@ -170,6 +170,33 @@ async function loadMemories(page) {
     // Redirect subsequent rendering to the list section
     el = document.getElementById('memories-list-section');
 
+    // --- Chart rendering (async, after DOM is populated) ---
+    setTimeout(function(){
+        S.charts = S.charts || {};
+        N.Components.chart.destroy('chart-timeline');
+        N.Components.chart.destroy('chart-tags');
+        var tlCtx = document.getElementById('chart-timeline');
+        if (tlCtx) {
+            S.charts['chart-timeline'] = new Chart(tlCtx, {
+                type:'bar',
+                data:{labels:dayLabels,datasets:[{label:'Memories',data:dayCounts,backgroundColor:'rgba(0,122,255,0.5)',borderColor:'#007aff',borderWidth:1,borderRadius:6}]},
+                options:N.Components.chart.defaults({plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}},x:{}}})
+            });
+        }
+        var allTags = Object.entries(tagDist).sort((a,b)=>b[1]-a[1]).slice(0,8);
+        var tgCtx = document.getElementById('chart-tags');
+        if (tgCtx && allTags.length) {
+            S.charts['chart-tags'] = new Chart(tgCtx, {
+                type:'doughnut',
+                data:{labels:allTags.map(t=>t[0]),datasets:[{data:allTags.map(t=>t[1]),backgroundColor:N.Core.CHART_COLORS.slice(0,allTags.length),borderWidth:0}]},
+                options:{...N.Components.chart.defaults(),cutout:'60%'}
+            });
+        } else if (tgCtx) {
+            tgCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-muted);font-size:0.85rem;">No tags yet</div>';
+        }
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }, 100);
+
     /* Build tag dropdown options from cache */
     var tagOptions = '<option value="">All Tags</option>';
     var allKnownTags = [];
