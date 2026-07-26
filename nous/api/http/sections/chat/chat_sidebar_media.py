@@ -89,6 +89,41 @@ def _render_image_section() -> str:
                                         </div>
                                     </div>
                                     <div>
+                                        <div class="chat-field-label" style="font-size:0.78rem;">プリセット解像度 <span style="font-weight:300;color:var(--text-dim);">(LLMが選ぶ解像度プリセット)</span></div>
+                                        <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:4px 6px;align-items:center;font-size:0.75rem;margin-top:4px;">
+                                            <span></span>
+                                            <span style="text-align:center;color:var(--text-dim);">Large</span>
+                                            <span style="text-align:center;color:var(--text-dim);">Medium</span>
+                                            <span style="text-align:center;color:var(--text-dim);">Small</span>
+                                            <span style="color:var(--text-dim);">縦長</span>
+                                            <input type="text" id="chat-image-gen-preset-portrait_large" class="chat-field-input" value="832x1216" style="width:100%;font-size:0.72rem;text-align:center;" />
+                                            <input type="text" id="chat-image-gen-preset-portrait_medium" class="chat-field-input" value="768x1024" style="width:100%;font-size:0.72rem;text-align:center;" />
+                                            <input type="text" id="chat-image-gen-preset-portrait_small" class="chat-field-input" value="576x768" style="width:100%;font-size:0.72rem;text-align:center;" />
+                                            <span style="color:var(--text-dim);">横長</span>
+                                            <input type="text" id="chat-image-gen-preset-landscape_large" class="chat-field-input" value="1216x832" style="width:100%;font-size:0.72rem;text-align:center;" />
+                                            <input type="text" id="chat-image-gen-preset-landscape_medium" class="chat-field-input" value="1024x768" style="width:100%;font-size:0.72rem;text-align:center;" />
+                                            <input type="text" id="chat-image-gen-preset-landscape_small" class="chat-field-input" value="768x576" style="width:100%;font-size:0.72rem;text-align:center;" />
+                                            <span style="color:var(--text-dim);">正方形</span>
+                                            <input type="text" id="chat-image-gen-preset-square_large" class="chat-field-input" value="1024x1024" style="width:100%;font-size:0.72rem;text-align:center;" />
+                                            <input type="text" id="chat-image-gen-preset-square_medium" class="chat-field-input" value="768x768" style="width:100%;font-size:0.72rem;text-align:center;" />
+                                            <input type="text" id="chat-image-gen-preset-square_small" class="chat-field-input" value="512x512" style="width:100%;font-size:0.72rem;text-align:center;" />
+                                        </div>
+                                        <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+                                            <span class="chat-field-label" style="font-size:0.78rem;">デフォルト</span>
+                                            <select id="chat-image-gen-default-preset" class="chat-field-input" style="flex:1;font-size:0.78rem;">
+                                                <option value="portrait_large">portrait_large</option>
+                                                <option value="portrait_medium">portrait_medium</option>
+                                                <option value="portrait_small">portrait_small</option>
+                                                <option value="landscape_large">landscape_large</option>
+                                                <option value="landscape_medium">landscape_medium</option>
+                                                <option value="landscape_small">landscape_small</option>
+                                                <option value="square_large">square_large</option>
+                                                <option value="square_medium" selected>square_medium</option>
+                                                <option value="square_small">square_small</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
                                         <div style="display:flex;justify-content:space-between;">
                                             <span class="chat-field-label" style="font-size:0.78rem;">Steps</span>
                                             <span id="chat-image-gen-steps-val" style="font-size:0.72rem;color:var(--accent-purple);">28</span>

@@ -93,7 +93,7 @@ def register_image_gen_routes(mcp) -> None:
         try:
             generated = await provider.generate(
                 prompt=prompt,
-                size=body.get("size", "512x512"),
+                size=f"{body.get('width', 1024)}x{body.get('height', 1024)}",
                 quality="standard",
                 n=1,
                 negative_prompt=body.get("negative_prompt", ""),

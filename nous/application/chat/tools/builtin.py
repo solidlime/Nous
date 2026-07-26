@@ -215,33 +215,34 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
     if not prompt:
         return {"status": "error", "message": "No prompt provided"}
 
-    # ── validate: size（LLM指定があればそれを使い、なければ設定値）──
-    size_input = tool_input.get("size")
-    if size_input is not None:
-        size = str(size_input)
-        m = re.match(r"^(\d+)x(\d+)$", size)
-        if not m:
+    # ── validate: preset（プリセット名 → WxH 解決）──
+    preset_name = tool_input.get("preset")
+    presets: dict[str, str] = getattr(config, "image_gen_presets", {}) or {}
+    default_preset: str = getattr(config, "image_gen_default_preset", "square_medium") or "square_medium"
+
+    if preset_name is not None:
+        preset_name = str(preset_name)
+        if preset_name not in presets:
+            available = ", ".join(sorted(presets.keys()))
             return {
                 "status": "error",
-                "message": f"Invalid size format: '{size}'. Expected 'WIDTHxHEIGHT' (e.g. '1024x1024').",
+                "message": f"Unknown preset: '{preset_name}'. Available: {available}.",
             }
-        w, h = int(m.group(1)), int(m.group(2))
-        max_w = getattr(config, "image_gen_max_width", 1200) or 1200
-        max_h = getattr(config, "image_gen_max_height", 1200) or 1200
-        if w > max_w or h > max_h:
-            return {
-                "status": "error",
-                "message": f"Size exceeds limit: '{size}'. Max {max_w}x{max_h}.",
-            }
-        if w < 64 or h < 64:
-            return {
-                "status": "error",
-                "message": f"Size too small: '{size}'. Minimum 64x64.",
-            }
+        size = presets[preset_name]
     else:
-        w = getattr(config, "image_gen_comfyui_width", 1024)
-        h = getattr(config, "image_gen_comfyui_height", 1024)
-        size = f"{w}x{h}"
+        preset_name = default_preset
+        size = presets.get(default_preset, "768x768")
+
+    m = re.match(r"^(\d+)x(\d+)$", size)
+    if not m:
+        return {"status": "error", "message": f"Invalid preset value: '{size}' for preset '{preset_name}'."}
+    w, h = int(m.group(1)), int(m.group(2))
+
+    # 上限クランプ（後方互換: 旧 size 指定のフォールバック）
+    max_w = getattr(config, "image_gen_max_width", 1200) or 1200
+    max_h = getattr(config, "image_gen_max_height", 1200) or 1200
+    w = min(w, max_w)
+    h = min(h, max_h)
 
     # ── validate: n (clamp 1-4) ──
     try:

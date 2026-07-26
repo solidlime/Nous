@@ -36,6 +36,19 @@ class ToolConfig(BaseModel):
     image_gen_comfyui_denoise: float = 0.7
     image_gen_max_width: int = 1200
     image_gen_max_height: int = 1200
+    # 画像生成プリセット（preset名 → "WxH"）
+    image_gen_presets: dict[str, str] = {
+        "portrait_large": "832x1216",
+        "portrait_medium": "768x1024",
+        "portrait_small": "576x768",
+        "landscape_large": "1216x832",
+        "landscape_medium": "1024x768",
+        "landscape_small": "768x576",
+        "square_large": "1024x1024",
+        "square_medium": "768x768",
+        "square_small": "512x512",
+    }
+    image_gen_default_preset: str = "square_medium"
     # 自画像生成用プロンプト（キャラ外見のSDタグ・LoRAトリガーワード・トーンなどを含む固定プロンプト文字列）
     image_gen_self_portrait_prompt: str = ""
     image_gen_negative_prompt: str = ""  # negative prompt for image generation

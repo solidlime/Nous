@@ -264,6 +264,15 @@ function applyChatConfig(cfg) {
   set("chat-image-gen-speed-lora-weight", cfg.image_gen_comfyui_speed_lora_weight);
   set("chat-image-gen-self-portrait-prompt", cfg.image_gen_self_portrait_prompt);
   set("chat-image-gen-negative-prompt", cfg.image_gen_negative_prompt || "");
+  // プリセット解像度 復元
+  var _presetNames = ["portrait_large","portrait_medium","portrait_small","landscape_large","landscape_medium","landscape_small","square_large","square_medium","square_small"];
+  var _presets = cfg.image_gen_presets || {};
+  _presetNames.forEach(function(name) {
+    var el = document.getElementById("chat-image-gen-preset-" + name);
+    if (el && _presets[name]) el.value = _presets[name];
+  });
+  var _defPreset = document.getElementById("chat-image-gen-default-preset");
+  if (_defPreset && cfg.image_gen_default_preset) _defPreset.value = cfg.image_gen_default_preset;
   // LoRA リスト復元
   var loraContainer = document.getElementById('chat-image-gen-lora-list');
   if (loraContainer) loraContainer.textContent = '';
@@ -470,6 +479,16 @@ async function saveChatConfig() {
     image_gen_comfyui_loras: JSON.stringify(N.Chat.settings.collectLoraRows()),
     image_gen_self_portrait_prompt: document.getElementById("chat-image-gen-self-portrait-prompt")?.value || "",
     image_gen_negative_prompt: document.getElementById("chat-image-gen-negative-prompt")?.value || "",
+    // プリセット解像度
+    image_gen_presets: (function() {
+      var p = {};
+      ["portrait_large","portrait_medium","portrait_small","landscape_large","landscape_medium","landscape_small","square_large","square_medium","square_small"].forEach(function(name) {
+        var el = document.getElementById("chat-image-gen-preset-" + name);
+        if (el && el.value.trim()) p[name] = el.value.trim();
+      });
+      return p;
+    })(),
+    image_gen_default_preset: document.getElementById("chat-image-gen-default-preset")?.value || "square_medium",
     // Voice / TTS settings (TE04)
     voice_url: document.getElementById("chat-voice-url")?.value || "",
     voice_auto_play: getChecked("chat-voice-auto-play"),

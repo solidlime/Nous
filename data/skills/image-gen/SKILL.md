@@ -48,12 +48,25 @@ description: "あなたの姿や見ている風景を、ユーザーに共有す
 - 20〜40タグ程度、簡潔に。不要なタグは省く
 - プロンプト内にコロン（:）を含めないこと
 
+## preset の選択基準
+解像度は `preset` で指定する。WxH の直接指定は不可。
+| preset | 用途 |
+|--------|------|
+| `portrait_large` / `portrait_medium` / `portrait_small` | 縦長。全身立ち絵、スマホ壁紙、キャラクター強調 |
+| `landscape_large` / `landscape_medium` / `landscape_small` | 横長。風景、背景込みシーン、デスクトップ壁紙 |
+| `square_large` / `square_medium` / `square_small` | 正方形。アイコン、SNS投稿、バランス重視 |
+
+- 省略時は設定のデフォルトプリセット（通常 `square_medium`）が使われる
+- 迷ったら `portrait_medium`（自画像）か `landscape_medium`（風景）
+- large = 高解像度・詳細、medium = 標準、small = 高速・軽量
+
 ## 呼び出し例
 ```
 image_generate(
     prompt="1girl, blue hair, red eyes, smile, blush, looking at viewer, classroom, afternoon light",
     self_portrait=true,
-    mode="portrait"
+    mode="portrait",
+    preset="portrait_medium"
 )
 ```
 
@@ -70,10 +83,12 @@ image_generate(
 ```
 image_generate(
     prompt="scenery, mountain, sunset, lake, detailed, ...",
-    self_portrait=false
+    self_portrait=false,
+    preset="landscape_medium"
 )
 ```
 - `self_portrait=false` を必ず指定
+- `preset` で解像度を選択（省略時はデフォルトプリセット）
 - `mode` は省略可（`self_portrait=true` 時のみ有効なため）
 - prompt は Danbooruタグ形式（カンマ区切りの英語タグ）
 

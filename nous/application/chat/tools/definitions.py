@@ -218,7 +218,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ToolDefinition(
         name="image_generate",
         defer_loading=False,
-        description="AI画像を生成する。ユーザーが画像を要求した時、または視覚表現が会話を強化する時に使え。ユーザーの許可なしに無関係な画像を生成するな。テキストの説明で十分な場面では使うな。prompt は必須（Danbooru タグ形式推奨）。n で枚数（1-4）、size で解像度、mode で構図を指定できる。",
+        description="AI画像を生成する。ユーザーが画像を要求した時、または視覚表現が会話を強化する時に使え。ユーザーの許可なしに無関係な画像を生成するな。テキストの説明で十分な場面では使うな。prompt は必須（Danbooru タグ形式推奨）。n で枚数（1-4）、preset で解像度プリセット、mode で構図を指定できる。",
         input_schema={
             "type": "object",
             "properties": {
@@ -226,9 +226,14 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                     "type": "string",
                     "description": "画像生成プロンプト。Danbooruタグ形式（カンマ区切りの英語タグ）で記述。例: '1girl, blue sky, standing, smile, detailed'",
                 },
-                "size": {
+                "preset": {
                     "type": "string",
-                    "description": "画像サイズを WIDTHxHEIGHT 形式で指定（例: 1024x768, 512x512）。上限は設定の最大解像度に従う。省略時はデフォルト値を使用。",
+                    "enum": [
+                        "portrait_large", "portrait_medium", "portrait_small",
+                        "landscape_large", "landscape_medium", "landscape_small",
+                        "square_large", "square_medium", "square_small",
+                    ],
+                    "description": "解像度プリセット。portrait=縦長, landscape=横長, square=正方形。large/medium/small でサイズ選択。省略時は設定のデフォルトプリセットを使用。",
                 },
                 "n": {
                     "type": "integer",
