@@ -15,12 +15,28 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 # Byte-level BPEトークナイザ由来の文字化けで発生しうる異常Unicodeブロック。
-# N'Ko, Mongolian, PUA, Surrogates — いずれも通常の日本語/英語テキストでは出現しない。
+# 通常の日本語/英語テキストでは出現しないスクリプトを広くカバーする。
 _SUSPICIOUS_RANGES: list[tuple[int, int]] = [
+    (0x0400, 0x04FF),   # Cyrillic
+    (0x0600, 0x06FF),   # Arabic
     (0x07C0, 0x07FF),   # N'Ko
+    (0x10A0, 0x10FF),   # Georgian
+    (0x1100, 0x11FF),   # Hangul Jamo
+    (0x1200, 0x137F),   # Ethiopic
+    (0x1380, 0x139F),   # Ethiopic Supplement
+    (0x1400, 0x167F),   # Canadian Aboriginal Syllabics
     (0x1800, 0x18AF),   # Mongolian
-    (0xE000, 0xF8FF),   # Private Use Area
+    (0x1980, 0x19DF),   # New Tai Lue
+    (0x1A00, 0x1A1F),   # Buginese
+    (0x1A20, 0x1AAF),   # Tai Tham
+    (0x1B80, 0x1BBF),   # Sundanese
+    (0x1BC0, 0x1BFF),   # Batak
+    (0x2D80, 0x2DDF),   # Ethiopic Extended
+    (0x2E80, 0x2EFF),   # CJK Radicals Supplement
+    (0x2F00, 0x2FDF),   # Kangxi Radicals
+    (0xA000, 0xA48F),   # Yi Syllables
     (0xD800, 0xDFFF),   # Surrogates (lone surrogates)
+    (0xE000, 0xF8FF),   # Private Use Area
 ]
 
 
