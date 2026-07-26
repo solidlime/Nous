@@ -275,12 +275,24 @@ async def _apply_emotion_decay(ctx: AppContext, persona: str, state: PersonaStat
     減衰不要の場合は (state, "") を返す。"""
     decay_note = ""
     try:
-        from nous.config.runtime_config import RuntimeConfigManager
         from nous.domain.persona.emotion_decay import apply_emotion_decay_if_needed
 
-        half_life, _ = RuntimeConfigManager().get_effective_value("forgetting", "emotion_half_life_hours")
+        # Read decay params from ToolConfig (via ChatConfig if available)
+        half_life_hours: float | None = None
+        threshold: float | None = None
+        neutral_threshold: float | None = None
+        if hasattr(ctx, "_config") and ctx._config is not None:
+            tc = getattr(ctx._config, "tool_config", None)
+            if tc is not None:
+                half_life_hours = getattr(tc, "emotion_decay_half_life_hours", None)
+                threshold = getattr(tc, "emotion_decay_threshold", None)
+                neutral_threshold = getattr(tc, "emotion_neutral_threshold", None)
+
         decay_result = await apply_emotion_decay_if_needed(
-            ctx.persona_service, persona, state, half_life_hours=float(half_life)
+            ctx.persona_service, persona, state,
+            half_life_hours=half_life_hours,
+            threshold=threshold,
+            neutral_threshold=neutral_threshold,
         )
         if decay_result is not None:
             refreshed = ctx.persona_service.get_context(persona)

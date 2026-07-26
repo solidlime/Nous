@@ -20,6 +20,10 @@ if TYPE_CHECKING:
 
 
 class AnthropicProvider(LLMProvider):
+    def supports_vision(self) -> bool:
+        """All Claude models support vision inputs."""
+        return True
+
     def __init__(self, api_key: str, model: str = "claude-opus-4-5") -> None:
         try:
             import anthropic

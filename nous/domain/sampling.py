@@ -17,6 +17,21 @@ _EMOTION_MODIFIERS: Final[dict[str, float]] = {
     "surprise": 0.10,
     "grief": -0.15,
     "love": 0.08,
+    "trust": -0.03,
+    "anxiety": 0.12,
+    "frustration": 0.10,
+    "nostalgia": 0.02,
+    "pride": 0.03,
+    "shame": -0.12,
+    "guilt": -0.10,
+    "loneliness": -0.08,
+    "contentment": -0.05,
+    "awe": 0.08,
+    "relief": -0.02,
+    "envy": 0.05,
+    "gratitude": 0.03,
+    "contempt": 0.05,
+    "anticipation": 0.06,
 }
 
 TEMPERATURE_MIN: Final[float] = 0.1

@@ -61,6 +61,14 @@ ChatEvent = TextDeltaEvent | ToolCallEvent | DoneEvent | ErrorEvent
 
 
 class LLMProvider(ABC):
+    def supports_vision(self) -> bool:
+        """Whether this provider/model combination supports image inputs.
+
+        Defaults to False for safety. Override in subclasses that support
+        multimodal inputs.
+        """
+        return False
+
     @abstractmethod
     async def stream(
         self,

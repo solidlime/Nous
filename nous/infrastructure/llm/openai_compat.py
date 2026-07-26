@@ -25,8 +25,40 @@ _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 
 
+_VISION_MODEL_PREFIXES = (
+    "gpt-4o",
+    "gpt-4-turbo",
+    "gpt-4-vision",
+    "o1",
+    "o3",
+    "o4-mini",
+)
+
+_NON_VISION_MODEL_PREFIXES = (
+    "gpt-3.5",
+)
+
+
+def _is_vision_model(model: str) -> bool:
+    """Determine if the model name indicates vision support.
+
+    Known non-vision models (gpt-3.5) return False.
+    Known vision models (gpt-4o, gpt-4-turbo, o1, etc.) return True.
+    All other models default to True (safe side — API errors are visible).
+    """
+    if model.startswith(_NON_VISION_MODEL_PREFIXES):
+        return False
+    if model.startswith(_VISION_MODEL_PREFIXES):
+        return True
+    # Unknown model / OpenRouter: default to True (safe side)
+    return True
+
+
 class OpenAICompatProvider(LLMProvider):
     """OpenAI-compatible streaming provider (supports OpenAI and OpenRouter)."""
+
+    def supports_vision(self) -> bool:
+        return _is_vision_model(self.model)
 
     def __init__(self, api_key: str, model: str = "gpt-4o", base_url: str | None = None) -> None:
         try:

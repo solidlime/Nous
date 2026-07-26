@@ -152,8 +152,8 @@ class SQLitePersonaRepository(SQLiteRepository):
             self._db.execute(
                 """
                 INSERT INTO emotion_history
-                    (emotion_type, intensity, timestamp, trigger_memory_key, context)
-                VALUES (?, ?, ?, ?, ?)
+                    (emotion_type, intensity, timestamp, trigger_memory_key, context, persona)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record.emotion,
@@ -161,6 +161,7 @@ class SQLitePersonaRepository(SQLiteRepository):
                     format_iso(record.timestamp) if record.timestamp else now,
                     record.trigger_memory_key,
                     record.context,
+                    persona,
                 ),
             )
             logger.info("Emotion record added: %s (%.1f)", record.emotion, record.intensity)

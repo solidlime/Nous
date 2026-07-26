@@ -10,6 +10,10 @@ class GeminiProvider(OpenAICompatProvider):
     ツール呼び出し、ストリーミング、システムプロンプトすべて OpenAI 形式でOK。
     """
 
+    def supports_vision(self) -> bool:
+        """All Gemini models support vision inputs."""
+        return True
+
     def __init__(self, api_key: str, model: str, base_url: str = "") -> None:
         super().__init__(
             api_key=api_key,

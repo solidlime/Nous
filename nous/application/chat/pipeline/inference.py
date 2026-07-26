@@ -61,18 +61,30 @@ class InferenceStep:
 
         messages = list(session_messages)
         if turn_ctx.images:
-            parts: list[dict] = [{"type": "text", "text": turn_ctx.user_message}]
-            for img in turn_ctx.images:
-                parts.append(
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{img['mime_type']};base64,{img['base64_data']}",
-                            "detail": "auto",
-                        },
-                    }
+            if not provider.supports_vision():
+                logger.warning(
+                    "Provider %s does not support vision, %d images will be ignored",
+                    config.provider,
+                    len(turn_ctx.images),
                 )
-            messages.append(LLMMessage(role="user", content=turn_ctx.user_message, content_parts=parts, timestamp=datetime.now()))
+                turn_ctx.user_message = (
+                    f"[User attached {len(turn_ctx.images)} image(s) but current model does not support vision]\n"
+                    f"{turn_ctx.user_message}"
+                )
+                messages.append(LLMMessage(role="user", content=turn_ctx.user_message, timestamp=datetime.now()))
+            else:
+                parts: list[dict] = [{"type": "text", "text": turn_ctx.user_message}]
+                for img in turn_ctx.images:
+                    parts.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{img['mime_type']};base64,{img['base64_data']}",
+                                "detail": "auto",
+                            },
+                        }
+                    )
+                messages.append(LLMMessage(role="user", content=turn_ctx.user_message, content_parts=parts, timestamp=datetime.now()))
         else:
             messages.append(LLMMessage(role="user", content=turn_ctx.user_message, timestamp=datetime.now()))
 

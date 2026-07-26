@@ -162,6 +162,27 @@ def _migrate_cleanup_orphan_strengths_v4(
     logger.info("Cleaned up %d orphan memory_strength records", delete_count)
 
 
+def _migrate_add_persona_to_emotion_history_v5(
+    db_conn: sqlite3.Connection, persona: str  # noqa: ARG001
+) -> None:
+    """Add persona column to emotion_history and rebuild index."""
+    try:
+        db_conn.execute("ALTER TABLE emotion_history ADD COLUMN persona TEXT NOT NULL DEFAULT ''")
+        db_conn.commit()
+        logger.info("Added persona column to emotion_history (migration v5)")
+    except sqlite3.OperationalError:
+        pass  # column already exists
+
+    # Rebuild the index: old idx_emotion_history_persona was on timestamp (misnamed)
+    try:
+        db_conn.execute("DROP INDEX IF EXISTS idx_emotion_history_persona")
+        db_conn.execute("CREATE INDEX IF NOT EXISTS idx_emotion_history_persona ON emotion_history(persona)")
+        db_conn.execute("CREATE INDEX IF NOT EXISTS idx_emotion_history_timestamp ON emotion_history(timestamp DESC)")
+        db_conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Migration registry  (ordered by version)
 # ---------------------------------------------------------------------------
@@ -173,4 +194,5 @@ MIGRATIONS = [
     (2, "Backfill FTS5 index", _migrate_fts_backfill),
     (3, "Transfer context_state records into memories", _migrate_context_state_to_memories),
     (4, "cleanup_orphan_strengths", _migrate_cleanup_orphan_strengths_v4),
+    (5, "Add persona column to emotion_history", _migrate_add_persona_to_emotion_history_v5),
 ]

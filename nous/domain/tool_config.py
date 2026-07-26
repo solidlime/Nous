@@ -43,6 +43,11 @@ class ToolConfig(BaseModel):
     image_gen_portrait_prefix: str = "upper body, portrait, looking at viewer, "
     image_gen_selfie_prefix: str = "selfie, from below, mirror selfie, "
     image_gen_scene_prefix: str = "environment shot, full body, "
+    # Emotion decay config
+    emotion_decay_half_life_hours: float = 24.0
+    emotion_decay_threshold: float = 0.005
+    emotion_neutral_threshold: float = 0.01
+
     # 高速化 LoRA
     image_gen_comfyui_speed_lora_path: str = "lcm_lora_sdxl.safetensors"
     image_gen_comfyui_speed_lora_weight: float = 1.0

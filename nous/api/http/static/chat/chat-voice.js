@@ -8,6 +8,7 @@ var C = N.Core;
 var esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 
 let _voiceRecognition = null;
+let _voiceBaseText = "";
 
 function toggleVoiceInput() {
   const btn = document.getElementById("chat-voice-btn");
@@ -20,6 +21,7 @@ function toggleVoiceInput() {
   if (_voiceRecognition) {
     _voiceRecognition.stop();
     _voiceRecognition = null;
+    _voiceBaseText = "";
     if (btn) {
       safeSetHTML(btn, '<i data-lucide="mic"></i>');
       btn.style.color = "";
@@ -28,24 +30,30 @@ function toggleVoiceInput() {
   }
   _voiceRecognition = new SpeechRecognition();
   _voiceRecognition.lang = "ja-JP";
-  _voiceRecognition.interimResults = false;
-  _voiceRecognition.continuous = false;
+  _voiceRecognition.interimResults = true;
+  _voiceRecognition.continuous = true;
   if (btn) {
     safeSetHTML(btn, '<i data-lucide="circle-dot"></i>');
     btn.style.color = "var(--accent-red)";
   }
   _voiceRecognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
     const inputEl = document.getElementById("chat-input");
-    if (inputEl) {
-      inputEl.value = (inputEl.value ? inputEl.value + " " : "") + transcript;
-      inputEl.dispatchEvent(new Event("input"));
+    if (!inputEl) return;
+    let interimText = "";
+    let finalText = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const result = event.results[i];
+      if (result.isFinal) {
+        finalText += result[0].transcript;
+      } else {
+        interimText += result[0].transcript;
+      }
     }
-    _voiceRecognition = null;
-    if (btn) {
-      safeSetHTML(btn, '<i data-lucide="mic"></i>');
-      btn.style.color = "";
+    if (finalText) {
+      _voiceBaseText += (_voiceBaseText ? " " : "") + finalText;
     }
+    inputEl.value = _voiceBaseText + (interimText ? " " + interimText : "");
+    inputEl.dispatchEvent(new Event("input"));
   };
   _voiceRecognition.onerror = () => {
     toast("音声認識エラー", "error");
@@ -56,6 +64,7 @@ function toggleVoiceInput() {
     }
   };
   _voiceRecognition.onend = () => {
+    _voiceRecognition = null;
     if (btn) {
       safeSetHTML(btn, '<i data-lucide="mic"></i>');
       btn.style.color = "";
