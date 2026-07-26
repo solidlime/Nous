@@ -64,26 +64,6 @@ async function loadOverview() {
         const sm = data.state_memories || {};
         const physicalContent = (sm.physical_state?.content) || ctx.physical_state;
         const mentalContent = (sm.mental_state?.content) || ctx.mental_state;
-        // --- Build tag/emotion distributions from stats ---
-        const tagDist = stats.tag_distribution || {};
-        const emoDist = stats.emotion_distribution || {};
-        const topTags = Object.entries(tagDist).sort((a,b) => b[1]-a[1]).slice(0,5);
-        const topEmo = Object.entries(emoDist).sort((a,b) => b[1]-a[1]).slice(0,5);
-
-        // --- Memory Type Distribution (decision/milestone/preference/problem/emotional) ---
-        const MEMORY_TYPES = {
-            'decision':  {color: 'badge-blue',   icon: '<i data-lucide="compass"></i>'},
-            'milestone': {color: 'badge-green',  icon: '<i data-lucide="trophy"></i>'},
-            'preference':{color: 'badge-purple', icon: '<i data-lucide="heart"></i>'},
-            'problem':   {color: 'badge-red',    icon: '<i data-lucide="alert-triangle"></i>'},
-            'emotional': {color: 'badge-pink',   icon: '<i data-lucide="heart"></i>'},
-        };
-        const memTypeCounts = {};
-        Object.entries(MEMORY_TYPES).forEach(([k]) => {
-            if (tagDist[k]) memTypeCounts[k] = tagDist[k];
-        });
-        const hasMemTypes = Object.keys(memTypeCounts).length > 0;
-
         // --- Equipment display ---
         const EQUIP_SLOTS = ['top','bottom','shoes','outer','head','accessory_1','accessory_2','accessory_3'];
         let equipHtml = '<div style="display:grid;gap:6px;margin-top:8px">';
@@ -107,29 +87,6 @@ async function loadOverview() {
             equipHtml += '</div>';
         });
         equipHtml += '</div>';
-
-        // --- Core blocks ---
-        let blocksHtml = '';
-        if (data.blocks && data.blocks.length > 0) {
-            data.blocks.forEach(b => {
-                const name = typeof b === 'string' ? b : (b.name || b.block_name || 'block');
-                const content = typeof b === 'object' ? (b.content || b.value || '') : '';
-                const priority = typeof b === 'object' ? b.priority : null;
-                blocksHtml += '<div style="padding:10px 0;border-bottom:1px solid var(--glass-border)">';
-                blocksHtml += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
-                blocksHtml += '<span style="font-weight:600;color:var(--accent-purple);font-size:0.85rem">' + esc(name) + '</span>';
-                if (priority != null) blocksHtml += '<span class="badge badge-yellow">P' + esc(String(priority)) + '</span>';
-                blocksHtml += '<div style="display:flex;gap:6px;margin-left:auto">';
-                blocksHtml += '<button class="glass-btn" data-bname="' + esc(name) + '" data-bcontent="' + esc(content) + '" data-bpriority="' + (priority || 0) + '" onclick="var el=this;N.Features.Overview.showEditBlock(el.dataset.bname,el.dataset.bcontent,parseInt(el.dataset.bpriority||0))" style="padding:3px 10px;font-size:0.75rem"><i data-lucide="pencil"></i> Edit</button>';
-                blocksHtml += '<button class="glass-btn" data-bname="' + esc(name) + '" onclick="N.Features.Overview.deleteBlock(this.dataset.bname)" style="padding:3px 10px;font-size:0.75rem;color:var(--accent-red)"><i data-lucide="trash-2"></i> Delete</button>';
-                blocksHtml += '</div>';
-                blocksHtml += '</div>';
-                if (content) blocksHtml += '<div style="font-size:0.82rem;color:var(--text-muted)">' + esc(truncate(String(content), 80)) + '</div>';
-                blocksHtml += '</div>';
-            });
-        } else {
-            blocksHtml = '<span style="color:var(--text-muted)">No core memory blocks</span>';
-        }
 
         // --- Goals ---
         function getStatusIcon(status) {
@@ -184,26 +141,7 @@ async function loadOverview() {
             invHtml += '</div>';
         }
 
-        // --- Recent memories grouped by date (for 7-day chart) ---
-        const recent = data.recent || [];
-        const dayMap = {};
-        const now = new Date();
-        for (let i = 6; i >= 0; i--) {
-            const d = new Date(now); d.setDate(d.getDate() - i);
-            dayMap[d.toISOString().slice(0,10)] = 0;
-        }
-        recent.forEach(m => {
-            const d = (m.created_at || '').slice(0,10);
-            if (d in dayMap) dayMap[d]++;
-        });
-        // Augment with stats if available
-        if (stats.daily_counts) {
-            Object.entries(stats.daily_counts).forEach(([d, c]) => { if (d in dayMap) dayMap[d] = c; });
-        }
-        const dayLabels = Object.keys(dayMap).map(d => fmtDate(d));
-        const dayCounts = Object.values(dayMap);
-
-        // --- Render (new section order) ---
+        // --- Render ---
         safeSetHTML(el, `
         <!-- Hero: portrait + status panel -->
         <div class="ov-hero">
@@ -256,19 +194,6 @@ async function loadOverview() {
                     </div>
                 </div>
 
-                <!-- Memory Stats -->
-                <div class="glass p-4" style="border-radius:var(--radius-md);backdrop-filter:blur(20px) saturate(180%)">
-                    <div class="ov-section-title"><i data-lucide="bar-chart-3"></i> Memory</div>
-                    <div class="ov-stats-grid">
-                        <div class="ov-stat-card"><div class="stat-value">${stats.total_count ?? '--'}</div><div class="stat-label">Total</div></div>
-                        <div class="ov-stat-card"><div class="stat-value" style="color:var(--accent-green)">${str.avg ?? '--'}</div><div class="stat-label">Avg Strength</div></div>
-                        <div class="ov-stat-card"><div class="stat-value" style="color:var(--accent-blue)">${stats.tagged_ratio != null ? (stats.tagged_ratio * 100).toFixed(1) + '%' : '--'}</div><div class="stat-label">Tagged</div></div>
-                        <div class="ov-stat-card"><div class="stat-value" style="color:var(--accent-yellow)">${stats.linked_ratio != null ? (stats.linked_ratio * 100).toFixed(1) + '%' : '--'}</div><div class="stat-label">Linked</div></div>
-                    </div>
-                    ${topTags.length ? '<div style="margin-bottom:6px">' + topTags.map(([t,c]) => '<span class="badge badge-purple">' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join(' ') + '</div>' : ''}
-                    ${hasMemTypes ? '<div style="margin-bottom:6px">' + Object.entries(memTypeCounts).map(([t,c]) => '<span class="badge ' + MEMORY_TYPES[t].color + '">' + MEMORY_TYPES[t].icon + ' ' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join(' ') + '</div>' : ''}
-                    ${topEmo.length ? '<div>' + topEmo.map(([e,c]) => '<span class="badge badge-pink">' + esc(e) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join(' ') + '</div>' : ''}
-                </div>
             </div>
         </div>
 
@@ -284,14 +209,6 @@ async function loadOverview() {
         <div class="glass glass-hoverable p-6 mb-6">
             <div class="card-title"><i data-lucide="shield"></i> Equipment</div>
             ${equipHtml}
-        </div>
-        <!-- Core Memory Blocks -->
-        <div class="glass glass-hoverable p-6 mb-6">
-            <div class="card-title" style="justify-content:space-between">
-                <span>&#129504; Core Memory Blocks</span>
-                <button onclick="N.Features.Overview.showCreateBlock()" class="glass-btn" style="padding:4px 12px;font-size:0.78rem"><i data-lucide="plus"></i> New Block</button>
-            </div>
-            ${blocksHtml}
         </div>
         <!-- Relationship Highlights (from memory tags) -->
         ${data.relationship_highlights && data.relationship_highlights.length > 0 ? `
@@ -314,17 +231,6 @@ async function loadOverview() {
             ${invHtml}
         </div>
         ${genImagesHtml}
-        <!-- Charts -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div class="glass p-6">
-                <div class="card-title"><i data-lucide="calendar"></i> 7-Day Timeline</div>
-                <div style="height:220px;position:relative"><canvas id="chart-timeline"></canvas></div>
-            </div>
-            <div class="glass p-6">
-                <div class="card-title"><i data-lucide="tag"></i> Tag Distribution</div>
-                <div style="height:220px;position:relative"><canvas id="chart-tags"></canvas></div>
-            </div>
-        </div>
         <!-- Add Item Modal -->
         <div id="add-item-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center">
             <div style="background:#1e1b2e;border:1px solid rgba(var(--accent-blue-rgb), 0.3);border-radius:14px;padding:28px;width:420px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,0.6)">
@@ -392,28 +298,6 @@ async function loadOverview() {
             portraitEl2.style.display = 'none';
         }
 
-        // --- Charts ---
-        N.Components.chart.destroy('chart-timeline');
-        N.Components.chart.destroy('chart-tags');
-        const tlCtx = document.getElementById('chart-timeline');
-        if (tlCtx) {
-            S.charts['chart-timeline'] = new Chart(tlCtx, {
-                type: 'bar',
-                data: { labels: dayLabels, datasets: [{ label: 'Memories', data: dayCounts, backgroundColor: 'rgba(0,122,255,0.5)', borderColor: '#007aff', borderWidth: 1, borderRadius: 6 }] },
-                options: N.Components.chart.defaults({ plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: {} } })
-            });
-        }
-        const allTags = Object.entries(tagDist).sort((a,b) => b[1]-a[1]).slice(0, 8);
-        const tgCtx = document.getElementById('chart-tags');
-        if (tgCtx && allTags.length) {
-            S.charts['chart-tags'] = new Chart(tgCtx, {
-                type: 'doughnut',
-                data: { labels: allTags.map(t=>t[0]), datasets: [{ data: allTags.map(t=>t[1]), backgroundColor: N.Core.CHART_COLORS.slice(0, allTags.length), borderWidth: 0 }] },
-                options: { ...N.Components.chart.defaults(), cutout: '60%' }
-            });
-        } else if (tgCtx) {
-            tgCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-muted);font-size:0.85rem;">タグがありません</div>';
-        }
         if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
         console.error('overview load failed:', e);
