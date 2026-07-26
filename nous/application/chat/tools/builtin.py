@@ -339,6 +339,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             "message": summary,
             "images": images_data,
             "provider": provider_name,
+            "self_portrait": self_portrait,
         }
 
     except Exception as e:

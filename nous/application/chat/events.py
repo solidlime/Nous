@@ -203,12 +203,18 @@ class ImageGenResultSSE:
     images: list  # [{base64: str, revised_prompt: str, size: str}]
     provider: str  # "comfyui"
     tool_use_id: str = ""  # 対応する tool_call の ID（並列ツール時の順序正規化用）
+    self_portrait: bool = False  # self-portrait 生成時は True（Overview 自動更新用）
     type: str = "image_gen_result"
 
     def to_sse(self) -> str:
         return _sse_encode(
             "image_gen_result",
-            {"images": self.images, "provider": self.provider, "tool_use_id": self.tool_use_id},
+            {
+                "images": self.images,
+                "provider": self.provider,
+                "tool_use_id": self.tool_use_id,
+                "self_portrait": self.self_portrait,
+            },
         )
 
 

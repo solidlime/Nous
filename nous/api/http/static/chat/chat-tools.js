@@ -208,8 +208,21 @@ function showImageGenResult(evt) {
     _imageGenSpinnerId = null;
   }
 
-  console.log("[showImageGenResult] images check:", {images: !!evt.images, length: evt.images?.length});
+  console.log("[showImageGenResult] images check:", {images: !!evt.images, length: evt.images?.length, self_portrait: evt.self_portrait});
   if (!evt.images || !evt.images.length) return;
+
+  // Self-portrait → update Overview tab
+  if (evt.self_portrait && evt.images[0]) {
+    var portraitEl = document.getElementById('overview-portrait');
+    if (portraitEl) {
+      var imgUrl = evt.images[0].url || ("data:image/png;base64," + (evt.images[0].base64 || ""));
+      portraitEl.style.display = 'block';
+      safeSetHTML(portraitEl, '<div class="glass p-4" style="text-align:center;max-width:400px;margin:0 auto 16px">'
+          + '<img src="' + esc(imgUrl) + '" alt="Self Portrait" style="max-width:100%;max-height:300px;border-radius:8px;cursor:pointer" onclick="N.Chat.attachments.openViewer(\'' + esc(imgUrl) + '\',\'image\')">'
+          + '<div style="margin-top:6px;font-size:0.75rem;color:var(--text-muted)">Latest Self Portrait</div>'
+          + '</div>');
+    }
+  }
 
   evt.images.forEach(function (img) {
     console.log("[showImageGenResult] img keys:", Object.keys(img));
