@@ -183,6 +183,24 @@ def _migrate_add_persona_to_emotion_history_v5(
         pass
 
 
+def _migrate_remove_chat_kind_v6(
+    db_conn: sqlite3.Connection, persona: str  # noqa: ARG001
+) -> None:
+    """Replace kind='chat' with kind='semantic' for existing records.
+
+    'chat' was removed from VALID_KINDS; existing records with this value
+    are updated to the default 'semantic' kind. Idempotent — safe to run
+    multiple times.
+    """
+    cursor = db_conn.execute("UPDATE memories SET kind = 'semantic' WHERE kind = 'chat'")
+    affected = cursor.rowcount
+    if affected:
+        db_conn.commit()
+        logger.info("Migration v6: updated %d records from kind='chat' to 'semantic'", affected)
+    else:
+        logger.info("Migration v6: no records with kind='chat' found")
+
+
 # ---------------------------------------------------------------------------
 # Migration registry  (ordered by version)
 # ---------------------------------------------------------------------------
@@ -195,4 +213,5 @@ MIGRATIONS = [
     (3, "Transfer context_state records into memories", _migrate_context_state_to_memories),
     (4, "cleanup_orphan_strengths", _migrate_cleanup_orphan_strengths_v4),
     (5, "Add persona column to emotion_history", _migrate_add_persona_to_emotion_history_v5),
+    (6, "Replace kind='chat' with 'semantic'", _migrate_remove_chat_kind_v6),
 ]
