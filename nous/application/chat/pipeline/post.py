@@ -16,6 +16,7 @@ from nous.application.chat.events import (
 from nous.application.chat.memory_llm import run_memory_llm
 from nous.application.chat.pattern_detector import maybe_run_mental_model
 from nous.application.chat.reflection import maybe_run_reflection
+from nous.application.chat.response_validator import validate_response
 from nous.application.chat.summarizer import summarize_and_store
 from nous.infrastructure.logging.structured import get_logger
 
@@ -77,7 +78,15 @@ async def _safe_mental_model(ctx: AppContext, config: ChatConfig) -> None:
 
 
 class PostProcessStep:
-    """MemoryLLM await実行 + Reflection SSE + セッション更新 + debug_info/done SSEの送出。"""
+    """MemoryLLM await実行 + Reflection SSE + セッション更新 + debug_info/done SSEの送出。
+
+    Validation gaps (2026-07-26):
+    - No character consistency / tone verification exists
+    - No contradiction detection against persona settings
+    - Author's Note (injected at prompt.py:118) has no contradiction check
+    - LLM output trusted as-is; verification relies solely on system prompt quality
+    - Response validation added via ResponseValidator (see response_validator.py)
+    """
 
     def __init__(self) -> None:
         self._background_tasks: list[asyncio.Task] = []
@@ -134,6 +143,11 @@ class PostProcessStep:
             ctx.persona_service.record_conversation_time(ctx.persona)
         except Exception as e:
             logger.warning("PostProcessStep: record_conversation_time failed: %s", e)
+
+        # Validate response before marking as done
+        response_warnings = validate_response(turn_ctx.full_response)
+        for w in response_warnings:
+            logger.warning("Response validation: %s", w)
 
         # DoneSSE: memory_llmの前に送出（was_truncatedは事前に設定済み）
         yield DoneSSE(
