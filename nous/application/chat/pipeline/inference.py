@@ -117,11 +117,12 @@ class InferenceStep:
             visible_tools = registry.get_visible_tools()
 
             # タイムスタンプ注入（設定ON時のみ）— debug dumpより先に注入
+            # HTML comment format: LLM sees timestamp but does not echo it in output
             if getattr(config, "show_message_timestamps", False):
                 for msg in messages:
                     if msg.timestamp and msg.role in ("user", "assistant"):
                         ts_str = msg.timestamp.strftime("%Y-%m-%d %H:%M JST")
-                        msg.content = f"[{ts_str}] {msg.content}"
+                        msg.content = f"<!-- msg_at: {ts_str} -->{msg.content}"
 
             # Debug: capture the full prompt sent to LLM
             if getattr(config, "debug_mode", False):
