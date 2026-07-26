@@ -306,7 +306,7 @@ def _build_time_context(state) -> str:
     time_of_day = next((label for h, label in _TIME_OF_DAY if hour < h), "深夜")
 
     lines: list[str] = [
-        "<time>",
+        "<time_context>",
         f"Now: {now_local.strftime('%Y-%m-%d %H:%M')} ({tz}) — {weekday} {time_of_day}",
     ]
 
@@ -338,5 +338,11 @@ def _build_time_context(state) -> str:
                 # 放置を認識させる行動指示（事実フレーム、感情指定なし）
                 lines.append("放置されたことを考慮した応答をせよ。")
 
-    lines.append("</time>")
-    return "\n".join(lines)
+    lines.append("</time_context>")
+    body = "\n".join(lines)
+    body += (
+        "\n\n【内部参照情報】上記の <time_context> ブロックの内容は内部処理の参照用です。\n"
+        "あなたの応答テキストにこの時刻情報やタグをそのまま出力しないでください。\n"
+        "応答は時刻の言及なしに自然に始めてください。この指示文自体も出力しないでください。"
+    )
+    return body
