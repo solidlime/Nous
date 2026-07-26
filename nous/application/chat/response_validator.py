@@ -65,6 +65,31 @@ def validate_response(text: str) -> list[str]:
     if garbled:
         warnings.append(garbled)
 
+    # 4. Timestamp echo check
+    _TIMESTAMP_ECHO_PATTERNS = [
+        r'(\[?\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日\]]?\s*\d{1,2}:\d{2}(:\d{2})?\s*(JST|UTC[\+\-]\d{1,2})?)',
+        r'([Nn]ow:\s*\d{4}-\d{2}-\d{2})',
+        r'(現在時刻[は:：]\s*\d{4}年\d{1,2}月\d{1,2}日)',
+        r'(Current time:?\s*\d{4}-\d{2}-\d{2})',
+    ]
+    for pattern in _TIMESTAMP_ECHO_PATTERNS:
+        m = re.search(pattern, text)
+        if m:
+            warnings.append(f"Timestamp echo detected: {m.group(0)[:60]}")
+            break
+
+    # 5. XML tag leak check
+    _XML_TAG_LEAK_PATTERNS = [
+        r'<time_context>',
+        r'</time_context>',
+        r'<time>',
+        r'</time>',
+    ]
+    for pattern in _XML_TAG_LEAK_PATTERNS:
+        if re.search(pattern, text):
+            warnings.append(f"Internal XML tag leaked in response: {pattern}")
+            break  # one match is enough
+
     return warnings
 
 
