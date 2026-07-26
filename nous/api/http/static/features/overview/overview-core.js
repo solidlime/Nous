@@ -88,33 +88,6 @@ async function loadOverview() {
         });
         equipHtml += '</div>';
 
-        // --- Goals ---
-        function getStatusIcon(status) {
-            if (status === 'active') return '<i data-lucide="refresh-cw"></i>';
-            if (status === 'achieved' || status === 'fulfilled') return '<i data-lucide="check-circle"></i>';
-            if (status === 'cancelled') return '<i data-lucide="x-circle"></i>';
-            return '<i data-lucide="refresh-cw"></i>';
-        }
-
-        function renderGoalItems(goalItems, label) {
-            if (!goalItems || goalItems.length === 0) return '<span style="color:var(--text-muted)">No ' + label + '</span>';
-            let html = '';
-            goalItems.forEach(item => {
-                const content = typeof item === 'string' ? item : (item.content || item.description || item.title || JSON.stringify(item));
-                const status = typeof item === 'object' ? (item.status || 'active').toLowerCase() : 'active';
-                const icon = getStatusIcon(status);
-                html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0">';
-                html += '<span>' + icon + '</span>';
-                html += '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)">' + esc(content) + '</span>';
-                const ts = typeof item === 'object' && (item.created_at || item.date);
-                if (ts) html += '<span style="font-size:0.72rem;color:var(--text-muted)">' + relativeTime(ts) + '</span>';
-                html += '</div>';
-            });
-            return html;
-        }
-
-        const effectiveGoals = data.goals || [];
-
         // --- Profile: user_info / persona_info / relationship ---
         const userInfo = ctx.user_info || {};
         const personaInfo = ctx.persona_info || {};
@@ -197,14 +170,6 @@ async function loadOverview() {
             </div>
         </div>
 
-        <!-- Goals -->
-        <div class="glass glass-hoverable p-6 mb-6">
-            <div class="card-title"><i data-lucide="target"></i> Goals</div>
-            <div>
-                <div style="font-size:0.8rem;font-weight:600;color:var(--accent-green);margin-bottom:8px">Goals <span style="opacity:0.6;font-weight:400">(${effectiveGoals.length}件)</span></div>
-                <div style="max-height:240px;overflow-y:auto;padding-right:4px">${renderGoalItems(effectiveGoals, 'goals')}</div>
-            </div>
-        </div>
         <!-- Equipment -->
         <div class="glass glass-hoverable p-6 mb-6">
             <div class="card-title"><i data-lucide="shield"></i> Equipment</div>
