@@ -6,6 +6,9 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from nous.domain.shared.time_utils import get_now
+from nous.infrastructure.logging.structured import get_logger
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from nous.application.chat.reflection import ReflectionEngine
@@ -64,7 +67,15 @@ class DecayWorker:
             return
 
         now = get_now()
-        for strength in result.value:
+        strengths = result.value
+        logger.debug("Decay cycle started, checking %d strengths", len(strengths))
+
+        processed = 0
+        updated = 0
+        skipped = 0
+        errors = 0
+        for strength in strengths:
+            processed += 1
             elapsed = (now - strength.last_decay).total_seconds() / 3600 if strength.last_decay else 24.0
 
             # LTM uses slower decay exponent
@@ -92,11 +103,24 @@ class DecayWorker:
 
             min_strength = self._config.forgetting_min_strength if self._config else self.context.settings.forgetting.min_strength
             if new_strength_val < min_strength:
+                skipped += 1
                 continue
 
             strength.strength = new_strength_val
             strength.last_decay = now
-            self.context.memory_repo.save_strength(strength)
+            save_result = self.context.memory_repo.save_strength(strength)
+            if save_result.is_ok:
+                updated += 1
+            else:
+                errors += 1
+
+        logger.info(
+            "Decay cycle done: %d processed / %d updated / %d skipped / %d errors",
+            processed,
+            updated,
+            skipped,
+            errors,
+        )
 
     def _maybe_run_reflection(self) -> None:
         """Run reflection if engine and LLM provider are configured.

@@ -1,62 +1,62 @@
-# SPEC — Phase 4: 発展
+# SPEC — Phase 1: 検証・即時改善
 
-## 出典
-`refactor-instructions.md` 第3章、第5章、第6章
-
----
-
-## SPEC-4.1: ChatConfig 分割 (refactor 3.3)
-**現状**: `nous/domain/chat_config.py` (602行) に50+フィールドのPydanticモデル。SQLシリアライズも内包。
-
-| 新ファイル | 内容 | 想定行数 |
-|-----------|------|:--:|
-| `provider_config.py` | LLM接続設定 (api_key, base_url, model等) | ~100 |
-| `session_config.py` | セッション管理設定 (max_turns, ttl等) | ~100 |
-| `compression_config.py` | コンテキスト圧縮設定 | ~80 |
-| `tool_config.py` | MCPツール設定 | ~80 |
-| `chat_config.py` | Facade: 全設定を集約するPydanticモデル | ~200 |
-
-**要件**: ChatConfig クラスは引き続き1つのPydanticモデルとして動作。内部で設定ブロックに分割。
+> 出典: `.spec/PLAN.md` (2026-07-26) P1-1 / P1-2
+> 旧 SPEC (Phase 4: ChatConfig分割・契約テスト・CI強化) は完了済み。MEMORY.md 参照。
 
 ---
 
-## SPEC-4.2: MCPツール契約テスト導入 (refactor 6.3)
-**現状**: MCPツールの入出力が暗黙的。破壊的変更の検出機構なし。
+## SPEC-1.1: 記憶減衰・想起スコアの動作検証 (P1-1)
 
-| 項目 | 内容 |
-|------|------|
-| 対象ツール | memory_create, memory_read, memory_search, memory_update, memory_delete, goal_manage, update_context 等 |
-| 方式 | Pact (pact-python) で consumer-driven 契約テスト |
-| カバレッジ | 全MCPツールの入出力スキーマ、エラーレスポンス形式 |
-| ファイル | `tests/contracts/` ディレクトリ新設 |
+**背景**: `memory_strength` テーブル、`ForgettingCurveRanker`、`DecayWorker` は実装済み。
+しかし 52件の FK constraint failed（orphan memory_strength records）が発生しており、
+減衰サイクルが想定通り機能しているか未確認。
 
-**参考**: `~/.agents/skills/contract-testing/SKILL.md` に Pact ワークフローあり。
+### 要件
 
----
+| # | 要件 | 内容 |
+|---|------|------|
+| R1 | DecayWorker 可観測性 | 減衰サイクル毎の処理件数・更新件数・スキップ件数をデバッグログに出力 |
+| R2 | オーファンクリーンアップ | `memory_strength` の orphan レコード（memories 側に存在しない memory_id）を削除する migration 追加 |
+| R3 | エラーログ集約 | `strength_repo` の FK エラーを1件毎でなくサマリー集計（N件を1行）で出力 |
+| R4 | 統合テスト | 検索結果に減衰スコアが反映されること（古い記憶が新しい記憶より下位になる等）を確認する統合テスト追加 |
 
-## SPEC-4.3: カバレッジ下限 CI 強制 (refactor 5.2)
-**対象**: `.github/workflows/ci.yml`
-- `pytest --cov=nous --cov-fail-under=70` をCIに追加
-- カバレッジレポートをGitHub Actions artifact に保存
-
----
-
-## SPEC-4.4: bandit セキュリティ lint (refactor 5.2)
-**対象**: `.github/workflows/ci.yml`
-- `bandit -r nous/ -ll` をCIジョブとして追加
-- `# nosec` 抑制の正当性確認（既にコメント付きなので概ねパスするはず）
+### 制約
+- migration は既存のバージョン規約（v0XX 連番）に従う
+- 後方互換: 既存の `memory_strength` スキーマは変更しない（削除のみ）
 
 ---
 
-## 実装方針
-- 4.1 (ChatConfig分割) は #011 — 独立した単一ファイル変更
-- 4.2 (契約テスト) は #042 (librarian) でPact実装パターン調査 → #011 実装
-- 4.3 + 4.4 (CI改善) は直接編集（YAML変更のみ、リスク低）
+## SPEC-1.2: 応答検証の動作確認 (P1-2)
+
+**背景**: 応答検証機構（キャラクター整合性チェック）の実装状況が不明。
+`PostProcessStep` 内の `_safe_reflection()` / `_safe_mental_model()`、
+Author's Note 強制注入との矛盾検出の有無を確認する。
+
+### 要件
+
+| # | 要件 | 内容 |
+|---|------|------|
+| R1 | 検証パス洗い出し | 全 PostProcessStep の検証経路をコードリードで一覧化（ドキュメント化） |
+| R2 | 検出能力テスト | 現在の検証がキャラクター矛盾（口調崩壊・性格不一致）を検出できるかのテストケース作成 |
+| R3 | 簡易後処理検証 | 不足がある場合のみ、ルールベース（LLM呼出不要）の後処理検証パスを追加 |
+
+### 制約
+- R3 は R2 の結果が「検出不可」の場合のみ実施（YAGNI）
+- ルールベース検証はペルソナ非依存であること（口調・感情表現はペルソナ定義側の責務）
+
+---
 
 ## 検証要件
+
 | # | 項目 | 方法 |
 |---|------|------|
-| V1 | ChatConfig import | `from nous.domain.chat_config import ChatConfig` |
-| V2 | 既存テスト | `pytest tests/unit/test_chat_config.py` |
-| V3 | 契約テスト | `pytest tests/contracts/` |
-| V4 | CI | GitHub Actions で bandit + coverage ジョブが動作すること |
+| V1 | P1-1 関連テスト | `pytest tests/unit/test_decay_worker.py tests/unit/test_memory_strength.py` + 新規テスト |
+| V2 | P1-2 関連テスト | 新規テスト + `pytest tests/unit/test_chat_pipeline.py` の関連部分 |
+| V3 | 回帰確認 | 変更モジュールに直接依存するテストファイルのみ個別実行（**フルスイート禁止: メモリ不足のため**） |
+| V4 | lint | `ruff check` PASS |
+| V5 | migration | 新規 migration が既存DBに対して冪等に適用できること |
+
+## 実装方針
+- 調査（探索）: #009 explorer ×2 並列（P1-1 系 / P1-2 系）
+- 実装: #011 fixer（P1-1 と P1-2 は独立のため並列可能）
+- テスト実行はスコープ限定（対象ファイル指定）

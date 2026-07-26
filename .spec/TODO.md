@@ -1,28 +1,22 @@
-# TODO — Phase 1: 安全基盤リファクタリング (2026-07-25) — COMPLETE
+# TODO — Phase 1: 検証・即時改善 (2026-07-26)
 
-## Increment 1: クイックウィン（機械的変更）
-- [x] 1.1 `_compute_recency_decay` をプライベート化 — 既に対応済み（変更不要）
-- [x] 1.2 `main.py:192` の重複 `_mount_static_files(mcp)` 削除
-- [x] 1.3 `.gitignore` に `node_modules/` 追加 + `git rm --cached` — 既に.gitignore済み、追跡なし
-- [x] 1.5 `_get_session_memories` スタブに `TODO(blocked)` コメント — `service.py`
-- [x] 1.6 `use_cases.py` の `_search_engine` 直接代入を setter 経由に
-- [x] 1.7 `memory_repo.py` の `noqa: S608` に説明コメント追加
-- [x] 1.8 Makefile 追加（プロジェクトルート）
+> SPEC: `.spec/SPEC.md` / PLAN: `.spec/PLAN.md` P1-1, P1-2
+> 注意: フルテストスイートはメモリ不足のリスクあり。テストは対象ファイル指定で実行すること。
 
-## Increment 2: asyncio タスクリーク修正（TaskGroup移行）
-- [x] 2.1 `service.py:245` — `create_task(_evolve_related_memories())` → TaskGroup化
-- [x] 2.2 `service.py:255` — `create_task(_invalidate_contradicted_memory())` → TaskGroup化
-- [x] 2.3 `post.py:119` — 調査の結果、`_background_tasks` で管理済み（変更不要）
-- [x] 2.4 `prepare.py:695,702` — 調査の結果、`asyncio.gather()` で適切に await 済み（変更不要）
+## P1-1: 記憶減衰・想起スコアの動作検証
+- [ ] 1.1 DecayWorker デバッグログ追加（サイクル毎の処理/更新/スキップ件数）
+- [ ] 1.2 オーファン memory_strength クリーンアップ migration 追加
+- [ ] 1.3 strength_repo FK エラーログのサマリー集計化
+- [ ] 1.4 減衰スコアが検索結果に反映されることの統合テスト追加
 
-## Increment 3: CI改善
-- [x] 3.1 `mypy nous/` を CI（ci.yml）に追加
-- [x] 3.2 `pytest tests/integration/` を CI に追加
+## P1-2: 応答検証の動作確認
+- [ ] 2.1 全 PostProcessStep 検証パスの洗い出し・一覧化
+- [ ] 2.2 キャラクター矛盾検出能力のテストケース作成
+- [ ] 2.3 （検出不可の場合のみ）ルールベース後処理検証パス追加
 
 ## 検証
-- [x] `ruff check` → 全PASS
-- [x] importチェック → OK
-- [x] メソッド存在確認 → `set_search_engine`, `_run_background_evolution`, `TODO(blocked)` 全確認
-- [ ] `pytest tests/unit/` → メモリ不足により未実行（要サーバー再起動後）
-- [ ] `mypy nous/` → 未実行
-- [ ] サーバー起動確認 → 未実行
+- [ ] V1: `pytest tests/unit/test_decay_worker.py tests/unit/test_memory_strength.py` + 新規
+- [ ] V2: P1-2 新規テスト + test_chat_pipeline.py 関連部分
+- [ ] V3: 変更モジュール依存テストの個別実行（フルスイート禁止）
+- [ ] V4: `ruff check` PASS
+- [ ] V5: 新規 migration の冪等性確認
