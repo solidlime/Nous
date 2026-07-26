@@ -199,11 +199,13 @@ def register_tools(mcp: FastMCP) -> None:
         recency_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0,
         vector_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0,
         keyword_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 0.5,
+        kind: str | None = None,
     ) -> str:
         """ハイブリッド検索で記憶を検索。会話が過去の出来事に言及したとき、またはあなたやユーザーについての文脈が必要なときに使用せよ。
         date_range: "7d","30d","昨日"。
         importance_weight/recency_weight: RRF スコアリングのブースト値 (0.0-1.0)。
-        vector_weight/keyword_weight: セマンティック/キーワード信号の RRF ソース重み。"""
+        vector_weight/keyword_weight: セマンティック/キーワード信号の RRF ソース重み。
+        kind: 記憶の種類でフィルタ — episodic（具体的な出来事）/ semantic（一般的事実）/ procedural（手順・パターン）/ prospective（将来の予定・意図）。"""
         p = _resolve_persona()
         return await _tool_memory_search(
             AppContextRegistry.get(p),
@@ -218,6 +220,7 @@ def register_tools(mcp: FastMCP) -> None:
             recency_weight=recency_weight,
             vector_weight=vector_weight,
             keyword_weight=keyword_weight,
+            kind=kind,
         )
 
     # memory_stats
