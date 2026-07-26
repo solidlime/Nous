@@ -45,11 +45,11 @@ function updateMemoryPanel(retrieved, saved, goals) {
               .filter(Boolean)
               .join(" ");
             const key = m.key || "";
-            const emotionBadges = renderEmotionBadges(
+            const emotionBadges = N.Components.memoryCard.renderEmotionBadges(
               m.emotion,
               m.emotion_intensity,
             );
-            const bodyCompact = renderBodyStateCompact(m.body_state);
+            const bodyCompact = N.Components.memoryCard.renderBodyStateCompact(m.body_state);
             const extra = [emotionBadges, bodyCompact]
               .filter(Boolean)
               .join(" ");
@@ -93,11 +93,11 @@ function updateMemoryPanel(retrieved, saved, goals) {
             const content = esc(_raw.substring(0, 80));
             const tags = m.tags ? m.tags.join(", ") : "";
             const key = m.key || "";
-            const emotionBadges = renderEmotionBadges(
+            const emotionBadges = N.Components.memoryCard.renderEmotionBadges(
               m.emotion,
               m.emotion_intensity,
             );
-            const bodyCompact = renderBodyStateCompact(m.body_state);
+            const bodyCompact = N.Components.memoryCard.renderBodyStateCompact(m.body_state);
             const extra = [emotionBadges, bodyCompact]
               .filter(Boolean)
               .join(" ");

@@ -3,6 +3,44 @@
   display: flex;
   flex-direction: column;
   height: calc(100dvh - var(--header-height) - var(--tabbar-height) - 48px);
+  position: relative;
+  overflow: hidden;
+}
+/* Background image overlay — subtle, does not break readability */
+#tab-chat.active::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--chat-bg-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.18;
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity var(--duration-normal) var(--ease-apple);
+}
+/* Standing picture — fixed bottom-right, non-interactive */
+#chat-standing-pic {
+  position: fixed;
+  bottom: 0;
+  right: 16px;
+  z-index: var(--z-content);
+  pointer-events: none;
+  max-height: 40vh;
+  max-width: 25vw;
+  object-fit: contain;
+  object-position: bottom right;
+  opacity: 0;
+  transition: opacity var(--duration-slow) var(--ease-apple);
+}
+#chat-standing-pic.visible {
+  opacity: 1;
+}
+@media (max-width: 768px) {
+  #chat-standing-pic {
+    display: none !important;
+  }
 }
 #chat-layout {
   container-type: inline-size;
@@ -11,6 +49,8 @@
   flex: 1;
   min-height: 0;
   overflow-x: hidden;
+  position: relative;
+  z-index: var(--z-content);
 }
 #chat-main {
   flex: 1;
@@ -464,6 +504,9 @@ html.light .chat-tool-result-content {
 }
 #settings-panel details[data-category="voice"] summary::before {
   color: var(--accent-green);
+}
+#settings-panel details[data-category="background"] summary::before {
+  color: var(--accent-teal);
 }
 
 /* Enhanced field labels */

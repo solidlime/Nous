@@ -1,36 +1,52 @@
-# HANDOFF — 2026-07-25 (Phase 10: Keyboard Accessibility)
+# HANDOFF — 2026-07-25 (Phase 12: Window Pollution Removal — COMPLETE)
 
 ## セッション概要
-Phase 10: Usability Hardening — Keyboard Accessibility。全機能タブ・主要インタラクションのキーボード到達性確保。
+Phase 12: 全モジュールの `window.*` エクスポートを除去し `N.*` 名前空間のみに統一。
 
-## 完了コミット（全プッシュ済み main）
+## 完了コミット（2 commits）
 ```
-bacad16 feat: add skip-link target, toast aria/role attrs, settings validation role=alert
-3468506 feat: add arrow key navigation for tabs (Left/Right)
-c4f54db  feat: add keyboard support for activity session headers
-af3bbdd  chore: mark Phase 10 complete in TODO.md [skip-docs]
+49f90b8 refactor: remove window.* pollution, migrate to N.* namespace
+21d0c6e fix: update Python section onclick refs to N.* namespace
+ded6ebf fix: update JS inline onclick refs from bare names to N.* namespace
 ```
 
-## 変更ファイル（nous/ 配下のみ）
-1. `sections/base.py` — skip-link href修正（#tab-content→#main-content）、main要素にid+tabindex付与
-2. `core/toast.js` — fallback containerにaria-live/role/aria-atomic、各toast要素にrole="status"
-3. `features/settings/settings-form.js` — validation error divにrole="alert"
-4. `base.js` — ArrowLeft/ArrowRightによるタブ切替（WAI-ARIA tabs pattern）
-5. `features/activity.js` — セッションヘッダーにtabindex+role="button"、Enter/Space keydown delegation
+## 変更ファイル（43 files, +312/-351）
+### core/*.js (window backward compat exports removed)
+- `api.js`, `dom.js`, `modal.js`, `sse.js`, `theme.js`, `time.js`, `toast.js`
+- `dom.js`: `N.Core.safeSetHTML` 関数定義を保持（誤削除から復元）
+- `dom.test.js`: `window.safeSetHTML` → `N.safeSetHTML`
 
-## 現在の状態
-- テスト: 71/71 pass
-- 作業ディレクトリ: clean
-- Version: 3.5.0（変更なし）
+### features/*.js (window exports removed, N.Features.* registration → onclick fixes)
+- `graph.js`, `timeline.js`, `activity.js`, `memories-core.js`, `memories-edit.js`
+- `overview-core.js`, `settings-core.js`, `settings-form.js`, `settings-save.js`
+- 全inline onclick文字列を bare function → `N.Features.*` に修正
+- `memories-edit.js`: `onclick="closeMemModal()"` → `N.Features.Memories.closeMemModal()`
 
-## 確認済み（変更不要だったもの）
-- **core/modal.js**: フォーカストラップ、aria属性、Escape、フォーカス復元 — 全て完了済み
-- **core/modal.js**: `role="dialog"`, `aria-modal="true"`, `aria-labelledby` — 動的付与済み
-- **chat/**: Enter送信、Shift+Enter改行 — 問題なし
-- **styles/reset.css**: `focus-visible` — 包括的スタイル済み
-- **styles/layout.css**: `.skip-link` — CSS済み
-- **全onclick**: grep確認、全て`<button>`または`tabindex=0`付き
+### chat/*.js (window exports removed, N.Chat.* sub-namespace registration → onclick fixes)
+- 12 chat files modified, each registered on appropriate N.Chat.* namespace
+- Cross-module references fixed: `safeSetHTML`, `safeMarkdown`, `appendChatMessage`, etc.
+- `chat-history.js`: `onclick="toggleSettingsPanel()"` → `N.Chat.core.toggleSettings()`
 
-## 注意点
-1. `activity.js` のセッションイベントdetailトグル（`.act-event[onclick]`）はdelegated keydownでカバー
-2. データマイグレーションなし、単なるa11y属性追加
+### Python sections (onclick → N.* namespace, 16 handlers updated)
+- `chat_layout.py`: 10 handlers → `N.Chat.*`
+- `chat_sidebar.py`: 15 handlers → `N.Chat.*` (incl. `N.Chat.tts.test`, `N.Chat.settings.save`, `N.Chat.history.clear`)
+- `timeline.py`: 2 handlers → `N.Features.Timeline.*`
+- `memories.py`: 4 handlers → `N.Features.Memories.*`
+- `activity.py`: 1 handler → `N.Features.Activity.*`
+
+## リマインダー（安全のための制約）
+### base.js / base.py は Phase 13 まで触らない
+- base.js 内の `window.foo = ...` アダプター行（~40行）
+- base.py の `window.__INITIAL_PERSONA__` および base.py 内の全onclick
+- これらは Phase 13 で一括除去する
+
+### 安全に残っている参照
+- `var S = window.S;` — store 同期用（安全）
+- `var { esc, api, ... } = window.Nous.Core;` — N.* destructure（安全）
+- `window.open()`, `window.innerWidth`, `window.matchMedia()`, `window.dispatchEvent()`, `window.addEventListener()` — ブラウザネイティブAPI
+- `window.SpeechRecognition / window.webkitSpeechRecognition` — ブラウザネイティブAPI
+- Python sections の inline スクリプト内関数（persona.py, skills.py, import_export.py） — 同一ページコンテキストで定義
+
+## テスト
+- 71/71 pass（`npm test`）
+- 7 test files, all passing

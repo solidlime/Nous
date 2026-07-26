@@ -1,4 +1,28 @@
-"""Media settings — image generation (ComfyUI) and voice/TTS (Irodori)."""
+"""Media settings — image generation (ComfyUI), voice/TTS (Irodori), and background/standing picture."""
+
+
+def _render_background_section() -> str:
+    """Background image and standing picture settings."""
+    return """
+                        <!-- 背景画像・立ち絵 -->
+                        <details data-category="background" id="chat-background-section">
+                            <summary><i data-lucide="image"></i> 背景・立ち絵 <span class="chat-help-icon" data-category="background" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
+                            <div class="details-body">
+                                <div>
+                                    <div class="chat-field-label">背景画像URL <span style="color:var(--text-muted);font-size:0.7rem;">（ライトモード用）</span></div>
+                                    <input type="url" id="chat-bg-url" class="chat-field-input" placeholder="https://example.com/bg-light.jpg" aria-label="背景画像URL" />
+                                </div>
+                                <div>
+                                    <div class="chat-field-label">背景画像URL <span style="color:var(--text-muted);font-size:0.7rem;">（ダークモード用・未設定ならライト用を共通利用）</span></div>
+                                    <input type="url" id="chat-bg-dark-url" class="chat-field-input" placeholder="https://example.com/bg-dark.jpg" aria-label="ダークモード背景画像URL" />
+                                </div>
+                                <div>
+                                    <div class="chat-field-label">立ち絵URL</div>
+                                    <input type="url" id="chat-standing-pic-url" class="chat-field-input" placeholder="https://example.com/standing.png" aria-label="立ち絵URL" />
+                                </div>
+                                <p style="font-size:0.72rem;color:var(--text-muted);margin:0;">背景は薄くオーバーレイ表示されます。設定を反映するには保存後、ページを再読み込みしてください。</p>
+                            </div>
+                        </details>"""
 
 
 def _render_image_section() -> str:
