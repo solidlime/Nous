@@ -1,0 +1,5 @@
+services:
+  nous:
+    volumes:
+      - ${DATA_ROOT}:/data
+      - ./nous:/app/nous:ro
