@@ -22,14 +22,13 @@ async function loadOverview() {
             if (typeof lucide !== 'undefined') lucide.createIcons();
             return;
         }
-        // ── Self-portrait display ──
+        // ── Self-portrait in hero section ──
         const portraitUrl = data.latest_self_portrait;
         const portraitEl = document.getElementById('overview-portrait');
         if (portraitUrl && portraitEl) {
             portraitEl.style.display = 'block';
-            safeSetHTML(portraitEl, '<div class="glass p-4" style="text-align:center;max-width:400px;margin:0 auto 16px">'
-                + '<img src="' + esc(portraitUrl) + '" alt="Self Portrait" style="max-width:100%;max-height:300px;border-radius:8px;cursor:pointer" onclick="N.Chat.attachments.openViewer(\'' + esc(portraitUrl) + '\',\'image\')">'
-                + '<div style="margin-top:6px;font-size:0.75rem;color:var(--text-muted)">Latest Self Portrait</div>'
+            safeSetHTML(portraitEl, '<div class="ov-hero-portrait">'
+                + '<img src="' + esc(portraitUrl) + '" alt="Self Portrait" onclick="N.Chat.attachments.openViewer(\'' + esc(portraitUrl) + '\',\'image\')" style="cursor:pointer">'
                 + '</div>');
         } else if (portraitEl) {
             portraitEl.style.display = 'none';
@@ -212,45 +211,78 @@ async function loadOverview() {
 
         // --- Render (new section order) ---
         safeSetHTML(el, `
-        <!-- Profile & Relationship -->
-        <div class="glass glass-hoverable p-6 mb-6">
-            <div class="card-title"><i data-lucide="user"></i> Profile &amp; Relationship</div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;font-weight:600">Relationship</div>
-                    <div style="font-size:0.9rem;color:var(--accent-pink);font-weight:600;margin-bottom:12px">${esc(relStatus)}</div>
-                    ${ctx.last_conversation_time ? `<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px"><span style="font-size:0.78rem;color:var(--text-muted)"><i data-lucide="clock"></i> Last session:</span><span class="badge badge-blue">${relativeTime(ctx.last_conversation_time)}</span></div>` : ''}
-                    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;font-weight:600">User Info</div>
-                    ${Object.entries(userInfo).length ? Object.entries(userInfo).map(([k,v]) => `<div style="display:flex;gap:8px;padding:4px 0;font-size:0.85rem"><span style="color:var(--text-muted);min-width:120px">${esc(k.replace(/_/g,' '))}</span><span style="color:var(--text-secondary)">${esc(String(v))}</span></div>`).join('') : '<span style="color:var(--text-muted)">No user info</span>'}
+        <!-- Hero: portrait + status panel -->
+        <div class="ov-hero">
+            <div id="hero-portrait-slot"></div>
+            <div class="ov-status-panel">
+                <!-- Quick Status -->
+                <div class="ov-quick">
+                    <div class="ov-section-title"><i data-lucide="user"></i> Status</div>
+                    ${(function(){
+                        var emoColor = N.Core.EMOTION_COLORS[ctx.emotion] || N.Core.EMOTION_COLORS.neutral;
+                        var pct = Math.round((ctx.emotion_intensity || 0) * 100);
+                        return '<div class="ov-emotion-section" style="border-color:' + emoColor + '44">'
+                            + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
+                            + '<span style="font-size:0.9rem;font-weight:700;color:' + emoColor + '">' + esc(ctx.emotion || 'neutral') + '</span>'
+                            + '<span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">' + pct + '%</span>'
+                            + '</div>'
+                            + '<div class="ov-emotion-bar-wrap"><div class="ov-emotion-bar-fill" style="width:' + pct + '%;background:' + (N.Core.EMOTION_BAR_COLORS[ctx.emotion] || N.Core.EMOTION_BAR_COLORS.neutral) + '"></div></div>'
+                            + '</div>';
+                    })()}
+                    <div class="ov-quick-row"><span class="ov-quick-label">Relationship</span><span class="ov-quick-value" style="color:var(--accent-pink);font-weight:600">${esc(relStatus)}</span></div>
+                    ${ctx.last_conversation_time ? '<div class="ov-quick-row"><span class="ov-quick-label"><i data-lucide="clock"></i> Last</span><span class="ov-quick-value">' + relativeTime(ctx.last_conversation_time) + '</span></div>' : ''}
+                    <div class="ov-quick-row"><span class="ov-quick-label">Physical</span><span class="ov-quick-value">${esc(physicalContent || '--')}</span></div>
+                    <div class="ov-quick-row"><span class="ov-quick-label">Mental</span><span class="ov-quick-value">${esc(mentalContent || '--')}</span></div>
+                    ${stats.environment ? '<div class="ov-quick-row"><span class="ov-quick-label">Environment</span><span class="ov-quick-value"><span class="badge badge-blue">' + esc(stats.environment) + '</span></span></div>' : ''}
                 </div>
-                <div>
-                    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;font-weight:600">Persona Info</div>
-                    ${(() => { const _GOALS_KEYS = new Set(['goals','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GOALS_KEYS.has(k)); return filtered.length ? filtered.map(([k,v]) => `<div style="display:flex;gap:8px;padding:4px 0;font-size:0.85rem"><span style="color:var(--text-muted);min-width:120px">${esc(k.replace(/_/g,' '))}</span><span style="color:var(--accent-purple)">${esc(String(v))}</span></div>`).join('') : '<span style="color:var(--text-muted)">No persona info</span>'; })()}
+
+                <!-- Memory Stats -->
+                <div class="glass p-4" style="border-radius:var(--radius-md);backdrop-filter:blur(20px) saturate(180%)">
+                    <div class="ov-section-title"><i data-lucide="bar-chart-3"></i> Memory</div>
+                    <div class="ov-stats-grid">
+                        <div class="ov-stat-card"><div class="stat-value">${stats.total_count ?? '--'}</div><div class="stat-label">Total</div></div>
+                        <div class="ov-stat-card"><div class="stat-value" style="color:var(--accent-green)">${str.avg ?? '--'}</div><div class="stat-label">Avg Strength</div></div>
+                        <div class="ov-stat-card"><div class="stat-value" style="color:var(--accent-blue)">${stats.tagged_ratio != null ? (stats.tagged_ratio * 100).toFixed(1) + '%' : '--'}</div><div class="stat-label">Tagged</div></div>
+                        <div class="ov-stat-card"><div class="stat-value" style="color:var(--accent-yellow)">${stats.linked_ratio != null ? (stats.linked_ratio * 100).toFixed(1) + '%' : '--'}</div><div class="stat-label">Linked</div></div>
+                    </div>
+                    ${topTags.length ? '<div style="margin-bottom:6px">' + topTags.map(([t,c]) => '<span class="badge badge-purple">' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join(' ') + '</div>' : ''}
+                    ${hasMemTypes ? '<div style="margin-bottom:6px">' + Object.entries(memTypeCounts).map(([t,c]) => '<span class="badge ' + MEMORY_TYPES[t].color + '">' + MEMORY_TYPES[t].icon + ' ' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join(' ') + '</div>' : ''}
+                    ${topEmo.length ? '<div>' + topEmo.map(([e,c]) => '<span class="badge badge-pink">' + esc(e) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join(' ') + '</div>' : ''}
+                </div>
+
+                <!-- Body Sensations -->
+                <div class="glass p-4" style="border-radius:var(--radius-md);backdrop-filter:blur(20px) saturate(180%)">
+                    <div class="ov-section-title"><i data-lucide="activity"></i> Body</div>
+                    <div class="ov-body-grid">
+                        ${(['fatigue','warmth','arousal','heart_rate','pain']).map(k => {
+                            var val = stats[k];
+                            var label = N.Core.BODY_LABELS[k] || k;
+                            var barColor = N.Core.BODY_BAR_COLORS[k] || 'var(--text-muted)';
+                            if (val != null) {
+                                return '<div>'
+                                    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'
+                                    + '<span style="font-size:0.72rem;color:var(--text-muted)">' + label + '</span>'
+                                    + '<span style="font-size:0.72rem;color:var(--text-secondary);font-weight:600">' + (val * 100).toFixed(0) + '%</span>'
+                                    + '</div>'
+                                    + '<div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden">'
+                                    + '<div style="height:100%;width:' + (val * 100).toFixed(1) + '%;background:' + barColor + ';border-radius:2px;transition:width 0.4s ease"></div>'
+                                    + '</div></div>';
+                            } else {
+                                return '<div><span style="font-size:0.72rem;color:var(--text-muted)">' + label + '</span> <span style="font-size:0.72rem;color:var(--text-muted)">--</span></div>';
+                            }
+                        }).join('')}
+                    </div>
+                </div>
+
+                <!-- Profile Info -->
+                <div class="glass p-4" style="border-radius:var(--radius-md);backdrop-filter:blur(20px) saturate(180%)">
+                    <div class="ov-section-title"><i data-lucide="user-circle"></i> Profile</div>
+                    ${Object.entries(userInfo).length ? Object.entries(userInfo).map(([k,v]) => '<div class="ov-quick-row"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value">' + esc(String(v)) + '</span></div>').join('') : '<span style="color:var(--text-muted);font-size:0.82rem">No user info</span>'}
+                    ${(() => { const _GOALS_KEYS = new Set(['goals','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GOALS_KEYS.has(k)); return filtered.length ? filtered.map(([k,v]) => '<div class="ov-quick-row"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value" style="color:var(--accent-purple)">' + esc(String(v)) + '</span></div>').join('') : '<span style="color:var(--text-muted);font-size:0.8rem">No persona info</span>'; })()}
                 </div>
             </div>
         </div>
-        <!-- Memory Stats -->
-        <div class="glass glass-hoverable p-6 mb-6">
-            <div class="card-title"><i data-lucide="bar-chart-3"></i> Memory Stats</div>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                <div><div class="stat-value">${stats.total_count ?? '--'}</div><div class="stat-label">Total Memories</div></div>
-                <div><div class="stat-value" style="color:var(--accent-green)">${str.avg ?? '--'}</div><div class="stat-label">Avg Strength</div></div>
-                <div><div class="stat-value" style="color:var(--accent-blue)">${stats.tagged_ratio != null ? (stats.tagged_ratio * 100).toFixed(1) + '%' : '--'}</div><div class="stat-label">Tagged</div></div>
-                <div><div class="stat-value" style="color:var(--accent-yellow)">${stats.linked_ratio != null ? (stats.linked_ratio * 100).toFixed(1) + '%' : '--'}</div><div class="stat-label">Linked</div></div>
-            </div>
-            <div style="margin-bottom:10px">
-                <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Top Tags</div>
-                <div style="display:flex;flex-wrap:wrap;gap:6px">${topTags.length ? topTags.map(([t,c]) => '<span class="badge badge-purple">' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join('') : '<span style="color:var(--text-muted)">--</span>'}</div>
-            </div>
-            ${hasMemTypes ? `<div style="margin-bottom:10px">
-                <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Memory Types</div>
-                <div style="display:flex;flex-wrap:wrap;gap:6px">${Object.entries(memTypeCounts).map(([t,c]) => '<span class="badge ' + MEMORY_TYPES[t].color + '">' + MEMORY_TYPES[t].icon + ' ' + esc(t) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join('')}</div>
-            </div>` : ''}
-            <div>
-                <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Top Emotions</div>
-                <div style="display:flex;flex-wrap:wrap;gap:6px">${topEmo.length ? topEmo.map(([e,c]) => '<span class="badge badge-pink">' + esc(e) + ' <span style="opacity:0.7">(' + c + ')</span></span>').join('') : '<span style="color:var(--text-muted)">--</span>'}</div>
-            </div>
-        </div>
+
         <!-- Goals -->
         <div class="glass glass-hoverable p-6 mb-6">
             <div class="card-title"><i data-lucide="target"></i> Goals</div>
@@ -259,91 +291,10 @@ async function loadOverview() {
                 <div style="max-height:240px;overflow-y:auto;padding-right:4px">${renderGoalItems(effectiveGoals, 'goals')}</div>
             </div>
         </div>
-        <!-- Emotion -->
-        <div class="glass glass-hoverable p-6 mb-6">
-            <div class="card-title"><i data-lucide="sparkles"></i> Emotion</div>
-            <div>
-                ${(function() {
-                    /* Constants now from core/constants.js via adapter globals */
-                    if (ctx.emotion) {
-                        var barGrad = N.Core.EMOTION_BAR_COLORS[ctx.emotion] || N.Core.EMOTION_BAR_COLORS.neutral;
-                        var pct = (ctx.emotion_intensity || 0) * 100;
-                        pct = Math.round(pct);
-                        return '<div style="margin-bottom:12px">' +
-                            '<div style="margin-bottom:8px">' +
-                            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">' +
-                            '<span style="font-size:0.78rem;color:var(--text-muted)">' + esc(ctx.emotion) + '</span>' +
-                            '<span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">' + pct + '%</span>' +
-                            '</div>' +
-                            '<div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">' +
-                            '<div style="height:100%;width:' + pct + '%;background:' + barGrad + ';border-radius:3px;transition:width 0.4s ease"></div>' +
-                            '</div>' +
-                            '</div></div>';
-                    }
-                    return '<div style="font-size:0.9rem;color:var(--text-muted);margin-bottom:12px">--</div>';
-                })()}
-                <div style="display:flex;flex-direction:column;gap:6px">
-                    <div><span style="font-size:0.78rem;color:var(--text-muted)">Physical: </span><span style="font-size:0.85rem">${esc(physicalContent || '--')}</span></div>
-                    <div><span style="font-size:0.78rem;color:var(--text-muted)">Mental: </span><span style="font-size:0.85rem">${esc(mentalContent || '--')}</span></div>
-                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:0.78rem;color:var(--text-muted);min-width:78px"><i data-lucide="globe"></i> Env:</span>${stats.environment ? '<span class="badge badge-blue">' + esc(stats.environment) + '</span>' : '<span style="color:var(--text-muted);font-size:0.82rem">--</span>'}</div>
-                </div>
-            </div>
-        </div>
         <!-- Equipment -->
         <div class="glass glass-hoverable p-6 mb-6">
             <div class="card-title"><i data-lucide="shield"></i> Equipment</div>
             ${equipHtml}
-        </div>
-        <!-- Body Sensations -->
-        <div class="glass glass-hoverable p-6 mb-6">
-            <div class="card-title"><i data-lucide="activity"></i> Body Sensations</div>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-                <div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-                        <span style="font-size:0.78rem;color:var(--text-muted)"><i data-lucide="flame"></i> Fatigue</span>
-                        <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.fatigue != null ? (stats.fatigue * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.fatigue != null ? (stats.fatigue * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.fatigue};border-radius:3px;transition:width 0.4s ease"></div>
-                    </div>
-                </div>
-                <div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-                        <span style="font-size:0.78rem;color:var(--text-muted)"><i data-lucide="flower"></i> Warmth</span>
-                        <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.warmth != null ? (stats.warmth * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.warmth != null ? (stats.warmth * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.warmth};border-radius:3px;transition:width 0.4s ease"></div>
-                    </div>
-                </div>
-                <div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-                        <span style="font-size:0.78rem;color:var(--text-muted)"><i data-lucide="zap"></i> Arousal</span>
-                        <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.arousal != null ? (stats.arousal * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.arousal != null ? (stats.arousal * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.arousal};border-radius:3px;transition:width 0.4s ease"></div>
-                    </div>
-                </div>
-                <div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-                        <span style="font-size:0.78rem;color:var(--text-muted)"><i data-lucide="heart-pulse"></i> Heart Rate</span>
-                        <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.heart_rate != null ? (stats.heart_rate * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.heart_rate != null ? (stats.heart_rate * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.heart_rate};border-radius:3px;transition:width 0.4s ease"></div>
-                    </div>
-                </div>
-                <div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-                        <span style="font-size:0.78rem;color:var(--text-muted)"><i data-lucide="activity"></i> Pain</span>
-                        <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600">${stats.pain != null ? (stats.pain * 100).toFixed(0) + '%' : '--'}</span>
-                    </div>
-                    <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
-                        <div style="height:100%;width:${stats.pain != null ? (stats.pain * 100).toFixed(1) : 0}%;background:${N.Core.BODY_BAR_COLORS.pain};border-radius:3px;transition:width 0.4s ease"></div>
-                    </div>
-                </div>
-            </div>
         </div>
         <!-- Core Memory Blocks -->
         <div class="glass glass-hoverable p-6 mb-6">
@@ -442,6 +393,14 @@ async function loadOverview() {
                 </div>
             </div>
         </div>`);
+
+        // --- Move portrait into hero slot ---
+        var heroSlot = document.getElementById('hero-portrait-slot');
+        var portraitEl2 = document.getElementById('overview-portrait');
+        if (heroSlot && portraitEl2 && portraitEl2.style.display !== 'none') {
+            heroSlot.innerHTML = portraitEl2.innerHTML;
+            portraitEl2.style.display = 'none';
+        }
 
         // --- Charts ---
         N.Components.chart.destroy('chart-timeline');

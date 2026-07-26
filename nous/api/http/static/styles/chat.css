@@ -1628,3 +1628,148 @@ input[type="range"].chat-field-input:focus {
     margin: 0 -16px 12px;
     contain: layout style paint;
 }
+
+/* ============================================================
+   OVERVIEW — Game Status Layout
+   ============================================================ */
+
+/* Hero section: portrait (left 35%) + status panel (right 65%) */
+.ov-hero {
+    display: grid;
+    grid-template-columns: 35fr 65fr;
+    gap: 16px;
+    margin-bottom: 16px;
+    align-items: start;
+}
+
+.ov-hero-portrait {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    backdrop-filter: blur(20px) saturate(180%);
+}
+.ov-hero-portrait img {
+    width: 100%;
+    display: block;
+    border-radius: var(--radius-lg);
+}
+
+/* Status panel (right side) */
+.ov-status-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Quick Status row */
+.ov-quick {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    backdrop-filter: blur(20px) saturate(180%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.ov-quick-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+}
+.ov-quick-label {
+    min-width: 90px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+.ov-quick-value {
+    color: var(--text-secondary);
+    flex: 1;
+}
+
+/* Emotion bar (larger) */
+.ov-emotion-section {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    backdrop-filter: blur(20px) saturate(180%);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.ov-emotion-bar-wrap {
+    height: 8px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.ov-emotion-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+/* Section title in status panel */
+.ov-section-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+/* Body sensation bars (compact in status panel) */
+.ov-body-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+/* Memory stats in status panel */
+.ov-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.ov-stat-card {
+    background: rgba(255,255,255,0.04);
+    border-radius: var(--radius-sm);
+    padding: 10px 8px;
+    text-align: center;
+}
+.ov-stat-card .stat-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.ov-stat-card .stat-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .ov-hero {
+        grid-template-columns: 1fr;
+    }
+    .ov-hero-portrait img {
+        max-height: 300px;
+        object-fit: cover;
+    }
+    .ov-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .ov-body-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
