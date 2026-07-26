@@ -27,10 +27,10 @@ class EmotionDecayResult:
 
 
 def compute_emotion_decay(
-    emotion: str,
     intensity: float,
     elapsed_hours: float,
     half_life_hours: float | None = None,
+    emotion: str = "neutral",
     threshold: float | None = None,
     neutral_threshold: float | None = None,
 ) -> tuple[str, float]:
@@ -108,8 +108,10 @@ async def apply_emotion_decay_if_needed(
         return None
 
     new_emotion, new_intensity = compute_emotion_decay(
-        state.emotion, current_intensity, elapsed_hours,
+        intensity=current_intensity,
+        elapsed_hours=elapsed_hours,
         half_life_hours=half_life_hours,
+        emotion=state.emotion,
         threshold=threshold,
         neutral_threshold=neutral_threshold,
     )

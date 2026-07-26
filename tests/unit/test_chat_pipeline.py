@@ -85,17 +85,17 @@ class TestChatTurnContext:
 
 class TestComputeEmotionDecay:
     def test_zero_intensity_no_decay(self):
-        """Zero intensity → no decay needed, returns 0.0."""
+        """Zero intensity → no decay needed, returns (emotion, 0.0)."""
         from nous.domain.persona.emotion_decay import compute_emotion_decay
 
-        result = compute_emotion_decay(intensity=0.0, elapsed_hours=10)
+        _, result = compute_emotion_decay(intensity=0.0, elapsed_hours=10)
         assert result == 0.0
 
     def test_decay_after_elapsed(self):
         """intensity=0.8, elapsed=48h → effective_half_life=24*0.8=19.2h."""
         from nous.domain.persona.emotion_decay import compute_emotion_decay
 
-        result = compute_emotion_decay(intensity=0.8, elapsed_hours=48.0)
+        _, result = compute_emotion_decay(intensity=0.8, elapsed_hours=48.0)
         assert result > 0.0
         assert result < 0.8  # decayed
         # effective_half_life = 24 * max(0.3, 0.8) = 19.2h
@@ -104,18 +104,18 @@ class TestComputeEmotionDecay:
         assert 0.13 <= result <= 0.15
 
     def test_no_change_for_zero_elapsed(self):
-        """Zero elapsed → decay returns 0.0 (caller skips when elapsed <= 0)."""
+        """Zero elapsed → decay returns (emotion, 0.0)."""
         from nous.domain.persona.emotion_decay import compute_emotion_decay
 
-        result = compute_emotion_decay(intensity=0.8, elapsed_hours=0)
+        _, result = compute_emotion_decay(intensity=0.8, elapsed_hours=0)
         assert result == 0.0
 
     def test_high_intensity_persists_longer(self):
         """Higher intensity (0.9) decays slower than lower intensity (0.3) over same period."""
         from nous.domain.persona.emotion_decay import compute_emotion_decay
 
-        high = compute_emotion_decay(intensity=0.9, elapsed_hours=48.0)
-        low = compute_emotion_decay(intensity=0.3, elapsed_hours=48.0)
+        _, high = compute_emotion_decay(intensity=0.9, elapsed_hours=48.0)
+        _, low = compute_emotion_decay(intensity=0.3, elapsed_hours=48.0)
         # high: effective_half_life = 24*0.9 = 21.6h, result ≈ 0.1931
         # low:  effective_half_life = 24*0.3 = 7.2h,  result ≈ 0.0030
         assert high > low
@@ -126,7 +126,7 @@ class TestComputeEmotionDecay:
         """intensity=0.05 (below cap=0.3) uses min effective_half_life to avoid vanishing instantly."""
         from nous.domain.persona.emotion_decay import compute_emotion_decay
 
-        result = compute_emotion_decay(intensity=0.05, elapsed_hours=6.0)
+        _, result = compute_emotion_decay(intensity=0.05, elapsed_hours=6.0)
         # Without cap: effective_half_life = 24*0.05 = 1.2h
         #   factor = 0.5^(6/1.2) = 0.5^5 = 0.03125 → result ≈ 0.0016
         # With cap: effective_half_life = 24*0.3 = 7.2h
@@ -139,8 +139,8 @@ class TestComputeEmotionDecay:
         from nous.domain.persona.emotion_decay import compute_emotion_decay
 
         # Same intensity and elapsed, different half-life
-        fast = compute_emotion_decay(intensity=0.8, elapsed_hours=48.0, half_life_hours=12.0)
-        slow = compute_emotion_decay(intensity=0.8, elapsed_hours=48.0, half_life_hours=48.0)
+        _, fast = compute_emotion_decay(intensity=0.8, elapsed_hours=48.0, half_life_hours=12.0)
+        _, slow = compute_emotion_decay(intensity=0.8, elapsed_hours=48.0, half_life_hours=48.0)
         # Shorter half-life → more decay → lower value
         assert fast < slow
         # fast: effective_half_life = 12*0.8 = 9.6h, factor = 0.5^(48/9.6) = 0.5^5 = 0.03125
@@ -154,7 +154,7 @@ class TestComputeEmotionDecay:
         """Custom half_life_hours can be passed as keyword argument."""
         from nous.domain.persona.emotion_decay import compute_emotion_decay
 
-        result = compute_emotion_decay(intensity=0.5, elapsed_hours=24.0, half_life_hours=6.0)
+        _, result = compute_emotion_decay(intensity=0.5, elapsed_hours=24.0, half_life_hours=6.0)
         # effective_half_life = 6 * max(0.3, 0.5) = 6 * 0.5 = 3.0h
         # factor = 0.5^(24/3) = 0.5^8 = 0.0039
         # result = 0.5 * 0.0039 ≈ 0.00195
@@ -165,13 +165,13 @@ class TestComputeEmotionDecay:
         from nous.domain.persona.emotion_decay import compute_emotion_decay
 
         # With very long half-life, decay should be minimal
-        long_hl = compute_emotion_decay(intensity=0.9, elapsed_hours=48.0, half_life_hours=240.0)
+        _, long_hl = compute_emotion_decay(intensity=0.9, elapsed_hours=48.0, half_life_hours=240.0)
         # effective_half_life = 240 * 0.9 = 216h
         # factor = 0.5^(48/216) ≈ 0.851
         # result = 0.9 * 0.851 ≈ 0.766
         assert long_hl > 0.7  # well preserved
         # Compare with default (24h) — default decays much more
-        default_hl = compute_emotion_decay(intensity=0.9, elapsed_hours=48.0)
+        _, default_hl = compute_emotion_decay(intensity=0.9, elapsed_hours=48.0)
         assert long_hl > default_hl
 
 

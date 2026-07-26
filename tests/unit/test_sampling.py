@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from nous.domain.sampling import TEMPERATURE_MAX, TEMPERATURE_MIN, EmotionDrivenSampler
+from nous.domain.sampling import _EMOTION_MODIFIERS, TEMPERATURE_MAX, TEMPERATURE_MIN, EmotionDrivenSampler
+from nous.domain.value_objects import _EMOTION_KEYWORD_MAP
 
 
 class TestEmotionDrivenSampler:
@@ -138,3 +139,14 @@ class TestEmotionDrivenSampler:
         a = EmotionDrivenSampler.compute(0.7, "surprise", 0.3, 0.2)
         b = EmotionDrivenSampler.compute(0.7, "surprise", 0.3, 0.2)
         assert a == b
+
+    def test_all_emotions_have_modifier(self) -> None:
+        """_EMOTION_KEYWORD_MAP の全キーが _EMOTION_MODIFIERS に存在する。"""
+        missing = [e for e in _EMOTION_KEYWORD_MAP if e not in _EMOTION_MODIFIERS]
+        assert not missing, f"Missing modifiers for: {missing}"
+        # Compute returns valid temperature for all emotions
+        for emotion in _EMOTION_KEYWORD_MAP:
+            temp = EmotionDrivenSampler.compute(0.7, emotion, 0.5, 0.2)
+            assert TEMPERATURE_MIN <= temp <= TEMPERATURE_MAX, (
+                f"Temperature {temp} out of range for {emotion}"
+            )
