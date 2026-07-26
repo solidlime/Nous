@@ -184,6 +184,23 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
         logger.exception("dashboard_data: self portrait lookup failed")
         # 非致命的、ポートレートなしで表示継続
 
+    # ── Generated images history (max 20, newest first) ──
+    generated_images: list[dict] = []
+    try:
+        images_dir = Path(get_settings().data_root) / "persona" / persona / "images"
+        if images_dir.is_dir():
+            all_images = sorted(images_dir.glob("*.png"), key=lambda f: f.stat().st_mtime, reverse=True)
+            for img_file in all_images[:20]:
+                generated_images.append({
+                    "url": f"/api/chat/{persona}/persona/images/{img_file.name}",
+                    "filename": img_file.name,
+                    "created_at": datetime.fromtimestamp(img_file.stat().st_mtime).isoformat(),
+                    "is_self_portrait": img_file.name.startswith("self_"),
+                })
+    except Exception:
+        logger.exception("dashboard_data: generated images lookup failed")
+        # 非致命的、画像履歴なしで表示継続
+
     # Chat background / standing picture URLs from config
     chat_background_url = ""
     chat_background_dark_url = ""
@@ -212,6 +229,7 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
         "relationship_highlights": rel_highlights,
         "state_memories": state_memories,
         "latest_self_portrait": latest_self_portrait,
+        "generated_images": generated_images,
         "chat_background_url": chat_background_url,
         "chat_background_dark_url": chat_background_dark_url,
         "standing_pic_url": standing_pic_url,

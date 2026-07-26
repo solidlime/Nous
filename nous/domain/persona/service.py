@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from nous.domain.persona.body_state import extract_body_metrics
@@ -21,6 +23,8 @@ if TYPE_CHECKING:
     from nous.application.event_bus import EventBus
     from nous.domain.memory.service import MemoryService
     from nous.domain.persona.repository import PersonaRepository
+
+_logger = logging.getLogger("nous")
 
 
 class PersonaService:
@@ -94,6 +98,8 @@ class PersonaService:
                     "context": context,
                 },
             )
+            # Propagate emotion to recent memories
+            self._propagate_emotion_to_memories(persona, normalized_name, clamped)
         return result
 
     def update_physical_state(
@@ -267,6 +273,39 @@ class PersonaService:
         """Record current time as last conversation time."""
         now = get_now()
         return self._repo.update_state(persona, "last_conversation_time", now.isoformat())
+
+    def _propagate_emotion_to_memories(
+        self,
+        persona: str,
+        emotion: str,
+        intensity: float,
+        recent_minutes: int = 30,
+    ) -> None:
+        """Update emotion field on memories created/accessed recently.
+
+        Best-effort: failures are silently swallowed.
+        """
+        if self._memory_service is None:
+            return
+
+        now = get_now()
+        cutoff = now - timedelta(minutes=recent_minutes)
+
+        try:
+            recent = self._memory_service.get_recent(limit=20)
+            if not recent.is_ok or not recent.value:
+                return
+
+            for mem in recent.value:
+                if not mem.created_at or mem.created_at < cutoff:
+                    continue
+                self._memory_service.update_memory(
+                    mem.key,
+                    emotion=emotion,
+                    emotion_intensity=intensity,
+                )
+        except Exception:
+            _logger.warning("Failed to propagate emotion to memories", exc_info=True)
 
     @staticmethod
     def build_body_state_dict(state: PersonaState) -> dict[str, float | None]:

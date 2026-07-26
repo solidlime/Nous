@@ -34,6 +34,32 @@ async function loadOverview() {
         } else if (portraitEl) {
             portraitEl.style.display = 'none';
         }
+
+        // ── Generated Images History Grid ──
+        const imagesGridEl = document.getElementById('overview-images-grid');
+        if (imagesGridEl) {
+            const genImages = data.generated_images || [];
+            if (genImages.length > 0) {
+                let gridHtml = '<div class="glass glass-hoverable p-6 mb-6">';
+                gridHtml += '<div class="card-title"><i data-lucide="images"></i> Generated Images</div>';
+                gridHtml += '<div class="image-history-grid">';
+                genImages.forEach(img => {
+                    const prompt = img.revised_prompt || '';
+                    const tooltipAttr = prompt ? ' title="' + esc(prompt) + '"' : '';
+                    const badgeHtml = img.is_self_portrait ? '<span class="image-history-badge">🖼️ SP</span>' : '';
+                    gridHtml += '<div class="image-history-thumb"' + tooltipAttr + ' onclick="N.Chat.attachments.openViewer(\'' + esc(img.url) + '\',\'image\',null,{revised_prompt:\'' + esc(prompt).replace(/'/g, "\\'") + '\'})">';
+                    gridHtml += '<img src="' + esc(img.url) + '" alt="' + esc(img.filename) + '" loading="lazy">';
+                    gridHtml += badgeHtml;
+                    gridHtml += '</div>';
+                });
+                gridHtml += '</div>';
+                gridHtml += '</div>';
+                imagesGridEl.style.display = 'block';
+                safeSetHTML(imagesGridEl, gridHtml);
+            } else {
+                imagesGridEl.style.display = 'none';
+            }
+        }
         S.dashCache = data;
         const stats = data.stats || {};
         const ctx = data.context || {};

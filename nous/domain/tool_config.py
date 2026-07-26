@@ -48,6 +48,13 @@ class ToolConfig(BaseModel):
     chat_background_dark_url: str = ""
     standing_pic_url: str = ""
 
+    # Image caption (for non-vision providers)
+    image_caption_enabled: bool = True
+    image_caption_provider: str = "openai_compat"
+    image_caption_model: str = "gpt-4o-mini"
+    image_caption_api_key: str = ""
+    image_caption_base_url: str = ""
+
     # Emotion decay config
     emotion_decay_half_life_hours: float = 24.0
     emotion_decay_threshold: float = 0.005

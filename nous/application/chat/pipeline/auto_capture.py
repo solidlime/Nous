@@ -52,6 +52,55 @@ _CATEGORY_IMPORTANCE: dict[str, float] = {
 }
 
 
+def _infer_kind(content: str, category: str) -> str:
+    """Infer memory kind from content patterns and category.
+
+    Returns one of: episodic, semantic, procedural.
+    The default (semantic) is used when no strong signal is detected.
+    """
+    if not content or not content.strip() or len(content.strip()) < 3:
+        return "semantic"
+
+    # ── Episodic: time/place expressions + past-tense narratives ──
+    _episodic_time = re.compile(
+        r"(昨日|先週|前回|この前|あの時|さっき|この間|"
+        r"先月|去年|先日|以前|前に|先ほど|"
+        r"来週|明日|明後日|今度|次回)"
+    )
+    _episodic_past = re.compile(
+        r"(した[。\.]?$|に行った|に会った|で会った|で起こった|"
+        r"を訪れた|を食べた|を見た|を観た|を聞いた)"
+    )
+    _place_pat = re.compile(r"(で|にて|へ)")
+    _past_ending = re.compile(r"(た[。\.]?$|た\s|ました[。\.]?$)")
+
+    has_time = bool(_episodic_time.search(content))
+    has_past = bool(_episodic_past.search(content) or
+                    (_place_pat.search(content) and _past_ending.search(content)))
+
+    # Decision category + concrete time context → episodic
+    if category == "decision" and has_time:
+        return "episodic"
+
+    if has_time or has_past:
+        return "episodic"
+
+    # ── Procedural: methods, steps, how-to ──
+    _procedural = re.compile(
+        r"(すればいい|するとうまくいく|てうまくいく|"
+        r"のやり方|手順|方法|すればよい|"
+        r"ればいい|れば直る|を押せば|をつければ|"
+        r"コツは|ポイントは|"
+        r"作り方|考え方|使い方|読み方|解き方|進め方)"
+    )
+    # category fact + how-to → procedural
+    if category == "fact" and _procedural.search(content):
+        return "procedural"
+
+    # ── Default: semantic ──
+    return "semantic"
+
+
 def _extract_sentence(text: str, match_start: int) -> str:
     """Extract the sentence surrounding a match from text.
 
@@ -173,12 +222,14 @@ async def run_auto_capture(
                 pass  # Fall through to normal creation if check fails
 
             try:
+                inferred_kind = _infer_kind(text, category)
                 result = await ctx.memory_service.create_memory(
                     content=text,
                     importance=importance,
                     tags=["auto_captured", category],
                     privacy_level=privacy,
                     source_context="auto_capture:session",
+                    kind=inferred_kind,
                 )
                 if result.is_ok:
                     created_keys.append(result.value.key)
