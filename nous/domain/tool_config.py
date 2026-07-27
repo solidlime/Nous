@@ -36,7 +36,7 @@ class ToolConfig(BaseModel):
     image_gen_comfyui_scheduler: str = "normal"
     image_gen_comfyui_seed: int = 0  # 0=ランダム
     image_gen_comfyui_denoise: float = 0.7
-    image_gen_ipadapter_weight: float = 0.85  # IP-Adapter weight for character consistency in i2i mode
+    image_gen_comfyui_workflow_template: str = ""  # path to API-format JSON workflow template, empty = use dynamic build
     # Generation mode: t2i (text-to-image) or i2i (image-to-image with reference)
     image_gen_mode: Literal["t2i", "i2i"] = "t2i"
     image_gen_max_width: int = 1200
