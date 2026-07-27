@@ -101,6 +101,12 @@ async function uploadReferenceImage() {
     var data = await resp.json();
     if (data.ok) {
       if (statusEl) statusEl.textContent = "\u2713 \u30a2\u30c3\u30d7\u30ed\u30fc\u30c9\u5b8c\u4e86 (" + (data.size / 1024).toFixed(1) + " KB)";
+      // Show thumbnail preview after upload
+      var thumb = document.getElementById("chat-image-gen-ref-thumb");
+      if (thumb) {
+        thumb.src = "/api/chat/" + persona + "/persona/images/reference.png?_=" + Date.now();
+        thumb.style.display = "block";
+      }
     } else {
       if (statusEl) statusEl.textContent = "\u2717 " + (data.error || "\u30a8\u30e9\u30fc");
     }

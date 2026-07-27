@@ -201,6 +201,8 @@ def _render_image_section() -> str:
                                             <i data-lucide="upload"></i> アップロード
                                         </button>
                                         <span id="chat-image-gen-ref-status" style="font-size:0.72rem;color:var(--text-muted);margin-left:8px;"></span>
+                                        <img id="chat-image-gen-ref-thumb" src="" alt="参照画像プレビュー"
+                                            style="display:none;max-width:120px;max-height:120px;margin-top:6px;border-radius:6px;border:1px solid var(--border-color);object-fit:contain;" />
                                     </div>
                                     <div style="display:flex;gap:8px;align-items:center;">
                                         <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="N.Chat.settings.testImageGen()"><i data-lucide="play"></i> テスト生成</button>
