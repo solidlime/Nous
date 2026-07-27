@@ -88,6 +88,7 @@ def register_image_gen_routes(mcp) -> None:
             scheduler=body.get("scheduler", getattr(config, "image_gen_comfyui_scheduler", "normal")),
             seed=body.get("seed", getattr(config, "image_gen_comfyui_seed", 0)),
             denoise=body.get("denoise", getattr(config, "image_gen_comfyui_denoise", 0.7)),
+            ipadapter_weight=body.get("ipadapter_weight", getattr(config, "image_gen_ipadapter_weight", 0.85)),
         )
 
         # ── i2i mode: use uploaded reference image ──

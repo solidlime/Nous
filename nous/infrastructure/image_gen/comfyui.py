@@ -39,6 +39,7 @@ class ComfyUIProvider(ImageGenProvider):
         scheduler: str = "normal",
         seed: int = 0,
         denoise: float = 0.7,
+        ipadapter_weight: float = 0.85,
     ) -> None:
         self._api_url = api_url.rstrip("/")
         self._checkpoint = checkpoint
@@ -54,6 +55,7 @@ class ComfyUIProvider(ImageGenProvider):
         self._scheduler = scheduler
         self._seed = seed
         self._denoise = denoise
+        self._ipadapter_weight = ipadapter_weight
         self._client: httpx.AsyncClient | None = None
 
     @property
@@ -173,14 +175,15 @@ class ComfyUIProvider(ImageGenProvider):
         """ワークフロー JSON を構築（パラメータ駆動）。
 
         ノードID固定:
-          4=CheckpointLoaderSimple, 3=KSampler, 5=EmptyLatentImage,
-          6=CLIPTextEncode(pos), 7=CLIPTextEncode(neg),
-          8=VAEDecode, 9=SaveImage, 10=VAEEncode, 11=LoadImage
+           4=CheckpointLoaderSimple, 3=KSampler, 5=EmptyLatentImage,
+           6=CLIPTextEncode(pos), 7=CLIPTextEncode(neg),
+           8=VAEDecode, 9=SaveImage, 11=LoadImage,
+           20=IPAdapterUnifiedLoader, 21=IPAdapterApply
 
         LoRA ノードID: 12 から動的採番。
 
-        image_filename が指定された場合、img2img ワークフロー
-        （LoadImage → VAEEncode → KSampler(denoise<1.0)）を使用。
+        image_filename が指定された場合、IP-Adapter ワークフローを使用。
+        性格（character identity）は IP-Adapter が注入し、空の latent から生成（denoise=1.0）。
         """
         # ── seed: 0 はランダム ──
         seed = self._seed if self._seed != 0 else random.randint(0, 2**63 - 1)
@@ -258,29 +261,57 @@ class ComfyUIProvider(ImageGenProvider):
             last_model_id = node_id
             next_id += 1
 
-        # ── 3. EmptyLatentImage (5) / VAEEncode(10)+LoadImage(11) ──
+        # ── 3. Latent image (for both t2i and IP-Adapter i2i) ──
+        # IP-Adapter uses denoise=1.0 on empty latent (character identity comes from IP-Adapter, not img2img)
+        nodes["5"] = {
+            "class_type": "EmptyLatentImage",
+            "inputs": {
+                "width": self._width,
+                "height": self._height,
+                "batch_size": n,
+            },
+        }
+        latent_image: list[str | int] = ["5", 0]
+        denoise = 1.0
+
+        # ── 3b. IP-Adapter (only when reference image provided) ──
         if image_filename:
-            nodes["10"] = {
-                "class_type": "VAEEncode",
-                "inputs": {"pixels": ["11", 0], "vae": ["4", 2]},
-            }
+            # Load reference image
             nodes["11"] = {
                 "class_type": "LoadImage",
                 "inputs": {"image": image_filename},
             }
-            latent_image: list[str | int] = ["10", 0]
-            denoise = self._denoise
-        else:
-            nodes["5"] = {
-                "class_type": "EmptyLatentImage",
+
+            # IPAdapter Unified Loader — loads both IP-Adapter model + CLIP Vision
+            # Preset "PLUS FACE (portraits)" for SDXL = ip-adapter-plus-face_sdxl_vit-h
+            nodes["20"] = {
+                "class_type": "IPAdapterUnifiedLoader",
                 "inputs": {
-                    "width": self._width,
-                    "height": self._height,
-                    "batch_size": n,
+                    "model": [last_model_id, 0],
+                    "preset": "PLUS FACE (portraits)",
                 },
             }
-            latent_image = ["5", 0]
-            denoise = 1.0
+
+            # IPAdapter Apply — injects character identity into model
+            # The IPADAPTER dict from Unified Loader ["20", 1] serves both
+            # as ipadapter model and clip_vision (internally auto-extracted)
+            nodes["21"] = {
+                "class_type": "IPAdapterApply",
+                "inputs": {
+                    "ipadapter": ["20", 1],
+                    "clip_vision": ["20", 1],
+                    "image": ["11", 0],
+                    "model": ["20", 0],
+                    "weight": self._ipadapter_weight,
+                    "weight_type": "strong style transfer",
+                    "start_at": 0.0,
+                    "end_at": 1.0,
+                    "combine_embeds": "concat",
+                },
+            }
+
+            # IP-Adapter modified model replaces the checkpoint model for KSampler
+            last_model_id = "21"
 
         # ── 4. CLIPTextEncode (6, 7) — clip は Checkpoint から直接 ──
         nodes["6"] = {
