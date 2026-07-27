@@ -302,7 +302,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             scheduler=getattr(config, "image_gen_comfyui_scheduler", "normal"),
             seed=getattr(config, "image_gen_comfyui_seed", 0),
             denoise=getattr(config, "image_gen_comfyui_denoise", 0.7),
-            ipadapter_weight=getattr(config, "image_gen_ipadapter_weight", 0.85),
+            workflow_template=getattr(config, "image_gen_comfyui_workflow_template", ""),
         )
 
         # ── i2i mode: use uploaded reference image ──
