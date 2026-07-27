@@ -191,6 +191,13 @@ def _render_image_section() -> str:
                                             <option value="i2i">画像→画像 (i2i)</option>
                                         </select>
                                     </div>
+                                    <!-- workflow template path -->
+                                    <div style="margin-top:8px;">
+                                        <div class="chat-field-label" style="font-size:0.78rem;">ワークフローテンプレート（空=動的構築）</div>
+                                        <input type="text" id="chat-image-gen-template" class="chat-field-input"
+                                            placeholder="例: /data/workflows/pony_ipadapter.json"
+                                            style="width:100%;font-size:0.78rem;" />
+                                    </div>
                                     <!-- Reference image upload (shown only in i2i mode) -->
                                     <div id="chat-image-gen-ref-upload" style="display:none;margin-top:8px;">
                                         <div class="chat-field-label" style="font-size:0.82rem;margin-bottom:4px;">参照画像</div>
