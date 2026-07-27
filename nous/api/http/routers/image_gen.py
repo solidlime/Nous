@@ -96,7 +96,7 @@ def register_image_gen_routes(mcp) -> None:
                 size=f"{body.get('width', 1024)}x{body.get('height', 1024)}",
                 quality="standard",
                 n=1,
-                negative_prompt=body.get("negative_prompt", ""),
+                negative_prompt=body.get("negative_prompt") or getattr(config, "image_gen_negative_prompt", "") or "",
             )
         except Exception:
             return JSONResponse({"error": "Image generation failed"}, status_code=500)
@@ -116,3 +116,45 @@ def register_image_gen_routes(mcp) -> None:
                 ],
             }
         )
+
+    @mcp.custom_route("/api/chat/{persona}/image-gen/reference", methods=["POST"])
+    async def upload_reference_image(request: Request) -> JSONResponse:
+        """参照画像アップロード (i2i用) — POST multipart/form-data, field 'file'"""
+        persona = _resolve_persona_from_request(request)
+        ctx = _safe_get_context(persona)
+        if not ctx:
+            return JSONResponse({"error": "Persona not found"}, status_code=404)
+
+        try:
+            form = await request.form()
+        except Exception:
+            return JSONResponse({"error": "Invalid form data"}, status_code=400)
+
+        uploaded = form.get("file")
+        if not uploaded or not hasattr(uploaded, "filename"):
+            return JSONResponse({"error": "No file uploaded. Use multipart/form-data with field name 'file'."}, status_code=400)
+
+        # Validate file type
+        content_type = getattr(uploaded, "content_type", "") or ""
+        if content_type and not content_type.startswith("image/"):
+            return JSONResponse({"error": f"Invalid file type: {content_type}. Only images allowed."}, status_code=400)
+
+        # Save as reference.png
+        from pathlib import Path
+        from nous.config.settings import get_settings
+
+        settings = get_settings()
+        images_dir = Path(settings.data_root) / "persona" / persona / "images"
+        images_dir.mkdir(parents=True, exist_ok=True)
+
+        ref_path = images_dir / "reference.png"
+        content = await uploaded.read()
+        ref_path.write_bytes(content)
+
+        logger.info("Reference image uploaded for persona %s: %d bytes", persona, len(content))
+        return JSONResponse({
+            "ok": True,
+            "filename": "reference.png",
+            "size": len(content),
+            "url": f"/api/chat/{persona}/persona/images/reference.png",
+        })

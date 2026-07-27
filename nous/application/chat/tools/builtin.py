@@ -304,8 +304,21 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             denoise=getattr(config, "image_gen_comfyui_denoise", 0.7),
         )
 
+        # ── i2i mode: use uploaded reference image ──
+        reference_image = None
+        if getattr(config, "image_gen_mode", "t2i") == "i2i":
+            from pathlib import Path as _Path
+            from nous.config.settings import get_settings as _get_settings
+            _persona = getattr(ctx, "persona", "default")
+            _settings = _get_settings()
+            ref_path = _Path(_settings.data_root) / "persona" / _persona / "images" / "reference.png"
+            if ref_path.exists():
+                reference_image = ref_path.read_bytes()
+            else:
+                logger.warning("i2i mode enabled but no reference.png found at %s, falling back to t2i", ref_path)
+
         negative_prompt = getattr(config, "image_gen_negative_prompt", "") or ""
-        generated = await provider.generate(prompt=prompt, size=size, n=n, negative_prompt=negative_prompt)
+        generated = await provider.generate(prompt=prompt, size=size, n=n, negative_prompt=negative_prompt, reference_image=reference_image)
 
         # ── 画像をサーバー側に永続化 ──
         from pathlib import Path
