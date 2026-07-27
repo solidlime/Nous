@@ -122,7 +122,7 @@ def register_tts_routes(mcp) -> None:
                 voice_context_parts = []
                 if state:
                     if state.emotion and state.emotion != "neutral":
-                        voice_context_parts.append(f"感情: {state.emotion} (強度: {int(state.emotion_intensity or 0.0) * 10}/10)")
+                        voice_context_parts.append(f"感情: {state.emotion} (強度: {int((state.emotion_intensity or 0.0) * 10)}/10)")
                     voice_related = []
                     if state.relationship_status:
                         voice_related.append(f"相手との関係: {state.relationship_status}")
