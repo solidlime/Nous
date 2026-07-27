@@ -273,6 +273,8 @@ function applyChatConfig(cfg) {
   set("chat-image-gen-speed-lora-weight", cfg.image_gen_comfyui_speed_lora_weight);
   set("chat-image-gen-self-portrait-prompt", cfg.image_gen_self_portrait_prompt);
   set("chat-image-gen-negative-prompt", cfg.image_gen_negative_prompt || "");
+  var templateInput = document.getElementById("chat-image-gen-template");
+  if (templateInput) templateInput.value = cfg.image_gen_comfyui_workflow_template || "";
   // プリセット解像度 復元
   var _presetNames = ["portrait_large","portrait_medium","portrait_small","landscape_large","landscape_medium","landscape_small","square_large","square_medium","square_small"];
   var _presets = cfg.image_gen_presets || {};
@@ -516,6 +518,7 @@ async function saveChatConfig() {
     })(),
     image_gen_default_preset: document.getElementById("chat-image-gen-default-preset")?.value || "square_medium",
     image_gen_mode: document.getElementById("chat-image-gen-mode")?.value || "t2i",
+    image_gen_comfyui_workflow_template: document.getElementById("chat-image-gen-template")?.value || "",
     // Voice / TTS settings (TE04)
     voice_url: document.getElementById("chat-voice-url")?.value || "",
     voice_auto_play: getChecked("chat-voice-auto-play"),
