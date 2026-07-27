@@ -324,6 +324,21 @@ def _render_voice_section() -> str:
                                                     value="0" min="0"
                                                     style="width:100%;" />
                                             </div>
+                                            <!-- LLM caption generation -->
+                                            <div style="margin-top:8px;">
+                                                <div style="display:flex;align-items:center;gap:6px;">
+                                                    <input type="checkbox" id="chat-irodori-caption-llm" class="chat-field-input"
+                                                        style="width:auto;accent-color:var(--accent-purple);"
+                                                        onchange="document.getElementById('chat-irodori-caption-llm-model-wrap').style.display=this.checked?'block':'none'" />
+                                                    <span class="chat-field-label" style="font-size:0.78rem;">LLMキャプション生成</span>
+                                                </div>
+                                                <div id="chat-irodori-caption-llm-model-wrap" style="display:none;margin-top:6px;">
+                                                    <span class="chat-field-label" style="font-size:0.72rem;color:var(--text-muted);">モデル名（空=ペルソナモデル）</span>
+                                                    <input type="text" id="chat-irodori-caption-llm-model" class="chat-field-input"
+                                                        placeholder="ペルソナモデルを使用"
+                                                        style="width:100%;font-size:0.78rem;" />
+                                                </div>
+                                            </div>
                                         </div>
                                     </details>
                                     <!-- Test playback -->

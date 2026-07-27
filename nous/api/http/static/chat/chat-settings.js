@@ -211,6 +211,15 @@ function applyChatConfig(cfg) {
   if (irodoriChunkMin) document.getElementById("chat-irodori-chunk-min-val").textContent = cfg.irodori_chunk_min_chars ?? 85;
   var irodoriSeed = document.getElementById("chat-irodori-seed");
   if (irodoriSeed) irodoriSeed.value = cfg.irodori_seed ?? 0;
+  // LLM caption generation
+  var irodoriCaptionLLM = document.getElementById("chat-irodori-caption-llm");
+  if (irodoriCaptionLLM) {
+    irodoriCaptionLLM.checked = cfg.irodori_caption_llm_enabled === true;
+    var modelWrap = document.getElementById("chat-irodori-caption-llm-model-wrap");
+    if (modelWrap) modelWrap.style.display = irodoriCaptionLLM.checked ? "block" : "none";
+  }
+  var irodoriCaptionLLMModel = document.getElementById("chat-irodori-caption-llm-model");
+  if (irodoriCaptionLLMModel) irodoriCaptionLLMModel.value = cfg.irodori_caption_llm_model || "";
   // Voice volume
   var voiceVolume = document.getElementById("chat-voice-volume");
   if (voiceVolume) voiceVolume.value = cfg.voice_volume ?? 1.0;
@@ -501,6 +510,8 @@ async function saveChatConfig() {
     irodori_cfg_scale_caption: parseFloat(document.getElementById("chat-irodori-cfg-scale-caption")?.value) || 4.2,
     irodori_chunk_min_chars: parseInt(document.getElementById("chat-irodori-chunk-min-chars")?.value) || 85,
     irodori_seed: parseInt(document.getElementById("chat-irodori-seed")?.value) || 0,
+    irodori_caption_llm_enabled: document.getElementById("chat-irodori-caption-llm")?.checked || false,
+    irodori_caption_llm_model: document.getElementById("chat-irodori-caption-llm-model")?.value || "",
     // Voice volume
     voice_volume: parseFloat(document.getElementById("chat-voice-volume")?.value) ?? 1.0,
     voice_speed: parseFloat(document.getElementById("chat-voice-speed")?.value) ?? 1.0,
