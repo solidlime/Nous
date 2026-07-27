@@ -60,7 +60,7 @@ function testImageGen() {
     seed: parseInt(document.getElementById('chat-image-gen-seed')?.value || '0'),
     denoise: parseFloat(document.getElementById('chat-image-gen-denoise')?.value || '0.7'),
     prompt: document.getElementById('chat-image-gen-self-portrait-prompt')?.value.trim() || '1girl, herta, honkai star rail, solo, smile',
-    negative_prompt: 'lowres, bad anatomy, bad hands, text, error',
+    negative_prompt: document.getElementById('chat-image-gen-negative-prompt')?.value || '',
   };
   
   fetch('/api/chat/' + (S.persona || '') + '/image-gen/test', {
