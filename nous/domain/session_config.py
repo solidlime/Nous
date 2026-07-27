@@ -53,6 +53,9 @@ class SessionConfig(BaseModel):
     irodori_cfg_scale_caption: float = 4.2
     irodori_chunk_min_chars: int = 85
     irodori_seed: int = 0
+    # Irodori LLM emotion caption
+    irodori_caption_llm_enabled: bool = False
+    irodori_caption_llm_model: str = ""  # empty = use persona's configured model
 
     # Auto-capture
     auto_capture_enabled: bool = False
