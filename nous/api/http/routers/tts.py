@@ -85,30 +85,102 @@ def register_tts_routes(mcp) -> None:
                 engine._voice = voice_override  # noqa: SLF001
 
         # get persona state for emotion + build caption
-        # Caption format: {emotion}{intensity}%\nPhysical: ...\nMental: ...
         emotion = "neutral"
         caption: str | None = None
+        state = None
         if chat_config.voice_emotion_link:
             state_result = ctx.persona_service.get_context(persona)
             if state_result.is_ok and state_result.value:
                 state = state_result.value
                 emotion = state.emotion or "neutral"
+
+                # Build simple context caption (always, even if LLM is enabled — as fallback)
                 intensity_pct = int((state.emotion_intensity or 0.0) * 100)
                 caption_parts = [f"{emotion}{intensity_pct}%"]
-                # Read one-shot physical/mental from memories (tags)
-                import datetime as _dt
-
-                for tag_name, label in [("physical_state", "Physical"), ("mental_state", "Mental")]:
-                    mems_result = ctx.memory_service.get_by_tags([tag_name])
-                    if mems_result.is_ok and mems_result.value:
-                        latest = max(mems_result.value, key=lambda m: m.created_at or _dt.datetime.min)
-                        content = latest.content
-                        prefix = f"{tag_name}: "
-                        if content.startswith(prefix):
-                            content = content[len(prefix) :]
-                        if content.strip():
-                            caption_parts.append(f"{label}: {content}")
+                if state.relationship_status:
+                    caption_parts.append(f"Relationship: {state.relationship_status}")
+                if state.appearance:
+                    caption_parts.append(f"Appearance: {state.appearance}")
+                if state.environment:
+                    caption_parts.append(f"Environment: {state.environment}")
                 caption = "\n".join(caption_parts)
+
+        # LLM caption generation (when enabled, overrides simple context injection)
+        irodori_caption_llm_enabled = getattr(chat_config, "irodori_caption_llm_enabled", False)
+        if irodori_caption_llm_enabled and state:
+            try:
+                # Get LLM config from chat config
+                provider_name = getattr(chat_config, "provider", "opencode_go")
+                api_key = getattr(chat_config, "api_key", "")
+                model_name = getattr(chat_config, "irodori_caption_llm_model", "") or getattr(chat_config, "model", "")
+                base_url = getattr(chat_config, "base_url", "")
+
+                from nous.infrastructure.llm.factory import get_provider
+                provider = get_provider(provider_name, api_key, model_name, base_url)
+
+                # Build voice-relevant context
+                voice_context_parts = []
+                if state:
+                    if state.emotion and state.emotion != "neutral":
+                        voice_context_parts.append(f"感情: {state.emotion} (強度: {int(state.emotion_intensity or 0.0) * 10}/10)")
+                    voice_related = []
+                    if state.relationship_status:
+                        voice_related.append(f"相手との関係: {state.relationship_status}")
+                    if state.appearance:
+                        voice_related.append(f"外見・雰囲気: {state.appearance}")
+                    if state.environment:
+                        voice_related.append(f"環境: {state.environment}")
+                    if voice_related:
+                        voice_context_parts.append("\n".join(voice_related))
+                voice_context = "\n".join(voice_context_parts) if voice_context_parts else "（特になし）"
+
+                llm_system = """あなたは音声合成（irodori-tts）向けキャプション生成AIです。
+読み上げテキストの内容と話者の状況から、話者の声質・感情・話し方を自然な日本語1文で記述してください。
+
+## 含めるべき要素（該当するもののみ）
+- 声の高さ・速さ・質感（落ち着いた/高い/ハスキー/ささやく 等）
+- 感情の種類と強度（嬉しそう/怒り/悲しみ/驚き 等）
+- 話し方のスタイル（丁寧/カジュアル/近い距離感/遠い距離感）
+- 発話の特徴（震え/息遣い/間/たどたどしさ 等）
+
+## 例
+- 「落ち着いた女性の声で、近い距離感でやわらかく自然に読み上げてください。」
+- 「深く傷つき、今にも泣き出しそうな様子。声が震えており、悲痛なトーンで弱々しく話す。」
+- 「余裕のある大人の男性。親しい相手に対して、くだけた雰囲気で呆れながらも楽しそうに話している。」
+
+## 制約
+- 80文字以内の自然な日本語1文
+- 話者情報が提供された場合は必ず反映する
+- 読み上げテキスト自体の内容から感情を推測して良い
+- 説明文ではなく「〜話す」「〜読み上げる」で締める
+- 出力はキャプションの本文のみ（JSONや説明は不要）"""
+
+                llm_user = f"""## 話者情報
+{voice_context}
+
+## 読み上げテキスト
+{text}"""
+
+                from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, LLMMessage, TextDeltaEvent
+
+                full_content: list[str] = []
+                async for event in provider.stream(
+                    messages=[LLMMessage(role="user", content=llm_user)],
+                    system=llm_system,
+                    temperature=0.7,
+                    max_tokens=256,
+                ):
+                    if isinstance(event, TextDeltaEvent):
+                        full_content.append(event.content)
+                    elif isinstance(event, ErrorEvent):
+                        logger.warning("LLM caption generation error: %s", event.message)
+                        break
+                llm_caption = "".join(full_content).strip()
+                if llm_caption:
+                    caption = llm_caption
+                    logger.info("LLM caption generated for TTS: %s", llm_caption[:100])
+            except Exception:
+                logger.exception("LLM caption generation failed, falling back to context injection")
 
         # ---- TTS audio cache ----
         voice_speed = getattr(chat_config, "voice_speed", 1.0)
