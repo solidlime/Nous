@@ -48,6 +48,8 @@ function _getVolume() {
 /* ── Strip markdown for TTS ── */
 function _stripMarkdown(text) {
   return text
+    .replace(/<time_context>[\s\S]*?<\/time_context>/g, "")
+    .replace(/<!-- msg_at:.*?-->/g, "")
     .replace(/```[\s\S]*?```/g, "コードブロック")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/[*_~>#-]/g, "")
