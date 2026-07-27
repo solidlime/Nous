@@ -182,6 +182,26 @@ def _render_image_section() -> str:
                                             </div>
                                         </div>
                                     </details>
+                                    <!-- Generation mode: t2i / i2i -->
+                                    <div style="margin-top:10px;">
+                                        <div class="chat-field-label" style="font-size:0.82rem;margin-bottom:4px;">生成モード</div>
+                                        <select id="chat-image-gen-mode" class="chat-field-input" style="width:100%;"
+                                            onchange="document.getElementById('chat-image-gen-ref-upload').style.display=this.value==='i2i'?'block':'none'">
+                                            <option value="t2i">テキスト→画像 (t2i)</option>
+                                            <option value="i2i">画像→画像 (i2i)</option>
+                                        </select>
+                                    </div>
+                                    <!-- Reference image upload (shown only in i2i mode) -->
+                                    <div id="chat-image-gen-ref-upload" style="display:none;margin-top:8px;">
+                                        <div class="chat-field-label" style="font-size:0.82rem;margin-bottom:4px;">参照画像</div>
+                                        <input type="file" id="chat-image-gen-ref-file" accept="image/*"
+                                            style="font-size:0.78rem;width:100%;margin-bottom:4px;" />
+                                        <button id="chat-image-gen-ref-upload-btn" class="chat-clear-btn" style="font-size:0.78rem;padding:4px 10px;"
+                                            onclick="N.ImageGen.uploadReferenceImage()">
+                                            <i data-lucide="upload"></i> アップロード
+                                        </button>
+                                        <span id="chat-image-gen-ref-status" style="font-size:0.72rem;color:var(--text-muted);margin-left:8px;"></span>
+                                    </div>
                                     <div style="display:flex;gap:8px;align-items:center;">
                                         <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="N.Chat.settings.testImageGen()"><i data-lucide="play"></i> テスト生成</button>
                                         <span id="chat-image-test-status" style="font-size:0.72rem;color:var(--text-muted);min-height:16px;"></span>

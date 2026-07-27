@@ -291,6 +291,15 @@ function applyChatConfig(cfg) {
       loras.forEach(function(l) { N.Chat.settings.addLoraRow(l.path, l.weight); });
     } catch(e) { console.error('LoRA JSON parse error:', e); }
   }
+  // Image generation mode
+  var imageGenMode = document.getElementById("chat-image-gen-mode");
+  if (imageGenMode) {
+    imageGenMode.value = cfg.image_gen_mode || "t2i";
+  }
+  var refUpload = document.getElementById("chat-image-gen-ref-upload");
+  if (refUpload && imageGenMode) {
+    refUpload.style.display = imageGenMode.value === "i2i" ? "block" : "none";
+  }
   // スライダー値表示更新
   N.Chat.settings.updateSliderLabels();
   // === Auto-capture (moved from Settings) ===
@@ -498,6 +507,7 @@ async function saveChatConfig() {
       return p;
     })(),
     image_gen_default_preset: document.getElementById("chat-image-gen-default-preset")?.value || "square_medium",
+    image_gen_mode: document.getElementById("chat-image-gen-mode")?.value || "t2i",
     // Voice / TTS settings (TE04)
     voice_url: document.getElementById("chat-voice-url")?.value || "",
     voice_auto_play: getChecked("chat-voice-auto-play"),

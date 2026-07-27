@@ -80,6 +80,36 @@ function testImageGen() {
   });
 }
 
+async function uploadReferenceImage() {
+  var fileInput = document.getElementById("chat-image-gen-ref-file");
+  var statusEl = document.getElementById("chat-image-gen-ref-status");
+  if (!fileInput || !fileInput.files || !fileInput.files.length) {
+    if (statusEl) statusEl.textContent = "ファイルを選択してください";
+    return;
+  }
+  var file = fileInput.files[0];
+  var persona = window.N?.Chat?.persona || document.querySelector("[data-persona]")?.dataset?.persona || "default";
+  var formData = new FormData();
+  formData.append("file", file);
+  
+  var btn = document.getElementById("chat-image-gen-ref-upload-btn");
+  if (btn) { btn.disabled = true; btn.innerHTML = "アップロード中..."; }
+  if (statusEl) statusEl.textContent = "";
+  
+  try {
+    var resp = await fetch("/api/chat/" + persona + "/image-gen/reference", { method: "POST", body: formData });
+    var data = await resp.json();
+    if (data.ok) {
+      if (statusEl) statusEl.textContent = "\u2713 \u30a2\u30c3\u30d7\u30ed\u30fc\u30c9\u5b8c\u4e86 (" + (data.size / 1024).toFixed(1) + " KB)";
+    } else {
+      if (statusEl) statusEl.textContent = "\u2717 " + (data.error || "\u30a8\u30e9\u30fc");
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = "\u2717 \u901a\u4fe1\u30a8\u30e9\u30fc";
+  }
+  if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="upload"></i> \u30a2\u30c3\u30d7\u30ed\u30fc\u30c9'; }
+}
+
 function checkComfyUIHealth() {
   var url = document.getElementById('chat-image-gen-comfyui-url').value.trim();
   var status = document.getElementById('chat-image-status');
@@ -139,5 +169,9 @@ Object.assign(N.Chat.settings, {
   addLoraRow: addLoraRow,
   collectLoraRows: collectLoraRows,
 });
+
+// ImageGen sub-namespace for i2i reference upload
+N.ImageGen = N.ImageGen || {};
+N.ImageGen.uploadReferenceImage = uploadReferenceImage;
 
 })(window.Nous);
