@@ -5,6 +5,8 @@ ChatConfig から分割された、MCPツール・画像生成に関する設定
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -34,6 +36,8 @@ class ToolConfig(BaseModel):
     image_gen_comfyui_scheduler: str = "normal"
     image_gen_comfyui_seed: int = 0  # 0=ランダム
     image_gen_comfyui_denoise: float = 0.7
+    # Generation mode: t2i (text-to-image) or i2i (image-to-image with reference)
+    image_gen_mode: Literal["t2i", "i2i"] = "t2i"
     image_gen_max_width: int = 1200
     image_gen_max_height: int = 1200
     # 画像生成プリセット（preset名 → "WxH"）
