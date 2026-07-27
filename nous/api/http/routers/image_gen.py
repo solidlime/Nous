@@ -58,7 +58,7 @@ def register_image_gen_routes(mcp) -> None:
         if not config or not getattr(config, "image_gen_enabled", False):
             return JSONResponse({"error": "Image generation is disabled"}, status_code=400)
 
-        prompt = body.get("prompt", "test image: a cute anime girl").strip()
+        prompt = body.get("prompt", "").strip()
         comfyui_url = getattr(config, "image_gen_comfyui_url", "") or body.get("comfyui_url", "http://localhost:8188")
 
         # LoRA リスト: POST body 指定があれば優先、なければDB設定から
