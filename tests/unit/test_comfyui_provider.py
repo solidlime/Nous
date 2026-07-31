@@ -337,14 +337,14 @@ def test_nous_injects_simple_keys():
     assert workflow["11"]["inputs"]["text"] == "bad anatomy"
 
 
-def test_nous_negative_prompt_default_when_empty():
-    """NOUS:negative_prompt は空ならデフォルトプロンプトを使う"""
+def test_nous_negative_prompt_empty_passthrough():
+    """NOUS:negative_prompt は空なら空のまま（デフォルト値は使わない）"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
     provider = ComfyUIProvider(workflow_template="dummy.json")
     workflow = {"1": {"class_type": "CLIPTextEncode", "inputs": {}, "_meta": {"title": "NOUS:negative_prompt"}}}
     provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
-    assert workflow["1"]["inputs"]["text"] == "lowres, bad anatomy, bad hands, text, error"
+    assert workflow["1"]["inputs"]["text"] == ""
 
 
 def test_nous_reference_image_injects_filename():
@@ -623,7 +623,7 @@ async def test_generate_template_mode_injects_nous_tags(tmp_path):
         assert sent["4"]["inputs"]["ckpt_name"] == "new.safetensors"
         assert sent["5"]["inputs"]["width"] == 1024
         assert sent["6"]["inputs"]["text"] == "a cat"
-        assert sent["7"]["inputs"]["text"] == "lowres, bad anatomy, bad hands, text, error"
+        assert sent["7"]["inputs"]["text"] == ""
 
         # 出力ノードの node_id / node_title が付与される
         assert len(images) == 1
@@ -683,7 +683,7 @@ async def test_generate_template_mode_legacy_placeholders(tmp_path):
         assert sent["5"]["inputs"]["width"] == "768"
         assert sent["5"]["inputs"]["height"] == "640"
         assert sent["6"]["inputs"]["text"] == "hello"
-        assert sent["7"]["inputs"]["text"] == "lowres, bad anatomy, bad hands, text, error"
+        assert sent["7"]["inputs"]["text"] == ""
 
 
 # ============================================================

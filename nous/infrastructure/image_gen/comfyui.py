@@ -13,9 +13,6 @@ from .base import GeneratedImage, ImageGenProvider
 
 logger = logging.getLogger(__name__)
 
-# NOUS:negative_prompt / {{negative_prompt}} の既定値（3重複していたため集約）
-_DEFAULT_NEGATIVE_PROMPT = "lowres, bad anatomy, bad hands, text, error"
-
 
 class ComfyUIProvider(ImageGenProvider):
     """ComfyUI REST API 経由の画像生成プロバイダ
@@ -33,7 +30,7 @@ class ComfyUIProvider(ImageGenProvider):
     def __init__(
         self,
         api_url: str = "http://localhost:8188",
-        checkpoint: str = "noobaiXLNAIXL_epsilonPred11Version.safetensors",
+        checkpoint: str = "",
         loras: list[dict] | None = None,
         width: int = 1024,
         height: int = 1024,
@@ -125,7 +122,7 @@ class ComfyUIProvider(ImageGenProvider):
         # レガシー {{placeholder}} 置換（後方互換・プレースホルダがある場合のみ）
         if "{{" in template_json:
             template_json = template_json.replace("{{prompt}}", prompt)
-            template_json = template_json.replace("{{negative_prompt}}", negative_prompt or _DEFAULT_NEGATIVE_PROMPT)
+            template_json = template_json.replace("{{negative_prompt}}", negative_prompt)
             template_json = template_json.replace("{{seed}}", str(seed))
             template_json = template_json.replace("{{width}}", str(self._width))
             template_json = template_json.replace("{{height}}", str(self._height))
@@ -268,7 +265,7 @@ class ComfyUIProvider(ImageGenProvider):
         if key == "prompt":
             inputs["text"] = prompt
         elif key == "negative_prompt":
-            inputs["text"] = negative_prompt or _DEFAULT_NEGATIVE_PROMPT
+            inputs["text"] = negative_prompt
         elif key == "reference_image":
             if not image_filename:
                 raise ValueError("NOUS:reference_image タグが設定されていますが参照画像がありません")
@@ -291,7 +288,8 @@ class ComfyUIProvider(ImageGenProvider):
         elif key == "denoise":
             inputs["denoise"] = self._denoise
         elif key == "checkpoint":
-            inputs["ckpt_name"] = self._checkpoint
+            if self._checkpoint:
+                inputs["ckpt_name"] = self._checkpoint
         else:
             logger.warning("Unknown NOUS tag ignored: NOUS:%s", key)
 

@@ -52,7 +52,7 @@ def _render_image_section() -> str:
                                     </div>
                                     <div>
                                         <div class="chat-field-label">チェックポイント</div>
-                                        <input type="text" id="chat-image-gen-checkpoint" class="chat-field-input" placeholder="noobaiXLNAIXL_epsilonPred11Version.safetensors" />
+                                        <input type="text" id="chat-image-gen-checkpoint" class="chat-field-input" />
                                     </div>
                                     <!-- 自画像生成プロンプト -->
                                     <div>

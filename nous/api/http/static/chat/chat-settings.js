@@ -478,7 +478,7 @@ async function saveChatConfig() {
     // 画像生成設定 — ComfyUI
     image_gen_enabled: getChecked("chat-image-gen-enabled"),
     image_gen_comfyui_url: (document.getElementById("chat-image-gen-comfyui-url")?.value || "").trim(),
-    image_gen_comfyui_checkpoint: document.getElementById("chat-image-gen-checkpoint")?.value || "noobaiXLNAIXL_epsilonPred11Version.safetensors",
+    image_gen_comfyui_checkpoint: document.getElementById("chat-image-gen-checkpoint")?.value || "",
     image_gen_comfyui_width: parseInt(document.getElementById("chat-image-gen-width")?.value || "1024"),
     image_gen_comfyui_height: parseInt(document.getElementById("chat-image-gen-height")?.value || "1024"),
     image_gen_max_width: parseInt(document.getElementById("chat-image-gen-max-width")?.value || "1200"),
