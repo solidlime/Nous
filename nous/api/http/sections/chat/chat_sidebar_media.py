@@ -145,12 +145,25 @@ def _render_image_section() -> str:
                                                 <select id="chat-image-gen-sampler" class="chat-field-input" style="width:100%;">
                                                     <option value="euler">Euler</option>
                                                     <option value="euler_ancestral" selected>Euler Ancestral</option>
-                                                    <option value="dpmpp_2m">DPM++ 2M</option>
-                                                    <option value="dpmpp_2m_sde">DPM++ 2M SDE</option>
-                                                    <option value="dpmpp_3m_sde">DPM++ 3M SDE</option>
+                                                    <option value="heun">Heun</option>
+                                                    <option value="heunpp2">Heun++ 2</option>
                                                     <option value="dpm_2">DPM 2</option>
                                                     <option value="dpm_2_ancestral">DPM 2 Ancestral</option>
+                                                    <option value="lms">LMS</option>
+                                                    <option value="dpm_fast">DPM Fast</option>
+                                                    <option value="dpm_adaptive">DPM Adaptive</option>
+                                                    <option value="dpmpp_2s_ancestral">DPM++ 2S Ancestral</option>
+                                                    <option value="dpmpp_sde">DPM++ SDE</option>
+                                                    <option value="dpmpp_sde_gpu">DPM++ SDE (GPU)</option>
+                                                    <option value="dpmpp_2m">DPM++ 2M</option>
+                                                    <option value="dpmpp_2m_sde">DPM++ 2M SDE</option>
+                                                    <option value="dpmpp_2m_sde_gpu">DPM++ 2M SDE (GPU)</option>
+                                                    <option value="dpmpp_3m_sde">DPM++ 3M SDE</option>
+                                                    <option value="dpmpp_3m_sde_gpu">DPM++ 3M SDE (GPU)</option>
+                                                    <option value="ddpm">DDPM</option>
                                                     <option value="lcm">LCM</option>
+                                                    <option value="uni_pc">UniPC</option>
+                                                    <option value="uni_pc_bh2">UniPC (BH2)</option>
                                                 </select>
                                             </div>
                                             <div>
@@ -162,6 +175,9 @@ def _render_image_section() -> str:
                                                     <option value="sgm_uniform">SGM Uniform</option>
                                                     <option value="simple">Simple</option>
                                                     <option value="ddim_uniform">DDIM Uniform</option>
+                                                    <option value="beta">Beta</option>
+                                                    <option value="linear_quadratic">Linear Quadratic</option>
+                                                    <option value="kl_optimal">KL Optimal</option>
                                                 </select>
                                             </div>
                                             <div>
