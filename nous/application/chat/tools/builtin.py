@@ -57,6 +57,14 @@ def filter_extra_tools(extra_tools: list[ToolDefinition]) -> list[ToolDefinition
     return [t for t in extra_tools if t.name.split("__")[-1] not in _NOUS_TOOL_NAMES]
 
 
+def _sanitize_node_title(title: str | None) -> str:
+    """ノードタイトルをファイル名に使える形に整形する（英数字・_・- のみ、最大32文字）。"""
+    if not title:
+        return ""
+    s = re.sub(r"[^A-Za-z0-9_\-]+", "_", title).strip("_")
+    return s[:32]
+
+
 def _image_ref(b64_str: str, mime_type: str = "image/png") -> str:
     """Convert base64 image data to a compact reference string.
 
@@ -339,7 +347,10 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             # ディスクに保存
             img_bytes = base64.b64decode(img.base64)
             prefix = "self_" if self_portrait else ""
-            filename = f"{prefix}{timestamp}_{idx:02d}.png"
+            node_part = _sanitize_node_title(img.node_title)
+            filename = (
+                f"{prefix}{node_part}_{timestamp}_{idx:02d}.png" if node_part else f"{prefix}{timestamp}_{idx:02d}.png"
+            )
             img_path = images_dir / filename
             img_path.write_bytes(img_bytes)
             url = f"/api/chat/{persona}/persona/images/{filename}"
@@ -350,6 +361,8 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
                 "size": img.size,
                 "filename": str(img_path),
                 "url": url,
+                "node_id": getattr(img, "node_id", None),
+                "node_title": getattr(img, "node_title", None),
             })
 
         # 結果イベントを送信（event_busは使われていないが後方互換のため残す）

@@ -552,7 +552,11 @@ async def test_generate_template_mode_injects_nous_tags(tmp_path):
                     "_meta": {"title": "NOUS:negative_prompt"},
                 },
                 "8": {"class_type": "VAEDecode", "inputs": {"samples": ["3", 0], "vae": ["4", 2]}},
-                "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "x", "images": ["8", 0]}},
+                "9": {
+                    "class_type": "SaveImage",
+                    "inputs": {"filename_prefix": "x", "images": ["8", 0]},
+                    "_meta": {"title": "main_out"},
+                },
             },
             ensure_ascii=False,
         )
@@ -585,7 +589,7 @@ async def test_generate_template_mode_injects_nous_tags(tmp_path):
             seed=123,
         )
         with patch("asyncio.sleep", new=AsyncMock(return_value=None)):
-            await provider.generate(prompt="a cat", n=1)
+            images = await provider.generate(prompt="a cat", n=1)
 
         sent = mock_client.post.call_args[1]["json"]["prompt"]
         assert sent["3"]["inputs"]["seed"] == 123
@@ -594,6 +598,11 @@ async def test_generate_template_mode_injects_nous_tags(tmp_path):
         assert sent["5"]["inputs"]["width"] == 1024
         assert sent["6"]["inputs"]["text"] == "a cat"
         assert sent["7"]["inputs"]["text"] == "lowres, bad anatomy, bad hands, text, error"
+
+        # 出力ノードの node_id / node_title が付与される
+        assert len(images) == 1
+        assert images[0].node_id == "9"
+        assert images[0].node_title == "main_out"
 
 
 @pytest.mark.asyncio
@@ -647,3 +656,99 @@ async def test_generate_template_mode_legacy_placeholders(tmp_path):
         assert sent["5"]["inputs"]["height"] == "640"
         assert sent["6"]["inputs"]["text"] == "hello"
         assert sent["7"]["inputs"]["text"] == "lowres, bad anatomy, bad hands, text, error"
+
+
+# ============================================================
+# Node info attachment tests (node_id / node_title)
+# ============================================================
+
+
+class _FakeResp:
+    """テスト用の最小レスポンス (json/content/raise_for_status)"""
+
+    def __init__(self, payload):
+        self._payload = payload
+        self.status_code = 200
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._payload
+
+    @property
+    def content(self):
+        return self._payload
+
+
+def test_generated_image_node_fields_default_to_none():
+    """GeneratedImage の node_id/node_title はデフォルト None"""
+    from nous.infrastructure.image_gen.base import GeneratedImage
+
+    img = GeneratedImage(base64="xxx", revised_prompt="p", size="512x512")
+    assert img.node_id is None
+    assert img.node_title is None
+
+
+@pytest.mark.asyncio
+async def test_poll_result_sets_node_id_and_title():
+    """_poll_result が履歴の node_id と node_titles から node_id/node_title を設定する"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(api_url="http://localhost:8188")
+    hist = _FakeResp(
+        {
+            "pid": {
+                "outputs": {
+                    "9": {"images": [{"filename": "a.png", "type": "output"}]},
+                    "10": {"images": [{"filename": "b.png", "type": "output"}]},
+                }
+            }
+        }
+    )
+    img_resp = _FakeResp(b"png")
+    fake_client = MagicMock()
+    fake_client.get = AsyncMock(side_effect=[hist, img_resp, img_resp])
+    provider._client = fake_client
+
+    images = await provider._poll_result(
+        "pid", prompt="cat", size="512x512", n=4, node_titles={"9": "main", "10": "upscale"}
+    )
+    assert len(images) == 2
+    assert images[0].node_id == "9"
+    assert images[0].node_title == "main"
+    assert images[1].node_id == "10"
+    assert images[1].node_title == "upscale"
+    assert images[0].revised_prompt == "cat"
+    assert images[0].base64
+
+
+@pytest.mark.asyncio
+async def test_poll_result_node_title_none_when_not_in_map():
+    """node_titles に無い node_id の node_title は None"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(api_url="http://localhost:8188")
+    hist = _FakeResp({"pid": {"outputs": {"9": {"images": [{"filename": "a.png", "type": "output"}]}}}})
+    img_resp = _FakeResp(b"png")
+    fake_client = MagicMock()
+    fake_client.get = AsyncMock(side_effect=[hist, img_resp])
+    provider._client = fake_client
+
+    images = await provider._poll_result(
+        "pid", prompt="cat", size="512x512", n=1, node_titles={"10": "upscale"}
+    )
+    assert images[0].node_id == "9"
+    assert images[0].node_title is None
+
+
+def test_sanitize_node_title():
+    """_sanitize_node_title がファイル名に使える形に整形する"""
+    from nous.application.chat.tools.builtin import _sanitize_node_title
+
+    assert _sanitize_node_title(None) == ""
+    assert _sanitize_node_title("") == ""
+    assert _sanitize_node_title("   ") == ""
+    assert _sanitize_node_title("Main Output!") == "Main_Output"
+    assert _sanitize_node_title("already-snake_case") == "already-snake_case"
+    assert len(_sanitize_node_title("x" * 100)) == 32

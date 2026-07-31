@@ -136,6 +136,16 @@ class ComfyUIProvider(ImageGenProvider):
 
             workflow = _json.loads(template_json)
 
+            # node_id(str) → _meta.title（空なら省略）
+            node_titles: dict[str, str] = {}
+            try:
+                for nid, node in workflow.items():
+                    title = (node.get("_meta") or {}).get("title")
+                    if title:
+                        node_titles[str(nid)] = str(title)
+            except Exception:
+                pass
+
             # NOUS: タグ注入（ノードの _meta.title ベース）
             workflow = self._apply_nous_injections(
                 workflow,
@@ -147,12 +157,15 @@ class ComfyUIProvider(ImageGenProvider):
         else:
             # 動的ビルドモード（従来通り）
             workflow = self._build_workflow(prompt, size, n, image_filename=image_filename, negative_prompt=negative_prompt)
+            node_titles = {}
 
         # POST /prompt — 最大 2 回リトライ
         prompt_id = await self._submit_workflow(workflow)
 
         # Poll /history — 最大 180 秒
-        return await self._poll_result(prompt_id, prompt, size, n, negative_prompt=negative_prompt)
+        return await self._poll_result(
+            prompt_id, prompt, size, n, negative_prompt=negative_prompt, node_titles=node_titles
+        )
 
     async def _upload_reference_image(self, image_bytes: bytes) -> str:
         """参照画像を ComfyUI の /upload/image にアップロードし、filename を返す。"""
@@ -358,7 +371,15 @@ class ComfyUIProvider(ImageGenProvider):
                     continue
         raise RuntimeError("ComfyUI generation failed after retries") from last_exc
 
-    async def _poll_result(self, prompt_id: str, prompt: str, size: str, n: int, negative_prompt: str = "") -> list[GeneratedImage]:
+    async def _poll_result(
+        self,
+        prompt_id: str,
+        prompt: str,
+        size: str,
+        n: int,
+        negative_prompt: str = "",
+        node_titles: dict[str, str] | None = None,
+    ) -> list[GeneratedImage]:
         """履歴をポーリングして生成画像を取得（最大 60 回 × 3s = 180s）。"""
         for _ in range(60):
             await asyncio.sleep(3)
@@ -373,7 +394,7 @@ class ComfyUIProvider(ImageGenProvider):
 
             outputs = hist[prompt_id].get("outputs", {})
             images: list[GeneratedImage] = []
-            for _node_id, output in outputs.items():
+            for node_id, output in outputs.items():
                 for img in output.get("images", []):
                     try:
                         img_resp = await self.client.get(
@@ -382,7 +403,17 @@ class ComfyUIProvider(ImageGenProvider):
                         )
                         img_resp.raise_for_status()
                         b64 = base64.b64encode(img_resp.content).decode("utf-8")
-                        images.append(GeneratedImage(base64=b64, revised_prompt=prompt, size=size, negative_prompt=negative_prompt))
+                        nid = str(node_id)
+                        images.append(
+                            GeneratedImage(
+                                base64=b64,
+                                revised_prompt=prompt,
+                                size=size,
+                                negative_prompt=negative_prompt,
+                                node_id=nid,
+                                node_title=(node_titles or {}).get(nid),
+                            )
+                        )
                     except Exception:
                         continue
             if images:

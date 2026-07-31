@@ -13,6 +13,8 @@ class GeneratedImage:
     revised_prompt: str  # プロバイダが修正したプロンプト（なければ元のまま）
     size: str  # 画像サイズ (例: "1024x1024")
     negative_prompt: str = ""  # ネガティブプロンプト（未指定時はプロバイダ標準値）
+    node_id: str | None = None  # 出力ノードID (ComfyUI history outputs key)
+    node_title: str | None = None  # 出力ノードのタイトル (_meta.title)
 
 
 @dataclass

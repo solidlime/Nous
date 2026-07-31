@@ -125,6 +125,8 @@ def register_image_gen_routes(mcp) -> None:
                         "base64": generated[0].base64,
                         "revised_prompt": generated[0].revised_prompt,
                         "size": generated[0].size,
+                        "node_id": generated[0].node_id,
+                        "node_title": generated[0].node_title,
                     }
                 ],
             }
