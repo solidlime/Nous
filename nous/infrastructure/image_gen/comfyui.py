@@ -249,6 +249,30 @@ class ComfyUIProvider(ImageGenProvider):
         seed: int,
     ) -> None:
         inputs = node.setdefault("inputs", {})
+        class_type = node.get("class_type", "")
+        # INTConstant / FloatConstant ノードは value フィールドしか持たない。
+        # 数値系タグは value へ（int/float に型合わせして）注入する。
+        if class_type in ("INTConstant", "FloatConstant"):
+            if key == "seed":
+                inputs["value"] = int(seed)  # value のみ（noise_seed フィールドは無い）
+                return
+            if key == "width":
+                inputs["value"] = int(self._width)
+                return
+            if key == "height":
+                inputs["value"] = int(self._height)
+                return
+            if key == "steps":
+                inputs["value"] = int(self._steps)
+                return
+            if key == "cfg":
+                inputs["value"] = float(self._cfg)
+                return
+            if key == "denoise":
+                inputs["value"] = float(self._denoise)
+                return
+            # 数値系以外（prompt / sampler 等）は従来のセマンティックフィールドへフォールスルー
+
         if key == "prompt":
             inputs["text"] = prompt
         elif key == "negative_prompt":
@@ -360,13 +384,22 @@ class ComfyUIProvider(ImageGenProvider):
         return value
 
     def _inject_power_lora(self, node: dict, loras: list[dict]) -> None:
-        """rgthree Power Lora Loader の lora_1..lora_5 スロットへ注入する。"""
+        """rgthree Power Lora Loader の lora_1..lora_5 スロットへ注入する。
+
+        rgthree はオブジェクト形式のみ認識する:
+        {"on": True, "lora": "<filename>", "strength": <weight>}
+        未使用スロットは "" （rgthree のゲートがスキップする）。
+        """
         inputs = node.setdefault("inputs", {})
         for i in range(1, 6):
             slot = f"lora_{i}"
             if i <= len(loras):
                 lora = loras[i - 1]
-                inputs[slot] = [lora["path"], lora["weight"], lora["weight"]]
+                inputs[slot] = {
+                    "on": True,
+                    "lora": lora["path"],
+                    "strength": lora["weight"],
+                }
             else:
                 inputs[slot] = ""
 

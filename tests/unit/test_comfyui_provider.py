@@ -459,16 +459,58 @@ def test_nous_lora_empty_config_leaves_node_untouched():
     assert len(workflow) == 1
 
 
+def test_nous_int_constant_injects_value_field():
+    """INTConstant ノードは数値系タグを inputs["value"]（int）に注入する"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(width=768, height=512, steps=10)
+    workflow = {
+        "1": {"class_type": "INTConstant", "inputs": {}, "_meta": {"title": "NOUS:seed"}},
+        "2": {"class_type": "INTConstant", "inputs": {}, "_meta": {"title": "NOUS:width"}},
+        "3": {"class_type": "INTConstant", "inputs": {}, "_meta": {"title": "NOUS:height"}},
+        "4": {"class_type": "INTConstant", "inputs": {}, "_meta": {"title": "NOUS:steps"}},
+    }
+    provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=42)
+    assert workflow["1"]["inputs"] == {"value": 42}
+    assert workflow["2"]["inputs"] == {"value": 768}
+    assert workflow["3"]["inputs"] == {"value": 512}
+    assert workflow["4"]["inputs"] == {"value": 10}
+
+
+def test_nous_float_constant_injects_value_field():
+    """FloatConstant ノードは cfg/denoise を inputs["value"]（float）に注入する"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(cfg=3.0, denoise=0.5)
+    workflow = {
+        "1": {"class_type": "FloatConstant", "inputs": {}, "_meta": {"title": "NOUS:cfg"}},
+        "2": {"class_type": "FloatConstant", "inputs": {}, "_meta": {"title": "NOUS:denoise"}},
+    }
+    provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
+    assert workflow["1"]["inputs"] == {"value": 3.0}
+    assert workflow["2"]["inputs"] == {"value": 0.5}
+
+
+def test_nous_constant_branch_keeps_non_constant_behavior():
+    """非定数ノードは従来どおりセマンティックフィールドへ注入される（定数分岐の影響なし）"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(checkpoint="ck.safetensors")
+    workflow = {"1": {"class_type": "CheckpointLoaderSimple", "inputs": {}, "_meta": {"title": "NOUS:checkpoint"}}}
+    provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
+    assert workflow["1"]["inputs"] == {"ckpt_name": "ck.safetensors"}
+
+
 def test_nous_lora_power_loader_slots():
-    """Power Lora Loader は lora_1..lora_5 スロットに注入する"""
+    """Power Lora Loader は lora_1..lora_5 スロットにオブジェクト形式で注入する"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
     provider = ComfyUIProvider(loras=[{"path": "a", "weight": 1.0}, {"path": "b.safetensors", "weight": 0.3}])
     workflow = {"9": {"class_type": "Power Lora Loader", "inputs": {}, "_meta": {"title": "NOUS:lora"}}}
     provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
     inputs = workflow["9"]["inputs"]
-    assert inputs["lora_1"] == ["a.safetensors", 1.0, 1.0]
-    assert inputs["lora_2"] == ["b.safetensors", 0.3, 0.3]
+    assert inputs["lora_1"] == {"on": True, "lora": "a.safetensors", "strength": 1.0}
+    assert inputs["lora_2"] == {"on": True, "lora": "b.safetensors", "strength": 0.3}
     assert inputs["lora_3"] == ""
     assert inputs["lora_4"] == ""
     assert inputs["lora_5"] == ""
