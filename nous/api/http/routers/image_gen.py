@@ -73,13 +73,8 @@ def register_image_gen_routes(mcp) -> None:
 
         provider = ComfyUIProvider(
             api_url=comfyui_url,
-            checkpoint=getattr(
-                config, "image_gen_comfyui_checkpoint", "noobaiXLNAIXL_epsilonPred11Version.safetensors"
-            ),
+            checkpoint=getattr(config, "image_gen_comfyui_checkpoint", ""),
             loras=loras,
-            speed_lora_path=getattr(config, "image_gen_comfyui_speed_lora_path", ""),
-            speed_lora_weight=getattr(config, "image_gen_comfyui_speed_lora_weight", 1.0),
-            speed_lora_method=getattr(config, "image_gen_comfyui_speed_lora_method", ""),
             width=body.get("width", getattr(config, "image_gen_comfyui_width", 1024)),
             height=body.get("height", getattr(config, "image_gen_comfyui_height", 1024)),
             steps=body.get("steps", getattr(config, "image_gen_comfyui_steps", 28)),
@@ -91,16 +86,13 @@ def register_image_gen_routes(mcp) -> None:
             workflow_template=getattr(config, "image_gen_comfyui_workflow_template", ""),
         )
 
-        # ── i2i mode: use uploaded reference image ──
-        reference_image = None
-        if getattr(config, "image_gen_mode", "t2i") == "i2i":
-            from pathlib import Path as _Path
-            _settings = get_settings()
-            ref_path = _Path(_settings.data_root) / "persona" / persona / "images" / "reference.png"
-            if ref_path.exists():
-                reference_image = ref_path.read_bytes()
-            else:
-                logger.warning("i2i mode enabled but no reference.png found at %s, falling back to t2i", ref_path)
+        # ── i2i（固定）: 参照画像 reference.png を常時読み込む（無ければ 400）──
+        from pathlib import Path as _Path
+        _settings = get_settings()
+        ref_path = _Path(_settings.data_root) / "persona" / persona / "images" / "reference.png"
+        if not ref_path.exists():
+            return JSONResponse({"error": f"参照画像がありません: {ref_path}"}, status_code=400)
+        reference_image = ref_path.read_bytes()
 
         try:
             generated = await provider.generate(

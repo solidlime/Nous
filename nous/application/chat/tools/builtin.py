@@ -274,7 +274,6 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
 
     try:
         # ── ChatConfig から ComfyUIProvider を直接構築 ──
-        from nous.infrastructure.image_gen.base import ImageGenConfig
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
         # LoRA リストを JSON からパース
@@ -290,18 +289,10 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
 
         comfyui_url = getattr(config, "image_gen_comfyui_url", "") or "http://localhost:8188"
 
-        gen_cfg = ImageGenConfig(
-            provider="comfyui",
-            comfyui_url=comfyui_url,
-            size=size,
-        )
         provider = ComfyUIProvider(
-            api_url=gen_cfg.comfyui_url,
-            checkpoint=getattr(config, "image_gen_comfyui_checkpoint", "noobaiXLNAIXL_epsilonPred11Version.safetensors"),
+            api_url=comfyui_url,
+            checkpoint=getattr(config, "image_gen_comfyui_checkpoint", ""),
             loras=loras,
-            speed_lora_path=getattr(config, "image_gen_comfyui_speed_lora_path", ""),
-            speed_lora_weight=getattr(config, "image_gen_comfyui_speed_lora_weight", 1.0),
-            speed_lora_method=getattr(config, "image_gen_comfyui_speed_lora_method", ""),
             width=w,
             height=h,
             steps=getattr(config, "image_gen_comfyui_steps", 28),
@@ -313,18 +304,16 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             workflow_template=getattr(config, "image_gen_comfyui_workflow_template", ""),
         )
 
-        # ── i2i mode: use uploaded reference image ──
-        reference_image = None
-        if getattr(config, "image_gen_mode", "t2i") == "i2i":
-            from pathlib import Path as _Path
-            from nous.config.settings import get_settings as _get_settings
-            _persona = getattr(ctx, "persona", "default")
-            _settings = _get_settings()
-            ref_path = _Path(_settings.data_root) / "persona" / _persona / "images" / "reference.png"
-            if ref_path.exists():
-                reference_image = ref_path.read_bytes()
-            else:
-                logger.warning("i2i mode enabled but no reference.png found at %s, falling back to t2i", ref_path)
+        # ── i2i（固定）: 参照画像 reference.png を常に読み込む（無ければ明示エラー）──
+        from pathlib import Path as _Path
+
+        from nous.config.settings import get_settings as _get_settings
+        _persona = getattr(ctx, "persona", "default")
+        _settings = _get_settings()
+        ref_path = _Path(_settings.data_root) / "persona" / _persona / "images" / "reference.png"
+        if not ref_path.exists():
+            raise FileNotFoundError(f"参照画像がありません: {ref_path}")
+        reference_image = ref_path.read_bytes()
 
         negative_prompt = getattr(config, "image_gen_negative_prompt", "") or ""
         generated = await provider.generate(prompt=prompt, size=size, n=n, negative_prompt=negative_prompt, reference_image=reference_image)

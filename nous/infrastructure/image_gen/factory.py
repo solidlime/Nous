@@ -11,5 +11,6 @@ def get_image_gen_provider(config: ImageGenConfig) -> ImageGenProvider | None:
     if config.provider == "comfyui":
         from .comfyui import ComfyUIProvider
 
-        return ComfyUIProvider(api_url=config.comfyui_url)
+        # workflow_template は必須（既定の同梱テンプレートを使用）
+        return ComfyUIProvider(api_url=config.comfyui_url, workflow_template="workflows/default_node.json")
     return None
