@@ -23,7 +23,7 @@ async def test_health_check_returns_true_when_comfyui_responds():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="dummy.json")
         result = await provider.health_check()
 
         assert result is True
@@ -40,7 +40,7 @@ async def test_health_check_returns_false_on_connection_error():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="dummy.json")
         result = await provider.health_check()
 
         assert result is False
@@ -58,7 +58,7 @@ async def test_health_check_returns_false_on_non_200():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="dummy.json")
         result = await provider.health_check()
 
         assert result is False
@@ -70,8 +70,12 @@ async def test_health_check_returns_false_on_non_200():
 
 
 @pytest.mark.asyncio
-async def test_generate_submits_workflow_and_returns_images():
+async def test_generate_submits_workflow_and_returns_images(tmp_path):
     """generateがworkflowを送信し、ポーリングして画像を返す"""
+    template = tmp_path / "template.json"
+    template.write_text(
+        json.dumps({"6": {"class_type": "CLIPTextEncode", "inputs": {"text": ""}, "_meta": {"title": "NOUS:prompt"}}})
+    )
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
 
@@ -108,7 +112,7 @@ async def test_generate_submits_workflow_and_returns_images():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template=str(template))
         with patch("asyncio.sleep", new=AsyncMock(return_value=None)):
             images = await provider.generate(prompt="a cute cat", size="512x512", n=1)
 
@@ -126,8 +130,10 @@ async def test_generate_submits_workflow_and_returns_images():
 
 
 @pytest.mark.asyncio
-async def test_generate_retries_on_connection_error():
+async def test_generate_retries_on_connection_error(tmp_path):
     """generateが接続エラー時にリトライする"""
+    template = tmp_path / "template.json"
+    template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
         post_resp = MagicMock()
@@ -154,7 +160,7 @@ async def test_generate_retries_on_connection_error():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template=str(template))
         with patch("asyncio.sleep", new=AsyncMock(return_value=None)):
             await provider.generate(prompt="test", n=1)
 
@@ -162,8 +168,10 @@ async def test_generate_retries_on_connection_error():
 
 
 @pytest.mark.asyncio
-async def test_generate_raises_on_all_retries_fail():
+async def test_generate_raises_on_all_retries_fail(tmp_path):
     """全リトライが失敗すると例外が上がる"""
+    template = tmp_path / "template.json"
+    template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
         mock_client.post = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
@@ -171,7 +179,7 @@ async def test_generate_raises_on_all_retries_fail():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template=str(template))
 
         with pytest.raises(RuntimeError, match="ComfyUI generation failed after retries"):
             await provider.generate(prompt="test", n=1)
@@ -180,8 +188,10 @@ async def test_generate_raises_on_all_retries_fail():
 
 
 @pytest.mark.asyncio
-async def test_generate_times_out_after_180s():
+async def test_generate_times_out_after_180s(tmp_path):
     """generateが180秒でタイムアウトする"""
+    template = tmp_path / "template.json"
+    template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
 
@@ -199,7 +209,7 @@ async def test_generate_times_out_after_180s():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template=str(template))
 
         with (
             patch("asyncio.sleep", new=AsyncMock(return_value=None)),
@@ -209,8 +219,10 @@ async def test_generate_times_out_after_180s():
 
 
 @pytest.mark.asyncio
-async def test_generate_multiple_images():
+async def test_generate_multiple_images(tmp_path):
     """n>1で複数枚生成できる"""
+    template = tmp_path / "template.json"
+    template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
 
@@ -242,7 +254,7 @@ async def test_generate_multiple_images():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template=str(template))
         with patch("asyncio.sleep", new=AsyncMock(return_value=None)):
             images = await provider.generate(prompt="test", n=2)
 
@@ -254,49 +266,19 @@ async def test_generate_multiple_images():
 # ============================================================
 
 
-def test_build_workflow_defaults():
-    """デフォルトのインスタンス変数が EmptyLatentImage に反映される"""
+def test_workflow_template_required():
+    """workflow_template が空なら構築時に ValueError"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider()
-    workflow = provider._build_workflow("cat", "512x512", 1)
-
-    # デフォルト width/height は __init__ の 1024 が使われる
-    assert workflow["5"]["inputs"]["width"] == 1024
-    assert workflow["5"]["inputs"]["height"] == 1024
-    assert workflow["5"]["inputs"]["batch_size"] == 1
-    assert workflow["6"]["inputs"]["text"] == "cat"
-
-
-def test_build_workflow_custom_dimensions():
-    """カスタム width/height が EmptyLatentImage に反映される"""
-    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
-
-    provider = ComfyUIProvider(width=768, height=512)
-    workflow = provider._build_workflow("cat", "1024x1024", 1)
-
-    assert workflow["5"]["inputs"]["width"] == 768
-    assert workflow["5"]["inputs"]["height"] == 512
-
-
-def test_build_workflow_1024x1024():
-    """1024x1024（デフォルト）のワークフローが正しく構築される"""
-    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
-
-    provider = ComfyUIProvider()
-    workflow = provider._build_workflow("dog", "1024x1024", 3)
-
-    # デフォルト width/height は 1024
-    assert workflow["5"]["inputs"]["width"] == 1024
-    assert workflow["5"]["inputs"]["height"] == 1024
-    assert workflow["5"]["inputs"]["batch_size"] == 3
+    with pytest.raises(ValueError, match="workflow_template"):
+        ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
 
 
 def test_provider_name():
     """provider_nameがcomfyuiを返す"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider()
+    provider = ComfyUIProvider(workflow_template="dummy.json")
     assert provider.provider_name == "comfyui"
 
 
@@ -310,6 +292,7 @@ def test_nous_injects_simple_keys():
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
     provider = ComfyUIProvider(
+        workflow_template="dummy.json",
         checkpoint="ck.safetensors",
         width=768,
         height=512,
@@ -358,7 +341,7 @@ def test_nous_negative_prompt_default_when_empty():
     """NOUS:negative_prompt は空ならデフォルトプロンプトを使う"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider()
+    provider = ComfyUIProvider(workflow_template="dummy.json")
     workflow = {"1": {"class_type": "CLIPTextEncode", "inputs": {}, "_meta": {"title": "NOUS:negative_prompt"}}}
     provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
     assert workflow["1"]["inputs"]["text"] == "lowres, bad anatomy, bad hands, text, error"
@@ -368,7 +351,7 @@ def test_nous_reference_image_injects_filename():
     """NOUS:reference_image はアップロード済みファイル名を注入する"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider()
+    provider = ComfyUIProvider(workflow_template="dummy.json")
     workflow = {"1": {"class_type": "LoadImage", "inputs": {}, "_meta": {"title": "NOUS:reference_image"}}}
     provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename="ref.png", seed=1)
     assert workflow["1"]["inputs"]["image"] == "ref.png"
@@ -378,7 +361,7 @@ def test_nous_reference_image_raises_without_image():
     """NOUS:reference_image タグがあるのに参照画像が無ければ ValueError"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider()
+    provider = ComfyUIProvider(workflow_template="dummy.json")
     workflow = {"1": {"class_type": "LoadImage", "inputs": {}, "_meta": {"title": "NOUS:reference_image"}}}
     with pytest.raises(ValueError, match="参照画像がありません"):
         provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
@@ -388,7 +371,7 @@ def test_nous_lora_single_uses_tagged_node():
     """LoRAが1件ならタグ付きノード自身に注入する"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider(loras=[{"path": "char", "weight": 0.8}])
+    provider = ComfyUIProvider(workflow_template="dummy.json", loras=[{"path": "char", "weight": 0.8}])
     workflow = {
         "4": {
             "class_type": "LoraLoader",
@@ -409,7 +392,7 @@ def test_nous_lora_chain_creates_nodes_and_remaps():
     """LoRAが複数ならチェーンを構築し、参照を最終ノードへ張り替える"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider(loras=[{"path": "a.safetensors", "weight": 1.0}, {"path": "b.safetensors", "weight": 0.5}])
+    provider = ComfyUIProvider(workflow_template="dummy.json", loras=[{"path": "a.safetensors", "weight": 1.0}, {"path": "b.safetensors", "weight": 0.5}])
     workflow = {
         "4": {
             "class_type": "LoraLoader",
@@ -446,7 +429,7 @@ def test_nous_lora_empty_config_leaves_node_untouched():
     """LoRA設定が空ならタグ付きノードに手を加えない"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider(loras=[])
+    provider = ComfyUIProvider(workflow_template="dummy.json", loras=[])
     workflow = {
         "4": {
             "class_type": "LoraLoader",
@@ -463,7 +446,7 @@ def test_nous_int_constant_injects_value_field():
     """INTConstant ノードは数値系タグを inputs["value"]（int）に注入する"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider(width=768, height=512, steps=10)
+    provider = ComfyUIProvider(workflow_template="dummy.json", width=768, height=512, steps=10)
     workflow = {
         "1": {"class_type": "INTConstant", "inputs": {}, "_meta": {"title": "NOUS:seed"}},
         "2": {"class_type": "INTConstant", "inputs": {}, "_meta": {"title": "NOUS:width"}},
@@ -481,7 +464,7 @@ def test_nous_float_constant_injects_value_field():
     """FloatConstant ノードは cfg/denoise を inputs["value"]（float）に注入する"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider(cfg=3.0, denoise=0.5)
+    provider = ComfyUIProvider(workflow_template="dummy.json", cfg=3.0, denoise=0.5)
     workflow = {
         "1": {"class_type": "FloatConstant", "inputs": {}, "_meta": {"title": "NOUS:cfg"}},
         "2": {"class_type": "FloatConstant", "inputs": {}, "_meta": {"title": "NOUS:denoise"}},
@@ -495,7 +478,7 @@ def test_nous_constant_branch_keeps_non_constant_behavior():
     """非定数ノードは従来どおりセマンティックフィールドへ注入される（定数分岐の影響なし）"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider(checkpoint="ck.safetensors")
+    provider = ComfyUIProvider(workflow_template="dummy.json", checkpoint="ck.safetensors")
     workflow = {"1": {"class_type": "CheckpointLoaderSimple", "inputs": {}, "_meta": {"title": "NOUS:checkpoint"}}}
     provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
     assert workflow["1"]["inputs"] == {"ckpt_name": "ck.safetensors"}
@@ -505,7 +488,7 @@ def test_nous_lora_power_loader_slots():
     """Power Lora Loader は lora_1..lora_5 スロットにオブジェクト形式で注入する"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider(loras=[{"path": "a", "weight": 1.0}, {"path": "b.safetensors", "weight": 0.3}])
+    provider = ComfyUIProvider(workflow_template="dummy.json", loras=[{"path": "a", "weight": 1.0}, {"path": "b.safetensors", "weight": 0.3}])
     workflow = {"9": {"class_type": "Power Lora Loader", "inputs": {}, "_meta": {"title": "NOUS:lora"}}}
     provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
     inputs = workflow["9"]["inputs"]
@@ -520,7 +503,7 @@ def test_nous_lora_power_loader_empty_config_disables_all_slots():
     """Power Lora Loader は LoRA 設定が空なら全スロットを無効化する"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider(loras=[])
+    provider = ComfyUIProvider(workflow_template="dummy.json", loras=[])
     workflow = {"9": {"class_type": "Power Lora Loader", "inputs": {}, "_meta": {"title": "NOUS:lora"}}}
     provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
     inputs = workflow["9"]["inputs"]
@@ -531,7 +514,7 @@ def test_nous_lora_unsupported_class_type_skipped():
     """対応外の class_type の NOUS:lora タグはスキップされる"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider(loras=[{"path": "a.safetensors", "weight": 1.0}])
+    provider = ComfyUIProvider(workflow_template="dummy.json", loras=[{"path": "a.safetensors", "weight": 1.0}])
     workflow = {"1": {"class_type": "SomeOtherLoader", "inputs": {}, "_meta": {"title": "NOUS:lora"}}}
     provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
     assert workflow["1"]["inputs"] == {}
@@ -541,7 +524,7 @@ def test_nous_no_tags_leaves_workflow_unchanged():
     """NOUS:タグが無ければワークフローは変更されない"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider()
+    provider = ComfyUIProvider(workflow_template="dummy.json")
     workflow = {
         "1": {"class_type": "KSampler", "inputs": {"seed": 1}},
         "2": {"class_type": "EmptyLatentImage", "inputs": {"width": 512}},
@@ -740,7 +723,7 @@ async def test_poll_result_sets_node_id_and_title():
     """_poll_result が履歴の node_id と node_titles から node_id/node_title を設定する"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider(api_url="http://localhost:8188")
+    provider = ComfyUIProvider(workflow_template="dummy.json", api_url="http://localhost:8188")
     hist = _FakeResp(
         {
             "pid": {
@@ -773,7 +756,7 @@ async def test_poll_result_node_title_none_when_not_in_map():
     """node_titles に無い node_id の node_title は None"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider(api_url="http://localhost:8188")
+    provider = ComfyUIProvider(workflow_template="dummy.json", api_url="http://localhost:8188")
     hist = _FakeResp({"pid": {"outputs": {"9": {"images": [{"filename": "a.png", "type": "output"}]}}}})
     img_resp = _FakeResp(b"png")
     fake_client = MagicMock()
@@ -904,7 +887,7 @@ async def test_poll_result_display_none_means_all_true():
     """display_node_ids=None → 全画像 display=True（後方互換）"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider(api_url="http://localhost:8188")
+    provider = ComfyUIProvider(workflow_template="dummy.json", api_url="http://localhost:8188")
     hist = _FakeResp({"pid": {"outputs": {"9": {"images": [{"filename": "a.png", "type": "output"}]}}}})
     fake_client = MagicMock()
     fake_client.get = AsyncMock(side_effect=[hist, _FakeResp(b"png")])
@@ -919,7 +902,7 @@ async def test_poll_result_display_filters_by_node_ids():
     """display_node_ids に含まれないノード出力は display=False"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-    provider = ComfyUIProvider(api_url="http://localhost:8188")
+    provider = ComfyUIProvider(workflow_template="dummy.json", api_url="http://localhost:8188")
     hist = _FakeResp(
         {
             "pid": {
@@ -947,7 +930,7 @@ async def test_poll_result_display_no_match_falls_back_all(caplog):
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
     caplog.set_level(logging.WARNING)
-    provider = ComfyUIProvider(api_url="http://localhost:8188")
+    provider = ComfyUIProvider(workflow_template="dummy.json", api_url="http://localhost:8188")
     hist = _FakeResp({"pid": {"outputs": {"9": {"images": [{"filename": "a.png", "type": "output"}]}}}})
     fake_client = MagicMock()
     fake_client.get = AsyncMock(side_effect=[hist, _FakeResp(b"png")])
@@ -970,7 +953,6 @@ async def test_builtin_image_generate_skips_non_display_images(tmp_path, monkeyp
 
     config = MagicMock()
     config.image_gen_enabled = True
-    config.image_gen_mode = "t2i"
     config.image_gen_presets = {}
     config.image_gen_default_preset = "square_medium"
     config.image_gen_max_width = 1200
@@ -982,6 +964,11 @@ async def test_builtin_image_generate_skips_non_display_images(tmp_path, monkeyp
     settings = MagicMock()
     settings.data_root = str(tmp_path)
     monkeypatch.setattr("nous.config.settings.get_settings", lambda: settings)
+
+    # i2i（固定）: 参照画像 reference.png が必須
+    ref_dir = tmp_path / "persona" / "test_persona" / "images"
+    ref_dir.mkdir(parents=True, exist_ok=True)
+    (ref_dir / "reference.png").write_bytes(b"fake_ref_png")
 
     generated = [
         GeneratedImage(base64="aGVsbG8=", revised_prompt="p", size="768x768", display=True),
@@ -998,7 +985,11 @@ async def test_builtin_image_generate_skips_non_display_images(tmp_path, monkeyp
     assert len(result["images"]) == 2
     assert result["images"][0]["base64"] == "aGVsbG8="
     assert result["images"][1]["base64"] == "IQ=="
-    saved = sorted((tmp_path / "persona" / "test_persona" / "images").glob("*.png"))
+    saved = sorted(
+        p
+        for p in (tmp_path / "persona" / "test_persona" / "images").glob("*.png")
+        if p.name != "reference.png"
+    )
     assert len(saved) == 2
     assert saved[0].name.endswith("_00.png")
     assert saved[1].name.endswith("_01.png")
