@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import logging
 import random
 import time
 from typing import Any
@@ -9,6 +10,8 @@ from typing import Any
 import httpx
 
 from .base import GeneratedImage, ImageGenProvider
+
+logger = logging.getLogger(__name__)
 
 
 class ComfyUIProvider(ImageGenProvider):
@@ -96,7 +99,7 @@ class ComfyUIProvider(ImageGenProvider):
         """ComfyUI で画像生成（fire-and-forget + polling）
 
         reference_image が指定された場合:
-          - テンプレートモード: 参照画像をアップロードし {{reference_image}} を置換
+          - テンプレートモード: 参照画像をアップロードし NOUS:reference_image / {{reference_image}} で利用
           - 動的ビルド: img2img ワークフローを構築
         """
         image_filename: str | None = None
@@ -104,7 +107,7 @@ class ComfyUIProvider(ImageGenProvider):
             image_filename = await self._upload_reference_image(reference_image)
 
         if self._workflow_template:
-            # テンプレートモード: JSON読み込み → 変数差し替え → そのまま送信
+            # テンプレートモード: JSON読み込み → NOUSタグ注入 → そのまま送信
             import json as _json
             from pathlib import Path as _Path
 
@@ -120,15 +123,27 @@ class ComfyUIProvider(ImageGenProvider):
             template_json = template_path.read_text(encoding="utf-8")
             seed = self._seed if self._seed != 0 else random.randint(1, 2**31 - 1)
 
-            # 変数置換
-            template_json = template_json.replace("{{prompt}}", prompt)
-            template_json = template_json.replace("{{negative_prompt}}", negative_prompt or "lowres, bad anatomy, bad hands, text, error")
-            template_json = template_json.replace("{{seed}}", str(seed))
-            template_json = template_json.replace("{{width}}", str(self._width))
-            template_json = template_json.replace("{{height}}", str(self._height))
-            template_json = template_json.replace("{{reference_image}}", image_filename or "")
+            # レガシー {{placeholder}} 置換（後方互換・プレースホルダがある場合のみ）
+            if "{{" in template_json:
+                template_json = template_json.replace("{{prompt}}", prompt)
+                template_json = template_json.replace(
+                    "{{negative_prompt}}", negative_prompt or "lowres, bad anatomy, bad hands, text, error"
+                )
+                template_json = template_json.replace("{{seed}}", str(seed))
+                template_json = template_json.replace("{{width}}", str(self._width))
+                template_json = template_json.replace("{{height}}", str(self._height))
+                template_json = template_json.replace("{{reference_image}}", image_filename or "")
 
             workflow = _json.loads(template_json)
+
+            # NOUS: タグ注入（ノードの _meta.title ベース）
+            workflow = self._apply_nous_injections(
+                workflow,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                image_filename=image_filename,
+                seed=seed,
+            )
         else:
             # 動的ビルドモード（従来通り）
             workflow = self._build_workflow(prompt, size, n, image_filename=image_filename, negative_prompt=negative_prompt)
@@ -150,6 +165,180 @@ class ComfyUIProvider(ImageGenProvider):
         resp = await self.client.post(f"{self._api_url}/upload/image", files=files)
         resp.raise_for_status()
         return filename
+
+    def _apply_nous_injections(
+        self,
+        workflow: dict,
+        *,
+        prompt: str,
+        negative_prompt: str,
+        image_filename: str | None,
+        seed: int,
+    ) -> dict:
+        """テンプレートワークフローへ NOUS: タグを注入する。
+
+        ノードの _meta.title が "NOUS:key" の場合、対応する設定値をそのノードの
+        inputs に書き込む。LoRA はグラフ再構成を伴うため最後に処理する。
+        """
+        tagged: list[tuple[Any, dict, str]] = []
+        for node_id, node in workflow.items():
+            if not isinstance(node, dict):
+                continue
+            meta = node.get("_meta")
+            title = meta.get("title", "") if isinstance(meta, dict) else ""
+            if isinstance(title, str) and title.strip().startswith("NOUS:"):
+                tagged.append((node_id, node, title.strip()))
+
+        if not tagged:
+            return workflow
+
+        # 単純なキー注入（LoRA 以外）
+        for _, node, tag in tagged:
+            key = tag[len("NOUS:"):]
+            if key != "lora":
+                self._inject_nous_key(
+                    node, key, prompt=prompt, negative_prompt=negative_prompt, image_filename=image_filename, seed=seed
+                )
+
+        # LoRA 注入（グラフを再構成するため最後）
+        for node_id, node, tag in tagged:
+            key = tag[len("NOUS:"):]
+            if key == "lora":
+                self._inject_lora(workflow, node_id, node)
+
+        return workflow
+
+    def _inject_nous_key(
+        self,
+        node: dict,
+        key: str,
+        *,
+        prompt: str,
+        negative_prompt: str,
+        image_filename: str | None,
+        seed: int,
+    ) -> None:
+        inputs = node.setdefault("inputs", {})
+        if key == "prompt":
+            inputs["text"] = prompt
+        elif key == "negative_prompt":
+            inputs["text"] = negative_prompt or "lowres, bad anatomy, bad hands, text, error"
+        elif key == "reference_image":
+            if not image_filename:
+                raise ValueError("NOUS:reference_image タグが設定されていますが参照画像がありません")
+            inputs["image"] = image_filename
+        elif key == "seed":
+            inputs["seed"] = seed
+            inputs["noise_seed"] = seed
+        elif key == "width":
+            inputs["width"] = self._width
+        elif key == "height":
+            inputs["height"] = self._height
+        elif key == "steps":
+            inputs["steps"] = self._steps
+        elif key == "cfg":
+            inputs["cfg"] = self._cfg
+        elif key == "sampler":
+            inputs["sampler_name"] = self._sampler
+        elif key == "scheduler":
+            inputs["scheduler"] = self._scheduler
+        elif key == "denoise":
+            inputs["denoise"] = self._denoise
+        elif key == "checkpoint":
+            inputs["ckpt_name"] = self._checkpoint
+        else:
+            logger.warning("Unknown NOUS tag ignored: NOUS:%s", key)
+
+    def _inject_lora(self, workflow: dict, node_id: Any, node: dict) -> None:
+        class_type = node.get("class_type", "")
+        loras = [
+            {"path": self._normalize_lora_path(lora.get("path", "")), "weight": lora.get("weight", 1.0)}
+            for lora in self._loras
+            if lora.get("path")
+        ]
+        if class_type == "LoraLoader":
+            self._inject_lora_chain(workflow, node_id, node, loras)
+        elif class_type == "Power Lora Loader":
+            self._inject_power_lora(node, loras)
+        else:
+            logger.warning("NOUS:lora tag on unsupported class_type %r — skipped", class_type)
+
+    def _inject_lora_chain(self, workflow: dict, node_id: Any, node: dict, loras: list[dict]) -> None:
+        """標準 LoraLoader チェーン注入。タグ付きノードをチェーン先頭にする。"""
+        if not loras:
+            return  # 設定なし: ノードはそのまま
+        inputs = node.setdefault("inputs", {})
+        first = loras[0]
+        inputs["lora_name"] = first["path"]
+        inputs["strength_model"] = first["weight"]
+        inputs["strength_clip"] = first["weight"]
+        if len(loras) == 1:
+            return
+
+        # 後続 LoRA 用に一意な新規 ID を採番
+        max_id = 0
+        for nid in workflow:
+            try:
+                max_id = max(max_id, int(str(nid)))
+            except (TypeError, ValueError):
+                continue
+
+        last_id = str(node_id)
+        next_id = max_id + 1
+        created: set[str] = set()
+        for lora in loras[1:]:
+            new_id = str(next_id)
+            next_id += 1
+            created.add(new_id)
+            workflow[new_id] = {
+                "class_type": "LoraLoader",
+                "inputs": {
+                    "model": [last_id, 0],
+                    "clip": [last_id, 1],
+                    "lora_name": lora["path"],
+                    "strength_model": lora["weight"],
+                    "strength_clip": lora["weight"],
+                },
+            }
+            last_id = new_id
+
+        # タグ付きノードの MODEL(0)/CLIP(1) 参照を最終チェーンノードへ張り替え
+        # （新規チェーンノード自身は「前段ノード」を指すため対象外）
+        tagged = str(node_id)
+        for other_id, other in workflow.items():
+            if str(other_id) == tagged or str(other_id) in created:
+                continue
+            if not isinstance(other, dict):
+                continue
+            other_inputs = other.get("inputs")
+            if not isinstance(other_inputs, dict):
+                continue
+            for field, value in other_inputs.items():
+                other_inputs[field] = self._remap_lora_ref(value, tagged, last_id)
+
+    @staticmethod
+    def _remap_lora_ref(value: Any, tagged_id: str, last_id: str) -> Any:
+        """[node_id, output_index] 形式の参照を再帰的に張り替える（MODEL=0, CLIP=1 のみ）。"""
+        if isinstance(value, list):
+            if len(value) >= 2 and str(value[0]) == tagged_id:
+                try:
+                    if int(value[1]) in (0, 1):
+                        return [last_id, value[1]]
+                except (TypeError, ValueError):
+                    pass
+            return [ComfyUIProvider._remap_lora_ref(v, tagged_id, last_id) for v in value]
+        return value
+
+    def _inject_power_lora(self, node: dict, loras: list[dict]) -> None:
+        """rgthree Power Lora Loader の lora_1..lora_5 スロットへ注入する。"""
+        inputs = node.setdefault("inputs", {})
+        for i in range(1, 6):
+            slot = f"lora_{i}"
+            if i <= len(loras):
+                lora = loras[i - 1]
+                inputs[slot] = [lora["path"], lora["weight"], lora["weight"]]
+            else:
+                inputs[slot] = ""
 
     async def _submit_workflow(self, workflow: dict) -> str:
         """ワークフローを送信し prompt_id を取得。接続エラー時は最大2回リトライ。"""

@@ -1,5 +1,6 @@
 """ComfyUIProvider の単体テスト"""
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -296,3 +297,353 @@ def test_provider_name():
 
     provider = ComfyUIProvider()
     assert provider.provider_name == "comfyui"
+
+
+# ============================================================
+# NOUS tag injection tests (template mode)
+# ============================================================
+
+
+def test_nous_injects_simple_keys():
+    """NOUS:タグが対応するinputsフィールドに設定値を注入する"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(
+        checkpoint="ck.safetensors",
+        width=768,
+        height=512,
+        steps=10,
+        cfg=3.0,
+        sampler="euler",
+        scheduler="sgm_uniform",
+        seed=123,
+        denoise=0.5,
+    )
+    workflow = {
+        "1": {"class_type": "KSampler", "inputs": {"seed": 0}, "_meta": {"title": "NOUS:seed"}},
+        "2": {"class_type": "EmptyLatentImage", "inputs": {}, "_meta": {"title": "NOUS:width"}},
+        "3": {"class_type": "EmptyLatentImage", "inputs": {}, "_meta": {"title": "NOUS:height"}},
+        "4": {"class_type": "KSampler", "inputs": {}, "_meta": {"title": "NOUS:steps"}},
+        "5": {"class_type": "KSampler", "inputs": {}, "_meta": {"title": "NOUS:cfg"}},
+        "6": {"class_type": "KSampler", "inputs": {}, "_meta": {"title": "NOUS:sampler"}},
+        "7": {"class_type": "KSampler", "inputs": {}, "_meta": {"title": "NOUS:scheduler"}},
+        "8": {"class_type": "KSampler", "inputs": {}, "_meta": {"title": "NOUS:denoise"}},
+        "9": {"class_type": "CheckpointLoaderSimple", "inputs": {}, "_meta": {"title": "NOUS:checkpoint"}},
+        "10": {"class_type": "CLIPTextEncode", "inputs": {}, "_meta": {"title": "NOUS:prompt"}},
+        "11": {"class_type": "CLIPTextEncode", "inputs": {}, "_meta": {"title": "NOUS:negative_prompt"}},
+    }
+    provider._apply_nous_injections(
+        workflow,
+        prompt="a cat",
+        negative_prompt="bad anatomy",
+        image_filename=None,
+        seed=123,
+    )
+    assert workflow["1"]["inputs"]["seed"] == 123
+    assert workflow["1"]["inputs"]["noise_seed"] == 123
+    assert workflow["2"]["inputs"]["width"] == 768
+    assert workflow["3"]["inputs"]["height"] == 512
+    assert workflow["4"]["inputs"]["steps"] == 10
+    assert workflow["5"]["inputs"]["cfg"] == 3.0
+    assert workflow["6"]["inputs"]["sampler_name"] == "euler"
+    assert workflow["7"]["inputs"]["scheduler"] == "sgm_uniform"
+    assert workflow["8"]["inputs"]["denoise"] == 0.5
+    assert workflow["9"]["inputs"]["ckpt_name"] == "ck.safetensors"
+    assert workflow["10"]["inputs"]["text"] == "a cat"
+    assert workflow["11"]["inputs"]["text"] == "bad anatomy"
+
+
+def test_nous_negative_prompt_default_when_empty():
+    """NOUS:negative_prompt は空ならデフォルトプロンプトを使う"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider()
+    workflow = {"1": {"class_type": "CLIPTextEncode", "inputs": {}, "_meta": {"title": "NOUS:negative_prompt"}}}
+    provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
+    assert workflow["1"]["inputs"]["text"] == "lowres, bad anatomy, bad hands, text, error"
+
+
+def test_nous_reference_image_injects_filename():
+    """NOUS:reference_image はアップロード済みファイル名を注入する"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider()
+    workflow = {"1": {"class_type": "LoadImage", "inputs": {}, "_meta": {"title": "NOUS:reference_image"}}}
+    provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename="ref.png", seed=1)
+    assert workflow["1"]["inputs"]["image"] == "ref.png"
+
+
+def test_nous_reference_image_raises_without_image():
+    """NOUS:reference_image タグがあるのに参照画像が無ければ ValueError"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider()
+    workflow = {"1": {"class_type": "LoadImage", "inputs": {}, "_meta": {"title": "NOUS:reference_image"}}}
+    with pytest.raises(ValueError, match="参照画像がありません"):
+        provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
+
+
+def test_nous_lora_single_uses_tagged_node():
+    """LoRAが1件ならタグ付きノード自身に注入する"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(loras=[{"path": "char", "weight": 0.8}])
+    workflow = {
+        "4": {
+            "class_type": "LoraLoader",
+            "inputs": {"model": ["3", 0], "clip": ["3", 1]},
+            "_meta": {"title": "NOUS:lora"},
+        }
+    }
+    provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
+    inputs = workflow["4"]["inputs"]
+    assert inputs["lora_name"] == "char.safetensors"
+    assert inputs["strength_model"] == 0.8
+    assert inputs["strength_clip"] == 0.8
+    assert inputs["model"] == ["3", 0]
+    assert inputs["clip"] == ["3", 1]
+
+
+def test_nous_lora_chain_creates_nodes_and_remaps():
+    """LoRAが複数ならチェーンを構築し、参照を最終ノードへ張り替える"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(loras=[{"path": "a.safetensors", "weight": 1.0}, {"path": "b.safetensors", "weight": 0.5}])
+    workflow = {
+        "4": {
+            "class_type": "LoraLoader",
+            "inputs": {"model": ["3", 0], "clip": ["3", 1]},
+            "_meta": {"title": "NOUS:lora"},
+        },
+        "5": {"class_type": "KSampler", "inputs": {"model": ["4", 0], "positive": ["6", 0]}},
+        "6": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["4", 1]}},
+        "7": {"class_type": "VAEDecode", "inputs": {"samples": ["5", 0]}},
+    }
+    provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
+
+    # タグ付きノードはチェーン先頭（1つ目のLoRA）
+    assert workflow["4"]["inputs"]["lora_name"] == "a.safetensors"
+    assert workflow["4"]["inputs"]["strength_model"] == 1.0
+
+    # 新規ノード: max_id=7 なので "8"
+    new_id = "8"
+    assert new_id in workflow
+    assert workflow[new_id]["class_type"] == "LoraLoader"
+    assert workflow[new_id]["inputs"]["lora_name"] == "b.safetensors"
+    assert workflow[new_id]["inputs"]["strength_model"] == 0.5
+    assert workflow[new_id]["inputs"]["model"] == ["4", 0]
+    assert workflow[new_id]["inputs"]["clip"] == ["4", 1]
+
+    # タグ付きノード(4)の MODEL(0)/CLIP(1) 参照 → 最終ノード(8)
+    assert workflow["5"]["inputs"]["model"] == [new_id, 0]
+    assert workflow["6"]["inputs"]["clip"] == [new_id, 1]
+    # 無関係な参照は変わらない
+    assert workflow["7"]["inputs"]["samples"] == ["5", 0]
+
+
+def test_nous_lora_empty_config_leaves_node_untouched():
+    """LoRA設定が空ならタグ付きノードに手を加えない"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(loras=[])
+    workflow = {
+        "4": {
+            "class_type": "LoraLoader",
+            "inputs": {"model": ["3", 0], "clip": ["3", 1]},
+            "_meta": {"title": "NOUS:lora"},
+        }
+    }
+    provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
+    assert workflow["4"]["inputs"] == {"model": ["3", 0], "clip": ["3", 1]}
+    assert len(workflow) == 1
+
+
+def test_nous_lora_power_loader_slots():
+    """Power Lora Loader は lora_1..lora_5 スロットに注入する"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(loras=[{"path": "a", "weight": 1.0}, {"path": "b.safetensors", "weight": 0.3}])
+    workflow = {"9": {"class_type": "Power Lora Loader", "inputs": {}, "_meta": {"title": "NOUS:lora"}}}
+    provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
+    inputs = workflow["9"]["inputs"]
+    assert inputs["lora_1"] == ["a.safetensors", 1.0, 1.0]
+    assert inputs["lora_2"] == ["b.safetensors", 0.3, 0.3]
+    assert inputs["lora_3"] == ""
+    assert inputs["lora_4"] == ""
+    assert inputs["lora_5"] == ""
+
+
+def test_nous_lora_power_loader_empty_config_disables_all_slots():
+    """Power Lora Loader は LoRA 設定が空なら全スロットを無効化する"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(loras=[])
+    workflow = {"9": {"class_type": "Power Lora Loader", "inputs": {}, "_meta": {"title": "NOUS:lora"}}}
+    provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
+    inputs = workflow["9"]["inputs"]
+    assert all(inputs[f"lora_{i}"] == "" for i in range(1, 6))
+
+
+def test_nous_lora_unsupported_class_type_skipped():
+    """対応外の class_type の NOUS:lora タグはスキップされる"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(loras=[{"path": "a.safetensors", "weight": 1.0}])
+    workflow = {"1": {"class_type": "SomeOtherLoader", "inputs": {}, "_meta": {"title": "NOUS:lora"}}}
+    provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
+    assert workflow["1"]["inputs"] == {}
+
+
+def test_nous_no_tags_leaves_workflow_unchanged():
+    """NOUS:タグが無ければワークフローは変更されない"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider()
+    workflow = {
+        "1": {"class_type": "KSampler", "inputs": {"seed": 1}},
+        "2": {"class_type": "EmptyLatentImage", "inputs": {"width": 512}},
+    }
+    result = provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
+    assert result is workflow
+    assert workflow["1"]["inputs"] == {"seed": 1}
+
+
+@pytest.mark.asyncio
+async def test_generate_template_mode_injects_nous_tags(tmp_path):
+    """テンプレートモードで NOUS:タグが注入されて送信される"""
+    template = tmp_path / "template.json"
+    template.write_text(
+        json.dumps(
+            {
+                "3": {
+                    "class_type": "KSampler",
+                    "inputs": {
+                        "seed": 0,
+                        "steps": 5,
+                        "cfg": 1.0,
+                        "sampler_name": "x",
+                        "scheduler": "y",
+                        "denoise": 1.0,
+                        "model": ["4", 0],
+                        "positive": ["6", 0],
+                        "negative": ["7", 0],
+                        "latent_image": ["5", 0],
+                    },
+                    "_meta": {"title": "NOUS:seed"},
+                },
+                "4": {
+                    "class_type": "CheckpointLoaderSimple",
+                    "inputs": {"ckpt_name": "old.safetensors"},
+                    "_meta": {"title": "NOUS:checkpoint"},
+                },
+                "5": {
+                    "class_type": "EmptyLatentImage",
+                    "inputs": {"width": 512, "height": 512, "batch_size": 1},
+                    "_meta": {"title": "NOUS:width"},
+                },
+                "6": {
+                    "class_type": "CLIPTextEncode",
+                    "inputs": {"text": "x", "clip": ["4", 1]},
+                    "_meta": {"title": "NOUS:prompt"},
+                },
+                "7": {
+                    "class_type": "CLIPTextEncode",
+                    "inputs": {"text": "x", "clip": ["4", 1]},
+                    "_meta": {"title": "NOUS:negative_prompt"},
+                },
+                "8": {"class_type": "VAEDecode", "inputs": {"samples": ["3", 0], "vae": ["4", 2]}},
+                "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "x", "images": ["8", 0]}},
+            },
+            ensure_ascii=False,
+        )
+    )
+
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = MagicMock()
+        post_resp = MagicMock()
+        post_resp.status_code = 200
+        post_resp.json.return_value = {"prompt_id": "nous-id"}
+        completed_hist = MagicMock()
+        completed_hist.json.return_value = {
+            "nous-id": {"outputs": {"9": {"images": [{"filename": "o.png", "type": "output"}]}}}
+        }
+        img_resp = MagicMock()
+        img_resp.status_code = 200
+        img_resp.content = b"png"
+        mock_client.post = AsyncMock(return_value=post_resp)
+        mock_client.get = AsyncMock(side_effect=[completed_hist, img_resp])
+        mock_client_class.return_value = mock_client
+
+        from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+        provider = ComfyUIProvider(
+            api_url="http://localhost:8188",
+            workflow_template=str(template),
+            checkpoint="new.safetensors",
+            width=1024,
+            height=2048,
+            seed=123,
+        )
+        with patch("asyncio.sleep", new=AsyncMock(return_value=None)):
+            await provider.generate(prompt="a cat", n=1)
+
+        sent = mock_client.post.call_args[1]["json"]["prompt"]
+        assert sent["3"]["inputs"]["seed"] == 123
+        assert sent["3"]["inputs"]["noise_seed"] == 123
+        assert sent["4"]["inputs"]["ckpt_name"] == "new.safetensors"
+        assert sent["5"]["inputs"]["width"] == 1024
+        assert sent["6"]["inputs"]["text"] == "a cat"
+        assert sent["7"]["inputs"]["text"] == "lowres, bad anatomy, bad hands, text, error"
+
+
+@pytest.mark.asyncio
+async def test_generate_template_mode_legacy_placeholders(tmp_path):
+    """レガシー {{placeholder}} 置換が引き続き動作する"""
+    template = tmp_path / "template.json"
+    template.write_text(
+        json.dumps(
+            {
+                "3": {"class_type": "KSampler", "inputs": {"seed": "{{seed}}", "model": ["4", 0]}},
+                "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "x.safetensors"}},
+                "5": {"class_type": "EmptyLatentImage", "inputs": {"width": "{{width}}", "height": "{{height}}"}},
+                "6": {"class_type": "CLIPTextEncode", "inputs": {"text": "{{prompt}}"}},
+                "7": {"class_type": "CLIPTextEncode", "inputs": {"text": "{{negative_prompt}}"}},
+            },
+            ensure_ascii=False,
+        )
+    )
+
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = MagicMock()
+        post_resp = MagicMock()
+        post_resp.status_code = 200
+        post_resp.json.return_value = {"prompt_id": "legacy-id"}
+        completed_hist = MagicMock()
+        completed_hist.json.return_value = {
+            "legacy-id": {"outputs": {"9": {"images": [{"filename": "o.png", "type": "output"}]}}}
+        }
+        img_resp = MagicMock()
+        img_resp.status_code = 200
+        img_resp.content = b"png"
+        mock_client.post = AsyncMock(return_value=post_resp)
+        mock_client.get = AsyncMock(side_effect=[completed_hist, img_resp])
+        mock_client_class.return_value = mock_client
+
+        from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+        provider = ComfyUIProvider(
+            api_url="http://localhost:8188",
+            workflow_template=str(template),
+            seed=42,
+            width=768,
+            height=640,
+        )
+        with patch("asyncio.sleep", new=AsyncMock(return_value=None)):
+            await provider.generate(prompt="hello", n=1)
+
+        sent = mock_client.post.call_args[1]["json"]["prompt"]
+        assert sent["3"]["inputs"]["seed"] == "42"
+        assert sent["5"]["inputs"]["width"] == "768"
+        assert sent["5"]["inputs"]["height"] == "640"
+        assert sent["6"]["inputs"]["text"] == "hello"
+        assert sent["7"]["inputs"]["text"] == "lowres, bad anatomy, bad hands, text, error"
