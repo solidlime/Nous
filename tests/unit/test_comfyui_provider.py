@@ -23,7 +23,7 @@ async def test_health_check_returns_true_when_comfyui_responds():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
         result = await provider.health_check()
 
         assert result is True
@@ -40,7 +40,7 @@ async def test_health_check_returns_false_on_connection_error():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
         result = await provider.health_check()
 
         assert result is False
@@ -58,7 +58,7 @@ async def test_health_check_returns_false_on_non_200():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
         result = await provider.health_check()
 
         assert result is False
@@ -108,7 +108,7 @@ async def test_generate_submits_workflow_and_returns_images():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
         with patch("asyncio.sleep", new=AsyncMock(return_value=None)):
             images = await provider.generate(prompt="a cute cat", size="512x512", n=1)
 
@@ -154,7 +154,7 @@ async def test_generate_retries_on_connection_error():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
         with patch("asyncio.sleep", new=AsyncMock(return_value=None)):
             await provider.generate(prompt="test", n=1)
 
@@ -171,7 +171,7 @@ async def test_generate_raises_on_all_retries_fail():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
 
         with pytest.raises(RuntimeError, match="ComfyUI generation failed after retries"):
             await provider.generate(prompt="test", n=1)
@@ -199,7 +199,7 @@ async def test_generate_times_out_after_180s():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
 
         with (
             patch("asyncio.sleep", new=AsyncMock(return_value=None)),
@@ -242,7 +242,7 @@ async def test_generate_multiple_images():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188")
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
         with patch("asyncio.sleep", new=AsyncMock(return_value=None)):
             images = await provider.generate(prompt="test", n=2)
 

@@ -44,6 +44,10 @@ output/
 # Data runtime (allow: .gitkeep, SKILL.md, seed settings)
 data/*/
 data/_tmp/
+# workflows: ship default template, allow user overrides
+!data/workflows/
+data/workflows/*
+!data/workflows/default_node.json
 !data/*.zip
 # searxng: allow only .gitkeep (settings.yml auto-generated on first docker-compose up)
 !data/searxng/
