@@ -191,31 +191,17 @@ def _render_image_section() -> str:
                                                 <div class="chat-field-label" style="font-size:0.78rem;">乱数シード（0=ランダム）</div>
                                                 <input type="number" id="chat-image-gen-seed" class="chat-field-input" value="0" min="0" style="width:100%;" />
                                             </div>
-                                            <div style="display:none;">
-                                                <select id="chat-image-gen-speed-lora-method"><option value="">使用しない</option><option value="lcm">LCM</option><option value="lightning">Lightning</option><option value="hyper">Hyper-SD</option><option value="tcd">TCD</option></select>
-                                                <input type="text" id="chat-image-gen-speed-lora-path" />
-                                                <input type="number" id="chat-image-gen-speed-lora-weight" value="1.0" />
-                                            </div>
                                         </div>
                                     </details>
-                                    <!-- Generation mode: t2i / i2i -->
-                                    <div style="margin-top:10px;">
-                                        <div class="chat-field-label" style="font-size:0.82rem;margin-bottom:4px;">生成モード</div>
-                                        <select id="chat-image-gen-mode" class="chat-field-input" style="width:100%;"
-                                            onchange="document.getElementById('chat-image-gen-ref-upload').style.display=this.value==='i2i'?'block':'none'">
-                                            <option value="t2i">テキスト→画像 (t2i)</option>
-                                            <option value="i2i">画像→画像 (i2i)</option>
-                                        </select>
-                                    </div>
                                     <!-- workflow template path -->
                                     <div style="margin-top:8px;">
-                                        <div class="chat-field-label" style="font-size:0.78rem;">ワークフローテンプレート（空=動的構築）</div>
+                                        <div class="chat-field-label" style="font-size:0.78rem;">ワークフローテンプレート（必須）</div>
                                         <input type="text" id="chat-image-gen-template" class="chat-field-input"
                                             placeholder="例: /data/workflows/pony_ipadapter.json"
                                             style="width:100%;font-size:0.78rem;" />
                                     </div>
-                                    <!-- Reference image upload (shown only in i2i mode) -->
-                                    <div id="chat-image-gen-ref-upload" style="display:none;margin-top:8px;">
+                                    <!-- Reference image upload (i2i fixed — always shown) -->
+                                    <div id="chat-image-gen-ref-upload" style="margin-top:8px;">
                                         <div class="chat-field-label" style="font-size:0.82rem;margin-bottom:4px;">参照画像</div>
                                         <input type="file" id="chat-image-gen-ref-file" accept="image/*"
                                             style="font-size:0.78rem;width:100%;margin-bottom:4px;" />

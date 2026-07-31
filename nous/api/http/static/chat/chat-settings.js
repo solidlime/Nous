@@ -268,9 +268,6 @@ function applyChatConfig(cfg) {
   set("chat-image-gen-scheduler", cfg.image_gen_comfyui_scheduler);
   set("chat-image-gen-seed", cfg.image_gen_comfyui_seed);
   set("chat-image-gen-denoise", cfg.image_gen_comfyui_denoise);
-  set("chat-image-gen-speed-lora-method", cfg.image_gen_comfyui_speed_lora_method);
-  set("chat-image-gen-speed-lora-path", cfg.image_gen_comfyui_speed_lora_path);
-  set("chat-image-gen-speed-lora-weight", cfg.image_gen_comfyui_speed_lora_weight);
   set("chat-image-gen-self-portrait-prompt", cfg.image_gen_self_portrait_prompt);
   set("chat-image-gen-negative-prompt", cfg.image_gen_negative_prompt || "");
   var templateInput = document.getElementById("chat-image-gen-template");
@@ -293,18 +290,9 @@ function applyChatConfig(cfg) {
       loras.forEach(function(l) { N.Chat.settings.addLoraRow(l.path, l.weight); });
     } catch(e) { console.error('LoRA JSON parse error:', e); }
   }
-  // Image generation mode
-  var imageGenMode = document.getElementById("chat-image-gen-mode");
-  if (imageGenMode) {
-    imageGenMode.value = cfg.image_gen_mode || "t2i";
-  }
-  var refUpload = document.getElementById("chat-image-gen-ref-upload");
-  if (refUpload && imageGenMode) {
-    refUpload.style.display = imageGenMode.value === "i2i" ? "block" : "none";
-  }
-  // Load reference image thumbnail if i2i mode
+  // Load reference image thumbnail (i2i fixed — always shown)
   var refThumb = document.getElementById("chat-image-gen-ref-thumb");
-  if (refThumb && imageGenMode.value === "i2i") {
+  if (refThumb) {
     var persona = window.N?.Chat?.persona || document.querySelector("[data-persona]")?.dataset?.persona || "default";
     refThumb.src = "/api/chat/" + persona + "/persona/images/reference.png";
     refThumb.style.display = "block";
@@ -501,9 +489,6 @@ async function saveChatConfig() {
     image_gen_comfyui_scheduler: document.getElementById("chat-image-gen-scheduler")?.value || "normal",
     image_gen_comfyui_seed: parseInt(document.getElementById("chat-image-gen-seed")?.value || "0"),
     image_gen_comfyui_denoise: parseFloat(document.getElementById("chat-image-gen-denoise")?.value || "0.7"),
-    image_gen_comfyui_speed_lora_method: document.getElementById("chat-image-gen-speed-lora-method")?.value || "",
-    image_gen_comfyui_speed_lora_path: document.getElementById("chat-image-gen-speed-lora-path")?.value || "",
-    image_gen_comfyui_speed_lora_weight: parseFloat(document.getElementById("chat-image-gen-speed-lora-weight")?.value || "1.0"),
     image_gen_comfyui_loras: JSON.stringify(N.Chat.settings.collectLoraRows()),
     image_gen_self_portrait_prompt: document.getElementById("chat-image-gen-self-portrait-prompt")?.value || "",
     image_gen_negative_prompt: document.getElementById("chat-image-gen-negative-prompt")?.value || "",
@@ -517,7 +502,6 @@ async function saveChatConfig() {
       return p;
     })(),
     image_gen_default_preset: document.getElementById("chat-image-gen-default-preset")?.value || "square_medium",
-    image_gen_mode: document.getElementById("chat-image-gen-mode")?.value || "t2i",
     image_gen_comfyui_workflow_template: document.getElementById("chat-image-gen-template")?.value || "",
     // Voice / TTS settings (TE04)
     voice_url: document.getElementById("chat-voice-url")?.value || "",
