@@ -116,6 +116,7 @@ async def test_generate_submits_workflow_and_returns_images():
         assert images[0].size == "512x512"
         assert images[0].revised_prompt == "a cute cat"
         assert len(images[0].base64) > 0
+        assert images[0].display is True
 
         # POST /prompt が正しく呼ばれたことを確認
         post_call = mock_client.post.call_args
@@ -603,6 +604,8 @@ async def test_generate_template_mode_injects_nous_tags(tmp_path):
         assert len(images) == 1
         assert images[0].node_id == "9"
         assert images[0].node_title == "main_out"
+        # NOUS:display タグ無し → 全画像 display=True
+        assert images[0].display is True
 
 
 @pytest.mark.asyncio
@@ -752,3 +755,208 @@ def test_sanitize_node_title():
     assert _sanitize_node_title("Main Output!") == "Main_Output"
     assert _sanitize_node_title("already-snake_case") == "already-snake_case"
     assert len(_sanitize_node_title("x" * 100)) == 32
+
+
+# ============================================================
+# NOUS:display node filtering tests
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_generate_template_mode_display_filters_outputs(tmp_path):
+    """NOUS:display タグ付きノードの出力のみ display=True になる（前後空白も許容）"""
+    template = tmp_path / "template.json"
+    template.write_text(
+        json.dumps(
+            {
+                "3": {"class_type": "KSampler", "inputs": {"seed": 1, "model": ["4", 0]}},
+                "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "x.safetensors"}},
+                "9": {
+                    "class_type": "SaveImage",
+                    "inputs": {"images": ["3", 0]},
+                    "_meta": {"title": " NOUS:display "},
+                },
+                "10": {"class_type": "SaveImage", "inputs": {"images": ["3", 0]}},
+            },
+            ensure_ascii=False,
+        )
+    )
+
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = MagicMock()
+        post_resp = MagicMock()
+        post_resp.status_code = 200
+        post_resp.json.return_value = {"prompt_id": "disp-id"}
+        completed_hist = MagicMock()
+        completed_hist.json.return_value = {
+            "disp-id": {
+                "outputs": {
+                    "9": {"images": [{"filename": "a.png", "type": "output"}]},
+                    "10": {"images": [{"filename": "b.png", "type": "output"}]},
+                }
+            }
+        }
+        img_resp = MagicMock()
+        img_resp.status_code = 200
+        img_resp.content = b"png"
+        mock_client.post = AsyncMock(return_value=post_resp)
+        mock_client.get = AsyncMock(side_effect=[completed_hist, img_resp, img_resp])
+        mock_client_class.return_value = mock_client
+
+        from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template=str(template))
+        with patch("asyncio.sleep", new=AsyncMock(return_value=None)):
+            images = await provider.generate(prompt="a cat", n=4)
+
+        assert len(images) == 2
+        assert images[0].node_id == "9"
+        assert images[0].display is True
+        assert images[1].node_id == "10"
+        assert images[1].display is False
+
+
+@pytest.mark.asyncio
+async def test_generate_template_mode_display_title_prefix_not_matched(tmp_path):
+    """NOUS:display 以外の NOUS: タグ付きノードは表示フィルタ対象にならない"""
+    template = tmp_path / "template.json"
+    template.write_text(
+        json.dumps(
+            {
+                "3": {"class_type": "KSampler", "inputs": {"seed": 1, "model": ["4", 0]}},
+                "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "x.safetensors"}},
+                "9": {"class_type": "SaveImage", "inputs": {"images": ["3", 0]}, "_meta": {"title": "NOUS:displayx"}},
+            },
+            ensure_ascii=False,
+        )
+    )
+
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = MagicMock()
+        post_resp = MagicMock()
+        post_resp.status_code = 200
+        post_resp.json.return_value = {"prompt_id": "disp-id2"}
+        completed_hist = MagicMock()
+        completed_hist.json.return_value = {
+            "disp-id2": {"outputs": {"9": {"images": [{"filename": "a.png", "type": "output"}]}}}
+        }
+        img_resp = MagicMock()
+        img_resp.status_code = 200
+        img_resp.content = b"png"
+        mock_client.post = AsyncMock(return_value=post_resp)
+        mock_client.get = AsyncMock(side_effect=[completed_hist, img_resp])
+        mock_client_class.return_value = mock_client
+
+        from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template=str(template))
+        with patch("asyncio.sleep", new=AsyncMock(return_value=None)):
+            images = await provider.generate(prompt="a cat", n=1)
+
+        assert len(images) == 1
+        assert images[0].display is True
+
+
+@pytest.mark.asyncio
+async def test_poll_result_display_none_means_all_true():
+    """display_node_ids=None → 全画像 display=True（後方互換）"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(api_url="http://localhost:8188")
+    hist = _FakeResp({"pid": {"outputs": {"9": {"images": [{"filename": "a.png", "type": "output"}]}}}})
+    fake_client = MagicMock()
+    fake_client.get = AsyncMock(side_effect=[hist, _FakeResp(b"png")])
+    provider._client = fake_client
+
+    images = await provider._poll_result("pid", prompt="c", size="512x512", n=1)
+    assert images[0].display is True
+
+
+@pytest.mark.asyncio
+async def test_poll_result_display_filters_by_node_ids():
+    """display_node_ids に含まれないノード出力は display=False"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(api_url="http://localhost:8188")
+    hist = _FakeResp(
+        {
+            "pid": {
+                "outputs": {
+                    "9": {"images": [{"filename": "a.png", "type": "output"}]},
+                    "10": {"images": [{"filename": "b.png", "type": "output"}]},
+                }
+            }
+        }
+    )
+    fake_client = MagicMock()
+    fake_client.get = AsyncMock(side_effect=[hist, _FakeResp(b"png"), _FakeResp(b"png")])
+    provider._client = fake_client
+
+    images = await provider._poll_result("pid", prompt="c", size="512x512", n=4, display_node_ids={"9"})
+    assert images[0].display is True
+    assert images[1].display is False
+
+
+@pytest.mark.asyncio
+async def test_poll_result_display_no_match_falls_back_all(caplog):
+    """display_node_ids が出力ノードと一致しない場合は全表示にフォールバックして警告"""
+    import logging
+
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    caplog.set_level(logging.WARNING)
+    provider = ComfyUIProvider(api_url="http://localhost:8188")
+    hist = _FakeResp({"pid": {"outputs": {"9": {"images": [{"filename": "a.png", "type": "output"}]}}}})
+    fake_client = MagicMock()
+    fake_client.get = AsyncMock(side_effect=[hist, _FakeResp(b"png")])
+    provider._client = fake_client
+
+    images = await provider._poll_result("pid", prompt="c", size="512x512", n=1, display_node_ids={"99"})
+    assert images[0].display is True
+    assert "NOUS:display" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_builtin_image_generate_skips_non_display_images(tmp_path, monkeypatch):
+    """display=False の画像は保存もレスポンスにも含まれない"""
+    from nous.application.chat.tools.builtin import _handle_image_generate
+    from nous.infrastructure.image_gen.base import GeneratedImage
+
+    ctx = MagicMock()
+    ctx.persona = "test_persona"
+    ctx.event_bus = AsyncMock()
+
+    config = MagicMock()
+    config.image_gen_enabled = True
+    config.image_gen_mode = "t2i"
+    config.image_gen_presets = {}
+    config.image_gen_default_preset = "square_medium"
+    config.image_gen_max_width = 1200
+    config.image_gen_max_height = 1200
+    config.image_gen_negative_prompt = ""
+    config.image_gen_comfyui_loras = ""
+    config.image_gen_comfyui_url = "http://localhost:8188"
+
+    settings = MagicMock()
+    settings.data_root = str(tmp_path)
+    monkeypatch.setattr("nous.config.settings.get_settings", lambda: settings)
+
+    generated = [
+        GeneratedImage(base64="aGVsbG8=", revised_prompt="p", size="768x768", display=True),
+        GeneratedImage(base64="d29ybGQ=", revised_prompt="p", size="768x768", display=False),
+        GeneratedImage(base64="IQ==", revised_prompt="p", size="768x768", display=True),
+    ]
+    fake_provider = MagicMock()
+    fake_provider.generate = AsyncMock(return_value=generated)
+    monkeypatch.setattr("nous.infrastructure.image_gen.comfyui.ComfyUIProvider", lambda **kw: fake_provider)
+
+    result = await _handle_image_generate(ctx, config, {"prompt": "a cat"})
+
+    assert result["status"] == "success"
+    assert len(result["images"]) == 2
+    assert result["images"][0]["base64"] == "aGVsbG8="
+    assert result["images"][1]["base64"] == "IQ=="
+    saved = sorted((tmp_path / "persona" / "test_persona" / "images").glob("*.png"))
+    assert len(saved) == 2
+    assert saved[0].name.endswith("_00.png")
+    assert saved[1].name.endswith("_01.png")

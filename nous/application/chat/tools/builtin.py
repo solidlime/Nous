@@ -343,13 +343,16 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
 
         # 結果を構築
         images_data = []
-        for idx, img in enumerate(generated):
+        saved_idx = 0
+        for img in generated:
+            if not getattr(img, "display", True):
+                continue  # NOUS:display 対象外ノードの出力は保存しない
             # ディスクに保存
             img_bytes = base64.b64decode(img.base64)
             prefix = "self_" if self_portrait else ""
             node_part = _sanitize_node_title(img.node_title)
             filename = (
-                f"{prefix}{node_part}_{timestamp}_{idx:02d}.png" if node_part else f"{prefix}{timestamp}_{idx:02d}.png"
+                f"{prefix}{node_part}_{timestamp}_{saved_idx:02d}.png" if node_part else f"{prefix}{timestamp}_{saved_idx:02d}.png"
             )
             img_path = images_dir / filename
             img_path.write_bytes(img_bytes)
@@ -364,6 +367,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
                 "node_id": getattr(img, "node_id", None),
                 "node_title": getattr(img, "node_title", None),
             })
+            saved_idx += 1
 
         # 結果イベントを送信（event_busは使われていないが後方互換のため残す）
         if hasattr(ctx, "event_bus") and ctx.event_bus is not None:

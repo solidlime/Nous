@@ -15,6 +15,7 @@ class GeneratedImage:
     negative_prompt: str = ""  # ネガティブプロンプト（未指定時はプロバイダ標準値）
     node_id: str | None = None  # 出力ノードID (ComfyUI history outputs key)
     node_title: str | None = None  # 出力ノードのタイトル (_meta.title)
+    display: bool = True  # NOUS:display タグによる表示対象か（False は保存・表示しない）
 
 
 @dataclass

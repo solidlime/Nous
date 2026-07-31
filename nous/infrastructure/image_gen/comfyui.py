@@ -146,6 +146,16 @@ class ComfyUIProvider(ImageGenProvider):
             except Exception:
                 pass
 
+            # NOUS:display タグ: 表示対象ノードIDの収集（タイトルが完全一致のみ・前後空白許容）
+            display_node_ids: set[str] = set()
+            try:
+                for nid, node in workflow.items():
+                    title = (node.get("_meta") or {}).get("title")
+                    if title and str(title).strip() == "NOUS:display":
+                        display_node_ids.add(str(nid))
+            except Exception:
+                pass
+
             # NOUS: タグ注入（ノードの _meta.title ベース）
             workflow = self._apply_nous_injections(
                 workflow,
@@ -158,13 +168,20 @@ class ComfyUIProvider(ImageGenProvider):
             # 動的ビルドモード（従来通り）
             workflow = self._build_workflow(prompt, size, n, image_filename=image_filename, negative_prompt=negative_prompt)
             node_titles = {}
+            display_node_ids = set()
 
         # POST /prompt — 最大 2 回リトライ
         prompt_id = await self._submit_workflow(workflow)
 
         # Poll /history — 最大 180 秒
         return await self._poll_result(
-            prompt_id, prompt, size, n, negative_prompt=negative_prompt, node_titles=node_titles
+            prompt_id,
+            prompt,
+            size,
+            n,
+            negative_prompt=negative_prompt,
+            node_titles=node_titles,
+            display_node_ids=display_node_ids or None,  # 空集合は None（フィルタ無効・全表示）
         )
 
     async def _upload_reference_image(self, image_bytes: bytes) -> str:
@@ -205,10 +222,10 @@ class ComfyUIProvider(ImageGenProvider):
         if not tagged:
             return workflow
 
-        # 単純なキー注入（LoRA 以外）
+        # 単純なキー注入（LoRA 以外。display は表示フィルタ用なので注入対象外）
         for _, node, tag in tagged:
             key = tag[len("NOUS:"):]
-            if key != "lora":
+            if key not in ("lora", "display"):
                 self._inject_nous_key(
                     node, key, prompt=prompt, negative_prompt=negative_prompt, image_filename=image_filename, seed=seed
                 )
@@ -379,8 +396,12 @@ class ComfyUIProvider(ImageGenProvider):
         n: int,
         negative_prompt: str = "",
         node_titles: dict[str, str] | None = None,
+        display_node_ids: set[str] | None = None,
     ) -> list[GeneratedImage]:
-        """履歴をポーリングして生成画像を取得（最大 60 回 × 3s = 180s）。"""
+        """履歴をポーリングして生成画像を取得（最大 60 回 × 3s = 180s）。
+
+        display_node_ids が None の場合は全画像 display=True（後方互換）。
+        """
         for _ in range(60):
             await asyncio.sleep(3)
             try:
@@ -393,6 +414,19 @@ class ComfyUIProvider(ImageGenProvider):
                 continue
 
             outputs = hist[prompt_id].get("outputs", {})
+            if not outputs:
+                continue
+
+            # NOUS:display 指定ノードが出力画像を一切生成しなかった場合は
+            # 全画像を表示にフォールバック（黙って全部捨てる事故を防ぐ）
+            fallback_all = False
+            if display_node_ids and not any(str(nid) in display_node_ids for nid in outputs):
+                logger.warning(
+                    "NOUS:display ノード %s が出力画像を生成しなかったため全画像を表示します",
+                    sorted(display_node_ids),
+                )
+                fallback_all = True
+
             images: list[GeneratedImage] = []
             for node_id, output in outputs.items():
                 for img in output.get("images", []):
@@ -412,6 +446,7 @@ class ComfyUIProvider(ImageGenProvider):
                                 negative_prompt=negative_prompt,
                                 node_id=nid,
                                 node_title=(node_titles or {}).get(nid),
+                                display=fallback_all or display_node_ids is None or nid in display_node_ids,
                             )
                         )
                     except Exception:
