@@ -121,7 +121,7 @@ class ComfyUIProvider(ImageGenProvider):
                 raise FileNotFoundError(f"Workflow template not found: {template_path}")
 
             template_json = template_path.read_text(encoding="utf-8")
-            seed = self._seed if self._seed != 0 else random.randint(1, 2**31 - 1)
+            seed = self._seed if self._seed != 0 else random.randint(1, 2**63 - 1)
 
             # レガシー {{placeholder}} 置換（後方互換・プレースホルダがある場合のみ）
             if "{{" in template_json:
