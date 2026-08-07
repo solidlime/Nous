@@ -127,6 +127,24 @@ class TestUpdateContext:
             mock_reg_cls.get.return_value = ctx
             result = await update_context()
         assert "No changes" in result
+        ctx.persona_service.record_conversation_time.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_update_records_conversation_time(self, registered_tools):
+        """自発的更新（context_note/relationship 等）は最終接触時刻を記録する。"""
+        tools, ctx, _ = registered_tools
+        ctx.persona_service.update_relationship.return_value = Success(None)
+        ctx.persona_service.update_persona_info.return_value = Success(None)
+        update_context = tools["update_context"]
+        with (
+            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
+            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
+        ):
+            mock_reg_cls.get.return_value = ctx
+            result = await update_context(relationship_status="friends", context_note="会話中")
+        assert "relationship=friends" in result
+        ctx.persona_service.record_conversation_time.assert_called_once_with("test_persona")
+
 
     @pytest.mark.asyncio
     async def test_update_relationship_status(self, registered_tools):

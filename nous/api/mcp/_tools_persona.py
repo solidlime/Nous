@@ -208,6 +208,8 @@ async def _tool_update_context(
 
     if not updated:
         return {"ok": True, "result": "No changes made (all parameters were None)"}
+    # 状態の自発的更新 = ユーザーとの接触として最終接触時刻を記録
+    ctx.persona_service.record_conversation_time(persona)
     await ctx.event_bus.publish(
         "context.updated",
         {

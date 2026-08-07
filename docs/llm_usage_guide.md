@@ -168,6 +168,7 @@ search_memory(query="user info", importance_weight=0.3, min_importance=0.6)
 ## 4. Updating Context / コンテキスト更新
 
 Call `update_context()` whenever the user's emotional or physical state changes in the conversation.
+Any successful update records the current time as the last conversation time (contact time).
 
 ### Emotion updates
 
