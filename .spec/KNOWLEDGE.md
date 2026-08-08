@@ -180,3 +180,28 @@
 - TreeSessionWindow は SessionWindow と一時的に並存（全移行完了後に削除）
 - post.py の episode_consolidation（L88）が session._messages 直参照 → TreeSessionWindow 移行時に要修正
 - DoneSSE に user_msg_id / assistant_msg_id 追加でフロントエンドとメッセージID同期
+
+---
+
+## Thinking トグル実装の教訓（2026-08-08）
+
+### reasoning effort のプロバイダ変換
+- 統一規格は存在しない。OpenAI 系デファクト `reasoning_effort` / `reasoning: {effort}` の値セット（none〜max）がほぼ共有されるが、Anthropic は budget_tokens 予算方式、Gemini は thinkingLevel。
+- **設計判断**: 設定は統一 4 段階（low/medium/high/max）+ on/off を保持し、プロバイダ実装側で各 API 形式に変換するのが正解。UI と設定値はプロバイダ非依存に保つ。
+- Anthropic の thinking budget_tokens は 1024 未満不可 → effort マップは全値 2048 以上に。
+
+### OpenAICompatProvider の base_url 保存
+- `self.base_url` が保存されておらず、OpenRouter 判定（`"openrouter" in base_url`）ができなかった。__init__ で保存するのが地味に重要。
+
+### テスト環境の落とし穴
+- `.venv/bin/python` には openai/anthropic が無い（ModuleNotFoundError）。システム python3（rtk pytest）にはある。**テスト実行は必ずシステム python3（rtk pytest）で**。
+- 新フィールド追加時の回帰確認: 既存テスト 12 failed は全て既存起因（stash 比較で切り分け）。TestChatConfigRepository は実環境 config 干渉、TestDynamicTemperatureInference は debug_mode MagicMock → /data 書き込み PermissionError。
+
+### UI 実装パターン（踏襲）
+- 動的温度調整チェックボックス + 感情温度スライダーの既存パターン（checkbox で slider.disabled 制御 + oninput でラベル同期）をそのまま踏襲 → 統一感が保たれ、レビューも楽。
+- updateSliderLabels の実体は chat-settings-image.js にあった（chat-settings.js ではない）。`N.Chat.settings.updateSliderLabels` を追うときは注意。
+
+### ブラウザ実機確認（puppeteer）
+- リモートブラウザからは localhost 不可 → Tailscale IP（100.112.180.92:26262）経由。headless:true + --no-sandbox + allowDangerous:true 必須。
+- タブ切替は `[data-tab]` の可視ボタン（2セットあり、visible の方をクリック）。#tab-chat の click() は active クラスを付与しない（別要素がナビ）。
+- 保存フロー検証: fetch フックで payload キャプチャ → API GET でサーバー反映確認 → リロード復元確認の 3 段。検証後は config を元の値に戻すこと。

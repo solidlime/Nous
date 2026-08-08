@@ -77,3 +77,15 @@
 
 ## テストモデル: openrouter/free (2026-07-22)
 - 特定モデル固定ではなく `openrouter/free` 自動ルーティング（無料モデルは予告なく終了するため）。
+
+## Thinking トグル + effort 設定 (2026-08-08)
+- **commits**: 1b366af（BE+テスト）, b575067（UI）, 19d5a8b（docs）
+- **背景**: チャット LLM の thinking on/off トグル + ヴァリアント（effort）スライダー。SPEC: `.spec/SPEC-thinking-toggle.md`
+- **設計**: 設定は統一 4 段階 effort（low/medium/high/max）+ on/off を保持し、プロバイダ実装側で変換（OpenRouter: `reasoning:{effort}` / OpenAI: `reasoning_effort` / Anthropic: budget_tokens 2048-16384）
+- **検証**: 新規テスト 17 passed。ブラウザ実機確認（puppeteer/Tailscale IP）でトグル・スライダー・保存・リロード復元すべて確認
+
+### 教訓
+1. **テストはシステム python3（rtk pytest）で実行**: `.venv/bin/python` には openai/anthropic が無い（ModuleNotFoundError）。システム python3 には openai 2.44.0 / anthropic 0.116.0 がある。
+2. **ブラウザ実機確認のパターン**: リモートブラウザからは localhost 不可 → Tailscale IP（100.112.180.92:26262）+ headless + --no-sandbox + allowDangerous。タブ切替は `[data-tab]` の可視ボタンをクリック（#tab-chat 直クリックは active にならない場合あり）。保存フローは fetch フックで payload 確認 → API GET でサーバー反映確認 → リロード復元確認。
+3. **UI 新設定の実装は既存パターン踏襲**: 動的温度調整（checkbox + slider.disabled + oninput ラベル同期）の踏襲で統一感を保つ。updateSliderLabels の実体は chat-settings-image.js（chat-settings.js ではない）。
+4. **ブラウザ検証で書き換えた persona config は検証後に元に戻す**（API POST で復元）。

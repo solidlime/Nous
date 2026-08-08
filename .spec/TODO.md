@@ -56,3 +56,30 @@
 - [ ] P3-2 R1: config スキーマ拡張（S）
 - [ ] P3-2 R2+R3: CSS 背景画像 + 設定 UI（M → #057 designer）
 - [ ] P3-2 R4+R5+R6: 立ち絵 DOM + アニメ + API（M → #057 designer）
+
+---
+
+## Thinking トグル + effort 設定（2026-08-08）✅ 完了
+
+> SPEC: `.spec/SPEC-thinking-toggle.md`。要望: チャット LLM の thinking on/off トグル + ヴァリアント（effort）スライダー
+
+- [x] R1: ProviderConfig に `reasoning_enabled` / `reasoning_effort` 追加（バリデータ付き）
+- [x] R2: `stream()` に `reasoning_effort` 引数追加（後方互換: 既定 None）
+- [x] R3: OpenAICompatProvider — OpenRouter は `reasoning:{effort}`、他は `reasoning_effort` 送信
+- [x] R4: AnthropicProvider — effort→budget_tokens（low=2048/medium=4096/high=8192/max=16384）で `thinking` 有効化
+- [x] R6: inference.py から config 値伝播
+- [x] R7: 設定パネルに「思考モード（Reasoning）」チェックボックス + 4 段階スライダー（OFF 時 disabled）
+- [x] R8: chat-settings.js apply/save 対応（ChatConfig Facade がフラット自動保存）
+- [x] R9: テスト追加（test_provider_config.py / test_llm_reasoning.py 新規 + 既存追記）
+
+### 検証
+- [x] V1/V2: 新規 17 passed。既存 158 passed / 12 failed（全て既存起因、stash 比較で確認済み）
+- [x] V3: ruff 対象ファイル All checks passed
+- [x] V5: ブラウザ実機確認（puppeteer）: トグル ON/OFF・スライダー disabled 制御・ラベル同期（low/high/max）・保存→API 反映（true/high）・リロード復元 すべて確認
+
+### コミット
+| コミット | 内容 |
+|----------|------|
+| `1b366af` | feat(llm): reasoning_effort バックエンド実装 + テスト |
+| `b575067` | feat(ui): 思考モードトグル + effort スライダー |
+| `19d5a8b` | docs: llm_usage_guide に Reasoning セクション追加 |
