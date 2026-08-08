@@ -129,6 +129,7 @@ function safeMarkdown(text) {
           "td",
           "span",
           "img",
+          "input",
         ],
         ALLOWED_ATTR: [
           "href",
@@ -139,6 +140,10 @@ function safeMarkdown(text) {
           "alt",
           "width",
           "height",
+          "type",
+          "checked",
+          "disabled",
+          "class",
         ],
       });
       // Restore code blocks (renderCodeBlock output is already escaped/safe)
@@ -148,6 +153,19 @@ function safeMarkdown(text) {
           block,
         );
       });
+      // Post-process: add task-list classes to ul/li containing checkbox inputs
+      // (marked does not emit these classes in this environment)
+      sanitized = sanitized.replace(
+        /<ul>([\s\S]*?)<\/ul>/g,
+        function (match, inner) {
+          if (inner.indexOf('type="checkbox"') === -1) return match;
+          var fixed = inner.replace(
+            /<li>/g,
+            '<li class="task-list-item">',
+          );
+          return '<ul class="contains-task-list">' + fixed + '</ul>';
+        },
+      );
       return sanitized;
     }
   } catch (e) {

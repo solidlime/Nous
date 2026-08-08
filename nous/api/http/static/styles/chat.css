@@ -249,10 +249,18 @@
 /* Expand/collapse chevron */
 .chat-tool-chevron {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 12px;
   height: 12px;
   opacity: 0.5;
   transition: transform var(--duration-fast) var(--ease-apple);
+}
+.chat-tool-chevron i,
+.chat-tool-chevron svg {
+  width: 12px;
+  height: 12px;
 }
 .chat-tool-call details[open] > summary .chat-tool-chevron,
 .chat-tool-result details[open] > summary .chat-tool-chevron {
@@ -1303,12 +1311,19 @@ input[type="range"].chat-field-input:focus {
 }
 .chat-bubble ul,
 .chat-bubble ol {
-  margin: 0.4em 0;
+  margin: 0.3em 0;
   padding-left: 1.6em;
+  list-style-position: outside;
+}
+.chat-bubble ul {
+  list-style: disc;
+}
+.chat-bubble ol {
+  list-style: decimal;
 }
 .chat-bubble li {
-  margin: 0.15em 0;
-  line-height: 1.5;
+  margin: 0;
+  line-height: 1.4;
 }
 /* Task list / checkbox support */
 .chat-bubble ul.contains-task-list {
@@ -1318,7 +1333,7 @@ input[type="range"].chat-field-input:focus {
 .chat-bubble li.task-list-item {
   display: flex;
   align-items: flex-start;
-  gap: 0.5em;
+  gap: 0.4em;
 }
 .chat-bubble li.task-list-item input[type="checkbox"] {
   margin-top: 0.35em;
