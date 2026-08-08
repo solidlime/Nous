@@ -78,4 +78,5 @@ class LLMProvider(ABC):
         temperature: float = 0.7,
         max_tokens: int = 2048,
         top_p: float | None = None,
+        reasoning_effort: str | None = None,
     ) -> AsyncIterator[ChatEvent]: ...

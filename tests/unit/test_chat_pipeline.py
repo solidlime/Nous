@@ -1024,6 +1024,77 @@ class TestDynamicTemperatureInference:
 
 
 # ──────────────────────────────────────────────
+# Reasoning — reasoning_effort propagation (R6)
+# ──────────────────────────────────────────────
+
+
+class TestReasoningPropagationInference:
+    """InferenceStep が config.reasoning_enabled に従って reasoning_effort を stream() に渡す。"""
+
+    async def _run(self, captured: list[dict | None], reasoning_enabled: bool, reasoning_effort: str) -> None:
+        """Mock provider で InferenceStep を1ターン回す共通ヘルパー."""
+        from unittest.mock import MagicMock, patch
+
+        from nous.application.chat.pipeline.inference import InferenceStep
+        from nous.infrastructure.llm.base import TextDeltaEvent
+
+        async def _mock_stream(**kwargs):
+            captured[0] = kwargs
+            yield TextDeltaEvent(content="hello")
+
+        mock_provider = MagicMock()
+        mock_provider.stream = _mock_stream
+
+        config = MagicMock()
+        config.temperature = 0.7
+        config.max_tokens = 100
+        config.provider = "anthropic"
+        config.get_effective_api_key.return_value = "test-key"
+        config.get_effective_model.return_value = "claude-3"
+        config.get_effective_base_url.return_value = ""
+        config.max_tool_calls = 0
+        config.enable_parallel_tools = True
+        config.tool_result_max_chars = 4000
+        config.top_p = None
+        config.reasoning_enabled = reasoning_enabled
+        config.reasoning_effort = reasoning_effort
+        config.debug_mode = False  # この環境には /data が無いため書き込みを無効化
+        config.show_message_timestamps = False
+
+        turn_ctx = MagicMock()
+        turn_ctx.images = []
+        turn_ctx.tool_call_count = 0
+        turn_ctx.full_response = ""
+        turn_ctx.user_message = "test"
+        turn_ctx.system_prompt = "test sys"
+        turn_ctx.tool_calls_log = []
+        turn_ctx.skills_raw = []
+
+        registry = MagicMock()
+        ctx = MagicMock()
+
+        with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
+            async for _ in InferenceStep().run(ctx, config, [], turn_ctx, registry):
+                pass
+
+    @pytest.mark.asyncio
+    async def test_reasoning_effort_passed_when_enabled(self):
+        """reasoning_enabled=True → reasoning_effort が stream() に渡る."""
+        captured: list = [None]
+        await self._run(captured, reasoning_enabled=True, reasoning_effort="high")
+        assert captured[0] is not None
+        assert captured[0]["reasoning_effort"] == "high"
+
+    @pytest.mark.asyncio
+    async def test_reasoning_effort_none_when_disabled(self):
+        """reasoning_enabled=False → reasoning_effort=None（effort 設定があっても）."""
+        captured: list = [None]
+        await self._run(captured, reasoning_enabled=False, reasoning_effort="max")
+        assert captured[0] is not None
+        assert captured[0]["reasoning_effort"] is None
+
+
+# ──────────────────────────────────────────────
 # TA05: Timestamp Injection — show_message_timestamps
 # ──────────────────────────────────────────────
 

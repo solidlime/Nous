@@ -38,6 +38,9 @@ _DEFAULT_BASE_URLS: dict[str, str] = {
     "opencode_go": "",
 }
 
+# Allowed reasoning effort levels (shared across providers, converted per provider)
+REASONING_EFFORTS = frozenset({"low", "medium", "high", "max"})
+
 
 class ProviderConfig(BaseModel):
     """LLMプロバイダ接続設定。"""
@@ -56,6 +59,8 @@ class ProviderConfig(BaseModel):
     dynamic_temperature: bool = True
     emotion_temperature_scale: float = 0.2
     top_p: float | None = None
+    reasoning_enabled: bool = False
+    reasoning_effort: str = "medium"
 
     @field_validator("temperature")
     @classmethod
@@ -93,6 +98,13 @@ class ProviderConfig(BaseModel):
         if v is None:
             return None
         return max(0.0, min(1.0, v))
+
+    @field_validator("reasoning_effort")
+    @classmethod
+    def _validate_reasoning_effort(cls, v: str) -> str:
+        if v not in REASONING_EFFORTS:
+            raise ValueError(f"reasoning_effort must be one of {sorted(REASONING_EFFORTS)}, got: {v!r}")
+        return v
 
     def get_effective_api_key(self) -> str:
         """Return stored API key or fall back via RuntimeConfigManager.

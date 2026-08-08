@@ -18,6 +18,9 @@ from .cache_utils import build_anthropic_system
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+# reasoning_effort → Anthropic thinking budget_tokens (min 1024)
+_EFFORT_BUDGET_MAP = {"low": 2048, "medium": 4096, "high": 8192, "max": 16384}
+
 
 class AnthropicProvider(LLMProvider):
     def supports_vision(self) -> bool:
@@ -101,6 +104,7 @@ class AnthropicProvider(LLMProvider):
         temperature: float = 0.7,
         max_tokens: int = 2048,
         top_p: float | None = None,
+        reasoning_effort: str | None = None,
     ) -> AsyncIterator[ChatEvent]:
         anthropic_tools = []
         if tools:
@@ -127,6 +131,9 @@ class AnthropicProvider(LLMProvider):
             }
             if top_p is not None:
                 kwargs["top_p"] = top_p
+            if reasoning_effort:
+                budget = _EFFORT_BUDGET_MAP.get(reasoning_effort, 4096)
+                kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
             if anthropic_tools:
                 kwargs["tools"] = anthropic_tools
 

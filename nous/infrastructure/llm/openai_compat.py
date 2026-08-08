@@ -73,6 +73,7 @@ class OpenAICompatProvider(LLMProvider):
         except ImportError as e:
             raise ImportError("openai package required: pip install openai") from e
         self.model = model
+        self.base_url = base_url or _OPENAI_BASE_URL
 
     def _to_api_messages(self, messages: list[LLMMessage]) -> list[dict]:
         result = []
@@ -128,6 +129,7 @@ class OpenAICompatProvider(LLMProvider):
         temperature: float = 0.7,
         max_tokens: int = 2048,
         top_p: float | None = None,
+        reasoning_effort: str | None = None,
     ) -> AsyncIterator[ChatEvent]:
         openai_tools = []
         if tools:
@@ -155,6 +157,11 @@ class OpenAICompatProvider(LLMProvider):
             }
             if top_p is not None:
                 kwargs["top_p"] = top_p
+            if reasoning_effort:
+                if "openrouter" in (self.base_url or "").lower():
+                    kwargs["reasoning"] = {"effort": reasoning_effort}
+                else:
+                    kwargs["reasoning_effort"] = reasoning_effort
             if openai_tools:
                 kwargs["tools"] = openai_tools
                 kwargs["tool_choice"] = "auto"

@@ -951,6 +951,61 @@ class TestChatService:
         assert captured_kwargs["top_p"] is None
 
     @pytest.mark.asyncio
+    async def test_reasoning_effort_passed_when_enabled(self):
+        """reasoning_enabled=True → provider.stream() に reasoning_effort が伝播."""
+        from nous.application.chat_service import ChatService
+
+        captured_kwargs = {}
+
+        async def mock_stream(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+            yield TextDeltaEvent(content="ok")
+            yield DoneEvent(full_content="ok", tool_calls=[])
+
+        mock_provider = MagicMock()
+        mock_provider.stream = mock_stream
+
+        ctx = self._make_ctx()
+        cfg = self._make_config(api_key="sk-valid-key")
+        cfg.reasoning_enabled = True
+        cfg.reasoning_effort = "high"
+        service = ChatService()
+
+        with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
+            async for _ in service.chat(ctx, cfg, "sess1", "hello"):
+                pass
+
+        assert captured_kwargs.get("reasoning_effort") == "high"
+
+    @pytest.mark.asyncio
+    async def test_reasoning_effort_none_when_disabled(self):
+        """reasoning_enabled=False → reasoning_effort=None（config に effort 設定があっても）."""
+        from nous.application.chat_service import ChatService
+
+        captured_kwargs = {}
+
+        async def mock_stream(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+            yield TextDeltaEvent(content="ok")
+            yield DoneEvent(full_content="ok", tool_calls=[])
+
+        mock_provider = MagicMock()
+        mock_provider.stream = mock_stream
+
+        ctx = self._make_ctx()
+        cfg = self._make_config(api_key="sk-valid-key")
+        cfg.reasoning_enabled = False
+        cfg.reasoning_effort = "max"  # 無効時は設定されていても None になる
+        service = ChatService()
+
+        with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
+            async for _ in service.chat(ctx, cfg, "sess1", "hello"):
+                pass
+
+        assert "reasoning_effort" in captured_kwargs
+        assert captured_kwargs["reasoning_effort"] is None
+
+    @pytest.mark.asyncio
     async def test_streams_text_and_done(self):
         from nous.application.chat_service import ChatService
 

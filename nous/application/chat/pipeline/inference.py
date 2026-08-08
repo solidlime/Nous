@@ -151,6 +151,7 @@ class InferenceStep:
                 temperature=temperature,
                 max_tokens=config.max_tokens,
                 top_p=config.top_p,
+                reasoning_effort=config.reasoning_effort if config.reasoning_enabled else None,
             ):
                 if isinstance(event, TextDeltaEvent):
                     current_text += event.content
