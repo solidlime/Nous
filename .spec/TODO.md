@@ -83,3 +83,21 @@
 | `1b366af` | feat(llm): reasoning_effort バックエンド実装 + テスト |
 | `b575067` | feat(ui): 思考モードトグル + effort スライダー |
 | `19d5a8b` | docs: llm_usage_guide に Reasoning セクション追加 |
+
+---
+
+## CoT 表示 + 履歴保存（2026-08-08）
+
+> SPEC: `.spec/SPEC-cot-display.md`。要望: CoT 表示（TTS 読み上げ除外・履歴保存あり）
+
+- [ ] R1: base.py に ThinkingDeltaEvent 追加
+- [ ] R2: events.py に ThinkingDeltaSSE（type: "thinking_delta"）追加
+- [ ] R3: OpenAICompatProvider で delta.reasoning_content 拾い上げ
+- [ ] R4: AnthropicProvider で thinking_delta 拾い上げ
+- [ ] R5: inference.py 分岐（ThinkingDeltaSSE yield + segments に type:"thinking" 保存）
+- [ ] R6: chat-send.js に thinking_delta 分岐（.chat-thinking-bubble 折りたたみ表示）
+- [ ] R7: chat-history.js _appendSegmentsToBubble に thinking 復元分岐
+- [ ] R8: chat.css に .chat-thinking-bubble スタイル
+- [ ] R9: TTS 除外の構造的保証（.chat-bubble 不使用 + contentParts 非push）
+- [ ] R10: テスト（reasoning_content/thinking_delta 拾い上げ・segments 保存・full_response 混入なし）
+- [ ] R11: docs/llm_usage_guide.md に thinking_delta 追記

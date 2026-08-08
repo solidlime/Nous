@@ -13,10 +13,18 @@ from nous.application.chat.events import (
     ImageGenResultSSE,
     ImageGenStartSSE,
     TextDeltaSSE,
+    ThinkingDeltaSSE,
     ToolCallSSE,
     ToolResultSSE,
 )
-from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, LLMMessage, TextDeltaEvent, ToolCallEvent
+from nous.infrastructure.llm.base import (
+    DoneEvent,
+    ErrorEvent,
+    LLMMessage,
+    TextDeltaEvent,
+    ThinkingDeltaEvent,
+    ToolCallEvent,
+)
 from nous.infrastructure.llm.factory import get_provider
 from nous.infrastructure.logging.structured import get_logger
 
@@ -42,7 +50,9 @@ class InferenceStep:
         turn_ctx: ChatTurnContext,
         registry: ToolRegistry,
         effective_temp: float | None = None,
-    ) -> AsyncIterator[TextDeltaSSE | ToolCallSSE | ToolResultSSE | ErrorSSE | ImageGenStartSSE | ImageGenResultSSE]:
+    ) -> AsyncIterator[
+        TextDeltaSSE | ThinkingDeltaSSE | ToolCallSSE | ToolResultSSE | ErrorSSE | ImageGenStartSSE | ImageGenResultSSE
+    ]:
         api_key = config.get_effective_api_key()
         if not api_key:
             yield ErrorSSE(message="APIキーが設定されていません。チャット設定でAPIキーを入力してください。")
@@ -111,6 +121,7 @@ class InferenceStep:
             pending_tool_calls: list[ToolCallEvent] = []
             current_text = ""
             _seg_text = ""  # text accumulator for segment ordering
+            _thinking_text = ""  # thinking accumulator for CoT segments (SPEC R5)
             _finish_reason = ""  # set by DoneEvent handler inside stream loop
 
             # 各ループ反復で visible tools を再評価（search_tools で新発見を拾う）
@@ -158,11 +169,19 @@ class InferenceStep:
                     turn_ctx.full_response += event.content
                     _seg_text += event.content
                     yield TextDeltaSSE(content=event.content)
+                elif isinstance(event, ThinkingDeltaEvent):
+                    # CoT: accumulate separately — never mixed into text/full_response (TTS excluded)
+                    _thinking_text += event.content
+                    yield ThinkingDeltaSSE(content=event.content)
                 elif isinstance(event, ToolCallEvent):
                     # Flush accumulated text as segment before tool call
                     if _seg_text:
                         turn_ctx.segments.append({"type": "text", "content": _seg_text})
                         _seg_text = ""
+                    # Flush accumulated thinking as segment before tool call
+                    if _thinking_text:
+                        turn_ctx.segments.append({"type": "thinking", "content": _thinking_text})
+                        _thinking_text = ""
                     yield ToolCallSSE(name=event.tool_name, input=event.tool_input, id=event.tool_use_id)
                     turn_ctx.segments.append(
                         {
@@ -195,6 +214,10 @@ class InferenceStep:
             if _seg_text:
                 turn_ctx.segments.append({"type": "text", "content": _seg_text})
                 _seg_text = ""
+            # Flush remaining thinking segment after inner loop (SPEC R5)
+            if _thinking_text:
+                turn_ctx.segments.append({"type": "thinking", "content": _thinking_text})
+                _thinking_text = ""
 
             # Auto-continue if response was truncated by max_tokens limit
             if not pending_tool_calls and _finish_reason == "length" and current_text:

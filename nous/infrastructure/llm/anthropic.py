@@ -10,6 +10,7 @@ from .base import (
     LLMMessage,
     LLMProvider,
     TextDeltaEvent,
+    ThinkingDeltaEvent,
     ToolCallEvent,
     ToolDefinition,
 )
@@ -157,6 +158,9 @@ class AnthropicProvider(LLMProvider):
                         if delta.type == "text_delta":
                             full_text += delta.text
                             yield TextDeltaEvent(content=delta.text)
+                        elif delta.type == "thinking_delta":
+                            # CoT: thinking blocks (emitted when thinking is enabled)
+                            yield ThinkingDeltaEvent(content=delta.thinking)
                         elif delta.type == "input_json_delta" and current_tool:
                             current_tool["input_json"] += delta.partial_json
 

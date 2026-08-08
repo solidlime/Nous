@@ -111,6 +111,20 @@ function _appendSegmentsToBubble(msg, msgDiv) {
       var timeDiv = msgDiv.querySelector(".chat-time");
       if (timeDiv) msgDiv.insertBefore(bubble, timeDiv);
       else msgDiv.appendChild(bubble);
+    } else if (seg.type === "thinking") {
+      // CoT restore (R7): same .chat-thinking-bubble <details> as streaming.
+      // NOT .chat-bubble — excluded from TTS manual / copy collectors.
+      if (!seg.content) continue;
+      var thinkDiv = document.createElement("details");
+      thinkDiv.className = "chat-thinking-bubble";
+      thinkDiv.open = true;
+      safeSetHTML(thinkDiv,
+        '<summary><i data-lucide="brain"></i> 思考過程</summary>' +
+        '<div class="chat-thinking-body"></div>');
+      thinkDiv.querySelector(".chat-thinking-body").textContent = seg.content;
+      var timeDiv3 = msgDiv.querySelector(".chat-time");
+      if (timeDiv3) msgDiv.insertBefore(thinkDiv, timeDiv3);
+      else msgDiv.appendChild(thinkDiv);
     } else if (seg.type === "tool_call") {
       var inputStr;
       try { inputStr = JSON.stringify(seg.input, null, 2); } catch (e) { inputStr = String(seg.input); }

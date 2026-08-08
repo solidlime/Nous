@@ -35,6 +35,12 @@ class TextDeltaEvent:
 
 
 @dataclass
+class ThinkingDeltaEvent:
+    type: Literal["thinking_delta"] = "thinking_delta"
+    content: str = ""
+
+
+@dataclass
 class ToolCallEvent:
     type: Literal["tool_call"] = "tool_call"
     tool_name: str = ""
@@ -57,7 +63,7 @@ class ErrorEvent:
     message: str = ""
 
 
-ChatEvent = TextDeltaEvent | ToolCallEvent | DoneEvent | ErrorEvent
+ChatEvent = TextDeltaEvent | ThinkingDeltaEvent | ToolCallEvent | DoneEvent | ErrorEvent
 
 
 class LLMProvider(ABC):

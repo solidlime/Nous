@@ -510,6 +510,16 @@ When `reasoning_enabled` is `False` (default), no reasoning parameter is sent an
 
 Reasoning settings are available in the Chat Config section of the WebUI Settings page (思考モード checkbox + 思考の深さ slider). Changes take effect on the next message.
 
+### SSE events
+
+When reasoning is enabled, the CoT (thinking) text is streamed as a dedicated SSE event, kept separate from the answer text so it can be displayed collapsed and excluded from TTS / copy:
+
+| Event | Fields | Description |
+|-------|--------|-------------|
+| `thinking_delta` | `content: str` | Incremental thinking (CoT) text. Rendered in a collapsible 「思考過程」 block (`.chat-thinking-bubble`); not merged into the assistant text bubble. |
+
+Thinking text is also persisted per turn as a `{"type": "thinking", "content": ...}` segment (never merged into the assistant answer / `full_response`).
+
 ---
 
 ---

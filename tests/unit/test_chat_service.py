@@ -1006,6 +1006,55 @@ class TestChatService:
         assert captured_kwargs["reasoning_effort"] is None
 
     @pytest.mark.asyncio
+    async def test_thinking_not_mixed_into_full_response(self):
+        """CoT が full_response（保存される assistant テキスト）に混入しない (SPEC R10d)."""
+        import json
+
+        from nous.application.chat_service import ChatService
+        from nous.infrastructure.llm.base import ThinkingDeltaEvent
+
+        async def mock_stream(*args, **kwargs):
+            yield ThinkingDeltaEvent(content="secret chain of thought")
+            yield TextDeltaEvent(content="public answer")
+            yield DoneEvent(full_content="public answer", tool_calls=[])
+
+        mock_provider = MagicMock()
+        mock_provider.stream = mock_stream
+
+        ctx = self._make_ctx()
+        cfg = self._make_config(api_key="sk-valid-key")
+        service = ChatService()
+
+        mock_session = MagicMock()
+        with (
+            patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider),
+            patch("nous.application.chat.service._session_manager.get_or_create", return_value=mock_session),
+        ):
+            chunks = []
+            async for chunk in service.chat(ctx, cfg, "sess1", "hello"):
+                chunks.append(chunk)
+
+        # ThinkingDeltaSSE は配信される（フロント表示用）
+        data_chunks = [c for c in chunks if c.startswith("data: ")]
+        types = [json.loads(c[6:].strip())["type"] for c in data_chunks]
+        assert "thinking_delta" in types
+        thinking_payloads = [json.loads(c[6:].strip()) for c in data_chunks if json.loads(c[6:].strip())["type"] == "thinking_delta"]
+        assert any(p.get("content") == "secret chain of thought" for p in thinking_payloads)
+
+        # full_response には thinking が混入しない
+        assistant_calls = [c for c in mock_session.add.call_args_list if c.args[0] == "assistant"]
+        assert assistant_calls, "assistant メッセージの保存呼び出しが存在すること"
+        content = assistant_calls[0].args[1]
+        assert content == "public answer"
+        assert "secret chain of thought" not in content
+
+        # segments には thinking が保存される
+        segments = assistant_calls[0].kwargs.get("segments") or []
+        assert any(
+            s.get("type") == "thinking" and s.get("content") == "secret chain of thought" for s in segments
+        )
+
+    @pytest.mark.asyncio
     async def test_streams_text_and_done(self):
         from nous.application.chat_service import ChatService
 

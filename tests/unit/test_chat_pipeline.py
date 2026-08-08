@@ -1094,6 +1094,119 @@ class TestReasoningPropagationInference:
         assert captured[0]["reasoning_effort"] is None
 
 
+class TestThinkingSegmentInference:
+    """InferenceStep が ThinkingDeltaEvent を ThinkingDeltaSSE + segments に変換する (SPEC R5)."""
+
+    async def _run(self, events: list):
+        """Mock provider が events を yield する InferenceStep 実行。SSE と turn_ctx を返す."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from nous.application.chat.pipeline.inference import InferenceStep
+        from nous.infrastructure.llm.base import DoneEvent
+
+        async def _mock_stream(*args, **kwargs):
+            for ev in events:
+                yield ev
+            yield DoneEvent(full_content="", tool_calls=[])
+
+        mock_provider = MagicMock()
+        mock_provider.stream = _mock_stream
+
+        config = MagicMock()
+        config.temperature = 0.7
+        config.max_tokens = 100
+        config.provider = "anthropic"
+        config.get_effective_api_key.return_value = "test-key"
+        config.get_effective_model.return_value = "claude-3"
+        config.get_effective_base_url.return_value = ""
+        config.max_tool_calls = 0
+        config.enable_parallel_tools = True
+        config.tool_result_max_chars = 4000
+        config.top_p = None
+        config.reasoning_enabled = True
+        config.reasoning_effort = "high"
+        config.debug_mode = False
+        config.show_message_timestamps = False
+
+        turn_ctx = MagicMock()
+        turn_ctx.images = []
+        turn_ctx.tool_call_count = 0
+        turn_ctx.full_response = ""
+        turn_ctx.user_message = "test"
+        turn_ctx.system_prompt = "test sys"
+        turn_ctx.tool_calls_log = []
+        turn_ctx.skills_raw = []
+        turn_ctx.segments = []  # 実リストで検証可能にする
+
+        registry = MagicMock()
+        registry.execute = AsyncMock(return_value={})  # ツール実行を成功させてループを継続させる
+        registry.truncate_result = MagicMock(return_value={})  # ツール結果の切り詰め（JSON 直列化可能）
+        ctx = MagicMock()
+
+        sse_events = []
+        with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
+            async for ev in InferenceStep().run(ctx, config, [], turn_ctx, registry):
+                sse_events.append(ev)
+        return sse_events, turn_ctx
+
+    @pytest.mark.asyncio
+    async def test_thinking_delta_yields_thinking_sse_and_segment(self):
+        """ThinkingDeltaEvent → ThinkingDeltaSSE yield + ループ終了時に thinking segment 保存."""
+        from nous.application.chat.events import ThinkingDeltaSSE
+        from nous.infrastructure.llm.base import ThinkingDeltaEvent
+
+        sse_events, turn_ctx = await self._run(
+            [
+                ThinkingDeltaEvent(content="step one"),
+                ThinkingDeltaEvent(content=" step two"),
+            ]
+        )
+        thinking_sse = [ev for ev in sse_events if isinstance(ev, ThinkingDeltaSSE)]
+        assert [ev.content for ev in thinking_sse] == ["step one", " step two"]
+        thinking_segs = [s for s in turn_ctx.segments if s.get("type") == "thinking"]
+        assert thinking_segs == [{"type": "thinking", "content": "step one step two"}]
+
+    @pytest.mark.asyncio
+    async def test_empty_thinking_adds_no_segment(self):
+        """thinking テキストが空 → segment を追加しない."""
+        from nous.infrastructure.llm.base import ThinkingDeltaEvent
+
+        _, turn_ctx = await self._run(
+            [ThinkingDeltaEvent(content="")]
+        )
+        assert not any(s.get("type") == "thinking" for s in turn_ctx.segments)
+
+    @pytest.mark.asyncio
+    async def test_thinking_segment_flushed_before_tool_call(self):
+        """tool_call 前に thinking フラッシュ（thinking → tool_call の順で segments に入る）."""
+        from nous.infrastructure.llm.base import ThinkingDeltaEvent, ToolCallEvent
+
+        _, turn_ctx = await self._run(
+            [
+                ThinkingDeltaEvent(content="reasoning..."),
+                ToolCallEvent(tool_name="memory_search", tool_input={"q": "x"}, tool_use_id="t1"),
+            ]
+        )
+        # ツール実行の結果 tool_result も追加される（thinking → tool_call → tool_result の順）
+        assert [s.get("type") for s in turn_ctx.segments] == ["thinking", "tool_call", "tool_result"]
+        assert turn_ctx.segments[0] == {"type": "thinking", "content": "reasoning..."}
+
+    @pytest.mark.asyncio
+    async def test_thinking_not_mixed_into_text_segment(self):
+        """thinking と text が混ざらない（text segment は text のみ）. """
+        from nous.infrastructure.llm.base import TextDeltaEvent, ThinkingDeltaEvent
+
+        _, turn_ctx = await self._run(
+            [
+                ThinkingDeltaEvent(content="secret"),
+                TextDeltaEvent(content="public"),
+            ]
+        )
+        text_segs = [s for s in turn_ctx.segments if s.get("type") == "text"]
+        assert text_segs == [{"type": "text", "content": "public"}]
+        assert all("secret" not in str(s.get("content", "")) for s in text_segs)
+
+
 # ──────────────────────────────────────────────
 # TA05: Timestamp Injection — show_message_timestamps
 # ──────────────────────────────────────────────

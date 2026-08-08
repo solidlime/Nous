@@ -26,6 +26,14 @@ class TextDeltaSSE:
 
 
 @dataclass
+class ThinkingDeltaSSE:
+    content: str
+
+    def to_sse(self) -> str:
+        return _sse_encode("thinking_delta", {"content": self.content})
+
+
+@dataclass
 class ToolCallSSE:
     name: str
     input: dict

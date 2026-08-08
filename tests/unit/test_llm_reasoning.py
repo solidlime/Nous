@@ -1,13 +1,14 @@
-"""Tests for provider reasoning/thinking kwargs mapping (R3, R4)."""
+"""Tests for provider reasoning/thinking kwargs mapping (R3, R4) and CoT stream pickup (R3, R4 CoT)."""
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from nous.infrastructure.llm.anthropic import AnthropicProvider
-from nous.infrastructure.llm.base import DoneEvent
+from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent, ThinkingDeltaEvent
 from nous.infrastructure.llm.openai_compat import OpenAICompatProvider
 
 
@@ -25,6 +26,27 @@ class _FakeStream:
 
     async def __anext__(self):
         raise StopAsyncIteration
+
+
+class _ChunkStream:
+    """Async context manager that yields the given chunks in order."""
+
+    def __init__(self, chunks: list) -> None:
+        self._chunks = list(chunks)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self._chunks:
+            raise StopAsyncIteration
+        return self._chunks.pop(0)
 
 
 class TestOpenAICompatReasoning:
@@ -130,3 +152,109 @@ class TestAnthropicReasoning:
         async for ev in provider.stream(messages=[], system="", reasoning_effort="high"):
             events.append(ev)
         assert isinstance(events[-1], DoneEvent)
+
+
+class TestOpenAICompatCoT:
+    """OpenAICompatProvider: delta.reasoning_content を ThinkingDeltaEvent として拾う (SPEC R3)."""
+
+    @staticmethod
+    def _chunk(content: str | None, reasoning: str | None) -> SimpleNamespace:
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    delta=SimpleNamespace(content=content, reasoning_content=reasoning, tool_calls=None),
+                    finish_reason=None,
+                )
+            ],
+            usage=None,
+        )
+
+    async def _stream_events(self, chunks: list) -> list:
+        provider = OpenAICompatProvider(api_key="test-key", model="gpt-4o", base_url=None)
+        provider._client = MagicMock()
+        provider._client.chat.completions.create = AsyncMock(return_value=_ChunkStream(chunks))
+        events = []
+        async for ev in provider.stream(messages=[], system=""):
+            events.append(ev)
+        return events
+
+    @pytest.mark.asyncio
+    async def test_reasoning_content_yields_thinking_events(self):
+        """reasoning_content が ThinkingDeltaEvent として text と分離して yield される."""
+        events = await self._stream_events(
+            [
+                self._chunk(content=None, reasoning="Let me think"),
+                self._chunk(content="Answer", reasoning="more"),
+                self._chunk(content=None, reasoning=None),
+            ]
+        )
+        thinking = [ev for ev in events if isinstance(ev, ThinkingDeltaEvent)]
+        texts = [ev for ev in events if isinstance(ev, TextDeltaEvent)]
+        assert [t.content for t in thinking] == ["Let me think", "more"]
+        assert [t.content for t in texts] == ["Answer"]
+
+    @pytest.mark.asyncio
+    async def test_content_and_reasoning_in_same_chunk_yielded_in_order(self):
+        """同一チャンクで content と reasoning_content の両方 → 両方 yield（reasoning が先）."""
+        events = await self._stream_events(
+            [self._chunk(content="Hello", reasoning="Hmm")]
+        )
+        assert [ev.content for ev in events if isinstance(ev, ThinkingDeltaEvent)] == ["Hmm"]
+        assert [ev.content for ev in events if isinstance(ev, TextDeltaEvent)] == ["Hello"]
+        thinking_idx = next(i for i, ev in enumerate(events) if isinstance(ev, ThinkingDeltaEvent))
+        text_idx = next(i for i, ev in enumerate(events) if isinstance(ev, TextDeltaEvent))
+        assert thinking_idx < text_idx
+
+    @pytest.mark.asyncio
+    async def test_no_reasoning_no_thinking_events(self):
+        """reasoning_content が無い → ThinkingDeltaEvent は出ない."""
+        events = await self._stream_events(
+            [self._chunk(content="plain", reasoning=None)]
+        )
+        assert not any(isinstance(ev, ThinkingDeltaEvent) for ev in events)
+        assert [ev.content for ev in events if isinstance(ev, TextDeltaEvent)] == ["plain"]
+
+
+class TestAnthropicCoT:
+    """AnthropicProvider: thinking_delta を ThinkingDeltaEvent として拾う (SPEC R4)."""
+
+    async def _stream_events(self, sdk_events: list) -> list:
+        provider = AnthropicProvider(api_key="test-key", model="claude-opus-4-5")
+        provider._client = MagicMock()
+        provider._client.messages.stream.return_value = _ChunkStream(sdk_events)
+        events = []
+        async for ev in provider.stream(messages=[], system=""):
+            events.append(ev)
+        return events
+
+    @pytest.mark.asyncio
+    async def test_thinking_delta_yields_thinking_events(self):
+        """delta.type == "thinking_delta" → ThinkingDeltaEvent として yield され text と分離."""
+        events = await self._stream_events(
+            [
+                SimpleNamespace(
+                    type="content_block_delta",
+                    delta=SimpleNamespace(type="thinking_delta", thinking="Hmm, let me consider"),
+                ),
+                SimpleNamespace(type="content_block_delta", delta=SimpleNamespace(type="text_delta", text="Final answer")),
+                SimpleNamespace(type="message_delta", delta=SimpleNamespace(stop_reason="end_turn"), usage=None),
+            ]
+        )
+        thinking = [ev for ev in events if isinstance(ev, ThinkingDeltaEvent)]
+        texts = [ev for ev in events if isinstance(ev, TextDeltaEvent)]
+        assert [t.content for t in thinking] == ["Hmm, let me consider"]
+        assert [t.content for t in texts] == ["Final answer"]
+
+    @pytest.mark.asyncio
+    async def test_no_thinking_delta_no_thinking_events(self):
+        """thinking_delta が無い → ThinkingDeltaEvent は出ない."""
+        events = await self._stream_events(
+            [
+                SimpleNamespace(type="content_block_delta", delta=SimpleNamespace(type="text_delta", text="plain")),
+                SimpleNamespace(type="message_delta", delta=SimpleNamespace(stop_reason="end_turn"), usage=None),
+            ]
+        )
+        assert not any(isinstance(ev, ThinkingDeltaEvent) for ev in events)
+        assert [ev.content for ev in events if isinstance(ev, TextDeltaEvent)] == ["plain"]
+
+

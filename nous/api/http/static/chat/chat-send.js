@@ -403,6 +403,12 @@ async function chatSend(retry) {
   let assistantDiv = null;
   let currentTextBubble = null;  // DOM element currently being streamed to
   let currentTextContent = "";   // raw text accumulated for current text part
+  // CoT display (R6): managed independently of text streaming.
+  // Deliberately NOT pushed to contentParts and NOT .chat-bubble —
+  // structural TTS/copy exclusion (TTS manual/copy collect .chat-bubble,
+  // TTS auto-play collects contentParts text only).
+  let thinkingDetails = null;   // <details class="chat-thinking-bubble">
+  let thinkingContent = "";     // accumulated thinking text
 
   try {
     const response = await fetch("/api/chat/" + encodeURIComponent(S.persona), {
@@ -426,6 +432,7 @@ async function chatSend(retry) {
     let buffer = "";
     let streamDone = false;
     var _rafPending = false;
+    var _thinkingRafPending = false;
     var _scrollListener = null;
     var chatMessages = document.getElementById("chat-messages");
 
@@ -490,6 +497,49 @@ async function chatSend(retry) {
                 currentTextBubble.textContent = currentTextContent;
               }
               // Auto-scroll with user intent detection
+              if (chatMessages) {
+                var isAtBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 80;
+                if (isAtBottom || !CHAT._userScrolledUp) {
+                  chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+              }
+            });
+          }
+        } else if (evt.type === "thinking_delta") {
+          // CoT (thinking) display — R6: dedicated .chat-thinking-bubble <details>.
+          // Structural TTS/copy exclusion: content NOT pushed to contentParts and
+          // class is NOT .chat-bubble, so TTS auto-play / manual / copy never see it.
+          if (CHAT._firstContent) {
+            CHAT._firstContent = false;
+            statusEl.textContent = "応答中...";
+          }
+          if (!assistantDiv) {
+            assistantDiv = _createAssistantDiv();
+          }
+          if (!thinkingDetails) {
+            thinkingDetails = document.createElement("details");
+            thinkingDetails.className = "chat-thinking-bubble";
+            thinkingDetails.open = true;
+            safeSetHTML(
+              thinkingDetails,
+              '<summary><i data-lucide="brain"></i> 思考過程</summary>' +
+                '<div class="chat-thinking-body"></div>',
+            );
+            // Keep thinking block at the head of the assistant div
+            assistantDiv.insertBefore(thinkingDetails, assistantDiv.firstChild);
+            thinkingContent = "";
+            N.Core.refreshIcons();
+          }
+          thinkingContent += evt.content;
+          const thinkBody = thinkingDetails.querySelector(
+            ".chat-thinking-body",
+          );
+          // rAF-batched DOM update (independent of text_delta batching)
+          if (!_thinkingRafPending) {
+            _thinkingRafPending = true;
+            requestAnimationFrame(function() {
+              _thinkingRafPending = false;
+              if (thinkBody) thinkBody.textContent = thinkingContent;
               if (chatMessages) {
                 var isAtBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 80;
                 if (isAtBottom || !CHAT._userScrolledUp) {
@@ -573,11 +623,12 @@ async function chatSend(retry) {
           if (voiceAutoPlay && voiceAutoPlay.checked && allText.trim()) {
             N.Chat.tts.autoPlay(allText.trim());
           }
-          // Clean up: remove assistant div if it has no content (text or tools)
+          // Clean up: remove assistant div if it has no content (text, tools, or thinking)
           if (assistantDiv) {
             const hasToolCalls = assistantDiv.querySelector(".chat-tool-call");
             const hasTextBubbles = assistantDiv.querySelector(".chat-bubble");
-            if (!hasToolCalls && !hasTextBubbles) {
+            const hasThinking = assistantDiv.querySelector(".chat-thinking-bubble");
+            if (!hasToolCalls && !hasTextBubbles && !hasThinking) {
               assistantDiv.remove();
             }
           }
@@ -644,6 +695,7 @@ async function chatSend(retry) {
     CHAT._userScrolledUp = false;
     CHAT._firstContent = false;
     _rafPending = false;
+    _thinkingRafPending = false;
     sendBtn.style.display = "";
     if (cancelBtn) cancelBtn.style.display = "none";
     inputEl.focus();
