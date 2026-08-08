@@ -32,9 +32,12 @@ function appendToolEvent(eventType, data, targetDiv) {
       inputStr = String(data.input);
     }
     safeSetHTML(div,
-      '<details><summary><i data-lucide="wrench"></i> <strong>' +
+      '<details><summary>' +
+      '<span class="chat-tool-summary-left">' +
+      '<i data-lucide="wrench"></i> <strong>' +
       esc(data.name) +
-      "</strong>" +
+      '</strong></span>' +
+      '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
       '<span class="chat-tool-status">実行中...</span></summary>' +
       '<pre class="chat-tool-detail">' +
       esc(inputStr) +
@@ -90,7 +93,7 @@ function appendToolEvent(eventType, data, targetDiv) {
       : null;
     if (callDiv) {
       const statusEl = callDiv.querySelector(".chat-tool-status");
-      if (statusEl) safeSetHTML(statusEl, ' <i data-lucide="check"></i> 完了');
+      if (statusEl) safeSetHTML(statusEl, '<i data-lucide="check"></i> 完了');
       const details = callDiv.querySelector("details");
       if (details) {
         const resultPre = document.createElement("pre");
@@ -104,9 +107,13 @@ function appendToolEvent(eventType, data, targetDiv) {
       const div = document.createElement("div");
       div.className = "chat-tool-result";
       safeSetHTML(div,
-        '<details><summary><i data-lucide="check"></i> <strong>' +
+        '<details><summary>' +
+        '<span class="chat-tool-summary-left">' +
+        '<i data-lucide="check"></i> <strong>' +
         esc(data.name) +
-        "</strong></summary>" +
+        '</strong></span>' +
+        '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
+        '</summary>' +
         '<pre class="chat-tool-detail chat-tool-result-content">' +
         esc(resultStr) +
         "</pre></details>");

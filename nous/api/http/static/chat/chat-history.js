@@ -131,9 +131,12 @@ function _appendSegmentsToBubble(msg, msgDiv) {
       var div = document.createElement("div");
       div.className = "chat-tool-call done";
       if (seg.id) div.dataset.toolId = seg.id;
-      safeSetHTML(div, '<details><summary><i data-lucide="wrench"></i> <strong>' +
-        esc(seg.name) + '</strong>' +
-        '<span class="chat-tool-status"> <i data-lucide="check"></i> 完了</span></summary>' +
+      safeSetHTML(div, '<details><summary>' +
+        '<span class="chat-tool-summary-left">' +
+        '<i data-lucide="wrench"></i> <strong>' +
+        esc(seg.name) + '</strong></span>' +
+        '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
+        '<span class="chat-tool-status"><i data-lucide="check"></i> 完了</span></summary>' +
         '<pre class="chat-tool-detail">' + esc(inputStr) + '</pre></details>');
       if (seg.id) toolCallDivs[seg.id] = div;
       var timeDiv2 = msgDiv.querySelector(".chat-time");
@@ -563,10 +566,13 @@ async function restoreChatHistory(showSkeleton) {
             resultStr = String(tc.result);
           }
           safeSetHTML(div,
-            '<details><summary><i data-lucide="wrench"></i> <strong>' +
+            '<details><summary>' +
+            '<span class="chat-tool-summary-left">' +
+            '<i data-lucide="wrench"></i> <strong>' +
             esc(tc.name) +
-            "</strong>" +
-            '<span class="chat-tool-status"> <i data-lucide="check"></i> 完了</span></summary>' +
+            '</strong></span>' +
+            '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
+            '<span class="chat-tool-status"><i data-lucide="check"></i> 完了</span></summary>' +
             '<pre class="chat-tool-detail">' +
             esc(inputStr) +
             "</pre>" +
@@ -603,10 +609,13 @@ async function restoreChatHistory(showSkeleton) {
             resultStr = String(tc.result);
           }
           safeSetHTML(div,
-            '<details><summary><i data-lucide="wrench"></i> <strong>' +
+            '<details><summary>' +
+            '<span class="chat-tool-summary-left">' +
+            '<i data-lucide="wrench"></i> <strong>' +
             esc(tc.name) +
-            "</strong>" +
-            '<span class="chat-tool-status"> <i data-lucide="check"></i> 完了</span></summary>' +
+            '</strong></span>' +
+            '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
+            '<span class="chat-tool-status"><i data-lucide="check"></i> 完了</span></summary>' +
             '<pre class="chat-tool-detail">' +
             esc(inputStr) +
             "</pre>" +
