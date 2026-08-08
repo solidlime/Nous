@@ -135,14 +135,17 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
                 )
                 if summary:
                     keep_count = keep_recent * 2
-                    old_count = len(messages) - keep_count
                     from nous.infrastructure.llm.base import LLMMessage
 
                     summary_msg = LLMMessage(
                         role="user",
                         content=f"[過去の会話要約]\n{summary}",
                     )
-                    messages = [summary_msg] + messages[-keep_count:]
+                    # スライス先頭が tool なら assistant(tool_calls) を含むよう広げる（孤児 tool 防止）
+                    start = TrimmerMixin._adjust_slice_start(messages, -keep_count)
+                    kept = messages[start:]
+                    old_count = len(messages) - len(kept)
+                    messages = [summary_msg] + kept
                     total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
                     logger.info(
                         "CompressStep: Stage 3 — LLM summarized %d old messages into %d chars",

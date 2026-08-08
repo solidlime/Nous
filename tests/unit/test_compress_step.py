@@ -828,3 +828,91 @@ class TestDogfooding:
         assert hasattr(cfg, "enable_parallel_tools")
         assert isinstance(cfg.enable_parallel_tools, bool)
         assert cfg.enable_parallel_tools is True  # Default on
+
+
+class TestTrimmerToolOrphan:
+    """TrimmerMixin._truncate_old_messages の tool 孤児防止（SPEC F1）。"""
+
+    @staticmethod
+    def _msg(role, content="", tool_calls=None, tool_call_id=None):
+        from nous.infrastructure.llm.base import LLMMessage
+
+        return LLMMessage(role=role, content=content, tool_calls=tool_calls, tool_call_id=tool_call_id)
+
+    def test_tool_orphan_prevented_by_widening_slice(self):
+        """スライス先頭が tool になる入力 → assistant(tool_calls) を含むよう広げられる。"""
+        from nous.application.chat.pipeline.trimmer import TrimmerMixin
+
+        msgs = [
+            self._msg("user", "q1"),
+            self._msg("assistant", "", tool_calls=[{"id": "call_1", "name": "f", "input": {}}]),
+            self._msg("tool", "r1", tool_call_id="call_1"),
+            self._msg("user", "q2"),
+            self._msg("assistant", "", tool_calls=[{"id": "call_2", "name": "f", "input": {}}]),
+            self._msg("tool", "r2", tool_call_id="call_2"),
+            self._msg("user", "q3"),
+            self._msg("assistant", "", tool_calls=[{"id": "call_3", "name": "f", "input": {}}]),
+            self._msg("tool", "r3", tool_call_id="call_3"),
+        ]
+        # 9件 / keep=2 → keep_count=4 → 素朴な [-4:] は [tool, user, assistant(tc), tool] で先頭が tool 孤児になる
+        result = TrimmerMixin._truncate_old_messages(msgs, keep_recent_turns=2)
+
+        # 先頭は [システムnotice]、その後に assistant(tool_calls) → tool が続く（孤児なし）
+        assert "[システム:" in (result[0].content or "")
+        assert result[1].role == "assistant"
+        assert result[1].tool_calls
+        assert result[2].role == "tool"
+        assert result[2].tool_call_id == result[1].tool_calls[0]["id"]
+        # 広げた分、末尾の a(tc call_3) → tool r3 も含まれる
+        assert result[-1].role == "tool"
+        assert result[-1].tool_call_id == "call_3"
+
+    def test_normal_slice_unchanged(self):
+        """スライス先頭が tool でない通常ケース → 従来動作を維持。"""
+        from nous.application.chat.pipeline.trimmer import TrimmerMixin
+
+        msgs = [
+            self._msg("user", "q1"),
+            self._msg("assistant", "", tool_calls=[{"id": "call_1", "name": "f", "input": {}}]),
+            self._msg("tool", "r1", tool_call_id="call_1"),
+            self._msg("user", "q2"),
+            self._msg("assistant", "", tool_calls=[{"id": "call_2", "name": "f", "input": {}}]),
+            self._msg("tool", "r2", tool_call_id="call_2"),
+            self._msg("user", "q3"),
+            self._msg("assistant", "final answer"),
+        ]
+        result = TrimmerMixin._truncate_old_messages(msgs, keep_recent_turns=2)
+
+        # 素朴な [-4:] と同じ開始位置（先頭が tool でないので広がらない）
+        assert len(result) == 5  # [システムnotice] + 末尾4件
+        assert "[システム:" in (result[0].content or "")
+        assert result[1].role == "assistant"
+        assert result[1].tool_calls
+        assert result[2].role == "tool"
+        assert result[-1].content == "final answer"
+
+    def test_keep_zero_returns_unchanged(self):
+        """keep_recent_turns=0 → 無変更。"""
+        from nous.application.chat.pipeline.trimmer import TrimmerMixin
+
+        msgs = [
+            self._msg("user", "q1"),
+            self._msg("assistant", "a1"),
+            self._msg("user", "q2"),
+            self._msg("assistant", "a2"),
+        ]
+        result = TrimmerMixin._truncate_old_messages(msgs, keep_recent_turns=0)
+        assert result == msgs
+
+    def test_all_tool_tail_does_not_crash(self):
+        """末尾が全て tool の極端ケースでクラッシュしない（広げすぎない）。"""
+        from nous.application.chat.pipeline.trimmer import TrimmerMixin
+
+        msgs = [
+            self._msg("tool", "r1", tool_call_id="call_1"),
+            self._msg("tool", "r2", tool_call_id="call_1"),
+            self._msg("tool", "r3", tool_call_id="call_1"),
+        ]
+        result = TrimmerMixin._truncate_old_messages(msgs, keep_recent_turns=1)
+        assert isinstance(result, list)
+        assert len(result) > 0

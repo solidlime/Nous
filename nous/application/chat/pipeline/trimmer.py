@@ -16,6 +16,17 @@ class TrimmerMixin:
     """メッセージ切り詰め機能を提供するミックスイン。"""
 
     @staticmethod
+    def _adjust_slice_start(messages: list[LLMMessage], start: int) -> int:
+        """スライス開始位置が tool メッセージを指す場合、1件前に広げて
+        対応する assistant(tool_calls) を含める（孤児 tool 防止）。
+
+        start は負のインデックス。リスト先頭（-len）を越えて広げない。
+        """
+        while start < 0 and start > -len(messages) and messages[start].role == "tool":
+            start -= 1
+        return start
+
+    @staticmethod
     def _trim_system_prompt(prompt: str, mode: str, total_tokens: int = 0, budget_tokens: int = 0) -> str:
         """Trim system prompt sections by reducing memory list size.
 
@@ -139,12 +150,16 @@ class TrimmerMixin:
         if keep_recent_turns == 0 or len(messages) <= keep_count:
             return messages
 
+        # スライス開始位置が tool メッセージを指す場合、1件前に広げて
+        # 対応する assistant(tool_calls) を含める（孤児 tool 防止）
+        start = TrimmerMixin._adjust_slice_start(messages, -keep_count)
+
         # Keep only the last keep_count messages intact
-        recent = messages[-keep_count:]
-        removed_count = len(messages) - keep_count
+        recent = messages[start:]
+        removed_count = len(messages) - len(recent)
 
         # Build a brief summary of cut user messages for context
-        old_messages = messages[:-keep_count]
+        old_messages = messages[:start]
         user_msgs = [m for m in old_messages if m.role == "user" and m.content]
         summary_parts: list[str] = []
         if user_msgs:

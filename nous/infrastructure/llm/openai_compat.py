@@ -99,7 +99,6 @@ class OpenAICompatProvider(LLMProvider):
                         "role": "assistant",
                         "content": content or None,
                         "tool_calls": tool_calls_data,
-                        "reasoning_content": "",
                     }
                 )
             elif msg.role == "tool":

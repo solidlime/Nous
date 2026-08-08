@@ -10,6 +10,7 @@ from nous.application.chat.pipeline.inference import InferenceStep
 from nous.application.chat.pipeline.post import PostProcessStep
 from nous.application.chat.pipeline.prepare import PrepareStep
 from nous.application.chat.pipeline.prompt import PromptBuildStep
+from nous.application.chat.pipeline.trimmer import TrimmerMixin
 from nous.application.chat.session_store import SessionManager
 from nous.application.chat.tools.definitions import get_filtered_tools
 from nous.application.chat.tools.registry import ToolRegistry
@@ -180,13 +181,16 @@ class ChatService:
                 # max_stored_messages によるメッセージ数制限（LLMMessage数でカウント）
                 max_msgs = config.max_stored_messages
                 if len(messages) >= max_msgs:
+                    before_count = len(messages)
+                    # スライス先頭が tool なら assistant(tool_calls) を含むよう広げる（孤児 tool 防止）
+                    start = TrimmerMixin._adjust_slice_start(messages, -max_msgs)
+                    messages = messages[start:]
                     logger.info(
                         "Truncated session messages: %d → %d (max_stored_messages=%d)",
+                        before_count,
                         len(messages),
                         max_msgs,
-                        max_msgs,
                     )
-                    messages = messages[-max_msgs:]
 
                 # Notify frontend if compression occurred
                 comp_info = getattr(turn_ctx, "_compression_info", None)

@@ -258,3 +258,23 @@ class TestAnthropicCoT:
         assert [ev.content for ev in events if isinstance(ev, TextDeltaEvent)] == ["plain"]
 
 
+class TestToApiMessagesNoReasoningContent:
+    """F2: assistant(tool_calls) メッセージに非標準 reasoning_content を含めない。"""
+
+    def test_assistant_tool_calls_have_no_reasoning_content(self):
+        from nous.infrastructure.llm.base import LLMMessage
+        from nous.infrastructure.llm.openai_compat import OpenAICompatProvider
+
+        provider = OpenAICompatProvider(api_key="test-key", base_url="https://openrouter.ai/api/v1")
+        msgs = [
+            LLMMessage(
+                role="assistant",
+                content="",
+                tool_calls=[{"id": "call_1", "name": "search", "input": {"q": "x"}}],
+            ),
+        ]
+        out = provider._to_api_messages(msgs)
+
+        assert out[0]["role"] == "assistant"
+        assert "reasoning_content" not in out[0]
+        assert out[0]["tool_calls"][0]["id"] == "call_1"
