@@ -167,6 +167,12 @@ function safeMarkdown(text) {
           "class",
         ],
       });
+      // Collapse newline text nodes between block elements. .chat-bubble uses
+      // white-space: pre-wrap (needed for streaming plain-text bubbles), which
+      // would otherwise render markdown's block-separating newlines as visible
+      // line breaks and inflate paragraph/line spacing. Code blocks are still
+      // placeholders here, so their inner newlines stay protected.
+      sanitized = sanitized.replace(/>[ \t]*\n+[ \t]*</g, "><").replace(/\n\s*$/, "");
       // Restore code blocks (renderCodeBlock output is already escaped/safe)
       codeBlocks.forEach(function (block, idx) {
         sanitized = sanitized.replace(
