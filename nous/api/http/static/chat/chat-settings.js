@@ -79,6 +79,24 @@ function applyChatConfig(cfg) {
     var v = parseFloat(topPSlider.value);
     topPVal.textContent = isNaN(v) ? "—" : v.toFixed(2);
   }
+  // Reasoning settings (R7/R8)
+  const reasoningLabels = ["low", "medium", "high", "max"];
+  setChecked("chat-reasoning-enabled", cfg.reasoning_enabled === true);
+  const reasoningCb = document.getElementById("chat-reasoning-enabled");
+  const reasoningSlider = document.getElementById("chat-reasoning-effort");
+  const reasoningVal = document.getElementById("chat-reasoning-effort-val");
+  if (reasoningSlider && reasoningVal) {
+    var effIdx = reasoningLabels.indexOf(cfg.reasoning_effort);
+    if (effIdx < 0) effIdx = 1;
+    reasoningSlider.value = effIdx;
+    reasoningVal.textContent = reasoningLabels[effIdx];
+  }
+  if (reasoningCb && reasoningSlider) {
+    reasoningSlider.disabled = !reasoningCb.checked;
+    reasoningCb.onchange = function () {
+      reasoningSlider.disabled = !this.checked;
+    };
+  }
   onChatProviderChange();
   N.Chat.state.mcpServers = cfg.mcp_servers || [];
   N.Chat.settings.renderMcpJson(N.Chat.state.mcpServers);
@@ -370,6 +388,14 @@ async function saveChatConfig() {
     top_p: (function () {
       var v = parseFloat(document.getElementById("chat-top-p")?.value);
       return isNaN(v) ? null : v;
+    })(),
+    reasoning_enabled: getChecked("chat-reasoning-enabled"),
+    reasoning_effort: (function () {
+      var labels = ["low", "medium", "high", "max"];
+      var idx = parseInt(
+        document.getElementById("chat-reasoning-effort")?.value || "1",
+      );
+      return labels[idx] || "medium";
     })(),
     max_tokens: parseInt(document.getElementById("chat-max-tokens").value),
     max_stored_messages: parseInt(

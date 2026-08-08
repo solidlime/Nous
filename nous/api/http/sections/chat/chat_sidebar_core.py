@@ -81,6 +81,25 @@ def _render_core_section() -> str:
                                             style="width:100%;accent-color:var(--accent-purple);" />
                                     </div>
                                 </div>
+                                <div style="border-top:1px solid var(--glass-border);padding-top:8px;margin-top:4px;">
+                                    <h4 style="font-size:0.82rem;font-weight:600;color:var(--text-secondary);margin:8px 0 4px;display:flex;align-items:center;gap:6px;"><i data-lucide="brain"></i> 思考モード（Reasoning）</h4>
+                                    <div class="chat-config-row" style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+                                        <label class="chat-config-label" style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-secondary);cursor:pointer;">
+                                            <input type="checkbox" id="chat-reasoning-enabled" class="chat-config-checkbox" style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;"
+                                                onchange="document.getElementById('chat-reasoning-effort').disabled=!this.checked;" />
+                                            <span>推論（thinking）を有効にする</span>
+                                        </label>
+                                    </div>
+                                    <div>
+                                        <div class="chat-field-label" style="display:flex;justify-content:space-between;">
+                                            <span>思考の深さ（Variant）</span>
+                                            <span id="chat-reasoning-effort-val" style="color:var(--accent-purple);">medium</span>
+                                        </div>
+                                        <input type="range" id="chat-reasoning-effort" class="chat-field-input" min="0" max="3" step="1" value="1" disabled
+                                            oninput="var labels=['low','medium','high','max'];document.getElementById('chat-reasoning-effort-val').textContent=labels[parseInt(this.value)]"
+                                            style="width:100%;accent-color:var(--accent-purple);" />
+                                    </div>
+                                </div>
                                 <div>
                                     <div class="chat-field-label">Max Tokens</div>
                                     <input type="number" id="chat-max-tokens" class="chat-field-input" min="1" max="131072" value="8192" />

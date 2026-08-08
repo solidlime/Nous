@@ -39,7 +39,13 @@ function collectLoraRows() {
 }
 
 function updateImageGenSliderLabels() {
-  // HTML側の oninput で処理するため、ここでは何もしない
+  // HTML側の oninput で処理するため、ここでは何もしない（reasoning ラベルのみ同期）
+  var reasoningVal = document.getElementById("chat-reasoning-effort-val");
+  var reasoningSlider = document.getElementById("chat-reasoning-effort");
+  if (reasoningVal && reasoningSlider) {
+    var labels = ["low", "medium", "high", "max"];
+    reasoningVal.textContent = labels[parseInt(reasoningSlider.value, 10)] || "medium";
+  }
 }
 
 function testImageGen() {
