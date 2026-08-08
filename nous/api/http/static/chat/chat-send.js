@@ -519,10 +519,13 @@ async function chatSend(retry) {
           if (!thinkingDetails) {
             thinkingDetails = document.createElement("details");
             thinkingDetails.className = "chat-thinking-bubble";
-            thinkingDetails.open = true;
             safeSetHTML(
               thinkingDetails,
-              '<summary><i data-lucide="brain"></i> 思考過程</summary>' +
+              '<summary>' +
+                '<span class="chat-thinking-summary-left">' +
+                '<i data-lucide="brain"></i> <strong>思考</strong></span>' +
+                '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
+                '<span class="chat-tool-status">処理中...</span></summary>' +
                 '<div class="chat-thinking-body"></div>',
             );
             // Keep thinking block at the head of the assistant div

@@ -117,9 +117,12 @@ function _appendSegmentsToBubble(msg, msgDiv) {
       if (!seg.content) continue;
       var thinkDiv = document.createElement("details");
       thinkDiv.className = "chat-thinking-bubble";
-      thinkDiv.open = true;
       safeSetHTML(thinkDiv,
-        '<summary><i data-lucide="brain"></i> 思考過程</summary>' +
+        '<summary>' +
+        '<span class="chat-thinking-summary-left">' +
+        '<i data-lucide="brain"></i> <strong>思考</strong></span>' +
+        '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
+        '<span class="chat-tool-status"><i data-lucide="check"></i> 完了</span></summary>' +
         '<div class="chat-thinking-body"></div>');
       thinkDiv.querySelector(".chat-thinking-body").textContent = seg.content;
       var timeDiv3 = msgDiv.querySelector(".chat-time");

@@ -326,27 +326,54 @@ html.light .chat-bubble strong {
 html.light .chat-bubble hr {
   background: rgba(0, 0, 0, 0.1);
 }
-/* CoT (thinking) bubble — neutral faint style, distinct from tool_call */
+/* CoT (thinking) bubble — compact 1-row summary, distinct from tool_call */
 .chat-thinking-bubble {
   font-size: 0.78rem;
-  padding: 2px 8px;
+  padding: 0;
   border-radius: var(--radius-sm);
   background: rgba(148, 163, 184, 0.06);
   border: 0.5px solid rgba(148, 163, 184, 0.15);
   border-left: 2px solid rgba(148, 163, 184, 0.4);
   color: var(--text-secondary);
-  font-style: italic;
   margin: 4px 0;
+  overflow: hidden;
 }
 .chat-thinking-bubble summary {
   cursor: pointer;
   user-select: none;
-  padding: 4px 6px;
+  padding: 4px 8px;
   outline: none;
   list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
 }
 .chat-thinking-bubble summary::-webkit-details-marker {
   display: none;
+}
+.chat-thinking-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+}
+.chat-thinking-summary-left i,
+.chat-thinking-summary-left svg {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+}
+.chat-thinking-summary-left strong {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Chevron reuse from tool bubble */
+.chat-thinking-bubble details[open] > summary .chat-tool-chevron {
+  transform: rotate(90deg);
 }
 .chat-thinking-body {
   margin: 4px 0 4px 10px;
