@@ -10,6 +10,27 @@ var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
 "use strict";
 
 // ------------------------------------------------------------------
+// Custom marked renderer for GFM task lists
+// marked v12 does not emit contains-task-list / task-list-item classes.
+// Register once at module init (marked.use is global).
+// ------------------------------------------------------------------
+if (typeof marked !== "undefined" && marked.use) {
+  marked.use({
+    renderer: {
+      checkbox: function (checked) {
+        return '<input class="task-list-item-checkbox"' +
+          (checked ? ' checked=""' : '') +
+          ' disabled type="checkbox">';
+      },
+      listitem: function (text, task, checked) {
+        return '<li' + (task ? ' class="task-list-item"' : '') + '>' +
+          text + '</li>\n';
+      },
+    },
+  });
+}
+
+// ------------------------------------------------------------------
 // Markdown code block rendering with syntax highlighting
 // ------------------------------------------------------------------
 function renderCodeBlock(lang, code) {
@@ -153,17 +174,13 @@ function safeMarkdown(text) {
           block,
         );
       });
-      // Post-process: add task-list classes to ul/li containing checkbox inputs
-      // (marked does not emit these classes in this environment)
+      // Post-process: add contains-task-list class to ul containing checkbox inputs
+      // (marked renderer adds task-list-item to li, but cannot add class to ul itself)
       sanitized = sanitized.replace(
         /<ul>([\s\S]*?)<\/ul>/g,
         function (match, inner) {
           if (inner.indexOf('type="checkbox"') === -1) return match;
-          var fixed = inner.replace(
-            /<li>/g,
-            '<li class="task-list-item">',
-          );
-          return '<ul class="contains-task-list">' + fixed + '</ul>';
+          return '<ul class="contains-task-list">' + inner + '</ul>';
         },
       );
       return sanitized;

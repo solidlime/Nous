@@ -1325,6 +1325,18 @@ input[type="range"].chat-field-input:focus {
   margin: 0;
   line-height: 1.4;
 }
+/* Eliminate loose-list paragraph margins inside li */
+.chat-bubble li > p {
+  margin: 0;
+}
+/* Collapse nested list margins */
+.chat-bubble ul ul,
+.chat-bubble ol ol,
+.chat-bubble ul ol,
+.chat-bubble ol ul {
+  margin-top: 0;
+  margin-bottom: 0;
+}
 /* Task list / checkbox support */
 .chat-bubble ul.contains-task-list {
   list-style: none;
@@ -1335,8 +1347,9 @@ input[type="range"].chat-field-input:focus {
   align-items: flex-start;
   gap: 0.4em;
 }
-.chat-bubble li.task-list-item input[type="checkbox"] {
-  margin-top: 0.35em;
+.chat-bubble li.task-list-item input[type="checkbox"],
+.chat-bubble .task-list-item-checkbox {
+  margin: 0.25em 0.3em 0 0;
   accent-color: var(--accent-blue);
   flex-shrink: 0;
 }
