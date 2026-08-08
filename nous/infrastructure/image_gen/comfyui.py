@@ -41,6 +41,7 @@ class ComfyUIProvider(ImageGenProvider):
         seed: int = 0,
         denoise: float = 0.7,
         workflow_template: str = "",
+        timeout_seconds: float = 180.0,
     ) -> None:
         if not workflow_template:
             raise ValueError("workflow_template is required")
@@ -56,12 +57,20 @@ class ComfyUIProvider(ImageGenProvider):
         self._seed = seed
         self._denoise = denoise
         self._workflow_template = workflow_template
+        self._timeout_seconds = timeout_seconds
         self._client: httpx.AsyncClient | None = None
 
     @property
     def client(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=180.0, write=180.0, pool=5.0))
+            self._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(
+                    connect=5.0,
+                    read=self._timeout_seconds,
+                    write=self._timeout_seconds,
+                    pool=5.0,
+                )
+            )
         return self._client
 
     @staticmethod
@@ -76,9 +85,12 @@ class ComfyUIProvider(ImageGenProvider):
         return "comfyui"
 
     async def health_check(self) -> bool:
-        """ComfyUI のヘルスチェック: GET /system_stats"""
+        """ComfyUI のヘルスチェック: GET /system_stats（専用ショートタイムアウト 5s）"""
         try:
-            r = await self.client.get(f"{self._api_url}/system_stats")
+            r = await self.client.get(
+                f"{self._api_url}/system_stats",
+                timeout=httpx.Timeout(connect=5.0, read=5.0, write=5.0, pool=5.0),
+            )
             return r.status_code == 200
         except Exception:
             return False
@@ -162,7 +174,7 @@ class ComfyUIProvider(ImageGenProvider):
         # POST /prompt — 最大 2 回リトライ
         prompt_id = await self._submit_workflow(workflow)
 
-        # Poll /history — 最大 180 秒
+        # Poll /history — 実時間タイムアウト（既定 180 秒）
         return await self._poll_result(
             prompt_id,
             prompt,
@@ -421,12 +433,14 @@ class ComfyUIProvider(ImageGenProvider):
         node_titles: dict[str, str] | None = None,
         display_node_ids: set[str] | None = None,
     ) -> list[GeneratedImage]:
-        """履歴をポーリングして生成画像を取得（最大 60 回 × 3s = 180s）。
+        """履歴をポーリングして生成画像を取得（実時間タイムアウト: timeout_seconds）。
 
         display_node_ids が None の場合は全画像 display=True（後方互換）。
+        ComfyUI 実行エラー（status.status_str == "error"）は即時検出して raise する。
         """
-        for _ in range(60):
-            await asyncio.sleep(3)
+        deadline = time.monotonic() + self._timeout_seconds
+        while time.monotonic() < deadline:
+            await asyncio.sleep(min(3.0, max(0.0, deadline - time.monotonic())))
             try:
                 hist_resp = await self.client.get(f"{self._api_url}/history/{prompt_id}")
                 hist = hist_resp.json()
@@ -435,6 +449,14 @@ class ComfyUIProvider(ImageGenProvider):
 
             if prompt_id not in hist:
                 continue
+
+            # ComfyUI 実行エラー: 出力が生成されないままポーリング継続せず即時検出
+            status = hist[prompt_id].get("status", {})
+            if status.get("status_str") == "error":
+                messages = status.get("messages", [])
+                if messages:
+                    raise RuntimeError(f"ComfyUI generation failed: {messages}")
+                raise RuntimeError("ComfyUI generation failed")
 
             outputs = hist[prompt_id].get("outputs", {})
             if not outputs:
@@ -477,4 +499,4 @@ class ComfyUIProvider(ImageGenProvider):
             if images:
                 return images[:n]
 
-        raise RuntimeError("ComfyUI generation timed out after 180s")
+        raise RuntimeError(f"ComfyUI generation timed out after {self._timeout_seconds:.0f}s")

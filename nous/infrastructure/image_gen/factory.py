@@ -12,5 +12,9 @@ def get_image_gen_provider(config: ImageGenConfig) -> ImageGenProvider | None:
         from .comfyui import ComfyUIProvider
 
         # workflow_template は必須（既定の同梱テンプレートを使用）
-        return ComfyUIProvider(api_url=config.comfyui_url, workflow_template="workflows/default_node.json")
+        return ComfyUIProvider(
+            api_url=config.comfyui_url,
+            workflow_template="workflows/default_node.json",
+            timeout_seconds=getattr(config, "timeout_seconds", 180.0),
+        )
     return None

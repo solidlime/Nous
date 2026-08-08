@@ -1,6 +1,7 @@
 """ComfyUIProvider の単体テスト"""
 
 import json
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -27,7 +28,10 @@ async def test_health_check_returns_true_when_comfyui_responds():
         result = await provider.health_check()
 
         assert result is True
-        mock_client.get.assert_called_once_with("http://localhost:8188/system_stats")
+        mock_client.get.assert_called_once_with(
+            "http://localhost:8188/system_stats",
+            timeout=httpx.Timeout(connect=5.0, read=5.0, write=5.0, pool=5.0),
+        )
 
 
 @pytest.mark.asyncio
@@ -188,8 +192,8 @@ async def test_generate_raises_on_all_retries_fail(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_generate_times_out_after_180s(tmp_path):
-    """generateが180秒でタイムアウトする"""
+async def test_generate_times_out_after_timeout_seconds(tmp_path):
+    """timeout_seconds を超えると実時間でタイムアウトする（sleep モックなし）"""
     template = tmp_path / "template.json"
     template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
     with patch("httpx.AsyncClient") as mock_client_class:
@@ -209,13 +213,97 @@ async def test_generate_times_out_after_180s(tmp_path):
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
+        provider = ComfyUIProvider(
+            api_url="http://localhost:8188",
+            workflow_template=str(template),
+            timeout_seconds=1.0,
+        )
+
+        start = time.monotonic()
+        with pytest.raises(RuntimeError, match="ComfyUI generation timed out after 1s"):
+            await provider.generate(prompt="test", n=1)
+        elapsed = time.monotonic() - start
+
+        # sleep モックに依存せず実時間でタイムアウトしていること
+        assert elapsed >= 1.0
+
+
+@pytest.mark.asyncio
+async def test_generate_raises_immediately_on_comfyui_error_status(tmp_path):
+    """history の status_str == "error" で即 RuntimeError（ポーリング継続しない）"""
+    template = tmp_path / "template.json"
+    template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = MagicMock()
+
+        post_resp = MagicMock()
+        post_resp.status_code = 200
+        post_resp.json.return_value = {"prompt_id": "error-id"}
+
+        error_hist = MagicMock()
+        error_hist.json.return_value = {
+            "error-id": {
+                "status": {
+                    "status_str": "error",
+                    "messages": [["execution_error", {"exception_message": "CUDA OOM"}]],
+                },
+                "outputs": {},
+            }
+        }
+
+        mock_client.post = AsyncMock(return_value=post_resp)
+        mock_client.get = AsyncMock(return_value=error_hist)
+        mock_client_class.return_value = mock_client
+
+        from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
         provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template=str(template))
 
         with (
             patch("asyncio.sleep", new=AsyncMock(return_value=None)),
-            pytest.raises(RuntimeError, match="ComfyUI generation timed out"),
+            pytest.raises(RuntimeError, match="ComfyUI generation failed: .*CUDA OOM"),
         ):
             await provider.generate(prompt="test", n=1)
+
+        # 1回のポーリングで即失敗（タイムアウトまで回さない）
+        assert mock_client.get.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_raises_plain_error_without_messages(tmp_path):
+    """status に messages が無い場合はシンプルなエラーメッセージで即失敗"""
+    template = tmp_path / "template.json"
+    template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = MagicMock()
+
+        post_resp = MagicMock()
+        post_resp.status_code = 200
+        post_resp.json.return_value = {"prompt_id": "error-id2"}
+
+        error_hist = MagicMock()
+        error_hist.json.return_value = {
+            "error-id2": {
+                "status": {"status_str": "error"},  # messages 無し
+                "outputs": {},
+            }
+        }
+
+        mock_client.post = AsyncMock(return_value=post_resp)
+        mock_client.get = AsyncMock(return_value=error_hist)
+        mock_client_class.return_value = mock_client
+
+        from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template=str(template))
+
+        with (
+            patch("asyncio.sleep", new=AsyncMock(return_value=None)),
+            pytest.raises(RuntimeError, match="^ComfyUI generation failed$"),
+        ):
+            await provider.generate(prompt="test", n=1)
+
+        assert mock_client.get.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -280,6 +368,35 @@ def test_provider_name():
 
     provider = ComfyUIProvider(workflow_template="dummy.json")
     assert provider.provider_name == "comfyui"
+
+
+def test_timeout_seconds_default_is_180():
+    """timeout_seconds 未指定時はデフォルト 180 秒"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(workflow_template="dummy.json")
+    assert provider._timeout_seconds == 180.0
+
+
+def test_client_timeout_follows_timeout_seconds():
+    """client の read/write タイムアウトが timeout_seconds に連動する"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    provider = ComfyUIProvider(workflow_template="dummy.json", timeout_seconds=77.0)
+    with patch("httpx.AsyncClient") as mock_client_class:
+        _ = provider.client
+    timeout = mock_client_class.call_args.kwargs["timeout"]
+    assert timeout.read == 77.0
+    assert timeout.write == 77.0
+    assert timeout.connect == 5.0
+    assert timeout.pool == 5.0
+
+
+def test_tool_config_comfyui_timeout_default_is_180():
+    """ToolConfig の image_gen_comfyui_timeout_seconds デフォルトは 180"""
+    from nous.domain.tool_config import ToolConfig
+
+    assert ToolConfig().image_gen_comfyui_timeout_seconds == 180
 
 
 # ============================================================

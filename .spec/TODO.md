@@ -101,3 +101,19 @@
 - [ ] R9: TTS 除外の構造的保証（.chat-bubble 不使用 + contentParts 非push）
 - [ ] R10: テスト（reasoning_content/thinking_delta 拾い上げ・segments 保存・full_response 混入なし）
 - [ ] R11: docs/llm_usage_guide.md に thinking_delta 追記
+
+---
+
+## 画像生成タイムアウト処理（2026-08-08）
+
+> 要望: サーバー接続時、画像生成がタイムアウト処理なしで「生成中」のままハング。音声生成（irodori.py: config `timeout_seconds` + httpxタイムアウト + リトライ）と同じパターンで対策する。
+
+- [x] R1: `tool_config.py` に `image_gen_comfyui_timeout_seconds: int = 180` 追加
+- [x] R2: `ComfyUIProvider.__init__` に `timeout_seconds` パラメータ追加（デフォルト 180）。client の read/write タイムアウトを設定値に連動
+- [x] R3: `_poll_result` を実時間制限に変更（`time.monotonic()` デッドライン、ループ回数上限 60 は廃止 → 実時間で打ち切り、エラーメッセージに秒数を含める）
+- [x] R4: `_poll_result` に ComfyUI 実行エラー早期検出（`status.status_str == "error"` → 即 RuntimeError）
+- [x] R5: `health_check` に専用ショートタイムアウト（5s、TTS の irodori.py:97 と同型）
+- [x] R6: `builtin.py` / `routers/image_gen.py` / `factory.py` で `timeout_seconds` を config から注入
+- [x] R7: テスト更新（タイムアウト実時間検証・エラー早期検出・config デフォルト）
+- [x] V1: `pytest tests/unit/test_comfyui_provider.py -q` 全パス（45 passed / 2ファイル合算）
+- [x] V2: ruff / py_compile クリーン（既存 issue 2件のみ）

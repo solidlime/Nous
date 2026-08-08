@@ -34,6 +34,7 @@ class ToolConfig(BaseModel):
     image_gen_comfyui_scheduler: str = "normal"
     image_gen_comfyui_seed: int = 0  # 0=ランダム
     image_gen_comfyui_denoise: float = 0.7
+    image_gen_comfyui_timeout_seconds: int = 180  # 生成タイムアウト（秒）
     image_gen_comfyui_workflow_template: str = "workflows/default_node.json"  # path to API-format JSON workflow template (required; empty raises in ComfyUIProvider)
     image_gen_max_width: int = 1200
     image_gen_max_height: int = 1200

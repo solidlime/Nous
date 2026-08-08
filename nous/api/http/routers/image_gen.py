@@ -84,6 +84,7 @@ def register_image_gen_routes(mcp) -> None:
             seed=body.get("seed", getattr(config, "image_gen_comfyui_seed", 0)),
             denoise=body.get("denoise", getattr(config, "image_gen_comfyui_denoise", 0.7)),
             workflow_template=getattr(config, "image_gen_comfyui_workflow_template", ""),
+            timeout_seconds=getattr(config, "image_gen_comfyui_timeout_seconds", 180),
         )
 
         # ── i2i（固定）: 参照画像 reference.png を常時読み込む（無ければ 400）──

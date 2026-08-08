@@ -1,5 +1,20 @@
 # MEMORY
 
+## 画像生成タイムアウト実装 (2026-08-08)
+- **症状**: ComfyUI サーバー接続時に「生成中」のまま無限ハング。`_poll_result` はループ60回×3s=180s と docstring に主張するが、各 `GET /history` に httpx read=180s が掛かり実質最大3時間まで伸び得た（ループ回数≠実時間制限）
+- **Fix**: TTS（irodori.py）のパターンを移植 — (1) `ToolConfig.image_gen_comfyui_timeout_seconds=180` + `ImageGenConfig.timeout_seconds=180.0` 追加 (2) `ComfyUIProvider(timeout_seconds=)` で client read/write タイムアウト連動 (3) `_poll_result` を `while time.monotonic() < deadline` の実時間制限に変更、sleep は `min(3.0, deadline-now)` (4) `status.status_str=="error"` の早期検出（messages 込み RuntimeError） (5) `health_check` 専用 5s タイムアウト (6) builtin.py / routers/image_gen.py / factory.py で config 注入
+- **検証**: comfyui_provider 41 + image_gen_providers 4 = 45 passed（タイムアウトは sleep モック非依存の実時間テストに変更）、ruff 新規0、py_compile OK
+- **教訓**: 「ループ回数上限」は実時間保証にならない。httpx の read タイムアウトが掛かる await があると総時間が指数関数的に伸びる。ポーリングは必ず `time.monotonic()` デッドラインで実時間制限する
+
+## チャット行間バグ: pre-wrap × マークダウン改行ノード (2026-08-08)
+- **コミット**: 10917ca（未プッシュ）[skip-docs]
+- **症状**: チャットのマークダウン行間が過剰に広い（測定で正常時の1.7倍）
+- **Root cause**: `.chat-bubble` の `white-space: pre-wrap`（streaming 中の textContent 表示用）が、marked 出力のブロック間改行テキストノード（`</p>\n<p>` 等）を可視改行として描画 → 段落・リスト項目間が2行分に膨張
+- **Fix**: (1) chat-markdown.js: DOMPurify後・プレースホルダー復元前に `replace(/>[ \t]*\n+[ \t]*</g, "><").replace(/\n\s*$/, "")` で改行ノード除去（コードブロックはプレースホルダー保護中なので安全）。実験で556.6→326.5px（white-space:normal と完全一致） (2) chat.css: 人間工学的余白に調整（p: 0.5em, li: 0.25em+line-height 1.5, 見出し: 1em/0.45em, pre/blockquote/table: 0.6em, hr: 0.8em）
+- **検証**: vitest 71 passed / stylelint クリーン / localhost 実機確認（computed style: p 8px, li 4px + 24px lh）
+- **教訓**: pre-wrap コンテナにマークダウンHTMLを注入する際はブロック間改行ノードの正規化必須。streaming 中は textContent 直書きのため pre-wrap は残す（CSS側だけで直せない）。インライン間の空白は壊さないよう `\n` を含む場合のみ除去
+- **実験手法**: /tmp/line-test/ で marked.min.js（CDN）+ agent-browser（puppeteer キャッシュ Chrome）+ eval で高さ計測・A/B比較。視覚検証はスクショ + vision
+
 ## 画像生成パイプライン全面リライト (2026-08-01)
 - **commits**: 3e3df71, 590bc9c, d9b0b9e, 7cc3427
 - **背景**: 動的ビルド `_build_workflow()` のノードID衝突（LoRAチェーン next_id=12 と img2img VAEEncode の上書き）→ ComfyUI で `LoraLoader 13: tuple index out of range`
