@@ -483,6 +483,35 @@ Dynamic Temperature settings are available in the Chat Config section of the Web
 
 ---
 
+## 10-a. Reasoning / 思考モード（thinking）
+
+Reasoning controls how much the LLM "thinks" before answering. Providers expose this differently, so Nous maps a unified 4-level effort scale (`low` / `medium` / `high` / `max`) per provider.
+
+### Configuration
+
+```python
+# ChatConfig fields
+reasoning_enabled: bool = False           # Enable/disable (default: False)
+reasoning_effort: str = "medium"          # "low" | "medium" | "high" | "max" (default: "medium")
+```
+
+### Provider mapping
+
+| Provider | Wire format |
+|----------|-------------|
+| OpenRouter | `reasoning: {"effort": <level>}` |
+| OpenAI-compatible (OpenAI / DeepSeek / xAI etc.) | `reasoning_effort: "<level>"` |
+| Anthropic | `thinking: {"type": "enabled", "budget_tokens": <level→tokens>}` (`low`=2048 / `medium`=4096 / `high`=8192 / `max`=16384) |
+| Google (GeminiProvider) | inherits OpenAI-compatible path |
+
+When `reasoning_enabled` is `False` (default), no reasoning parameter is sent and providers use their own defaults.
+
+### WebUI
+
+Reasoning settings are available in the Chat Config section of the WebUI Settings page (思考モード checkbox + 思考の深さ slider). Changes take effect on the next message.
+
+---
+
 ---
 
 ## 11-a. Voice Synthesis / 音声合成 (Irodori TTS)
