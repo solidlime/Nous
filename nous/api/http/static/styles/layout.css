@@ -10,6 +10,7 @@
     padding: 14px 24px;
     display: flex; align-items: center; justify-content: space-between;
     flex-wrap: wrap; gap: 12px;
+    flex-shrink: 0;
     contain: layout style paint;
 }
 html.light .app-header {
@@ -43,7 +44,7 @@ html.light .app-header {
    ============================================================ */
 .tab-bar {
     position: sticky; top: 60px; z-index: var(--z-sticky);
-    display: flex; gap: 4px;
+    display: flex; gap: 4px; align-items: flex-start;
     padding: 8px 24px;
     background: var(--glass-bg);
     backdrop-filter: blur(20px) saturate(180%);
@@ -52,6 +53,7 @@ html.light .app-header {
     overflow-x: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    flex-shrink: 0;
     contain: layout style paint;
 }
 .tab-bar::-webkit-scrollbar { display: none; }
@@ -94,6 +96,9 @@ html.light .tab-bar { background: rgba(255, 255, 255, 0.7); }
     max-width: 1400px;
     margin: 0 auto;
     padding: 24px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
     overflow-x: hidden;
 }
 .tab-panel {

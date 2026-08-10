@@ -35,8 +35,10 @@ body {
     line-height: 1.47;
     background: var(--bg-primary);
     color: var(--text-primary);
-    min-height: 100dvh;
-    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    overflow: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }

@@ -2,7 +2,7 @@
 #tab-chat.active {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - var(--header-height) - var(--tabbar-height) - 48px);
+  height: 100%;
   position: relative;
   overflow: hidden;
 }
