@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import json
 from typing import TYPE_CHECKING
 
@@ -61,29 +60,13 @@ def register_image_gen_routes(mcp) -> None:
         prompt = body.get("prompt", "").strip()
         comfyui_url = getattr(config, "image_gen_comfyui_url", "") or body.get("comfyui_url", "http://localhost:8188")
 
-        # LoRA リスト: POST body 指定があれば優先、なければDB設定から
-        if "loras" in body and isinstance(body["loras"], list):
-            loras = body["loras"]
-        else:
-            loras_raw = getattr(config, "image_gen_comfyui_loras", "")
-            loras: list[dict] = []
-            if loras_raw:
-                with contextlib.suppress(json.JSONDecodeError, TypeError):
-                    loras = json.loads(loras_raw)
-
         provider = ComfyUIProvider(
             api_url=comfyui_url,
-            checkpoint=getattr(config, "image_gen_comfyui_checkpoint", ""),
-            loras=loras,
             width=body.get("width", getattr(config, "image_gen_comfyui_width", 1024)),
             height=body.get("height", getattr(config, "image_gen_comfyui_height", 1024)),
-            steps=body.get("steps", getattr(config, "image_gen_comfyui_steps", 28)),
-            cfg=body.get("cfg", getattr(config, "image_gen_comfyui_cfg", 5.5)),
-            sampler=body.get("sampler", getattr(config, "image_gen_comfyui_sampler", "euler_ancestral")),
-            scheduler=body.get("scheduler", getattr(config, "image_gen_comfyui_scheduler", "normal")),
-            seed=body.get("seed", getattr(config, "image_gen_comfyui_seed", 0)),
-            denoise=body.get("denoise", getattr(config, "image_gen_comfyui_denoise", 0.7)),
             workflow_template=getattr(config, "image_gen_comfyui_workflow_template", ""),
+            workflow_source=getattr(config, "image_gen_comfyui_workflow_source", "local"),
+            workflow_name=getattr(config, "image_gen_comfyui_workflow_name", ""),
             timeout_seconds=getattr(config, "image_gen_comfyui_timeout_seconds", 180),
         )
 

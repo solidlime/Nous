@@ -399,6 +399,36 @@ def test_tool_config_comfyui_timeout_default_is_180():
     assert ToolConfig().image_gen_comfyui_timeout_seconds == 180
 
 
+def test_tool_config_workflow_source_defaults():
+    """新フィールドのデフォルトは local + 空名（後方互換）。"""
+    from nous.domain.tool_config import ToolConfig
+
+    config = ToolConfig()
+    assert config.image_gen_comfyui_workflow_source == "local"
+    assert config.image_gen_comfyui_workflow_name == ""
+
+
+def test_tool_config_removed_params_absent():
+    """廃止フィールド（checkpoint/loras/steps/cfg/sampler/scheduler/denoise/seed）が無いこと。"""
+    from nous.domain.tool_config import ToolConfig
+
+    config = ToolConfig()
+    for field in (
+        "image_gen_comfyui_checkpoint",
+        "image_gen_comfyui_loras",
+        "image_gen_comfyui_steps",
+        "image_gen_comfyui_cfg",
+        "image_gen_comfyui_sampler",
+        "image_gen_comfyui_scheduler",
+        "image_gen_comfyui_denoise",
+        "image_gen_comfyui_seed",
+    ):
+        assert not hasattr(config, field), f"{field} は廃止されているべき"
+    # サイズ系は維持
+    assert config.image_gen_comfyui_width == 1024
+    assert config.image_gen_comfyui_height == 1024
+
+
 # ============================================================
 # NOUS tag injection tests (template mode)
 # ============================================================

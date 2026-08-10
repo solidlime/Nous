@@ -276,32 +276,15 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
         # ── ChatConfig から ComfyUIProvider を直接構築 ──
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        # LoRA リストを JSON からパース
-        loras_raw = getattr(config, "image_gen_comfyui_loras", "")
-        loras: list[dict] = []
-        if loras_raw:
-            try:
-                loras = json.loads(loras_raw)
-                if not isinstance(loras, list):
-                    loras = []
-            except (json.JSONDecodeError, TypeError):
-                pass
-
         comfyui_url = getattr(config, "image_gen_comfyui_url", "") or "http://localhost:8188"
 
         provider = ComfyUIProvider(
             api_url=comfyui_url,
-            checkpoint=getattr(config, "image_gen_comfyui_checkpoint", ""),
-            loras=loras,
             width=w,
             height=h,
-            steps=getattr(config, "image_gen_comfyui_steps", 28),
-            cfg=getattr(config, "image_gen_comfyui_cfg", 5.5),
-            sampler=getattr(config, "image_gen_comfyui_sampler", "euler_ancestral"),
-            scheduler=getattr(config, "image_gen_comfyui_scheduler", "normal"),
-            seed=getattr(config, "image_gen_comfyui_seed", 0),
-            denoise=getattr(config, "image_gen_comfyui_denoise", 0.7),
             workflow_template=getattr(config, "image_gen_comfyui_workflow_template", ""),
+            workflow_source=getattr(config, "image_gen_comfyui_workflow_source", "local"),
+            workflow_name=getattr(config, "image_gen_comfyui_workflow_name", ""),
             timeout_seconds=getattr(config, "image_gen_comfyui_timeout_seconds", 180),
         )
 
