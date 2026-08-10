@@ -613,10 +613,11 @@ async function restoreChatHistory(showSkeleton) {
   const sid = getChatSessionId();
   const container = document.getElementById("chat-messages");
   // display_history_turns 件数分（最新N turns = N*2 messages）に制限 — fetch 前に計算
+  // サーバー上限 200 を超えないようクランプ（設定が大きくても遅延ロードで補完される）
   const displayTurns = parseInt(
     document.getElementById("chat-display-history-turns")?.value || "10",
   );
-  const maxMsgs = displayTurns * 2;
+  const maxMsgs = Math.min(displayTurns * 2, 200);
   // Show loading skeleton while fetching history (Bug B3 fix: don't reset DOM before fetch)
   if (showSkeleton) {
     const skeletonHtml =
@@ -693,11 +694,11 @@ async function loadOlderMessages() {
   var prevScrollTop = container ? container.scrollTop : 0;
   var prevScrollHeight = container ? container.scrollHeight : 0;
   try {
-    // #chat-display-history-turns は初期・追加ロード両方の件数に使用
+    // #chat-display-history-turns は初期・追加ロード両方の件数に使用（サーバー上限 200 にクランプ）
     const displayTurns = parseInt(
       document.getElementById("chat-display-history-turns")?.value || "10",
     );
-    const maxMsgs = displayTurns * 2;
+    const maxMsgs = Math.min(displayTurns * 2, 200);
     const data = await api(
       "/api/chat/" +
         encodeURIComponent(S.persona) +
