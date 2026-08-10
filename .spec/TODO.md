@@ -149,3 +149,20 @@
 - [x] V2: ブラウザ実機確認（設定パネルに項目なし・ヒント文言修正・limit=50 動作・保存OK・レイアウト正常）
 
 > 既知の失敗（本変更と無関係・git stash で切り分け確認済み）: TestChatConfigRepository 4件（chat_config.get がデフォルト回帰 'still invalid after stripping fields'）+ test_chat_tab_buttons_use_panel_toggle_handlers（onclick="toggleMemoryPanel()" 期待が陳腐化。sections に toggleMemoryPanel は存在しない）。別タスクで対処要検討。
+
+---
+
+## ComfyUI保存ワークフロー直接実行（/userdata + UI→API変換）（2026-08-11）
+
+> 要望: ComfyUI の保存ワークフロー（/userdata 配下）を直接実行。workflow_source を「local（旧テンプレートファイル）」と「comfyui（/userdata 取得→UI→API 変換）」の2モードに。LoRA/パラメータ注入は廃止し、seed は毎回ランダム化。
+
+- [x] R1: `workflow_converter.py` 新規（is_api_format / convert_ui_to_api / apply_generation_params / WorkflowConversionError）＋フィクスチャ＋テスト15件 → 16dc87f, 9bb4aea
+- [x] R2: ComfyUIProvider 統合（/userdata 取得・変換・LoRA/パラメータ注入削除・seed ランダム化・object_info キャッシュ） → f4a819e（37 passed）
+- [x] R3: 設定配線（ToolConfig に workflow_source/name 追加・廃止8フィールド削除、builtin.py / routers/image_gen.py 書き換え） → 92aa295（39 passed）
+- [x] R4: WebUI（フォームから廃止9要素削除 + workflow-source/name 追加、chat-settings.js 保存/復元、chat-settings-image.js の廃止ID参照整理） → 3c2332e
+- [x] R5: Dockerfile COPY data/workflows/ + README 追記 → 3d75364
+- [x] V1: テスト全件（test_comfyui_provider + test_workflow_converter = 54 passed）／ruff 新規 issue なし（既存2件のみ）
+- [x] V2: ブラウザ実機確認（local:26263 に新コード起動。DOM で workflow-source=local・選択肢 [local,comfyui]・workflow-name 存在・廃止8要素消滅、API config に workflow_source=local 反映を確認）
+
+> 補足: Docker コンテナ（nous:latest, 26262）は古いコードのまま動作中のため、実機確認はローカル別ポートで実施。コンテナ更新時は再ビルドが必要。
+> 既知の失敗（本変更と無関係・既存）: test_builtin_handlers.py 4件（image size 系。preset ベース実装移行時にテスト未更新、"Invalid size format" メッセージが現実装に無い・image_gen_presets 未設定で TypeError）＋ TestChatConfigRepository 4件＋ test_chat_tab_buttons 1件。別タスクで対処要検討。
