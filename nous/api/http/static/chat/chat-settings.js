@@ -164,10 +164,6 @@ function applyChatConfig(cfg) {
     "chat-retrieval-rrf-k-val",
     cfg.retrieval_rrf_k != null ? cfg.retrieval_rrf_k : 5,
   );
-  set(
-    "chat-display-history-turns",
-    cfg.display_history_turns != null ? cfg.display_history_turns : 10,
-  );
   // Context compression settings
   set("chat-stored-msgs", cfg.max_stored_messages ?? 200);
   set("chat-context-max-tokens", cfg.context_max_tokens ?? "");
@@ -468,9 +464,6 @@ async function saveChatConfig() {
     ),
     retrieval_rrf_k: parseInt(
       document.getElementById("chat-retrieval-rrf-k")?.value || "5",
-    ),
-    display_history_turns: parseInt(
-      document.getElementById("chat-display-history-turns")?.value || "10",
     ),
     mental_model_enabled: getChecked("chat-mental-model-enabled"),
     mental_model_min_samples: parseInt(

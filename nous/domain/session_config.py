@@ -18,7 +18,6 @@ class SessionConfig(BaseModel):
     system_prompt: str = ""
     language: str = "ja"  # "ja" | "en" | "zh" | "ko" | "auto"
     debug_mode: bool = False
-    display_history_turns: int = 10
     show_message_timestamps: bool = False  # チャットメッセージにタイムスタンプを表示
     session_summarize: bool = True
     episode_search_enabled: bool = True
@@ -120,8 +119,3 @@ class SessionConfig(BaseModel):
     @classmethod
     def _clamp_retrieval_rrf_k(cls, v: float) -> float:
         return max(0.1, min(100.0, v))
-
-    @field_validator("display_history_turns")
-    @classmethod
-    def _clamp_display_history_turns(cls, v: int) -> int:
-        return max(1, min(5000, v))

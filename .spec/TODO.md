@@ -134,3 +134,18 @@
 - [x] V3: docs 更新（http_api_reference.md にチャット履歴 API 記載なし → [skip-docs]）
 
 > 補足: チャットタイトル h2 は Python 側インライン style のため CSS が負けていた → chat-mobile.css に !important 追加。スクロールバーは #chat-messages に加え .chat-tool-detail / .chat-thinking-body もモバイルで非表示。
+
+---
+
+## 表示ターン数設定の廃止（2026-08-10）
+
+> 要望: 遅延ロード導入後、表示ターン数設定（#chat-display-history-turns）は意味を失ったため廃止。初期・追加ロードとも固定50件ずつ。
+
+- [x] R1: chat_sidebar_core.py から「表示履歴 (turns)」input ブロック削除
+- [x] R2: session_config.py から display_history_turns フィールド + バリデータ削除
+- [x] R3: chat-settings.js からロード/保存処理削除
+- [x] R4: chat-history.js の maxMsgs を固定 50 に（displayTurns 読み取り削除）
+- [x] V1: node --check / py_compile / 残存 grep 確認（fix-1 実施）
+- [x] V2: ブラウザ実機確認（設定パネルに項目なし・ヒント文言修正・limit=50 動作・保存OK・レイアウト正常）
+
+> 既知の失敗（本変更と無関係・git stash で切り分け確認済み）: TestChatConfigRepository 4件（chat_config.get がデフォルト回帰 'still invalid after stripping fields'）+ test_chat_tab_buttons_use_panel_toggle_handlers（onclick="toggleMemoryPanel()" 期待が陳腐化。sections に toggleMemoryPanel は存在しない）。別タスクで対処要検討。
