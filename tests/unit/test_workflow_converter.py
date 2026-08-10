@@ -109,3 +109,46 @@ def test_convert_missing_schema_node_is_skipped():
     api = convert_ui_to_api(wf, OBJECT_INFO)
     assert "30" not in api
     assert "6" in api
+
+
+def test_apply_generation_params_injects_size_batch_and_seed():
+    from nous.infrastructure.image_gen.workflow_converter import apply_generation_params
+
+    workflow = {
+        "5": {"class_type": "EmptyLatentImage", "inputs": {"width": 512, "height": 512, "batch_size": 1}},
+        "9": {"class_type": "KSampler", "inputs": {"seed": 123, "noise_seed": 123, "steps": 30}},
+        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": ""}},
+    }
+    out = apply_generation_params(workflow, width=896, height=1152, n=3, seed=42)
+
+    assert out["5"]["inputs"]["width"] == 896
+    assert out["5"]["inputs"]["height"] == 1152
+    assert out["5"]["inputs"]["batch_size"] == 3
+    assert out["9"]["inputs"]["seed"] == 42
+    assert out["9"]["inputs"]["noise_seed"] == 42
+    assert out["6"]["inputs"]["text"] == ""  # 無関係ノードは無変更
+
+
+def test_apply_generation_params_skips_linked_inputs():
+    from nous.infrastructure.image_gen.workflow_converter import apply_generation_params
+
+    # リンク入力（[node_id, slot] リスト）は上書きしない / batch_size は最低1
+    workflow = {
+        "5": {"class_type": "EmptyLatentImage", "inputs": {"width": ["6", 0], "height": 512, "batch_size": 0}},
+    }
+    out = apply_generation_params(workflow, width=1024, height=1536, n=0, seed=7)
+
+    assert out["5"]["inputs"]["width"] == ["6", 0]  # リンクは維持
+    assert out["5"]["inputs"]["height"] == 1536
+    assert out["5"]["inputs"]["batch_size"] == 1
+
+
+def test_apply_generation_params_seed_none_randomizes():
+    from nous.infrastructure.image_gen.workflow_converter import apply_generation_params
+
+    workflow = {"9": {"class_type": "KSampler", "inputs": {"seed": 1, "noise_seed": 1}}}
+    out = apply_generation_params(workflow, width=512, height=512, n=1, seed=None)
+
+    assert out["9"]["inputs"]["seed"] != 1  # ランダム化（1 と一致する確率は実質 0）
+    assert out["9"]["inputs"]["seed"] == out["9"]["inputs"]["noise_seed"]
+    assert 1 <= out["9"]["inputs"]["seed"] < 2**63

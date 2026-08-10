@@ -11,6 +11,7 @@ comfy-cli の workflow_to_api.py を Nous 用に縮小移植したもの。
 from __future__ import annotations
 
 import copy
+import random
 from typing import Any
 
 # litegraph のノード mode。2=ミュート（実行しない）、4=バイパス（入力を素通し）
@@ -339,3 +340,34 @@ def _strip_orphan_link_inputs(api_prompt: dict[str, dict]) -> None:
             value = inputs[name]
             if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str) and value[0] not in api_prompt:
                 del inputs[name]
+
+
+def apply_generation_params(workflow: dict, *, width: int, height: int, n: int, seed: int | None = None) -> dict:
+    """保存済みワークフローへ実行時パラメータを適用する（毎回の生成時に呼ぶ）。
+
+    - class_type == "EmptyLatentImage" のノード: width / height / batch_size を注入
+      （リンク入力（[node_id, slot] リスト）は上書きしない。batch_size は最低 1）
+    - 入力名が seed / noise_seed の INT 入力: シードを上書き（ワークフロー保存時の
+      固定 seed 対策。seed=None なら毎回ランダム）
+
+    対象ノードが無ければ無変更で同じ dict を返す。
+    """
+    if seed is None:
+        seed = random.randint(1, 2**63 - 1)
+    for node in workflow.values():
+        if not isinstance(node, dict):
+            continue
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict):
+            continue
+        if node.get("class_type") == "EmptyLatentImage":
+            if "width" in inputs and isinstance(inputs["width"], (int, float)):
+                inputs["width"] = int(width)
+            if "height" in inputs and isinstance(inputs["height"], (int, float)):
+                inputs["height"] = int(height)
+            if "batch_size" in inputs and isinstance(inputs["batch_size"], (int, float)):
+                inputs["batch_size"] = max(1, int(n))
+        for name in ("seed", "noise_seed"):
+            if name in inputs and isinstance(inputs[name], (int, float)):
+                inputs[name] = seed
+    return workflow
