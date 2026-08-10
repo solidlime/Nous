@@ -51,6 +51,8 @@ COPY pyproject.toml ${APP_HOME}/
 # Copy global skill definitions (all skill dirs under data/skills/)
 COPY data/skills/ /data/skills/
 COPY data/skills/ /opt/nous/default-skills/
+# Copy bundled workflow templates (data_root=/data 前提。workflow_source="local" の初期セットアップ用)
+COPY data/workflows/ /data/workflows/
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash nous

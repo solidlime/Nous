@@ -34,6 +34,29 @@
 - **音声合成**: Irodori TTS による日本語音声出力（デフォルト OFF）
 - **コード実行**: Docker サンドボックスで Python/Bash を安全に実行
 
+#### ComfyUI 保存ワークフローの直接実行
+
+`image_gen_comfyui_workflow_source` を `"comfyui"` に設定すると、
+ComfyUI 側の `user/default/workflows/` に保存済みのワークフローを
+`/userdata` API で取得し、`/object_info` を併用して API 形式に変換して実行する。
+Nous サーバー側にワークフローファイルを置く必要はない。
+
+- `image_gen_comfyui_workflow_source`: `"local"`（既定・従来動作）| `"comfyui"`
+- `image_gen_comfyui_workflow_name`: ComfyUI 側のワークフローファイル名（例: `"Anima_T2I_Turbo_Aesthetic.json"`）
+
+変換時に UI ノードのタイトルが API 形式の `_meta.title` に写るため、
+ノードタイトルに `NOUS:prompt` / `NOUS:negative_prompt` / `NOUS:reference_image` /
+`NOUS:width` / `NOUS:height` / `NOUS:seed` / `NOUS:display` のタグを付ければ値の
+注入が機能する。シードは毎回ランダム化され、`EmptyLatentImage` の width / height /
+batch_size は実行時に上書きされる（`apply_generation_params`）。
+
+モデル・LoRA・steps・cfg・sampler・scheduler・denoise はワークフロー側に埋め込む
+（旧 `NOUS:checkpoint` / `NOUS:lora` / `NOUS:steps` / `NOUS:cfg` / `NOUS:sampler` /
+`NOUS:scheduler` / `NOUS:denoise` タグと `image_gen_comfyui_checkpoint` 等の設定は廃止）。
+
+対応外（現時点）: サブグラフ / V3 dynamic combo / GetNode-SetNode / bypass パススルー
+を含むワークフロー。必要なら comfy-cli の変換器を移植する。
+
 ---
 
 ## クイックスタート
