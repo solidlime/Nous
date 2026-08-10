@@ -856,3 +856,101 @@ class TestRollbackEndpoint:
             json={"from_id": ""},
         )
         assert resp.status_code == 400
+
+
+@pytest.mark.integration
+class TestGetSessionPagination:
+    """GET /api/chat/{persona}/sessions/{session_id}?limit=N&offset=M — tail-based pagination."""
+
+    async def _create_session_with_messages(self, client, persona: str, count: int = 5) -> str:
+        """Helper: create persona and insert messages. Returns session_id."""
+        resp = await client.post("/api/personas", json={"name": persona})
+        assert resp.status_code in (200, 201), f"Expected 200/201, got {resp.status_code}: {resp.text[:200]}"
+
+        from nous.application.chat.service import _session_manager
+        from nous.application.use_cases import AppContextRegistry
+
+        ctx = AppContextRegistry.get(persona)
+        assert ctx is not None, f"Context for '{persona}' not found"
+        db = ctx.connection.get_memory_db()
+
+        window = _session_manager.get_or_create(persona, "main", db=db)
+        for i in range(count):
+            window.add("user" if i % 2 == 0 else "assistant", f"message {i}")
+        window.flush()
+        return "main"
+
+    async def test_no_limit_returns_all_with_total(self, client):
+        persona = "page_no_limit"
+        session_id = await self._create_session_with_messages(client, persona, count=5)
+
+        resp = await client.get(f"/api/chat/{persona}/sessions/{session_id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 5
+        assert [m["content"] for m in data["messages"]] == [f"message {i}" for i in range(5)]
+
+    async def test_limit_offset_zero_returns_tail(self, client):
+        persona = "page_tail"
+        session_id = await self._create_session_with_messages(client, persona, count=5)
+
+        resp = await client.get(f"/api/chat/{persona}/sessions/{session_id}?limit=2&offset=0")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 5
+        assert [m["content"] for m in data["messages"]] == ["message 3", "message 4"]
+
+    async def test_limit_offset_two_returns_older_slice(self, client):
+        persona = "page_older"
+        session_id = await self._create_session_with_messages(client, persona, count=5)
+
+        resp = await client.get(f"/api/chat/{persona}/sessions/{session_id}?limit=2&offset=2")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 5
+        assert [m["content"] for m in data["messages"]] == ["message 1", "message 2"]
+
+    async def test_offset_at_or_beyond_total_returns_empty(self, client):
+        persona = "page_offset_past"
+        session_id = await self._create_session_with_messages(client, persona, count=5)
+
+        resp = await client.get(f"/api/chat/{persona}/sessions/{session_id}?limit=2&offset=5")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 5
+        assert data["messages"] == []
+
+    async def test_empty_session_returns_empty_and_total_zero(self, client):
+        persona = "page_empty"
+        resp = await client.post("/api/personas", json={"name": persona})
+        assert resp.status_code in (200, 201)
+
+        resp = await client.get(f"/api/chat/{persona}/sessions/main?limit=2&offset=0")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 0
+        assert data["messages"] == []
+
+    async def test_limit_greater_than_remaining_returns_available(self, client):
+        persona = "page_short"
+        session_id = await self._create_session_with_messages(client, persona, count=3)
+
+        resp = await client.get(f"/api/chat/{persona}/sessions/{session_id}?limit=200&offset=2")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 3
+        assert [m["content"] for m in data["messages"]] == ["message 0"]
+
+    async def test_invalid_limit_rejected(self, client):
+        persona = "page_inv_limit"
+        session_id = await self._create_session_with_messages(client, persona, count=3)
+        for qs in ("limit=0", "limit=201", "limit=abc", "limit=1.5"):
+            resp = await client.get(f"/api/chat/{persona}/sessions/{session_id}?{qs}")
+            assert resp.status_code == 400, f"{qs} should be rejected"
+
+    async def test_invalid_offset_rejected(self, client):
+        persona = "page_inv_offset"
+        session_id = await self._create_session_with_messages(client, persona, count=3)
+        for qs in ("offset=-1", "offset=abc"):
+            resp = await client.get(f"/api/chat/{persona}/sessions/{session_id}?{qs}")
+            assert resp.status_code == 400, f"{qs} should be rejected"

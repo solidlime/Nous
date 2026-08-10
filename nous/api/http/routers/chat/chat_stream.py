@@ -65,13 +65,23 @@ async def _do_chat(
         yield chunk
 
 
-async def _do_get_chat_session(persona: str, ctx, session_id: str) -> dict:
-    """Return session messages dict."""
+async def _do_get_chat_session(
+    persona: str, ctx, session_id: str, limit: int | None = None, offset: int = 0
+) -> dict:
+    """Return session messages dict with tail-based pagination.
+
+    limit/offset は末尾（最新）基準。limit=None なら全件。total は常に全件数。
+    """
     from nous.application.chat.session_store import SessionManager
 
     db = ctx.connection.get_memory_db()
-    messages = SessionManager.get_messages(db, persona, session_id)
-    return {"session_id": session_id, "messages": messages}
+    all_messages = SessionManager.get_messages(db, persona, session_id)
+    total = len(all_messages)
+    if limit is None:
+        return {"session_id": session_id, "messages": all_messages, "total": total}
+    end = total - offset
+    start = max(0, end - limit)
+    return {"session_id": session_id, "messages": all_messages[start:end], "total": total}
 
 
 async def _do_delete_chat_session(persona: str, ctx, session_id: str) -> dict:

@@ -93,3 +93,126 @@
     padding: 10px;
   }
 }
+
+/* ============================================================
+   MOBILE SIZE REFINEMENTS — compact icons, tighter spacing
+   ============================================================ */
+
+/* --- Header: smaller glass-btn icons + tighter controls --- */
+@media (max-width: 768px) {
+  /* Glass-btn SVG inside header: 24px → 18px */
+  .header-controls .glass-btn svg,
+  .header-controls .glass-btn i {
+    width: 18px;
+    height: 18px;
+  }
+  /* Reduce glass-btn padding on mobile (keep 44px tap target via min-height/min-width) */
+  .header-controls .glass-btn {
+    padding: 8px 10px;
+  }
+  /* Header brain icon — target the inline-style span via structural selector */
+  .app-header > div:first-child > span {
+    font-size: 1.2rem !important;
+  }
+}
+
+/* --- Chat tab header: smaller title + icon --- */
+@media (max-width: 768px) {
+  /* Chat h2 title — !important: sections/chat がインライン style で固定しているため */
+  #tab-chat h2 {
+    font-size: 1.05rem !important;
+  }
+  #tab-chat h2 span {
+    font-size: 1.15rem !important;
+  }
+  /* Chat header action buttons: smaller SVGs */
+  .mem-panel-toggle svg,
+  .mem-panel-toggle i,
+  .chat-sidebar-toggle svg,
+  .chat-sidebar-toggle i {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* --- Welcome command chips: more compact --- */
+@media (max-width: 768px) {
+  .chat-welcome-commands {
+    gap: 4px;
+    max-width: 320px;
+  }
+  .chat-welcome-cmd {
+    padding: 2px 6px;
+    font-size: 0.68rem;
+  }
+}
+
+/* --- Chat input area: tighter on mobile --- */
+@media (max-width: 768px) {
+  #chat-input-area {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  #chat-input {
+    padding: 10px 12px;
+    font-size: 0.92rem;
+    min-height: 40px;
+  }
+  /* Send button: slightly smaller padding */
+  #chat-send-btn {
+    padding: 8px 16px;
+    font-size: 0.92rem;
+  }
+  /* Action buttons (attach, mic, download): smaller SVGs */
+  .chat-action-btn svg,
+  .chat-action-btn i {
+    width: 18px;
+    height: 18px;
+  }
+  .chat-action-btn {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+  /* Stop/cancel button */
+  .chat-stop-btn {
+    padding: 5px 10px;
+    font-size: 0.75rem;
+  }
+  .chat-stop-btn svg,
+  .chat-stop-btn i {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/* --- Suppress blue scrollbar on mobile --- */
+@media (max-width: 768px) {
+  #chat-messages {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+  }
+  #chat-messages::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+  /* Tool details / thinking bodies: hide scrollbars on mobile too */
+  .chat-tool-detail,
+  .chat-thinking-body {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .chat-tool-detail::-webkit-scrollbar,
+  .chat-thinking-body::-webkit-scrollbar {
+    display: none;
+  }
+  #chat-messages::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+  /* Settings panel: thin subtle scrollbar instead of blue */
+  #settings-panel .settings-scroll-container {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  }
+  #settings-panel .settings-scroll-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}

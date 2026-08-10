@@ -15,6 +15,10 @@ var S = window.S;
 var CHAT = N.Chat.state;
 var _historyGen = 0;
 var _restoreLock = false;
+var _loadedCount = 0;       // 表示済みメッセージ件数（初期ロード + 追加分）
+var _historyComplete = false; // total 取得済み（追加ロード不要）
+var _loadingOlder = false;    // 追加ロード中の多重実行防止
+var _historyRestorePending = false; // restore 未完了（バックグラウンド復帰時の再実行判定）
 
 // ------------------------------------------------------------------
 // Reset to welcome screen
@@ -479,75 +483,22 @@ async function editChatMessage(msgId) {
 }
 
 // ------------------------------------------------------------------
-// Restore chat history from server on page load / persona switch
+// Shared renderer for history messages (initial load / load-older)
+// prepend=false: DOM リセット後に末尾へ append（初期ロード）
+// prepend=true:  既存メッセージの前に挿入（追加ロード）
 // ------------------------------------------------------------------
-async function restoreChatHistory(showSkeleton) {
-  if (showSkeleton === undefined) showSkeleton = true;
-  if (!S.persona) return;
-  if (CHAT._justReset) {
-    CHAT._justReset = false;
-    return; // リセット直後は履歴を再取得しない
-  }
-  // Generation counter — prevent stale response from overwriting newer data
-  var myGen = ++_historyGen;
-  // Exclusive lock — prevent concurrent restore calls
-  if (_restoreLock) return;
-  _restoreLock = true;
-  try {
-  const sid = getChatSessionId();
-  const container = document.getElementById("chat-messages");
-  // Show loading skeleton while fetching history (Bug B3 fix: don't reset DOM before fetch)
-  if (showSkeleton) {
-    const skeletonHtml =
-      '<div class="chat-msg assistant"><div class="chat-bubble" style="opacity:0.5"><div class="skeleton skeleton-text" style="width:80%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:60%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:40%;height:14px"></div></div></div>' +
-      '<div class="chat-msg user" style="align-self:flex-end"><div class="chat-bubble" style="opacity:0.5"><div class="skeleton skeleton-text" style="width:70%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:50%;height:14px"></div></div></div>';
-    const skeletonDiv = document.createElement("div");
-    skeletonDiv.id = "chat-history-skeleton";
-    safeSetHTML(skeletonDiv, skeletonHtml);
-    container.appendChild(skeletonDiv);
-  }
-  try {
-    const data = await api(
-      "/api/chat/" +
-        encodeURIComponent(S.persona) +
-        "/sessions/" +
-        encodeURIComponent(sid),
-    );
-    // Remove skeleton
-    const skel = document.getElementById("chat-history-skeleton");
-    if (skel) skel.remove();
-    if (myGen !== _historyGen) return; // 新しい呼び出しに敗退
-    if (!data || !data.messages) {
-      console.warn("[restoreChatHistory] unexpected response — data or messages missing:", data);
-      S.historyLoadFailed = true;
-      return;
-    }
-    if (data.messages.length === 0) {
-      // No history, show welcome
-      console.info("[restoreChatHistory] no messages, fresh start");
-      CHAT.messages = [];
-      resetToWelcome();
-      return;
-    }
-    // display_history_turns 件数分（最新N turns = N*2 messages）に制限
-    const displayTurns = parseInt(
-      document.getElementById("chat-display-history-turns")?.value || "10",
-    );
-    const maxMsgs = displayTurns * 2;
-    const msgs = data.messages.slice(-maxMsgs);
-    // Successful fetch — now safe to reset DOM (Bug B3 fix: only reset after fetch succeeds)
-    CHAT.messages = [];
-    container.textContent = "";
-    for (const msg of msgs) {
-      const msgContainer = document.getElementById("chat-messages");
+function renderMessages(msgs, opts) {
+  var prepend = !!(opts && opts.prepend);
+  var container = document.getElementById("chat-messages");
+  var anchor = prepend ? container.firstChild : null;
+  for (const msg of msgs) {
+    var marker = prepend ? container.lastChild : null;
 
-      // ── Segments-based rendering (F2: correct interleaving) ──
-      if (msg.segments) {
-        appendChatMessage(msg.role, "", msg.time, false, msg.id);
-        _appendSegmentsToBubble(msg, msgContainer.querySelector(".chat-msg:last-child"));
-        continue;
-      }
-
+    // ── Segments-based rendering (F2: correct interleaving) ──
+    if (msg.segments) {
+      appendChatMessage(msg.role, "", msg.time, false, msg.id);
+      _appendSegmentsToBubble(msg, container.querySelector(".chat-msg:last-child"));
+    } else {
       // ── Legacy: no segments (backward compat) ──
       if (msg.role === "assistant" && msg.tool_calls?.length) {
         for (const tc of msg.tool_calls) {
@@ -582,7 +533,7 @@ async function restoreChatHistory(showSkeleton) {
             '<pre class="chat-tool-detail chat-tool-result-content">' +
             esc(resultStr) +
             "</pre></details>");
-          msgContainer.appendChild(div);
+          container.appendChild(div);
         }
       }
       appendChatMessage(
@@ -625,10 +576,91 @@ async function restoreChatHistory(showSkeleton) {
             '<pre class="chat-tool-detail chat-tool-result-content">' +
             esc(resultStr) +
             "</pre></details>");
-          msgContainer.appendChild(div);
+          container.appendChild(div);
         }
       }
     }
+
+    // 追加ロード: このメッセージで生成した要素を先頭（anchor 前）へ移動
+    if (prepend && marker) {
+      var el = marker.nextSibling;
+      while (el) {
+        var next = el.nextSibling;
+        container.insertBefore(el, anchor);
+        el = next;
+      }
+    }
+  }
+}
+
+// ------------------------------------------------------------------
+// Restore chat history from server on page load / persona switch
+// ------------------------------------------------------------------
+async function restoreChatHistory(showSkeleton) {
+  if (showSkeleton === undefined) showSkeleton = true;
+  if (!S.persona) return;
+  if (CHAT._justReset) {
+    CHAT._justReset = false;
+    return; // リセット直後は履歴を再取得しない
+  }
+  // Generation counter — prevent stale response from overwriting newer data
+  var myGen = ++_historyGen;
+  // Exclusive lock — prevent concurrent restore calls
+  if (_restoreLock) return;
+  _restoreLock = true;
+  _historyRestorePending = true; // バックグラウンド復帰時の再実行判定用
+  try {
+  const sid = getChatSessionId();
+  const container = document.getElementById("chat-messages");
+  // display_history_turns 件数分（最新N turns = N*2 messages）に制限 — fetch 前に計算
+  const displayTurns = parseInt(
+    document.getElementById("chat-display-history-turns")?.value || "10",
+  );
+  const maxMsgs = displayTurns * 2;
+  // Show loading skeleton while fetching history (Bug B3 fix: don't reset DOM before fetch)
+  if (showSkeleton) {
+    const skeletonHtml =
+      '<div class="chat-msg assistant"><div class="chat-bubble" style="opacity:0.5"><div class="skeleton skeleton-text" style="width:80%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:60%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:40%;height:14px"></div></div></div>' +
+      '<div class="chat-msg user" style="align-self:flex-end"><div class="chat-bubble" style="opacity:0.5"><div class="skeleton skeleton-text" style="width:70%;height:14px;margin-bottom:8px"></div><div class="skeleton skeleton-text" style="width:50%;height:14px"></div></div></div>';
+    const skeletonDiv = document.createElement("div");
+    skeletonDiv.id = "chat-history-skeleton";
+    safeSetHTML(skeletonDiv, skeletonHtml);
+    container.appendChild(skeletonDiv);
+  }
+  try {
+    const data = await api(
+      "/api/chat/" +
+        encodeURIComponent(S.persona) +
+        "/sessions/" +
+        encodeURIComponent(sid) +
+        "?limit=" + maxMsgs + "&offset=0",
+    );
+    // Remove skeleton
+    const skel = document.getElementById("chat-history-skeleton");
+    if (skel) skel.remove();
+    if (myGen !== _historyGen) return; // 新しい呼び出しに敗退
+    if (!data || !data.messages) {
+      console.warn("[restoreChatHistory] unexpected response — data or messages missing:", data);
+      S.historyLoadFailed = true;
+      return;
+    }
+    _loadedCount = data.messages.length;
+    // total が全件数 — 取得済みなら「さらに古いメッセージなし」
+    _historyComplete = typeof data.total === "number"
+      ? data.total <= _loadedCount
+      : data.messages.length < maxMsgs;
+    if (data.messages.length === 0) {
+      // No history, show welcome
+      console.info("[restoreChatHistory] no messages, fresh start");
+      CHAT.messages = [];
+      _historyComplete = true;
+      resetToWelcome();
+      return;
+    }
+    // Successful fetch — now safe to reset DOM (Bug B3 fix: only reset after fetch succeeds)
+    CHAT.messages = [];
+    container.textContent = "";
+    renderMessages(data.messages, { prepend: false });
     N.Core.refreshIcons();
   } catch (e) {
     console.error("[restoreChatHistory] failed:", e);
@@ -646,6 +678,58 @@ async function restoreChatHistory(showSkeleton) {
   }
   } finally {
     _restoreLock = false;
+    _historyRestorePending = false;
+  }
+}
+
+// ------------------------------------------------------------------
+// Lazy-load older messages (scroll to top / background resume)
+// ------------------------------------------------------------------
+async function loadOlderMessages() {
+  if (!S.persona || _loadingOlder || _historyComplete || _restoreLock) return;
+  _loadingOlder = true;
+  var container = document.getElementById("chat-messages");
+  // appendChatMessage が scrollTop を末尾へリセットするため、事前に捕捉しておく
+  var prevScrollTop = container ? container.scrollTop : 0;
+  var prevScrollHeight = container ? container.scrollHeight : 0;
+  try {
+    // #chat-display-history-turns は初期・追加ロード両方の件数に使用
+    const displayTurns = parseInt(
+      document.getElementById("chat-display-history-turns")?.value || "10",
+    );
+    const maxMsgs = displayTurns * 2;
+    const data = await api(
+      "/api/chat/" +
+        encodeURIComponent(S.persona) +
+        "/sessions/" +
+        encodeURIComponent(getChatSessionId()) +
+        "?limit=" + maxMsgs + "&offset=" + _loadedCount,
+    );
+    if (!data || !data.messages) {
+      console.warn("[loadOlderMessages] unexpected response:", data);
+      _historyComplete = true; // 再試行ループ回避
+      return;
+    }
+    if (data.messages.length === 0) {
+      _historyComplete = true;
+      return;
+    }
+    // 既存メッセージの前に挿入（コンテナは空にしない）
+    renderMessages(data.messages, { prepend: true });
+    _loadedCount += data.messages.length;
+    if (typeof data.total === "number" && data.total <= _loadedCount) {
+      _historyComplete = true;
+    }
+    // 挿入差分ぶんスクロール位置を補正して表示位置を維持
+    if (container) {
+      container.scrollTop = prevScrollTop + (container.scrollHeight - prevScrollHeight);
+    }
+    N.Core.refreshIcons();
+  } catch (e) {
+    console.error("[loadOlderMessages] failed:", e);
+    toast("過去のメッセージ取得失敗: " + e.message, "error");
+  } finally {
+    _loadingOlder = false;
   }
 }
 
@@ -797,6 +881,34 @@ async function deleteChatMessage(msgId) {
     toast("削除失敗: " + e.message, "error");
   }
 }
+
+// ------------------------------------------------------------------
+// Lazy-load triggers — registered once at init
+// ------------------------------------------------------------------
+var _historyListenersBound = false;
+function bindHistoryLazyLoadListeners() {
+  if (_historyListenersBound) return; // 二重登録防止
+  _historyListenersBound = true;
+  var container = document.getElementById("chat-messages");
+  if (container) {
+    container.addEventListener("scroll", function _onHistoryScroll() {
+      if (container.scrollTop <= 30 && !_historyComplete && !_loadingOlder) {
+        loadOlderMessages();
+      }
+    }, { passive: true });
+  }
+  document.addEventListener("visibilitychange", function _onVisibility() {
+    if (document.visibilityState === "visible" && _historyRestorePending) {
+      restoreChatHistory(true);
+    }
+  });
+  window.addEventListener("pageshow", function _onPageShow(e) {
+    if (e.persisted && _historyRestorePending) {
+      restoreChatHistory(true);
+    }
+  });
+}
+bindHistoryLazyLoadListeners();
 
 // ------------------------------------------------------------------
 // Expose on N.Chat.history

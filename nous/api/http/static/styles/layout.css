@@ -177,8 +177,9 @@ h4, .tab-panel h4 {
    RESPONSIVE LAYOUT — Apple HIG
    ============================================================ */
 @media (max-width: 768px) {
-    .app-header { padding: 10px 16px; }
+    .app-header { padding: 10px 16px; gap: 8px; }
     .app-header h1 { font-size: 1rem; }
+    .header-controls { gap: 6px; }
     .tab-bar { padding: 6px 12px; }
     .tab-btn { padding: 10px 14px; font-size: 0.82rem; min-height: 44px; }
     .main-content { padding: 16px; }

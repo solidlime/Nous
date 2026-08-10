@@ -301,11 +301,10 @@ async function loadChat() {
       }
     }
   }
-  if (!CHAT.memoryPanelOpen) {
-    var _memoryPanel = document.getElementById("memory-panel");
-    if (_memoryPanel) {
-      _memoryPanel.style.display = "none";
-    }
+  var _memoryPanel = document.getElementById("memory-panel");
+  if (_memoryPanel) {
+    // Restore open state explicitly: mobile CSS defaults #memory-panel to display:none
+    _memoryPanel.style.display = CHAT.memoryPanelOpen ? "flex" : "none";
   }
 
   // ESC closes settings panel on mobile (moved from chat.js)

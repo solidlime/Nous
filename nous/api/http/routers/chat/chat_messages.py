@@ -161,14 +161,40 @@ async def _do_rollback_chat_session(persona: str, ctx, session_id: str, body: di
 
 
 async def get_chat_session(request: Request) -> JSONResponse:
-    """GET /api/chat/{persona}/sessions/{session_id} — return session messages."""
+    """GET /api/chat/{persona}/sessions/{session_id}?limit=N&offset=M — return session messages.
+
+    limit: 返すメッセージ数（1〜200、末尾基準）。省略時は全件。
+    offset: 末尾からスキップする件数（0以上）。
+    レスポンスの total は limit 適用前の全メッセージ数。
+    """
     persona, ctx = _resolve_request(request)
     if not ctx:
         return JSONResponse({"error": "Persona not found"}, status_code=404)
     session_id = request.path_params.get("session_id", "")
     if not session_id:
         return JSONResponse({"error": "session_id required"}, status_code=400)
-    return JSONResponse(await _do_get_chat_session(persona, ctx, session_id))
+
+    limit: int | None = None
+    limit_raw = request.query_params.get("limit")
+    if limit_raw is not None:
+        try:
+            limit = int(limit_raw)
+        except ValueError:
+            return JSONResponse({"error": "limit must be an integer"}, status_code=400)
+        if limit < 1 or limit > 200:
+            return JSONResponse({"error": "limit must be between 1 and 200"}, status_code=400)
+
+    offset = 0
+    offset_raw = request.query_params.get("offset")
+    if offset_raw is not None:
+        try:
+            offset = int(offset_raw)
+        except ValueError:
+            return JSONResponse({"error": "offset must be an integer"}, status_code=400)
+        if offset < 0:
+            return JSONResponse({"error": "offset must be >= 0"}, status_code=400)
+
+    return JSONResponse(await _do_get_chat_session(persona, ctx, session_id, limit=limit, offset=offset))
 
 
 async def delete_chat_session(request: Request) -> JSONResponse:

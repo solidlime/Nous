@@ -117,3 +117,20 @@
 - [x] R7: テスト更新（タイムアウト実時間検証・エラー早期検出・config デフォルト）
 - [x] V1: `pytest tests/unit/test_comfyui_provider.py -q` 全パス（45 passed / 2ファイル合算）
 - [x] V2: ruff / py_compile クリーン（既存 issue 2件のみ）
+
+---
+
+## モバイルUI最適化 + チャット履歴遅延ロード（2026-08-10）
+
+> 要望: ①モバイルUIアイコン・フォント縮小 ②チャット左右サイドバーの開閉状態が保存されない ③チャットログ全量DL→表示分のみ+スクロール随時ロード（通信容量削減・使用感維持） ④Androidでページロード中バックグラウンド化→ログロード中断の調査と対策
+
+- [x] R1: モバイルUI縮小（#057 designer）→ chat-mobile.css「MOBILE SIZE REFINEMENTS」/ layout.css gap 追加
+- [x] R2: サイドバー開閉状態保存バグ修正（chat-core.js 復元時 memory-panel display:flex 明示、settings-panel モバイル復元確認）
+- [x] R3: チャット履歴API limit/offset + total 追加（chat_stream.py / chat_messages.py、末尾ベース）
+- [x] R4: フロント遅延ロード（chat-history.js: 初期=表示分のみ → スクロール上端で追加ロード prepend）
+- [x] R5: Android バックグラウンド復帰対策（visibilitychange/pageshow + 未完了フラグで再取得）
+- [x] V1: テスト（limit/offset 動作、後方互換=limit なし全件）— クラス単位実行 88 passed
+- [x] V2: ブラウザ実機確認（モバイルUI・サイドバー復元・遅延ロード・バックグラウンド復帰）— viewport 390x844 で全項目確認
+- [x] V3: docs 更新（http_api_reference.md にチャット履歴 API 記載なし → [skip-docs]）
+
+> 補足: チャットタイトル h2 は Python 側インライン style のため CSS が負けていた → chat-mobile.css に !important 追加。スクロールバーは #chat-messages に加え .chat-tool-detail / .chat-thinking-body もモバイルで非表示。
