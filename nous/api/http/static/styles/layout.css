@@ -93,6 +93,7 @@ html.light .tab-bar { background: rgba(255, 255, 255, 0.7); }
    ============================================================ */
 .main-content {
     position: relative; z-index: var(--z-content);
+    width: 100%;
     max-width: 1400px;
     margin: 0 auto;
     padding: 24px;
