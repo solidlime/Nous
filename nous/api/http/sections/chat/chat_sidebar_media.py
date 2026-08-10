@@ -26,7 +26,7 @@ def _render_background_section() -> str:
 
 
 def _render_image_section() -> str:
-    """Image generation settings — ComfyUI, checkpoint, LoRA, resolution."""
+    """Image generation settings — ComfyUI URL, resolution, presets, workflow template."""
     return """
                         <!-- 画像生成 -->
                         <details data-category="image" id="chat-image-section">
@@ -50,10 +50,6 @@ def _render_image_section() -> str:
                                             <input type="text" id="chat-image-gen-comfyui-url" class="chat-field-input" placeholder="http://192.168.50.150:8188" style="flex:1;" />
                                         </div>
                                     </div>
-                                    <div>
-                                        <div class="chat-field-label">チェックポイント</div>
-                                        <input type="text" id="chat-image-gen-checkpoint" class="chat-field-input" />
-                                    </div>
                                     <!-- 自画像生成プロンプト -->
                                     <div>
                                         <div class="chat-field-label" style="font-size:0.78rem;">自画像プロンプト <span style="color:var(--text-muted);font-size:0.7rem;">（キャラの外見タグ・LoRAトリガーワード等）</span></div>
@@ -62,13 +58,6 @@ def _render_image_section() -> str:
                                     <div>
                                         <div class="chat-field-label" style="font-size:0.78rem;">ネガティブプロンプト <span style="font-weight:300;color:var(--text-dim);">(低画質・崩れ除外タグ)</span></div>
                                         <textarea id="chat-image-gen-negative-prompt" class="chat-field-input" style="min-height:48px;width:100%;" placeholder="lowres, bad anatomy, bad hands, text, error"></textarea>
-                                    </div>
-                                    <div>
-                                        <div style="display:flex;justify-content:space-between;align-items:center;">
-                                            <span class="chat-field-label" style="font-size:0.78rem;">LoRA</span>
-                                            <button type="button" id="chat-image-gen-lora-add" class="chat-btn-sm" style="font-size:0.72rem;">+ 追加</button>
-                                        </div>
-                                        <div id="chat-image-gen-lora-list" style="display:flex;flex-direction:column;gap:4px;margin-top:4px;"></div>
                                     </div>
                                     <div>
                                         <div class="chat-field-label">解像度</div>
@@ -123,79 +112,24 @@ def _render_image_section() -> str:
                                             </select>
                                         </div>
                                     </div>
-                                    <div>
-                                        <div style="display:flex;justify-content:space-between;">
-                                            <span class="chat-field-label" style="font-size:0.78rem;">Steps</span>
-                                            <span id="chat-image-gen-steps-val" style="font-size:0.72rem;color:var(--accent-purple);">28</span>
-                                        </div>
-                                        <input type="range" id="chat-image-gen-steps" class="chat-field-input" min="1" max="100" step="1" value="28" oninput="document.getElementById('chat-image-gen-steps-val').textContent=this.value" style="width:100%;accent-color:var(--accent-purple);" />
+                                    <!-- workflow source selector -->
+                                    <div style="margin-top:8px;">
+                                        <div class="chat-field-label" style="font-size:0.78rem;">ワークフロー取得元</div>
+                                        <select id="chat-image-gen-workflow-source" class="chat-field-input" style="width:100%;">
+                                            <option value="local" selected>Nous サーバー（data/workflows/）</option>
+                                            <option value="comfyui">ComfyUI サーバー（user/default/workflows/）</option>
+                                        </select>
                                     </div>
-                                    <div>
-                                        <div style="display:flex;justify-content:space-between;">
-                                            <span class="chat-field-label" style="font-size:0.78rem;">CFG Scale</span>
-                                            <span id="chat-image-gen-cfg-val" style="font-size:0.72rem;color:var(--accent-purple);">5.5</span>
-                                        </div>
-                                        <input type="range" id="chat-image-gen-cfg" class="chat-field-input" min="1.0" max="30.0" step="0.5" value="5.5" oninput="document.getElementById('chat-image-gen-cfg-val').textContent=parseFloat(this.value).toFixed(1)" style="width:100%;accent-color:var(--accent-purple);" />
+                                    <!-- workflow name (comfyui source) -->
+                                    <div style="margin-top:8px;">
+                                        <div class="chat-field-label" style="font-size:0.78rem;">ワークフロー名（ComfyUI 側のファイル名）</div>
+                                        <input type="text" id="chat-image-gen-workflow-name" class="chat-field-input"
+                                            placeholder="例: Anima_T2I_Turbo_Aesthetic.json"
+                                            style="width:100%;font-size:0.78rem;" />
                                     </div>
-                                    <details style="margin-top:12px;">
-                                        <summary style="font-size:0.82rem;color:var(--text-muted);cursor:pointer;">詳細設定</summary>
-                                        <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;padding-left:4px;">
-                                            <div>
-                                                <div class="chat-field-label" style="font-size:0.78rem;">Sampler</div>
-                                                <select id="chat-image-gen-sampler" class="chat-field-input" style="width:100%;">
-                                                    <option value="euler">Euler</option>
-                                                    <option value="euler_ancestral" selected>Euler Ancestral</option>
-                                                    <option value="heun">Heun</option>
-                                                    <option value="heunpp2">Heun++ 2</option>
-                                                    <option value="dpm_2">DPM 2</option>
-                                                    <option value="dpm_2_ancestral">DPM 2 Ancestral</option>
-                                                    <option value="lms">LMS</option>
-                                                    <option value="dpm_fast">DPM Fast</option>
-                                                    <option value="dpm_adaptive">DPM Adaptive</option>
-                                                    <option value="dpmpp_2s_ancestral">DPM++ 2S Ancestral</option>
-                                                    <option value="dpmpp_sde">DPM++ SDE</option>
-                                                    <option value="dpmpp_sde_gpu">DPM++ SDE (GPU)</option>
-                                                    <option value="dpmpp_2m">DPM++ 2M</option>
-                                                    <option value="dpmpp_2m_sde">DPM++ 2M SDE</option>
-                                                    <option value="dpmpp_2m_sde_gpu">DPM++ 2M SDE (GPU)</option>
-                                                    <option value="dpmpp_3m_sde">DPM++ 3M SDE</option>
-                                                    <option value="dpmpp_3m_sde_gpu">DPM++ 3M SDE (GPU)</option>
-                                                    <option value="ddpm">DDPM</option>
-                                                    <option value="lcm">LCM</option>
-                                                    <option value="uni_pc">UniPC</option>
-                                                    <option value="uni_pc_bh2">UniPC (BH2)</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <div class="chat-field-label" style="font-size:0.78rem;">Scheduler</div>
-                                                <select id="chat-image-gen-scheduler" class="chat-field-input" style="width:100%;">
-                                                    <option value="normal" selected>Normal</option>
-                                                    <option value="karras">Karras</option>
-                                                    <option value="exponential">Exponential</option>
-                                                    <option value="sgm_uniform">SGM Uniform</option>
-                                                    <option value="simple">Simple</option>
-                                                    <option value="ddim_uniform">DDIM Uniform</option>
-                                                    <option value="beta">Beta</option>
-                                                    <option value="linear_quadratic">Linear Quadratic</option>
-                                                    <option value="kl_optimal">KL Optimal</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <div style="display:flex;justify-content:space-between;">
-                                                    <span class="chat-field-label" style="font-size:0.78rem;">Denoise (img2img)</span>
-                                                    <span id="chat-image-gen-denoise-val" style="font-size:0.72rem;color:var(--accent-purple);">0.70</span>
-                                                </div>
-                                                <input type="range" id="chat-image-gen-denoise" class="chat-field-input" min="0.1" max="1.0" step="0.05" value="0.7" oninput="document.getElementById('chat-image-gen-denoise-val').textContent=parseFloat(this.value).toFixed(2)" style="width:100%;accent-color:var(--accent-purple);" />
-                                            </div>
-                                            <div>
-                                                <div class="chat-field-label" style="font-size:0.78rem;">乱数シード（0=ランダム）</div>
-                                                <input type="number" id="chat-image-gen-seed" class="chat-field-input" value="0" min="0" style="width:100%;" />
-                                            </div>
-                                        </div>
-                                    </details>
                                     <!-- workflow template path -->
                                     <div style="margin-top:8px;">
-                                        <div class="chat-field-label" style="font-size:0.78rem;">ワークフローテンプレート（必須）</div>
+                                        <div class="chat-field-label" style="font-size:0.78rem;">ワークフローテンプレート（必須・Nous サーバー側のパス）</div>
                                         <input type="text" id="chat-image-gen-template" class="chat-field-input"
                                             placeholder="例: /data/workflows/pony_ipadapter.json"
                                             style="width:100%;font-size:0.78rem;" />

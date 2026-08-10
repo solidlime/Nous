@@ -5,39 +5,12 @@
    ================================================================= */
 ;(function(N) {
 var C = N.Core;
-var safeSetHTML = C.safeSetHTML;
 "use strict";
 var S = window.S;
 
 // ------------------------------------------------------------------
 // ComfyUI helper functions
 // ------------------------------------------------------------------
-function addLoraRow(path, weight) {
-  var container = document.getElementById('chat-image-gen-lora-list');
-  if (!container) return;
-  var div = document.createElement('div');
-  div.style.cssText = 'display:flex;gap:4px;align-items:center;';
-  safeSetHTML(div, '<input type="text" class="chat-field-input lora-path" value="' + escHtml(path || '') + '" placeholder="lora.safetensors" style="flex:1;font-size:0.82rem;">'
-    + '<input type="number" class="chat-field-input lora-weight" value="' + (weight ?? 1.0).toFixed(1) + '" min="0.1" max="2.0" step="0.1" style="width:55px;font-size:0.82rem;">'
-    + '<button type="button" class="lora-delete-btn" style="color:var(--accent-red);background:none;border:none;cursor:pointer;font-size:1rem;">\u00d7</button>');
-  div.querySelector('.lora-delete-btn').addEventListener('click', function() { div.remove(); });
-  container.appendChild(div);
-}
-
-function collectLoraRows() {
-  var container = document.getElementById('chat-image-gen-lora-list');
-  if (!container) return [];
-  var result = [];
-  container.querySelectorAll('.lora-path').forEach(function(input, i) {
-    var path = input.value.trim();
-    if (path) {
-      var weightEl = container.querySelectorAll('.lora-weight')[i];
-      result.push({path: path, weight: parseFloat(weightEl ? weightEl.value : 1.0)});
-    }
-  });
-  return result;
-}
-
 function updateImageGenSliderLabels() {
   // HTML側の oninput で処理するため、ここでは何もしない（reasoning ラベルのみ同期）
   var reasoningVal = document.getElementById("chat-reasoning-effort-val");
@@ -55,16 +28,8 @@ function testImageGen() {
   status.style.color = 'var(--text-muted)';
   
   var payload = {
-    checkpoint: document.getElementById('chat-image-gen-checkpoint')?.value || '',
-    loras: collectLoraRows(),
     width: parseInt(document.getElementById('chat-image-gen-width')?.value || '1024'),
     height: parseInt(document.getElementById('chat-image-gen-height')?.value || '1024'),
-    steps: parseInt(document.getElementById('chat-image-gen-steps')?.value || '28'),
-    cfg: parseFloat(document.getElementById('chat-image-gen-cfg')?.value || '5.5'),
-    sampler: document.getElementById('chat-image-gen-sampler')?.value || 'euler_ancestral',
-    scheduler: document.getElementById('chat-image-gen-scheduler')?.value || 'normal',
-    seed: parseInt(document.getElementById('chat-image-gen-seed')?.value || '0'),
-    denoise: parseFloat(document.getElementById('chat-image-gen-denoise')?.value || '0.7'),
     prompt: document.getElementById('chat-image-gen-self-portrait-prompt')?.value.trim() || '',
     negative_prompt: document.getElementById('chat-image-gen-negative-prompt')?.value || '',
   };
@@ -149,18 +114,9 @@ function checkComfyUIHealth() {
     });
 }
 
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
 // イベントリスナー初期化 (DOMContentLoaded 安全策)
 (function initImageGenEvents() {
   function bind() {
-    var addBtn = document.getElementById('chat-image-gen-lora-add');
-    if (addBtn && !addBtn._bound) {
-      addBtn._bound = true;
-      addBtn.addEventListener('click', function() { addLoraRow('', 1.0); });
-    }
     // ページロード時にComfyUI URLが設定済みなら疎通確認
     if (document.getElementById('chat-image-gen-comfyui-url')?.value) {
       checkComfyUIHealth();
@@ -178,8 +134,6 @@ Object.assign(N.Chat.settings, {
   checkComfyUI: checkComfyUIHealth,
   updateSliderLabels: updateImageGenSliderLabels,
   testImageGen: testImageGen,
-  addLoraRow: addLoraRow,
-  collectLoraRows: collectLoraRows,
 });
 
 // ImageGen sub-namespace for i2i reference upload

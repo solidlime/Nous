@@ -271,21 +271,17 @@ function applyChatConfig(cfg) {
   }
   // 画像生成設定
   set("chat-image-gen-comfyui-url", cfg.image_gen_comfyui_url);
-  set("chat-image-gen-checkpoint", cfg.image_gen_comfyui_checkpoint);
   set("chat-image-gen-width", cfg.image_gen_comfyui_width);
   set("chat-image-gen-height", cfg.image_gen_comfyui_height);
   set("chat-image-gen-max-width", cfg.image_gen_max_width);
   set("chat-image-gen-max-height", cfg.image_gen_max_height);
-  set("chat-image-gen-steps", cfg.image_gen_comfyui_steps);
-  set("chat-image-gen-cfg", cfg.image_gen_comfyui_cfg);
-  set("chat-image-gen-sampler", cfg.image_gen_comfyui_sampler);
-  set("chat-image-gen-scheduler", cfg.image_gen_comfyui_scheduler);
-  set("chat-image-gen-seed", cfg.image_gen_comfyui_seed);
-  set("chat-image-gen-denoise", cfg.image_gen_comfyui_denoise);
   set("chat-image-gen-self-portrait-prompt", cfg.image_gen_self_portrait_prompt);
   set("chat-image-gen-negative-prompt", cfg.image_gen_negative_prompt || "");
   var templateInput = document.getElementById("chat-image-gen-template");
   if (templateInput) templateInput.value = cfg.image_gen_comfyui_workflow_template || "";
+  set("chat-image-gen-workflow-source", cfg.image_gen_comfyui_workflow_source);
+  var workflowNameInput = document.getElementById("chat-image-gen-workflow-name");
+  if (workflowNameInput) workflowNameInput.value = cfg.image_gen_comfyui_workflow_name || "";
   // プリセット解像度 復元
   var _presetNames = ["portrait_large","portrait_medium","portrait_small","landscape_large","landscape_medium","landscape_small","square_large","square_medium","square_small"];
   var _presets = cfg.image_gen_presets || {};
@@ -295,15 +291,6 @@ function applyChatConfig(cfg) {
   });
   var _defPreset = document.getElementById("chat-image-gen-default-preset");
   if (_defPreset && cfg.image_gen_default_preset) _defPreset.value = cfg.image_gen_default_preset;
-  // LoRA リスト復元
-  var loraContainer = document.getElementById('chat-image-gen-lora-list');
-  if (loraContainer) loraContainer.textContent = '';
-  if (cfg.image_gen_comfyui_loras) {
-    try {
-      var loras = JSON.parse(cfg.image_gen_comfyui_loras);
-      loras.forEach(function(l) { N.Chat.settings.addLoraRow(l.path, l.weight); });
-    } catch(e) { console.error('LoRA JSON parse error:', e); }
-  }
   // Load reference image thumbnail (i2i fixed — always shown)
   var refThumb = document.getElementById("chat-image-gen-ref-thumb");
   if (refThumb) {
@@ -497,18 +484,10 @@ async function saveChatConfig() {
     // 画像生成設定 — ComfyUI
     image_gen_enabled: getChecked("chat-image-gen-enabled"),
     image_gen_comfyui_url: (document.getElementById("chat-image-gen-comfyui-url")?.value || "").trim(),
-    image_gen_comfyui_checkpoint: document.getElementById("chat-image-gen-checkpoint")?.value || "",
     image_gen_comfyui_width: parseInt(document.getElementById("chat-image-gen-width")?.value || "1024"),
     image_gen_comfyui_height: parseInt(document.getElementById("chat-image-gen-height")?.value || "1024"),
     image_gen_max_width: parseInt(document.getElementById("chat-image-gen-max-width")?.value || "1200"),
     image_gen_max_height: parseInt(document.getElementById("chat-image-gen-max-height")?.value || "1200"),
-    image_gen_comfyui_steps: parseInt(document.getElementById("chat-image-gen-steps")?.value || "28"),
-    image_gen_comfyui_cfg: parseFloat(document.getElementById("chat-image-gen-cfg")?.value || "5.5"),
-    image_gen_comfyui_sampler: document.getElementById("chat-image-gen-sampler")?.value || "euler_ancestral",
-    image_gen_comfyui_scheduler: document.getElementById("chat-image-gen-scheduler")?.value || "normal",
-    image_gen_comfyui_seed: parseInt(document.getElementById("chat-image-gen-seed")?.value || "0"),
-    image_gen_comfyui_denoise: parseFloat(document.getElementById("chat-image-gen-denoise")?.value || "0.7"),
-    image_gen_comfyui_loras: JSON.stringify(N.Chat.settings.collectLoraRows()),
     image_gen_self_portrait_prompt: document.getElementById("chat-image-gen-self-portrait-prompt")?.value || "",
     image_gen_negative_prompt: document.getElementById("chat-image-gen-negative-prompt")?.value || "",
     // プリセット解像度
@@ -522,6 +501,8 @@ async function saveChatConfig() {
     })(),
     image_gen_default_preset: document.getElementById("chat-image-gen-default-preset")?.value || "square_medium",
     image_gen_comfyui_workflow_template: document.getElementById("chat-image-gen-template")?.value || "",
+    image_gen_comfyui_workflow_source: document.getElementById("chat-image-gen-workflow-source")?.value || "local",
+    image_gen_comfyui_workflow_name: document.getElementById("chat-image-gen-workflow-name")?.value || "",
     // Voice / TTS settings (TE04)
     voice_url: document.getElementById("chat-voice-url")?.value || "",
     voice_auto_play: getChecked("chat-voice-auto-play"),
