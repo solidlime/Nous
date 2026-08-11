@@ -53,6 +53,10 @@ async def _tool_item_equip(ctx: AppContext, persona: str, equipment: dict | None
         return 'Error: equipment dict required (e.g. {"top": "白いドレス"})'
     result = ctx.equipment_service.equip(equipment, auto_add)
     if result.is_ok:
+        # 装備スロットから appearance を自動合成して persona state に反映する
+        appearance = ctx.equipment_service.build_appearance(equipment)
+        if appearance:
+            ctx.persona_service.update_state(persona, "appearance", appearance)
         await ctx.event_bus.publish(
             "tool.called",
             {

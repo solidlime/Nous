@@ -97,6 +97,41 @@ class TestItemTools:
         assert "Equipped" in result
 
     @pytest.mark.asyncio
+    async def test_item_equip_syncs_appearance_to_persona_state(self, registered_tools):
+        """equip 成功時、装備スロットから appearance を合成して persona state に保存する."""
+        tools, ctx, _ = registered_tools
+        ctx.equipment_service.equip.return_value = Success({"top": "red dress"})
+        ctx.equipment_service.build_appearance.return_value = "red dress"
+        item_tool = tools["item_equip"]
+        with (
+            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
+            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
+        ):
+            mock_reg_cls.get.return_value = ctx
+            result = await item_tool(equipment={"top": "red dress"})
+        assert "Equipped" in result
+        ctx.equipment_service.build_appearance.assert_called_once_with({"top": "red dress"})
+        ctx.persona_service.update_state.assert_called_once_with("test_persona", "appearance", "red dress")
+
+    @pytest.mark.asyncio
+    async def test_item_equip_skips_appearance_sync_on_failure(self, registered_tools):
+        """equip 失敗時は appearance を更新しない."""
+        from nous.domain.shared.errors import DomainError
+        from nous.domain.shared.result import Failure
+
+        tools, ctx, _ = registered_tools
+        ctx.equipment_service.equip.return_value = Failure(DomainError("slot full"))
+        item_tool = tools["item_equip"]
+        with (
+            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
+            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
+        ):
+            mock_reg_cls.get.return_value = ctx
+            result = await item_tool(equipment={"top": "red dress"})
+        assert "Error" in result
+        ctx.persona_service.update_state.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_item_search(self, registered_tools):
         tools, ctx, _ = registered_tools
         item_obj = MagicMock()

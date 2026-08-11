@@ -236,6 +236,43 @@ class TestGetEquipment:
         assert eq["bottom"] == "パンツ"
 
 
+class TestBuildAppearance:
+    """equip → appearance 自動合成 (Task: item スキル)."""
+
+    def test_build_appearance_empty(self, service: EquipmentService):
+        result = service.build_appearance({})
+        assert result == ""
+
+    def test_build_appearance_uses_item_name_fallback(
+        self, service: EquipmentService, repo: InMemoryEquipmentRepository
+    ):
+        service.add_item("白いドレス")
+        result = service.build_appearance({"top": "白いドレス"})
+        assert result == "白いドレス"
+
+    def test_build_appearance_prefers_visual_desc(
+        self, service: EquipmentService, repo: InMemoryEquipmentRepository
+    ):
+        service.add_item("白いドレス", visual_desc="white dress, off-shoulder")
+        result = service.build_appearance({"top": "白いドレス"})
+        assert result == "white dress, off-shoulder"
+
+    def test_build_appearance_slot_order_follows_valid_slots(
+        self, service: EquipmentService, repo: InMemoryEquipmentRepository
+    ):
+        service.equip(
+            {"shoes": "黒い靴", "top": "白いドレス", "head": "黒いカチューシャ"},
+            auto_add=True,
+        )
+        # VALID_SLOTS 順 (top → bottom → shoes → ... → head) に並ぶ
+        result = service.build_appearance({"shoes": "黒い靴", "top": "白いドレス", "head": "黒いカチューシャ"})
+        assert result == "白いドレス, 黒い靴, 黒いカチューシャ"
+
+    def test_build_appearance_skips_none_or_empty_values(self, service: EquipmentService):
+        result = service.build_appearance({"top": "ドレス", "shoes": "", "head": None})
+        assert result == "ドレス"
+
+
 class TestAccessorySlots:
     """accessory_1/2/3 スロットの拡張テスト."""
 

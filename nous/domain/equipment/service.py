@@ -130,6 +130,24 @@ class EquipmentService:
             )
         return result
 
+    def build_appearance(self, equipment: dict[str, str]) -> str:
+        """Synthesize an appearance string from equipment slots.
+
+        Comma-joined, ordered by VALID_SLOTS. Uses each item's ``visual_desc``
+        when available, falling back to the raw item name.
+        """
+        parts: list[str] = []
+        for slot in VALID_SLOTS:
+            item_name = equipment.get(slot)
+            if not item_name:
+                continue
+            desc = item_name
+            item_result = self._repo.find_item_by_name(item_name)
+            if item_result.is_ok and item_result.value and item_result.value.visual_desc:
+                desc = item_result.value.visual_desc
+            parts.append(desc)
+        return ", ".join(parts)
+
     def equip(
         self,
         equipment: dict[str, str],
