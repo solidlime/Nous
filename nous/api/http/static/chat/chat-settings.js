@@ -291,14 +291,6 @@ function applyChatConfig(cfg) {
   });
   var _defPreset = document.getElementById("chat-image-gen-default-preset");
   if (_defPreset && cfg.image_gen_default_preset) _defPreset.value = cfg.image_gen_default_preset;
-  // Load reference image thumbnail (i2i fixed — always shown)
-  var refThumb = document.getElementById("chat-image-gen-ref-thumb");
-  if (refThumb) {
-    var persona = window.N?.Chat?.persona || document.querySelector("[data-persona]")?.dataset?.persona || "default";
-    refThumb.src = "/api/chat/" + persona + "/persona/images/reference.png";
-    refThumb.style.display = "block";
-    refThumb.onerror = function() { refThumb.style.display = "none"; };
-  }
   // スライダー値表示更新
   N.Chat.settings.updateSliderLabels();
   // === Auto-capture (moved from Settings) ===

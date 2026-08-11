@@ -440,28 +440,8 @@ def test_nous_negative_prompt_empty_passthrough():
 
     provider = ComfyUIProvider(workflow_template="dummy.json")
     workflow = {"1": {"class_type": "CLIPTextEncode", "inputs": {}, "_meta": {"title": "NOUS:negative_prompt"}}}
-    provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
+    provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", seed=1)
     assert workflow["1"]["inputs"]["text"] == ""
-
-
-def test_nous_reference_image_injects_filename():
-    """NOUS:reference_image はアップロード済みファイル名を注入する"""
-    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
-
-    provider = ComfyUIProvider(workflow_template="dummy.json")
-    workflow = {"1": {"class_type": "LoadImage", "inputs": {}, "_meta": {"title": "NOUS:reference_image"}}}
-    provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename="ref.png", seed=1)
-    assert workflow["1"]["inputs"]["image"] == "ref.png"
-
-
-def test_nous_reference_image_raises_without_image():
-    """NOUS:reference_image タグがあるのに参照画像が無ければ ValueError"""
-    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
-
-    provider = ComfyUIProvider(workflow_template="dummy.json")
-    workflow = {"1": {"class_type": "LoadImage", "inputs": {}, "_meta": {"title": "NOUS:reference_image"}}}
-    with pytest.raises(ValueError, match="参照画像がありません"):
-        provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
 
 
 def test_nous_no_tags_leaves_workflow_unchanged():
@@ -473,7 +453,7 @@ def test_nous_no_tags_leaves_workflow_unchanged():
         "1": {"class_type": "KSampler", "inputs": {"seed": 1}},
         "2": {"class_type": "EmptyLatentImage", "inputs": {"width": 512}},
     }
-    result = provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", image_filename=None, seed=1)
+    result = provider._apply_nous_injections(workflow, prompt="x", negative_prompt="", seed=1)
     assert result is workflow
     assert workflow["1"]["inputs"] == {"seed": 1}
 
@@ -900,11 +880,6 @@ async def test_builtin_image_generate_skips_non_display_images(tmp_path, monkeyp
     settings.data_root = str(tmp_path)
     monkeypatch.setattr("nous.config.settings.get_settings", lambda: settings)
 
-    # i2i（固定）: 参照画像 reference.png が必須
-    ref_dir = tmp_path / "persona" / "test_persona" / "images"
-    ref_dir.mkdir(parents=True, exist_ok=True)
-    (ref_dir / "reference.png").write_bytes(b"fake_ref_png")
-
     generated = [
         GeneratedImage(base64="aGVsbG8=", revised_prompt="p", size="768x768", display=True),
         GeneratedImage(base64="d29ybGQ=", revised_prompt="p", size="768x768", display=False),
@@ -920,11 +895,7 @@ async def test_builtin_image_generate_skips_non_display_images(tmp_path, monkeyp
     assert len(result["images"]) == 2
     assert result["images"][0]["base64"] == "aGVsbG8="
     assert result["images"][1]["base64"] == "IQ=="
-    saved = sorted(
-        p
-        for p in (tmp_path / "persona" / "test_persona" / "images").glob("*.png")
-        if p.name != "reference.png"
-    )
+    saved = sorted(p for p in (tmp_path / "persona" / "test_persona" / "images").glob("*.png"))
     assert len(saved) == 2
     assert saved[0].name.endswith("_00.png")
     assert saved[1].name.endswith("_01.png")
@@ -993,36 +964,33 @@ async def test_generate_injects_size_batch_and_random_seed():
 
 @pytest.mark.asyncio
 async def test_nous_injects_remaining_keys():
-    """残存タグ（prompt / negative_prompt / reference_image / width / height / seed）だけが注入される。"""
+    """残存タグ（prompt / negative_prompt / width / height / seed）だけが注入される。"""
     from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
     provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template="dummy.json")
     workflow = {
         "1": {"class_type": "CLIPTextEncode", "inputs": {"text": ""}, "_meta": {"title": "NOUS:prompt"}},
         "2": {"class_type": "CLIPTextEncode", "inputs": {"text": ""}, "_meta": {"title": "NOUS:negative_prompt"}},
-        "3": {"class_type": "LoadImage", "inputs": {"image": ""}, "_meta": {"title": "NOUS:reference_image"}},
-        "4": {"class_type": "INTConstant", "inputs": {"value": 0}, "_meta": {"title": "NOUS:width"}},
-        "5": {"class_type": "INTConstant", "inputs": {"value": 0}, "_meta": {"title": "NOUS:height"}},
-        "6": {"class_type": "INTConstant", "inputs": {"value": -370}, "_meta": {"title": "NOUS:seed"}},
-        "7": {"class_type": "LoraLoader", "inputs": {}, "_meta": {"title": "NOUS:lora"}},
-        "8": {"class_type": "CheckpointLoaderSimple", "inputs": {}, "_meta": {"title": "NOUS:checkpoint"}},
+        "3": {"class_type": "INTConstant", "inputs": {"value": 0}, "_meta": {"title": "NOUS:width"}},
+        "4": {"class_type": "INTConstant", "inputs": {"value": 0}, "_meta": {"title": "NOUS:height"}},
+        "5": {"class_type": "INTConstant", "inputs": {"value": -370}, "_meta": {"title": "NOUS:seed"}},
+        "6": {"class_type": "LoraLoader", "inputs": {}, "_meta": {"title": "NOUS:lora"}},
+        "7": {"class_type": "CheckpointLoaderSimple", "inputs": {}, "_meta": {"title": "NOUS:checkpoint"}},
     }
     out = provider._apply_nous_injections(
         workflow,
         prompt="p1",
         negative_prompt="n1",
-        image_filename="ref.png",
         seed=12345,
     )
     assert out["1"]["inputs"]["text"] == "p1"
     assert out["2"]["inputs"]["text"] == "n1"
-    assert out["3"]["inputs"]["image"] == "ref.png"
-    assert out["4"]["inputs"]["value"] == 1024  # 既定 width
-    assert out["5"]["inputs"]["value"] == 1024  # 既定 height
-    assert out["6"]["inputs"]["value"] == 12345  # seed は generate 側で計算された値
+    assert out["3"]["inputs"]["value"] == 1024  # 既定 width
+    assert out["4"]["inputs"]["value"] == 1024  # 既定 height
+    assert out["5"]["inputs"]["value"] == 12345  # seed は generate 側で計算された値
     # 廃止タグは無視される（未知タグとして warning ログのみ）
-    assert "lora_name" not in out["7"]["inputs"]
-    assert "ckpt_name" not in out["8"]["inputs"]
+    assert "lora_name" not in out["6"]["inputs"]
+    assert "ckpt_name" not in out["7"]["inputs"]
 
 
 @pytest.mark.asyncio

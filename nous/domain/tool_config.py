@@ -27,7 +27,7 @@ class ToolConfig(BaseModel):
     image_gen_comfyui_width: int = 1024
     image_gen_comfyui_height: int = 1024
     image_gen_comfyui_timeout_seconds: int = 180  # 生成タイムアウト（秒）
-    image_gen_comfyui_workflow_template: str = "workflows/default_node.json"  # path to API-format JSON workflow template (required; empty raises in ComfyUIProvider)
+    image_gen_comfyui_workflow_template: str = "workflows/anima.json"  # path to API-format JSON workflow template (required; empty raises in ComfyUIProvider)
     image_gen_comfyui_workflow_source: str = "local"  # "local" | "comfyui"（ComfyUI 側 user/default/workflows から取得）
     image_gen_comfyui_workflow_name: str = ""  # workflow_source="comfyui" 時の ComfyUI 側ワークフローファイル名
     image_gen_max_width: int = 1200

@@ -27,8 +27,6 @@ class ImageGenConfig:
     timeout_seconds: float = 180.0  # 生成タイムアウト（秒）
     size: str = "1024x1024"  # 画像サイズ (例: "1024x1024")
     quality: str = "standard"  # 品質 ("standard" | "hd")
-    # Reference image (img2img) support
-    reference_image_enabled: bool = False  # True の場合reference_imageを受け付ける
 
 
 class ImageGenProvider(ABC):
@@ -41,7 +39,6 @@ class ImageGenProvider(ABC):
         size: str = "1024x1024",
         quality: str = "standard",
         n: int = 1,
-        reference_image: bytes | None = None,
         negative_prompt: str = "",
         **kwargs: Any,
     ) -> list[GeneratedImage]:
@@ -53,7 +50,6 @@ class ImageGenProvider(ABC):
             size: 画像サイズ (例: "1024x1024")
             quality: 品質 ("standard"|"hd")
             n: 生成枚数 (1-4)
-            reference_image: img2img用参照画像のバイト列 (Noneの場合はtxt2img)
             negative_prompt: ネガティブプロンプト（空文字の場合はプロバイダ標準値）
 
         Returns:

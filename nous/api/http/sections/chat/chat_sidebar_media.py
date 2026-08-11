@@ -134,19 +134,6 @@ def _render_image_section() -> str:
                                             placeholder="例: /data/workflows/pony_ipadapter.json"
                                             style="width:100%;font-size:0.78rem;" />
                                     </div>
-                                    <!-- Reference image upload (i2i fixed — always shown) -->
-                                    <div id="chat-image-gen-ref-upload" style="margin-top:8px;">
-                                        <div class="chat-field-label" style="font-size:0.82rem;margin-bottom:4px;">参照画像</div>
-                                        <input type="file" id="chat-image-gen-ref-file" accept="image/*"
-                                            style="font-size:0.78rem;width:100%;margin-bottom:4px;" />
-                                        <button id="chat-image-gen-ref-upload-btn" class="chat-clear-btn" style="font-size:0.78rem;padding:4px 10px;"
-                                            onclick="N.ImageGen.uploadReferenceImage()">
-                                            <i data-lucide="upload"></i> アップロード
-                                        </button>
-                                        <span id="chat-image-gen-ref-status" style="font-size:0.72rem;color:var(--text-muted);margin-left:8px;"></span>
-                                        <img id="chat-image-gen-ref-thumb" src="" alt="参照画像プレビュー"
-                                            style="display:none;max-width:120px;max-height:120px;margin-top:6px;border-radius:6px;border:1px solid var(--border-color);object-fit:contain;" />
-                                    </div>
                                     <div style="display:flex;gap:8px;align-items:center;">
                                         <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="N.Chat.settings.testImageGen()"><i data-lucide="play"></i> テスト生成</button>
                                         <span id="chat-image-test-status" style="font-size:0.72rem;color:var(--text-muted);min-height:16px;"></span>

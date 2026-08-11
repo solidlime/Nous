@@ -288,19 +288,8 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             timeout_seconds=getattr(config, "image_gen_comfyui_timeout_seconds", 180),
         )
 
-        # ── i2i（固定）: 参照画像 reference.png を常に読み込む（無ければ明示エラー）──
-        from pathlib import Path as _Path
-
-        from nous.config.settings import get_settings as _get_settings
-        _persona = getattr(ctx, "persona", "default")
-        _settings = _get_settings()
-        ref_path = _Path(_settings.data_root) / "persona" / _persona / "images" / "reference.png"
-        if not ref_path.exists():
-            raise FileNotFoundError(f"参照画像がありません: {ref_path}")
-        reference_image = ref_path.read_bytes()
-
         negative_prompt = getattr(config, "image_gen_negative_prompt", "") or ""
-        generated = await provider.generate(prompt=prompt, size=size, n=n, negative_prompt=negative_prompt, reference_image=reference_image)
+        generated = await provider.generate(prompt=prompt, size=size, n=n, negative_prompt=negative_prompt)
 
         # ── 画像をサーバー側に永続化 ──
         from pathlib import Path

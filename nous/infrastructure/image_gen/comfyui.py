@@ -23,8 +23,7 @@ class ComfyUIProvider(ImageGenProvider):
       2. GET /history/{prompt_id} をポーリング → 出力画像を取得
       3. GET /view で画像ダウンロード → base64 エンコード
 
-    i2i（参照画像ベース）のみ対応:
-      - reference_image を渡すと ComfyUI にアップロードし NOUS:reference_image で利用
+    t2i 対応:
       - ワークフローは workflow_source に応じて取得する:
         "local"（既定）: Nous 側のワークフローテンプレートファイル（API形式JSON）
         "comfyui": ComfyUI の /userdata API から UI 形式ワークフローを取得し変換
@@ -94,7 +93,6 @@ class ComfyUIProvider(ImageGenProvider):
         size: str = "512x512",
         quality: str = "standard",
         n: int = 1,
-        reference_image: bytes | None = None,
         negative_prompt: str = "",
         **kwargs: Any,
     ) -> list[GeneratedImage]:
@@ -106,16 +104,11 @@ class ComfyUIProvider(ImageGenProvider):
         取得後、apply_generation_params（サイズ・枚数・ランダムシード）を適用し、
         NOUS: タグ / レガシー {{placeholder}} を注入して送信する。
         """
-        image_filename: str | None = None
-        if reference_image is not None:
-            image_filename = await self._upload_reference_image(reference_image)
-
         # シードは毎回ランダム（ユーザー決定）。タグ注入と seed ランダム化で共用。
         seed = random.randint(1, 2**63 - 1)
         workflow = await self._load_workflow(
             prompt=prompt,
             negative_prompt=negative_prompt,
-            image_filename=image_filename,
             seed=seed,
         )
         # 保存時の固定 seed 対策＋サイズ・枚数の実行時注入（対応ノードが無ければ無変更）
@@ -148,7 +141,6 @@ class ComfyUIProvider(ImageGenProvider):
             workflow,
             prompt=prompt,
             negative_prompt=negative_prompt,
-            image_filename=image_filename,
             seed=seed,
         )
 
@@ -171,7 +163,6 @@ class ComfyUIProvider(ImageGenProvider):
         *,
         prompt: str,
         negative_prompt: str,
-        image_filename: str | None,
         seed: int,
     ) -> dict:
         """ワークフローを取得して API 形式 dict で返す。
@@ -209,7 +200,6 @@ class ComfyUIProvider(ImageGenProvider):
             template_json = template_json.replace("{{seed}}", str(seed))
             template_json = template_json.replace("{{width}}", str(self._width))
             template_json = template_json.replace("{{height}}", str(self._height))
-            template_json = template_json.replace("{{reference_image}}", image_filename or "")
 
         workflow = _json.loads(template_json)
         if is_api_format(workflow):
@@ -262,32 +252,20 @@ class ComfyUIProvider(ImageGenProvider):
         self._object_info_cache_time = now
         return data
 
-    async def _upload_reference_image(self, image_bytes: bytes) -> str:
-        """参照画像を ComfyUI の /upload/image にアップロードし、filename を返す。"""
-        filename = f"nous_ref_{int(time.time() * 1000)}.png"
-        files: dict[str, tuple[str | None, str | bytes, str | None]] = {
-            "image": (filename, image_bytes, "image/png"),
-            "type": (None, "input", None),
-            "overwrite": (None, "True", None),
-        }
-        resp = await self.client.post(f"{self._api_url}/upload/image", files=files)
-        resp.raise_for_status()
-        return filename
-
     def _apply_nous_injections(
         self,
         workflow: dict,
         *,
         prompt: str,
         negative_prompt: str,
-        image_filename: str | None,
         seed: int,
     ) -> dict:
         """テンプレートワークフローへ NOUS: タグを注入する。
 
         ノードの _meta.title が "NOUS:key" の場合、対応する値をそのノードの inputs に
-        書き込む。checkpoint / lora / steps / cfg / sampler / scheduler / denoise の
-        タグは廃止（パラメータはワークフロー側に一元化）: 未知タグとして warning のみ。
+        書き込む。checkpoint / lora / steps / cfg / sampler / scheduler / denoise 等の
+        タグは廃止（パラメータはワークフロー側に一元化）:
+        未知タグとして warning のみ。
         """
         tagged: list[tuple[Any, dict, str]] = []
         for node_id, node in workflow.items():
@@ -306,7 +284,7 @@ class ComfyUIProvider(ImageGenProvider):
             if key == "display":
                 continue  # display は表示フィルタ用なので注入対象外
             self._inject_nous_key(
-                node, key, prompt=prompt, negative_prompt=negative_prompt, image_filename=image_filename, seed=seed
+                node, key, prompt=prompt, negative_prompt=negative_prompt, seed=seed
             )
 
         return workflow
@@ -318,7 +296,6 @@ class ComfyUIProvider(ImageGenProvider):
         *,
         prompt: str,
         negative_prompt: str,
-        image_filename: str | None,
         seed: int,
     ) -> None:
         inputs = node.setdefault("inputs", {})
@@ -339,10 +316,6 @@ class ComfyUIProvider(ImageGenProvider):
             inputs["text"] = prompt
         elif key == "negative_prompt":
             inputs["text"] = negative_prompt
-        elif key == "reference_image":
-            if not image_filename:
-                raise ValueError("NOUS:reference_image タグが設定されていますが参照画像がありません")
-            inputs["image"] = image_filename
         else:
             # 廃止タグ（checkpoint / lora / steps / cfg / sampler / scheduler / denoise）等
             logger.warning("Unknown NOUS tag ignored: NOUS:%s", key)
