@@ -166,3 +166,17 @@
 
 > 補足: Docker コンテナ（nous:latest, 26262）は古いコードのまま動作中のため、実機確認はローカル別ポートで実施。コンテナ更新時は再ビルドが必要。
 > 既知の失敗（本変更と無関係・既存）: test_builtin_handlers.py 4件（image size 系。preset ベース実装移行時にテスト未更新、"Invalid size format" メッセージが現実装に無い・image_gen_presets 未設定で TypeError）＋ TestChatConfigRepository 4件＋ test_chat_tab_buttons 1件。別タスクで対処要検討。
+
+---
+
+## 参照画像（i2i）機能の廃止（2026-08-11）
+
+> 要望: 「webuiとバックエンドの参照画像機能を廃止しよう。今参照画像アップしてないと『参照画像がありません: /data/persona/herta/images/reference.png』エラーで生成進まない」
+
+- [x] R1: バックエンド（base.py / comfyui.py / builtin.py / image_gen.py）から reference_image 引数・アップロード分岐・NOUS:reference_image タグ処理・upload_reference_image ルート削除（-143行）
+- [x] R2: WebUI（chat_sidebar_media.py / chat-settings.js / chat-settings-image.js）から参照画像 UI・アップロード処理削除（-61行）
+- [x] R3: デフォルトワークフローを workflows/anima.json に切替（tool_config.py）。default_node.json（i2i 専用）は残置
+- [x] V1: test_comfyui_provider.py 37 passed / grep reference_image 系 0件 / node --check・py_compile OK / ruff 新規なし
+- [x] V2: ブラウザ実機確認（参照画像 UI 消滅・workflow source/name 維持。※前回セッションの古いサーバープロセスが 26263 に残存して誤検出したため kill して再検証）
+
+> 補足: コミット 5ba5594。images/ ディレクトリ（生成画像保存先）は存置。
