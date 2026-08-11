@@ -48,6 +48,7 @@ data/_tmp/
 !data/workflows/
 data/workflows/*
 !data/workflows/default_node.json
+!data/workflows/anima.json
 !data/*.zip
 # searxng: allow only .gitkeep (settings.yml auto-generated on first docker-compose up)
 !data/searxng/
