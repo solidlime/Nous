@@ -134,6 +134,10 @@ def _render_image_section() -> str:
                                             placeholder="例: /data/workflows/pony_ipadapter.json"
                                             style="width:100%;font-size:0.78rem;" />
                                     </div>
+                                    <div id="chat-image-test-result" style="display:none;margin-bottom:8px;text-align:center;">
+                                        <img id="chat-image-test-img" alt="テスト生成結果"
+                                            style="max-width:100%;max-height:240px;border-radius:8px;object-fit:contain;" />
+                                    </div>
                                     <div style="display:flex;gap:8px;align-items:center;">
                                         <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="N.Chat.settings.testImageGen()"><i data-lucide="play"></i> テスト生成</button>
                                         <span id="chat-image-test-status" style="font-size:0.72rem;color:var(--text-muted);min-height:16px;"></span>

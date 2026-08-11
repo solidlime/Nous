@@ -24,6 +24,8 @@ function updateImageGenSliderLabels() {
 function testImageGen() {
   var status = document.getElementById('chat-image-test-status');
   if (!status) return;
+  var result = document.getElementById('chat-image-test-result');
+  if (result) result.style.display = 'none';
   status.textContent = '生成中...';
   status.style.color = 'var(--text-muted)';
   
@@ -44,6 +46,13 @@ function testImageGen() {
     if (d.error) { status.textContent = '\ud83d\udd34 ' + d.error; status.style.color = 'var(--accent-red)'; return; }
     status.textContent = '\u2705 \u751f\u6210\u5b8c\u4e86 (' + (d.images ? d.images.length : 0) + '\u679a)';
     status.style.color = 'var(--accent-green)';
+    if (d.images && d.images.length && d.images[0].base64 && result) {
+      var img = document.getElementById('chat-image-test-img');
+      if (img) {
+        img.src = 'data:image/png;base64,' + d.images[0].base64;
+        result.style.display = 'block';
+      }
+    }
   })
   .catch(function(e) {
     status.textContent = '\ud83d\udd34 ' + e.message;
