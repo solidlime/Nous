@@ -1015,6 +1015,10 @@ async def test_fetch_userdata_workflow_404():
         provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_source="comfyui", workflow_name="missing.json")
         with pytest.raises(FileNotFoundError, match="Workflow not found"):
             await provider._fetch_userdata_workflow()
+        # ルートは単一セグメント {file} のためスラッシュを %2F エンコードして叩く
+        mock_client.get.assert_awaited_once_with(
+            "http://localhost:8188/userdata/workflows%2Fmissing.json"
+        )
 
 
 @pytest.mark.asyncio

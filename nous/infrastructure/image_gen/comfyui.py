@@ -211,7 +211,8 @@ class ComfyUIProvider(ImageGenProvider):
     async def _fetch_userdata_workflow(self) -> dict:
         """ComfyUI /userdata API から保存済みワークフローを取得して dict で返す。
 
-        GET /userdata/workflows/{name}.json（user/default 配下の相対パス）
+        GET /userdata/workflows%2F{name}.json（user/default 配下の相対パス。
+        ルートが単一セグメント {file} のためスラッシュは %2F エンコード必須）
         """
         import json as _json
         from urllib.parse import quote
@@ -223,7 +224,7 @@ class ComfyUIProvider(ImageGenProvider):
         if "/" in name or "\\" in name or name.startswith("."):
             raise ValueError(f"Invalid workflow name: {self._workflow_name!r}")
 
-        resp = await self.client.get(f"{self._api_url}/userdata/workflows/{quote(name)}")
+        resp = await self.client.get(f"{self._api_url}/userdata/{quote(f'workflows/{name}', safe='')}")
         if resp.status_code == 404:
             raise FileNotFoundError(
                 f"Workflow not found on ComfyUI: workflows/{name} "
