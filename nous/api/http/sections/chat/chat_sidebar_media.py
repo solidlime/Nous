@@ -53,7 +53,7 @@ def _render_image_section() -> str:
                                     <!-- 自画像生成プロンプト -->
                                     <div>
                                         <div class="chat-field-label" style="font-size:0.78rem;">自画像プロンプト <span style="color:var(--text-muted);font-size:0.7rem;">（キャラの外見タグ・LoRAトリガーワード等）</span></div>
-                                        <textarea id="chat-image-gen-self-portrait-prompt" class="chat-field-input" placeholder="1girl, solo, purple eyes, short white hair, witch hat, holding ornate key-shaped staff, &lt;lora:herta_v1:0.8&gt;" rows="3" style="width:100%;resize:vertical;font-size:0.78rem;"></textarea>
+                                        <textarea id="chat-image-gen-self-portrait-prompt" class="chat-field-input" placeholder="キャラ外見タグ（例: 1girl, solo, purple eyes, short white hair, witch hat, holding ornate key-shaped staff）" rows="3" style="width:100%;resize:vertical;font-size:0.78rem;"></textarea>
                                     </div>
                                     <div>
                                         <div class="chat-field-label" style="font-size:0.78rem;">ネガティブプロンプト <span style="font-weight:300;color:var(--text-dim);">(低画質・崩れ除外タグ)</span></div>

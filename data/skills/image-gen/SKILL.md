@@ -41,20 +41,14 @@ description: "あなたの姿や見ている風景を、ユーザーに共有す
 - mood-sync 連鎖時も同様に、感情変化→画像生成→記録の3段連鎖を完遂せよ
 
 ## プロンプト作成ルール
-- **Danbooruタグ形式で記述**（`1girl, blue hair, red eyes, smile, ...`）
-- あなた自身の外見的特徴を必ず含める（システムプロンプトから読み取れる範囲で）
-- 現在の感情や表情をタグ化（`smile`, `blush`, `surprised`, `thoughtful`, `embarrassed` など）
-- 状況や背景も簡潔にタグ化（`classroom`, `park`, `night`, `reading book` など）
-- 20〜40タグ程度、簡潔に。不要なタグは省く
-- プロンプト内にコロン（:）を含めないこと（タグ本体に直接コロンを書かない。重み指定の `(chibi:2)` は括弧内でのみ使用可）
-- **タグの順序**: `[品質/メタ/年号/安全] [被写体（1girl等）] [キャラクター名] [シリーズ] [画師] [一般タグ]` の順で並べる（小文字・スペース区切り）
-- **単独キャラは `solo` を必ず入れる**: 自分一人を描くときは `solo, 1girl` のセットで（`solo` が無いとモデルが2人目を追加しやすい）。構図タグ（`upper body`, `full body`, `portrait`）と背景タグ（`simple background`, `solid background`）も併用すると1人構図が安定する
-- **品質タグを先頭に**: `masterpiece, best quality` で始める（Anima は品質タグ推奨）
-- **画師タグ**: 使う場合は `@` プレフィックス必須（例 `@fkey`）。なしでも可
-- **重み付け**: SDXL より高めに効く（例 `(chibi:2)`）。強調したい要素には積極的に使ってよい
-- **自然言語混在可**: Danbooru タグに加え、短い英語フレーズを混ぜてもよい（Anima は両対応）
+- **英語の自然言語で記述する**（Anima は自然言語対応。0.6B エンコーダのため英語が基本・日本語は崩れやすい）
+- 状況・感情・シーン・雰囲気を1〜3文の英語で簡潔に書く（例: `A girl with purple eyes and white hair, smiling softly in a sunlit classroom, gentle afternoon light`）
+- キャラ外見は WebUI の自画像プロンプトから自動注入されるため、プロンプトに毎回書く必要はない。強調したい外見要素だけ含める
+- 必要な場合のみ Danbooru タグを先頭に併記する（`solo, 1girl` など。キャラ一人なら必ず `solo` を含め、2人目が追加されるのを防ぐ）
+- プロンプト内にコロン（:）を含めないこと（重み指定の `(chibi:2)` は括弧内でのみ使用可）
+- タグを使う場合は `[被写体（1girl等）] [キャラクター名] [シリーズ] [一般タグ]` の順・小文字・スペース区切り。品質タグ（`masterpiece, best quality`）は先頭に
 - **ユーザー視点で描く**: あなた自身を描くときは、ユーザーの目から見た構図にする。`pov`（一人称視点・ユーザーの視線からあなたを見る）を基本とし、会話中・親密シーンではあなたがカメラ（ユーザー）に近く、手が届きそうな距離感にする。`looking at viewer` はあなたがユーザーを見返す構図なので、見つめ合いの場面でのみ使う
-- ただし強制ではない: 風景や背景メインの scene、あなたが対象でない絵では不要。構図タグは状況判断で使う
+- ただし強制ではない: 風景や背景メインの scene、あなたが対象でない絵では不要。構図は状況判断で使う
 
 ## preset の選択基準
 解像度は `preset` で指定する。WxH の直接指定は不可。
@@ -71,7 +65,7 @@ description: "あなたの姿や見ている風景を、ユーザーに共有す
 ## 呼び出し例
 ```
 image_generate(
-    prompt="1girl, blue hair, red eyes, smile, blush, looking at viewer, classroom, afternoon light",
+    prompt="A girl with blue hair and red eyes, smiling softly and blushing in a classroom, warm afternoon light",
     self_portrait=true,
     mode="portrait",
     preset="portrait_medium"
@@ -90,7 +84,7 @@ image_generate(
 ### 呼び出し
 ```
 image_generate(
-    prompt="scenery, mountain, sunset, lake, detailed, ...",
+    prompt="A serene mountain lake at sunset, warm orange sky reflecting on still water",
     self_portrait=false,
     preset="landscape_medium"
 )
@@ -98,7 +92,7 @@ image_generate(
 - `self_portrait=false` を必ず指定
 - `preset` で解像度を選択（省略時はデフォルトプリセット）
 - `mode` は省略可（`self_portrait=true` 時のみ有効なため）
-- prompt は Danbooruタグ形式（カンマ区切りの英語タグ）
+- prompt は英語の自然言語で記述（状況・雰囲気を簡潔に。必要ならタグを先頭に併記可）
 
 ## 制約
 - **1ターン1回まで**: 同一レスポンス内で image_generate を複数回呼ばないこと

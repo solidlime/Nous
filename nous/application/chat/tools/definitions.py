@@ -218,13 +218,13 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ToolDefinition(
         name="image_generate",
         defer_loading=False,
-        description="AI画像を生成する。ユーザーが画像を要求した時、または視覚表現が会話を強化する時に使え。ユーザーの許可なしに無関係な画像を生成するな。テキストの説明で十分な場面では使うな。prompt は必須（Danbooru タグ形式推奨）。n で枚数（1-4）、preset で解像度プリセット、mode で構図を指定できる。",
+        description="AI画像を生成する。ユーザーが画像を要求した時、または視覚表現が会話を強化する時に使え。ユーザーの許可なしに無関係な画像を生成するな。テキストの説明で十分な場面では使うな。prompt は必須（英語の自然言語で状況・感情・シーンを記述。Danbooru タグとの併用も可）。n で枚数（1-4）、preset で解像度プリセット、mode で構図を指定できる。",
         input_schema={
             "type": "object",
             "properties": {
                 "prompt": {
                     "type": "string",
-                    "description": "画像生成プロンプト。Danbooruタグ形式（カンマ区切りの英語タグ）で記述。例: '1girl, blue sky, standing, smile, detailed'",
+                    "description": "画像生成プロンプト。英語の自然言語で記述（例: 'a girl standing under a blue sky, smiling softly'）。キャラ外見タグ（例: '1girl, purple eyes, white hair'）を先頭に併記してもよい",
                 },
                 "preset": {
                     "type": "string",
