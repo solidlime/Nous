@@ -1,5 +1,5 @@
 ---
-name: item
+name: item-manage
 description: "キャラクターの持ち物・装備の管理。アイテムの所持登録（item_add）、装備（item_equip）、検索（item_search）を状況に応じて使い分ける。服装・アクセサリーなど外見に影響する装備は、装備すると自動的に appearance（外見）へ反映される。"
 ---
 
