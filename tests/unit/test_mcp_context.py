@@ -273,7 +273,7 @@ class TestGetContext:
         )
         note = _format_emotion_decay_note(result)
         assert "anger" in note
-        assert "消えていった" in note
+        assert "消失した" in note
         assert "2日" in note
         assert "(" not in note  # no debug format like (0.72)
 
@@ -291,7 +291,7 @@ class TestGetContext:
         )
         note = _format_emotion_decay_note(result)
         assert "joy" in note
-        assert "落ち着いてきた" in note
+        assert "減衰した" in note
         assert "1日" in note
         assert "(" not in note  # no debug format
 
@@ -315,7 +315,7 @@ class TestGetContext:
         )
         note = _format_emotion_decay_note(result)
         assert "30分" in note
-        assert "消えていった" in note
+        assert "消失した" in note
 
     @pytest.mark.asyncio
     async def test_get_context_includes_decay_notification(self, registered_tools):
@@ -366,7 +366,7 @@ class TestGetContext:
             mock_reg_cls.get.return_value = ctx
             result = await get_context()
         assert "anger" in result
-        assert "消えていった" in result
+        assert "消失した" in result
         assert "2日" in result
 
     @pytest.mark.asyncio

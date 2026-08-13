@@ -273,6 +273,7 @@ class TestMemoryLLMPromptFormat:
             inventory="  - アイテムA\n  - アイテムB",
             user_message="こんにちは",
             assistant_response="はい、こんにちは",
+            language="ja",
         )
         assert "テストペルソナ" in formatted
         assert "テストユーザー" in formatted
@@ -290,6 +291,7 @@ class TestMemoryLLMPromptFormat:
             inventory="",
             user_message="hello",
             assistant_response="world",
+            language="ja",
         )
         # Should still produce a valid string with "hello" and "world"
         assert "hello" in formatted
@@ -307,6 +309,7 @@ class TestMemoryLLMPromptFormat:
             "inventory": "(なし)",
             "user_message": "test",
             "assistant_response": "response",
+            "language": "ja",
         }
         formatted = _MEMORY_LLM_PROMPT.format(**kwargs)
         assert "assistant" in formatted
@@ -323,6 +326,7 @@ class TestMemoryLLMPromptFormat:
             inventory="何もなし",
             user_message="msg",
             assistant_response="resp",
+            language="ja",
         )
         assert "facts" in formatted
         assert "goals" in formatted
@@ -345,6 +349,7 @@ class TestMemoryLLMPromptFormat:
             "inventory",
             "user_message",
             "assistant_response",
+            "language",
         }
         assert placeholders == expected, f"Unexpected placeholders: {placeholders - expected}"
 

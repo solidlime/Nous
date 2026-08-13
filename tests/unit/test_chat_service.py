@@ -1153,8 +1153,8 @@ def test_chat_tab_buttons_use_panel_toggle_handlers():
     """Top control buttons should call the panel toggle functions directly."""
     html = render_chat_tab()
 
-    assert 'onclick="toggleMemoryPanel()"' in html
-    assert 'onclick="toggleSettingsPanel()"' in html
+    assert 'onclick="N.Chat.core.toggleMemory()"' in html
+    assert 'onclick="N.Chat.core.toggleSettings()"' in html
 
 
 def test_chat_tab_renders_all_toggle_panels():

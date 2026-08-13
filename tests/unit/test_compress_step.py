@@ -427,8 +427,8 @@ class TestCompressStep:
         replaced = [m for m in result if m.role == "tool" and "ツール実行" in (m.content or "")]
         assert len(replaced) >= 1
 
-    def test_trim_system_prompt_skill_section_truncated(self):
-        """Long skill descriptions should be truncated."""
+    def test_trim_system_prompt_preserves_skill_section(self):
+        """Long skill descriptions must be preserved (skill discovery layer is protected)."""
         from nous.application.chat.pipeline.compress import CompressStep
 
         # Build prompt with long skill section
@@ -442,8 +442,11 @@ class TestCompressStep:
         ]
         prompt = "\n".join(lines)
         result = CompressStep._trim_system_prompt(prompt, "aggressive")
-        # Should be truncated (skill section > 600 chars)
-        assert len(result) < len(prompt) or "..." in result
+        # Skill section is intentionally protected — truncation would break skill discovery.
+        # Only the 関連記憶 section is trimmed.
+        assert "skill_a" in result
+        assert "利用可能なSkill" in result
+        assert len(result) == len(prompt)
 
     def test_clear_tool_results_with_few_assistant_msgs(self):
         """When there are <= 3 assistant messages, no replacement happens."""

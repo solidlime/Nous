@@ -863,6 +863,7 @@ class TestDynamicTemperatureInference:
         mock_provider.stream = _mock_stream
 
         config = MagicMock()
+        config.debug_mode = False  # この環境には /data が無いため書き込みを無効化
         config.temperature = 0.7
         config.max_tokens = 100
         config.provider = "anthropic"
@@ -919,6 +920,7 @@ class TestDynamicTemperatureInference:
         mock_provider.stream = _mock_stream
 
         config = MagicMock()
+        config.debug_mode = False  # この環境には /data が無いため書き込みを無効化
         config.temperature = 0.7
         config.max_tokens = 100
         config.provider = "anthropic"
@@ -971,6 +973,7 @@ class TestDynamicTemperatureInference:
         mock_provider.stream = _mock_stream
 
         config = MagicMock()
+        config.debug_mode = False  # この環境には /data が無いため書き込みを無効化
         config.temperature = 0.7
         config.max_tokens = 100
         config.provider = "anthropic"
@@ -1046,6 +1049,7 @@ class TestReasoningPropagationInference:
         mock_provider.stream = _mock_stream
 
         config = MagicMock()
+        config.debug_mode = False  # この環境には /data が無いため書き込みを無効化
         config.temperature = 0.7
         config.max_tokens = 100
         config.provider = "anthropic"
@@ -1113,6 +1117,7 @@ class TestThinkingSegmentInference:
         mock_provider.stream = _mock_stream
 
         config = MagicMock()
+        config.debug_mode = False  # この環境には /data が無いため書き込みを無効化
         config.temperature = 0.7
         config.max_tokens = 100
         config.provider = "anthropic"
@@ -1271,9 +1276,9 @@ class TestTimestampInjection:
                 pass
 
         assert captured_messages[0] is not None
-        # Check the two session messages had timestamps injected
-        assert captured_messages[0][0].content == "[2025-06-15 14:30] hello"
-        assert captured_messages[0][1].content == "[2025-06-15 14:31] hi there"
+        # Check the two session messages had timestamps injected (HTML comment format)
+        assert captured_messages[0][0].content == "<!-- msg_at: 2025-06-15 14:30 JST -->hello"
+        assert captured_messages[0][1].content == "<!-- msg_at: 2025-06-15 14:31 JST -->hi there"
 
     @pytest.mark.asyncio
     async def test_no_timestamps_when_disabled(self):
@@ -1386,7 +1391,7 @@ class TestTimestampInjection:
                 pass
 
         assert captured_messages[0] is not None
-        assert captured_messages[0][0].content == "[2025-06-15 14:30] hi"
+        assert captured_messages[0][0].content == "<!-- msg_at: 2025-06-15 14:30 JST -->hi"
         # tool message should NOT have timestamp prefix
         assert captured_messages[0][1].content == '{"result": "ok"}'
 
@@ -1445,7 +1450,7 @@ class TestTimestampInjection:
                 pass
 
         assert captured_messages[0] is not None
-        assert captured_messages[0][0].content == "[2025-06-15 14:30] with ts"
+        assert captured_messages[0][0].content == "<!-- msg_at: 2025-06-15 14:30 JST -->with ts"
         assert captured_messages[0][1].content == "no ts"
 
 
@@ -1589,7 +1594,7 @@ class TestEmotionDecayNoteNaturalLanguage:
             elapsed_hours=48.0,
         )
         note_neutral = _format_emotion_decay_note(neutralized)
-        assert "消えていった" in note_neutral
+        assert "消失した" in note_neutral
 
         # 部分減衰 (same emotion, reduced intensity)
         partial = EmotionDecayResult(
@@ -1600,5 +1605,5 @@ class TestEmotionDecayNoteNaturalLanguage:
             elapsed_hours=24.0,
         )
         note_partial = _format_emotion_decay_note(partial)
-        assert "落ち着いてきた" in note_partial
-        assert "消えていった" not in note_partial
+        assert "減衰した" in note_partial
+        assert "消失した" not in note_partial
