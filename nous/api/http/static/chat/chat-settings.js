@@ -324,12 +324,10 @@ function applyChatConfig(cfg) {
   if (cfg.image_gen_comfyui_url) {
     N.Chat.settings.checkComfyUI();
   }
-  // 背景画像・立ち絵
-  set("chat-bg-url", cfg.chat_background_url);
-  set("chat-bg-dark-url", cfg.chat_background_dark_url);
-  set("chat-standing-pic-url", cfg.standing_pic_url);
-  // CSS変数に即時反映
-  N.Chat.settings.applyBackgroundVars(cfg);
+  // Avatar settings
+  setChecked("chat-avatar-enabled", cfg.avatar && cfg.avatar.enabled === true);
+  set("chat-avatar-mouth-mode", cfg.avatar && cfg.avatar.mouth_mode || "toggle");
+  set("chat-avatar-panel-width", cfg.avatar && cfg.avatar.panel_width || 220);
 }
 
 function onChatProviderChange() {
@@ -513,10 +511,12 @@ async function saveChatConfig() {
     voice_volume: parseFloat(document.getElementById("chat-voice-volume")?.value) ?? 1.0,
     voice_speed: parseFloat(document.getElementById("chat-voice-speed")?.value) ?? 1.0,
     voice_enabled: getChecked("chat-voice-enabled"),
-    // 背景画像・立ち絵
-    chat_background_url: (document.getElementById("chat-bg-url")?.value || "").trim(),
-    chat_background_dark_url: (document.getElementById("chat-bg-dark-url")?.value || "").trim(),
-    standing_pic_url: (document.getElementById("chat-standing-pic-url")?.value || "").trim(),
+    // Avatar settings
+    avatar: {
+      enabled: getChecked("chat-avatar-enabled"),
+      mouth_mode: document.getElementById("chat-avatar-mouth-mode")?.value || "toggle",
+      panel_width: parseInt(document.getElementById("chat-avatar-panel-width")?.value || "220"),
+    },
   };
   const btn = document.querySelector(".chat-save-btn");
   if (btn) {
@@ -551,54 +551,6 @@ async function saveChatConfig() {
 // ------------------------------------------------------------------
 
 // ------------------------------------------------------------------
-// Background image & standing picture — CSS variable application
-// ------------------------------------------------------------------
-function applyBackgroundVars(cfg) {
-  var root = document.documentElement;
-  var isDark = !root.classList.contains("light");
-  var lightUrl = (cfg && cfg.chat_background_url) || "";
-  var darkUrl = (cfg && cfg.chat_background_dark_url) || "";
-  var standingUrl = (cfg && cfg.standing_pic_url) || "";
-
-  // Choose background: dark mode prefers dark URL, light mode prefers light URL
-  var bgUrl = isDark ? (darkUrl || lightUrl) : lightUrl;
-  if (bgUrl) {
-    root.style.setProperty("--chat-bg-image", "url(" + bgUrl + ")");
-  } else {
-    root.style.setProperty("--chat-bg-image", "url('')");
-  }
-
-  // Standing picture
-  var picEl = document.getElementById("chat-standing-pic");
-  if (standingUrl) {
-    if (!picEl) {
-      picEl = document.createElement("img");
-      picEl.id = "chat-standing-pic";
-      picEl.alt = "";
-      picEl.setAttribute("aria-hidden", "true");
-      var chatTab = document.getElementById("tab-chat");
-      if (chatTab) chatTab.appendChild(picEl);
-    }
-    picEl.src = standingUrl;
-    picEl.classList.add("visible");
-  } else if (picEl) {
-    picEl.classList.remove("visible");
-    setTimeout(function() { picEl.remove(); }, 400);
-  }
-}
-
-// Re-apply on theme change
-var _themeObserver = new MutationObserver(function() {
-  var S = window.S;
-  if (S && S.persona) {
-    api("/api/chat/" + encodeURIComponent(S.persona) + "/config").then(function(cfg) {
-      applyBackgroundVars(cfg);
-    }).catch(function() {});
-  }
-});
-_themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-
-// ------------------------------------------------------------------
 // Register namespace (MCP/Image additions in chat-settings-mcp.js / chat-settings-image.js)
 // ------------------------------------------------------------------
 N.Chat.settings = {
@@ -606,7 +558,6 @@ N.Chat.settings = {
   apply: applyChatConfig,
   save: saveChatConfig,
   onProviderChange: onChatProviderChange,
-  applyBackgroundVars: applyBackgroundVars,
 };
 
 })(window.Nous);

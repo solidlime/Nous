@@ -52,10 +52,6 @@ class ToolConfig(BaseModel):
     image_gen_portrait_prefix: str = "upper body, portrait, pov, "
     image_gen_selfie_prefix: str = "selfie, from below, mirror selfie, "
     image_gen_scene_prefix: str = "environment shot, full body, "
-    # チャット背景画像・立ち絵
-    chat_background_url: str = ""
-    chat_background_dark_url: str = ""
-    standing_pic_url: str = ""
 
     # Image caption (for non-vision providers)
     image_caption_enabled: bool = True

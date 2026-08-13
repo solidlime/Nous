@@ -85,10 +85,6 @@
     --z-modal: 400;
     --z-toast: 500;
     --z-debug: 9999;
-
-    /* Chat background & standing picture */
-    --chat-bg-image: url("");
-    --standing-pic-url: url("");
 }
 html.light {
     /* Light mode backgrounds */

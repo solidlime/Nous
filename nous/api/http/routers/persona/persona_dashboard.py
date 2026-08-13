@@ -227,21 +227,6 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
         except Exception:
             logger.debug("dashboard_data: prompt enrichment skipped")
 
-    # Chat background / standing picture URLs from config
-    chat_background_url = ""
-    chat_background_dark_url = ""
-    standing_pic_url = ""
-    try:
-        from nous.domain.chat_config import ChatConfigFileRepository
-
-        cfg_repo = ChatConfigFileRepository(get_settings().data_root)
-        cfg = cfg_repo.get(persona)
-        chat_background_url = cfg.chat_background_url or ""
-        chat_background_dark_url = cfg.chat_background_dark_url or ""
-        standing_pic_url = cfg.standing_pic_url or ""
-    except Exception:
-        logger.debug("dashboard_data: chat background config load skipped")
-
     return {
         "persona": persona,
         "stats": stats,
@@ -256,9 +241,6 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
         "state_memories": state_memories,
         "latest_self_portrait": latest_self_portrait,
         "generated_images": generated_images,
-        "chat_background_url": chat_background_url,
-        "chat_background_dark_url": chat_background_dark_url,
-        "standing_pic_url": standing_pic_url,
     }
 
 

@@ -3,7 +3,7 @@
 import sys
 
 from .chat_sidebar_core import _render_context_section, _render_core_section, _render_sidebar_header
-from .chat_sidebar_media import _render_background_section, _render_image_section, _render_voice_section
+from .chat_sidebar_media import _render_avatar_section, _render_image_section, _render_voice_section
 from .chat_sidebar_memory import (
     _render_forgetting_section,
     _render_memory_enrichment_section,
@@ -99,7 +99,7 @@ def render_chat_sidebar() -> str:
         _render_weights_section(),
         _render_image_section(),
         _render_voice_section(),
-        _render_background_section(),
+        _render_avatar_section(),
         _render_debug_section(),
         _render_auto_capture_section(),
         _render_memory_enrichment_section(),

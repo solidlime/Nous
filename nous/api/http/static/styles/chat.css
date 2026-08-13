@@ -6,42 +6,6 @@
   position: relative;
   overflow: hidden;
 }
-/* Background image overlay — subtle, does not break readability */
-#tab-chat.active::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: var(--chat-bg-image);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  opacity: 0.18;
-  pointer-events: none;
-  z-index: 0;
-  transition: opacity var(--duration-normal) var(--ease-apple);
-}
-/* Standing picture — fixed bottom-right, non-interactive */
-#chat-standing-pic {
-  position: fixed;
-  bottom: 0;
-  right: 16px;
-  z-index: var(--z-content);
-  pointer-events: none;
-  max-height: 40vh;
-  max-width: 25vw;
-  object-fit: contain;
-  object-position: bottom right;
-  opacity: 0;
-  transition: opacity var(--duration-slow) var(--ease-apple);
-}
-#chat-standing-pic.visible {
-  opacity: 1;
-}
-@media (max-width: 768px) {
-  #chat-standing-pic {
-    display: none !important;
-  }
-}
 #chat-layout {
   container-type: inline-size;
   display: flex;
@@ -665,7 +629,7 @@ html.light .chat-thinking-body {
 #settings-panel details[data-category="voice"] summary::before {
   color: var(--accent-green);
 }
-#settings-panel details[data-category="background"] summary::before {
+#settings-panel details[data-category="avatar"] summary::before {
   color: var(--accent-teal);
 }
 

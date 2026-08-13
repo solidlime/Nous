@@ -1,26 +1,32 @@
-"""Media settings — image generation (ComfyUI), voice/TTS (Irodori), and background/standing picture."""
+"""Media settings — image generation (ComfyUI), voice/TTS (Irodori), and avatar."""
 
 
-def _render_background_section() -> str:
-    """Background image and standing picture settings."""
+def _render_avatar_section() -> str:
+    """Avatar panel settings — enable, mouth mode, panel width."""
     return """
-                        <!-- 背景画像・立ち絵 -->
-                        <details data-category="background" id="chat-background-section">
-                            <summary><i data-lucide="image"></i> 背景・立ち絵 <span class="chat-help-icon" data-category="background" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
+                        <!-- アバター設定 -->
+                        <details data-category="avatar" id="chat-avatar-section">
+                            <summary><i data-lucide="user"></i> アバター <span class="chat-help-icon" data-category="avatar" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
-                                <div>
-                                    <div class="chat-field-label">背景画像URL <span style="color:var(--text-muted);font-size:0.7rem;">（ライトモード用）</span></div>
-                                    <input type="url" id="chat-bg-url" class="chat-field-input" placeholder="https://example.com/bg-light.jpg" aria-label="背景画像URL" />
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                                    <span class="chat-field-label" style="margin:0;">アバターを有効化</span>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="chat-avatar-enabled" />
+                                        <span class="toggle-slider"></span>
+                                    </label>
                                 </div>
                                 <div>
-                                    <div class="chat-field-label">背景画像URL <span style="color:var(--text-muted);font-size:0.7rem;">（ダークモード用・未設定ならライト用を共通利用）</span></div>
-                                    <input type="url" id="chat-bg-dark-url" class="chat-field-input" placeholder="https://example.com/bg-dark.jpg" aria-label="ダークモード背景画像URL" />
+                                    <div class="chat-field-label">口パクモード</div>
+                                    <select id="chat-avatar-mouth-mode" class="chat-field-input">
+                                        <option value="toggle">固定トグル</option>
+                                        <option value="analyser">音量連動</option>
+                                    </select>
                                 </div>
                                 <div>
-                                    <div class="chat-field-label">立ち絵URL</div>
-                                    <input type="url" id="chat-standing-pic-url" class="chat-field-input" placeholder="https://example.com/standing.png" aria-label="立ち絵URL" />
+                                    <div class="chat-field-label">パネル幅（px）</div>
+                                    <input type="number" id="chat-avatar-panel-width" class="chat-field-input" value="220" min="80" max="800" />
                                 </div>
-                                <p style="font-size:0.72rem;color:var(--text-muted);margin:0;">背景は薄くオーバーレイ表示されます。設定を反映するには保存後、ページを再読み込みしてください。</p>
+                                <p style="font-size:0.72rem;color:var(--text-muted);margin:0;">立ち絵（base.png / mouth_open.png / expr_*.png）は persona/avatar/ に配置。アバターは左サイドバー最上部に表示されます。</p>
                             </div>
                         </details>"""
 
