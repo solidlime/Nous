@@ -104,12 +104,3 @@
 2. **ブラウザ実機確認のパターン**: リモートブラウザからは localhost 不可 → Tailscale IP（100.112.180.92:26262）+ headless + --no-sandbox + allowDangerous。タブ切替は `[data-tab]` の可視ボタンをクリック（#tab-chat 直クリックは active にならない場合あり）。保存フローは fetch フックで payload 確認 → API GET でサーバー反映確認 → リロード復元確認。
 3. **UI 新設定の実装は既存パターン踏襲**: 動的温度調整（checkbox + slider.disabled + oninput ラベル同期）の踏襲で統一感を保つ。updateSliderLabels の実体は chat-settings-image.js（chat-settings.js ではない）。
 4. **ブラウザ検証で書き換えた persona config は検証後に元に戻す**（API POST で復元）。
-
-## PNGTuber アバター素材生成 (2026-08-14)
-- **成果**: WebUI アバター（口形5段階 mouth_0-4 / 表情 expr_* / 顔振り look_left-right / 髪揺れ hair_0-2 の静止画差分、全 RGBA 透過・bbox 統一）。エンジン avatar-engine.js は mouth>look>hair>emotion>base の優先順位 + look 周期アニメ + hair 200ms ループ
-- **ComfyUI API 直接実行手順**（fixer クラッシュ時の代替・安定）: ① /prompt POST（API形式 JSON）→ ② /history/{prompt_id} を 2s ポーリングで完了待ち → ③ /view?filename=..&type=output で DL → ④ 透過化は LoadImage→BiRefNetRMBG→SaveImage の3ノード構成（model=BiRefNet_512x512, background=Alpha、**optional パラメータ sensitivity/mask_blur/mask_offset/invert_output/refine_foreground/background 明示必須**）→ ⑤ /upload/image で input へ配置
-- **透過 PNG の bbox 統一**: 「はみ出しクリップ + 不足パディング」で target に一致させる。シフトで動かすと内容位置がズレるので禁止。bbox 数 px の差は内容位置（顔・体）が一致していれば無害
-- **noobai 系で風プロンプト（wind）は髪飾り・帽子を描きがち**: negative に `hair ornament, hair accessory, ribbon, hair clip, hairband, bow, accessory, hat, headwear, headdress, crown, beret, cap, hood, veil, tiara` を追加（アンダースコア禁止・Danbooru タグ）
-- **vision の小物判定は不安定**: 同じ画像でも判定が反転することがある（髪飾りの有無）。ピクセル解析（hue クラスタ検出）と併用して確定すること
-- **低メモリ環境ではサブエージェントが頻繁にクラッシュ**（「stopped without a terminal result」）: 成果物はディスクに揃っていることが多いので、まず git status / ファイル mtime / サイズで確認。機械的な API 作業は orchestrator 直接実行（curl+python）が安定
-- **素材検証の基準値**（512px キャンバス）: 対象マスク領域の差分 >10（揺れあり）・顔領域 <10（前髪かぶりで 9.3-9.6 は許容）・唇ズレ <10px。相互差分 >10 で別パターン成立
