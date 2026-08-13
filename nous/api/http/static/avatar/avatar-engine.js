@@ -58,15 +58,15 @@ function mouthRatioToLevel(ratio, prevLevel) {
 
 /**
  * Select which file to display based on current state.
- * Logic: mouth_<level> (if talking & loaded, stepping down to mouth_1) >
- *        emotion file (if loaded) > base.png
+ * Priority: mouth_<level> (talking) > look_<dir>.png (idle, turned) >
+ *           hair_<n>.png (idle, front) > expr_<emotion>.png > base.png.
+ * Every layer falls through to the next when its file is not loaded.
  * @param {object} state - Avatar state
  * @returns {string} Filename to display
  */
 function selectDisplayFile(state) {
-  // Mouth takes priority when talking and mouth is open (level > 0)
+  // 1. Talking: mouth takes priority (mouth_<level>, stepping down until loaded)
   if (state.talking && state.mouthLevel > 0) {
-    // Step down from current level until a loaded mouth image is found
     for (var l = state.mouthLevel; l >= 1; l--) {
       var mouthFile = "mouth_" + l + ".png";
       var mouthEntry = state.cache[mouthFile];
@@ -75,14 +75,85 @@ function selectDisplayFile(state) {
       }
     }
   }
-  // Emotion file if loaded and not errored
+  // 2. Idle look: face turned left/right (front uses base/hair layer instead)
+  if (!state.talking && state.lookEnabled !== false &&
+      (state.look === "left" || state.look === "right")) {
+    var lookFile = "look_" + state.look + ".png";
+    var lookEntry = state.cache[lookFile];
+    if (lookEntry && lookEntry.loaded && !lookEntry.error) {
+      return lookFile;
+    }
+  }
+  // 3. Idle bob: hair sway frame (front view)
+  if (!state.talking && state.bobEnabled !== false &&
+      typeof state.hairFrame === "number" && state.hairFrame >= 0 && state.hairFrame <= 2) {
+    var hairFile = "hair_" + state.hairFrame + ".png";
+    var hairEntry = state.cache[hairFile];
+    if (hairEntry && hairEntry.loaded && !hairEntry.error) {
+      return hairFile;
+    }
+  }
+  // 4. Emotion file if loaded and not errored
   var emotionFile = emotionToFilename(state.emotion);
   var emotionEntry = state.cache[emotionFile];
   if (emotionEntry && emotionEntry.loaded && !emotionEntry.error) {
     return emotionFile;
   }
-  // Fallback
+  // 5. Fallback
   return "base.png";
+}
+
+// ------------------------------------------------------------------
+// Look (face turn) & Bob (hair sway) — idle animations
+// ------------------------------------------------------------------
+
+// Look sequence: [state, durationMs] pairs. Cycle: front -> left -> front -> right -> front.
+// Front 1200ms + left 900ms + front 1200ms + right 900ms = 4200ms (~3-5s per requirement).
+var LOOK_SEQUENCE = [
+  ["front", 1200],
+  ["left", 900],
+  ["front", 1200],
+  ["right", 900],
+];
+
+// Hair bob: frame duration in ms, 3 frames looping (hair_0/1/2).
+var HAIR_FRAME_MS = 200;
+
+/**
+ * Idle look state from elapsed time: 'front' | 'left' | 'right'.
+ * Walks LOOK_SEQUENCE in a loop. Invalid time/start degrades to the
+ * start of the cycle (front).
+ * @param {number} t - Current timestamp (ms)
+ * @param {number} lookStartTime - Animation start timestamp (ms)
+ * @returns {string} Look state
+ */
+function lookFrameAt(t, lookStartTime) {
+  if (typeof t !== "number" || isNaN(t)) return "front";
+  var start = (typeof lookStartTime === "number" && !isNaN(lookStartTime)) ? lookStartTime : t;
+  var elapsed = t - start;
+  if (elapsed < 0) elapsed = 0;
+  var cycle = 0;
+  for (var i = 0; i < LOOK_SEQUENCE.length; i++) cycle += LOOK_SEQUENCE[i][1];
+  var pos = elapsed % cycle;
+  for (var j = 0; j < LOOK_SEQUENCE.length; j++) {
+    pos -= LOOK_SEQUENCE[j][1];
+    if (pos < 0) return LOOK_SEQUENCE[j][0];
+  }
+  return "front";
+}
+
+/**
+ * Idle hair frame (0-2) from elapsed time, looping hair_0/1/2.
+ * @param {number} t - Current timestamp (ms)
+ * @param {number} hairStartTime - Animation start timestamp (ms)
+ * @returns {number} Hair frame 0|1|2
+ */
+function hairFrameAt(t, hairStartTime) {
+  if (typeof t !== "number" || isNaN(t)) return 0;
+  var start = (typeof hairStartTime === "number" && !isNaN(hairStartTime)) ? hairStartTime : t;
+  var elapsed = t - start;
+  if (elapsed < 0) elapsed = 0;
+  return Math.floor(elapsed / HAIR_FRAME_MS) % 3;
 }
 
 // ------------------------------------------------------------------
@@ -95,9 +166,10 @@ function selectDisplayFile(state) {
  * @param {string} filename - Image filename to preload
  * @param {function} callback - Called with cache entry { loaded, error }
  * @param {function} [createImage] - Factory for Image element (injectable for testing)
+ * @param {boolean} [quiet] - Suppress onError on failure (optional assets)
  * @returns {object} Cache entry
  */
-function preloadImage(state, filename, callback, createImage) {
+function preloadImage(state, filename, callback, createImage, quiet) {
   if (state.cache[filename]) {
     callback(state.cache[filename]);
     return state.cache[filename];
@@ -116,7 +188,7 @@ function preloadImage(state, filename, callback, createImage) {
   };
   img.onerror = function() {
     entry.error = true;
-    if (state.onError) {
+    if (!quiet && state.onError) {
       state.onError(new Error("Failed to load avatar image: " + filename));
     }
     callback(entry);
@@ -153,6 +225,12 @@ function createAvatarState(options) {
     intensity: 1.0,
     talking: false,
     mouthLevel: 0,
+    lookEnabled: options.lookEnabled !== false,
+    bobEnabled: options.bobEnabled !== false,
+    look: "front",
+    hairFrame: 0,
+    lookStartTime: null,
+    hairStartTime: null,
     cache: {},   // filename -> { loaded: bool, error: bool }
     onError: options.onError || null,
   };
@@ -205,6 +283,56 @@ function createRenderer(element) {
 var _state = null;
 var _renderer = null;
 
+// ------------------------------------------------------------------
+// Idle Animation Driver (setInterval; rAF is overkill for 100ms ticks)
+// ------------------------------------------------------------------
+
+var ANIM_INTERVAL_MS = 100;
+var _animTimer = null;
+
+function noop() {}
+
+/**
+ * Advance look/bob state from the clock and re-render.
+ * Paused (held at front / frozen frame) while talking — mouth takes priority.
+ * Look/hair assets are preloaded quietly on the first idle tick; missing
+ * assets silently fall back to emotion/base.
+ */
+function tickAnimation() {
+  if (!_state) return;
+  var now = Date.now();
+  if (_state.talking) {
+    _state.look = "front";
+  } else {
+    if (_state.lookEnabled) {
+      if (_state.lookStartTime == null) _state.lookStartTime = now;
+      _state.look = lookFrameAt(now, _state.lookStartTime);
+      preloadImage(_state, "look_left.png", noop, null, true);
+      preloadImage(_state, "look_right.png", noop, null, true);
+    }
+    if (_state.bobEnabled) {
+      if (_state.hairStartTime == null) _state.hairStartTime = now;
+      _state.hairFrame = hairFrameAt(now, _state.hairStartTime);
+      preloadImage(_state, "hair_0.png", noop, null, true);
+      preloadImage(_state, "hair_1.png", noop, null, true);
+      preloadImage(_state, "hair_2.png", noop, null, true);
+    }
+  }
+  _renderer.render(selectDisplayFile(_state), _state);
+}
+
+function startAnimTimer() {
+  if (_animTimer != null) return;
+  _animTimer = setInterval(tickAnimation, ANIM_INTERVAL_MS);
+}
+
+function stopAnimTimer() {
+  if (_animTimer != null) {
+    clearInterval(_animTimer);
+    _animTimer = null;
+  }
+}
+
 var avatar = {
 
   // Expose pure functions for unit testing
@@ -213,12 +341,15 @@ var avatar = {
   _selectDisplayFile: selectDisplayFile,
   _preloadImage: preloadImage,
   _mouthRatioToLevel: mouthRatioToLevel,
+  _lookFrameAt: lookFrameAt,
+  _hairFrameAt: hairFrameAt,
   _getState: function() { return _state; },
 
   /**
    * Initialize the avatar engine.
    * @param {HTMLElement|null} element - Container for the avatar image (null = no DOM)
-   * @param {object} options - { baseUrl, persona, enabled, panelWidth, mouthMode, onError }
+   * @param {object} options - { baseUrl, persona, enabled, panelWidth, mouthMode,
+   *                            lookEnabled (default true), bobEnabled (default true), onError }
    * @returns {object} avatar (for chaining)
    */
   init: function(element, options) {
@@ -232,6 +363,11 @@ var avatar = {
         _renderer.render(selectDisplayFile(_state), _state);
       }
     });
+
+    // Idle animation driver (look/bob); no-op when both disabled
+    if (_state.lookEnabled || _state.bobEnabled) {
+      startAnimTimer();
+    }
 
     return this;
   },
@@ -302,6 +438,7 @@ var avatar = {
    * Destroy the avatar instance and clean up DOM.
    */
   destroy: function() {
+    stopAnimTimer();
     if (_renderer) _renderer.clear();
     _state = null;
     _renderer = null;
