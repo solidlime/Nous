@@ -25,6 +25,7 @@ var _containerEl = null;
 var _resizeHandle = null;
 var _toggleBtn = null;
 var _resizeState = null; // { startX, startWidth }
+var _memoryPanelEl = null; // #memory-panel (resize target in column layout)
 
 // ------------------------------------------------------------------
 // Config fetch (with fallback)
@@ -79,7 +80,8 @@ function saveVisible(v) {
 function onResizeStart(e) {
   if (e.button !== 0) return; // left click only
   e.preventDefault();
-  _resizeState = { startX: e.clientX, startWidth: _panelEl.offsetWidth };
+  var target = _memoryPanelEl || _panelEl;
+  _resizeState = { startX: e.clientX, startWidth: target.offsetWidth };
   _resizeHandle.classList.add("active");
   document.addEventListener("pointermove", onResizeMove);
   document.addEventListener("pointerup", onResizeEnd);
@@ -89,12 +91,14 @@ function onResizeMove(e) {
   if (!_resizeState) return;
   var dx = e.clientX - _resizeState.startX;
   var newWidth = Math.min(400, Math.max(120, _resizeState.startWidth + dx));
-  _panelEl.style.width = newWidth + "px";
+  var target = _memoryPanelEl || _panelEl;
+  target.style.width = newWidth + "px";
 }
 
 function onResizeEnd() {
   if (!_resizeState) return;
-  var finalWidth = _panelEl.offsetWidth;
+  var target = _memoryPanelEl || _panelEl;
+  var finalWidth = target.offsetWidth;
   saveWidth(finalWidth);
   _resizeHandle.classList.remove("active");
   _resizeState = null;
@@ -134,6 +138,7 @@ async function initAvatar() {
   _containerEl = document.getElementById("avatar-container");
   _resizeHandle = document.getElementById("avatar-resize-handle");
   _toggleBtn = document.getElementById("avatar-toggle-btn");
+  _memoryPanelEl = document.getElementById("memory-panel");
 
   if (!_panelEl || !_containerEl) return;
 
@@ -151,10 +156,11 @@ async function initAvatar() {
   var persona = S && S.persona;
   var config = await fetchAvatarConfig(persona);
 
-  // Apply saved width (localStorage overrides config)
+  // Apply saved width (localStorage overrides config) — target memory-panel in column layout
   var savedWidth = getSavedWidth();
   var width = savedWidth || config.panelWidth || DEFAULTS.panelWidth;
-  _panelEl.style.width = width + "px";
+  var widthTarget = _memoryPanelEl || _panelEl;
+  widthTarget.style.width = width + "px";
 
   // Apply visibility: localStorage overrides config
   var savedVisible = getSavedVisible();
