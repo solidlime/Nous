@@ -1,34 +1,4 @@
-"""Media settings — image generation (ComfyUI), voice/TTS (Irodori), and avatar."""
-
-
-def _render_avatar_section() -> str:
-    """Avatar panel settings — enable, mouth mode, panel width."""
-    return """
-                        <!-- アバター設定 -->
-                        <details data-category="avatar" id="chat-avatar-section">
-                            <summary><i data-lucide="user"></i> アバター <span class="chat-help-icon" data-category="avatar" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
-                            <div class="details-body">
-                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-                                    <span class="chat-field-label" style="margin:0;">アバターを有効化</span>
-                                    <label class="toggle-switch">
-                                        <input type="checkbox" id="chat-avatar-enabled" />
-                                        <span class="toggle-slider"></span>
-                                    </label>
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">口パクモード</div>
-                                    <select id="chat-avatar-mouth-mode" class="chat-field-input">
-                                        <option value="toggle">固定トグル</option>
-                                        <option value="analyser">音量連動</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">パネル幅（px）</div>
-                                    <input type="number" id="chat-avatar-panel-width" class="chat-field-input" value="220" min="80" max="800" />
-                                </div>
-                                <p style="font-size:0.72rem;color:var(--text-muted);margin:0;">立ち絵（base.png / mouth_open.png / expr_*.png）は persona/avatar/ に配置。アバターは左サイドバー最上部に表示されます。</p>
-                            </div>
-                        </details>"""
+"""Media settings — image generation (ComfyUI), voice/TTS (Irodori)."""
 
 
 def _render_image_section() -> str:

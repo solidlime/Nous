@@ -629,9 +629,6 @@ html.light .chat-thinking-body {
 #settings-panel details[data-category="voice"] summary::before {
   color: var(--accent-green);
 }
-#settings-panel details[data-category="avatar"] summary::before {
-  color: var(--accent-teal);
-}
 
 /* Enhanced field labels */
 .chat-field-label {

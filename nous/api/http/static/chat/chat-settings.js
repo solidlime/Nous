@@ -324,10 +324,6 @@ function applyChatConfig(cfg) {
   if (cfg.image_gen_comfyui_url) {
     N.Chat.settings.checkComfyUI();
   }
-  // Avatar settings
-  setChecked("chat-avatar-enabled", cfg.avatar && cfg.avatar.enabled === true);
-  set("chat-avatar-mouth-mode", cfg.avatar && cfg.avatar.mouth_mode || "toggle");
-  set("chat-avatar-panel-width", cfg.avatar && cfg.avatar.panel_width || 220);
 }
 
 function onChatProviderChange() {
@@ -511,12 +507,6 @@ async function saveChatConfig() {
     voice_volume: parseFloat(document.getElementById("chat-voice-volume")?.value) ?? 1.0,
     voice_speed: parseFloat(document.getElementById("chat-voice-speed")?.value) ?? 1.0,
     voice_enabled: getChecked("chat-voice-enabled"),
-    // Avatar settings
-    avatar: {
-      enabled: getChecked("chat-avatar-enabled"),
-      mouth_mode: document.getElementById("chat-avatar-mouth-mode")?.value || "toggle",
-      panel_width: parseInt(document.getElementById("chat-avatar-panel-width")?.value || "220"),
-    },
   };
   const btn = document.querySelector(".chat-save-btn");
   if (btn) {
