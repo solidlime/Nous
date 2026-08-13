@@ -722,7 +722,7 @@ describe('N.Avatar._lookFrameAt()', () => {
 });
 
 // ==================================================================
-// Pure Logic: _hairFrameAt — time → hair frame (0|1|2, 200ms each)
+// Pure Logic: _hairFrameAt — time → hair frame (0|1|2|3|4, 200ms each)
 // ==================================================================
 describe('N.Avatar._hairFrameAt()', () => {
   it('returns frame 0 at start', () => {
@@ -734,12 +734,19 @@ describe('N.Avatar._hairFrameAt()', () => {
     expect(N.Avatar._hairFrameAt(1200, 1000)).toBe(1);
     expect(N.Avatar._hairFrameAt(1399, 1000)).toBe(1);
     expect(N.Avatar._hairFrameAt(1400, 1000)).toBe(2);
+    expect(N.Avatar._hairFrameAt(1599, 1000)).toBe(2);
+    expect(N.Avatar._hairFrameAt(1600, 1000)).toBe(3);
+    expect(N.Avatar._hairFrameAt(1799, 1000)).toBe(3);
+    expect(N.Avatar._hairFrameAt(1800, 1000)).toBe(4);
+    expect(N.Avatar._hairFrameAt(1999, 1000)).toBe(4);
   });
 
-  it('loops 0-1-2', () => {
-    expect(N.Avatar._hairFrameAt(1600, 1000)).toBe(0); // 600ms → 3 % 3
-    expect(N.Avatar._hairFrameAt(1800, 1000)).toBe(1); // 800ms → 4 % 3
-    expect(N.Avatar._hairFrameAt(2000, 1000)).toBe(2); // 1000ms → 5 % 3
+  it('loops 0-1-2-3-4-0', () => {
+    expect(N.Avatar._hairFrameAt(2000, 1000)).toBe(0); // 1000ms → 5 % 5
+    expect(N.Avatar._hairFrameAt(2200, 1000)).toBe(1); // 1200ms → 6 % 5
+    expect(N.Avatar._hairFrameAt(2400, 1000)).toBe(2); // 1400ms → 7 % 5
+    expect(N.Avatar._hairFrameAt(2600, 1000)).toBe(3); // 1600ms → 8 % 5
+    expect(N.Avatar._hairFrameAt(2800, 1000)).toBe(4); // 1800ms → 9 % 5
   });
 
   it('treats negative elapsed as frame 0', () => {
@@ -759,7 +766,7 @@ describe('N.Avatar._hairFrameAt()', () => {
 // mouth > look > hair > emotion > base
 // ==================================================================
 describe('N.Avatar._selectDisplayFile() — look/bob priority', () => {
-  it('look_left takes priority over loaded emotion when idle', () => {
+  it('look state does not change file selection (look is transform-based)', () => {
     const state = {
       talking: false, mouthLevel: 0, emotion: 'joy',
       lookEnabled: true, look: 'left', hairFrame: 0,
@@ -768,19 +775,19 @@ describe('N.Avatar._selectDisplayFile() — look/bob priority', () => {
         'look_left.png': { loaded: true, error: false },
       },
     };
-    expect(N.Avatar._selectDisplayFile(state)).toBe('look_left.png');
+    expect(N.Avatar._selectDisplayFile(state)).toBe('expr_joy.png');
   });
 
-  it('look_right is used when turned right', () => {
+  it('ignores look assets even when loaded (transform-based)', () => {
     const state = {
       talking: false, mouthLevel: 0, emotion: 'neutral',
       lookEnabled: true, look: 'right', hairFrame: 0,
       cache: { 'look_right.png': { loaded: true, error: false } },
     };
-    expect(N.Avatar._selectDisplayFile(state)).toBe('look_right.png');
+    expect(N.Avatar._selectDisplayFile(state)).toBe('base.png');
   });
 
-  it('look beats hair when turned', () => {
+  it('hair wins over loaded look assets (look is transform-only)', () => {
     const state = {
       talking: false, mouthLevel: 0, emotion: 'neutral',
       lookEnabled: true, look: 'left', hairFrame: 1,
@@ -789,7 +796,7 @@ describe('N.Avatar._selectDisplayFile() — look/bob priority', () => {
         'hair_1.png': { loaded: true, error: false },
       },
     };
-    expect(N.Avatar._selectDisplayFile(state)).toBe('look_left.png');
+    expect(N.Avatar._selectDisplayFile(state)).toBe('hair_1.png');
   });
 
   it('hair frame takes priority over emotion when front', () => {
@@ -907,7 +914,7 @@ describe('N.Avatar — look/bob animation driver', () => {
     expect(N.Avatar._getState().look).toBe('front');
   });
 
-  it('advances hair frames 0→1→2→0 when idle', () => {
+  it('advances hair frames 0→1→2→3→4→0 when idle', () => {
     N.Avatar.init(null, { baseUrl: '', persona: 'test', lookEnabled: false });
     vi.advanceTimersByTime(100); // first tick: hairStartTime set, frame 0
     expect(N.Avatar._getState().hairFrame).toBe(0);
@@ -915,7 +922,11 @@ describe('N.Avatar — look/bob animation driver', () => {
     expect(N.Avatar._getState().hairFrame).toBe(1);
     vi.advanceTimersByTime(200); // t=500 → elapsed 400 → frame 2
     expect(N.Avatar._getState().hairFrame).toBe(2);
-    vi.advanceTimersByTime(200); // t=700 → elapsed 600 → frame 0 (loop)
+    vi.advanceTimersByTime(200); // t=700 → elapsed 600 → frame 3
+    expect(N.Avatar._getState().hairFrame).toBe(3);
+    vi.advanceTimersByTime(200); // t=900 → elapsed 800 → frame 4
+    expect(N.Avatar._getState().hairFrame).toBe(4);
+    vi.advanceTimersByTime(200); // t=1100 → elapsed 1000 → frame 0 (loop)
     expect(N.Avatar._getState().hairFrame).toBe(0);
   });
 
@@ -942,27 +953,50 @@ describe('N.Avatar — look/bob animation driver', () => {
     expect(N.Avatar._getState().look).toBe('front');
   });
 
-  it('preloads look and hair assets on the first idle tick', () => {
+  it('preloads hair assets on the first idle tick (look needs no assets)', () => {
     N.Avatar.init(null, { baseUrl: '', persona: 'test' });
     mockImages.length = 0; // drop base.png preload
     vi.advanceTimersByTime(100);
     const urls = mockImages.map(i => i.src);
-    ['look_left.png', 'look_right.png', 'hair_0.png', 'hair_1.png', 'hair_2.png']
+    ['hair_0.png', 'hair_1.png', 'hair_2.png', 'hair_3.png', 'hair_4.png']
       .forEach(f => expect(urls.some(u => u.includes(f))).toBe(true));
+    // look is transform-based — engine must not fetch look assets
+    expect(urls.some(u => u.includes('look_'))).toBe(false);
   });
 
-  it('renders look_left.png when turned and asset loaded', () => {
+  it('applies rotateY tilt via transform when look turns (no image swap)', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
 
     N.Avatar.init(container, { baseUrl: '', persona: 'test', bobEnabled: false });
-    mockImages[0].onload(); // base.png
-    vi.advanceTimersByTime(1400); // look → left; look assets preloaded
-    const lookLeft = mockImages.find(i => i.src.includes('look_left.png'));
-    expect(lookLeft).toBeTruthy();
-    lookLeft.onload();
-    vi.advanceTimersByTime(100); // next tick renders
-    expect(container.querySelector('img').getAttribute('src')).toContain('look_left.png');
+    const img = container.querySelector('img');
+    vi.advanceTimersByTime(1400); // t=1400, elapsed 1300 → left
+    expect(img.style.transform).toContain('rotateY(-10deg)');
+
+    N.Avatar.startTalking();
+    vi.advanceTimersByTime(100); // talking pins rotation to 0
+    expect(img.style.transform).toContain('rotateY(0deg)');
+
+    N.Avatar.stopTalking();
+    vi.advanceTimersByTime(2000); // t=3500, elapsed 3400 → right
+    expect(img.style.transform).toContain('rotateY(10deg)');
+
+    document.body.removeChild(container);
+  });
+
+  it('applies breathing translateY when idle and resets while talking', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    N.Avatar.init(container, { baseUrl: '', persona: 'test', lookEnabled: false }); // bob on → timer runs
+    const img = container.querySelector('img');
+    vi.advanceTimersByTime(100); // tick1: bobStartTime set, translateY(0px)
+    vi.advanceTimersByTime(750); // t=850, elapsed 750 → sin(π/2)=1 → +2
+    expect(img.style.transform).toContain('translateY(2px)');
+
+    N.Avatar.startTalking();
+    vi.advanceTimersByTime(100);
+    expect(img.style.transform).toContain('translateY(0px)');
 
     document.body.removeChild(container);
   });
@@ -983,13 +1017,13 @@ describe('N.Avatar — look/bob animation driver', () => {
     document.body.removeChild(container);
   });
 
-  it('quietly falls back when look/hair assets fail to load', () => {
+  it('quietly falls back when hair assets fail to load', () => {
     const onError = vi.fn();
     N.Avatar.init(null, { baseUrl: '', persona: 'test', onError });
     mockImages.length = 0;
     vi.advanceTimersByTime(100);
     const urls = mockImages.map(i => i.src);
-    expect(urls.some(u => u.includes('look_left.png'))).toBe(true);
+    expect(urls.some(u => u.includes('hair_0.png'))).toBe(true);
     mockImages.forEach(i => i.onerror());
     // quiet preloads must not report errors
     expect(onError).not.toHaveBeenCalled();
@@ -1003,5 +1037,121 @@ describe('N.Avatar — look/bob animation driver', () => {
     N.Avatar.destroy();
     expect(vi.getTimerCount()).toBe(0);
     vi.advanceTimersByTime(1000); // no crash after destroy
+  });
+});
+
+// ==================================================================
+// Pure Logic: _lookTiltDeg — look state → rotateY degrees
+// ==================================================================
+describe('N.Avatar._lookTiltDeg()', () => {
+  it('returns 0 for front', () => {
+    expect(N.Avatar._lookTiltDeg('front')).toBe(0);
+  });
+
+  it('returns -10 for left', () => {
+    expect(N.Avatar._lookTiltDeg('left')).toBe(-10);
+  });
+
+  it('returns 10 for right', () => {
+    expect(N.Avatar._lookTiltDeg('right')).toBe(10);
+  });
+
+  it('returns 0 for invalid states', () => {
+    expect(N.Avatar._lookTiltDeg(undefined)).toBe(0);
+    expect(N.Avatar._lookTiltDeg(null)).toBe(0);
+    expect(N.Avatar._lookTiltDeg('')).toBe(0);
+    expect(N.Avatar._lookTiltDeg('up')).toBe(0);
+  });
+});
+
+// ==================================================================
+// Pure Logic: _bobOffset — breathing sine wave (period 3000ms, ±2px)
+// ==================================================================
+describe('N.Avatar._bobOffset()', () => {
+  it('returns 0 at start', () => {
+    expect(N.Avatar._bobOffset(1000, 1000)).toBe(0);
+  });
+
+  it('peaks at +2 at quarter period (750ms)', () => {
+    expect(N.Avatar._bobOffset(1750, 1000)).toBe(2); // sin(π/2)
+  });
+
+  it('returns 0 at half period (1500ms)', () => {
+    expect(N.Avatar._bobOffset(2500, 1000)).toBe(0); // sin(π)
+  });
+
+  it('peaks at -2 at three-quarter period (2250ms)', () => {
+    expect(N.Avatar._bobOffset(3250, 1000)).toBe(-2); // sin(3π/2)
+  });
+
+  it('loops after a full period (3000ms)', () => {
+    expect(N.Avatar._bobOffset(4000, 1000)).toBe(0); // sin(2π)
+    expect(N.Avatar._bobOffset(4750, 1000)).toBe(2); // 750ms into 2nd cycle
+  });
+
+  it('always returns integers', () => {
+    for (let dt = 0; dt <= 3000; dt += 50) {
+      expect(Number.isInteger(N.Avatar._bobOffset(1000 + dt, 1000))).toBe(true);
+    }
+  });
+
+  it('treats invalid inputs as 0', () => {
+    expect(N.Avatar._bobOffset(undefined, 1000)).toBe(0);
+    expect(N.Avatar._bobOffset(NaN, 1000)).toBe(0);
+    expect(N.Avatar._bobOffset(5000, undefined)).toBe(0);
+    expect(N.Avatar._bobOffset(-100, 1000)).toBe(0);
+  });
+});
+
+// ==================================================================
+// Pure Logic: _composeTransform — transform string composition
+// ==================================================================
+describe('N.Avatar._composeTransform()', () => {
+  it('composes perspective + rotateY + translateY in order', () => {
+    expect(N.Avatar._composeTransform(-10, 2))
+      .toBe('perspective(600px) rotateY(-10deg) translateY(2px)');
+    expect(N.Avatar._composeTransform(10, -2))
+      .toBe('perspective(600px) rotateY(10deg) translateY(-2px)');
+    expect(N.Avatar._composeTransform(0, 0))
+      .toBe('perspective(600px) rotateY(0deg) translateY(0px)');
+  });
+});
+
+// ==================================================================
+// Crossfade on src change (fake rAF/timers)
+// ==================================================================
+describe('N.Avatar — src crossfade', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame',
+               'cancelAnimationFrame', 'setInterval', 'clearInterval', 'Date'],
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('fades opacity 0 → 1 when src changes, untouched on same-src render', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    N.Avatar.init(container, { baseUrl: '', persona: 'test' });
+    const img = container.querySelector('img');
+
+    // src change: expr_joy loaded → fade out, swap, fade in next frame
+    N.Avatar.setEmotion('joy');
+    mockImages[1].onload(); // expr_joy (index 1: base at 0, no ticks advanced yet)
+    expect(img.style.opacity).toBe('0');
+    expect(img.getAttribute('src')).toContain('expr_joy.png');
+
+    vi.advanceTimersByTime(50); // next frame → fade in
+    expect(img.style.opacity).toBe('1');
+
+    // same-src render (cached) must not touch opacity
+    N.Avatar.setEmotion('joy'); // cached → immediate render, same src
+    expect(img.style.opacity).toBe('1');
+
+    document.body.removeChild(container);
   });
 });

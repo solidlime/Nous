@@ -58,8 +58,9 @@ function mouthRatioToLevel(ratio, prevLevel) {
 
 /**
  * Select which file to display based on current state.
- * Priority: mouth_<level> (talking) > look_<dir>.png (idle, turned) >
- *           hair_<n>.png (idle, front) > expr_<emotion>.png > base.png.
+ * Priority: mouth_<level> (talking) > hair_<n>.png (idle bob) >
+ *           expr_<emotion>.png > base.png.
+ * Look (face turn) is expressed via CSS transform, not a file swap.
  * Every layer falls through to the next when its file is not loaded.
  * @param {object} state - Avatar state
  * @returns {string} Filename to display
@@ -75,31 +76,22 @@ function selectDisplayFile(state) {
       }
     }
   }
-  // 2. Idle look: face turned left/right (front uses base/hair layer instead)
-  if (!state.talking && state.lookEnabled !== false &&
-      (state.look === "left" || state.look === "right")) {
-    var lookFile = "look_" + state.look + ".png";
-    var lookEntry = state.cache[lookFile];
-    if (lookEntry && lookEntry.loaded && !lookEntry.error) {
-      return lookFile;
-    }
-  }
-  // 3. Idle bob: hair sway frame (front view)
+  // 2. Idle bob: hair sway frame (front view; look uses transform instead)
   if (!state.talking && state.bobEnabled !== false &&
-      typeof state.hairFrame === "number" && state.hairFrame >= 0 && state.hairFrame <= 2) {
+      typeof state.hairFrame === "number" && state.hairFrame >= 0 && state.hairFrame <= 4) {
     var hairFile = "hair_" + state.hairFrame + ".png";
     var hairEntry = state.cache[hairFile];
     if (hairEntry && hairEntry.loaded && !hairEntry.error) {
       return hairFile;
     }
   }
-  // 4. Emotion file if loaded and not errored
+  // 3. Emotion file if loaded and not errored
   var emotionFile = emotionToFilename(state.emotion);
   var emotionEntry = state.cache[emotionFile];
   if (emotionEntry && emotionEntry.loaded && !emotionEntry.error) {
     return emotionFile;
   }
-  // 5. Fallback
+  // 4. Fallback
   return "base.png";
 }
 
@@ -116,8 +108,52 @@ var LOOK_SEQUENCE = [
   ["right", 900],
 ];
 
-// Hair bob: frame duration in ms, 3 frames looping (hair_0/1/2).
+// Hair bob: frame duration in ms, 5 frames looping (hair_0..4).
 var HAIR_FRAME_MS = 200;
+
+// Smooth motion constants.
+var LOOK_TILT_DEG = 10;      // rotateY degrees at full left/right turn
+var HAIR_FADE_MS = 100;      // crossfade duration on image swap
+var BOB_PERIOD_MS = 3000;    // breathing cycle (sine wave)
+var BOB_AMPLITUDE_PX = 2;    // breathing translateY amplitude
+
+/**
+ * Look state -> rotateY tilt in degrees. front/invalid -> 0.
+ * @param {string} lookState - 'front' | 'left' | 'right'
+ * @returns {number} Tilt degrees: -10 | 0 | 10
+ */
+function lookTiltDeg(lookState) {
+  if (lookState === "left") return -LOOK_TILT_DEG;
+  if (lookState === "right") return LOOK_TILT_DEG;
+  return 0;
+}
+
+/**
+ * Breathing offset: sine wave translateY (-2..2 px, integer), 3s period.
+ * @param {number} t - Current timestamp (ms)
+ * @param {number} bobStartTime - Breathing start timestamp (ms)
+ * @returns {number} Offset in px, rounded to integer
+ */
+function bobOffset(t, bobStartTime) {
+  if (typeof t !== "number" || isNaN(t)) return 0;
+  var start = (typeof bobStartTime === "number" && !isNaN(bobStartTime)) ? bobStartTime : t;
+  var elapsed = t - start;
+  if (elapsed < 0) elapsed = 0;
+  var rounded = Math.round(Math.sin(elapsed / BOB_PERIOD_MS * 2 * Math.PI) * BOB_AMPLITUDE_PX);
+  // normalize -0 (sin of 2π etc.) to +0
+  return rounded === 0 ? 0 : rounded;
+}
+
+/**
+ * Compose the img transform string: perspective + rotateY (look) + translateY (bob).
+ * Order is significant for CSS 3D rendering.
+ * @param {number} lookDeg - rotateY degrees
+ * @param {number} bobPx - translateY px
+ * @returns {string} CSS transform value
+ */
+function composeTransform(lookDeg, bobPx) {
+  return "perspective(600px) rotateY(" + lookDeg + "deg) translateY(" + bobPx + "px)";
+}
 
 /**
  * Idle look state from elapsed time: 'front' | 'left' | 'right'.
@@ -143,17 +179,17 @@ function lookFrameAt(t, lookStartTime) {
 }
 
 /**
- * Idle hair frame (0-2) from elapsed time, looping hair_0/1/2.
+ * Idle hair frame (0-4) from elapsed time, looping hair_0..4.
  * @param {number} t - Current timestamp (ms)
  * @param {number} hairStartTime - Animation start timestamp (ms)
- * @returns {number} Hair frame 0|1|2
+ * @returns {number} Hair frame 0|1|2|3|4
  */
 function hairFrameAt(t, hairStartTime) {
   if (typeof t !== "number" || isNaN(t)) return 0;
   var start = (typeof hairStartTime === "number" && !isNaN(hairStartTime)) ? hairStartTime : t;
   var elapsed = t - start;
   if (elapsed < 0) elapsed = 0;
-  return Math.floor(elapsed / HAIR_FRAME_MS) % 3;
+  return Math.floor(elapsed / HAIR_FRAME_MS) % 5;
 }
 
 // ------------------------------------------------------------------
@@ -231,6 +267,7 @@ function createAvatarState(options) {
     hairFrame: 0,
     lookStartTime: null,
     hairStartTime: null,
+    bobStartTime: null,
     cache: {},   // filename -> { loaded: bool, error: bool }
     onError: options.onError || null,
   };
@@ -240,10 +277,17 @@ function createAvatarState(options) {
 // DOM Renderer
 // ------------------------------------------------------------------
 
+// rAF for crossfade scheduling; setTimeout fallback for envs without rAF (jsdom).
+var nextFrame = (typeof requestAnimationFrame === "function")
+  ? function(fn) { requestAnimationFrame(fn); }
+  : function(fn) { setTimeout(fn, 16); };
+
 /**
  * Create a renderer that manages an img element inside a container.
+ * Smooth motion: CSS transition (transform for look/bob, opacity for crossfade)
+ * is set once; src swaps fade via opacity; look/breathing drive style.transform.
  * @param {HTMLElement|null} element - Container element
- * @returns {object} Renderer with render() and clear()
+ * @returns {object} Renderer with render(), setTransform(), clear()
  */
 function createRenderer(element) {
   var img = null;
@@ -256,6 +300,8 @@ function createRenderer(element) {
       img.setAttribute("role", "img");
       element.appendChild(img);
     }
+    // One-time transition setup: smooth head turn (transform) + hair fade (opacity)
+    img.style.transition = "transform 0.6s ease-in-out, opacity " + HAIR_FADE_MS + "ms ease";
   }
 
   return {
@@ -263,12 +309,25 @@ function createRenderer(element) {
       if (!img || !state) return;
       var url = buildImageUrl(state.baseUrl, state.persona, filename);
       if (img.getAttribute("src") !== url) {
+        // Crossfade: fade out, swap src, fade in on the next frame
+        img.style.opacity = "0";
         img.setAttribute("src", url);
+        nextFrame(function() {
+          if (img) img.style.opacity = "1";
+        });
+      }
+    },
+    setTransform: function(transform) {
+      if (!img) return;
+      if (img.style.transform !== transform) {
+        img.style.transform = transform;
       }
     },
     clear: function() {
       if (img) {
         img.removeAttribute("src");
+        img.style.opacity = "";
+        img.style.transform = "";
         img = null;
       }
     },
@@ -293,22 +352,22 @@ var _animTimer = null;
 function noop() {}
 
 /**
- * Advance look/bob state from the clock and re-render.
- * Paused (held at front / frozen frame) while talking — mouth takes priority.
- * Look/hair assets are preloaded quietly on the first idle tick; missing
- * assets silently fall back to emotion/base.
+ * Advance look/bob/breathing state from the clock and re-render.
+ * Paused while talking (front view, no tilt/bob) — mouth takes priority.
+ * Hair assets are preloaded quietly on the first idle tick; missing assets
+ * silently fall back to emotion/base. Look is transform-based (no assets).
  */
 function tickAnimation() {
   if (!_state) return;
   var now = Date.now();
+  var transform;
   if (_state.talking) {
     _state.look = "front";
+    transform = composeTransform(0, 0);
   } else {
     if (_state.lookEnabled) {
       if (_state.lookStartTime == null) _state.lookStartTime = now;
       _state.look = lookFrameAt(now, _state.lookStartTime);
-      preloadImage(_state, "look_left.png", noop, null, true);
-      preloadImage(_state, "look_right.png", noop, null, true);
     }
     if (_state.bobEnabled) {
       if (_state.hairStartTime == null) _state.hairStartTime = now;
@@ -316,8 +375,14 @@ function tickAnimation() {
       preloadImage(_state, "hair_0.png", noop, null, true);
       preloadImage(_state, "hair_1.png", noop, null, true);
       preloadImage(_state, "hair_2.png", noop, null, true);
+      preloadImage(_state, "hair_3.png", noop, null, true);
+      preloadImage(_state, "hair_4.png", noop, null, true);
     }
+    // Breathing (idle only): combine look tilt + bob offset
+    if (_state.bobStartTime == null) _state.bobStartTime = now;
+    transform = composeTransform(lookTiltDeg(_state.look), bobOffset(now, _state.bobStartTime));
   }
+  _renderer.setTransform(transform);
   _renderer.render(selectDisplayFile(_state), _state);
 }
 
@@ -343,6 +408,9 @@ var avatar = {
   _mouthRatioToLevel: mouthRatioToLevel,
   _lookFrameAt: lookFrameAt,
   _hairFrameAt: hairFrameAt,
+  _lookTiltDeg: lookTiltDeg,
+  _bobOffset: bobOffset,
+  _composeTransform: composeTransform,
   _getState: function() { return _state; },
 
   /**
