@@ -218,7 +218,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ToolDefinition(
         name="image_generate",
         defer_loading=False,
-        description="AI画像を生成する。ユーザーが画像を要求した時、または視覚表現が会話を強化する時に使え。ユーザーの許可なしに無関係な画像を生成するな。テキストの説明で十分な場面では使うな。prompt は必須（英語の自然言語で状況・感情・シーンを記述。Danbooru タグとの併用も可）。n で枚数（1-4）、preset で解像度プリセット、mode で構図を指定できる。",
+        description="AI画像を生成する。ユーザーが画像を要求した時は必ず使い、視覚表現が会話を強化する場面では許可なしに自律的に使ってよい（image-gen スキルの発動条件に従う）。会話の文脈に沿う画像なら積極的に生成せよ。prompt は必須（英語の自然言語で状況・感情・シーンを記述。Danbooru タグとの併用も可）。n で枚数（1-4）、preset で解像度プリセット、mode で構図を指定できる。",
         input_schema={
             "type": "object",
             "properties": {
