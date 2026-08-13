@@ -583,6 +583,16 @@ async function chatSend(retry) {
           statusEl.textContent = "";
         } else if (evt.type === "inventory_update") {
           N.Chat.equipment.update(evt.update);
+        } else if (evt.type === "context_update") {
+          // PNGTuber linkage: persona emotion changes → avatar expression
+          var _upd = evt.update || {};
+          if (_upd.emotion) {
+            CHAT.emotion = _upd.emotion;
+            CHAT.emotion_intensity = _upd.emotion_intensity || 0;
+            if (N.Chat.avatar) {
+              N.Chat.avatar.setEmotion(_upd.emotion, _upd.emotion_intensity || 0);
+            }
+          }
         } else if (evt.type === "reflection_start") {
           N.Chat.memoryPanel.showReflection();
         } else if (evt.type === "reflection_done") {
