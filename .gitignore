@@ -88,8 +88,3 @@ CHANGELOG.md
 # Worktrees
 .worktrees/
 data/hub.db
-
-# Tauri desktop mascot
-/desktop/mascot/node_modules/
-/desktop/mascot/src-tauri/target/
-/desktop/mascot/dist/
