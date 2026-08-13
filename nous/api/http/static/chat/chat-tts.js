@@ -89,57 +89,9 @@ function _startSeekBar(audio, bar) {
   }, 50);
 }
 
-/* ── PNGTuber mouth sync — optional avatar linkage (silent if absent) ── */
-var _voiceMeter = null; // { audioCtx, source, analyser, buf, timer } | null
-
-function _startVoiceMeter(audio) {
-  if (!N.Chat.avatar || !N.Chat.avatar.setMouth) return;
-  _stopVoiceMeter();
-  var AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return;
-  try {
-    var audioCtx = new AC();
-    var source = audioCtx.createMediaElementSource(audio);
-    var analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 256;
-    source.connect(analyser);
-    analyser.connect(audioCtx.destination);
-    var buf = new Uint8Array(analyser.frequencyBinCount);
-    _voiceMeter = {
-      audioCtx: audioCtx,
-      source: source,
-      analyser: analyser,
-      buf: buf,
-      timer: setInterval(function() {
-        if (!_voiceMeter || !N.Chat.avatar) return;
-        analyser.getByteFrequencyData(buf);
-        var sum = 0;
-        for (var i = 0; i < buf.length; i++) sum += buf[i];
-        N.Chat.avatar.setMouth(sum / buf.length / 255); // 0..1
-      }, 100),
-    };
-  } catch (e) {
-    // AudioContext unavailable — engine's toggle mouth mode takes over
-  }
-}
-
-function _stopVoiceMeter() {
-  var m = _voiceMeter;
-  if (!m) return;
-  _voiceMeter = null;
-  if (m.timer) clearInterval(m.timer);
-  try {
-    m.source.disconnect();
-    m.analyser.disconnect();
-    if (m.audioCtx.close) m.audioCtx.close();
-  } catch (e) {}
-}
-
 /* ── Session cleanup — single entry point ── */
 function _endSession(reason) {
   var session = _playbackSession;
-  if (N.Chat.avatar) N.Chat.avatar.stopTalking();
-  _stopVoiceMeter();
   if (!session) return;
   if (session.interval) { clearInterval(session.interval); session.interval = null; }
   if (session.audio) {
@@ -217,17 +169,6 @@ function _setupAudio(audio, audioUrl, btn, containerDiv) {
     if (typeof lucide !== "undefined") lucide.createIcons();
   }
   
-  audio.onplay = function() {
-    // PNGTuber linkage: mouth follows actual audio playback
-    if (N.Chat.avatar) N.Chat.avatar.startTalking();
-    _startVoiceMeter(audio);
-  };
-
-  audio.onpause = function() {
-    if (N.Chat.avatar) N.Chat.avatar.stopTalking();
-    _stopVoiceMeter();
-  };
-
   audio.onended = function() {
     _endSession("ended");
   };
