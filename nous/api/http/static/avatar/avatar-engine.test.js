@@ -110,13 +110,13 @@ describe('N.Avatar._emotionToFilename()', () => {
 // ==================================================================
 describe('N.Avatar._selectDisplayFile()', () => {
   it('returns base.png when nothing is loaded', () => {
-    const state = { talking: false, mouthLevel: 0, emotion: 'neutral', cache: {} };
+    const state = { talking: false, mouthOpen: false, emotion: 'neutral', cache: {} };
     expect(N.Avatar._selectDisplayFile(state)).toBe('base.png');
   });
 
   it('returns emotion file when loaded and not errored', () => {
     const state = {
-      talking: false, mouthLevel: 0, emotion: 'joy',
+      talking: false, mouthOpen: false, emotion: 'joy',
       cache: { 'expr_joy.png': { loaded: true, error: false } },
     };
     expect(N.Avatar._selectDisplayFile(state)).toBe('expr_joy.png');
@@ -124,7 +124,7 @@ describe('N.Avatar._selectDisplayFile()', () => {
 
   it('returns base.png when emotion file has error (fallback)', () => {
     const state = {
-      talking: false, mouthLevel: 0, emotion: 'joy',
+      talking: false, mouthOpen: false, emotion: 'joy',
       cache: { 'expr_joy.png': { loaded: false, error: true } },
     };
     expect(N.Avatar._selectDisplayFile(state)).toBe('base.png');
@@ -132,200 +132,76 @@ describe('N.Avatar._selectDisplayFile()', () => {
 
   it('returns base.png when emotion file is not yet loaded', () => {
     const state = {
-      talking: false, mouthLevel: 0, emotion: 'joy',
+      talking: false, mouthOpen: false, emotion: 'joy',
       cache: { 'expr_joy.png': { loaded: false, error: false } },
     };
     expect(N.Avatar._selectDisplayFile(state)).toBe('base.png');
   });
 
-  it('returns mouth_3.png when talking, mouthLevel 3, and loaded', () => {
+  it('returns mouth_open.png when talking, mouthOpen, and loaded', () => {
     const state = {
-      talking: true, mouthLevel: 3, emotion: 'neutral',
+      talking: true, mouthOpen: true, emotion: 'neutral',
       cache: {
         'base.png': { loaded: true, error: false },
-        'mouth_3.png': { loaded: true, error: false },
+        'mouth_open.png': { loaded: true, error: false },
       },
     };
-    expect(N.Avatar._selectDisplayFile(state)).toBe('mouth_3.png');
+    expect(N.Avatar._selectDisplayFile(state)).toBe('mouth_open.png');
   });
 
-  it('falls back to emotion file when mouth level not loaded', () => {
+  it('falls back to emotion file when mouth_open not loaded', () => {
     const state = {
-      talking: true, mouthLevel: 3, emotion: 'joy',
+      talking: true, mouthOpen: true, emotion: 'joy',
       cache: {
         'expr_joy.png': { loaded: true, error: false },
-        // mouth_3.png not in cache
+        // mouth_open.png not in cache
       },
     };
     expect(N.Avatar._selectDisplayFile(state)).toBe('expr_joy.png');
   });
 
-  it('returns emotion file (not mouth) when mouth_3 has error', () => {
+  it('returns emotion file (not mouth) when mouth_open has error', () => {
     const state = {
-      talking: true, mouthLevel: 3, emotion: 'joy',
+      talking: true, mouthOpen: true, emotion: 'joy',
       cache: {
         'expr_joy.png': { loaded: true, error: false },
-        'mouth_3.png': { loaded: false, error: true },
+        'mouth_open.png': { loaded: false, error: true },
       },
     };
     expect(N.Avatar._selectDisplayFile(state)).toBe('expr_joy.png');
   });
 
-  it('returns base.png when talking but mouthLevel is 0', () => {
+  it('returns base.png when talking but mouthOpen is false', () => {
     const state = {
-      talking: true, mouthLevel: 0, emotion: 'neutral',
+      talking: true, mouthOpen: false, emotion: 'neutral',
       cache: {
         'base.png': { loaded: true, error: false },
-        'mouth_3.png': { loaded: true, error: false },
+        'mouth_open.png': { loaded: true, error: false },
       },
     };
     expect(N.Avatar._selectDisplayFile(state)).toBe('base.png');
   });
 
-  it('returns base.png when not talking even if mouth_3 loaded', () => {
+  it('returns base.png when not talking even if mouth_open loaded', () => {
     const state = {
-      talking: false, mouthLevel: 0, emotion: 'neutral',
+      talking: false, mouthOpen: false, emotion: 'neutral',
       cache: {
         'base.png': { loaded: true, error: false },
-        'mouth_3.png': { loaded: true, error: false },
+        'mouth_open.png': { loaded: true, error: false },
       },
     };
     expect(N.Avatar._selectDisplayFile(state)).toBe('base.png');
   });
 
-  it('mouth_3 takes priority over loaded emotion', () => {
+  it('mouth_open takes priority over loaded emotion', () => {
     const state = {
-      talking: true, mouthLevel: 3, emotion: 'joy',
+      talking: true, mouthOpen: true, emotion: 'joy',
       cache: {
         'expr_joy.png': { loaded: true, error: false },
-        'mouth_3.png': { loaded: true, error: false },
+        'mouth_open.png': { loaded: true, error: false },
       },
     };
-    expect(N.Avatar._selectDisplayFile(state)).toBe('mouth_3.png');
-  });
-
-  // ── 5-level step-down fallback (mouth_<n>.png) ──
-  it('steps down to mouth_2 when mouth_3 is missing/errored', () => {
-    const state = {
-      talking: true, mouthLevel: 3, emotion: 'joy',
-      cache: {
-        'expr_joy.png': { loaded: true, error: false },
-        'mouth_3.png': { loaded: false, error: true },
-        'mouth_2.png': { loaded: true, error: false },
-      },
-    };
-    expect(N.Avatar._selectDisplayFile(state)).toBe('mouth_2.png');
-  });
-
-  it('steps down through all levels to mouth_1', () => {
-    const state = {
-      talking: true, mouthLevel: 4, emotion: 'joy',
-      cache: {
-        'expr_joy.png': { loaded: true, error: false },
-        'mouth_4.png': { loaded: false, error: true },
-        'mouth_3.png': { loaded: false, error: true },
-        'mouth_2.png': { loaded: false, error: false },
-        'mouth_1.png': { loaded: true, error: false },
-      },
-    };
-    expect(N.Avatar._selectDisplayFile(state)).toBe('mouth_1.png');
-  });
-
-  it('falls back to emotion when all mouth levels fail', () => {
-    const state = {
-      talking: true, mouthLevel: 4, emotion: 'joy',
-      cache: {
-        'expr_joy.png': { loaded: true, error: false },
-        'mouth_4.png': { loaded: false, error: true },
-        'mouth_3.png': { loaded: false, error: true },
-        'mouth_2.png': { loaded: false, error: true },
-        'mouth_1.png': { loaded: false, error: true },
-      },
-    };
-    expect(N.Avatar._selectDisplayFile(state)).toBe('expr_joy.png');
-  });
-
-  it('uses base.png when mouth_0.png exists but level is 0 (base is the closed mouth)', () => {
-    const state = {
-      talking: true, mouthLevel: 0, emotion: 'neutral',
-      cache: {
-        'base.png': { loaded: true, error: false },
-        'mouth_0.png': { loaded: true, error: false },
-      },
-    };
-    expect(N.Avatar._selectDisplayFile(state)).toBe('base.png');
-  });
-});
-
-// ==================================================================
-// Pure Logic: _mouthRatioToLevel — quantization + hysteresis
-// ==================================================================
-describe('N.Avatar._mouthRatioToLevel()', () => {
-  // ── Basic quantization from level 0 ──
-  it('maps low ratio to level 0', () => {
-    expect(N.Avatar._mouthRatioToLevel(0.0, 0)).toBe(0);
-    expect(N.Avatar._mouthRatioToLevel(0.19, 0)).toBe(0);
-  });
-
-  it('rises to level 1 when ratio >= 0.2', () => {
-    expect(N.Avatar._mouthRatioToLevel(0.2, 0)).toBe(1);
-    expect(N.Avatar._mouthRatioToLevel(0.39, 0)).toBe(1);
-  });
-
-  it('rises stepwise: thresholds [0.2, 0.4, 0.6, 0.8]', () => {
-    expect(N.Avatar._mouthRatioToLevel(0.2, 0)).toBe(1);
-    expect(N.Avatar._mouthRatioToLevel(0.4, 1)).toBe(2);
-    expect(N.Avatar._mouthRatioToLevel(0.6, 2)).toBe(3);
-    expect(N.Avatar._mouthRatioToLevel(0.8, 3)).toBe(4);
-  });
-
-  // ── Hysteresis: falling thresholds differ from rising ──
-  it('falls only below lower thresholds [0.15, 0.35, 0.55, 0.75]', () => {
-    expect(N.Avatar._mouthRatioToLevel(0.14, 1)).toBe(0);
-    expect(N.Avatar._mouthRatioToLevel(0.34, 2)).toBe(1);
-    expect(N.Avatar._mouthRatioToLevel(0.54, 3)).toBe(2);
-    expect(N.Avatar._mouthRatioToLevel(0.74, 4)).toBe(3);
-  });
-
-  it('keeps level in hysteresis band between falling and rising thresholds', () => {
-    // At level 1: 0.15 <= ratio < 0.4 stays at 1
-    expect(N.Avatar._mouthRatioToLevel(0.2, 1)).toBe(1);
-    expect(N.Avatar._mouthRatioToLevel(0.3, 1)).toBe(1);
-    expect(N.Avatar._mouthRatioToLevel(0.39, 1)).toBe(1);
-    // At level 2: 0.35 <= ratio < 0.6 stays at 2
-    expect(N.Avatar._mouthRatioToLevel(0.5, 2)).toBe(2);
-  });
-
-  it('same ratio can rise from lower level but hold at higher level', () => {
-    // ratio 0.3: from 0 rises to 1, but from 1 holds (band 0.15-0.4)
-    expect(N.Avatar._mouthRatioToLevel(0.3, 0)).toBe(1);
-    expect(N.Avatar._mouthRatioToLevel(0.3, 1)).toBe(1);
-    // ratio 0.5: from 1 rises to 2, from 2 holds (band 0.35-0.6)
-    expect(N.Avatar._mouthRatioToLevel(0.5, 1)).toBe(2);
-    expect(N.Avatar._mouthRatioToLevel(0.5, 2)).toBe(2);
-  });
-
-  // ── Clamping ──
-  it('clamps to 4 at the top', () => {
-    expect(N.Avatar._mouthRatioToLevel(1.0, 4)).toBe(4);
-    expect(N.Avatar._mouthRatioToLevel(0.9, 4)).toBe(4);
-    expect(N.Avatar._mouthRatioToLevel(2.0, 4)).toBe(4);
-  });
-
-  it('clamps to 0 at the bottom', () => {
-    expect(N.Avatar._mouthRatioToLevel(0.0, 0)).toBe(0);
-    expect(N.Avatar._mouthRatioToLevel(-0.5, 0)).toBe(0);
-  });
-
-  it('treats invalid prevLevel as 0', () => {
-    expect(N.Avatar._mouthRatioToLevel(0.5, undefined)).toBe(1);
-    expect(N.Avatar._mouthRatioToLevel(0.5, NaN)).toBe(1);
-    expect(N.Avatar._mouthRatioToLevel(0.1, null)).toBe(0);
-  });
-
-  it('treats invalid ratio as closed (0)', () => {
-    expect(N.Avatar._mouthRatioToLevel(undefined, 3)).toBe(2);
-    expect(N.Avatar._mouthRatioToLevel(NaN, 3)).toBe(2);
+    expect(N.Avatar._selectDisplayFile(state)).toBe('mouth_open.png');
   });
 });
 
@@ -442,49 +318,35 @@ describe('N.Avatar — setEmotion', () => {
 // Public API: talking state (startTalking / stopTalking / setMouth)
 // ==================================================================
 describe('N.Avatar — startTalking', () => {
-  it('sets talking to true and defaults mouthLevel to 2', () => {
+  it('sets talking and mouthOpen to true', () => {
     N.Avatar.init(null, { baseUrl: '', persona: 'test' });
     N.Avatar.startTalking();
     const state = N.Avatar._getState();
     expect(state.talking).toBe(true);
-    expect(state.mouthLevel).toBe(2);
+    expect(state.mouthOpen).toBe(true);
   });
 
-  it('preloads mouth_1..mouth_4 (not legacy mouth_open)', () => {
+  it('triggers preload for mouth_open.png', () => {
     N.Avatar.init(null, { baseUrl: '', persona: 'test' });
     mockImages.length = 0;
 
     N.Avatar.startTalking();
-    // 4 preloads: mouth_1 .. mouth_4
-    expect(mockImages.length).toBe(4);
-    expect(mockImages.map(i => i.src)).toEqual([
-      expect.stringContaining('mouth_1.png'),
-      expect.stringContaining('mouth_2.png'),
-      expect.stringContaining('mouth_3.png'),
-      expect.stringContaining('mouth_4.png'),
-    ]);
-  });
-
-  it('keeps existing mouthLevel when already set', () => {
-    N.Avatar.init(null, { baseUrl: '', persona: 'test' });
-    N.Avatar.setMouth(0.9); // level 0 -> 1 (ratio >= 0.2)
-    expect(N.Avatar._getState().mouthLevel).toBe(1);
-    N.Avatar.startTalking();
-    expect(N.Avatar._getState().mouthLevel).toBe(1);
+    expect(mockImages.length).toBe(1);
+    expect(mockImages[0].src).toContain('mouth_open.png');
   });
 });
 
 describe('N.Avatar — stopTalking', () => {
-  it('clears talking and resets mouthLevel to 0', () => {
+  it('clears talking and mouthOpen', () => {
     N.Avatar.init(null, { baseUrl: '', persona: 'test' });
     N.Avatar.startTalking();
     N.Avatar.stopTalking();
     const state = N.Avatar._getState();
     expect(state.talking).toBe(false);
-    expect(state.mouthLevel).toBe(0);
+    expect(state.mouthOpen).toBe(false);
   });
 
-  it('renders current emotion image (not mouth)', () => {
+  it('renders current emotion image (not mouth_open)', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -493,13 +355,12 @@ describe('N.Avatar — stopTalking', () => {
     mockImages[0].onload();
 
     N.Avatar.startTalking();
-    // Simulate mouth_2.png loaded
-    mockImages[1].onload(); // mouth_1
-    mockImages[2].onload(); // mouth_2
+    // Simulate mouth_open.png loaded
+    mockImages[1].onload();
 
     N.Avatar.stopTalking();
     const img = container.querySelector('img');
-    // After stop, should show base.png (neutral), not mouth
+    // After stop, should show base.png (neutral), not mouth_open
     expect(img.getAttribute('src')).toContain('base.png');
 
     document.body.removeChild(container);
@@ -507,44 +368,28 @@ describe('N.Avatar — stopTalking', () => {
 });
 
 describe('N.Avatar — setMouth', () => {
-  it('raises mouth level when ratio >= 0.2 (from 0)', () => {
+  it('opens mouth when ratio > 0.5', () => {
     N.Avatar.init(null, { baseUrl: '', persona: 'test' });
+    N.Avatar.startTalking();
     N.Avatar.setMouth(0.8);
-    expect(N.Avatar._getState().mouthLevel).toBe(1);
+    expect(N.Avatar._getState().mouthOpen).toBe(true);
   });
 
-  it('quantizes stepwise: 0.8 from level 1 -> level 2', () => {
+  it('closes mouth when ratio <= 0.5', () => {
     N.Avatar.init(null, { baseUrl: '', persona: 'test' });
-    N.Avatar.setMouth(0.8); // level 1
-    N.Avatar.setMouth(0.8); // level 2 (>= 0.4)
-    expect(N.Avatar._getState().mouthLevel).toBe(2);
+    N.Avatar.startTalking();
+    N.Avatar.setMouth(0.3);
+    expect(N.Avatar._getState().mouthOpen).toBe(false);
   });
 
-  it('holds level in hysteresis band (0.3 at level 1 stays 1)', () => {
+  it('closes mouth when ratio is exactly 0.5', () => {
     N.Avatar.init(null, { baseUrl: '', persona: 'test' });
-    N.Avatar.setMouth(0.8); // level 1
-    N.Avatar.setMouth(0.3); // band 0.15-0.4 -> stays 1
-    expect(N.Avatar._getState().mouthLevel).toBe(1);
+    N.Avatar.startTalking();
+    N.Avatar.setMouth(0.5);
+    expect(N.Avatar._getState().mouthOpen).toBe(false);
   });
 
-  it('closes mouth when ratio drops below 0.15 at level 1', () => {
-    N.Avatar.init(null, { baseUrl: '', persona: 'test' });
-    N.Avatar.setMouth(0.8); // level 1
-    N.Avatar.setMouth(0.1); // < 0.15 -> level 0
-    expect(N.Avatar._getState().mouthLevel).toBe(0);
-  });
-
-  it('clamps to 4 at the top', () => {
-    N.Avatar.init(null, { baseUrl: '', persona: 'test' });
-    N.Avatar.setMouth(0.9); // 1
-    N.Avatar.setMouth(0.9); // 2
-    N.Avatar.setMouth(0.9); // 3
-    N.Avatar.setMouth(0.9); // 4
-    N.Avatar.setMouth(0.9); // clamped 4
-    expect(N.Avatar._getState().mouthLevel).toBe(4);
-  });
-
-  it('re-renders on mouth level change', () => {
+  it('re-renders on state change', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -552,30 +397,29 @@ describe('N.Avatar — setMouth', () => {
     mockImages[0].onload(); // base loaded
 
     N.Avatar.startTalking();
-    mockImages[1].onload(); // mouth_1 loaded
-    mockImages[2].onload(); // mouth_2 loaded
+    mockImages[1].onload(); // mouth_open loaded
 
     const img = container.querySelector('img');
     const srcBefore = img.getAttribute('src');
 
-    N.Avatar.setMouth(0.0); // mouthLevel 2 -> 1 (below 0.35)
+    N.Avatar.setMouth(0.3); // close mouth
     const srcAfter = img.getAttribute('src');
 
-    // Should change from mouth_2 to mouth_1
-    expect(srcAfter).toContain('mouth_1.png');
+    // Should change from mouth_open to base
+    expect(srcAfter).toContain('base.png');
     expect(srcAfter).not.toBe(srcBefore);
 
     document.body.removeChild(container);
   });
 
-  it('does not re-render when level unchanged', () => {
+  it('does not re-render when state unchanged', () => {
     N.Avatar.init(null, { baseUrl: '', persona: 'test' });
-    // setMouth(0.8) twice: first moves 0 -> 1, second stays at 1 (0.8 < 0.4? no, >= 0.4 -> 2)
-    N.Avatar.setMouth(0.3); // 0 -> 1 (>= 0.2)
-    const levelAfterFirst = N.Avatar._getState().mouthLevel;
-    expect(levelAfterFirst).toBe(1);
-    N.Avatar.setMouth(0.3); // 1 -> stays 1 (band)
-    expect(N.Avatar._getState().mouthLevel).toBe(1);
+    // setMouth(0.3) when already closed — no render call
+    const state = N.Avatar._getState();
+    const wasMouthOpen = state.mouthOpen;
+    N.Avatar.setMouth(0.3);
+    // No state change, no renderer.render() call
+    expect(state.mouthOpen).toBe(wasMouthOpen);
   });
 });
 
@@ -634,7 +478,7 @@ describe('N.Avatar — emotion fallback (preload error)', () => {
 // Talking + emotion interaction
 // ==================================================================
 describe('N.Avatar — talking + emotion interaction', () => {
-  it('mouth_2 overrides emotion when talking', () => {
+  it('mouth_open overrides emotion when talking', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -647,10 +491,8 @@ describe('N.Avatar — talking + emotion interaction', () => {
     expect(img.getAttribute('src')).toContain('expr_joy.png');
 
     N.Avatar.startTalking();
-    // startTalking preloads mouth_1..4 -> mockImages[2..5]
-    mockImages[2].onload(); // mouth_1
-    mockImages[3].onload(); // mouth_2
-    expect(img.getAttribute('src')).toContain('mouth_2.png');
+    mockImages[2].onload(); // mouth_open loaded
+    expect(img.getAttribute('src')).toContain('mouth_open.png');
 
     N.Avatar.stopTalking();
     // Back to emotion
@@ -659,7 +501,7 @@ describe('N.Avatar — talking + emotion interaction', () => {
     document.body.removeChild(container);
   });
 
-  it('mouth not shown when talking but not loaded', () => {
+  it('mouth_open not shown when talking but not loaded', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -670,9 +512,9 @@ describe('N.Avatar — talking + emotion interaction', () => {
     mockImages[1].onload(); // expr_joy loaded
 
     N.Avatar.startTalking();
-    // mouth_1..4 NOT loaded (no onerror/onload called for them)
+    // mouth_open.png NOT loaded (no onerror/onload called for it)
     const img = container.querySelector('img');
-    // Should show emotion file, not mouth
+    // Should show emotion file, not mouth_open
     expect(img.getAttribute('src')).toContain('expr_joy.png');
 
     document.body.removeChild(container);
