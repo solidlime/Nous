@@ -300,7 +300,7 @@ class ChatConfigRepository:
         data = dict(zip(columns, row, strict=False))
 
         # Parse stored JSON fields with resilience
-        for jf in ("mcp_servers", "enabled_skills", "disabled_tools"):
+        for jf in ("mcp_servers", "enabled_skills", "disabled_tools", "image_gen_presets"):
             if data.get(jf) is not None:
                 try:
                     data[jf] = json.loads(data[jf])
@@ -414,7 +414,7 @@ class ChatConfigFileRepository:
             columns = [d[0] for d in cursor.description]
             data = dict(zip(columns, row, strict=False))
             # JSON フィールドのパース
-            for jf in ("mcp_servers", "enabled_skills", "disabled_tools"):
+            for jf in ("mcp_servers", "enabled_skills", "disabled_tools", "image_gen_presets"):
                 if data.get(jf) is not None and isinstance(data.get(jf), str):
                     try:
                         data[jf] = json.loads(data[jf])
