@@ -104,3 +104,19 @@
 2. **ブラウザ実機確認のパターン**: リモートブラウザからは localhost 不可 → Tailscale IP（100.112.180.92:26262）+ headless + --no-sandbox + allowDangerous。タブ切替は `[data-tab]` の可視ボタンをクリック（#tab-chat 直クリックは active にならない場合あり）。保存フローは fetch フックで payload 確認 → API GET でサーバー反映確認 → リロード復元確認。
 3. **UI 新設定の実装は既存パターン踏襲**: 動的温度調整（checkbox + slider.disabled + oninput ラベル同期）の踏襲で統一感を保つ。updateSliderLabels の実体は chat-settings-image.js（chat-settings.js ではない）。
 4. **ブラウザ検証で書き換えた persona config は検証後に元に戻す**（API POST で復元）。
+
+## PNGTuber 全削除（revert 方式）(2026-08-14)
+- **背景**: ユーザー判断で PNGTuber 連携（WebUI アバター + Tauri マスコット）を全部削除。LivePortrait 調査も中止（計算資源不足）。画像生成条件の緩和（13e3d76d）と背景・立ち絵機能の削除（90f9f7ab の一部）は残す
+- **方式**: main は push 済み → `git reset --hard` 不可 → **`git revert` 11 件を新しい順に実行**（chat.css は auto-merge 成功）。部分削除（90f9f7ab）は revert せず avatar 設定UI のみ手動削除。作業ツリーは `git checkout -- .` で破棄
+- **残骸掃除**: static/chat-avatar.js・static/avatar/・desktop/mascot/（6.2G）・data/persona/herta/avatar/・data/workflows/avatar_*.json + マスク類・config.json の avatar ブロック（docker exec nous python3）・chat_sidebar(_media).py / chat-settings.js / chat.css の avatar 参照
+- **検証**: grep avatar 残留ゼロ / node --check / ruff / vitest 71 PASS / pytest 小分け green
+- **教訓**:
+  1. **機能丸ごと削除は revert が安全**: push 済み main では reset 不可。新機能コミットを新しい順に revert すれば履歴がきれいに戻る。部分的に残したい機能は revert 対象から除外して手動削除
+  2. **ブラウザの古い JS はゴースト残りする**: ソースに無い N.Avatar 空オブジェクトがブラウザに残る（サーバーは 404、UI も消えているので無害）。実害のない環境残骸は記録して放置でよい
+  3. **worktree 比較で既存失敗を切り分け**: `git worktree add /tmp/x <revert前SHA>` で同テスト実行 → 失敗セット完全一致（27件）なら revert は何も壊していないと論証できる
+
+## 既存テスト失敗 27 件（2026-08-14 確認・revert と無関係）
+- **症状**: tests/unit/ の 6 ファイルで 27 失敗（test_builtin_handlers 4 / test_chat_pipeline 7 / test_chat_service 5 / test_compress_step 2 / test_mcp_context 4 / test_memory_llm 5）
+- **切り分け**: PNGTuber 前の SHA（7ab63a7d）を worktree で実行 → **失敗数・内容が完全一致**。revert 対象コミットはこれらの実装・テストに触れていない（builtin.py は 5ba55942、テストは 8815d4de が最終変更）
+- **代表例**: test_builtin_handlers の image_generate size/n 検証 — 実装は preset ベースに移行済み（size 直接指定を読まない）のにテストが古いまま + mock_config の image_gen_presets が MagicMock のまま re.match に渡る
+- **対応**: 修正は後日（未対応）。黙殺せず記録。新規実装の検証では「失敗が既存か新規か」を worktree 比較で切り分けること
