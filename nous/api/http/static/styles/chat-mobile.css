@@ -20,6 +20,9 @@
   #avatar-panel {
     display: none !important;
   }
+  #avatar-toggle-btn {
+    display: none !important;
+  }
   #memory-panel {
     display: none;
   }
@@ -81,6 +84,9 @@
 }
 @media (max-width: 900px) {
   #avatar-panel {
+    display: none !important;
+  }
+  #avatar-toggle-btn {
     display: none !important;
   }
   #memory-panel {

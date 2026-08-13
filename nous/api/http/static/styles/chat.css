@@ -1023,6 +1023,7 @@ input[type="range"].chat-field-input:focus {
   overflow: hidden;
   background: var(--glass-bg-faint);
   border-right: 0.5px solid var(--separator-non-opaque);
+  position: relative;
 }
 #memory-panel:not(:has(#avatar-panel[style*="display: flex"])) {
   /* When avatar is hidden, memory content fills the full width */
@@ -1083,8 +1084,8 @@ input[type="range"].chat-field-input:focus {
 }
 #avatar-toggle-btn {
   position: absolute;
-  bottom: 6px;
-  left: 6px;
+  top: 8px;
+  right: 8px;
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
@@ -1097,7 +1098,7 @@ input[type="range"].chat-field-input:focus {
   justify-content: center;
   padding: 0;
   transition: all var(--duration-fast) var(--ease-apple);
-  z-index: 3;
+  z-index: 10;
 }
 #avatar-toggle-btn:hover {
   background: var(--glass-bg-light);
