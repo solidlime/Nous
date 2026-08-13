@@ -11,7 +11,6 @@ from __future__ import annotations
 from nous.api.http.routers.chat.chat_management import (  # noqa: F401
     attachment_serve,
     attachment_upload,
-    avatar_image_serve,
     execute_chat_tool,
     get_chat_commitments,
     get_chat_config,
@@ -44,5 +43,4 @@ def register_chat_routes(mcp) -> None:
     mcp.custom_route("/api/chat/{persona}/attachment/upload", methods=["POST"])(attachment_upload)
     mcp.custom_route("/api/chat/{persona}/attachment/{filename}", methods=["GET"])(attachment_serve)
     mcp.custom_route("/api/chat/{persona}/persona/images/{filename}", methods=["GET"])(memory_image_serve)
-    mcp.custom_route("/api/chat/{persona}/persona/avatar/{filename}", methods=["GET"])(avatar_image_serve)
     mcp.custom_route("/api/chat/{persona}/tool", methods=["POST"])(execute_chat_tool)

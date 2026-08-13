@@ -9,6 +9,6 @@ export default defineConfig({
       },
     },
     globals: true,
-    include: ['core/**/*.test.js', 'avatar/**/*.test.js'],
+    include: ['core/**/*.test.js'],
   },
 });

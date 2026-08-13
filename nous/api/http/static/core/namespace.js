@@ -8,7 +8,6 @@
   global.Nous.Components = global.Nous.Components || {};
   global.Nous.Chat = global.Nous.Chat || {};
   global.Nous.Features = global.Nous.Features || {};
-  global.Nous.Avatar = global.Nous.Avatar || {};
 })(window);
 
 // Global alias — required by all feature/chat modules that reference N at the top level

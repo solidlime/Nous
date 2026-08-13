@@ -978,99 +978,17 @@ input[type="range"].chat-field-input:focus {
   background: rgba(var(--accent-blue-rgb), 0.2);
   border-color: rgba(var(--accent-blue-rgb), 0.4);
 }
-/* Left sidebar — avatar + memory activity */
+/* Memory activity panel — Apple HIG */
 #memory-panel {
   width: 260px;
   flex-shrink: 0;
-  display: flex;
-  flex-direction: row;
-  overflow: hidden;
-  background: var(--glass-bg-faint);
-  border-right: 0.5px solid var(--separator-non-opaque);
-}
-#memory-panel:not(:has(#avatar-panel[style*="display: flex"])) {
-  /* When avatar is hidden, memory content fills the full width */
-}
-.memory-panel-content {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
   padding: 14px;
-  min-width: 0;
-}
-
-/* ── Avatar Panel ── */
-#avatar-panel {
-  position: relative;
-  display: flex;
-  flex-direction: row;
-  width: 220px;
-  min-width: 120px;
-  max-width: 400px;
-  flex-shrink: 0;
-  border-right: 0.5px solid var(--separator-non-opaque);
   background: var(--glass-bg-faint);
-  overflow: hidden;
-}
-#avatar-container {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-  min-height: 120px;
-  overflow: hidden;
-}
-#avatar-container img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  border-radius: var(--radius-sm);
-  user-select: none;
-  -webkit-user-drag: none;
-}
-#avatar-resize-handle {
-  position: absolute;
-  top: 0;
-  right: -3px;
-  width: 6px;
-  height: 100%;
-  cursor: col-resize;
-  z-index: 2;
-  transition: background var(--duration-fast) var(--ease-apple);
-}
-#avatar-resize-handle:hover,
-#avatar-resize-handle.active {
-  background: rgba(var(--accent-blue-rgb), 0.4);
-}
-#avatar-toggle-btn {
-  position: absolute;
-  bottom: 6px;
-  left: 6px;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  border: 0.5px solid var(--glass-border);
-  background: var(--glass-bg-subtle);
-  color: var(--text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  transition: all var(--duration-fast) var(--ease-apple);
-  z-index: 3;
-}
-#avatar-toggle-btn:hover {
-  background: var(--glass-bg-light);
-  color: var(--text-primary);
-}
-#avatar-toggle-btn svg,
-#avatar-toggle-btn i {
-  width: 16px;
-  height: 16px;
+  border-right: 0.5px solid var(--separator-non-opaque);
 }
 .memory-panel-title {
   font-size: 0.82rem;

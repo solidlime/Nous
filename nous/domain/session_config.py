@@ -6,25 +6,9 @@ ChatConfig から分割された、セッション管理・リフレクション
 
 from __future__ import annotations
 
-from typing import Literal
-
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 
 from nous.domain.value_objects import normalize_importance
-
-
-class AvatarConfig(BaseModel):
-    """PNGTuberアバター設定（R6）。既定は無効（後方互換のため既存 config.json に影響しない）。"""
-
-    enabled: bool = False
-    panel_position: Literal["top", "bottom"] = "top"
-    mouth_mode: Literal["analyser", "toggle"] = "analyser"
-    panel_width: int = 220
-
-    @field_validator("panel_width")
-    @classmethod
-    def _clamp_panel_width(cls, v: int) -> int:
-        return max(80, min(800, v))
 
 
 class SessionConfig(BaseModel):
@@ -115,9 +99,6 @@ class SessionConfig(BaseModel):
     memorag_similarity_threshold: float = 0.7
     memorag_enabled: bool = False
     memorag_snapshot_interval_hours: int = 24
-
-    # PNGTuber avatar (R6)
-    avatar: AvatarConfig = Field(default_factory=AvatarConfig)
 
     @field_validator("reflection_threshold")
     @classmethod
