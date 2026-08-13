@@ -283,6 +283,8 @@ class ChatConfigRepository:
             return int(value)
         if base in (list, dict):
             return json.dumps(value, ensure_ascii=False)
+        if isinstance(value, BaseModel):  # ネストモデル（avatar 等）は JSON 文字列化
+            return json.dumps(value.model_dump(mode="json"), ensure_ascii=False)
         return value
 
     def get(self, persona: str) -> ChatConfig:
@@ -300,13 +302,13 @@ class ChatConfigRepository:
         data = dict(zip(columns, row, strict=False))
 
         # Parse stored JSON fields with resilience
-        for jf in ("mcp_servers", "enabled_skills", "disabled_tools"):
+        for jf in ("mcp_servers", "enabled_skills", "disabled_tools", "avatar"):
             if data.get(jf) is not None:
                 try:
                     data[jf] = json.loads(data[jf])
                 except json.JSONDecodeError:
-                    logger.warning("chat_config.get: corrupted JSON in '%s', falling back to []", jf)
-                    data[jf] = []
+                    logger.warning("chat_config.get: corrupted JSON in '%s', falling back to default", jf)
+                    data[jf] = [] if jf != "avatar" else {}
 
         # Build kwargs: only pass known ChatConfig fields, skip None unless nullable
         nullable = {"updated_at", "context_max_tokens", "top_p"}
@@ -414,12 +416,12 @@ class ChatConfigFileRepository:
             columns = [d[0] for d in cursor.description]
             data = dict(zip(columns, row, strict=False))
             # JSON フィールドのパース
-            for jf in ("mcp_servers", "enabled_skills", "disabled_tools"):
+            for jf in ("mcp_servers", "enabled_skills", "disabled_tools", "avatar"):
                 if data.get(jf) is not None and isinstance(data.get(jf), str):
                     try:
                         data[jf] = json.loads(data[jf])
                     except json.JSONDecodeError:
-                        data[jf] = []
+                        data[jf] = [] if jf != "avatar" else {}
             # bool→int の逆変換 (SQLite は bool を INTEGER で保存している)
             all_fields = ChatConfig._all_flat_fields()
             bool_fields = {

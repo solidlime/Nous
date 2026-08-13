@@ -184,19 +184,29 @@ async def _do_attachment_serve(persona: str, ctx, filename: str) -> dict | None:
     return {"file_path": str(file_path), "mime_type": mime_type}
 
 
-async def _do_memory_image_serve(persona: str, ctx, filename: str) -> dict | None:
-    """Resolve file path and mime type for a memory image. Returns None if not found."""
+async def _do_persona_media_serve(persona: str, ctx, subdir: str, filename: str) -> dict | None:
+    """Resolve file path and mime type for a persona media file (images/avatar). Returns None if not found."""
     import mimetypes
     from pathlib import Path
 
     settings = get_settings()
-    file_path = Path(settings.data_root) / "persona" / persona / "images" / filename
+    file_path = Path(settings.data_root) / "persona" / persona / subdir / filename
     if not file_path.exists():
         return None
 
     mime_type, _ = mimetypes.guess_type(filename)
     mime_type = mime_type or "image/png"
     return {"file_path": str(file_path), "mime_type": mime_type}
+
+
+async def _do_memory_image_serve(persona: str, ctx, filename: str) -> dict | None:
+    """Resolve file path and mime type for a memory image. Returns None if not found."""
+    return await _do_persona_media_serve(persona, ctx, "images", filename)
+
+
+async def _do_avatar_image_serve(persona: str, ctx, filename: str) -> dict | None:
+    """Resolve file path and mime type for an avatar asset. Returns None if not found."""
+    return await _do_persona_media_serve(persona, ctx, "avatar", filename)
 
 
 # ── HTTP adapter layer ─────────────────────────────────────────────
@@ -300,6 +310,28 @@ async def memory_image_serve(request: Request) -> Response:
         return JSONResponse({"error": "Invalid filename"}, status_code=400)
 
     result = await _do_memory_image_serve(persona, ctx, safe_name)
+    if result is None:
+        return JSONResponse({"error": "File not found"}, status_code=404)
+
+    return FileResponse(result["file_path"], media_type=result["mime_type"])
+
+
+async def avatar_image_serve(request: Request) -> Response:
+    """GET /api/chat/{persona}/persona/avatar/{filename} — serve avatar asset."""
+    import os
+
+    from starlette.responses import FileResponse
+
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": "Persona not found"}, status_code=404)
+
+    filename = request.path_params.get("filename", "")
+    safe_name = os.path.basename(filename).replace("..", "").strip()
+    if not safe_name or not safe_name.lower().endswith(".png"):
+        return JSONResponse({"error": "Invalid filename"}, status_code=400)
+
+    result = await _do_avatar_image_serve(persona, ctx, safe_name)
     if result is None:
         return JSONResponse({"error": "File not found"}, status_code=404)
 

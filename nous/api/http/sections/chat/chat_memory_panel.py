@@ -3,8 +3,18 @@
 
 def render_chat_memory_panel() -> str:
     """Return the memory activity panel HTML."""
-    return """<!-- Memory activity panel (left) -->
+    return """<!-- Left sidebar: avatar panel + memory activity -->
                 <div id="memory-panel">
+                    <!-- Avatar panel (top of left sidebar) -->
+                    <div id="avatar-panel" data-avatar style="display:none;">
+                        <div id="avatar-container"></div>
+                        <div id="avatar-resize-handle" title="ドラッグで幅を変更" aria-label="アバターパネルの幅を調整"></div>
+                        <button id="avatar-toggle-btn" title="アバター表示切替" aria-label="アバターの表示を切替">
+                            <i data-lucide="user"></i>
+                        </button>
+                    </div>
+                    <!-- Memory activity -->
+                    <div class="memory-panel-content">
                     <div class="memory-panel-title"><i data-lucide="brain"></i> 記憶活動</div>
 
                     <!-- Retrieved memories -->
@@ -45,5 +55,6 @@ def render_chat_memory_panel() -> str:
                         <div id="memory-equipment-list" style="max-height:150px;overflow-y:auto;">
                             <div class="memory-empty">会話中に装備変更があればここに表示されます</div>
                         </div>
+                    </div>
                     </div>
                 </div>"""

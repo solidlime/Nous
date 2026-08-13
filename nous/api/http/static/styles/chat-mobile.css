@@ -17,6 +17,9 @@
     min-height: 350px;
     max-height: 50dvh;
   }
+  #avatar-panel {
+    display: none !important;
+  }
   #memory-panel {
     display: none;
   }
@@ -77,6 +80,9 @@
   }
 }
 @media (max-width: 900px) {
+  #avatar-panel {
+    display: none !important;
+  }
   #memory-panel {
     display: none;
   }
