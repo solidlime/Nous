@@ -1,7 +1,7 @@
-# PNGTuber 素材生成ワークフロー
+# PNGTuber 素材生成ワークフロー（口開き差分）
 
 > 出典: `.spec/SPEC-pngtuber.md`「素材生成ワークフロー設計（R9 詳細）」
-> 対象ワークフロー: `data/workflows/avatar_mouth_open.json` / `avatar_emotion_*.json`（ComfyUI API 形式・マスク inpaint）
+> 対象ワークフロー: `data/workflows/avatar_mouth_open.json`（ComfyUI API 形式・マスク inpaint）
 
 ## 概要
 
@@ -71,7 +71,7 @@ WebUI でアバターパネルが表示され、音声再生時に base / mouth_
 | 7 | SetLatentNoiseMask | latent + マスク適用 |
 | 8 | CLIPTextEncode | positive: `open mouth, looking at viewer, solo, masterpiece, best quality, newest, absurdres, highres` |
 | 9 | CLIPTextEncode | negative: `closed mouth, parted lips, worst quality, old, early, low quality, lowres, bad hands` |
-| 10 | KSampler | steps=30, cfg=4, euler/simple, denoise=0.75, seed=42 |
+| 10 | KSampler | steps=30, cfg=4, euler/simple, denoise=0.65, seed=42 |
 | 11 | VAEDecode | latent → 画像 |
 | 12 | SaveImage | avatar_mouth_open |
 
@@ -80,49 +80,3 @@ WebUI でアバターパネルが表示され、音声再生時に base / mouth_
 - **LoadMask ノードは使用しない**（ComfyUI 0.32.0 に存在しない）。マスク読み込みは `LoadImageMask` + channel 指定
 - マスク画像は red チャンネルに口領域を白（255）で描くこと
 - マスク領域の広さ・ぼかしで口の開き具合が変わる。生成結果が不自然な場合は denoise 0.6–0.75 の範囲で調整
-
----
-
-## 表情差分の生成（avatar_emotion_*.json）
-
-`data/workflows/avatar_emotion_{joy|sad|angry|surprised}.json` で base.png から表情差分を生成する。
-顔領域マスク（`face_mask.png`）を inpaint する方式。ワークフロー構成は avatar_mouth_open.json と同形（LoadImageMask が face_mask.png、positive が表情タグ、denoise=0.5）。
-
-| ファイル | positive タグ |
-|---|---|
-| avatar_emotion_joy.json | smile, happy |
-| avatar_emotion_sad.json | sad, tears, watery eyes |
-| avatar_emotion_angry.json | angry, jitome |
-| avatar_emotion_surprised.json | surprised, eyes wide open |
-
-- 出力: `avatar_expr_{emotion}_00001_.png` → `data/persona/herta/avatar/expr_{emotion}.png`
-- マスク: `data/workflows/face_mask.png`（512×512 黒背景 + 赤楕円 中心(295,165) 半径 100×110、顔全体をカバー）
-- FaceDetailer（Impact Pack）はサーバーに存在するが、アニメ顔の bbox 検出が不安定なため未使用。`.pth` モデル（mmdet_anime-face）は Impact Pack が受け付けない（.pt のみ）
-
-## 背景透過（BiRefNetRMBG）
-
-`BiRefNetRMBG` ノード（model=BiRefNet_512x512, background=Alpha）で透過 PNG 化する。
-**optional パラメータ（sensitivity/mask_blur/mask_offset/invert_output/refine_foreground/background）を明示指定しないとエラー**（`'process_res'` / `'mask_blur'`）になる。
-
-```
-LoadImage → BiRefNetRMBG(image, model=BiRefNet_512x512, sensitivity=1.0, mask_blur=0,
-                         mask_offset=0, invert_output=false, refine_foreground=false,
-                         background=Alpha) → SaveImage
-```
-
-- 出力は RGBA PNG（透過）。avatar/ の 6 枚（base / mouth_open / expr_*）全て透過化済み
-- RMBG ノードは同じ構成だがエラーになるため非推奨（BiRefNet を使用）
-
-## 素材構成（最終）
-
-```
-data/persona/herta/avatar/
-├── base.png            # 口閉じ（透過）
-├── mouth_open.png      # 口開き（透過）
-├── expr_joy.png        # 笑顔（透過）
-├── expr_sad.png        # 悲しみ（透過）
-├── expr_angry.png      # 怒り（透過）
-└── expr_surprised.png  # 驚き（透過）
-```
-
-ComfyUI input 配置ファイル: base.png / mouth_mask.png / face_mask.png（+ 生成画像の再加工時に mouth_open.png / expr_*.png）
