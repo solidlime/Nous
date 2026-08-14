@@ -1,7 +1,7 @@
 # SPEC — 記憶の nous 一元化（セッションまたぎ再開の自然化）
 
 > 出典: ユーザー要望 (2026-08-14)。調査: exp-1（nous 記憶実装）/ exp-2（make_project_skill 詳細）/ exp-3（フック設計・スキル配置）/ lib-1・lib-2（外部運用事例 30件超）
-> 状態: **設計書 v5**（PoC 検証結果を反映: evolution タグ破壊バグの修正を main 反映済み・サーバー側タグ強制を R3 に追加）。実装は合意後のフェーズ分け（実装方針参照）で開始。
+> 状態: **設計書 v6**（PoC 検証結果を反映: evolution タグ破壊バグの修正を main 反映済み・サーバー側タグ強制を R3 に追加・**専用 persona（dev）を廃止**し現在の persona に `project:<slug>` タグ付きで記録する方式に変更）。実装は合意後のフェーズ分け（実装方針参照）で開始。
 
 ## 背景
 
@@ -26,7 +26,7 @@
 |---|------|------|
 | R1 | セッション終了フック | nous サーバーに `session.stopped` イベントハンドラを追加。終了時に未サマリ化メッセージからサマリを生成し `memory_create(tags=["session_summary"])`。詳細設計は「フック設計」節 |
 | R2 | サマリ生成の即時化 | セッションが短く evict 未発生でも、終了時に必ずサマリが生成される |
-| R3 | 開発知識の nous 化 | 開発教訓を専用 persona（`dev`）の記憶として記録。**プロジェクトタグ必須**（「記憶・検索設計」節）。会話ペルソナ（herta 等）への混入を防ぐ |
+| R3 | 開発知識の nous 化 | 開発教訓を現在の persona（herta 等）の記憶として記録。**プロジェクトタグ必須**（「記憶・検索設計」節）。プロジェクト分離は persona 分離ではなく `project:<slug>` タグで担保 |
 | R4 | 作業引継の nous 化 | HANDOFF.md 相当は session_summary（+ source_context にブランチ・コミット情報）で代替。開始時は直近 session_summary を読む（**memory_search に `sort="updated_at"` オプションを追加し、`tags=["session_summary"], top_k=1` で最新1件を取得。案2採用**） |
 | R5 | get_context 改善 | (a) top_memories と recent の重複除去 (b) 直近 session_summary を優先表示 (c) `_apply_relationship_decay` のデッドコード整理 |
 | R6 | スキル再編成 | 下記「スキル再編成」表の通り。goal-coach → project-manage に全統合、make_project_skill → **make-project** に改名 |
@@ -38,18 +38,18 @@
 
 | 旧スキル | 新スキル | スコープ | 発動条件・頻度 |
 |----------|----------|----------|----------------|
-| make_project_skill | **make-project**（改名のみ） | プロジェクト初期構築。**.agent/ 生成を廃止**。初期記憶を `memory_create`（dev persona・`project_overview`）で記録。**AGENTS.md にプロジェクトタグ節を生成**。残す本質: `.spec/` 4ファイル + SDD、品質ゲート節、README/CLAUDE/GEMINI、git init | 「プロジェクトを初期化/セットアップして」。低頻度（手動） |
+| make_project_skill | **make-project**（改名のみ） | プロジェクト初期構築。**.agent/ 生成を廃止**。初期記憶を `memory_create`（現在の persona・`project_overview`）で記録。**AGENTS.md にプロジェクトタグ節を生成**。残す本質: `.spec/` 4ファイル + SDD、品質ゲート節、README/CLAUDE/GEMINI、git init | 「プロジェクトを初期化/セットアップして」。低頻度（手動） |
 | session-start | **session-start**（名称維持） | セッション開始ルーティン。get_context + **AGENTS.md のプロジェクトタグ読取 → プロジェクト絞り込み検索** | セッション開始時・最初の応答前。毎セッション1回 |
 | goal-coach | **project-manage** | **全統合**: (a) 目標管理: goal_manage (b) .spec/ 進行管理: PLAN/SPEC/TODO/KNOWLEDGE の進捗追跡・更新。SDD ルールは残し運用を補助 | 目標・進捗・TODO 関連の発言。中頻度 |
 
 ### 記憶・検索設計（R3/R4 詳細）— プロジェクトタグ方式
 
-**目的**: dev persona は複数プロジェクトの記憶を扱うため、「そのプロジェクトの記憶」を確実に抽出できる必要がある。
+**目的**: 現在の persona（herta 等）は複数プロジェクトの記憶を扱うため、「そのプロジェクトの記憶」を確実に抽出できる必要がある。
 
 **タグ体系**:
 | タグ | kind | 内容 | 作成タイミング |
 |------|------|------|----------------|
-| `project:<slug>` | — | **全 dev 記憶に必須のプロジェクト識別タグ**。slug はディレクトリ名由来（例: `project:nous`） | 全記録時 |
+| `project:<slug>` | — | **全プロジェクト記憶に必須の識別タグ**。slug はディレクトリ名由来（例: `project:nous`） | 全記録時 |
 | `project_overview` | semantic | プロジェクト概要・技術構成・主要決定 | make-project 初期構築時 |
 | `dev_lesson` | procedural | 開発教訓・トラブル解決法 | トラブル解決後 |
 | `decision` | semantic | 決定事項と理由 | アーキ判断時 |
@@ -61,7 +61,7 @@
 ## プロジェクト識別
 - project: <slug>
 ```
-session-start は開始時にこの節を読み取り、以降の `memory_search` は必ず `tags=["project:<slug>", ...]` で絞り込む。会話ペルソナ（herta）の記憶と開発記憶（dev）は persona 分離 + プロジェクトタグの2重で交ざらない。
+session-start は開始時にこの節を読み取り、以降の `memory_search` は必ず `tags=["project:<slug>", ...]` で絞り込む。プロジェクト分離は `project:<slug>` タグのみで担保する（専用 persona は作らない）。
 
 **検索フロー**:
 1. セッション開始: session-start → get_context（状態+直近サマリ）+ AGENTS.md の project slug 読取
@@ -98,7 +98,7 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 ### 制約
 - **破壊的変更なし**: 既存 memory_create / get_context / スキーマは変更しない。追加はイベントハンドラ + 表示ロジック + スキルファイル群のみ
 - MCP ツールの追加・変更がある場合は `docs/llm_usage_guide.md` 更新必須
-- `dev` persona は新規作成だが、persona ごとの memory.sqlite 分離が既存設計のため追加実装不要
+- 専用 persona（dev）は**作らない**。開発知識は現在の persona の記憶に `project:<slug>` タグ付きで記録する（persona ごとの memory.sqlite 分離は既存設計のため追加実装不要）
 - スキル配置: `data/skills/` は `.gitignore` の `data/*/`（.gitignore:45）と矛盾。新規スキルは `git add -f` 必要。symlink 化後は実体 `.claude/skills/` を追跡（.gitignore 調整）
 - 旧グローバルスキル（make_project_skill / session-start / goal-coach）は**削除**し nous 付属版のみに（opencode の「一意」ルール違反回避）。auto-memory / recall-weaver / mood-sync は**グローバルのまま**（会話ペルソナ向け・他プロジェクトでも使用）。data/skills/ の既存6スキル（auto-memory, goal-coach, image-gen, item-manage, mood-sync, recall-weaver）は invoke_skill 用に配置済み — 配置変更は再編成対象（make-project / session-start / project-manage）のみ
 - 既存テスト失敗 27 件は本件と無関係（2026-08-14 確認、worktree 比較で切り分け）
@@ -110,7 +110,7 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 | V1 | 終了フック | 短いセッション終了 → session_summary タグの記憶が生成される。evict 未発生でも生成されることをテストで確認 |
 | V2 | サマリ内容 | 「何を話したか」「合意・約束」を含む（LLM 形式テスト）。文字化けチェック（既存 N'Ko/Mongolian/PUA チェック踏襲） |
 | V3 | get_context | 同一記憶が2回表示されない。直近 session_summary が優先表示される |
-| V4 | プロジェクト分離 | dev persona の記憶に `project:<slug>` が付与される（スキル経由 + サーバー側タグ強制の両経路で確認）。`memory_search(tags=["project:nous"])` で Nous の記憶だけが返る。herta の記憶に開発教訓が混入しない |
+| V4 | プロジェクト分離 | 現在の persona（herta 等）の記憶に `project:<slug>` が付与される（スキル経由 + サーバー側タグ強制の両経路で確認）。`memory_search(tags=["project:nous"])` で Nous の記憶だけが返る |
 | V5 | スキル解決 | 3スキル（make-project / session-start / project-manage）が opencode・Claude Code・nous invoke_skill の3経路で解決される |
 | V6 | .agent/ 非生成 | make-project で新プロジェクト構築 → `.agent/` と `.claude/commands/handoff.md` が生成されない。AGENTS.md に MEMORY.md/HANDOFF.md 読込ルールが含まれない |
 | V7 | 回帰 | 変更モジュールに依存するテストのみ個別実行（フルスイート禁止）。既存失敗は worktree 比較で切り分け |
@@ -122,7 +122,7 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 各フェーズは独立領域 → 並列 #011 実行可能。実装開始前にユーザー承認を得る。
 
 - **Phase A: R1+R2（終了フック）+ R4 読み取り手段** — nous サーバー側イベント処理 + **memory_search の `sort="updated_at"` オプション追加** + テスト。単一領域。SessionSummarizer を再利用
-- **Phase B: R3+R4+R7（一元化 + .agent/ 廃止）** — dev persona 運用 + プロジェクトタグ設計 + AGENTS.md ルール変更 + make-project の .agent/ 非生成化。ユーザー確認必須（作業フロー変更）
+- **Phase B: R3+R4+R7（一元化 + .agent/ 廃止）** — 現在の persona へのプロジェクトタグ運用 + サーバー側タグ強制 + AGENTS.md ルール変更 + make-project の .agent/ 非生成化。ユーザー確認必須（作業フロー変更）
 - **Phase C: R5（get_context 改善）** — 独立。重複除去 + サマリ優先表示 + デッドコード整理
 - **Phase D: R6+R8+R9（スキル再編成）** — project-manage 作成（goal-coach から拡張）、make-project 改名・nous 付属化（SKILL.md 書き換え）、session-start の nous 付属化（プロジェクトタグ読取 + **最新 session_summary 復元: `memory_search(tags=["session_summary"], top_k=1, sort="updated_at")`**）、配置変更（.claude/skills/ + data/skills symlink）、旧スキル削除、登録更新（oh-my-opencode-slim.json 等）、**config.json の enabled_skills への新スキル登録（PoC 発見3: data/skills/ 配置のみでは LLM が存在を認識できない）**
 - ドキュメント: MCP ツール変更時 `docs/llm_usage_guide.md`。本 SPEC に実装結果を追記
@@ -134,7 +134,7 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 検証目的: 再編成スキル群を実際の LLM に使わせ、記憶管理が機能するか本実装前に確認する。
 
 ### 検証環境
-- dev persona（新規作成）、Docker コンテナ（localhost:26262）、OpenRouter 経由
+- dev persona（新規作成）で検証実施（※ v6 設計変更により専用 persona は廃止。検証当時の実績として記録。スキル自体は persona 非依存のため、現在の persona 運用でも同じ結果になる）、Docker コンテナ（localhost:26262）、OpenRouter 経由
 - モデル2系統で比較: `openrouter/free` → `deepseek/deepseek-v4-flash`（本番想定相当）
 - 試作スキル3つ（make-project / project-manage / session-start）を `data/skills/` に配置
 
@@ -162,7 +162,7 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 - make-project を invoke しなかった場合、LLM は自由なタグを付与（free: `["project","python","sample",...]`、flash: `["decision","project"]`）
 - 原因の一部: 試作スキルが config の `enabled_skills` に未登録のため、LLM が存在を認識できない（`data/skills/` 配置のみでは list_skills に出ない）
 - **設計変更: R3 に「サーバー側タグ強制」を追加**（Phase B で検討）:
-  - 案A: memory_create ツールが `project:<slug>` を自動付与（dev persona のみ・source_context 等から slug 解決）
+  - 案A: memory_create ツールが `project:<slug>` を自動付与（AGENTS.md に `project:` 節があるプロジェクト内の全記録・source_context 等から slug 解決）
   - 案B: タグ検証（`project:<slug>` 必須・規約外は補正 or 拒否）
   - スキル指示に頼る現行案では V4（プロジェクト分離）が保証できないため、サーバー側強制が必須
 
@@ -195,5 +195,5 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 - 注意: hybrid は top_k で切った後にソートされる（top_k=1 + sort で「最新1件」は成立）。レスポンス JSON に updated_at は含まれない（従来仕様）
 
 ### 次フェーズ
-- Phase B（R3+R4+R7）: ユーザー確認必須（dev persona 運用 + .agent/ 廃止 + サーバー側タグ強制）
+- Phase B（R3+R4+R7）: ユーザー確認必須（現在の persona へのプロジェクトタグ運用 + .agent/ 廃止 + サーバー側タグ強制）
 - Phase C（R5 get_context 改善）→ Phase D（スキル再編成 + enabled_skills 登録）
