@@ -28,7 +28,7 @@
 | R2 | サマリ生成の即時化 | セッションが短く evict 未発生でも、終了時に必ずサマリが生成される |
 | R3 | 開発知識の nous 化 | 開発教訓を現在の persona（herta 等）の記憶として記録。**プロジェクトタグ必須**（「記憶・検索設計」節）。プロジェクト分離は persona 分離ではなく `project:<slug>` タグで担保 |
 | R4 | 作業引継の nous 化 | HANDOFF.md 相当は session_summary（+ source_context にブランチ・コミット情報）で代替。開始時は直近 session_summary を読む（**memory_search に `sort="updated_at"` オプションを追加し、`tags=["session_summary"], top_k=1` で最新1件を取得。案2採用**） |
-| R5 | get_context 改善 | (a) top_memories と recent の重複除去 (b) 直近 session_summary を優先表示 (c) `_apply_relationship_decay` のデッドコード整理 |
+| R5 | get_context 改善 | (a) top_memories と recent の重複除去 (b) 直近 session_summary を優先表示 ※ (c) `_apply_relationship_decay` のデッドコード整理は調査の結果**不要と判明**（prepare.py:80,84 で使用中） |
 | R6 | スキル再編成 | 下記「スキル再編成」表の通り。goal-coach → project-manage に全統合、make_project_skill → **make-project** に改名 |
 | R7 | .agent/ 運用廃止 | AGENTS.md の「MEMORY.md / HANDOFF.md 読込」ルールを削除し session-start の get_context に一本化。make-project が .agent/ を**生成しない**。既存ファイルはアーカイブ放置 |
 | R8 | スキル配置一本化 | 正配置 `Nous/.claude/skills/<name>/SKILL.md`。`data/skills` は symlink 化。opencode / Claude Code / nous invoke_skill の3経路対応 |
@@ -123,7 +123,7 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 
 - **Phase A: R1+R2（終了フック）+ R4 読み取り手段** — nous サーバー側イベント処理 + **memory_search の `sort="updated_at"` オプション追加** + テスト。単一領域。SessionSummarizer を再利用
 - **Phase B: R3+R4+R7（一元化 + .agent/ 廃止）** — 現在の persona へのプロジェクトタグ運用 + サーバー側タグ強制 + AGENTS.md ルール変更 + make-project の .agent/ 非生成化。ユーザー確認必須（作業フロー変更）
-- **Phase C: R5（get_context 改善）** — 独立。重複除去 + サマリ優先表示 + デッドコード整理
+- **Phase C: R5（get_context 改善）** — 独立。重複除去 + サマリ優先表示（デッドコード整理は不要と判明済み）
 - **Phase D: R6+R8+R9（スキル再編成）** — project-manage 作成（goal-coach から拡張）、make-project 改名・nous 付属化（SKILL.md 書き換え）、session-start の nous 付属化（プロジェクトタグ読取 + **最新 session_summary 復元: `memory_search(tags=["session_summary"], top_k=1, sort="updated_at")`**）、配置変更（.claude/skills/ + data/skills symlink）、旧スキル削除、登録更新（oh-my-opencode-slim.json 等）、**config.json の enabled_skills への新スキル登録（PoC 発見3: data/skills/ 配置のみでは LLM が存在を認識できない）**
 - ドキュメント: MCP ツール変更時 `docs/llm_usage_guide.md`。本 SPEC に実装結果を追記
 
@@ -196,7 +196,8 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 
 ### 次フェーズ
 - Phase B（R3+R4+R7）: ✅ 完了（下記「実装結果（Phase B）」参照。v6 設計変更: dev persona 廃止・現在の persona に `project:<slug>` タグ付きで記録・タグ強制は形式検証のみ・AGENTS.md にプロジェクト識別節）
-- Phase C（R5 get_context 改善）→ Phase D（スキル再編成 + enabled_skills 登録）
+- Phase C（R5 get_context 改善）: ✅ 完了（下記「実装結果（Phase C）」参照。R5(c) デッドコード整理は調査の結果不要と判明: prepare.py:80,84 で使用中）
+- Phase D（スキル再編成 + enabled_skills 登録）: 未着手
 
 ---
 
@@ -213,3 +214,14 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 
 ### B3: 試作スキル3つの最終確認 — 変更不要
 - make-project / session-start / project-manage とも persona 非依存で v6 方針と整合（memory_create は現在の persona に記録、AGENTS.md の `## プロジェクト識別` 節から slug 読取）。session-start の「他 persona の記憶と混在させない」は文言のみ v5 名残（機能影響なし）
+
+## 実装結果（Phase C、2026-08-14）
+
+### C1: get_context の重複除去 + サマリ優先表示（R5）— 完了
+- **背景**: exp-2 調査で構造判明 — top_memories（`get_top_by_importance(8)`、importance 降順）と recent（`get_recent(5)`、updated_at 降順）は独立クエリで重複排除なし。重要度の高い記憶（goal/reflection/session_summary 等）は更新頻度が高く top と recent の両方に入る。session_summary も書かれた直後は recent に入り 3 経路で重複しうる
+- **R5(c) 撤回**: 「`_apply_relationship_decay` デッドコード整理」は調査の結果**不要と判明**（prepare.py:80,84 で毎ターン使用、システムプロンプトに decay_note 注入）。要件行を修正
+- **実装**（`nous/api/mcp/_tools_persona.py` `_tool_get_context`、+8行）:
+  - (b) `session_summaries` を `updated_at or created_at or get_now()` 降順でソート（`get_by_tags` は並び順保証なしのため。フォーマッタは `[:2]` 表示）
+  - (a) `recent` から `top_memories` と `memory.key` が重複する要素を除外（会話継続目的の recent 優先ではなく重要度表示側を優先する設計判断 — top_memories は表示予算が文字数制限なので recent 側を削る）
+- **検証**: `tests/unit/test_tools_persona.py` +2（重複除外: 同一 key が出力に1回のみ / サマリソート: updated_at が新しい記憶が先頭。`_make_memory` に `updated_at` 引数追加）。`test_tools_persona` 5 passed + `test_tools_helpers` 8 passed + `test_mcp_context` 29 passed（全体）。py_compile OK / ruff エラー0
+- **備考**: get_by_tags の全件フェッチ非効率は `context_loader.py:239` にも同様の欠陥あり（minor、Phase D 対象外のため残置）。`_tools_persona.py` の Result 型アクセスに LSP 型エラーが既存で発生（ランタイム影響なし）
