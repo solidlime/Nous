@@ -24,6 +24,7 @@ class MemorySearchMixin:
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         valid_at: datetime | None = None,
+        tags: list[str] | None = None,
     ) -> Result[list[tuple[Memory, float]], RepositoryError]:
         """FTS5 full-text search using BM25 ranking.
 
@@ -62,6 +63,12 @@ class MemorySearchMixin:
             params.append(iso)
             conditions.append("(m.valid_until IS NULL OR m.valid_until > ?)")
             params.append(iso)
+
+        # Tag filter: memories.tags is stored as JSON array string (e.g. '["a", "b"]')
+        if tags:
+            for t in tags:
+                conditions.append("m.tags LIKE ?")
+                params.append(f'%"{t}"%')
 
         where_clause = " AND ".join(conditions)
         rows = self._db.execute(
@@ -112,6 +119,7 @@ class MemorySearchMixin:
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         valid_at: datetime | None = None,
+        tags: list[str] | None = None,
     ) -> Result[list[tuple[Memory, float]], RepositoryError]:
         """Search memories by keyword with relevance scoring.
 
@@ -149,6 +157,12 @@ class MemorySearchMixin:
             params.append(iso)
             conditions.append("(valid_until IS NULL OR valid_until > ?)")
             params.append(iso)
+
+        # Tag filter: memories.tags is stored as JSON array string (e.g. '["a", "b"]')
+        if tags:
+            for t in tags:
+                conditions.append("tags LIKE ?")
+                params.append(f'%"{t}"%')
 
         where_clause = " AND ".join(conditions)
         rows = self._db.execute(

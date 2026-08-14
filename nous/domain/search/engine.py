@@ -108,6 +108,7 @@ class SearchEngine:
             return result
         filtered = self._filter_by_emotion(result.value, query.emotion)
         filtered = self._filter_by_kind(filtered, query.kind)
+        filtered = self._filter_by_tags(filtered, query.tags)
         if query.valid_at is not None:
             filtered = self._filter_by_valid_at(filtered, query.valid_at)
         if query.sort == "updated_at":
@@ -140,6 +141,17 @@ class SearchEngine:
         return [r for r in results if r.memory.kind == kind]
 
     @staticmethod
+    def _filter_by_tags(
+        results: list[SearchResult],
+        tags: list[str] | None,
+    ) -> list[SearchResult]:
+        """Post-filter results to only keep memories containing ALL specified tags."""
+        if not tags:
+            return results
+        required = set(tags)
+        return [r for r in results if required.issubset(set(r.memory.tags))]
+
+    @staticmethod
     def _filter_by_valid_at(
         results: list[SearchResult],
         valid_at: datetime,
@@ -169,10 +181,24 @@ class SearchEngine:
         self, query: SearchQuery, date_from=None, date_to=None
     ) -> Result[list[SearchResult], SearchError]:
         """Execute keyword-only search."""
-        result = self._keyword.search(query.text, limit=query.top_k, date_from=date_from, date_to=date_to)
+        # Empty query + tags: plain keyword/FTS return nothing, so fetch by tags directly
+        if not query.text.strip() and query.tags and self._memory_repo is not None:
+            return self._tag_only_search(query)
+        result = self._keyword.search(
+            query.text, limit=query.top_k, date_from=date_from, date_to=date_to, tags=query.tags
+        )
         if not result.is_ok:
             return Failure(result.error)
         return Success(self._to_search_results(result.value, "keyword"))
+
+    def _tag_only_search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
+        """Fallback for tag-only retrieval (empty text + tags): fetch via get_by_tags."""
+        from nous.domain.shared.errors import SearchError
+
+        result = self._memory_repo.get_by_tags(query.tags)
+        if not result.is_ok:
+            return Failure(SearchError(str(result.error)))
+        return Success(self._to_search_results([(m, 0.0) for m in result.value], "keyword"))
 
     async def _semantic_search(
         self, query: SearchQuery, date_from=None, date_to=None
@@ -189,17 +215,23 @@ class SearchEngine:
         self, query: SearchQuery, date_from=None, date_to=None
     ) -> Result[list[SearchResult], SearchError]:
         """Execute hybrid search combining FTS5, plain keyword, and semantic results with RRF fusion."""
+        # Empty query + tags: keyword/FTS return nothing, so fall back to tag-only retrieval
+        if not query.text.strip() and query.tags and self._memory_repo is not None:
+            return self._keyword_search(query, date_from, date_to)
+
         all_results: list[SearchResult] = []
 
         # 1. Plain LIKE keyword search (existing)
-        kw_result = self._keyword.search(query.text, limit=query.top_k, date_from=date_from, date_to=date_to)
+        kw_result = self._keyword.search(
+            query.text, limit=query.top_k, date_from=date_from, date_to=date_to, tags=query.tags
+        )
         if kw_result.is_ok:
             all_results.extend(self._to_search_results(kw_result.value, "keyword"))
 
         # 2. FTS5 full-text search (BM25 ranked)
         if self._memory_repo is not None and hasattr(self._memory_repo, "search_fts"):
             fts_result = self._memory_repo.search_fts(
-                query.text, top_k=query.top_k * 2, date_from=date_from, date_to=date_to
+                query.text, top_k=query.top_k * 2, date_from=date_from, date_to=date_to, tags=query.tags
             )
             if fts_result.is_ok:
                 all_results.extend(self._to_search_results(fts_result.value, "fts"))

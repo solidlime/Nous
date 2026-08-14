@@ -27,6 +27,7 @@ def _mem(
     emotion: str = "neutral",
     created_at: datetime | None = None,
     updated_at: datetime | None = None,
+    tags: list[str] | None = None,
 ) -> Memory:
     now = datetime.now(UTC)
     return Memory(
@@ -36,6 +37,7 @@ def _mem(
         updated_at=updated_at or now,
         importance=importance,
         emotion=emotion,
+        tags=tags or [],
     )
 
 
@@ -224,7 +226,7 @@ class TestSearchEngineSearch:
         assert result.is_ok
         assert len(result.value) == 1
         assert result.value[0].source == "keyword"
-        kw.search.assert_called_once_with("hello", limit=5, date_from=None, date_to=None)
+        kw.search.assert_called_once_with("hello", limit=5, date_from=None, date_to=None, tags=None)
 
     @pytest.mark.asyncio
     async def test_semantic_mode(self):
@@ -421,7 +423,7 @@ class TestSearchEngineDateRange:
         engine = SearchEngine(keyword_search=kw)
         result = await engine.search(SearchQuery(text="hello", mode="keyword"))
         assert result.is_ok
-        kw.search.assert_called_once_with("hello", limit=5, date_from=None, date_to=None)
+        kw.search.assert_called_once_with("hello", limit=5, date_from=None, date_to=None, tags=None)
 
     @pytest.mark.asyncio
     async def test_date_range_passes_parsed_dates_to_keyword(self):
@@ -465,7 +467,7 @@ class TestSearchEngineDateRange:
         engine = SearchEngine(keyword_search=kw)
         result = await engine.search(SearchQuery(text="hello", mode="keyword", date_range="わけわからん"))
         assert result.is_ok
-        kw.search.assert_called_once_with("hello", limit=5, date_from=None, date_to=None)
+        kw.search.assert_called_once_with("hello", limit=5, date_from=None, date_to=None, tags=None)
 
     @pytest.mark.asyncio
     async def test_date_range_empty_string_passes_none(self):
@@ -474,7 +476,111 @@ class TestSearchEngineDateRange:
         engine = SearchEngine(keyword_search=kw)
         result = await engine.search(SearchQuery(text="hello", mode="keyword", date_range=""))
         assert result.is_ok
-        kw.search.assert_called_once_with("hello", limit=5, date_from=None, date_to=None)
+        kw.search.assert_called_once_with("hello", limit=5, date_from=None, date_to=None, tags=None)
+
+
+# ---------------------------------------------------------------------------
+# SearchEngine tags filter (bugfix: tags were never passed to strategies)
+# ---------------------------------------------------------------------------
+
+
+class TestSearchEngineTags:
+    """tags パラメータが検索戦略へ伝播し、タグ絞り込みが機能すること。"""
+
+    @pytest.mark.asyncio
+    async def test_keyword_mode_passes_tags_to_strategy(self):
+        """keyword モードで tags が戦略に渡される。"""
+        kw = _make_keyword_strategy([(_mem("k1", content="hello", tags=["project:nous"]), 0.7)])
+        engine = SearchEngine(keyword_search=kw)
+        result = await engine.search(
+            SearchQuery(text="hello", mode="keyword", tags=["project:nous"])
+        )
+        assert result.is_ok
+        assert len(result.value) == 1
+        kw.search.assert_called_once_with(
+            "hello", limit=5, date_from=None, date_to=None, tags=["project:nous"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_hybrid_mode_passes_tags_to_keyword_and_fts(self):
+        """hybrid モードで tags が keyword 戦略と search_fts に渡される。"""
+        kw = _make_keyword_strategy([(_mem("k1"), 0.7)])
+        sem = _make_semantic_strategy([])
+        memory_repo = MagicMock()
+        memory_repo.search_fts.return_value = Success([])
+        engine = SearchEngine(keyword_search=kw, semantic_search=sem, memory_repo=memory_repo)
+        result = await engine.search(
+            SearchQuery(text="hello", mode="hybrid", tags=["project:nous", "task_state"])
+        )
+        assert result.is_ok
+        assert kw.search.call_args.kwargs["tags"] == ["project:nous", "task_state"]
+        assert memory_repo.search_fts.call_args.kwargs["tags"] == ["project:nous", "task_state"]
+
+    @pytest.mark.asyncio
+    async def test_empty_query_with_tags_uses_get_by_tags_keyword_mode(self):
+        """空クエリ + tags 指定で get_by_tags フォールバックが動く（keyword モード）。"""
+        mem = _mem("k1", content="hello", tags=["project:nous"])
+        memory_repo = MagicMock()
+        memory_repo.get_by_tags.return_value = Success([mem])
+        engine = SearchEngine(keyword_search=_make_keyword_strategy(), memory_repo=memory_repo)
+        result = await engine.search(
+            SearchQuery(text="", mode="keyword", tags=["project:nous"])
+        )
+        assert result.is_ok
+        assert len(result.value) == 1
+        assert result.value[0].memory.key == "k1"
+        assert result.value[0].source == "keyword"
+        memory_repo.get_by_tags.assert_called_once_with(["project:nous"])
+
+    @pytest.mark.asyncio
+    async def test_empty_query_with_tags_uses_get_by_tags_hybrid_mode(self):
+        """空クエリ + tags 指定で get_by_tags フォールバックが動く（hybrid モード）。"""
+        mem = _mem("k1", content="hello", tags=["project:nous"])
+        memory_repo = MagicMock()
+        memory_repo.get_by_tags.return_value = Success([mem])
+        engine = SearchEngine(keyword_search=_make_keyword_strategy(), memory_repo=memory_repo)
+        result = await engine.search(
+            SearchQuery(text="", mode="hybrid", tags=["project:nous"])
+        )
+        assert result.is_ok
+        assert len(result.value) == 1
+        assert result.value[0].memory.key == "k1"
+        memory_repo.get_by_tags.assert_called_once_with(["project:nous"])
+
+
+class TestFilterByTags:
+    def test_none_tags_returns_all(self) -> None:
+        results = [_result("k1", 1.0)]
+        out = SearchEngine._filter_by_tags(results, None)
+        assert out == results
+
+    def test_keeps_only_memories_with_all_tags(self) -> None:
+        results = [
+            _result("k1", 1.0, tags=["a", "b"]),
+            _result("k2", 0.9, tags=["a"]),
+            _result("k3", 0.8, tags=["b", "c"]),
+        ]
+        out = SearchEngine._filter_by_tags(results, ["a", "b"])
+        assert [r.memory.key for r in out] == ["k1"]
+
+    def test_no_match_returns_empty(self) -> None:
+        results = [_result("k1", 1.0, tags=["c"])]
+        out = SearchEngine._filter_by_tags(results, ["a"])
+        assert out == []
+
+    @pytest.mark.asyncio
+    async def test_search_applies_tag_post_filter_to_semantic_noise(self) -> None:
+        """semantic 経路の結果にタグが含まれないものは除外される。"""
+        tagged = _mem("tagged", tags=["project:nous"])
+        noise = _mem("noise", tags=["other"])
+        sem = _make_semantic_strategy([(tagged, 0.9), (noise, 0.8)])
+        kw = _make_keyword_strategy([])
+        engine = SearchEngine(keyword_search=kw, semantic_search=sem)
+        result = await engine.search(
+            SearchQuery(text="hello", mode="hybrid", tags=["project:nous"])
+        )
+        assert result.is_ok
+        assert [r.memory.key for r in result.value] == ["tagged"]
 
 
 def _make_memory(key: str):

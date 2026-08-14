@@ -20,6 +20,7 @@ class KeywordSearchStrategy(Protocol):
         limit: int = 10,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
+        tags: list[str] | None = None,
     ) -> Result[list[tuple[Memory, float]], SearchError]: ...
 
 

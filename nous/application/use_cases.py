@@ -40,8 +40,8 @@ class SQLiteKeywordSearch:
     def __init__(self, repo: SQLiteMemoryRepository) -> None:
         self.repo = repo
 
-    def search(self, query: str, limit: int = 10, date_from=None, date_to=None):
-        result = self.repo.search_keyword(query, limit, date_from=date_from, date_to=date_to)
+    def search(self, query: str, limit: int = 10, date_from=None, date_to=None, tags=None):
+        result = self.repo.search_keyword(query, limit, date_from=date_from, date_to=date_to, tags=tags)
         if result.is_ok:
             return Success(result.value)
         return Failure(SearchError(str(result.error)))

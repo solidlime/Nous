@@ -48,7 +48,7 @@ class TestSQLiteKeywordSearch:
 
         adapter = SQLiteKeywordSearch(repo)
         adapter.search("query", limit=5)
-        repo.search_keyword.assert_called_once_with("query", 5, date_from=None, date_to=None)
+        repo.search_keyword.assert_called_once_with("query", 5, date_from=None, date_to=None, tags=None)
 
 
 class TestQdrantSemanticSearch:
