@@ -388,6 +388,28 @@ class TestSearchEngineSortByUpdatedAt:
         assert [r.memory.key for r in result.value] == ["new", "mid", "old"]
 
     @pytest.mark.asyncio
+    async def test_empty_query_with_tags_sorts_by_updated_at_and_respects_top_k(self):
+        """空クエリ + tags + sort=updated_at で updated_at 降順 & top_k 制限が効くこと。"""
+        base = datetime.now(UTC)
+        memory_repo = MagicMock()
+        memory_repo.get_by_tags.return_value = Success(
+            [
+                _mem("old", updated_at=base - timedelta(hours=3), tags=["project:nous"]),
+                _mem("mid", updated_at=base - timedelta(hours=2), tags=["project:nous"]),
+                _mem("new", updated_at=base - timedelta(hours=1), tags=["project:nous"]),
+            ]
+        )
+        engine = SearchEngine(keyword_search=_make_keyword_strategy(), memory_repo=memory_repo)
+        result = await engine.search(
+            SearchQuery(
+                text="", mode="hybrid", top_k=2, tags=["project:nous"], sort="updated_at"
+            )
+        )
+        assert result.is_ok
+        assert [r.memory.key for r in result.value] == ["new", "mid"]
+        memory_repo.get_by_tags.assert_called_once_with(["project:nous"])
+
+    @pytest.mark.asyncio
     async def test_sort_none_keeps_score_order(self):
         """sort=None（従来動作）ではスコア降順のまま。"""
         base = datetime.now(UTC)

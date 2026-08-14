@@ -198,7 +198,10 @@ class SearchEngine:
         result = self._memory_repo.get_by_tags(query.tags)
         if not result.is_ok:
             return Failure(SearchError(str(result.error)))
-        return Success(self._to_search_results([(m, 0.0) for m in result.value], "keyword"))
+        results = self._to_search_results([(m, 0.0) for m in result.value], "keyword")
+        if query.sort == "updated_at":
+            results.sort(key=lambda r: r.memory.updated_at, reverse=True)
+        return Success(results[: query.top_k])
 
     async def _semantic_search(
         self, query: SearchQuery, date_from=None, date_to=None
