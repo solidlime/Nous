@@ -26,8 +26,8 @@ description: "セッション開始時の必須ルーティン。セッション
 タグが取得できた場合、以下を実行してプロジェクトの状態を復元する（すべて `project:<slug>` タグで絞り込む）:
 
 1. `memory_search(query="", tags=["project:<slug>", "session_summary"], top_k=1, sort="updated_at")` — このプロジェクトの最新セッション要約（セッション終了フックが生成したサマリ。引継の代替）
-2. `memory_search(query="", tags=["project:<slug>", "task_state"], top_k=3, sort="updated_at")` — このプロジェクトの最新の作業状態
-3. `memory_search(query="", tags=["project:<slug>", "decision"], top_k=3, sort="updated_at")` — このプロジェクトの重要な決定
+2. `memory_search(query="", tags=["project:<slug>", "task_state"], top_k=5, sort="updated_at")` — このプロジェクトの最新の作業状態
+3. `memory_search(query="", tags=["project:<slug>", "decision"], top_k=5, sort="updated_at")` — このプロジェクトの重要な決定
 4. `memory_search(query="", tags=["project:<slug>", "goal", "active"], top_k=5, sort="updated_at")` — このプロジェクトのアクティブな目標（goal は memory で管理: `tags=["goal", "active", "project:<slug>"]` で作成する）
 
 （注: タグ検索は `query=""` で行うこと。非空クエリは content 全文一致が前提で、タグは検索結果の絞り込みにしか使われない。get_context の ACTIVE COMMITMENTS は persona 全体の goal を表示するため、プロジェクト固有の goal はここで取得する）
