@@ -1,40 +1,31 @@
-# HANDOFF — 2026-08-08 15:00
+# HANDOFF - 2026-08-14 11:48
 
-## 前回まで（2026-08-08 14:58 アーカイブ済み）
-- 画像生成パイプライン全面リライト完了（コミット済み）
+## 使用ツール
+opencode
 
-## 今回: Thinking トグル + effort 設定 ✅ 完了
+## 現在のタスクと進捗
+- ✅ **Phase A 実装完了・コミット済み**（ブランチ poc/skill-poc）
+  - **A1 セッション終了フック（R1+R2）**: commit `a3d20b8` — events.py の ingest で `session.stopped` 検知 → `_session_manager.get_or_create(persona, session_id, db=...)` → `window.get_active_path()` を turns 化 → `summarize_and_store(ctx, config, turns)`（tags=["session_summary"], importance=0.65）。fire-and-forget（create_task + add_done_callback で例外ログ）+ `contextlib.suppress` 非致命化。空ウィンドウスキップ。テスト: `tests/unit/test_session_stop_hook.py` 新規 5 passed、回帰 test_plugin_auth 8 passed
+  - **A2 memory_search sort="updated_at"（R4 読み取り手段）**: commit `37e90f4` — `SearchQuery.sort` 追加、`SearchEngine.search()` 末尾で updated_at 降順（post-filter 後・全モード共通）。MCP（tools.py / _tools_memory.py）/ definitions.py / docs/llm_usage_guide.md にパラメータ追記。テスト +2（test_search_engine.py 36 passed）。V9 満足: `memory_search(tags=["session_summary"], top_k=1, sort="updated_at")` が最新1件のみ
+  - SPEC に「実装結果（Phase A）」節を追記済み（.spec/SPEC-nous-unification.md 末尾）
+- ⏳ **Phase B 以降は未着手**（ユーザー確認必須）
 
-### 完了内容
-- チャット LLM の thinking on/off トグル + ヴァリアント（effort）スライダーを WebUI に実装
-- SPEC: `.spec/SPEC-thinking-toggle.md`（R1-R9 全完了）、TODO.md に完了記録済み
+## 検証結果
+- 全変更ファイル: py_compile OK / ruff 新規0 / 対象テスト 71 passed（フック5 + search 36 + event系30）
+- 既存テスト失敗 27 件は pre-existing（無関係・未対応のまま）
 
-### コミット（未プッシュ）
-| コミット | 内容 |
-|----------|------|
-| `1b366af` | feat(llm): reasoning_effort バックエンド実装 + テスト（10 files, +380） |
-| `b575067` | feat(ui): 思考モードトグル + effort スライダー（3 files） |
-| `19d5a8b` | docs: llm_usage_guide に Reasoning セクション追加 |
+## 次のセッションで最初にやること
+1. **Phase B（R3+R4+R7: dev persona 運用 + .agent/ 廃止 + サーバー側タグ強制）** — **ユーザー確認必須**（作業フロー変更）。設計書の「実装方針」節と PoC 発見3（サーバー側タグ強制: 案A 自動付与 / 案B タグ検証）を具体化
+2. Phase C（R5 get_context 改善: 重複除去 + サマリ優先表示 + デッドコード整理）— 独立
+3. Phase D（R6+R8+R9 スキル再編成: project-manage / make-project 改名・nous 付属化 / session-start に最新 session_summary 復元 `memory_search(tags=["session_summary"], top_k=1, sort="updated_at")` / 配置変更 / enabled_skills 登録）— A2 の sort が土台
 
-- **未プッシュ**: プッシュはユーザー確認後（AGENTS.md: git push 関連ルールのため要確認）
+## 注意点・ブロッカー
+- ブランチ: **poc/skill-poc**（Phase A 実装済み a3d20b8 / 37e90f4。main は evolution バグ修正 e7354bd1 のみ）。Phase B 以降はどこで進めるかユーザーに確認
+- Docker コンテナ nous（localhost:26262）稼働中。dev persona データは PoC 用
+- 開発用 OpenRouter キー: config_overrides.json 参照
+- docs/ 更新ルール: nous/ コード変更時は docs/ or README or [skip-docs] 明示（A1/A2 は docs/llm_usage_guide.md 更新済み + SPEC 追記済み）
+- MCP ツール変更時は docs/llm_usage_guide.md 更新必須（A2 で対応済み）
 
-### 実装サマリ
-- **バックエンド**: ProviderConfig に `reasoning_enabled`/`reasoning_effort`（validator 付き）、stream() に `reasoning_effort` 引数、OpenRouter=`reasoning:{effort}` / OpenAI=`reasoning_effort` / Anthropic=budget_tokens（low=2048〜max=16384）、inference.py で伝播
-- **UI**: 設定パネルに「思考モード（Reasoning）」チェックボックス + 4 段階スライダー（OFF 時 disabled）、chat-settings.js / chat-settings-image.js 対応
-
-### 検証結果
-- 新規テスト 17 passed（システム python3 / rtk pytest で実行）
-- 既存テスト 158 passed / 12 failed（**全て既存起因**。stash 比較で確認済み: TestChatConfigRepository ×4 実環境 config 干渉、test_chat_tab_buttons HTML 乖離、TestDynamicTemperatureInference ×2 PermissionError /data、TestTimestampInjection ×3 形式乖離、他）
-- ruff 対象ファイル All checks passed
-- ブラウザ実機確認（puppeteer/Tailscale IP）: トグル ON/OFF・スライダー disabled 制御・ラベル同期（low/high/max）・保存→API 反映（true/high 確認後デフォルトに復元済み）・リロード復元 すべて確認
-- Docker コンテナ nous 再起動済み（ライブマウントでコード反映済み）
-
-## 重要メモ
-- **テスト実行環境**: `.venv/bin/python` には openai/anthropic が無い。必ずシステム python3（rtk pytest）で実行
-- **ブラウザ確認**: リモートブラウザからは localhost 不可 → http://100.112.180.92:26262/ + headless + --no-sandbox + allowDangerous
-- **stash@{0}**: 前回からの残存は今回の作業で解消済み（stash 未使用のまま終了。作業ツリーはクリーン）
-
-## 次回候補
-- コミットのプッシュ（ユーザー確認待ち）
-- `.spec/` の既存 TODO（P2/P3 系タスク、TODO.md 参照）
-- 既存テスト 12 failed の是正（TestTimestampInjection 形式乖離、TestChatConfigRepository 実環境干渉対策、inference.py:131 debug_mode MagicMock 対策）— 積み残し候補
+## 参照
+- 設計書: `.spec/SPEC-nous-unification.md`（v5 + 実装結果 Phase A 節）
+- コミット: `a3d20b8`（A1 フック）/ `37e90f4`（A2 sort）/ `acaf9c14`（v5）/ `c9245284`+`e7354bd1`（evolution バグ修正）/ `2b0a283`（試作スキル）
