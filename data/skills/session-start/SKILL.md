@@ -41,4 +41,4 @@ description: "セッション開始時の必須ルーティン。セッション
 
 ## 制約
 - `memory_search` はタグ・キーワードで絞る（全件検索は禁止）
-- `.agent/memory/MEMORY.md` や `.agent/handoff/HANDOFF.md` は読まない（nous 記憶が代替する）
+- ツールが見つからない場合は`mcp-hub`経由を必ず確認
