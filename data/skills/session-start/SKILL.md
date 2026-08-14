@@ -6,6 +6,13 @@ description: "セッション開始時の必須ルーティン。セッション
 # session-start — セッション開始ルーティン
 最初のユーザー応答より前に、必ず以下の手順を実行すること。
 
+## ツール解決（環境差対応）
+- `get_context` / `memory_search` が直接利用可能なら、そのまま使う
+- 見つからない場合、MCP ハブ等の仲介経由で「nous」サーバーのツールを探して実行する
+  - mcp-hub 例: `mcp-hub_list_upstream_tools` → nous サーバーを特定 → `mcp-hub_execute_tool(server="nous", tool_name="get_context", arguments={})`
+  - 他の MCP クライアントでも同様に「nous」サーバーのツールを検索して実行すること
+- 実行手段が違うだけで、以降のステップの手順は変わらない
+
 ## ステップ1: 自身の状況復元
 `get_context` を呼び出し、自分の状態・アクティブなコミットメント・記憶概要を把握する。
 
@@ -41,4 +48,3 @@ description: "セッション開始時の必須ルーティン。セッション
 
 ## 制約
 - `memory_search` はタグ・キーワードで絞る（全件検索は禁止）
-- ツールが見つからない場合は`mcp-hub`経由を必ず確認
