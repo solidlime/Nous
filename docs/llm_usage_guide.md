@@ -16,7 +16,7 @@ Call these tools proactively — do not wait for the user to ask.
 | `memory_read(memory_key, ...)` | Read a memory by key or list recent |
 | `memory_update(memory_key, ...)` | Update existing memory |
 | `memory_delete(memory_key, ...)` | Delete (tombstone) a memory |
-| `memory_search(query, ...)` | Semantic / keyword / hybrid memory search |
+| `memory_search(query, ...)` | Semantic / keyword / hybrid memory search. `sort="updated_at"` で更新日時降順（最新優先） |
 | `memory_stats(top_n)` | Memory statistics and distributions |
 | `update_context(...)` | Update emotion, physical state, user info in real time |
 | `item_add / item_equip / item_search` | Manage physical inventory and equipment (3 tools) |
@@ -724,6 +724,8 @@ memory_create(content="...", importance=0.7, tags=["..."], emotion_type="joy")
 # Search memory
 memory_search(query="...", top_k=5)
 memory_search(query="...", date_range="先週", tags=["promise"])
+# 最新の session_summary を1件だけ復元する場合
+memory_search(query="", tags=["session_summary"], top_k=1, sort="updated_at")
 
 # Update context
 update_context(emotion="joy", emotion_intensity=0.8)

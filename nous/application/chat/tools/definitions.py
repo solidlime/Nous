@@ -78,6 +78,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                     "minimum": 0,
                     "maximum": 1.0,
                 },
+                "sort": {"type": "string", "description": "並び順: updated_at で更新日時降順（最新優先）"},
             },
             "required": ["query"],
         },

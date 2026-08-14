@@ -179,3 +179,21 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 - V4: 検証方法に「スキル経由 + サーバー側タグ強制の両経路で確認」を追加
 - Phase D: 新規スキルの `enabled_skills` 登録を必須手順に追加（発見3、config.json の enabled_skills 更新）
 - 制約: evolution バグ修正（e7354bd1）が main に反映済みのため、本設計の前提に含める
+
+---
+
+## 実装結果（Phase A、2026-08-14）
+
+### A1: セッション終了フック（R1+R2）— 完了
+- **実装**: `nous/api/http/routers/events.py` — ingest の publish 後に `raw_events` に `type == "session.stopped"` があれば fire-and-forget（`asyncio.create_task` + `add_done_callback` で例外ログ）で `_summarize_session_end` 起動。`_session_manager.get_or_create(persona, session_id, db=...)` → `window.get_active_path()` を turns 化 → `summarize_and_store(ctx, config, turns)`（`tags=["session_summary"]`, importance=0.65）。`contextlib.suppress(Exception)` で非致命化。空ウィンドウはスキップ
+- **検証**: `tests/unit/test_session_stop_hook.py` 新規 5 passed（サマリ生成/空スキップ/config 失敗 suppress/有無で起動判定）。回帰: test_plugin_auth 8 passed
+- 二重ガードは Phase A 最小実装（空リストスキップ + 類似度>0.85 依存）。重複観測時は「サマリ済み境界」を追加
+
+### A2: memory_search sort="updated_at"（R4 読み取り手段）— 完了
+- **実装**: `SearchQuery.sort` 追加（engine.py）→ `SearchEngine.search()` 末尾で `updated_at` 降順ソート（post-filter 後・全モード共通）。`_tool_memory_search` / `tools.py` / `definitions.py` に `sort` パラメータ追加。`docs/llm_usage_guide.md` に使用例追記
+- **検証**: `tests/unit/test_search_engine.py` +2（updated_at 降順 / sort=None で従来動作維持）。36 passed。V9 を満たす: `memory_search(tags=["session_summary"], top_k=1, sort="updated_at")` は最新1件のみ
+- 注意: hybrid は top_k で切った後にソートされる（top_k=1 + sort で「最新1件」は成立）。レスポンス JSON に updated_at は含まれない（従来仕様）
+
+### 次フェーズ
+- Phase B（R3+R4+R7）: ユーザー確認必須（dev persona 運用 + .agent/ 廃止 + サーバー側タグ強制）
+- Phase C（R5 get_context 改善）→ Phase D（スキル再編成 + enabled_skills 登録）

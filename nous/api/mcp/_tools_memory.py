@@ -315,8 +315,9 @@ async def _tool_memory_search(
     vector_weight: float = 1.0,
     keyword_weight: float = 0.5,
     kind: str | None = None,
+    sort: str | None = None,
 ) -> str:
-    """Search memories with hybrid retrieval."""
+    """Search memories with hybrid retrieval. sort: "updated_at" 指定で更新日時降順（最新優先）"""
     if top_k is not None and (top_k < 1 or top_k > 200):
         return {"success": False, "data": None, "result_summary": "top_k must be between 1 and 200"}
     top_k = min(top_k or 5, 200)
@@ -337,6 +338,7 @@ async def _tool_memory_search(
         vector_weight=vector_weight,
         keyword_weight=keyword_weight,
         kind=kind,
+        sort=sort,
     )
     ctx.search_engine.set_persona(persona)
     result = await ctx.search_engine.search(search_query)
