@@ -27,7 +27,7 @@
 | R1 | セッション終了フック | nous サーバーに `session.stopped` イベントハンドラを追加。終了時に未サマリ化メッセージからサマリを生成し `memory_create(tags=["session_summary"])`。詳細設計は「フック設計」節 |
 | R2 | サマリ生成の即時化 | セッションが短く evict 未発生でも、終了時に必ずサマリが生成される |
 | R3 | 開発知識の nous 化 | 開発教訓を専用 persona（`dev`）の記憶として記録。**プロジェクトタグ必須**（「記憶・検索設計」節）。会話ペルソナ（herta 等）への混入を防ぐ |
-| R4 | 作業引継の nous 化 | HANDOFF.md 相当は session_summary（+ source_context にブランチ・コミット情報）で代替。開始時は直近 session_summary を読む |
+| R4 | 作業引継の nous 化 | HANDOFF.md 相当は session_summary（+ source_context にブランチ・コミット情報）で代替。開始時は直近 session_summary を読む（**memory_search に `sort="updated_at"` オプションを追加し、`tags=["session_summary"], top_k=1` で最新1件を取得。案2採用**） |
 | R5 | get_context 改善 | (a) top_memories と recent の重複除去 (b) 直近 session_summary を優先表示 (c) `_apply_relationship_decay` のデッドコード整理 |
 | R6 | スキル再編成 | 下記「スキル再編成」表の通り。goal-coach → project-manage に全統合、make_project_skill → **make-project** に改名 |
 | R7 | .agent/ 運用廃止 | AGENTS.md の「MEMORY.md / HANDOFF.md 読込」ルールを削除し session-start の get_context に一本化。make-project が .agent/ を**生成しない**。既存ファイルはアーカイブ放置 |
@@ -115,15 +115,16 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 | V6 | .agent/ 非生成 | make-project で新プロジェクト構築 → `.agent/` と `.claude/commands/handoff.md` が生成されない。AGENTS.md に MEMORY.md/HANDOFF.md 読込ルールが含まれない |
 | V7 | 回帰 | 変更モジュールに依存するテストのみ個別実行（フルスイート禁止）。既存失敗は worktree 比較で切り分け |
 | V8 | lint/型 | ruff / py_compile PASS。UI 変更なし |
+| V9 | 引継復元 | `memory_search(tags=["session_summary"], top_k=1, sort="updated_at")` が最新1件のみ返る（古いサマリが混ざらない） |
 
 ## 実装方針（合意後のフェーズ分け案）
 
 各フェーズは独立領域 → 並列 #011 実行可能。実装開始前にユーザー承認を得る。
 
-- **Phase A: R1+R2（終了フック）** — nous サーバー側イベント処理 + テスト。単一領域。SessionSummarizer を再利用
+- **Phase A: R1+R2（終了フック）+ R4 読み取り手段** — nous サーバー側イベント処理 + **memory_search の `sort="updated_at"` オプション追加** + テスト。単一領域。SessionSummarizer を再利用
 - **Phase B: R3+R4+R7（一元化 + .agent/ 廃止）** — dev persona 運用 + プロジェクトタグ設計 + AGENTS.md ルール変更 + make-project の .agent/ 非生成化。ユーザー確認必須（作業フロー変更）
 - **Phase C: R5（get_context 改善）** — 独立。重複除去 + サマリ優先表示 + デッドコード整理
-- **Phase D: R6+R8+R9（スキル再編成）** — project-manage 作成（goal-coach から拡張）、make-project 改名・nous 付属化（SKILL.md 書き換え）、session-start の nous 付属化（プロジェクトタグ読取追加）、配置変更（.claude/skills/ + data/skills symlink）、旧スキル削除、登録更新（oh-my-opencode-slim.json 等）、**config.json の enabled_skills への新スキル登録（PoC 発見3: data/skills/ 配置のみでは LLM が存在を認識できない）**
+- **Phase D: R6+R8+R9（スキル再編成）** — project-manage 作成（goal-coach から拡張）、make-project 改名・nous 付属化（SKILL.md 書き換え）、session-start の nous 付属化（プロジェクトタグ読取 + **最新 session_summary 復元: `memory_search(tags=["session_summary"], top_k=1, sort="updated_at")`**）、配置変更（.claude/skills/ + data/skills symlink）、旧スキル削除、登録更新（oh-my-opencode-slim.json 等）、**config.json の enabled_skills への新スキル登録（PoC 発見3: data/skills/ 配置のみでは LLM が存在を認識できない）**
 - ドキュメント: MCP ツール変更時 `docs/llm_usage_guide.md`。本 SPEC に実装結果を追記
 
 ---
