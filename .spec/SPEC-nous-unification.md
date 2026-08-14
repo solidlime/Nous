@@ -241,7 +241,8 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 - **確定方針**: ソース = Nous リポジトリ `data/skills/`（git 追跡済み・nous アプリの skills_dir 参照先でもある）。配布 = `.chezmoiexternal.toml`（dotfiles repo）で GitHub `solidlime/Nous`（PUBLIC）から `~/.agents/skills/` へ archive 方式で展開（`include=["**/skills/<name>/**"]` + `stripComponents=4`、refreshPeriod=168h）。nous アプリ側の skills_dir 参照は**不変更**
 - **調査確定事項**（exp-3 / lib-1）: `git-repo` タイプはサブディレクトリ抽出不可（include 無視・unmanaged 扱い）→ archive 一択。ターゲットパスが既に chezmoi 管理下だと衝突エラー → 既存 `~/.agents/skills/session-start` は事前に `chezmoi forget` が必要。`.chezmoiignore` 未設定のため展開は通常どおり動作
 
-### D3: R9 参照更新 + enabled_skills 登録 — 未着手（配布後に実施）
-- `oh-my-opencode-slim.json` 両 preset（opencode-go / alibaba）: `make_project_skill` → `make-project`、`goal-coach` → `project-manage` に更新（chezmoi 管理ファイルなので source 側 `dot_config/opencode/` を変更 → `chezmoi apply`）
-- `~/.agents/AGENTS.md:93`: `make_project_skill` → `make-project`（source 側 `dot_agents/AGENTS.md`）
-- config.json の enabled_skills 登録（PoC 発見3: 配置のみでは LLM が認識できない）
+### D3: R9 参照更新 + enabled_skills 登録 — 完了
+- **R9 参照更新（chezmoi source 側で変更 → apply 反映）**: `dot_config/opencode/oh-my-opencode-slim.json` 両 preset（opencode-go / alibaba）の `make_project_skill` → `make-project`、`goal-coach` → `project-manage` に更新。`dot_agents/AGENTS.md:93` の `make_project_skill` → `make-project` に更新
+- **旧スキル削除**: `~/.agents/skills/` の旧実体（make_project_skill / goal-coach）を削除（chezmoi source からも削除、ターゲット実体も削除）。新3スキルのみが `~/.agents/skills/` に存在
+- **enabled_skills 登録は不要と判断**: 設計書 PoC 発見3 の「config.json の enabled_skills」は nous アプリ内の skills 一覧（`chat_settings.enabled_skills`、DB 管理）を指す。ユーザー指示「nous アプリは触る必要ない」（m0150）により、nous アプリ側のスキル登録は対象外。クライアント側（opencode）は `~/.agents/skills/` への配置 + preset skills リスト更新で認識される
+- **検証**: `chezmoi verify` OK。3スキルが `~/.agents/skills/` に展開されリポジトリの `data/skills/` と内容一致（diff MATCH）
