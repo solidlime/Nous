@@ -197,7 +197,7 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 ### 次フェーズ
 - Phase B（R3+R4+R7）: ✅ 完了（下記「実装結果（Phase B）」参照。v6 設計変更: dev persona 廃止・現在の persona に `project:<slug>` タグ付きで記録・タグ強制は形式検証のみ・AGENTS.md にプロジェクト識別節）
 - Phase C（R5 get_context 改善）: ✅ 完了（下記「実装結果（Phase C）」参照。R5(c) デッドコード整理は調査の結果不要と判明: prepare.py:80,84 で使用中）
-- Phase D（スキル再編成 + enabled_skills 登録）: 未着手
+- Phase D（スキル再編成 + enabled_skills 登録）: ✅ 完了（下記「実装結果（Phase D）」参照。配布方式はユーザー指示で chezmoi externals に変更・nous アプリは不変更）
 
 ---
 
@@ -225,3 +225,23 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
   - (a) `recent` から `top_memories` と `memory.key` が重複する要素を除外（会話継続目的の recent 優先ではなく重要度表示側を優先する設計判断 — top_memories は表示予算が文字数制限なので recent 側を削る）
 - **検証**: `tests/unit/test_tools_persona.py` +2（重複除外: 同一 key が出力に1回のみ / サマリソート: updated_at が新しい記憶が先頭。`_make_memory` に `updated_at` 引数追加）。`test_tools_persona` 5 passed + `test_tools_helpers` 8 passed + `test_mcp_context` 29 passed（全体）。py_compile OK / ruff エラー0
 - **備考**: get_by_tags の全件フェッチ非効率は `context_loader.py:239` にも同様の欠陥あり（minor、Phase D 対象外のため残置）。`_tools_persona.py` の Result 型アクセスに LSP 型エラーが既存で発生（ランタイム影響なし）
+
+---
+
+## 実装結果（Phase D、2026-08-14）
+
+### D1: 試作スキル3つの仕上げ（R6）— 完了
+- **project-manage**（84行）: goal-coach を統合 — 発動条件（直接・間接の目標言及）/ 発動禁止条件（無関係な話題・深刻な相談中・直近に目標の話をした）/ 会話の自然さルール（進捗確認・達成祝福 `goal_manage(achieve)`・励まし）/ やってはいけないこと（事務的口調の強制報告・突然の目標確認・1ターン複数目標）/ auto-memory との関係（`memory_create` → `goal_manage` の順序）
+- **make-project**（289行）: グローバル `make_project_skill` の本質を統合 — README.md / AGENTS.md（プロジェクト概要 + `## プロジェクト識別` 節 + nous 記憶運用節 + SDD + 品質ゲート）/ `.spec/` 4ファイル / CLAUDE.md / GEMINI.md / .gitignore / git init+push のテンプレートを内包。品質ゲート節（トリアージ3段階・パイプライン・TEST 検証ループ・GATE 条件式）は原文維持。「Memory & Handoff Instructions」節は排除（nous 記憶運用の案内に置換）
+- **session-start**（36行）: ステップ3先頭に `memory_search(query="", tags=["session_summary"], top_k=1, sort="updated_at")` を追加（引継を session_summary で代替）。復元サマリを最初の応答「前回の状態: <要約>」に含める旨を明記
+- frontmatter は `name` = ディレクトリ名で整形式。コミット ea9f1b3
+
+### D2: 配布方式の設計変更 — chezmoi externals（ユーザー指示 2026-08-14）
+- 旧案（R8: `.claude/skills/` 正配置 + symlink 一本化）を**廃止**。ユーザー指示: 「スキルはグローバルにリンクを貼るだけでは他の環境（nous のディレクトリ自体がない）で追従できない。chezmoi の externals 機能を使うように」（m0129）。「nous アプリは触る必要ない」（m0150）。「nous のクライアントに対してスキルを配布するだけでいい」（m0152）
+- **確定方針**: ソース = Nous リポジトリ `data/skills/`（git 追跡済み・nous アプリの skills_dir 参照先でもある）。配布 = `.chezmoiexternal.toml`（dotfiles repo）で GitHub `solidlime/Nous`（PUBLIC）から `~/.agents/skills/` へ archive 方式で展開（`include=["**/skills/<name>/**"]` + `stripComponents=4`、refreshPeriod=168h）。nous アプリ側の skills_dir 参照は**不変更**
+- **調査確定事項**（exp-3 / lib-1）: `git-repo` タイプはサブディレクトリ抽出不可（include 無視・unmanaged 扱い）→ archive 一択。ターゲットパスが既に chezmoi 管理下だと衝突エラー → 既存 `~/.agents/skills/session-start` は事前に `chezmoi forget` が必要。`.chezmoiignore` 未設定のため展開は通常どおり動作
+
+### D3: R9 参照更新 + enabled_skills 登録 — 未着手（配布後に実施）
+- `oh-my-opencode-slim.json` 両 preset（opencode-go / alibaba）: `make_project_skill` → `make-project`、`goal-coach` → `project-manage` に更新（chezmoi 管理ファイルなので source 側 `dot_config/opencode/` を変更 → `chezmoi apply`）
+- `~/.agents/AGENTS.md:93`: `make_project_skill` → `make-project`（source 側 `dot_agents/AGENTS.md`）
+- config.json の enabled_skills 登録（PoC 発見3: 配置のみでは LLM が認識できない）
