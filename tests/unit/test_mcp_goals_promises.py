@@ -123,6 +123,46 @@ class TestGoalManage:
         )
 
     @pytest.mark.asyncio
+    async def test_create_goal_with_extra_tags(self, registered_tools):
+        """Creating a goal with tags should merge them into the memory tags."""
+        tools, ctx, _ = registered_tools
+        ctx.memory_service.create_memory.return_value = Success(
+            _mem("goal_004", tags=["goal", "active", "project:nous"])
+        )
+        goal_manage = tools["goal_manage"]
+        result = await goal_manage(
+            operation="create", content="nous project goal", scope="self", tags=["project:nous"]
+        )
+
+        assert "Goal created: goal_004" in result
+        ctx.memory_service.create_memory.assert_called_once_with(
+            content="nous project goal",
+            importance=0.75,
+            tags=["goal", "active", "project:nous"],
+            emotion="neutral",
+        )
+
+    @pytest.mark.asyncio
+    async def test_create_goal_with_extra_tags_interpersonal(self, registered_tools):
+        """Interpersonal + extra tags should both be merged, in order."""
+        tools, ctx, _ = registered_tools
+        ctx.memory_service.create_memory.return_value = Success(
+            _mem("goal_005", tags=["goal", "active", "interpersonal", "project:nous"])
+        )
+        goal_manage = tools["goal_manage"]
+        result = await goal_manage(
+            operation="create", content="help with nous", scope="interpersonal", tags=["project:nous"]
+        )
+
+        assert "Goal created: goal_005" in result
+        ctx.memory_service.create_memory.assert_called_once_with(
+            content="help with nous",
+            importance=0.75,
+            tags=["goal", "active", "interpersonal", "project:nous"],
+            emotion="neutral",
+        )
+
+    @pytest.mark.asyncio
     async def test_create_goal_service_failure(self, registered_tools):
         """Service failure on create should return error message."""
         tools, ctx, _ = registered_tools
@@ -334,6 +374,46 @@ class TestGoalManage:
         result = await goal_manage(operation="list", scope="self")
 
         assert "(none)" in result
+
+    @pytest.mark.asyncio
+    async def test_list_goals_with_extra_tags(self, registered_tools):
+        """Listing goals with tags should pass them to get_by_tags for filtering."""
+        tools, ctx, _ = registered_tools
+        ctx.memory_service.get_by_tags.return_value = Success(
+            [_mem("g5", content="nous goal", tags=["goal", "active", "project:nous"])]
+        )
+        goal_manage = tools["goal_manage"]
+        result = await goal_manage(operation="list", scope="self", tags=["project:nous"])
+
+        assert "Active goals" in result
+        assert "nous goal" in result
+        ctx.memory_service.get_by_tags.assert_called_once_with(["goal", "active", "project:nous"])
+
+    @pytest.mark.asyncio
+    async def test_list_goals_with_extra_tags_interpersonal(self, registered_tools):
+        """Listing interpersonal goals with tags should merge both."""
+        tools, ctx, _ = registered_tools
+        ctx.memory_service.get_by_tags.return_value = Success([])
+        goal_manage = tools["goal_manage"]
+        result = await goal_manage(operation="list", scope="interpersonal", tags=["project:nous"])
+
+        assert "Active goals" in result
+        ctx.memory_service.get_by_tags.assert_called_once_with(
+            ["goal", "active", "interpersonal", "project:nous"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_list_goals_without_tags_unchanged(self, registered_tools):
+        """Omitting tags should keep legacy behavior (all active goals)."""
+        tools, ctx, _ = registered_tools
+        ctx.memory_service.get_by_tags.return_value = Success(
+            [_mem("g6", content="plain goal", tags=["goal", "active"])]
+        )
+        goal_manage = tools["goal_manage"]
+        result = await goal_manage(operation="list", scope="self", tags=None)
+
+        assert "plain goal" in result
+        ctx.memory_service.get_by_tags.assert_called_once_with(["goal", "active"])
 
     # -- Edge cases -------------------------------------------------------------
 

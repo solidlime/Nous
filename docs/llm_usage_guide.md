@@ -20,7 +20,7 @@ Call these tools proactively — do not wait for the user to ask.
 | `memory_stats(top_n)` | Memory statistics and distributions |
 | `update_context(...)` | Update emotion, physical state, user info in real time |
 | `item_add / item_equip / item_search` | Manage physical inventory and equipment (3 tools) |
-| `goal_manage(operation, ...)` | Create / list / achieve / cancel goals |
+| `goal_manage(operation, ..., tags)` | Create / list / achieve / cancel goals（tags で追加タグ付与・絞り込み） |
 | `search(query, ...)` | Web search via SearXNG |
 | `read_pdf(path)` | Parse PDF files |
 
@@ -231,6 +231,11 @@ They appear in the **ACTIVE COMMITMENTS** section of `get_context()` output.
 > **⚠️ Removed**: `update_context(append_goals/append_promises/remove_goals/remove_promises)` is no longer supported.
 > Use `memory(operation="create/update", tags=[...])` directly. See lifecycle example below.
 > Also do **not** use `context_tags=["promise"]` / `context_tags=["goal"]` — these have no effect.
+
+> **Note**: `goal_manage` は状態遷移（create/achieve/cancel）とタグ付与のために使える。
+> `tags` パラメータで追加タグを付与・絞り込みできる（例: `goal_manage(operation="create", content="...", tags=["project:nous"])`）。
+> achieve/cancel 時に importance を 0.9 に引き上げる副作用があるため、プロジェクト別の goal 検索は
+> `memory_search(query="", tags=["project:<slug>", "goal", "active"])` を推奨。
 
 ### Tag Convention / タグ規約
 

@@ -326,12 +326,14 @@ def register_tools(mcp: FastMCP) -> None:
         importance: float = 0.75,
         scope: str = "self",
         memory_key: str | None = None,
+        tags: list[str] | None = None,
     ) -> str:
         """Manage goals and interpersonal commitments.
         operation: create/list/achieve/cancel.
-        create → requires: content, scope (self/interpersonal), optional: importance.
-        list → requires: scope.
+        create → requires: content, scope (self/interpersonal), optional: importance, tags.
+        list → requires: scope. optional: tags.
         achieve/cancel → requires: memory_key. content: optional (not needed when memory_key provided).
+        tags: 追加タグ（例: project:nous）。create 時は goal/active に加えて付与、list 時は絞り込みに使用。
         Goals stored as memories with tags=["goal","active/achieved/cancelled"]."""
         p = _resolve_persona()
         r = await _tool_goal_manage(
@@ -342,6 +344,7 @@ def register_tools(mcp: FastMCP) -> None:
             importance=importance,
             scope=scope,
             memory_key=memory_key,
+            tags=tags,
         )
         if r.get("ok"):
             if "key" in r:

@@ -22,10 +22,12 @@ async def _tool_goal_manage(
     importance: float = 0.75,
     scope: str = "self",
     memory_key: str | None = None,
+    tags: list[str] | None = None,
 ) -> dict:
     if operation == "list":
         base_tags = ["goal", "active"]
         search_tags = base_tags + ["interpersonal"] if scope == "interpersonal" else base_tags
+        search_tags = search_tags + (tags or [])
         tag_result = ctx.memory_service.get_by_tags(search_tags)
         if not tag_result.is_ok:
             await ctx.event_bus.publish(
@@ -58,7 +60,7 @@ async def _tool_goal_manage(
             {
                 "persona": persona,
                 "tool_name": "goal_manage",
-                "params_summary": f"operation=list, scope={scope}",
+                "params_summary": f"operation=list, scope={scope}, tags={tags}",
                 "result_summary": f"Listed {len(memories)} goals",
                 "success": True,
             },
@@ -69,6 +71,7 @@ async def _tool_goal_manage(
         create_tags = ["goal", "active"]
         if scope == "interpersonal":
             create_tags.append("interpersonal")
+        create_tags += tags or []
         result = await ctx.memory_service.create_memory(
             content=content,
             importance=importance,
@@ -81,7 +84,7 @@ async def _tool_goal_manage(
                 {
                     "persona": persona,
                     "tool_name": "goal_manage",
-                    "params_summary": f"operation=create, scope={scope}, content={content[:50]}",
+                    "params_summary": f"operation=create, scope={scope}, tags={tags}, content={content[:50]}",
                     "result_summary": f"Goal created: {result.value.key}",
                     "success": True,
                 },
@@ -92,7 +95,7 @@ async def _tool_goal_manage(
             {
                 "persona": persona,
                 "tool_name": "goal_manage",
-                "params_summary": f"operation=create, scope={scope}, content={content[:50]}",
+                "params_summary": f"operation=create, scope={scope}, tags={tags}, content={content[:50]}",
                 "result_summary": str(result.error),
                 "success": False,
             },
