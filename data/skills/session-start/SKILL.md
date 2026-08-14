@@ -17,12 +17,12 @@ description: "セッション開始時の必須ルーティン。ペルソナ状
 - 節が無ければ: スキップ（プロジェクト外 or 旧形式）
 
 ## ステップ3: プロジェクト記憶の復元
-タグが取得できた場合、以下を実行してプロジェクトの状態を復元する:
+タグが取得できた場合、以下を実行してプロジェクトの状態を復元する（すべて `project:<slug>` タグで絞り込む）:
 
-1. `memory_search(query="", tags=["session_summary"], top_k=1, sort="updated_at")` — 最新のセッション要約（セッション終了フックが生成したサマリ。引継の代替）
-2. `memory_search(query="直近の作業状態", tags=["project:<slug>", "task_state"], top_k=3)` — 最新の作業状態
-3. `memory_search(query="決定事項", tags=["project:<slug>", "decision"], top_k=3)` — 重要な決定
-4. `goal_manage(operation="list", scope="self")` — アクティブな目標
+1. `memory_search(query="", tags=["project:<slug>", "session_summary"], top_k=1, sort="updated_at")` — このプロジェクトの最新セッション要約（セッション終了フックが生成したサマリ。引継の代替）
+2. `memory_search(query="直近の作業状態", tags=["project:<slug>", "task_state"], top_k=3)` — このプロジェクトの最新の作業状態
+3. `memory_search(query="決定事項", tags=["project:<slug>", "decision"], top_k=3)` — このプロジェクトの重要な決定
+4. `memory_search(query="", tags=["project:<slug>", "goal", "active"], top_k=5)` — このプロジェクトのアクティブな目標（`goal_manage` はタグを指定できないため、プロジェクト固有の目標は memory_search で取得する）
 
 復元した内容（直近サマリを含む）を要約し、ユーザーへの最初の応答に含める:
 「前回の状態: <要約>。続きは <次のアクション> から」
