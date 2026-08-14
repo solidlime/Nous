@@ -36,12 +36,14 @@ AGENTS.md の自動生成とプロジェクトタグ（`project:<slug>`）の自
 判定は LLM がファイル一覧を見て行う。機械的な条件式・ルールファイルは持たない。
 
 ### F2: 確認フロー（常時）
-- 検出 → 「AGENTS.md を生成して `project:<slug>` タグを付けますか？」と提案 → 承認で生成
+- AGENTS.md なし → 「AGENTS.md を生成して `project:<slug>` タグを付けますか？」と提案 → 承認で生成
+- AGENTS.md あり → 「`project:<slug>` タグを付けますか？」と提案（タグ付けのみ。AGENTS.md は触らない）
 - 拒否 → 何も生成せず通常の会話を継続
 - 不明 → 質問してから判断（質問1つのみで絞り込む）
 
 ### F3: 既存 AGENTS.md 保護
 - 既に AGENTS.md が存在する → 生成しない（上書き禁止）
+- 既存 AGENTS.md がある場合でも**タグ付けのみは提案する**。slug は AGENTS.md の `## プロジェクト識別` 節から読み取る（節がなければユーザーに確認）
 
 ### F4: タグ付け
 - 生成時、既存フローどおり `memory_create(tags=["project:<slug>", "project_overview"], importance=0.8, kind="semantic")`
