@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -81,6 +82,11 @@ class MemoryWriteService:
         for tag in tags:
             if len(str(tag)) > 50:
                 return MemoryValidationError(f"Tag too long: '{str(tag)[:20]}...' (max 50 chars)")
+            tag_str = str(tag)
+            if tag_str.startswith("project:") and not re.fullmatch(r"[a-z0-9][a-z0-9-]*", tag_str[len("project:"):]):
+                return MemoryValidationError(
+                    f"Invalid project tag: '{tag_str}' (expected 'project:<slug>' with slug matching [a-z0-9][a-z0-9-]*)"
+                )
         return None
 
     def _build_memory_entity(

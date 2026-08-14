@@ -16,6 +16,7 @@ def _make_memory(
     content: str = "test content",
     tags: list[str] | None = None,
     created_at: datetime | None = None,
+    updated_at: datetime | None = None,
 ) -> Memory:
     ts = created_at or datetime(2026, 7, 10, 12, 0)
     return Memory(
@@ -23,7 +24,7 @@ def _make_memory(
         content=content,
         tags=tags or [],
         created_at=ts,
-        updated_at=ts,
+        updated_at=updated_at or ts,
     )
 
 
@@ -121,3 +122,76 @@ async def test_get_context_both_one_shot_present(mock_ctx):
     assert "元気" in result["result"]
     assert "🧠 精神状態" in result["result"]
     assert "集中" in result["result"]
+
+
+@pytest.mark.asyncio
+async def test_get_context_dedup_recent_vs_top_memories(mock_ctx):
+    """top_memories と recent で同一 key の記憶は recent 側から除外され、重複表示されない"""
+    from nous.api.mcp._tools_persona import _tool_get_context
+    from nous.domain.persona.entities import PersonaState
+
+    state = PersonaState(persona="test_persona")
+    shared = _make_memory("shared_key", content="SHARED_MEMORY_CONTENT", tags=["episodic"])
+    mock_ctx.persona_service.get_context.return_value = Success(state)
+    mock_ctx.memory_service.get_top_by_importance.return_value = Success([shared])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
+    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    mock_ctx.persona_service.get_emotion_history.return_value = Success([])
+    mock_ctx.persona_service.get_body_state_history.return_value = Success([])
+    mock_ctx.memory_service.get_recent.return_value = Success([shared])
+    mock_ctx.equipment_service.get_equipment.return_value = Success({})
+    mock_ctx.persona_service.record_conversation_time.return_value = Success(None)
+
+    result = await _tool_get_context(mock_ctx, "test_persona")
+
+    # ESSENTIAL STORY には出るが Recent Memories では除外され、本文に1回だけ現れる
+    assert result["ok"] is True
+    assert "SHARED_MEMORY_CONTENT" in result["result"]
+    assert result["result"].count("SHARED_MEMORY_CONTENT") == 1
+
+
+@pytest.mark.asyncio
+async def test_get_context_summaries_sorted_by_updated_at(mock_ctx):
+    """session_summary は updated_at 降順でソートされ、最新のサマリが先に表示される"""
+    from nous.api.mcp._tools_persona import _tool_get_context
+    from nous.domain.persona.entities import PersonaState
+
+    state = PersonaState(persona="test_persona")
+    # 古い updated_at だが新しい created_at を持つ記憶（ソートが created_at でないことを検証）
+    old = _make_memory(
+        "sum_old",
+        content="OLD_SUMMARY_TEXT",
+        tags=["session_summary"],
+        created_at=datetime(2026, 8, 10),
+        updated_at=datetime(2026, 7, 1),
+    )
+    new = _make_memory(
+        "sum_new",
+        content="NEW_SUMMARY_TEXT",
+        tags=["session_summary"],
+        created_at=datetime(2026, 7, 1),
+        updated_at=datetime(2026, 8, 10),
+    )
+    mock_ctx.persona_service.get_context.return_value = Success(state)
+
+    def get_by_tags_side_effect(tags, include_consumed=False):
+        if tags == ["session_summary"]:
+            return Success([old, new])  # 並び順は保証されない想定（古い順で返す）
+        return Success([])
+
+    mock_ctx.memory_service.get_by_tags.side_effect = get_by_tags_side_effect
+    mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
+    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    mock_ctx.persona_service.get_emotion_history.return_value = Success([])
+    mock_ctx.persona_service.get_body_state_history.return_value = Success([])
+    mock_ctx.memory_service.get_recent.return_value = Success([])
+    mock_ctx.equipment_service.get_equipment.return_value = Success({})
+    mock_ctx.persona_service.record_conversation_time.return_value = Success(None)
+
+    result = await _tool_get_context(mock_ctx, "test_persona")
+
+    assert result["ok"] is True
+    assert "📝 NEW_SUMMARY_TEXT" in result["result"]
+    assert "📝 OLD_SUMMARY_TEXT" in result["result"]
+    # updated_at が新しい NEW が先に表示される
+    assert result["result"].index("NEW_SUMMARY_TEXT") < result["result"].index("OLD_SUMMARY_TEXT")

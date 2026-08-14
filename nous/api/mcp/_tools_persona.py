@@ -65,11 +65,19 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> dict:
     # Session summaries — conversation continuity
     ss_result = ctx.memory_service.get_by_tags(["session_summary"])
     session_summaries = ss_result.value if ss_result.is_ok else []
+    # 最新のサマリを優先表示（並び順が保証されないため updated_at 降順でソート）
+    session_summaries = sorted(
+        session_summaries,
+        key=lambda m: m.updated_at or m.created_at or get_now(),
+        reverse=True,
+    )
     equip_result = ctx.equipment_service.get_equipment()
     equipment = equip_result.value if equip_result.is_ok else {}
     # Recent memories (last 5) for conversation continuity across sessions
     recent_result = ctx.memory_service.get_recent(5)
     recent = recent_result.value if recent_result.is_ok else []
+    # top_memories と重複する recent は除外（重要度表示側を優先）
+    recent = [m for m in recent if not any(m.key == t.key for t in top_memories)]
     time_since = ""
     if state.last_conversation_time:
         time_since = relative_time_str(state.last_conversation_time)

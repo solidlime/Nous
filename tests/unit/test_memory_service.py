@@ -548,6 +548,27 @@ class TestTagValidation:
         result = service.update_memory(created.key, tags=[long_tag])
         assert not result.is_ok
 
+    async def test_create_project_tag_valid_slug_ok(self, service):
+        result = await service.create_memory(content="proj tag", tags=["project:nous", "project:my-app"])
+        assert result.is_ok
+
+    async def test_create_project_tag_empty_slug_fails(self, service):
+        result = await service.create_memory(content="proj tag", tags=["project:"])
+        assert not result.is_ok
+
+    async def test_create_project_tag_invalid_slug_fails(self, service):
+        result = await service.create_memory(content="proj tag", tags=["project:Weird_Slug"])
+        assert not result.is_ok
+
+    async def test_create_project_tag_with_space_fails(self, service):
+        result = await service.create_memory(content="proj tag", tags=["project:weird slug"])
+        assert not result.is_ok
+
+    async def test_create_plain_project_tag_ok(self, service):
+        """'project' 単体（プレフィックス無し）は検証対象外。"""
+        result = await service.create_memory(content="proj tag", tags=["project"])
+        assert result.is_ok
+
 
 class TestMemoryEnrichment:
     """Test that create_memory correctly interacts with the MemoryEnricher."""

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -38,6 +39,38 @@ _ALL_EVENT_TYPES = frozenset(
         SESSION_ROLLBACK,
     }
 )
+
+
+async def _summarize_session_end(ctx, persona: str, session_id: str) -> None:
+    """session.stopped 受信時の終了サマリ生成（R1/R2）。fire-and-forget で実行される。
+
+    ウィンドウ内（evict されていない未サマリ分）を SessionSummarizer で要約し、
+    memory_create(tags=["session_summary"]) に保存する。失敗は非致命（suppress）。
+    """
+    # 循環 import 回避のため関数内 import（chat_stream.py:89 と同パターン）
+    from nous.application.chat.service import _session_manager
+    from nous.application.chat.summarizer import summarize_and_store
+    from nous.config.settings import get_settings
+    from nous.domain.chat_config import ChatConfigFileRepository
+
+    with contextlib.suppress(Exception):
+        db = ctx.connection.get_memory_db()
+        window = _session_manager.get_or_create(persona, session_id, db=db)
+        turns = [{"role": n["role"], "content": n["content"]} for n in window.get_active_path()]
+        if not turns:
+            logger.debug("session stop hook: empty window, skip (persona=%s session=%s)", persona, session_id)
+            return
+        config = ChatConfigFileRepository(get_settings().data_root).get(persona)
+        await summarize_and_store(ctx, config, turns)
+
+
+def _on_session_summary_done(task: asyncio.Task) -> None:
+    """バックグラウンドタスクの例外をログに残す（非致命）。"""
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.warning("session stop hook task failed: %s", exc)
 
 
 def register_events_routes(mcp) -> None:
@@ -261,5 +294,11 @@ def register_events_routes(mcp) -> None:
         except Exception:
             logger.exception("Failed to publish events.ingested event for persona '%s'", persona)
 
-        # 8. Return success response
+        # 8. Session stop hook（R1/R2）: session.stopped 受信時のみ
+        #    fire-and-forget で終了サマリを生成（evict 未発生の短いセッション対策）
+        if any(isinstance(ev, dict) and ev.get("type") == "session.stopped" for ev in raw_events):
+            task = asyncio.create_task(_summarize_session_end(ctx, persona, session_id))
+            task.add_done_callback(_on_session_summary_done)
+
+        # 9. Return success response
         return JSONResponse({"status": "ok", "count": inserted, "skipped": skipped})

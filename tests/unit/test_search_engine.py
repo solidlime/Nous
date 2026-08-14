@@ -26,13 +26,14 @@ def _mem(
     importance: float = 0.5,
     emotion: str = "neutral",
     created_at: datetime | None = None,
+    updated_at: datetime | None = None,
 ) -> Memory:
     now = datetime.now(UTC)
     return Memory(
         key=key,
         content=content,
         created_at=created_at or now,
-        updated_at=now,
+        updated_at=updated_at or now,
         importance=importance,
         emotion=emotion,
     )
@@ -358,6 +359,46 @@ class TestSearchEngineFilterByEmotion:
         # "joy" and "happy" normalize to the same canonical value
         out = SearchEngine._filter_by_emotion(results, "joy")
         assert len(out) == 1
+
+
+# ---------------------------------------------------------------------------
+# SearchEngine sort by updated_at (V9)
+# ---------------------------------------------------------------------------
+
+
+class TestSearchEngineSortByUpdatedAt:
+    """V9: sort="updated_at" で更新日時降順（最新優先）ソート。"""
+
+    @pytest.mark.asyncio
+    async def test_sort_updated_at_descending(self):
+        """updated_at 降順（最新が先頭）になること。"""
+        base = datetime.now(UTC)
+        kw = _make_keyword_strategy(
+            [
+                (_mem("old", created_at=base - timedelta(days=10), updated_at=base - timedelta(days=10)), 0.9),
+                (_mem("mid", created_at=base - timedelta(days=5), updated_at=base - timedelta(days=5)), 0.5),
+                (_mem("new", created_at=base, updated_at=base), 0.1),
+            ]
+        )
+        engine = SearchEngine(keyword_search=kw)
+        result = await engine.search(SearchQuery(text="", mode="hybrid", top_k=10, sort="updated_at"))
+        assert result.is_ok
+        assert [r.memory.key for r in result.value] == ["new", "mid", "old"]
+
+    @pytest.mark.asyncio
+    async def test_sort_none_keeps_score_order(self):
+        """sort=None（従来動作）ではスコア降順のまま。"""
+        base = datetime.now(UTC)
+        kw = _make_keyword_strategy(
+            [
+                (_mem("new", created_at=base, updated_at=base), 0.1),
+                (_mem("old", created_at=base - timedelta(days=10), updated_at=base - timedelta(days=10)), 0.9),
+            ]
+        )
+        engine = SearchEngine(keyword_search=kw)
+        result = await engine.search(SearchQuery(text="", mode="hybrid", top_k=10))
+        assert result.is_ok
+        assert [r.memory.key for r in result.value] == ["old", "new"]  # score order preserved
 
 
 # ---------------------------------------------------------------------------

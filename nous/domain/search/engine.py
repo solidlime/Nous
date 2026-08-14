@@ -44,6 +44,7 @@ class SearchQuery:
     similarity_threshold: float = 0.85  # cosine similarity flag threshold
     valid_at: datetime | None = None  # Only return memories valid at this timestamp
     kind: str | None = None  # episodic / semantic / procedural / prospective
+    sort: str | None = None  # "updated_at" 指定時は updated_at 降順
 
 
 @dataclass
@@ -109,6 +110,8 @@ class SearchEngine:
         filtered = self._filter_by_kind(filtered, query.kind)
         if query.valid_at is not None:
             filtered = self._filter_by_valid_at(filtered, query.valid_at)
+        if query.sort == "updated_at":
+            filtered.sort(key=lambda r: r.memory.updated_at, reverse=True)
         return Success(filtered)
 
     @staticmethod
