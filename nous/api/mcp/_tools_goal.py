@@ -53,7 +53,7 @@ async def _tool_goal_manage(
                 content_str = getattr(m, "content", "?")[:80]
                 imp = getattr(m, "importance", 0.5) or 0.5
                 label = importance_to_label(imp)
-                lines.append(f"  - [{label}] {content_str} (imp={imp:.2f})")
+                lines.append(f"  - [{label}] {content_str} (imp={imp:.2f}) [key={m.key}]")
         result_text = "\n".join(lines)
         await ctx.event_bus.publish(
             "tool.called",
@@ -106,6 +106,7 @@ async def _tool_goal_manage(
         search_tags = ["goal", "active"]
         if scope == "interpersonal":
             search_tags.append("interpersonal")
+        search_tags = search_tags + (tags or [])
         if memory_key and memory_key.strip():
             get_result = ctx.memory_service.get_memory(memory_key)
             if not get_result.is_ok:

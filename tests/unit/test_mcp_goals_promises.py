@@ -312,6 +312,44 @@ class TestGoalManage:
         assert "Goal cancelled" in result
         assert "learn python" in result
 
+    @pytest.mark.asyncio
+    async def test_cancel_goal_by_content_with_tags(self, registered_tools):
+        """Cancelling a goal by content with tags should pass tags to get_by_tags for filtering."""
+        tools, ctx, _ = registered_tools
+        m = _mem("goal_001", content="nous goal", tags=["goal", "active", "project:nous"])
+        ctx.memory_service.get_by_tags.return_value = Success([m])
+        ctx.memory_service.update_memory.return_value = Success(
+            _mem("goal_001", tags=["goal", "cancelled", "archived"])
+        )
+        goal_manage = tools["goal_manage"]
+        result = await goal_manage(operation="cancel", content="nous goal", scope="self", tags=["project:nous"])
+
+        assert "Goal cancelled" in result
+        assert "nous goal" in result
+        ctx.memory_service.get_by_tags.assert_called_once_with(["goal", "active", "project:nous"])
+        ctx.memory_service.update_memory.assert_called_once_with(
+            "goal_001", importance=0.9, tags=["goal", "cancelled", "archived"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_cancel_goal_by_content_with_tags_interpersonal(self, registered_tools):
+        """Cancelling an interpersonal goal with tags should merge both."""
+        tools, ctx, _ = registered_tools
+        m = _mem("goal_002", content="help with nous", tags=["goal", "active", "interpersonal", "project:nous"])
+        ctx.memory_service.get_by_tags.return_value = Success([m])
+        ctx.memory_service.update_memory.return_value = Success(
+            _mem("goal_002", tags=["goal", "cancelled", "archived"])
+        )
+        goal_manage = tools["goal_manage"]
+        result = await goal_manage(
+            operation="cancel", content="help with nous", scope="interpersonal", tags=["project:nous"]
+        )
+
+        assert "Goal cancelled" in result
+        ctx.memory_service.get_by_tags.assert_called_once_with(
+            ["goal", "active", "interpersonal", "project:nous"]
+        )
+
     # -- List -------------------------------------------------------------------
 
     @pytest.mark.asyncio
@@ -326,6 +364,19 @@ class TestGoalManage:
         assert "goal 1" in result
         assert "[normal]" in result
         ctx.memory_service.get_by_tags.assert_called_once_with(["goal", "active"])
+
+    @pytest.mark.asyncio
+    async def test_list_goals_shows_key(self, registered_tools):
+        """Goal list output should include memory_key for direct achieve/cancel."""
+        tools, ctx, _ = registered_tools
+        ctx.memory_service.get_by_tags.return_value = Success(
+            [_mem("g1", content="goal 1", tags=["goal", "active"])]
+        )
+        goal_manage = tools["goal_manage"]
+        result = await goal_manage(operation="list", scope="self")
+
+        assert "Active goals" in result
+        assert "[key=g1]" in result
 
     @pytest.mark.asyncio
     async def test_list_goals_shows_importance_label(self, registered_tools):

@@ -137,7 +137,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="goal_manage",
-        description="目標・約束を管理する（作成・一覧・達成・取消）。ユーザーが目標を設定・確認・完了・破棄する時に使え。一時的な雑談や軽い意向には使うな。operation（create/list/achieve/cancel）と scope（self/interpersonal）が必須。create 時は content 必須、achieve/cancel 時は memory_key で対象を指定できる。",
+        description="目標・約束を管理する（作成・一覧・達成・取消）。ユーザーが目標を設定・確認・完了・破棄する時に使え。一時的な雑談や軽い意向には使うな。operation（create/list/achieve/cancel）と scope（self/interpersonal）が必須。create 時は content 必須、achieve/cancel 時は memory_key で対象を指定できる。tags は create 時は goal/active に加えて付与、list/achieve/cancel 時は絞り込みに使用する。",
         input_schema={
             "type": "object",
             "properties": {
@@ -157,6 +157,11 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 "memory_key": {
                     "type": "string",
                     "description": "memory_key（achieve/cancel時に直接指定可能）",
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "追加タグ（例: project:nous）。create 時は goal/active に加えて付与、list/achieve/cancel 時は絞り込みに使用",
                 },
             },
             "required": ["operation", "scope"],
