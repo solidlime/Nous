@@ -195,5 +195,21 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 - 注意: hybrid は top_k で切った後にソートされる（top_k=1 + sort で「最新1件」は成立）。レスポンス JSON に updated_at は含まれない（従来仕様）
 
 ### 次フェーズ
-- Phase B（R3+R4+R7）: ユーザー確認必須（現在の persona へのプロジェクトタグ運用 + .agent/ 廃止 + サーバー側タグ強制）
+- Phase B（R3+R4+R7）: ✅ 完了（下記「実装結果（Phase B）」参照。v6 設計変更: dev persona 廃止・現在の persona に `project:<slug>` タグ付きで記録・タグ強制は形式検証のみ・AGENTS.md にプロジェクト識別節）
 - Phase C（R5 get_context 改善）→ Phase D（スキル再編成 + enabled_skills 登録）
+
+---
+
+## 実装結果（Phase B、2026-08-14）
+
+### B1: サーバー側タグ形式検証（R3）— 完了
+- **背景**: exp-1 調査で「呼び出し元 cwd は memory_create に届かない」「コンテナから AGENTS.md は読めない」が判明 → 案A（自動付与）はサーバー単独では実装不能。ユーザー判断で**形式検証のみ**に決定（スキル誘導 + タグ形式チェックで担保）
+- **実装**: `nous/domain/memory/write_service.py` `_validate_tags` に `project:` プレフィックスタグの slug 形式検証を追加（`re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug)`、違反は `MemoryValidationError` で拒否）。`project` 単体・非 `project:` タグは従来通り対象外。自動付与なし
+- **検証**: `tests/unit/test_memory_service.py` に5件追加（`project:nous`/`project:my-app` OK、`project:`/`project:Weird_Slug`/`project:weird slug` 拒否、`project` 単体 OK）。`-k "validate or tag or write_service"` 69 passed
+
+### B2: Nous 自身の AGENTS.md 更新（R7）— 完了
+- **実装**: AGENTS.md に「## 2. プロジェクト識別 / - project: nous」節を追加。「# Memory & Handoff Instructions」節（3ファイルの役割と哲学 / MEMORY.md・HANDOFF.md 読込 / メモリ管理 / ハンドオフ管理）を「# Nous 記憶運用（.agent/ は使わない）」に置換 — session-start による nous 記憶復元（get_context + `project:nous` タグ検索 + 直近 session_summary）に一本化。SDD / ドキュメント更新 / フロントエンド同期ルールは既存のまま
+- **検証**: ユーザー承認済みドラフト通り
+
+### B3: 試作スキル3つの最終確認 — 変更不要
+- make-project / session-start / project-manage とも persona 非依存で v6 方針と整合（memory_create は現在の persona に記録、AGENTS.md の `## プロジェクト識別` 節から slug 読取）。session-start の「他 persona の記憶と混在させない」は文言のみ v5 名残（機能影響なし）
