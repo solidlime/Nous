@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime
+
 import pytest
 
-from nous.domain.memory.contradiction import ContradictionDetector
+from nous.domain.memory.contradiction import (
+    ContradictionDetector,
+    ContradictionResult,
+    ContradictionType,
+    _parse_contradiction_response,
+)
+from nous.domain.memory.entities import Memory
+from nous.domain.memory.evolution_service import MemoryEvolutionService
+from nous.domain.search.engine import SearchResult
 from nous.domain.shared.errors import VectorStoreError
 from nous.domain.shared.result import Failure, Success
 
@@ -145,3 +156,157 @@ class TestContradictionDetector:
         result = await detector.find_potential_contradictions("my query", "persona1")
         assert result.is_ok
         assert result.value.query_content == "my query"
+
+
+class TestParseContradictionResponse:
+    def test_updated_fields_tags_are_stripped(self):
+        """updated_fields に tags が含まれても除去され importance のみ残る"""
+        text = json.dumps(
+            {
+                "type": "EXTENDABLE",
+                "existing_key": "mem_1",
+                "explanation": "テスト",
+                "updated_fields": {"tags": ["last_reflection"], "importance": 0.8},
+            }
+        )
+        result = _parse_contradiction_response(text)
+        assert result is not None
+        assert result.type == ContradictionType.EXTENDABLE
+        assert result.updated_fields == {"importance": 0.8}
+
+    def test_updated_fields_content_and_context_tags_are_stripped(self):
+        """content / context_tags も除去される"""
+        text = json.dumps(
+            {
+                "type": "EXTENDABLE",
+                "existing_key": "mem_1",
+                "explanation": "テスト",
+                "updated_fields": {"content": "hacked", "context_tags": ["x"], "importance": 0.7},
+            }
+        )
+        result = _parse_contradiction_response(text)
+        assert result is not None
+        assert result.updated_fields == {"importance": 0.7}
+
+    def test_updated_fields_non_numeric_importance_is_dropped(self):
+        """importance が文字列なら updated_fields ごと除去される"""
+        text = json.dumps(
+            {
+                "type": "EXTENDABLE",
+                "existing_key": "mem_1",
+                "explanation": "テスト",
+                "updated_fields": {"importance": "0.8"},
+            }
+        )
+        result = _parse_contradiction_response(text)
+        assert result is not None
+        assert result.updated_fields is None
+
+
+class FakeEvolutionRepo:
+    """Minimal repo stub for evolution tests."""
+
+    def __init__(self, memory: Memory):
+        self._memory = memory
+        self.update_calls: list[tuple[str, dict]] = []
+        self.version_calls: list[dict] = []
+
+    def find_by_key(self, key: str):
+        return Success(self._memory)
+
+    def get_latest_version_number(self, key: str):
+        return Success(3)
+
+    def save_version(self, memory_key, version, content, metadata, changed_by, change_type):
+        self.version_calls.append(
+            {
+                "memory_key": memory_key,
+                "version": version,
+                "content": content,
+                "metadata": metadata,
+                "changed_by": changed_by,
+                "change_type": change_type,
+            }
+        )
+        return Success(None)
+
+    def update(self, key: str, **kwargs):
+        self.update_calls.append((key, kwargs))
+        return Success(self._memory)
+
+
+class FakeSearchEngine:
+    """Minimal search engine stub for evolution tests."""
+
+    def __init__(self, result):
+        self._result = result
+
+    async def search(self, query):
+        return self._result
+
+
+class FakeEnricher:
+    """Stub enricher returning a fixed contradiction result."""
+
+    def __init__(self, result: ContradictionResult):
+        self._result = result
+
+    def classify_contradiction(self, new_content: str, existing_memories: list[dict]):
+        return self._result
+
+
+class TestEvolutionExtendable:
+    @pytest.mark.asyncio
+    async def test_extendable_update_keeps_tags_and_records_version(self):
+        """EXTENDABLE 適用時: tags/content は repo.update に渡らず、save_version が呼ばれる"""
+        existing_memory = Memory(
+            key="mem_existing",
+            content="既存のプロジェクトに関する記憶。",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            importance=0.5,
+            tags=["project:sample-project", "project_overview"],
+            summary_ref="mem_summary",
+        )
+        repo = FakeEvolutionRepo(existing_memory)
+        search_engine = FakeSearchEngine(
+            Success(
+                [
+                    SearchResult(memory=existing_memory, score=0.9, source="semantic"),
+                ]
+            )
+        )
+        enricher = FakeEnricher(
+            ContradictionResult(
+                type=ContradictionType.EXTENDABLE,
+                existing_memory_key="mem_existing",
+                explanation="テスト",
+                updated_fields={"importance": 0.9, "tags": ["last_reflection"], "content": "hacked"},
+            )
+        )
+        service = MemoryEvolutionService(
+            search_engine_ref=[search_engine],
+            repo=repo,
+            enricher=enricher,
+            link_repo=None,
+            contradiction_detector=None,
+        )
+
+        await service._evolve_related_memories(
+            content="これは既存のプロジェクトについての新しい詳細情報を追加する記憶です。",
+            new_memory_key="mem_new",
+        )
+
+        # EXTENDABLE の update に tags/content が渡らない
+        importance_calls = [kwargs for key, kwargs in repo.update_calls if "importance" in kwargs]
+        assert len(importance_calls) == 1
+        assert importance_calls[0] == {"importance": 0.9}
+
+        # version 記録が呼ばれている（更新前スナップショットに tags が保持）
+        assert len(repo.version_calls) == 1
+        version_call = repo.version_calls[0]
+        assert version_call["memory_key"] == "mem_existing"
+        assert version_call["version"] == 4
+        assert version_call["changed_by"] == "evolution"
+        assert version_call["change_type"] == "update"
+        assert version_call["metadata"]["tags"] == ["project:sample-project", "project_overview"]

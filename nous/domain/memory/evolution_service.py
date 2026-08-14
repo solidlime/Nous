@@ -96,7 +96,26 @@ class MemoryEvolutionService:
                     if result is not None and result.existing_memory_key:
                         if result.type == ContradictionType.EXTENDABLE:
                             updates = dict(result.updated_fields or {})
+                            # Double guard: never overwrite tags/content from
+                            # LLM output, even if it slips past the parser.
+                            updates.pop("tags", None)
+                            updates.pop("content", None)
                             if updates:
+                                # 事前に既存記憶を取得し、更新前スナップショットを保存
+                                existing_mem = self._repo.find_by_key(result.existing_memory_key)
+                                if existing_mem.is_ok and existing_mem.value is not None:  # type: ignore[union-attr]
+                                    old = existing_mem.value  # type: ignore[union-attr]
+                                    snapshot = {"content": old.content, "importance": old.importance, "emotion": old.emotion, "tags": old.tags}
+                                    ver = self._repo.get_latest_version_number(result.existing_memory_key)  # type: ignore[attr-defined]
+                                    next_ver = (ver.value + 1) if ver.is_ok else 1
+                                    self._repo.save_version(  # type: ignore[attr-defined]
+                                        memory_key=result.existing_memory_key,
+                                        version=next_ver,
+                                        content=old.content,
+                                        metadata=snapshot,
+                                        changed_by="evolution",
+                                        change_type="update",
+                                    )
                                 self._repo.update(result.existing_memory_key, **updates)
                         elif result.type == ContradictionType.CONTRADICTORY:
                             self._repo.tombstone(result.existing_memory_key)

@@ -48,11 +48,13 @@ CLASSIFY_PROMPT = """以下の新しい記憶と、既存の関連記憶の関�
 
 以下の3つのうち1つを選んでください:
 - INDEPENDENT: 新しい記憶は既存の記憶と無関係。独立した新しい事実。
-- EXTENDABLE: 新しい記憶は既存の記憶を拡張・更新する情報。既存記憶のtags/context/importanceを更新すべき。
+- EXTENDABLE: 新しい記憶は既存の記憶を拡張・更新する情報。既存記憶のimportanceのみ更新すべき。
 - CONTRADICTORY: 新しい記憶は既存の記憶と明確に矛盾する。既存記憶を無効化すべき。
 
+既存記憶のtagsは絶対に変更しないこと。updated_fieldsで指定できるのはimportanceのみ（数値）。
+
 JSON形式で回答:
-{{"type": "INDEPENDENT|EXTENDABLE|CONTRADICTORY", "existing_key": "該当する既存記憶のkey（なければnull）", "explanation": "理由（日本語で簡潔に）", "updated_fields": {{"tags": ["..."], "importance": 0.8}} }}"""
+{{"type": "INDEPENDENT|EXTENDABLE|CONTRADICTORY", "existing_key": "該当する既存記憶のkey（なければnull）", "explanation": "理由（日本語で簡潔に）", "updated_fields": {{"importance": 0.8}} }}"""
 
 
 async def classify_contradiction(
@@ -152,13 +154,22 @@ def _parse_contradiction_response(text: str) -> ContradictionResult | None:
 
     existing_key = data.get("existing_key") or None
     explanation = data.get("explanation", "")
-    updated_fields = data.get("updated_fields")
+    raw_fields = data.get("updated_fields")
+
+    # Whitelist: only importance may be applied to the existing memory.
+    # tags / content / context_tags etc. are never applied — defense against
+    # the LLM returning them despite prompt instructions.
+    updated_fields: dict[str, Any] | None = None
+    if isinstance(raw_fields, dict):
+        importance = raw_fields.get("importance")
+        if isinstance(importance, (int, float)) and not isinstance(importance, bool):
+            updated_fields = {"importance": importance}
 
     return ContradictionResult(
         type=ctype,
         existing_memory_key=str(existing_key) if existing_key else None,
         explanation=str(explanation),
-        updated_fields=updated_fields if isinstance(updated_fields, dict) else None,
+        updated_fields=updated_fields,
     )
 
 
