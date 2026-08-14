@@ -12,8 +12,10 @@
 セッション開始時、ユーザーへの最初の応答の前に session-start スキルを実行し、nous 記憶から状態を復元する：
 - `get_context` でペルソナ状態・直近サマリを取得
 - 本 AGENTS.md の `## プロジェクト識別` 節から `project: nous` タグを取得
-- `memory_search(tags=["project:nous", "task_state"], top_k=3)` 等で作業状態を復元
-- `memory_search(tags=["project:nous", "session_summary"], top_k=1, sort="updated_at")` で前回の内容を把握
+- `memory_search(query="", tags=["project:nous", "session_summary"], top_k=1, sort="updated_at")` で前回の内容を把握
+- `memory_search(query="", tags=["project:nous", "task_state"], top_k=3, sort="updated_at")` で作業状態を復元
+- `memory_search(query="", tags=["project:nous", "goal", "active"], top_k=5, sort="updated_at")` でアクティブな目標を取得
+- 注: query は必ず空文字 `""` で指定すること（非空クエリは content 全文一致が前提。タグ検索は空クエリで行う）
 
 ## メモリ管理
 - 重要情報・決定・作業完了は nous に記録。`project: nous` タグ必須
