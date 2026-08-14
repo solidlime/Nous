@@ -19,11 +19,12 @@ description: "セッション開始時の必須ルーティン。ペルソナ状
 ## ステップ3: プロジェクト記憶の復元
 タグが取得できた場合、以下を実行してプロジェクトの状態を復元する:
 
-1. `memory_search(query="直近の作業状態", tags=["project:<slug>", "task_state"], top_k=3)` — 最新の作業状態
-2. `memory_search(query="決定事項", tags=["project:<slug>", "decision"], top_k=3)` — 重要な決定
-3. `goal_manage(operation="list", scope="self")` — アクティブな目標
+1. `memory_search(query="", tags=["session_summary"], top_k=1, sort="updated_at")` — 最新のセッション要約（セッション終了フックが生成したサマリ。引継の代替）
+2. `memory_search(query="直近の作業状態", tags=["project:<slug>", "task_state"], top_k=3)` — 最新の作業状態
+3. `memory_search(query="決定事項", tags=["project:<slug>", "decision"], top_k=3)` — 重要な決定
+4. `goal_manage(operation="list", scope="self")` — アクティブな目標
 
-復元した内容を要約し、ユーザーへの最初の応答に含める:
+復元した内容（直近サマリを含む）を要約し、ユーザーへの最初の応答に含める:
 「前回の状態: <要約>。続きは <次のアクション> から」
 
 ## ステップ4: 全貌把握
