@@ -1,7 +1,7 @@
 # SPEC — 記憶の nous 一元化（セッションまたぎ再開の自然化）
 
 > 出典: ユーザー要望 (2026-08-14)。調査: exp-1（nous 記憶実装）/ exp-2（make_project_skill 詳細）/ exp-3（フック設計・スキル配置）/ lib-1・lib-2（外部運用事例 30件超）
-> 状態: **設計書 v4**（make_project_skill → make-project 改名、記憶・検索設計=プロジェクトタグ方式、発動頻度の数値化を反映）。実装は合意後のフェーズ分け（実装方針参照）で開始。
+> 状態: **設計書 v5**（PoC 検証結果を反映: evolution タグ破壊バグの修正を main 反映済み・サーバー側タグ強制を R3 に追加）。実装は合意後のフェーズ分け（実装方針参照）で開始。
 
 ## 背景
 
@@ -110,7 +110,7 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 | V1 | 終了フック | 短いセッション終了 → session_summary タグの記憶が生成される。evict 未発生でも生成されることをテストで確認 |
 | V2 | サマリ内容 | 「何を話したか」「合意・約束」を含む（LLM 形式テスト）。文字化けチェック（既存 N'Ko/Mongolian/PUA チェック踏襲） |
 | V3 | get_context | 同一記憶が2回表示されない。直近 session_summary が優先表示される |
-| V4 | プロジェクト分離 | dev persona の記憶に `project:<slug>` が付与される。`memory_search(tags=["project:nous"])` で Nous の記憶だけが返る。herta の記憶に開発教訓が混入しない |
+| V4 | プロジェクト分離 | dev persona の記憶に `project:<slug>` が付与される（スキル経由 + サーバー側タグ強制の両経路で確認）。`memory_search(tags=["project:nous"])` で Nous の記憶だけが返る。herta の記憶に開発教訓が混入しない |
 | V5 | スキル解決 | 3スキル（make-project / session-start / project-manage）が opencode・Claude Code・nous invoke_skill の3経路で解決される |
 | V6 | .agent/ 非生成 | make-project で新プロジェクト構築 → `.agent/` と `.claude/commands/handoff.md` が生成されない。AGENTS.md に MEMORY.md/HANDOFF.md 読込ルールが含まれない |
 | V7 | 回帰 | 変更モジュールに依存するテストのみ個別実行（フルスイート禁止）。既存失敗は worktree 比較で切り分け |
@@ -123,5 +123,58 @@ session-start は開始時にこの節を読み取り、以降の `memory_search
 - **Phase A: R1+R2（終了フック）** — nous サーバー側イベント処理 + テスト。単一領域。SessionSummarizer を再利用
 - **Phase B: R3+R4+R7（一元化 + .agent/ 廃止）** — dev persona 運用 + プロジェクトタグ設計 + AGENTS.md ルール変更 + make-project の .agent/ 非生成化。ユーザー確認必須（作業フロー変更）
 - **Phase C: R5（get_context 改善）** — 独立。重複除去 + サマリ優先表示 + デッドコード整理
-- **Phase D: R6+R8+R9（スキル再編成）** — project-manage 作成（goal-coach から拡張）、make-project 改名・nous 付属化（SKILL.md 書き換え）、session-start の nous 付属化（プロジェクトタグ読取追加）、配置変更（.claude/skills/ + data/skills symlink）、旧スキル削除、登録更新（oh-my-opencode-slim.json 等）
+- **Phase D: R6+R8+R9（スキル再編成）** — project-manage 作成（goal-coach から拡張）、make-project 改名・nous 付属化（SKILL.md 書き換え）、session-start の nous 付属化（プロジェクトタグ読取追加）、配置変更（.claude/skills/ + data/skills symlink）、旧スキル削除、登録更新（oh-my-opencode-slim.json 等）、**config.json の enabled_skills への新スキル登録（PoC 発見3: data/skills/ 配置のみでは LLM が存在を認識できない）**
 - ドキュメント: MCP ツール変更時 `docs/llm_usage_guide.md`。本 SPEC に実装結果を追記
+
+---
+
+## PoC 検証結果（2026-08-14、ブランチ poc/skill-poc）
+
+検証目的: 再編成スキル群を実際の LLM に使わせ、記憶管理が機能するか本実装前に確認する。
+
+### 検証環境
+- dev persona（新規作成）、Docker コンテナ（localhost:26262）、OpenRouter 経由
+- モデル2系統で比較: `openrouter/free` → `deepseek/deepseek-v4-flash`（本番想定相当）
+- 試作スキル3つ（make-project / project-manage / session-start）を `data/skills/` に配置
+
+### 発見1: evolution タグ破壊バグ（重大・修正済み）
+- memory_create の tags（`project:<slug>` 等）が、数分後のバックグラウンド evolution で無検証に全置換されるバグを発見（tags → `["last_reflection"]`）
+- 原因: `MemoryEvolutionService._evolve_related_memories` の EXTENDABLE 分岐（evolution_service.py:97-100）が LLM 生成 `updated_fields.tags` を既存記憶へ無検証適用。reflection 自動作成が evolution を連鎖起動
+- 修正（**main e7354bd1 / poc c9245284、両ブランチ反映済み**）:
+  1. プロンプトで「tags 変更禁止・importance のみ」を明示（contradiction.py CLASSIFY_PROMPT）
+  2. パーサーで updated_fields をホワイトリスト化（importance 数値のみ許可、contradiction.py `_parse_contradiction_response`）
+  3. サービス側で tags/content を強制除去（二重ガード、evolution_service.py）
+  4. evolution 更新に version 記録追加（`save_version(changed_by="evolution")`、監査可能化）
+- 実環境検証: 修正後、evolution が3回ヒット（access=3）しても tags 無傷。回帰テスト4件追加（test_contradiction.py 13 passed）
+
+### 発見2: スキル駆動はモデル能力に依存
+| 項目 | openrouter/free | deepseek-v4-flash |
+|------|----------------|-------------------|
+| スキル invoke | しない（直接ツール実行） | する（goal-coach / auto-memory をロード） |
+| ツール連鎖 | 2件（goal_manage → memory_create） | 5件（invoke_skill×2 → memory_create → goal_manage → update_context） |
+| 記録内容 | 英語・簡素・タグ規約外 | 日本語・日付付き・構造的 |
+| セッションまたぎ復元 | memory_search のみ | memory_search + goal_manage list（目標含む復元） |
+- 結論: free モデルはスキル探索をスキップするため検証対象として不適。**本番想定モデル（deepseek-v4-flash 相当以上）ならスキル群のクロス発動が機能**し、Phase D は成立
+- 示唆: スキル発動の信頼性をモデル任せにしない余地（プロンプト補強 or ハーネス側注入）はあるが必須ではない
+
+### 発見3: タグ規約（project:<slug>）はスキル指示だけでは守られない
+- make-project を invoke しなかった場合、LLM は自由なタグを付与（free: `["project","python","sample",...]`、flash: `["decision","project"]`）
+- 原因の一部: 試作スキルが config の `enabled_skills` に未登録のため、LLM が存在を認識できない（`data/skills/` 配置のみでは list_skills に出ない）
+- **設計変更: R3 に「サーバー側タグ強制」を追加**（Phase B で検討）:
+  - 案A: memory_create ツールが `project:<slug>` を自動付与（dev persona のみ・source_context 等から slug 解決）
+  - 案B: タグ検証（`project:<slug>` 必須・規約外は補正 or 拒否）
+  - スキル指示に頼る現行案では V4（プロジェクト分離）が保証できないため、サーバー側強制が必須
+
+### 発見4: サーバー自動抽出がバックアップとして実効
+- 明示的な記録指示でも tool_call しないケースがあったが、MemoryLLM の自動抽出（auto_captured）が記録をカバー
+- 「スキルが書かない」層を自動抽出が担保 → 設計のバックアップ層は有効。二重記録は類似度>0.85 ガードで緩和
+
+### 発見5: 応答品質
+- flash は明示指示なしでも日本語・マークダウン構造化で応答。free は英語・簡素
+- 「記録しておいて」指示でも tool_call 0件のケースあり（free）→ スキル駆動の信頼性はモデル依存（発見2 と同根）
+
+### 設計書への変更（本節による反映）
+- R3: 「サーバー側タグ強制」を追加（発見3、Phase B で具体化）
+- V4: 検証方法に「スキル経由 + サーバー側タグ強制の両経路で確認」を追加
+- Phase D: 新規スキルの `enabled_skills` 登録を必須手順に追加（発見3、config.json の enabled_skills 更新）
+- 制約: evolution バグ修正（e7354bd1）が main に反映済みのため、本設計の前提に含める
