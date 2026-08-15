@@ -1,6 +1,6 @@
 ---
 name: project-manage
-description: "プロジェクト進行管理スキル。目標の作成・進捗確認・達成管理（goal_manage）と、作業状態・決定事項・教訓の記憶記録・検索を行う。プロジェクト目標に加え、個人目標・対人目標も goal_manage で管理。意図や決意表明から目標を自律提案・作成してもよい。『進捗どう？』『次は何やる？』『目標を立てて』『今の状態をまとめて』などの発言、または開発作業の開始・完了・決定時、プロジェクトタグ（project:xxx）を含む会話で使用。"
+description: "プロジェクトの目標管理（goal_manage）と作業状態の記録。『進捗どう？』『次は何やる？』『目標を立てて』や開発の開始・完了・決定時に発動し、project:<slug> タグで記憶記録・検索する。意図や決意表明から目標を自律提案してよい。"
 ---
 
 # project-manage — プロジェクト進行管理
@@ -38,6 +38,7 @@ description: "プロジェクト進行管理スキル。目標の作成・進捗
 ### 目標管理（goal_manage）
 - 目標の提案・作成: `goal_manage(operation="create", content=..., importance=..., scope="self" or "interpersonal")`
 - 会話中の意図や決意表明から、追跡可能な目標を自律提案・作成してもよい（ユーザーの意図なら interpersonal、自身の意図なら self）
+- **goal は「測定可能な完了条件」で書く**（例: 「テスト失敗0でリリース」「◯◯を3回やる」「git status が clean になる」）。達成判定は自分自身の感情ではなく客観条件（テスト結果・ファイル状態・回数）で行う
 - 達成: `goal_manage(operation="achieve", memory_key=...)`
 - 取消: `goal_manage(operation="cancel", memory_key=...)`
 - **順序**: 事実は先に `memory_create` で記録し、その memory_key を goal_manage に渡す
