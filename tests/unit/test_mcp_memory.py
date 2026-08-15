@@ -267,6 +267,19 @@ class TestMemoryRead:
         result = await memory_read(memory_key="missing")
         assert "not found" in result.lower()
 
+    @pytest.mark.asyncio
+    async def test_read_by_key_alias(self, registered_tools):
+        """key は memory_key のエイリアスとして機能する（直近リストではなく指定キーを読む）。"""
+        tools, ctx, _ = registered_tools
+        m = _mem("mem_001", "stored content")
+        ctx.memory_service.get_memory.return_value = Success(m)
+        ctx.memory_service.boost_recall.return_value = Success(None)
+        memory_read = tools["memory_read"]
+        result = await memory_read(key="mem_001")
+        assert "stored content" in result
+        assert "mem_001" in result
+        ctx.memory_service.get_memory.assert_called_once_with("mem_001")
+
 
 # ---------------------------------------------------------------------------
 # memory_delete()
@@ -283,6 +296,18 @@ class TestMemoryDelete:
         memory_delete = tools["memory_delete"]
         result = await memory_delete(memory_key="mem_del")
         assert "tombstoned" in result.lower()
+
+    @pytest.mark.asyncio
+    async def test_delete_by_key_alias(self, registered_tools):
+        """key は memory_key のエイリアスとして機能する。"""
+        tools, ctx, _ = registered_tools
+        m = _mem("mem_del")
+        ctx.memory_service.get_memory.return_value = Success(m)
+        ctx.memory_service.delete_memory.return_value = Success(None)
+        memory_delete = tools["memory_delete"]
+        result = await memory_delete(key="mem_del")
+        assert "tombstoned" in result.lower()
+        ctx.memory_service.get_memory.assert_called_once_with("mem_del")
 
     @pytest.mark.asyncio
     async def test_delete_requires_key_or_query(self, registered_tools):
@@ -341,6 +366,19 @@ class TestMemoryUpdate:
         data = json.loads(result)
         assert data["ok"] is True
         assert data["key"] == "mem_001"
+
+    @pytest.mark.asyncio
+    async def test_update_by_key_alias(self, registered_tools):
+        """key は memory_key のエイリアスとして機能する。"""
+        tools, ctx, _ = registered_tools
+        ctx.memory_service.update_memory.return_value = Success(_mem("mem_001"))
+        memory_update = tools["memory_update"]
+        result = await memory_update(key="mem_001", content="new content")
+        data = json.loads(result)
+        assert data["ok"] is True
+        assert data["key"] == "mem_001"
+        ctx.memory_service.update_memory.assert_called_once()
+        assert ctx.memory_service.update_memory.call_args.args[0] == "mem_001"
 
     @pytest.mark.asyncio
     async def test_update_requires_key(self, registered_tools):

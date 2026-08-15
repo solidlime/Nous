@@ -148,8 +148,16 @@ def register_tools(mcp: FastMCP) -> None:
 
     # memory_read
     @_tool("memory_read")
-    async def memory_read(memory_key: str | None = None, limit: int = 10, offset: int = 0) -> str:
-        """Read a memory by key, or list most recent if key omitted. Use limit/offset for pagination."""
+    async def memory_read(
+        memory_key: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        key: str | None = None,
+    ) -> str:
+        """Read a memory by key, or list most recent if key omitted. Use limit/offset for pagination.
+        key は memory_key のエイリアス。"""
+        if key and not memory_key:
+            memory_key = key
         p = _resolve_persona()
         return await _tool_memory_read(AppContextRegistry.get(p), p, memory_key=memory_key, limit=limit, offset=offset)
 
@@ -163,9 +171,13 @@ def register_tools(mcp: FastMCP) -> None:
         emotion_intensity: float | None = None,
         tags: list[str] | None = None,
         privacy_level: str | None = None,
+        key: str = "",
     ) -> str:
         """Update a memory. Only provided fields are changed.
-        importance must be 0.0-1.0. Invalid emotion silently falls back to neutral."""
+        importance must be 0.0-1.0. Invalid emotion silently falls back to neutral.
+        key は memory_key のエイリアス。"""
+        if key and not memory_key:
+            memory_key = key
         p = _resolve_persona()
         return await _tool_memory_update(
             AppContextRegistry.get(p),
@@ -181,8 +193,15 @@ def register_tools(mcp: FastMCP) -> None:
 
     # memory_delete
     @_tool("memory_delete")
-    async def memory_delete(memory_key: str | None = None, query: str | None = None) -> str:
-        """Delete (tombstone) a memory by key or query. Returns key and content snippet of deleted memory."""
+    async def memory_delete(
+        memory_key: str | None = None,
+        query: str | None = None,
+        key: str | None = None,
+    ) -> str:
+        """Delete (tombstone) a memory by key or query. Returns key and content snippet of deleted memory.
+        key は memory_key のエイリアス。"""
+        if key and not memory_key:
+            memory_key = key
         p = _resolve_persona()
         return await _tool_memory_delete(AppContextRegistry.get(p), p, memory_key=memory_key, query=query)
 
