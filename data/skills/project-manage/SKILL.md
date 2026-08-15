@@ -45,7 +45,16 @@ description: "プロジェクト進行管理スキル。目標の作成・進捗
 | 決定事項（技術選定・方針） | `["project:<slug>", "decision"]` | 0.7 | semantic |
 | 開発教訓（失敗・学び） | `["project:<slug>", "dev_lesson"]` | 0.6 | semantic |
 | 作業状態（現在のタスク・進捗） | `["project:<slug>", "task_state"]` | 0.5 | episodic |
-| 完了した作業の記録 | `["project:<slug>", "task_state"]` | 0.5 | episodic |
+| 完了した作業の記録 | task_state メモの tags を completed に更新（新規作成は原則しない） | 0.5 | episodic |
+
+タスク完了時は既存メモを更新（memory_update）で完了フラグを付ける。新規 memory_create での完了記録作成はしない。
+
+### タスク完了時の更新
+- 作業・タスクが完了したら、**必ずその場で**該当の task_state メモを更新して完了フラグを付ける:
+  `memory_update(memory_key=<該当メモのkey>, tags=["project:<slug>", "task_state", "completed"])`
+- memory_update の tags は**全置換**なので、元のタグ（project:<slug>、task_state 等）も含めて指定し直すこと。completed だけ渡すと元タグが消える
+- 完了フラグは session-start の復元（task_state 検索）で未完了と完了を区別するためのもの。付け忘れると「実施済みなのに未実施のまま」に見える
+- 完了後に追加で記録が必要なら、既存メモの更新で足りる場合は更新のみ、新しい事実なら新規 memory_create を使う
 
 - **content は必ず `project:<slug>` タグを含める**（忘れると分離できない）
 - content は 150〜500字程度。簡潔に事実・決定・理由を書く
