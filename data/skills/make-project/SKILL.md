@@ -1,6 +1,6 @@
 ---
 name: make-project
-description: "新規開発プロジェクトの初期構築スキル。プロジェクトの識別タグ決定・初期記憶の記録・生成ファイル一式（README / AGENTS.md / .spec/ / CLAUDE.md / GEMINI.md / .gitignore / git init）のテンプレート提示を行う。コーディング開始・初期化リクエスト時にディレクトリ状態を検査し、明らかにコーディングプロジェクトと判断できる場合のみ AGENTS.md 生成とプロジェクトタグ付与を提案する（常にユーザー確認あり）。『プロジェクトを初期化して』『プロジェクトをセットアップして』『新規プロジェクトを始めたい』などのリクエストで必ず使用すること。"
+description: "新規開発プロジェクトの初期構築スキル。コードプロジェクトと判断できるディレクトリを検出したら、AGENTS.md 生成と project:<slug> タグ付与を自動提案する（常にユーザー確認あり）。空ディレクトリ・雑談では発動しない。生成一式: README / AGENTS.md / .spec/ / CLAUDE.md / GEMINI.md / .gitignore / git init。"
 ---
 
 # make-project — プロジェクト初期構築
@@ -117,74 +117,8 @@ memory_create(
 - 仕様が不明確な場合は作業を開始せず、ユーザーに確認してから SPEC.md を更新する
 ```
 
-#### 4.3 品質ゲート節（AGENTS.md の末尾に追記）
-
-```markdown
-## 品質ゲート
-
-### トリアージ（3段階）
-作業開始前にレベルを判定し、ゲートの重みを変える。
-
-| レベル | 対象 | ゲート |
-|--------|------|--------|
-| 軽量 | 単一ファイル20行未満・機械的・1文で説明できるdiff | lint + 型チェック + 影響範囲テストのみ。REVIEW 省略可 |
-| 標準 | 単一機能（数百行以内・ファイル分散 ≤5） | フルパイプライン（下記） |
-| 本格 | 複数ファイル・アーキテクチャ/API/UI変更 | フル + 事前アーキテクチャ判断（#081）+ 実ブラウザ確認 + 契約テスト |
-
-### パイプライン（検証ループ方式）
-**EXPLORE** → **PLAN** → **IMPLEMENT** → **TEST**（検証ループ） → **REVIEW** → **GATE**（機械的条件式） → **COMMIT** → **PUSH**
-
-各フェーズは Grill 方式で開始する: Goal（何を達成するか）→ Success criteria（どうなれば成功か）→ Success type（test / build / lint / command / fileExists）→ Execute agent / Verify agent を分離 → Max attempts（デフォルト3）→ 必要なら Context files。
-
-| フェーズ | 担当 | やること | 通過条件 | 失敗時 |
-|---------|------|---------|---------|--------|
-| **EXPLORE** | #009 or orchestrator | コードベース探索、関連ファイル特定、依存関係把握 | 変更範囲が明確になっている | PLAN に進めない（再探索） |
-| **PLAN** | orchestrator（委譲禁止） | 実装計画書の作成。影響範囲・ファイル一覧・テスト方針を明記 | 計画に具体性がある（ファイルパス・変更内容） | IMPLEMENT に進めない（計画の練り直し） |
-| **IMPLEMENT** | #011（複数ファイルは並列）or 直接 | 計画に従い実装。単一ファイル20行未満は直接、それ以外は #011 | コードが計画通りに書かれている | TEST に進めない（#011 に差し戻し） |
-| **TEST** | #011（Execute）+ 検証エージェント（Verify） | 検証ループ（下記「TEST = 検証ループ」参照） | 全チェック通過 | max3 再試行 → 人間エスカレーション |
-| **REVIEW** | #081（oracle・独立コンテキスト） | diff + 基準のみを見て correctness のギャップを反駁。スタイル好みは指摘しない。編集権限なし | **PASS（完全）**。それ以外は BLOCK | BLOCK → IMPLEMENT に戻る。BLOCK を上書き禁止 |
-| **GATE** | orchestrator | 機械的条件式（下記）で全項目を判定 | 条件式が成立 | COMMIT 禁止。未解決項目を修正 |
-| **COMMIT** | orchestrator | `git add` + `git commit`。バグ修正は重大度に応じたプレフィックス | コミット成功 | — |
-| **PUSH** | orchestrator | `git push` | プッシュ成功 | コンフリクト時は解決して再コミット |
-
-### TEST = 検証ループ
-1. **Execute**: 実装エージェント（#011）が変更を適用。
-2. **Verify**: 検証エージェントが successCommand を実行して成功を機械判定する:
-   - テスト: 全テスト失敗 0
-   - 型チェック: exit 0（lint 通過 ≠ コンパイル通過）
-   - lint/format: エラー 0
-   - カバレッジ: ≥60%（プロジェクト規模で調整）
-3. **失敗時**: エラー出力を Execute に返して再試行。max attempts = 3。
-4. **3回失敗** → onEscalated: 人間へ理由付きでエスカレーション。自動解決禁止。
-5. **手動レビューが必要な変更** → onManualReview: 人間が approve/fail を判定し、resolveManualReview まで COMMIT 禁止。
-6. **onLoopComplete**: 結果と試行回数を記録して GATE へ。
-
-### GATE = 機械的条件式
-```
-TYPECHECK=pass AND TESTS=0-fail AND COVERAGE≥60% AND LINT=0 AND FORMAT=ok
-AND CONTRACT=pass AND SECRETS=0 AND AUDIT≤moderate AND DOCS=synced
-AND DIFF=単一目的（300-500行以内、1000行超は分割、50ファイル分散は過大）
-AND 禁止操作なし
-```
-- CONTRACT: 契約テスト（マイクロサービス構成なら Pact 等）が pass。
-- SECRETS: シークレット検出（gitleaks）0件。
-- AUDIT: 依存監査（`npm audit --audit-level=moderate`）が moderate 以下。
-- DOCS: 公開API・CLIフラグ・env var 変更時は README / .env.example / APIドキュメントを同期更新（`documentation-sync` を参照）。
-- 禁止操作: `git push --force` / `git commit --no-verify` / `DROP TABLE` / `DELETE FROM` なし。
-
-### CI 二重ゲート
-- **第1ゲート（ローカル）**: pre-commit で lint/format を変更分のみ高速実行（速度優先）。
-- **第2ゲート（CI）**: GitHub Actions で全テスト・型・カバレッジ・契約テスト・gitleaks・npm audit を実行（正しさの最終判定）。
-- **最終ゲート**: merge queue 導入時は必須 status check 通過まで自動マージ不可。
-
-### 補足ルール
-- 軽量トリアージ: lint + 型チェック + 影響範囲テストのみ実施し、限定版 GATE（型・テスト・lint）通過で COMMIT 可。
-- TEST 範囲: #011/#057 は変更ファイルのみ。orchestrator は全件（プロジェクト全体の回帰確認）。
-- UI変更 (#057) 後は `ドッグフーディングテスト`（実ブラウザでの目視確認）が必須。テスト成功のみでは完了としない。
-- 既存壊れテスト: 変更起因 → 即修正。既存障害 → #081 が修正/削除判断。
-- サブエージェント作業中に発見した副次的な問題は `## Drive-by Findings` 形式で報告。セッション終了時までに対応（修正 or 記録）。
-- テスト失敗/未完了 → コミット禁止。
-```
+#### 4.3 品質ゲート
+品質ゲート（トリアージ・パイプライン・検証ループ・GATE 条件式・CI 二重ゲート）はグローバル AGENTS.md の「品質ゲート」節に定義される。本プロジェクトも同節に従うこと。
 
 #### 4.4 .spec/ 4ファイル
 
