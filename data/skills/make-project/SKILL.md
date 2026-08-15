@@ -1,6 +1,6 @@
 ---
 name: make-project
-description: "コードプロジェクトと判断できるディレクトリを検出したら、AGENTS.md 生成と project:<slug> タグ付与を自動提案する（常にユーザー確認あり）。空ディレクトリ・雑談では発動しない。"
+description: "コードプロジェクトと判断できるディレクトリを検出したら発動"
 ---
 
 # make-project — プロジェクト初期構築
