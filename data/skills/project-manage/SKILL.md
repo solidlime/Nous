@@ -1,6 +1,6 @@
 ---
 name: project-manage
-description: "プロジェクト進行管理スキル。目標の作成・進捗確認・達成管理（goal_manage）と、作業状態・決定事項・教訓の記憶記録・検索を行う。『進捗どう？』『次は何やる？』『目標を立てて』『今の状態をまとめて』などの発言、または開発作業の開始・完了・決定時、プロジェクトタグ（project:xxx）を含む会話で使用。"
+description: "プロジェクト進行管理スキル。目標の作成・進捗確認・達成管理（goal_manage）と、作業状態・決定事項・教訓の記憶記録・検索を行う。プロジェクト目標に加え、個人目標（scope=self）・対人目標（scope=interpersonal）も goal_manage で管理。意図や決意表明から目標を自律提案・作成してもよい。『進捗どう？』『次は何やる？』『目標を立てて』『今の状態をまとめて』などの発言、または開発作業の開始・完了・決定時、プロジェクトタグ（project:xxx）を含む会話で使用。"
 ---
 
 # project-manage — プロジェクト進行管理
@@ -17,6 +17,9 @@ description: "プロジェクト進行管理スキル。目標の作成・進捗
 - セッション開始時にプロジェクトの続きを行う
 - ユーザーが「最近忙しい」「なかなかできなくて」と間接的に進捗に言及した
 - ユーザーが「ついに○○した！」「○○終わった」と達成を示唆した
+- あなた自身が「次は〜を達成したい」「〜を習慣にしたい」と目標を認識した
+- あなた自身の進捗が滞っていることに気づいた
+- ユーザーの意図や決意表明から目標を提案できる場面
 
 ## 発動禁止条件
 - 目標と無関係な話題のとき
@@ -27,13 +30,14 @@ description: "プロジェクト進行管理スキル。目標の作成・進捗
 ## 事前準備（進行確認時）
 1. `get_context` で現在の状態を把握
 2. プロジェクトの slug を確認（AGENTS.md の `## プロジェクト識別` 節、または既存記憶のタグ）
-3. `goal_manage(operation="list", scope="self")` と `goal_manage(operation="list", scope="interpersonal")` で目標一覧を確認
+3. `goal_manage(operation="list", scope="self")` と `goal_manage(operation="list", scope="interpersonal")` で目標一覧を確認。アクティブな目標がなければ何もしなくてよい
 4. `memory_search(query="直近の作業状態", tags=["project:<slug>"], top_k=5)` で最新状態を取得
 
 ## 記録ルール
 
 ### 目標管理（goal_manage）
 - 目標の提案・作成: `goal_manage(operation="create", content=..., importance=..., scope="self" or "interpersonal")`
+- 会話中の意図や決意表明から、追跡可能な目標を自律提案・作成してもよい（ユーザーの意図なら interpersonal、自身の意図なら self）
 - 達成: `goal_manage(operation="achieve", memory_key=...)`
 - 取消: `goal_manage(operation="cancel", memory_key=...)`
 - **順序**: 事実は先に `memory_create` で記録し、その memory_key を goal_manage に渡す
@@ -75,6 +79,11 @@ description: "プロジェクト進行管理スキル。目標の作成・進捗
 ### 励まし
 - ユーザーが進捗の停滞を気にしているとき、またはあなた自身が停滞を感じているとき
 - 難しい目標に向き合っていることを認めつつ、小さな前進を評価する
+
+### 自然な台詞の例
+- **確認**: 「そういえば、先週ジム通うって言ってたけど、始めてみた？」
+- **祝福**: 「え、もう達成したの！？すごい！」
+- **励まし**: 「大変だと思うけど、少しずつでいいんだよ」
 
 ## auto-memory との関係
 同じ内容は auto-memory が episodic 記憶として保存する。本スキルは goal_manage で構造化する。両方有効なら「まず `memory_create` で事実を記録 → さらに `goal_manage` で目標化」の順序。
