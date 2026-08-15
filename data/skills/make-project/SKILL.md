@@ -1,6 +1,6 @@
 ---
 name: make-project
-description: "新規開発プロジェクトの初期構築スキル。コードプロジェクトと判断できるディレクトリを検出したら、AGENTS.md 生成と project:<slug> タグ付与を自動提案する（常にユーザー確認あり）。空ディレクトリ・雑談では発動しない。生成一式: README / AGENTS.md / .spec/ / CLAUDE.md / GEMINI.md / .gitignore / git init。"
+description: "コードプロジェクトと判断できるディレクトリを検出したら、AGENTS.md 生成と project:<slug> タグ付与を自動提案する（常にユーザー確認あり）。空ディレクトリ・雑談では発動しない。"
 ---
 
 # make-project — プロジェクト初期構築
