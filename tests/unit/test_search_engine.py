@@ -332,6 +332,114 @@ class TestSearchEngineSearch:
         assert len(result.value) <= 3
 
 
+class TestQueryCache:
+    """Module-level query cache: hit, shallow copy, TTL expiry, exclusions."""
+
+    @pytest.mark.asyncio
+    async def test_second_query_hits_cache(self):
+        """Same query twice → strategies called once, results identical."""
+        mem = _mem("k1", content="cached content")
+        kw = _make_keyword_strategy([(mem, 0.7)])
+        engine = SearchEngine(keyword_search=kw)
+        q = SearchQuery(text="cache me", mode="hybrid", top_k=5)
+
+        r1 = await engine.search(q)
+        r2 = await engine.search(q)
+
+        assert r1.is_ok and r2.is_ok
+        assert [x.memory.key for x in r1.value] == [x.memory.key for x in r2.value]
+        assert kw.search.call_count == 1, "second identical query should hit the cache"
+
+    @pytest.mark.asyncio
+    async def test_cache_returns_shallow_copy(self):
+        """Mutating the returned list must not corrupt the cached entry."""
+        mem = _mem("k1", content="copy me")
+        kw = _make_keyword_strategy([(mem, 0.7)])
+        engine = SearchEngine(keyword_search=kw)
+        q = SearchQuery(text="copy query", mode="hybrid", top_k=5)
+
+        r1 = await engine.search(q)
+        r1.value.append(SearchResult(memory=_mem("k2"), score=9.9, source="semantic"))
+
+        r2 = await engine.search(q)
+        assert len(r2.value) == 1
+        assert r2.value[0].memory.key == "k1"
+
+    @pytest.mark.asyncio
+    async def test_cache_expires_after_ttl(self):
+        """Aged cache entries are dropped and the query re-executes."""
+        from nous.domain.search.engine import _query_cache
+
+        mem = _mem("k1", content="ttl")
+        kw = _make_keyword_strategy([(mem, 0.7)])
+        engine = SearchEngine(keyword_search=kw)
+        q = SearchQuery(text="ttl query", mode="hybrid", top_k=5)
+
+        await engine.search(q)
+        assert kw.search.call_count == 1
+
+        key = engine._query_cache_key(q, "hybrid")
+        assert key is not None and key in _query_cache
+        ts, results = _query_cache[key]
+        _query_cache[key] = (ts - 31.0, results)  # age past the 30s TTL
+
+        r2 = await engine.search(q)
+        assert r2.is_ok and len(r2.value) == 1
+        assert kw.search.call_count == 2, "expired entry should re-execute the query"
+
+    @pytest.mark.asyncio
+    async def test_keyword_mode_not_cached(self):
+        """keyword mode bypasses the cache (strategy called every time)."""
+        mem = _mem("k1")
+        kw = _make_keyword_strategy([(mem, 0.7)])
+        engine = SearchEngine(keyword_search=kw)
+        q = SearchQuery(text="hello", mode="keyword")
+
+        await engine.search(q)
+        await engine.search(q)
+        assert kw.search.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_empty_text_not_cached(self):
+        """Empty-text (tag-only) queries bypass the cache."""
+        mem = _mem("k1", tags=["work"])
+        kw = _make_keyword_strategy([(mem, 0.7)])
+        engine = SearchEngine(keyword_search=kw)
+        q = SearchQuery(text="   ", mode="hybrid", tags=["work"])
+
+        await engine.search(q)
+        await engine.search(q)
+        assert kw.search.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_filters_applied_outside_cache(self):
+        """emotion/kind/tags filters still apply on cache hits."""
+        mem = _mem("k1", content="moody", emotion="happy")
+        kw = _make_keyword_strategy([(mem, 0.7)])
+        engine = SearchEngine(keyword_search=kw)
+        q = SearchQuery(text="mood query", mode="hybrid", top_k=5)
+
+        r1 = await engine.search(q)
+        assert len(r1.value) == 1
+        r2 = await engine.search(SearchQuery(text="mood query", mode="hybrid", top_k=5, emotion="sad"))
+        assert r2.is_ok
+        assert r2.value == [], "emotion filter must be applied on every request"
+
+    @pytest.mark.asyncio
+    async def test_engines_do_not_share_cache(self):
+        """Two engines with different repos (e.g. different personas) must not share results."""
+        mem = _mem("k1", content="isolation")
+        kw = _make_keyword_strategy([(mem, 0.7)])
+        engine_a = SearchEngine(keyword_search=kw, memory_repo=object())
+        engine_b = SearchEngine(keyword_search=kw, memory_repo=object())
+        q = SearchQuery(text="isolated query", mode="hybrid", top_k=5)
+
+        await engine_a.search(q)
+        await engine_b.search(q)
+
+        assert kw.search.call_count == 2, "each engine must execute its own query"
+
+
 class TestSearchEngineFilterByEmotion:
     def test_no_emotion_filter_returns_all(self):
         results = [
@@ -401,9 +509,7 @@ class TestSearchEngineSortByUpdatedAt:
         )
         engine = SearchEngine(keyword_search=_make_keyword_strategy(), memory_repo=memory_repo)
         result = await engine.search(
-            SearchQuery(
-                text="", mode="hybrid", top_k=2, tags=["project:nous"], sort="updated_at"
-            )
+            SearchQuery(text="", mode="hybrid", top_k=2, tags=["project:nous"], sort="updated_at")
         )
         assert result.is_ok
         assert [r.memory.key for r in result.value] == ["new", "mid"]
@@ -514,14 +620,10 @@ class TestSearchEngineTags:
         """keyword モードで tags が戦略に渡される。"""
         kw = _make_keyword_strategy([(_mem("k1", content="hello", tags=["project:nous"]), 0.7)])
         engine = SearchEngine(keyword_search=kw)
-        result = await engine.search(
-            SearchQuery(text="hello", mode="keyword", tags=["project:nous"])
-        )
+        result = await engine.search(SearchQuery(text="hello", mode="keyword", tags=["project:nous"]))
         assert result.is_ok
         assert len(result.value) == 1
-        kw.search.assert_called_once_with(
-            "hello", limit=5, date_from=None, date_to=None, tags=["project:nous"]
-        )
+        kw.search.assert_called_once_with("hello", limit=5, date_from=None, date_to=None, tags=["project:nous"])
 
     @pytest.mark.asyncio
     async def test_hybrid_mode_passes_tags_to_keyword_and_fts(self):
@@ -531,9 +633,7 @@ class TestSearchEngineTags:
         memory_repo = MagicMock()
         memory_repo.search_fts.return_value = Success([])
         engine = SearchEngine(keyword_search=kw, semantic_search=sem, memory_repo=memory_repo)
-        result = await engine.search(
-            SearchQuery(text="hello", mode="hybrid", tags=["project:nous", "task_state"])
-        )
+        result = await engine.search(SearchQuery(text="hello", mode="hybrid", tags=["project:nous", "task_state"]))
         assert result.is_ok
         assert kw.search.call_args.kwargs["tags"] == ["project:nous", "task_state"]
         assert memory_repo.search_fts.call_args.kwargs["tags"] == ["project:nous", "task_state"]
@@ -545,9 +645,7 @@ class TestSearchEngineTags:
         memory_repo = MagicMock()
         memory_repo.get_by_tags.return_value = Success([mem])
         engine = SearchEngine(keyword_search=_make_keyword_strategy(), memory_repo=memory_repo)
-        result = await engine.search(
-            SearchQuery(text="", mode="keyword", tags=["project:nous"])
-        )
+        result = await engine.search(SearchQuery(text="", mode="keyword", tags=["project:nous"]))
         assert result.is_ok
         assert len(result.value) == 1
         assert result.value[0].memory.key == "k1"
@@ -561,9 +659,7 @@ class TestSearchEngineTags:
         memory_repo = MagicMock()
         memory_repo.get_by_tags.return_value = Success([mem])
         engine = SearchEngine(keyword_search=_make_keyword_strategy(), memory_repo=memory_repo)
-        result = await engine.search(
-            SearchQuery(text="", mode="hybrid", tags=["project:nous"])
-        )
+        result = await engine.search(SearchQuery(text="", mode="hybrid", tags=["project:nous"]))
         assert result.is_ok
         assert len(result.value) == 1
         assert result.value[0].memory.key == "k1"
@@ -598,9 +694,7 @@ class TestFilterByTags:
         sem = _make_semantic_strategy([(tagged, 0.9), (noise, 0.8)])
         kw = _make_keyword_strategy([])
         engine = SearchEngine(keyword_search=kw, semantic_search=sem)
-        result = await engine.search(
-            SearchQuery(text="hello", mode="hybrid", tags=["project:nous"])
-        )
+        result = await engine.search(SearchQuery(text="hello", mode="hybrid", tags=["project:nous"]))
         assert result.is_ok
         assert [r.memory.key for r in result.value] == ["tagged"]
 
@@ -618,9 +712,7 @@ def _make_engine(memorag_config=None, memory_repo=None):
     keyword.search.return_value = Success([(_make_memory("k1"), 0.9)])
     semantic = AsyncMock()
     semantic.search.return_value = Success([(_make_memory("k2"), 0.8)])
-    return SearchEngine(
-        keyword, semantic, None, memory_repo=memory_repo, memorag_config=memorag_config
-    )
+    return SearchEngine(keyword, semantic, None, memory_repo=memory_repo, memorag_config=memorag_config)
 
 
 class TestBestSearchMode:

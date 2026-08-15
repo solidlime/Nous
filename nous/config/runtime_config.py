@@ -258,46 +258,52 @@ def register_model_reload_callbacks(config_manager: RuntimeConfigManager) -> Non
         config_manager.reload_status.set("embedding", "loading")
         logger.info("Embedding config changed: %s = %s", key, new_value)
 
-        results = []
-        for persona, ctx in AppContextRegistry._contexts.items():
-            if ctx._embedding is not None:
-                kwargs = {}
-                if key == "model":
-                    kwargs["new_model_name"] = new_value
-                elif key == "device":
-                    kwargs["new_device"] = new_value
-                result = ctx._embedding.reload_model(**kwargs)
-                results.append({"persona": persona, **result})
-                # search_engine をリセット（embedding変更で再構築が必要）
-                ctx._search_engine = None
+        def _reload_worker() -> None:
+            results = []
+            for persona, ctx in AppContextRegistry._contexts.items():
+                if ctx._embedding is not None:
+                    kwargs = {}
+                    if key == "model":
+                        kwargs["new_model_name"] = new_value
+                    elif key == "device":
+                        kwargs["new_device"] = new_value
+                    result = ctx._embedding.reload_model(**kwargs)
+                    results.append({"persona": persona, **result})
+                    # search_engine をリセット（embedding変更で再構築が必要）
+                    ctx._search_engine = None
 
-        status = "ready" if all(r.get("status") == "ready" for r in results) else "error"
-        error_msg = "; ".join(r["message"] for r in results if r.get("status") == "error") or None
-        config_manager.reload_status.set("embedding", status, error=error_msg)
-        logger.info("Embedding reload complete: %s (%d contexts)", status, len(results))
+            status = "ready" if all(r.get("status") == "ready" for r in results) else "error"
+            error_msg = "; ".join(r["message"] for r in results if r.get("status") == "error") or None
+            config_manager.reload_status.set("embedding", status, error=error_msg)
+            logger.info("Embedding reload complete: %s (%d contexts)", status, len(results))
+
+        threading.Thread(target=_reload_worker, daemon=True).start()
 
     def on_reranker_change(key: str, new_value: Any) -> None:
         """Rerankerモデル設定変更時のコールバック。"""
         config_manager.reload_status.set("reranker", "loading")
         logger.info("Reranker config changed: %s = %s", key, new_value)
 
-        results = []
-        for persona, ctx in AppContextRegistry._contexts.items():
-            if ctx._reranker is not None:
-                kwargs = {}
-                if key == "model":
-                    kwargs["new_model_name"] = new_value
-                elif key == "enabled":
-                    kwargs["new_enabled"] = new_value
-                result = ctx._reranker.reload_model(**kwargs)
-                results.append({"persona": persona, **result})
-                # search_engine をリセット（reranker変更で再構築が必要）
-                ctx._search_engine = None
+        def _reload_worker() -> None:
+            results = []
+            for persona, ctx in AppContextRegistry._contexts.items():
+                if ctx._reranker is not None:
+                    kwargs = {}
+                    if key == "model":
+                        kwargs["new_model_name"] = new_value
+                    elif key == "enabled":
+                        kwargs["new_enabled"] = new_value
+                    result = ctx._reranker.reload_model(**kwargs)
+                    results.append({"persona": persona, **result})
+                    # search_engine をリセット（reranker変更で再構築が必要）
+                    ctx._search_engine = None
 
-        status = "ready" if all(r.get("status") in ("ready", "disabled") for r in results) else "error"
-        error_msg = "; ".join(r["message"] for r in results if r.get("status") == "error") or None
-        config_manager.reload_status.set("reranker", status, error=error_msg)
-        logger.info("Reranker reload complete: %s (%d contexts)", status, len(results))
+            status = "ready" if all(r.get("status") in ("ready", "disabled") for r in results) else "error"
+            error_msg = "; ".join(r["message"] for r in results if r.get("status") == "error") or None
+            config_manager.reload_status.set("reranker", status, error=error_msg)
+            logger.info("Reranker reload complete: %s (%d contexts)", status, len(results))
+
+        threading.Thread(target=_reload_worker, daemon=True).start()
 
     def on_qdrant_change(key: str, new_value: Any) -> None:
         """Qdrant設定変更時のコールバック。"""

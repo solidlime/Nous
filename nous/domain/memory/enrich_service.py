@@ -23,7 +23,7 @@ class MemoryEnrichService:
         self._entity_service = entity_service
         self._repo = repo
 
-    def enrich_memory(
+    async def enrich_memory(
         self,
         memory: Memory,
         content: str,
@@ -42,7 +42,6 @@ class MemoryEnrichService:
         if self._enricher is not None and importance == 0.5:
             with contextlib.suppress(Exception):
                 # Extract entities using Sudachi NER (accurate path) for LLM context.
-                # create_memory is sync — call SudachiExtractor directly (no await needed).
                 from nous.domain.memory.sudachi_extractor import (
                     SudachiExtractor,
                 )
@@ -51,7 +50,7 @@ class MemoryEnrichService:
                 accurate = sudachi.extract(content.strip())
                 # Convert list[dict] with keys {name, type, start, end} → list[tuple[str, str]]
                 extracted_entities = [(e["name"], e["type"]) for e in accurate]
-                enrichment = self._enricher.enrich(
+                enrichment = await self._enricher.enrich_async(
                     content=content.strip(),
                     type_tags=type_hints or [],
                     entities=extracted_entities,

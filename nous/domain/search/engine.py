@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import threading
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -23,6 +25,39 @@ if TYPE_CHECKING:
 from nous.infrastructure.logging.structured import get_logger
 
 logger = get_logger(__name__)
+
+# Query result cache: key -> (monotonic timestamp, results). TTL-only invalidation.
+_CACHE_TTL_S = 30.0
+_CACHE_MAX = 256
+_query_cache: dict[tuple, tuple[float, list[SearchResult]]] = {}
+_query_lock = threading.Lock()
+
+
+def _cache_get(key: tuple) -> list[SearchResult] | None:
+    """Return a shallow copy of cached results if fresh, else None."""
+    with _query_lock:
+        entry = _query_cache.get(key)
+        if entry is None:
+            return None
+        ts, results = entry
+        if time.monotonic() - ts > _CACHE_TTL_S:
+            _query_cache.pop(key, None)
+            return None
+    return [r for r in results]
+
+
+def _cache_put(key: tuple, results: list[SearchResult]) -> None:
+    """Store results under key, dropping all entries when at capacity."""
+    with _query_lock:
+        if len(_query_cache) >= _CACHE_MAX:
+            _query_cache.clear()
+        _query_cache[key] = (time.monotonic(), list(results))
+
+
+def invalidate_query_cache() -> None:
+    """Drop all cached query results (called on memory writes via event bus)."""
+    with _query_lock:
+        _query_cache.clear()
 
 
 @dataclass
@@ -79,6 +114,46 @@ class SearchEngine:
         self._reranker = reranker
         self._link_repo = link_repo
         self._entity_service = entity_service
+        self._reranker_unloaded_warned = False
+
+    def _post_filter(self, results: list[SearchResult], query: SearchQuery) -> list[SearchResult]:
+        """Apply per-request filters/sort outside the query cache."""
+        filtered = self._filter_by_emotion(results, query.emotion)
+        filtered = self._filter_by_kind(filtered, query.kind)
+        filtered = self._filter_by_tags(filtered, query.tags)
+        if query.valid_at is not None:
+            filtered = self._filter_by_valid_at(filtered, query.valid_at)
+        if query.sort == "updated_at":
+            filtered.sort(key=lambda r: r.memory.updated_at, reverse=True)
+        return filtered
+
+    def _query_cache_key(self, query: SearchQuery, mode: str) -> tuple | None:
+        """Build the cache key for cacheable queries, or None to skip caching."""
+        if mode not in ("hybrid", "semantic", "smart") or not query.text.strip():
+            return None
+        persona = self._semantic.persona if self._semantic is not None else "default"
+        # Engine identity: the module-level cache is shared across engines, so
+        # include per-engine state (repo) to prevent cross-engine/persona leaks.
+        engine_id = id(self._memory_repo) if self._memory_repo is not None else id(self)
+        return (
+            engine_id,
+            persona,
+            query.text,
+            mode,
+            query.top_k,
+            tuple(query.tags) if query.tags else None,
+            query.date_range,
+            query.min_importance,
+            query.kind,
+            query.importance_weight,
+            query.recency_weight,
+            query.vector_weight,
+            query.keyword_weight,
+            query.similarity_threshold,
+            query.sort,
+            query.lifecycle_status,
+            query.valid_at,
+        )
 
     async def search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
         """Execute search using the specified mode.
@@ -95,6 +170,12 @@ class SearchEngine:
         date_from, date_to = parse_date_range(query.date_range)
 
         mode = query.mode or "hybrid"
+        cache_key = self._query_cache_key(query, mode)
+        if cache_key is not None:
+            cached = _cache_get(cache_key)
+            if cached is not None:
+                return Success(self._post_filter(cached, query))
+
         if mode == "keyword":
             result = self._keyword_search(query, date_from, date_to)
         elif mode == "semantic":
@@ -106,14 +187,11 @@ class SearchEngine:
 
         if not result.is_ok:
             return result
-        filtered = self._filter_by_emotion(result.value, query.emotion)
-        filtered = self._filter_by_kind(filtered, query.kind)
-        filtered = self._filter_by_tags(filtered, query.tags)
-        if query.valid_at is not None:
-            filtered = self._filter_by_valid_at(filtered, query.valid_at)
-        if query.sort == "updated_at":
-            filtered.sort(key=lambda r: r.memory.updated_at, reverse=True)
-        return Success(filtered)
+        # Never cache empty results: cold-start fallbacks (e.g. embedding not
+        # loaded yet) would otherwise poison the cache for the full TTL.
+        if cache_key is not None and result.value:
+            _cache_put(cache_key, result.value)
+        return Success(self._post_filter(result.value, query))
 
     @staticmethod
     def _filter_by_emotion(
@@ -297,26 +375,30 @@ class SearchEngine:
                             r.score += 0.1
                     deduped.sort(key=lambda x: x.score, reverse=True)
 
-        # 5. Rerank step: cross-encoder refinement (if available)
+        # 5. Rerank step: cross-encoder refinement (if available and loaded)
         if self._reranker is not None and self._reranker.enabled:
-            pairs = [(r.memory.key, r.score) for r in deduped]
-            contents = {r.memory.key: r.memory.content for r in deduped if r.memory.content}
-            if contents:
-                try:
-                    reranked = self._reranker.rerank(
-                        query.text,
-                        pairs,
-                        contents,
-                        top_k=min(len(pairs), 20),
-                    )
-                    score_map = dict(reranked)
-                    for r in deduped:
-                        new_score = score_map.get(r.memory.key)
-                        if new_score is not None:
-                            r.score = new_score
-                    deduped.sort(key=lambda x: x.score, reverse=True)
-                except Exception:
-                    logger.warning("Reranker step failed, using pre-rerank scores")
+            if self._reranker.is_loaded:
+                pairs = [(r.memory.key, r.score) for r in deduped]
+                contents = {r.memory.key: r.memory.content for r in deduped if r.memory.content}
+                if contents:
+                    try:
+                        reranked = self._reranker.rerank(
+                            query.text,
+                            pairs,
+                            contents,
+                            top_k=min(len(pairs), 20),
+                        )
+                        score_map = dict(reranked)
+                        for r in deduped:
+                            new_score = score_map.get(r.memory.key)
+                            if new_score is not None:
+                                r.score = new_score
+                        deduped.sort(key=lambda x: x.score, reverse=True)
+                    except Exception:
+                        logger.warning("Reranker step failed, using pre-rerank scores")
+            elif not self._reranker_unloaded_warned:
+                self._reranker_unloaded_warned = True
+                logger.warning("Reranker not loaded; skipping rerank step")
 
         # 6. Spreading Activation through memory links
         if self._link_repo and deduped:
@@ -397,6 +479,7 @@ class SearchEngine:
                 seen[r.memory.key] = r
         deduped = sorted(seen.values(), key=lambda x: x.score, reverse=True)
         return Success(deduped[: query.top_k])
+
 
 def _expand_query(text: str) -> list[str]:
     """Extract sub-queries from text for smart search expansion.

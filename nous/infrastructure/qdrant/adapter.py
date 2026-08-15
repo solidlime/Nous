@@ -114,6 +114,12 @@ class QdrantVectorStore:
         limit: int = 10,
     ) -> Result[list[tuple[str, float]], VectorStoreError]:
         """Semantic search with pure vector similarity. Returns list of (memory_key, score)."""
+        if not self.embedding.is_loaded:
+            # Cold start: kick off a single background load (self-healing) and
+            # fall back to keyword/FTS rather than blocking this request for
+            # seconds. ensure_loaded_background() guards against thread storms.
+            self.embedding.ensure_loaded_background()
+            return Success([])
         try:
             vector = await self.embedding.async_encode(query, is_query=True)
             client = self.client_manager.client

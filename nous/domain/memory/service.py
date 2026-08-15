@@ -32,6 +32,17 @@ from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import get_now
 from nous.domain.value_objects import normalize_emotion
 
+# Strong references to background tasks so they aren't garbage-collected mid-flight.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _track_background_task(coro) -> asyncio.Task:
+    """Schedule a coroutine and keep a strong reference until it completes."""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+
 
 class MemoryService:
     """Domain service for memory operations — Facade over 5 sub-services."""
@@ -61,15 +72,17 @@ class MemoryService:
 
         # Sub-services
         self._write_service = MemoryWriteService(repo, self._search_engine_ref)
-        self._enrich_service = MemoryEnrichService(
-            enricher, entity_service, repo
-        )
+        self._enrich_service = MemoryEnrichService(enricher, entity_service, repo)
         self._link_service = MemoryLinkService(
-            link_repo, self._search_engine_ref,
+            link_repo,
+            self._search_engine_ref,
             session_event_repo=session_event_repo,
         )
         self._evolution_service = MemoryEvolutionService(
-            self._search_engine_ref, repo, enricher, link_repo,
+            self._search_engine_ref,
+            repo,
+            enricher,
+            link_repo,
             contradiction_detector,
         )
         self._query_service = MemoryQueryService(repo)
@@ -183,13 +196,15 @@ class MemoryService:
                     tags=tags,
                 )
 
-        # ── 8. Enrichment ──
-        self._enrich_service.enrich_memory(
-            memory=memory,
-            content=content,
-            type_hints=type_hints,
-            key=key,
-            importance=importance,
+        # ── 8. Enrichment (background: LLM wait must not block create) ──
+        _track_background_task(
+            self._enrich_service.enrich_memory(
+                memory=memory,
+                content=content,
+                type_hints=type_hints,
+                key=key,
+                importance=importance,
+            )
         )
 
         # ── 9. Hebbian co-activation links ──
@@ -198,7 +213,7 @@ class MemoryService:
                 self._link_service._create_hebbian_links(memory, session_id)
 
         # ── 10. Background evolution ──
-        asyncio.create_task(
+        _track_background_task(
             self._evolution_service._run_background_evolution(
                 content=content,
                 memory_key=memory.key,

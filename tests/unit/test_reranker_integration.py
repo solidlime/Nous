@@ -188,6 +188,42 @@ class TestSearchEngineRerankerIntegration:
         assert result.is_ok
         mock_reranker.rerank.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_reranker_not_called_when_not_loaded(self):
+        """When reranker is enabled but not loaded, rerank is skipped (no loop freeze)."""
+
+        mock_reranker = MagicMock()
+        mock_reranker.enabled = True
+        mock_reranker.is_loaded = False
+
+        kw = MagicMock()
+        kw.search.return_value = Success([(_make_mem("key_a"), 0.5)])
+
+        engine = SearchEngine(keyword_search=kw, reranker=mock_reranker)
+        result = await engine.search(SearchQuery(text="test", mode="hybrid", top_k=5))
+        assert result.is_ok
+        mock_reranker.rerank.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_reranker_unloaded_warning_logged_once(self, caplog):
+        """The unloaded-reranker warning is logged once per engine, not per request."""
+
+        mock_reranker = MagicMock()
+        mock_reranker.enabled = True
+        mock_reranker.is_loaded = False
+
+        kw = MagicMock()
+        kw.search.return_value = Success([(_make_mem("key_a"), 0.5)])
+
+        engine = SearchEngine(keyword_search=kw, reranker=mock_reranker)
+        with caplog.at_level("WARNING"):
+            for i in range(3):
+                result = await engine.search(SearchQuery(text=f"test {i}", mode="hybrid", top_k=5))
+                assert result.is_ok
+
+        warns = [r for r in caplog.records if "Reranker not loaded" in r.getMessage()]
+        assert len(warns) == 1
+
 
 # ---------------------------------------------------------------------------
 # AppContext RerankerModel instantiation tests

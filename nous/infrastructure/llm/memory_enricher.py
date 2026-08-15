@@ -6,7 +6,7 @@ import asyncio
 import concurrent.futures
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from nous.domain.memory.contradiction import ContradictionResult, classify_contradiction
 from nous.domain.memory.enrichment import EnrichmentResult, RelationCandidate
@@ -14,9 +14,13 @@ from nous.domain.value_objects import normalize_importance
 from nous.infrastructure.llm.factory import get_provider
 
 if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
     from nous.infrastructure.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 _VALID_RELATION_TYPES = frozenset(
     {
@@ -73,7 +77,7 @@ class MemoryEnricher:
         self._min_chars = min_chars
 
     @staticmethod
-    def _run_async(coro):
+    def _run_async(coro: Coroutine[Any, Any, _T]) -> _T:
         """Safely run an async coroutine from a sync context."""
         try:
             asyncio.get_running_loop()  # raises RuntimeError if no loop
@@ -83,13 +87,16 @@ class MemoryEnricher:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 return pool.submit(asyncio.run, coro).result()
 
-    def enrich(
+    async def enrich_async(
         self,
         content: str,
         type_tags: list[str] | None = None,
         entities: list[tuple[str, str]] | None = None,
     ) -> EnrichmentResult | None:
-        """One LLM call extracting both importance and entity relations.
+        """One LLM call extracting both importance and entity relations (async).
+
+        Same as :meth:`enrich` but awaits the LLM call directly so it can run
+        as a background task without blocking the event loop.
 
         Args:
             content: Memory content to enrich.
@@ -122,13 +129,22 @@ class MemoryEnricher:
                 model=self._model,
                 base_url=self._base_url,
             )
-            result_text = self._run_async(self._call_llm(provider, _SYSTEM_PROMPT, user_message))
+            result_text = await self._call_llm(provider, _SYSTEM_PROMPT, user_message)
             if not result_text:
                 return None
             return self._parse_response(result_text)
         except Exception:
             logger.exception("Memory enrichment failed")
             return None
+
+    def enrich(
+        self,
+        content: str,
+        type_tags: list[str] | None = None,
+        entities: list[tuple[str, str]] | None = None,
+    ) -> EnrichmentResult | None:
+        """Sync wrapper around :meth:`enrich_async` (kept for sync callers/tests)."""
+        return self._run_async(self.enrich_async(content=content, type_tags=type_tags, entities=entities))
 
     async def _call_llm(self, provider: LLMProvider, system: str, user_message: str) -> str | None:
         """Call the LLM stream and collect the full text response."""

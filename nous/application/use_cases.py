@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from nous.domain.equipment.service import EquipmentService
 from nous.domain.memory.service import MemoryService
 from nous.domain.persona.service import PersonaService
-from nous.domain.search.engine import SearchEngine
+from nous.domain.search.engine import SearchEngine, invalidate_query_cache
 from nous.domain.search.ranker import (
     ChainedRanker,
     EmotionRecallBiasRanker,
@@ -169,6 +169,7 @@ class AppContext:
                     api_key = self.settings.opencode_go_api_key
                 if not api_key:
                     from nous.config.runtime_config import RuntimeConfigManager
+
                     key_name = f"{provider}_api_key"
                     value, _ = RuntimeConfigManager().get_effective_value("api_keys", key_name)
                     api_key = value or ""
@@ -177,6 +178,7 @@ class AppContext:
                 model = self.settings.memory_enrichment.model
             if api_key:
                 from nous.infrastructure.llm.memory_enricher import MemoryEnricher
+
                 enricher = MemoryEnricher(
                     provider=provider,
                     api_key=api_key,
@@ -215,13 +217,20 @@ class AppContext:
             enricher=self._enricher,
             session_event_repo=self._session_event_repo,
         )
-        self.persona_service = PersonaService(self.persona_repo, event_bus=self.event_bus, memory_service=self.memory_service)
+        self.persona_service = PersonaService(
+            self.persona_repo, event_bus=self.event_bus, memory_service=self.memory_service
+        )
         self.equipment_service = EquipmentService(self.equipment_repo)
 
         # Vector store sync via event handlers (replaces direct calls from MCP tools)
         self.event_bus.subscribe("memory.created", self._on_memory_vector_upsert)
         self.event_bus.subscribe("memory.updated", self._on_memory_vector_upsert)
         self.event_bus.subscribe("memory.deleted", self._on_memory_vector_delete)
+
+        # Invalidate the query cache on writes so new data is immediately searchable
+        self.event_bus.subscribe("memory.created", self._on_memory_cache_invalidate)
+        self.event_bus.subscribe("memory.updated", self._on_memory_cache_invalidate)
+        self.event_bus.subscribe("memory.deleted", self._on_memory_cache_invalidate)
 
         # Initialize SessionEventRecorder (best-effort, don't fail startup)
         # Uses self._session_event_repo already created in _init_services above.
@@ -275,7 +284,7 @@ class AppContext:
                 try:
                     self._reranker._load_model()
                 except Exception:
-                    logger.debug("Reranker preload failed (will lazy-load on first use)")
+                    logger.warning("Reranker preload failed (will lazy-load on first use)", exc_info=True)
 
             threading.Thread(target=_safe_preload, daemon=True).start()
 
@@ -286,7 +295,7 @@ class AppContext:
             try:
                 self._embedding._ensure_loaded()
             except Exception:
-                logger.debug("EmbeddingModel preload failed (will lazy-load on first use)", exc_info=True)
+                logger.warning("EmbeddingModel preload failed (will lazy-load on first use)", exc_info=True)
 
         _embed_threading.Thread(target=_preload_embedding, daemon=True).start()
 
@@ -301,7 +310,7 @@ class AppContext:
                 SudachiExtractor().extract("")
                 logger.debug("Sudachi dictionary preloaded successfully")
             except Exception:
-                logger.debug("Sudachi preload failed (will retry on first use)", exc_info=True)
+                logger.warning("Sudachi preload failed (will retry on first use)", exc_info=True)
 
         threading.Thread(target=_safe_preload_sudachi, daemon=True).start()
 
@@ -317,7 +326,7 @@ class AppContext:
                 _ = self.search_engine  # プロパティアクセスで全戦略を初期化
                 logger.debug("SearchEngine warmed up")
             except Exception:
-                logger.debug("SearchEngine warmup failed (will init on first use)", exc_info=True)
+                logger.warning("SearchEngine warmup failed (will init on first use)", exc_info=True)
 
         _threading.Thread(target=_warmup_search_engine, daemon=True).start()
 
@@ -460,6 +469,10 @@ class AppContext:
         except Exception:
             logger.warning("Vector delete failed for memory: %s", data.get("key", "?"), exc_info=True)
 
+    async def _on_memory_cache_invalidate(self, event_type: str, data: dict) -> None:
+        """Drop cached query results so writes are immediately visible in search."""
+        invalidate_query_cache()
+
 
 class AppContextRegistry:
     """Registry managing per-persona AppContext instances."""
@@ -489,9 +502,7 @@ class AppContextRegistry:
             from nous.application.workers.decay_worker import DecayWorker
 
             decay_interval = (
-                config.forgetting_decay_interval_seconds
-                if config
-                else cls._settings.forgetting.decay_interval_seconds
+                config.forgetting_decay_interval_seconds if config else cls._settings.forgetting.decay_interval_seconds
             )
             decay_worker = DecayWorker(ctx, decay_interval, config=config)
             decay_worker.start()

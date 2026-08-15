@@ -6,10 +6,15 @@ Shared by EmbeddingModel and RerankerModel to eliminate the identical
 
 from __future__ import annotations
 
+import logging
 import threading
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-import onnxruntime
+if TYPE_CHECKING:
+    import onnxruntime
+
+logger = logging.getLogger(__name__)
 
 
 class OnnxBaseModel(ABC):
@@ -22,6 +27,35 @@ class OnnxBaseModel(ABC):
     def __init__(self) -> None:
         self._session: onnxruntime.InferenceSession | None = None
         self._lock = threading.Lock()
+        self._bg_load_started = False
+
+    @property
+    def is_loaded(self) -> bool:
+        """Whether the model session has been created (no load triggered)."""
+        return self._session is not None
+
+    def ensure_loaded_background(self) -> None:
+        """Start at most one background load thread; never blocks.
+
+        Used by request paths that prefer graceful degradation over a
+        multi-second cold load (snapshot_download + ONNX session creation).
+        Self-healing: once the thread finishes (success or failure), a later
+        call may start a fresh attempt.
+        """
+        with self._lock:
+            if self._session is not None or self._bg_load_started:
+                return
+            self._bg_load_started = True
+        threading.Thread(target=self._load_worker, daemon=True).start()
+
+    def _load_worker(self) -> None:
+        try:
+            self._ensure_loaded()
+        except Exception:
+            logger.warning("Background model load failed (will retry on next request)", exc_info=True)
+        finally:
+            with self._lock:
+                self._bg_load_started = False
 
     def _ensure_loaded(self) -> None:
         """Lazy-load model with double-checked locking."""

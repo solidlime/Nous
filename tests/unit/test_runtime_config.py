@@ -34,6 +34,19 @@ def tmp_data_dir(tmp_path: Path):
         yield tmp_path
 
 
+def _wait_for_reload(mgr: RuntimeConfigManager, key: str, timeout: float = 5.0) -> dict:
+    """Wait for the background reload thread to finish (status leaves 'loading')."""
+    import time
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        status = mgr.reload_status.get(key)
+        if status["status"] != "loading":
+            return status
+        time.sleep(0.01)
+    raise AssertionError(f"reload of '{key}' did not complete within {timeout}s")
+
+
 def test_get_all_returns_all_categories(tmp_data_dir: Path):
     """All categories defined in SETTINGS_META should appear in get_all()."""
     mgr = RuntimeConfigManager()
@@ -418,6 +431,7 @@ def test_embedding_reload_callback_fires(tmp_data_dir: Path):
     try:
         result = mgr.update("embedding", "model", "new-model")
         assert result["success"] is True
+        _wait_for_reload(mgr, "embedding")
         mock_ctx._embedding.reload_model.assert_called_once_with(new_model_name="new-model")
         assert mock_ctx._search_engine is None
     finally:
@@ -444,6 +458,7 @@ def test_embedding_reload_callback_device(tmp_data_dir: Path):
     try:
         result = mgr.update("embedding", "device", "cuda")
         assert result["success"] is True
+        _wait_for_reload(mgr, "embedding")
         mock_ctx._embedding.reload_model.assert_called_once_with(new_device="cuda")
     finally:
         AppContextRegistry._contexts.clear()
@@ -468,7 +483,7 @@ def test_embedding_reload_with_error_status(tmp_data_dir: Path):
 
     try:
         mgr.update("embedding", "model", "bad-model")
-        status = mgr.reload_status.get("embedding")
+        status = _wait_for_reload(mgr, "embedding")
         assert status["status"] == "error"
     finally:
         AppContextRegistry._contexts.clear()
@@ -493,6 +508,7 @@ def test_reranker_reload_callback(tmp_data_dir: Path):
     try:
         result = mgr.update("reranker", "model", "new-reranker")
         assert result["success"] is True
+        _wait_for_reload(mgr, "reranker")
         mock_ctx._reranker.reload_model.assert_called_once_with(new_model_name="new-reranker")
     finally:
         AppContextRegistry._contexts.clear()
@@ -517,6 +533,7 @@ def test_reranker_enabled_callback(tmp_data_dir: Path):
     try:
         result = mgr.update("reranker", "enabled", False)
         assert result["success"] is True
+        _wait_for_reload(mgr, "reranker")
         mock_ctx._reranker.reload_model.assert_called_once_with(new_enabled=False)
     finally:
         AppContextRegistry._contexts.clear()

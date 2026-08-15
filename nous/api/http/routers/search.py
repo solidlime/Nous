@@ -53,7 +53,7 @@ def register_search_routes(mcp) -> None:
                 query_kwargs["emotion"] = emotion
             query = SearchQuery(**query_kwargs)
             if hasattr(ctx.search_engine, "_semantic") and ctx.search_engine._semantic is not None:
-                ctx.search_engine._semantic._persona = persona  # noqa: SLF001
+                ctx.search_engine._semantic.persona = persona  # noqa: SLF001
 
             result = await ctx.search_engine.search(query)
             if not result.is_ok:
