@@ -117,7 +117,7 @@ def register_tools(mcp: FastMCP) -> None:
         source_context: str | None = None,
         kind: str = "semantic",
         defer_vector: bool = False,
-        skip_duplicate_check: bool = False,
+        skip_duplicate_check: bool = True,
     ) -> str:
         """記憶を作成する。あなたやユーザーに関する重要な事実・好み・出来事を記録せよ。
         importance は None かつエンリッチメント有効時に LLM が自動評価。

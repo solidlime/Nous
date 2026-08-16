@@ -26,7 +26,7 @@ async def _tool_memory_create(
     source_context: str | None = None,
     kind: str = "semantic",
     defer_vector: bool = False,
-    skip_duplicate_check: bool = False,
+    skip_duplicate_check: bool = True,
 ) -> str:
     """Create a memory. Current persona state (emotion, body_state) is automatically
     snapshotted at creation time. Always call context_update/update_context *before*

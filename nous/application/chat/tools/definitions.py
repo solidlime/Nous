@@ -45,8 +45,8 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 "tags": {"type": "array", "items": {"type": "string"}, "description": "タグリスト"},
                 "skip_duplicate_check": {
                     "type": "boolean",
-                    "description": "Skip semantic duplicate detection. ALWAYS keep as false unless explicitly asked by user.",
-                    "default": False,
+                    "description": "重複チェックをスキップする（デフォルト: True。応答を速くするため）。重複防止が必要な場合は false を明示的に指定。",
+                    "default": True,
                 },
             },
             "required": ["content"],
