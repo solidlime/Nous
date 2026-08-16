@@ -186,3 +186,22 @@ class TestChainEmotionBoost:
         )
         diff = high.compute_strength_score(now=now) - low.compute_strength_score(now=now)
         assert diff <= 0.10 + 1e-9
+
+    def test_compute_strength_score_mixed_tz_no_crash(self):
+        """aware な last_recall/last_utility と naive な now の混在で例外を出さない（decay worker 経路の回帰）。"""
+        from datetime import UTC
+
+        aware = datetime(2026, 6, 29, 12, 0, 0, tzinfo=UTC)
+        ms = MemoryStrength(
+            memory_key="tz-mix",
+            recall_count=5,
+            last_recall=aware,
+            last_utility=aware,
+        )
+        # now を渡さない = entities 内で datetime.now()（naive）が使われる経路
+        score = ms.compute_strength_score()
+        assert 0.0 <= score <= 1.0
+
+        # 両方向: aware な now を明示的に渡しても落ちない
+        score2 = ms.compute_strength_score(now=datetime(2026, 6, 30, 12, 0, 0, tzinfo=UTC))
+        assert 0.0 <= score2 <= 1.0

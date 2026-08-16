@@ -112,8 +112,14 @@ class MemoryStrength:
         if now is None:
             now = datetime.now()
 
+        # Normalize timezones: DB round-trips store aware datetimes (format_iso),
+        # while in-memory defaults are naive. Strip tzinfo to keep subtraction valid.
+        now = now.replace(tzinfo=None)
+        last_recall = self.last_recall.replace(tzinfo=None) if self.last_recall is not None else None
+        last_utility = self.last_utility.replace(tzinfo=None) if self.last_utility is not None else None
+
         # Recency: 7-day half-life
-        age_days = (now - self.last_recall).total_seconds() / 86400 if self.last_recall is not None else 365.0
+        age_days = (now - last_recall).total_seconds() / 86400 if last_recall is not None else 365.0
         recency = 0.20 * math.exp(-age_days / 7.0)
 
         # Frequency: log-scaled recall count
@@ -123,8 +129,8 @@ class MemoryStrength:
         importance_score = 0.25 * max(0.0, min(1.0, importance))
 
         # Utility: 3-day half-life
-        if self.last_utility is not None:
-            utility_age = (now - self.last_utility).total_seconds() / 86400
+        if last_utility is not None:
+            utility_age = (now - last_utility).total_seconds() / 86400
             utility = 0.20 * math.exp(-utility_age / 3.0)
         else:
             utility = 0.0
