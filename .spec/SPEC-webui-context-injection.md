@@ -60,6 +60,11 @@ opencode 側では session-start スキル + get_context により「プロジ�
 - base_prompt に一行追記:「会話の話題が過去の記憶と関連しそうなとき・話題が切り替わったときは、memory_search ツールで能動的に検索せよ」。
 - 頻度制御は既存 max_tool_calls に委ねる。
 
+### §5 DB 既定値生成の修正（設定監査で判明した前提修正）
+
+- `nous/domain/chat_config.py:267` `_infer_default_value` が pydantic default を無視して型のみの既定値（int→0, bool→0）で ALTER TABLE するため、新規列が初回 save まで pydantic 既定と乖離する。
+- **本 SPEC の新設キー `memory_digest_count` もこの罠にかかる**（列追加直後の既定が 0 = digest 無効化になる）。根因修正として `_infer_default_value` を pydantic field default を使う方式に変更する。副次的に `context_compression_threshold`(0.0→clamp 0.5 化け)・true 既定の bool 群も解消される。
+
 ## データフロー
 
 ```
@@ -94,6 +99,7 @@ PostProcessStep:
 - `nous/application/chat/pipeline/context_loader.py` — session_summary sort 指定、task_state 注入
 - `nous/application/chat/pipeline/trimmer.py` — トリム優先度
 - `nous/domain/compression_config.py` — `memory_digest_count` 新設、`memory_preload_count` 既定値変更
+- `nous/domain/chat_config.py` — `_infer_default_value` の pydantic default 互換修正（§5）
 - `nous/api/http/static/chat/chat-settings.js`（+ 設定パネル HTML）— 右カラムへの設定UI追加
 - base_prompt 定義 — §4 の一行
 
