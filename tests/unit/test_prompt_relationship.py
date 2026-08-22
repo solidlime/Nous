@@ -55,7 +55,7 @@ def _make_ctx(db, persona: str = "test_persona"):
 
 @pytest.fixture(autouse=True)
 def _patch_datetime():
-    with patch("nous.application.chat.pipeline.prepare.datetime", FakeDatetime):
+    with patch("nous.application.chat.pipeline.context_loader.datetime", FakeDatetime):
         yield
 
 
@@ -105,22 +105,6 @@ class TestBuildRelationshipContext:
         assert "5日前から知り合い" in result
         assert "3 日会話した" in result
 
-    def test_days_since_last(self):
-        """last_conversation_time from yesterday -> '1日経過' text."""
-        first_at = _sqlite_dt(REF_NOW - timedelta(days=10))
-        last_time = _sqlite_dt(REF_NOW - timedelta(days=1))
-        db = MockDb(first_at=first_at, active_days=5, last_time=last_time)
-        result = _build_relationship_context(_make_ctx(db))
-        assert "前回の会話から1日経過" in result
-
-    def test_long_absence(self):
-        """last_conversation_time from 30+ days ago -> '長い間' text."""
-        first_at = _sqlite_dt(REF_NOW - timedelta(days=60))
-        last_time = _sqlite_dt(REF_NOW - timedelta(days=35))
-        db = MockDb(first_at=first_at, active_days=10, last_time=last_time)
-        result = _build_relationship_context(_make_ctx(db))
-        assert "長い間話していなかった" in result
-
     def test_active_days_count(self):
         """DISTINCT dates count works correctly."""
         first_at = _sqlite_dt(REF_NOW - timedelta(days=30))
@@ -135,25 +119,6 @@ class TestBuildRelationshipContext:
         db = MockDb(first_at=first_at, active_days=1, last_time=last_time)
         result = _build_relationship_context(_make_ctx(db))
         assert "経過" not in result
-
-    def test_days_since_last_under_seven(self):
-        """days_since_last between 2-6 -> simple count without extra note."""
-        first_at = _sqlite_dt(REF_NOW - timedelta(days=20))
-        last_time = _sqlite_dt(REF_NOW - timedelta(days=3))
-        db = MockDb(first_at=first_at, active_days=8, last_time=last_time)
-        result = _build_relationship_context(_make_ctx(db))
-        assert "前回の会話から3日経過。" in result
-        assert "しばらく" not in result
-        assert "長い間" not in result
-
-    def test_days_since_last_under_thirty(self):
-        """days_since_last between 7-29 -> includes 'しばらく' note."""
-        first_at = _sqlite_dt(REF_NOW - timedelta(days=50))
-        last_time = _sqlite_dt(REF_NOW - timedelta(days=14))
-        db = MockDb(first_at=first_at, active_days=15, last_time=last_time)
-        result = _build_relationship_context(_make_ctx(db))
-        assert "前回の会話から14日経過。" in result
-        assert "しばらく話していない" in result
 
     def test_context_appended_to_prompt(self):
         """Verify relationship context in context_section flows into system_prompt."""

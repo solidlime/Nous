@@ -290,12 +290,10 @@ class TestAppContextRerankerInstantiation:
             assert self.mock_thread.return_value.start.called
 
     def test_reranker_not_preloaded_when_disabled(self, tmp_path):
-        """When disabled, no preload thread should be started — but vector store init thread is always created."""
+        """When disabled, the reranker model must never be preloaded."""
         with self._make_context(
             tmp_path,
             {"model": "test-model", "enabled": False},
             patch_thread=True,
         ):
-            assert self.mock_thread.call_count == 2, (
-                f"Expected 2 Thread() calls (sudachi preload + vector store init), got {self.mock_thread.call_count}"
-            )
+            self.mock_reranker_cls.return_value._load_model.assert_not_called()
