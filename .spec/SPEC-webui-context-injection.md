@@ -65,6 +65,29 @@ opencode 側では session-start スキル + get_context により「プロジ�
 - `nous/domain/chat_config.py:267` `_infer_default_value` が pydantic default を無視して型のみの既定値（int→0, bool→0）で ALTER TABLE するため、新規列が初回 save まで pydantic 既定と乖離する。
 - **本 SPEC の新設キー `memory_digest_count` もこの罠にかかる**（列追加直後の既定が 0 = digest 無効化になる）。根因修正として `_infer_default_value` を pydantic field default を使う方式に変更する。副次的に `context_compression_threshold`(0.0→clamp 0.5 化け)・true 既定の bool 群も解消される。
 
+### §6 設定監査修正（監査で判明した不具合の同梱修正）
+
+※ voice_enabled / voice_auto_play / voice_volume は実機確認済みで正常動作のため対象外。
+
+**バグ修正:**
+
+- `auto_capture_interval` を機能させる: post.py の auto_capture 実行を interval 秒間隔に制限する（最終実行時刻を保持し、未達なら skip）。現状は UI 表示に反して毎ターン実行。
+- `reasoning_effort` の validator を raise 型から clamp 型に統一する（provider_config.py:102-107）。不正値で ValidationError → 設定全体がデフォルトフォールバックする危険を除去。
+- chat-settings.js:51 の `max_tokens` JS fallback を 2048 → 8192 に修正（pydantic/HTML 既定と一致させる）。
+- chat-settings.js:438 の `rrf_k` 送信を parseInt → parseFloat に修正（小数 k の切り捨て解消）。
+- `context_keep_recent_turns` の HTML min="1" → "0"（pydantic の 0=無効化を UI から可能に）。
+- `show_message_timestamps` を「コンテキスト最適化」サブセクションから表示設定として適切な位置へ移動。
+
+**backend-only 群の全面 UI 化（14項目）:**
+
+| 項目 | 配置先 |
+|------|--------|
+| `image_caption_enabled/model/api_key/base_url/provider` | メディアパネル |
+| `emotion_decay_half_life_hours/threshold/neutral_threshold` | メモリ・感情パネル |
+| `language` | 基本設定 |
+| `dynamic_tool_selection` | ツールパネル |
+| `image_gen_full_body/portrait/selfie/scene_prefix` | メディアパネル画像生成セクション |
+
 ## データフロー
 
 ```
@@ -100,12 +123,16 @@ PostProcessStep:
 - `nous/application/chat/pipeline/trimmer.py` — トリム優先度
 - `nous/domain/compression_config.py` — `memory_digest_count` 新設、`memory_preload_count` 既定値変更
 - `nous/domain/chat_config.py` — `_infer_default_value` の pydantic default 互換修正（§5）
-- `nous/api/http/static/chat/chat-settings.js`（+ 設定パネル HTML）— 右カラムへの設定UI追加
+- `nous/domain/provider_config.py` — `reasoning_effort` validator の clamp 化（§6）
+- `nous/application/chat/pipeline/post.py` — auto_capture interval 実装（§6）
+- `nous/api/http/static/chat/chat-settings.js` — JS 既定値・パース修正 + 新規14項目の wiring（§6）
+- `nous/api/http/sections/chat/chat_sidebar_{core,memory,media,tools}.py` — 設定UIの追加・移動（§6）
 - base_prompt 定義 — §4 の一行
 
 ## テスト計画
 
 - 単体: digest 構築（件数・ソート・トリミング・0件スキップ）/ クエリ拡張 / trim 順序 / task_state 注入 / session_summary sort / `memory_digest_count` バリデーション
-- 設定UI: 右カラムから両キーを変更 → 保存 → 再読込で反映されること（round-trip）
+- §5/§6: `_infer_default_value` が pydantic default を返すこと / auto_capture interval の throttle 動作 / `reasoning_effort` clamp（不正値で例外を出さない）
+- 設定UI: 右カラムから両キーを変更 → 保存 → 再読込で反映されること（round-trip）。新規14項目も同様に round-trip 確認
 - 回帰: 既存 chat pipeline テスト一式
 - 手動確認: opencode で記録した直近記憶が、webui 新規チャットの初回応答に反映されること（実ブラウザ）
