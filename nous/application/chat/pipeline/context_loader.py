@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now, relative_time_str
 from nous.infrastructure.logging.structured import get_logger
 
@@ -245,6 +246,19 @@ async def _build_context_section(
                         t3.append("最近の会話要約:\n" + "\n".join(f"  📝 {s}" for s in sanitized))
         except Exception as e:
             logger.debug("Failed to fetch session summaries: %s", e)
+
+    # Task state — skip in light mode
+    if not _is_light:
+        try:
+            ts_result = ctx.memory_service.get_by_tags(["task_state"])
+            if isinstance(ts_result, Success) and ts_result.value:
+                states = [s.content for s in ts_result.value[:2] if s.content]
+                if states:
+                    sanitized = [_sanitize_text(s) for s in states if s]
+                    if sanitized:
+                        t3.append("作業状態:\n" + "\n".join(f"  📌 {s}" for s in sanitized))
+        except Exception as e:
+            logger.debug("Failed to fetch task states: %s", e)
 
     try:
         equip_result = ctx.equipment_service.get_equipment()

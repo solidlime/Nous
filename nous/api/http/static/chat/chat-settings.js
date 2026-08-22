@@ -48,7 +48,7 @@ function applyChatConfig(cfg) {
     cfg.emotion_temperature_scale != null ? cfg.emotion_temperature_scale : 0.2,
   );
   set("chat-top-p", cfg.top_p != null ? cfg.top_p : "");
-  set("chat-max-tokens", cfg.max_tokens || 2048);
+  set("chat-max-tokens", cfg.max_tokens || 8192);
   set("chat-max-tool-calls", cfg.max_tool_calls || 5);
   set("chat-system-prompt", cfg.system_prompt || "");
   setChecked("chat-auto-extract", cfg.auto_extract !== false);
@@ -175,7 +175,10 @@ function applyChatConfig(cfg) {
     Math.round((cfg.context_compression_threshold ?? 0.8) * 100) + "%";
   set("chat-compression-mode", cfg.context_compression_mode || "auto");
   set("chat-keep-recent", cfg.context_keep_recent_turns ?? 2);
-  set("chat-memory-preload", cfg.memory_preload_count ?? 3);
+  set("chat-memory-preload", cfg.memory_preload_count ?? 5);
+  set("chat-memory-digest", cfg.memory_digest_count ?? 5);
+  set("chat-language", cfg.language || "ja");
+  setChecked("chat-dynamic-tool-selection", cfg.dynamic_tool_selection !== false);
   var el;
   el = document.getElementById("chat-compress-system"); if (el) el.checked = cfg.context_compress_system_prompt !== false;
   el = document.getElementById("chat-compress-history"); if (el) el.checked = cfg.context_compress_history !== false;
@@ -282,6 +285,17 @@ function applyChatConfig(cfg) {
   set("chat-image-gen-workflow-source", cfg.image_gen_comfyui_workflow_source);
   var workflowNameInput = document.getElementById("chat-image-gen-workflow-name");
   if (workflowNameInput) workflowNameInput.value = cfg.image_gen_comfyui_workflow_name || "";
+  // 構図プリフィックス
+  set("chat-image-gen-full-body-prefix", cfg.image_gen_full_body_prefix || "");
+  set("chat-image-gen-portrait-prefix", cfg.image_gen_portrait_prefix || "");
+  set("chat-image-gen-selfie-prefix", cfg.image_gen_selfie_prefix || "");
+  set("chat-image-gen-scene-prefix", cfg.image_gen_scene_prefix || "");
+  // Image caption (non-vision providers)
+  setChecked("chat-image-caption-enabled", cfg.image_caption_enabled !== false);
+  set("chat-image-caption-provider", cfg.image_caption_provider || "openai_compat");
+  set("chat-image-caption-model", cfg.image_caption_model || "");
+  set("chat-image-caption-api-key", cfg.image_caption_api_key || "");
+  set("chat-image-caption-base-url", cfg.image_caption_base_url || "");
   // プリセット解像度 復元
   var _presetNames = ["portrait_large","portrait_medium","portrait_small","landscape_large","landscape_medium","landscape_small","square_large","square_medium","square_small"];
   var _presets = cfg.image_gen_presets || {};
@@ -320,6 +334,10 @@ function applyChatConfig(cfg) {
   set("chat-memorag-top-k", cfg.memorag_top_k ?? 5);
   set("chat-memorag-similarity-threshold", cfg.memorag_similarity_threshold ?? 0.7);
   set("chat-memorag-snapshot-interval-hours", cfg.memorag_snapshot_interval_hours ?? 24);
+  // Emotion decay
+  set("chat-emotion-decay-half-life-hours", cfg.emotion_decay_half_life_hours ?? 24);
+  set("chat-emotion-decay-threshold", cfg.emotion_decay_threshold ?? 0.005);
+  set("chat-emotion-neutral-threshold", cfg.emotion_neutral_threshold ?? 0.01);
   // ComfyUI URLが設定済みなら疎通確認を自動実行
   if (cfg.image_gen_comfyui_url) {
     N.Chat.settings.checkComfyUI();
@@ -392,6 +410,11 @@ async function saveChatConfig() {
     memory_preload_count: parseInt(
       document.getElementById("chat-memory-preload").value,
     ),
+    memory_digest_count: parseInt(
+      document.getElementById("chat-memory-digest")?.value || "5",
+    ),
+    language: document.getElementById("chat-language")?.value || "ja",
+    dynamic_tool_selection: getChecked("chat-dynamic-tool-selection"),
     enable_parallel_tools: document.getElementById("chat-parallel-tools")
       .checked,
     context_use_llm_summary: getChecked("chat-llm-summary"),
@@ -435,7 +458,7 @@ async function saveChatConfig() {
     retrieval_relevance_weight: parseFloat(
       document.getElementById("chat-relevance-weight")?.value || "0.4",
     ),
-    retrieval_rrf_k: parseInt(
+    retrieval_rrf_k: parseFloat(
       document.getElementById("chat-retrieval-rrf-k")?.value || "5",
     ),
     mental_model_enabled: getChecked("chat-mental-model-enabled"),
@@ -467,6 +490,10 @@ async function saveChatConfig() {
     memorag_top_k: parseInt(document.getElementById("chat-memorag-top-k")?.value || "5"),
     memorag_similarity_threshold: parseFloat(document.getElementById("chat-memorag-similarity-threshold")?.value || "0.7"),
     memorag_snapshot_interval_hours: parseInt(document.getElementById("chat-memorag-snapshot-interval-hours")?.value || "24"),
+    // Emotion decay
+    emotion_decay_half_life_hours: parseFloat(document.getElementById("chat-emotion-decay-half-life-hours")?.value || "24"),
+    emotion_decay_threshold: parseFloat(document.getElementById("chat-emotion-decay-threshold")?.value || "0.005"),
+    emotion_neutral_threshold: parseFloat(document.getElementById("chat-emotion-neutral-threshold")?.value || "0.01"),
     // 画像生成設定 — ComfyUI
     image_gen_enabled: getChecked("chat-image-gen-enabled"),
     image_gen_comfyui_url: (document.getElementById("chat-image-gen-comfyui-url")?.value || "").trim(),
@@ -489,6 +516,17 @@ async function saveChatConfig() {
     image_gen_comfyui_workflow_template: document.getElementById("chat-image-gen-template")?.value || "",
     image_gen_comfyui_workflow_source: document.getElementById("chat-image-gen-workflow-source")?.value || "local",
     image_gen_comfyui_workflow_name: document.getElementById("chat-image-gen-workflow-name")?.value || "",
+    // 構図プリフィックス
+    image_gen_full_body_prefix: document.getElementById("chat-image-gen-full-body-prefix")?.value || "",
+    image_gen_portrait_prefix: document.getElementById("chat-image-gen-portrait-prefix")?.value || "",
+    image_gen_selfie_prefix: document.getElementById("chat-image-gen-selfie-prefix")?.value || "",
+    image_gen_scene_prefix: document.getElementById("chat-image-gen-scene-prefix")?.value || "",
+    // Image caption (non-vision providers)
+    image_caption_enabled: getChecked("chat-image-caption-enabled"),
+    image_caption_provider: document.getElementById("chat-image-caption-provider")?.value || "openai_compat",
+    image_caption_model: document.getElementById("chat-image-caption-model")?.value.trim() || "",
+    image_caption_api_key: document.getElementById("chat-image-caption-api-key")?.value || "",
+    image_caption_base_url: document.getElementById("chat-image-caption-base-url")?.value.trim() || "",
     // Voice / TTS settings (TE04)
     voice_url: document.getElementById("chat-voice-url")?.value || "",
     voice_auto_play: getChecked("chat-voice-auto-play"),

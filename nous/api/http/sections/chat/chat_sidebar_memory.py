@@ -27,6 +27,18 @@ def _render_memory_section() -> str:
                                         style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
                                     <label for="chat-enable-memory-tools" class="chat-field-label" style="margin:0;cursor:pointer;">LLMに組み込みメモリツールを渡す</label>
                                 </div>
+                                <div>
+                                    <div class="chat-field-label">感情減衰半減期（時間）</div>
+                                    <input type="number" id="chat-emotion-decay-half-life-hours" class="chat-field-input" min="0" step="0.5" value="24" />
+                                </div>
+                                <div>
+                                    <div class="chat-field-label">感情減衰閾値</div>
+                                    <input type="number" id="chat-emotion-decay-threshold" class="chat-field-input" min="0" step="0.01" value="0.005" />
+                                </div>
+                                <div>
+                                    <div class="chat-field-label">中立感情閾値</div>
+                                    <input type="number" id="chat-emotion-neutral-threshold" class="chat-field-input" min="0" step="0.01" value="0.01" />
+                                </div>
                             </div>
                         </details>"""
 

@@ -1,8 +1,15 @@
-"""Tests for _infer_kind() in auto_capture.py."""
+"""Tests for _infer_kind() in auto_capture.py + PostProcessStep auto_capture throttle."""
+
+from __future__ import annotations
+
+import asyncio
+from types import SimpleNamespace
 
 import pytest
 
+from nous.application.chat.pipeline import post as post_module
 from nous.application.chat.pipeline.auto_capture import _infer_kind
+from nous.application.chat.pipeline.post import PostProcessStep
 
 
 class TestInferKind:
@@ -77,3 +84,85 @@ class TestInferKind:
     def test_infer_semantic_edge(self, content: str) -> None:
         """Edge/short/empty content should default to semantic."""
         assert _infer_kind(content, "problem") == "semantic"
+
+
+# ── PostProcessStep auto_capture throttle ────────────────────────────
+
+
+def _make_throttle_fixtures(interval: int):
+    ctx = SimpleNamespace(
+        persona="p1",
+        persona_service=SimpleNamespace(record_conversation_time=lambda p: None),
+    )
+    config = SimpleNamespace(
+        session_summarize=False,
+        auto_capture_enabled=True,
+        auto_capture_interval=interval,
+        auto_capture_max_memories=5,
+        reflection_enabled=False,
+        mental_model_enabled=False,
+        auto_extract=False,
+        provider="anthropic",
+        get_effective_model=lambda: "m",
+    )
+    session = SimpleNamespace(_messages=[{"role": "user", "content": "hi"}], evict_callback=None)
+    turn_ctx = SimpleNamespace(
+        full_response="ok",
+        was_truncated=False,
+        usage={},
+        user_msg_id="u",
+        assistant_msg_id="a",
+        memories_raw=[],
+        user_message="hi",
+        tool_calls_log=[],
+        system_prompt="",
+        state_raw="",
+        context_section="",
+        memory_debug={},
+        skills_raw=[],
+        messages=[],
+    )
+    return ctx, config, session, turn_ctx
+
+
+def _run_step(ctx, config, session, turn_ctx) -> None:
+    async def _consume():
+        step = PostProcessStep()
+        async for _ in step.run(ctx=ctx, config=config, session=session, turn_ctx=turn_ctx):
+            pass
+
+    asyncio.run(_consume())
+
+
+class TestAutoCaptureThrottle:
+    def test_second_call_within_interval_suppressed_across_instances(self, monkeypatch):
+        """別インスタンスでも interval 未満の2連続呼び出しは2回目が抑制される."""
+        calls: list = []
+
+        async def fake_run_auto_capture(**kwargs):
+            calls.append(kwargs)
+
+        monkeypatch.setattr(post_module, "_last_auto_capture_at", {})
+        monkeypatch.setattr("nous.application.chat.pipeline.auto_capture.run_auto_capture", fake_run_auto_capture)
+        ctx, config, session, turn_ctx = _make_throttle_fixtures(interval=300)
+
+        _run_step(ctx, config, session, turn_ctx)
+        _run_step(ctx, config, session, turn_ctx)
+
+        assert len(calls) == 1
+
+    def test_interval_zero_runs_every_time(self, monkeypatch):
+        """interval=0 は毎回実行."""
+        calls: list = []
+
+        async def fake_run_auto_capture(**kwargs):
+            calls.append(kwargs)
+
+        monkeypatch.setattr(post_module, "_last_auto_capture_at", {})
+        monkeypatch.setattr("nous.application.chat.pipeline.auto_capture.run_auto_capture", fake_run_auto_capture)
+        ctx, config, session, turn_ctx = _make_throttle_fixtures(interval=0)
+
+        _run_step(ctx, config, session, turn_ctx)
+        _run_step(ctx, config, session, turn_ctx)
+
+        assert len(calls) == 2

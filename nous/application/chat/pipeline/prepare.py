@@ -30,6 +30,7 @@ from nous.application.chat.pipeline.memory_retriever import (  # noqa: F401
     _search_keyword_fast,
     _search_memories,
 )
+from nous.domain.shared.time_utils import relative_time_str
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -39,6 +40,44 @@ if TYPE_CHECKING:
     from nous.domain.chat_config import ChatConfig
 
 logger = get_logger(__name__)
+
+
+def _build_recall_query(session, current_user_message: str) -> str:
+    """§2: 直近ユーザー発言 最大3件の結合（合計800字上限、超過時は新しい方から採用）。"""
+    # TreeSessionWindow._messages は list[dict]（role/content キー）なので辞書アクセス必須
+    history = [
+        str(m.get("content")) for m in session._messages
+        if isinstance(m, dict) and m.get("role") == "user" and m.get("content")
+    ]
+    if not history or history[-1] != current_user_message:
+        history.append(current_user_message)
+    combined = "\n".join(history[-3:])
+    return combined[-800:] if len(combined) > 800 else combined
+
+
+def _build_digest(ctx, config) -> str:
+    """§1 Recency digest: 直近記憶を updated_at 降順で N 件（クエリ一致不要・consumed 済みも含む）。"""
+    n = int(getattr(config, "memory_digest_count", 5) or 0)
+    if n <= 0:
+        return ""
+    try:
+        result = ctx.memory_service.get_recent(limit=n)
+        memories = result.value if result.is_ok else []
+        if not memories:
+            return ""
+        lines = ["[最近のできごと — 他クライアントとの活動を含む]"]
+        for m in memories:
+            content = (getattr(m, "content", "") or "").strip()[:200]
+            if not content:
+                continue
+            updated_at = getattr(m, "updated_at", None)
+            ts = relative_time_str(updated_at) if updated_at else ""
+            ts_str = f" ({ts})" if ts else ""
+            lines.append(f"- {ts_str}{content}")
+        return "\n".join(lines) if len(lines) > 1 else ""
+    except Exception:
+        logger.warning("PrepareStep: digest build failed", exc_info=True)
+        return ""
 
 
 class PrepareStep:
@@ -106,19 +145,18 @@ class PrepareStep:
                 turn_ctx.time_context = ""
 
             # context_section 構築
-            last_assistant = session.get_last_assistant_content()
             context_task = asyncio.create_task(
                 _build_context_section(
                     ctx, state, turn_ctx, compress_mode=config.context_compression_mode, decay_note=decay_note
                 )
             )
             # Progressive disclosure: only preload N memories; LLM searches for more if needed
-            preload_count = getattr(config, "memory_preload_count", 3)
+            preload_count = getattr(config, "memory_preload_count", 5)
             memory_task = asyncio.create_task(
                 _search_memories(
                     ctx,
-                    turn_ctx.user_message,
-                    last_assistant,
+                    _build_recall_query(session, turn_ctx.user_message),
+                    None,
                     config,
                     top_k=max(preload_count, 1) if preload_count > 0 else 100,
                 )
@@ -128,6 +166,9 @@ class PrepareStep:
             )
             context_section = results[0]
             memory_result = results[1]
+
+            # §1 Recency digest（同期 API のため gather 後に構築）
+            turn_ctx.recency_digest = _build_digest(ctx, config)
 
             if isinstance(context_section, Exception):
                 logger.warning("PrepareStep: context_section build failed: %s", context_section)
@@ -162,13 +203,12 @@ class PrepareStep:
         else:
             logger.warning("PrepareStep: get_context failed: %s", state_result.error)
             # contextなしで継続
-            last_assistant = session.get_last_assistant_content()
             try:
-                preload_count = getattr(config, "memory_preload_count", 3)
+                preload_count = getattr(config, "memory_preload_count", 5)
                 turn_ctx.related_memories, debug, memories_list = await _search_memories(
                     ctx,
-                    turn_ctx.user_message,
-                    last_assistant,
+                    _build_recall_query(session, turn_ctx.user_message),
+                    None,
                     config,
                     top_k=max(preload_count, 1) if preload_count > 0 else 100,
                 )

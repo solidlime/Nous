@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import TYPE_CHECKING
 
 from nous.application.chat.events import (
@@ -29,6 +30,10 @@ if TYPE_CHECKING:
     from nous.domain.chat_config import ChatConfig
 
 logger = get_logger(__name__)
+
+# persona ごとの最終 auto_capture 実行時刻（monotonic）。
+# PostProcessStep は毎ターン新規インスタンス化されるためモジュールレベルで保持。
+_last_auto_capture_at: dict[str, float] = {}
 
 
 async def _do_summarize(ctx: AppContext, config: ChatConfig, turns: list[dict]) -> str | None:
@@ -119,9 +124,14 @@ class PostProcessStep:
             except Exception as e:
                 logger.warning("SessionSummarizedSSE failed: %s", e)
 
-        # Auto-capture: セッション会話から重要情報を記憶として抽出
+        # Auto-capture: セッション会話から重要情報を記憶として抽出（interval throttle 付き）
         try:
-            if config.auto_capture_enabled and session._messages:
+            interval = max(0, int(getattr(config, "auto_capture_interval", 300)))
+            now = time.monotonic()
+            last = _last_auto_capture_at.get(ctx.persona)
+            due = interval <= 0 or last is None or (now - last) >= interval
+            if config.auto_capture_enabled and session._messages and due:
+                _last_auto_capture_at[ctx.persona] = now
                 from nous.application.chat.pipeline.auto_capture import run_auto_capture
 
                 self._background_tasks.append(

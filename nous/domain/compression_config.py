@@ -18,7 +18,8 @@ class CompressionConfig(BaseModel):
     context_keep_recent_turns: int = 2
     context_compress_system_prompt: bool = True
     context_compress_history: bool = True
-    memory_preload_count: int = 3  # 0=all, N=preload top N
+    memory_preload_count: int = 5  # 0=all, N=preload top N
+    memory_digest_count: int = 5  # 0=無効
     context_use_llm_summary: bool = True
 
     @field_validator("context_compression_threshold")
@@ -41,4 +42,9 @@ class CompressionConfig(BaseModel):
     @field_validator("memory_preload_count")
     @classmethod
     def _clamp_preload_count(cls, v: int) -> int:
+        return max(0, min(20, v))
+
+    @field_validator("memory_digest_count")
+    @classmethod
+    def _clamp_digest_count(cls, v: int) -> int:
         return max(0, min(20, v))

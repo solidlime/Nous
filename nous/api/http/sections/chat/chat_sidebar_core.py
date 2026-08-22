@@ -104,6 +104,20 @@ def _render_core_section() -> str:
                                     <div class="chat-field-label">Max Tokens</div>
                                     <input type="number" id="chat-max-tokens" class="chat-field-input" min="1" max="131072" value="8192" />
                                 </div>
+                                <div>
+                                    <div class="chat-field-label">言語</div>
+                                    <select id="chat-language" class="chat-field-input">
+                                        <option value="ja" selected>日本語</option>
+                                        <option value="en">English</option>
+                                        <option value="zh">中文</option>
+                                        <option value="ko">한국어</option>
+                                        <option value="auto">自動</option>
+                                    </select>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+                                    <input type="checkbox" id="chat-show-timestamps">
+                                    <label for="chat-show-timestamps" style="font-size:0.8rem;">メッセージにタイムスタンプを表示</label>
+                                </div>
                             </div>
                         </details>"""
 
@@ -150,12 +164,16 @@ def _render_context_section() -> str:
                                   </select>
 
                                   <div class="chat-field-label">完全保持ターン数</div>
-                                  <input type="number" id="chat-keep-recent" class="chat-field-input" value="2" min="1" />
+                                  <input type="number" id="chat-keep-recent" class="chat-field-input" value="2" min="0" />
                                   <span class="setting-hint">AIが要約せず完全に保持する最新の会話ターン数です。</span>
 
                                   <div class="chat-field-label">記憶プリロード数</div>
-                                  <input type="number" id="chat-memory-preload" class="chat-field-input" value="3" min="0" max="20" />
+                                  <input type="number" id="chat-memory-preload" class="chat-field-input" value="5" min="0" max="20" />
                                   <div class="chat-field-hint" style="font-size:0.7rem;color:var(--text-muted);margin-top:-6px;margin-bottom:8px;">systemプロンプトに含める関連記憶の数。0で全件オンデマンド検索</div>
+
+                                  <div class="chat-field-label">記憶ダイジェスト数</div>
+                                  <input type="number" id="chat-memory-digest" class="chat-field-input" value="5" min="0" max="20" />
+                                  <div class="chat-field-hint" style="font-size:0.7rem;color:var(--text-muted);margin-top:-6px;margin-bottom:8px;">毎ターン最新 user 発言前に注入する最近の記憶の数。0で無効</div>
 
                                   <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
                                     <input type="checkbox" id="chat-compress-system" checked>
@@ -176,10 +194,6 @@ def _render_context_section() -> str:
                                    <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
                                      <input type="checkbox" id="chat-episode-search" checked>
                                      <label for="chat-episode-search" style="font-size:0.8rem;">エピソード検索</label>
-                                   </div>
-                                   <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
-                                     <input type="checkbox" id="chat-show-timestamps">
-                                     <label for="chat-show-timestamps" style="font-size:0.8rem;">メッセージにタイムスタンプを表示</label>
                                    </div>
                                    </div>
                                  </details>

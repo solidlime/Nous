@@ -70,6 +70,11 @@ class InferenceStep:
             return
 
         messages = list(session_messages)
+
+        # §1 Recency digest: 最新 user 発言の直前に合成メッセージ（非永続化・毎ターン再構築）
+        if getattr(turn_ctx, "recency_digest", ""):
+            messages.append(LLMMessage(role="user", content=turn_ctx.recency_digest))
+
         if turn_ctx.images:
             if not provider.supports_vision():
                 logger.info(
@@ -130,10 +135,18 @@ class InferenceStep:
             # タイムスタンプ注入（設定ON時のみ）— debug dumpより先に注入
             # HTML comment format: LLM sees timestamp but does not echo it in output
             if getattr(config, "show_message_timestamps", False):
+                from zoneinfo import ZoneInfo
+
+                from nous.config.settings import get_settings
+
+                tz = ZoneInfo(get_settings().timezone)
                 for msg in messages:
                     if msg.timestamp and msg.role in ("user", "assistant"):
-                        ts_str = msg.timestamp.strftime("%Y-%m-%d %H:%M JST")
-                        msg.content = f"<!-- msg_at: {ts_str} -->{msg.content}"
+                        ts = msg.timestamp if msg.timestamp.tzinfo else msg.timestamp.replace(tzinfo=tz)
+                        ts_str = ts.astimezone(tz).strftime("%Y-%m-%d %H:%M")
+                        prefix = f"<!-- msg_at: {ts_str} -->"
+                        if not str(msg.content).startswith("<!-- msg_at:"):
+                            msg.content = f"{prefix}{msg.content}"
 
             # Debug: capture the full prompt sent to LLM
             if getattr(config, "debug_mode", False):

@@ -18,6 +18,7 @@ class ChatTurnContext:
     context_section: str = ""
     time_context: str = ""  # ★ <TIME_CONTEXT> ブロック（システムプロンプト先頭に注入）
     related_memories: str = ""
+    recency_digest: str = ""  # PrepareStep が埋める（§1 直近記憶ダイジェスト）
     state_raw: dict = field(default_factory=dict)
     memories_raw: list[dict] = field(default_factory=list)
     memories_objects: list = field(default_factory=list)

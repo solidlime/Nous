@@ -110,6 +110,55 @@ def _render_image_section() -> str:
                                             placeholder="例: /data/workflows/pony_ipadapter.json"
                                             style="width:100%;font-size:0.78rem;" />
                                     </div>
+                                    <!-- 構図プリフィックス -->
+                                    <details class="chat-subsection" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--glass-border);">
+                                        <summary style="font-size:0.78rem;font-weight:600;color:var(--text-secondary);cursor:pointer;padding:4px 0;">構図プリフィックス</summary>
+                                        <div style="padding-top:6px;display:flex;flex-direction:column;gap:8px;">
+                                            <div>
+                                                <div class="chat-field-label" style="font-size:0.75rem;">全身</div>
+                                                <input type="text" id="chat-image-gen-full-body-prefix" class="chat-field-input" value="full body, standing, pov, " style="width:100%;font-size:0.75rem;" />
+                                            </div>
+                                            <div>
+                                                <div class="chat-field-label" style="font-size:0.75rem;">ポートレート</div>
+                                                <input type="text" id="chat-image-gen-portrait-prefix" class="chat-field-input" value="upper body, portrait, pov, " style="width:100%;font-size:0.75rem;" />
+                                            </div>
+                                            <div>
+                                                <div class="chat-field-label" style="font-size:0.75rem;">自撮り</div>
+                                                <input type="text" id="chat-image-gen-selfie-prefix" class="chat-field-input" value="selfie, from below, mirror selfie, " style="width:100%;font-size:0.75rem;" />
+                                            </div>
+                                            <div>
+                                                <div class="chat-field-label" style="font-size:0.75rem;">風景・シーン</div>
+                                                <input type="text" id="chat-image-gen-scene-prefix" class="chat-field-input" value="environment shot, full body, " style="width:100%;font-size:0.75rem;" />
+                                            </div>
+                                        </div>
+                                    </details>
+                                    <!-- Image caption (non-vision providers) -->
+                                    <details class="chat-subsection" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--glass-border);">
+                                        <summary style="font-size:0.78rem;font-weight:600;color:var(--text-secondary);cursor:pointer;padding:4px 0;">画像キャプション（非ビジョンモデル用）</summary>
+                                        <div style="padding-top:6px;display:flex;flex-direction:column;gap:8px;">
+                                            <div style="display:flex;align-items:center;gap:8px;">
+                                                <input type="checkbox" id="chat-image-caption-enabled" checked
+                                                    style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
+                                                <label for="chat-image-caption-enabled" class="chat-field-label" style="margin:0;cursor:pointer;">画像キャプション生成を有効化</label>
+                                            </div>
+                                            <div>
+                                                <div class="chat-field-label" style="font-size:0.75rem;">プロバイダー</div>
+                                                <input type="text" id="chat-image-caption-provider" class="chat-field-input" value="openai_compat" style="width:100%;font-size:0.75rem;" />
+                                            </div>
+                                            <div>
+                                                <div class="chat-field-label" style="font-size:0.75rem;">モデル</div>
+                                                <input type="text" id="chat-image-caption-model" class="chat-field-input" placeholder="例: gpt-4o-mini" style="width:100%;font-size:0.75rem;" />
+                                            </div>
+                                            <div>
+                                                <div class="chat-field-label" style="font-size:0.75rem;">APIキー</div>
+                                                <input type="password" id="chat-image-caption-api-key" class="chat-field-input" autocomplete="off" style="width:100%;font-size:0.75rem;" />
+                                            </div>
+                                            <div>
+                                                <div class="chat-field-label" style="font-size:0.75rem;">Base URL</div>
+                                                <input type="text" id="chat-image-caption-base-url" class="chat-field-input" style="width:100%;font-size:0.75rem;" />
+                                            </div>
+                                        </div>
+                                    </details>
                                     <div id="chat-image-test-result" style="display:none;margin-bottom:8px;text-align:center;">
                                         <img id="chat-image-test-img" alt="テスト生成結果"
                                             style="max-width:100%;max-height:240px;border-radius:8px;object-fit:contain;" />

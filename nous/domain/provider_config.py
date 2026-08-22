@@ -102,9 +102,9 @@ class ProviderConfig(BaseModel):
     @field_validator("reasoning_effort")
     @classmethod
     def _validate_reasoning_effort(cls, v: str) -> str:
-        if v not in REASONING_EFFORTS:
-            raise ValueError(f"reasoning_effort must be one of {sorted(REASONING_EFFORTS)}, got: {v!r}")
-        return v
+        if v in REASONING_EFFORTS:
+            return v
+        return "medium"  # 不正値は既定へ clamp（設定全体のデフォルトフォールバック防止）
 
     def get_effective_api_key(self) -> str:
         """Return stored API key or fall back via RuntimeConfigManager.

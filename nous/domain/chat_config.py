@@ -13,6 +13,7 @@ import typing
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
+from pydantic_core import PydanticUndefined
 
 from nous.domain.compression_config import CompressionConfig
 
@@ -265,9 +266,25 @@ class ChatConfigRepository:
 
     @staticmethod
     def _infer_default_value(field_info) -> str:
-        """Infer SQL DEFAULT expression from a Pydantic FieldInfo."""
+        """Infer SQL DEFAULT expression from a Pydantic FieldInfo (pydantic default 優先)."""
         base = ChatConfigRepository._get_base_type(field_info.annotation)
-        return _TYPE_SQL.get(base, ("TEXT", "''"))[1]
+        _, type_default = _TYPE_SQL.get(base, ("TEXT", "''"))
+        default = getattr(field_info, "default", None)
+        if default is PydanticUndefined:
+            factory = getattr(field_info, "default_factory", None)
+            try:
+                default = factory() if factory else None
+            except Exception:
+                default = None
+        if default is None:
+            return type_default
+        if base is bool:
+            return str(int(bool(default)))
+        if base is int:
+            return str(int(typing.cast("int", default)))
+        if base is float:
+            return str(float(typing.cast("float", default)))
+        return "'" + str(default).replace("'", "''") + "'"
 
     @staticmethod
     def _to_bind_value(field_name: str, value: object) -> object:

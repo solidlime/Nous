@@ -28,8 +28,8 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
 
     圧縮段階:
     0. 常時メッセージ切り詰め (context_keep_recent_turns) ← 予算・force_compressとは独立して常時実行
-    1. システムプロンプトの関連記憶セクションをトリム
-    2. 古いツール結果をステータスサマリーに置換（成功/失敗/完了）
+    1. 古いツール結果をステータスサマリーに置換（成功/失敗/完了）
+    2. システムプロンプトの関連記憶セクションをトリム
     3. LLMによる古い会話ターンの要約圧縮（予算超過時）— フルテキストで要約
     """
 
@@ -92,7 +92,16 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
         )
         before_total = total
 
-        # Stage 1: System prompt trimming
+        # Stage 1: Clear old tool results（古いログ系を先に圧縮）
+        if getattr(config, "context_compress_history", True):
+            messages = self._clear_old_tool_results(messages)
+
+        # Re-check
+        total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
+        if not force_compress and total <= budget:
+            return list(messages)
+
+        # Stage 2: System prompt trimming（関連記憶/digest はツール結果より優先で残す）
         if getattr(config, "context_compress_system_prompt", True):
             old_len = len(turn_ctx.system_prompt)
             turn_ctx.system_prompt = self._trim_system_prompt(
@@ -111,15 +120,6 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
         total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
         if not force_compress and total <= budget:
             return messages
-
-        # Stage 2: Clear old tool results
-        if getattr(config, "context_compress_history", True):
-            messages = self._clear_old_tool_results(messages)
-
-        # Re-check
-        total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
-        if not force_compress and total <= budget:
-            return list(messages)
 
         # Stage 3: LLM-based summary of old conversation turns
         if (

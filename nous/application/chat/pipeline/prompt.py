@@ -49,6 +49,8 @@ class PromptBuildStep:
         persona = ctx.persona
 
         base_system = config.system_prompt or f"あなたは{persona}です。"
+        # §4 自律 recall 指示
+        base_system += "\n会話の話題が過去の記憶と関連しそうなとき・話題が切り替わったときは、memory_search ツールで能動的に検索せよ。"
 
         # --- 静的パート（キャッシュ可能）---
         static_parts = [base_system]

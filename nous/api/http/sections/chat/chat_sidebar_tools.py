@@ -28,6 +28,11 @@ def _render_mcp_section(sys_executable: str) -> str:
                                         oninput="document.getElementById('chat-tool-max-val').textContent=this.value"
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <input type="checkbox" id="chat-dynamic-tool-selection" checked
+                                        style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
+                                    <label for="chat-dynamic-tool-selection" class="chat-field-label" style="margin:0;cursor:pointer;">動的ツール選択</label>
+                                </div>
                             </div>
                         </details>"""
 

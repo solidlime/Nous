@@ -1277,8 +1277,8 @@ class TestTimestampInjection:
 
         assert captured_messages[0] is not None
         # Check the two session messages had timestamps injected (HTML comment format)
-        assert captured_messages[0][0].content == "<!-- msg_at: 2025-06-15 14:30 JST -->hello"
-        assert captured_messages[0][1].content == "<!-- msg_at: 2025-06-15 14:31 JST -->hi there"
+        assert captured_messages[0][0].content == "<!-- msg_at: 2025-06-15 14:30 -->hello"
+        assert captured_messages[0][1].content == "<!-- msg_at: 2025-06-15 14:31 -->hi there"
 
     @pytest.mark.asyncio
     async def test_no_timestamps_when_disabled(self):
@@ -1391,7 +1391,7 @@ class TestTimestampInjection:
                 pass
 
         assert captured_messages[0] is not None
-        assert captured_messages[0][0].content == "<!-- msg_at: 2025-06-15 14:30 JST -->hi"
+        assert captured_messages[0][0].content == "<!-- msg_at: 2025-06-15 14:30 -->hi"
         # tool message should NOT have timestamp prefix
         assert captured_messages[0][1].content == '{"result": "ok"}'
 
@@ -1450,7 +1450,7 @@ class TestTimestampInjection:
                 pass
 
         assert captured_messages[0] is not None
-        assert captured_messages[0][0].content == "<!-- msg_at: 2025-06-15 14:30 JST -->with ts"
+        assert captured_messages[0][0].content == "<!-- msg_at: 2025-06-15 14:30 -->with ts"
         assert captured_messages[0][1].content == "no ts"
 
 
@@ -1607,3 +1607,252 @@ class TestEmotionDecayNoteNaturalLanguage:
         note_partial = _format_emotion_decay_note(partial)
         assert "減衰した" in note_partial
         assert "消失した" not in note_partial
+
+
+# ──────────────────────────────────────────────
+# Task 5: §1 digest / §2 recall query / §3 trim 順序 / task_state / tz
+# ──────────────────────────────────────────────
+
+
+class TestBuildRecallQuery:
+    """_build_recall_query(): 直近 user 発言 最大3件結合・800字上限。"""
+
+    def test_build_recall_query_joins_recent_user_messages(self):
+        from types import SimpleNamespace
+
+        from nous.application.chat.pipeline.prepare import _build_recall_query
+
+        session = SimpleNamespace(
+            _messages=[
+                {"role": "user", "content": "u1"},
+                {"role": "assistant", "content": "a1"},
+                {"role": "user", "content": "u2"},
+                {"role": "user", "content": "u3"},
+                {"role": "user", "content": "u4"},
+            ]
+        )
+        q = _build_recall_query(session, "u5")
+        # 5件あるので古い u1, u2 は落ちる（新しい方から3件）
+        assert "u1" not in q and "u2" not in q
+        assert "u3" in q and "u4" in q and "u5" in q
+        # 現在メッセージが履歴末尾と同じなら重複追加しない
+        session2 = SimpleNamespace(_messages=[{"role": "user", "content": "u5"}])
+        assert _build_recall_query(session2, "u5") == "u5"
+
+    def test_build_recall_query_caps_at_800_chars_newest_side(self):
+        from types import SimpleNamespace
+
+        from nous.application.chat.pipeline.prepare import _build_recall_query
+
+        big = "x" * 400
+        session = SimpleNamespace(
+            _messages=[
+                {"role": "user", "content": big},
+                {"role": "user", "content": big},
+                {"role": "user", "content": big},
+            ]
+        )
+        current = "y" * 400
+        q = _build_recall_query(session, current)
+        assert len(q) == 800
+        # 新しい方から採用: 末尾は現在メッセージの末尾
+        assert q.endswith(current[-100:])
+
+
+class TestBuildDigest:
+    """_build_digest(): 無効化・フォーマット・例外握り。"""
+
+    def _ctx_with(self, memories):
+        from unittest.mock import MagicMock
+
+        ctx = MagicMock()
+        ctx.memory_service.get_recent.return_value = Success(memories)
+        return ctx
+
+    def test_build_digest_returns_empty_when_disabled(self):
+        from unittest.mock import MagicMock
+
+        from nous.application.chat.pipeline.prepare import _build_digest
+
+        config = MagicMock()
+        config.memory_digest_count = 0
+        assert _build_digest(MagicMock(), config) == ""
+
+    def test_build_digest_formats_recent_memories(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from nous.application.chat.pipeline.prepare import _build_digest
+
+        mem = SimpleNamespace(content="テスト記憶です", updated_at=datetime.now(UTC) - timedelta(hours=2))
+        ctx = self._ctx_with([mem])
+        digest = _build_digest(ctx, MagicMock(memory_digest_count=5))
+        assert digest.startswith("[最近のできごと")
+        assert "(2h ago)" in digest
+        assert "テスト記憶です" in digest
+
+    def test_build_digest_swallows_store_failure(self):
+        from unittest.mock import MagicMock
+
+        from nous.application.chat.pipeline.prepare import _build_digest
+
+        ctx = MagicMock()
+        ctx.memory_service.get_recent.side_effect = RuntimeError("db down")
+        assert _build_digest(ctx, MagicMock(memory_digest_count=5)) == ""
+
+
+class TestTrimOrderToolResultsBeforeMemorySections:
+    """§3: 圧縮時ツール結果置換が先に走り、予算内なら関連記憶セクションが生き残る。"""
+
+    @pytest.mark.asyncio
+    async def test_trim_order_tool_results_before_memory_sections(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from nous.application.chat.pipeline.compress import CompressStep
+        from nous.infrastructure.llm.base import LLMMessage
+
+        big_json = '{"success": true, "data": "' + "x" * 1000 + '"}'
+        messages = []
+        for i in range(12):
+            messages.append(LLMMessage(role="assistant", content=f"a{i}"))
+            messages.append(LLMMessage(role="tool", content=big_json, tool_call_id=f"t{i}"))
+
+        memory_lines = "\n".join(f"- 記憶{i}" for i in range(10))
+        turn_ctx = SimpleNamespace(system_prompt=f"base\n--- 関連記憶 ---\n{memory_lines}")
+
+        config = MagicMock()
+        config.context_keep_recent_turns = 0
+        config.context_compress_history = True
+        config.context_compress_system_prompt = True
+        config.context_compression_mode = "normal"
+        config.max_stored_messages = 1000
+        config.get_effective_model.return_value = "claude-3"
+        config.context_max_tokens = 3000
+        config.context_compression_threshold = 0.9
+
+        result = await CompressStep().run(MagicMock(), config, turn_ctx, messages)
+
+        # Stage 1（ツール結果置換）で予算内に収まった → Stage 2 未実行
+        tool_msgs = [m for m in result if m.role == "tool"]
+        assert all(m.content == "[ツール実行: 成功]" for m in tool_msgs[:8])
+        assert all(m.content == big_json for m in tool_msgs[8:])
+        # 関連記憶 10 行すべて生き残る（トリムされていない）
+        assert turn_ctx.system_prompt.count("- 記憶") == 10
+
+
+class TestTaskStateInjection:
+    """Tier3 への task_state 注入。"""
+
+    @pytest.mark.asyncio
+    async def test_task_state_injected_into_tier3(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+
+        from nous.application.chat.pipeline.context_loader import _build_context_section
+
+        ctx = MagicMock()
+        ctx.persona = "test"
+        ctx.memory_service = MagicMock()
+
+        def fake_get_by_tags(tags):
+            if tags == ["task_state"]:
+                mem = SimpleNamespace(content="Lane A 実装中", tags=["task_state"], created_at=datetime.now(UTC))
+                return Success([mem])
+            return Success([])
+
+        ctx.memory_service.get_by_tags.side_effect = fake_get_by_tags
+        ctx.persona_service = MagicMock()
+        ctx.persona_service.get_emotion_history.return_value = Success([])
+        ctx.equipment_service = MagicMock()
+        ctx.equipment_service.get_equipment.return_value = Success({})
+
+        state = MagicMock()
+        state.last_conversation_time = None
+        state.emotion = None
+        state.mental_state = None
+        state.physical_state = None
+        state.environment = None
+        state.relationship_status = None
+        state.user_info = {}
+        state.persona_info = {}
+        state.fatigue = None
+        state.pain = None
+        state.arousal = None
+
+        result = await _build_context_section(ctx, state)
+        assert "作業状態:" in result
+        assert "Lane A 実装中" in result
+
+
+class TestTimestampTimezoneAndDoublePrefix:
+    """tz 表記修正: settings.timezone 従属・二重 prefix ガード。"""
+
+    @pytest.mark.asyncio
+    async def test_timestamp_uses_settings_timezone_and_no_double_prefix(self):
+        from datetime import datetime
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock, patch
+
+        from nous.application.chat.pipeline.inference import InferenceStep
+        from nous.infrastructure.llm.base import LLMMessage, TextDeltaEvent
+
+        captured_messages = [None]
+
+        async def _mock_stream(**kwargs):
+            captured_messages[0] = kwargs.get("messages", [])
+            yield TextDeltaEvent(content="")
+
+        mock_provider = MagicMock()
+        mock_provider.stream = _mock_stream
+
+        config = MagicMock()
+        config.debug_mode = False
+        config.temperature = 0.7
+        config.max_tokens = 100
+        config.provider = "anthropic"
+        config.get_effective_api_key.return_value = "test-key"
+        config.get_effective_model.return_value = "claude-3"
+        config.get_effective_base_url.return_value = ""
+        config.max_tool_calls = 0
+        config.enable_parallel_tools = True
+        config.tool_result_max_chars = 4000
+        config.top_p = None
+        config.show_message_timestamps = True
+
+        turn_ctx = MagicMock()
+        turn_ctx.images = []
+        turn_ctx.tool_call_count = 0
+        turn_ctx.full_response = ""
+        turn_ctx.user_message = "test"
+        turn_ctx.system_prompt = "test sys"
+        turn_ctx.tool_calls_log = []
+        turn_ctx.skills_raw = []
+
+        registry = MagicMock()
+        ctx = MagicMock()
+
+        naive_ts = datetime(2025, 6, 15, 14, 30, 0)
+        session_messages = [
+            # 既に prefix 済み → 二重付与されない
+            LLMMessage(role="user", content="<!-- msg_at: 2025-06-15 14:30 -->hello", timestamp=naive_ts),
+            # prefix 無し → settings.timezone（UTC）で付与、"JST" 固定は消える
+            LLMMessage(role="assistant", content="hi there", timestamp=naive_ts),
+        ]
+
+        fake_settings = SimpleNamespace(timezone="UTC")
+        with (
+            patch("nous.config.settings.get_settings", return_value=fake_settings),
+            patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider),
+        ):
+            async for _ in InferenceStep().run(ctx, config, session_messages, turn_ctx, registry):
+                pass
+
+        assert captured_messages[0] is not None
+        first, second = captured_messages[0][0], captured_messages[0][1]
+        # 二重 prefix ガード
+        assert first.content.count("<!-- msg_at:") == 1
+        assert first.content == "<!-- msg_at: 2025-06-15 14:30 -->hello"
+        # tz 変換（UTC 指定・naive はローカル扱いでそのまま時刻）
+        assert second.content.startswith("<!-- msg_at: 2025-06-15 14:30 -->")
+        assert "JST" not in second.content
