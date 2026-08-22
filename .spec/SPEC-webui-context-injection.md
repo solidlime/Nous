@@ -84,17 +84,22 @@ PostProcessStep:
 | `memory_digest_count` | 新設 | 5（0で無効） |
 | `memory_preload_count` | 既定値変更 | 3 → 5 |
 
+- **両キーとも webui 右カラムの設定パネルから編集可能にする**。既存の `memory_preload_count` と同じ UI パターン（`nous/api/http/static/chat/chat-settings.js`:178 set / :392 read）に倣い、数値入力として追加する。
+- config 実体は `nous/domain/compression_config.py`（pydantic + field_validator）。`memory_digest_count` には 0 以上のバリデーションを追加する。
+
 ## 対象ファイル（想定）
 
 - `nous/application/chat/pipeline/prepare.py` — クエリ拡張、digest 構築
 - `nous/application/chat/pipeline/inference.py` — 合成メッセージ挿入、タイムゾーン表記修正
 - `nous/application/chat/pipeline/context_loader.py` — session_summary sort 指定、task_state 注入
 - `nous/application/chat/pipeline/trimmer.py` — トリム優先度
-- chat config — `memory_digest_count` 新設、`memory_preload_count` 既定値
+- `nous/domain/compression_config.py` — `memory_digest_count` 新設、`memory_preload_count` 既定値変更
+- `nous/api/http/static/chat/chat-settings.js`（+ 設定パネル HTML）— 右カラムへの設定UI追加
 - base_prompt 定義 — §4 の一行
 
 ## テスト計画
 
-- 単体: digest 構築（件数・ソート・トリミング・0件スキップ）/ クエリ拡張 / trim 順序 / task_state 注入 / session_summary sort
+- 単体: digest 構築（件数・ソート・トリミング・0件スキップ）/ クエリ拡張 / trim 順序 / task_state 注入 / session_summary sort / `memory_digest_count` バリデーション
+- 設定UI: 右カラムから両キーを変更 → 保存 → 再読込で反映されること（round-trip）
 - 回帰: 既存 chat pipeline テスト一式
 - 手動確認: opencode で記録した直近記憶が、webui 新規チャットの初回応答に反映されること（実ブラウザ）
