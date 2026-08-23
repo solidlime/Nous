@@ -195,6 +195,31 @@ class TestAnthropicSamplingKwargs:
         assert kwargs["temperature"] == 0.7
         assert "top_p" not in kwargs
 
+    @pytest.mark.asyncio
+    async def test_reasoning_effort_drops_sampling_params(self):
+        """reasoning_effort 指定時 → thinking のみで temperature/top_p は送らない.
+
+        Anthropic API は thinking 有効時のサンプリングパラメータ変更を拒否するため.
+        """
+        provider = self._make_provider()
+        async for _ in provider.stream(messages=[], system="", temperature=0.7, reasoning_effort="high"):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert "thinking" in kwargs
+        assert "temperature" not in kwargs
+        assert "top_p" not in kwargs
+
+    @pytest.mark.asyncio
+    async def test_reasoning_effort_with_top_p_still_no_top_p(self):
+        """reasoning_effort + top_p 同時指定でも top_p は飛ばない."""
+        provider = self._make_provider()
+        async for _ in provider.stream(messages=[], system="", top_p=0.9, reasoning_effort="high"):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert "thinking" in kwargs
+        assert "top_p" not in kwargs
+        assert "temperature" not in kwargs
+
 
 class TestOpenAICompatCoT:
     """OpenAICompatProvider: delta.reasoning_content を ThinkingDeltaEvent として拾う (SPEC R3)."""
