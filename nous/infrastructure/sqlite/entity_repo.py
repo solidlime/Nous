@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from nous.domain.memory.graph import Entity, EntityGraph, EntityRelation
+from nous.domain.memory.memory_link import MemoryLink
 from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import format_iso, get_now
@@ -171,6 +172,86 @@ class SQLiteEntityRepository(SQLiteRepository):
         except Exception as e:
             logger.error("Failed to get entities for memory %s: %s", memory_key, e)
             return Failure(RepositoryError(str(e)))
+
+    def get_links_for_keys(self, keys: list[str], limit: int = 1000) -> list[MemoryLink]:
+        """Return co-occurrence links between memories sharing any entity.
+
+        Two memories are linked when they mention the same entity.
+        Used by spreading activation in the search engine.
+        """
+        if not keys:
+            return []
+        try:
+            placeholders = ", ".join("?" for _ in keys)
+            rows = self._db.execute(
+                "SELECT DISTINCT me1.memory_key AS src, me2.memory_key AS dst "
+                "FROM memory_entities me1 "
+                "JOIN memory_entities me2 ON me1.entity_id = me2.entity_id "
+                f"WHERE me1.memory_key IN ({placeholders}) AND me2.memory_key != me1.memory_key "
+                "ORDER BY src, dst LIMIT ?",
+                (*keys, limit),
+            ).fetchall()
+            return [
+                MemoryLink(source_key=r["src"], target_key=r["dst"], weight=0.5, link_type="semantic") for r in rows
+            ]
+        except Exception as e:
+            logger.error("Failed to get links for %d keys: %s", len(keys), e)
+            return []
+
+    def get_entities_for_memories(self, memory_keys: list[str], limit: int = 50) -> list[dict]:
+        """Return entities mentioned in the given memories, ordered by mention_count desc.
+
+        Two-stage query so *limit* applies to distinct entities (top-N hubs),
+        not raw rows. Each row carries ``memory_key`` so callers can build
+        memory→entity edges; rows are restricted to the visible entity set.
+        """
+        if not memory_keys:
+            return []
+        try:
+            placeholders = ", ".join("?" for _ in memory_keys)
+            # Stage 1: pick distinct top-N entities by mention_count.
+            id_rows = self._db.execute(
+                "SELECT e.id FROM memory_entities me "
+                "JOIN entities e ON e.id = me.entity_id "
+                f"WHERE me.memory_key IN ({placeholders}) "
+                "GROUP BY e.id ORDER BY MAX(e.mention_count) DESC, e.id LIMIT ?",
+                (*memory_keys, limit),
+            ).fetchall()
+            ids = [r["id"] for r in id_rows]
+            if not ids:
+                return []
+            # Stage 2: fetch memory_key-bearing rows for the visible set.
+            id_placeholders = ", ".join("?" for _ in ids)
+            rows = self._db.execute(
+                "SELECT e.id, e.id AS label, e.entity_type AS type, e.mention_count, me.memory_key "
+                "FROM memory_entities me "
+                "JOIN entities e ON e.id = me.entity_id "
+                f"WHERE me.entity_id IN ({id_placeholders}) "
+                "ORDER BY e.mention_count DESC, e.id",
+                (*ids,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        except Exception as e:
+            logger.error("Failed to get entities for %d memories: %s", len(memory_keys), e)
+            return []
+
+    def get_relations_between_entities(self, entity_ids: list[str]) -> list[dict]:
+        """Return relations whose *both* endpoints are within *entity_ids*."""
+        if not entity_ids:
+            return []
+        try:
+            placeholders = ", ".join("?" for _ in entity_ids)
+            rows = self._db.execute(
+                "SELECT source_entity AS source_id, target_entity AS target_id, "
+                "relation_type AS relation, confidence "
+                f"FROM entity_relations WHERE source_entity IN ({placeholders}) "
+                f"AND target_entity IN ({placeholders})",
+                (*entity_ids, *entity_ids),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        except Exception as e:
+            logger.error("Failed to get relations between %d entities: %s", len(entity_ids), e)
+            return []
 
     # ------------------------------------------------------------------
     # Graph traversal

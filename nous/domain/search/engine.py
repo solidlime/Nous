@@ -402,17 +402,21 @@ class SearchEngine:
 
         # 6. Spreading Activation through memory links
         if self._link_repo and deduped:
-            seed_keys = [r.memory.key for r in deduped[:5]]
-            all_links = self._link_repo.get_links_for_keys(seed_keys)
-            if all_links:
-                from nous.domain.search.spreading_activation import SpreadingActivation
+            try:
+                seed_keys = [r.memory.key for r in deduped[:5]]
+                all_links = self._link_repo.get_links_for_keys(seed_keys)
+                if all_links:
+                    from nous.domain.search.spreading_activation import SpreadingActivation
 
-                sa = SpreadingActivation(hops=2)
-                activations = sa.propagate(seed_keys, all_links)
-                for r in deduped:
-                    if r.memory.key in activations:
-                        r.score += activations[r.memory.key] * 0.2
-                deduped.sort(key=lambda x: x.score, reverse=True)
+                    sa = SpreadingActivation(hops=2)
+                    activations = sa.propagate(seed_keys, all_links)
+                    for r in deduped:
+                        if r.memory.key in activations:
+                            # Cap absolute boost to prevent accumulation on hub nodes
+                            r.score += min(activations[r.memory.key] * 0.2, 0.1)
+                    deduped.sort(key=lambda x: x.score, reverse=True)
+            except Exception:
+                logger.warning("Spreading activation step failed, using pre-SA scores")
 
         return Success(deduped[: query.top_k])
 

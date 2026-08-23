@@ -389,6 +389,7 @@ class AppContext:
                 memorag_config=memorag_config,
                 reranker=self._reranker,
                 entity_service=self.entity_service,
+                link_repo=self.entity_repo,
             )
             # Wire search engine to memory service for memory evolution
             self.memory_service.set_search_engine(self._search_engine)

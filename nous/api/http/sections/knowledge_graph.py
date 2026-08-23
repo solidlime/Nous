@@ -2,9 +2,13 @@
 
 Interactive visualization of memory relationships using vis-network.
 Provides a force-directed graph where nodes represent memories and
-edges represent semantic/tag-based relationships. Supports filtering
-by tag and emotion, adjustable node limits, physics toggle, and a
-slide-out detail panel for inspecting individual memories.
+edges represent semantic/tag-based relationships. Entity nodes
+(extracted by the LLM entity pipeline) are merged in as a backward-
+compatible superset: ``mentions`` edges link memories to entities and
+``relation`` edges connect entities with their relation/confidence.
+Supports filtering by tag and emotion, adjustable node limits,
+physics toggle, and a slide-out detail panel for inspecting
+individual memories.
 
 API consumed:
     GET /api/graph/{persona}?limit={limit}
@@ -12,8 +16,17 @@ API consumed:
 Response shape:
     {
         "persona": "xxx",
-        "nodes": [{ "key", "content", "tags", "emotion", "importance" }],
-        "edges": [{ "source", "target", "type", "tag?" }],
+        "nodes": [
+            { "key", "content", "tags", "emotion", "importance" },    # memory node
+            { "key": "ent:<name>", "kind": "entity", "label",
+              "entity_type", "mention_count" }                        # entity node (cap 50)
+        ],
+        "edges": [
+            { "source", "target", "type", "tag?" },                   # tag | related
+            { "source", "target", "type": "mentions" },               # memory -> entity
+            { "source", "target", "type": "relation",
+              "relation", "confidence" }                              # entity -> entity
+        ],
         "node_count": int,
         "edge_count": int
     }

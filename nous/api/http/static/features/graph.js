@@ -21,13 +21,20 @@ let graphNodeLimit = 100;
 function _graphFontColor() {
     return document.documentElement.classList.contains('light') ? '#1e1b4b' : '#f1f5f9';
 }
-function _graphEdgeColor(isRelated) {
+function _graphEdgeColor(type) {
     var isLight = document.documentElement.classList.contains('light');
-    if (isRelated) {
+    if (type === 'related') {
         return {
             color:     isLight ? 'rgba(0,82,204,0.75)' : 'rgba(0,122,255,0.85)',
             highlight: isLight ? '#0051d5' : '#60a5fa',
             hover:     isLight ? '#0051d5' : '#60a5fa'
+        };
+    }
+    if (type === 'relation') {
+        return {
+            color:     isLight ? 'rgba(124,58,237,0.75)' : 'rgba(167,139,250,0.85)',
+            highlight: isLight ? '#6d28d9' : '#c4b5fd',
+            hover:     isLight ? '#6d28d9' : '#c4b5fd'
         };
     }
     return {
@@ -109,6 +116,27 @@ function buildVisData(nodes, edges) {
     var fontColor = _graphFontColor();
 
     var visNodes = nodes.map(function(n) {
+        /* Entity node: fixed-color dot sized by mention count */
+        if (n.kind === 'entity') {
+            var entColor = '#a78bfa';
+            return {
+                id: n.key,
+                label: truncate(n.label, 20) || n.key,
+                title: buildEntityTooltip(n),
+                shape: 'dot',
+                size: 8 + Math.min(n.mention_count || 1, 10) * 2,
+                color: {
+                    background: entColor,
+                    border: entColor,
+                    highlight: { background: entColor, border: '#fff' },
+                    hover:     { background: entColor, border: '#fff' }
+                },
+                font: { color: fontColor, size: 11, face: 'system-ui' },
+                borderWidth: 2,
+                shadow: { enabled: true, color: entColor, size: 8, x: 0, y: 0 },
+                _data: n
+            };
+        }
         var emoColor = N.Core.EMOTION_COLORS[n.emotion] || '#94a3b8';
         var sz = 10 + (n.importance || 0.5) * 30;
         var nodeLabel = truncate(n.content, 20) || n.key || 'Unknown';
@@ -131,14 +159,16 @@ function buildVisData(nodes, edges) {
     });
 
     var visEdges = edges.map(function(e, i) {
-        var isRelated = (e.type === 'related');
+        var isRelated  = (e.type === 'related');
+        var isMentions = (e.type === 'mentions');
+        var isRelation = (e.type === 'relation');
         return {
             id: 'e' + i,
             from: e.source,
             to: e.target,
-            dashes: !isRelated,
-            width: isRelated ? 2.5 : 1.5,
-            color: _graphEdgeColor(isRelated),
+            dashes: isMentions ? [2, 4] : !isRelated,
+            width: isRelated ? 2.5 : (isRelation ? 2 : 1),
+            color: _graphEdgeColor(e.type),
             smooth: { type: 'continuous' },
             _type: e.type,
             _tag:  e.tag || '',
@@ -151,6 +181,15 @@ function buildVisData(nodes, edges) {
 }
 
 /* ---- Tooltip HTML ---- */
+
+function buildEntityTooltip(n) {
+    var el = document.createElement('div');
+    el.style.cssText = 'background:#1e293b;color:#e2e8f0;border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.6;max-width:300px;white-space:normal;word-break:break-word;box-shadow:0 4px 16px rgba(0,0,0,0.5);';
+    var h = '<div style="margin-bottom:4px;font-weight:600;color:#f8fafc">' + esc(n.label || n.key) + '</div>';
+    h += '<div style="color:#94a3b8">&#127991; ' + esc(n.entity_type || 'entity') + ' &#183; mentions: ' + (n.mention_count || 0) + '</div>';
+    safeSetHTML(el, h);
+    return el;
+}
 
 function buildTooltip(n) {
     var el = document.createElement('div');
@@ -273,12 +312,12 @@ function renderNetwork(container, nodes, edges) {
         }
     });
 
-    /* Double-click → open full modal via openMemModal */
+    /* Double-click → open full modal via openMemModal (entity nodes have no memory modal) */
     graphNetwork.on('doubleClick', function(params) {
         if (params.nodes.length > 0) {
             var nodeId = params.nodes[0];
             var node = dataSet.nodes.get(nodeId);
-            if (node && node._data) {
+            if (node && node._data && !node._data.kind) {
                 var d = node._data;
                 N.Features.Memories.openMemModal({
                     memory_key:  d.key,
@@ -303,6 +342,20 @@ function openGraphDetailPanel(data) {
     var panel   = document.getElementById('graph-detail-panel');
     var overlay = document.getElementById('graph-panel-overlay');
     var body    = document.getElementById('graph-panel-body');
+
+    /* Entity node: compact info card instead of memory details */
+    if (data.kind === 'entity') {
+        var entHtml = '<div style="margin-bottom:12px">' +
+            '<div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px">Entity</div>' +
+            '<div style="font-size:1.05rem;font-weight:600;color:var(--text-primary)">' + esc(data.label || data.key) + '</div>' +
+            '</div>' +
+            '<div style="color:var(--text-secondary);font-size:0.85rem">' +
+            esc(data.entity_type || 'entity') + ' &#183; mentioned in ' + (data.mention_count || 0) + ' memories</div>';
+        safeSetHTML(body, entHtml);
+        panel.style.right = '0';
+        overlay.style.display = 'block';
+        return;
+    }
 
     var tags = (data.tags || []).map(function(t) {
         return '<span class="badge badge-purple">' + esc(t) + '</span>';
@@ -453,6 +506,7 @@ Object.assign(N.Features.Graph, {
     populateGraphFilters: populateGraphFilters,
     buildVisData: buildVisData,
     buildTooltip: buildTooltip,
+    buildEntityTooltip: buildEntityTooltip,
     applyGraphFilters: applyGraphFilters,
     renderNetwork: renderNetwork,
     openGraphDetailPanel: openGraphDetailPanel,

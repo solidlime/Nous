@@ -19,6 +19,86 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _merge_entity_layer(ctx, memories: list, nodes: list, edges: list, edge_set: set) -> None:
+    """Append entity nodes and mentions/relation edges to the graph (display-only superset).
+
+    Repo contract (implemented on the repository side by Lane B):
+        get_entities_for_memories(memory_keys, limit=50)
+            -> [{id, label, type, mention_count, memory_key}]
+        get_relations_between_entities(entity_ids)
+            -> [{source_id, target_id, relation, confidence}]
+
+    FYI(accepted): tags also surface as concept entities (see domain/memory/graph.py),
+    and enrich runs async, so relations may be missing within the 30s cache window.
+    """
+    # getattr guard keeps the endpoint backward-compatible until Lane B lands.
+    get_entities = getattr(ctx.entity_repo, "get_entities_for_memories", None)
+    if get_entities is None:
+        return
+    try:
+        rows = get_entities([m.key for m in memories], limit=50)
+    except Exception:
+        logger.warning("graph: entity fetch failed; serving memory-only graph", exc_info=True)
+        return
+
+    by_id: dict[str, dict] = {}
+    for row in rows or []:
+        eid = row.get("id")
+        if not eid:
+            continue
+        cur = by_id.get(eid)
+        if cur is None or (row.get("mention_count") or 0) > (cur.get("mention_count") or 0):
+            by_id[eid] = row
+    top = sorted(by_id.values(), key=lambda r: r.get("mention_count") or 0, reverse=True)[:50]
+    visible = {r["id"] for r in top}
+
+    for row in top:
+        nodes.append(
+            {
+                "key": f"ent:{row['id']}",
+                "kind": "entity",
+                "label": row.get("label") or row["id"],
+                "entity_type": row.get("type"),
+                "mention_count": row.get("mention_count", 0),
+            }
+        )
+
+    for row in rows or []:
+        source = row.get("memory_key") or ""
+        target_id = row.get("id")
+        if not source or target_id not in visible:
+            continue  # sentinel rows and edges to capped-out entities are dropped
+        marker = ("mentions", source, target_id)
+        if marker not in edge_set:
+            edge_set.add(marker)
+            edges.append({"source": source, "target": f"ent:{target_id}", "type": "mentions"})
+
+    get_relations = getattr(ctx.entity_repo, "get_relations_between_entities", None)
+    if get_relations is None:
+        return
+    try:
+        relations = get_relations(sorted(visible))
+    except Exception:
+        logger.warning("graph: relation fetch failed; skipping relation edges", exc_info=True)
+        return
+    for rel in relations or []:
+        sid, tid = rel.get("source_id"), rel.get("target_id")
+        if sid not in visible or tid not in visible:
+            continue  # relation edges require both endpoints visible
+        marker = ("relation", sid, tid)
+        if marker not in edge_set:
+            edge_set.add(marker)
+            edges.append(
+                {
+                    "source": f"ent:{sid}",
+                    "target": f"ent:{tid}",
+                    "type": "relation",
+                    "relation": rel.get("relation"),
+                    "confidence": rel.get("confidence"),
+                }
+            )
+
+
 def register_search_routes(mcp) -> None:
     @mcp.custom_route("/api/search/{persona}", methods=["GET"])
     async def search_memories(request: Request) -> JSONResponse:
@@ -176,6 +256,8 @@ def register_search_routes(mcp) -> None:
                                         "tag": tag,
                                     }
                                 )
+
+            _merge_entity_layer(ctx, memories, nodes, edges, edge_set)
 
             return JSONResponse(
                 {
