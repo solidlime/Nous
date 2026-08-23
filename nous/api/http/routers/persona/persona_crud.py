@@ -61,7 +61,8 @@ async def _do_delete_persona(persona: str) -> dict:
     settings = Settings()
     persona_dir = (Path(settings.persona_dir) / persona).resolve()
     root = Path(settings.persona_dir).resolve()
-    if not str(persona_dir).startswith(str(root) + "/"):
+    # ponytail: strict-subdir check; is_relative_to alone would admit persona_dir == root
+    if persona_dir == root or not persona_dir.is_relative_to(root):
         return {"error": "Invalid persona name"}
     if not persona_dir.exists():
         return {"error": f"Persona '{persona}' not found"}

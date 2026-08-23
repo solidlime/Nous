@@ -696,7 +696,7 @@ class TestDashboardStateRestoration:
         """Persona persistence should use shared helpers instead of split localStorage keys."""
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         base_js_path = os.path.join(base_dir, "nous", "api", "http", "static", "base.js")
-        with open(base_js_path) as f:
+        with open(base_js_path, encoding="utf-8") as f:
             js = f.read()
 
         assert "function getStoredPersona()" in js
