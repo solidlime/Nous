@@ -250,9 +250,7 @@ class TestBuildAppearance:
         result = service.build_appearance({"top": "白いドレス"})
         assert result == "白いドレス"
 
-    def test_build_appearance_prefers_visual_desc(
-        self, service: EquipmentService, repo: InMemoryEquipmentRepository
-    ):
+    def test_build_appearance_prefers_visual_desc(self, service: EquipmentService, repo: InMemoryEquipmentRepository):
         service.add_item("白いドレス", visual_desc="white dress, off-shoulder")
         result = service.build_appearance({"top": "白いドレス"})
         assert result == "white dress, off-shoulder"
@@ -289,11 +287,14 @@ class TestAccessorySlots:
         assert repo._slots.get("accessory_3") == "ブレスレット"
 
     def test_equip_all_three_accessories(self, service: EquipmentService, repo: InMemoryEquipmentRepository):
-        service.equip({
-            "accessory_1": "リング",
-            "accessory_2": "ネックレス",
-            "accessory_3": "ブレスレット",
-        }, auto_add=True)
+        service.equip(
+            {
+                "accessory_1": "リング",
+                "accessory_2": "ネックレス",
+                "accessory_3": "ブレスレット",
+            },
+            auto_add=True,
+        )
         assert repo._slots.get("accessory_1") == "リング"
         assert repo._slots.get("accessory_2") == "ネックレス"
         assert repo._slots.get("accessory_3") == "ブレスレット"

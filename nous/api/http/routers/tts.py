@@ -116,13 +116,16 @@ def register_tts_routes(mcp) -> None:
                 base_url = getattr(chat_config, "base_url", "")
 
                 from nous.infrastructure.llm.factory import get_provider
+
                 provider = get_provider(provider_name, api_key, model_name, base_url)
 
                 # Build voice-relevant context
                 voice_context_parts = []
                 if state:
                     if state.emotion and state.emotion != "neutral":
-                        voice_context_parts.append(f"感情: {state.emotion} (強度: {int((state.emotion_intensity or 0.0) * 10)}/10)")
+                        voice_context_parts.append(
+                            f"感情: {state.emotion} (強度: {int((state.emotion_intensity or 0.0) * 10)}/10)"
+                        )
                     voice_related = []
                     if state.relationship_status:
                         voice_related.append(f"相手との関係: {state.relationship_status}")
@@ -161,7 +164,7 @@ def register_tts_routes(mcp) -> None:
 ## 読み上げテキスト
 {text}"""
 
-                from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, LLMMessage, TextDeltaEvent
+                from nous.infrastructure.llm.base import ErrorEvent, LLMMessage, TextDeltaEvent
 
                 full_content: list[str] = []
                 async for event in provider.stream(

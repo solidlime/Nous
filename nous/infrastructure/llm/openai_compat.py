@@ -35,9 +35,7 @@ _VISION_MODEL_PREFIXES = (
     "o4-mini",
 )
 
-_NON_VISION_MODEL_PREFIXES = (
-    "gpt-3.5",
-)
+_NON_VISION_MODEL_PREFIXES = ("gpt-3.5",)
 
 
 def _is_vision_model(model: str) -> bool:
@@ -233,7 +231,9 @@ class OpenAICompatProvider(LLMProvider):
                 tool_calls_collected.append(tc)
                 yield tc
 
-            yield DoneEvent(full_content=full_text, tool_calls=tool_calls_collected, finish_reason=finish_reason, usage=usage_info)
+            yield DoneEvent(
+                full_content=full_text, tool_calls=tool_calls_collected, finish_reason=finish_reason, usage=usage_info
+            )
 
         except Exception as e:
             yield ErrorEvent(message=str(e))

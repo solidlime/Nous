@@ -196,9 +196,7 @@ class TestOpenAICompatCoT:
     @pytest.mark.asyncio
     async def test_content_and_reasoning_in_same_chunk_yielded_in_order(self):
         """同一チャンクで content と reasoning_content の両方 → 両方 yield（reasoning が先）."""
-        events = await self._stream_events(
-            [self._chunk(content="Hello", reasoning="Hmm")]
-        )
+        events = await self._stream_events([self._chunk(content="Hello", reasoning="Hmm")])
         assert [ev.content for ev in events if isinstance(ev, ThinkingDeltaEvent)] == ["Hmm"]
         assert [ev.content for ev in events if isinstance(ev, TextDeltaEvent)] == ["Hello"]
         thinking_idx = next(i for i, ev in enumerate(events) if isinstance(ev, ThinkingDeltaEvent))
@@ -208,9 +206,7 @@ class TestOpenAICompatCoT:
     @pytest.mark.asyncio
     async def test_no_reasoning_no_thinking_events(self):
         """reasoning_content が無い → ThinkingDeltaEvent は出ない."""
-        events = await self._stream_events(
-            [self._chunk(content="plain", reasoning=None)]
-        )
+        events = await self._stream_events([self._chunk(content="plain", reasoning=None)])
         assert not any(isinstance(ev, ThinkingDeltaEvent) for ev in events)
         assert [ev.content for ev in events if isinstance(ev, TextDeltaEvent)] == ["plain"]
 
@@ -236,7 +232,9 @@ class TestAnthropicCoT:
                     type="content_block_delta",
                     delta=SimpleNamespace(type="thinking_delta", thinking="Hmm, let me consider"),
                 ),
-                SimpleNamespace(type="content_block_delta", delta=SimpleNamespace(type="text_delta", text="Final answer")),
+                SimpleNamespace(
+                    type="content_block_delta", delta=SimpleNamespace(type="text_delta", text="Final answer")
+                ),
                 SimpleNamespace(type="message_delta", delta=SimpleNamespace(stop_reason="end_turn"), usage=None),
             ]
         )

@@ -147,6 +147,4 @@ class TestEmotionDrivenSampler:
         # Compute returns valid temperature for all emotions
         for emotion in _EMOTION_KEYWORD_MAP:
             temp = EmotionDrivenSampler.compute(0.7, emotion, 0.5, 0.2)
-            assert TEMPERATURE_MIN <= temp <= TEMPERATURE_MAX, (
-                f"Temperature {temp} out of range for {emotion}"
-            )
+            assert TEMPERATURE_MIN <= temp <= TEMPERATURE_MAX, f"Temperature {temp} out of range for {emotion}"

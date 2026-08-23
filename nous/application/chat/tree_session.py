@@ -158,10 +158,7 @@ class TreeSessionWindow:
     @property
     def _timestamps(self) -> list[datetime]:
         """SessionWindow互換: アクティブパスの created_at をdatetimeリストで返す。"""
-        return [
-            datetime.fromisoformat(n["created_at"])
-            for n in self.get_active_path()
-        ]
+        return [datetime.fromisoformat(n["created_at"]) for n in self.get_active_path()]
 
     def update_message(self, message_index: int, new_content: str) -> dict | None:
         """SessionWindow互換: インデックス指定でアクティブパス内のメッセージを編集。"""
@@ -298,9 +295,7 @@ class TreeSessionWindow:
                     window._nodes[node["id"]] = node
             elif isinstance(data, list):
                 # 旧形式: list[dict] — 自動マイグレーション
-                timestamps_raw: list[str] = json.loads(
-                    row["timestamps"] if hasattr(row, "keys") else row[1]
-                )
+                timestamps_raw: list[str] = json.loads(row["timestamps"] if hasattr(row, "keys") else row[1])
                 prev_id: str | None = None
                 for msg, ts_str in zip(data, timestamps_raw, strict=False):
                     node_id = str(_uuid.uuid4())

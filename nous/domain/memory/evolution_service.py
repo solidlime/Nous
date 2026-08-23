@@ -105,7 +105,12 @@ class MemoryEvolutionService:
                                 existing_mem = self._repo.find_by_key(result.existing_memory_key)
                                 if existing_mem.is_ok and existing_mem.value is not None:  # type: ignore[union-attr]
                                     old = existing_mem.value  # type: ignore[union-attr]
-                                    snapshot = {"content": old.content, "importance": old.importance, "emotion": old.emotion, "tags": old.tags}
+                                    snapshot = {
+                                        "content": old.content,
+                                        "importance": old.importance,
+                                        "emotion": old.emotion,
+                                        "tags": old.tags,
+                                    }
                                     ver = self._repo.get_latest_version_number(result.existing_memory_key)  # type: ignore[attr-defined]
                                     next_ver = (ver.value + 1) if ver.is_ok else 1
                                     self._repo.save_version(  # type: ignore[attr-defined]

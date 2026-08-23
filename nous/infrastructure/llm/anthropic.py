@@ -199,7 +199,9 @@ class AnthropicProvider(LLMProvider):
                                 "total_tokens": usage_attr.input_tokens + usage_attr.output_tokens,
                             }
 
-            yield DoneEvent(full_content=full_text, tool_calls=tool_calls_collected, finish_reason=finish_reason, usage=usage_info)
+            yield DoneEvent(
+                full_content=full_text, tool_calls=tool_calls_collected, finish_reason=finish_reason, usage=usage_info
+            )
 
         except Exception as e:
             yield ErrorEvent(message=str(e))

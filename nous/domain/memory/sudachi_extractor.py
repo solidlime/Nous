@@ -37,17 +37,15 @@ def _download_dict(target_path: str) -> None:
     os.makedirs(target_dir, exist_ok=True)
     try:
         logger.info("Downloading Sudachi dictionary from %s", SUDACHI_DICT_URL)
-        with urllib.request.urlopen(SUDACHI_DICT_URL) as resp:
+        with urllib.request.urlopen(
+            SUDACHI_DICT_URL
+        ) as resp:  # static https URL from pinned version constants  # nosec B310
             zip_data = io.BytesIO(resp.read())
         with zipfile.ZipFile(zip_data) as zf:
             names = zf.namelist()
-            dic_member = next(
-                (n for n in names if n.endswith(SUDACHI_DICT_FILENAME)), None
-            )
+            dic_member = next((n for n in names if n.endswith(SUDACHI_DICT_FILENAME)), None)
             if dic_member is None:
-                raise FileNotFoundError(
-                    f"{SUDACHI_DICT_FILENAME} not found in Sudachi dictionary archive"
-                )
+                raise FileNotFoundError(f"{SUDACHI_DICT_FILENAME} not found in Sudachi dictionary archive")
             dic_data = zf.read(dic_member)
         with open(target_path, "wb") as f:
             f.write(dic_data)

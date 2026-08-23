@@ -130,9 +130,7 @@ class TestGoalManage:
             _mem("goal_004", tags=["goal", "active", "project:nous"])
         )
         goal_manage = tools["goal_manage"]
-        result = await goal_manage(
-            operation="create", content="nous project goal", scope="self", tags=["project:nous"]
-        )
+        result = await goal_manage(operation="create", content="nous project goal", scope="self", tags=["project:nous"])
 
         assert "Goal created: goal_004" in result
         ctx.memory_service.create_memory.assert_called_once_with(
@@ -346,9 +344,7 @@ class TestGoalManage:
         )
 
         assert "Goal cancelled" in result
-        ctx.memory_service.get_by_tags.assert_called_once_with(
-            ["goal", "active", "interpersonal", "project:nous"]
-        )
+        ctx.memory_service.get_by_tags.assert_called_once_with(["goal", "active", "interpersonal", "project:nous"])
 
     # -- List -------------------------------------------------------------------
 
@@ -369,9 +365,7 @@ class TestGoalManage:
     async def test_list_goals_shows_key(self, registered_tools):
         """Goal list output should include memory_key for direct achieve/cancel."""
         tools, ctx, _ = registered_tools
-        ctx.memory_service.get_by_tags.return_value = Success(
-            [_mem("g1", content="goal 1", tags=["goal", "active"])]
-        )
+        ctx.memory_service.get_by_tags.return_value = Success([_mem("g1", content="goal 1", tags=["goal", "active"])])
         goal_manage = tools["goal_manage"]
         result = await goal_manage(operation="list", scope="self")
 
@@ -449,9 +443,7 @@ class TestGoalManage:
         result = await goal_manage(operation="list", scope="interpersonal", tags=["project:nous"])
 
         assert "Active goals" in result
-        ctx.memory_service.get_by_tags.assert_called_once_with(
-            ["goal", "active", "interpersonal", "project:nous"]
-        )
+        ctx.memory_service.get_by_tags.assert_called_once_with(["goal", "active", "interpersonal", "project:nous"])
 
     @pytest.mark.asyncio
     async def test_list_goals_without_tags_unchanged(self, registered_tools):

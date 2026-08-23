@@ -824,9 +824,9 @@ class TestRunMemoryLLM:
         for call in mock_ctx.memory_service.create_memory.call_args_list:
             _, kwargs = call
             content = kwargs.get("content", "")
-            assert not any(
-                content.startswith(prefix) for prefix in ("physical_state:", "mental_state:")
-            ), f"Memory should not be created: {content}"
+            assert not any(content.startswith(prefix) for prefix in ("physical_state:", "mental_state:")), (
+                f"Memory should not be created: {content}"
+            )
 
     @pytest.mark.asyncio
     async def test_context_update_none_state_skips_memory(self, mock_ctx, mock_config):
@@ -849,6 +849,6 @@ class TestRunMemoryLLM:
         for call in mock_ctx.memory_service.create_memory.call_args_list:
             _, kwargs = call
             content = kwargs.get("content", "")
-            assert not any(
-                content.startswith(prefix) for prefix in ("physical_state:", "mental_state:")
-            ), f"Memory should not be created for None: {content}"
+            assert not any(content.startswith(prefix) for prefix in ("physical_state:", "mental_state:")), (
+                f"Memory should not be created for None: {content}"
+            )

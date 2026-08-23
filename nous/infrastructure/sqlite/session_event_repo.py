@@ -108,7 +108,7 @@ class SessionEventRepository:
 
         # Paginated rows
         rows = self._db.execute(
-            f"SELECT * FROM session_events {where_clause} ORDER BY timestamp {direction} LIMIT ? OFFSET ?",  # nosec B608: internally-built clause
+            f"SELECT * FROM session_events {where_clause} ORDER BY timestamp {direction} LIMIT ? OFFSET ?",  # where_clause internally built; direction whitelisted; params bound  # nosec B608
             (*params, limit, offset),
         ).fetchall()
 

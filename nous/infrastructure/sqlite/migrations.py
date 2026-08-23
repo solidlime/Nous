@@ -40,9 +40,7 @@ def run_migrations(db_conn: sqlite3.Connection, persona: str) -> None:
 
     for version, desc, func in MIGRATIONS:
         if version > current:
-            logger.info(
-                "Applying v%d: %s (persona='%s')", version, desc, persona
-            )
+            logger.info("Applying v%d: %s (persona='%s')", version, desc, persona)
             func(db_conn, persona)
             _record_version(db_conn, version)
 
@@ -57,19 +55,14 @@ def run_migrations(db_conn: sqlite3.Connection, persona: str) -> None:
 def _ensure_version_table(db_conn: sqlite3.Connection) -> None:
     """Create ``_migration_version`` if it somehow doesn't exist yet."""
     db_conn.execute(
-        "CREATE TABLE IF NOT EXISTS _migration_version ("
-        "    version INTEGER PRIMARY KEY,"
-        "    applied_at TEXT NOT NULL"
-        ")"
+        "CREATE TABLE IF NOT EXISTS _migration_version (    version INTEGER PRIMARY KEY,    applied_at TEXT NOT NULL)"
     )
 
 
 def _get_current_version(db_conn: sqlite3.Connection) -> int:
     """Return the highest applied migration version (0 = none)."""
     try:
-        row = db_conn.execute(
-            "SELECT COALESCE(MAX(version), 0) AS v FROM _migration_version"
-        ).fetchone()
+        row = db_conn.execute("SELECT COALESCE(MAX(version), 0) AS v FROM _migration_version").fetchone()
         return row["v"]
     except sqlite3.OperationalError:
         return 0
@@ -90,7 +83,8 @@ def _record_version(db_conn: sqlite3.Connection, version: int) -> None:
 
 
 def _migrate_add_last_consumed_at(
-    db_conn: sqlite3.Connection, persona: str  # noqa: ARG001
+    db_conn: sqlite3.Connection,
+    persona: str,  # noqa: ARG001
 ) -> None:
     """Add ``last_consumed_at`` column to ``memories`` if missing."""
     try:
@@ -102,34 +96,28 @@ def _migrate_add_last_consumed_at(
 
 
 def _migrate_fts_backfill(
-    db_conn: sqlite3.Connection, persona: str  # noqa: ARG001
+    db_conn: sqlite3.Connection,
+    persona: str,  # noqa: ARG001
 ) -> None:
     """Backfill the FTS5 index from the ``memories`` table when empty.
 
     This handles the case of an existing database that was created before the
     FTS5 index was introduced.
     """
-    count = db_conn.execute(
-        "SELECT COUNT(*) as cnt FROM memories_fts"
-    ).fetchone()["cnt"]
+    count = db_conn.execute("SELECT COUNT(*) as cnt FROM memories_fts").fetchone()["cnt"]
     if count > 0:
         return
 
-    existing = db_conn.execute(
-        "SELECT COUNT(*) as cnt FROM memories"
-    ).fetchone()["cnt"]
+    existing = db_conn.execute("SELECT COUNT(*) as cnt FROM memories").fetchone()["cnt"]
     if existing > 0:
         db_conn.execute(
-            "INSERT INTO memories_fts(rowid, content, memories_key) "
-            "SELECT rowid, content, key FROM memories"
+            "INSERT INTO memories_fts(rowid, content, memories_key) SELECT rowid, content, key FROM memories"
         )
         db_conn.commit()
         logger.info("FTS5 index backfilled: %d documents", existing)
 
 
-def _migrate_context_state_to_memories(
-    db_conn: sqlite3.Connection, persona: str
-) -> None:
+def _migrate_context_state_to_memories(db_conn: sqlite3.Connection, persona: str) -> None:
     """One-shot migration: transfer ``context_state`` records into ``memories``.
 
     This is a best-effort migration that silenty ignores failures so that it
@@ -143,27 +131,25 @@ def _migrate_context_state_to_memories(
         migrated = migrate_context_state_to_memories(db_conn, persona)
         if migrated:
             db_conn.commit()
-            logger.info(
-                "One-shot migration: %d state records -> memories", migrated
-            )
+            logger.info("One-shot migration: %d state records -> memories", migrated)
     except Exception:  # noqa: S110
         pass
 
 
 def _migrate_cleanup_orphan_strengths_v4(
-    db_conn: sqlite3.Connection, persona: str  # noqa: ARG001
+    db_conn: sqlite3.Connection,
+    persona: str,  # noqa: ARG001
 ) -> None:
     """Delete orphan memory_strength records whose memory_key has been removed."""
-    cursor = db_conn.execute(
-        "DELETE FROM memory_strength WHERE memory_key NOT IN (SELECT key FROM memories)"
-    )
+    cursor = db_conn.execute("DELETE FROM memory_strength WHERE memory_key NOT IN (SELECT key FROM memories)")
     delete_count = cursor.rowcount
     db_conn.commit()
     logger.info("Cleaned up %d orphan memory_strength records", delete_count)
 
 
 def _migrate_add_persona_to_emotion_history_v5(
-    db_conn: sqlite3.Connection, persona: str  # noqa: ARG001
+    db_conn: sqlite3.Connection,
+    persona: str,  # noqa: ARG001
 ) -> None:
     """Add persona column to emotion_history and rebuild index."""
     try:
@@ -184,7 +170,8 @@ def _migrate_add_persona_to_emotion_history_v5(
 
 
 def _migrate_remove_chat_kind_v6(
-    db_conn: sqlite3.Connection, persona: str  # noqa: ARG001
+    db_conn: sqlite3.Connection,
+    persona: str,  # noqa: ARG001
 ) -> None:
     """Replace kind='chat' with kind='semantic' for existing records.
 

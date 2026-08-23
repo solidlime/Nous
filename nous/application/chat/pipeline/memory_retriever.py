@@ -181,9 +181,7 @@ async def _search_keyword_fast(
 
     async def _run(q: str) -> list:
         try:
-            result = await ctx.search_engine.search(
-                SearchQuery(text=q, top_k=top_k, mode="keyword")
-            )
+            result = await ctx.search_engine.search(SearchQuery(text=q, top_k=top_k, mode="keyword"))
             return result.value if result.is_ok else []
         except Exception:
             return []
@@ -204,11 +202,13 @@ async def _search_keyword_fast(
             content = getattr(mem, "content", str(mem))
             if content not in seen:
                 seen.add(content)
-                items.append({
-                    "content": content[:200],
-                    "score": 1.0,
-                    "importance": float(getattr(mem, "importance", 0.5)),
-                })
+                items.append(
+                    {
+                        "content": content[:200],
+                        "score": 1.0,
+                        "importance": float(getattr(mem, "importance", 0.5)),
+                    }
+                )
                 if len(items) >= top_k:
                     break
         if len(items) >= top_k:

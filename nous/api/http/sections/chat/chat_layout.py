@@ -1,7 +1,6 @@
 """Chat tab layout — container, message area, and input area HTML."""
 
 
-
 def render_chat_layout_prefix() -> str:
     """Return the opening HTML (CSS link, section, header, layout container, backdrop)."""
     return """

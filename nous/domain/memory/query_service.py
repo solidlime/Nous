@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -61,7 +60,9 @@ class MemoryQueryService:
                 tag_dist[tag] = tag_dist.get(tag, 0) + 1
             emotion_dist[m.emotion] = emotion_dist.get(m.emotion, 0) + 1
             if m.created_at:
-                day_key = m.created_at.strftime("%Y-%m-%d") if hasattr(m.created_at, "strftime") else str(m.created_at)[:10]
+                day_key = (
+                    m.created_at.strftime("%Y-%m-%d") if hasattr(m.created_at, "strftime") else str(m.created_at)[:10]
+                )
                 daily_counts[day_key] = daily_counts.get(day_key, 0) + 1
 
         total_count = count_result.value

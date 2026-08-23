@@ -43,9 +43,7 @@ class MemoryLinkService:
             return []
 
         try:
-            events = self._session_event_repo.get_by_session(
-                session_id, limit=20
-            )
+            events = self._session_event_repo.get_by_session(session_id, limit=20)
         except Exception:
             return []
 

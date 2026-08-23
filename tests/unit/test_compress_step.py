@@ -203,7 +203,7 @@ class TestCompressStep:
 
         config = _make_chat_config(
             context_max_tokens=1_000_000,  # Huge budget
-            context_keep_recent_turns=0,    # Disable Stage 0 truncation
+            context_keep_recent_turns=0,  # Disable Stage 0 truncation
         )
         ctx = _dummy_app_context()
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=5))

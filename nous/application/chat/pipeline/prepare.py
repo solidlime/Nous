@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING
 
 from nous.application.chat.pipeline.context_loader import (  # noqa: F401
     _GAP_INSTRUCTIONS,
-    _SUSPICIOUS_CP,
     _SUSPICIOUS_RANGES,
     _TIME_OF_DAY,
     _build_context_section,
     _build_relationship_context,
     _build_time_context,
     _classify_gap,
+    _is_suspicious_cp,
 )
 
 # Re-export all public symbols from the split modules.
@@ -46,7 +46,8 @@ def _build_recall_query(session, current_user_message: str) -> str:
     """§2: 直近ユーザー発言 最大3件の結合（合計800字上限、超過時は新しい方から採用）。"""
     # TreeSessionWindow._messages は list[dict]（role/content キー）なので辞書アクセス必須
     history = [
-        str(m.get("content")) for m in session._messages
+        str(m.get("content"))
+        for m in session._messages
         if isinstance(m, dict) and m.get("role") == "user" and m.get("content")
     ]
     if not history or history[-1] != current_user_message:
@@ -161,9 +162,7 @@ class PrepareStep:
                     top_k=max(preload_count, 1) if preload_count > 0 else 100,
                 )
             )
-            results = await asyncio.gather(
-                context_task, memory_task, return_exceptions=True
-            )
+            results = await asyncio.gather(context_task, memory_task, return_exceptions=True)
             context_section = results[0]
             memory_result = results[1]
 

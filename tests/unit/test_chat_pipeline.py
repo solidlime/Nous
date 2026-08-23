@@ -1176,9 +1176,7 @@ class TestThinkingSegmentInference:
         """thinking テキストが空 → segment を追加しない."""
         from nous.infrastructure.llm.base import ThinkingDeltaEvent
 
-        _, turn_ctx = await self._run(
-            [ThinkingDeltaEvent(content="")]
-        )
+        _, turn_ctx = await self._run([ThinkingDeltaEvent(content="")])
         assert not any(s.get("type") == "thinking" for s in turn_ctx.segments)
 
     @pytest.mark.asyncio
@@ -1198,7 +1196,7 @@ class TestThinkingSegmentInference:
 
     @pytest.mark.asyncio
     async def test_thinking_not_mixed_into_text_segment(self):
-        """thinking と text が混ざらない（text segment は text のみ）. """
+        """thinking と text が混ざらない（text segment は text のみ）."""
         from nous.infrastructure.llm.base import TextDeltaEvent, ThinkingDeltaEvent
 
         _, turn_ctx = await self._run(

@@ -404,4 +404,3 @@ def _safe_float(value: str | None) -> float | None:
         return float(value)
     except (ValueError, TypeError):
         return None
-

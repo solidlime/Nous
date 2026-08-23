@@ -55,7 +55,7 @@ class MemoryStatsMixin:
 
         offset = (page - 1) * per_page
         rows = self._db.execute(
-            f"SELECT * FROM memories{where_clause} ORDER BY updated_at {order} LIMIT ? OFFSET ?",  # noqa: S608  # nosec B608 — variables are placeholder-protected, safe against SQL injection
+            f"SELECT * FROM memories{where_clause} ORDER BY updated_at {order} LIMIT ? OFFSET ?",  # order whitelisted; where_clause internally built; params bound  # nosec B608
             [*params, per_page, offset],
         ).fetchall()
 
@@ -63,7 +63,9 @@ class MemoryStatsMixin:
 
     def get_all_tags(self) -> Result[list[str], RepositoryError]:
         """Return a deduplicated list of all tags used across memories."""
-        rows = self._db.execute(f"SELECT tags FROM memories WHERE {self._active_where()}").fetchall()
+        rows = self._db.execute(
+            f"SELECT tags FROM memories WHERE {self._active_where()}"  # values bound via sqlite params; identifiers from internal constants  # nosec B608
+        ).fetchall()
         all_tags: set[str] = set()
         for row in rows:
             all_tags.update(_parse_json_list(row["tags"]))
@@ -93,7 +95,7 @@ class MemoryStatsMixin:
             all_conditions.append("last_consumed_at IS NULL")
         where = " AND ".join(all_conditions)
         rows = self._db.execute(
-            f"SELECT * FROM memories WHERE {where} ORDER BY updated_at DESC",  # nosec B608
+            f"SELECT * FROM memories WHERE {where} ORDER BY updated_at DESC",  # where built from internal conditions; params bound  # nosec B608
             params,
         ).fetchall()
         return Success([self._row_to_memory(r) for r in rows])
@@ -115,7 +117,7 @@ class MemoryStatsMixin:
             WHERE {self._active_where()}
             ORDER BY smart_score DESC
             LIMIT ?
-            """,
+            """,  # values bound via sqlite params; identifiers from internal constants  # nosec B608
             (limit,),
         ).fetchall()
         return Success([self._row_to_memory(r) for r in rows])
@@ -152,13 +154,13 @@ class MemoryStatsMixin:
 
     def get_memory_index(self) -> Result[dict, RepositoryError]:
         """Get compressed memory index for context snapshot."""
-        total = self._db.execute(f"SELECT COUNT(*) as cnt FROM memories WHERE {self._active_where()}").fetchone()[
-            "cnt"
-        ]
+        total = self._db.execute(
+            f"SELECT COUNT(*) as cnt FROM memories WHERE {self._active_where()}"  # values bound via params; identifiers from internal constants  # nosec B608
+        ).fetchone()["cnt"]  # values bound via sqlite params; identifiers from internal constants  # nosec B608
 
         tag_rows = self._db.execute(f"""
             SELECT tags FROM memories WHERE {self._active_where()} AND tags IS NOT NULL AND tags != '' AND tags != '[]'
-        """).fetchall()
+        """).fetchall()  # values bound via sqlite params; identifiers from internal constants  # nosec B608
         tag_dist: dict[str, int] = {}
         for row in tag_rows:
             try:
@@ -174,7 +176,7 @@ class MemoryStatsMixin:
             SELECT emotion, COUNT(*) as cnt FROM memories
             WHERE {self._active_where()} AND emotion IS NOT NULL AND emotion != ''
             GROUP BY emotion ORDER BY cnt DESC
-        """).fetchall()
+        """).fetchall()  # values bound via sqlite params; identifiers from internal constants  # nosec B608
         emotion_dist = [(r["emotion"], r["cnt"]) for r in emotion_rows[:8]]
         emotion_others = max(0, len(emotion_rows) - 8)
 
@@ -183,11 +185,11 @@ class MemoryStatsMixin:
             FROM memories
             WHERE {self._active_where()} AND created_at >= datetime('now', '-12 months')
             GROUP BY month ORDER BY month
-        """).fetchall()
+        """).fetchall()  # values bound via sqlite params; identifiers from internal constants  # nosec B608
         timeline = [(r["month"], r["cnt"]) for r in timeline_rows]
 
         high_imp = self._db.execute(
-            f"SELECT COUNT(*) as cnt FROM memories WHERE {self._active_where()} AND importance >= 0.8"
+            f"SELECT COUNT(*) as cnt FROM memories WHERE {self._active_where()} AND importance >= 0.8"  # values bound via sqlite params; identifiers from internal constants  # nosec B608
         ).fetchone()["cnt"]
 
         return Success(
@@ -219,7 +221,7 @@ class MemoryStatsMixin:
             )
             ORDER BY importance DESC, created_at ASC
             LIMIT ?
-        """,
+        """,  # values bound via sqlite params; identifiers from internal constants  # nosec B608
             (limit,),
         ).fetchall()
         return Success([self._row_to_memory(r) for r in rows])
@@ -227,7 +229,7 @@ class MemoryStatsMixin:
     def find_top_by_importance(self, limit: int = 15) -> Result[list[Memory], RepositoryError]:
         """Find memories ranked purely by importance descending."""
         rows = self._db.execute(
-            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY importance DESC LIMIT ?",
+            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY importance DESC LIMIT ?",  # values bound via sqlite params; identifiers from internal constants  # nosec B608
             (limit,),
         ).fetchall()
         return Success([self._row_to_memory(r) for r in rows])

@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
 
 from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import format_iso, get_now
 from nous.infrastructure.logging.structured import get_logger
-
-if TYPE_CHECKING:
-    from nous.domain.memory.entities import Memory
 
 logger = get_logger(__name__)
 

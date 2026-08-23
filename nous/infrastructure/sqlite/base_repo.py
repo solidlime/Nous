@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import sqlite3
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import sqlite3
+
     from nous.infrastructure.sqlite.connection import SQLiteConnection
 
 

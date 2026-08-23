@@ -386,7 +386,7 @@ class ChatConfigRepository:
         update_clause = ", ".join(update_set)
 
         sql = (
-            f"INSERT INTO chat_settings ({columns})\n"
+            f"INSERT INTO chat_settings ({columns})\n"  # column names from dataclass fields x DB introspection; values bound via params  # nosec B608
             f"VALUES ({placeholders})\n"
             f"ON CONFLICT(persona) DO UPDATE SET {update_clause}"
         )
@@ -440,18 +440,14 @@ class ChatConfigFileRepository:
             # bool→int の逆変換 (SQLite は bool を INTEGER で保存している)
             all_fields = ChatConfig._all_flat_fields()
             bool_fields = {
-                k for k, fi in all_fields.items()
-                if ChatConfigRepository._get_base_type(fi.annotation) is bool
+                k for k, fi in all_fields.items() if ChatConfigRepository._get_base_type(fi.annotation) is bool
             }
             for bf in bool_fields:
                 if bf in data and data[bf] is not None:
                     data[bf] = bool(data[bf])
             # 不要なキーを除去、None でないキーのみ
             nullable = {"updated_at", "context_max_tokens", "top_p"}
-            result = {
-                k: v for k, v in data.items()
-                if k in all_fields and (v is not None or k in nullable)
-            }
+            result = {k: v for k, v in data.items() if k in all_fields and (v is not None or k in nullable)}
             return result
         except Exception:
             logger.warning("Migration from SQLite failed for persona '%s'", persona, exc_info=True)
@@ -516,7 +512,5 @@ class ImageAttachment(BaseModel):
         # 余裕をもって判定: パディング除去後の有効長
         decoded_estimate = len(v) * 3 // 4
         if decoded_estimate > max_bytes:
-            raise ValueError(
-                f"Image data exceeds 10MB limit (estimated {decoded_estimate} bytes > {max_bytes} bytes)"
-            )
+            raise ValueError(f"Image data exceeds 10MB limit (estimated {decoded_estimate} bytes > {max_bytes} bytes)")
         return v

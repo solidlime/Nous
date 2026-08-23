@@ -198,14 +198,10 @@ class PostProcessStep:
             if f.get("content")
         ]
         saved_goals = [
-            {"content": _ensure_str(g.get("content"))}
-            for g in memory_result.get("goals", [])
-            if g.get("content")
+            {"content": _ensure_str(g.get("content"))} for g in memory_result.get("goals", []) if g.get("content")
         ]
         saved_promises = [
-            {"content": _ensure_str(p.get("content"))}
-            for p in memory_result.get("promises", [])
-            if p.get("content")
+            {"content": _ensure_str(p.get("content"))} for p in memory_result.get("promises", []) if p.get("content")
         ]
         yield MemoryActivitySSE(
             retrieved=retrieved_for_sse,

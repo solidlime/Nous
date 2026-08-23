@@ -74,11 +74,7 @@ class ContextSnapshotWorker:
             return
 
         threshold = self._settings.memorag.rebuild_threshold
-        top_n = (
-            self._config.memorag_top_k
-            if self._config
-            else self._settings.memorag.snapshot_top_memories
-        )
+        top_n = self._config.memorag_top_k if self._config else self._settings.memorag.snapshot_top_memories
         for persona in personas:
             try:
                 self._rebuild_persona(persona, threshold, top_n)

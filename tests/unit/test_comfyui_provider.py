@@ -679,9 +679,7 @@ async def test_poll_result_node_title_none_when_not_in_map():
     fake_client.get = AsyncMock(side_effect=[hist, img_resp])
     provider._client = fake_client
 
-    images = await provider._poll_result(
-        "pid", prompt="cat", size="512x512", n=1, node_titles={"10": "upscale"}
-    )
+    images = await provider._poll_result("pid", prompt="cat", size="512x512", n=1, node_titles={"10": "upscale"})
     assert images[0].node_id == "9"
     assert images[0].node_title is None
 
@@ -905,6 +903,7 @@ async def test_builtin_image_generate_skips_non_display_images(tmp_path, monkeyp
 # 実行時パラメータ適用（apply_generation_params 統合）
 # ============================================================
 
+
 @pytest.mark.asyncio
 async def test_generate_injects_size_batch_and_random_seed():
     """workflow_source='comfyui': 変換後にサイズ・枚数・ランダムシードが適用される。"""
@@ -929,7 +928,11 @@ async def test_generate_injects_size_batch_and_random_seed():
 
         hist_resp = MagicMock()
         hist_resp.json.return_value = {
-            "pid-1": {"outputs": {"13": {"images": [{"filename": "a.png", "type": "output"}, {"filename": "b.png", "type": "output"}]}}}
+            "pid-1": {
+                "outputs": {
+                    "13": {"images": [{"filename": "a.png", "type": "output"}, {"filename": "b.png", "type": "output"}]}
+                }
+            }
         }
 
         img_resp = MagicMock()
@@ -1012,13 +1015,13 @@ async def test_fetch_userdata_workflow_404():
 
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
-        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_source="comfyui", workflow_name="missing.json")
+        provider = ComfyUIProvider(
+            api_url="http://localhost:8188", workflow_source="comfyui", workflow_name="missing.json"
+        )
         with pytest.raises(FileNotFoundError, match="Workflow not found"):
             await provider._fetch_userdata_workflow()
         # ルートは単一セグメント {file} のためスラッシュを %2F エンコードして叩く
-        mock_client.get.assert_awaited_once_with(
-            "http://localhost:8188/userdata/workflows%2Fmissing.json"
-        )
+        mock_client.get.assert_awaited_once_with("http://localhost:8188/userdata/workflows%2Fmissing.json")
 
 
 @pytest.mark.asyncio

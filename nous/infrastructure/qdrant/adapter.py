@@ -229,7 +229,7 @@ class QdrantVectorStore:
     @staticmethod
     def _key_to_id(key: str) -> str:
         """Convert a memory key to a deterministic UUID-like hex string for Qdrant."""
-        return hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()  # nosec B324
+        return hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()
 
     async def reconnect(
         self,

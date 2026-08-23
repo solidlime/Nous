@@ -241,7 +241,9 @@ async def get_chat_commitments(request: Request) -> JSONResponse:
     persona, ctx = _resolve_request(request)
     if not ctx:
         return JSONResponse({"error": "Persona not found"}, status_code=404)
-    return JSONResponse(await _do_get_commitments(persona, ctx), headers={"Content-Type": "application/json; charset=utf-8"})
+    return JSONResponse(
+        await _do_get_commitments(persona, ctx), headers={"Content-Type": "application/json; charset=utf-8"}
+    )
 
 
 async def attachment_upload(request: Request) -> JSONResponse:

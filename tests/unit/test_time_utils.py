@@ -367,6 +367,7 @@ class TestClassifyGap:
 
     def test_next_day(self):
         from nous.application.chat.pipeline.prepare import _classify_gap
+
         assert _classify_gap(24) == "FEW_DAYS"
 
         assert _classify_gap(100) == "FEW_DAYS"

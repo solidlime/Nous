@@ -98,6 +98,7 @@ def send_chat(message: str, session_id: str = "skill-test") -> list[dict]:
     """WebUI APIにチャットメッセージを送信し、SSEイベントを返す。"""
     # 毎回ユニークなセッションIDを使用（コンテキスト汚染防止）
     import uuid
+
     unique_sid = f"skill-test-{uuid.uuid4().hex[:8]}"
     url = f"{BASE_URL}/api/chat/{PERSONA}"
     body = json.dumps({"message": message, "session_id": unique_sid}).encode("utf-8")
@@ -168,9 +169,9 @@ def print_result(result: dict, index: int):
     passed = result["passed"]
 
     icon = "✅" if passed else "❌"
-    print(f"\n{'='*60}")
-    print(f"  {icon} テスト{index+1}: {skill} — {desc}")
-    print(f"{'='*60}")
+    print(f"\n{'=' * 60}")
+    print(f"  {icon} テスト{index + 1}: {skill} — {desc}")
+    print(f"{'=' * 60}")
 
     if result["error"]:
         print(f"  🔴 エラー: {result['error']}")
@@ -229,7 +230,7 @@ def main():
     passed_count = 0
 
     for i, tc in enumerate(TEST_CASES):
-        print(f"\n▶ テスト{i+1}/{len(TEST_CASES)}: {tc['skill']}")
+        print(f"\n▶ テスト{i + 1}/{len(TEST_CASES)}: {tc['skill']}")
         print(f"  メッセージ: {tc['message']}")
 
         events = send_chat(tc["message"])
@@ -249,9 +250,11 @@ def main():
     print("\n" + "=" * 60)
     print("  テストサマリー")
     print("=" * 60)
-    for i, (r, tc) in enumerate(zip(results, TEST_CASES)):
+    for r, tc in zip(results, TEST_CASES, strict=False):
         icon = "✅" if r["passed"] else "❌"
-        print(f"  {icon} {tc['skill']}: invoke_skill={r['invoke_skill_called']}, {tc['expected_tool']}={r['target_tool_called']}")
+        print(
+            f"  {icon} {tc['skill']}: invoke_skill={r['invoke_skill_called']}, {tc['expected_tool']}={r['target_tool_called']}"
+        )
     print(f"\n  合格: {passed_count}/{len(TEST_CASES)}")
     print("=" * 60)
 

@@ -130,7 +130,10 @@ MEMORY_TOOLS: list[ToolDefinition] = [
             "type": "object",
             "properties": {
                 "name": {"type": "string", "description": "スキル名"},
-                "task": {"type": "string", "description": "スキルを呼び出す理由（任意。スキル内容を読み返す目的を簡潔に）"},
+                "task": {
+                    "type": "string",
+                    "description": "スキルを呼び出す理由（任意。スキル内容を読み返す目的を簡潔に）",
+                },
             },
             "required": ["name"],
         },
@@ -235,9 +238,15 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 "preset": {
                     "type": "string",
                     "enum": [
-                        "portrait_large", "portrait_medium", "portrait_small",
-                        "landscape_large", "landscape_medium", "landscape_small",
-                        "square_large", "square_medium", "square_small",
+                        "portrait_large",
+                        "portrait_medium",
+                        "portrait_small",
+                        "landscape_large",
+                        "landscape_medium",
+                        "landscape_small",
+                        "square_large",
+                        "square_medium",
+                        "square_small",
                     ],
                     "description": "解像度プリセット。portrait=縦長, landscape=横長, square=正方形。large/medium/small でサイズ選択。省略時は設定のデフォルトプリセットを使用。",
                 },
@@ -281,7 +290,10 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         input_schema={
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "検索したい機能の説明（例: アイテム管理、画像生成、記憶の検索）"},
+                "query": {
+                    "type": "string",
+                    "description": "検索したい機能の説明（例: アイテム管理、画像生成、記憶の検索）",
+                },
                 "top_k": {"type": "integer", "description": "取得件数", "default": 5},
             },
             "required": ["query"],

@@ -145,7 +145,6 @@ class TestUpdateContext:
         assert "relationship=friends" in result
         ctx.persona_service.record_conversation_time.assert_called_once_with("test_persona")
 
-
     @pytest.mark.asyncio
     async def test_update_relationship_status(self, registered_tools):
         tools, ctx, _ = registered_tools

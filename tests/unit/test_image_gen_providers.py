@@ -1,8 +1,6 @@
 """画像生成プロバイダの単体テスト"""
 
 
-
-
 # ============================================================
 # Factory テスト
 # ============================================================
@@ -51,6 +49,3 @@ def test_factory_timeout_seconds_default_180():
     provider = get_image_gen_provider(config)
 
     assert provider._timeout_seconds == 180.0
-
-
-

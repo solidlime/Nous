@@ -96,7 +96,9 @@ class ChatService:
         try:
             persona = ctx.persona
             db = ctx.connection.get_memory_db()
-            session = _session_manager.get_or_create(persona, session_id, max_messages=config.max_stored_messages, db=db)
+            session = _session_manager.get_or_create(
+                persona, session_id, max_messages=config.max_stored_messages, db=db
+            )
 
             # Propagate session_id to AppContext so MCP tools can use it for
             # Hebbian co-activation linking via MemoryLinkService.
@@ -266,6 +268,7 @@ class ChatService:
             except Exception:
                 logger.exception("Chat pipeline crashed")
                 from nous.application.chat.events import ErrorSSE
+
                 yield ErrorSSE(message="チャット処理中に内部エラーが発生しました。").to_sse()
             finally:
                 # Always persist, even on GeneratorExit (client disconnect during PostProcessStep)
@@ -273,4 +276,5 @@ class ChatService:
         except Exception:
             logger.exception("Chat pipeline crashed")
             from nous.application.chat.events import ErrorSSE
+
             yield ErrorSSE(message="チャット処理中に内部エラーが発生しました。").to_sse()

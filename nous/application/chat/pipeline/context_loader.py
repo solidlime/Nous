@@ -18,30 +18,30 @@ logger = get_logger(__name__)
 # Byte-level BPEトークナイザ由来の文字化けで発生しうる異常Unicodeブロック。
 # 通常の日本語/英語テキストでは出現しないスクリプトを広くカバーする。
 _SUSPICIOUS_RANGES: list[tuple[int, int]] = [
-    (0x0400, 0x04FF),   # Cyrillic
-    (0x0600, 0x06FF),   # Arabic
-    (0x07C0, 0x07FF),   # N'Ko
-    (0x10A0, 0x10FF),   # Georgian
-    (0x1100, 0x11FF),   # Hangul Jamo
-    (0x1200, 0x137F),   # Ethiopic
-    (0x1380, 0x139F),   # Ethiopic Supplement
-    (0x1400, 0x167F),   # Canadian Aboriginal Syllabics
-    (0x1800, 0x18AF),   # Mongolian
-    (0x1980, 0x19DF),   # New Tai Lue
-    (0x1A00, 0x1A1F),   # Buginese
-    (0x1A20, 0x1AAF),   # Tai Tham
-    (0x1B80, 0x1BBF),   # Sundanese
-    (0x1BC0, 0x1BFF),   # Batak
-    (0x2D80, 0x2DDF),   # Ethiopic Extended
-    (0x2E80, 0x2EFF),   # CJK Radicals Supplement
-    (0x2F00, 0x2FDF),   # Kangxi Radicals
-    (0xA000, 0xA48F),   # Yi Syllables
-    (0xD800, 0xDFFF),   # Surrogates (lone surrogates)
-    (0xE000, 0xF8FF),   # Private Use Area
+    (0x0400, 0x04FF),  # Cyrillic
+    (0x0600, 0x06FF),  # Arabic
+    (0x07C0, 0x07FF),  # N'Ko
+    (0x10A0, 0x10FF),  # Georgian
+    (0x1100, 0x11FF),  # Hangul Jamo
+    (0x1200, 0x137F),  # Ethiopic
+    (0x1380, 0x139F),  # Ethiopic Supplement
+    (0x1400, 0x167F),  # Canadian Aboriginal Syllabics
+    (0x1800, 0x18AF),  # Mongolian
+    (0x1980, 0x19DF),  # New Tai Lue
+    (0x1A00, 0x1A1F),  # Buginese
+    (0x1A20, 0x1AAF),  # Tai Tham
+    (0x1B80, 0x1BBF),  # Sundanese
+    (0x1BC0, 0x1BFF),  # Batak
+    (0x2D80, 0x2DDF),  # Ethiopic Extended
+    (0x2E80, 0x2EFF),  # CJK Radicals Supplement
+    (0x2F00, 0x2FDF),  # Kangxi Radicals
+    (0xA000, 0xA48F),  # Yi Syllables
+    (0xD800, 0xDFFF),  # Surrogates (lone surrogates)
+    (0xE000, 0xF8FF),  # Private Use Area
 ]
 
 
-def _SUSPICIOUS_CP(cp: int) -> bool:
+def _is_suspicious_cp(cp: int) -> bool:
     """Return True if the Unicode code point falls in a known suspicious block."""
     return any(lo <= cp <= hi for lo, hi in _SUSPICIOUS_RANGES)
 
@@ -95,25 +95,26 @@ async def _build_context_section(
     compress_mode が "light"/"normal"/"aggressive" の場合は、
     重いセクション（reflection insight, mental model, session summary, emotion history）をスキップする。
     """
+
     def _sanitize_text(text: str) -> str:
         """LLMのByte-level BPEトークナイザ由来の文字化けを検出・除去する。
         通常の日本語/英語テキストでは出現しない異常Unicodeブロック（N'Ko, Mongolian,
         PUA, Surrogates）の文字が10%以上ならテキスト全体を破棄、それ未満なら該当文字のみ除去。"""
         if not text:
             return text
-        suspicious = [
-            ch for ch in text
-            if _SUSPICIOUS_CP(ord(ch))
-        ]
+        suspicious = [ch for ch in text if _is_suspicious_cp(ord(ch))]
         if suspicious:
             ratio = len(suspicious) / len(text)
             if ratio > 0.1:
-                logger.warning("_sanitize_text: discarding text with %.0f%% suspicious chars (%d/%d)",
-                               ratio * 100, len(suspicious), len(text))
+                logger.warning(
+                    "_sanitize_text: discarding text with %.0f%% suspicious chars (%d/%d)",
+                    ratio * 100,
+                    len(suspicious),
+                    len(text),
+                )
                 return ""
-            sanitized = "".join(ch for ch in text if not _SUSPICIOUS_CP(ord(ch)))
-            logger.info("_sanitize_text: removed %d suspicious chars (%.0f%%)",
-                        len(text) - len(sanitized), ratio * 100)
+            sanitized = "".join(ch for ch in text if not _is_suspicious_cp(ord(ch)))
+            logger.info("_sanitize_text: removed %d suspicious chars (%.0f%%)", len(text) - len(sanitized), ratio * 100)
             return sanitized
         return text
 
@@ -353,10 +354,7 @@ def _build_time_context(state) -> str:
                 # 経過時間の表示（日本語、時間/分単位）
                 if elapsed_seconds >= 86400:  # 24時間以上
                     days = elapsed_seconds / 86400
-                    if days >= 30:
-                        time_str = f"約{days / 30:.0f}ヶ月"
-                    else:
-                        time_str = f"約{days:.0f}日"
+                    time_str = f"約{days / 30:.0f}ヶ月" if days >= 30 else f"約{days:.0f}日"
                 elif elapsed_seconds >= 3600:
                     time_str = f"約{elapsed_seconds / 3600:.0f}時間"
                 else:

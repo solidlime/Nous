@@ -16,7 +16,6 @@ from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.memory_repo import SQLiteMemoryRepository
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -89,12 +88,8 @@ class TestDecaySearch:
         ranked = _search(repo, conn, "hello")
 
         assert len(ranked) == 2
-        assert ranked[0].memory.key == "mem_fresh", (
-            f"Expected mem_fresh first, got {ranked[0].memory.key}"
-        )
-        assert ranked[1].memory.key == "mem_decayed", (
-            f"Expected mem_decayed second, got {ranked[1].memory.key}"
-        )
+        assert ranked[0].memory.key == "mem_fresh", f"Expected mem_fresh first, got {ranked[0].memory.key}"
+        assert ranked[1].memory.key == "mem_decayed", f"Expected mem_decayed second, got {ranked[1].memory.key}"
         # Fresh memory should have a higher score
         assert ranked[0].score > ranked[1].score, (
             f"Fresh mem score ({ranked[0].score}) should be > decayed ({ranked[1].score})"
@@ -130,15 +125,12 @@ class TestDecaySearch:
         ranked = _search(repo, conn, "unique")
 
         # mem_a (boosted, strength=1.0) should rank above mem_b (strength=0.2)
-        assert ranked[0].memory.key == "mem_a", (
-            f"Expected boosted mem_a first, got {ranked[0].memory.key}"
-        )
+        assert ranked[0].memory.key == "mem_a", f"Expected boosted mem_a first, got {ranked[0].memory.key}"
         # With stability=0, ForgettingCurveRanker does score * max(0.1, strength)
         # mem_a: score * 1.0, mem_b: score * 0.2 → mem_a should be ~5x higher
         ratio = ranked[0].score / ranked[1].score
         assert ratio > 2.0, (
-            f"Boosted score ratio ({ratio}) should be >> 1: "
-            f"mem_a={ranked[0].score:.4f}, mem_b={ranked[1].score:.4f}"
+            f"Boosted score ratio ({ratio}) should be >> 1: mem_a={ranked[0].score:.4f}, mem_b={ranked[1].score:.4f}"
         )
 
     async def test_orphan_strength_does_not_break(self, repo, conn) -> None:

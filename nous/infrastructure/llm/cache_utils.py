@@ -79,9 +79,11 @@ PROVIDER_CACHE_STRATEGY = {
     "opencode_go": "explicit",
 }
 
+
 def should_add_cache_control(provider: str) -> bool:
     """explicit 戦略のプロバイダかどうか"""
     return PROVIDER_CACHE_STRATEGY.get(provider) == "explicit"
+
 
 def get_cache_extra_body(provider: str, session_id: str = "") -> dict:
     """プロバイダごとのキャッシュ用 extra_body を返す。

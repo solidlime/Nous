@@ -85,14 +85,16 @@ class SkillRepository:
     def list_all(self) -> list[Skill]:
         if self._db is None:
             return []
-        rows = self._db.execute(f"SELECT {self._SELECT_COLS} FROM skills ORDER BY name").fetchall()
+        rows = self._db.execute(
+            f"SELECT {self._SELECT_COLS} FROM skills ORDER BY name"  # _SELECT_COLS is a class constant  # nosec B608
+        ).fetchall()
         return [self._row_to_skill(r) for r in rows]
 
     def get(self, name: str) -> Skill | None:
         if self._db is None:
             return None
         row = self._db.execute(
-            f"SELECT {self._SELECT_COLS} FROM skills WHERE name = ?",
+            f"SELECT {self._SELECT_COLS} FROM skills WHERE name = ?",  # _SELECT_COLS class constant; name bound via param  # nosec B608
             (name,),
         ).fetchone()
         if row is None:
@@ -323,7 +325,7 @@ class SkillRepository:
             if orphan_names:
                 placeholders = ",".join("?" * len(orphan_names))
                 db.execute(
-                    f"DELETE FROM skills WHERE name IN ({placeholders})",
+                    f"DELETE FROM skills WHERE name IN ({placeholders})",  # placeholders only; names bound via params  # nosec B608
                     tuple(orphan_names),
                 )
                 db.commit()

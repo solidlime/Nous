@@ -83,7 +83,7 @@ class MemoryWriteService:
             if len(str(tag)) > 50:
                 return MemoryValidationError(f"Tag too long: '{str(tag)[:20]}...' (max 50 chars)")
             tag_str = str(tag)
-            if tag_str.startswith("project:") and not re.fullmatch(r"[a-z0-9][a-z0-9-]*", tag_str[len("project:"):]):
+            if tag_str.startswith("project:") and not re.fullmatch(r"[a-z0-9][a-z0-9-]*", tag_str[len("project:") :]):
                 return MemoryValidationError(
                     f"Invalid project tag: '{tag_str}' (expected 'project:<slug>' with slug matching [a-z0-9][a-z0-9-]*)"
                 )

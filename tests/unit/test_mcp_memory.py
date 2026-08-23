@@ -141,7 +141,9 @@ class TestMemoryCreate:
         from nous.domain.shared.errors import DuplicateMemoryError
 
         ctx.memory_service.create_memory.return_value = Failure(
-            DuplicateMemoryError("similar", similar_to=[{"key": "mem_dup", "content": "similar content", "score": 0.89}])
+            DuplicateMemoryError(
+                "similar", similar_to=[{"key": "mem_dup", "content": "similar content", "score": 0.89}]
+            )
         )
         ctx.persona_service.get_state_snapshot.return_value = ("neutral", 0.0, {}, None)
         memory_create = tools["memory_create"]

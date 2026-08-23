@@ -24,10 +24,10 @@ _REPETITION_MIN_LENGTH = 10  # chars, to avoid false positives on short words
 # N'Ko, Mongolian, PUA, Surrogates — LLM BPE tokenizer artifacts
 _GARBLED_RE = re.compile(
     "["
-    "\u07C0-\u07FF"  # N'Ko
-    "\u1800-\u18AF"  # Mongolian
-    "\uE000-\uF8FF"  # Private Use Area
-    "\uD800-\uDFFF"  # Surrogates (lone surrogates)
+    "\u07c0-\u07ff"  # N'Ko
+    "\u1800-\u18af"  # Mongolian
+    "\ue000-\uf8ff"  # Private Use Area
+    "\ud800-\udfff"  # Surrogates (lone surrogates)
     "]"
 )
 
@@ -55,9 +55,7 @@ def validate_response(text: str) -> list[str]:
                 seen[s_stripped] = seen.get(s_stripped, 0) + 1
         for sentence, count in seen.items():
             if count >= _REPETITION_THRESHOLD:
-                warnings.append(
-                    f"Phrase repeated {count} times: '{sentence[:80]}...'"
-                )
+                warnings.append(f"Phrase repeated {count} times: '{sentence[:80]}...'")
                 break  # one example is enough
 
     # 3. Garbled text (BPE artifact) check
@@ -67,10 +65,10 @@ def validate_response(text: str) -> list[str]:
 
     # 4. Timestamp echo check
     timestamp_echo_patterns = [
-        r'(\[?\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日\]]?\s*\d{1,2}:\d{2}(:\d{2})?\s*(JST|UTC[\+\-]\d{1,2})?)',
-        r'([Nn]ow:\s*\d{4}-\d{2}-\d{2})',
-        r'(現在時刻[は:：]\s*\d{4}年\d{1,2}月\d{1,2}日)',
-        r'(Current time:?\s*\d{4}-\d{2}-\d{2})',
+        r"(\[?\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日\]]?\s*\d{1,2}:\d{2}(:\d{2})?\s*(JST|UTC[\+\-]\d{1,2})?)",
+        r"([Nn]ow:\s*\d{4}-\d{2}-\d{2})",
+        r"(現在時刻[は:：]\s*\d{4}年\d{1,2}月\d{1,2}日)",
+        r"(Current time:?\s*\d{4}-\d{2}-\d{2})",
     ]
     for pattern in timestamp_echo_patterns:
         m = re.search(pattern, text)
@@ -80,10 +78,10 @@ def validate_response(text: str) -> list[str]:
 
     # 5. XML tag leak check
     xml_tag_leak_patterns = [
-        r'<time_context>',
-        r'</time_context>',
-        r'<time>',
-        r'</time>',
+        r"<time_context>",
+        r"</time_context>",
+        r"<time>",
+        r"</time>",
     ]
     for pattern in xml_tag_leak_patterns:
         if re.search(pattern, text):
@@ -108,8 +106,5 @@ def _check_garbled_text(text: str) -> str | None:
     if garbled:
         ratio = len(garbled) / max(len(text), 1)
         if ratio > 0.05:
-            return (
-                f"Garbled text detected "
-                f"({len(garbled)} chars, {ratio:.1%}): ..."
-            )
+            return f"Garbled text detected ({len(garbled)} chars, {ratio:.1%}): ..."
     return None

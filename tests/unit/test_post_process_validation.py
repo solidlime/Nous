@@ -9,8 +9,6 @@ rather than absence.
 import inspect
 import textwrap
 
-import pytest
-
 
 class TestCharacterConsistencyGap:
     """R2: Character contradiction detection gap."""
@@ -26,15 +24,15 @@ class TestCharacterConsistencyGap:
         step = PostProcessStep()
         attrs = dir(step)
         validation_methods = [
-            a for a in attrs
+            a
+            for a in attrs
             if "valid" in a.lower()
             or "character" in a.lower()
             or "contradiction" in a.lower()
             or "sanitize" in a.lower()
         ]
         assert validation_methods == [], (
-            f"PostProcessStep has unexpected validation-related attributes: "
-            f"{validation_methods}"
+            f"PostProcessStep has unexpected validation-related attributes: {validation_methods}"
         )
 
     def test_garbled_text_now_detected(self):
@@ -47,23 +45,15 @@ class TestCharacterConsistencyGap:
 
         # Garbled text with N'Ko characters (U+07CA-U+07CE)
         # 5 garbled chars in ~22 char text → ~22% > 5% threshold
-        garbled_text = (
-            "正常なテキストです。"
-            "\u07CA\u07CB\u07CC\u07CD\u07CE"
-            "が混ざっています。"
-        )
+        garbled_text = "正常なテキストです。\u07ca\u07cb\u07cc\u07cd\u07ceが混ざっています。"
         warnings = validate_response(garbled_text)
-        assert any("Garbled" in w for w in warnings), (
-            f"Expected garbled warning, got: {warnings}"
-        )
+        assert any("Garbled" in w for w in warnings), f"Expected garbled warning, got: {warnings}"
 
         # Verify integration: PostProcessStep.run() calls validate_response
         from nous.application.chat.pipeline.post import PostProcessStep
 
         source = textwrap.dedent(inspect.getsource(PostProcessStep.run))
-        assert "validate_response" in source, (
-            "PostProcessStep.run() must call validate_response()"
-        )
+        assert "validate_response" in source, "PostProcessStep.run() must call validate_response()"
 
     def test_author_note_no_contradiction_check(self):
         """Author's Note injection code has no contradiction detection."""
@@ -79,8 +69,6 @@ class TestCharacterConsistencyGap:
             "validate",
             "sanitize",
         ]
-        author_note_section = source[source.find("Author's Note"):]
+        author_note_section = source[source.find("Author's Note") :]
         for keyword in contradiction_keywords:
-            assert keyword not in author_note_section.lower(), (
-                f"Author's Note code unexpectedly contains '{keyword}'"
-            )
+            assert keyword not in author_note_section.lower(), f"Author's Note code unexpectedly contains '{keyword}'"

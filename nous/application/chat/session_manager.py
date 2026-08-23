@@ -101,9 +101,7 @@ class SessionManager:
 
             # 旧形式: list[dict] — 従来の処理
             if isinstance(data, list):
-                timestamps_raw: list[str] = json.loads(
-                    row[1] if not hasattr(row, "keys") else row["timestamps"]
-                )
+                timestamps_raw: list[str] = json.loads(row[1] if not hasattr(row, "keys") else row["timestamps"])
                 result: list[dict] = []
                 for msg, ts_str in zip(data, timestamps_raw, strict=False):
                     try:
@@ -112,7 +110,9 @@ class SessionManager:
                     except ValueError:
                         time_label = ""
                     entry: dict[str, object] = {
-                        "role": msg["role"], "content": msg["content"], "time": time_label,
+                        "role": msg["role"],
+                        "content": msg["content"],
+                        "time": time_label,
                     }
                     if msg.get("tool_calls"):
                         fixed_tc = []

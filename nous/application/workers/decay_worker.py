@@ -20,7 +20,9 @@ if TYPE_CHECKING:
 class DecayWorker:
     """FSRS v6 power-law forgetting curve decay worker + periodic reflection."""
 
-    REFLECTION_INTERVAL = 24  # trigger reflection every N decay cycles (was 50; changed to 24 for more frequent periodic reflection ⑫)
+    REFLECTION_INTERVAL = (
+        24  # trigger reflection every N decay cycles (was 50; changed to 24 for more frequent periodic reflection ⑫)
+    )
 
     def __init__(
         self,
@@ -101,7 +103,9 @@ class DecayWorker:
                             lifecycle_status="archived",
                         )
 
-            min_strength = self._config.forgetting_min_strength if self._config else self.context.settings.forgetting.min_strength
+            min_strength = (
+                self._config.forgetting_min_strength if self._config else self.context.settings.forgetting.min_strength
+            )
             if new_strength_val < min_strength:
                 skipped += 1
                 continue

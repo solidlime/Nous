@@ -87,22 +87,24 @@ def _render_sidebar_footer() -> str:
 
 def render_chat_sidebar() -> str:
     """Return the settings sidebar HTML with all configuration panels."""
-    return "".join([
-        _render_sidebar_header(),
-        _render_core_section(),
-        _render_context_section(),
-        _render_memory_section(),
-        _render_mcp_section(sys.executable),
-        _render_skills_section(),
-        _render_reflection_section(),
-        _render_mental_section(),
-        _render_weights_section(),
-        _render_image_section(),
-        _render_voice_section(),
-        _render_debug_section(),
-        _render_auto_capture_section(),
-        _render_memory_enrichment_section(),
-        _render_forgetting_section(),
-        _render_memorag_section(),
-        _render_sidebar_footer(),
-    ])
+    return "".join(
+        [
+            _render_sidebar_header(),
+            _render_core_section(),
+            _render_context_section(),
+            _render_memory_section(),
+            _render_mcp_section(sys.executable),
+            _render_skills_section(),
+            _render_reflection_section(),
+            _render_mental_section(),
+            _render_weights_section(),
+            _render_image_section(),
+            _render_voice_section(),
+            _render_debug_section(),
+            _render_auto_capture_section(),
+            _render_memory_enrichment_section(),
+            _render_forgetting_section(),
+            _render_memorag_section(),
+            _render_sidebar_footer(),
+        ]
+    )

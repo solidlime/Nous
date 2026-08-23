@@ -223,7 +223,9 @@ class EmbeddingModel(OnnxBaseModel):
         logger.info("Loading embedding model: %s (device=%s)", self.config.model, self.config.device)
 
         # 1. Download ONNX model
-        model_dir = snapshot_download(self.config.model)
+        model_dir = snapshot_download(
+            self.config.model
+        )  # TODO(follow-up): pin HuggingFace snapshot_download revision  # nosec B615
         onnx_path = os.path.join(model_dir, "onnx", "model.onnx")
 
         # 2. Load tokenizer

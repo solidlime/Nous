@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from typing import TYPE_CHECKING
 
 from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
@@ -8,6 +8,9 @@ from nous.domain.shared.time_utils import format_iso, get_now
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.sqlite.memory_stats_mixin import MemoryStatsMixin
 from nous.infrastructure.sqlite.memory_version_mixin import MemoryVersionMixin
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 logger = get_logger(__name__)
 
@@ -54,7 +57,7 @@ class MemoryAuxMixin(MemoryVersionMixin, MemoryStatsMixin):
             set_clause = ", ".join(f"{k} = ?" for k in params)
             values = list(params.values()) + [memory_key]
             self._db.execute(
-                f"UPDATE memories SET {set_clause} WHERE key = ?",  # noqa: S608  # nosec B608 — variables are placeholder-protected, safe against SQL injection
+                f"UPDATE memories SET {set_clause} WHERE key = ?",  # set_clause keys from params dict; values bound via params  # nosec B608
                 values,
             )
             logger.info("Validity window updated for memory %s", memory_key)

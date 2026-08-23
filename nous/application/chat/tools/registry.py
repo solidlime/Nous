@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from nous.application.chat.tools.builtin import execute_tool, filter_extra_tools, truncate_tool_result
@@ -11,6 +10,8 @@ from nous.infrastructure.llm.base import ToolDefinition
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from nous.application.use_cases import AppContext
     from nous.domain.chat_config import ChatConfig
     from nous.infrastructure.mcp_client import MCPClientPool
@@ -71,7 +72,8 @@ class ToolRegistry:
         """defer_loading=False のツール + セッション中に search_tools で発見済みのツールのみ返す。"""
         all_tools = self.get_all_tools()
         return [
-            t for t in all_tools
+            t
+            for t in all_tools
             if not t.defer_loading or t.name in self._discovered_tools or t.name == SEARCH_TOOLS_NAME
         ]
 

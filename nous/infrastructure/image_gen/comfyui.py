@@ -112,9 +112,7 @@ class ComfyUIProvider(ImageGenProvider):
             seed=seed,
         )
         # 保存時の固定 seed 対策＋サイズ・枚数の実行時注入（対応ノードが無ければ無変更）
-        workflow = apply_generation_params(
-            workflow, width=self._width, height=self._height, n=n, seed=seed
-        )
+        workflow = apply_generation_params(workflow, width=self._width, height=self._height, n=n, seed=seed)
 
         # node_id(str) → _meta.title（空なら省略）
         node_titles: dict[str, str] = {}
@@ -239,10 +237,7 @@ class ComfyUIProvider(ImageGenProvider):
     async def _get_object_info(self) -> dict:
         """GET /object_info を TTL キャッシュ付きで取得する。"""
         now = time.monotonic()
-        if (
-            self._object_info_cache is not None
-            and now - self._object_info_cache_time < self._object_info_cache_ttl
-        ):
+        if self._object_info_cache is not None and now - self._object_info_cache_time < self._object_info_cache_ttl:
             return self._object_info_cache
         resp = await self.client.get(f"{self._api_url}/object_info")
         resp.raise_for_status()
@@ -281,12 +276,10 @@ class ComfyUIProvider(ImageGenProvider):
             return workflow
 
         for _, node, tag in tagged:
-            key = tag[len("NOUS:"):]
+            key = tag[len("NOUS:") :]
             if key == "display":
                 continue  # display は表示フィルタ用なので注入対象外
-            self._inject_nous_key(
-                node, key, prompt=prompt, negative_prompt=negative_prompt, seed=seed
-            )
+            self._inject_nous_key(node, key, prompt=prompt, negative_prompt=negative_prompt, seed=seed)
 
         return workflow
 

@@ -56,8 +56,8 @@ class TestCaptionSingle:
     @pytest.mark.asyncio
     async def test_caption_empty_image(self):
         """Empty base64 string returns empty caption."""
-        from nous.infrastructure.llm.image_caption import ImageCaptioner
         from nous.infrastructure.llm.base import DoneEvent
+        from nous.infrastructure.llm.image_caption import ImageCaptioner
 
         provider = _MockProvider([DoneEvent(full_content="")])
         captioner = ImageCaptioner(provider=provider)
@@ -67,8 +67,8 @@ class TestCaptionSingle:
     @pytest.mark.asyncio
     async def test_caption_success(self):
         """Successful caption call returns the LLM response text."""
-        from nous.infrastructure.llm.image_caption import ImageCaptioner
         from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+        from nous.infrastructure.llm.image_caption import ImageCaptioner
 
         provider = _MockProvider(
             [
@@ -87,8 +87,8 @@ class TestCaptionSingle:
     @pytest.mark.asyncio
     async def test_caption_failure_returns_empty(self):
         """When LLM call fails, caption() returns empty string without raising."""
-        from nous.infrastructure.llm.image_caption import ImageCaptioner
         from nous.infrastructure.llm.base import ErrorEvent
+        from nous.infrastructure.llm.image_caption import ImageCaptioner
 
         provider = _MockProvider([ErrorEvent(message="API error")])
         captioner = ImageCaptioner(provider=provider)
@@ -118,10 +118,10 @@ class TestCaptionBatch:
     @pytest.mark.asyncio
     async def test_caption_batch(self):
         """Batch captioning returns list of captions."""
-        from nous.infrastructure.llm.image_caption import ImageCaptioner
-        from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
-
         import asyncio
+
+        from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+        from nous.infrastructure.llm.image_caption import ImageCaptioner
 
         results_queue = asyncio.Queue()
         results_queue.put_nowait("A cat.")
@@ -147,10 +147,10 @@ class TestCaptionBatch:
     @pytest.mark.asyncio
     async def test_caption_batch_with_failures(self):
         """Batch captioning handles partial failures gracefully."""
-        from nous.infrastructure.llm.image_caption import ImageCaptioner
-        from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, TextDeltaEvent
-
         import asyncio
+
+        from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, TextDeltaEvent
+        from nous.infrastructure.llm.image_caption import ImageCaptioner
 
         result_queue = asyncio.Queue()
         result_queue.put_nowait("cat")

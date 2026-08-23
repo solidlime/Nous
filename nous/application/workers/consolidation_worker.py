@@ -192,16 +192,18 @@ class ConsolidationWorker:
 
         import asyncio as _asyncio
 
-        result = _asyncio.run(ctx.memory_service.create_memory(
-            content=content,
-            importance=avg_importance,
-            emotion="neutral",
-            emotion_intensity=0.0,
-            tags=["consolidated", "auto"],
-            privacy_level="private",
-            source_context="consolidation_worker",
-            related_keys=[m.key for m in sources],
-        ))
+        result = _asyncio.run(
+            ctx.memory_service.create_memory(
+                content=content,
+                importance=avg_importance,
+                emotion="neutral",
+                emotion_intensity=0.0,
+                tags=["consolidated", "auto"],
+                privacy_level="private",
+                source_context="consolidation_worker",
+                related_keys=[m.key for m in sources],
+            )
+        )
 
         if result.is_ok:
             logger.info(

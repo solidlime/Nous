@@ -41,6 +41,4 @@ class TestProviderVerification:
         result = verifier.verify()
 
         # If verification failed, pytest will see the exception
-        assert result, (
-            f"Provider verification failed for {PACT_FILE}"
-        )
+        assert result, f"Provider verification failed for {PACT_FILE}"

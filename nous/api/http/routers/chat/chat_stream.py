@@ -65,9 +65,7 @@ async def _do_chat(
         yield chunk
 
 
-async def _do_get_chat_session(
-    persona: str, ctx, session_id: str, limit: int | None = None, offset: int = 0
-) -> dict:
+async def _do_get_chat_session(persona: str, ctx, session_id: str, limit: int | None = None, offset: int = 0) -> dict:
     """Return session messages dict with tail-based pagination.
 
     limit/offset は末尾（最新）基準。limit=None なら全件。total は常に全件数。

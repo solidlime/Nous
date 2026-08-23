@@ -7,10 +7,12 @@ from .chat_sidebar import render_chat_sidebar
 
 def render_chat_tab() -> str:
     """Return the HTML for the Chat tab (integrated from sub-modules)."""
-    return "".join([
-        render_chat_layout_prefix(),
-        render_chat_memory_panel(),
-        render_chat_main(),
-        render_chat_sidebar(),
-        render_chat_layout_suffix(),
-    ])
+    return "".join(
+        [
+            render_chat_layout_prefix(),
+            render_chat_memory_panel(),
+            render_chat_main(),
+            render_chat_sidebar(),
+            render_chat_layout_suffix(),
+        ]
+    )

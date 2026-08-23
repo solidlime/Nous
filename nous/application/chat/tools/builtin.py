@@ -89,10 +89,10 @@ def _image_ref(b64_str: str, mime_type: str = "image/png") -> str:
 
 def truncate_tool_result(result: dict, max_chars: int) -> dict:
     """Truncate tool result string to avoid context overflow."""
-    _IMAGE_KEYS = ("content_base64", "artifacts", "images")
-    has_images = any(k in result for k in _IMAGE_KEYS)
+    image_keys = ("content_base64", "artifacts", "images")
+    has_images = any(k in result for k in image_keys)
     if has_images:
-        img_sources = [k for k in _IMAGE_KEYS if k in result]
+        img_sources = [k for k in image_keys if k in result]
         imgs_count = len(result.get("images", [])) if "images" in result else None
         logger.info(
             "truncate_tool_result: image data detected from %s (images_count=%s)",
@@ -109,7 +109,7 @@ def truncate_tool_result(result: dict, max_chars: int) -> dict:
             "content": result_str[:max_chars] + f"... [truncated: {remaining} chars remaining]",
         }
     # Build text-only output (exclude all image keys, replace with summary)
-    exclude_keys = set(_IMAGE_KEYS)
+    exclude_keys = set(image_keys)
     text_parts = {k: v for k, v in result.items() if k not in exclude_keys}
     if "images" in result:
         imgs = result["images"]
@@ -295,12 +295,14 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
         from pathlib import Path
 
         from nous.config.settings import get_settings
+
         settings = get_settings()
         persona = getattr(ctx, "persona", "default")
         images_dir = Path(settings.data_root) / "persona" / persona / "images"
         images_dir.mkdir(parents=True, exist_ok=True)
 
         import time as _time
+
         timestamp = int(_time.time())
 
         # 結果を構築
@@ -314,21 +316,25 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             prefix = "self_" if self_portrait else ""
             node_part = _sanitize_node_title(img.node_title)
             filename = (
-                f"{prefix}{node_part}_{timestamp}_{saved_idx:02d}.png" if node_part else f"{prefix}{timestamp}_{saved_idx:02d}.png"
+                f"{prefix}{node_part}_{timestamp}_{saved_idx:02d}.png"
+                if node_part
+                else f"{prefix}{timestamp}_{saved_idx:02d}.png"
             )
             img_path = images_dir / filename
             img_path.write_bytes(img_bytes)
             url = f"/api/chat/{persona}/persona/images/{filename}"
-            images_data.append({
-                "base64": img.base64,
-                "revised_prompt": img.revised_prompt,
-                "negative_prompt": getattr(img, "negative_prompt", "") or "",
-                "size": img.size,
-                "filename": str(img_path),
-                "url": url,
-                "node_id": getattr(img, "node_id", None),
-                "node_title": getattr(img, "node_title", None),
-            })
+            images_data.append(
+                {
+                    "base64": img.base64,
+                    "revised_prompt": img.revised_prompt,
+                    "negative_prompt": getattr(img, "negative_prompt", "") or "",
+                    "size": img.size,
+                    "filename": str(img_path),
+                    "url": url,
+                    "node_id": getattr(img, "node_id", None),
+                    "node_title": getattr(img, "node_title", None),
+                }
+            )
             saved_idx += 1
 
         # 結果イベントを送信（event_busは使われていないが後方互換のため残す）

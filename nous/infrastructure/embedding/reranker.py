@@ -186,7 +186,9 @@ class RerankerModel(OnnxBaseModel):
         logger.info("Loading reranker model: %s", self.model_name)
 
         # 1. Download ONNX model
-        model_dir = snapshot_download(self.model_name)
+        model_dir = snapshot_download(
+            self.model_name
+        )  # TODO(follow-up): pin HuggingFace snapshot_download revision  # nosec B615
         onnx_path = os.path.join(model_dir, "onnx", "model.onnx")
 
         # 2. Load tokenizer (same repo as model for reranker)

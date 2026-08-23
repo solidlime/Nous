@@ -25,10 +25,7 @@ def _create_emotion_history_without_persona(conn: sqlite3.Connection) -> None:
         "    context TEXT"
         ")"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_emotion_history_persona "
-        "ON emotion_history(timestamp DESC)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_emotion_history_persona ON emotion_history(timestamp DESC)")
     conn.commit()
 
 
@@ -51,9 +48,7 @@ class TestMigrationV5:
         cols = [r["name"] for r in tmp_db.execute("PRAGMA table_info(emotion_history)").fetchall()]
         assert "persona" in cols
         # DEFAULT '' 確認
-        col_info = tmp_db.execute(
-            "PRAGMA table_info(emotion_history)"
-        ).fetchall()
+        col_info = tmp_db.execute("PRAGMA table_info(emotion_history)").fetchall()
         persona_col = [r for r in col_info if r["name"] == "persona"][0]
         assert persona_col["dflt_value"] == "''"
 
@@ -64,8 +59,7 @@ class TestMigrationV5:
 
         # データ挿入テスト
         tmp_db.execute(
-            "INSERT INTO emotion_history (emotion_type, intensity, timestamp, persona) "
-            "VALUES (?, ?, ?, ?)",
+            "INSERT INTO emotion_history (emotion_type, intensity, timestamp, persona) VALUES (?, ?, ?, ?)",
             ("joy", 0.8, "2026-07-26T12:00:00", "test_persona"),
         )
         row = tmp_db.execute("SELECT * FROM emotion_history").fetchone()
@@ -95,10 +89,7 @@ class TestMigrationV5:
             "    context TEXT"
             ")"
         )
-        tmp_db.execute(
-            "CREATE INDEX IF NOT EXISTS idx_emotion_history_persona "
-            "ON emotion_history(timestamp DESC)"
-        )
+        tmp_db.execute("CREATE INDEX IF NOT EXISTS idx_emotion_history_persona ON emotion_history(timestamp DESC)")
         tmp_db.commit()
 
         # v5 を直接実行（run_migrations 経由だと v2/v6 が前提条件不足で失敗）
@@ -111,8 +102,7 @@ class TestMigrationV5:
 
         # v5 の内容が適用されている（データ挿入テスト）
         tmp_db.execute(
-            "INSERT INTO emotion_history (emotion_type, intensity, timestamp, persona) "
-            "VALUES (?, ?, ?, ?)",
+            "INSERT INTO emotion_history (emotion_type, intensity, timestamp, persona) VALUES (?, ?, ?, ?)",
             ("sadness", 0.5, "2026-07-26T12:00:00", "test_persona"),
         )
         row = tmp_db.execute("SELECT * FROM emotion_history").fetchone()

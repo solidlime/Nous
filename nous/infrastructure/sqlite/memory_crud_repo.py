@@ -102,7 +102,7 @@ class MemoryCrudMixin:
     def find_by_content_exact(self, content: str) -> Result[Memory | None, RepositoryError]:
         """Find a memory by exact content match (case-insensitive, excludes tombstoned)."""
         row = self._db.execute(
-            f"SELECT * FROM memories WHERE LOWER(content) = LOWER(?) AND {self._active_where()} LIMIT 1",
+            f"SELECT * FROM memories WHERE LOWER(content) = LOWER(?) AND {self._active_where()} LIMIT 1",  # values bound via sqlite params; identifiers from internal constants  # nosec B608
             (content.strip(),),
         ).fetchone()
         if row is None:
@@ -112,7 +112,7 @@ class MemoryCrudMixin:
     def find_recent(self, limit: int = 10, offset: int = 0) -> Result[list[Memory], RepositoryError]:
         """Return the most recently updated memories with optional pagination offset."""
         rows = self._db.execute(
-            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY updated_at DESC LIMIT ? OFFSET ?",  # values bound via sqlite params; identifiers from internal constants  # nosec B608
             (limit, offset),
         ).fetchall()
         return Success([self._row_to_memory(r) for r in rows])
@@ -120,7 +120,7 @@ class MemoryCrudMixin:
     def find_by_tags(self, tags: list[str], limit: int = 10) -> Result[list[Memory], RepositoryError]:
         """Find memories that contain any of the specified tags."""
         rows = self._db.execute(
-            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY updated_at DESC"
+            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY updated_at DESC"  # values bound via sqlite params; identifiers from internal constants  # nosec B608
         ).fetchall()
         result: list[Memory] = []
         tag_set = set(tags)
@@ -156,7 +156,7 @@ class MemoryCrudMixin:
             set_clause = ", ".join(f"{k} = ?" for k in updates)
             values = list(updates.values()) + [key]
             self._db.execute(
-                f"UPDATE memories SET {set_clause} WHERE key = ?",  # noqa: S608  # nosec B608 — variables are placeholder-protected, safe against SQL injection
+                f"UPDATE memories SET {set_clause} WHERE key = ?",  # set_clause keys from update kwargs; values bound via params  # nosec B608
                 values,
             )
 
@@ -185,13 +185,15 @@ class MemoryCrudMixin:
 
     def count(self) -> Result[int, RepositoryError]:
         """Count total memories."""
-        row = self._db.execute(f"SELECT COUNT(*) as cnt FROM memories WHERE {self._active_where()}").fetchone()
+        row = self._db.execute(
+            f"SELECT COUNT(*) as cnt FROM memories WHERE {self._active_where()}"  # values bound via sqlite params; identifiers from internal constants  # nosec B608
+        ).fetchone()
         return Success(row["cnt"])
 
     def find_all(self) -> Result[list[Memory], RepositoryError]:
         """Return all memories."""
         rows = self._db.execute(
-            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY updated_at DESC"
+            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY updated_at DESC"  # values bound via sqlite params; identifiers from internal constants  # nosec B608
         ).fetchall()
         return Success([self._row_to_memory(r) for r in rows])
 

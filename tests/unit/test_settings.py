@@ -98,6 +98,7 @@ class TestSettings:
         # skills_dir should NOT be affected by data_root
         assert s.skills_dir == "/custom/data/skills", "skills_dir must follow data_root when set"
 
+
 class TestEnsureDirectories:
     """ensure_directories() should create expected directories, NOT
     sentence_transformers or torch (removed in ONNX migration)."""
@@ -107,6 +108,7 @@ class TestEnsureDirectories:
         # skills_dir は /opt/nous/skills 固定のため ensure_directories は
         # テスト環境で PermissionError になり得る。data_root 下のディレクトリのみ手動作成。
         from pathlib import Path as _Path
+
         writable_dirs = [
             _Path(s.data_dir),
             _Path(s.import_dir),

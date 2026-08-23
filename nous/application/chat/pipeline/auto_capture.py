@@ -75,8 +75,7 @@ def _infer_kind(content: str, category: str) -> str:
     _past_ending = re.compile(r"(た[。\.]?$|た\s|ました[。\.]?$)")
 
     has_time = bool(_episodic_time.search(content))
-    has_past = bool(_episodic_past.search(content) or
-                    (_place_pat.search(content) and _past_ending.search(content)))
+    has_past = bool(_episodic_past.search(content) or (_place_pat.search(content) and _past_ending.search(content)))
 
     # Decision category + concrete time context → episodic
     if category == "decision" and has_time:
@@ -176,7 +175,7 @@ async def run_auto_capture(
     Returns:
         List of created memory keys.
     """
-    if config is None and not getattr(ctx.settings, 'auto_capture', None):
+    if config is None and not getattr(ctx.settings, "auto_capture", None):
         return []
 
     enabled = config.auto_capture_enabled if config else ctx.settings.auto_capture.enabled

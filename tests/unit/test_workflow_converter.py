@@ -105,7 +105,17 @@ def test_convert_raises_without_object_info():
 def test_convert_missing_schema_node_is_skipped():
     """/object_info に無いノード型はスキップ（全体は落とさない）。"""
     wf = json.loads(json.dumps(MINI_UI_WORKFLOW))
-    wf["nodes"].append({"id": 30, "type": "UnknownCustomNodeXYZ", "title": "x", "mode": 0, "inputs": [], "outputs": [], "widgets_values": [1]})
+    wf["nodes"].append(
+        {
+            "id": 30,
+            "type": "UnknownCustomNodeXYZ",
+            "title": "x",
+            "mode": 0,
+            "inputs": [],
+            "outputs": [],
+            "widgets_values": [1],
+        }
+    )
     api = convert_ui_to_api(wf, OBJECT_INFO)
     assert "30" not in api
     assert "6" in api

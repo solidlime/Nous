@@ -225,7 +225,11 @@ async def _tool_memory_update(
 
     valid_privacy = {"internal", "private", "public"}
     if privacy_level is not None and privacy_level not in valid_privacy:
-        return {"success": False, "data": None, "result_summary": f"invalid privacy_level: {privacy_level}. Must be: {', '.join(sorted(valid_privacy))}"}
+        return {
+            "success": False,
+            "data": None,
+            "result_summary": f"invalid privacy_level: {privacy_level}. Must be: {', '.join(sorted(valid_privacy))}",
+        }
 
     updates: dict = {}
     if content is not None:

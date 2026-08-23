@@ -289,7 +289,9 @@ async def _apply_emotion_decay(ctx: AppContext, persona: str, state: PersonaStat
                 neutral_threshold = getattr(tc, "emotion_neutral_threshold", None)
 
         decay_result = await apply_emotion_decay_if_needed(
-            ctx.persona_service, persona, state,
+            ctx.persona_service,
+            persona,
+            state,
             half_life_hours=half_life_hours,
             threshold=threshold,
             neutral_threshold=neutral_threshold,
@@ -309,6 +311,7 @@ async def _apply_relationship_decay(ctx: AppContext, persona: str, state: Person
     PersonaStateへの永続化は行わない（プロンプト注入のみ）。"""
     try:
         from nous.domain.shared.time_utils import get_now
+
         last_conv = getattr(state, "last_conversation_time", None)
         if last_conv is None:
             return ""
@@ -321,10 +324,10 @@ async def _apply_relationship_decay(ctx: AppContext, persona: str, state: Person
         if elapsed_hours < 24:
             return f"時間経過（{elapsed_hours:.0f}時間）により、関係性がわずかに希薄化している"
         if elapsed_hours < 168:
-            return f"時間経過（{elapsed_hours/24:.0f}日）により、関係性がやや希薄化している"
+            return f"時間経過（{elapsed_hours / 24:.0f}日）により、関係性がやや希薄化している"
         if elapsed_hours < 720:
-            return f"時間経過（{elapsed_hours/24:.0f}日）により、関係性が大きく減衰している"
-        return f"長時間の放置（{elapsed_hours/720:.0f}ヶ月）により、関係性がほぼ消失している"
+            return f"時間経過（{elapsed_hours / 24:.0f}日）により、関係性が大きく減衰している"
+        return f"長時間の放置（{elapsed_hours / 720:.0f}ヶ月）により、関係性がほぼ消失している"
     except Exception:
         return ""
 

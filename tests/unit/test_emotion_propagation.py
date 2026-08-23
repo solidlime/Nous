@@ -73,9 +73,7 @@ class InMemoryPersonaRepository:
         self._state[persona][key] = value
         return Success(None)
 
-    def add_emotion_record(
-        self, persona: str, record: EmotionRecord
-    ) -> Result[None, RepositoryError]:
+    def add_emotion_record(self, persona: str, record: EmotionRecord) -> Result[None, RepositoryError]:
         if persona not in self._emotions:
             self._emotions[persona] = []
         self._emotions[persona].append(record)

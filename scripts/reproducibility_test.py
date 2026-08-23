@@ -33,6 +33,7 @@ JST = timezone(timedelta(hours=9))
 
 # ── Model Detection ─────────────────────────────────────────────────────────
 
+
 def _read_model() -> str:
     try:
         with open(CONFIG_PATH) as f:
@@ -41,9 +42,11 @@ def _read_model() -> str:
     except Exception:
         return "unknown"
 
+
 MODEL = _read_model()
 
 # ── SSE Helpers ─────────────────────────────────────────────────────────────
+
 
 def read_sse_stream(response: Any, timeout: int = TIMEOUT) -> list[dict]:
     """Read SSE stream, return list of parsed JSON events."""
@@ -95,6 +98,7 @@ def send_chat(message: str) -> list[dict]:
 
 # ── Event Analysis ──────────────────────────────────────────────────────────
 
+
 def collect_tool_calls(events: list[dict]) -> list[dict]:
     """Extract all tool_call events from SSE event list."""
     return [e for e in events if e.get("type") == "tool_call"]
@@ -102,12 +106,13 @@ def collect_tool_calls(events: list[dict]) -> list[dict]:
 
 def get_text_response(events: list[dict]) -> str:
     """Concatenate text_delta content."""
-    return "".join(e.get("content", "") for e in events
-                   if e.get("type") == "text_delta")
+    return "".join(e.get("content", "") for e in events if e.get("type") == "text_delta")
 
 
 def check_invoke_skill_chain(
-    events: list[dict], expected_skill: str, expected_tool: str,
+    events: list[dict],
+    expected_skill: str,
+    expected_tool: str,
 ) -> dict:
     """Check if invoke_skill → expected_tool chain occurred."""
     result = {
@@ -137,17 +142,18 @@ def check_invoke_skill_chain(
 
 def check_tool_called(events: list[dict], tool_name: str) -> bool:
     """Simple check: was a given tool called at least once?"""
-    return any(
-        ev.get("type") == "tool_call" and ev.get("name") == tool_name
-        for ev in events
-    )
+    return any(ev.get("type") == "tool_call" and ev.get("name") == tool_name for ev in events)
 
 
 # ── Emotion Detection for Test 3 ────────────────────────────────────────────
 
 EMOTION_KEYWORDS = [
-    "sadness", "loneliness", "disappointment",
-    "sad", "lonely", "disappointed",
+    "sadness",
+    "loneliness",
+    "disappointment",
+    "sad",
+    "lonely",
+    "disappointed",
 ]
 
 
@@ -264,13 +270,18 @@ def run_test1() -> tuple[list[dict], int, int]:
                 print(f"  {label}: ❌ {'/'.join(reasons)}", flush=True)
                 calls = collect_tool_calls(events)
                 if calls:
-                    names = [f"{c.get('name','?')}" for c in calls]
+                    names = [f"{c.get('name', '?')}" for c in calls]
                     print(f"          actual: {', '.join(names)}", flush=True)
 
-            all_results.append({
-                "skill": skill, "rep": rep_idx, "passed": passed_flag,
-                "analysis": analysis, "prompt": prompt,
-            })
+            all_results.append(
+                {
+                    "skill": skill,
+                    "rep": rep_idx,
+                    "passed": passed_flag,
+                    "analysis": analysis,
+                    "prompt": prompt,
+                }
+            )
             if counter < total:
                 time.sleep(TEST_INTERVAL)
 
@@ -279,6 +290,7 @@ def run_test1() -> tuple[list[dict], int, int]:
 
 # ── Summary Helpers ─────────────────────────────────────────────────────────
 
+
 def print_summary_line(label: str, passed: int, total: int) -> None:
     """Print a summary line with percentage."""
     pct = (passed / total * 100) if total > 0 else 0.0
@@ -286,6 +298,7 @@ def print_summary_line(label: str, passed: int, total: int) -> None:
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
+
 
 def main() -> int:
     """Run all reproducibility tests and print results."""
@@ -351,16 +364,20 @@ def run_test2() -> tuple[list[dict], int, int]:
         else:
             calls = collect_tool_calls(events)
             if calls:
-                names = [f"{c.get('name','?')}" for c in calls]
+                names = [f"{c.get('name', '?')}" for c in calls]
                 print(f"  {label}: ❌ image_generate未呼出 → actual: {', '.join(names)}", flush=True)
             else:
                 text = get_text_response(events)[:100]
                 print(f"  {label}: ❌ ツール呼出なし → 応答: {text}...", flush=True)
 
-        all_results.append({
-            "rep": i, "passed": tool_ok,
-            "tool_calls": collect_tool_calls(events), "prompt": prompt,
-        })
+        all_results.append(
+            {
+                "rep": i,
+                "passed": tool_ok,
+                "tool_calls": collect_tool_calls(events),
+                "prompt": prompt,
+            }
+        )
         if i < total:
             time.sleep(TEST_INTERVAL)
 
@@ -368,6 +385,7 @@ def run_test2() -> tuple[list[dict], int, int]:
 
 
 # ── Test 3: DB Setup ────────────────────────────────────────────────────────
+
 
 def setup_time_gap_db():
     """Set up 5-day gap in the DB for time awareness tests."""
@@ -410,8 +428,7 @@ def docker_restart():
     """Restart the nous Docker container to pick up DB changes."""
     print("  🐳 Docker restart: nous", flush=True)
     try:
-        subprocess.run(["docker", "restart", "nous"],
-                       capture_output=True, text=True, check=True)
+        subprocess.run(["docker", "restart", "nous"], capture_output=True, text=True, check=True)
         print("  ⏳ 起動待機 5秒...", flush=True)
         time.sleep(5)
         print("  ✅ Docker再起動完了", flush=True)
@@ -466,22 +483,25 @@ def run_test3() -> tuple[list[dict], int, int]:
             print(f"  {label}: ❌ {'/'.join(reasons)}", flush=True)
             calls = collect_tool_calls(events)
             if calls:
-                names = [f"{c.get('name','?')}" for c in calls]
+                names = [f"{c.get('name', '?')}" for c in calls]
                 print(f"          actual: {', '.join(names)}", flush=True)
             text = get_text_response(events)[:120]
             if text:
                 print(f"          💬 {text}...", flush=True)
 
-        all_results.append({
-            "rep": i, "passed": passed_flag,
-            "analysis": analysis, "prompt": msg,
-        })
+        all_results.append(
+            {
+                "rep": i,
+                "passed": passed_flag,
+                "analysis": analysis,
+                "prompt": msg,
+            }
+        )
         if i < total:
             time.sleep(TEST_INTERVAL)
 
     return all_results, passed, total
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
-

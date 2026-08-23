@@ -209,7 +209,7 @@ class TestTreeSessionWindowNew:
         uid = win.add("user", "q1")
         aid = win.add("assistant", "a1")
         uid2 = win.add("user", "q2")  # uid2 の親は aid
-        aid2 = win.add("assistant", "a2")
+        win.add("assistant", "a2")
         # aid を削除 → uid2 の parent_id が uid になるはず
         deleted = win.delete_message(aid)
         assert deleted is not None
@@ -1038,7 +1038,9 @@ class TestChatService:
         data_chunks = [c for c in chunks if c.startswith("data: ")]
         types = [json.loads(c[6:].strip())["type"] for c in data_chunks]
         assert "thinking_delta" in types
-        thinking_payloads = [json.loads(c[6:].strip()) for c in data_chunks if json.loads(c[6:].strip())["type"] == "thinking_delta"]
+        thinking_payloads = [
+            json.loads(c[6:].strip()) for c in data_chunks if json.loads(c[6:].strip())["type"] == "thinking_delta"
+        ]
         assert any(p.get("content") == "secret chain of thought" for p in thinking_payloads)
 
         # full_response には thinking が混入しない
@@ -1050,9 +1052,7 @@ class TestChatService:
 
         # segments には thinking が保存される
         segments = assistant_calls[0].kwargs.get("segments") or []
-        assert any(
-            s.get("type") == "thinking" and s.get("content") == "secret chain of thought" for s in segments
-        )
+        assert any(s.get("type") == "thinking" and s.get("content") == "secret chain of thought" for s in segments)
 
     @pytest.mark.asyncio
     async def test_streams_text_and_done(self):

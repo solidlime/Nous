@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from nous.domain.search.ranker import RRFRanker
 from nous.infrastructure.logging.structured import get_logger
-from nous.infrastructure.tools.tool_vector_store import ToolVectorStore
+
+if TYPE_CHECKING:
+    from nous.infrastructure.tools.tool_vector_store import ToolVectorStore
 
 logger = get_logger(__name__)
 
@@ -12,6 +15,7 @@ logger = get_logger(__name__)
 @dataclass
 class ToolSearchResult:
     """Represents a tool search result."""
+
     tool_name: str
     description: str
     input_schema: dict
@@ -75,7 +79,9 @@ class ToolSearchEngine:
 
         logger.info(
             "ToolSearchEngine: query=%r → %d results (from %d candidates)",
-            query[:80], len(results), len(combined),
+            query[:80],
+            len(results),
+            len(combined),
         )
         return results
 

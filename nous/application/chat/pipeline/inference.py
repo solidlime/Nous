@@ -86,9 +86,7 @@ class InferenceStep:
 
                 captioner = ImageCaptioner(config=config.tool_config)
                 captions = await captioner.caption_batch(turn_ctx.images)
-                caption_text = "\n".join(
-                    f"[Image {i+1}]: {c}" for i, c in enumerate(captions) if c
-                )
+                caption_text = "\n".join(f"[Image {i + 1}]: {c}" for i, c in enumerate(captions) if c)
                 if caption_text:
                     turn_ctx.user_message = (
                         f"{turn_ctx.user_message}\n\n---\nAttached images described:\n{caption_text}"
@@ -115,7 +113,11 @@ class InferenceStep:
                             },
                         }
                     )
-                messages.append(LLMMessage(role="user", content=turn_ctx.user_message, content_parts=parts, timestamp=datetime.now()))
+                messages.append(
+                    LLMMessage(
+                        role="user", content=turn_ctx.user_message, content_parts=parts, timestamp=datetime.now()
+                    )
+                )
         else:
             messages.append(LLMMessage(role="user", content=turn_ctx.user_message, timestamp=datetime.now()))
 
@@ -159,12 +161,16 @@ class InferenceStep:
                     _f.write(turn_ctx.system_prompt)
                     _f.write(f"\n\n=== MESSAGES ({len(messages)} total) ===\n")
                     for _i, _m in enumerate(messages):
-                        role = _m.role if hasattr(_m, 'role') else '?'
-                        content = str(_m.content)[:2000] if hasattr(_m, 'content') else str(_m)[:2000]
+                        role = _m.role if hasattr(_m, "role") else "?"
+                        content = str(_m.content)[:2000] if hasattr(_m, "content") else str(_m)[:2000]
                         _f.write(f"\n[{_i}] {role}: {content}\n")
                     _f.write(f"\n\n=== TOOLS ({len(visible_tools)} total) ===\n")
                     for _t in visible_tools:
-                        name = _t.get("function", {}).get("name", "?") if isinstance(_t, dict) else getattr(_t, "name", "?")
+                        name = (
+                            _t.get("function", {}).get("name", "?")
+                            if isinstance(_t, dict)
+                            else getattr(_t, "name", "?")
+                        )
                         _f.write(f"  - {name}\n")
                 logger.info("Debug prompt saved: %s", _path)
 
@@ -324,7 +330,10 @@ class InferenceStep:
                 # If tool result contains images, emit ImageGenResultSSE to frontend
                 if isinstance(tool_result, dict) and tool_result.get("images"):
                     imgs = tool_result["images"]
-                    logger.info("ImageGenResultSSE: yielding %d image(s) to frontend", len(imgs) if isinstance(imgs, list) else 0)
+                    logger.info(
+                        "ImageGenResultSSE: yielding %d image(s) to frontend",
+                        len(imgs) if isinstance(imgs, list) else 0,
+                    )
                     yield ImageGenResultSSE(
                         provider=tool_result.get("provider", "comfyui"),
                         images=tool_result["images"],
@@ -339,11 +348,7 @@ class InferenceStep:
                 if isinstance(tool_result, dict) and tool_result.get("images"):
                     result_for_log = dict(tool_result)
                     result_for_log["images"] = [
-                        {
-                            k: v for k, v in img.items()
-                            if k != "base64"
-                        }
-                        for img in tool_result["images"]
+                        {k: v for k, v in img.items() if k != "base64"} for img in tool_result["images"]
                     ]
                 turn_ctx.tool_calls_log.append(
                     {
@@ -402,7 +407,10 @@ class InferenceStep:
                                 image_parts.append(
                                     {
                                         "type": "image_url",
-                                        "image_url": {"url": f"data:image/png;base64,{img['base64']}", "detail": "auto"},
+                                        "image_url": {
+                                            "url": f"data:image/png;base64,{img['base64']}",
+                                            "detail": "auto",
+                                        },
                                     }
                                 )
 
