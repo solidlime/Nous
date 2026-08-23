@@ -420,26 +420,34 @@ class TestAppContextVectorStore:
 
         settings = Settings(data_root=str(tmp_path), qdrant={"url": "http://localhost:6333"})
 
+        # Distinct instance per QdrantVectorStore() call: stray daemon threads
+        # from earlier tests may hit these class mocks while this patch is
+        # active, so exactly-once must be asserted on OUR instance only.
+        instances = []
+
+        def _vs_factory(*args, **kwargs):
+            inst = MagicMock()
+            inst.ensure_collection = AsyncMock(return_value=Success(None))
+            instances.append(inst)
+            return inst
+
         with (
             patch("nous.application.use_cases.QdrantClientManager") as mock_qdrant_client_manager,
-            patch("nous.application.use_cases.QdrantVectorStore") as mock_vector_store,
+            patch("nous.application.use_cases.QdrantVectorStore", side_effect=_vs_factory),
             patch.object(MagicMock(), "embedding_model", create=True),
-            patch.object(AppContext, "_init_vector_store", return_value=None),
         ):
             mock_mgr = AsyncMock()
             mock_mgr.connect = AsyncMock(return_value=mock_mgr)
             mock_mgr.health_check = AsyncMock(return_value=True)
             mock_qdrant_client_manager.return_value = mock_mgr
 
-            mock_vs = MagicMock()
-            mock_vector_store.return_value = mock_vs
-            mock_vs.ensure_collection = AsyncMock(return_value=Success(None))
-
             ctx = AppContext(settings, "test_persona")
             # Access vector_store to trigger lazy init
             result = ctx.vector_store
-            assert result is mock_vs
-            mock_vs.ensure_collection.assert_called_once_with("test_persona")
+            assert result is not None
+            assert result is ctx._vector_store
+            assert result in instances
+            result.ensure_collection.assert_called_once_with("test_persona")
             ctx.close()
 
     def test_vector_store_health_check_false(self, tmp_path):

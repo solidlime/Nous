@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from typing import TYPE_CHECKING
 
 from nous.domain.equipment.service import EquipmentService
@@ -252,8 +253,11 @@ class AppContext:
         Depends on: _init_storage (self.settings).
         Models are instantiated here; background preloading happens in _preload_background.
         """
-        # Vector store (lazy)
+        # Vector store (lazy, exactly-once init guarded by lock + event)
         self._vector_store: QdrantVectorStore | None = None
+        self._vector_store_lock = threading.Lock()
+        self._vector_store_ready = threading.Event()
+        self._vector_store_init_started = False
         self._embedding: EmbeddingModel | None = None
         self._reranker: RerankerModel | None = None
         self._search_engine: SearchEngine | None = None
@@ -339,13 +343,8 @@ class AppContext:
                 # Running inside an event loop — cannot block here.
                 # Caller should use await ctx._init_vector_store_async() explicitly.
             except RuntimeError:
-                # No running loop — safe to call asyncio.run()
-                try:
-                    result = asyncio.run(self._init_vector_store_async())
-                    if result is not None:
-                        self._vector_store = result
-                except Exception as _e:
-                    logger.debug("VectorStore init failed (Qdrant unavailable?): %s", _e)
+                # No running loop — safe to block on the guarded init.
+                self._init_vector_store()
         return self._vector_store
 
     @property
@@ -396,13 +395,27 @@ class AppContext:
         return self._search_engine
 
     def _init_vector_store(self) -> None:
-        """Eagerly ensure Qdrant collection exists for this persona on startup.
+        """Ensure Qdrant collection exists for this persona — exactly once.
 
-        Called from a daemon thread (AppContext.__init__), so asyncio.run() is safe here.
+        Called from a daemon thread (AppContext.__init__) and lazily from the
+        vector_store property. The lock guarantees only one caller runs the
+        async init; the event unblocks the others once it completes.
         """
-        result = asyncio.run(self._init_vector_store_async())
-        if result is not None:
-            self._vector_store = result
+        with self._vector_store_lock:
+            if self._vector_store_init_started:
+                started_elsewhere = True
+            else:
+                self._vector_store_init_started = True
+                started_elsewhere = False
+        if started_elsewhere:
+            self._vector_store_ready.wait()
+            return
+        try:
+            result = asyncio.run(self._init_vector_store_async())
+            if result is not None:
+                self._vector_store = result
+        finally:
+            self._vector_store_ready.set()
 
     async def _init_vector_store_async(self) -> QdrantVectorStore | None:
         """Async vector store initialization (connect + ensure collection)."""
@@ -432,6 +445,8 @@ class AppContext:
 
     def close(self) -> None:
         self.connection.close()
+        # Unblock any waiter on an init that will never complete (daemon thread died, etc.)
+        self._vector_store_ready.set()
 
     # ── Vector store sync event handlers ──
 
