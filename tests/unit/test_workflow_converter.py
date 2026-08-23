@@ -121,6 +121,68 @@ def test_convert_missing_schema_node_is_skipped():
     assert "6" in api
 
 
+# --- 動的 LoRA スロット（rgthree Power Lora Loader 等）---
+
+
+_RGTHREE_SCHEMA = {"input": {"required": {}, "optional": {}}, "output": ["LORA_STACK"]}
+_OBJECT_INFO_WITH_RGTHREE = {"Power Lora Loader (rgthree)": _RGTHREE_SCHEMA}
+
+
+def _rgthree_workflow(*, with_named: bool) -> dict:
+    """実物ワークフローと同じ形状の合成ノード。"""
+    node: dict = {
+        "id": 18,
+        "type": "Power Lora Loader (rgthree)",
+        "title": "Power Lora Loader",
+        "mode": 0,
+        "inputs": [],
+        "outputs": [],
+        "properties": {},
+        "widgets_values": [
+            {},
+            {"type": "PowerLoraLoaderHeaderWidget"},
+            {"on": True, "lora": "Anima\\anima-turbo-lora-v0.2.safetensors", "strength": 0.65, "strengthTwo": None},
+            {"on": True, "lora": "Anima\\The Herta.safetensors", "strength": 1, "strengthTwo": None},
+            {"on": False, "lora": "Anima\\Koikatsu Style.safetensors", "strength": 1, "strengthTwo": None},
+            {"on": True, "lora": "Anima\\@skintextureV1 3d skin.safetensors", "strength": 0.65, "strengthTwo": None},
+            {},
+            "",
+        ],
+    }
+    if with_named:
+        node["widgets_values_named"] = {
+            "divider": {},
+            "PowerLoraLoaderHeaderWidget": {"type": "PowerLoraLoaderHeaderWidget"},
+            "lora_1": {"on": True, "lora": "a.safetensors", "strength": 0.65},
+            "lora_2": {"on": False, "lora": "b.safetensors", "strength": 1},
+            "➕ Add Lora": "",
+        }
+    return {"nodes": [node], "links": []}
+
+
+def test_convert_rgthree_dynamic_lora_slots_from_widgets_values():
+    """widgets_values の形状ベース救出: lora_1..4 が正しく入る（off スロットも送る）。"""
+    api = convert_ui_to_api(_rgthree_workflow(with_named=False), _OBJECT_INFO_WITH_RGTHREE)
+    slots = api["18"]["inputs"]
+    assert slots["lora_1"]["lora"] == "Anima\\anima-turbo-lora-v0.2.safetensors"
+    assert slots["lora_1"]["on"] is True
+    assert slots["lora_1"]["strength"] == 0.65
+    assert slots["lora_2"]["lora"] == "Anima\\The Herta.safetensors"
+    assert slots["lora_3"]["on"] is False  # off も API エクスポートと同じく送信対象
+    assert slots["lora_3"]["lora"] == "Anima\\Koikatsu Style.safetensors"
+    assert slots["lora_4"]["lora"] == "Anima\\@skintextureV1 3d skin.safetensors"
+    assert len(slots) == 4  # ヘッダー・空dict・文字列は lora_N にならない
+
+
+def test_convert_rgthree_prefers_widgets_values_named_keys():
+    """widgets_values_named（自己記述形式）があればそのキー名を優先する。"""
+    api = convert_ui_to_api(_rgthree_workflow(with_named=True), _OBJECT_INFO_WITH_RGTHREE)
+    slots = api["18"]["inputs"]
+    assert slots["lora_1"]["lora"] == "a.safetensors"
+    assert slots["lora_2"]["on"] is False
+    assert len(slots) == 2
+
+
 def test_apply_generation_params_injects_size_batch_and_seed():
     from nous.infrastructure.image_gen.workflow_converter import apply_generation_params
 

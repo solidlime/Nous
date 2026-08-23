@@ -11,8 +11,11 @@ comfy-cli の workflow_to_api.py を Nous 用に縮小移植したもの。
 from __future__ import annotations
 
 import copy
+import logging
 import random
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # litegraph のノード mode。2=ミュート（実行しない）、4=バイパス（入力を素通し）
 _MODE_MUTED = 2
@@ -198,6 +201,37 @@ def _schema_widget_pairs(schema: dict, widget_values: list) -> list[tuple[str, A
     return pairs
 
 
+def _is_lora_slot(value: Any) -> bool:
+    """動的 LoRA スロット（rgthree Power Lora Loader 等）の形状判定。
+
+    class_type に依存せず、API エクスポートと同じ {"on": bool, "lora": str, ...} 形状で判定する。
+    """
+    return isinstance(value, dict) and isinstance(value.get("on"), bool) and isinstance(value.get("lora"), str)
+
+
+def _dynamic_lora_slots(node: dict, widget_values: list, consumed: set[int]) -> dict[str, Any]:
+    """スキーマに現れない動的 LoRA スロットを救出する。
+
+    rgthree 等の動的スロット（lora_N）は /object_info スキーマに現れないため
+    位置対応では復元できない。widgets_values_named（自己記述形式）があればその
+    キー名を優先し、無ければ残りの値から形状ベースで検出して lora_N を振る。
+    off（on=false）のスロットも API エクスポートと同じく送信対象に含める。
+    """
+    named = node.get("widgets_values_named")
+    if isinstance(named, dict):
+        named_slots = {key: value for key, value in named.items() if _is_lora_slot(value)}
+        if named_slots:
+            return named_slots
+    slots: dict[str, Any] = {}
+    index = 0
+    for value in widget_values:
+        if id(value) in consumed or not _is_lora_slot(value):
+            continue
+        index += 1
+        slots[f"lora_{index}"] = value
+    return slots
+
+
 def _collect_widget_inputs(
     node: dict, node_type: str, object_info: dict, link_inputs: dict[str, list]
 ) -> dict[str, Any]:
@@ -217,14 +251,23 @@ def _collect_widget_inputs(
         return {}
 
     schema = _schema_for(node_type, node, object_info)
+    consumed: set[int] = set()
     if schema:
         for name, value in _schema_widget_pairs(schema, widget_values):
+            consumed.add(id(value))
             if not name or name in link_inputs:
                 continue
             out[name] = _wrap_widget_value(value)
-        return out
-    # ponytail: スキーマ無しノードは widget を無視（ComfyUI に未ロードのノード型は
-    # 実行できないため、静かに落ちるより送信前に気付ける）
+    for key, value in _dynamic_lora_slots(node, widget_values, consumed).items():
+        if key not in link_inputs:
+            out[key] = value
+    if not schema and len(out) < len(widget_values):
+        # ponytail: スキーマ無しノードで捨てた widget を警告（実行不能な未ロード型の早期発見用）
+        logger.warning(
+            "workflow_converter: dropping %d unmapped widget value(s) on schema-less node type %r",
+            len(widget_values) - len(out),
+            node_type,
+        )
     return out
 
 
