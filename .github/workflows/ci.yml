@@ -90,9 +90,12 @@ jobs:
 
       - name: Run mypy (delta-gated against mypy-baseline.txt)
         shell: bash
-        # No pipefail: mypy exits 1 on baseline errors even when filter reports new=0;
-        # the gate is mypy-baseline's exit code (fails only on new errors).
-        run: mypy nous/ | mypy-baseline filter
+        # GH Actions forces `-eo pipefail` on bash, so pipelines would propagate
+        # mypy's exit 1 (baseline errors) even when filter reports new=0.
+        # Route output through a file; the gate is filter's exit code (new errors only).
+        run: |
+          mypy nous/ > /tmp/mypy_out.txt || true
+          mypy-baseline filter < /tmp/mypy_out.txt
 
   # ------------------------------------------------------------------
   # Integration tests: ASGI transport based integration tests
