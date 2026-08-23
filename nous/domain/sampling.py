@@ -62,8 +62,9 @@ class EmotionDrivenSampler:
 
         Returns:
             クランプされた実効温度 [TEMPERATURE_MIN, TEMPERATURE_MAX]。
+            小数点2桁に丸められる（プロバイダが3桁以上の温度を拒否するため）。
         """
         modifier = _EMOTION_MODIFIERS.get(emotion.lower(), 0.0)
         effective_modifier = modifier * intensity * scale
-        effective_temp = base_temp + effective_modifier
+        effective_temp = round(base_temp + effective_modifier, 2)
         return max(TEMPERATURE_MIN, min(TEMPERATURE_MAX, effective_temp))

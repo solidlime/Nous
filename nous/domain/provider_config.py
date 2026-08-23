@@ -65,7 +65,8 @@ class ProviderConfig(BaseModel):
     @field_validator("temperature")
     @classmethod
     def _clamp_temperature(cls, v: float) -> float:
-        return max(0.0, min(2.0, v))
+        # 小数点2桁に丸めてからクランプ（プロバイダが3桁以上を拒否するため）
+        return max(0.0, min(2.0, round(v, 2)))
 
     @field_validator("max_tokens")
     @classmethod
@@ -97,7 +98,8 @@ class ProviderConfig(BaseModel):
     def _clamp_top_p(cls, v: float | None) -> float | None:
         if v is None:
             return None
-        return max(0.0, min(1.0, v))
+        # 小数点2桁に丸めてからクランプ（_clamp_temperature と同規約）
+        return max(0.0, min(1.0, round(v, 2)))
 
     @field_validator("reasoning_effort")
     @classmethod

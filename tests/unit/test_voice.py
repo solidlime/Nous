@@ -276,6 +276,24 @@ class TestIrodoriEngine:
     # ── health_check ──
 
     @pytest.mark.asyncio
+    async def test_synthesize_speed_rounded_to_two_decimals(self, config):
+        """float 演算誤差付き speed も2桁に丸めて送信される"""
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_client = MagicMock()
+            mock_resp = MagicMock(status_code=200, content=b"wav")
+            mock_resp.raise_for_status = MagicMock()
+            mock_client.post = AsyncMock(return_value=mock_resp)
+            mock_cls.return_value.__aenter__.return_value = mock_client
+
+            engine = self._make_irodori(config)
+            # 0.9 + 0.2 == 1.1000000000000001 (float 誤差の典型例)
+            await engine.synthesize("テスト", emotion="neutral", speed=0.9 + 0.2)
+
+            sent_speed = mock_client.post.call_args[1]["json"]["speed"]
+            assert sent_speed == 1.1
+            assert round(sent_speed, 2) == sent_speed
+
+    @pytest.mark.asyncio
     async def test_health_check_returns_true(self, config):
         """GET /models が200 → True"""
         with patch("httpx.AsyncClient") as mock_cls:

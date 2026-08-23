@@ -1013,9 +1013,9 @@ class TestDynamicTemperatureInference:
         base_temp = 0.7
         # anger → modifier = +0.15, intensity=0.8, scale=0.2
         # effective_modifier = 0.15 * 0.8 * 0.2 = 0.024
-        # effective_temp = 0.7 + 0.024 = 0.724
+        # effective_temp = 0.7 + 0.024 = 0.724 → rounded to 2 decimals = 0.72
         result = EmotionDrivenSampler.compute(base_temp, "anger", 0.8, scale=0.2)
-        assert result == pytest.approx(0.724, rel=1e-3)
+        assert result == pytest.approx(0.72, rel=1e-3)
 
     @pytest.mark.asyncio
     async def test_emotion_driven_sampler_neutral_no_change(self):

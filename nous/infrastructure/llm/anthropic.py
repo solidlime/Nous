@@ -123,15 +123,18 @@ class AnthropicProvider(LLMProvider):
         try:
             system_param = build_anthropic_system(system)
 
+            # Anthropic API 制約: temperature ≤ 1.0（sampling 由来の [0.1, 1.8] クランプ値が飛んでくるため境界で防御）
+            # および temperature と top_p の同時指定禁止（top_p 明示設定時は top_p を優先）
             kwargs: dict = {
                 "model": self.model,
                 "max_tokens": max_tokens,
                 "system": system_param,
                 "messages": api_messages,
-                "temperature": temperature,
             }
             if top_p is not None:
                 kwargs["top_p"] = top_p
+            else:
+                kwargs["temperature"] = round(min(temperature, 1.0), 2)
             if reasoning_effort:
                 budget = _EFFORT_BUDGET_MAP.get(reasoning_effort, 4096)
                 kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}

@@ -43,7 +43,8 @@ class IrodoriEngine(VoiceEngine):
 
         接続エラーの場合は最大2回リトライする。
         """
-        speed = speed if speed is not None else _EMOTION_SPEED.get(emotion, _DEFAULT_SPEED)
+        # float 演算の誤差 (1.1000000000000001 等) を防ぐため2桁に丸めてから送信
+        speed = round(speed if speed is not None else _EMOTION_SPEED.get(emotion, _DEFAULT_SPEED), 2)
 
         extra_body_irodori: dict = {
             "num_steps": self._advanced.num_steps,

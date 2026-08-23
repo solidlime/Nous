@@ -154,6 +154,48 @@ class TestAnthropicReasoning:
         assert isinstance(events[-1], DoneEvent)
 
 
+class TestAnthropicSamplingKwargs:
+    """AnthropicProvider: temperature/top_p のプロバイダ境界防御."""
+
+    def _make_provider(self) -> AnthropicProvider:
+        provider = AnthropicProvider(api_key="test-key", model="claude-opus-4-5")
+        provider._client = MagicMock()
+        provider._client.messages.stream.return_value = _FakeStream()
+        return provider
+
+    def _capture_kwargs(self, provider: AnthropicProvider) -> dict:
+        return provider._client.messages.stream.call_args.kwargs
+
+    @pytest.mark.asyncio
+    async def test_temperature_clamped_to_api_max(self):
+        """temperature > 1.0 → 1.0 にクランプ（Anthropic API 制約）."""
+        provider = self._make_provider()
+        async for _ in provider.stream(messages=[], system="", temperature=1.8):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert kwargs["temperature"] == 1.0
+
+    @pytest.mark.asyncio
+    async def test_top_p_set_drops_temperature(self):
+        """top_p 設定時 → temperature は送らず top_p のみ（同時指定禁止）."""
+        provider = self._make_provider()
+        async for _ in provider.stream(messages=[], system="", temperature=0.7, top_p=0.9):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert "temperature" not in kwargs
+        assert kwargs["top_p"] == 0.9
+
+    @pytest.mark.asyncio
+    async def test_top_p_none_sends_temperature_only(self):
+        """top_p=None → 従来どおり temperature のみ."""
+        provider = self._make_provider()
+        async for _ in provider.stream(messages=[], system="", temperature=0.7, top_p=None):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert kwargs["temperature"] == 0.7
+        assert "top_p" not in kwargs
+
+
 class TestOpenAICompatCoT:
     """OpenAICompatProvider: delta.reasoning_content を ThinkingDeltaEvent として拾う (SPEC R3)."""
 

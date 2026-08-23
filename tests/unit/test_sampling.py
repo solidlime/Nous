@@ -17,17 +17,18 @@ class TestEmotionDrivenSampler:
     @pytest.mark.parametrize(
         ("emotion", "expected"),
         [
-            ("anger", 0.7 + 0.15 * 0.1),  # 0.715
-            ("sadness", 0.7 + (-0.10) * 0.1),  # 0.690
-            ("joy", 0.7 + 0.05 * 0.1),  # 0.705
-            ("excitement", 0.7 + 0.20 * 0.1),  # 0.720
-            ("neutral", 0.7 + 0.0 * 0.1),  # 0.700
-            ("curiosity", 0.7 + 0.05 * 0.1),  # 0.705
-            ("fear", 0.7 + (-0.05) * 0.1),  # 0.695
-            ("disgust", 0.7 + (-0.08) * 0.1),  # 0.692
-            ("surprise", 0.7 + 0.10 * 0.1),  # 0.710
-            ("grief", 0.7 + (-0.15) * 0.1),  # 0.685
-            ("love", 0.7 + 0.08 * 0.1),  # 0.708
+            # 小数点2桁に丸められた値（プロバイダが3桁以上の温度を拒否するため）
+            ("anger", 0.71),  # raw 0.715 → banker's rounding
+            ("sadness", 0.69),
+            ("joy", 0.7),  # raw 0.705 → banker's rounding
+            ("excitement", 0.72),
+            ("neutral", 0.7),
+            ("curiosity", 0.7),  # raw 0.705 → banker's rounding
+            ("fear", 0.69),  # raw 0.695 → banker's rounding
+            ("disgust", 0.69),
+            ("surprise", 0.71),
+            ("grief", 0.68),  # raw 0.684999... → banker's rounding
+            ("love", 0.71),
         ],
     )
     def test_all_emotions_baseline(self, emotion: str, expected: float) -> None:
@@ -38,6 +39,23 @@ class TestEmotionDrivenSampler:
             scale=0.2,
         )
         assert result == pytest.approx(expected, abs=1e-12)
+
+    @pytest.mark.parametrize(
+        ("base_temp", "emotion", "intensity", "scale"),
+        [
+            (base, emotion, intensity, scale)
+            for base in (0.3, 0.7, 1.2)
+            for emotion in ("anger", "joy", "grief", "love")
+            for intensity in (0.3, 0.5, 1.0)
+            for scale in (0.2, 0.5, 1.0)
+        ],
+    )
+    def test_result_always_at_most_two_decimals(
+        self, base_temp: float, emotion: str, intensity: float, scale: float
+    ) -> None:
+        """動的温度計算結果は常に小数点2桁以下（float 丸め誤差を含め）。"""
+        result = EmotionDrivenSampler.compute(base_temp, emotion, intensity, scale)
+        assert result == round(result, 2)
 
     def test_intensity_zero_returns_base_temp(self) -> None:
         """intensity=0.0 → effective_temp == base_temp."""
