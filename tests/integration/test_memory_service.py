@@ -243,8 +243,8 @@ class _KeywordAdapter:
     def __init__(self, repo: SQLiteMemoryRepository) -> None:
         self._repo = repo
 
-    def search(self, query: str, limit: int = 10, date_from=None, date_to=None):
-        return self._repo.search_keyword(query, limit, date_from=date_from, date_to=date_to)
+    def search(self, query: str, limit: int = 10, date_from=None, date_to=None, tags=None):
+        return self._repo.search_keyword(query, limit, date_from=date_from, date_to=date_to, tags=tags)
 
 
 class TestSearch:
