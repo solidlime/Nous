@@ -58,6 +58,9 @@ markers = [
 source = ["nous"]
 omit = ["tests/*", "*/migration/*"]
 
+[tool.mypy-baseline]
+baseline_path = "mypy-baseline.txt"
+
 [tool.coverage.report]
 show_missing = true
 

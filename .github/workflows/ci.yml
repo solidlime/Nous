@@ -31,8 +31,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install ruff
-        run: pip install ruff
+      - name: Install tools (pinned via requirements-dev.txt)
+        run: pip install -r requirements-dev.txt
 
       # ruff check — lint rules (E, F, W, I, N, UP, B, A, SIM, TCH)
       - name: Run ruff check
@@ -88,8 +88,9 @@ jobs:
         run: |
           pip install -r requirements-prod.txt -r requirements-dev.txt
 
-      - name: Run mypy
-        run: mypy nous/
+      - name: Run mypy (delta-gated against mypy-baseline.yaml)
+        shell: bash
+        run: set -o pipefail && mypy nous/ | mypy-baseline filter
 
   # ------------------------------------------------------------------
   # Integration tests: ASGI transport based integration tests
@@ -137,7 +138,8 @@ jobs:
           pip install -r requirements-prod.txt -r requirements-dev.txt
 
       - name: Run coverage
-        run: pytest --cov=nous --cov-fail-under=70 --cov-report=term
+        # tests/contracts requires the optional [contract] extra (pact-python), not installed here
+        run: pytest --cov=nous --cov-fail-under=70 --cov-report=term --ignore=tests/contracts
 
   # ------------------------------------------------------------------
   # Security: bandit static analysis
@@ -155,8 +157,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install bandit
-        run: pip install bandit
+      - name: Install tools (pinned via requirements-dev.txt)
+        run: pip install -r requirements-dev.txt
 
       - name: Run bandit
         run: bandit -r nous/ -ll
