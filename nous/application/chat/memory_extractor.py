@@ -384,7 +384,10 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
             if isinstance(item_data, dict):
                 name = item_data.get("name", "").strip()
                 if name:
-                    updates = {k: v for k, v in item_data.items() if k != "name" and v is not None}
+                    # Allowlist LLM-provided keys: they become SQL column names
+                    # downstream (equipment_repo UPDATE SET clause).
+                    allowed = {"item_name", "category", "description", "visual_desc", "quantity", "tags"}
+                    updates = {k: v for k, v in item_data.items() if k in allowed and v is not None}
                     if updates:
                         ctx.equipment_service.update_item(name, **updates)
 
