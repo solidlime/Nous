@@ -29,6 +29,8 @@ contract = [
 [tool.ruff]
 target-version = "py312"
 line-length = 120
+# Markdown specs/plans are prose documents; don't machine-format their code blocks.
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TCH"]

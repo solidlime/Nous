@@ -88,9 +88,11 @@ jobs:
         run: |
           pip install -r requirements-prod.txt -r requirements-dev.txt
 
-      - name: Run mypy (delta-gated against mypy-baseline.yaml)
+      - name: Run mypy (delta-gated against mypy-baseline.txt)
         shell: bash
-        run: set -o pipefail && mypy nous/ | mypy-baseline filter
+        # No pipefail: mypy exits 1 on baseline errors even when filter reports new=0;
+        # the gate is mypy-baseline's exit code (fails only on new errors).
+        run: mypy nous/ | mypy-baseline filter
 
   # ------------------------------------------------------------------
   # Integration tests: ASGI transport based integration tests
