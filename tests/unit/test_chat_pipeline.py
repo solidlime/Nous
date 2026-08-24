@@ -1854,3 +1854,217 @@ class TestTimestampTimezoneAndDoublePrefix:
         # tz 変換（UTC 指定・naive はローカル扱いでそのまま時刻）
         assert second.content.startswith("<!-- msg_at: 2025-06-15 14:30 -->")
         assert "JST" not in second.content
+
+
+# ──────────────────────────────────────────────
+# BugFix: inference.py — 重複排除順序 / 継続メッセージ / max_tool_calls=0 / タイムスタンプ共有 / debug dir
+# ──────────────────────────────────────────────
+
+
+class TestInferenceBugfixes:
+    """バグハント修正の回帰テスト。"""
+
+    def _make_config(self, **overrides):
+        from unittest.mock import MagicMock
+
+        config = MagicMock()
+        config.debug_mode = False
+        config.temperature = 0.7
+        config.max_tokens = 100
+        config.provider = "anthropic"
+        config.get_effective_api_key.return_value = "test-key"
+        config.get_effective_model.return_value = "claude-3"
+        config.get_effective_base_url.return_value = ""
+        config.max_tool_calls = 5
+        config.enable_parallel_tools = True
+        config.tool_result_max_chars = 4000
+        config.top_p = None
+        config.show_message_timestamps = False
+        for k, v in overrides.items():
+            setattr(config, k, v)
+        return config
+
+    def _make_turn_ctx(self, tool_calls_log=None):
+        from unittest.mock import MagicMock
+
+        turn_ctx = MagicMock()
+        turn_ctx.images = []
+        turn_ctx.tool_call_count = 0
+        turn_ctx.full_response = ""
+        turn_ctx.user_message = "test"
+        turn_ctx.system_prompt = "test sys"
+        turn_ctx.tool_calls_log = tool_calls_log if tool_calls_log is not None else []
+        turn_ctx.skills_raw = []
+        turn_ctx.segments = []
+        turn_ctx.recency_digest = ""
+        turn_ctx.was_truncated = False
+        return turn_ctx
+
+    async def _run(self, mock_stream_fn, config, turn_ctx, session_messages=None):
+        """mock_stream_fn(**kwargs) を provider.stream として InferenceStep を実行する。"""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from nous.application.chat.pipeline.inference import InferenceStep
+
+        mock_provider = MagicMock()
+        mock_provider.stream = mock_stream_fn
+        registry = MagicMock()
+        registry.execute = AsyncMock(return_value={"ok": True})
+        registry.truncate_result = MagicMock(return_value={"ok": True})
+
+        with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
+            sse_events = []
+            async for ev in InferenceStep().run(MagicMock(), config, session_messages or [], turn_ctx, registry):
+                sse_events.append(ev)
+        return sse_events
+
+    @pytest.mark.asyncio
+    async def test_duplicate_tool_use_id_from_log_is_skipped_entirely(self):
+        """同一ターンで実行済み tool_use_id の再送 → SSE/segment/pending に記録されない（#1）."""
+        from nous.application.chat.events import ToolCallSSE
+        from nous.infrastructure.llm.base import DoneEvent, ToolCallEvent
+
+        async def _stream(**kwargs):
+            # モデルが t1 を再送してくるシナリオ
+            yield ToolCallEvent(tool_name="memory_search", tool_input={"q": "x"}, tool_use_id="t1")
+            yield DoneEvent(finish_reason="stop")
+
+        config = self._make_config()
+        turn_ctx = self._make_turn_ctx(tool_calls_log=[{"id": "t1", "name": "memory_search"}])
+
+        sse_events = await self._run(_stream, config, turn_ctx)
+
+        # 再送された tool call は何も記録されない
+        assert not any(isinstance(ev, ToolCallSSE) for ev in sse_events)
+        assert not any(s.get("type") == "tool_call" for s in turn_ctx.segments)
+        assert not any(s.get("type") == "tool_result" for s in turn_ctx.segments)
+
+    @pytest.mark.asyncio
+    async def test_duplicate_tool_use_id_within_batch_executes_once(self):
+        """同一バッチ内で同一 tool_use_id が2回来る → 1回だけ実行・segment も1組（#1/#3）."""
+        from nous.infrastructure.llm.base import DoneEvent, ToolCallEvent
+
+        async def _stream(**kwargs):
+            yield ToolCallEvent(tool_name="memory_search", tool_input={"q": "x"}, tool_use_id="t1")
+            yield ToolCallEvent(tool_name="memory_search", tool_input={"q": "x"}, tool_use_id="t1")
+            yield DoneEvent(finish_reason="stop")
+
+        config = self._make_config()
+        turn_ctx = self._make_turn_ctx()
+
+        await self._run(_stream, config, turn_ctx)
+
+        tc_segs = [s for s in turn_ctx.segments if s.get("type") == "tool_call"]
+        tr_segs = [s for s in turn_ctx.segments if s.get("type") == "tool_result"]
+        assert len(tc_segs) == 1
+        assert len(tr_segs) == 1
+        assert len(turn_ctx.tool_calls_log) == 1
+
+    @pytest.mark.asyncio
+    async def test_all_duplicates_no_orphan_assistant_tool_calls(self):
+        """全件が重複で消滅 → tool_calls 付き assistant メッセージは永続化されない（#3）."""
+        from nous.infrastructure.llm.base import DoneEvent, ToolCallEvent
+
+        captured = []
+
+        async def _stream(**kwargs):
+            captured.append(list(kwargs["messages"]))
+            yield ToolCallEvent(tool_name="memory_search", tool_input={"q": "x"}, tool_use_id="t1")
+            yield DoneEvent(finish_reason="stop")
+
+        config = self._make_config()
+        turn_ctx = self._make_turn_ctx(tool_calls_log=[{"id": "t1", "name": "memory_search"}])
+
+        await self._run(_stream, config, turn_ctx)
+
+        # ループは1回で終了し、assistant(tool_calls) も tool メッセージも追加されない
+        assert len(captured) == 1
+        assert not any(m.role == "assistant" and m.tool_calls for m in captured[0])
+        assert not any(m.role == "tool" for m in captured[0])
+
+    @pytest.mark.asyncio
+    async def test_continuation_user_message_is_non_empty(self):
+        """finish_reason=length の自動継続時、user メッセージは非空（Anthropic 400 回避）（#2）."""
+        from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+
+        calls = []
+
+        async def _stream(**kwargs):
+            calls.append(list(kwargs["messages"]))
+            if len(calls) == 1:
+                yield TextDeltaEvent(content="part1")
+                yield DoneEvent(finish_reason="length")
+            else:
+                yield TextDeltaEvent(content="part2")
+                yield DoneEvent(finish_reason="stop")
+
+        config = self._make_config()
+        turn_ctx = self._make_turn_ctx()
+
+        await self._run(_stream, config, turn_ctx)
+
+        assert len(calls) == 2
+        cont_msg = calls[1][-1]
+        assert cont_msg.role == "user"
+        assert cont_msg.content.strip() != ""
+
+    @pytest.mark.asyncio
+    async def test_max_tool_calls_zero_passes_no_tools(self):
+        """max_tool_calls=0 → provider にツールを渡さない（#6）."""
+        from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+
+        captured = []
+
+        async def _stream(**kwargs):
+            captured.append(kwargs)
+            yield TextDeltaEvent(content="hello")
+            yield DoneEvent(finish_reason="stop")
+
+        config = self._make_config(max_tool_calls=0)
+        turn_ctx = self._make_turn_ctx()
+
+        await self._run(_stream, config, turn_ctx)
+
+        assert captured[0]["tools"] == []
+
+    @pytest.mark.asyncio
+    async def test_timestamp_injection_does_not_mutate_session_messages(self):
+        """タイムスタンプ注入はコピーに対して行われ、session_messages を汚さない（#8）."""
+        from datetime import datetime
+
+        from nous.infrastructure.llm.base import DoneEvent, LLMMessage, TextDeltaEvent
+
+        async def _stream(**kwargs):
+            yield TextDeltaEvent(content="hello")
+            yield DoneEvent(finish_reason="stop")
+
+        config = self._make_config(show_message_timestamps=True)
+        turn_ctx = self._make_turn_ctx()
+
+        ts = datetime(2025, 6, 15, 14, 30, 0)
+        session_msg = LLMMessage(role="user", content="hello", timestamp=ts)
+        await self._run(_stream, config, turn_ctx, session_messages=[session_msg])
+
+        # 元オブジェクトは汚されていない
+        assert session_msg.content == "hello"
+
+    @pytest.mark.asyncio
+    async def test_debug_mode_writes_under_tempdir(self):
+        """debug_mode=True でも Windows で例外にならず、tempdir 配下に書き出される（#9）."""
+        import os
+        import tempfile
+
+        from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+
+        async def _stream(**kwargs):
+            yield TextDeltaEvent(content="hello")
+            yield DoneEvent(finish_reason="stop")
+
+        config = self._make_config(debug_mode=True)
+        turn_ctx = self._make_turn_ctx()
+
+        sse_events = await self._run(_stream, config, turn_ctx)  # 例外が出ないこと
+
+        assert len(sse_events) == 1
+        debug_dir = os.path.join(tempfile.gettempdir(), "nous_debug")
+        assert any(f.startswith("prompt_") for f in os.listdir(debug_dir))

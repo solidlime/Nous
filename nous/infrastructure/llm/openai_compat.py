@@ -149,17 +149,22 @@ class OpenAICompatProvider(LLMProvider):
             kwargs: dict = {
                 "model": self.model,
                 "messages": api_messages,
-                "temperature": temperature,
                 "max_tokens": max_tokens,
                 "stream": True,
             }
-            if top_p is not None:
-                kwargs["top_p"] = top_p
             if reasoning_effort:
+                # 推論モデル (o1/o3/o4-mini 等) は temperature を許可しない (400 Unsupported parameter)。
+                # reasoning 指定時は sampling params (temperature/top_p) を送らない
                 if "openrouter" in (self.base_url or "").lower():
                     kwargs["reasoning"] = {"effort": reasoning_effort}
                 else:
                     kwargs["reasoning_effort"] = reasoning_effort
+                # TODO: 推論モデルは max_tokens ではなく max_completion_tokens が必要。
+                # モデル名検出が必要で侵襲が大きいため次回候補（未実施）
+            else:
+                kwargs["temperature"] = temperature
+                if top_p is not None:
+                    kwargs["top_p"] = top_p
             if openai_tools:
                 kwargs["tools"] = openai_tools
                 kwargs["tool_choice"] = "auto"
@@ -222,7 +227,14 @@ class OpenAICompatProvider(LLMProvider):
                 try:
                     input_data = json.loads(tc_data["args_json"]) if tc_data["args_json"] else {}
                 except json.JSONDecodeError:
-                    input_data = {}
+                    # 引数欠損のままツールを実行させない (誤データ生成防止)。
+                    # 呼び自体を履歴に載せない → dangling tool_result も発生しない
+                    logger.warning(
+                        "Malformed tool arguments for '%s' (id=%s), dropping tool call",
+                        tc_data["name"],
+                        tc_data["id"],
+                    )
+                    continue
                 tc = ToolCallEvent(
                     tool_name=tc_data["name"],
                     tool_input=input_data,

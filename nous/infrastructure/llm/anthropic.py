@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING
 
 from .base import (
@@ -21,6 +22,8 @@ if TYPE_CHECKING:
 
 # reasoning_effort → Anthropic thinking budget_tokens (min 1024)
 _EFFORT_BUDGET_MAP = {"low": 2048, "medium": 4096, "high": 8192, "max": 16384}
+
+logger = logging.getLogger(__name__)
 
 
 class AnthropicProvider(LLMProvider):
@@ -136,6 +139,9 @@ class AnthropicProvider(LLMProvider):
             if reasoning_effort:
                 budget = _EFFORT_BUDGET_MAP.get(reasoning_effort, 4096)
                 kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
+                # Anthropic API 制約: thinking 有効時は max_tokens > budget_tokens が必須。
+                # budget + 1024 のヘッドルームを確保して下回りを防止（thinking 無効時は触らない）
+                kwargs["max_tokens"] = max(max_tokens, budget + 1024)
             elif top_p is not None:
                 kwargs["top_p"] = top_p
             else:
@@ -176,7 +182,15 @@ class AnthropicProvider(LLMProvider):
                                     json.loads(current_tool["input_json"]) if current_tool["input_json"] else {}
                                 )
                             except json.JSONDecodeError:
-                                input_data = {}
+                                # 引数欠損のままツールを実行させない (誤データ生成防止)。
+                                # 呼び自体を履歴に載せない → dangling tool_result も発生しない
+                                logger.warning(
+                                    "Malformed tool arguments for '%s' (id=%s), dropping tool call",
+                                    current_tool["name"],
+                                    current_tool["id"],
+                                )
+                                current_tool = None
+                                continue
                             tc = ToolCallEvent(
                                 tool_name=current_tool["name"],
                                 tool_input=input_data,
@@ -198,10 +212,13 @@ class AnthropicProvider(LLMProvider):
                         # Collect usage from message_delta event
                         usage_attr = getattr(event, "usage", None)
                         if usage_attr:
+                            # None 蔵しの属性で TypeError → ストリーム全体が ErrorEvent 化するのを防御
+                            prompt_tokens = usage_attr.input_tokens or 0
+                            completion_tokens = usage_attr.output_tokens or 0
                             usage_info = {
-                                "prompt_tokens": usage_attr.input_tokens,
-                                "completion_tokens": usage_attr.output_tokens,
-                                "total_tokens": usage_attr.input_tokens + usage_attr.output_tokens,
+                                "prompt_tokens": prompt_tokens,
+                                "completion_tokens": completion_tokens,
+                                "total_tokens": prompt_tokens + completion_tokens,
                             }
 
             yield DoneEvent(

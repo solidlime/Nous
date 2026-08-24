@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from nous.infrastructure.llm.anthropic import AnthropicProvider
-from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent, ThinkingDeltaEvent
+from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, TextDeltaEvent, ThinkingDeltaEvent, ToolCallEvent
 from nous.infrastructure.llm.openai_compat import OpenAICompatProvider
 
 
@@ -90,6 +90,29 @@ class TestOpenAICompatReasoning:
         kwargs = self._capture_kwargs(provider)
         assert "reasoning" not in kwargs
         assert "reasoning_effort" not in kwargs
+
+    @pytest.mark.asyncio
+    async def test_reasoning_drops_sampling_params(self):
+        """reasoning_effort 指定時 → temperature/top_p を送らない.
+
+        推論モデル (o1/o3/o4-mini 等) は temperature 不許可のため.
+        """
+        provider = self._make_provider(base_url=None)
+        async for _ in provider.stream(messages=[], system="", temperature=0.7, top_p=0.9, reasoning_effort="high"):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert "temperature" not in kwargs
+        assert "top_p" not in kwargs
+        assert kwargs["reasoning_effort"] == "high"
+
+    @pytest.mark.asyncio
+    async def test_no_reasoning_keeps_temperature(self):
+        """reasoning_effort なし → 従来どおり temperature を送る."""
+        provider = self._make_provider(base_url=None)
+        async for _ in provider.stream(messages=[], system="", temperature=0.7):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert kwargs["temperature"] == 0.7
 
     @pytest.mark.asyncio
     async def test_base_url_stored_on_instance(self):
@@ -220,6 +243,37 @@ class TestAnthropicSamplingKwargs:
         assert "top_p" not in kwargs
         assert "temperature" not in kwargs
 
+    @pytest.mark.asyncio
+    async def test_reasoning_high_raises_max_tokens_above_budget(self):
+        """effort="high" (budget 8192) + max_tokens=8192 → max_tokens > budget_tokens に補正.
+
+        Anthropic API は thinking 有効時 max_tokens > budget_tokens を要求するため.
+        """
+        provider = self._make_provider()
+        async for _ in provider.stream(messages=[], system="", max_tokens=8192, reasoning_effort="high"):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert kwargs["max_tokens"] > kwargs["thinking"]["budget_tokens"]
+
+    @pytest.mark.asyncio
+    async def test_reasoning_max_raises_max_tokens_above_budget(self):
+        """effort="max" (budget 16384) + デフォルト max_tokens でも違反しない."""
+        provider = self._make_provider()
+        async for _ in provider.stream(messages=[], system="", reasoning_effort="max"):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert kwargs["max_tokens"] > kwargs["thinking"]["budget_tokens"]
+
+    @pytest.mark.asyncio
+    async def test_no_reasoning_keeps_max_tokens_untouched(self):
+        """thinking 無効時 → max_tokens は元の値のまま."""
+        provider = self._make_provider()
+        async for _ in provider.stream(messages=[], system="", max_tokens=1234):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert "thinking" not in kwargs
+        assert kwargs["max_tokens"] == 1234
+
 
 class TestOpenAICompatCoT:
     """OpenAICompatProvider: delta.reasoning_content を ThinkingDeltaEvent として拾う (SPEC R3)."""
@@ -343,3 +397,91 @@ class TestToApiMessagesNoReasoningContent:
         assert out[0]["role"] == "assistant"
         assert "reasoning_content" not in out[0]
         assert out[0]["tool_calls"][0]["id"] == "call_1"
+
+
+class TestMalformedToolArgs:
+    """不正 JSON 引数のツールコール → ツールコール自体を履歴から落として実行させない."""
+
+    @pytest.mark.asyncio
+    async def test_openai_malformed_args_dropped(self):
+        """OpenAICompat: args_json が不正 JSON → ToolCallEvent を出さない (実行されない)."""
+        provider = OpenAICompatProvider(api_key="test-key", model="gpt-4o", base_url=None)
+        provider._client = MagicMock()
+        chunk = SimpleNamespace(
+            usage=None,
+            choices=[
+                SimpleNamespace(
+                    finish_reason=None,
+                    delta=SimpleNamespace(
+                        content=None,
+                        reasoning_content=None,
+                        tool_calls=[
+                            SimpleNamespace(
+                                index=0,
+                                id="call_1",
+                                function=SimpleNamespace(name="memory_create", arguments='{"content": "bro'),
+                            )
+                        ],
+                    ),
+                )
+            ],
+        )
+        provider._client.chat.completions.create = AsyncMock(return_value=_ChunkStream([chunk]))
+
+        events = []
+        async for ev in provider.stream(messages=[], system=""):
+            events.append(ev)
+
+        assert not any(isinstance(ev, ToolCallEvent) for ev in events)
+
+    @pytest.mark.asyncio
+    async def test_anthropic_malformed_args_dropped(self):
+        """Anthropic: input_json_delta が不正 JSON → ToolCallEvent を出さない (実行されない)."""
+        provider = AnthropicProvider(api_key="test-key", model="claude-opus-4-5")
+        provider._client = MagicMock()
+        sdk_events = [
+            SimpleNamespace(
+                type="content_block_start",
+                content_block=SimpleNamespace(type="tool_use", id="toolu_1", name="memory_create"),
+            ),
+            SimpleNamespace(
+                type="content_block_delta",
+                delta=SimpleNamespace(type="input_json_delta", partial_json='{"content": "bro'),
+            ),
+            SimpleNamespace(type="content_block_stop"),
+            SimpleNamespace(type="message_delta", delta=SimpleNamespace(stop_reason="tool_use"), usage=None),
+        ]
+        provider._client.messages.stream.return_value = _ChunkStream(sdk_events)
+
+        events = []
+        async for ev in provider.stream(messages=[], system=""):
+            events.append(ev)
+
+        assert not any(isinstance(ev, ToolCallEvent) for ev in events)
+
+
+class TestAnthropicUsageDefense:
+    """message_delta.usage の None 属性でストリームが落ちない (#10)."""
+
+    @pytest.mark.asyncio
+    async def test_usage_none_fields_do_not_crash(self):
+        """input_tokens/output_tokens が None → TypeError ではなく DoneEvent (0 扱い)."""
+        provider = AnthropicProvider(api_key="test-key", model="claude-opus-4-5")
+        provider._client = MagicMock()
+        sdk_events = [
+            SimpleNamespace(
+                type="message_delta",
+                delta=SimpleNamespace(stop_reason="end_turn"),
+                usage=SimpleNamespace(input_tokens=None, output_tokens=5),
+            ),
+        ]
+        provider._client.messages.stream.return_value = _ChunkStream(sdk_events)
+
+        events = []
+        async for ev in provider.stream(messages=[], system=""):
+            events.append(ev)
+
+        done = [ev for ev in events if isinstance(ev, DoneEvent)]
+        assert len(done) == 1
+        assert not any(isinstance(ev, ErrorEvent) for ev in events)
+        assert done[0].usage == {"prompt_tokens": 0, "completion_tokens": 5, "total_tokens": 5}

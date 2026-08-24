@@ -130,30 +130,40 @@ class InferenceStep:
             _seg_text = ""  # text accumulator for segment ordering
             _thinking_text = ""  # thinking accumulator for CoT segments (SPEC R5)
             _finish_reason = ""  # set by DoneEvent handler inside stream loop
+            # 既に実行済みの tool_use_id（同一ターン内の再送を排除するため。
+            # tool_call segment / SSE / pending への記録より先に除外しないと
+            # 「結果無し tool_call」が履歴に永続化され、次ターン以降プロバイダが 400 を返す）
+            executed_ids = {tc.get("id", "") for tc in (turn_ctx.tool_calls_log or [])}
+            seen_ids: set[str] = set()
 
             # 各ループ反復で visible tools を再評価（search_tools で新発見を拾う）
-            visible_tools = registry.get_visible_tools()
+            # max_tool_calls の予算を使い切ったらツールを渡さない（0 設定なら最初から渡さない）
+            visible_tools = registry.get_visible_tools() if turn_ctx.tool_call_count < config.max_tool_calls else []
 
             # タイムスタンプ注入（設定ON時のみ）— debug dumpより先に注入
             # HTML comment format: LLM sees timestamp but does not echo it in output
+            # 注入はコピーに対して行う（session_messages の LLMMessage は共有オブジェクトのため）
             if getattr(config, "show_message_timestamps", False):
+                from dataclasses import replace
                 from zoneinfo import ZoneInfo
 
                 from nous.config.settings import get_settings
 
                 tz = ZoneInfo(get_settings().timezone)
-                for msg in messages:
+                for i, msg in enumerate(messages):
                     if msg.timestamp and msg.role in ("user", "assistant"):
                         ts = msg.timestamp if msg.timestamp.tzinfo else msg.timestamp.replace(tzinfo=tz)
                         ts_str = ts.astimezone(tz).strftime("%Y-%m-%d %H:%M")
                         prefix = f"<!-- msg_at: {ts_str} -->"
                         if not str(msg.content).startswith("<!-- msg_at:"):
-                            msg.content = f"{prefix}{msg.content}"
+                            messages[i] = replace(msg, content=f"{prefix}{msg.content}")
 
             # Debug: capture the full prompt sent to LLM
             if getattr(config, "debug_mode", False):
+                import tempfile
+
                 _ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-                _debug_dir = "/data/tmp"
+                _debug_dir = os.path.join(tempfile.gettempdir(), "nous_debug")
                 os.makedirs(_debug_dir, exist_ok=True)
                 _path = os.path.join(_debug_dir, f"prompt_{_ts}.txt")
                 with open(_path, "w", encoding="utf-8") as _f:
@@ -193,6 +203,19 @@ class InferenceStep:
                     _thinking_text += event.content
                     yield ThinkingDeltaSSE(content=event.content)
                 elif isinstance(event, ToolCallEvent):
+                    # Skip tool calls already executed this turn or duplicated within
+                    # this batch — record nothing (no SSE / segment / pending entry),
+                    # otherwise a result-less tool_call would be persisted and the
+                    # provider would reject the rebuilt history next turn.
+                    if event.tool_use_id in executed_ids or event.tool_use_id in seen_ids:
+                        logger.info("Skipping duplicate tool call (id=%s)", event.tool_use_id)
+                        continue
+                    # Guard against None from buggy provider implementations.
+                    # Note: {} is a valid tool input (parameterless tools).
+                    if event.tool_input is None:
+                        logger.warning("Skipping tool call with None input (id=%s)", event.tool_use_id)
+                        continue
+                    seen_ids.add(event.tool_use_id)
                     # Flush accumulated text as segment before tool call
                     if _seg_text:
                         turn_ctx.segments.append({"type": "text", "content": _seg_text})
@@ -210,10 +233,7 @@ class InferenceStep:
                             "id": event.tool_use_id,
                         }
                     )
-                    # Guard against None from buggy provider implementations.
-                    # Note: {} is a valid tool input (parameterless tools).
-                    if event.tool_input is not None:
-                        pending_tool_calls.append(event)
+                    pending_tool_calls.append(event)
                 elif isinstance(event, ErrorEvent):
                     yield ErrorSSE(message=event.message)
                     return
@@ -251,8 +271,8 @@ class InferenceStep:
                     turn_ctx.was_truncated = True
                     # Save partial text as assistant message for continuation context
                     messages.append(LLMMessage(role="assistant", content=current_text))
-                    # Empty user message prompts LLM to continue from where it left off
-                    messages.append(LLMMessage(role="user", content=""))
+                    # Non-empty placeholder: Anthropic rejects empty user messages (400)
+                    messages.append(LLMMessage(role="user", content="(continue)"))
                     current_text = ""
                     _seg_text = ""
                     continue  # back to top of while loop for another stream
@@ -276,25 +296,7 @@ class InferenceStep:
                 )
             )
 
-            # ── Deduplicate tool calls before execution ──
-
-            # 1) Skip tool calls already executed in this turn
-            executed_ids = {tc.get("id", "") for tc in (turn_ctx.tool_calls_log or [])}
-            pending_tool_calls = [tc for tc in pending_tool_calls if tc.tool_use_id not in executed_ids]
-
-            # 2) Deduplicate identical tool calls within the same pending batch
-            seen_ids: set[str] = set()
-            deduped_calls: list[ToolCallEvent] = []
-            for tc in pending_tool_calls:
-                if tc.tool_use_id not in seen_ids:
-                    seen_ids.add(tc.tool_use_id)
-                    deduped_calls.append(tc)
-            if len(deduped_calls) < len(pending_tool_calls):
-                logger.info("Deduplicated %d → %d tool calls", len(pending_tool_calls), len(deduped_calls))
-            pending_tool_calls = deduped_calls
-
-            if not pending_tool_calls:
-                break
+            # 重複排除はストリーム中の ToolCallEvent 処理時に実施済み（executed_ids / seen_ids）
 
             enable_parallel = getattr(config, "enable_parallel_tools", True)
 
@@ -374,10 +376,10 @@ class InferenceStep:
             image_parts: list[dict] = []
             logger.debug(
                 "InferenceStep: checking %d tool call results for image data",
-                len(pending_tool_calls),
+                len(results),
             )
-            for log_entry in turn_ctx.tool_calls_log[-len(pending_tool_calls) :]:
-                result = log_entry.get("result_raw", log_entry.get("result", {}))
+            for _tc, _truncated, raw_result in results:
+                result = raw_result
                 if isinstance(result, dict):
                     ct = result.get("content_type", "image/png")
                     if result.get("content_base64"):
