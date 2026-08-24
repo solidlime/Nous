@@ -131,8 +131,9 @@ class TestCorsPreflight:
         assert resp.headers.get("access-control-allow-origin") == "http://b.com"
 
     def test_options_preflight_allow_credentials(self):
-        """OPTIONSがAccess-Control-Allow-Credentialsを含む"""
-        client = _make_app()
+        """OPTIONSがAccess-Control-Allow-Credentialsを含む（明示origins + credentials=True）"""
+        settings = Settings(cors=CorsConfig(allowed_origins=["http://example.com"], allow_credentials=True))
+        client = _make_app(settings)
         resp = client.options("/test-cors", headers={"Origin": "http://example.com"})
         assert resp.headers.get("access-control-allow-credentials") == "true"
 
@@ -188,8 +189,9 @@ class TestCorsOnGet:
         assert resp.headers.get("access-control-allow-origin") is None
 
     def test_get_returns_allow_credentials(self):
-        """GETがAccess-Control-Allow-Credentialsを含む"""
-        client = _make_app()
+        """GETがAccess-Control-Allow-Credentialsを含む（明示origins + credentials=True）"""
+        settings = Settings(cors=CorsConfig(allowed_origins=["http://example.com"], allow_credentials=True))
+        client = _make_app(settings)
         resp = client.get("/test-cors", headers={"Origin": "http://example.com"})
         assert resp.headers.get("access-control-allow-credentials") == "true"
 
@@ -230,9 +232,24 @@ class TestCorsConfigFromEnv:
         assert settings.cors.allowed_origins == ["*"]
 
     def test_allow_credentials_default_true(self):
-        """allow_credentials のデフォルトは True"""
+        """allow_credentials の設定値デフォルトは True だが、ワイルドカード origins とは両立しないため強制 False"""
         settings = Settings()
+        assert settings.cors.allowed_origins == ["*"]
+        assert settings.cors.allow_credentials is False
+
+    def test_explicit_origins_keep_allow_credentials(self):
+        """明示 origins なら allow_credentials=True は維持される"""
+        settings = Settings(cors=CorsConfig(allowed_origins=["http://a.com"], allow_credentials=True))
         assert settings.cors.allow_credentials is True
+
+    def test_wildcard_forces_credentials_off_with_warning(self, caplog):
+        """ワイルドカード origins 時は allow_credentials 強制 False + 警告ログ"""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            settings = Settings(cors=CorsConfig(allowed_origins=["*"], allow_credentials=True))
+        assert settings.cors.allow_credentials is False
+        assert "allow_credentials" in caplog.text
 
     def test_allow_methods_default_wildcard(self):
         """allow_methods のデフォルトは ['*']"""

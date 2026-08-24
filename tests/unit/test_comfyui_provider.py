@@ -17,6 +17,7 @@ async def test_health_check_returns_true_when_comfyui_responds():
     """ComfyUIが200を返すとhealth_checkがTrue"""
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_client.get = AsyncMock(return_value=mock_resp)
@@ -39,6 +40,7 @@ async def test_health_check_returns_false_on_connection_error():
     """ComfyUIに接続できないとhealth_checkがFalse"""
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
         mock_client.get = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
         mock_client_class.return_value = mock_client
 
@@ -55,6 +57,7 @@ async def test_health_check_returns_false_on_non_200():
     """ComfyUIが200以外を返すとhealth_checkがFalse"""
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
         mock_resp = MagicMock()
         mock_resp.status_code = 503
         mock_client.get = AsyncMock(return_value=mock_resp)
@@ -82,6 +85,7 @@ async def test_generate_submits_workflow_and_returns_images(tmp_path):
     )
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
 
         # POST /prompt レスポンス
         post_resp = MagicMock()
@@ -140,6 +144,7 @@ async def test_generate_retries_on_connection_error(tmp_path):
     template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
         post_resp = MagicMock()
         post_resp.status_code = 200
         post_resp.json.return_value = {"prompt_id": "test-id-456"}
@@ -178,6 +183,7 @@ async def test_generate_raises_on_all_retries_fail(tmp_path):
     template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
         mock_client.post = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
         mock_client_class.return_value = mock_client
 
@@ -198,6 +204,7 @@ async def test_generate_times_out_after_timeout_seconds(tmp_path):
     template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
 
         post_resp = MagicMock()
         post_resp.status_code = 200
@@ -235,6 +242,7 @@ async def test_generate_raises_immediately_on_comfyui_error_status(tmp_path):
     template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
 
         post_resp = MagicMock()
         post_resp.status_code = 200
@@ -276,6 +284,7 @@ async def test_generate_raises_plain_error_without_messages(tmp_path):
     template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
 
         post_resp = MagicMock()
         post_resp.status_code = 200
@@ -313,6 +322,7 @@ async def test_generate_multiple_images(tmp_path):
     template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
 
         post_resp = MagicMock()
         post_resp.status_code = 200
@@ -508,6 +518,7 @@ async def test_generate_template_mode_injects_nous_tags(tmp_path):
 
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
         post_resp = MagicMock()
         post_resp.status_code = 200
         post_resp.json.return_value = {"prompt_id": "nous-id"}
@@ -568,6 +579,7 @@ async def test_generate_template_mode_legacy_placeholders(tmp_path):
 
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
         post_resp = MagicMock()
         post_resp.status_code = 200
         post_resp.json.return_value = {"prompt_id": "legacy-id"}
@@ -723,6 +735,7 @@ async def test_generate_template_mode_display_filters_outputs(tmp_path):
 
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
         post_resp = MagicMock()
         post_resp.status_code = 200
         post_resp.json.return_value = {"prompt_id": "disp-id"}
@@ -772,6 +785,7 @@ async def test_generate_template_mode_display_title_prefix_not_matched(tmp_path)
 
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
         post_resp = MagicMock()
         post_resp.status_code = 200
         post_resp.json.return_value = {"prompt_id": "disp-id2"}
@@ -913,6 +927,7 @@ async def test_generate_injects_size_batch_and_random_seed():
 
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
 
         userdata_resp = MagicMock()
         userdata_resp.status_code = 200
@@ -1008,6 +1023,7 @@ async def test_workflow_source_comfyui_requires_name():
 async def test_fetch_userdata_workflow_404():
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
         resp = MagicMock()
         resp.status_code = 404
         mock_client.get = AsyncMock(return_value=resp)
@@ -1031,6 +1047,7 @@ async def test_object_info_is_cached():
 
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
         resp = MagicMock()
         resp.status_code = 200
         resp.json.return_value = OBJECT_INFO
@@ -1053,3 +1070,77 @@ async def test_workflow_source_local_rejects_empty_template():
 
     with pytest.raises(ValueError, match="workflow_template"):
         ComfyUIProvider(api_url="http://localhost:8188", workflow_template="")
+
+
+# ============================================================
+# Client lifecycle / download failure tests
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_generate_closes_client_after_generate(tmp_path):
+    """generate 完了後に AsyncClient が aclose される（コネクションリーク対策）"""
+    template = tmp_path / "template.json"
+    template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
+        post_resp = MagicMock()
+        post_resp.status_code = 200
+        post_resp.json.return_value = {"prompt_id": "close-id"}
+        completed_hist = MagicMock()
+        completed_hist.json.return_value = {
+            "close-id": {"outputs": {"9": {"images": [{"filename": "o.png", "type": "output"}]}}}
+        }
+        img_resp = MagicMock()
+        img_resp.status_code = 200
+        img_resp.content = b"png"
+        mock_client.post = AsyncMock(return_value=post_resp)
+        mock_client.get = AsyncMock(side_effect=[completed_hist, img_resp])
+        mock_client_class.return_value = mock_client
+
+        from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+        provider = ComfyUIProvider(api_url="http://localhost:8188", workflow_template=str(template))
+        with patch("asyncio.sleep", new=AsyncMock(return_value=None)):
+            await provider.generate(prompt="test", n=1)
+
+        mock_client.aclose.assert_awaited_once()
+        assert provider._client is None
+
+
+@pytest.mark.asyncio
+async def test_generate_raises_immediately_when_all_downloads_fail(tmp_path):
+    """outputs 有りで全画像ダウンロード失敗 → タイムアウト誤認させず即エラー"""
+    template = tmp_path / "template.json"
+    template.write_text(json.dumps({"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}))
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client.aclose = AsyncMock()
+        post_resp = MagicMock()
+        post_resp.status_code = 200
+        post_resp.json.return_value = {"prompt_id": "dlfail-id"}
+        completed_hist = MagicMock()
+        completed_hist.json.return_value = {
+            "dlfail-id": {"outputs": {"9": {"images": [{"filename": "o.png", "type": "output"}]}}}
+        }
+        mock_client.post = AsyncMock(return_value=post_resp)
+        # 1回目: history 取得成功、2回目: /view ダウンロード失敗
+        mock_client.get = AsyncMock(side_effect=[completed_hist, httpx.ConnectError("download failed")])
+        mock_client_class.return_value = mock_client
+
+        from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+        provider = ComfyUIProvider(
+            api_url="http://localhost:8188",
+            workflow_template=str(template),
+            timeout_seconds=5.0,
+        )
+        with (
+            patch("asyncio.sleep", new=AsyncMock(return_value=None)),
+            pytest.raises(RuntimeError, match="all downloads failed"),
+        ):
+            await provider.generate(prompt="test", n=1)
+
+        # /view 失敗で即エラー → history 取得は 1 回のみ
+        assert mock_client.get.call_count == 2

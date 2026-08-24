@@ -87,7 +87,35 @@ class ComfyUIProvider(ImageGenProvider):
         except Exception:
             return False
 
+    async def _close_client(self) -> None:
+        """生成済みクライアントを閉じて破棄する（コネクションプール・ソケットリーク対策）。"""
+        if self._client is not None:
+            client, self._client = self._client, None
+            await client.aclose()
+
     async def generate(
+        self,
+        prompt: str,
+        size: str = "512x512",
+        quality: str = "standard",
+        n: int = 1,
+        negative_prompt: str = "",
+        **kwargs: Any,
+    ) -> list[GeneratedImage]:
+        try:
+            return await self._generate(
+                prompt=prompt,
+                size=size,
+                quality=quality,
+                n=n,
+                negative_prompt=negative_prompt,
+                **kwargs,
+            )
+        finally:
+            # Provider はリクエスト毎に生成されるため generate 単位で閉じるのが確実
+            await self._close_client()
+
+    async def _generate(
         self,
         prompt: str,
         size: str = "512x512",
@@ -382,8 +410,10 @@ class ComfyUIProvider(ImageGenProvider):
                 fallback_all = True
 
             images: list[GeneratedImage] = []
+            total_images = 0
             for node_id, output in outputs.items():
                 for img in output.get("images", []):
+                    total_images += 1
                     try:
                         img_resp = await self.client.get(
                             f"{self._api_url}/view",
@@ -404,8 +434,12 @@ class ComfyUIProvider(ImageGenProvider):
                             )
                         )
                     except Exception:
+                        logger.exception("Failed to download image %s from ComfyUI", img.get("filename"))
                         continue
             if images:
                 return images[:n]
+            if total_images:
+                # 全画像ダウンロード失敗をタイムアウトと誤認させないため即時エラー
+                raise RuntimeError(f"ComfyUI generated {total_images} image(s) but all downloads failed")
 
         raise RuntimeError(f"ComfyUI generation timed out after {self._timeout_seconds:.0f}s")

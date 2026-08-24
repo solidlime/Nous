@@ -200,6 +200,19 @@ class CorsConfig(BaseModel):
             return [s.strip() for s in v.split(",") if s.strip()]
         return v
 
+    @model_validator(mode="after")
+    def _enforce_credentials_compatibility(self) -> Self:
+        """ワイルドカード origins × allow_credentials=True はブラウザに拒否されるため強制無効化する。"""
+        if "*" in self.allowed_origins and self.allow_credentials:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "CORS: allowed_origins contains '*' with allow_credentials=True — "
+                "browsers reject this combination. Forcing allow_credentials=False."
+            )
+            self.allow_credentials = False
+        return self
+
 
 class PluginConfig(BaseModel):
     """Plugin API configuration — default OFF for security.
