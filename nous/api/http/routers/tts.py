@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from starlette.responses import FileResponse, JSONResponse, Response
 
-from nous.api.http.deps import _resolve_persona_from_request, _safe_get_context
+from nous.api.http.deps import _PERSONA_PATTERN, _resolve_persona_from_request, _safe_get_context
 from nous.infrastructure.voice.factory import get_voice_engine
 
 if TYPE_CHECKING:
@@ -18,6 +18,19 @@ if TYPE_CHECKING:
     from nous.config.settings import IrodoriConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _tts_cache_key(
+    *,
+    text: str,
+    emotion: str,
+    caption: str | None,
+    voice_speed: float,
+    voice_override: str | None,
+) -> str:
+    """TTS 音声キャッシュのキー。声（voice_override）も含める — 声違いで旧音声を返さないため。"""
+    material = f"{text}|{emotion}|{caption or ''}|{voice_speed}|{voice_override or ''}"
+    return hashlib.sha256(material.encode()).hexdigest()
 
 
 def _get_irodori_config(ctx, chat_config) -> IrodoriConfig:
@@ -192,7 +205,13 @@ def register_tts_routes(mcp) -> None:
         settings = get_settings()
         cache_dir = Path(settings.data_root) / "persona" / persona / "tts_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_key = hashlib.sha256(f"{text}|{emotion}|{caption or ''}|{voice_speed}".encode()).hexdigest()
+        cache_key = _tts_cache_key(
+            text=text,
+            emotion=emotion,
+            caption=caption,
+            voice_speed=voice_speed,
+            voice_override=voice_override,
+        )
         hash12 = cache_key[:12]
         new_filename = f"{hash12}.wav"
         new_cache_path = cache_dir / new_filename
@@ -338,6 +357,8 @@ def register_tts_routes(mcp) -> None:
         import os
 
         persona = _resolve_persona_from_request(request)
+        if not _PERSONA_PATTERN.match(persona):
+            return JSONResponse({"error": "File not found"}, status_code=404)
         filename = request.path_params.get("filename", "")
         safe_name = os.path.basename(filename).replace("..", "").strip()
         if not safe_name or not safe_name.lower().endswith(".wav"):
@@ -360,6 +381,8 @@ def register_tts_routes(mcp) -> None:
         import os
 
         persona = _resolve_persona_from_request(request)
+        if not _PERSONA_PATTERN.match(persona):
+            return JSONResponse({"ok": False, "error": "File not found"}, status_code=404)
         filename = request.path_params.get("filename", "")
         safe_name = os.path.basename(filename).replace("..", "").strip()
         if not safe_name or not safe_name.lower().endswith(".wav"):

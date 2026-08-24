@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -34,6 +35,8 @@ from nous.domain.value_objects import normalize_emotion
 
 # Strong references to background tasks so they aren't garbage-collected mid-flight.
 _background_tasks: set[asyncio.Task] = set()
+
+logger = logging.getLogger(__name__)
 
 
 def _track_background_task(coro) -> asyncio.Task:
@@ -178,7 +181,7 @@ class MemoryService:
             return Failure(result.error)
 
         # ── 6. Version 1 ──
-        self._repo.save_version(
+        ver_result = self._repo.save_version(
             memory_key=key,
             version=1,
             content=memory.content,
@@ -186,6 +189,8 @@ class MemoryService:
             changed_by="user",
             change_type="create",
         )
+        if not ver_result.is_ok:
+            logger.warning("Failed to record initial version for %s: %s", key, ver_result.error)
 
         # ── 7. Entity extraction hook (best-effort) ──
         if self._entity_service is not None:
@@ -288,7 +293,12 @@ class MemoryService:
         if existing.value is None:
             return Failure(MemoryNotFoundError(f"Memory not found: {key}"))
 
-        # Record delete version
+        # Tombstone first, then record the delete version — a failed
+        # tombstone must never leave an active memory with a "delete" version.
+        tomb_result = self._repo.tombstone(key)
+        if not tomb_result.is_ok:
+            return Failure(tomb_result.error)
+
         old_memory = existing.value
         ver_result = self._repo.get_latest_version_number(key)
         next_ver = (ver_result.value + 1) if ver_result.is_ok else 1
@@ -307,7 +317,7 @@ class MemoryService:
             change_type="delete",
         )
 
-        return self._repo.tombstone(key)
+        return Success(None)
 
     # ------------------------------------------------------------------
     # Query delegation

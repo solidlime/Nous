@@ -19,6 +19,7 @@ from __future__ import annotations
 import pytest
 
 from nous.application import use_cases
+from nous.application.use_cases import AppContextRegistry
 
 
 @pytest.fixture(autouse=True)
@@ -29,3 +30,26 @@ def _disable_model_preload(monkeypatch):
         pass
 
     monkeypatch.setattr(use_cases.AppContext, "_preload_background", _noop)
+
+
+@pytest.fixture()
+def _auto_persona_dirs(_reset_singletons):
+    """AppContextRegistry now requires an existing persona directory (memory-DoS fix).
+
+    Integration tests rarely pre-create personas, so auto-create the
+    directory on get() to restore the legacy behaviour for tests.
+    Security tests that verify the strict behaviour must NOT use this fixture.
+    """
+    from pathlib import Path
+
+    original_get = AppContextRegistry.get.__func__
+
+    def _get_with_mkdir(cls, persona, config=None):
+        settings = AppContextRegistry._settings
+        if settings is not None:
+            Path(settings.persona_dir).joinpath(persona).mkdir(parents=True, exist_ok=True)
+        return original_get(cls, persona, config)
+
+    AppContextRegistry.get = classmethod(_get_with_mkdir)  # type: ignore[attr-defined]
+    yield
+    AppContextRegistry.get = classmethod(original_get)  # type: ignore[attr-defined]

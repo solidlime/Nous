@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import secrets
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -207,7 +208,7 @@ def register_events_routes(mcp) -> None:
         if not auth_header.startswith("Bearer "):
             return JSONResponse({"error": "Missing or invalid Authorization header"}, status_code=401)
         token = auth_header.removeprefix("Bearer ").strip()
-        if token != plugin_cfg.api_key:
+        if not secrets.compare_digest(token, plugin_cfg.api_key):
             return JSONResponse({"error": "Invalid API key"}, status_code=401)
 
         # 5. Ensure database schema exists (session_events table)

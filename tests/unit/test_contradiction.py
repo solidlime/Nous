@@ -210,12 +210,17 @@ class FakeEvolutionRepo:
         self._memory = memory
         self.update_calls: list[tuple[str, dict]] = []
         self.version_calls: list[dict] = []
+        self.tombstone_calls: list[str] = []
 
     def find_by_key(self, key: str):
         return Success(self._memory)
 
     def get_latest_version_number(self, key: str):
         return Success(3)
+
+    def tombstone(self, key: str):
+        self.tombstone_calls.append(key)
+        return Success(None)
 
     def save_version(self, memory_key, version, content, metadata, changed_by, change_type):
         self.version_calls.append(
@@ -251,7 +256,7 @@ class FakeEnricher:
     def __init__(self, result: ContradictionResult):
         self._result = result
 
-    def classify_contradiction(self, new_content: str, existing_memories: list[dict]):
+    async def classify_contradiction(self, new_content: str, existing_memories: list[dict]):
         return self._result
 
 
@@ -310,3 +315,94 @@ class TestEvolutionExtendable:
         assert version_call["changed_by"] == "evolution"
         assert version_call["change_type"] == "update"
         assert version_call["metadata"]["tags"] == ["project:sample-project", "project_overview"]
+
+
+class TestEvolutionRegression:
+    """バグハント監査の回帰テスト (#1, #3, #4)."""
+
+    def _make_service(self, repo, enricher):
+        existing_memory = Memory(
+            key="mem_existing",
+            content="既存のプロジェクトに関する記憶。",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            importance=0.5,
+        )
+        search_engine = FakeSearchEngine(Success([SearchResult(memory=existing_memory, score=0.9, source="semantic")]))
+        return MemoryEvolutionService(
+            search_engine_ref=[search_engine],
+            repo=repo,
+            enricher=enricher,
+            link_repo=None,
+            contradiction_detector=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_hallucinated_key_is_ignored(self):
+        """#3: LLM がハルシネーションしたキーでは update/tombstone されない"""
+        repo = FakeEvolutionRepo(
+            Memory(
+                key="mem_existing",
+                content="x",
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+                importance=0.5,
+            )
+        )
+        enricher = FakeEnricher(
+            ContradictionResult(
+                type=ContradictionType.CONTRADICTORY,
+                existing_memory_key="mem_hallucinated",
+                explanation="幻覚",
+                updated_fields=None,
+            )
+        )
+        service = self._make_service(repo, enricher)
+        await service._evolve_related_memories(
+            content="これは既存のプロジェクトについての新しい詳細情報を追加する記憶です。",
+            new_memory_key="mem_new",
+        )
+        assert repo.tombstone_calls == []
+        assert all(key != "mem_hallucinated" for key, _ in repo.update_calls)
+
+    @pytest.mark.asyncio
+    async def test_extendable_importance_is_normalized(self):
+        """#4: LLM が異常値の importance を返しても正規化される"""
+        repo = FakeEvolutionRepo(
+            Memory(
+                key="mem_existing",
+                content="x",
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+                importance=0.5,
+            )
+        )
+        enricher = FakeEnricher(
+            ContradictionResult(
+                type=ContradictionType.EXTENDABLE,
+                existing_memory_key="mem_existing",
+                explanation="テスト",
+                updated_fields={"importance": 99.0},
+            )
+        )
+        service = self._make_service(repo, enricher)
+        await service._evolve_related_memories(
+            content="これは既存のプロジェクトについての新しい詳細情報を追加する記憶です。",
+            new_memory_key="mem_new",
+        )
+        importance_calls = [kw for _, kw in repo.update_calls if "importance" in kw]
+        assert len(importance_calls) == 1
+        assert importance_calls[0]["importance"] == pytest.approx(1.0)
+
+    def test_classify_contradiction_is_async(self):
+        """#1: classify_contradiction は async — await 経路でループをブロックしない"""
+        import inspect
+
+        from nous.domain.memory.evolution_service import MemoryEvolutionService
+        from nous.infrastructure.llm.memory_enricher import MemoryEnricher
+
+        assert inspect.iscoroutinefunction(MemoryEnricher.classify_contradiction)
+        # 呼び出し経路も await 直接: 同期ラッパー (_run_async) の連鎖が戻っていないこと
+        evo_src = inspect.getsource(MemoryEvolutionService._evolve_related_memories)
+        assert "await self._enricher.classify_contradiction" in evo_src
+        assert "_run_async" not in evo_src

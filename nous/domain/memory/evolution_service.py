@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -12,6 +13,9 @@ if TYPE_CHECKING:
 from nous.domain.memory.contradiction import ContradictionType
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.time_utils import get_now
+from nous.domain.value_objects import normalize_importance
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryEvolutionService:
@@ -89,17 +93,31 @@ class MemoryEvolutionService:
                     if r.memory.key != new_memory_key
                 ]
                 if candidates:
-                    result = self._enricher.classify_contradiction(
+                    result = await self._enricher.classify_contradiction(
                         new_content=content,
                         existing_memories=candidates,
                     )
-                    if result is not None and result.existing_memory_key:
+                    # Guard against LLM hallucination: only act on keys that
+                    # were actually offered as candidates.
+                    candidate_keys = {c["key"] for c in candidates}
+                    if (
+                        result is not None
+                        and result.existing_memory_key
+                        and result.existing_memory_key not in candidate_keys
+                    ):
+                        logger.warning(
+                            "Contradiction LLM returned unknown key %r; skipping",
+                            result.existing_memory_key,
+                        )
+                    elif result is not None and result.existing_memory_key:
                         if result.type == ContradictionType.EXTENDABLE:
                             updates = dict(result.updated_fields or {})
                             # Double guard: never overwrite tags/content from
                             # LLM output, even if it slips past the parser.
                             updates.pop("tags", None)
                             updates.pop("content", None)
+                            if "importance" in updates:
+                                updates["importance"] = normalize_importance(float(updates["importance"]))
                             if updates:
                                 # 事前に既存記憶を取得し、更新前スナップショットを保存
                                 existing_mem = self._repo.find_by_key(result.existing_memory_key)
@@ -153,7 +171,7 @@ class MemoryEvolutionService:
 
         except Exception:
             # Evolution is best-effort, never blocks the main flow
-            pass
+            logger.debug("Memory evolution failed", exc_info=True)
 
     async def _invalidate_contradicted_memory(
         self,
@@ -183,13 +201,19 @@ class MemoryEvolutionService:
             threshold = report.value.threshold
             for candidate in report.value.candidates:
                 if candidate.similarity >= threshold:
+                    # Skip memories that are already tombstoned or whose
+                    # validity window is already closed — nothing to invalidate.
+                    mem = self._repo.find_by_key(candidate.memory_key)
+                    if not mem.is_ok or mem.value is None:  # type: ignore[union-attr]
+                        continue
+                    if mem.value.lifecycle_status == "tombstoned" or mem.value.valid_until is not None:  # type: ignore[union-attr]
+                        continue
                     self._repo.update_validity_window(
                         memory_key=candidate.memory_key,
                         valid_until=valid_from,
                     )
         except Exception:
-            # Invalidation is best-effort, never blocks the main flow
-            pass
+            logger.debug("Contradiction invalidation failed", exc_info=True)
 
     async def _run_background_evolution(
         self,

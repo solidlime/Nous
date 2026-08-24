@@ -111,6 +111,22 @@ class TestQdrantSemanticSearch:
         await adapter.search("query")
         vs.search.assert_called_once_with("my_persona", "query", 10)
 
+    @pytest.mark.asyncio
+    async def test_search_excludes_tombstoned_memory(self):
+        """#2: tombstone 済みの記憶は検索結果に載らない"""
+        memory = _make_memory("mem_dead")
+        memory.lifecycle_status = "tombstoned"
+        vs = AsyncMock()
+        vs.search.return_value = Success([("mem_dead", 0.9)])
+
+        repo = MagicMock()
+        repo.find_by_key.return_value = Success(memory)
+
+        adapter = QdrantSemanticSearch(vs, repo)
+        result = await adapter.search("query")
+        assert result.is_ok
+        assert result.value == []
+
 
 class TestQdrantSemanticSearchDateFiltering:
     """Tests for date-based post-filtering in QdrantSemanticSearch.search()."""
@@ -351,6 +367,10 @@ class TestAppContextRegistry:
         ):
             mock_settings_inst = MagicMock()
             mock_settings_inst.data_dir = str(tmp_path)
+            # get() は実在ペルソナディレクトリを要求する
+            persona_root = tmp_path / "persona"
+            (persona_root / "test_persona").mkdir(parents=True)
+            mock_settings_inst.persona_dir = str(persona_root)
             mock_settings.return_value = mock_settings_inst
 
             mock_ctx = MagicMock()
@@ -495,6 +515,26 @@ class TestAppContextVectorStore:
             result = await se.search(SearchQuery(text="test", top_k=5, mode="hybrid"))
             assert result.is_ok
 
+        ctx.close()
+
+    @pytest.mark.asyncio
+    async def test_vector_upsert_skips_tombstoned(self, tmp_path):
+        """#5: tombstone済み記憶は memory.updated でベクターストアに復活しない"""
+        from nous.application.use_cases import AppContext
+        from nous.config.settings import Settings
+
+        settings = Settings(data_root=str(tmp_path))
+        ctx = AppContext(settings, "test_persona")
+
+        mem = _make_memory("mem_dead")
+        mem.lifecycle_status = "tombstoned"
+        ctx.memory_repo = MagicMock()
+        ctx.memory_repo.find_by_key.return_value = Success(mem)
+        ctx._vector_store = AsyncMock()
+
+        await ctx._on_memory_vector_upsert("memory.updated", {"key": "mem_dead"})
+
+        ctx._vector_store.upsert.assert_not_called()
         ctx.close()
 
     @pytest.mark.asyncio

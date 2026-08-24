@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nous.domain.equipment.service import EquipmentService
@@ -68,6 +69,9 @@ class QdrantSemanticSearch:
             mem_result = self.memory_repo.find_by_key(key)
             if mem_result.is_ok and mem_result.value:
                 memory = mem_result.value
+                # Exclude tombstoned memories (vector points may linger)
+                if getattr(memory, "lifecycle_status", "active") == "tombstoned":
+                    continue
                 # Post-filter by date range
                 if date_from or date_to:
                     created = memory.created_at
@@ -465,6 +469,10 @@ class AppContext:
             persona = data.get("persona", self.persona)
             mem_result = self.memory_repo.find_by_key(key)
             if mem_result.is_ok and mem_result.value is not None:
+                # Never resurrect tombstoned memories into the vector store
+                if getattr(mem_result.value, "lifecycle_status", "active") == "tombstoned":  # type: ignore[union-attr]
+                    logger.debug("Vector sync skipped (tombstoned): %s", key)
+                    return
                 await self._vector_store.upsert(persona, key, mem_result.value.content)
             else:
                 logger.warning("Vector sync: memory not found for key: %s", key)
@@ -495,6 +503,7 @@ class AppContextRegistry:
 
     _contexts: dict[str, AppContext] = {}
     _settings: Settings | None = None
+    _lock = threading.Lock()
 
     @classmethod
     def configure(cls, settings: Settings) -> None:
@@ -502,26 +511,43 @@ class AppContextRegistry:
 
     @classmethod
     def get(cls, persona: str, config: ChatConfig | None = None) -> AppContext:
-        if persona in cls._contexts:
-            return cls._contexts[persona]
+        ctx = cls._contexts.get(persona)
+        if ctx is not None:
+            return ctx
 
-        if cls._settings is None:
-            from nous.config.settings import Settings
+        with cls._lock:
+            # 二重チェック: ロック待ち間に他スレッドが生成した場合の重複生成を防ぐ
+            ctx = cls._contexts.get(persona)
+            if ctx is not None:
+                return ctx
 
-            cls._settings = Settings()
+            if cls._settings is None:
+                from nous.config.settings import Settings
 
-        ctx = AppContext(cls._settings, persona, config=config)
-        cls._contexts[persona] = ctx
+                cls._settings = Settings()
 
-        forgetting_enabled = config.forgetting_enabled if config else cls._settings.forgetting.enabled
-        if forgetting_enabled:
-            from nous.application.workers.decay_worker import DecayWorker
+            # パス分離子・親参照を含む persona はディレクトリ存在確認をすり抜けるため拒否
+            if not persona or "/" in persona or "\\" in persona or persona in (".", ".."):
+                raise ValueError(f"Invalid persona name: '{persona}'")
 
-            decay_interval = (
-                config.forgetting_decay_interval_seconds if config else cls._settings.forgetting.decay_interval_seconds
-            )
-            decay_worker = DecayWorker(ctx, decay_interval, config=config)
-            decay_worker.start()
+            persona_root = Path(cls._settings.persona_dir) / persona
+            if not persona_root.is_dir():
+                raise ValueError(f"Persona '{persona}' not found")
+
+            ctx = AppContext(cls._settings, persona, config=config)
+            cls._contexts[persona] = ctx
+
+            forgetting_enabled = config.forgetting_enabled if config else cls._settings.forgetting.enabled
+            if forgetting_enabled:
+                from nous.application.workers.decay_worker import DecayWorker
+
+                decay_interval = (
+                    config.forgetting_decay_interval_seconds
+                    if config
+                    else cls._settings.forgetting.decay_interval_seconds
+                )
+                decay_worker = DecayWorker(ctx, decay_interval, config=config)
+                decay_worker.start()
 
         return ctx
 

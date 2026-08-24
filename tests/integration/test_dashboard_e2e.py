@@ -55,7 +55,7 @@ def _reset_singletons():
 
 
 @pytest.fixture()
-async def client(tmp_data_dir, _reset_singletons):
+async def client(tmp_data_dir, _auto_persona_dirs):
     """httpx AsyncClient backed by a fresh Nous Starlette app."""
     env_overrides = {
         "NOUS_DATA_ROOT": tmp_data_dir,

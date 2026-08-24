@@ -24,6 +24,8 @@ async def _do_create_persona(persona_name: str) -> dict:
     persona_dir = Path(settings.persona_dir) / persona_name
     if persona_dir.exists():
         return {"error": f"Persona '{persona_name}' already exists"}
+    # AppContextRegistry.get は既存ペルソナディレクトリを要求するため先に作成する
+    persona_dir.mkdir(parents=True)
     ctx = AppContextRegistry.get(persona_name)
     if ctx is None:
         return {"error": "Failed to initialize persona"}

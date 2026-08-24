@@ -226,7 +226,7 @@ class MemoryEnricher:
 
         return EnrichmentResult(importance=importance, relations=relations)
 
-    def classify_contradiction(
+    async def classify_contradiction(
         self,
         new_content: str,
         existing_memories: list[dict],
@@ -235,6 +235,9 @@ class MemoryEnricher:
 
         Uses a single LLM call to decide if the new memory is INDEPENDENT,
         EXTENDABLE, or CONTRADICTORY relative to the provided existing memories.
+
+        Async so it can be awaited from background tasks without blocking the
+        event loop.
 
         Best-effort: returns None on any failure and never blocks the caller.
 
@@ -256,12 +259,10 @@ class MemoryEnricher:
                 model=self._model,
                 base_url=self._base_url,
             )
-            result = self._run_async(
-                classify_contradiction(
-                    new_content=new_content,
-                    existing_memories=existing_memories,
-                    llm_provider=provider,
-                )
+            result = await classify_contradiction(
+                new_content=new_content,
+                existing_memories=existing_memories,
+                llm_provider=provider,
             )
             return result
         except Exception:

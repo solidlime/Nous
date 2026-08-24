@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse, Response
 
+from nous.api.http.deps import _PERSONA_PATTERN
 from nous.api.http.routers.chat.chat_stream import _resolve_request
 from nous.config.settings import get_settings
 from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository
@@ -271,7 +272,7 @@ async def attachment_serve(request: Request) -> Response:
     from starlette.responses import FileResponse
 
     persona, ctx = _resolve_request(request)
-    if not ctx:
+    if not ctx or not _PERSONA_PATTERN.match(persona):
         return JSONResponse({"error": "Persona not found"}, status_code=404)
 
     filename = request.path_params.get("filename", "")
@@ -293,7 +294,7 @@ async def memory_image_serve(request: Request) -> Response:
     from starlette.responses import FileResponse
 
     persona, ctx = _resolve_request(request)
-    if not ctx:
+    if not ctx or not _PERSONA_PATTERN.match(persona):
         return JSONResponse({"error": "Persona not found"}, status_code=404)
 
     filename = request.path_params.get("filename", "")

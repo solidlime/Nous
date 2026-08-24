@@ -52,7 +52,7 @@ def _reset_singletons():
 
 
 @pytest.fixture()
-async def client(tmp_data_dir, _reset_singletons):
+async def client(tmp_data_dir, _auto_persona_dirs):
     """AsyncClient backed by a fresh Nous app (Qdrant intentionally offline)."""
     env_overrides = {
         "NOUS_DATA_ROOT": tmp_data_dir,
@@ -954,3 +954,54 @@ class TestGetSessionPagination:
         for qs in ("offset=-1", "offset=abc"):
             resp = await client.get(f"/api/chat/{persona}/sessions/{session_id}?{qs}")
             assert resp.status_code == 400, f"{qs} should be rejected"
+
+
+# ---------------------------------------------------------------------------
+# Security: static file serving & file routes persona validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestStaticServingSecurity:
+    """_mount_static_files: path traversal (../ and absolute paths) must 404."""
+
+    async def test_traversal_blocked(self, client):
+        resp = await client.get("/static/%2e%2e/pyproject.toml")
+        assert resp.status_code == 404
+
+    async def test_nested_traversal_blocked(self, client):
+        resp = await client.get("/static/core/%2e%2e/%2e%2e/pyproject.toml")
+        assert resp.status_code == 404
+
+    async def test_windows_absolute_path_blocked(self, client):
+        resp = await client.get("/static/C:/Windows/win.ini")
+        assert resp.status_code == 404
+
+    async def test_valid_asset_served(self, client):
+        resp = await client.get("/static/package.json")
+        assert resp.status_code == 200
+
+
+@pytest.mark.integration
+class TestFileServePersonaValidation:
+    """File-serving routes must reject invalid persona (.. etc.) with 404."""
+
+    async def test_tts_cache_traversal_persona_blocked(self, client):
+        resp = await client.get("/api/tts/%2e%2e/cache/000000000000.wav")
+        assert resp.status_code == 404
+
+    async def test_tts_cache_invalid_persona_blocked(self, client):
+        resp = await client.get("/api/tts/bad%20persona/cache/000000000000.wav")
+        assert resp.status_code == 404
+
+    async def test_attachment_traversal_persona_blocked(self, client):
+        resp = await client.get("/api/chat/%2e%2e/attachment/whatever.txt")
+        assert resp.status_code == 404
+
+    async def test_memory_image_traversal_persona_blocked(self, client):
+        resp = await client.get("/api/chat/%2e%2e/persona/images/x.png")
+        assert resp.status_code == 404
+
+    async def test_export_traversal_persona_blocked(self, client):
+        resp = await client.get("/api/export/%2e%2e")
+        assert resp.status_code == 404

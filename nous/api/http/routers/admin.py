@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from starlette.responses import JSONResponse, StreamingResponse
 
 from nous.api.http.deps import (
+    _PERSONA_PATTERN,
     _resolve_persona_from_request,
     _safe_get_context,
 )
@@ -158,6 +159,8 @@ def register_admin_routes(mcp) -> None:
     @mcp.custom_route("/api/export/{persona}", methods=["GET"])
     async def export_data(request: Request) -> StreamingResponse:
         persona = _resolve_persona_from_request(request)
+        if not _PERSONA_PATTERN.match(persona):
+            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)  # type: ignore[return-value]
         settings = Settings()
         persona_dir = Path(settings.persona_dir) / persona
         if not persona_dir.exists():

@@ -89,10 +89,10 @@ def _mount_static_files(mcp: MemoryFastMCP) -> None:
     async def serve_static(request: Request):  # noqa: F821
         filepath = request.path_params.get("filepath", "").lstrip("/")
         safe_path = Path(filepath).as_posix().lstrip("/")
-        if ".." in safe_path.split("/"):
-            return Response("Forbidden", status_code=403)
 
-        full_path = static_dir / safe_path
+        full_path = (static_dir / safe_path).resolve()
+        if not full_path.is_relative_to(static_dir.resolve()):
+            return Response("Not Found", status_code=404)
         if not full_path.is_file():
             return Response("Not Found", status_code=404)
 
@@ -182,7 +182,10 @@ def create_app() -> MemoryFastMCP:
             from qdrant_client import QdrantClient
 
             client = QdrantClient(url=settings.qdrant.url, api_key=settings.qdrant.api_key)
-            client.get_collections()
+            try:
+                client.get_collections()
+            finally:
+                client.close()
             status["services"]["qdrant"] = "ok"
         except Exception as e:
             status["services"]["qdrant"] = f"error: {e}"
