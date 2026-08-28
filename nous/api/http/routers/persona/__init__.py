@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from nous.api.http.routers.persona.persona_card import sillytavern_card
 from nous.api.http.routers.persona.persona_crud import create_persona, delete_persona, update_persona_profile
-from nous.api.http.routers.persona.persona_dashboard import dashboard_data, dashboard_page, dashboard_page_persona
+from nous.api.http.routers.persona.persona_dashboard import (
+    dashboard_data,
+    dashboard_page,
+    dashboard_page_persona,
+    generate_expressions,
+)
 from nous.api.http.routers.persona.persona_health import health, list_personas
 from nous.api.http.routers.persona.persona_import import import_conversation
 
@@ -20,3 +25,4 @@ def register_persona_routes(mcp) -> None:
     mcp.custom_route("/api/personas/{persona}", methods=["DELETE"])(delete_persona)
     mcp.custom_route("/api/personas/{persona}/card.png", methods=["GET"])(sillytavern_card)
     mcp.custom_route("/api/personas/{persona}/profile", methods=["PUT"])(update_persona_profile)
+    mcp.custom_route("/api/chat/{persona}/persona/expressions/generate", methods=["POST"])(generate_expressions)
