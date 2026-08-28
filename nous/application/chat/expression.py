@@ -53,8 +53,8 @@ def save_expression_image(persona: str, emotion: str, png_bytes: bytes) -> str:
 # ラベル集合自体は ALLOWED_EMOTIONS（nous/domain/memory/value_objects.py）を正典とする。
 EMOTION_EXPRESSION_HINTS: dict[str, str] = {
     "joy": "bright joyful smile, sparkling eyes",
-    "sad": "downcast eyes, sorrowful expression",
-    "angry": "pouting, irritated expression",
+    "sadness": "downcast eyes, sorrowful expression",
+    "anger": "pouting, irritated expression",
     "surprise": "wide eyes, surprised open mouth",
     "fear": "trembling, anxious expression",
     "disgust": "scowling, displeased expression",
