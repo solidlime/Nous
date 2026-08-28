@@ -272,8 +272,24 @@ async function loadOverview() {
 }
 /* N.Features.Overview.loadOverview registered below */
 
+async function generateExpressionSet(btn) {
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = '生成中…';
+    try {
+        const d = await api('/api/chat/' + encodeURIComponent(S.persona) + '/persona/expressions/generate', { method: 'POST' });
+        btn.textContent = '生成 ' + d.generated.length + ' / skip ' + d.skipped.length + ' / 失敗 ' + d.failed.length;
+    } catch (e) {
+        btn.textContent = '失敗: ' + e.message;
+    } finally {
+        btn.disabled = false;
+        setTimeout(() => { btn.textContent = original; }, 5000);
+    }
+}
+
 // Register in namespace (CRUD helpers live in overview-blocks.js / overview-inventory.js)
 Object.assign(N.Features.Overview, {
     loadOverview: loadOverview,
+    generateExpressionSet: generateExpressionSet,
 });
 })();
