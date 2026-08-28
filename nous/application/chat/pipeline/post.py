@@ -7,6 +7,7 @@ import time
 from typing import TYPE_CHECKING
 
 from nous.application.chat.events import (
+    CharacterFlagSSE,
     ContextUpdateSSE,
     DebugInfoSSE,
     DoneSSE,
@@ -104,7 +105,13 @@ class PostProcessStep:
         turn_ctx: ChatTurnContext,
         debug: bool = False,
     ) -> AsyncIterator[
-        DebugInfoSSE | DoneSSE | MemoryActivitySSE | SessionSummarizedSSE | ContextUpdateSSE | InventoryUpdateSSE
+        DebugInfoSSE
+        | DoneSSE
+        | MemoryActivitySSE
+        | SessionSummarizedSSE
+        | ContextUpdateSSE
+        | InventoryUpdateSSE
+        | CharacterFlagSSE
     ]:
         # evict_callback を設定（session.add は service.py で既に実行済み）
         _summary_tasks: list[asyncio.Task] = []
@@ -167,14 +174,36 @@ class PostProcessStep:
             assistant_msg_id=turn_ctx.assistant_msg_id,
         )
 
-        # MemoryLLM: DoneSSE後にawait実行（fire-and-forgetをやめて結果をSSEに含める）
+        # MemoryLLM + CharacterJudge: DoneSSE後に並走実行（asyncio.gather・互待ち時間なし）
         memory_result: dict = {}
-        if config.auto_extract and turn_ctx.full_response:
+        judgment: dict | None = None
+        if turn_ctx.full_response:
             payload = {"user": turn_ctx.user_message, "assistant": turn_ctx.full_response}
-            try:
-                memory_result = await run_memory_llm(ctx, config, payload)
-            except Exception as e:
-                logger.warning("PostProcessStep: run_memory_llm failed: %s", e)
+            coros: list = []  # 戻り値型が混在（dict / dict|None）するため Any 許容
+            wants_memory = config.auto_extract
+            wants_judge = getattr(config, "character_judge_enabled", True)
+            if wants_memory:
+                coros.append(run_memory_llm(ctx, config, payload))
+            if wants_judge:
+                from nous.application.chat.character_judge import judge_character
+
+                coros.append(judge_character(config, turn_ctx.system_prompt, turn_ctx.full_response))
+            if coros:
+                results = await asyncio.gather(*coros, return_exceptions=True)
+                idx = 0
+                if wants_memory:
+                    r = results[idx]
+                    idx += 1
+                    if isinstance(r, Exception):
+                        logger.warning("PostProcessStep: run_memory_llm failed: %s", r)
+                    elif isinstance(r, dict):
+                        memory_result = r
+                if wants_judge:
+                    r = results[idx]
+                    if isinstance(r, Exception):
+                        logger.warning("PostProcessStep: judge_character failed: %s", r)
+                    elif isinstance(r, dict):
+                        judgment = r
 
         # MemoryActivitySSE: 取得された記憶と保存された記憶・goals・promises を通知
         retrieved_for_sse = turn_ctx.memories_raw[:5]
@@ -247,6 +276,10 @@ class PostProcessStep:
                 await update_expression(ctx, config, emotion)
             except Exception as e:
                 logger.warning("PostProcessStep: update_expression failed: %s", e)
+
+        # CharacterFlagSSE: キャラ一貫性違反のフラグ（非破壊・表示のみ）
+        if judgment and judgment.get("violation") not in (None, "none"):
+            yield CharacterFlagSSE(violation=judgment["violation"], detail=judgment.get("detail", ""))
 
         # debug_info SSE — only when debug flag is enabled
         if debug:

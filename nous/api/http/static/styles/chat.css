@@ -2010,3 +2010,14 @@ input[type="range"].chat-field-input:focus {
         padding: 5px 8px;
     }
 }
+
+.character-flag {
+  font-size: 0.72rem;
+  color: var(--accent-yellow, #d9a441);
+  border: 1px solid var(--accent-yellow, #d9a441);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-top: 4px;
+  display: inline-block;
+  cursor: help;
+}

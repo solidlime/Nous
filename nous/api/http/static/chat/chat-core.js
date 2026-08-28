@@ -548,6 +548,18 @@ function renderDebugPanel(anchorEl, data) {
 }
 
 // ------------------------------------------------------------------
+// キャラ一貫性フラグ（character_flag SSE・非破壊・表示のみ）
+// ------------------------------------------------------------------
+N.Chat.showCharacterFlag = function (msgEl, violation, detail) {
+  if (!msgEl) return;
+  var badge = document.createElement("div");
+  badge.className = "character-flag";
+  badge.title = detail || "";
+  badge.textContent = "⚠ キャラ逸脱: " + violation;
+  msgEl.appendChild(badge);
+};
+
+// ------------------------------------------------------------------
 // Expose on N.Chat.core
 // ------------------------------------------------------------------
 N.Chat.core = {

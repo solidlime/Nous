@@ -70,6 +70,7 @@ class ChatConfig(BaseModel):
 
     persona: str | None = None
     updated_at: str | None = None
+    character_judge_enabled: bool = True  # キャラ一貫性判定器（Task 8・非破壊フラグ）
     provider_config: ProviderConfig = Field(default_factory=ProviderConfig)
     session_config: SessionConfig = Field(default_factory=SessionConfig)
     compression_config: CompressionConfig = Field(default_factory=CompressionConfig)

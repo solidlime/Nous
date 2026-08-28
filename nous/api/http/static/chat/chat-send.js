@@ -583,6 +583,8 @@ async function chatSend(retry) {
           statusEl.textContent = "";
         } else if (evt.type === "inventory_update") {
           N.Chat.equipment.update(evt.update);
+        } else if (evt.type === "character_flag") {
+          N.Chat.showCharacterFlag(assistantDiv, evt.violation, evt.detail);
         } else if (evt.type === "reflection_start") {
           N.Chat.memoryPanel.showReflection();
         } else if (evt.type === "reflection_done") {

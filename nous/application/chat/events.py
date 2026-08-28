@@ -168,6 +168,17 @@ class InventoryUpdateSSE:
 
 
 @dataclass
+class CharacterFlagSSE:
+    """キャラ一貫性判定の違反フラグ（非破壊・表示のみ）"""
+
+    violation: str  # "tone" | "compliance" | "character"
+    detail: str
+
+    def to_sse(self) -> str:
+        return _sse_encode("character_flag", {"violation": self.violation, "detail": self.detail})
+
+
+@dataclass
 class ContextCompressedSSE:
     """Notification when context compression occurs."""
 
