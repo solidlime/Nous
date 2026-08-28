@@ -91,3 +91,4 @@ CHANGELOG.md
 # Worktrees
 .worktrees/
 data/hub.db
+.codegraph/
