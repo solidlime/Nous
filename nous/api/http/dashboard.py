@@ -35,7 +35,7 @@ def render_dashboard(persona: str | None = None) -> str:
             render_memories_tab(),
             render_timeline_tab(),
             render_graph_tab(),
-            render_chat_tab(),
+            render_chat_tab(persona or ""),
             render_activity_tab(),
             render_settings_tab(),
         ]

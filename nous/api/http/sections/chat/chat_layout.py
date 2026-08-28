@@ -1,13 +1,36 @@
 """Chat tab layout — container, message area, and input area HTML."""
 
+from __future__ import annotations
 
-def render_chat_layout_prefix() -> str:
+from pathlib import Path
+
+
+def _latest_self_portrait_url(persona: str) -> str:
+    """最新の self_*.png の URL を返す（persona_dashboard.latest_self_portrait と同型）。無ければ空文字。"""
+    if not persona or any(sep in persona for sep in ("/", "\\", "..")):
+        return ""
+    from nous.config.settings import get_settings
+
+    try:
+        images_dir = Path(get_settings().data_root) / "persona" / persona / "images"
+        if images_dir.is_dir():
+            self_files = sorted(images_dir.glob("self_*.png"))
+            if self_files:
+                latest = self_files[-1]  # sorted alphabetically = chronological
+                return f"/api/chat/{persona}/persona/images/{latest.name}"
+    except Exception:
+        pass
+    return ""
+
+
+def render_chat_layout_prefix(persona: str = "") -> str:
     """Return the opening HTML (CSS link, section, header, layout container, backdrop)."""
-    return """
+    avatar_url = _latest_self_portrait_url(persona)
+    return f"""
         <!-- ========== CHAT TAB ========== -->
         <section id="tab-chat" class="tab-panel" role="tabpanel">
             <div style="position:relative; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
-                <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="message-circle"></i></span> Chat</h2>
+                <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><img id="chat-persona-avatar" src="{avatar_url}" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0;" onload="this.style.display=''" onerror="this.style.display='none'"/><span style="font-size:1.4rem;"><i data-lucide="message-circle"></i></span> Chat</h2>
                 <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
                     <button class="mem-panel-toggle" id="memory-panel-toggle-btn" onclick="N.Chat.core.toggleMemory()" title="記憶パネルを開閉" aria-label="記憶パネルの表示切替"><i data-lucide="brain"></i></button>
                     <button class="chat-sidebar-toggle" onclick="N.Chat.core.toggleSettings()" id="chat-sidebar-toggle-btn" title="設定パネルを開閉" aria-label="設定パネルの表示切替"><i data-lucide="settings"></i></button>
