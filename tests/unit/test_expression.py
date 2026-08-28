@@ -11,7 +11,7 @@ from nous.application.chat.expression import (
 
 
 def test_emotion_label_validation(tmp_path, monkeypatch):
-    monkeypatch.setattr("nous.config.settings.get_settings", lambda: _fake_settings(tmp_path))
+    monkeypatch.setattr("nous.application.chat.expression.get_settings", lambda: _fake_settings(tmp_path))
     assert is_valid_emotion_label("joy") is True
     assert is_valid_emotion_label("happy_joy") is True
     assert is_valid_emotion_label("../etc") is False
@@ -20,12 +20,12 @@ def test_emotion_label_validation(tmp_path, monkeypatch):
 
 
 def test_resolve_missing_returns_none(tmp_path, monkeypatch):
-    monkeypatch.setattr("nous.config.settings.get_settings", lambda: _fake_settings(tmp_path))
+    monkeypatch.setattr("nous.application.chat.expression.get_settings", lambda: _fake_settings(tmp_path))
     assert resolve_expression_url("herta", "joy") is None
 
 
 def test_save_and_resolve_roundtrip(tmp_path, monkeypatch):
-    monkeypatch.setattr("nous.config.settings.get_settings", lambda: _fake_settings(tmp_path))
+    monkeypatch.setattr("nous.application.chat.expression.get_settings", lambda: _fake_settings(tmp_path))
     url = save_expression_image("herta", "joy", b"PNG")
     assert url == "/api/chat/herta/persona/images/expr_joy.png"
     assert resolve_expression_url("herta", "joy") == url
