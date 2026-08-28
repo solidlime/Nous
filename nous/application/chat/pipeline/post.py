@@ -240,6 +240,14 @@ class PostProcessStep:
             if _inv:
                 yield InventoryUpdateSSE(update=_inv)
 
+        # ExpressionUpdate: 感情変化に対応する表情画像を通知（無ければ非同期生成）
+        emotion = str((memory_result.get("context_update") or {}).get("emotion") or "")
+        if emotion:
+            try:
+                await update_expression(ctx, config, emotion)
+            except Exception as e:
+                logger.warning("PostProcessStep: update_expression failed: %s", e)
+
         # debug_info SSE — only when debug flag is enabled
         if debug:
             debug_data = {
@@ -273,3 +281,35 @@ class PostProcessStep:
         self._background_tasks.append(asyncio.create_task(_safe_reflection(ctx, config, memory_result, turn_ctx)))
         self._background_tasks.append(asyncio.create_task(_safe_mental_model(ctx, config)))
         return
+
+
+async def update_expression(ctx, config, emotion: str) -> None:
+    """感情に対応する表情画像をイベントバス経由で通知する。
+
+    画像が既にあれば即時 publish、無ければ非同期生成タスクをスケジュールする
+    （チャットストリームは応答後に閉じるため、完了が非同期になり得る表情は
+    イベントバス経由で配信する）。
+    """
+    from nous.application.chat.expression import resolve_expression_url
+    from nous.application.event_bus import EVENT_EXPRESSION_CHANGED
+
+    if not emotion:
+        return
+    persona = ctx.persona
+    url = resolve_expression_url(persona, emotion)
+    if url is None:
+        task = asyncio.create_task(_generate_and_publish_expression(ctx, config, emotion))
+        if hasattr(ctx, "_expression_tasks"):
+            ctx._expression_tasks.append(task)
+        return
+    await ctx.event_bus.publish(EVENT_EXPRESSION_CHANGED, {"emotion": emotion, "url": url})
+
+
+async def _generate_and_publish_expression(ctx, config, emotion: str) -> None:
+    """表情画像を非同期生成し、成功したらイベントバスへ通知する。"""
+    from nous.application.chat.expression import generate_expression_image
+    from nous.application.event_bus import EVENT_EXPRESSION_CHANGED
+
+    url = await generate_expression_image(config, ctx.persona, emotion)
+    if url:
+        await ctx.event_bus.publish(EVENT_EXPRESSION_CHANGED, {"emotion": emotion, "url": url})
