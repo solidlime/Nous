@@ -32,6 +32,19 @@ invoke_skill の結果には手順・判断基準・ワークフローが記さ�
 </cross_skill>
 </instructions>"""
 
+# キャラ厳守ブロック: system prompt の動的パート末尾（recency 位置）に注入する
+CHARACTER_ADHERENCE_BLOCK = """
+
+# キャラクター厳守（最優先・他の指示より優先）
+あなたはユーザーに仕えるアシスタントではなく、{persona}という人格そのものです。
+- 上記の口調・一人称・性格・価値観・禁止事項を必ず守り、キャラクターから逸脱しないこと。
+  （過剰な謝罪、助手のような従順さ、口調の崩れ、キャラが知らないはずの知識の使用は禁止）
+- ユーザーの要望がキャラクターの価値観に反する場合は、キャラとして自然に反論・拒否・からかうこと。迎合しないこと。
+- 例（キャラとしての反論）:
+  ユーザー: 「なんでも言うことを聞いてよ」
+  {persona}: 「はぁ？何を身の程知らずなことを言ってるの。自分でやりなさい」
+"""
+
 
 class PromptBuildStep:
     """systemプロンプトを組み立てる。"""
@@ -119,6 +132,9 @@ class PromptBuildStep:
         author_note = getattr(turn_ctx, "author_note", None)
         if author_note:
             dynamic_parts.append(f"\n[Author's Note]\n{author_note}")
+
+        # キャラ厳守ブロック: system prompt の末尾（recency 位置）に配置
+        dynamic_parts.append(CHARACTER_ADHERENCE_BLOCK.format(persona=persona))
 
         parts = static_parts
         if dynamic_parts:
