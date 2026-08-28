@@ -47,3 +47,68 @@ def save_expression_image(persona: str, emotion: str, png_bytes: bytes) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(png_bytes)
     return f"/api/chat/{persona}/persona/images/{path.name}"
+
+
+# 感情 → 表情プロンプトの差分指示。未知ラベルはフォールバック形式。
+# ラベル集合自体は ALLOWED_EMOTIONS（nous/domain/memory/value_objects.py）を正典とする。
+EMOTION_EXPRESSION_HINTS: dict[str, str] = {
+    "joy": "bright joyful smile, sparkling eyes",
+    "sad": "downcast eyes, sorrowful expression",
+    "angry": "pouting, irritated expression",
+    "surprise": "wide eyes, surprised open mouth",
+    "fear": "trembling, anxious expression",
+    "disgust": "scowling, displeased expression",
+    "neutral": "calm neutral expression",
+}
+
+
+def _expression_prompt(config, emotion: str) -> str:
+    """persona の self-portrait プロンプトをベースに感情差分を足す。"""
+    self_prompt = getattr(config, "image_gen_self_portrait_prompt", "") or ""
+    hint = EMOTION_EXPRESSION_HINTS.get(emotion, f"{emotion} facial expression")
+    return f"{self_prompt}, portrait, upper body, {hint}".strip(", ")
+
+
+def _build_provider(config, size: str):
+    """ChatConfig から ComfyUIProvider を構築する（builtin.py の image_generate と同型）。"""
+    from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
+
+    return ComfyUIProvider(
+        api_url=getattr(config, "image_gen_comfyui_url", "") or "http://localhost:8188",
+        width=768,
+        height=768,
+        workflow_template=getattr(config, "image_gen_comfyui_workflow_template", ""),
+        workflow_source=getattr(config, "image_gen_comfyui_workflow_source", "local"),
+        workflow_name=getattr(config, "image_gen_comfyui_workflow_name", ""),
+        timeout_seconds=getattr(config, "image_gen_comfyui_timeout_seconds", 180),
+    )
+
+
+async def generate_expression_image(config, persona: str, emotion: str) -> str | None:
+    """ComfyUI で表情差分を 1 枚生成してライブラリに保存する。失敗時は None。"""
+    import base64
+    import logging
+
+    if not is_valid_emotion_label(emotion):
+        return None
+    if not getattr(config, "image_gen_enabled", False):
+        logging.getLogger(__name__).info("Expression generation skipped: image_gen disabled (persona=%s)", persona)
+        return None
+    try:
+        provider = _build_provider(config, "768x768")
+        generated = await provider.generate(
+            prompt=_expression_prompt(config, emotion),
+            size="768x768",
+            n=1,
+            negative_prompt=getattr(config, "image_gen_negative_prompt", "") or "",
+        )
+        for img in generated:
+            if not getattr(img, "display", True):
+                continue
+            return save_expression_image(persona, emotion, base64.b64decode(img.base64))
+        return None
+    except Exception as e:
+        logging.getLogger(__name__).warning(
+            "Expression generation failed (persona=%s emotion=%s): %s", persona, emotion, e
+        )
+        return None
