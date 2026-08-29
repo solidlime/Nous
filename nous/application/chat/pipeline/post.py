@@ -183,7 +183,7 @@ class PostProcessStep:
             wants_memory = config.auto_extract
             wants_judge = getattr(config, "character_judge_enabled", True)
             if wants_memory:
-                coros.append(run_memory_llm(ctx, config, payload))
+                coros.append(run_memory_llm(ctx, config, payload, tool_calls_log=turn_ctx.tool_calls_log))
             if wants_judge:
                 from nous.application.chat.character_judge import judge_character
 

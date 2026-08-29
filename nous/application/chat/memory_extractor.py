@@ -185,13 +185,16 @@ async def _build_memory_llm_context(ctx: AppContext) -> tuple[str, str, str]:
     return "\n".join(lines), commitments_str, inventory_str
 
 
-def _body_delta_state(ctx: AppContext, persona: str, ctx_update: dict) -> dict[str, float]:
+def _body_delta_state(ctx: AppContext, persona: str, ctx_update: dict, *, skip_body: bool) -> dict[str, float]:
     """LLM の絶対値 fatigue/warmth/arousal を現在値からの delta（±0.2 clamp）変換する。
 
     - float 化できない値は drop
     - |applied - current| < 0.01 は書き込まない
     絶対値の直接書き込みは禁止。この経路のみ update_physical_state へ渡す。
     """
+    if skip_body:
+        return {}
+
     current: dict[str, float] = {}
     state_result = ctx.persona_service.get_context(persona)
     if state_result.is_ok:
@@ -222,7 +225,26 @@ def _body_delta_state(ctx: AppContext, persona: str, ctx_update: dict) -> dict[s
     return updates
 
 
-async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> dict:
+def _context_update_skips(tool_calls_log: list[dict] | None) -> tuple[bool, bool]:
+    """メインLLMが今ターン update_context を呼んだフィールド群から (感情skip, 身体skip) を判定する。"""
+    skip_emotion = False
+    skip_body = False
+    for entry in tool_calls_log or []:
+        if not isinstance(entry, dict) or entry.get("name") != "update_context":
+            continue
+        tool_input = entry.get("input")
+        if not isinstance(tool_input, dict):
+            continue
+        if "emotion" in tool_input or "emotion_intensity" in tool_input:
+            skip_emotion = True
+        if {"body_state", "fatigue", "warmth", "arousal"} & tool_input.keys():
+            skip_body = True
+    return skip_emotion, skip_body
+
+
+async def run_memory_llm(
+    ctx: AppContext, config: ChatConfig, payload: dict, tool_calls_log: list[dict] | None = None
+) -> dict:
     """T35: 遅延MemoryLLM処理。facts保存 + context/inventory更新を行う。結果dictを返す。"""
     user_message = payload.get("user", "")
     assistant_response = payload.get("assistant", "")
@@ -353,9 +375,11 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
         # context_update: 感情・状態を更新
         ctx_update = result.get("context_update", {})
         if ctx_update:
+            skip_emotion, skip_body = _context_update_skips(tool_calls_log)
+
             emotion = ctx_update.get("emotion")
             intensity = ctx_update.get("emotion_intensity")
-            if emotion:
+            if emotion and not skip_emotion:
                 if str(emotion).strip().lower() in VALID_EMOTIONS:
                     ctx.persona_service.update_emotion(
                         persona,
@@ -387,7 +411,7 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
             env_val = ctx_update.get("environment")
             if isinstance(env_val, str):
                 state_fields["environment"] = env_val
-            state_fields.update(_body_delta_state(ctx, persona, ctx_update))
+            state_fields.update(_body_delta_state(ctx, persona, ctx_update, skip_body=skip_body))
             if state_fields:
                 ctx.persona_service.update_physical_state(persona, **state_fields)
 

@@ -1000,3 +1000,70 @@ class TestRunMemoryLLM:
             await run_memory_llm(mock_ctx, mock_config, payload)
 
         mock_ctx.persona_service.update_physical_state.assert_not_called()
+
+    # -- tool_calls_log フィールド単位 skip ------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_tool_calls_log_skips_emotion_keeps_body(self, mock_ctx, mock_config):
+        """メインLLMが update_context(emotion) 済み → 感情skip、身体は処理。ノイズログは無視。"""
+        state = mock_ctx.persona_service.get_context("test_persona").value
+        state.fatigue = 0.4
+        payload = {"user": "test", "assistant": "response"}
+        llm_result = {
+            "facts": [],
+            "goals": [],
+            "promises": [],
+            "context_update": {
+                "emotion": "joy",
+                "emotion_intensity": 0.8,
+                "fatigue": 0.7,
+            },
+            "inventory_update": {},
+        }
+        tool_calls_log = [
+            {"name": "memory_search", "input": {"query": "x"}},
+            {"name": "update_context", "input": None},
+            {"name": "update_context", "input": {"emotion": "joy", "emotion_intensity": 0.8}},
+        ]
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(return_value=llm_result)
+            await run_memory_llm(mock_ctx, mock_config, payload, tool_calls_log=tool_calls_log)
+
+        mock_ctx.persona_service.update_emotion.assert_not_called()
+        # body: current 0.4, LLM 0.7 → delta 0.3 → clamp 0.2 → applied 0.6
+        mock_ctx.persona_service.update_physical_state.assert_called_once_with(
+            "test_persona",
+            fatigue=pytest.approx(0.6),
+        )
+
+    @pytest.mark.asyncio
+    async def test_tool_calls_log_skips_body_keeps_emotion(self, mock_ctx, mock_config):
+        """メインLLMが update_context(body_state) 済み → 身体skip、感情は処理。"""
+        payload = {"user": "test", "assistant": "response"}
+        llm_result = {
+            "facts": [],
+            "goals": [],
+            "promises": [],
+            "context_update": {
+                "emotion": "joy",
+                "emotion_intensity": 0.8,
+                "fatigue": 0.7,
+            },
+            "inventory_update": {},
+        }
+        tool_calls_log = [
+            {"name": "update_context", "input": {"body_state": {"fatigue": 0.7}}},
+        ]
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(return_value=llm_result)
+            await run_memory_llm(mock_ctx, mock_config, payload, tool_calls_log=tool_calls_log)
+
+        mock_ctx.persona_service.update_emotion.assert_called_once_with(
+            "test_persona",
+            "joy",
+            0.8,
+            context="llm_suggested",
+        )
+        mock_ctx.persona_service.update_physical_state.assert_not_called()
