@@ -70,7 +70,11 @@ JSONのみ。コメント不要。不要なフィールドは省略可。
 - goals・promises: 何もなければ空配列。
 - context_update: 私（{persona_name}）自身の感情・状態変化。変化がなければ省略。
   - 感情: emotion + emotion_intensity（変化時のみ）
-  - 状態: mental_state, physical_state, fatigue, warmth, arousal
+    - emotion は正典25語のみ: neutral, joy, sadness, anger, fear, surprise, disgust, love, trust, anticipation, excitement, frustration, nostalgia, pride, shame, guilt, loneliness, contentment, curiosity, awe, relief, envy, gratitude, contempt, anxiety
+    - 上記以外のラベル（誤字・類義語・和語含む）は書かないこと。書いた時点で破棄される。
+    - emotion_intensity は 0.0〜1.0
+  - 身体数値: fatigue, warmth, arousal は現在値からの絶対値 0.0〜1.0 で書く（範囲外の値はシステム側で丸められ、ターンあたりの変化幅も制限される）。心拍・疼痛は書かない。
+  - 状態: mental_state, physical_state, environment（自由記述）
   - ユーザー情報: user_name, user_nickname, user_preferred_address（ユーザーが自ら名乗ったり呼び方を変えた時のみ記録）
 - inventory_update:
   - 物理的な持ち物（服・装飾品・道具・武器など）の具体的な言及があった場合のみ記述。
