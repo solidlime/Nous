@@ -379,16 +379,22 @@ async def run_memory_llm(
 
             emotion = ctx_update.get("emotion")
             intensity = ctx_update.get("emotion_intensity")
-            if emotion and not skip_emotion:
-                if str(emotion).strip().lower() in VALID_EMOTIONS:
-                    ctx.persona_service.update_emotion(
-                        persona,
-                        emotion,
-                        normalize_importance(float(intensity) if intensity is not None else None),
-                        context="llm_suggested",
-                    )
-                else:
-                    logger.debug("MemoryLLM: dropping non-canonical emotion label: %r", emotion)
+            # 不変条件: ctx_update は「適用された値」のみを保持する。
+            # post.py がこの dict を ContextUpdateSSE / update_expression にそのまま
+            # 流すため、適用しなかった感情フィールドは捨てる（非正典ラベルが
+            # ゴミ表情生成に繋がる／メインLLMが書いた感情と二重書きになるのを防ぐ）。
+            if emotion and not skip_emotion and str(emotion).strip().lower() in VALID_EMOTIONS:
+                ctx.persona_service.update_emotion(
+                    persona,
+                    emotion,
+                    normalize_importance(float(intensity) if intensity is not None else None),
+                    context="llm_suggested",
+                )
+            else:
+                if emotion:
+                    logger.debug("MemoryLLM: not applying emotion label: %r", emotion)
+                ctx_update.pop("emotion", None)
+                ctx_update.pop("emotion_intensity", None)
 
             # physical_state/mental_state → memories (one-shot consumption)
             for key, tags in [
@@ -411,7 +417,18 @@ async def run_memory_llm(
             env_val = ctx_update.get("environment")
             if isinstance(env_val, str):
                 state_fields["environment"] = env_val
-            state_fields.update(_body_delta_state(ctx, persona, ctx_update, skip_body=skip_body))
+            else:
+                ctx_update.pop("environment", None)  # 非 str は適用されない → SSE にも流さない
+            body_applied = _body_delta_state(ctx, persona, ctx_update, skip_body=skip_body)
+            state_fields.update(body_applied)
+            # 適用値（delta 変換後）で生の絶対値を置換 — post.py の ContextUpdateSSE が
+            # state 実値と一致するようにする（5.2 がそのまま流れる事故を防ぐ）
+            for key in ("fatigue", "warmth", "arousal"):
+                if ctx_update.get(key) is not None:
+                    if key in body_applied:
+                        ctx_update[key] = body_applied[key]
+                    else:
+                        ctx_update.pop(key, None)
             if state_fields:
                 ctx.persona_service.update_physical_state(persona, **state_fields)
 

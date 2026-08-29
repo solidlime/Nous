@@ -878,6 +878,9 @@ class TestRunMemoryLLM:
         mock_ctx.persona_service.update_emotion.assert_not_called()
         # 他の処理（facts）は通常通り
         assert mock_ctx.memory_service.create_memory.call_count >= 1
+        # 不変条件: drop した感情は ctx_update（SSE/表情フック経路）にも残らない
+        assert "emotion" not in llm_result["context_update"]
+        assert "emotion_intensity" not in llm_result["context_update"]
 
     @pytest.mark.asyncio
     async def test_valid_emotion_intensity_clamped(self, mock_ctx, mock_config):
