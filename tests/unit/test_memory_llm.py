@@ -904,6 +904,35 @@ class TestRunMemoryLLM:
             1.0,
             context="llm_suggested",
         )
+        # 不変条件: SSE/表情フック経路にも適用値（clamp 済み）が流れる
+        assert llm_result["context_update"]["emotion"] == "joy"
+        assert llm_result["context_update"]["emotion_intensity"] == 1.0
+
+    @pytest.mark.asyncio
+    async def test_emotion_case_variant_normalized_in_ctx_update(self, mock_ctx, mock_config):
+        """大文字バリアント（"Joy"）→ 適用され、ctx_update には正規化値 "joy" が流れる。"""
+        payload = {"user": "test", "assistant": "response"}
+        llm_result = {
+            "facts": [],
+            "goals": [],
+            "promises": [],
+            "context_update": {"emotion": "Joy", "emotion_intensity": 0.8},
+            "inventory_update": {},
+        }
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(return_value=llm_result)
+            await run_memory_llm(mock_ctx, mock_config, payload)
+
+        mock_ctx.persona_service.update_emotion.assert_called_once_with(
+            "test_persona",
+            "Joy",
+            0.8,
+            context="llm_suggested",
+        )
+        # ctx_update は正規化済み — update_expression("Joy") の silent stop を防ぐ
+        assert llm_result["context_update"]["emotion"] == "joy"
+        assert llm_result["context_update"]["emotion_intensity"] == 0.8
 
     # -- 身体 delta 変換 + clamp ------------------------------------------------
 
