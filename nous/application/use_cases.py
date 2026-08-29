@@ -339,6 +339,11 @@ class AppContext:
         _threading.Thread(target=_warmup_search_engine, daemon=True).start()
 
     @property
+    def config(self) -> ChatConfig | None:
+        """Per-request chat config (None if AppContext created without one)."""
+        return self._config
+
+    @property
     def vector_store(self) -> QdrantVectorStore | None:
         """Lazy-init vector store. Returns None if Qdrant unavailable or collection creation fails."""
         if self._vector_store is None:
