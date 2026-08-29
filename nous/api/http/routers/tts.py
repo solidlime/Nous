@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 EMOTION_TONE_HINTS: dict[str, str] = {
     "joy": "明るく弾んだ、声のトーンが上がった話し方で",
-    "sad": "落ち着いた、やや低くゆっくりした話し方で",
-    "angry": "強く短く、勢いのある話し方で",
+    "sadness": "落ち着いた、やや低くゆっくりした話し方で",
+    "anger": "強く短く、勢いのある話し方で",
     "surprise": "間と抑揚を大きく、驚きを含んだ話し方で",
     "fear": "小さく震える、不安を含んだ話し方で",
     "neutral": "普段どおりの自然な話し方で",
@@ -31,7 +31,9 @@ EMOTION_TONE_HINTS: dict[str, str] = {
 
 
 def build_caption_emotion_directive(emotion: str, intensity: float) -> str:
-    """caption LLM 用の感情トーン指示文を組み立てる。"""
+    """caption LLM 用の感情トーン指示文を組み立てる。感情が空なら空文字（混入防止）。"""
+    if not emotion:
+        return ""
     tone = EMOTION_TONE_HINTS.get(emotion, f"「{emotion}」の感情に合った話し方で")
     if intensity < 0.3:
         tone = "感情を抑えめに、穏やかな話し方で"
@@ -193,7 +195,8 @@ def register_tts_routes(mcp) -> None:
                     str(getattr(state, "emotion", "") or ""),
                     float(getattr(state, "emotion_intensity", 0.0) or 0.0),
                 )
-                llm_system = llm_system + "\n" + emotion_directive
+                if emotion_directive:
+                    llm_system = llm_system + "\n" + emotion_directive
 
                 llm_user = f"""## 話者情報
 {voice_context}
