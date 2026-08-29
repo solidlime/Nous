@@ -23,26 +23,16 @@ def _render_core_section() -> str:
                             <summary><i data-lucide="wrench"></i> 基本設定 <span class="chat-help-icon" data-category="core" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <div>
-                                    <div class="chat-field-label">プロバイダー</div>
-                                    <select id="chat-provider" class="chat-field-input" onchange="N.Chat.settings.onProviderChange()">
-                                        <option value="anthropic">Anthropic (Claude)</option>
-                                        <option value="openai">OpenAI</option>
-                                        <option value="openrouter">OpenRouter</option>
-                                        <option value="google">Google (Gemini)</option>
-                                        <option value="opencode_go">OpenCode Go</option>
-                                    </select>
-                                </div>
-                                <div>
                                     <div class="chat-field-label">モデル <span style="color:var(--accent-blue);font-size:0.7rem;">（空白でデフォルト）</span></div>
-                                    <input type="text" id="chat-model" class="chat-field-input" placeholder="例: claude-opus-4-5" />
+                                    <input type="text" id="chat-model" class="chat-field-input" placeholder="例: deepseek/deepseek-v4-flash-vision-exp" />
                                 </div>
                                 <div>
                                     <div class="chat-field-label">APIキー</div>
                                     <input type="password" id="chat-api-key" class="chat-field-input" placeholder="sk-..." autocomplete="off" />
                                 </div>
-                                <div id="chat-base-url-row">
-                                    <div class="chat-field-label">Base URL <span style="color:var(--text-muted);font-size:0.7rem;">（任意）</span></div>
-                                    <input type="text" id="chat-base-url" class="chat-field-input" placeholder="https://openrouter.ai/api/v1" />
+                                <div>
+                                    <div class="chat-field-label">Base URL <span style="color:var(--accent-blue);font-size:0.7rem;">（必須）</span></div>
+                                    <input type="text" id="chat-base-url" class="chat-field-input" placeholder="https://api.commandcode.ai/provider/v1" />
                                 </div>
                                 <div>
                                     <div class="chat-field-label" style="display:flex;justify-content:space-between;">

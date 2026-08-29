@@ -36,7 +36,6 @@ function applyChatConfig(cfg) {
     const el = document.getElementById(id);
     if (el) el.checked = v === true;
   };
-  set("chat-provider", cfg.provider);
   set("chat-model", cfg.model || "");
   set("chat-api-key", cfg.api_key || "");
   set("chat-base-url", cfg.base_url || "");
@@ -97,7 +96,6 @@ function applyChatConfig(cfg) {
       reasoningSlider.disabled = !this.checked;
     };
   }
-  onChatProviderChange();
   N.Chat.state.mcpServers = cfg.mcp_servers || [];
   N.Chat.settings.renderMcpJson(N.Chat.state.mcpServers);
   // Auto-fetch MCP tools for per-server display
@@ -344,25 +342,20 @@ function applyChatConfig(cfg) {
   }
 }
 
-function onChatProviderChange() {
-  const provider = document.getElementById("chat-provider").value;
-  const baseUrlRow = document.getElementById("chat-base-url-row");
-  if (baseUrlRow) {
-    baseUrlRow.style.display =
-      provider === "openrouter" || provider === "openai" || provider === "google" || provider === "opencode_go" ? "" : "none";
-  }
-}
-
 async function saveChatConfig() {
   if (!S.persona) {
     toast("ペルソナを選択してください", "error");
+    return;
+  }
+  const baseUrlVal = (document.getElementById("chat-base-url")?.value || "").trim();
+  if (!baseUrlVal) {
+    toast("Base URL は必須です", "error");
     return;
   }
   const apiKeyEl = document.getElementById("chat-api-key");
   const apiKeyVal = apiKeyEl ? apiKeyEl.value.trim() : "";
   const getChecked = (id) => document.getElementById(id)?.checked ?? false;
   const payload = {
-    provider: document.getElementById("chat-provider").value,
     model: document.getElementById("chat-model").value.trim(),
     api_key: apiKeyVal,
     base_url: document.getElementById("chat-base-url").value.trim(),
@@ -585,7 +578,6 @@ N.Chat.settings = {
   load: loadChatConfig,
   apply: applyChatConfig,
   save: saveChatConfig,
-  onProviderChange: onChatProviderChange,
 };
 
 })(window.Nous);
