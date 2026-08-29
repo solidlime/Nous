@@ -81,6 +81,39 @@ def _build_digest(ctx, config) -> str:
         return ""
 
 
+def _build_body_decay_note(before: dict, after: dict, before_last_conv) -> str:
+    """身体減衰の前後差分からノート行を1行生成。差分なし・経過時間不明なら空文字。"""
+    from nous.domain.shared.time_utils import get_now
+
+    if before_last_conv is None:
+        return ""
+    try:
+        now = get_now()
+        if before_last_conv.tzinfo is None and now.tzinfo is not None:
+            before_last_conv = before_last_conv.replace(tzinfo=now.tzinfo)
+        elapsed_hours = (now - before_last_conv).total_seconds() / 3600.0
+    except Exception:
+        return ""
+
+    diffs = []
+    for key, b in before.items():
+        a = after.get(key)
+        if b is None or a is None or abs(float(a) - float(b)) < 0.01:
+            continue
+        verb = "上昇" if a > b else "低下"
+        diffs.append(f"{key} {float(b):.0%}→{float(a):.0%} に{verb}")
+    if not diffs:
+        return ""
+
+    if elapsed_hours >= 24:
+        time_str = f"{elapsed_hours / 24:.0f}日"
+    elif elapsed_hours >= 1:
+        time_str = f"{elapsed_hours:.0f}時間"
+    else:
+        time_str = f"{elapsed_hours * 60:.0f}分"
+    return f"{time_str}の経過で " + "、".join(diffs)
+
+
 class PrepareStep:
     """ターン開始時の準備ステップ。"""
 
@@ -120,7 +153,14 @@ class PrepareStep:
             from nous.api.mcp._tools_helpers import _apply_body_decay, _apply_emotion_decay, _apply_relationship_decay
 
             state, decay_note = await _apply_emotion_decay(ctx, persona, state)
+            from nous.domain.persona.body_state import extract_body_metrics
+
+            body_before = extract_body_metrics(state)
+            body_before_last_conv = getattr(state, "last_conversation_time", None)
             state = await _apply_body_decay(ctx, persona, state)
+            body_note = _build_body_decay_note(body_before, extract_body_metrics(state), body_before_last_conv)
+            if body_note:
+                decay_note = f"{decay_note}\n{body_note}" if decay_note else body_note
             relationship_note = await _apply_relationship_decay(ctx, persona, state)
             if relationship_note:
                 decay_note = f"{decay_note}\n{relationship_note}" if decay_note else relationship_note

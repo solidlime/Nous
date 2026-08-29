@@ -560,6 +560,59 @@ class TestDecayNoteInContextSection:
         assert "状態変化" not in result
 
 
+class TestPrepareStepBodyDecayNote:
+    """PrepareStep.run: 身体減衰の前後差分が decay_note に連結されること。"""
+
+    async def _run(self, after_fatigue):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from nous.application.chat.pipeline.context import ChatTurnContext
+        from nous.application.chat.pipeline.prepare import PrepareStep
+        from nous.domain.persona.entities import PersonaState
+        from nous.domain.shared.result import Success
+        from nous.domain.shared.time_utils import get_now
+
+        state = PersonaState(persona="t", fatigue=0.4, last_conversation_time=get_now() - timedelta(hours=3))
+
+        async def body_decay(_ctx, _persona, s):
+            s.fatigue = after_fatigue
+            return s
+
+        ctx = MagicMock()
+        ctx.persona = "t"
+        ctx.persona_service.get_context.return_value = Success(state)
+        session = SimpleNamespace(pending_memory_task=None, _messages=[])
+        turn_ctx = ChatTurnContext(session_id="s", user_message="hi")
+        config = SimpleNamespace(
+            context_compression_mode="light",
+            memory_preload_count=0,
+            episode_search_enabled=False,
+            show_message_timestamps=False,
+            memory_digest_count=0,
+        )
+        note = "2時間の間に、joyの感情は減衰した（現在の強度: 0.4）"
+        with (
+            patch("nous.api.mcp._tools_helpers._apply_emotion_decay", AsyncMock(return_value=(state, note))),
+            patch("nous.api.mcp._tools_helpers._apply_body_decay", side_effect=body_decay),
+            patch("nous.api.mcp._tools_helpers._apply_relationship_decay", AsyncMock(return_value="")),
+            patch("nous.application.chat.pipeline.prepare._search_memories", AsyncMock(return_value=("", {}, []))),
+        ):
+            await PrepareStep().run(ctx, session, turn_ctx, config)
+        return turn_ctx.context_section
+
+    @pytest.mark.asyncio
+    async def test_body_decay_delta_line_appended(self):
+        section = await self._run(0.55)
+        assert "3時間" in section and "fatigue 40%→55% に上昇" in section
+        assert "joyの感情は減衰した" in section  # 感情ノートと連結済み
+
+    @pytest.mark.asyncio
+    async def test_no_delta_no_body_line(self):
+        section = await self._run(0.405)  # 差分 < 0.01 → ノートなし
+        assert "上昇" not in section and "40%→" not in section
+
+
 # ──────────────────────────────────────────────
 # AutoCapture — _scan_message
 # ──────────────────────────────────────────────
