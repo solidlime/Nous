@@ -655,6 +655,10 @@ class TestRunMemoryLLM:
         state.mental_state = ""
         state.physical_state = ""
         state.environment = ""
+        # body delta 計算用の現在値（未設定=None）
+        state.fatigue = None
+        state.warmth = None
+        state.arousal = None
         ctx.persona_service.get_context.return_value = Success(state)
 
         # 空のメモリ・装備・インベントリ
@@ -663,7 +667,7 @@ class TestRunMemoryLLM:
         ctx.equipment_service.search_items.return_value = Success([])
 
         # search_engine.search — 重複チェックはヒットしない（空）
-        ctx.search_engine.search.return_value = Success([])
+        ctx.search_engine.search = AsyncMock(return_value=Success([]))
 
         return ctx
 
@@ -749,7 +753,7 @@ class TestRunMemoryLLM:
             "facts": [],
             "goals": [],
             "promises": [],
-            "context_update": {"emotion": "sad", "emotion_intensity": 0.3},
+            "context_update": {"emotion": "sadness", "emotion_intensity": 0.3},
             "inventory_update": {},
         }
 
@@ -761,7 +765,7 @@ class TestRunMemoryLLM:
 
         mock_ctx.persona_service.update_emotion.assert_called_once_with(
             "test_persona",
-            "sad",
+            "sadness",
             0.3,
             context="llm_suggested",
         )
@@ -852,3 +856,48 @@ class TestRunMemoryLLM:
             assert not any(content.startswith(prefix) for prefix in ("physical_state:", "mental_state:")), (
                 f"Memory should not be created for None: {content}"
             )
+
+    # -- 感情ラベル正典チェック ------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_invalid_emotion_label_dropped(self, mock_ctx, mock_config):
+        """未認識ラベル（"happines"）→ update_emotion を呼ばない（neutral 上書きしない）。"""
+        payload = {"user": "test", "assistant": "response"}
+        llm_result = {
+            "facts": [{"content": "事実", "importance": 0.5}],
+            "goals": [],
+            "promises": [],
+            "context_update": {"emotion": "happines", "emotion_intensity": 0.9},
+            "inventory_update": {},
+        }
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(return_value=llm_result)
+            await run_memory_llm(mock_ctx, mock_config, payload)
+
+        mock_ctx.persona_service.update_emotion.assert_not_called()
+        # 他の処理（facts）は通常通り
+        assert mock_ctx.memory_service.create_memory.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_valid_emotion_intensity_clamped(self, mock_ctx, mock_config):
+        """正典ラベル + intensity>1.0 → 1.0 に clamp して update_emotion。"""
+        payload = {"user": "test", "assistant": "response"}
+        llm_result = {
+            "facts": [],
+            "goals": [],
+            "promises": [],
+            "context_update": {"emotion": "joy", "emotion_intensity": 5.0},
+            "inventory_update": {},
+        }
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(return_value=llm_result)
+            await run_memory_llm(mock_ctx, mock_config, payload)
+
+        mock_ctx.persona_service.update_emotion.assert_called_once_with(
+            "test_persona",
+            "joy",
+            1.0,
+            context="llm_suggested",
+        )
