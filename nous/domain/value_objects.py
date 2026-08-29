@@ -129,6 +129,9 @@ def normalize_emotion(text: str | None) -> str:
 # Canonical set of valid emotion labels (frozenset for fast O(1) membership checks)
 _VALID_EMOTIONS: frozenset[str] = frozenset(_EMOTION_KEYWORD_MAP.keys())
 
+# Public alias for canonical emotion label checks
+VALID_EMOTIONS = _VALID_EMOTIONS
+
 
 # ──────────────────────────────────────────────
 # 感情→絵文字マッピング（正規定義）

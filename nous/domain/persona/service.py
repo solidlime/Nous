@@ -122,12 +122,18 @@ class PersonaService:
             "heart_rate",
             "pain",
         }
+        clamped_keys = {"fatigue", "warmth", "arousal", "heart_rate", "pain"}
         updated_values: dict[str, object] = {}
         for key, value in states.items():
             if key not in allowed_keys:
                 continue
             if value is None:
                 continue
+            if key in clamped_keys and isinstance(value, (int, float, str)):
+                try:
+                    value = max(0.0, min(1.0, float(value)))
+                except (TypeError, ValueError):
+                    _logger.debug("update_physical_state: non-numeric %s=%r stored as-is", key, value)
             result = self._repo.update_state(persona, key, str(value))
             if not result.is_ok:
                 return Failure(result.error)

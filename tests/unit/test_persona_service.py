@@ -229,6 +229,22 @@ class TestUpdatePhysicalState:
         assert result.is_ok
         assert "unknown_key" not in repo._state.get(PERSONA, {})
 
+    def test_clamps_numeric_body_state(self, service: PersonaService, repo: InMemoryPersonaRepository):
+        """数値で来た fatigue/warmth/arousal/heart_rate/pain は 0.0-1.0 に clamp."""
+        service.update_physical_state(PERSONA, fatigue=5.2, warmth=-0.3, arousal=0.5, heart_rate=2, pain=0.9)
+        assert repo._state[PERSONA]["fatigue"] == "1.0"
+        assert repo._state[PERSONA]["warmth"] == "0.0"
+        assert repo._state[PERSONA]["arousal"] == "0.5"
+        assert repo._state[PERSONA]["heart_rate"] == "1.0"
+        assert repo._state[PERSONA]["pain"] == "0.9"
+
+    def test_non_numeric_body_state_stored_as_is(self, service: PersonaService, repo: InMemoryPersonaRepository):
+        """float 化できない文字列は現状通り str(value) で保存（互換維持）."""
+        service.update_physical_state(PERSONA, fatigue="0.8")
+        assert repo._state[PERSONA]["fatigue"] == "0.8"
+        service.update_physical_state(PERSONA, fatigue="abc")
+        assert repo._state[PERSONA]["fatigue"] == "abc"
+
 
 class TestUpdateRelationship:
     def test_updates_status(self, service: PersonaService, repo: InMemoryPersonaRepository):
