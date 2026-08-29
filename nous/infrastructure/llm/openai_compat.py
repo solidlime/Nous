@@ -155,10 +155,12 @@ class OpenAICompatProvider(LLMProvider):
             if reasoning_effort:
                 # 推論モデル (o1/o3/o4-mini 等) は temperature を許可しない (400 Unsupported parameter)。
                 # reasoning 指定時は sampling params (temperature/top_p) を送らない
-                if "openrouter" in (self.base_url or "").lower():
-                    kwargs["reasoning"] = {"effort": reasoning_effort}
-                else:
-                    kwargs["reasoning_effort"] = reasoning_effort
+                kwargs["reasoning_effort"] = reasoning_effort
+                # ponytail: hybrid reasoning モデル (DeepSeek V4 等) は effort だけでは thinking が
+                # 有効化されない。OpenAI互換サーバーは未知キーを黙って無視するため、両トグルを併送
+                # (DeepSeek 公式: thinking, vLLM/Alibaba 系: enable_thinking)。
+                # 対応表方式 (reasoning_param_style フィールド) は過剰設計のため不採用。
+                kwargs["extra_body"] = {"thinking": {"type": "enabled"}, "enable_thinking": True}
                 # TODO: 推論モデルは max_tokens ではなく max_completion_tokens が必要。
                 # モデル名検出が必要で侵襲が大きいため次回候補（未実施）
             else:

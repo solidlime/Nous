@@ -62,34 +62,25 @@ class TestOpenAICompatReasoning:
         return provider._client.chat.completions.create.call_args.kwargs
 
     @pytest.mark.asyncio
-    async def test_openrouter_uses_reasoning_object(self):
-        """OpenRouter base_url → reasoning: {"effort": X} 形式."""
-        provider = self._make_provider(base_url="https://openrouter.ai/api/v1")
-        async for _ in provider.stream(messages=[], system="", reasoning_effort="high"):
-            pass
-        kwargs = self._capture_kwargs(provider)
-        assert kwargs["reasoning"] == {"effort": "high"}
-        assert "reasoning_effort" not in kwargs
-
-    @pytest.mark.asyncio
-    async def test_openai_uses_reasoning_effort(self):
-        """OpenAI (default) base_url → reasoning_effort: X 形式."""
-        provider = self._make_provider(base_url=None)
+    async def test_reasoning_sends_effort_and_extra_body(self):
+        """reasoning 指定 → reasoning_effort + extra_body トグル併送 (DeepSeek V4 / vLLM 対応)."""
+        provider = self._make_provider(base_url="https://api.commandcode.ai/provider/v1")
         async for _ in provider.stream(messages=[], system="", reasoning_effort="high"):
             pass
         kwargs = self._capture_kwargs(provider)
         assert kwargs["reasoning_effort"] == "high"
-        assert "reasoning" not in kwargs
+        assert kwargs["extra_body"] == {"thinking": {"type": "enabled"}, "enable_thinking": True}
 
     @pytest.mark.asyncio
     async def test_none_adds_nothing(self):
-        """reasoning_effort=None → どちらのキーも入らない."""
+        """reasoning_effort=None → effort も extra_body も入らない."""
         provider = self._make_provider(base_url="https://openrouter.ai/api/v1")
         async for _ in provider.stream(messages=[], system="", reasoning_effort=None):
             pass
         kwargs = self._capture_kwargs(provider)
         assert "reasoning" not in kwargs
         assert "reasoning_effort" not in kwargs
+        assert "extra_body" not in kwargs
 
     @pytest.mark.asyncio
     async def test_reasoning_drops_sampling_params(self):
@@ -119,6 +110,17 @@ class TestOpenAICompatReasoning:
         """__init__ が base_url を self.base_url に保存する."""
         provider = OpenAICompatProvider(api_key="test-key", model="gpt-4o", base_url="https://openrouter.ai/api/v1")
         assert provider.base_url == "https://openrouter.ai/api/v1"
+
+    @pytest.mark.asyncio
+    async def test_reasoning_effort_still_sent_for_openrouter(self):
+        """OpenRouter も reasoning_effort を受理する → 専用 reasoning オブジェクト分岐は廃止."""
+        provider = self._make_provider(base_url="https://openrouter.ai/api/v1")
+        async for _ in provider.stream(messages=[], system="", reasoning_effort="low"):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert kwargs["reasoning_effort"] == "low"
+        assert "reasoning" not in kwargs
+        assert kwargs["extra_body"] == {"thinking": {"type": "enabled"}, "enable_thinking": True}
 
 
 class TestAnthropicReasoning:
