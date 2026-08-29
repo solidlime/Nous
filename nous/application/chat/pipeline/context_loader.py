@@ -131,6 +131,11 @@ async def _build_context_section(
         t1.append(f"感情: {state.emotion}（{intensity_label}）")
 
     # === Tier 2: 身体・環境 ===
+    # 減衰ノート（感情・身体・関係性、複数行可）
+    if decay_note:
+        note_lines = "\n".join(f"  {line}" for line in decay_note.split("\n") if line)
+        t2.append(f"⏱️ 状態変化:\n{note_lines}")
+
     # Body state — show all 5 metrics with percentages (unified with MCP tools format)
     from nous.api.mcp._tools_helpers import _format_body_metrics
 

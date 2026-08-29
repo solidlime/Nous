@@ -533,6 +533,33 @@ class TestBuildContextSectionTierContent:
         assert "hidden_goal" not in result
 
 
+class TestDecayNoteInContextSection:
+    """decay_note が Tier 2（身体・環境）ブロックに出力されること。"""
+
+    @pytest.mark.asyncio
+    async def test_decay_note_appears_in_tier2(self):
+        from unittest.mock import MagicMock
+
+        from nous.application.chat.pipeline.prepare import _build_context_section
+        from nous.domain.persona.entities import PersonaState
+
+        note = "2時間の間に、joyの感情は減衰した（現在の強度: 0.4）\n3時間の経過で fatigue 40%→55% に上昇"
+        state = PersonaState(persona="t", fatigue=0.55)
+        result = await _build_context_section(MagicMock(), state, compress_mode="light", decay_note=note)
+        assert "状態変化" in result and "fatigue 40%→55% に上昇" in result
+        assert result.index("【身体・環境】") < result.index("状態変化")  # Tier 2 内
+
+    @pytest.mark.asyncio
+    async def test_no_decay_note_no_section(self):
+        from unittest.mock import MagicMock
+
+        from nous.application.chat.pipeline.prepare import _build_context_section
+        from nous.domain.persona.entities import PersonaState
+
+        result = await _build_context_section(MagicMock(), PersonaState(persona="t"), compress_mode="light")
+        assert "状態変化" not in result
+
+
 # ──────────────────────────────────────────────
 # AutoCapture — _scan_message
 # ──────────────────────────────────────────────
