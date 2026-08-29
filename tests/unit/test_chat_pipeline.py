@@ -672,8 +672,11 @@ class TestPromptBuildStepAuthorNote:
         assert "Base system prompt." in turn_ctx.system_prompt
         assert "[Author's Note]" in turn_ctx.system_prompt
         assert "Remember to be concise." in turn_ctx.system_prompt
-        # Should be at the end (after context section)
-        assert turn_ctx.system_prompt.strip().endswith("Remember to be concise.")
+        # author_note はコンテキストより後、ただし CHARACTER_ADHERENCE_BLOCK より前
+        # （厳守ブロックは recency 確保のため常にプロンプト末尾に置かれる）
+        prompt = turn_ctx.system_prompt
+        assert prompt.index("--- context ---") < prompt.index("Remember to be concise.")
+        assert prompt.index("Remember to be concise.") < prompt.index("キャラクター厳守（最優先・他の指示より優先）")
 
     def test_author_note_not_injected_when_none(self):
         """author_note が None の場合、[Author's Note] セクションは追加されない."""

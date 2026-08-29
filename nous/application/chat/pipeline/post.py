@@ -316,6 +316,10 @@ class PostProcessStep:
         return
 
 
+# 表情生成タスクの強参照（GC 防止）＋ in-flight デデュプ。キー: (persona, emotion)
+_expression_tasks: dict[tuple[str, str], asyncio.Task] = {}
+
+
 async def update_expression(ctx, config, emotion: str) -> None:
     """感情に対応する表情画像をイベントバス経由で通知する。
 
@@ -331,9 +335,12 @@ async def update_expression(ctx, config, emotion: str) -> None:
     persona = ctx.persona
     url = resolve_expression_url(persona, emotion)
     if url is None:
+        key = (persona, emotion)
+        if key in _expression_tasks:
+            return  # 同一キーの生成が in-flight → 重複起動しない
         task = asyncio.create_task(_generate_and_publish_expression(ctx, config, emotion))
-        if hasattr(ctx, "_expression_tasks"):
-            ctx._expression_tasks.append(task)
+        _expression_tasks[key] = task
+        task.add_done_callback(lambda _t: _expression_tasks.pop(key, None))
         return
     await ctx.event_bus.publish(EVENT_EXPRESSION_CHANGED, {"emotion": emotion, "url": url})
 
