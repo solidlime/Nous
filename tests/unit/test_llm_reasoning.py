@@ -50,8 +50,8 @@ class _ChunkStream:
 
 
 class TestOpenAICompatReasoning:
-    def _make_provider(self, base_url: str | None) -> OpenAICompatProvider:
-        provider = OpenAICompatProvider(api_key="test-key", model="gpt-4o", base_url=base_url)
+    def _make_provider(self, base_url: str | None, model: str = "gpt-4o") -> OpenAICompatProvider:
+        provider = OpenAICompatProvider(api_key="test-key", model=model, base_url=base_url)
         provider._client = MagicMock()
         create_mock = AsyncMock()
         create_mock.return_value = _FakeStream()
@@ -120,6 +120,49 @@ class TestOpenAICompatReasoning:
         kwargs = self._capture_kwargs(provider)
         assert kwargs["reasoning_effort"] == "low"
         assert "reasoning" not in kwargs
+        assert kwargs["extra_body"] == {"thinking": {"type": "enabled"}, "enable_thinking": True}
+
+    @pytest.mark.asyncio
+    async def test_anthropic_compat_sends_budget_thinking(self):
+        """Anthropic 互換エンドポイント → effort/無予算 thinking は送らず budget 付き thinking を送る."""
+        provider = self._make_provider(base_url="https://api.anthropic.com/v1/")
+        async for _ in provider.stream(messages=[], system="", reasoning_effort="high"):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"] == {"thinking": {"type": "enabled", "budget_tokens": 8192}}
+        assert kwargs["max_tokens"] >= 8192 + 1024
+
+    @pytest.mark.asyncio
+    async def test_anthropic_compat_effort_budget_map_low_max(self):
+        """low→2048 / max→16384、未知 effort→4096 フォールバック (旧 AnthropicProvider と同マップ)."""
+        for effort, budget in [("low", 2048), ("max", 16384), ("bogus", 4096)]:
+            provider = self._make_provider(base_url="https://api.anthropic.com/v1/")
+            async for _ in provider.stream(messages=[], system="", reasoning_effort=effort, max_tokens=100):
+                pass
+            kwargs = self._capture_kwargs(provider)
+            assert kwargs["extra_body"] == {"thinking": {"type": "enabled", "budget_tokens": budget}}, effort
+            assert kwargs["max_tokens"] >= budget + 1024, effort
+
+    @pytest.mark.asyncio
+    async def test_openrouter_anthropic_model_sends_budget_thinking(self):
+        """OpenRouter + anthropic/ モデル → raw thinking は Anthropic へ透過され 400 になるため budget 付き."""
+        provider = self._make_provider(base_url="https://openrouter.ai/api/v1", model="anthropic/claude-sonnet-4")
+        async for _ in provider.stream(messages=[], system="", reasoning_effort="medium"):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"] == {"thinking": {"type": "enabled", "budget_tokens": 4096}}
+        assert kwargs["max_tokens"] >= 4096 + 1024
+
+    @pytest.mark.asyncio
+    async def test_openrouter_non_anthropic_uses_effort_and_extra_body(self):
+        """OpenRouter + 非 Anthropic モデル → effort + thinking/enable_thinking 併送を維持."""
+        provider = self._make_provider(base_url="https://openrouter.ai/api/v1", model="deepseek/deepseek-v4-flash")
+        async for _ in provider.stream(messages=[], system="", reasoning_effort="high"):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert kwargs["reasoning_effort"] == "high"
         assert kwargs["extra_body"] == {"thinking": {"type": "enabled"}, "enable_thinking": True}
 
 

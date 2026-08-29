@@ -25,6 +25,10 @@ if TYPE_CHECKING:
 _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 
+# 旧 AnthropicProvider (anthropic.py:24) と同じ effort→budget 変換。
+# Anthropic の thinking.enabled は budget_tokens 必須 (無しで 400) のため互換分岐で使う。
+_EFFORT_BUDGET_MAP = {"low": 2048, "medium": 4096, "high": 8192, "max": 16384}
+
 
 _VISION_MODEL_PREFIXES = (
     "gpt-4o",
@@ -155,12 +159,23 @@ class OpenAICompatProvider(LLMProvider):
             if reasoning_effort:
                 # 推論モデル (o1/o3/o4-mini 等) は temperature を許可しない (400 Unsupported parameter)。
                 # reasoning 指定時は sampling params (temperature/top_p) を送らない
-                kwargs["reasoning_effort"] = reasoning_effort
-                # ponytail: hybrid reasoning モデル (DeepSeek V4 等) は effort だけでは thinking が
-                # 有効化されない。OpenAI互換サーバーは未知キーを黙って無視するため、両トグルを併送
-                # (DeepSeek 公式: thinking, vLLM/Alibaba 系: enable_thinking)。
-                # 対応表方式 (reasoning_param_style フィールド) は過剰設計のため不採用。
-                kwargs["extra_body"] = {"thinking": {"type": "enabled"}, "enable_thinking": True}
+                base = self.base_url or ""
+                is_anthropic_compat = "api.anthropic.com" in base or (
+                    "openrouter.ai" in base and (self.model or "").startswith("anthropic/")
+                )
+                if is_anthropic_compat:
+                    # Anthropic Messages API 互換: reasoning_effort は無視され、thinking.enabled には
+                    # budget_tokens が必須 (400)。旧 AnthropicProvider と同じ effort→budget 変換を行う
+                    budget = _EFFORT_BUDGET_MAP.get(reasoning_effort, 4096)
+                    kwargs["max_tokens"] = max(max_tokens, budget + 1024)
+                    kwargs["extra_body"] = {"thinking": {"type": "enabled", "budget_tokens": budget}}
+                else:
+                    # ponytail: hybrid reasoning モデル (DeepSeek V4 等) は effort だけでは thinking が
+                    # 有効化されない。OpenAI互換サーバーは未知キーを黙って無視するため、両トグルを併送
+                    # (DeepSeek 公式: thinking, vLLM/Alibaba 系: enable_thinking)。
+                    # Anthropic 互換 (上記分岐) は未知キーを無視しないため併送対象外。
+                    kwargs["reasoning_effort"] = reasoning_effort
+                    kwargs["extra_body"] = {"thinking": {"type": "enabled"}, "enable_thinking": True}
                 # TODO: 推論モデルは max_tokens ではなく max_completion_tokens が必要。
                 # モデル名検出が必要で侵襲が大きいため次回候補（未実施）
             else:
