@@ -212,8 +212,10 @@ class OpenAICompatProvider(LLMProvider):
                     if chunk.choices and chunk.choices[0].finish_reason:
                         finish_reason = chunk.choices[0].finish_reason
 
-                    # CoT: reasoning_content (e.g. OpenAI o-series / OpenRouter reasoning models)
-                    reasoning = getattr(delta, "reasoning_content", None)
+                    # CoT: reasoning_content (OpenAI o-series / OpenRouter reasoning models)、
+                    # フォールバック reasoning (Baseten 系 wire: commandcode.ai 実測。2026-08-29
+                    # 実機 curl で delta.reasoning + reasoning_details を確認)
+                    reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None)
                     if reasoning:
                         yield ThinkingDeltaEvent(content=reasoning)
 

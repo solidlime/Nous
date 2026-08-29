@@ -376,6 +376,52 @@ class TestOpenAICompatCoT:
         assert not any(isinstance(ev, ThinkingDeltaEvent) for ev in events)
         assert [ev.content for ev in events if isinstance(ev, TextDeltaEvent)] == ["plain"]
 
+    @staticmethod
+    def _chunk_reasoning_key(content: str | None, reasoning: str | None) -> SimpleNamespace:
+        """Baseten 系 wire (commandcode.ai 実測 2026-08-29): 思考は delta.reasoning で流れる."""
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    delta=SimpleNamespace(
+                        content=content, reasoning_content=None, reasoning=reasoning, tool_calls=None
+                    ),
+                    finish_reason=None,
+                )
+            ],
+            usage=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_reasoning_key_fallback_yields_thinking_events(self):
+        """delta.reasoning (Baseten 系) も ThinkingDeltaEvent として拾う."""
+        events = await self._stream_events(
+            [
+                self._chunk_reasoning_key(content=None, reasoning="Let me think"),
+                self._chunk_reasoning_key(content="Answer", reasoning="more"),
+            ]
+        )
+        thinking = [ev for ev in events if isinstance(ev, ThinkingDeltaEvent)]
+        texts = [ev for ev in events if isinstance(ev, TextDeltaEvent)]
+        assert [t.content for t in thinking] == ["Let me think", "more"]
+        assert [t.content for t in texts] == ["Answer"]
+
+    @pytest.mark.asyncio
+    async def test_reasoning_content_takes_precedence(self):
+        """reasoning_content と reasoning の両方がある場合 → reasoning_content を優先（二重 yield しない）."""
+        chunk = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    delta=SimpleNamespace(
+                        content=None, reasoning_content="primary", reasoning="fallback", tool_calls=None
+                    ),
+                    finish_reason=None,
+                )
+            ],
+            usage=None,
+        )
+        events = await self._stream_events([chunk])
+        assert [ev.content for ev in events if isinstance(ev, ThinkingDeltaEvent)] == ["primary"]
+
 
 class TestAnthropicCoT:
     """AnthropicProvider: thinking_delta を ThinkingDeltaEvent として拾う (SPEC R4)."""
