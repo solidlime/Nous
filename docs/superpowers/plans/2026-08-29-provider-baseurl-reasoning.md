@@ -1,6 +1,6 @@
 # Provider base_url 必須化＋OpenAI互換統一＋reasoning トグル修正 — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** WebUI からプロバイダー選択を廃止して base_url 必須運用に移行し、全 LLM 接続を OpenAICompatProvider に統一。さらに reasoning 有効時に DeepSeek 系 hybrid モデルが推論しないバグを `extra_body` トグル併送で修正する。
 
@@ -32,7 +32,7 @@
 - Consumes: `OpenAICompatProvider.stream(messages, system, tools, temperature, max_tokens, top_p, reasoning_effort)`（既存シグネチャ、変更なし）
 - Produces: reasoning 指定時の `create()` kwargs に `reasoning_effort: str` と `extra_body: {"thinking": {"type": "enabled"}, "enable_thinking": True}` が含まれる。OpenRouter 専用分岐 `kwargs["reasoning"]` は削除される。
 
-- [ ] **Step 1: 既存テストを削除・新テストを書く（失敗する状態）**
+- [x] **Step 1: 既存テストを削除・新テストを書く（失敗する状態）**
 
 `tests/unit/test_llm_reasoning.py` の `TestOpenAICompatReasoning` クラス内:
 
@@ -82,12 +82,12 @@
         assert kwargs["extra_body"] == {"thinking": {"type": "enabled"}, "enable_thinking": True}
 ```
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `python -X utf8 -m pytest tests/unit/test_llm_reasoning.py::TestOpenAICompatReasoning -v`
 Expected: FAIL（`extra_body` が kwargs に無い KeyError / assert 失敗）— 削除した `test_openrouter_uses_reasoning_object` は消えていること
 
-- [ ] **Step 3: openai_compat.py の実装**
+- [x] **Step 3: openai_compat.py の実装**
 
 `nous/infrastructure/llm/openai_compat.py` L155-161 を以下に置換:
 
@@ -108,12 +108,12 @@ Expected: FAIL（`extra_body` が kwargs に無い KeyError / assert 失敗）�
 
 （`else:` 以降 L164-167 の temperature/top_p ブロックは現行維持。else のインデント整合に注意）
 
-- [ ] **Step 4: テストが通ることを確認**
+- [x] **Step 4: テストが通ることを確認**
 
 Run: `python -X utf8 -m pytest tests/unit/test_llm_reasoning.py -v`
 Expected: PASS 27件（28 - 1削除 + 1追加 = 28件）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add nous/infrastructure/llm/openai_compat.py tests/unit/test_llm_reasoning.py
@@ -132,7 +132,7 @@ git commit -m "fix(llm): reasoning 有効時 extra_body で thinking/enable_thin
 - Consumes: `OpenAICompatProvider(api_key, model, base_url)`（`nous/infrastructure/llm/openai_compat.py:62`、base_url=None の場合は `_OPENAI_BASE_URL` フォールバック）
 - Produces: `get_provider(provider: str, api_key: str, model: str, base_url: str = "") -> OpenAICompatProvider`。常に OpenAICompatProvider を返す。旧 provider 名 → base_url デフォルト解決マップ: `anthropic`→`https://api.anthropic.com/v1/`、`google`→`https://generativelanguage.googleapis.com/v1beta/openai/`、`openai`→`https://api.openai.com/v1`、`openrouter`→`https://openrouter.ai/api/v1`、`opencode_go`→`https://opencode.ai/zen/go/v1`、未知/空→`""`（AsyncOpenAI が api.openai.com にフォールバック）。明示 `base_url` 引数があれば最優先。
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `tests/unit/test_llm_factory.py` を新規作成:
 
@@ -182,12 +182,12 @@ class TestFactoryUnifiedOpenAICompat:
         assert p.base_url == "https://api.commandcode.ai/provider/v1"
 ```
 
-- [ ] **Step 2: テストが失敗することを確認**
+- [x] **Step 2: テストが失敗することを確認**
 
 Run: `python -X utf8 -m pytest tests/unit/test_llm_factory.py -v`
 Expected: FAIL（現行実装は anthropic で AnthropicProvider を返すため isinstance 失敗）
 
-- [ ] **Step 3: factory.py を書き換え**
+- [x] **Step 3: factory.py を書き換え**
 
 `nous/infrastructure/llm/factory.py` を全差し替え:
 
@@ -224,12 +224,12 @@ def get_provider(provider: str, api_key: str, model: str, base_url: str = "") ->
 
 注: 旧実装の `_PROVIDER_REGISTRY` / AnthropicProvider / GeminiProvider 分岐は削除。`base_url=""` + 未知 provider の場合、`OpenAICompatProvider.__init__` の `base_url or _OPENAI_BASE_URL` が api.openai.com にフォールバックする（openai_compat.py:69）。
 
-- [ ] **Step 4: テストが通ること＋既存スイートへの影響確認**
+- [x] **Step 4: テストが通ること＋既存スイートへの影響確認**
 
 Run: `python -X utf8 -m pytest tests/unit/test_llm_factory.py tests/unit/test_llm_reasoning.py tests/unit/test_llm_vision.py tests/unit/test_image_caption.py -q`
 Expected: PASS（test_llm_vision.py / test_image_caption.py は provider クラス直参照のため影響なし）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add nous/infrastructure/llm/factory.py tests/unit/test_llm_factory.py
@@ -248,7 +248,7 @@ git commit -m "refactor(llm): factory を OpenAICompatProvider 統一に変更�
 - Consumes: なし（純粋な UI 削除＋バリデーション追加）
 - Produces: `N.Chat.settings.onProviderChange` が名前空間から**削除される**。保存 payload から `provider` キー削除（サーバー `_do_save_chat_config` は body 内フィールドのみマージするため既存 `provider` 値は保持される — chat_management.py:40-44）。
 
-- [ ] **Step 1: chat_sidebar_core.py — プロバイダー select 削除＋base_url 行の常時表示化**
+- [x] **Step 1: chat_sidebar_core.py — プロバイダー select 削除＋base_url 行の常時表示化**
 
 L25-34 の `<div>`（プロバイダー select ブロック）を**丸ごと削除**。L43-46 の base_url 行を以下に差し替え:
 
@@ -261,7 +261,7 @@ L25-34 の `<div>`（プロバイダー select ブロック）を**丸ごと削�
 
 注: `id="chat-base-url-row"` と `id="chat-provider"` は参照が全部消えるため撤去。モデル input の placeholder（L37 `例: claude-opus-4-5`）→ `例: deepseek/deepseek-v4-flash-vision-exp` に更新。
 
-- [ ] **Step 2: chat-settings.js — 参照削除＋バリデーション追加**
+- [x] **Step 2: chat-settings.js — 参照削除＋バリデーション追加**
 
 1. **L39 削除**: `set("chat-provider", cfg.provider);`
 2. **L100 削除**: `onChatProviderChange();`（applyChatConfig 内）
@@ -278,17 +278,17 @@ L25-34 の `<div>`（プロバイダー select ブロック）を**丸ごと削�
   }
 ```
 
-- [ ] **Step 3: 構文チェック**
+- [x] **Step 3: 構文チェック**
 
 Run: `node --check nous/api/http/static/chat/chat-settings.js`
 Expected: エラー出力なし（node 未導入なら `python -c "print('skip')"` でスキップし Task 4 のブラウザ確認で代替）
 
-- [ ] **Step 4: 残存参照チェック**
+- [x] **Step 4: 残存参照チェック**
 
 Run: `grep -r "onProviderChange\|chat-provider" nous/`
 Expected: 0件（chat_sidebar_core.py と chat-settings.js 両方から消えていること。`chat-image-caption-provider` は別物なのでヒットさせてよいが `chat-provider"` の完全一致は無いこと）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add nous/api/http/sections/chat/chat_sidebar_core.py nous/api/http/static/chat/chat-settings.js
@@ -306,22 +306,22 @@ git commit -m "feat(ui): プロバイダードロップダウン廃止、base_ur
 - Consumes: Task 1-3 の全変更
 - Produces: 検証結果レポート
 
-- [ ] **Step 1: ユニットテスト全実行**
+- [x] **Step 1: ユニットテスト全実行**
 
 Run: `python -X utf8 -m pytest tests/unit -q`
 Expected: FAIL 0（既存テストの provider 依存は全て get_provider を mock しているため影響なし。FAIL があれば Task 1-3 に差し戻し）
 
-- [ ] **Step 2: lint / format**
+- [x] **Step 2: lint / format**
 
 Run: `ruff check nous/ tests/` ＋ `ruff format --check nous/infrastructure/llm/factory.py nous/infrastructure/llm/openai_compat.py`
 Expected: エラー 0（プロジェクトの lint 設定に従う。ruff 未導入なら設定済みツールに読み替え）
 
-- [ ] **Step 3: ドキュメント同期チェック**
+- [x] **Step 3: ドキュメント同期チェック**
 
 Run: `grep -rn "プロバイダー" docs/ README.md --include="*.md" | grep -v superpowers`
 Expected: プロバイダードロップダウンを説明している箇所があれば更新（base_url 必須運用に合わせる。無ければ完了）
 
-- [ ] **Step 4: 実ブラウザ確認（UI 変更は実機必須）**
+- [x] **Step 4: 実ブラウザ確認（UI 変更は実機必須）**
 
 1. Docker コンテナ nous が `/app/nous` を `:ro` マウントしているため、**コンテナ再起動で変更を反映**（`docker restart nous`、healthcheck 待ち）
 2. `http://localhost:26262` を開き、チャット設定パネルで確認:
@@ -330,7 +330,7 @@ Expected: プロバイダードロップダウンを説明している箇所が�
    - Base URL `https://api.commandcode.ai/provider/v1` ＋ model `deepseek/deepseek-v4-flash-vision-exp` で保存成功
    - Reasoning ON ＋ チャット1ターン → 思考プロセス（ThinkingDeltaEvent 由来）が表示されれば実機 reasoning 修正も確認
 
-- [ ] **Step 5: 実機 curl 4パターン（要 commandcode.ai API キー）**
+- [x] **Step 5: 実機 curl 4パターン（要 commandcode.ai API キー）**
 
 キー未設定のためユーザー提供が必要。取得したら PowerShell:
 
@@ -344,7 +344,7 @@ curl.exe -s -N https://api.commandcode.ai/provider/v1/chat/completions -H "Autho
 
 判定期望: パターンA（effort のみ）で `reasoning_content` 無し → バグ再現確認。パターンB（`reasoning_effort` + `extra_body` 相当の top-level `thinking`/`enable_thinking`）で `reasoning_content` 有り → 修正有効確認。実サーバーは extra_body を展開しないため curl では top-level に置く点に注意（openai SDK の `extra_body` は送信時に top-level 展開される）。
 
-- [ ] **Step 6: RECORD（記録フェーズ）**
+- [x] **Step 6: RECORD（記録フェーズ）**
 
 GATE 通過後、nous 記憶に記録（tags: `project:nous`, `task_state`, kind=semantic, importance 0.75）。content にコミットハッシュ・変更概要・検証結果・「OpenAI互換サーバーは未知キーを黙って無視する」の教訓を含める。
 
