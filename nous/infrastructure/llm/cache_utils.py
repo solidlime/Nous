@@ -57,6 +57,10 @@ def build_openai_system_messages(system: str) -> list[dict]:
         [{"role": "system", "content": system}]
     """
     static_part, dynamic_part = split_system_prompt(system)
+    # commandcode.ai 等は空 content の system メッセージを 400 で拒否する
+    # （2026-08-30 実機 curl 確認）。空 system はメッセージ自体を省略する。
+    if not system.strip():
+        return []
     if not dynamic_part:
         return [{"role": "system", "content": system}]
 
