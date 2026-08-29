@@ -29,7 +29,7 @@ function resetToWelcome() {
         <div class="chat-welcome" id="chat-welcome">
             <div class="chat-welcome-icon"><i data-lucide="message-circle"></i></div>
             <p>チャットを開始するには下のテキストボックスにメッセージを入力してください。</p>
-            <p class="chat-welcome-hint">APIキーとプロバイダーを設定してください。<br><a href="#" onclick="N.Chat.core.toggleSettings();return false;" class="chat-welcome-link"><i data-lucide="settings"></i> 設定パネルを開く</a></p>
+            <p class="chat-welcome-hint">APIキーとBase URLを設定してください。<br><a href="#" onclick="N.Chat.core.toggleSettings();return false;" class="chat-welcome-link"><i data-lucide="settings"></i> 設定パネルを開く</a></p>
             <div class="chat-welcome-commands">
                 <span class="chat-welcome-cmd">/memory</span>
                 <span class="chat-welcome-cmd">/goal</span>

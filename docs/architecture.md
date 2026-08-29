@@ -87,8 +87,8 @@ nous/
 │   └── chat_config.py         # ChatConfig Facade（サブ設定統合）
 ├── infrastructure/            # 基盤層
 │   ├── llm/                   # LLMプロバイダ実装
-│   │   ├── anthropic.py       # Anthropic
-│   │   ├── openai_compat.py   # OpenAI/OpenRouter互換
+│   │   ├── anthropic.py       # Anthropic (legacy: unused by factory, kept for migration)
+│   │   ├── openai_compat.py   # unified provider (all connections; OpenAI/OpenRouter/Anthropic-compat)
 │   │   ├── google.py          # Google Gemini
 │   │   └── cache_utils.py     # プロンプトキャッシュ共通化
 │   ├── embedding/             # 埋め込みモデル
@@ -123,7 +123,7 @@ nous/
     ↓ (ハイブリッド検索: ベクトル+キーワード+RRF)
 [Pipeline] prompt.py → system prompt構築（キャッシュ対応）
     ↓
-[Inference] LLM API (Anthropic/OpenAI/OpenRouter/Google)
+[Inference] LLM API (OpenAI-compatible; Anthropic/Gemini via compat endpoints)
     ↓ (ツール呼出: memory_search, update_context, invoke_skill...)
 [Tool Execution] builtin.py → MCPツール実行
     ↓

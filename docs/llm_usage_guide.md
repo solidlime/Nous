@@ -502,12 +502,14 @@ reasoning_effort: str = "medium"          # "low" | "medium" | "high" | "max" (d
 
 ### Provider mapping
 
-| Provider | Wire format |
+All connections use the unified OpenAI-compatible provider (provider selection was removed; the legacy `provider` field in config.json is only used to restore a default `base_url`).
+
+| Endpoint | Wire format |
 |----------|-------------|
-| OpenRouter | `reasoning: {"effort": <level>}` |
-| OpenAI-compatible (OpenAI / DeepSeek / xAI etc.) | `reasoning_effort: "<level>"` |
-| Anthropic | `thinking: {"type": "enabled", "budget_tokens": <level→tokens>}` (`low`=2048 / `medium`=4096 / `high`=8192 / `max`=16384) |
-| Google (GeminiProvider) | inherits OpenAI-compatible path |
+| OpenAI-compatible (OpenAI / DeepSeek / xAI / OpenRouter non-Anthropic models etc.) | `reasoning_effort: "<level>"` + `extra_body: {"thinking": {"type": "enabled"}, "enable_thinking": true}` (hybrid-reasoning toggles; unknown keys are ignored by servers) |
+| Anthropic-compatible (`api.anthropic.com`, or OpenRouter `anthropic/*` models) | `extra_body: {"thinking": {"type": "enabled", "budget_tokens": <level→tokens>}}` (`low`=2048 / `medium`=4096 / `high`=8192 / `max`=16384); `reasoning_effort` is not sent (ignored by Anthropic), and `max_tokens` is raised to `budget + 1024` |
+
+Note: Anthropic-compatible endpoints do not return thinking content via `delta.reasoning_content`, so no CoT bubble is shown in the WebUI even when reasoning is enabled.
 
 When `reasoning_enabled` is `False` (default), no reasoning parameter is sent and providers use their own defaults.
 
