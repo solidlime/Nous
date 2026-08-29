@@ -252,6 +252,50 @@ Export all persona data as a ZIP file download.
 
 ---
 
+## Persona Dashboard Pages
+
+### `GET /dashboard/{persona}`
+Serve the persona chat dashboard UI (HTML).
+
+---
+
+## Chat Persona
+
+### `POST /api/chat/{persona}/persona/expressions/generate`
+Generate expression images for all supported emotions via ComfyUI, using the persona's
+image generation config (`image_gen_*` fields in the persona chat config). Existing
+images are skipped. Requires `image_gen_enabled: true`.
+
+**Response:**
+```json
+{
+  "generated": ["joy", "sadness"],
+  "skipped": ["neutral"],
+  "failed": []
+}
+```
+
+- `generated` — emotions for which a new PNG was created
+- `skipped` — emotions with an existing image or generation disabled
+- `failed` — emotions whose generation errored
+
+### `GET /api/chat/{persona}/persona/images/{file}`
+Serve a persona image (self portraits and expression images such as `expr_joy.png`).
+
+---
+
+### SSE: `context.expression_changed`
+
+Emitted on the dashboard SSE stream when the persona's expression changes.
+
+```json
+{ "emotion": "joy", "url": "/api/chat/herta/persona/images/expr_joy.png" }
+```
+
+The chat view swaps the persona avatar image to `url` on receipt.
+
+---
+
 ## Core Memory Blocks
 
 Blocks are named segments always injected into `get_context()` output — high-priority working memory for the AI agent.
