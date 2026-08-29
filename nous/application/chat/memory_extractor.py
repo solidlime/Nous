@@ -185,6 +185,43 @@ async def _build_memory_llm_context(ctx: AppContext) -> tuple[str, str, str]:
     return "\n".join(lines), commitments_str, inventory_str
 
 
+def _body_delta_state(ctx: AppContext, persona: str, ctx_update: dict) -> dict[str, float]:
+    """LLM の絶対値 fatigue/warmth/arousal を現在値からの delta（±0.2 clamp）変換する。
+
+    - float 化できない値は drop
+    - |applied - current| < 0.01 は書き込まない
+    絶対値の直接書き込みは禁止。この経路のみ update_physical_state へ渡す。
+    """
+    current: dict[str, float] = {}
+    state_result = ctx.persona_service.get_context(persona)
+    if state_result.is_ok:
+        state = state_result.value  # type: ignore[union-attr]
+        for key in ("fatigue", "warmth", "arousal"):
+            raw = getattr(state, key, None)
+            try:
+                current[key] = float(raw) if raw is not None else 0.0
+            except (TypeError, ValueError):
+                current[key] = 0.0
+
+    updates: dict[str, float] = {}
+    for key in ("fatigue", "warmth", "arousal"):
+        val = ctx_update.get(key)
+        if val is None:
+            continue
+        try:
+            llm_value = float(val)
+        except (TypeError, ValueError):
+            logger.debug("MemoryLLM: dropping non-numeric %s: %r", key, val)
+            continue
+        cur = current.get(key, 0.0)
+        new = max(0.0, min(1.0, llm_value))
+        delta = max(-0.2, min(0.2, new - cur))
+        applied = max(0.0, min(1.0, cur + delta))
+        if abs(applied - cur) >= 0.01:
+            updates[key] = applied
+    return updates
+
+
 async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> dict:
     """T35: 遅延MemoryLLM処理。facts保存 + context/inventory更新を行う。結果dictを返す。"""
     user_message = payload.get("user", "")
@@ -346,11 +383,11 @@ async def run_memory_llm(ctx: AppContext, config: ChatConfig, payload: dict) -> 
                             await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
                     ctx_update.pop(key, None)  # update_physical_state に渡さない
 
-            state_fields = {
-                k: v
-                for k, v in ctx_update.items()
-                if k in {"environment", "fatigue", "warmth", "arousal"} and v is not None
-            }
+            state_fields: dict[str, object] = {}
+            env_val = ctx_update.get("environment")
+            if isinstance(env_val, str):
+                state_fields["environment"] = env_val
+            state_fields.update(_body_delta_state(ctx, persona, ctx_update))
             if state_fields:
                 ctx.persona_service.update_physical_state(persona, **state_fields)
 

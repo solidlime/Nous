@@ -901,3 +901,102 @@ class TestRunMemoryLLM:
             1.0,
             context="llm_suggested",
         )
+
+    # -- 身体 delta 変換 + clamp ------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_fatigue_absolute_converted_to_clamped_delta(self, mock_ctx, mock_config):
+        """current fatigue=0.4, LLM 5.2 → clamp 後 delta±0.2 → applied 0.6。"""
+        state = mock_ctx.persona_service.get_context("test_persona").value
+        state.fatigue = 0.4
+        payload = {"user": "test", "assistant": "response"}
+        llm_result = {
+            "facts": [],
+            "goals": [],
+            "promises": [],
+            "context_update": {"fatigue": 5.2},
+            "inventory_update": {},
+        }
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(return_value=llm_result)
+            await run_memory_llm(mock_ctx, mock_config, payload)
+
+        mock_ctx.persona_service.update_physical_state.assert_called_once_with(
+            "test_persona",
+            fatigue=pytest.approx(0.6),
+        )
+
+    @pytest.mark.asyncio
+    async def test_body_micro_change_not_written(self, mock_ctx, mock_config):
+        """|applied - current| < 0.01 → 書き込まない。"""
+        state = mock_ctx.persona_service.get_context("test_persona").value
+        state.fatigue = 0.4
+        payload = {"user": "test", "assistant": "response"}
+        llm_result = {
+            "facts": [],
+            "goals": [],
+            "promises": [],
+            "context_update": {"fatigue": 0.405},
+            "inventory_update": {},
+        }
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(return_value=llm_result)
+            await run_memory_llm(mock_ctx, mock_config, payload)
+
+        mock_ctx.persona_service.update_physical_state.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_body_non_numeric_dropped(self, mock_ctx, mock_config):
+        """float 化できない値は drop、environment(str)は通す。"""
+        payload = {"user": "test", "assistant": "response"}
+        llm_result = {
+            "facts": [],
+            "goals": [],
+            "promises": [],
+            "context_update": {"fatigue": "very tired", "warmth": "x"},
+            "inventory_update": {},
+        }
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(return_value=llm_result)
+            await run_memory_llm(mock_ctx, mock_config, payload)
+
+        mock_ctx.persona_service.update_physical_state.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_environment_non_str_dropped(self, mock_ctx, mock_config):
+        """environment が str 以外 → drop。"""
+        payload = {"user": "test", "assistant": "response"}
+        llm_result = {
+            "facts": [],
+            "goals": [],
+            "promises": [],
+            "context_update": {"environment": 123},
+            "inventory_update": {},
+        }
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(return_value=llm_result)
+            await run_memory_llm(mock_ctx, mock_config, payload)
+
+        mock_ctx.persona_service.update_physical_state.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_heart_rate_pain_not_in_state_fields(self, mock_ctx, mock_config):
+        """heart_rate/pain はメモリLLM経由で書き込まない（減衰一本）。"""
+        payload = {"user": "test", "assistant": "response"}
+        llm_result = {
+            "facts": [],
+            "goals": [],
+            "promises": [],
+            "context_update": {"heart_rate": 0.9, "pain": 0.8},
+            "inventory_update": {},
+        }
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(return_value=llm_result)
+            await run_memory_llm(mock_ctx, mock_config, payload)
+
+        mock_ctx.persona_service.update_physical_state.assert_not_called()
