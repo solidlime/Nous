@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from nous.application.chat.memory_prompts import _MEMORY_LLM_PROMPT
 from nous.domain.language import LanguageResolver
 from nous.domain.search.engine import SearchQuery
-from nous.domain.value_objects import VALID_EMOTIONS, normalize_importance
+from nous.domain.value_objects import normalize_emotion, normalize_importance
 from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.factory import get_provider
 from nous.infrastructure.logging.structured import get_logger
@@ -383,14 +383,14 @@ async def run_memory_llm(
             # post.py がこの dict を ContextUpdateSSE / update_expression にそのまま
             # 流すため、適用しなかった感情フィールドは捨てる（非正典ラベルが
             # ゴミ表情生成に繋がる／メインLLMが書いた感情と二重書きになるのを防ぐ）。
-            # 適用する場合も正規化後の値を書き戻す（"Joy" や 5.0 が生で流れないように）。
-            if emotion and not skip_emotion and str(emotion).strip().lower() in VALID_EMOTIONS:
-                ctx_update["emotion"] = str(emotion).strip().lower()
+            normalized = normalize_emotion(str(emotion).strip()) if emotion else ""
+            if normalized and normalized != "neutral" and not skip_emotion:
+                ctx_update["emotion"] = normalized
                 if intensity is not None:
                     ctx_update["emotion_intensity"] = normalize_importance(float(intensity))
                 ctx.persona_service.update_emotion(
                     persona,
-                    emotion,
+                    normalized,
                     normalize_importance(float(intensity) if intensity is not None else None),
                     context="llm_suggested",
                 )

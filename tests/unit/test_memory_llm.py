@@ -883,6 +883,28 @@ class TestRunMemoryLLM:
         assert "emotion_intensity" not in llm_result["context_update"]
 
     @pytest.mark.asyncio
+    async def test_emotion_alias_normalized(self, mock_ctx, mock_config):
+        """類義語ラベル（"happy"）→ normalize_emotion で "joy" に正規化して適用。"""
+        payload = {"user": "test", "assistant": "response"}
+        llm_result = {
+            "facts": [],
+            "goals": [],
+            "promises": [],
+            "context_update": {"emotion": "happy", "emotion_intensity": 0.7},
+            "inventory_update": {},
+        }
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(return_value=llm_result)
+            await run_memory_llm(mock_ctx, mock_config, payload)
+
+        mock_ctx.persona_service.update_emotion.assert_called_once_with(
+            "test_persona", "joy", 0.7, context="llm_suggested"
+        )
+        # 不変条件: 正規化後の値が ctx_update に書き戻される
+        assert llm_result["context_update"]["emotion"] == "joy"
+
+    @pytest.mark.asyncio
     async def test_valid_emotion_intensity_clamped(self, mock_ctx, mock_config):
         """正典ラベル + intensity>1.0 → 1.0 に clamp して update_emotion。"""
         payload = {"user": "test", "assistant": "response"}
@@ -926,11 +948,11 @@ class TestRunMemoryLLM:
 
         mock_ctx.persona_service.update_emotion.assert_called_once_with(
             "test_persona",
-            "Joy",
+            "joy",
             0.8,
             context="llm_suggested",
         )
-        # ctx_update は正規化済み — update_expression("Joy") の silent stop を防ぐ
+        # ctx_update も update_emotion も正規化済み — update_expression("Joy") の silent stop を防ぐ
         assert llm_result["context_update"]["emotion"] == "joy"
         assert llm_result["context_update"]["emotion_intensity"] == 0.8
 
