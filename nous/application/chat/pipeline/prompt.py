@@ -62,8 +62,8 @@ class PromptBuildStep:
         persona = ctx.persona
 
         base_system = config.system_prompt or f"あなたは{persona}です。"
-        # §4 自律 recall 指示
-        base_system += "\n会話の話題が過去の記憶と関連しそうなとき・話題が切り替わったときは、memory_search ツールで能動的に検索せよ。"
+        # §4 自律 recall 指示（連想想起A: 開発・約束・バグでは確定検索）
+        base_system += "\n会話の話題が過去の記憶と関連しそうなとき・話題が切り替わったときは、memory_search ツールで能動的に検索せよ。開発・開発方針・バグ・不具合・エラー・直らない・約束・TODO・次回・過去の決定の話題では必ず検索せよ（合計3以内のクエリ: (a)話題そのまま (b)約束・決定タグ掘り=該当側1つのみ (c)効果なかった・失敗・NG掘り、top_k=3ずつ）。"
 
         # --- 静的パート（キャッシュ可能）---
         static_parts = [base_system]

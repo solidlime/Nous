@@ -126,7 +126,7 @@ New:
 
 ```markdown
 ## 手順
-1. 会話の中で「これは過去の記憶に関連しそうだ」と感じたら、以下を最大3クエリ実行する（いずれも `top_k=3`）: (a) 今の話題そのまま `memory_search(query="<話題>", top_k=3)`、(b) 約束・決定掘り `memory_search(query="<話題>", tags=["project:nous", "promise"], top_k=3)` と `tags=["project:nous", "decision"]` のいずれか該当側、(c) ネガティブ知識掘り `memory_search(query="<話題> 効果なかった 失敗 NG", top_k=3)`。開発・約束・バグ話題では省略不可。雑談では(a)のみでよい
+1. 会話の中で「これは過去の記憶に関連しそうだ」と感じたら、以下を合計3以内で実行する（いずれも `top_k=3`）: (a) 今の話題そのまま `memory_search(query="<話題>", top_k=3)`、(b) 約束・決定掘りは `memory_search(query="<話題>", tags=["promise"], top_k=3)` か `memory_search(query="<話題>", tags=["decision"], top_k=3)` の該当側1つのみ1クエリ（projectタグとのANDにしないこと——書込側はprojectタグ無しで書くため）、(c) ネガティブ知識掘り `memory_search(query="<話題> 効果なかった 失敗 NG", top_k=3)`。(c)が空振りしたら(a)の結果から除外判定せよ。開発・約束・バグ話題では省略不可。雑談では(a)のみでよい
 2. 結果の中から、**今の会話の流れに自然に織り込める記憶を最大2件**選ぶ（約束型→先出し、対処再利用型→手順再利用、除外型→「前にダメだったから除外」と明示）
 3. 以下の技法で自然に言及する
 ```
@@ -134,7 +134,7 @@ New:
 - [ ] **Step 3: 差分を目視確認**
 
 Run: `git diff data/skills/recall-weaver/SKILL.md`
-Expected: 上記2箇所のみの追加・置換であること（技法表・確信度・禁止事項・制約は無変更）
+Expected: 発動条件・手順・禁止事項1行の変更であること（技法表・確信度・制約は無変更）
 
 - [ ] **Step 4: Commit**
 

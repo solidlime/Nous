@@ -39,7 +39,7 @@ Scope: チャット応答中の連想活用（約束・バグ対処・効果な�
 
 - `memory_search` を最大3クエリ:
   1. 今の話題そのまま (query=text, top_k=3)
-  2. 約束・決定タグ絞り (query=text, tags=[project:<slug>, promise/decision], top_k=3)
+  2. 約束・決定タグ絞り (query=text, tags=["promise"] か ["decision"] の該当側1つのみ1クエリ, top_k=3。projectタグとのANDにしないこと——書込側はprojectタグ無しで書くため)
   3. ネガティブ知識掘り (query=text + 効果なかった・失敗・NG, top_k=3)
 - 既存の hybrid + entityブースト + SA をそのまま使う。追加インフラなし。
 - 1ターンに織り込むのは最大2件まで (recall-weaver制約)。
