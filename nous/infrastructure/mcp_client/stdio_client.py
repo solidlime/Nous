@@ -32,7 +32,7 @@ async def list_tools(config: MCPServerConfig) -> list[MCPTool]:
                     MCPTool(
                         name=f"{config.name}__{tool.name}",
                         description=tool.description or "",
-                        input_schema=tool.inputSchema if tool.inputSchema else {},
+                        input_schema=tool.input_schema if tool.input_schema else {},
                         server_name=config.name,
                         original_name=tool.name,
                     )
@@ -61,7 +61,7 @@ async def call_tool(config: MCPServerConfig, tool_name: str, args: dict) -> dict
                     content_parts.append(item.text)
                 else:
                     content_parts.append(str(item))
-            return {"result": "\n".join(content_parts), "isError": result.isError}
+            return {"result": "\n".join(content_parts), "isError": result.is_error}
 
     try:
         return await asyncio.wait_for(_inner(), timeout=30.0)

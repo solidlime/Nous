@@ -40,13 +40,7 @@ def _make_app(settings: Settings | None = None) -> TestClient:
 
     from nous.api.http.routers.events import register_events_routes
 
-    mcp = MemoryFastMCP(
-        "test",
-        host="127.0.0.1",
-        port=0,
-        stateless_http=True,
-        json_response=True,
-    )
+    mcp = MemoryFastMCP("test")
 
     register_events_routes(mcp)
 

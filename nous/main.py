@@ -4,9 +4,9 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.tools.base import Tool
-from mcp.shared.exceptions import McpError
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.tools.base import Tool
+from mcp.shared.exceptions import MCPError
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -24,13 +24,13 @@ from nous.infrastructure.logging.structured import get_logger, setup_logging
 _data_root = os.environ.get("NOUS_DATA_ROOT", str(Path(__file__).resolve().parent.parent / "data"))
 os.environ.setdefault("HF_HOME", str(Path(_data_root) / "cache" / "huggingface"))
 
-# ── Monkey-patch Tool.run() to re-raise McpError (preserves JSON-RPC error codes) ──
-# FastMCP's Tool.run() wraps all exceptions in ToolError, but McpError must
+# ── Monkey-patch Tool.run() to re-raise MCPError (preserves JSON-RPC error codes) ──
+# MCPServer's Tool.run() wraps all exceptions in ToolError, but MCPError must
 # propagate unwrapped so the low-level MCP server can convert it to a proper
 # JSON-RPC error response (e.g. -32000 PERSONA_REQUIRED).
 _original_tool_run = Tool.run
 
-from mcp.server.fastmcp.exceptions import ToolError  # noqa: E402
+from mcp.server.mcpserver.exceptions import ToolError  # noqa: E402
 
 
 async def _patched_tool_run(self, arguments, context=None, convert_result=False):
@@ -38,18 +38,18 @@ async def _patched_tool_run(self, arguments, context=None, convert_result=False)
         return await _original_tool_run(self, arguments, context, convert_result)
     except ToolError as e:
         cause = e.__cause__ or e.__context__
-        if isinstance(cause, McpError):
+        if isinstance(cause, MCPError):
             raise cause from None
         raise
-    except McpError:
+    except MCPError:
         raise
 
 
 Tool.run = _patched_tool_run
 
 
-class MemoryFastMCP(FastMCP):
-    """FastMCP subclass that injects PersonaMiddleware + CORSMiddleware."""
+class MemoryFastMCP(MCPServer):
+    """MCPServer subclass that injects PersonaMiddleware + CORSMiddleware."""
 
     def _add_cors_middleware(self, app):
         from starlette.middleware.cors import CORSMiddleware
@@ -65,13 +65,13 @@ class MemoryFastMCP(FastMCP):
         )
 
     def streamable_http_app(self):
-        app = super().streamable_http_app()
+        app = super().streamable_http_app(json_response=True, stateless_http=True)
         app.add_middleware(PersonaMiddleware)
         self._add_cors_middleware(app)
         return app
 
-    def sse_app(self, mount_path=None):
-        app = super().sse_app(mount_path)
+    def sse_app(self):
+        app = super().sse_app()
         app.add_middleware(PersonaMiddleware)
         self._add_cors_middleware(app)
         return app
@@ -101,7 +101,7 @@ def _mount_static_files(mcp: MemoryFastMCP) -> None:
 
 
 def create_app() -> MemoryFastMCP:
-    """Create and configure the FastMCP application."""
+    """Create and configure the MCPServer application."""
     settings = Settings()
     setup_logging(settings.log_level)
     logger = get_logger("main")
@@ -142,13 +142,7 @@ def create_app() -> MemoryFastMCP:
 
     # HF_HOME is already set at module level — no need to set again
 
-    mcp = MemoryFastMCP(
-        "Nous",
-        host=settings.server.host,
-        port=settings.server.port,
-        stateless_http=True,
-        json_response=True,  # Accept: application/json のみでOK（SSE不要）
-    )
+    mcp = MemoryFastMCP("Nous")
 
     # Auto-import on startup
     if settings.import_dir:
@@ -221,7 +215,14 @@ mcp = create_app()
 
 def main() -> None:
     """Run the Nous server."""
-    mcp.run(transport="streamable-http")
+    settings = get_settings()
+    mcp.run(
+        transport="streamable-http",
+        host=settings.server.host,
+        port=settings.server.port,
+        stateless_http=True,
+        json_response=True,
+    )
 
 
 if __name__ == "__main__":

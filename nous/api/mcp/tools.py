@@ -3,9 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Any
 
-from mcp.server.fastmcp import FastMCP  # noqa: TC002
-from mcp.shared.exceptions import McpError
-from mcp.types import ErrorData
+from mcp.server.mcpserver import MCPServer  # noqa: TC002
+from mcp.shared.exceptions import MCPError
 from pydantic import Field
 
 from nous.api.mcp.middleware import PersonaRequiredError, get_current_persona
@@ -85,7 +84,7 @@ def _parse_description_overrides() -> dict[str, str]:
     return overrides
 
 
-def register_tools(mcp: FastMCP) -> None:
+def register_tools(mcp: MCPServer) -> None:
     """Register flat-named MCP tools (20+ tools)."""
     _desc_overrides = _parse_description_overrides()
 
@@ -380,4 +379,4 @@ def _resolve_persona() -> str:
     try:
         return get_current_persona()
     except PersonaRequiredError:
-        raise McpError(ErrorData(code=-32000, message="PERSONA_REQUIRED")) from None
+        raise MCPError(-32000, "PERSONA_REQUIRED") from None

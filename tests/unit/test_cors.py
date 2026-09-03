@@ -32,13 +32,7 @@ def _make_app(settings: Settings | None = None) -> TestClient:
     if settings is None:
         settings = Settings(cors=CorsConfig(allowed_origins=["*"]))
 
-    mcp = MemoryFastMCP(
-        "test",
-        host="127.0.0.1",
-        port=0,
-        stateless_http=True,
-        json_response=True,
-    )
+    mcp = MemoryFastMCP("test")
 
     @mcp.custom_route("/test-cors", methods=["GET", "OPTIONS"])
     async def test_cors(request: Request) -> Response:  # noqa: ARG001
@@ -65,13 +59,7 @@ class TestCORSMiddlewarePresence:
     def test_middleware_is_registered(self):
         """MemoryFastMCP.streamable_http_app() のStarlette appにCORSMiddlewareが含まれる"""
         settings = Settings(cors=CorsConfig(allowed_origins=["*"]))
-        mcp = MemoryFastMCP(
-            "test",
-            host="127.0.0.1",
-            port=0,
-            stateless_http=True,
-            json_response=True,
-        )
+        mcp = MemoryFastMCP("test")
 
         import nous.main as main_mod
 
@@ -90,8 +78,7 @@ class TestCORSMiddlewarePresence:
 # =========================================================================
 
 # Starlette CORSMiddleware behavior notes:
-# - With allow_origins=["*"] and a specific Origin header present, it
-#   *reflects* the origin (echoes it back) to support credentials.
+# - With allow_origins=["*"], Starlette>=1 returns ACAO '*' (no origin reflection).
 # - With allow_origins=["*"] and no Origin header, no ACAO is added.
 # - With allow_origins=["*"] and allow_headers=["*"], ACAH reflects
 #   the requested headers, or is omitted if none were requested.
@@ -103,8 +90,8 @@ class TestCorsPreflight:
         client = _make_app()
         resp = client.options("/test-cors", headers={"Origin": "http://example.com"})
         assert resp.status_code == 200
-        # Starlette reflects origin when allow_origins=["*"] and Origin is present
-        assert resp.headers.get("access-control-allow-origin") == "http://example.com"
+        # Starlette>=1 returns '*' for wildcard origins (no reflection)
+        assert resp.headers.get("access-control-allow-origin") == "*"
 
     def test_options_preflight_specific_origin(self):
         """許可リストに含まれるoriginが通る"""
@@ -161,8 +148,8 @@ class TestCorsOnGet:
         client = _make_app()
         resp = client.get("/test-cors", headers={"Origin": "http://example.com"})
         assert resp.status_code == 200
-        # Starlette reflects origin when allow_origins=["*"]
-        assert resp.headers.get("access-control-allow-origin") == "http://example.com"
+        # Starlette>=1 returns '*' for wildcard origins (no reflection)
+        assert resp.headers.get("access-control-allow-origin") == "*"
 
     def test_get_no_origin_no_cors(self):
         """Originヘッダなし → ACAOは付かない"""
