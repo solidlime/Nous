@@ -64,14 +64,16 @@ class MemoryFastMCP(MCPServer):
             allow_headers=cfg.allow_headers,
         )
 
-    def streamable_http_app(self):
-        app = super().streamable_http_app(json_response=True, stateless_http=True)
+    def streamable_http_app(self, **kwargs):
+        kwargs.setdefault("json_response", True)
+        kwargs.setdefault("stateless_http", True)
+        app = super().streamable_http_app(**kwargs)
         app.add_middleware(PersonaMiddleware)
         self._add_cors_middleware(app)
         return app
 
-    def sse_app(self):
-        app = super().sse_app()
+    def sse_app(self, **kwargs):
+        app = super().sse_app(**kwargs)
         app.add_middleware(PersonaMiddleware)
         self._add_cors_middleware(app)
         return app
