@@ -10,8 +10,8 @@ tokenizers>=0.21.0
 huggingface_hub>=0.20
 sentencepiece>=0.1.99  # Required for cl-nagoya/ruri-v3-30m tokenizer
 
-# MCP Server Framework
-mcp>=1.0.0
+# MCP Server Framework (mcp<2: v1 FastMCP API. 2.x renamed FastMCP->MCPServer)
+mcp>=1.0.0,<2
 fastmcp>=3.4.4
 fastapi>=0.139.0
 uvicorn>=0.51.0
