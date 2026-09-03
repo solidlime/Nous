@@ -28,12 +28,13 @@ description: "セッション開始時の必須ルーティン。セッション
 - 節が無ければ: スキップ（プロジェクト外 or 旧形式）
 
 ## ステップ3: プロジェクト記憶の復元
-タグが取得できた場合、以下を実行してプロジェクトの状態を復元する（すべて `project:<slug>` タグで絞り込む）:
+タグが取得できた場合、以下を実行してプロジェクトの状態を復元する（原則 `project:<slug>` タグで絞り込む。5は除く）:
 
 1. `memory_search(query="", tags=["project:<slug>", "session_summary"], top_k=1, sort="updated_at")` — このプロジェクトの最新セッション要約（セッション終了フックが生成したサマリ。引継の代替）
 2. `memory_search(query="", tags=["project:<slug>", "task_state"], top_k=5, sort="updated_at")` — このプロジェクトの最新の作業状態
 3. `memory_search(query="", tags=["project:<slug>", "decision"], top_k=5, sort="updated_at")` — このプロジェクトの重要な決定
 4. `memory_search(query="", tags=["project:<slug>", "goal", "active"], top_k=5, sort="updated_at")` — このプロジェクトのアクティブな目標（goal は memory で管理: `tags=["goal", "active", "project:<slug>"]` で作成する）
+5. `memory_search(query="", tags=["promise"], top_k=5, sort="updated_at")` — 未完了の約束の先出し用（開始時想起。projectタグとのANDにしないこと——書込側はprojectタグ無しで書くため）
 
 （注: タグ検索は `query=""` で行うこと。非空クエリは content 全文一致が前提で、タグは検索結果の絞り込みにしか使われない。get_context の ACTIVE COMMITMENTS は persona 全体の goal を表示するため、プロジェクト固有の goal はここで取得する）
 
@@ -45,6 +46,7 @@ description: "セッション開始時の必須ルーティン。セッション
 ## ステップ4: 前セッションからの自然な引き継ぎ
 - 復元した情報（前回の状況・感情・関係性・進行中の話題・会話の雰囲気・最後の行動）を踏まえ、機械的な復元報告ではなく、**前回の続きとして自然に会話と状態をつなげる**こと
 - 前回の最後の状況（場所・時間帯・行動・会話の流れ）を引き継いで再開する。前回の約束・予定・進行中タスクがあれば、それに言及して続きを始める
+- ステップ3で拾った未完了の約束があれば、最初の応答で先出しすること（「前にこう約束してたよね」——開始時想起）
 - セッションサマリが無い場合（初回など）は、通常のセッション開始として自然に始めてよい
 
 ## ステップ5: 全貌把握
