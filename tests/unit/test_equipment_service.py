@@ -82,9 +82,6 @@ class InMemoryEquipmentRepository:
         self._history.append(entry)
         return Success(None)
 
-    def get_history(self, days: int = 7) -> Result[list[EquipmentHistory], RepositoryError]:
-        return Success(self._history)
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -180,7 +177,7 @@ class TestEquip:
             auto_add=True,
         )
         assert result.is_ok
-        eq = result.unwrap()
+        eq = result.value
         assert eq["top"] == "シャツ"
         assert eq["bottom"] == "スカート"
 
@@ -208,22 +205,22 @@ class TestSearchItems:
         service.add_item("赤いリング", category="accessory")
         result = service.search_items(category="clothing")
         assert result.is_ok
-        assert len(result.unwrap()) == 1
-        assert result.unwrap()[0].name == "白いドレス"
+        assert len(result.value) == 1
+        assert result.value[0].name == "白いドレス"
 
     def test_search_by_query(self, service: EquipmentService):
         service.add_item("白いドレス", description="シンプルな白ドレス")
         service.add_item("赤いドレス", description="派手な赤ドレス")
         result = service.search_items(query="白い")
         assert result.is_ok
-        assert len(result.unwrap()) == 1
+        assert len(result.value) == 1
 
     def test_search_all(self, service: EquipmentService):
         service.add_item("A")
         service.add_item("B")
         result = service.search_items()
         assert result.is_ok
-        assert len(result.unwrap()) == 2
+        assert len(result.value) == 2
 
 
 class TestGetEquipment:
@@ -231,7 +228,7 @@ class TestGetEquipment:
         service.equip({"top": "シャツ", "bottom": "パンツ"}, auto_add=True)
         result = service.get_equipment()
         assert result.is_ok
-        eq = result.unwrap()
+        eq = result.value
         assert eq["top"] == "シャツ"
         assert eq["bottom"] == "パンツ"
 

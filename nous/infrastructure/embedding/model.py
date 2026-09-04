@@ -211,14 +211,6 @@ class EmbeddingModel(OnnxBaseModel):
                     "message": f"Reload failed, reverted: {e}",
                 }
 
-    def unload(self) -> None:
-        """Release model resources."""
-        with self._lock:
-            self._session = None
-            self._tokenizer = None
-            self._dimension = None
-            logger.info("Embedding model unloaded: %s", self.config.model)
-
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

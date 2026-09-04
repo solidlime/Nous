@@ -14,6 +14,7 @@ from nous.application.chat.pipeline.trimmer import TrimmerMixin
 from nous.application.chat.session_store import SessionManager
 from nous.application.chat.tools.definitions import get_filtered_tools
 from nous.application.chat.tools.registry import ToolRegistry
+from nous.application.event_bus import CHAT_LLM_RESPONSE, CHAT_MESSAGE, SESSION_COMPACT
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.mcp_client import MCPClientPool
@@ -108,7 +109,7 @@ class ChatService:
 
             # Publish chat.message event for server-side history
             await ctx.event_bus.publish(
-                "chat.message",
+                CHAT_MESSAGE,
                 {
                     "persona": persona,
                     "session_id": session_id,
@@ -199,7 +200,7 @@ class ChatService:
                 if comp_info:
                     # Publish compaction event
                     await ctx.event_bus.publish(
-                        "session.compact",
+                        SESSION_COMPACT,
                         {
                             "persona": persona,
                             "session_id": session_id,
@@ -249,7 +250,7 @@ class ChatService:
                 # Publish chat.llm_response event
                 if full_response:
                     await ctx.event_bus.publish(
-                        "chat.llm_response",
+                        CHAT_LLM_RESPONSE,
                         {
                             "persona": persona,
                             "session_id": session_id,

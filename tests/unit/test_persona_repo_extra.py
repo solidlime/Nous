@@ -54,7 +54,7 @@ class TestGetEmotionHistoryByDays:
     def test_returns_empty_when_no_records(self, persona_repo):
         result = persona_repo.get_emotion_history_by_days(PERSONA, days=7)
         assert result.is_ok
-        assert result.unwrap() == []
+        assert result.value == []
 
     def test_returns_recent_emotions(self, persona_repo):
         record = EmotionRecord(emotion="joy", intensity=0.8, timestamp=get_now())
@@ -62,8 +62,8 @@ class TestGetEmotionHistoryByDays:
 
         result = persona_repo.get_emotion_history_by_days(PERSONA, days=7)
         assert result.is_ok
-        assert len(result.unwrap()) == 1
-        assert result.unwrap()[0].emotion == "joy"
+        assert len(result.value) == 1
+        assert result.value[0].emotion == "joy"
 
     def test_ascending_order(self, persona_repo):
         from datetime import timedelta
@@ -75,7 +75,7 @@ class TestGetEmotionHistoryByDays:
 
         result = persona_repo.get_emotion_history_by_days(PERSONA, days=1)
         assert result.is_ok
-        records = result.unwrap()
+        records = result.value
         assert len(records) == 2
         # Ascending order: oldest first
         assert records[0].emotion == "joy"
@@ -88,13 +88,13 @@ class TestAppearanceField:
         persona_repo.update_state(PERSONA, "appearance", "銀色の長い髪、赤い瞳")
         result = persona_repo.get_current_state(PERSONA)
         assert result.is_ok
-        assert result.unwrap().appearance == "銀色の長い髪、赤い瞳"
+        assert result.value.appearance == "銀色の長い髪、赤い瞳"
 
     def test_appearance_defaults_to_none(self, persona_repo):
         """Fresh persona with no appearance set should have None."""
         result = persona_repo.get_current_state(PERSONA)
         assert result.is_ok
-        assert result.unwrap().appearance is None
+        assert result.value.appearance is None
 
 
 class TestGetCurrentStateWithBodyFields:
@@ -105,7 +105,7 @@ class TestGetCurrentStateWithBodyFields:
 
         result = persona_repo.get_current_state(PERSONA)
         assert result.is_ok
-        state = result.unwrap()
+        state = result.value
         assert state.fatigue == pytest.approx(0.7, abs=0.01)
         assert state.warmth == pytest.approx(0.8, abs=0.01)
         assert state.arousal == pytest.approx(0.5, abs=0.01)
@@ -122,4 +122,4 @@ class TestGetCurrentStateWithBodyFields:
         result = persona_repo.get_current_state(PERSONA)
         assert result.is_ok
         # last_conversation_time should not be None since memories exist
-        assert result.unwrap().last_conversation_time is not None
+        assert result.value.last_conversation_time is not None

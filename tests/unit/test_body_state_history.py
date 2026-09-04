@@ -89,7 +89,7 @@ class TestAddBodyStateRecord:
 
         history = repo.get_body_state_history(PERSONA)
         assert history.is_ok
-        records = history.unwrap()
+        records = history.value
         assert len(records) == 1
         assert records[0].fatigue == pytest.approx(0.8, abs=0.01)
         assert records[0].warmth == pytest.approx(0.7, abs=0.01)
@@ -100,7 +100,7 @@ class TestAddBodyStateRecord:
         result = repo.add_body_state_record(PERSONA, body_dict, context="partial")
         assert result.is_ok
 
-        records = repo.get_body_state_history(PERSONA).unwrap()
+        records = repo.get_body_state_history(PERSONA).value
         assert len(records) == 1
         assert records[0].fatigue == pytest.approx(0.5, abs=0.01)
         assert records[0].warmth is None  # not provided
@@ -109,7 +109,7 @@ class TestAddBodyStateRecord:
         result = repo.add_body_state_record(PERSONA, {}, context="empty")
         assert result.is_ok
 
-        records = repo.get_body_state_history(PERSONA).unwrap()
+        records = repo.get_body_state_history(PERSONA).value
         assert len(records) == 1
         assert records[0].fatigue is None
 
@@ -118,7 +118,7 @@ class TestGetBodyStateHistory:
     def test_returns_empty_when_no_records(self, repo):
         result = repo.get_body_state_history(PERSONA)
         assert result.is_ok
-        assert result.unwrap() == []
+        assert result.value == []
 
     def test_returns_most_recent_first(self, repo):
         # Use explicit DB timestamps to ensure ordering
@@ -133,7 +133,7 @@ class TestGetBodyStateHistory:
         )
         db.commit()
 
-        records = repo.get_body_state_history(PERSONA).unwrap()
+        records = repo.get_body_state_history(PERSONA).value
         assert len(records) == 2
         # Most recent first
         assert records[0].context == "second"
@@ -144,7 +144,7 @@ class TestGetBodyStateHistory:
         for i in range(5):
             repo.add_body_state_record(PERSONA, body_dict, context=f"rec_{i}")
 
-        records = repo.get_body_state_history(PERSONA, limit=3).unwrap()
+        records = repo.get_body_state_history(PERSONA, limit=3).value
         assert len(records) == 3
 
 
@@ -152,13 +152,13 @@ class TestGetBodyStateHistoryByDays:
     def test_returns_empty_when_no_records(self, repo):
         result = repo.get_body_state_history_by_days(PERSONA, days=7)
         assert result.is_ok
-        assert result.unwrap() == []
+        assert result.value == []
 
     def test_returns_recent_records(self, repo):
         body_dict = {"fatigue": 0.5}
         repo.add_body_state_record(PERSONA, body_dict, context="recent")
 
-        records = repo.get_body_state_history_by_days(PERSONA, days=7).unwrap()
+        records = repo.get_body_state_history_by_days(PERSONA, days=7).value
         assert len(records) == 1
 
     def test_ascending_order(self, repo):
@@ -180,7 +180,7 @@ class TestGetBodyStateHistoryByDays:
         )
         db.commit()
 
-        records = repo.get_body_state_history_by_days(PERSONA, days=7).unwrap()
+        records = repo.get_body_state_history_by_days(PERSONA, days=7).value
         assert len(records) == 2
         # Ascending: oldest first
         assert records[0].context == "first"
@@ -219,7 +219,7 @@ class TestServiceBodyStateHistory:
         result = service.record_body_state(PERSONA, body_dict, context="test")
         assert result.is_ok
 
-        records = service.get_body_state_history(PERSONA).unwrap()
+        records = service.get_body_state_history(PERSONA).value
         assert len(records) == 1
         assert records[0].fatigue == pytest.approx(0.7, abs=0.01)
 
@@ -227,7 +227,7 @@ class TestServiceBodyStateHistory:
         service = PersonaService(repo)
         service.record_body_state(PERSONA, {"fatigue": 0.8}, context="test")
 
-        records = service.get_body_state_history_by_days(PERSONA, days=7).unwrap()
+        records = service.get_body_state_history_by_days(PERSONA, days=7).value
         assert len(records) == 1
 
 
@@ -255,7 +255,7 @@ class TestBodyDecayRecordsHistory:
         # Re-read state and apply decay
         state_result = service.get_context(PERSONA)
         assert state_result.is_ok
-        state = state_result.unwrap()
+        state = state_result.value
 
         # Manually trigger the decay logic inline (same as apply_body_decay_if_needed)
         from nous.domain.persona.body_decay import apply_body_decay_if_needed
@@ -266,7 +266,7 @@ class TestBodyDecayRecordsHistory:
         assert changed, "Expected body decay to detect changes with 24h gap"
 
         # Check body state history has before/after records
-        records = repo.get_body_state_history(PERSONA).unwrap()
+        records = repo.get_body_state_history(PERSONA).value
         assert len(records) >= 2
 
         contexts = [r.context for r in records]
@@ -295,5 +295,5 @@ class TestBodyDecayRecordsHistory:
         changed = await apply_body_decay_if_needed(service, PERSONA, state)
         assert not changed
 
-        records = repo.get_body_state_history(PERSONA).unwrap()
+        records = repo.get_body_state_history(PERSONA).value
         assert len(records) == 0

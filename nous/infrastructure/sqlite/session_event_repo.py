@@ -115,18 +115,6 @@ class SessionEventRepository:
         return [self._row_to_event(r) for r in rows], total
 
     # ------------------------------------------------------------------
-    # Delete
-    # ------------------------------------------------------------------
-
-    def delete_by_session(self, session_id: str) -> int:
-        """Delete all events for a session. Returns count deleted."""
-        cursor = self._db.execute(
-            "DELETE FROM session_events WHERE session_id = ?",
-            (session_id,),
-        )
-        return cursor.rowcount
-
-    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 

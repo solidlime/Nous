@@ -45,7 +45,7 @@ def _make_memory(key: str, content: str, **kwargs) -> Memory:
 
 def _search(repo, conn, query_text: str):
     """Run keyword search then rank with ForgettingCurveRanker reading from DB."""
-    raw = repo.search_keyword(query_text).unwrap()
+    raw = repo.search_keyword(query_text).value
     db = conn.get_memory_db()
 
     def lookup(key: str):
@@ -117,10 +117,10 @@ class TestDecaySearch:
         db.commit()
 
         # Boost mem_a via the repo
-        strength_a = repo.get_strength("mem_a").unwrap()
+        strength_a = repo.get_strength("mem_a").value
         assert strength_a is not None
         strength_a.boost_on_recall()  # sets strength=1.0, stability=min(0*1.5,365)=0→stays 0
-        repo.save_strength(strength_a).unwrap()
+        repo.save_strength(strength_a)
 
         ranked = _search(repo, conn, "unique")
 
@@ -153,7 +153,7 @@ class TestDecaySearch:
         db.commit()
 
         # 1. Keyword search should still return only the real memory
-        raw = repo.search_keyword("working").unwrap()
+        raw = repo.search_keyword("working").value
         assert len(raw) == 1
         assert raw[0][0].key == "mem_ok"
 

@@ -181,12 +181,6 @@ class VectorSearchProtocol(Protocol):
     ) -> Result[list[tuple[str, float]], VectorStoreError]: ...
 
 
-class EmbeddingProtocol(Protocol):
-    """Protocol for text embedding."""
-
-    def encode(self, text: str, *, is_query: bool = False): ...
-
-
 @dataclass
 class ContradictionCandidate:
     """A memory that potentially contradicts new content."""

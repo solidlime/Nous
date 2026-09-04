@@ -4,7 +4,6 @@ from nous.domain.memory.entities import Memory, MemoryStrength
 from nous.domain.memory.entity_extractor import SimpleEntityExtractor
 from nous.domain.memory.memory_link import LINK_TYPES, MemoryLink
 from nous.domain.memory.recall_annotator import RecallAnnotation, RecallAnnotator
-from nous.domain.memory.recall_governor import RecallGovernor
 from nous.domain.memory.repository import (
     MemoryAuxiliaryRepository,
     MemoryRepository,
@@ -40,7 +39,6 @@ __all__ = [
     "MemoryStrengthRepository",
     "RecallAnnotator",
     "RecallAnnotation",
-    "RecallGovernor",
     "SimpleEntityExtractor",
     "SudachiExtractor",
 ]

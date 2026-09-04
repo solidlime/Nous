@@ -29,11 +29,6 @@ def _make_db() -> sqlite3.Connection:
 
 
 class TestSkillRepository:
-    def test_list_empty(self):
-        db = _make_db()
-        repo = SkillRepository(db)
-        assert repo.list_all() == []
-
     def test_save_and_get(self):
         db = _make_db()
         repo = SkillRepository(db)
@@ -51,17 +46,6 @@ class TestSkillRepository:
         db = _make_db()
         repo = SkillRepository(db)
         assert repo.get("nonexistent") is None
-
-    def test_list_all(self):
-        db = _make_db()
-        repo = SkillRepository(db)
-        repo.save(Skill(name="skill_b", content="b"))
-        repo.save(Skill(name="skill_a", content="a"))
-        skills = repo.list_all()
-        assert len(skills) == 2
-        # sorted by name
-        assert skills[0].name == "skill_a"
-        assert skills[1].name == "skill_b"
 
     def test_save_update(self):
         db = _make_db()
@@ -125,40 +109,6 @@ class TestSkillRepository:
         assert loaded.license == "MIT"
         assert loaded.compatibility == "memory-mcp >= 2.0.0"
         assert loaded.metadata == meta
-
-    def test_list_all_with_extended_fields(self):
-        db = _make_db()
-        repo = SkillRepository(db)
-        repo.save(
-            Skill(
-                name="skill1",
-                content="c1",
-                license="MIT",
-                compatibility="v1",
-                metadata={"env": "prod"},
-            )
-        )
-        repo.save(
-            Skill(
-                name="skill2",
-                content="c2",
-                license="Apache-2.0",
-                compatibility="v2",
-                metadata={"env": "staging"},
-            )
-        )
-        skills = repo.list_all()
-        assert len(skills) == 2
-        s1 = skills[0]
-        assert s1.name == "skill1"
-        assert s1.license == "MIT"
-        assert s1.compatibility == "v1"
-        assert s1.metadata == {"env": "prod"}
-        s2 = skills[1]
-        assert s2.name == "skill2"
-        assert s2.license == "Apache-2.0"
-        assert s2.compatibility == "v2"
-        assert s2.metadata == {"env": "staging"}
 
     def test_upsert_preserves_extended_fields(self):
         db = _make_db()

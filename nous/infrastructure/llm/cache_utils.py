@@ -69,33 +69,3 @@ def build_openai_system_messages(system: str) -> list[dict]:
         {"type": "text", "text": dynamic_part},
     ]
     return [{"role": "system", "content": content}]
-
-
-# プロバイダごとのキャッシュ戦略
-# explicit: cache_control: ephemeral を明示的に付与（Anthropic/OpenRouter/OpenCode Go）
-# auto: プロバイダ側の自動キャッシュに任せる（OpenAI/Gemini）
-# none: キャッシュ非対応
-PROVIDER_CACHE_STRATEGY = {
-    "anthropic": "explicit",
-    "openai": "auto",
-    "openrouter": "explicit",
-    "google": "auto",
-    "opencode_go": "explicit",
-}
-
-
-def should_add_cache_control(provider: str) -> bool:
-    """explicit 戦略のプロバイダかどうか"""
-    return PROVIDER_CACHE_STRATEGY.get(provider) == "explicit"
-
-
-def get_cache_extra_body(provider: str, session_id: str = "") -> dict:
-    """プロバイダごとのキャッシュ用 extra_body を返す。
-    opencode_go は prompt_cache_retention + prompt_cache_key が必要。
-    """
-    if provider == "opencode_go":
-        body = {"prompt_cache_retention": "24h"}
-        if session_id:
-            body["prompt_cache_key"] = session_id
-        return body
-    return {}

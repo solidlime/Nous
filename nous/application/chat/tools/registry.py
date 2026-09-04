@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 from nous.application.chat.tools.builtin import execute_tool, filter_extra_tools, truncate_tool_result
 from nous.domain.shared.time_utils import get_now
-from nous.infrastructure.llm.base import ToolDefinition
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -14,6 +13,7 @@ if TYPE_CHECKING:
 
     from nous.application.use_cases import AppContext
     from nous.domain.chat_config import ChatConfig
+    from nous.infrastructure.llm.base import ToolDefinition
     from nous.infrastructure.mcp_client import MCPClientPool
 
 logger = get_logger(__name__)
@@ -44,25 +44,6 @@ class ToolRegistry:
         self._mcp_pool = mcp_pool
         self._discovered_tools: set[str] = set()
         self._search_handler: SearchHandler | None = search_handler
-
-    def add_skills_info(self, skills: list[dict]) -> None:
-        """invoke_skill ツールの description に有効スキル一覧を動的注入する。"""
-        for i, tool in enumerate(self._builtin):
-            if tool.name == "invoke_skill":
-                base_desc = tool.description
-                if skills:
-                    skill_lines = [f"- {s.get('name', '?')}: {s.get('description', '')}" for s in skills]
-                    skill_list = "\n".join(skill_lines)
-                    new_desc = f"{base_desc}\n\n利用可能なスキル:\n{skill_list}"
-                else:
-                    new_desc = base_desc
-                # 新しい ToolDefinition を作成して置き換え
-                self._builtin[i] = ToolDefinition(
-                    name=tool.name,
-                    description=new_desc,
-                    input_schema=tool.input_schema,
-                )
-                break
 
     def get_all_tools(self) -> list[ToolDefinition]:
         """重複除去済みの全ツールリストを返す。builtin はアルファベット順（キャッシュ最適化） + MCP は末尾。"""

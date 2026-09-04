@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -193,11 +194,12 @@ def create_app() -> MemoryFastMCP:
             status_code=200 if status["status"] == "healthy" else 503,
         )
 
-    # Start background workers
+    # Start background workers (references kept for graceful shutdown in main())
     from nous.application.workers.consolidation_worker import ConsolidationWorker
 
     consolidation_worker = ConsolidationWorker(settings)
     consolidation_worker.start()
+    _workers.append(consolidation_worker)
 
     # Start MemoRAG context snapshot worker
     from nous.domain.chat_config import ChatConfig
@@ -208,23 +210,65 @@ def create_app() -> MemoryFastMCP:
 
         snapshot_worker = ContextSnapshotWorker(settings, config=default_config)
         snapshot_worker.start()
+        _workers.append(snapshot_worker)
 
     return mcp
 
 
+# Module-level registry of background workers created by create_app().
+# main() drains these on shutdown (stop → join → close_all_async).
+_workers: list = []
+
 mcp = create_app()
+
+# Hot-reload callbacks for embedding/reranker/qdrant (idempotent).
+from nous.config.runtime_config import RuntimeConfigManager, register_model_reload_callbacks  # noqa: E402
+
+register_model_reload_callbacks(RuntimeConfigManager())
+
+
+def _shutdown() -> None:
+    """Graceful shutdown: stop workers → join → close async resources.
+
+    Order matters (#081): workers must be fully stopped before closing
+    Qdrant/SQLite connections they may still be using.
+    Each step is exception-isolated so one failure cannot skip the rest.
+    """
+    from nous.application.use_cases import AppContextRegistry
+    from nous.infrastructure.logging.structured import get_logger
+
+    logger = get_logger("main")
+
+    try:
+        for worker in _workers:
+            worker.stop(timeout=5)
+    except Exception:
+        logger.exception("Shutdown: worker stop failed")
+    finally:
+        _workers.clear()
+
+    try:
+        AppContextRegistry.stop_decay_workers(timeout=5)
+    except Exception:
+        logger.exception("Shutdown: decay worker stop failed")
+
+    try:
+        asyncio.run(AppContextRegistry.close_all_async())
+    except Exception:
+        logger.exception("Shutdown: close_all_async failed")
 
 
 def main() -> None:
     """Run the Nous server."""
+    import uvicorn
+
     settings = get_settings()
-    mcp.run(
-        transport="streamable-http",
-        host=settings.server.host,
-        port=settings.server.port,
-        stateless_http=True,
-        json_response=True,
-    )
+    app = mcp.streamable_http_app(json_response=True, stateless_http=True)
+    server = uvicorn.Server(uvicorn.Config(app, host=settings.server.host, port=settings.server.port))
+    try:
+        asyncio.run(server.serve())
+    finally:
+        _shutdown()
 
 
 if __name__ == "__main__":

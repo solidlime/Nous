@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta
 
 from nous.domain.equipment.entities import (
     EquipmentHistory,
@@ -85,21 +84,6 @@ class SQLiteEquipmentRepository(SQLiteRepository):
             return Success(self._row_to_item(row))
         except Exception as e:
             logger.error("Failed to find item %s: %s", name, e)
-            return Failure(RepositoryError(str(e)))
-
-    def list_items(self, category: str | None = None) -> Result[list[Item], RepositoryError]:
-        """List all items, optionally filtered by category."""
-        try:
-            if category:
-                rows = self._db.execute(
-                    "SELECT * FROM items WHERE category = ? ORDER BY name",
-                    (category,),
-                ).fetchall()
-            else:
-                rows = self._db.execute("SELECT * FROM items ORDER BY name").fetchall()
-            return Success([self._row_to_item(r) for r in rows])
-        except Exception as e:
-            logger.error("Failed to list items: %s", e)
             return Failure(RepositoryError(str(e)))
 
     def update_item(self, name: str, **updates) -> Result[Item, RepositoryError]:
@@ -218,23 +202,6 @@ class SQLiteEquipmentRepository(SQLiteRepository):
             logger.error("Failed to get equipment: %s", e)
             return Failure(RepositoryError(str(e)))
 
-    def get_history(self, days: int = 7) -> Result[list[EquipmentHistory], RepositoryError]:
-        """Get equipment history for the last N days."""
-        try:
-            cutoff = format_iso(get_now() - timedelta(days=days))
-            rows = self._db.execute(
-                """
-                SELECT * FROM equipment_history
-                WHERE timestamp >= ?
-                ORDER BY timestamp DESC
-                """,
-                (cutoff,),
-            ).fetchall()
-            return Success([self._row_to_history(r) for r in rows])
-        except Exception as e:
-            logger.error("Failed to get equipment history: %s", e)
-            return Failure(RepositoryError(str(e)))
-
     # ------------------------------------------------------------------
     # Protocol aliases (EquipmentRepository protocol compliance)
     # ------------------------------------------------------------------
@@ -326,15 +293,4 @@ class SQLiteEquipmentRepository(SQLiteRepository):
             tags=_parse_json_list(row["tags"]),
             created_at=_parse_or_none(row["created_at"]),
             updated_at=_parse_or_none(row["updated_at"]),
-        )
-
-    @staticmethod
-    def _row_to_history(row) -> EquipmentHistory:
-        return EquipmentHistory(
-            id=row["id"],
-            action=row["action"],
-            slot=row["slot"],
-            item_name=row["item_name"],
-            timestamp=_parse_or_none(row["timestamp"]),
-            details=row["details"],
         )

@@ -38,6 +38,13 @@ def mock_get_provider():
         yield mock_provider, mock
 
 
+def _run_enrich(enricher: MemoryEnricher, **kwargs):
+    """Sync helper: run enrich_async via asyncio.run (sync enrich() was removed)."""
+    import asyncio
+
+    return asyncio.run(enricher.enrich_async(**kwargs))
+
+
 def _async_iter(*events: Any):
     """Build an async generator that yields the given events."""
 
@@ -51,15 +58,15 @@ def _async_iter(*events: Any):
 class TestMinChars:
     def test_skip_short_content(self, enricher: MemoryEnricher):
         """Content shorter than min_chars returns None."""
-        result = enricher.enrich(content="hi", type_tags=[], entities=[])
+        result = _run_enrich(enricher, content="hi", type_tags=[], entities=[])
         assert result is None
 
     def test_skip_empty_content(self, enricher: MemoryEnricher):
-        result = enricher.enrich(content="", type_tags=[], entities=[])
+        result = _run_enrich(enricher, content="", type_tags=[], entities=[])
         assert result is None
 
     def test_skip_whitespace_only(self, enricher: MemoryEnricher):
-        result = enricher.enrich(content="   ", type_tags=[], entities=[])
+        result = _run_enrich(enricher, content="   ", type_tags=[], entities=[])
         assert result is None
 
 
@@ -72,7 +79,8 @@ class TestParseImportance:
             DoneEvent(full_content='{"importance": 0.8, "relations": []}'),
         )
 
-        result = enricher.enrich(
+        result = _run_enrich(
+            enricher,
             content="これは十分に長いメモリの内容です。テスト用です。",
             type_tags=[],
             entities=[],
@@ -88,7 +96,8 @@ class TestParseImportance:
             DoneEvent(full_content='{"importance": 2.5, "relations": []}'),
         )
 
-        result = enricher.enrich(
+        result = _run_enrich(
+            enricher,
             content="これは十分に長いメモリの内容です。テスト用です。",
             type_tags=[],
             entities=[],
@@ -103,7 +112,8 @@ class TestParseImportance:
             DoneEvent(full_content='{"importance": -1.0, "relations": []}'),
         )
 
-        result = enricher.enrich(
+        result = _run_enrich(
+            enricher,
             content="これは十分に長いメモリの内容です。",
             type_tags=[],
             entities=[],
@@ -118,7 +128,8 @@ class TestParseImportance:
             DoneEvent(full_content='{"relations": []}'),
         )
 
-        result = enricher.enrich(
+        result = _run_enrich(
+            enricher,
             content="これは十分に長いメモリの内容です。",
             type_tags=[],
             entities=[],
@@ -142,7 +153,8 @@ class TestParseRelations:
             DoneEvent(full_content=json_text),
         )
 
-        result = enricher.enrich(
+        result = _run_enrich(
+            enricher,
             content="これは十分に長いメモリの内容です。",
             type_tags=[],
             entities=[],
@@ -169,7 +181,8 @@ class TestParseRelations:
             DoneEvent(full_content='{"importance": 0.5, "relations": []}'),
         )
 
-        result = enricher.enrich(
+        result = _run_enrich(
+            enricher,
             content="これは十分に長いメモリの内容です。",
             type_tags=[],
             entities=[],
@@ -191,7 +204,8 @@ class TestParseRelations:
             DoneEvent(full_content=json_text),
         )
 
-        result = enricher.enrich(
+        result = _run_enrich(
+            enricher,
             content="これは十分に長いメモリの内容です。",
             type_tags=[],
             entities=[],
@@ -213,7 +227,8 @@ class TestParseRelations:
             DoneEvent(full_content=json_text),
         )
 
-        result = enricher.enrich(
+        result = _run_enrich(
+            enricher,
             content="これは十分に長いメモリの内容です。",
             type_tags=[],
             entities=[],
@@ -230,7 +245,8 @@ class TestErrorHandling:
             DoneEvent(full_content=""),
         )
 
-        result = enricher.enrich(
+        result = _run_enrich(
+            enricher,
             content="これは十分に長いメモリの内容です。",
             type_tags=[],
             entities=[],
@@ -245,7 +261,8 @@ class TestErrorHandling:
             DoneEvent(full_content="not valid json"),
         )
 
-        result = enricher.enrich(
+        result = _run_enrich(
+            enricher,
             content="これは十分に長いメモリの内容です。",
             type_tags=[],
             entities=[],
@@ -257,7 +274,8 @@ class TestErrorHandling:
         _, mock_factory = mock_get_provider
         mock_factory.side_effect = RuntimeError("Provider unavailable")
 
-        result = enricher.enrich(
+        result = _run_enrich(
+            enricher,
             content="これは十分に長いメモリの内容です。",
             type_tags=[],
             entities=[],
@@ -275,7 +293,8 @@ class TestMarkdownCodeBlock:
             DoneEvent(full_content=md_text),
         )
 
-        result = enricher.enrich(
+        result = _run_enrich(
+            enricher,
             content="これは十分に長いメモリの内容です。",
             type_tags=[],
             entities=[],
@@ -292,7 +311,8 @@ class TestEnrichmentResult:
             DoneEvent(full_content='{"importance": 0.6, "relations": []}'),
         )
 
-        result = enricher.enrich(
+        result = _run_enrich(
+            enricher,
             content="これは十分に長いメモリの内容です。",
             type_tags=[],
             entities=[],

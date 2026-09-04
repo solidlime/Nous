@@ -31,6 +31,7 @@ from nous.infrastructure.sqlite.persona_repo import SQLitePersonaRepository
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from nous.application.workers.decay_worker import DecayWorker
     from nous.config.settings import Settings
     from nous.domain.chat_config import ChatConfig
     from nous.infrastructure.embedding.reranker import RerankerModel
@@ -507,6 +508,7 @@ class AppContextRegistry:
     """Registry managing per-persona AppContext instances."""
 
     _contexts: dict[str, AppContext] = {}
+    _decay_workers: dict[str, DecayWorker] = {}
     _settings: Settings | None = None
     _lock = threading.Lock()
 
@@ -553,11 +555,26 @@ class AppContextRegistry:
                 )
                 decay_worker = DecayWorker(ctx, decay_interval, config=config)
                 decay_worker.start()
+                cls._decay_workers[persona] = decay_worker
 
         return ctx
+
+    @classmethod
+    def stop_decay_workers(cls, timeout: float = 5.0) -> None:
+        """Stop all decay workers (graceful shutdown)."""
+        for worker in cls._decay_workers.values():
+            worker.stop(timeout=timeout)
+        cls._decay_workers.clear()
 
     @classmethod
     def close_all(cls) -> None:
         for ctx in cls._contexts.values():
             ctx.close()
+        cls._contexts.clear()
+
+    @classmethod
+    async def close_all_async(cls) -> None:
+        """Async close: release Qdrant connections and SQLite connections for all contexts."""
+        for ctx in cls._contexts.values():
+            await ctx.close_async()
         cls._contexts.clear()

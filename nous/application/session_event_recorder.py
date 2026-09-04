@@ -6,6 +6,7 @@ import contextlib
 import logging
 from typing import TYPE_CHECKING
 
+from nous.application.event_bus import CHAT_LLM_RESPONSE, CHAT_MESSAGE, SESSION_COMPACT, SESSION_STARTED
 from nous.domain.memory.session_event import SessionEvent
 from nous.domain.shared.time_utils import get_now
 
@@ -27,10 +28,10 @@ class SessionEventRecorder:
         event_types = [
             "tool.called",
             "events.ingested",
-            "chat.message",
-            "chat.llm_response",
-            "session.started",
-            "session.compact",
+            CHAT_MESSAGE,
+            CHAT_LLM_RESPONSE,
+            SESSION_STARTED,
+            SESSION_COMPACT,
         ]
         for event_type in event_types:
             self._event_bus.subscribe(event_type, self._on_event)
@@ -77,17 +78,17 @@ class SessionEventRecorder:
         elif event_type == "events.ingested":
             count = len(data.get("events", []))
             return f"Plugin ingested {count} events"
-        elif event_type == "chat.message":
+        elif event_type == CHAT_MESSAGE:
             content = data.get("content", "")
             return f"💬 {content[:100]}"
-        elif event_type == "chat.llm_response":
+        elif event_type == CHAT_LLM_RESPONSE:
             content = data.get("content", "")
             return f"🤖 {content[:100]}"
-        elif event_type == "session.compact":
+        elif event_type == SESSION_COMPACT:
             before = data.get("before_tokens", 0)
             after = data.get("after_tokens", 0)
             return f"📦 Compressed: {before}→{after} tokens"
-        elif event_type == "session.started":
+        elif event_type == SESSION_STARTED:
             sid = data.get("session_id", "")
             return f"▶ Session started: {sid}"
         return f"{event_type}: {data.get('summary', '')}"

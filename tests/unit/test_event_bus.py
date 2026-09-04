@@ -74,16 +74,6 @@ class TestEventBus:
         asyncio.run(bus.publish(EVENT_MEMORY_DELETED, {"key": "test"}))
         assert len(results) == 0
 
-    def test_subscriber_count(self):
-        bus = EventBus()
-        assert bus.subscriber_count(EVENT_CONTEXT_UPDATED) == 0
-
-        async def h(et, data):
-            pass
-
-        bus.subscribe(EVENT_CONTEXT_UPDATED, h)
-        assert bus.subscriber_count(EVENT_CONTEXT_UPDATED) == 1
-
     def test_event_constants(self):
         assert EVENT_MEMORY_CREATED == "memory.created"
         assert EVENT_MEMORY_UPDATED == "memory.updated"

@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from nous.domain.persona.entities import (
         BodyStateRecord,
-        ContextEntry,
         EmotionRecord,
         PersonaState,
     )
@@ -33,10 +32,6 @@ class PersonaRepository(Protocol):
         value: str,
         source: str | None = None,
     ) -> Result[None, RepositoryError]: ...
-
-    def get_state_history(
-        self, persona: str, key: str, limit: int = 20
-    ) -> Result[list[ContextEntry], RepositoryError]: ...
 
     # ------------------------------------------------------------------
     # Emotion history
@@ -68,7 +63,3 @@ class PersonaRepository(Protocol):
     def set_user_info(self, persona: str, key: str, value: str) -> Result[None, RepositoryError]: ...
 
     def set_persona_info(self, persona: str, key: str, value: str) -> Result[None, RepositoryError]: ...
-
-    def get_user_info(self, persona: str) -> Result[dict, RepositoryError]: ...
-
-    def get_persona_info(self, persona: str) -> Result[dict, RepositoryError]: ...

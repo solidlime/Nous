@@ -166,26 +166,15 @@ class TestMemoryCRUD:
 
 
 class TestMemoryBlocks:
-    """block_write / block_read / list_blocks / delete_block."""
-
-    def test_write_and_read_block(self, svc):
-        write = svc.write_block("intro", "これはヘルタの自己紹介ブロックです。")
-        assert write.is_ok
-        read = svc.read_block("intro")
-        assert read.is_ok
-        assert read.value is not None
-        assert read.value["content"] == "これはヘルタの自己紹介ブロックです。"
+    """block_write / list_blocks / delete_block."""
 
     def test_write_block_overwrites_existing(self, svc):
         svc.write_block("overwrite_me", "初回コンテンツ")
         svc.write_block("overwrite_me", "上書きコンテンツ")
-        result = svc.read_block("overwrite_me")
-        assert result.value["content"] == "上書きコンテンツ"
-
-    def test_read_nonexistent_block_returns_none(self, svc):
-        result = svc.read_block("totally_missing_block")
+        result = svc.list_blocks()
         assert result.is_ok
-        assert result.value is None
+        names = [b["block_name"] for b in result.value]
+        assert "overwrite_me" in names
 
     def test_list_blocks_empty(self, svc):
         result = svc.list_blocks()
@@ -207,21 +196,8 @@ class TestMemoryBlocks:
         svc.write_block("to_delete", "削除するブロック")
         del_result = svc.delete_block("to_delete")
         assert del_result.is_ok
-        assert svc.read_block("to_delete").value is None
-
-    def test_write_block_with_options(self, svc):
-        result = svc.write_block(
-            "typed_block",
-            "カスタムブロック",
-            block_type="system",
-            max_tokens=512,
-            priority=10,
-        )
-        assert result.is_ok
-        read = svc.read_block("typed_block")
-        assert read.value["block_type"] == "system"
-        assert read.value["max_tokens"] == 512
-        assert read.value["priority"] == 10
+        names = [b["block_name"] for b in svc.list_blocks().value]
+        assert "to_delete" not in names
 
     def test_write_block_empty_name_rejected(self, svc):
         result = svc.write_block("  ", "コンテンツ")
@@ -285,14 +261,6 @@ class TestSearch:
         query = SearchQuery(text="食べ物", mode="hybrid", top_k=5)
         result = await engine.search(query)
         assert result.is_ok
-
-    def test_search_by_tags(self, seeded_svc, repo):
-        """Tag-based filtering returns only memories with matching tags."""
-        result = repo.find_by_tags(["food"])
-        assert result.is_ok
-        assert len(result.value) >= 1
-        for m in result.value:
-            assert "food" in m.tags
 
     def test_find_all_returns_seeded_count(self, seeded_svc, repo):
         """find_all returns all 5 seeded memories."""

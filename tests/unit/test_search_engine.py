@@ -713,17 +713,3 @@ def _make_engine(memorag_config=None, memory_repo=None):
     semantic = AsyncMock()
     semantic.search.return_value = Success([(_make_memory("k2"), 0.8)])
     return SearchEngine(keyword, semantic, None, memory_repo=memory_repo, memorag_config=memorag_config)
-
-
-class TestBestSearchMode:
-    def test_hybrid_when_disabled(self):
-        config = MagicMock()
-        config.enabled = False
-        engine = _make_engine(memorag_config=config)
-        assert engine.best_search_mode() == "hybrid"
-
-    def test_smart_when_enabled(self):
-        config = MagicMock()
-        config.enabled = True
-        engine = _make_engine(memorag_config=config)
-        assert engine.best_search_mode() == "smart"

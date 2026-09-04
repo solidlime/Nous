@@ -128,36 +128,6 @@ def truncate_tool_result(result: dict, max_chars: int) -> dict:
     return output
 
 
-# ── Builtin-only handlers (different from MCP counterparts) ──
-
-
-async def _handle_context_update(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
-    update_kwargs: dict = {}
-    if "emotion" in tool_input:
-        update_kwargs["emotion"] = tool_input["emotion"]
-    if "emotion_intensity" in tool_input:
-        update_kwargs["emotion_intensity"] = float(tool_input["emotion_intensity"])
-    if "mental_state" in tool_input:
-        update_kwargs["mental_state"] = tool_input["mental_state"]
-    if update_kwargs:
-        if "emotion" in update_kwargs:
-            ctx.persona_service.update_emotion(
-                ctx.persona,
-                update_kwargs["emotion"],
-                update_kwargs.get("emotion_intensity", 0.5),
-                context="manual_update",
-            )
-        if "mental_state" in update_kwargs:
-            ctx.persona_service.update_physical_state(
-                ctx.persona,
-                mental_state=update_kwargs["mental_state"],
-            )
-    # context_note: session continuity — persists in persona_info, displayed in get_context
-    if "context_note" in tool_input and tool_input["context_note"]:
-        ctx.persona_service.update_persona_info(ctx.persona, {"context_note": tool_input["context_note"]})
-    return {"status": "ok"}
-
-
 # ── MCP-shared handlers (delegate to TOOL_DISPATCH) ──
 
 

@@ -58,7 +58,3 @@ class EventBus:
                 await handler(event_type, data)
             except Exception as e:
                 logger.error("EventBus handler error for %s: %s", event_type, e)
-
-    def subscriber_count(self, event_type: str) -> int:
-        """登録ハンドラ数を返す（テスト用）。"""
-        return len(self._subscribers.get(event_type, []))

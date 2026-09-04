@@ -92,7 +92,7 @@ class TestPromisesJsonPersistence:
 
         ctx = persona_service.get_context(PERSONA)
         assert ctx.is_ok
-        state = ctx.unwrap()
+        state = ctx.value
         # goals は persona_info には保存されない
         goals = state.persona_info.get("goals")
         assert goals is None, f"Expected None (goals not stored in persona_info), got {goals!r}"
@@ -104,7 +104,7 @@ class TestPromisesJsonPersistence:
 
         ctx = persona_service.get_context(PERSONA)
         assert ctx.is_ok
-        promises = ctx.unwrap().persona_info.get("promises")
+        promises = ctx.value.persona_info.get("promises")
         assert promises is None, f"Expected None (promises not stored in persona_info), got {promises!r}"
 
     def test_other_persona_info_keys_still_stored(self, persona_service: PersonaService):
@@ -114,7 +114,7 @@ class TestPromisesJsonPersistence:
 
         ctx = persona_service.get_context(PERSONA)
         assert ctx.is_ok
-        state = ctx.unwrap()
+        state = ctx.value
         assert state.persona_info.get("nickname") == "TestBot"
         assert state.persona_info.get("goals") is None
 
@@ -193,7 +193,7 @@ class TestPromisesClear:
         persona_service.update_persona_info(PERSONA, {"goals": ["G1", "G2"]})
         persona_service.update_persona_info(PERSONA, {"goals": []})
 
-        state = persona_service.get_context(PERSONA).unwrap()
+        state = persona_service.get_context(PERSONA).value
         goals = state.persona_info.get("goals")
         assert goals is None, f"goals should not be in persona_info, got {goals!r}"
 
@@ -202,7 +202,7 @@ class TestPromisesClear:
         persona_service.update_persona_info(PERSONA, {"promises": ["P1"]})
         persona_service.update_persona_info(PERSONA, {"promises": []})
 
-        state = persona_service.get_context(PERSONA).unwrap()
+        state = persona_service.get_context(PERSONA).value
         promises = state.persona_info.get("promises")
         assert promises is None, f"promises should not be in persona_info, got {promises!r}"
 

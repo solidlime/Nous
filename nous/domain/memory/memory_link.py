@@ -8,7 +8,6 @@ Unused links decay over time (spontaneous decay).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 LINK_TYPES = frozenset(["semantic", "temporal", "emotional", "contextual", "causal"])
 
@@ -36,16 +35,6 @@ class MemoryLink:
     def __post_init__(self) -> None:
         if self.link_type not in LINK_TYPES:
             raise ValueError(f"Invalid link_type: {self.link_type!r}. Must be one of {sorted(LINK_TYPES)}")
-
-    def hebbian_update(self, strength: float = 0.1) -> None:
-        """Hebbian co-fire principle: co-activation strengthens the link.
-
-        Weight is capped at 1.0.  Co-activation count is incremented and
-        ``last_activated`` is refreshed to the current UTC time.
-        """
-        self.weight = min(1.0, self.weight + strength)
-        self.co_activation_count += 1
-        self.last_activated = datetime.now(UTC).isoformat()
 
     def decay(self, rate: float = 0.01) -> None:
         """Spontaneous decay for unused links.  Weight floor at 0.1."""

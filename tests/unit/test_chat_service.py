@@ -105,52 +105,6 @@ class TestTreeSessionWindow:
         assert data["nodes"][0]["role"] == "user"
         assert data["nodes"][0]["content"] == "hello"
 
-    def test_update_message_valid_index(self):
-        """update_message should update content and persist."""
-        import json
-        import sqlite3
-
-        db = sqlite3.connect(":memory:")
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS chat_sessions (
-                persona TEXT NOT NULL, session_id TEXT NOT NULL,
-                messages TEXT NOT NULL DEFAULT '[]', timestamps TEXT NOT NULL DEFAULT '[]',
-                updated_at TEXT NOT NULL, PRIMARY KEY (persona, session_id))
-        """)
-        db.commit()
-
-        win = TreeSessionWindow(max_messages=20)
-        win.attach_db(db, "test_p", "test_s")
-        win.add("user", "original")
-        win.add("assistant", "response")
-
-        updated = win.update_message(0, "edited")
-        assert updated is not None
-        assert updated["role"] == "user"
-        assert updated["content"] == "edited"
-
-        # Verify persistence
-        row = db.execute(
-            "SELECT messages FROM chat_sessions WHERE persona=? AND session_id=?",
-            ("test_p", "test_s"),
-        ).fetchone()
-        data = json.loads(row[0])
-        assert data["nodes"][0]["content"] == "edited"
-
-    def test_update_message_out_of_range(self):
-        win = TreeSessionWindow(max_messages=20)
-        win.add("user", "hello")
-        assert win.update_message(-1, "x") is None
-        assert win.update_message(99, "x") is None
-
-    def test_update_message_preserves_tool_calls(self):
-        win = TreeSessionWindow(max_messages=20)
-        win.add("assistant", "text", tool_calls=[{"name": "test", "input": {}}])
-        updated = win.update_message(0, "new text")
-        assert updated is not None
-        assert updated["content"] == "new text"
-        assert updated["tool_calls"] == [{"name": "test", "input": {}}]
-
 
 # ─────────────────────────────────────────────────────────────
 # TreeSessionWindow 新機能 tests
@@ -203,21 +157,6 @@ class TestTreeSessionWindowNew:
         # assistant ノードはまだ存在する
         assert win.get_message_by_id(result["old_active_leaf_id"]) is not None
 
-    def test_delete_message_repairs_parenting(self):
-        """delete_message() は子の parent_id を付け替える"""
-        win = TreeSessionWindow()
-        uid = win.add("user", "q1")
-        aid = win.add("assistant", "a1")
-        uid2 = win.add("user", "q2")  # uid2 の親は aid
-        win.add("assistant", "a2")
-        # aid を削除 → uid2 の parent_id が uid になるはず
-        deleted = win.delete_message(aid)
-        assert deleted is not None
-        # uid2 の親が uid になっている
-        node = win.get_message_by_id(uid2)
-        assert node is not None
-        assert node["parent_id"] == uid
-
     def test_get_labeled_messages_uses_active_path(self):
         """get_labeled_messages() は active_path を使う"""
         win = TreeSessionWindow()
@@ -228,21 +167,6 @@ class TestTreeSessionWindowNew:
         assert len(msgs) == 1
         assert msgs[0].role == "user"
         assert msgs[0].content == "hello"
-
-    def test_get_message_by_id_after_rollback(self):
-        """ロールバック後も全ノードは get_message_by_id でアクセス可能"""
-        win = TreeSessionWindow()
-        uid = win.add("user", "q")
-        aid = win.add("assistant", "a")  # これは保存される
-        uid2 = win.add("user", "q2")  # これはアクティブパスに残る
-        aid2 = win.add("assistant", "a2")
-        win.rollback_to(uid)
-        # active_path には uid のみ
-        assert len(win.get_active_path()) == 1
-        # ただし全ノードは存在
-        assert win.get_message_by_id(aid) is not None
-        assert win.get_message_by_id(uid2) is not None
-        assert win.get_message_by_id(aid2) is not None
 
     def test_flush_persists_tree_format(self):
         """flush() で新JSON形式（root_id, active_leaf_id, nodes）が保存される"""

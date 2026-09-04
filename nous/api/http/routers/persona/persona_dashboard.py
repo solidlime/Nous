@@ -265,12 +265,12 @@ async def _generate_expression_set(config, persona: str) -> dict:
     バックグラウンドタスク化 + 進捗 SSE に拡張する。
     """
     from nous.application.chat.expression import resolve_expression_url
-    from nous.domain.memory.value_objects import ALLOWED_EMOTIONS
+    from nous.domain.value_objects import VALID_EMOTIONS
 
     generated: list[str] = []
     skipped: list[str] = []
     failed: list[str] = []
-    for emotion in sorted(ALLOWED_EMOTIONS):
+    for emotion in sorted(VALID_EMOTIONS):
         if resolve_expression_url(persona, emotion) is not None:
             skipped.append(emotion)
             continue

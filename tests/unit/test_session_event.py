@@ -125,17 +125,6 @@ class TestSessionEventRepository:
         assert len(msgs) == 1
         assert msgs[0].event_type == "chat_message"
 
-    def test_delete_by_session(self, repo: SessionEventRepository):
-        repo.insert(SessionEvent("sess_del", "p", "generic", "event 1"))
-        repo.insert(SessionEvent("sess_del", "p", "generic", "event 2"))
-        repo.insert(SessionEvent("other_sess", "p", "generic", "other"))
-
-        deleted = repo.delete_by_session("sess_del")
-        assert deleted == 2
-
-        remaining = repo.get_by_session("other_sess")
-        assert len(remaining) == 1
-
     def test_metadata_json_serialization(self, repo: SessionEventRepository):
         metadata = {"key": "value", "nested": {"a": 1}, "list": [1, 2, 3]}
         event = SessionEvent(

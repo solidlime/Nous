@@ -30,7 +30,7 @@ class TestJSONLExporter:
         output_path = tmp_path / "export.jsonl"
         result = exporter.export_persona(sqlite_conn, "test", str(output_path))
         assert result.is_ok
-        assert result.unwrap() == 0
+        assert result.value == 0
         assert output_path.exists()
 
     def test_export_with_memories(self, tmp_path, sqlite_conn, exporter):
@@ -41,7 +41,7 @@ class TestJSONLExporter:
         output_path = tmp_path / "export.jsonl"
         result = exporter.export_persona(sqlite_conn, "test", str(output_path))
         assert result.is_ok
-        assert result.unwrap() >= 1
+        assert result.value >= 1
 
         lines = [ln for ln in output_path.read_text(encoding="utf-8").split("\n") if ln.strip()]
         records = [json.loads(ln) for ln in lines]

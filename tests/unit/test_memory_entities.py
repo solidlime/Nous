@@ -6,12 +6,6 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from nous.domain.memory.entities import Memory, MemoryStrength
-from nous.domain.memory.value_objects import (
-    Emotion,
-    Importance,
-    MemoryKey,
-    PrivacyLevel,
-)
 
 TZ = ZoneInfo("Asia/Tokyo")
 
@@ -103,57 +97,3 @@ class TestMemoryStrength:
             s.boost_on_recall()
         assert s.recall_count == 5
         assert s.stability == pytest.approx(1.0 * 1.5**5, rel=1e-5)
-
-
-class TestMemoryKey:
-    def test_valid_key(self):
-        k = MemoryKey("memory_20250101120000")
-        assert k.value == "memory_20250101120000"
-
-    def test_invalid_key_raises(self):
-        with pytest.raises(ValueError, match="Invalid memory key"):
-            MemoryKey("bad-key")
-
-    def test_custom_prefix(self):
-        k = MemoryKey("emotion_20250615143000")
-        assert k.value.startswith("emotion_")
-
-
-class TestImportance:
-    def test_normal_range(self):
-        i = Importance(0.7)
-        assert i.value == 0.7
-
-    def test_clamp_above(self):
-        i = Importance(1.5)
-        assert i.value == 1.0
-
-    def test_clamp_below(self):
-        i = Importance(-0.3)
-        assert i.value == 0.0
-
-    def test_frozen(self):
-        i = Importance(0.5)
-        with pytest.raises(AttributeError):
-            i.value = 0.8  # type: ignore[misc]
-
-
-class TestEmotion:
-    def test_valid_emotion(self):
-        e = Emotion("joy")
-        assert e.value == "joy"
-
-    def test_invalid_emotion_raises(self):
-        with pytest.raises(ValueError, match="Invalid emotion"):
-            Emotion("nonexistent")
-
-
-class TestPrivacyLevel:
-    def test_valid_levels(self):
-        for level in ("internal", "shared", "secret"):
-            p = PrivacyLevel(level)
-            assert p.value == level
-
-    def test_invalid_level_raises(self):
-        with pytest.raises(ValueError, match="Invalid privacy level"):
-            PrivacyLevel("public")

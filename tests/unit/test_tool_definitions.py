@@ -9,7 +9,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from nous.application.chat.tools.definitions import (
-    CONDITIONAL_TOOLS,
     CORE_ALWAYS_TOOLS,
     MEMORY_TOOLS,
     get_filtered_tools,
@@ -189,19 +188,6 @@ def test_get_filtered_tools_dynamic_on_returns_all_currently():
     result_names = {td.name for td in result}
     expected_names = {td.name for td in MEMORY_TOOLS}
     assert result_names == expected_names
-
-
-def test_conditional_tools_are_subset_of_all_builtin_tools():
-    """CONDITIONAL_TOOLS のキーは全て MEMORY_TOOLS に存在する。"""
-    all_names = {td.name for td in MEMORY_TOOLS}
-    unknown = set(CONDITIONAL_TOOLS) - all_names
-    assert not unknown, f"CONDITIONAL_TOOLS のキーが MEMORY_TOOLS に存在しない: {unknown}"
-
-
-def test_conditional_tools_not_in_core():
-    """CONDITIONAL_TOOLS のキーは CORE_ALWAYS_TOOLS と重複しない。"""
-    overlap = set(CONDITIONAL_TOOLS) & CORE_ALWAYS_TOOLS
-    assert not overlap, f"CONDITIONAL_TOOLS が CORE_ALWAYS_TOOLS と重複: {overlap}"
 
 
 def test_get_filtered_tools_excludes_image_gen_when_disabled():

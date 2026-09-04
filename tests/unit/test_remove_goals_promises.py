@@ -156,7 +156,7 @@ class TestPersonaInfoOverridesRemove:
         """persona_info={"goals": [...]} は persona_info には保存されない（タグ管理）。"""
         persona_service.update_persona_info(PERSONA, {"goals": ["G1", "G2"]})
 
-        state = persona_service.get_context(PERSONA).unwrap()
+        state = persona_service.get_context(PERSONA).value
         goals = state.persona_info.get("goals")
         # goals は persona_info に保存されないため None
         assert goals is None, f"goals should not be in persona_info, got {goals!r}"

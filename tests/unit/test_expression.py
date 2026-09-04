@@ -9,13 +9,13 @@ from nous.application.chat.expression import (
     resolve_expression_url,
     save_expression_image,
 )
-from nous.domain.memory.value_objects import ALLOWED_EMOTIONS
+from nous.domain.value_objects import VALID_EMOTIONS
 
 
-def test_hint_keys_are_subset_of_allowed_emotions():
-    """ヒントキーは正典 ALLOWED_EMOTIONS に一致すること（不一致はフォールバック化）。"""
-    unknown = set(EMOTION_EXPRESSION_HINTS) - set(ALLOWED_EMOTIONS)
-    assert not unknown, f"EMOTION_EXPRESSION_HINTS keys not in ALLOWED_EMOTIONS: {unknown}"
+def test_hint_keys_are_subset_of_valid_emotions():
+    """ヒントキーは正典 VALID_EMOTIONS に一致すること（不一致はフォールバック化）。"""
+    unknown = set(EMOTION_EXPRESSION_HINTS) - set(VALID_EMOTIONS)
+    assert not unknown, f"EMOTION_EXPRESSION_HINTS keys not in VALID_EMOTIONS: {unknown}"
 
 
 def test_emotion_label_validation(tmp_path, monkeypatch):

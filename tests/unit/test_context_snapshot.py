@@ -108,18 +108,3 @@ class TestMemoryContextSnapshotStorage:
         loaded = MemoryContextSnapshot.load(repo)
         assert loaded is not None
         assert loaded.memory_count == 10
-
-
-class TestMemoryContextSnapshotToText:
-    def test_to_text_contains_total(self):
-        snap = MemoryContextSnapshot(memory_count=42)
-        text = snap.to_text()
-        assert "42" in text
-
-    def test_to_text_contains_topics(self):
-        snap = MemoryContextSnapshot(
-            top_tags=[("food", 5), ("travel", 3)],
-        )
-        text = snap.to_text()
-        assert "food" in text
-        assert "travel" in text

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import io
 import logging
 import os
@@ -122,8 +121,7 @@ class SudachiExtractor:
 class HybridEntityExtractor:
     """Dual-path extractor: regex (fast) + Sudachi (accurate).
 
-    Use ``extract_fast`` for real-time / inline usage and
-    ``extract_accurate`` (async) for background enrichment tasks.
+    Use ``extract_fast`` for real-time / inline usage.
     """
 
     def __init__(self) -> None:
@@ -139,12 +137,3 @@ class HybridEntityExtractor:
     def extract_fast(self, text: str) -> list[tuple[str, str]]:
         """Fast path: regex-based extraction for real-time use."""
         return self._fast.extract(text)
-
-    async def extract_accurate(self, text: str) -> list[dict]:
-        """Slow path: Sudachi NER for background tasks.
-
-        Sudachi tokenization is CPU-bound so it is offloaded to a thread.
-        """
-        if self._sudachi is None:
-            self._sudachi = SudachiExtractor()
-        return await asyncio.to_thread(self._sudachi.extract, text)

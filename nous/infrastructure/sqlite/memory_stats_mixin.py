@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
 from nous.infrastructure.logging.structured import get_logger
-from nous.infrastructure.sqlite._utils import _parse_json_list
 
 if TYPE_CHECKING:
     from nous.domain.memory.entities import Memory
@@ -60,16 +59,6 @@ class MemoryStatsMixin:
         ).fetchall()
 
         return Success(([self._row_to_memory(r) for r in rows], total_count))
-
-    def get_all_tags(self) -> Result[list[str], RepositoryError]:
-        """Return a deduplicated list of all tags used across memories."""
-        rows = self._db.execute(
-            f"SELECT tags FROM memories WHERE {self._active_where()}"  # values bound via sqlite params; identifiers from internal constants  # nosec B608
-        ).fetchall()
-        all_tags: set[str] = set()
-        for row in rows:
-            all_tags.update(_parse_json_list(row["tags"]))
-        return Success(sorted(all_tags))
 
     def consume_memory(self, key: str) -> Result[None, RepositoryError]:
         """Mark a memory as consumed by setting last_consumed_at = now()."""  # noqa: D401

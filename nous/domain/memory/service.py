@@ -397,10 +397,6 @@ class MemoryService:
             metadata=opts.get("metadata") if isinstance(opts.get("metadata"), dict) else None,
         )
 
-    def read_block(self, block_name: str) -> Result[dict | None, DomainError]:
-        """Read a named memory block."""
-        return self._repo.get_block(block_name)
-
     def list_blocks(self) -> Result[list[dict], DomainError]:
         """List all memory blocks."""
         return self._repo.list_blocks()
@@ -412,10 +408,6 @@ class MemoryService:
     # ------------------------------------------------------------------
     # Smart Recent + Search Log + Gap Alert
     # ------------------------------------------------------------------
-
-    def get_smart_recent(self, limit: int = 8) -> Result[list[Memory], DomainError]:
-        """Get memories ranked by smart score (importance * recency * strength)."""
-        return self._repo.find_smart_recent(limit)
 
     def log_search(self, query: str, mode: str, result_count: int) -> Result[None, DomainError]:
         """Log a search query."""
@@ -436,7 +428,3 @@ class MemoryService:
     def get_top_by_importance(self, limit: int = 15) -> Result[list[Memory], DomainError]:
         """Get memories ranked by importance descending."""
         return self._repo.find_top_by_importance(limit)
-
-    def get_relationship_highlights(self, limit: int = 5) -> Result[list, DomainError]:
-        """Get important relationship memories."""
-        return self._repo.find_relationship_highlights(limit)

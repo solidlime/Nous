@@ -72,13 +72,11 @@ nous/
 │   │   ├── write_service.py   # 書込専用
 │   │   ├── query_service.py   # 照会専用
 │   │   ├── link_service.py    # ヒュッビアンの結合
-│   │   ├── evolution_service.py # 記憶進化
-│   │   └── mental_model.py    # メンタルモデル
+│   │   └── evolution_service.py # 記憶進化
 │   ├── persona/               # ペルソナエンティティ
 │   │   ├── entities.py        # Persona, BodyState
 │   │   ├── body_decay.py      # 身体数値減衰
-│   │   ├── emotion_decay.py   # 感情減衰（Ebbinghaus）
-│   │   └── relationship_decay.py # 関係性減衰
+│   │   └── emotion_decay.py   # 感情減衰（Ebbinghaus）
 │   ├── search/                # 検索エンジン
 │   │   ├── engine.py          # ハイブリッド検索
 │   │   ├── ranker.py          # RRFスコアリング
@@ -87,9 +85,7 @@ nous/
 │   └── chat_config.py         # ChatConfig Facade（サブ設定統合）
 ├── infrastructure/            # 基盤層
 │   ├── llm/                   # LLMプロバイダ実装
-│   │   ├── anthropic.py       # Anthropic (legacy: unused by factory, kept for migration)
 │   │   ├── openai_compat.py   # unified provider (all connections; OpenAI/OpenRouter/Anthropic-compat)
-│   │   ├── google.py          # Google Gemini
 │   │   └── cache_utils.py     # プロンプトキャッシュ共通化
 │   ├── embedding/             # 埋め込みモデル
 │   ├── qdrant/                # Qdrantクライアントアダプタ

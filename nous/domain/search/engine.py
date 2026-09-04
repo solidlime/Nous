@@ -425,13 +425,6 @@ class SearchEngine:
         if self._semantic is not None:
             self._semantic.persona = persona
 
-    def best_search_mode(self) -> str:
-        """Return the best available search mode based on current configuration."""
-        cfg = self._memorag_config
-        if cfg and cfg.enabled:
-            return "smart"
-        return "hybrid"
-
     async def _smart_search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
         """Smart search: hybrid search with simple query expansion.
 

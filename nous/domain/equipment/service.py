@@ -230,22 +230,3 @@ class EquipmentService:
         if not result.is_ok:
             return Failure(result.error)
         return Success({s.slot: s.item_name for s in result.value})
-
-    def get_equipped_item_descs(self) -> Result[list[str], DomainError]:
-        """Get visual_desc strings from all currently equipped items.
-
-        Returns a list of ``visual_desc`` values for items that have one set.
-        Items without a ``visual_desc`` (None or empty) are skipped.
-        """
-        equipment_result = self.get_equipment()
-        if not equipment_result.is_ok:
-            return Failure(equipment_result.error)
-
-        descs: list[str] = []
-        for _slot, item_name in equipment_result.value.items():
-            if item_name is None:
-                continue
-            item_result = self._repo.find_item_by_name(item_name)
-            if item_result.is_ok and item_result.value and item_result.value.visual_desc:
-                descs.append(item_result.value.visual_desc)
-        return Success(descs)

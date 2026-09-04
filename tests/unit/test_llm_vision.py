@@ -2,21 +2,7 @@
 
 from __future__ import annotations
 
-from nous.infrastructure.llm.anthropic import AnthropicProvider
-from nous.infrastructure.llm.google import GeminiProvider
 from nous.infrastructure.llm.openai_compat import OpenAICompatProvider
-
-
-class TestAnthropicVision:
-    def test_anthropic_supports_vision(self):
-        """AnthropicProvider: all Claude models support vision."""
-        provider = AnthropicProvider(api_key="test-key", model="claude-sonnet-4-20250514")
-        assert provider.supports_vision() is True
-
-    def test_anthropic_any_model(self):
-        """AnthropicProvider: even unknown model names return True."""
-        provider = AnthropicProvider(api_key="test-key", model="claude-future-model")
-        assert provider.supports_vision() is True
 
 
 class TestOpenAIVision:
@@ -76,16 +62,4 @@ class TestOpenAIVision:
     def test_unknown_model_defaults_true(self):
         """OpenAICompatProvider: unknown model names default to True (safe side)."""
         provider = OpenAICompatProvider(api_key="test-key", model="custom-model-v42")
-        assert provider.supports_vision() is True
-
-
-class TestGoogleVision:
-    def test_google_supports_vision(self):
-        """GeminiProvider: all Gemini models support vision."""
-        provider = GeminiProvider(api_key="test-key", model="gemini-2.5-flash")
-        assert provider.supports_vision() is True
-
-    def test_google_any_model(self):
-        """GeminiProvider: even unknown model names return True."""
-        provider = GeminiProvider(api_key="test-key", model="gemini-future-model")
         assert provider.supports_vision() is True

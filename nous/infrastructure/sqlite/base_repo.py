@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import sqlite3
-
     from nous.infrastructure.sqlite.connection import SQLiteConnection
 
 
@@ -28,19 +26,3 @@ class SQLiteRepository:
     @property
     def _db(self):
         return getattr(self._conn, self._db_method)()
-
-    # ------------------------------------------------------------------
-    # Template method helpers for common query patterns
-    # ------------------------------------------------------------------
-
-    def _execute_query(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
-        """Execute SELECT and return all rows."""
-        return self._db.execute(sql, params).fetchall()
-
-    def _execute_single(self, sql: str, params: tuple = ()) -> sqlite3.Row | None:
-        """Execute SELECT and return first row or None."""
-        return self._db.execute(sql, params).fetchone()
-
-    def _execute_write(self, sql: str, params: tuple = ()) -> None:
-        """Execute INSERT/UPDATE/DELETE (returns no rows)."""
-        self._db.execute(sql, params)

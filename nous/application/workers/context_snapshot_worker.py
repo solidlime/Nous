@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import threading
-import time
 from typing import TYPE_CHECKING
 
 from nous.infrastructure.logging.structured import get_logger
@@ -26,6 +25,7 @@ class ContextSnapshotWorker:
         self._config = config
         self._running = False
         self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
 
     def start(self) -> None:
         """Start the background snapshot rebuild thread."""
@@ -33,6 +33,7 @@ class ContextSnapshotWorker:
         if not enabled:
             logger.info("ContextSnapshotWorker: MemoRAG disabled, skipping start")
             return
+        self._stop_event.clear()
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -48,8 +49,11 @@ class ContextSnapshotWorker:
             threshold,
         )
 
-    def stop(self) -> None:
+    def stop(self, timeout: float = 5.0) -> None:
         self._running = False
+        self._stop_event.set()
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=timeout)
         logger.info("ContextSnapshotWorker stopped")
 
     def _run(self) -> None:
@@ -59,10 +63,8 @@ class ContextSnapshotWorker:
             else self._settings.memorag.snapshot_interval_hours
         )
         interval = interval_hours * 3600
-        while self._running:
-            time.sleep(interval)
-            if self._running:
-                self._rebuild_all()
+        while not self._stop_event.wait(interval):
+            self._rebuild_all()
 
     def _rebuild_all(self) -> None:
         from nous.application.use_cases import AppContextRegistry

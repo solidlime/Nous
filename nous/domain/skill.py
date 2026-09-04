@@ -82,14 +82,6 @@ class SkillRepository:
 
     _SELECT_COLS = "id, name, description, content, license, compatibility, metadata, created_at, updated_at"
 
-    def list_all(self) -> list[Skill]:
-        if self._db is None:
-            return []
-        rows = self._db.execute(
-            f"SELECT {self._SELECT_COLS} FROM skills ORDER BY name"  # _SELECT_COLS is a class constant  # nosec B608
-        ).fetchall()
-        return [self._row_to_skill(r) for r in rows]
-
     def get(self, name: str) -> Skill | None:
         if self._db is None:
             return None

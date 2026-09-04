@@ -4,7 +4,6 @@ import json
 
 from nous.domain.persona.entities import (
     BodyStateRecord,
-    ContextEntry,
     EmotionRecord,
     PersonaState,
 )
@@ -122,23 +121,6 @@ class SQLitePersonaRepository(SQLiteRepository):
         except Exception as e:
             self._db.rollback()
             logger.error("Failed to update state %s/%s: %s", persona, key, e)
-            return Failure(RepositoryError(str(e)))
-
-    def get_state_history(self, persona: str, key: str, limit: int = 20) -> Result[list[ContextEntry], RepositoryError]:
-        """Get the change history for a specific state key."""
-        try:
-            rows = self._db.execute(
-                """
-                SELECT * FROM context_state
-                WHERE persona = ? AND key = ?
-                ORDER BY valid_from DESC
-                LIMIT ?
-                """,
-                (persona, key, limit),
-            ).fetchall()
-            return Success([self._row_to_context_entry(r) for r in rows])
-        except Exception as e:
-            logger.error("Failed to get state history %s/%s: %s", persona, key, e)
             return Failure(RepositoryError(str(e)))
 
     # ------------------------------------------------------------------
@@ -314,44 +296,9 @@ class SQLitePersonaRepository(SQLiteRepository):
             logger.error("Failed to set persona_info %s/%s: %s", persona, key, e)
             return Failure(RepositoryError(str(e)))
 
-    def get_user_info(self, persona: str) -> Result[dict, RepositoryError]:
-        """Get all user_info for a persona."""
-        try:
-            rows = self._db.execute(
-                "SELECT key, value FROM user_info WHERE persona = ?",
-                (persona,),
-            ).fetchall()
-            return Success({row["key"]: row["value"] for row in rows})
-        except Exception as e:
-            logger.error("Failed to get user_info for '%s': %s", persona, e)
-            return Failure(RepositoryError(str(e)))
-
-    def get_persona_info(self, persona: str) -> Result[dict, RepositoryError]:
-        """Get all persona_info for a persona."""
-        try:
-            rows = self._db.execute(
-                "SELECT key, value FROM persona_info WHERE persona = ?",
-                (persona,),
-            ).fetchall()
-            return Success({row["key"]: row["value"] for row in rows})
-        except Exception as e:
-            logger.error("Failed to get persona_info for '%s': %s", persona, e)
-            return Failure(RepositoryError(str(e)))
-
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _row_to_context_entry(row) -> ContextEntry:
-        return ContextEntry(
-            persona=row["persona"],
-            key=row["key"],
-            value=row["value"],
-            valid_from=parse_iso(row["valid_from"]),
-            valid_until=_parse_or_none(row["valid_until"]),
-            change_source=row["change_source"],
-        )
 
     @staticmethod
     def _row_to_emotion_record(row) -> EmotionRecord:

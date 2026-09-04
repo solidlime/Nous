@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from pydantic import BaseModel
 
 
@@ -32,11 +30,6 @@ class MCPServerConfig(BaseModel):
             enabled=True,
         )
 
-    @classmethod
-    def list_from_claude_config(cls, mcp_servers: dict) -> list[MCPServerConfig]:
-        """Parse full mcpServers dict from Claude mcp.json."""
-        return [cls.from_claude_entry(name, cfg) for name, cfg in (mcp_servers or {}).items()]
-
     def to_claude_entry(self) -> dict:
         """Convert to a single mcpServers entry (Claude mcp.json format)."""
         result: dict = {}
@@ -51,12 +44,6 @@ class MCPServerConfig(BaseModel):
             if self.headers:
                 result["env"] = dict(self.headers)
         return result
-
-    @staticmethod
-    def to_claude_json(servers: list[MCPServerConfig]) -> str:
-        """Serialize a list of configs as a mcp.json string."""
-        mcp_servers = {srv.name: srv.to_claude_entry() for srv in servers}
-        return json.dumps({"mcpServers": mcp_servers}, indent=2, ensure_ascii=False)
 
 
 class MCPTool(BaseModel):

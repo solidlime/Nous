@@ -32,13 +32,3 @@ def test_hybrid_fast_path_works() -> None:
     entities = extractor.extract_fast("田中さんが東京で会議に参加した")
     # regex fallback should at least extract the honorific name
     assert len(entities) >= 1
-
-
-@pytest.mark.slow
-@pytest.mark.asyncio
-async def test_hybrid_slow_path_works() -> None:
-    from nous.domain.memory.sudachi_extractor import HybridEntityExtractor
-
-    extractor = HybridEntityExtractor()
-    entities = await extractor.extract_accurate("田中さんが東京で会議に参加した")
-    assert len(entities) >= 2

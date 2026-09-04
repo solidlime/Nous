@@ -14,7 +14,6 @@ Philosophy: "Memories don't disappear — they consolidate."
 from __future__ import annotations
 
 import threading
-import time
 from typing import TYPE_CHECKING
 
 from nous.infrastructure.logging.structured import get_logger
@@ -32,6 +31,7 @@ class ConsolidationWorker:
         self._settings = settings
         self._running = False
         self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
         self.interval_seconds = 86400  # 24 hours
         self.min_memories_per_group = 3
         self.max_consolidated = 10
@@ -40,24 +40,28 @@ class ConsolidationWorker:
         """Start the background consolidation thread."""
         if self._running:
             return
+        self._stop_event.clear()
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True, name="consolidation-worker")
         self._thread.start()
         logger.info("ConsolidationWorker started (interval=%ds)", self.interval_seconds)
 
-    def stop(self) -> None:
-        """Stop the background thread."""
+    def stop(self, timeout: float = 5.0) -> None:
+        """Stop the background thread and wait for it to finish."""
         self._running = False
-        logger.info("ConsolidationWorker stopping")
+        self._stop_event.set()
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=timeout)
+        logger.info("ConsolidationWorker stopped")
 
     def _run(self) -> None:
-        """Main loop: sleep then consolidate."""
-        while self._running:
+        """Main loop: consolidate then wait (interruptible)."""
+        while not self._stop_event.is_set():
             try:
                 self._consolidate_all()
             except Exception:
                 logger.exception("Consolidation cycle failed")
-            time.sleep(self.interval_seconds)
+            self._stop_event.wait(self.interval_seconds)
 
     def _consolidate_all(self) -> None:
         """Run consolidation for all active personas."""

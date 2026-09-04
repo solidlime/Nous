@@ -26,7 +26,7 @@ class TestJSONLImporter:
 
         result = importer.import_file(str(file_path), sqlite_conn, "test")
         assert result.is_ok
-        counts = result.unwrap()
+        counts = result.value
         assert counts["memory"] == 2
 
     def test_import_invalid_json_lines_skipped(self, tmp_path, sqlite_conn, importer):
@@ -41,7 +41,7 @@ class TestJSONLImporter:
 
         result = importer.import_file(str(file_path), sqlite_conn, "test")
         assert result.is_ok
-        assert result.unwrap()["memory"] == 2
+        assert result.value["memory"] == 2
 
     def test_import_empty_lines_skipped(self, tmp_path, sqlite_conn, importer):
         """Empty lines should be skipped."""
@@ -56,7 +56,7 @@ class TestJSONLImporter:
 
         result = importer.import_file(str(file_path), sqlite_conn, "test")
         assert result.is_ok
-        assert result.unwrap()["memory"] == 2
+        assert result.value["memory"] == 2
 
     def test_import_missing_type_defaults_to_memory(self, tmp_path, sqlite_conn, importer):
         """Records without a type field default to memory."""
@@ -66,7 +66,7 @@ class TestJSONLImporter:
 
         result = importer.import_file(str(file_path), sqlite_conn, "test")
         assert result.is_ok
-        assert result.unwrap()["memory"] == 1
+        assert result.value["memory"] == 1
 
     def test_import_state_records(self, tmp_path, sqlite_conn, importer):
         """State records should be imported to context_state table."""
@@ -76,7 +76,7 @@ class TestJSONLImporter:
 
         result = importer.import_file(str(file_path), sqlite_conn, "test")
         assert result.is_ok
-        assert result.unwrap()["state"] == 1
+        assert result.value["state"] == 1
 
     def test_import_item_records(self, tmp_path, sqlite_conn, importer):
         """Item records should be imported to items table."""
@@ -86,7 +86,7 @@ class TestJSONLImporter:
 
         result = importer.import_file(str(file_path), sqlite_conn, "test")
         assert result.is_ok
-        assert result.unwrap()["item"] == 1
+        assert result.value["item"] == 1
 
     def test_import_emotion_records(self, tmp_path, sqlite_conn, importer):
         """Emotion records should be imported to emotion_history table."""
@@ -96,7 +96,7 @@ class TestJSONLImporter:
 
         result = importer.import_file(str(file_path), sqlite_conn, "test")
         assert result.is_ok
-        assert result.unwrap()["emotion"] == 1
+        assert result.value["emotion"] == 1
 
     def test_import_block_records(self, tmp_path, sqlite_conn, importer):
         """Block records should be imported to memory_blocks table."""
@@ -106,7 +106,7 @@ class TestJSONLImporter:
 
         result = importer.import_file(str(file_path), sqlite_conn, "test")
         assert result.is_ok
-        assert result.unwrap()["block"] == 1
+        assert result.value["block"] == 1
 
     def test_import_nonexistent_file_returns_failure(self, tmp_path, sqlite_conn, importer):
         """Non-existent file should return Failure."""
@@ -137,7 +137,7 @@ class TestJSONLImporter:
 
         result = importer.import_file(str(file_path), sqlite_conn, "test")
         assert result.is_ok
-        assert result.unwrap()["memory"] == 1
+        assert result.value["memory"] == 1
 
     def test_import_mixed_types(self, tmp_path, sqlite_conn, importer):
         """Import file with multiple record types returns correct counts."""
@@ -153,7 +153,7 @@ class TestJSONLImporter:
 
         result = importer.import_file(str(file_path), sqlite_conn, "test")
         assert result.is_ok
-        counts = result.unwrap()
+        counts = result.value
         assert counts["memory"] == 1
         assert counts["state"] == 1
         assert counts["item"] == 1
@@ -171,7 +171,7 @@ class TestJSONLImporter:
 
         result = importer.import_file(str(file_path), sqlite_conn, "test")
         assert result.is_ok
-        counts = result.unwrap()
+        counts = result.value
         assert counts["memory"] == 1
         # unknown type doesn't increment any counter
         assert sum(counts.values()) == 1

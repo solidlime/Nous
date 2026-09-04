@@ -27,10 +27,10 @@ def test_directive_sadness_anger_keys_are_live():
 
 
 def test_hint_keys_are_canonical_emotions():
-    """EMOTION_TONE_HINTS のキーは ALLOWED_EMOTIONS の部分集合でなければならない。"""
-    from nous.domain.memory.value_objects import ALLOWED_EMOTIONS
+    """EMOTION_TONE_HINTS のキーは VALID_EMOTIONS の部分集合でなければならない。"""
+    from nous.domain.value_objects import VALID_EMOTIONS
 
-    assert set(EMOTION_TONE_HINTS) <= set(ALLOWED_EMOTIONS)
+    assert set(EMOTION_TONE_HINTS) <= set(VALID_EMOTIONS)
 
 
 def test_directive_empty_emotion_returns_empty():

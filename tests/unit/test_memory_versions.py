@@ -177,7 +177,7 @@ class TestMemoryVersioning:
 
     async def test_update_increments_version(self, service: MemoryService, repo: InMemoryVersionedRepository):
         """更新時にバージョンが増加する"""
-        created = (await service.create_memory(content="original")).unwrap()
+        created = (await service.create_memory(content="original")).value
         service.update_memory(created.key, content="modified")
         versions = repo.get_versions(created.key).value
         assert len(versions) == 2
@@ -188,7 +188,7 @@ class TestMemoryVersioning:
 
     async def test_delete_records_final_version(self, service: MemoryService, repo: InMemoryVersionedRepository):
         """削除時にdelete版が記録される"""
-        created = (await service.create_memory(content="to delete")).unwrap()
+        created = (await service.create_memory(content="to delete")).value
         service.delete_memory(created.key)
         versions = repo.get_versions(created.key).value
         assert len(versions) == 2
@@ -196,7 +196,7 @@ class TestMemoryVersioning:
 
     async def test_get_history(self, service: MemoryService):
         """変更履歴が取得できる"""
-        created = (await service.create_memory(content="history test")).unwrap()
+        created = (await service.create_memory(content="history test")).value
         service.update_memory(created.key, content="updated")
         result = service.get_memory_history(created.key)
         assert result.is_ok
@@ -207,7 +207,7 @@ class TestMemoryVersioning:
 
     async def test_version_metadata_contains_snapshot(self, service: MemoryService, repo: InMemoryVersionedRepository):
         """更新版のmetadataに変更前スナップショットが含まれる"""
-        created = (await service.create_memory(content="original", importance=0.5)).unwrap()
+        created = (await service.create_memory(content="original", importance=0.5)).value
         service.update_memory(created.key, content="changed")
         versions = repo.get_versions(created.key).value
         update_version = versions[1]
@@ -217,7 +217,7 @@ class TestMemoryVersioning:
 
     async def test_multiple_updates_version_sequence(self, service: MemoryService, repo: InMemoryVersionedRepository):
         """複数回の更新でバージョン番号が正しくインクリメントされる"""
-        created = (await service.create_memory(content="v1")).unwrap()
+        created = (await service.create_memory(content="v1")).value
         service.update_memory(created.key, content="v2")
         service.update_memory(created.key, content="v3")
         versions = repo.get_versions(created.key).value

@@ -117,21 +117,6 @@ class MemoryCrudMixin:
         ).fetchall()
         return Success([self._row_to_memory(r) for r in rows])
 
-    def find_by_tags(self, tags: list[str], limit: int = 10) -> Result[list[Memory], RepositoryError]:
-        """Find memories that contain any of the specified tags."""
-        rows = self._db.execute(
-            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY updated_at DESC"  # values bound via sqlite params; identifiers from internal constants  # nosec B608
-        ).fetchall()
-        result: list[Memory] = []
-        tag_set = set(tags)
-        for row in rows:
-            memory_tags = set(_parse_json_list(row["tags"]))
-            if memory_tags & tag_set:
-                result.append(self._row_to_memory(row))
-                if len(result) >= limit:
-                    break
-        return Success(result)
-
     def update(self, key: str, **kwargs: Any) -> Result[Memory, RepositoryError]:
         """Update specific fields of a memory."""
         try:

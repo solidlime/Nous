@@ -47,6 +47,21 @@ def _wait_for_reload(mgr: RuntimeConfigManager, key: str, timeout: float = 5.0) 
     raise AssertionError(f"reload of '{key}' did not complete within {timeout}s")
 
 
+def _wait_for_async_callback(reconnect_mock, mgr: RuntimeConfigManager, key: str, timeout: float = 5.0) -> dict:
+    """Wait for a threaded async callback (qdrant) to run and reach a terminal status.
+
+    The callback runs in a background thread, so first poll until the mock
+    is actually called, then wait for the reload status to leave 'loading'.
+    """
+    import time
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and reconnect_mock.call_count == 0:
+        time.sleep(0.01)
+    assert reconnect_mock.call_count >= 1, f"callback for '{key}' did not run within {timeout}s"
+    return _wait_for_reload(mgr, key, timeout=timeout)
+
+
 def test_get_all_returns_all_categories(tmp_data_dir: Path):
     """All categories defined in SETTINGS_META should appear in get_all()."""
     mgr = RuntimeConfigManager()
@@ -559,6 +574,7 @@ def test_qdrant_reload_callback_url(tmp_data_dir: Path):
     try:
         result = mgr.update("qdrant", "url", "http://new-url:6333")
         assert result["success"] is True
+        _wait_for_async_callback(mock_ctx._vector_store.reconnect, mgr, "qdrant")
         mock_ctx._vector_store.reconnect.assert_called_once_with(new_url="http://new-url:6333")
         assert mock_ctx._search_engine is None
     finally:
@@ -584,6 +600,7 @@ def test_qdrant_reload_callback_api_key(tmp_data_dir: Path):
     try:
         result = mgr.update("qdrant", "api_key", "new-key")
         assert result["success"] is True
+        _wait_for_async_callback(mock_ctx._vector_store.reconnect, mgr, "qdrant")
         mock_ctx._vector_store.reconnect.assert_called_once_with(new_api_key="new-key")
     finally:
         AppContextRegistry._contexts.clear()
@@ -610,6 +627,7 @@ def test_qdrant_collection_prefix_change(tmp_data_dir: Path):
     try:
         result = mgr.update("qdrant", "collection_prefix", "new_prefix")
         assert result["success"] is True
+        _wait_for_async_callback(mock_ctx._vector_store.reconnect, mgr, "qdrant")
         mock_ctx._vector_store.reconnect.assert_called_once()
         assert mock_ctx._vector_store.collection_prefix == "new_prefix"
         mock_ctx._vector_store.ensure_collection.assert_called_once_with("test_persona")

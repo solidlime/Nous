@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import threading
-import time
 from typing import TYPE_CHECKING, Any
 
 from nous.domain.shared.time_utils import get_now
@@ -39,20 +38,25 @@ class DecayWorker:
         self._config = config
         self._running = False
         self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
         self._cycle_count = 0
 
     def start(self) -> None:
+        self._stop_event.clear()
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
-    def stop(self) -> None:
+    def stop(self, timeout: float = 5.0) -> None:
         self._running = False
+        self._stop_event.set()
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=timeout)
 
     def _run(self) -> None:
-        while self._running:
+        while not self._stop_event.is_set():
             self._run_cycle()
-            time.sleep(self.interval)
+            self._stop_event.wait(self.interval)
 
     def _run_cycle(self) -> None:
         """Run one full cycle: decay + optional reflection."""

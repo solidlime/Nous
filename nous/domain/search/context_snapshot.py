@@ -76,24 +76,6 @@ class MemoryContextSnapshot:
             built_at=datetime.now(UTC).isoformat(),
         )
 
-    def to_text(self) -> str:
-        """Convert snapshot to a concise text for LLM-based query expansion prompt."""
-        lines: list[str] = ["=== Memory Context Snapshot ==="]
-        lines.append(f"Total memories: {self.memory_count}")
-        if self.top_tags:
-            tags_str = ", ".join(f"{t}({n})" for t, n in self.top_tags[:8])
-            lines.append(f"Top topics: {tags_str}")
-        if self.emotion_dist:
-            emo_str = ", ".join(f"{e}({n})" for e, n in self.emotion_dist[:5])
-            lines.append(f"Emotions: {emo_str}")
-        if self.top_memories:
-            lines.append("High-importance memories:")
-            for m in self.top_memories[:10]:
-                tags = ", ".join(m["tags"][:3]) if m["tags"] else ""
-                tag_suffix = f" [{tags}]" if tags else ""
-                lines.append(f"  - {m['snippet']}{tag_suffix}")
-        return "\n".join(lines)
-
     def to_json(self) -> str:
         """Serialize to JSON for storage."""
         return json.dumps(

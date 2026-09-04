@@ -231,14 +231,14 @@ class TestCreateMemory:
     async def test_create_success(self, service: MemoryService):
         result = await service.create_memory(content="Hello world", importance=0.7)
         assert result.is_ok
-        memory = result.unwrap()
+        memory = result.value
         assert memory.content == "Hello world"
         assert memory.importance == 0.7
 
     async def test_create_strips_whitespace(self, service: MemoryService):
         result = await service.create_memory(content="  spaced  ")
         assert result.is_ok
-        assert result.unwrap().content == "spaced"
+        assert result.value.content == "spaced"
 
     async def test_create_empty_content_fails(self, service: MemoryService):
         result = await service.create_memory(content="")
@@ -251,20 +251,20 @@ class TestCreateMemory:
     async def test_create_with_tags(self, service: MemoryService):
         result = await service.create_memory(content="tagged", tags=["a", "b"])
         assert result.is_ok
-        assert result.unwrap().tags == ["a", "b"]
+        assert result.value.tags == ["a", "b"]
 
     async def test_importance_clamped(self, service: MemoryService):
         r = await service.create_memory(content="high", importance=2.0)
         assert r.is_ok
-        assert r.unwrap().importance == 1.0
+        assert r.value.importance == 1.0
 
 
 class TestGetMemory:
     async def test_get_existing(self, service: MemoryService):
-        created = (await service.create_memory(content="find me")).unwrap()
+        created = (await service.create_memory(content="find me")).value
         result = service.get_memory(created.key)
         assert result.is_ok
-        assert result.unwrap().content == "find me"
+        assert result.value.content == "find me"
 
     async def test_get_nonexistent(self, service: MemoryService):
         result = service.get_memory("memory_99999999999999")
@@ -273,10 +273,10 @@ class TestGetMemory:
 
 class TestUpdateMemory:
     async def test_update_content(self, service: MemoryService):
-        created = (await service.create_memory(content="original")).unwrap()
+        created = (await service.create_memory(content="original")).value
         result = service.update_memory(created.key, content="modified")
         assert result.is_ok
-        assert result.unwrap().content == "modified"
+        assert result.value.content == "modified"
 
     async def test_update_nonexistent(self, service: MemoryService):
         result = service.update_memory("memory_99999999999999", content="x")
@@ -285,7 +285,7 @@ class TestUpdateMemory:
 
 class TestDeleteMemory:
     async def test_delete_existing(self, service: MemoryService):
-        created = (await service.create_memory(content="remove me")).unwrap()
+        created = (await service.create_memory(content="remove me")).value
         result = service.delete_memory(created.key)
         assert result.is_ok
         # Verify it's tombstoned (logical delete, not physical)
@@ -295,7 +295,7 @@ class TestDeleteMemory:
         # Repository can still find it for recovery
         repo_result = service._repo.find_by_key(created.key)
         assert repo_result.is_ok
-        assert repo_result.unwrap().lifecycle_status == "tombstoned"
+        assert repo_result.value.lifecycle_status == "tombstoned"
 
     async def test_delete_nonexistent(self, service: MemoryService):
         result = service.delete_memory("memory_99999999999999")
@@ -312,22 +312,22 @@ class TestGetRecent:
             ):
                 r = await service.create_memory(content=f"memory {i}")
                 assert r.is_ok
-                keys.append(r.unwrap().key)
+                keys.append(r.value.key)
         result = service.get_recent(limit=3)
         assert result.is_ok
-        assert len(result.unwrap()) == 3
+        assert len(result.value) == 3
 
     async def test_empty_repo(self, service: MemoryService):
         result = service.get_recent()
         assert result.is_ok
-        assert result.unwrap() == []
+        assert result.value == []
 
 
 class TestGetStats:
     def test_stats_empty(self, service: MemoryService):
         result = service.get_stats()
         assert result.is_ok
-        stats = result.unwrap()
+        stats = result.value
         assert stats["total_count"] == 0
         assert stats["tag_distribution"] == {}
 
@@ -344,7 +344,7 @@ class TestGetStats:
             await service.create_memory(content="b", tags=["food", "travel"], emotion="sadness")
         result = service.get_stats()
         assert result.is_ok
-        stats = result.unwrap()
+        stats = result.value
         assert stats["total_count"] == 2
         assert stats["tag_distribution"]["food"] == 2
         assert stats["tag_distribution"]["travel"] == 1
@@ -354,19 +354,19 @@ class TestGetStats:
 
 class TestBoostRecall:
     async def test_boost_creates_strength_if_missing(self, service: MemoryService):
-        created = (await service.create_memory(content="remember")).unwrap()
+        created = (await service.create_memory(content="remember")).value
         result = service.boost_recall(created.key)
         assert result.is_ok
-        strength = result.unwrap()
+        strength = result.value
         assert strength.recall_count == 1
         assert strength.stability == 1.5
 
     async def test_boost_increments(self, service: MemoryService, repo: InMemoryMemoryRepository):
-        created = (await service.create_memory(content="recall")).unwrap()
+        created = (await service.create_memory(content="recall")).value
         service.boost_recall(created.key)
         result = service.boost_recall(created.key)
         assert result.is_ok
-        assert result.unwrap().recall_count == 2
+        assert result.value.recall_count == 2
 
     # --- tests merged from test_boost_recall.py (direct MagicMock approach) ---
 
@@ -415,26 +415,12 @@ class TestBoostRecall:
 
 
 class TestMemoryBlocks:
-    def test_write_and_read_block(self, service: MemoryService):
-        wr = service.write_block("test_block", "block content")
-        assert wr.is_ok
-        rd = service.read_block("test_block")
-        assert rd.is_ok
-        assert rd.unwrap()["content"] == "block content"
-
     def test_list_blocks(self, service: MemoryService):
         service.write_block("b1", "c1")
         service.write_block("b2", "c2")
         result = service.list_blocks()
         assert result.is_ok
-        assert len(result.unwrap()) == 2
-
-    def test_delete_block(self, service: MemoryService):
-        service.write_block("del_block", "content")
-        service.delete_block("del_block")
-        result = service.read_block("del_block")
-        assert result.is_ok
-        assert result.unwrap() is None
+        assert len(result.value) == 2
 
     def test_write_empty_name_fails(self, service: MemoryService):
         result = service.write_block("", "content")
@@ -453,7 +439,7 @@ class TestGetStatsTopN:
 
         result = service.get_stats(top_n=20)
         assert result.is_ok
-        stats = result.unwrap()
+        stats = result.value
         assert len(stats["tag_distribution"]) == 20
         assert "tag_distribution_note" in stats
         assert "5" in stats["tag_distribution_note"]
@@ -464,7 +450,7 @@ class TestGetStatsTopN:
 
         result = service.get_stats(top_n=3)
         assert result.is_ok
-        stats = result.unwrap()
+        stats = result.value
         assert len(stats["tag_distribution"]) == 3
         assert "tag_distribution_note" in stats
         assert "2" in stats["tag_distribution_note"]
@@ -475,7 +461,7 @@ class TestGetStatsTopN:
 
         result = service.get_stats(top_n=10)
         assert result.is_ok
-        stats = result.unwrap()
+        stats = result.value
         assert len(stats["tag_distribution"]) == 3
         assert "tag_distribution_note" not in stats
 
@@ -510,7 +496,7 @@ class TestGetStatsTopN:
 
         result = service.get_stats(top_n=10)
         assert result.is_ok
-        stats = result.unwrap()
+        stats = result.value
         assert len(stats["emotion_distribution"]) == 10
         assert "emotion_distribution_note" in stats
         assert "12" in stats["emotion_distribution_note"]
@@ -526,7 +512,7 @@ class TestTagValidation:
         tags = [f"tag{i}" for i in range(20)]
         result = await service.create_memory(content="max tags", tags=tags)
         assert result.is_ok
-        assert len(result.unwrap().tags) == 20
+        assert len(result.value.tags) == 20
 
     async def test_create_tag_too_long_fails(self, service):
         long_tag = "a" * 51
@@ -539,13 +525,13 @@ class TestTagValidation:
         assert result.is_ok
 
     async def test_update_too_many_tags_fails(self, service):
-        created = (await service.create_memory(content="base memory")).unwrap()
+        created = (await service.create_memory(content="base memory")).value
         tags = [f"tag{i}" for i in range(21)]
         result = service.update_memory(created.key, tags=tags)
         assert not result.is_ok
 
     async def test_update_tag_too_long_fails(self, service):
-        created = (await service.create_memory(content="base memory")).unwrap()
+        created = (await service.create_memory(content="base memory")).value
         long_tag = "b" * 51
         result = service.update_memory(created.key, tags=[long_tag])
         assert not result.is_ok
@@ -613,7 +599,7 @@ class TestMemoryEnrichment:
 
         result = await svc.create_memory(content="This is an important memory.")
         assert result.is_ok
-        memory = result.unwrap()
+        memory = result.value
 
         await self._drain_background_tasks()
         assert memory.importance == 0.9
@@ -626,7 +612,7 @@ class TestMemoryEnrichment:
 
         result = await svc.create_memory(content="Memory with explicit importance", importance=0.3)
         assert result.is_ok
-        memory = result.unwrap()
+        memory = result.value
 
         await self._drain_background_tasks()
         assert memory.importance == 0.3
@@ -640,7 +626,7 @@ class TestMemoryEnrichment:
 
         result = await svc.create_memory(content="This memory should still be created.")
         assert result.is_ok
-        memory = result.unwrap()
+        memory = result.value
         assert memory.content == "This memory should still be created."
 
         await self._drain_background_tasks()
@@ -697,6 +683,6 @@ class TestMemoryEnrichment:
             source="Alice",
             target="Bob",
             relation_type="knows",
-            memory_key=result.unwrap().key,
+            memory_key=result.value.key,
             confidence=0.9,
         )

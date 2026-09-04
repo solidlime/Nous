@@ -90,8 +90,3 @@ class ToolVectorStore:
             if point.payload:
                 results.append((dict(point.payload), point.score))
         return results
-
-    async def delete_all(self) -> None:
-        """Delete all tool definitions (for reindexing)."""
-        await self._client.delete_collection(collection_name=COLLECTION_NAME)
-        await self.ensure_collection()

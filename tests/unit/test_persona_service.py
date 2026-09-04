@@ -164,7 +164,7 @@ class TestGetContext:
     def test_default_state(self, service: PersonaService):
         result = service.get_context(PERSONA)
         assert result.is_ok
-        state = result.unwrap()
+        state = result.value
         assert state.persona == PERSONA
         assert state.emotion == "neutral"
         assert state.emotion_intensity == 0.0
@@ -173,7 +173,7 @@ class TestGetContext:
         service.update_emotion(PERSONA, "joy", 0.8)
         result = service.get_context(PERSONA)
         assert result.is_ok
-        state = result.unwrap()
+        state = result.value
         assert state.emotion == "joy"
 
 
@@ -296,14 +296,14 @@ class TestUpdatePersonaInfo:
         service.update_persona_info(PERSONA, {"appearance": desc})
         result = service.get_context(PERSONA)
         assert result.is_ok
-        state = result.unwrap()
+        state = result.value
         assert state.appearance == desc
 
     def test_appearance_defaults_to_none(self, service: PersonaService):
         """Fresh persona should have appearance=None."""
         result = service.get_context(PERSONA)
         assert result.is_ok
-        state = result.unwrap()
+        state = result.value
         assert state.appearance is None
 
 
@@ -318,7 +318,7 @@ class TestAuthorNote:
     def test_author_note_default_is_none(self, service: PersonaService):
         result = service.get_context(PERSONA)
         assert result.is_ok
-        state = result.unwrap()
+        state = result.value
         assert state.author_note is None
         assert state.author_note_frequency == "always"
 
@@ -329,14 +329,14 @@ class TestAuthorNote:
 
         result = service.get_context(PERSONA)
         assert result.is_ok
-        state = result.unwrap()
+        state = result.value
         assert state.author_note == "Remember: you are a helpful assistant."
 
     def test_author_note_frequency_custom(self, service: PersonaService, repo: InMemoryPersonaRepository):
         service.update_state(PERSONA, "author_note_frequency", "on_emotion_change")
         result = service.get_context(PERSONA)
         assert result.is_ok
-        state = result.unwrap()
+        state = result.value
         assert state.author_note_frequency == "on_emotion_change"
 
     def test_author_note_roundtrip_with_empty(self, service: PersonaService):
@@ -344,5 +344,5 @@ class TestAuthorNote:
         service.update_state(PERSONA, "author_note", "")
         result = service.get_context(PERSONA)
         assert result.is_ok
-        state = result.unwrap()
+        state = result.value
         assert state.author_note == ""

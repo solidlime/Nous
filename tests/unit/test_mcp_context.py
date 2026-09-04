@@ -222,13 +222,11 @@ class TestGetContext:
         state = PersonaState(persona="test_persona", emotion="joy", emotion_intensity=0.8)
         ctx.persona_service.get_context.return_value = Success(state)
         ctx.memory_service.get_stats.return_value = Success({"total": 10})
-        ctx.memory_service.get_smart_recent.return_value = Success([])
         ctx.memory_service.list_blocks.return_value = Success([])
         ctx.memory_service.get_by_tags.return_value = Success([])
         ctx.memory_service.get_recent_searches.return_value = Success([])
         ctx.memory_service.count_decayed_important.return_value = Success(0)
         ctx.memory_service.get_memory_index.return_value = Success(None)
-        ctx.memory_service.get_relationship_highlights.return_value = Success([])
         ctx.persona_service.record_conversation_time.return_value = Success(None)
         get_context = tools["get_context"]
         with (
@@ -262,13 +260,11 @@ class TestGetContext:
         goal_mem.tags = ["goal", "active"]
         ctx.persona_service.get_context.return_value = Success(state)
         ctx.memory_service.get_stats.return_value = Success({})
-        ctx.memory_service.get_smart_recent.return_value = Success([])
         ctx.memory_service.list_blocks.return_value = Success([])
         ctx.memory_service.get_by_tags.side_effect = lambda tags: Success([goal_mem]) if "goal" in tags else Success([])
         ctx.memory_service.get_recent_searches.return_value = Success([])
         ctx.memory_service.count_decayed_important.return_value = Success(0)
         ctx.memory_service.get_memory_index.return_value = Success(None)
-        ctx.memory_service.get_relationship_highlights.return_value = Success([])
         ctx.persona_service.record_conversation_time.return_value = Success(None)
         get_context = tools["get_context"]
         with (
@@ -363,13 +359,11 @@ class TestGetContext:
         ctx.persona_service.get_context.side_effect = [Success(state_before), Success(state_after)]
         ctx.persona_service.update_emotion.return_value = Success(None)
         ctx.memory_service.get_stats.return_value = Success({"total": 10})
-        ctx.memory_service.get_smart_recent.return_value = Success([])
         ctx.memory_service.list_blocks.return_value = Success([])
         ctx.memory_service.get_by_tags.return_value = Success([])
         ctx.memory_service.get_recent_searches.return_value = Success([])
         ctx.memory_service.count_decayed_important.return_value = Success(0)
         ctx.memory_service.get_memory_index.return_value = Success(None)
-        ctx.memory_service.get_relationship_highlights.return_value = Success([])
         ctx.persona_service.record_conversation_time.return_value = Success(None)
         get_context = tools["get_context"]
         decay_result = EmotionDecayResult(
@@ -406,13 +400,11 @@ class TestGetContext:
         ctx.persona_service.get_context.return_value = Success(state)
         ctx.persona_service.update_emotion.return_value = Success(None)
         ctx.memory_service.get_stats.return_value = Success({"total": 10})
-        ctx.memory_service.get_smart_recent.return_value = Success([])
         ctx.memory_service.list_blocks.return_value = Success([])
         ctx.memory_service.get_by_tags.return_value = Success([])
         ctx.memory_service.get_recent_searches.return_value = Success([])
         ctx.memory_service.count_decayed_important.return_value = Success(0)
         ctx.memory_service.get_memory_index.return_value = Success(None)
-        ctx.memory_service.get_relationship_highlights.return_value = Success([])
         ctx.persona_service.record_conversation_time.return_value = Success(None)
         get_context = tools["get_context"]
         with (

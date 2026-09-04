@@ -170,13 +170,6 @@ class RerankerModel(OnnxBaseModel):
                     "message": f"Reload failed, reverted: {e}",
                 }
 
-    def unload(self) -> None:
-        """Release model resources."""
-        with self._lock:
-            self._session = None
-            self._tokenizer = None
-            logger.info("Reranker model unloaded: %s", self.model_name)
-
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

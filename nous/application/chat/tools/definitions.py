@@ -28,11 +28,6 @@ CORE_ALWAYS_TOOLS: set[str] = {
     "search_tools",
 }
 
-# 条件付きツールのカテゴリマッピング（将来の文脈ベース制限用）
-CONDITIONAL_TOOLS: dict[str, str] = {
-    "image_generate": "image_gen",
-}
-
 MEMORY_TOOLS: list[ToolDefinition] = [
     ToolDefinition(
         name="memory_create",
