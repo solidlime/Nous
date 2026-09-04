@@ -76,7 +76,9 @@ class EmbeddingModel(OnnxBaseModel):
         hidden = outputs[0]  # (1, seq_len, dim)
 
         emb = self._pool(hidden, attention_mask)  # (1, dim)
-        return emb[0]  # 1D
+        result = emb[0]  # 1D
+        assert isinstance(result, np.ndarray)
+        return result
 
     def encode_batch(
         self,
@@ -109,6 +111,9 @@ class EmbeddingModel(OnnxBaseModel):
         is_query: bool = False,
     ) -> np.ndarray:
         """Encode a single chunk of texts (no chunking)."""
+        self._ensure_loaded()
+        assert self._session is not None
+        assert self._tokenizer is not None
         prefix = _QUERY_PREFIX if is_query else _DOCUMENT_PREFIX
         prefixed = [f"{prefix}{t}" for t in texts]
 
@@ -279,4 +284,6 @@ class EmbeddingModel(OnnxBaseModel):
 
         # L2 normalise
         norms = np.maximum(np.linalg.norm(pooled, axis=1, keepdims=True), 1e-12)
-        return pooled / norms
+        result = pooled / norms
+        assert isinstance(result, np.ndarray)
+        return result

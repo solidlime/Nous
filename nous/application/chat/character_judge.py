@@ -51,9 +51,8 @@ async def judge_character(config, persona_identity: str, response: str) -> dict 
     prompt = _JUDGE_PROMPT.format(persona_identity=persona_identity[:2000], response=response[:2000])
     text = ""
     try:
-        # base.py の stream 宣言が async def 扱いで mypy は AsyncIterator を coroutine と見なす
-        # （既存同型パターン: inference.py:187 / tts.py:207）。実行時は async generator。
-        async for event in provider.stream(  # type: ignore[attr-defined]
+        # provider.stream は async generator を返す（型宣言通り mypy も正しく解釈する）。
+        async for event in provider.stream(
             messages=[LLMMessage(role="user", content=prompt)],
             system="",
             tools=[],
