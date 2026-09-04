@@ -60,7 +60,7 @@ class MemoryService:
         contradiction_detector: ContradictionDetector | None = None,
         strength_repo: MemoryStrengthRepository | None = None,
         aux_repo: MemoryAuxiliaryRepository | None = None,
-        session_event_repo: object | None = None,
+        coaccess_tracker: list[str] | None = None,
     ) -> None:
         self._repo = repo
         # Mutable wrapper for late search_engine injection (see use_cases.py:362)
@@ -71,7 +71,6 @@ class MemoryService:
         self._contradiction_detector = contradiction_detector
         self._strength_repo = strength_repo
         self._aux_repo = aux_repo
-        self._session_event_repo = session_event_repo
 
         # Sub-services
         self._write_service = MemoryWriteService(repo, self._search_engine_ref)
@@ -79,7 +78,8 @@ class MemoryService:
         self._link_service = MemoryLinkService(
             link_repo,
             self._search_engine_ref,
-            session_event_repo=session_event_repo,
+            memory_repo=repo,
+            coaccess_tracker=coaccess_tracker,
         )
         self._evolution_service = MemoryEvolutionService(
             self._search_engine_ref,
@@ -215,7 +215,7 @@ class MemoryService:
         # ── 9. Hebbian co-activation links ──
         if self._link_repo is not None:
             with contextlib.suppress(Exception):
-                self._link_service._create_hebbian_links(memory, session_id)
+                self._link_service._create_hebbian_links(memory)
 
         # ── 10. Background evolution ──
         _track_background_task(

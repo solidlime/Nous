@@ -29,6 +29,7 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> dict:
             "tool.called",
             {
                 "persona": persona,
+                "session_id": getattr(ctx, "session_id", None),
                 "tool_name": "get_context",
                 "params_summary": f"persona={persona}",
                 "result_summary": str(state_result.error),
@@ -115,6 +116,7 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> dict:
         "tool.called",
         {
             "persona": persona,
+            "session_id": getattr(ctx, "session_id", None),
             "tool_name": "get_context",
             "params_summary": f"persona={persona}",
             "result_summary": f"Context formatted ({len(top_memories)} memories, {len(goals)} goals)",

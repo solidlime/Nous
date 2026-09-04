@@ -28,6 +28,7 @@ async def _tool_item_add(
             "tool.called",
             {
                 "persona": persona,
+                "session_id": getattr(ctx, "session_id", None),
                 "tool_name": "item_add",
                 "params_summary": f"item_name={item_name}, qty={quantity}",
                 "result_summary": f"Item added: {item_name}",
@@ -39,6 +40,7 @@ async def _tool_item_add(
         "tool.called",
         {
             "persona": persona,
+            "session_id": getattr(ctx, "session_id", None),
             "tool_name": "item_add",
             "params_summary": f"item_name={item_name}, qty={quantity}",
             "result_summary": str(result.error),
@@ -61,6 +63,7 @@ async def _tool_item_equip(ctx: AppContext, persona: str, equipment: dict | None
             "tool.called",
             {
                 "persona": persona,
+                "session_id": getattr(ctx, "session_id", None),
                 "tool_name": "item_equip",
                 "params_summary": f"equipment={equipment}",
                 "result_summary": f"Equipped: {equipment}",
@@ -72,6 +75,7 @@ async def _tool_item_equip(ctx: AppContext, persona: str, equipment: dict | None
         "tool.called",
         {
             "persona": persona,
+            "session_id": getattr(ctx, "session_id", None),
             "tool_name": "item_equip",
             "params_summary": f"equipment={equipment}",
             "result_summary": str(result.error),
@@ -92,6 +96,7 @@ async def _tool_item_search(
                 "tool.called",
                 {
                     "persona": persona,
+                    "session_id": getattr(ctx, "session_id", None),
                     "tool_name": "item_search",
                     "params_summary": f"query={query}, category={category}",
                     "result_summary": "No items found",
@@ -104,6 +109,7 @@ async def _tool_item_search(
             "tool.called",
             {
                 "persona": persona,
+                "session_id": getattr(ctx, "session_id", None),
                 "tool_name": "item_search",
                 "params_summary": f"query={query}, category={category}",
                 "result_summary": f"Found {len(items)} items",
@@ -115,6 +121,7 @@ async def _tool_item_search(
         "tool.called",
         {
             "persona": persona,
+            "session_id": getattr(ctx, "session_id", None),
             "tool_name": "item_search",
             "params_summary": f"query={query}, category={category}",
             "result_summary": str(result.error),

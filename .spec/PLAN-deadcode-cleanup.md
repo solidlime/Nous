@@ -86,3 +86,51 @@
 - 削除はvulture+#009裏取り+#081レビュー済みだが、削除後にimportエラーが出たら即修正（動的参照の見落とし）
 - INDEPENDENT / serve_static / cli/__main__.py / _expand_segments / normalize_* / build_* / enrich_async / reload_model を誤って削らない
 - uvicorn依存は既存（FastMCPが内部使用）のはず。requirementsに無ければ追加
+
+---
+
+# Phase 3: hebbian配線＋memoragフラグ修正（2026-09-05 追記、#081設計判断済み）
+
+## スコープ外（明示的にやらない）
+- decay()配線: スケジューラ設計が別途必要。メソッドはdataclassに残置（将来配線時の契約）
+- MemoryContextSnapshot消費者の実装: 消費者ゼロが判明（build-sideのみのデッドエンド）。配線か削除かは次の判断に回す
+- registryのtool.called二重発行解消: 既存挙動、activity表示への影響調査が別途必要
+
+## 3a. hebbian配線（トラッカー方式——session_events経由は採用しない）
+
+#081判断: session_events経由は二重tool.calledイベント・20件窓の浸食・summary文字列解析の脆弱性で死に経路。**AppContext上のインメモリ共アクセストラッカー**を採用（永続性を失うがhebbianは漸進的再構築なので損失ゼロ）。
+
+1. **共アクセストラッカー**: AppContextにインメモリトラッカー（セッション内で読まれたmemory keyの順序リスト、上限は既存設計準拠）。memory_read/memory_createのMCPツール関数（_tools_memory.py、キーを手に持っている箇所）で記録
+2. **Memory lookup**: `MemoryLinkService.__init__`に`memory_repo`を追加（service.py:79の構築箇所で渡す）。`_get_session_memories`はトラッカーのキー列を`memory_repo.get(key)`でMemoryオブジェクトに変換（失敗スキップ）して`list[Memory]`を返す。link_service.py:65のTODOと:93-95の型不一致（candidate.key/m1.emotion AttributeError未爆弾）を同時に解消
+3. **EntityRepository拡張**（新規ファイルは作らない——link_repoの実体は既にSQLiteEntityRepository）:
+   - `upsert_link(source_key, target_key, link_type, strength=0.1)`: 単一ステートメントで原子的に `INSERT ... ON CONFLICT(source_key, target_key, link_type) DO UPDATE SET weight = MIN(1.0, weight + :strength), co_activation_count = co_activation_count + 1, last_activated = :now`。読み取り→加算→書込の3ステップ禁止（競合原理的に排除）
+   - 双方向は読み取り側で展開: `get_links_for_keys`は`WHERE source_key IN (?) OR target_key IN (?)`で1行取得し、順方向+逆方向の2つのMemoryLinkを生成（SAはoutgoingのみ参照: spreading_activation.py:46）
+4. **get_links_for_keysのユニオン読替え**（フォールバックではなく統合）: entity共起エッジ（weight=0.5）をベースにmemory_linksの永続エッジを上書き統合。同一ペアは永続weight優先、永続のみのペアは新規追加（entity非共有ペアを繋ぐのがhebbianの唯一の価値）。Day-1挙動は現行と完全同一（memory_links空→共起のみ）。engine.py:416のSAブーストキャップ`min(act*0.2, 0.1)`は**いじらない**
+5. **hebbian_update復元**: git履歴（abe0ffe2~1）から逐語復元（weight=min(1.0,weight+strength)/count++/last_activated更新）。テストも削除済みtest_memory_links.pyのhebbian部分から復元
+6. **_create_hebbian_links**: トラッカー→Memory lookup→upsert_link呼び出しに変更。自己リンクskip・上限5件は既存設計準拠
+
+## 3b. session_id付与（hebbianから独立したデータ品質修正）
+- registry.py:96-104/110-119のtool.called発行に`"session_id": getattr(ctx, "session_id", None)`を追加
+- MCPツール側の発行箇所（_tools_memory.py等）にも同様に
+- 購読者はSessionEventRecorderのみ（recorder.py:43が`data.get("session_id", "unknown")`で既にキーを読む）→後方互換、「unknown」汚染が消えるだけ
+
+## 3c. memoragフラグ不整合修正（drive-by）
+- 役割: `settings.memorag.enabled`（settings.py:52、既定True）=グローバルinfraキルスイッチ / `ChatConfig.memorag_enabled`（session_config.py:100、既定False）=ペルソナ別機能ON/OFF
+- 現状バグ: main.py:207-213がsettings(True)でworker生成するがstart()（worker.py:32）はデフォルトChatConfigのmemorag_enabled=Falseを判定→常にskip
+- 修正: (1)`start()`の判定を`self._settings.memorag.enabled`のみに (2)`_rebuild_persona`内で`ChatConfigRepository(ctx.connection).get(persona)`をロードし、memorag_enabled=Falseのペルソナはskip。interval/top_kもペルソナ設定優先（worker.py:41-45,79の既存フォールバック構造を活用）
+- 注意: スナップショットの消費者は現状ゼロ（build-sideのみ）。workerが動き始めても可視影響なし（LLMフリー、24h毎）
+
+## テスト（最小6本）
+1. upsert_link: 新規挿入→weight 0.6/count 1、再upsert→加算（0.7/count 2）、6回連続→cap 1.0
+2. get_links_for_keysユニオン: memory_links空→共起のみ（現行回帰ガード）、永続リンクあり→永続weight優先・新規ペア追加・逆方向展開
+3. link_service: トラッカー→Memory lookup→実DB（tmp）にリンク行作成、自己リンクskip・上限5件
+4. hebbian_update単体: cap/count/last_activated（git履歴からテスト復元）
+5. memorag: settings.memorag.enabled=False→スレッド起動なし、_rebuild_personaがmemorag_enabled=Falseペルソナをskip
+6. session_id付与: registry発行イベント→recorderがsession_idを永続化
+
+## 検証コマンド（Phase 1/2と同じ）
+```
+.venv\Scripts\python.exe -m pytest tests -x -q
+.venv\Scripts\python.exe -m ruff check nous scripts
+.venv\Scripts\python.exe -m mypy nous
+```

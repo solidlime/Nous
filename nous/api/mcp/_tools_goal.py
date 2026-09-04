@@ -34,6 +34,7 @@ async def _tool_goal_manage(
                 "tool.called",
                 {
                     "persona": persona,
+                    "session_id": getattr(ctx, "session_id", None),
                     "tool_name": "goal_manage",
                     "params_summary": "operation=list",
                     "result_summary": str(tag_result.error),
@@ -59,6 +60,7 @@ async def _tool_goal_manage(
             "tool.called",
             {
                 "persona": persona,
+                "session_id": getattr(ctx, "session_id", None),
                 "tool_name": "goal_manage",
                 "params_summary": f"operation=list, scope={scope}, tags={tags}",
                 "result_summary": f"Listed {len(memories)} goals",
@@ -83,6 +85,7 @@ async def _tool_goal_manage(
                 "tool.called",
                 {
                     "persona": persona,
+                    "session_id": getattr(ctx, "session_id", None),
                     "tool_name": "goal_manage",
                     "params_summary": f"operation=create, scope={scope}, tags={tags}, content={content[:50]}",
                     "result_summary": f"Goal created: {result.value.key}",
@@ -94,6 +97,7 @@ async def _tool_goal_manage(
             "tool.called",
             {
                 "persona": persona,
+                "session_id": getattr(ctx, "session_id", None),
                 "tool_name": "goal_manage",
                 "params_summary": f"operation=create, scope={scope}, tags={tags}, content={content[:50]}",
                 "result_summary": str(result.error),
@@ -114,6 +118,7 @@ async def _tool_goal_manage(
                     "tool.called",
                     {
                         "persona": persona,
+                        "session_id": getattr(ctx, "session_id", None),
                         "tool_name": "goal_manage",
                         "params_summary": f"operation={operation}, memory_key={memory_key}",
                         "result_summary": str(get_result.error),
@@ -127,6 +132,7 @@ async def _tool_goal_manage(
                     "tool.called",
                     {
                         "persona": persona,
+                        "session_id": getattr(ctx, "session_id", None),
                         "tool_name": "goal_manage",
                         "params_summary": f"operation={operation}, memory_key={memory_key}",
                         "result_summary": f"Memory '{memory_key}' is not an active goal",
@@ -161,6 +167,7 @@ async def _tool_goal_manage(
                         "tool.called",
                         {
                             "persona": persona,
+                            "session_id": getattr(ctx, "session_id", None),
                             "tool_name": "goal_manage",
                             "params_summary": f"operation={operation}, content={content[:50]}",
                             "result_summary": str(tag_result.error),
@@ -176,6 +183,7 @@ async def _tool_goal_manage(
                     "tool.called",
                     {
                         "persona": persona,
+                        "session_id": getattr(ctx, "session_id", None),
                         "tool_name": "goal_manage",
                         "params_summary": f"operation={operation}, content={content[:50]}",
                         "result_summary": f"No active goal matching '{content[:40]}' found",
@@ -191,6 +199,7 @@ async def _tool_goal_manage(
                 "tool.called",
                 {
                     "persona": persona,
+                    "session_id": getattr(ctx, "session_id", None),
                     "tool_name": "goal_manage",
                     "params_summary": f"operation={operation}, content={match.content[:50]}",
                     "result_summary": f"Goal {new_status}: {match.content[:80]}",
@@ -202,6 +211,7 @@ async def _tool_goal_manage(
             "tool.called",
             {
                 "persona": persona,
+                "session_id": getattr(ctx, "session_id", None),
                 "tool_name": "goal_manage",
                 "params_summary": f"operation={operation}, memory_key={match.key}",
                 "result_summary": str(update_result.error),
@@ -214,6 +224,7 @@ async def _tool_goal_manage(
             "tool.called",
             {
                 "persona": persona,
+                "session_id": getattr(ctx, "session_id", None),
                 "tool_name": "goal_manage",
                 "params_summary": f"operation={operation}, content={content[:50]}",
                 "result_summary": f"Unknown operation: {operation}",

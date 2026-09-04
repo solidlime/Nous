@@ -99,6 +99,7 @@ class ToolRegistry:
                         "tool_name": tool_name,
                         "params_summary": str(tool_input)[:200],
                         "success": True,
+                        "session_id": getattr(ctx, "session_id", None),
                         "timestamp": get_now().isoformat(),
                     },
                 )
@@ -114,6 +115,7 @@ class ToolRegistry:
                         "params_summary": str(tool_input)[:200],
                         "success": False,
                         "error": str(e),
+                        "session_id": getattr(ctx, "session_id", None),
                         "timestamp": get_now().isoformat(),
                     },
                 )

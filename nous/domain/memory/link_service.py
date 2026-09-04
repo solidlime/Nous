@@ -14,11 +14,15 @@ class MemoryLinkService:
         self,
         link_repo: object | None,
         search_engine_ref: list,
-        session_event_repo: object | None = None,
+        memory_repo: object | None = None,
+        coaccess_tracker: list[str] | None = None,
     ) -> None:
         self._link_repo = link_repo
         self._search_engine_ref = search_engine_ref
-        self._session_event_repo = session_event_repo
+        self._memory_repo = memory_repo
+        # Shared mutable list owned by AppContext: keys of memories accessed
+        # in the current session (rolling window, most recent last).
+        self._coaccess_tracker = coaccess_tracker if coaccess_tracker is not None else []
 
     @property
     def _search_engine(self) -> SearchEngine | None:
@@ -27,43 +31,22 @@ class MemoryLinkService:
     def _get_session_memories(
         self,
         _new_memory: Memory,
-        session_id: str | None = None,
-    ) -> list:
-        """Return memories recently accessed in the current conversation turn.
+    ) -> list[Memory]:
+        """Return memories recently accessed in the current session.
 
-        Queries session_event table for tool.called events (memory_create,
-        memory_read) in the current session, then extracts the referenced
-        memory keys.
-
-        Returns empty list when session_event_repo is unavailable or
-        session_id is not set (the current state — session_id is not yet
-        recorded in session_events, so plumbing is wired but inert).
+        Looks up the co-access tracker keys (recorded by memory_read /
+        memory_create MCP tools) via the memory repository.  Lookup
+        failures (tombstoned, missing) are skipped.
         """
-        if session_id is None or self._session_event_repo is None:
+        if self._memory_repo is None or not self._coaccess_tracker:
             return []
 
-        try:
-            events = self._session_event_repo.get_by_session(session_id, limit=20)
-        except Exception:
-            return []
-
-        memory_keys: list[str] = []
-        for event in events:
-            if event.event_type != "tool.called":
-                continue
-            summary = event.summary or ""
-            if "memory_create" not in summary and "memory_read" not in summary:
-                continue
-
-            # Extract memory key from result_summary patterns:
-            # "memory_read: ✓ Read memory: <key>"
-            if "Read memory:" in summary:
-                key = summary.split("Read memory:")[-1].strip()
-                if key:
-                    memory_keys.append(key)
-
-        # TODO: lookup Memory objects via repo when available
-        return memory_keys
+        memories: list[Memory] = []
+        for key in self._coaccess_tracker:
+            result = self._memory_repo.find_by_key(key)  # type: ignore[attr-defined]
+            if result.is_ok and result.value is not None:
+                memories.append(result.value)
+        return memories
 
     @staticmethod
     def _classify_link_type(m1: Memory, m2: Memory) -> str:
@@ -77,20 +60,24 @@ class MemoryLinkService:
     def _create_hebbian_links(
         self,
         new_memory: Memory,
-        session_id: str | None = None,
     ) -> None:
         """Generate Hebbian links between *new_memory* and recently accessed memories.
 
-        Hebbian co-fire principle: only memories accessed in the same conversation
-        turn are linked.  Similarity-based linking (cosine >= 0.8) is deferred to
+        Hebbian co-fire principle: only memories accessed in the same session
+        are linked.  Similarity-based linking (cosine >= 0.8) is deferred to
         a future async search-engine integration.
         """
         if self._link_repo is None:
             return
 
-        co_accessed = self._get_session_memories(new_memory, session_id)
-        for candidate in co_accessed[:5]:  # max 5 links per new memory
-            if candidate.key == new_memory.key:
-                continue
+        co_accessed = self._get_session_memories(new_memory)
+        upsert_link = getattr(self._link_repo, "upsert_link", None)
+        if upsert_link is None:
+            return
+        # Self-link excluded first, then the 5 most RECENT accesses
+        # (tracker is append-ordered: last = newest; Hebbian co-activation
+        # is about temporal proximity).
+        candidates = [m for m in co_accessed if m.key != new_memory.key][-5:]
+        for candidate in candidates:
             link_type = self._classify_link_type(new_memory, candidate)
-            self._link_repo.upsert(new_memory.key, candidate.key, link_type)
+            upsert_link(new_memory.key, candidate.key, link_type)

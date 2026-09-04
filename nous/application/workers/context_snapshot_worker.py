@@ -9,7 +9,6 @@ from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
     from nous.config.settings import Settings
-    from nous.domain.chat_config import ChatConfig
 
 logger = get_logger(__name__)
 
@@ -20,28 +19,27 @@ class ContextSnapshotWorker:
     LLM-free, so always safe to run.
     """
 
-    def __init__(self, settings: Settings, config: ChatConfig | None = None) -> None:
+    def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._config = config
         self._running = False
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
 
     def start(self) -> None:
-        """Start the background snapshot rebuild thread."""
-        enabled = self._config.memorag_enabled if self._config else self._settings.memorag.enabled
-        if not enabled:
-            logger.info("ContextSnapshotWorker: MemoRAG disabled, skipping start")
+        """Start the background snapshot rebuild thread.
+
+        Gated by the global infra kill switch (settings.memorag.enabled) only.
+        Per-persona on/off (ChatConfig.memorag_enabled) is checked per persona
+        in _rebuild_persona.
+        """
+        if not self._settings.memorag.enabled:
+            logger.info("ContextSnapshotWorker: MemoRAG disabled (settings), skipping start")
             return
         self._stop_event.clear()
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
-        interval_hours = (
-            self._config.memorag_snapshot_interval_hours
-            if self._config
-            else self._settings.memorag.snapshot_interval_hours
-        )
+        interval_hours = self._settings.memorag.snapshot_interval_hours
         threshold = self._settings.memorag.rebuild_threshold  # stays at Settings level
         logger.info(
             "ContextSnapshotWorker started (interval=%.1fh, threshold=%d)",
@@ -57,12 +55,7 @@ class ContextSnapshotWorker:
         logger.info("ContextSnapshotWorker stopped")
 
     def _run(self) -> None:
-        interval_hours = (
-            self._config.memorag_snapshot_interval_hours
-            if self._config
-            else self._settings.memorag.snapshot_interval_hours
-        )
-        interval = interval_hours * 3600
+        interval = self._settings.memorag.snapshot_interval_hours * 3600
         while not self._stop_event.wait(interval):
             self._rebuild_all()
 
@@ -76,18 +69,35 @@ class ContextSnapshotWorker:
             return
 
         threshold = self._settings.memorag.rebuild_threshold
-        top_n = self._config.memorag_top_k if self._config else self._settings.memorag.snapshot_top_memories
         for persona in personas:
             try:
-                self._rebuild_persona(persona, threshold, top_n)
+                self._rebuild_persona(persona, threshold)
             except Exception:
                 logger.exception("ContextSnapshotWorker: error for persona=%s", persona)
 
-    def _rebuild_persona(self, persona: str, threshold: int, top_n: int) -> None:
+    def _rebuild_persona(self, persona: str, threshold: int) -> None:
         from nous.application.use_cases import AppContextRegistry
+        from nous.config.settings import get_settings
+        from nous.domain.chat_config import ChatConfigFileRepository
         from nous.domain.search.context_snapshot import MemoryContextSnapshot
 
         ctx = AppContextRegistry.get(persona)
+
+        # Per-persona switch: ChatConfig wins over the global default.
+        # Same source as the chat path (config.json via ChatConfigFileRepository —
+        # the WebUI toggle writes here; SQLite chat_settings is never written
+        # in production).  Read once per 24h cycle, so file I/O cost is nil.
+        settings_memorag = self._settings.memorag
+        top_n = settings_memorag.snapshot_top_memories
+        try:
+            persona_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
+            if not persona_config.memorag_enabled:
+                logger.debug("ContextSnapshotWorker: MemoRAG disabled for %s, skipping", persona)
+                return
+            top_n = persona_config.memorag_top_k or top_n
+        except Exception:
+            logger.debug("ContextSnapshotWorker: ChatConfig load failed for %s, using defaults", persona)
+
         count_result = ctx.memory_repo.count()
         current_count = count_result.value if count_result.is_ok else 0
 

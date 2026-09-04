@@ -110,15 +110,12 @@ class TestContextSnapshotWorkerEventStop:
 
         from nous.application.workers.context_snapshot_worker import ContextSnapshotWorker
 
-        config = MagicMock()
-        config.memorag_enabled = True
-        config.memorag_snapshot_interval_hours = 2
         settings = MagicMock()
         settings.memorag.enabled = True
         settings.memorag.snapshot_interval_hours = 2
         settings.memorag.rebuild_threshold = 20
 
-        worker = ContextSnapshotWorker(settings, config=config)
+        worker = ContextSnapshotWorker(settings)
         worker.start()
         assert worker._thread is not None
 

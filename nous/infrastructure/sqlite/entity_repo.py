@@ -173,14 +173,49 @@ class SQLiteEntityRepository(SQLiteRepository):
             logger.error("Failed to get entities for memory %s: %s", memory_key, e)
             return Failure(RepositoryError(str(e)))
 
-    def get_links_for_keys(self, keys: list[str], limit: int = 1000) -> list[MemoryLink]:
-        """Return co-occurrence links between memories sharing any entity.
+    def upsert_link(
+        self,
+        source_key: str,
+        target_key: str,
+        link_type: str = "semantic",
+        strength: float = 0.1,
+    ) -> Result[None, RepositoryError]:
+        """Atomically strengthen a Hebbian link (single-statement upsert).
 
-        Two memories are linked when they mention the same entity.
-        Used by spreading activation in the search engine.
+        New edge starts at weight 0.5 + strength; existing edges accumulate
+        weight (capped at 1.0) and bump co_activation_count.  Read-modify-write
+        is forbidden by design — the ON CONFLICT clause makes the update atomic.
+        """
+        try:
+            now = format_iso(get_now())
+            self._db.execute(
+                """
+                INSERT INTO memory_links (source_key, target_key, weight, link_type, co_activation_count, last_activated)
+                VALUES (?, ?, 0.5 + ?, ?, 1, ?)
+                ON CONFLICT(source_key, target_key, link_type) DO UPDATE SET
+                    weight = MIN(1.0, weight + ?),
+                    co_activation_count = co_activation_count + 1,
+                    last_activated = ?
+                """,
+                (source_key, target_key, strength, link_type, now, strength, now),
+            )
+            return Success(None)
+        except Exception as e:
+            logger.error("Failed to upsert link %s->%s: %s", source_key, target_key, e)
+            return Failure(RepositoryError(str(e)))
+
+    def get_links_for_keys(self, keys: list[str], limit: int = 1000) -> list[MemoryLink]:
+        """Return associative links for spreading activation.
+
+        Union read: entity co-occurrence edges (weight=0.5) form the base
+        graph; persistent memory_links edges (Hebbian) override same-pair
+        co-occurrence weights and add pairs that share no entity.  Persistent
+        edges are expanded in both directions (SA reads outgoing only).
+        Day-1 behaviour is unchanged when memory_links is empty.
         """
         if not keys:
             return []
+        links: dict[tuple[str, str], MemoryLink] = {}
         try:
             placeholders = ", ".join("?" for _ in keys)
             rows = self._db.execute(
@@ -191,9 +226,29 @@ class SQLiteEntityRepository(SQLiteRepository):
                 "ORDER BY src, dst LIMIT ?",
                 (*keys, limit),
             ).fetchall()
-            return [
-                MemoryLink(source_key=r["src"], target_key=r["dst"], weight=0.5, link_type="semantic") for r in rows
-            ]
+            for r in rows:
+                links[(r["src"], r["dst"])] = MemoryLink(
+                    source_key=r["src"], target_key=r["dst"], weight=0.5, link_type="semantic"
+                )
+
+            link_rows = self._db.execute(
+                "SELECT * FROM memory_links "
+                f"WHERE source_key IN ({placeholders}) OR target_key IN ({placeholders}) "
+                "LIMIT ?",
+                (*keys, *keys, limit),
+            ).fetchall()
+            for r in link_rows:
+                for src, dst in ((r["source_key"], r["target_key"]), (r["target_key"], r["source_key"])):
+                    # Persistent weight wins over the co-occurrence base
+                    links[(src, dst)] = MemoryLink(
+                        source_key=src,
+                        target_key=dst,
+                        weight=r["weight"],
+                        link_type=r["link_type"],
+                        co_activation_count=r["co_activation_count"],
+                        last_activated=r["last_activated"],
+                    )
+            return list(links.values())[:limit]
         except Exception as e:
             logger.error("Failed to get links for %d keys: %s", len(keys), e)
             return []

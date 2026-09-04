@@ -97,6 +97,10 @@ class AppContext:
         self.persona = persona
         self._config = config
         self._current_session_id: str | None = None
+        # In-memory Hebbian co-access tracker: keys of memories read/created
+        # in this session (rolling window, most recent last).  Volatile by
+        # design — Hebbian links rebuild progressively, so nothing is lost.
+        self._coaccess_keys: list[str] = []
         self._init_storage()
         self._init_enricher()
         self._init_services()
@@ -115,6 +119,23 @@ class AppContext:
     @session_id.setter
     def session_id(self, value: str | None) -> None:
         self._current_session_id = value
+
+    def record_memory_access(self, key: str) -> None:
+        """Record a memory key in the Hebbian co-access tracker.
+
+        Rolling window of the last 20 keys (most recent last); duplicates are
+        moved to the end so repeated reads keep recency.  Best-effort: never
+        raises into the caller (MCP tool flow).
+        """
+        if not key:
+            return
+        try:
+            if key in self._coaccess_keys:
+                self._coaccess_keys.remove(key)
+            self._coaccess_keys.append(key)
+            del self._coaccess_keys[:-20]
+        except Exception:
+            logger.debug("record_memory_access failed for %s", key, exc_info=True)
 
     # ------------------------------------------------------------------
     # Private factory methods (called in order from __init__)
@@ -221,7 +242,8 @@ class AppContext:
             self.memory_repo,
             entity_service=self.entity_service,
             enricher=self._enricher,
-            session_event_repo=self._session_event_repo,
+            link_repo=self.entity_repo,
+            coaccess_tracker=self._coaccess_keys,
         )
         self.persona_service = PersonaService(
             self.persona_repo, event_bus=self.event_bus, memory_service=self.memory_service

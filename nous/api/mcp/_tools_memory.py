@@ -56,17 +56,19 @@ async def _tool_memory_create(
         session_id=getattr(ctx, "session_id", None),
     )
     if result.is_ok:
+        m = result.value
+        ctx.record_memory_access(m.key)
         await ctx.event_bus.publish(
             "memory.created",
             {
-                "key": result.value.key,
+                "key": m.key,
                 "persona": persona,
                 "content_preview": content[:100],
                 "tags": tags or [],
                 "importance": importance,
             },
         )
-        return json.dumps({"ok": True, "key": result.value.key, "auto_emotion": True}, ensure_ascii=False)
+        return json.dumps({"ok": True, "key": m.key, "auto_emotion": True}, ensure_ascii=False)
 
     # Handle duplicate errors with the same response format as before
     if isinstance(result.error, DuplicateMemoryError):
@@ -97,6 +99,7 @@ async def _tool_memory_read(
             except Exception as e:
                 logger.warning(f"boost_recall failed: {e}")
             m = result.value
+            ctx.record_memory_access(m.key)
             emotion_line = f"Emotion: {m.emotion}"
             if m.emotion_intensity:
                 emotion_line += f" (intensity: {m.emotion_intensity})"
@@ -109,6 +112,7 @@ async def _tool_memory_read(
                 "tool.called",
                 {
                     "persona": persona,
+                    "session_id": getattr(ctx, "session_id", None),
                     "tool_name": "memory_read",
                     "params_summary": f"memory_key={memory_key}",
                     "result_summary": f"Read memory: {m.key}",
@@ -120,6 +124,7 @@ async def _tool_memory_read(
             "tool.called",
             {
                 "persona": persona,
+                "session_id": getattr(ctx, "session_id", None),
                 "tool_name": "memory_read",
                 "params_summary": f"memory_key={memory_key}",
                 "result_summary": str(result.error),
@@ -155,6 +160,7 @@ async def _tool_memory_read(
             "tool.called",
             {
                 "persona": persona,
+                "session_id": getattr(ctx, "session_id", None),
                 "tool_name": "memory_read",
                 "params_summary": f"limit={limit}, offset={offset}",
                 "result_summary": str(memories_result.error),
@@ -351,6 +357,7 @@ async def _tool_memory_search(
             "tool.called",
             {
                 "persona": persona,
+                "session_id": getattr(ctx, "session_id", None),
                 "tool_name": "memory_search",
                 "params_summary": f"query={query[:50]}, top_k={top_k}",
                 "result_summary": str(result.error),
@@ -363,6 +370,7 @@ async def _tool_memory_search(
             "tool.called",
             {
                 "persona": persona,
+                "session_id": getattr(ctx, "session_id", None),
                 "tool_name": "memory_search",
                 "params_summary": f"query={query[:50]}, top_k={top_k}",
                 "result_summary": "No results found",
@@ -396,6 +404,7 @@ async def _tool_memory_search(
         "tool.called",
         {
             "persona": persona,
+            "session_id": getattr(ctx, "session_id", None),
             "tool_name": "memory_search",
             "params_summary": f"query={query[:50]}, top_k={top_k}",
             "result_summary": f"Found {len(result.value)} results",
@@ -416,6 +425,7 @@ async def _tool_memory_stats(ctx: AppContext, persona: str, top_n: int = 20) -> 
             "tool.called",
             {
                 "persona": persona,
+                "session_id": getattr(ctx, "session_id", None),
                 "tool_name": "memory_stats",
                 "params_summary": f"top_n={top_n}",
                 "result_summary": f"Stats retrieved ({len(result_text)} chars)",
@@ -427,6 +437,7 @@ async def _tool_memory_stats(ctx: AppContext, persona: str, top_n: int = 20) -> 
         "tool.called",
         {
             "persona": persona,
+            "session_id": getattr(ctx, "session_id", None),
             "tool_name": "memory_stats",
             "params_summary": f"top_n={top_n}",
             "result_summary": str(result.error),
