@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+def _build_drift_section(drift: dict | None) -> str:
+    """キャラ一貫性監査の指摘をMemoryLLMプロンプト用の追記ブロックに変換する。"""
+    if not drift or drift.get("violation") in (None, "none"):
+        return ""
+    violation = str(drift.get("violation", ""))
+    detail = str(drift.get("detail", ""))
+    return f"【キャラ一貫性監査の指摘】\n- 種別: {violation}\n- 詳細: {detail}\n"
+
+
 _MEMORY_LLM_PROMPT = """\
 [System Directive] All output content must be written in {language}.
 
@@ -22,6 +31,7 @@ _MEMORY_LLM_PROMPT = """\
 【会話】
 [user]: {user_message}
 [assistant（私={persona_name}）]: {assistant_response}
+{drift_section}
 
 【出力形式】
 JSONのみ。コメント不要。不要なフィールドは省略可。
@@ -58,6 +68,10 @@ JSONのみ。コメント不要。不要なフィールドは省略可。
 【注意】
 - facts: ユーザーの好み・個人情報・重要な出来事のみ。一時的な発言は不要。
 - facts は私（{persona_name}）の一人称視点で記録する（「私は〜」「ユーザーは〜」など主語を明確に）。
+- drift: 上に【キャラ一貫性監査の指摘】がある場合のみ、反省文をfactsに1件だけ作る。
+  - contentは私（{persona_name}）の一人称独白の反省文（「私は〜すべきだった」形式）。
+  - tagsは ["character_drift", 指摘の種別]、importanceは0.8-0.9。
+  - 指摘がなければ作らない（重複禁止）。
 - goals: ユーザーが「〜したい」「〜を目指す」と表明した目標のみ。
   - 新規の場合: action="create" + content
   - 既存リストにあるgoalが会話で達成されたら: action="achieve" + memory_key
