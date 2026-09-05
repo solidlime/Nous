@@ -15,7 +15,7 @@ var S = window.S;
 // ------------------------------------------------------------------
 // Memory panel update (retrieved / saved / goals)
 // ------------------------------------------------------------------
-function updateMemoryPanel(retrieved, saved, goals) {
+function updateMemoryPanel(retrieved, saved, goals, promises) {
   const panel = document.getElementById("memory-panel");
   if (!panel || panel.style.display === "none") return;
   const escAttr = (s) =>
@@ -138,6 +138,8 @@ function updateMemoryPanel(retrieved, saved, goals) {
         safeSetHTML(goalsList, goals
           .map((g) => {
             const key = g.key || "";
+            const actionBadge = (g.action && g.action !== "create")
+              ? '<span class="mem-action-badge">更新</span> ' : "";
             return (
               '<div class="memory-item-card" data-key="' +
               escAttr(key) +
@@ -149,6 +151,7 @@ function updateMemoryPanel(retrieved, saved, goals) {
               escAttr((g.tags || []).join(",")) +
               '">' +
               '<i data-lucide="target"></i> ' +
+              actionBadge +
               esc((g.content || "").substring(0, 80)) +
               '<div class="mem-actions"><button class="mem-action-btn done" onclick="event.stopPropagation();N.Chat.memoryPanel.completeGoal(\'' +
               escAttr(key) +
@@ -164,24 +167,45 @@ function updateMemoryPanel(retrieved, saved, goals) {
       }
     }
   }
-}
-
-// ------------------------------------------------------------------
-// Reflection panel
-// ------------------------------------------------------------------
-function showReflectionStart() {
-  const header = document.getElementById("reflection-header");
-  if (header) {
-    safeSetHTML(header,
-      '<i data-lucide="sparkles"></i> リフレクション (実行中...)');
-    if (typeof lucide !== "undefined") lucide.createIcons();
+  if (promises !== undefined) {
+    const promisesList = document.getElementById("memory-promises-list");
+    if (promisesList) {
+      if (!promises || promises.length === 0) {
+        safeSetHTML(promisesList, '<div class="memory-empty">なし</div>');
+      } else {
+        safeSetHTML(promisesList, promises
+          .map((g) => {
+            const key = g.key || "";
+            const actionBadge = (g.action && g.action !== "create")
+              ? '<span class="mem-action-badge">更新</span> ' : "";
+            return (
+              '<div class="memory-item-card" data-key="' +
+              escAttr(key) +
+              '" data-content="' +
+              escAttr(g.content || "") +
+              '" data-importance="' +
+              (g.importance || 0.8) +
+              '" data-tags="' +
+              escAttr((g.tags || []).join(",")) +
+              '">' +
+              '<i data-lucide="handshake"></i> ' +
+              actionBadge +
+              esc((g.content || "").substring(0, 80)) +
+              '<div class="mem-actions"><button class="mem-action-btn del" onclick="event.stopPropagation();N.Chat.memoryPanel.deleteCard(\'' +
+              escAttr(key) +
+              "')\">削除</button></div>" +
+              "</div>"
+            );
+          })
+          .join(""));
+      }
+    }
   }
-  const list = document.getElementById("memory-reflection-list");
-  if (list)
-    safeSetHTML(list,
-      '<div class="memory-empty" style="color:var(--accent-purple);">分析中...</div>');
 }
 
+// ------------------------------------------------------------------
+// Reflection panel (insights via commitments polling; no streaming SSE)
+// ------------------------------------------------------------------
 function updateReflectionPanel(insights) {
   const header = document.getElementById("reflection-header");
   if (header) {
@@ -283,14 +307,6 @@ async function completeGoal(key, content) {
 // ------------------------------------------------------------------
 N.Chat.memoryPanel = {
   update: updateMemoryPanel,
-  showReflection: showReflectionStart,
-  updateReflection: updateReflectionPanel,
-};
-
-// Expose globals:
-N.Chat.memoryPanel = {
-  update: updateMemoryPanel,
-  showReflection: showReflectionStart,
   updateReflection: updateReflectionPanel,
   sessionSummarized: showSessionSummarized,
   contextCompressed: showContextCompressed,

@@ -39,6 +39,14 @@ def render_chat_memory_panel() -> str:
                         </div>
                     </div>
 
+                    <!-- Promises -->
+                    <div class="memory-panel-section">
+                        <div class="memory-section-header"><i data-lucide="handshake"></i> 約束</div>
+                        <div id="memory-promises-list">
+                            <div class="memory-empty">チャット中に自動更新されます</div>
+                        </div>
+                    </div>
+
                     <!-- Equipment -->
                     <div class="memory-panel-section">
                         <div class="memory-section-header"><i data-lucide="backpack"></i> 装備</div>

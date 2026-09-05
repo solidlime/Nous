@@ -577,7 +577,11 @@ async function chatSend(retry) {
           contentParts.push({ type: "tool_result", id: evt.id, result: evt.result });
           statusEl.textContent = "応答中...";
         } else if (evt.type === "memory_activity") {
-          N.Chat.memoryPanel.update(evt.retrieved, evt.saved, evt.goals);
+          if (evt.preliminary) {
+            N.Chat.memoryPanel.update(evt.retrieved, undefined, undefined, undefined);
+          } else {
+            N.Chat.memoryPanel.update(evt.retrieved, evt.saved, evt.goals, evt.promises);
+          }
           if (_memoryActivityTimer) clearTimeout(_memoryActivityTimer);
           _memoryActivityTimer = setTimeout(function() { N.Chat.core.loadCommitments(); }, 500);
           statusEl.textContent = "";
@@ -585,10 +589,6 @@ async function chatSend(retry) {
           N.Chat.equipment.update(evt.update);
         } else if (evt.type === "character_flag") {
           N.Chat.showCharacterFlag(assistantDiv, evt.violation, evt.detail);
-        } else if (evt.type === "reflection_start") {
-          N.Chat.memoryPanel.showReflection();
-        } else if (evt.type === "reflection_done") {
-          N.Chat.memoryPanel.updateReflection(evt.insights);
         } else if (evt.type === "session_summarized") {
           N.Chat.memoryPanel.sessionSummarized(evt.summary);
         } else if (evt.type === "context_compressed") {
