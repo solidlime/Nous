@@ -15,6 +15,8 @@ from nous.api.http.deps import _PERSONA_PATTERN, _resolve_persona_from_request, 
 from nous.infrastructure.voice.factory import get_voice_engine
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from starlette.requests import Request
 
     from nous.config.settings import IrodoriConfig
@@ -207,7 +209,8 @@ async def _resolve_caption(
                 relationship=getattr(state, "relationship_status", None),
             )
     snapshot = CaptionSnapshot(
-        emotion, _emotion_bucket(float(getattr(state, "emotion_intensity", 0.0) or 0.0)) if state else _emotion_bucket(0.0)
+        emotion,
+        _emotion_bucket(float(getattr(state, "emotion_intensity", 0.0) or 0.0)) if state else _emotion_bucket(0.0),
     )
     # LLM caption generation ("llm" モードのみ。アンカーを磨く)
     if mode == "llm" and state:
@@ -419,7 +422,7 @@ def _concat_wav(files: list[Path]) -> tuple[bytes, dict]:
     return buf.getvalue(), {"nchannels": nchannels, "sampwidth": sampwidth, "framerate": framerate}
 
 
-async def _relay_tts_stream(engine, *, text, emotion, caption, speed_arg, cache_path, audio_url):
+async def _relay_tts_stream(engine, *, text, emotion, caption, speed_arg, cache_path, audio_url) -> AsyncIterator[str]:
     """irodori SSEを中継しつつ蓄積→完了時に結合・保存。途中失敗はcache書込なし・doneなし。"""
     import tempfile
 

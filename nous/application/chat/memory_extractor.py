@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from nous.application.chat.memory_prompts import _MEMORY_LLM_PROMPT, _build_drift_section
 from nous.domain.language import LanguageResolver
 from nous.domain.search.engine import SearchQuery
+from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now
 from nous.domain.value_objects import normalize_emotion
 from nous.domain.value_objects import normalize_importance as _vo_normalize_importance
@@ -466,10 +467,10 @@ async def run_memory_llm(
                     tags=["goal", "active", "interpersonal"],
                     emotion="neutral",
                 )
-                if mem_result.is_ok and ctx.vector_store is not None:
+                if isinstance(mem_result, Success) and ctx.vector_store is not None:
                     with contextlib.suppress(Exception):
                         await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
-                if mem_result.is_ok:
+                if isinstance(mem_result, Success):
                     promise["memory_key"] = mem_result.value.key
                     promise["_saved"] = True
                 else:
@@ -526,7 +527,7 @@ async def run_memory_llm(
                         tags=tags,
                         importance=0.6,
                     )
-                    if mem_result.is_ok and ctx.vector_store is not None:
+                    if isinstance(mem_result, Success) and ctx.vector_store is not None:
                         with contextlib.suppress(Exception):
                             await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
                     ctx_update.pop(key, None)  # update_physical_state に渡さない

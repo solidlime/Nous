@@ -96,9 +96,9 @@ def _build_tool_only_fallback(tool_calls_log: list[dict]) -> str:
             if not isinstance(src, dict):
                 continue
             if src.get("images") and isinstance(src.get("message"), str) and src["message"].strip():
-                return src["message"].strip()
+                return str(src["message"]).strip()
             if isinstance(src.get("images_summary"), str) and src["images_summary"].strip():
-                return src["images_summary"].strip()
+                return str(src["images_summary"]).strip()
             content = src.get("content")
             if isinstance(content, str) and content.strip().startswith("{"):
                 try:
@@ -108,8 +108,8 @@ def _build_tool_only_fallback(tool_calls_log: list[dict]) -> str:
                 if isinstance(data, dict):
                     if isinstance(data.get("images_summary"), str) and data["images_summary"].strip():
                         if isinstance(data.get("message"), str) and data["message"].strip():
-                            return data["message"].strip()
-                        return data["images_summary"].strip()
+                            return str(data["message"]).strip()
+                        return str(data["images_summary"]).strip()
                     msg = data.get("message")
                     if isinstance(msg, str) and ("Generated" in msg or "image" in msg.lower()):
                         return msg.strip()

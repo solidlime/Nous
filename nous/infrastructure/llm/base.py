@@ -76,7 +76,7 @@ class LLMProvider(ABC):
         return False
 
     @abstractmethod
-    async def stream(
+    def stream(
         self,
         messages: list[LLMMessage],
         system: str,

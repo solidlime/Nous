@@ -404,7 +404,7 @@ class TestBoostRecall:
     def test_boost_recall_returns_failure_on_repo_error(self) -> None:
         """リポジトリエラー時は Failure を返す"""
         repo = MagicMock()
-        repo.get_strength.return_value = MagicMock(is_ok=False, error="DB error")
+        repo.get_strength.return_value = Failure(RepositoryError("DB error"))
 
         from nous.domain.memory.service import MemoryService
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import functools
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ParamSpec, TypeVar, cast
 
 from nous.domain.shared.time_utils import relative_time_str
 
@@ -15,6 +15,9 @@ if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
     from nous.domain.persona.emotion_decay import EmotionDecayResult
     from nous.domain.persona.entities import PersonaState
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 logger = logging.getLogger(__name__)
 
@@ -101,19 +104,21 @@ async def _emit_tool_called(
 
 def tool_called_audited(
     tool_name: str,
-) -> Callable[[Callable[..., Awaitable[object]]], Callable[..., Awaitable[object]]]:
+) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """Decorator: guarantee tool.called publication on all paths of an MCP tool.
 
     Success/failure is classified from the return value; exceptions emit a
-    failure event and re-raise.
+    failure event and re-raise. Generic over the wrapped signature (ParamSpec)
+    so return-type annotations (str/dict) survive decoration.
     """
 
-    def deco(fn: Callable[..., Awaitable[object]]) -> Callable[..., Awaitable[object]]:
+    def deco(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
         @functools.wraps(fn)
-        async def wrapper(ctx: AppContext, persona: str, *args: object, **kwargs: object) -> object:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            ctx = cast("AppContext", args[0] if args else kwargs["ctx"])
             params_summary = str(kwargs)
             try:
-                result = await fn(ctx, persona, *args, **kwargs)
+                result = await fn(*args, **kwargs)
             except Exception as e:
                 await _emit_tool_called(
                     ctx, tool_name, str(e), success=False, params_summary=params_summary, error=str(e)

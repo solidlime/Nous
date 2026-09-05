@@ -243,7 +243,7 @@ class SQLiteEntityRepository(SQLiteRepository):
         try:
             placeholders = ", ".join("?" for _ in keys)
             rows = self._db.execute(
-                "SELECT DISTINCT me1.memory_key AS src, me2.memory_key AS dst "
+                "SELECT DISTINCT me1.memory_key AS src, me2.memory_key AS dst "  # nosec B608 -- IN-list is "?" placeholders; values bound via sqlite params
                 "FROM memory_entities me1 "
                 "JOIN memory_entities me2 ON me1.entity_id = me2.entity_id "
                 f"WHERE me1.memory_key IN ({placeholders}) AND me2.memory_key != me1.memory_key "
@@ -256,7 +256,7 @@ class SQLiteEntityRepository(SQLiteRepository):
                 )
 
             link_rows = self._db.execute(
-                "SELECT * FROM memory_links "
+                "SELECT * FROM memory_links "  # nosec B608 -- IN-list is "?" placeholders; values bound via sqlite params
                 f"WHERE source_key IN ({placeholders}) OR target_key IN ({placeholders}) "
                 "LIMIT ?",
                 (*keys, *keys, limit),
@@ -290,7 +290,7 @@ class SQLiteEntityRepository(SQLiteRepository):
             placeholders = ", ".join("?" for _ in memory_keys)
             # Stage 1: pick distinct top-N entities by mention_count.
             id_rows = self._db.execute(
-                "SELECT e.id FROM memory_entities me "
+                "SELECT e.id FROM memory_entities me "  # nosec B608 -- IN-list is "?" placeholders; values bound via sqlite params
                 "JOIN entities e ON e.id = me.entity_id "
                 f"WHERE me.memory_key IN ({placeholders}) "
                 "GROUP BY e.id ORDER BY MAX(e.mention_count) DESC, e.id LIMIT ?",
@@ -302,7 +302,7 @@ class SQLiteEntityRepository(SQLiteRepository):
             # Stage 2: fetch memory_key-bearing rows for the visible set.
             id_placeholders = ", ".join("?" for _ in ids)
             rows = self._db.execute(
-                "SELECT e.id, e.id AS label, e.entity_type AS type, e.mention_count, me.memory_key "
+                "SELECT e.id, e.id AS label, e.entity_type AS type, e.mention_count, me.memory_key "  # nosec B608 -- IN-list is "?" placeholders; values bound via sqlite params
                 "FROM memory_entities me "
                 "JOIN entities e ON e.id = me.entity_id "
                 f"WHERE me.entity_id IN ({id_placeholders}) "
@@ -321,7 +321,7 @@ class SQLiteEntityRepository(SQLiteRepository):
         try:
             placeholders = ", ".join("?" for _ in entity_ids)
             rows = self._db.execute(
-                "SELECT source_entity AS source_id, target_entity AS target_id, "
+                "SELECT source_entity AS source_id, target_entity AS target_id, "  # nosec B608 -- IN-list is "?" placeholders; values bound via sqlite params
                 "relation_type AS relation, confidence "
                 f"FROM entity_relations WHERE source_entity IN ({placeholders}) "
                 f"AND target_entity IN ({placeholders})",
