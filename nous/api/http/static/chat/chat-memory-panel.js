@@ -322,6 +322,336 @@ if (typeof document !== "undefined" && !N.Chat.memoryPanel._delegated) {
 }
 
 // ------------------------------------------------------------------
+// Wiring fire feed — live synapse pulses (GET /api/memory/wiring/stream)
+// Server flushes its ring buffer on connect, then pushes live events:
+//   {seq, kind, source, target, weight, meta}
+//   kind ∈ {link_fire, recall_boost, ppr_hit} — no server-side thinning.
+// Client keeps a top-N view (default 8, 0 hides). Panel hidden ⇒ SSE off.
+// ------------------------------------------------------------------
+var WIRING_URL = "/api/memory/wiring/stream";
+var WIRING_LIMIT_KEY = "nous_wiring_limit";
+var WIRING_DEFAULT_LIMIT = 8;
+var WIRING_MAX_LIMIT = 50;
+var WIRING_BUF_CAP = 200;
+var WIRING_KINDS = {
+  link_fire: "発火",
+  recall_boost: "想起",
+  ppr_hit: "PPR",
+};
+var _wiringEvents = []; // newest-first
+var _wiringMaxSeq = 0;
+var _wiringVisible = true;
+
+function _wiringEscAttr(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function getFireLimit() {
+  try {
+    var raw = window.localStorage
+      ? window.localStorage.getItem(WIRING_LIMIT_KEY)
+      : null;
+    if (raw === null || raw === undefined || raw === "") {
+      return WIRING_DEFAULT_LIMIT;
+    }
+    var n = parseInt(raw, 10);
+    if (isNaN(n) || n < 0) return WIRING_DEFAULT_LIMIT;
+    return Math.min(n, WIRING_MAX_LIMIT);
+  } catch (_) {
+    return WIRING_DEFAULT_LIMIT;
+  }
+}
+
+function setFireLimit(n) {
+  var v = parseInt(n, 10);
+  if (isNaN(v)) v = WIRING_DEFAULT_LIMIT;
+  v = Math.max(0, Math.min(WIRING_MAX_LIMIT, v));
+  try {
+    if (window.localStorage) {
+      window.localStorage.setItem(WIRING_LIMIT_KEY, String(v));
+    }
+  } catch (_) {}
+  syncFireLimitInput();
+  renderWiringFeed();
+  // 0 hides the feed: drop the connection; raising it reconnects.
+  if (v <= 0) disconnectWiring();
+  else if (_wiringVisible) connectWiring();
+}
+
+// Feed DOM lives next to reflection (server HTML has no wiring section yet,
+// so the client injects it — keeps this feature inside static/ only).
+function ensureWiringFeed() {
+  if (document.getElementById("memory-wiring-list")) return;
+  var panel = document.getElementById("memory-panel");
+  if (!panel) return;
+  var anchor = document.getElementById("memory-reflection-list");
+  var anchorSection = anchor && anchor.closest
+    ? anchor.closest(".memory-panel-section")
+    : null;
+  var section = document.createElement("div");
+  section.className = "memory-panel-section";
+  section.id = "memory-wiring-section";
+  var header = document.createElement("div");
+  header.className = "memory-section-header wiring-feed-header";
+  safeSetHTML(header,
+    '<i data-lucide="zap"></i> 発火' +
+    '<span class="wiring-live-dot is-off" aria-hidden="true"></span>');
+  var list = document.createElement("div");
+  list.id = "memory-wiring-list";
+  list.setAttribute("role", "log");
+  list.setAttribute("aria-live", "polite");
+  list.setAttribute("aria-label", "シナプス発火フィード");
+  section.appendChild(header);
+  section.appendChild(list);
+  if (anchorSection && anchorSection.parentNode === panel) {
+    panel.insertBefore(section, anchorSection.nextSibling);
+  } else {
+    panel.appendChild(section);
+  }
+  if (typeof N.Core.refreshIcons === "function") N.Core.refreshIcons();
+}
+
+// "発火表示数" — numeric setting injected into the reflection settings
+// block (same number-input pattern as its neighbours, CSP-safe: the
+// listener is bound with addEventListener, never an inline handler).
+function ensureFireLimitSetting() {
+  if (document.getElementById("chat-wiring-fire-limit")) return;
+  var anchor = document.getElementById("chat-reflection-threshold");
+  var host = anchor && anchor.closest
+    ? anchor.closest(".details-body")
+    : null;
+  if (!host) {
+    host = document.querySelector(
+      'details[data-category="reflection"] .details-body',
+    );
+  }
+  if (!host) return;
+  var row = document.createElement("div");
+  var label = document.createElement("div");
+  label.className = "chat-field-label";
+  label.textContent = "発火表示数（0で非表示）";
+  var input = document.createElement("input");
+  input.type = "number";
+  input.id = "chat-wiring-fire-limit";
+  input.className = "chat-field-input";
+  input.min = "0";
+  input.max = String(WIRING_MAX_LIMIT);
+  input.step = "1";
+  input.value = String(getFireLimit());
+  input.setAttribute("aria-label", "発火フィードの表示数（0で非表示）");
+  input.addEventListener("input", function () {
+    setFireLimit(input.value);
+  });
+  input.addEventListener("change", function () {
+    setFireLimit(input.value);
+  });
+  row.appendChild(label);
+  row.appendChild(input);
+  host.appendChild(row);
+}
+
+function syncFireLimitInput() {
+  var el = document.getElementById("chat-wiring-fire-limit");
+  if (el && document.activeElement !== el) {
+    el.value = String(getFireLimit());
+  }
+}
+
+function _wiringShouldRun() {
+  return _wiringVisible && getFireLimit() > 0;
+}
+
+function _updateLiveDot() {
+  var dot = document.querySelector("#memory-wiring-section .wiring-live-dot");
+  if (!dot) return;
+  var on = _wiringShouldRun() && !!N.Core._wiringSSE;
+  dot.classList.toggle("is-off", !on);
+}
+
+function _renderWiringItem(ev, fresh) {
+  var label = WIRING_KINDS[ev.kind] || esc(String(ev.kind));
+  var s = ev.source || "";
+  var t = ev.target || "";
+  var edge = s && t ? s + " → " + t : s || t || "—";
+  var w = Number(ev.weight);
+  var weight = isFinite(w) ? w.toFixed(2) : "";
+  return (
+    '<div class="wiring-fire-item wiring-kind-' + _wiringEscAttr(ev.kind) +
+    (fresh ? " is-fresh" : "") + '" data-seq="' + _wiringEscAttr(ev.seq) + '">' +
+    '<span class="wiring-kind-badge">' + label + "</span>" +
+    '<span class="wiring-edge" title="' + _wiringEscAttr(edge) + '">' +
+    esc(edge) + "</span>" +
+    (weight
+      ? '<span class="wiring-weight">' + _wiringEscAttr(weight) + "</span>"
+      : "") +
+    "</div>"
+  );
+}
+
+function renderWiringFeed() {
+  ensureWiringFeed();
+  ensureFireLimitSetting();
+  var section = document.getElementById("memory-wiring-section");
+  var list = document.getElementById("memory-wiring-list");
+  if (!section || !list) return;
+  var limit = getFireLimit();
+  section.classList.toggle("is-hidden", limit <= 0);
+  syncFireLimitInput();
+  if (limit <= 0) {
+    safeSetHTML(list, "");
+    return;
+  }
+  if (_wiringEvents.length === 0) {
+    safeSetHTML(list,
+      '<div class="memory-empty">発火なし — まだシナプスは静か</div>');
+    return;
+  }
+  var view = _wiringEvents.slice(0, limit);
+  safeSetHTML(list, view
+    .map(function (ev, i) {
+      return _renderWiringItem(ev, i === 0);
+    })
+    .join(""));
+}
+
+// Reconnect replays the ring buffer, so dedupe by seq (monotonic).
+function pushWiringEvent(ev) {
+  if (!ev || typeof ev !== "object") return false;
+  if (!WIRING_KINDS[ev.kind]) return false;
+  var seq = Number(ev.seq);
+  if (!isFinite(seq)) seq = 0;
+  if (seq > 0) {
+    if (seq <= _wiringMaxSeq) return false;
+    _wiringMaxSeq = seq;
+  }
+  _wiringEvents.unshift({
+    seq: seq,
+    kind: ev.kind,
+    source: ev.source || "",
+    target: ev.target || "",
+    weight: ev.weight,
+  });
+  if (_wiringEvents.length > WIRING_BUF_CAP) {
+    _wiringEvents.length = WIRING_BUF_CAP;
+  }
+  renderWiringFeed();
+  return true;
+}
+
+function handleWiringMessage(data) {
+  try {
+    pushWiringEvent(JSON.parse(data));
+  } catch (err) {
+    console.warn("[wiring parse]:", err.message);
+  }
+}
+
+// Persona switch / tests: drop buffered fires and start clean.
+function clearWiring() {
+  _wiringEvents = [];
+  _wiringMaxSeq = 0;
+  renderWiringFeed();
+}
+
+// Single-flight wiring SSE — same discipline as N.Core.connectSSE:
+// exactly one live connection plus at most one pending retry timer.
+function connectWiring() {
+  if (N.Core._wiringTimer) {
+    clearTimeout(N.Core._wiringTimer);
+    N.Core._wiringTimer = null;
+  }
+  if (N.Core._wiringSSE) {
+    try {
+      var old = N.Core._wiringSSE;
+      if (old._wiringHandler) {
+        old.removeEventListener("wiring", old._wiringHandler);
+      }
+      old.onerror = null;
+      old.close();
+    } catch (e) {
+      console.warn("[wiring] close failed:", e.message);
+    }
+    N.Core._wiringSSE = null;
+  }
+  if (!_wiringShouldRun()) {
+    _updateLiveDot();
+    return;
+  }
+  ensureWiringFeed();
+  N.Core._wiringBackoff = N.Core._wiringBackoff || 5000;
+  var es = new EventSource(WIRING_URL);
+  es._wiringHandler = function (e) {
+    handleWiringMessage(e.data);
+  };
+  es.addEventListener("wiring", es._wiringHandler);
+  es.onerror = function () {
+    try { es.close(); } catch (_) {}
+    if (N.Core._wiringSSE === es) N.Core._wiringSSE = null;
+    _updateLiveDot();
+    if (!_wiringShouldRun()) return;
+    var backoff = N.Core._wiringBackoff || 5000;
+    N.Core._wiringBackoff = Math.min(backoff * 2, 60000);
+    if (N.Core._wiringTimer) clearTimeout(N.Core._wiringTimer);
+    N.Core._wiringTimer = setTimeout(function () {
+      N.Core._wiringTimer = null;
+      connectWiring();
+    }, backoff);
+  };
+  N.Core._wiringSSE = es;
+  _updateLiveDot();
+}
+
+function disconnectWiring() {
+  if (N.Core._wiringTimer) {
+    clearTimeout(N.Core._wiringTimer);
+    N.Core._wiringTimer = null;
+  }
+  if (N.Core._wiringSSE) {
+    try {
+      var es = N.Core._wiringSSE;
+      if (es._wiringHandler) {
+        es.removeEventListener("wiring", es._wiringHandler);
+      }
+      es.close();
+    } catch (_) {}
+    N.Core._wiringSSE = null;
+  }
+  _updateLiveDot();
+}
+
+// Panel hidden ⇒ cut the stream; reshown ⇒ reconnect (single-flight).
+function setWiringVisible(open) {
+  _wiringVisible = !!open;
+  if (_wiringVisible) connectWiring();
+  else disconnectWiring();
+}
+
+// beforeunload tears down the main SSE via disconnectSSE — take the
+// wiring stream down with it (wraps once, even under script double-load).
+if (typeof N.Core.disconnectSSE === "function" &&
+    !N.Core._wiringDisconnectWrapped) {
+  N.Core._wiringDisconnectWrapped = true;
+  (function () {
+    var _origDisconnect = N.Core.disconnectSSE;
+    N.Core.disconnectSSE = function () {
+      try { disconnectWiring(); } catch (_) {}
+      return _origDisconnect.apply(this, arguments);
+    };
+  })();
+}
+
+// Feed + setting exist from first paint; the stream itself starts when
+// the chat core restores panel visibility (loadChat / toggleMemory).
+ensureWiringFeed();
+ensureFireLimitSetting();
+renderWiringFeed();
+
+// ------------------------------------------------------------------
 // Expose on N.Chat.memoryPanel
 // ------------------------------------------------------------------
 Object.assign(N.Chat.memoryPanel, {
@@ -331,6 +661,14 @@ Object.assign(N.Chat.memoryPanel, {
   contextCompressed: showContextCompressed,
   deleteCard: deleteMemCard,
   completeGoal: completeGoal,
+  getFireLimit: getFireLimit,
+  setFireLimit: setFireLimit,
+  pushWiringEvent: pushWiringEvent,
+  clearWiring: clearWiring,
+  renderWiringFeed: renderWiringFeed,
+  connectWiring: connectWiring,
+  disconnectWiring: disconnectWiring,
+  setWiringVisible: setWiringVisible,
 });
 
 })(window.Nous);

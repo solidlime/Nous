@@ -301,6 +301,13 @@ async function loadChat() {
     // Restore open state explicitly: mobile CSS defaults #memory-panel to display:none
     _memoryPanel.style.display = CHAT.memoryPanelOpen ? "flex" : "none";
   }
+  // Wiring fire feed follows panel visibility (hidden ⇒ SSE off).
+  if (N.Chat.memoryPanel &&
+      typeof N.Chat.memoryPanel.setWiringVisible === "function") {
+    try {
+      N.Chat.memoryPanel.setWiringVisible(CHAT.memoryPanelOpen);
+    } catch (_) {}
+  }
 
   // ESC closes settings panel on mobile (moved from chat.js)
   document.addEventListener("keydown", function(e) {
@@ -519,6 +526,13 @@ function toggleMemoryPanel() {
   document
     .querySelectorAll(".mem-panel-toggle")
     .forEach((b) => b.classList.toggle("active", CHAT.memoryPanelOpen));
+  // Wiring fire feed follows panel visibility (hidden ⇒ SSE off).
+  if (N.Chat.memoryPanel &&
+      typeof N.Chat.memoryPanel.setWiringVisible === "function") {
+    try {
+      N.Chat.memoryPanel.setWiringVisible(CHAT.memoryPanelOpen);
+    } catch (_) {}
+  }
 }
 
 // ------------------------------------------------------------------

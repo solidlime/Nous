@@ -713,3 +713,120 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 .skeleton-error-card .glass-btn {
     margin-top: 12px;
 }
+
+/* ============================================================
+   WIRING FIRE FEED — synapse pulses in the memory panel.
+   Newest fire lands on top with a light pulse; older fires
+   quietly sink (opacity steps). No inline styles: the sanitizer
+   strips style="" so every visual lives here as a class.
+   ============================================================ */
+#memory-wiring-section.is-hidden {
+    display: none;
+}
+.wiring-feed-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.wiring-live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    box-shadow: 0 0 6px rgba(48, 209, 88, 0.8);
+    animation: wiring-dot-breathe 2.4s ease-in-out infinite;
+    flex-shrink: 0;
+}
+.wiring-live-dot.is-off {
+    background: var(--text-muted);
+    box-shadow: none;
+    animation: none;
+    opacity: 0.4;
+}
+@keyframes wiring-dot-breathe {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+}
+#memory-wiring-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.wiring-fire-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 9px;
+    font-size: 0.74rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    background: var(--glass-bg-light);
+    border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    min-width: 0;
+}
+/* older fires sink quietly */
+#memory-wiring-list .wiring-fire-item:nth-child(n+5) { opacity: 0.72; }
+#memory-wiring-list .wiring-fire-item:nth-child(n+8) { opacity: 0.5; }
+/* newest fire arrives as a pulse of light */
+.wiring-fire-item.is-fresh {
+    animation: wiring-pulse 0.9s var(--ease-apple);
+}
+@keyframes wiring-pulse {
+    0% {
+        opacity: 0;
+        transform: translateY(-5px);
+        background: rgba(191, 90, 242, 0.28);
+        box-shadow: 0 0 12px rgba(191, 90, 242, 0.45);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+        background: var(--glass-bg-light);
+        box-shadow: none;
+    }
+}
+.wiring-kind-badge {
+    flex-shrink: 0;
+    font-size: 0.64rem;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
+    border: 0.5px solid transparent;
+}
+.wiring-kind-link_fire .wiring-kind-badge {
+    background: rgba(191, 90, 242, 0.15);
+    color: var(--accent-purple);
+    border-color: rgba(191, 90, 242, 0.3);
+}
+.wiring-kind-recall_boost .wiring-kind-badge {
+    background: rgba(48, 209, 88, 0.15);
+    color: var(--accent-green);
+    border-color: rgba(48, 209, 88, 0.3);
+}
+.wiring-kind-ppr_hit .wiring-kind-badge {
+    background: rgba(0, 122, 255, 0.15);
+    color: var(--accent-blue);
+    border-color: rgba(0, 122, 255, 0.3);
+}
+.wiring-edge {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.wiring-weight {
+    flex-shrink: 0;
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+    .wiring-fire-item.is-fresh {
+        animation: none;
+    }
+    .wiring-live-dot {
+        animation: none;
+    }
+}
