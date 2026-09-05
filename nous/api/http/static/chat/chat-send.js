@@ -588,6 +588,13 @@ async function chatSend(retry) {
           statusEl.textContent = "";
         } else if (evt.type === "inventory_update") {
           N.Chat.equipment.update(evt.update);
+        } else if (evt.type === "context_update") {
+          try {
+            var _cu = evt.update || {};
+            if (_cu.emotion) {
+              window.dispatchEvent(new CustomEvent("emotion-changed", { detail: _cu }));
+            }
+          } catch (_e) { console.warn("[context_update] handle failed:", _e); }
         } else if (evt.type === "character_flag") {
           N.Chat.showCharacterFlag(assistantDiv, evt.violation, evt.detail);
         } else if (evt.type === "session_summarized") {
@@ -654,12 +661,15 @@ async function chatSend(retry) {
             const notice = document.createElement("div");
             notice.className = "chat-truncation-notice";
             notice.textContent = "（つづき）";
-            // Insert after the last text bubble inside assistantDiv
-            const lastBubble = assistantDiv.querySelector(".chat-bubble:last-of-type");
-            if (lastBubble) {
-              lastBubble.insertAdjacentElement("afterend", notice);
-            } else if (assistantDiv) {
-              assistantDiv.appendChild(notice);
+            // e1: 空応答時はassistantDivがnullのためガード
+            if (assistantDiv) {
+              // Insert after the last text bubble inside assistantDiv
+              const lastBubble = assistantDiv.querySelector(".chat-bubble:last-of-type");
+              if (lastBubble) {
+                lastBubble.insertAdjacentElement("afterend", notice);
+              } else {
+                assistantDiv.appendChild(notice);
+              }
             }
           }
           // Show token usage info when available

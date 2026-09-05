@@ -126,7 +126,14 @@ async def _build_context_section(
     # === Tier 1: 現在の状態 ===
     # 時間情報は <TIME_CONTEXT> ブロック（システムプロンプト先頭）を参照
     if getattr(state, "emotion", None):
-        intensity = getattr(state, "emotion_intensity", 0.5)
+        # f2: 欠損・範囲外・非数値を境界で正規化
+        from nous.domain.value_objects import normalize_importance
+
+        try:
+            _raw_int = getattr(state, "emotion_intensity", 0.5)
+            intensity = normalize_importance(float(_raw_int) if _raw_int is not None else None)
+        except (TypeError, ValueError):
+            intensity = 0.5
         intensity_label = "強い" if intensity > 0.6 else "やや強い" if intensity > 0.3 else "弱い"
         t1.append(f"感情: {state.emotion}（{intensity_label}）")
 

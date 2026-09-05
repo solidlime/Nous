@@ -433,12 +433,19 @@ async def run_memory_llm(
             normalized = normalize_emotion(str(emotion).strip()) if emotion else ""
             if normalized and normalized != "neutral" and not skip_emotion:
                 ctx_update["emotion"] = normalized
-                if intensity is not None:
-                    ctx_update["emotion_intensity"] = normalize_importance(float(intensity))
+                # f2: 非数値・範囲外を境界で正規化、失敗時は欠損扱い
+                try:
+                    _norm_int = normalize_importance(float(intensity) if intensity is not None else None)
+                except (TypeError, ValueError):
+                    _norm_int = 0.5
+                    ctx_update.pop("emotion_intensity", None)
+                else:
+                    if intensity is not None:
+                        ctx_update["emotion_intensity"] = _norm_int
                 ctx.persona_service.update_emotion(
                     persona,
                     normalized,
-                    normalize_importance(float(intensity) if intensity is not None else None),
+                    _norm_int,
                     context="llm_suggested",
                 )
             else:

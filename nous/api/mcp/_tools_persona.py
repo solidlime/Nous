@@ -151,7 +151,14 @@ async def _tool_update_context(
     updated: list[str] = []
 
     if emotion is not None:
-        result = ctx.persona_service.update_emotion(persona, emotion, emotion_intensity or 0.5, context="manual_update")
+        # f2: 0.0を欠損扱いしない（or 0.5は0.0を潰す）＋範囲正規化
+        from nous.domain.value_objects import normalize_importance
+
+        try:
+            _intensity = normalize_importance(float(emotion_intensity) if emotion_intensity is not None else None)
+        except (TypeError, ValueError):
+            _intensity = 0.5
+        result = ctx.persona_service.update_emotion(persona, emotion, _intensity, context="manual_update")
         if result.is_ok:
             updated.append(f"emotion={emotion}")
             # 表情画像を同期（既存画像あれば即 publish、無ければ非同期生成）

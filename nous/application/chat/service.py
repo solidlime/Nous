@@ -175,9 +175,19 @@ class ChatService:
 
             effective_temp: float | None = None
             if config.dynamic_temperature:
+                from nous.domain.value_objects import normalize_importance
+
                 state_raw = turn_ctx.state_raw
                 emotion = state_raw.get("emotion", "neutral")
-                intensity = float(state_raw.get("emotion_intensity", 0.5))
+                # f2: 欠損・範囲外・非数値を境界で正規化
+                try:
+                    intensity = normalize_importance(
+                        float(state_raw.get("emotion_intensity", 0.5))
+                        if state_raw.get("emotion_intensity") is not None
+                        else None
+                    )
+                except (TypeError, ValueError):
+                    intensity = 0.5
                 effective_temp = EmotionDrivenSampler.compute(
                     base_temp=config.temperature,
                     emotion=emotion,

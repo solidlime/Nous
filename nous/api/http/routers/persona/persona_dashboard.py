@@ -198,6 +198,8 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
                         "url": f"/api/chat/{persona}/persona/images/{img_file.name}",
                         "filename": img_file.name,
                         "created_at": datetime.fromtimestamp(img_file.stat().st_mtime).isoformat(),
+                        # f1: フラグ名統一 — 新旧両キー（self_portrait正典）
+                        "self_portrait": img_file.name.startswith("self_"),
                         "is_self_portrait": img_file.name.startswith("self_"),
                     }
                 )

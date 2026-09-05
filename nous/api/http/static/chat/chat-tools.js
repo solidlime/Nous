@@ -224,8 +224,8 @@ function showImageGenResult(evt) {
 
   if (!evt.images || !evt.images.length) return;
 
-  // Self-portrait → update Overview tab
-  if (evt.self_portrait && evt.images[0]) {
+  // Self-portrait → update Overview tab (f1: 両フラグ名を受容)
+  if ((evt.self_portrait || evt.is_self_portrait) && evt.images[0]) {
     var portraitEl = document.getElementById('overview-portrait');
     if (portraitEl) {
       var imgUrl = evt.images[0].url || ("data:image/png;base64," + (evt.images[0].base64 || ""));
