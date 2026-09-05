@@ -204,6 +204,23 @@ class SQLiteEntityRepository(SQLiteRepository):
                 """,
                 (source_key, target_key, strength, link_type, now, eta, strength, eta, strength, now),
             )
+            try:
+                from nous.domain.memory.wiring_events import emit as _wiring_emit
+
+                row = self._db.execute(
+                    "SELECT weight FROM memory_links WHERE source_key = ? AND target_key = ? AND link_type = ?",
+                    (source_key, target_key, link_type),
+                ).fetchone()
+                if row is not None:
+                    _wiring_emit(
+                        "link_fire",
+                        source=source_key,
+                        target=target_key,
+                        weight=float(row["weight"]),
+                        meta={"link_type": link_type, "coact": strength},
+                    )
+            except Exception:
+                logger.debug("wiring emit failed for %s->%s", source_key, target_key, exc_info=True)
             return Success(None)
         except Exception as e:
             logger.error("Failed to upsert link %s->%s: %s", source_key, target_key, e)

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 from typing import TYPE_CHECKING
 
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, StreamingResponse
 
 from nous.api.http.deps import (
     CreateMemoryRequest,
@@ -20,6 +21,30 @@ if TYPE_CHECKING:
     from starlette.requests import Request
 
 logger = get_logger(__name__)
+
+
+async def _wiring_stream_gen(request: Request, poll_interval: float = 0.5):
+    """SSE body: immediate buffer flush, then live (no server-side thinning)."""
+    from nous.domain.memory.wiring_events import snapshot_after
+
+    yield "event: connected\ndata: {}\n\n"
+    last_seq = 0
+    idle = 0.0
+    while True:
+        if await request.is_disconnected():
+            break
+        fresh = snapshot_after(last_seq)
+        for event in fresh:
+            last_seq = max(last_seq, event["seq"])
+            yield f"event: wiring\ndata: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
+        if not fresh:
+            idle += poll_interval
+            if idle >= 15.0:
+                idle = 0.0
+                yield ": keepalive\n\n"
+        else:
+            idle = 0.0
+        await asyncio.sleep(poll_interval)
 
 
 def register_memory_routes(mcp) -> None:
@@ -300,3 +325,25 @@ def register_memory_routes(mcp) -> None:
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+    @mcp.custom_route("/api/memory/wiring/stream", methods=["GET"])
+    async def wiring_stream(request: Request) -> StreamingResponse:
+        """SSE: synapse fire event feed (buffer flush + live, no thinning)."""
+        persona = _resolve_persona_from_request(request)
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+
+            async def not_found():
+                yield f"event: error\ndata: {json.dumps({'message': 'Persona not found'})}\n\n"
+
+            return StreamingResponse(not_found(), media_type="text/event-stream")
+
+        return StreamingResponse(
+            _wiring_stream_gen(request),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
+        )

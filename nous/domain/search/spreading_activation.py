@@ -95,4 +95,14 @@ class SpreadingActivation:
             curr = nxt
 
         seed_set = set(seeds)
+        try:
+            from nous.domain.memory.wiring_events import emit as _wiring_emit
+
+            ranked = sorted(((k, curr.get(k, 0.0)) for k in seeds), key=lambda kv: kv[1], reverse=True)[:5]
+            for rank, (seed_key, score) in enumerate(ranked):
+                _wiring_emit("ppr_hit", source=seed_key, weight=score, meta={"rank": rank})
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).debug("wiring emit failed", exc_info=True)
         return {k: v for k, v in curr.items() if k not in seed_set and v > self.threshold}

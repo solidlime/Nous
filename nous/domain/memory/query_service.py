@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -10,6 +11,8 @@ from nous.domain.memory.entities import Memory, MemoryStrength
 from nous.domain.shared.errors import DomainError, MemoryNotFoundError
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import get_now
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryQueryService:
@@ -113,6 +116,17 @@ class MemoryQueryService:
         save_result = self._repo.save_strength(strength)
         if isinstance(save_result, Failure):
             return Failure(save_result.error)
+        try:
+            from nous.domain.memory.wiring_events import emit as _wiring_emit
+
+            _wiring_emit(
+                "recall_boost",
+                source=key,
+                weight=float(strength.strength),
+                meta={"recall_count": strength.recall_count, "stability": strength.stability},
+            )
+        except Exception:
+            logger.debug("wiring emit failed for %s", key, exc_info=True)
         return Success(strength)
 
     def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], DomainError]:
