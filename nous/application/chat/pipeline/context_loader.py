@@ -122,6 +122,8 @@ async def _build_context_section(
     t2: list[str] = []  # Tier 2: 身体・環境
     t3: list[str] = []  # Tier 3: 参照情報
     _is_light = compress_mode == "light"
+    if _is_light:
+        logger.info("context section light skip drift=light_skip (drift/reflection sections skipped)")
 
     # === Tier 1: 現在の状態 ===
     # 時間情報は <TIME_CONTEXT> ブロック（システムプロンプト先頭）を参照

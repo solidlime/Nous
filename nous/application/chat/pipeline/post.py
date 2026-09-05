@@ -199,7 +199,7 @@ class PostProcessStep:
                 try:
                     judgment = await judge_character(config, turn_ctx.system_prompt, turn_ctx.full_response)
                 except Exception as e:
-                    logger.warning("PostProcessStep: judge_character failed: %s", e)
+                    logger.warning("PostProcessStep: judge_character failed drift=judge_exception: %s", e)
                     judgment = None
             if wants_memory:
                 try:
@@ -207,7 +207,7 @@ class PostProcessStep:
                         ctx, config, _with_drift(payload, judgment), tool_calls_log=turn_ctx.tool_calls_log
                     )
                 except Exception as e:
-                    logger.warning("PostProcessStep: run_memory_llm failed: %s", e)
+                    logger.warning("PostProcessStep: run_memory_llm failed drift=memory_exception: %s", e)
 
         # MemoryActivitySSE: 取得された記憶と保存された記憶・goals・promises を通知
         retrieved_for_sse = turn_ctx.memories_raw[:5]

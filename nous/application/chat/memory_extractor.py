@@ -301,6 +301,7 @@ async def run_memory_llm(
             drift=payload.get("drift"),
         )
         if not result:
+            logger.warning("MemoryLLM: empty result drift=empty_result persona=%s", persona_name)
             return {}
 
         persona = ctx.persona
@@ -312,6 +313,7 @@ async def run_memory_llm(
         for fact in facts:
             content = fact.get("content", "")
             if not content:
+                logger.warning("MemoryLLM: skipping empty fact drift=empty_fact_skip persona=%s", persona)
                 fact["_saved"] = False
                 continue
             dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
@@ -319,7 +321,12 @@ async def run_memory_llm(
                 top_hit = dup_check.value[0]
                 hit_score = top_hit.score if hasattr(top_hit, "score") else 0.0
                 if hit_score > 0.85:
-                    logger.debug("MemoryLLM: skipping duplicate fact (score=%.2f): %s", hit_score, content[:60])
+                    logger.warning(
+                        "MemoryLLM: skipping duplicate fact drift=duplicate_skip score=%.2f persona=%s: %s",
+                        hit_score,
+                        persona,
+                        content[:60],
+                    )
                     fact["_saved"] = False
                     continue
             _normalize_drift_fact(fact, drift_violation)
@@ -341,6 +348,7 @@ async def run_memory_llm(
                 fact["memory_key"] = mem_result.value.key
                 fact["_saved"] = True
             else:
+                logger.warning("MemoryLLM: fact save failed drift=save_failed persona=%s: %s", persona, content[:60])
                 fact["_saved"] = False
         if facts:
             logger.info("MemoryLLM: processed %d facts for persona=%s", len(facts), persona)
