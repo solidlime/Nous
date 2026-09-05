@@ -25,6 +25,33 @@ logger = get_logger(__name__)
 DRIFT_VALID_DAYS = 7
 
 
+def _normalize_drift_fact(fact: dict, violation: str) -> bool:
+    """drift factのtags・importanceをコード強制する。drift factならTrue。
+
+    判定: tags内に大小文字・前後空白を無視して "character_drift" を含むもの。
+    強制: tags=["character_drift", <種別>]（種別はviolation優先、なければ既存2件目をlower/strip）、
+    importanceが0.8-0.9に収まらない・非数値なら0.85に補正。fact dictに書き戻す。
+    """
+    tags = fact.get("tags")
+    if not isinstance(tags, list) or not any(
+        isinstance(t, str) and t.strip().lower() == "character_drift" for t in tags
+    ):
+        return False
+    kind = (violation or "").strip().lower()
+    if not kind or kind == "none":
+        rest = [t.strip().lower() for t in tags if isinstance(t, str) and t.strip().lower() != "character_drift"]
+        kind = rest[0] if rest else ""
+    fact["tags"] = ["character_drift", kind] if kind else ["character_drift"]
+    try:
+        imp = float(fact.get("importance", 0.6))
+    except (TypeError, ValueError):
+        imp = 0.85
+    if not 0.8 <= imp <= 0.9:
+        imp = 0.85
+    fact["importance"] = imp
+    return True
+
+
 class MemoryLLM:
     """T35: ターン終了後に facts・context_update・inventory_update を一括抽出する。"""
 
@@ -279,6 +306,8 @@ async def run_memory_llm(
         persona = ctx.persona
 
         # facts: スマートアップサート（類似度 > 0.85 ならスキップ）
+        drift = payload.get("drift")
+        drift_violation = str(drift.get("violation", "") or "") if isinstance(drift, dict) else ""
         facts = result.get("facts", [])
         for fact in facts:
             content = fact.get("content", "")
@@ -293,6 +322,7 @@ async def run_memory_llm(
                     logger.debug("MemoryLLM: skipping duplicate fact (score=%.2f): %s", hit_score, content[:60])
                     fact["_saved"] = False
                     continue
+            _normalize_drift_fact(fact, drift_violation)
             tags = fact.get("tags", ["auto_extract"]) or ["auto_extract"]
             save_kwargs: dict = {}
             if "character_drift" in tags:

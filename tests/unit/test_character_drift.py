@@ -152,6 +152,74 @@ class TestDriftForwarding:
         assert "valid_until" not in kwargs
 
 
+class TestDriftEnforcement:
+    @pytest.mark.asyncio
+    async def test_broken_tags_and_importance_are_forced(self):
+        ctx, config = _make_ctx(), _make_config()
+        result = {
+            "facts": [
+                {
+                    "content": "私は一人称を誤った。",
+                    "importance": 0.2,
+                    "tags": ["Character_Drift"],
+                    "emotion": "neutral",
+                },
+                {
+                    "content": "私は迎合しすぎた。",
+                    "importance": 9.9,
+                    "tags": ["character_drift", "TONE"],
+                    "emotion": "neutral",
+                },
+                {
+                    "content": "範囲内の値は触らない。",
+                    "importance": 0.8,
+                    "tags": ["character_drift", "tone"],
+                    "emotion": "neutral",
+                },
+                {
+                    "content": "通常factは対象外。",
+                    "importance": 0.7,
+                    "tags": ["preference"],
+                    "emotion": "joy",
+                },
+            ],
+            "goals": [],
+            "promises": [],
+            "context_update": {},
+            "inventory_update": {},
+        }
+        drift = {"violation": "tone", "detail": "一人称が俺だった"}
+        with (
+            patch(
+                "nous.application.chat.memory_extractor._build_memory_llm_context",
+                new=AsyncMock(return_value=("c", "cm", "i")),
+            ),
+            patch(
+                "nous.application.chat.memory_extractor.MemoryLLM.process",
+                new=AsyncMock(return_value=result),
+            ),
+        ):
+            await run_memory_llm(ctx, config, {"user": "u", "assistant": "a", "drift": drift})
+        calls = ctx.memory_service.create_memory.await_args_list
+        assert len(calls) == 4
+        k0 = calls[0].kwargs
+        assert k0["tags"] == ["character_drift", "tone"]
+        assert k0["importance"] == 0.85
+        k1 = calls[1].kwargs
+        assert k1["tags"] == ["character_drift", "tone"]
+        assert k1["importance"] == 0.85
+        k2 = calls[2].kwargs
+        assert k2["tags"] == ["character_drift", "tone"]
+        assert k2["importance"] == 0.8
+        for k in (k0, k1, k2):
+            delta = k["valid_until"] - get_now()
+            assert timedelta(days=6) < delta <= timedelta(days=7, seconds=60)
+        k3 = calls[3].kwargs
+        assert k3["tags"] == ["preference"]
+        assert k3["importance"] == 0.7
+        assert "valid_until" not in k3
+
+
 class TestWithDrift:
     def test_violation_attaches_drift(self):
         payload = {"user": "u", "assistant": "a"}
