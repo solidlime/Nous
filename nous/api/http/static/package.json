@@ -11,7 +11,7 @@
     "lint:css:fix": "stylelint '**/*.css' --ignore-pattern 'node_modules/**' --fix"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^2.1.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "jsdom": "^25.0.0",
     "stylelint": "^17.14.1",
     "stylelint-config-standard": "^40.0.0",
