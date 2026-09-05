@@ -647,3 +647,47 @@ def test_qdrant_collection_prefix_change(tmp_data_dir: Path):
         assert mock_ctx._search_engine is None
     finally:
         AppContextRegistry._contexts.clear()
+
+
+def test_fire_callbacks_survives_mutation_during_fire(tmp_data_dir: Path):
+    """A callback unregistering itself mid-fire must not skip the rest."""
+    mgr = RuntimeConfigManager()
+    fired: list[str] = []
+
+    def self_removing(key: str, value: object) -> None:
+        fired.append("a")
+        mgr._callbacks["general"].remove(self_removing)
+
+    def second(key: str, value: object) -> None:
+        fired.append("b")
+
+    mgr.register_callback("general", self_removing)
+    mgr.register_callback("general", second)
+    mgr._fire_callbacks("general", "k", "v")
+    assert fired == ["a", "b"]
+
+
+def test_snapshot_contexts_returns_stable_list():
+    """_snapshot_contexts decouples iteration from live dict mutation."""
+    from unittest.mock import MagicMock
+
+    from nous.application.use_cases import AppContextRegistry
+    from nous.config.runtime_config import _snapshot_contexts
+
+    AppContextRegistry._contexts["a"] = MagicMock()
+    try:
+        snap = _snapshot_contexts()
+        AppContextRegistry._contexts["b"] = MagicMock()
+        assert [k for k, _ in snap] == ["a"]
+    finally:
+        AppContextRegistry._contexts.clear()
+
+
+def test_save_overrides_leaves_no_stray_tmp(tmp_data_dir: Path):
+    """Atomic save: valid JSON at target, no tmp leftovers beside it."""
+    mgr = RuntimeConfigManager()
+    mgr._overrides = {"general": {"x": 1}}
+    mgr._save_overrides()
+    parent = mgr._overrides_path.parent
+    assert list(parent.glob("*.tmp")) == []
+    assert json.loads(mgr._overrides_path.read_text(encoding="utf-8")) == {"general": {"x": 1}}

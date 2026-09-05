@@ -84,6 +84,18 @@ class ReloadStatus:
             return dict(self._statuses)
 
 
+def _snapshot_contexts() -> list[tuple[str, Any]]:
+    """Return a stable snapshot of live persona contexts.
+
+    The registry dict can gain entries while a reload worker iterates
+    (concurrent persona creation); iterating the live view raises
+    ``RuntimeError: dictionary changed size during iteration``.
+    """
+    from nous.application.use_cases import AppContextRegistry
+
+    return list(AppContextRegistry._contexts.items())
+
+
 class RuntimeConfigManager:
     """Singleton manager for runtime configuration with hot-reload."""
 
@@ -121,10 +133,12 @@ class RuntimeConfigManager:
                 self._overrides = {}
 
     def _save_overrides(self) -> None:
-        """Persist overrides to JSON file."""
+        """Persist overrides to JSON file (atomic tmp+replace)."""
         self._overrides_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._overrides_path, "w") as f:
+        tmp_path = self._overrides_path.with_name(self._overrides_path.name + ".tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(self._overrides, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, self._overrides_path)
         logger.info("Saved config overrides to %s", self._overrides_path)
 
     def get_effective_value(self, category: str, key: str) -> tuple[Any, str]:
@@ -244,7 +258,7 @@ class RuntimeConfigManager:
 
     def _fire_callbacks(self, category: str, key: str, value: Any) -> None:
         """Fire registered callbacks for the category."""
-        for cb in self._callbacks.get(category, []):
+        for cb in list(self._callbacks.get(category, [])):
             try:
                 cb(key, value)
             except Exception:
@@ -280,8 +294,6 @@ def register_model_reload_callbacks(config_manager: RuntimeConfigManager) -> Non
         return
     _model_reload_callbacks_registered = True
 
-    from nous.application.use_cases import AppContextRegistry
-
     def on_embedding_change(key: str, new_value: Any) -> None:
         """Embeddingモデル設定変更時のコールバック。"""
         config_manager.reload_status.set("embedding", "loading")
@@ -290,7 +302,7 @@ def register_model_reload_callbacks(config_manager: RuntimeConfigManager) -> Non
         def _reload_worker() -> None:
             results = []
             try:
-                for persona, ctx in AppContextRegistry._contexts.items():
+                for persona, ctx in _snapshot_contexts():
                     if ctx._embedding is not None:
                         kwargs = {}
                         if key == "model":
@@ -322,7 +334,7 @@ def register_model_reload_callbacks(config_manager: RuntimeConfigManager) -> Non
         def _reload_worker() -> None:
             results = []
             try:
-                for persona, ctx in AppContextRegistry._contexts.items():
+                for persona, ctx in _snapshot_contexts():
                     if ctx._reranker is not None:
                         kwargs = {}
                         if key == "model":
@@ -366,7 +378,7 @@ def register_model_reload_callbacks(config_manager: RuntimeConfigManager) -> Non
 
         results = []
         try:
-            for persona, ctx in AppContextRegistry._contexts.items():
+            for persona, ctx in _snapshot_contexts():
                 if ctx._vector_store is not None:
                     kwargs = {}
                     if key == "url":
