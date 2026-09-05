@@ -540,7 +540,7 @@ Thinking text is also persisted per turn as a `{"type": "thinking", "content": .
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/tts/{persona}` | テキストを音声合成（body: `{"text": "..."}`） |
-| `GET` | `/api/tts/{persona}/voices` | 利用可能な音声モデル一覧 |
+> `GET /api/tts/{persona}/voices` は削除済み（d4）。
 
 > **仕組み**: ペルソナの現在の感情（`emotion`）から話速を自動調整します（joy→1.1x, sadness→0.9x, anger→1.2x）。`speech_style` も反映されます。
 

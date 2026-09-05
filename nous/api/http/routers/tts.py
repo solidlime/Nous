@@ -287,51 +287,8 @@ def register_tts_routes(mcp) -> None:
         except Exception:
             return JSONResponse({"ok": False, "error": "Voice synthesis failed"}, status_code=500)
 
-    @mcp.custom_route("/api/tts/{persona}/voices", methods=["GET"])
-    async def list_voices(request: Request) -> JSONResponse:
-        """List available TTS voices for a persona (TE04)."""
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"ok": False, "error": "Persona not found"}, status_code=404)
-
-        from nous.config.settings import get_settings
-        from nous.domain.chat_config import ChatConfigFileRepository
-
-        chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
-        irodori_config = _get_irodori_config(ctx, chat_config)
-
-        # Query the Irodori TTS server for available models
-        import httpx
-
-        base_url = irodori_config.url.rstrip("/")
-        try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
-                resp = await client.get(f"{base_url}/v1/models")
-                resp.raise_for_status()
-                models_data = resp.json()
-        # 音声一覧取得失敗時のフォールバック
-        except Exception:
-            # Fallback: return configured voice as the only known one
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "voices": [{"id": irodori_config.voice, "name": irodori_config.voice, "source": "config"}],
-                    "note": "Could not query server for voice list",
-                }
-            )
-
-        # Parse models list (OpenAI-compatible format)
-        voices: list[dict] = []
-        if isinstance(models_data, dict) and "data" in models_data:
-            for item in models_data["data"]:
-                model_id = item.get("id", "")
-                if model_id:
-                    voices.append({"id": model_id, "name": model_id})
-        if not voices:
-            voices.append({"id": irodori_config.voice, "name": irodori_config.voice, "source": "config"})
-
-        return JSONResponse({"ok": True, "voices": voices})
+    # d4: GET /api/tts/{persona}/voices 削除（内部使用ゼロ。docs言及のみ）
+    # d4残り1EP候補（health/cache）はchat-tts.js:198・audio_url・chat-history.jsで使用中のため残す。
 
     @mcp.custom_route("/api/tts/{persona}/health", methods=["GET"])
     async def health_check_tts(request: Request) -> JSONResponse:

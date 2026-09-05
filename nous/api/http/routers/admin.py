@@ -1,21 +1,10 @@
 from __future__ import annotations
 
-import asyncio
-import io
 import json
-import zipfile
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from starlette.responses import JSONResponse, StreamingResponse
+from starlette.responses import JSONResponse
 
-from nous.api.http.deps import (
-    _PERSONA_PATTERN,
-    _resolve_persona_from_request,
-    _safe_get_context,
-)
-from nous.api.http.routers._error_handlers import error_from_result
-from nous.config.settings import Settings
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -82,97 +71,4 @@ def register_admin_routes(mcp) -> None:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
 
-    @mcp.custom_route("/api/admin/rebuild/{persona}", methods=["POST"])
-    async def rebuild_vectors(request: Request) -> JSONResponse:
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if ctx is None:
-            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
-        if ctx.vector_store is None:
-            return JSONResponse({"error": "Vector store unavailable"}, status_code=503)
-        try:
-            loop = asyncio.get_running_loop()
-            loop.run_in_executor(None, ctx.vector_store.rebuild_collection, persona)
-            return JSONResponse(
-                {"status": "accepted", "message": f"Rebuild started for '{persona}'"},
-                status_code=202,
-            )
-        # 最終防衛線
-        except Exception as exc:
-            logger.exception("Unexpected error: %s", exc)
-            return JSONResponse({"error": "Internal server error"}, status_code=500)
-
-    @mcp.custom_route("/api/import/{persona}", methods=["POST"])
-    async def import_data(request: Request) -> JSONResponse:
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if ctx is None:
-            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
-        try:
-            form = await request.form()
-            upload = form.get("file")
-            if upload is None:
-                return JSONResponse({"error": "No file uploaded. Use multipart form field 'file'."}, status_code=400)
-            file_bytes = await upload.read()
-            if not file_bytes:
-                return JSONResponse({"error": "Uploaded file is empty"}, status_code=400)
-
-            settings = Settings()
-            import_dir = Path(settings.import_dir)
-            import_dir.mkdir(parents=True, exist_ok=True)
-            zip_path = import_dir / f"_upload_{persona}.zip"
-            zip_path.write_bytes(file_bytes)
-
-            try:
-                from nous.migration.importers.legacy_importer import LegacyImporter
-
-                importer = LegacyImporter(ctx.connection, persona)
-                result = importer.import_from_zip(str(zip_path))
-                if not result.is_ok:
-                    return error_from_result(result)
-                return JSONResponse(
-                    {
-                        "status": "ok",
-                        "persona": persona,
-                        "imported": result.value,
-                    }
-                )
-            finally:
-                if zip_path.exists():
-                    zip_path.unlink()
-        # 最終防衛線
-        except Exception as exc:
-            logger.exception("Unexpected error: %s", exc)
-            return JSONResponse({"error": "Internal server error"}, status_code=500)
-
-    def _build_export_zip(persona_dir: Path) -> io.BytesIO:
-        buf = io.BytesIO()
-        excluded = {".sqlite-wal", ".sqlite-shm"}
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
-            for file_path in persona_dir.rglob("*"):
-                if file_path.is_file() and file_path.suffix not in excluded:
-                    arcname = str(file_path.relative_to(persona_dir))
-                    zf.write(file_path, arcname)
-        buf.seek(0)
-        return buf
-
-    @mcp.custom_route("/api/export/{persona}", methods=["GET"])
-    async def export_data(request: Request) -> StreamingResponse:
-        persona = _resolve_persona_from_request(request)
-        if not _PERSONA_PATTERN.match(persona):
-            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)  # type: ignore[return-value]
-        settings = Settings()
-        persona_dir = Path(settings.persona_dir) / persona
-        if not persona_dir.exists():
-            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
-        try:
-            buf = await asyncio.to_thread(_build_export_zip, persona_dir)
-            return StreamingResponse(
-                buf,
-                media_type="application/zip",
-                headers={"Content-Disposition": f'attachment; filename="{persona}_export.zip"'},
-            )
-        # 最終防衛線
-        except Exception as exc:
-            logger.exception("Unexpected error: %s", exc)
-            return JSONResponse({"error": "Internal server error"}, status_code=500)
+    # d6/d7: rebuild・import・export削除（参照は死にsections＋tests＋docsのみ、liveタブ未使用）

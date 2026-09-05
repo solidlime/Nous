@@ -204,39 +204,9 @@ class TestObservationsRecentEndpoint:
 
 
 # ---------------------------------------------------------------------------
-# memory.py — strengths endpoint
+# memory.py — strengths endpoint: d1削除（直叩き廃止、dashboard集約に一本化）
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
-class TestStrengthsEndpoint:
-    """GET /api/strengths/{persona}."""
-
-    async def test_strengths_empty_persona(self, client):
-        resp = await client.get(f"/api/strengths/{PERSONA}")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["persona"] == PERSONA
-        assert "total" in data
-        assert "histogram" in data
-        assert isinstance(data["histogram"], list)
-        assert len(data["histogram"]) == 10
-
-    async def test_strengths_after_create(self, client):
-        await client.post(f"/api/memories/{PERSONA}", json={"content": "strength test"})
-        resp = await client.get(f"/api/strengths/{PERSONA}")
-        assert resp.status_code == 200
-        assert resp.json()["total"] >= 1
-
-    async def test_strengths_histogram_ranges(self, client):
-        resp = await client.get(f"/api/strengths/{PERSONA}")
-        histogram = resp.json()["histogram"]
-        assert histogram[0]["range"] == "0.0-0.1"
-        assert histogram[9]["range"] == "0.9-1.0"
-        for bucket in histogram:
-            assert "range" in bucket
-            assert "count" in bucket
-
+# (deleted TestStrengthsEndpoint)
 
 # ---------------------------------------------------------------------------
 # persona.py — dashboard endpoints
@@ -379,43 +349,9 @@ class TestPersonaProfileUpdate:
 
 
 # ---------------------------------------------------------------------------
-# search.py — emotion history
+# search.py — emotion history: d2削除（直叩き廃止）
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
-class TestEmotionHistoryEndpoint:
-    """GET /api/emotions/{persona}."""
-
-    async def test_emotion_history_empty(self, client):
-        resp = await client.get(f"/api/emotions/{PERSONA}")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["persona"] == PERSONA
-        assert "history" in data
-        assert isinstance(data["history"], dict)
-
-    async def test_emotion_history_default_days(self, client):
-        resp = await client.get(f"/api/emotions/{PERSONA}")
-        assert resp.json()["days"] == 7
-
-    async def test_emotion_history_custom_days(self, client):
-        resp = await client.get(f"/api/emotions/{PERSONA}?days=30")
-        assert resp.status_code == 200
-        assert resp.json()["days"] == 30
-
-    async def test_emotion_history_invalid_days(self, client):
-        resp = await client.get(f"/api/emotions/{PERSONA}?days=xyz")
-        assert resp.status_code == 400
-
-    async def test_emotion_history_days_too_large(self, client):
-        resp = await client.get(f"/api/emotions/{PERSONA}?days=999")
-        assert resp.status_code == 400
-
-    async def test_emotion_history_days_zero(self, client):
-        resp = await client.get(f"/api/emotions/{PERSONA}?days=0")
-        assert resp.status_code == 400
-
+# (deleted TestEmotionHistoryEndpoint)
 
 # ---------------------------------------------------------------------------
 # search.py — graph
@@ -512,41 +448,14 @@ class TestSettingsEndpoints:
 
 
 # ---------------------------------------------------------------------------
-# admin.py — rebuild (vector store offline → 503)
+# admin.py — rebuild: d6削除
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
-class TestAdminRebuildEndpoint:
-    """POST /api/admin/rebuild/{persona} — Qdrant offline returns 503."""
-
-    async def test_rebuild_without_vector_store_returns_503(self, client):
-        resp = await client.post(f"/api/admin/rebuild/{PERSONA}")
-        assert resp.status_code == 503
-        assert "unavailable" in resp.json()["error"].lower()
-
+# (deleted TestAdminRebuildEndpoint)
 
 # ---------------------------------------------------------------------------
-# admin.py — export
+# admin.py — export: d7削除
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
-class TestExportEndpoint:
-    """GET /api/export/{persona}."""
-
-    async def test_export_nonexistent_persona_returns_404(self, client):
-        resp = await client.get("/api/export/totally_nonexistent_persona_xyz")
-        assert resp.status_code == 404
-
-    async def test_export_existing_persona_returns_zip(self, client):
-        await client.post(f"/api/memories/{PERSONA}", json={"content": "export seed"})
-        resp = await client.get(f"/api/export/{PERSONA}")
-        assert resp.status_code == 200
-        assert resp.headers.get("content-type") == "application/zip"
-        content_disp = resp.headers.get("content-disposition", "")
-        assert PERSONA in content_disp
-        assert ".zip" in content_disp
+# (deleted TestExportEndpoint)
 
 
 # ---------------------------------------------------------------------------
@@ -1002,6 +911,4 @@ class TestFileServePersonaValidation:
         resp = await client.get("/api/chat/%2e%2e/persona/images/x.png")
         assert resp.status_code == 404
 
-    async def test_export_traversal_persona_blocked(self, client):
-        resp = await client.get("/api/export/%2e%2e")
-        assert resp.status_code == 404
+    # d7: export削除に伴い traversal テストも削除

@@ -12,7 +12,6 @@ from nous.api.http.deps import (
     _memory_to_dict,
     _resolve_persona_from_request,
     _safe_get_context,
-    _strength_to_dict,
 )
 from nous.api.http.routers._error_handlers import error_from_result
 from nous.infrastructure.logging.structured import get_logger
@@ -137,35 +136,8 @@ def register_memory_routes(mcp) -> None:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
 
-    @mcp.custom_route("/api/strengths/{persona}", methods=["GET"])
-    async def memory_strengths(request: Request) -> JSONResponse:
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if ctx is None:
-            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
-        try:
-            result = ctx.memory_repo.get_all_strengths()
-            if not result.is_ok:
-                return error_from_result(result)
-            strengths = result.value
-            buckets = [0] * 10
-            for s in strengths:
-                idx = min(int(s.strength * 10), 9)
-                buckets[idx] += 1
-            histogram = [{"range": f"{i / 10:.1f}-{(i + 1) / 10:.1f}", "count": buckets[i]} for i in range(10)]
-            return JSONResponse(
-                {
-                    "persona": persona,
-                    "total": len(strengths),
-                    "strengths": [_strength_to_dict(s) for s in strengths],
-                    "histogram": histogram,
-                }
-            )
-        # 最終防衛線
-        except Exception as exc:
-            logger.exception("Unexpected error: %s", exc)
-            return JSONResponse({"error": "Internal server error"}, status_code=500)
-
+    # d1: GET /api/strengths/{persona} 削除（直叩き廃止。dashboard集約data.strengthsは残す）
+    # 参照は死にanalytics.py＋tests＋docsのみ。liveタブ（dashboard.py）は未使用。
     @mcp.custom_route("/api/memories/{persona}", methods=["GET"])
     async def list_memories(request: Request) -> JSONResponse:
         persona = _resolve_persona_from_request(request)

@@ -191,37 +191,10 @@ Delete a memory by key.
 
 ---
 
-## Analytics
+## Analytics（直叩き廃止 — dashboard集約 `/api/dashboard/{persona}` に一本化）
 
-### `GET /api/emotions/{persona}`
-Emotion history grouped by date.
-
-**Query params:** `days` (int, default 7)
-
-**Response:**
-```json
-{
-  "history": {
-    "2025-07-15": [
-      { "emotion_type": "joy", "intensity": 0.8, "trigger": "shipped new feature" }
-    ]
-  }
-}
-```
-
-### `GET /api/strengths/{persona}`
-Memory strength distribution (Ebbinghaus decay values).
-
-**Response:**
-```json
-{
-  "total": 142,
-  "histogram": [
-    { "bucket": "0.0–0.2", "count": 30 },
-    { "bucket": "0.8–1.0", "count": 55 }
-  ]
-}
-```
+> `GET /api/emotions/{persona}`・`GET /api/strengths/{persona}` は削除済み。
+> 感情・強度は dashboard の `context`・`strengths` 集約を参照すること。
 
 ---
 
@@ -242,13 +215,9 @@ Memory relationship graph for visualization (nodes + edges).
 
 ---
 
-## Import / Export
+## Import / Export（削除済み — d7）
 
-### `POST /api/import/{persona}`
-Import persona data from a ZIP file upload (multipart/form-data).
-
-### `GET /api/export/{persona}`
-Export all persona data as a ZIP file download.
+> `POST /api/import/{persona}`・`GET /api/export/{persona}`・`POST /api/import-conversation/{persona}` は削除済み。
 
 ---
 
@@ -353,12 +322,9 @@ Delete a Core Memory Block by name.
 
 ---
 
-## Vector Store Admin
+## Vector Store Admin（削除済み — d6）
 
-### `POST /api/admin/rebuild/{persona}`
-Rebuild the Qdrant vector collection for a persona (async, returns 202 Accepted).
-
-**Response:** `{ "status": "rebuilding", "persona": "herta" }`
+> `POST /api/admin/rebuild/{persona}` は削除済み。
 
 ---
 

@@ -331,22 +331,10 @@ async def test_search_memories_missing_query(client):
 
 @pytest.mark.asyncio
 async def test_emotion_timeline(seeded_client):
-    """E7: GET /api/emotions/{persona}?days=7 → grouped-by-date structure."""
-    resp = await seeded_client.get("/api/emotions/testpersona?days=7")
+    """E7削除: GET /api/emotions廃止（dashboard集約に一本化）。dashboard contextで代替確認。"""
+    resp = await seeded_client.get("/api/dashboard/testpersona")
     assert resp.status_code == 200
-    data = resp.json()
-    assert data["persona"] == "testpersona"
-    assert data["days"] == 7
-    assert isinstance(data["history"], dict)
-    # We seeded emotions within the last 7 days
-    total_records = sum(len(v) for v in data["history"].values())
-    assert total_records >= 4
-    # Each record has correct structure
-    for _date, records in data["history"].items():
-        for rec in records:
-            assert "emotion" in rec
-            assert "intensity" in rec
-            assert "timestamp" in rec
+    assert "context" in resp.json()
 
 
 @pytest.mark.asyncio
@@ -375,42 +363,23 @@ async def test_observations_pagination(seeded_client):
 
 
 # ===================================================================
-# Strength & Admin Tests (E9–E10)
+# Strength & Admin Tests (E9–E10): d1/d6削除に伴い直叩きテスト廃止
 # ===================================================================
 
 
 @pytest.mark.asyncio
 async def test_strengths_endpoint(seeded_client):
-    """E9: GET /api/strengths/{persona} → strength data with histogram."""
-    resp = await seeded_client.get("/api/strengths/testpersona")
+    """E9削除: 直叩き廃止。dashboard集約data.strengthsで代替確認。"""
+    resp = await seeded_client.get("/api/dashboard/testpersona")
     assert resp.status_code == 200
-    data = resp.json()
-    assert data["persona"] == "testpersona"
-    assert data["total"] == 6
-    assert isinstance(data["strengths"], list)
-    assert len(data["strengths"]) == 6
-    # Histogram: 10 buckets
-    assert isinstance(data["histogram"], list)
-    assert len(data["histogram"]) == 10
-    bucket_total = sum(b["count"] for b in data["histogram"])
-    assert bucket_total == 6
-    # Each strength has required fields
-    s = data["strengths"][0]
-    assert "memory_key" in s
-    assert "strength" in s
-    assert "stability" in s
+    assert resp.json()["strengths"]["total"] == 6
 
 
 @pytest.mark.asyncio
 async def test_admin_rebuild_no_qdrant(client):
-    """E10: POST /api/admin/rebuild/{persona} → 503 when Qdrant unavailable."""
-    # First trigger persona init by accessing dashboard
-    await client.get("/api/dashboard/testpersona")
-    resp = await client.post("/api/admin/rebuild/testpersona")
-    assert resp.status_code == 503
-    data = resp.json()
-    assert "error" in data
-    assert "unavailable" in data["error"].lower() or "vector" in data["error"].lower()
+    """E10削除: POST /api/admin/rebuild廃止のため削除。ダッシュボード生存で代替。"""
+    resp = await client.get("/api/dashboard/testpersona")
+    assert resp.status_code in (200, 404)
 
 
 # ===================================================================

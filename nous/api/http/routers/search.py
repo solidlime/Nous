@@ -157,46 +157,8 @@ def register_search_routes(mcp) -> None:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
 
-    @mcp.custom_route("/api/emotions/{persona}", methods=["GET"])
-    async def emotion_history(request: Request) -> JSONResponse:
-        persona = _resolve_persona_from_request(request)
-        try:
-            days = int(request.query_params.get("days", "7"))
-            if days < 1 or days > 365:
-                return JSONResponse({"error": "days must be between 1 and 365"}, status_code=400)
-        except ValueError:
-            return JSONResponse({"error": "days must be an integer"}, status_code=400)
-        ctx = _safe_get_context(persona)
-        if ctx is None:
-            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
-        try:
-            result = ctx.persona_repo.get_emotion_history_by_days(persona, days)
-            if not result.is_ok:
-                return error_from_result(result)
-            grouped: dict[str, list[dict]] = defaultdict(list)
-            for record in result.value:
-                date_str = record.timestamp.strftime("%Y-%m-%d") if record.timestamp else "unknown"
-                grouped[date_str].append(
-                    {
-                        "emotion": record.emotion,
-                        "intensity": record.intensity,
-                        "timestamp": record.timestamp.isoformat() if record.timestamp else None,
-                        "trigger_memory_key": record.trigger_memory_key,
-                        "context": record.context,
-                    }
-                )
-            return JSONResponse(
-                {
-                    "persona": persona,
-                    "days": days,
-                    "history": dict(grouped),
-                }
-            )
-        # 最終防衛線
-        except Exception as exc:
-            logger.exception("Unexpected error: %s", exc)
-            return JSONResponse({"error": "Internal server error"}, status_code=500)
-
+    # d2: GET /api/emotions/{persona} 削除（直叩き廃止。dashboard集約はcontext/statsで代替）
+    # 参照は死にanalytics.py＋tests＋scripts＋docsのみ。liveタブ未使用。
     @mcp.custom_route("/api/graph/{persona}", methods=["GET"])
     async def graph_data(request: Request) -> JSONResponse:
         persona = _resolve_persona_from_request(request)
