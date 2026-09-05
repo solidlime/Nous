@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.tools.base import Tool
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.exceptions import MCPError
 
 if TYPE_CHECKING:
@@ -49,6 +50,20 @@ async def _patched_tool_run(self, arguments, context=None, convert_result=False)
 Tool.run = _patched_tool_run
 
 
+def _default_transport_security() -> TransportSecuritySettings:
+    """Allowlist for the MCP SDK's DNS-rebinding protection.
+
+    The SDK auto-enables protection with a localhost-only allowlist, which
+    421-rejects intra-docker clients (mcp-hub → Host: nous:26262).
+    Explicitly allow the docker service name + loopback instead of disabling.
+    """
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=["nous:*", "localhost:*", "127.0.0.1:*", "[::1]:*"],
+        allowed_origins=["http://nous:*", "http://localhost:*", "http://127.0.0.1:*"],
+    )
+
+
 class MemoryFastMCP(MCPServer):
     """MCPServer subclass that injects PersonaMiddleware + CORSMiddleware."""
 
@@ -68,12 +83,16 @@ class MemoryFastMCP(MCPServer):
     def streamable_http_app(self, **kwargs):
         kwargs.setdefault("json_response", True)
         kwargs.setdefault("stateless_http", True)
+        if "transport_security" not in kwargs:
+            kwargs["transport_security"] = _default_transport_security()
         app = super().streamable_http_app(**kwargs)
         app.add_middleware(PersonaMiddleware)
         self._add_cors_middleware(app)
         return app
 
     def sse_app(self, **kwargs):
+        if "transport_security" not in kwargs:
+            kwargs["transport_security"] = _default_transport_security()
         app = super().sse_app(**kwargs)
         app.add_middleware(PersonaMiddleware)
         self._add_cors_middleware(app)
