@@ -358,7 +358,19 @@ settings.pyの`seed`フィールド（172〜173行目）の直後に追加：
     """First-sentence fast-path chunk threshold for SSE. Range: 1-200."""
 ```
 
-tts.pyの`_get_irodori_config`（208〜215行目）に1行追加：
+settings.pyの`chunk_min_chars`（169〜170行目）の既定を85→40に変更（改行の間を残すため。docstringのRange表記30-200はそのまま。値ズレで旧cacheは孤児化し一度だけ再合成される）：
+
+```python
+    chunk_min_chars: int = 40
+```
+
+tts.pyの`_get_irodori_config`（208〜215行目）のgetattr既定も85→40に合わせる（settings既定と不一致だと設定未指定時に40にならない）：
+
+```python
+        chunk_min_chars=getattr(chat_config, "irodori_chunk_min_chars", 40),
+```
+
+さらに`_get_irodori_config`（208〜215行目）に1行追加：
 
 ```python
         first_sentence_chunk_min_chars=getattr(chat_config, "irodori_first_sentence_chunk_min_chars", 1),
