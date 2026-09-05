@@ -26,6 +26,7 @@ import threading
 from typing import TYPE_CHECKING
 
 from nous.infrastructure.logging.structured import get_logger
+from nous.infrastructure.sqlite.mot_thoughts import MOT_CONFIDENCE_THRESHOLD
 
 if TYPE_CHECKING:
     from nous.config.settings import Settings
@@ -294,3 +295,23 @@ class ConsolidationWorker:
                 result.value,
                 entity_key,
             )
+
+        # MoT: high-confidence trace goes to a separate slot (F5).
+        # Corrosion/TTL live on mot_thoughts only — never double-decayed
+        # with memory_strength / memory_links.
+        if result.is_ok and avg_importance >= MOT_CONFIDENCE_THRESHOLD:
+            try:
+                from nous.infrastructure.sqlite.mot_thoughts import save_thought  # noqa: PLC0415
+
+                gist_key = getattr(result.value, "key", None)
+                db = getattr(ctx.memory_repo, "_db", None)
+                if gist_key is not None and db is not None:
+                    save_thought(
+                        db,
+                        key=f"mot_{gist_key}",
+                        consolidation_key=gist_key,
+                        trace=content,
+                        confidence=avg_importance,
+                    )
+            except Exception:
+                logger.debug("MoT thought save failed", exc_info=True)

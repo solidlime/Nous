@@ -20,6 +20,7 @@ if TYPE_CHECKING:
         SemanticSearchStrategy,
     )
     from nous.domain.shared.errors import SearchError
+    from nous.infrastructure.sqlite.mot_thoughts import MotThought
 
 
 from nous.infrastructure.logging.structured import get_logger
@@ -442,6 +443,23 @@ class SearchEngine:
         """Set the persona for semantic search."""
         if self._semantic is not None:
             self._semantic.persona = persona
+
+    def fetch_mot_thoughts(self, query_text: str, limit: int = 3) -> list[MotThought]:
+        """Fetch MoT high-confidence thoughts in a separate slot (F5).
+
+        Never touches fact-recall scores — callers render these as their
+        own prompt block. Corrosion + TTL are applied inside.
+        """
+        try:
+            db = getattr(self._memory_repo, "_db", None)
+            if db is None:
+                return []
+            from nous.infrastructure.sqlite.mot_thoughts import fetch_thoughts
+
+            return fetch_thoughts(db, query_text, limit=limit)
+        except Exception:
+            logger.warning("MoT thought fetch failed", exc_info=True)
+            return []
 
     async def _smart_search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
         """Smart search: hybrid search with simple query expansion.

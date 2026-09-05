@@ -219,6 +219,18 @@ def _migrate_add_superseded_by_v7(
         pass
 
 
+def _migrate_mot_thoughts_v8(
+    db_conn: sqlite3.Connection,
+    persona: str,  # noqa: ARG001
+) -> None:
+    """Create ``mot_thoughts`` table + indexes (MoT high-confidence traces)."""
+    from nous.infrastructure.sqlite.mot_thoughts import ensure_thoughts_table  # noqa: PLC0415
+
+    ensure_thoughts_table(db_conn)
+    db_conn.commit()
+    logger.info("Created mot_thoughts table (migration v8)")
+
+
 # ---------------------------------------------------------------------------
 # Migration registry  (ordered by version)
 # ---------------------------------------------------------------------------
@@ -233,4 +245,5 @@ MIGRATIONS = [
     (5, "Add persona column to emotion_history", _migrate_add_persona_to_emotion_history_v5),
     (6, "Replace kind='chat' with 'semantic'", _migrate_remove_chat_kind_v6),
     (7, "Add superseded_by column to memories", _migrate_add_superseded_by_v7),
+    (8, "Create mot_thoughts table", _migrate_mot_thoughts_v8),
 ]
