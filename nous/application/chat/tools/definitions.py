@@ -114,7 +114,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="invoke_skill",
-        description="有効なスキルの完全な指示を取得する。会話の状況がスキルの発動条件に合致したと判断したら、ユーザーの指示を待たず自律的に呼び出せ。発動条件に合致しないスキルを推測で呼ぶな。同じスキルを同一ターンで重複呼び出しするな。name（スキル名）が必須。task パラメータに呼び出し理由を簡潔に記述できる。",
+        description="有効なスキルの完全な指示を取得する。会話の状況がスキルの発動条件に合致したと判断したら、ユーザーの指示を待たず自律的に呼び出せ。発動したスキルはこのセッション中 system prompt に常駐し、毎ターン自動で参照される（同じスキルを毎ターン呼び直す必要はない）。用が済んだスキルは action=deactivate で解除しろ。発動条件に合致しないスキルを推測で呼ぶな。同じスキルを同一ターンで重複呼び出しするな。name（スキル名）が必須。task パラメータに呼び出し理由を簡潔に記述できる。",
         input_schema={
             "type": "object",
             "properties": {
@@ -122,6 +122,12 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 "task": {
                     "type": "string",
                     "description": "スキルを呼び出す理由（任意。スキル内容を読み返す目的を簡潔に）",
+                },
+                "action": {
+                    "type": "string",
+                    "enum": ["activate", "deactivate"],
+                    "description": "activate=発動して本文取得（省略時）/ deactivate=発動解除（本文取得なし）",
+                    "default": "activate",
                 },
             },
             "required": ["name"],

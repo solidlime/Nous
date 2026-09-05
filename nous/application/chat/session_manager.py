@@ -83,6 +83,9 @@ class SessionManager:
         return window
 
     def clear(self, persona: str, session_id: str) -> None:
+        from nous.application.chat.skills_state import clear_session
+
+        clear_session(persona, session_id)
         self._sessions.pop((persona, session_id), None)
 
     @staticmethod

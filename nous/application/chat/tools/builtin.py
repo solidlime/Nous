@@ -352,14 +352,25 @@ async def _handle_list_skills(ctx: AppContext, config: ChatConfig, tool_input: d
 
 
 async def _handle_invoke_skill(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
-    """スキルの内容をDBから取得して返す。別LLM呼び出しは行わない。"""
+    """スキルの内容をDBから取得して返す。別LLM呼び出しは行わない。
+
+    成功時はセッションの発動状態に記録され、次ターン以降 system prompt に
+    本文が常駐する。action=deactivate で発動解除（本文取得なし）。
+    """
+    from nous.application.chat.skills_state import activate, deactivate
+
     name = tool_input.get("name", "")
-    logger.info("invoke_skill called: '%s'", name)
-    task = tool_input.get("task", "")
     if not name:
         return {"status": "error", "message": "name is required"}
+    session_id = getattr(ctx, "session_id", None)
+    if tool_input.get("action", "activate") == "deactivate":
+        remaining = deactivate(ctx.persona, session_id, name)
+        return {"status": "ok", "result": f"スキル '{name}' の発動を解除した。残り発動中: {remaining}"}
+    logger.info("invoke_skill called: '%s'", name)
+    task = tool_input.get("task", "")
     r = await _tool_invoke_skill(ctx, ctx.persona, name=name, task=task)
     if r.get("ok"):
+        activate(ctx.persona, session_id, name)
         return {"status": "ok", "result": r.get("result", "(no response)")}
     return {"status": "error", "message": r.get("error", "unknown")}
 
