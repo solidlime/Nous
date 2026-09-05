@@ -150,7 +150,7 @@ class ComfyUIProvider(ImageGenProvider):
                 if title:
                     node_titles[str(nid)] = str(title)
         except Exception:
-            pass
+            logger.warning("ComfyUI: node title scan failed", exc_info=True)
 
         # NOUS:display タグ: 表示対象ノードIDの収集（タイトルが完全一致のみ・前後空白許容）
         display_node_ids: set[str] = set()
@@ -160,7 +160,7 @@ class ComfyUIProvider(ImageGenProvider):
                 if title and str(title).strip() == "NOUS:display":
                     display_node_ids.add(str(nid))
         except Exception:
-            pass
+            logger.warning("ComfyUI: display-node scan failed", exc_info=True)
 
         # NOUS: タグ注入（ノードの _meta.title ベース）
         workflow = self._apply_nous_injections(

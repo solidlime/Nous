@@ -234,7 +234,7 @@ class PrepareStep:
                                 ep_lines.append(f"  [{ep.get('topic', 'episode')}] {ep.get('summary', '')[:80]}")
                             turn_ctx.related_memories += "\n" + "\n".join(ep_lines)
                     except Exception:
-                        logger.debug("PrepareStep: episode search fallback failed", exc_info=True)
+                        logger.warning("PrepareStep: episode search fallback failed", exc_info=True)
         else:
             logger.warning("PrepareStep: get_context failed: %s", state_result.error)
             # contextなしで継続

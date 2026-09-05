@@ -175,7 +175,7 @@ def _parse_memory_llm_result(text: str) -> dict:
                 "inventory_update": {},
             }
     except Exception as _e:
-        logger.debug("MemoryLLM: failed to parse LLM output: %s", _e)
+        logger.warning("MemoryLLM: failed to parse LLM output: %s", _e)
     return {}
 
 
