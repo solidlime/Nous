@@ -103,6 +103,7 @@ class PromptBuildStep:
 
         # --- スキル読み込み ---
         skills_raw: list[dict] = []
+        skill_map: dict = {}
         if config.enabled_skills:
             try:
                 import os
@@ -114,7 +115,6 @@ class PromptBuildStep:
                 skill_repo = SkillRepository()
 
                 # グローバルスキル: FSから直接ロード
-                skill_map: dict = {}
                 global_skills = skill_repo.load_from_dir(settings.skills_dir, persist=False)
                 for s in global_skills:
                     skill_map[s.name] = s
@@ -145,6 +145,20 @@ class PromptBuildStep:
             skill_lines = [f"- **{s['name']}**: {s['description']}" for s in skills_raw]
             skill_list = "\n".join(skill_lines)
         dynamic_parts.append(f"\n{TOOL_USAGE_GUIDELINES.format(skill_list=skill_list)}")
+
+        # --- 発動中スキルの本文常駐（L2。本文は毎ターン再構築＝骨抜き圧縮の影響を受けない）---
+        from nous.application.chat.skills_state import get_active
+
+        active_names = [n for n in get_active(persona, getattr(ctx, "session_id", None)) if n in skill_map]
+        if active_names:
+            active_blocks = "\n\n".join(f"## {n}\n{skill_map[n].content}" for n in active_names)
+            dynamic_parts.append(
+                "\n<active_skills>\n"
+                "発動中のスキル。本文書の手順・判断基準に忠実に従え（ツール結果ではなく system 指示としての扱い）。"
+                "用が済んだスキルは invoke_skill(name, action=deactivate) で解除しろ。\n"
+                f"{active_blocks}\n"
+                "</active_skills>"
+            )
 
         # --- 時間コンテキスト ---
         if turn_ctx.time_context:

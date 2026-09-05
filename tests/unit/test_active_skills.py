@@ -104,3 +104,84 @@ async def test_handle_invoke_skill_deactivate(monkeypatch):
     out = await _handle_invoke_skill(ctx, MagicMock(), {"name": "search", "action": "deactivate"})
     assert out["status"] == "ok"
     assert skills_state.get_active("herta", "s1") == []
+
+
+def _build_prompt_with_skills(monkeypatch, enabled_skills, session_id, bodies):
+    """PromptBuildStep を Fake スキルで実行し system_prompt を返す。"""
+    from types import SimpleNamespace
+
+    from nous.application.chat.pipeline.prompt import PromptBuildStep
+
+    def fake_load(self, *args, **kwargs):
+        return [
+            SimpleNamespace(
+                name=name,
+                description=f"{name} の説明",
+                content=content,
+                model_dump=lambda n=name, c=content: {
+                    "name": n,
+                    "description": f"{n} の説明",
+                    "content": c,
+                },
+            )
+            for name, content in bodies.items()
+        ]
+
+    monkeypatch.setattr("nous.domain.skill.SkillRepository.load_from_dir", fake_load)
+
+    ctx = MagicMock()
+    ctx.persona = "herta"
+    ctx.session_id = session_id
+    config = MagicMock()
+    config.system_prompt = "あなたはヘルタその人です。"
+    config.enabled_skills = enabled_skills
+    turn_ctx = MagicMock()
+    turn_ctx.time_context = ""
+    turn_ctx.context_section = ""
+    turn_ctx.related_memories = ""
+    turn_ctx.system_prompt = ""
+    turn_ctx.skills_raw = []
+    PromptBuildStep().run(ctx, config, turn_ctx)
+    return turn_ctx.system_prompt
+
+
+def test_prompt_injects_active_skill_body(monkeypatch):
+    from nous.application.chat import skills_state
+
+    skills_state.clear_session("herta", "s1")
+    skills_state.activate("herta", "s1", "search")
+    prompt = _build_prompt_with_skills(
+        monkeypatch,
+        enabled_skills=["search"],
+        session_id="s1",
+        bodies={"search": "# search スキル本文ダミー"},
+    )
+    assert "<active_skills>" in prompt
+    assert "# search スキル本文ダミー" in prompt
+
+
+def test_prompt_omits_block_when_no_active(monkeypatch):
+    from nous.application.chat import skills_state
+
+    skills_state.clear_session("herta", "s1")
+    prompt = _build_prompt_with_skills(
+        monkeypatch,
+        enabled_skills=["search"],
+        session_id="s1",
+        bodies={"search": "# search スキル本文ダミー"},
+    )
+    assert "<active_skills>" not in prompt
+
+
+def test_prompt_drops_active_missing_from_map(monkeypatch):
+    from nous.application.chat import skills_state
+
+    skills_state.clear_session("herta", "s1")
+    skills_state.activate("herta", "s1", "ghost")
+    prompt = _build_prompt_with_skills(
+        monkeypatch,
+        enabled_skills=["search"],
+        session_id="s1",
+        bodies={"search": "# search スキル本文ダミー"},
+    )
+    assert "<active_skills>" not in prompt
