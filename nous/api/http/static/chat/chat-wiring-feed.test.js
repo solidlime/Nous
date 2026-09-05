@@ -99,7 +99,9 @@ beforeEach(() => {
       <input type="number" id="chat-reflection-threshold" value="1.0" />
     </div></details>`;
   MP.setWiringVisible(true);
-  MP.clearWiring();
+  MP.disconnectWiring(); // kills sockets/timers, resets flush suppression
+  window.S.persona = 'p1';
+  MP.switchWiringPersona('p1'); // resets persona scoping + clears buffer
   MP.setFireLimit(8);
   // Start each test disconnected with zero sockets; tests connect explicitly.
   MP.disconnectWiring();
@@ -183,7 +185,7 @@ describe('wiring SSE single-flight + visibility', () => {
   it('connects once, closes the old socket on reconnect', () => {
     MP.connectWiring();
     expect(instances.length).toBe(1);
-    expect(instances[0].url).toBe('/api/memory/wiring/stream');
+    expect(instances[0].url).toBe('/api/memory/wiring/stream?persona=p1');
     MP.connectWiring();
     expect(instances[0].close).toHaveBeenCalled();
     expect(instances.length).toBe(2);
@@ -230,6 +232,91 @@ describe('wiring SSE single-flight + visibility', () => {
     N.Core.disconnectSSE();
     expect(N.Core._wiringTimer).toBeNull();
     expect(N.Core._wiringSSE).toBeNull();
+  });
+});
+
+describe('persona scoping', () => {
+  const wiringSockets = () => instances.filter(
+    (es) => es.url.indexOf('/api/memory/wiring/stream') === 0);
+
+  it('persona switch clears the feed and resockets scoped', () => {
+    MP.connectWiring();
+    expect(wiringSockets().length).toBe(1);
+    wiringSockets()[0].emit('wiring',
+      JSON.stringify(fire(1, 'link_fire', 'a', 'b', 0.5)));
+    expect(wiringList().querySelectorAll('.wiring-fire-item').length).toBe(1);
+    N.Core.connectSSE('p2'); // main connect drives the wiring switch
+    expect(wiringSockets()[0].close).toHaveBeenCalled();
+    expect(wiringSockets().length).toBe(2);
+    expect(wiringSockets()[1].url).toBe('/api/memory/wiring/stream?persona=p2');
+    expect(wiringList().querySelectorAll('.wiring-fire-item').length).toBe(0);
+    expect(wiringList().innerHTML).toContain('まだシナプスは静か');
+  });
+
+  it('same-persona main reconnect keeps the feed (no needless clear)', () => {
+    MP.connectWiring();
+    wiringSockets()[0].emit('wiring',
+      JSON.stringify(fire(1, 'link_fire', 'a', 'b', 0.5)));
+    N.Core.connectSSE('p1');
+    expect(wiringSockets().length).toBe(1);
+    expect(wiringList().querySelectorAll('.wiring-fire-item').length).toBe(1);
+  });
+});
+
+describe('backoff + flush batching', () => {
+  it('resets backoff to 5000 on open (main-stream manners)', () => {
+    MP.connectWiring();
+    instances[0].onerror();
+    expect(N.Core._wiringBackoff).toBe(10000);
+    vi.runAllTimers();
+    expect(instances.length).toBe(2);
+    instances[1].onopen();
+    expect(N.Core._wiringBackoff).toBe(5000);
+  });
+
+  it('batches the connect flush into a single paint', () => {
+    MP.connectWiring();
+    instances[0].emit('connected', '{}');
+    for (let i = 1; i <= 5; i++) {
+      instances[0].emit('wiring',
+        JSON.stringify(fire(i, 'link_fire', 's' + i, 't' + i, 0.5)));
+    }
+    // Suppressed mid-flush: still the quiet placeholder.
+    expect(wiringList().querySelectorAll('.wiring-fire-item').length).toBe(0);
+    expect(wiringList().innerHTML).toContain('まだシナプスは静か');
+    vi.advanceTimersByTime(500);
+    const items = wiringList().querySelectorAll('.wiring-fire-item');
+    expect(items.length).toBe(5);
+    expect(items[0].getAttribute('data-seq')).toBe('5');
+  });
+
+  it('live events past the flush window paint immediately', () => {
+    MP.connectWiring();
+    instances[0].emit('connected', '{}');
+    vi.advanceTimersByTime(500);
+    instances[0].emit('wiring',
+      JSON.stringify(fire(1, 'link_fire', 'a', 'b', 0.5)));
+    expect(wiringList().querySelectorAll('.wiring-fire-item').length).toBe(1);
+  });
+});
+
+describe('recall_boost evidence', () => {
+  it('shows recall_count/stability instead of the flat ≈1.00 weight', () => {
+    MP.pushWiringEvent({
+      seq: 1, kind: 'recall_boost', source: 'k', target: '',
+      weight: 1.0, meta: { recall_count: 3, stability: 0.82, persona: 'p1' },
+    });
+    const item = wiringList().querySelector('.wiring-fire-item');
+    expect(item.querySelector('.wiring-meta').textContent).toContain('×3回');
+    expect(item.querySelector('.wiring-meta').textContent).toContain('0.82');
+    expect(item.querySelector('.wiring-weight')).toBeNull();
+  });
+
+  it('falls back to weight when recall meta is absent', () => {
+    MP.pushWiringEvent(fire(1, 'recall_boost', 'k', '', 0.97));
+    const item = wiringList().querySelector('.wiring-fire-item');
+    expect(item.querySelector('.wiring-meta')).toBeNull();
+    expect(item.querySelector('.wiring-weight').textContent).toBe('0.97');
   });
 });
 

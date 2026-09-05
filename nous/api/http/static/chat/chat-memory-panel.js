@@ -341,6 +341,12 @@ var WIRING_KINDS = {
 var _wiringEvents = []; // newest-first
 var _wiringMaxSeq = 0;
 var _wiringVisible = true;
+var _wiringPersona = null; // persona the live socket is scoped to
+// Connect flush (up to 200 buffered fires) lands as a burst — hold
+// rendering until the window closes, then paint once.
+var WIRING_FLUSH_WINDOW_MS = 500;
+var _wiringSuspendRender = false;
+var _wiringFlushTimer = null;
 
 function _wiringEscAttr(s) {
   return String(s == null ? "" : s)
@@ -466,11 +472,40 @@ function _wiringShouldRun() {
   return _wiringVisible && getFireLimit() > 0;
 }
 
+function _currentPersona() {
+  try {
+    if (typeof S !== "undefined" && S && S.persona) return S.persona;
+  } catch (_) {}
+  return null;
+}
+
+function _wiringURL(persona) {
+  return WIRING_URL +
+    (persona ? "?persona=" + encodeURIComponent(persona) : "");
+}
+
 function _updateLiveDot() {
   var dot = document.querySelector("#memory-wiring-section .wiring-live-dot");
   if (!dot) return;
   var on = _wiringShouldRun() && !!N.Core._wiringSSE;
   dot.classList.toggle("is-off", !on);
+}
+
+// recall_boost weight sits at ≈1.00 post-boost (monotone) — show the
+// recall_count / stability from meta instead; weight stays the fallback
+// when meta is absent (legacy events).
+function _wiringMetaBadge(ev) {
+  if (ev.kind !== "recall_boost") return "";
+  var meta = ev.meta && typeof ev.meta === "object" ? ev.meta : {};
+  var parts = [];
+  var rc = Number(meta.recall_count);
+  if (isFinite(rc)) parts.push("×" + rc + "回");
+  var st = Number(meta.stability);
+  if (isFinite(st)) parts.push("安定 " + st.toFixed(2));
+  if (!parts.length) return "";
+  var text = parts.join(" · ");
+  return '<span class="wiring-meta" title="' + _wiringEscAttr(text) + '">' +
+    esc(text) + "</span>";
 }
 
 function _renderWiringItem(ev, fresh) {
@@ -480,15 +515,18 @@ function _renderWiringItem(ev, fresh) {
   var edge = s && t ? s + " → " + t : s || t || "—";
   var w = Number(ev.weight);
   var weight = isFinite(w) ? w.toFixed(2) : "";
+  var metaBadge = _wiringMetaBadge(ev);
+  var tail = metaBadge ||
+    (weight
+      ? '<span class="wiring-weight">' + _wiringEscAttr(weight) + "</span>"
+      : "");
   return (
     '<div class="wiring-fire-item wiring-kind-' + _wiringEscAttr(ev.kind) +
     (fresh ? " is-fresh" : "") + '" data-seq="' + _wiringEscAttr(ev.seq) + '">' +
     '<span class="wiring-kind-badge">' + label + "</span>" +
     '<span class="wiring-edge" title="' + _wiringEscAttr(edge) + '">' +
     esc(edge) + "</span>" +
-    (weight
-      ? '<span class="wiring-weight">' + _wiringEscAttr(weight) + "</span>"
-      : "") +
+    tail +
     "</div>"
   );
 }
@@ -535,11 +573,15 @@ function pushWiringEvent(ev) {
     source: ev.source || "",
     target: ev.target || "",
     weight: ev.weight,
+    meta: ev.meta && typeof ev.meta === "object"
+      ? Object.assign({}, ev.meta)
+      : {},
   });
   if (_wiringEvents.length > WIRING_BUF_CAP) {
     _wiringEvents.length = WIRING_BUF_CAP;
   }
-  renderWiringFeed();
+  // Suppressed while the connect flush lands — one batch paint later.
+  if (!_wiringSuspendRender) renderWiringFeed();
   return true;
 }
 
@@ -558,6 +600,26 @@ function clearWiring() {
   renderWiringFeed();
 }
 
+// Flush batching: the server greets every connect with `connected`,
+// then replays the buffer. Hold paints for one window, then paint once.
+function _beginWiringFlush() {
+  _wiringSuspendRender = true;
+  if (_wiringFlushTimer) clearTimeout(_wiringFlushTimer);
+  _wiringFlushTimer = setTimeout(function () {
+    _wiringFlushTimer = null;
+    _wiringSuspendRender = false;
+    renderWiringFeed();
+  }, WIRING_FLUSH_WINDOW_MS);
+}
+
+function _clearWiringFlush() {
+  if (_wiringFlushTimer) {
+    clearTimeout(_wiringFlushTimer);
+    _wiringFlushTimer = null;
+  }
+  _wiringSuspendRender = false;
+}
+
 // Single-flight wiring SSE — same discipline as N.Core.connectSSE:
 // exactly one live connection plus at most one pending retry timer.
 function connectWiring() {
@@ -565,13 +627,18 @@ function connectWiring() {
     clearTimeout(N.Core._wiringTimer);
     N.Core._wiringTimer = null;
   }
+  _clearWiringFlush();
   if (N.Core._wiringSSE) {
     try {
       var old = N.Core._wiringSSE;
       if (old._wiringHandler) {
         old.removeEventListener("wiring", old._wiringHandler);
       }
+      if (old._wiringConnectedHandler) {
+        old.removeEventListener("connected", old._wiringConnectedHandler);
+      }
       old.onerror = null;
+      old.onopen = null;
       old.close();
     } catch (e) {
       console.warn("[wiring] close failed:", e.message);
@@ -583,12 +650,23 @@ function connectWiring() {
     return;
   }
   ensureWiringFeed();
+  var persona = _wiringPersona || _currentPersona();
+  _wiringPersona = persona || null;
   N.Core._wiringBackoff = N.Core._wiringBackoff || 5000;
-  var es = new EventSource(WIRING_URL);
+  var es = new EventSource(_wiringURL(persona));
   es._wiringHandler = function (e) {
     handleWiringMessage(e.data);
   };
   es.addEventListener("wiring", es._wiringHandler);
+  es._wiringConnectedHandler = function () {
+    _beginWiringFlush();
+  };
+  es.addEventListener("connected", es._wiringConnectedHandler);
+  // Main-stream manners (sse.js): a healthy open resets the backoff.
+  es.onopen = function () {
+    N.Core._wiringBackoff = 5000;
+    _updateLiveDot();
+  };
   es.onerror = function () {
     try { es.close(); } catch (_) {}
     if (N.Core._wiringSSE === es) N.Core._wiringSSE = null;
@@ -611,11 +689,15 @@ function disconnectWiring() {
     clearTimeout(N.Core._wiringTimer);
     N.Core._wiringTimer = null;
   }
+  _clearWiringFlush();
   if (N.Core._wiringSSE) {
     try {
       var es = N.Core._wiringSSE;
       if (es._wiringHandler) {
         es.removeEventListener("wiring", es._wiringHandler);
+      }
+      if (es._wiringConnectedHandler) {
+        es.removeEventListener("connected", es._wiringConnectedHandler);
       }
       es.close();
     } catch (_) {}
@@ -624,11 +706,39 @@ function disconnectWiring() {
   _updateLiveDot();
 }
 
+// Persona switch: drop the old feed and rescope the stream. Wired into
+// the main SSE connect (base.js persona-select init + change both funnel
+// through N.Core.connectSSE), so no other hook point is needed.
+function switchWiringPersona(persona) {
+  if (!persona) persona = _currentPersona();
+  if (persona && persona === _wiringPersona && N.Core._wiringSSE) return;
+  _wiringPersona = persona || null;
+  clearWiring();
+  if (_wiringVisible) connectWiring();
+  else disconnectWiring();
+}
+
 // Panel hidden ⇒ cut the stream; reshown ⇒ reconnect (single-flight).
 function setWiringVisible(open) {
   _wiringVisible = !!open;
   if (_wiringVisible) connectWiring();
   else disconnectWiring();
+}
+
+// Persona select (init + change) funnels through the main SSE connect —
+// mirror it so the wiring stream always follows the active persona
+// (wraps once, even under script double-load).
+if (typeof N.Core.connectSSE === "function" &&
+    !N.Core._wiringConnectWrapped) {
+  N.Core._wiringConnectWrapped = true;
+  (function () {
+    var _origConnect = N.Core.connectSSE;
+    N.Core.connectSSE = function (persona) {
+      var r = _origConnect.apply(this, arguments);
+      try { switchWiringPersona(persona); } catch (_) {}
+      return r;
+    };
+  })();
 }
 
 // beforeunload tears down the main SSE via disconnectSSE — take the
@@ -668,6 +778,7 @@ Object.assign(N.Chat.memoryPanel, {
   renderWiringFeed: renderWiringFeed,
   connectWiring: connectWiring,
   disconnectWiring: disconnectWiring,
+  switchWiringPersona: switchWiringPersona,
   setWiringVisible: setWiringVisible,
 });
 
