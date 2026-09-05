@@ -136,6 +136,38 @@ def _get_irodori_config(ctx, chat_config) -> IrodoriConfig:
     )
 
 
+def _concat_wav(files: list[Path]) -> tuple[bytes, dict]:
+    """標準waveでparams検証後にフレーム連結する。params不一致はValueError。"""
+    import io
+    import wave
+
+    if not files:
+        raise ValueError("no files")
+    if len(files) > 50:
+        raise ValueError("too many files")
+    base_params = None
+    chunks: list[bytes] = []
+    for p in files:
+        with wave.open(str(p), "rb") as w:
+            params = (w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getcomptype(), w.getcompname())
+            frames = w.readframes(w.getnframes())
+        if base_params is None:
+            base_params = params
+        elif params != base_params:
+            raise ValueError(f"wav params mismatch: {p.name}")
+        chunks.append(frames)
+    nchannels, sampwidth, framerate, comptype, compname = base_params  # type: ignore[misc]
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(nchannels)
+        w.setsampwidth(sampwidth)
+        w.setframerate(framerate)
+        w.setcomptype(comptype, compname)
+        for c in chunks:
+            w.writeframes(c)
+    return buf.getvalue(), {"nchannels": nchannels, "sampwidth": sampwidth, "framerate": framerate}
+
+
 def register_tts_routes(mcp) -> None:
     @mcp.custom_route("/api/tts/{persona}", methods=["POST"])
     async def synthesize_tts(request: Request) -> JSONResponse:
@@ -462,3 +494,58 @@ def register_tts_routes(mcp) -> None:
 
         file_path.unlink()
         return JSONResponse({"ok": True, "deleted": True})
+
+    @mcp.custom_route("/api/tts/{persona}/combine", methods=["POST"])
+    async def combine_tts(request: Request) -> JSONResponse:
+        import os
+
+        persona = _resolve_persona_from_request(request)
+        ctx = _safe_get_context(persona)
+        if not ctx:
+            return JSONResponse({"ok": False, "error": "Persona not found"}, status_code=404)
+        try:
+            body = await request.json()
+        except (json.JSONDecodeError, TypeError):
+            body = {}
+        files = body.get("files", [])
+        full_text = (body.get("fullText") or "").strip()
+        if not files or not full_text:
+            return JSONResponse({"ok": False, "error": "files and fullText are required"}, status_code=400)
+        if len(files) > 50:
+            return JSONResponse({"ok": False, "error": "too many files"}, status_code=400)
+        from nous.config.settings import get_settings
+        from nous.domain.chat_config import ChatConfigFileRepository
+
+        settings = get_settings()
+        cache_dir = Path(settings.data_root) / "persona" / persona / "tts_cache"
+        paths: list[Path] = []
+        for name in files:
+            safe = os.path.basename(str(name)).replace("..", "").strip()
+            if not safe.lower().endswith(".wav"):
+                return JSONResponse({"ok": False, "error": "Invalid filename"}, status_code=400)
+            p = cache_dir / safe
+            if not p.exists():
+                return JSONResponse({"ok": False, "error": f"Missing cache file: {safe}"}, status_code=400)
+            paths.append(p)
+        try:
+            blob, _params = _concat_wav(paths)
+        except ValueError as e:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=422)
+        chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
+        irodori_config = _get_irodori_config(ctx, chat_config)
+        voice_speed = float(getattr(chat_config, "voice_speed", 1.0) or 1.0)
+        voice_override = body.get("voice") or (chat_config.voice_model or None)
+        voice_resolved = voice_override or chat_config.voice_model or ctx.settings.irodori.voice
+        emotion = "neutral"
+        caption = None
+        try:
+            st = ctx.persona_service.get_context(persona)
+            if st.is_ok and st.value and getattr(chat_config, "voice_emotion_mode", "anchor") != "off":
+                emotion = (getattr(st.value, "emotion", "") or "").strip() or "neutral"
+                caption = build_style_anchor(emotion, _clamp01(getattr(st.value, "emotion_intensity", 0.0)), getattr(st.value, "appearance", None), getattr(st.value, "relationship_status", None))
+        except Exception:
+            logger.exception("combine emotion resolve failed")
+        full_key = _tts_cache_key(text=full_text, emotion=emotion, caption=caption, voice_speed=voice_speed, voice_override=voice_override, voice_resolved=voice_resolved, model=irodori_config.model, seed=irodori_config.advanced.seed, num_steps=irodori_config.advanced.num_steps, cfg_text=irodori_config.advanced.cfg_scale_text, cfg_speaker=irodori_config.advanced.cfg_scale_speaker, cfg_caption=irodori_config.advanced.cfg_scale_caption, chunk_min_chars=irodori_config.advanced.chunk_min_chars)
+        out = cache_dir / f"{full_key}.wav"
+        out.write_bytes(blob)
+        return JSONResponse({"ok": True, "audio_url": f"/api/tts/{persona}/cache/{out.name}"})
