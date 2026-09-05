@@ -110,28 +110,29 @@ class IrodoriEngine(VoiceEngine):
         payload = self._build_payload(text, emotion, caption, speed, stream=True)
         timeout = httpx.Timeout(10.0, read=180.0, write=10.0, pool=10.0)
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client, client.stream(
-                "POST", f"{self._url}/v1/audio/speech", json=payload
-            ) as resp:
-                    resp.raise_for_status()
-                    async for line in resp.aiter_lines():
-                        if not line.startswith("data:"):
-                            continue
+            async with (
+                httpx.AsyncClient(timeout=timeout) as client,
+                client.stream("POST", f"{self._url}/v1/audio/speech", json=payload) as resp,
+            ):
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    try:
+                        evt = json.loads(line[5:].strip())
+                    except ValueError:
+                        continue
+                    if not isinstance(evt, dict):
+                        continue
+                    b64 = evt.get("audio_base64") or evt.get("audio_b64") or evt.get("audio")
+                    if isinstance(b64, str) and b64:
                         try:
-                            evt = json.loads(line[5:].strip())
-                        except ValueError:
+                            yield base64.b64decode(b64, validate=True)
+                        except (ValueError, binascii.Error):
                             continue
-                        if not isinstance(evt, dict):
-                            continue
-                        b64 = evt.get("audio_base64") or evt.get("audio_b64") or evt.get("audio")
-                        if isinstance(b64, str) and b64:
-                            try:
-                                yield base64.b64decode(b64, validate=True)
-                            except (ValueError, binascii.Error):
-                                continue
-                        etype = str(evt.get("type") or evt.get("event") or "")
-                        if etype in ("done", "error", "end", "complete"):
-                            break
+                    etype = str(evt.get("type") or evt.get("event") or "")
+                    if etype in ("done", "error", "end", "complete"):
+                        break
         except httpx.HTTPStatusError as e:
             raise RuntimeError(f"Irodori TTS stream HTTP {e.response.status_code}") from e
         except (httpx.ConnectError, httpx.TimeoutException) as e:
@@ -145,5 +146,5 @@ class IrodoriEngine(VoiceEngine):
             async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
                 resp = await client.get(f"{self._url}/v1/models")
                 return resp.status_code == 200
-        except (httpx.ConnectError, httpx.TimeoutException):
+        except httpx.HTTPError:
             return False

@@ -362,6 +362,19 @@ class TestIrodoriEngine:
 
             assert result is False
 
+    @pytest.mark.asyncio
+    async def test_health_check_returns_false_on_any_httpx_error(self, config):
+        """想定外のhttpxエラーでも例外なくFalse"""
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.get = AsyncMock(side_effect=httpx.RemoteProtocolError("peer closed"))
+            mock_cls.return_value.__aenter__.return_value = mock_client
+
+            engine = self._make_irodori(config)
+            result = await engine.health_check()
+
+            assert result is False
+
 
 # ============================================================
 # TestVoiceFactory
