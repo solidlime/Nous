@@ -109,3 +109,16 @@ class TestTransportSecurityAllowlist:
     def test_unknown_host_still_rejected(self):
         with TestClient(self._app(), raise_server_exceptions=False) as client:
             assert self._post_mcp(client, "evil.example").status_code == 421
+
+    def test_webui_override_consumed(self):
+        """A WebUI override (comma-separated string) replaces the default allowlist."""
+        from unittest.mock import patch
+
+        with patch(
+            "nous.config.runtime_config.RuntimeConfigManager.get_effective_value",
+            side_effect=[("custom:*", "override"), ("http://custom:*", "override")],
+        ):
+            app = self._app()
+        with TestClient(app, raise_server_exceptions=False) as client:
+            assert self._post_mcp(client, "custom:1234").status_code != 421
+            assert self._post_mcp(client, "nous:26262").status_code == 421

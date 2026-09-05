@@ -8,6 +8,7 @@ from nous.config.settings import (
     EmbeddingConfig,
     ForgettingConfig,
     IrodoriConfig,
+    McpSecurityConfig,
     QdrantConfig,
     RerankerConfig,
     ServerConfig,
@@ -49,6 +50,20 @@ class TestDefaultValues:
         assert cfg.url == "http://localhost:8088"
         assert cfg.voice == "default"
         assert cfg.timeout_seconds == 30
+
+    def test_mcp_security_defaults(self):
+        cfg = McpSecurityConfig()
+        assert "nous:*" in cfg.allowed_hosts
+        assert "localhost:*" in cfg.allowed_hosts
+        assert "http://nous:*" in cfg.allowed_origins
+
+    def test_mcp_security_comma_separated(self):
+        cfg = McpSecurityConfig(
+            allowed_hosts="foo:*, bar",  # type: ignore[arg-type]  # comma-separated accepted via validator
+            allowed_origins="http://x:*",  # type: ignore[arg-type]
+        )
+        assert cfg.allowed_hosts == ["foo:*", "bar"]
+        assert cfg.allowed_origins == ["http://x:*"]
 
 
 class TestSettings:

@@ -24,6 +24,16 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "host": {"hot_reload": False, "description": "Server bind address"},
         "port": {"hot_reload": False, "description": "Server port"},
     },
+    "mcp_security": {
+        "allowed_hosts": {
+            "hot_reload": False,
+            "description": "Allowed Host headers for /mcp (comma-separated, :* = any port). Restart to apply.",
+        },
+        "allowed_origins": {
+            "hot_reload": False,
+            "description": "Allowed Origin headers for /mcp (comma-separated). Restart to apply.",
+        },
+    },
     "embedding": {
         "model": {"hot_reload": True, "description": "Embedding model name", "reload_time": "10-60s"},
         "device": {"hot_reload": True, "description": "Device (cpu/cuda)", "reload_time": "10-60s"},

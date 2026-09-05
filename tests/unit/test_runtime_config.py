@@ -119,6 +119,19 @@ def test_update_non_hot_reloadable(tmp_data_dir: Path):
     assert data.get("server", {}).get("port") == 9999
 
 
+def test_mcp_security_update_requires_restart(tmp_data_dir: Path):
+    """mcp_security allowlists save as overrides with restart_required flag."""
+    mgr = RuntimeConfigManager()
+
+    result = mgr.update("mcp_security", "allowed_hosts", "custom:*")
+    assert result["success"] is True
+    assert result.get("restart_required") is True
+
+    value, source = mgr.get_effective_value("mcp_security", "allowed_hosts")
+    assert value == "custom:*"
+    assert source == "override"
+
+
 def test_overrides_persist_to_file(tmp_data_dir: Path):
     """Overrides should be persisted to config_overrides.json."""
     mgr = RuntimeConfigManager()

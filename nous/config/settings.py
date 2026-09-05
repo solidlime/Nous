@@ -45,6 +45,44 @@ class ServerConfig(BaseModel):
     port: int = 26262
 
 
+def _parse_str_list(v: object) -> list[str]:
+    """Accept a list, JSON array string, or comma-separated string."""
+    if isinstance(v, list):
+        return [str(s).strip() for s in v if str(s).strip()]
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return []
+        if s.startswith("["):
+            import json
+
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, list):
+                    return [str(x).strip() for x in parsed if str(x).strip()]
+            except json.JSONDecodeError:
+                pass
+        return [p.strip() for p in s.split(",") if p.strip()]
+    return []
+
+
+class McpSecurityConfig(BaseModel):
+    """MCP DNS-rebinding protection allowlists (applied on restart)."""
+
+    allowed_hosts: list[str] = ["nous:*", "localhost:*", "127.0.0.1:*", "[::1]:*"]
+    """Allowed Host header values ('*' suffix matches any port).
+    Env ``NOUS_MCP_SECURITY__ALLOWED_HOSTS`` accepts a JSON array.
+    WebUI stores comma-separated text."""
+
+    allowed_origins: list[str] = ["http://nous:*", "http://localhost:*", "http://127.0.0.1:*"]
+    """Allowed Origin header values. Same format as allowed_hosts."""
+
+    @field_validator("allowed_hosts", "allowed_origins", mode="before")
+    @classmethod
+    def split_str_list(cls, v: object) -> object:
+        return _parse_str_list(v)
+
+
 class ForgettingConfig(BaseModel):
     """FSRS v6 forgetting curve configuration."""
 
@@ -226,6 +264,7 @@ class Settings(BaseSettings):
     )
 
     server: ServerConfig = ServerConfig()
+    mcp_security: McpSecurityConfig = Field(default_factory=McpSecurityConfig)
     plugin: PluginConfig = Field(default_factory=PluginConfig)
     # LLM provider API keys (shared across subsystems)
     anthropic_api_key: str = ""

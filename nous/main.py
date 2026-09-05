@@ -50,17 +50,38 @@ async def _patched_tool_run(self, arguments, context=None, convert_result=False)
 Tool.run = _patched_tool_run
 
 
+def _parse_allowlist(value: object, default: list[str]) -> list[str]:
+    """Coerce a WebUI override (comma-separated str), env string, or list into a host list."""
+    if isinstance(value, list) and value:
+        return [str(v).strip() for v in value if str(v).strip()]
+    if isinstance(value, str) and value.strip():
+        from nous.config.settings import _parse_str_list
+
+        parsed = _parse_str_list(value)
+        if parsed:
+            return parsed
+    return default
+
+
 def _default_transport_security() -> TransportSecuritySettings:
     """Allowlist for the MCP SDK's DNS-rebinding protection.
 
     The SDK auto-enables protection with a localhost-only allowlist, which
     421-rejects intra-docker clients (mcp-hub → Host: nous:26262).
-    Explicitly allow the docker service name + loopback instead of disabling.
+    Values come from Settings defaults, environment, or WebUI overrides
+    (mcp_security.* — restart to apply). Protection itself stays ON.
     """
+    from nous.config.runtime_config import RuntimeConfigManager
+    from nous.config.settings import McpSecurityConfig
+
+    defaults = McpSecurityConfig()
+    cfg = RuntimeConfigManager()
+    hosts, _ = cfg.get_effective_value("mcp_security", "allowed_hosts")
+    origins, _ = cfg.get_effective_value("mcp_security", "allowed_origins")
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
-        allowed_hosts=["nous:*", "localhost:*", "127.0.0.1:*", "[::1]:*"],
-        allowed_origins=["http://nous:*", "http://localhost:*", "http://127.0.0.1:*"],
+        allowed_hosts=_parse_allowlist(hosts, defaults.allowed_hosts),
+        allowed_origins=_parse_allowlist(origins, defaults.allowed_origins),
     )
 
 

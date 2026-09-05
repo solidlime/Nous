@@ -10,6 +10,7 @@ var { esc, safeSetHTML } = window.Nous.Core;
 
 const CATEGORY_ICONS = {
     server: '<i data-lucide="monitor"></i>',
+    mcp_security: '<i data-lucide="shield"></i>',
     embedding: '<i data-lucide="brain"></i>',
     reranker: '<i data-lucide="search"></i>',
     qdrant: '<i data-lucide="package"></i>',
@@ -18,6 +19,7 @@ const CATEGORY_ICONS = {
 
 const CATEGORY_DESCRIPTIONS = {
     server: 'Server bind address and port. Changes require a full server restart.',
+    mcp_security: 'MCP DNS-rebinding protection: which Host/Origin headers may call /mcp. Changes require a full server restart.',
     embedding: 'Embedding model configuration for vector search. Reload takes 10-60s.',
     reranker: 'Cross-encoder reranker for search result quality. Reload takes 5-30s.',
     qdrant: 'Qdrant vector database connection settings.',
@@ -26,7 +28,7 @@ const CATEGORY_DESCRIPTIONS = {
 
 /* ── Category display order (consistent across renders) ── */
 const CATEGORY_ORDER = [
-    'general', 'server', 'embedding', 'reranker',
+    'general', 'server', 'mcp_security', 'embedding', 'reranker',
     'qdrant'
 ];
 
