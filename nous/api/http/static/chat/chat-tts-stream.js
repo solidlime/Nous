@@ -115,7 +115,27 @@ function _commonPrefix(a, b) {
   while (n < a.length && n < b.length && a[n] === b[n]) n++;
   return n;
 }
+function _stripForTts(text) {
+  // Shared impl lives in chat-tts.js (same strip as the legacy one-shot path).
+  var t = String(text || "");
+  try {
+    var f = N.Chat && N.Chat.tts && N.Chat.tts.stripMarkdown;
+    if (typeof f === "function") t = f(text);
+  } catch (e) {}
+  // Punctuation-only residue (e.g. "." left by a stripped tag) speaks nothing.
+  if (!/[\p{L}\p{N}]/u.test(t)) return "";
+  return t;
+}
 function _advance(stream, sens, includeLast) {
+  // Sanitize AFTER split (splitSentences itself is frozen): doneTexts and
+  // the prefix check below both use this stripped array, so numbering and
+  // the _send arrival guard stay consistent. Empties take no index.
+  var clean = [];
+  for (var i = 0; i < sens.length; i++) {
+    var t = _stripForTts(sens[i]);
+    if (t) clean.push(t);
+  }
+  sens = clean;
   // Positional enqueue over the prefix-verified range [k, end): entries
   // before k matched doneTexts, so nothing already sent is re-enqueued —
   // including textually identical repeats, which are distinct positions.

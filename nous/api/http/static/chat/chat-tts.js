@@ -419,6 +419,7 @@ N.Chat.tts = {
   test: testVoicePlayback,
   play: playTts,
   autoPlay: autoPlayTts,
+  stripMarkdown: _stripMarkdown,
 };
 
 })(window.Nous);
