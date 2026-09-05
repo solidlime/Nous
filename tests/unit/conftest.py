@@ -23,14 +23,17 @@ def sqlite_conn(tmp_path):
 @pytest.fixture(autouse=True)
 def _clear_global_state():
     """Isolate module-level state (query cache / background tasks) between tests."""
+    from nous.application.chat.pipeline.post import _background_tasks as _post_bg_tasks
     from nous.domain.memory.service import _background_tasks
     from nous.domain.search.engine import _query_cache
 
     _query_cache.clear()
     _background_tasks.clear()
+    _post_bg_tasks.clear()
     yield
     _query_cache.clear()
     _background_tasks.clear()
+    _post_bg_tasks.clear()
 
 
 @pytest.fixture

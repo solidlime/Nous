@@ -36,6 +36,27 @@ logger = get_logger(__name__)
 # PostProcessStep は毎ターン新規インスタンス化されるためモジュールレベルで保持。
 _last_auto_capture_at: dict[str, float] = {}
 
+# Fire-and-forget タスクの強参照（GC 防止）＋上限。完了タスクはコールバックで除去。
+# PostProcessStep は毎ターン新規インスタンス化されるためモジュールレベルで保持。
+_background_tasks: set[asyncio.Task] = set()
+_MAX_BACKGROUND_TASKS = 10
+
+
+def _track_background(task: asyncio.Task) -> None:
+    """Strong-ref a fire-and-forget task with done-callback cleanup and a cap.
+
+    Done tasks remove themselves (cf. domain/memory/service.py). When at cap,
+    the *new* task is cancelled so in-flight work is never killed.
+    """
+    for done in [t for t in _background_tasks if t.done()]:
+        _background_tasks.discard(done)
+    if len(_background_tasks) >= _MAX_BACKGROUND_TASKS:
+        logger.warning("dropping background task: %d in flight", len(_background_tasks))
+        task.cancel()
+        return
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
 
 async def _do_summarize(ctx: AppContext, config: ChatConfig, turns: list[dict]) -> str | None:
     """Summarization helper. Returns summary if generated."""
@@ -106,9 +127,6 @@ class PostProcessStep:
     - Response validation added via ResponseValidator (see response_validator.py)
     """
 
-    def __init__(self) -> None:
-        self._background_tasks: list[asyncio.Task] = []
-
     async def run(
         self,
         ctx: AppContext,
@@ -153,7 +171,7 @@ class PostProcessStep:
                 _last_auto_capture_at[ctx.persona] = now
                 from nous.application.chat.pipeline.auto_capture import run_auto_capture
 
-                self._background_tasks.append(
+                _track_background(
                     asyncio.create_task(
                         run_auto_capture(
                             ctx=ctx,
@@ -335,8 +353,8 @@ class PostProcessStep:
         # DoneSSE は run_memory_llm の前に移動済み（L175）
 
         # Fire-and-forget: DoneSSE後に後処理を非同期タスクとして実行
-        self._background_tasks.append(asyncio.create_task(_safe_reflection(ctx, config, memory_result, turn_ctx)))
-        self._background_tasks.append(asyncio.create_task(_safe_mental_model(ctx, config)))
+        _track_background(asyncio.create_task(_safe_reflection(ctx, config, memory_result, turn_ctx)))
+        _track_background(asyncio.create_task(_safe_mental_model(ctx, config)))
         return
 
 
