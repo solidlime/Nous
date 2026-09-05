@@ -120,6 +120,18 @@ class SessionConfig(BaseModel):
                 data["voice_emotion_mode"] = "off"
         return data
 
+    @field_validator("voice_speed")
+    @classmethod
+    def _clamp_voice_speed(cls, v: float) -> float:
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return 1.0
+        import math
+        if math.isnan(f) or math.isinf(f):
+            return 1.0
+        return max(0.25, min(4.0, f))
+
     @field_validator("reflection_threshold")
     @classmethod
     def _clamp_reflection_threshold(cls, v: float) -> float:

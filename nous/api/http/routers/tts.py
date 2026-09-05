@@ -297,7 +297,9 @@ def register_tts_routes(mcp) -> None:
                 logger.exception("LLM caption generation failed, falling back to style anchor")
 
         # ---- TTS audio cache ----
-        voice_speed = getattr(chat_config, "voice_speed", 1.0)
+        voice_speed = float(getattr(chat_config, "voice_speed", 1.0) or 1.0)
+        # 1.0近傍は感情速度に委譲（厳密な==ではなく許容誤差で判定）
+        speed_arg = None if abs(voice_speed - 1.0) < 1e-9 else voice_speed
         from nous.config.settings import get_settings
 
         settings = get_settings()
@@ -351,7 +353,7 @@ def register_tts_routes(mcp) -> None:
                 text=text,
                 emotion=emotion,
                 caption=caption,
-                speed=None if voice_speed == 1.0 else voice_speed,
+                speed=speed_arg,
             )
             new_cache_path.write_bytes(audio_bytes)
             logger.debug("TTS cache MISS: %s", new_cache_path)
