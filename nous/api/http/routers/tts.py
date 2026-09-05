@@ -200,6 +200,8 @@ def register_tts_routes(mcp) -> None:
         text = body.get("text", "")
         if not text:
             return JSONResponse({"ok": False, "error": "text is required"}, status_code=400)
+        override_emotion = (body.get("emotion") or "").strip() or ""
+        override_caption = (body.get("caption") or "").strip() or ""
 
         # Optional voice override (body > chat_config.voice_model > global)
         voice_override = body.get("voice") or (chat_config.voice_model or None)
@@ -210,9 +212,10 @@ def register_tts_routes(mcp) -> None:
                 engine._voice = voice_override  # noqa: SLF001
 
         # get persona state for emotion + build caption
-        emotion = "neutral"
-        caption: str | None = None
+        emotion = override_emotion or "neutral"
+        caption: str | None = override_caption or None
         state = None
+        use_override = bool(override_caption)
         # 感情の声への反映モード: "off" | "anchor" | "llm" (旧2ブール値から移行済み)
         emotion_mode = getattr(chat_config, "voice_emotion_mode", "") or ""
         if not emotion_mode:
@@ -226,7 +229,9 @@ def register_tts_routes(mcp) -> None:
                 emotion_mode = "anchor"
             else:
                 emotion_mode = "off"
-        if emotion_mode != "off":
+        if use_override:
+            pass  # emotion/captionは呼び出し側（1文目で解決済み）を使い回す。LLM生成・_LAST_CAPTION更新はしない。
+        elif emotion_mode != "off":
             state_result = ctx.persona_service.get_context(persona)
             if state_result.is_ok and state_result.value:
                 state = state_result.value
@@ -377,6 +382,8 @@ def register_tts_routes(mcp) -> None:
                     "audio_base64": base64.b64encode(audio_bytes).decode("ascii"),
                     "audio_url": audio_url,
                     "format": "wav",
+                    "emotion": emotion,
+                    "caption": caption,
                 }
             )
 
@@ -395,6 +402,8 @@ def register_tts_routes(mcp) -> None:
                     "audio_base64": base64.b64encode(audio_bytes).decode("ascii"),
                     "audio_url": audio_url,
                     "format": "wav",
+                    "emotion": emotion,
+                    "caption": caption,
                 }
             )
         except Exception:
@@ -536,15 +545,19 @@ def register_tts_routes(mcp) -> None:
         voice_speed = float(getattr(chat_config, "voice_speed", 1.0) or 1.0)
         voice_override = body.get("voice") or (chat_config.voice_model or None)
         voice_resolved = voice_override or chat_config.voice_model or ctx.settings.irodori.voice
-        emotion = "neutral"
-        caption = None
-        try:
-            st = ctx.persona_service.get_context(persona)
-            if st.is_ok and st.value and getattr(chat_config, "voice_emotion_mode", "anchor") != "off":
-                emotion = (getattr(st.value, "emotion", "") or "").strip() or "neutral"
-                caption = build_style_anchor(emotion, _clamp01(getattr(st.value, "emotion_intensity", 0.0)), getattr(st.value, "appearance", None), getattr(st.value, "relationship_status", None))
-        except Exception:
-            logger.exception("combine emotion resolve failed")
+        override_emotion = (body.get("emotion") or "").strip() or ""
+        override_caption = (body.get("caption") or "").strip() or ""
+        emotion = override_emotion or "neutral"
+        caption: str | None = override_caption or None
+        use_override = bool(override_caption)
+        if not use_override:
+            try:
+                st = ctx.persona_service.get_context(persona)
+                if st.is_ok and st.value and getattr(chat_config, "voice_emotion_mode", "anchor") != "off":
+                    emotion = (getattr(st.value, "emotion", "") or "").strip() or "neutral"
+                    caption = build_style_anchor(emotion, _clamp01(getattr(st.value, "emotion_intensity", 0.0)), getattr(st.value, "appearance", None), getattr(st.value, "relationship_status", None))
+            except Exception:
+                logger.exception("combine emotion resolve failed")
         full_key = _tts_cache_key(text=full_text, emotion=emotion, caption=caption, voice_speed=voice_speed, voice_override=voice_override, voice_resolved=voice_resolved, model=irodori_config.model, seed=irodori_config.advanced.seed, num_steps=irodori_config.advanced.num_steps, cfg_text=irodori_config.advanced.cfg_scale_text, cfg_speaker=irodori_config.advanced.cfg_scale_speaker, cfg_caption=irodori_config.advanced.cfg_scale_caption, chunk_min_chars=irodori_config.advanced.chunk_min_chars)
         out = cache_dir / f"{full_key}.wav"
         out.write_bytes(blob)
