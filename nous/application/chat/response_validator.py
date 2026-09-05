@@ -82,6 +82,11 @@ def validate_response(text: str) -> list[str]:
         r"</time_context>",
         r"<time>",
         r"</time>",
+        r"<retrieved_data>",
+        r"</retrieved_data>",
+        r"<current_state>",
+        r"<related_memories>",
+        r"<precedence>",
     ]
     for pattern in xml_tag_leak_patterns:
         if re.search(pattern, text):

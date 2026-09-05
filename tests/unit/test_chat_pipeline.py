@@ -1719,7 +1719,7 @@ class TestTrimOrderToolResultsBeforeMemorySections:
             messages.append(LLMMessage(role="tool", content=big_json, tool_call_id=f"t{i}"))
 
         memory_lines = "\n".join(f"- 記憶{i}" for i in range(10))
-        turn_ctx = SimpleNamespace(system_prompt=f"base\n--- 関連記憶 ---\n{memory_lines}")
+        turn_ctx = SimpleNamespace(system_prompt=f"base\n<related_memories>\n{memory_lines}\n</related_memories>")
 
         config = MagicMock()
         config.context_keep_recent_turns = 0

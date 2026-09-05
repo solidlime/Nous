@@ -26,15 +26,22 @@ class TrimmerMixin:
             start -= 1
         return start
 
+    import re
+
+    _RELATED_MEMORIES_RE = re.compile(r"<related_memories>\n(.*?)\n</related_memories>", re.DOTALL)
+
     @staticmethod
     def _trim_system_prompt(prompt: str, mode: str, total_tokens: int = 0, budget_tokens: int = 0) -> str:
-        """Trim system prompt sections by reducing memory list size.
+        """Trim the <related_memories> block by reducing memory list size.
 
-        Sections are separated by '\\n--- ' markers.
-        The 「関連記憶」 section is the primary target for trimming.
+        Only the related-memories block is ever trimmed; everything else
+        (core instructions, skill discovery layer, character block) is
+        protected. Matching is anchored on the explicit XML tags — unlike
+        the old generic "\\n--- " split, memory/state text containing
+        "--- " can never be mistaken for a section boundary.
         """
-        sections = prompt.split("\n--- ")
-        if len(sections) <= 1:
+        m = TrimmerMixin._RELATED_MEMORIES_RE.search(prompt)
+        if not m:
             return prompt
 
         # Limits per mode (how many memory lines to keep)
@@ -55,31 +62,18 @@ class TrimmerMixin:
             else:
                 limit = 2
 
-        result: list[str] = [sections[0]]  # Base prompt + time (section 0)
-        trimmed = False
+        body = m.group(1)
+        lines = body.split("\n")
+        memory_lines = [line for line in lines if line.strip().startswith("- ")]
+        if len(memory_lines) <= limit:
+            return prompt
 
-        for sec in sections[1:]:
-            if "関連記憶" in sec[:10]:
-                lines = sec.split("\n")
-                header = lines[0]
-                memory_lines = [line for line in lines[1:] if line.strip().startswith("- ")]
-                if len(memory_lines) > limit:
-                    # Keep only the top-N memory lines
-                    kept = memory_lines[:limit]
-                    removed = len(memory_lines) - limit
-                    kept.append(f"  （他 {removed} 件の関連記憶 — 必要なら memory_search で検索）")
-                    result.append(f"--- {header}\n" + "\n".join(kept))
-                    trimmed = True
-                    continue
-            # NOTE: 利用可能なSkill セクションはスキル発見層であり絶対保護対象。
-            # スキル情報の切り捨てはツール発見を阻害し、自律的 invoke_skill を不可能にする。
-            # 業界標準（Anthropic/OpenAI/LangChain）に従い、コア指示と同様に保護する。
-            result.append(f"--- {sec}")
-
-        if trimmed:
-            logger.debug("CompressStep: trimmed system prompt sections (mode=%s, limit=%d)", mode, limit)
-
-        return "\n".join(result)
+        kept = memory_lines[:limit]
+        removed = len(memory_lines) - limit
+        kept.append(f"  （他 {removed} 件の関連記憶 — 必要なら memory_search で検索）")
+        new_block = "<related_memories>\n" + "\n".join(kept) + "\n</related_memories>"
+        logger.debug("CompressStep: trimmed related_memories (mode=%s, limit=%d)", mode, limit)
+        return prompt[: m.start()] + new_block + prompt[m.end() :]
 
     @staticmethod
     def _clear_old_tool_results(messages: list[LLMMessage]) -> list[LLMMessage]:

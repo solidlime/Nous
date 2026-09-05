@@ -132,19 +132,21 @@ def _long_system_prompt(num_memories: int = 20) -> str:
     lines = [
         "あなたはテストアシスタントです。",
         "現在時刻: 2026-06-09 12:00 JST",
-        "--- ペルソナ状態・コンテキスト ---",
+        "<current_state>",
         "感情: neutral (強度: 0.5)",
-        "--- 関連記憶 ---",
+        "</current_state>",
+        "<related_memories>",
     ]
     for i in range(num_memories):
         lines.append(
             f"- [0.{i % 10}] これはテスト用の関連記憶です。長めのテキストを入れてトークン数を稼ぎます。記憶番号: {i}。"
             f"Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore."
         )
-    lines.append("--- 利用可能なSkill ---")
+    lines.append("</related_memories>")
+    lines.append("<instructions>")
     lines.append("- skill_a: テスト用スキルAの長い説明文です。" * 30)
     lines.append("- skill_b: テスト用スキルBの長い説明文です。" * 30)
-    lines.append("--- 記憶ツール使用ガイド ---")
+    lines.append("</instructions>")
     lines.append("memory_create, memory_search など")
     return "\n".join(lines)
 
@@ -434,18 +436,20 @@ class TestCompressStep:
         # Build prompt with long skill section
         lines = [
             "あなたはテストアシスタントです。",
-            "--- 関連記憶 ---",
+            "<related_memories>",
             "- [0.5] テスト記憶1",
             "- [0.3] テスト記憶2",
-            "--- 利用可能なSkill ---",
+            "</related_memories>",
+            "<instructions>",
             "- skill_a: " + "x" * 700,  # Long description
+            "</instructions>",
         ]
         prompt = "\n".join(lines)
         result = CompressStep._trim_system_prompt(prompt, "aggressive")
         # Skill section is intentionally protected — truncation would break skill discovery.
-        # Only the 関連記憶 section is trimmed.
+        # Only the related_memories block is trimmed (2 lines <= aggressive limit 2: unchanged).
         assert "skill_a" in result
-        assert "利用可能なSkill" in result
+        assert "<instructions>" in result
         assert len(result) == len(prompt)
 
     def test_clear_tool_results_with_few_assistant_msgs(self):
