@@ -617,9 +617,17 @@ def register_tts_routes(mcp) -> None:
         voice_resolved = voice_override or chat_config.voice_model or ctx.settings.irodori.voice
 
         # 字幕：並列タスク回収 → 不一致/失敗時は直列後退
-        caption_res = await _resolve_caption(persona, ctx, chat_config, ref_text=text)
+        ov_emo, ov_cap, use_override = _resolve_tts_override(body)
+        caption_res = await _resolve_caption(
+            persona,
+            ctx,
+            chat_config,
+            ref_text=text,
+            override_emotion=ov_emo if use_override else "",
+            override_caption=ov_cap if use_override else None,
+        )
         task = take_caption_task(persona)
-        if task is not None:
+        if task is not None and _resolve_emotion_mode(chat_config) == "llm":
             try:
                 parallel = await asyncio.wait_for(task, timeout=20.0)
                 st = ctx.persona_service.get_context(persona)

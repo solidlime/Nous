@@ -42,12 +42,12 @@ def _wav_blob(frames: bytes) -> bytes:
     return buf.getvalue()
 
 
-def _fake_ctx(monkeypatch, tmp_path, engine):
+def _fake_ctx(monkeypatch, tmp_path, engine, *, mode="off", state=None, task=None):
     chat_cfg = types.SimpleNamespace(
         voice_model="",
         voice_url="",
         voice_speed=1.0,
-        voice_emotion_mode="off",
+        voice_emotion_mode=mode,
         voice_emotion_link=False,
         irodori_caption_llm_enabled=False,
         provider="x",
@@ -77,12 +77,12 @@ def _fake_ctx(monkeypatch, tmp_path, engine):
             irodori=types.SimpleNamespace(url="http://127.0.0.1:9", voice="v", model="m", timeout_seconds=5)
         ),
         persona_service=types.SimpleNamespace(
-            get_context=lambda persona: types.SimpleNamespace(is_ok=True, value=None)
+            get_context=lambda persona: types.SimpleNamespace(is_ok=True, value=state)
         ),
     )
     monkeypatch.setattr(tts_mod, "_safe_get_context", lambda persona: fake_ctx)
     monkeypatch.setattr(tts_mod, "get_voice_engine", lambda cfg: engine)
-    monkeypatch.setattr(tts_mod, "take_caption_task", lambda persona: None)
+    monkeypatch.setattr(tts_mod, "take_caption_task", lambda persona: task)
 
 
 async def _collect_sse(resp):
@@ -185,3 +185,55 @@ async def test_stream_mid_error_writes_no_cache(monkeypatch, tmp_path):
     assert base64.b64decode(events[0]["audio_base64"]) == b1
     cache_dir = tmp_path / "persona" / "herta" / "tts_cache"
     assert not list(cache_dir.glob("*.wav"))
+
+
+class _RecordingEngine(_StubEngine):
+    def __init__(self, blobs):
+        super().__init__(blobs)
+        self.seen = {}
+
+    async def stream_speech(self, **kw):
+        self.seen.update(kw)
+        async for b in super().stream_speech(**kw):
+            yield b
+
+
+async def test_stream_uses_body_override_caption(monkeypatch, tmp_path):
+    # oracle #1: bodyのemotion/caption overrideはstreamでもsynthesizeと同一に効く。
+    blob = _wav_blob(b"\x01\x02" * 800)
+    engine = _RecordingEngine([blob])
+    _fake_ctx(monkeypatch, tmp_path, engine)
+    fn = _routes()[("/api/tts/{persona}/stream", ("POST",))]
+    resp = await fn(_req({"text": "こんにちは", "emotion": "joy", "caption": "オーバーライド字幕。"}))
+    assert resp.status_code == 200
+    events = await _collect_sse(resp)
+    assert [e["type"] for e in events] == ["tts_chunk", "tts_done"]
+    assert engine.seen["emotion"] == "joy"
+    assert engine.seen["caption"] == "オーバーライド字幕。"
+
+
+async def test_stream_ignores_parallel_caption_in_non_llm_mode(monkeypatch, tmp_path):
+    # oracle #2: 非llmモードでは並列字幕タスク（llm由来）を採用しない。
+    import asyncio
+
+    from nous.api.http.routers.tts import CaptionResult, CaptionSnapshot, build_style_anchor
+
+    blob = _wav_blob(b"\x01\x02" * 800)
+    engine = _RecordingEngine([blob])
+    state = types.SimpleNamespace(emotion="joy", emotion_intensity=0.8, appearance=None, relationship_status=None)
+
+    async def _parallel():
+        return CaptionResult("joy", "LLM磨きキャプション。", CaptionSnapshot("joy", 0.8))
+
+    task = asyncio.create_task(_parallel())
+    _fake_ctx(monkeypatch, tmp_path, engine, mode="anchor", state=state, task=task)
+    try:
+        fn = _routes()[("/api/tts/{persona}/stream", ("POST",))]
+        resp = await fn(_req({"text": "こんにちは"}))
+        assert resp.status_code == 200
+        events = await _collect_sse(resp)
+        assert [e["type"] for e in events] == ["tts_chunk", "tts_done"]
+        assert engine.seen["caption"] == build_style_anchor("joy", 0.8)
+        assert engine.seen["caption"] != "LLM磨きキャプション。"
+    finally:
+        await task
