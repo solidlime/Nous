@@ -55,81 +55,145 @@ N.Chat.ttsStream.splitSentences = splitSentences;
 "use strict";
 var T = N.Chat.ttsStream;
 var _stream = null;
-function _postTts(persona, text, voice, emotion, caption) {
+function _postTts(stream, persona, text, voice, emotion, caption) {
   var body = { text: text };
   if (voice) body.voice = voice;
   if (emotion) body.emotion = emotion;
   if (caption) body.caption = caption;
   return N.Core.api("/api/tts/" + encodeURIComponent(persona), { method: "POST", body: JSON.stringify(body) }).then(function(resp) {
-    if (resp && _stream && !_stream.caption && resp.caption) { _stream.caption = resp.caption; _stream.emotion = resp.emotion || _stream.emotion; }
+    if (stream !== _stream || stream.stopped) return resp; // #9: stale/superseded stream — drop side effects
+    if (resp && !stream.firstResolved) {
+      stream.firstResolved = true;
+      if (resp.caption) { stream.caption = resp.caption; stream.emotion = resp.emotion || stream.emotion; }
+      _flushHeld(stream); // #4: tone confirmed (or off-mode) — release held sentences
+    }
     return resp;
   });
 }
+function _nextSentence(stream, sentence) {
+  // #1/#2: single numbering authority for onDelta and finish.
+  var idx = stream.sent;
+  stream.sent++;
+  stream.doneTexts.push(sentence);
+  return idx;
+}
+function _send(stream, idx, sentence) {
+  var cur = stream;
+  var p = _postTts(cur, cur.persona, sentence, _voiceInput(), cur.emotion, cur.caption).then(function(resp) {
+    if (cur !== _stream || cur.stopped) return resp;
+    if (resp && resp.audio_url && cur.doneTexts[idx] === sentence) { // #5: drop superseded arrivals
+      cur.files[idx] = resp.audio_url.split("/").pop();
+    }
+    return resp;
+  });
+  cur.all.push(p); // #3: completion tracking, never shifted
+  cur.pending.push({ promise: p, idx: idx, sentence: sentence }); // playback queue
+  _pump(cur);
+}
+function _voiceInput() {
+  var modelInput = document.getElementById("chat-voice-model");
+  return (modelInput && modelInput.value) ? modelInput.value : undefined;
+}
+function _enqueue(stream, sentence) {
+  var idx = _nextSentence(stream, sentence);
+  if (!stream.closing && idx > 0 && !stream.firstResolved) {
+    stream.held.push({ idx: idx, sentence: sentence }); // #4: hold until tone confirmed
+    return idx;
+  }
+  _send(stream, idx, sentence);
+  return idx;
+}
+function _flushHeld(stream) {
+  if (stream.flushed) return;
+  stream.flushed = true;
+  var held = stream.held;
+  stream.held = [];
+  for (var i = 0; i < held.length; i++) _send(stream, held[i].idx, held[i].sentence);
+}
+function _commonPrefix(a, b) {
+  var n = 0;
+  while (n < a.length && n < b.length && a[n] === b[n]) n++;
+  return n;
+}
+function _advance(stream, sens, includeLast) {
+  // #5: advance only over the matching prefix; never resend assigned text.
+  var k = _commonPrefix(sens, stream.doneTexts);
+  if (k > 0 && k < stream.doneTexts.length) {
+    // Genuine boundary shift: the tail was superseded (it can never be
+    // unsent, but in-flight arrivals self-discard via the _send guard).
+    // k==0 with history means a fresh segment (tool-call bubble reset),
+    // so it must NOT truncate — those sentences are still in flight.
+    stream.doneTexts.length = k;
+    stream.sent = k;
+    stream.files.length = k;
+  }
+  var end = includeLast ? sens.length : sens.length - 1;
+  for (var i = k; i < end; i++) {
+    if (stream.doneTexts.indexOf(sens[i]) === -1) _enqueue(stream, sens[i]);
+  }
+}
 T.startStream = function(persona) {
   if (N.Chat.tts && N.Chat.tts._endSession) { try { N.Chat.tts._endSession("stream-start"); } catch (e) {} }
-  _stream = { persona: persona, sent: 0, doneTexts: [], pending: [], files: [], audio: null, stopped: false, playing: false, caption: null, emotion: null };
+  if (_stream) { try { T.stop(); } catch (e) {} } // #9: invalidate prior stream first
+  _stream = { persona: persona, sent: 0, doneTexts: [], pending: [], all: [], held: [], files: [], audio: null, stopped: false, playing: false, caption: null, emotion: null, firstResolved: false, flushed: false, closing: false };
   return _stream;
 };
 T.onDelta = function(fullText) {
-  if (!_stream || _stream.stopped) return;
-  var sens = T.splitSentences(fullText);
-  while (_stream.sent < sens.length - 1) {
-    (function(idx, sentence) {
-      _stream.sent++;
-      _stream.doneTexts.push(sentence);
-      var modelInput = document.getElementById("chat-voice-model");
-      var voice = modelInput && modelInput.value ? modelInput.value : undefined;
-      _stream.pending.push(_postTts(_stream.persona, sentence, voice, _stream.emotion, _stream.caption).then(function(resp) {
-        if (resp && resp.audio_url) _stream.files[idx] = resp.audio_url.split("/").pop();
-        return resp;
-      }));
-      _pump();
-    })(_stream.doneTexts.length - 1, sens[_stream.sent]);
-  }
+  var stream = _stream;
+  if (!stream || stream.stopped) return;
+  _advance(stream, T.splitSentences(fullText), false);
 };
-function _pump() {
-  if (!_stream || _stream.playing || _stream.stopped) return;
-  var next = _stream.pending.shift();
-  if (!next) return;
-  _stream.playing = true;
-  next.then(function(resp) {
-    if (_stream.stopped) { _stream.playing = false; return; }
-    if (resp && resp.audio_url) {
+function _pump(stream) {
+  stream = stream || _stream;
+  if (!stream || stream.playing || stream.stopped) return;
+  var entry = stream.pending.shift();
+  if (!entry) return;
+  stream.playing = true;
+  entry.promise.then(function(resp) {
+    if (stream.stopped || stream !== _stream) { stream.playing = false; return; }
+    if (resp && resp.audio_url && stream.doneTexts[entry.idx] === entry.sentence) {
       var a = new Audio(resp.audio_url);
-      _stream.audio = a;
-      a.onended = function() { _stream.playing = false; _pump(); };
-      a.onerror = function() { _stream.playing = false; _pump(); };
-      a.play().catch(function() { _stream.playing = false; _pump(); });
-    } else { _stream.playing = false; _pump(); }
-  }).catch(function() { _stream.playing = false; _pump(); });
+      stream.audio = a;
+      a.onended = function() { stream.playing = false; _pump(stream); };
+      a.onerror = function() { stream.playing = false; _pump(stream); };
+      a.play().catch(function() { stream.playing = false; _pump(stream); });
+    } else { stream.playing = false; _pump(stream); }
+  }).catch(function() { stream.playing = false; if (stream === _stream && !stream.stopped) _pump(stream); });
 }
 T.finish = function(allText, msgEl) {
-  if (!_stream) return Promise.resolve(null);
-  var sens = T.splitSentences(allText);
-  while (_stream.sent < sens.length) {
-    (function(idx, sentence) {
-      _stream.sent++;
-      var modelInput = document.getElementById("chat-voice-model");
-      var voice = modelInput && modelInput.value ? modelInput.value : undefined;
-      _stream.pending.push(_postTts(_stream.persona, sentence, voice, _stream.emotion, _stream.caption).then(function(resp) {
-        if (resp && resp.audio_url) _stream.files[idx] = resp.audio_url.split("/").pop();
-        return resp;
-      }));
-    })(_stream.doneTexts.length, sens[_stream.sent]);
-  }
-  return Promise.allSettled(_stream.pending).then(function() {
-    var files = _stream.files.filter(Boolean);
+  var stream = _stream;
+  if (!stream) return Promise.resolve(null);
+  stream.closing = true;
+  _flushHeld(stream);
+  _advance(stream, T.splitSentences(allText), true);
+  return Promise.allSettled(stream.all).then(function() { // #3: wait for ALL, not the shifted queue
+    if (stream !== _stream) return { ok: false, error: "superseded" }; // #9
+    if (stream.stopped) return { ok: false, error: "stopped" };
+    var missing = [];
+    for (var i = 0; i < stream.sent; i++) { if (!stream.files[i]) missing.push(i); }
+    if (missing.length) {
+      if (typeof console !== "undefined") console.warn("[TTS-stream] missing sentences, skip combine:", missing.join(","));
+      return { ok: false, error: "missing sentences: " + missing.join(",") }; // #3: no silent partial combine
+    }
+    var files = stream.files.filter(Boolean);
     if (!files.length) return null;
     var modelInput = document.getElementById("chat-voice-model");
     var body = { files: files, fullText: allText };
     if (modelInput && modelInput.value) body.voice = modelInput.value;
-    if (_stream.emotion) body.emotion = _stream.emotion;
-    if (_stream.caption) body.caption = _stream.caption;
-    return N.Core.api("/api/tts/" + encodeURIComponent(_stream.persona) + "/combine", { method: "POST", body: JSON.stringify(body) }).then(function(resp) {
-      if (resp && resp.audio_url && msgEl) { msgEl.dataset.ttsCacheUrl = resp.audio_url; }
+    if (stream.emotion) body.emotion = stream.emotion;
+    if (stream.caption) body.caption = stream.caption;
+    return N.Core.api("/api/tts/" + encodeURIComponent(stream.persona) + "/combine", { method: "POST", body: JSON.stringify(body) }).then(function(resp) {
+      if (stream === _stream && resp && resp.audio_url && msgEl) { msgEl.dataset.ttsCacheUrl = resp.audio_url; }
       return resp || null;
     }).catch(function(e) { console.warn("[TTS-stream] combine failed:", e.message); return null; });
   });
 };
-T.stop = function() { if (_stream) { _stream.stopped = true; try { _stream.audio && _stream.audio.pause(); } catch (e) {} } };
+T.stop = function() {
+  var stream = _stream;
+  if (!stream) return;
+  stream.stopped = true; // #9: late resolutions self-discard, _pump halts
+  stream.pending = [];
+  stream.held = [];
+  try { if (stream.audio) stream.audio.pause(); } catch (e) {}
+};
 })(window.Nous);
