@@ -319,6 +319,7 @@ def _render_voice_section() -> str:
                                                         placeholder="ペルソナモデルを使用"
                                                         style="width:100%;font-size:0.78rem;" />
                                                 </div>
+                                                <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">OFFでも声質アンカーで感情を一貫させます。ONはアンカーをLLMが磨きます（少し遅くなります）。</div>
                                             </div>
                                         </div>
                                     </details>
