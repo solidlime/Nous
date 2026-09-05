@@ -152,7 +152,7 @@ class AutoCaptureConfig(BaseModel):
 
 
 class IrodoriAdvancedParams(BaseModel):
-    """Irodori-TTS extra_body.irodori advanced parameters."""
+    """Irodori-TTS top-level irodori options (num_steps / cfg_* / chunking / caption / seed)."""
 
     num_steps: int = 30
     """Inference steps. Range: 10-50. Higher = better quality, slower."""

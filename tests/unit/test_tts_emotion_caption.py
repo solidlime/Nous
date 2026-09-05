@@ -36,3 +36,13 @@ def test_hint_keys_are_canonical_emotions():
 def test_directive_empty_emotion_returns_empty():
     """#081 指摘4: 感情が空なら指示文を生成しない（空疎文字列の LLM 混入防止）。"""
     assert build_caption_emotion_directive("", 0.5) == ""
+
+
+def test_directive_narrative_form():
+    """割合・命令形なし。叙述文。感情ラベルと強さの叙述は残す。"""
+    for emo, inten in [("joy", 0.8), ("sadness", 0.9), ("anger", 0.1), ("mysterious", 0.5)]:
+        d = build_caption_emotion_directive(emo, inten)
+        assert "%" not in d
+        assert "ください" not in d
+        assert d.endswith("。")
+        assert emo in d

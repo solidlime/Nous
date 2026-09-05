@@ -22,13 +22,23 @@ logger = logging.getLogger(__name__)
 
 
 EMOTION_TONE_HINTS: dict[str, str] = {
-    "joy": "明るく弾んだ、声のトーンが上がった話し方で",
-    "sadness": "落ち着いた、やや低くゆっくりした話し方で",
-    "anger": "強く短く、勢いのある話し方で",
-    "surprise": "間と抑揚を大きく、驚きを含んだ話し方で",
-    "fear": "小さく震える、不安を含んだ話し方で",
-    "neutral": "普段どおりの自然な話し方で",
+    "joy": "明るく弾んだ、声のトーンが上がった話し方",
+    "sadness": "落ち着いた、やや低くゆっくりした話し方",
+    "anger": "強く短く、勢いのある話し方",
+    "surprise": "間と抑揚を大きく、驚きを含んだ話し方",
+    "fear": "小さく震える、不安を含んだ話し方",
+    "neutral": "普段どおりの自然な話し方",
 }
+
+
+def _intensity_word(intensity: float) -> str:
+    """強度0-1を叙述語に。割合表示は学習caption分布外のため使わない。"""
+    v = _clamp01(intensity)
+    if v < 0.3:
+        return "ほのか"
+    if v < 0.7:
+        return "はっきり"
+    return "とても強い"
 
 
 def _clamp01(v: object) -> float:
@@ -43,15 +53,15 @@ def _clamp01(v: object) -> float:
 
 
 def build_caption_emotion_directive(emotion: str, intensity: float) -> str:
-    """caption LLM 用の感情トーン指示文を組み立てる。感情が空なら空文字（混入防止）。"""
+    """caption LLM 用の感情トーン指示文を組み立てる。感情が空なら空文字（混入防止）。叙述文のみ。"""
     emo = (emotion or "").strip()
     if not emo:
         return ""
     inten = _clamp01(intensity)
-    tone = EMOTION_TONE_HINTS.get(emo, f"「{emo}」の感情に合った話し方で")
+    tone = EMOTION_TONE_HINTS.get(emo, f"「{emo}」の感情に合った話し方")
     if inten < 0.3:
-        tone = "感情を抑えめに、穏やかな話し方で"
-    return f"現在の感情は {emo}（強度 {inten:.0%}）です。{tone}、セリフのキャプションを生成してください。"
+        tone = "感情を抑えめに、穏やかな話し方"
+    return f"いまの感情は{emo}で、強さは{_intensity_word(inten)}。{tone}。"
 
 
 def build_style_anchor(
@@ -67,18 +77,18 @@ def build_style_anchor(
         tone = EMOTION_TONE_HINTS[emo]
     elif emo:
         # 未知・内面系感情はラベルを潰さない (違和感/戸惑い等を残す)
-        tone = f"「{emo}」の内面をにじませた話し方で"
+        tone = f"「{emo}」の内面をにじませた話し方"
     else:
-        tone = "普段どおりの自然な話し方で"
+        tone = "普段どおりの自然な話し方"
     if emo and inten < 0.3:
-        tone = "感情を抑えめに、穏やかな話し方で"
+        tone = "感情を抑えめに、穏やかな話し方"
     prefix_parts: list[str] = []
     if relationship:
         prefix_parts.append(f"{relationship}に対して")
     if appearance:
         prefix_parts.append(f"{appearance}雰囲気で")
     prefix = "".join(prefix_parts)
-    return f"{prefix}{tone}、全体を通して一貫した声質・感情で話す。"
+    return f"{prefix}{tone}。全体を通して一貫した声質・感情で話す。"
 
 
 _LAST_CAPTION: dict[str, tuple[str, float, str]] = {}
@@ -164,8 +174,11 @@ def _tts_cache_key(
     chunk_min_chars: int = 85,
 ) -> str:
     """TTS音声キャッシュのキー。解決済みvoice・model・advanced全値を含める。区切り衝突回避のためjson結合。"""
+    # "v2": ペイロード配置修正（extra_body→top-level irodori）以前の旧エントリは
+    # 指定無視の既定音で作られているため、接頭辞で衝突させず孤児化する（削除はしない）。
     material = json.dumps(
         [
+            "v2",
             text,
             emotion,
             caption or "",
@@ -358,7 +371,7 @@ def register_tts_routes(mcp) -> None:
                     clamped_inten = _clamp01(getattr(state, "emotion_intensity", 0.0))
                     llm_user = f"""【固定条件】
 {anchor}
-感情: {emotion} (強度: {clamped_inten:.0%})
+感情: {emotion}（強さ: {_intensity_word(clamped_inten)}）。
 
 【前回】
 {prev or "（なし）"}

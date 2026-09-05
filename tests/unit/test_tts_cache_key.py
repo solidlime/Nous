@@ -65,3 +65,25 @@ def test_synthesize_lookup_uses_full_stem_match():
 
     src = inspect.getsource(tts_mod.register_tts_routes)
     assert "_find_cache_file(cache_dir, cache_key)" in src
+
+
+def test_cache_key_version_breaks_old_entries():
+    """v2接頭辞: 旧形式（接頭辞なし）材料のハッシュと一致しない＝腐ったHITを返さない。"""
+    import hashlib
+    import json
+
+    new_key = _tts_cache_key(
+        text="a",
+        emotion="neutral",
+        caption=None,
+        voice_speed=1.0,
+        voice_override=None,
+    )
+    old_material = json.dumps(
+        ["a", "neutral", "", 1.0, "", "", "irodori-tts", 0, 30, 3.2, 5.0, 4.2, 85],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    old_key = hashlib.sha256(old_material.encode()).hexdigest()
+    assert len(new_key) == 64
+    assert new_key != old_key

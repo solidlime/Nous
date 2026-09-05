@@ -34,6 +34,16 @@ def test_anchor_includes_baseline_when_given():
     assert "親しい相手" in a or "大人びた" in a
 
 
+def test_anchor_narrative_form():
+    """学習分布外の割合・命令形なし。叙述文で終わる。一貫 suffix 維持。"""
+    for emo, inten in [("joy", 0.8), ("sadness", 0.9), ("anger", 0.2), ("違和感", 0.6), ("", 0.0)]:
+        a = build_style_anchor(emo, inten)
+        assert "%" not in a
+        assert "ください" not in a
+        assert a.endswith("。")
+        assert "全体を通して一貫した" in a
+
+
 def test_bucket_rounds_to_01():
     assert _emotion_bucket(0.82) == 0.8
     assert _emotion_bucket(0.86) == 0.9

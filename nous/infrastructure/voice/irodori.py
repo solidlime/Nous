@@ -46,7 +46,7 @@ class IrodoriEngine(VoiceEngine):
         # float 演算の誤差 (1.1000000000000001 等) を防ぐため2桁に丸めてから送信
         speed = round(speed if speed is not None else _EMOTION_SPEED.get(emotion, _DEFAULT_SPEED), 2)
 
-        extra_body_irodori: dict = {
+        irodori_opts: dict = {
             "num_steps": self._advanced.num_steps,
             "cfg_scale_text": self._advanced.cfg_scale_text,
             "cfg_scale_speaker": self._advanced.cfg_scale_speaker,
@@ -55,19 +55,19 @@ class IrodoriEngine(VoiceEngine):
             "chunk_min_chars": self._advanced.chunk_min_chars,
         }
         if caption:
-            extra_body_irodori["caption"] = caption
+            irodori_opts["caption"] = caption
         if self._advanced.seed is not None and self._advanced.seed != 0:
-            extra_body_irodori["seed"] = self._advanced.seed
+            irodori_opts["seed"] = self._advanced.seed
 
+        # Irodori-TTS-Server の SpeechRequest はトップレベル "irodori" を見る。
+        # "extra_body" ネストは extra="allow" で黙殺されるため使わない。
         payload = {
             "model": "irodori-tts",
             "input": text,
             "voice": self._voice,
             "response_format": "wav",
             "speed": speed,
-            "extra_body": {
-                "irodori": extra_body_irodori,
-            },
+            "irodori": irodori_opts,
         }
 
         last_exception: Exception | None = None
