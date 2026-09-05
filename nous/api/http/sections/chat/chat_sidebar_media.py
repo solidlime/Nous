@@ -251,7 +251,7 @@ def _render_voice_section() -> str:
                                             <span id="chat-voice-speed-val" style="font-size:0.72rem;color:var(--accent-purple);">1.0x</span>
                                         </div>
                                         <input type="range" id="chat-voice-speed" class="chat-field-input"
-                                            min="0.25" max="4.0" step="0.25" value="1.0"
+                                            min="0.25" max="4.0" step="0.05" value="1.0"
                                             oninput="document.getElementById('chat-voice-speed-val').textContent=parseFloat(this.value).toFixed(2)+'x'"
                                             style="width:100%;accent-color:var(--accent-purple);" />
                                     </div>

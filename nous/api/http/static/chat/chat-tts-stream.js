@@ -173,6 +173,10 @@ function _pump(stream) {
     if (stream.stopped || stream !== _stream) { stream.playing = false; return; }
     if (resp && resp.audio_url && stream.doneTexts[entry.idx] === entry.sentence) {
       var a = new Audio(resp.audio_url);
+      try {
+        var _getVol = N.Chat.tts && N.Chat.tts.getVolume;
+        a.volume = typeof _getVol === "function" ? _getVol() : 1.0;
+      } catch (_e) {}
       stream.audio = a;
       a.onended = function() { stream.playing = false; _pump(stream); };
       a.onerror = function() { stream.playing = false; _pump(stream); };

@@ -420,6 +420,7 @@ N.Chat.tts = {
   play: playTts,
   autoPlay: autoPlayTts,
   stripMarkdown: _stripMarkdown,
+  getVolume: _getVolume,
 };
 
 })(window.Nous);

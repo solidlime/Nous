@@ -193,3 +193,27 @@ async def test_numeric_voice_coerced_to_string(monkeypatch, tmp_path):
     resp = await fn(_req({"text": "hi", "voice": 123}))
     assert resp.status_code == 200
     assert created[0]._voice == "123"
+
+
+async def test_voice_speed_005_step_passes_through(monkeypatch, tmp_path):
+    # 0.05刻みが丸め殺されずengineに届くことのlock-in（validator 0.25-4.0内）。
+    from nous.domain.session_config import SessionConfig
+
+    assert SessionConfig(voice_speed=1.05).voice_speed == 1.05
+    chat_cfg = _fake_ctx(monkeypatch, tmp_path, mode="off", forbid_state=True)
+    chat_cfg.voice_speed = 1.05
+    seen = {}
+
+    class _RecEngine:
+        async def health_check(self):
+            return True
+
+        async def synthesize(self, **kw):
+            seen.update(kw)
+            return b"RIFF...."
+
+    monkeypatch.setattr(tts_mod, "get_voice_engine", lambda cfg: _RecEngine())
+    fn = _routes()[("/api/tts/{persona}", ("POST",))]
+    resp = await fn(_req({"text": "hi"}))
+    assert resp.status_code == 200
+    assert seen["speed"] == 1.05
