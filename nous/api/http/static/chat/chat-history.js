@@ -105,6 +105,7 @@ function _appendSegmentsToBubble(msg, msgDiv) {
   for (var si = 0; si < msg.segments.length; si++) {
     var seg = msg.segments[si];
     if (seg.type === "text") {
+      if (!seg.content || !seg.content.trim()) continue;
       var bubble = document.createElement("div");
       bubble.className = "chat-bubble";
       safeSetHTML(bubble, safeMarkdown(seg.content));
@@ -118,7 +119,7 @@ function _appendSegmentsToBubble(msg, msgDiv) {
     } else if (seg.type === "thinking") {
       // CoT restore (R7): same .chat-thinking-bubble <details> as streaming.
       // NOT .chat-bubble — excluded from TTS manual / copy collectors.
-      if (!seg.content) continue;
+      if (!seg.content || !seg.content.trim()) continue;
       var thinkDiv = document.createElement("details");
       thinkDiv.className = "chat-thinking-bubble";
       safeSetHTML(thinkDiv,
@@ -225,9 +226,10 @@ function _appendSegmentsToBubble(msg, msgDiv) {
       }
     }
   }
-  // Remove empty bubble if appendChatMessage created one with no content
-  var emptyBubble = msgDiv.querySelector(".chat-bubble");
-  if (emptyBubble && !emptyBubble.innerHTML.trim()) emptyBubble.remove();
+  // Remove empty bubbles (初期の空バブル＋空textセグメント由来を全除去)
+  msgDiv.querySelectorAll(".chat-bubble").forEach(function(b) {
+    if (!b.innerHTML.trim()) b.remove();
+  });
   // Set time
   var timeEl = msgDiv.querySelector(".chat-time");
   if (timeEl && msg.time) timeEl.textContent = msg.time;
@@ -536,13 +538,16 @@ function renderMessages(msgs, opts) {
           container.appendChild(div);
         }
       }
-      appendChatMessage(
-        msg.role,
-        msg.content,
-        msg.time,
-        msg.role === "assistant",
-        msg.id,
-      );
+      // 空本文ではバブルを作らない（ツールのみのlegacyメッセージ対策）
+      if (msg.content && String(msg.content).trim()) {
+        appendChatMessage(
+          msg.role,
+          msg.content,
+          msg.time,
+          msg.role === "assistant",
+          msg.id,
+        );
+      }
       if (msg.role !== "assistant" && msg.tool_calls?.length) {
         for (const tc of msg.tool_calls) {
           const div = document.createElement("div");

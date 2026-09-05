@@ -470,6 +470,7 @@ async function chatSend(retry) {
         }
 
         if (evt.type === "text_delta") {
+          if (!evt.content) continue;
           if (CHAT._firstContent) {
             CHAT._firstContent = false;
             statusEl.textContent = "応答中...";
@@ -609,6 +610,12 @@ async function chatSend(retry) {
           N.Chat.core.debug(assistantDiv, evt);
         } else if (evt.type === "done") {
           // F3: render all text parts as final markdown
+          // 空delta由来の空バブルを除去（ツール合間の空バブル対策）
+          for (const part of contentParts) {
+            if (part.type === "text" && part.bubble && !(part.content || "").trim()) {
+              part.bubble.remove();
+            }
+          }
           let allText = "";
           for (const part of contentParts) {
             if (part.type === "text" && part.bubble && part.content) {
@@ -706,6 +713,12 @@ async function chatSend(retry) {
     inputEl.focus();
     // Fallback: render markdown if stream ended without 'done' event
     // F3: iterate over all text content parts
+    // 空バブル除去（done無し切断時も空バブルを残さない）
+    for (const part of contentParts) {
+      if (part.type === "text" && part.bubble && !(part.content || "").trim()) {
+        part.bubble.remove();
+      }
+    }
     for (const part of contentParts) {
       if (
         part.type === "text" &&
