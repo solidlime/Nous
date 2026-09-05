@@ -9,7 +9,7 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
-from starlette.responses import FileResponse, JSONResponse, Response
+from starlette.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
 from nous.api.http.deps import _PERSONA_PATTERN, _resolve_persona_from_request, _safe_get_context
 from nous.infrastructure.voice.factory import get_voice_engine
@@ -419,6 +419,40 @@ def _concat_wav(files: list[Path]) -> tuple[bytes, dict]:
     return buf.getvalue(), {"nchannels": nchannels, "sampwidth": sampwidth, "framerate": framerate}
 
 
+async def _relay_tts_stream(engine, *, text, emotion, caption, speed_arg, cache_path, audio_url):
+    """irodori SSEを中継しつつ蓄積→完了時に結合・保存。途中失敗はcache書込なし・doneなし。"""
+    import tempfile
+
+    chunks: list[bytes] = []
+    seq = 0
+    try:
+        async for wav in engine.stream_speech(text=text, emotion=emotion, caption=caption, speed=speed_arg):
+            chunks.append(wav)
+            yield f"data: {json.dumps({'type': 'tts_chunk', 'seq': seq, 'audio_base64': base64.b64encode(wav).decode('ascii')}, separators=(',', ':'))}\n\n"
+            seq += 1
+    except Exception:
+        logger.exception("TTS stream relay failed")
+        yield f"data: {json.dumps({'type': 'tts_error', 'message': 'stream interrupted'}, separators=(',', ':'))}\n\n"
+        return
+    if not chunks:
+        yield f"data: {json.dumps({'type': 'tts_error', 'message': 'no audio chunks'}, separators=(',', ':'))}\n\n"
+        return
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = []
+            for i, blob in enumerate(chunks):
+                p = Path(tmp) / f"chunk{i:03d}.wav"
+                p.write_bytes(blob)
+                paths.append(p)
+            combined, _params = _concat_wav(paths)
+    except ValueError:
+        logger.exception("TTS stream combine failed")
+        yield f"data: {json.dumps({'type': 'tts_error', 'message': 'combine failed'}, separators=(',', ':'))}\n\n"
+        return
+    cache_path.write_bytes(combined)
+    yield f"data: {json.dumps({'type': 'tts_done', 'audio_url': audio_url}, separators=(',', ':'))}\n\n"
+
+
 def register_tts_routes(mcp) -> None:
     @mcp.custom_route("/api/tts/{persona}", methods=["POST"])
     async def synthesize_tts(request: Request) -> JSONResponse:
@@ -539,6 +573,110 @@ def register_tts_routes(mcp) -> None:
             )
         except Exception:
             return JSONResponse({"ok": False, "error": "Voice synthesis failed"}, status_code=500)
+
+    @mcp.custom_route("/api/tts/{persona}/stream", methods=["POST"])
+    async def stream_tts(request: Request) -> Response:
+        persona = _resolve_persona_from_request(request)
+        ctx = _safe_get_context(persona)
+        if not ctx:
+            return JSONResponse({"ok": False, "error": "Persona not found"}, status_code=404)
+
+        from nous.config.settings import get_settings
+        from nous.domain.chat_config import ChatConfigFileRepository
+
+        chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
+        irodori_config = _get_irodori_config(ctx, chat_config)
+        engine = get_voice_engine(irodori_config)
+
+        try:
+            ok = await engine.health_check()
+            if not ok:
+                return JSONResponse({"ok": False, "error": "Voice engine health check failed"}, status_code=503)
+        except Exception:
+            return JSONResponse({"ok": False, "error": "Voice engine unreachable"}, status_code=503)
+
+        try:
+            body = await request.json()
+        except (json.JSONDecodeError, TypeError):
+            body = {}
+        if not isinstance(body, dict):
+            body = {}
+        text = _body_text_required(body, "text")
+        if not text:
+            return JSONResponse({"ok": False, "error": "text is required"}, status_code=400)
+
+        voice_override = _body_str(body, "voice") or (chat_config.voice_model or None)
+        if voice_override:
+            from nous.infrastructure.voice.irodori import IrodoriEngine
+
+            if isinstance(engine, IrodoriEngine):
+                engine._voice = voice_override  # noqa: SLF001
+
+        voice_speed = float(getattr(chat_config, "voice_speed", 1.0) or 1.0)
+        speed_arg = None if abs(voice_speed - 1.0) < 1e-9 else voice_speed
+        voice_resolved = voice_override or chat_config.voice_model or ctx.settings.irodori.voice
+
+        # 字幕：並列タスク回収 → 不一致/失敗時は直列後退
+        caption_res = await _resolve_caption(persona, ctx, chat_config, ref_text=text)
+        task = take_caption_task(persona)
+        if task is not None:
+            try:
+                parallel = await asyncio.wait_for(task, timeout=20.0)
+                st = ctx.persona_service.get_context(persona)
+                if st.is_ok and st.value:
+                    now_emo = (getattr(st.value, "emotion", "") or "").strip() or "neutral"
+                    now_bucket = _emotion_bucket(float(getattr(st.value, "emotion_intensity", 0.0) or 0.0))
+                    if now_emo == parallel.snapshot.emotion and now_bucket == parallel.snapshot.bucket:
+                        caption_res = parallel
+                        logger.debug("TTS caption parallel hit")
+            except Exception:
+                logger.exception("caption parallel consume failed")
+        emotion, caption = caption_res.emotion, caption_res.caption
+
+        settings = get_settings()
+        cache_dir = Path(settings.data_root) / "persona" / persona / "tts_cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_key = _tts_cache_key(
+            text=text,
+            emotion=emotion,
+            caption=caption,
+            voice_speed=voice_speed,
+            voice_override=voice_override,
+            voice_resolved=voice_resolved,
+            model=irodori_config.model,
+            seed=irodori_config.advanced.seed,
+            num_steps=irodori_config.advanced.num_steps,
+            cfg_text=irodori_config.advanced.cfg_scale_text,
+            cfg_speaker=irodori_config.advanced.cfg_scale_speaker,
+            cfg_caption=irodori_config.advanced.cfg_scale_caption,
+            chunk_min_chars=irodori_config.advanced.chunk_min_chars,
+        )
+        new_cache_path = cache_dir / f"{cache_key}.wav"
+        found_path, audio_url_filename = _find_cache_file(cache_dir, cache_key)
+        audio_url = f"/api/tts/{persona}/cache/{audio_url_filename}"
+
+        if found_path:
+            blob = found_path.read_bytes()
+
+            async def _hit():
+                yield f"data: {json.dumps({'type': 'tts_chunk', 'seq': 0, 'audio_base64': base64.b64encode(blob).decode('ascii')}, separators=(',', ':'))}\n\n"
+                yield f"data: {json.dumps({'type': 'tts_done', 'audio_url': audio_url}, separators=(',', ':'))}\n\n"
+
+            return StreamingResponse(_hit(), media_type="text/event-stream; charset=utf-8")
+
+        return StreamingResponse(
+            _relay_tts_stream(
+                engine,
+                text=text,
+                emotion=emotion,
+                caption=caption,
+                speed_arg=speed_arg,
+                cache_path=new_cache_path,
+                audio_url=audio_url,
+            ),
+            media_type="text/event-stream; charset=utf-8",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     # d4: GET /api/tts/{persona}/voices 削除（内部使用ゼロ。docs言及のみ）
     # d4残り1EP候補（health/cache）はchat-tts.js:198・audio_url・chat-history.jsで使用中のため残す。
