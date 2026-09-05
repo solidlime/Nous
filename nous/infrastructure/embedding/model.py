@@ -16,7 +16,7 @@ from huggingface_hub import snapshot_download
 from tokenizers import Tokenizer
 
 from nous.config.settings import EmbeddingConfig
-from nous.infrastructure.embedding._base import OnnxBaseModel
+from nous.infrastructure.embedding._base import OnnxBaseModel, _hf_revision
 from nous.infrastructure.logging.structured import get_logger
 
 logger = get_logger(__name__)
@@ -219,10 +219,8 @@ class EmbeddingModel(OnnxBaseModel):
         """Download ONNX model + tokenizer, create InferenceSession."""
         logger.info("Loading embedding model: %s (device=%s)", self.config.model, self.config.device)
 
-        # 1. Download ONNX model
-        model_dir = snapshot_download(
-            self.config.model
-        )  # TODO(follow-up): pin HuggingFace snapshot_download revision  # nosec B615
+        # 1. Download ONNX model (revision pinned via NOUS_EMBEDDING__REVISION when set)
+        model_dir = snapshot_download(self.config.model, revision=_hf_revision("NOUS_EMBEDDING__REVISION"))  # nosec B615
         onnx_path = os.path.join(model_dir, "onnx", "model.onnx")
 
         # 2. Load tokenizer

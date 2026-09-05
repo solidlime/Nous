@@ -7,6 +7,7 @@ Shared by EmbeddingModel and RerankerModel to eliminate the identical
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
@@ -15,6 +16,15 @@ if TYPE_CHECKING:
     import onnxruntime
 
 logger = logging.getLogger(__name__)
+
+
+def _hf_revision(env_var: str) -> str | None:
+    """Pinned HuggingFace revision from env (None = latest, current behavior).
+
+    Lets operators pin ``snapshot_download`` without code changes, e.g.
+    ``NOUS_EMBEDDING__REVISION=<sha>``.
+    """
+    return os.environ.get(env_var) or None
 
 
 class OnnxBaseModel(ABC):
