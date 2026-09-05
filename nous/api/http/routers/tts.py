@@ -155,7 +155,7 @@ def _body_str(body: object, key: str) -> str:
 
 
 def _resolve_emotion_mode(chat_config) -> str:
-    """感情反映モード解決の正典。SessionConfig._derive_emotion_modeと同じ条件順。synthesize/combine共用。"""
+    """感情反映モード解決の正典。SessionConfig._derive_emotion_modeと同じ条件順。字幕解決・kickoff共用。"""
     mode = getattr(chat_config, "voice_emotion_mode", "") or ""
     if mode:
         return mode
@@ -772,79 +772,3 @@ def register_tts_routes(mcp) -> None:
 
         file_path.unlink()
         return JSONResponse({"ok": True, "deleted": True})
-
-    @mcp.custom_route("/api/tts/{persona}/combine", methods=["POST"])
-    async def combine_tts(request: Request) -> JSONResponse:
-        import os
-
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"ok": False, "error": "Persona not found"}, status_code=404)
-        try:
-            body = await request.json()
-        except (json.JSONDecodeError, TypeError):
-            body = {}
-        if not isinstance(body, dict):
-            body = {}
-        files = body.get("files", [])
-        full_text = _body_text_required(body, "fullText")
-        if not isinstance(files, list) or not files or not full_text:
-            return JSONResponse({"ok": False, "error": "files and fullText are required"}, status_code=400)
-        if len(files) > 50:
-            return JSONResponse({"ok": False, "error": "too many files"}, status_code=400)
-        from nous.config.settings import get_settings
-        from nous.domain.chat_config import ChatConfigFileRepository
-
-        settings = get_settings()
-        cache_dir = Path(settings.data_root) / "persona" / persona / "tts_cache"
-        paths: list[Path] = []
-        for name in files:
-            safe = os.path.basename(str(name)).replace("..", "").strip()
-            if not safe.lower().endswith(".wav"):
-                return JSONResponse({"ok": False, "error": "Invalid filename"}, status_code=400)
-            p = cache_dir / safe
-            if not p.exists():
-                return JSONResponse({"ok": False, "error": f"Missing cache file: {safe}"}, status_code=400)
-            paths.append(p)
-        try:
-            blob, _params = _concat_wav(paths)
-        except ValueError as e:
-            return JSONResponse({"ok": False, "error": str(e)}, status_code=422)
-        chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
-        irodori_config = _get_irodori_config(ctx, chat_config)
-        voice_speed = float(getattr(chat_config, "voice_speed", 1.0) or 1.0)
-        voice_override = _body_str(body, "voice") or (chat_config.voice_model or None)
-        voice_resolved = voice_override or chat_config.voice_model or ctx.settings.irodori.voice
-        emotion, caption, use_override = _resolve_tts_override(body)
-        if not use_override:
-            try:
-                st = ctx.persona_service.get_context(persona)
-                if st.is_ok and st.value and _resolve_emotion_mode(chat_config) != "off":
-                    emotion = (getattr(st.value, "emotion", "") or "").strip() or "neutral"
-                    caption = build_style_anchor(
-                        emotion,
-                        _clamp01(getattr(st.value, "emotion_intensity", 0.0)),
-                        getattr(st.value, "appearance", None),
-                        getattr(st.value, "relationship_status", None),
-                    )
-            except Exception:
-                logger.exception("combine emotion resolve failed")
-        full_key = _tts_cache_key(
-            text=full_text,
-            emotion=emotion,
-            caption=caption,
-            voice_speed=voice_speed,
-            voice_override=voice_override,
-            voice_resolved=voice_resolved,
-            model=irodori_config.model,
-            seed=irodori_config.advanced.seed,
-            num_steps=irodori_config.advanced.num_steps,
-            cfg_text=irodori_config.advanced.cfg_scale_text,
-            cfg_speaker=irodori_config.advanced.cfg_scale_speaker,
-            cfg_caption=irodori_config.advanced.cfg_scale_caption,
-            chunk_min_chars=irodori_config.advanced.chunk_min_chars,
-        )
-        out = cache_dir / f"{full_key}.wav"
-        out.write_bytes(blob)
-        return JSONResponse({"ok": True, "audio_url": f"/api/tts/{persona}/cache/{out.name}"})

@@ -122,11 +122,10 @@ def test_endpoints_share_override_and_mode_helpers():
     import inspect
 
     src = inspect.getsource(tts_mod.register_tts_routes)
-    assert src.count("_resolve_tts_override(body)") == 2
-    # synthesizeは抽出後の _resolve_caption 経由で解決する（直書き導出の再発防止）。
-    # 直接呼出しはcombineの1件のみ。
+    assert src.count("_resolve_tts_override(body)") == 1
+    # synthesize/streamは抽出後の _resolve_caption 経由で解決する（直書き導出の再発防止）。
     assert "_resolve_caption(" in src
-    assert src.count("_resolve_emotion_mode(chat_config)") == 1
+    assert src.count("_resolve_emotion_mode(chat_config)") == 0
     capo = inspect.getsource(tts_mod._resolve_caption)
     assert "_resolve_emotion_mode(chat_config)" in capo
 
