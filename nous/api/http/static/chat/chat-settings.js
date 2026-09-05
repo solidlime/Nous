@@ -325,13 +325,6 @@ function applyChatConfig(cfg) {
   // Sync min-strength display
   var fs = document.getElementById("chat-forgetting-min-strength");
   if (fs) document.getElementById("chat-forgetting-min-strength-val").textContent = parseFloat(fs.value).toFixed(2);
-  // === MemoRAG (moved from Settings) ===
-  setChecked("chat-memorag-enabled", cfg.memorag_enabled === true);
-  set("chat-memorag-chunk-size", cfg.memorag_chunk_size ?? 512);
-  set("chat-memorag-chunk-overlap", cfg.memorag_chunk_overlap ?? 64);
-  set("chat-memorag-top-k", cfg.memorag_top_k ?? 5);
-  set("chat-memorag-similarity-threshold", cfg.memorag_similarity_threshold ?? 0.7);
-  set("chat-memorag-snapshot-interval-hours", cfg.memorag_snapshot_interval_hours ?? 24);
   // Emotion decay
   set("chat-emotion-decay-half-life-hours", cfg.emotion_decay_half_life_hours ?? 24);
   set("chat-emotion-decay-threshold", cfg.emotion_decay_threshold ?? 0.005);
@@ -476,13 +469,6 @@ async function saveChatConfig() {
     forgetting_min_strength: parseFloat(document.getElementById("chat-forgetting-min-strength")?.value || "0.1"),
     forgetting_forget_ratio: parseFloat(document.getElementById("chat-forgetting-forget-ratio")?.value || "0.2"),
     forgetting_forget_strength: parseFloat(document.getElementById("chat-forgetting-forget-strength")?.value || "0.5"),
-    // === MemoRAG (moved from Settings) ===
-    memorag_enabled: getChecked("chat-memorag-enabled"),
-    memorag_chunk_size: parseInt(document.getElementById("chat-memorag-chunk-size")?.value || "512"),
-    memorag_chunk_overlap: parseInt(document.getElementById("chat-memorag-chunk-overlap")?.value || "64"),
-    memorag_top_k: parseInt(document.getElementById("chat-memorag-top-k")?.value || "5"),
-    memorag_similarity_threshold: parseFloat(document.getElementById("chat-memorag-similarity-threshold")?.value || "0.7"),
-    memorag_snapshot_interval_hours: parseInt(document.getElementById("chat-memorag-snapshot-interval-hours")?.value || "24"),
     // Emotion decay
     emotion_decay_half_life_hours: parseFloat(document.getElementById("chat-emotion-decay-half-life-hours")?.value || "24"),
     emotion_decay_threshold: parseFloat(document.getElementById("chat-emotion-decay-threshold")?.value || "0.005"),

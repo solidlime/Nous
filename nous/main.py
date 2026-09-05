@@ -201,15 +201,6 @@ def create_app() -> MemoryFastMCP:
     consolidation_worker.start()
     _workers.append(consolidation_worker)
 
-    # Start MemoRAG context snapshot worker (global infra kill switch only;
-    # per-persona on/off is checked per persona in _rebuild_persona)
-    if settings.memorag.enabled:
-        from nous.application.workers.context_snapshot_worker import ContextSnapshotWorker
-
-        snapshot_worker = ContextSnapshotWorker(settings)
-        snapshot_worker.start()
-        _workers.append(snapshot_worker)
-
     return mcp
 
 

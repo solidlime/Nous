@@ -61,9 +61,8 @@ nous/
 │   │   ├── tools/             # 組み込みツール定義
 │   │   └── service.py         # チャットサービス
 │   ├── workers/               # バックグラウンドワーカー
-│   │   ├── decay_worker.py    # 感情/体調減衰
-│   │   ├── consolidation_worker.py  # 記憶統合
-│   │   └── context_snapshot_worker.py # MemoRAGスナップショット
+│   │   ├── decay_worker.py    # 感情/体調減衰＋リンク減衰
+│   │   └── consolidation_worker.py  # 記憶統合
 │   └── use_cases.py           # AppContextRegistry
 ├── domain/                    # ドメインモデル
 │   ├── memory/                # 記憶エンティティ/サービス/リポジトリ

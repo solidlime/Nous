@@ -707,9 +707,9 @@ def _make_memory(key: str):
     return m
 
 
-def _make_engine(memorag_config=None, memory_repo=None):
+def _make_engine(memory_repo=None):
     keyword = MagicMock()
     keyword.search.return_value = Success([(_make_memory("k1"), 0.9)])
     semantic = AsyncMock()
     semantic.search.return_value = Success([(_make_memory("k2"), 0.8)])
-    return SearchEngine(keyword, semantic, None, memory_repo=memory_repo, memorag_config=memorag_config)
+    return SearchEngine(keyword, semantic, None, memory_repo=memory_repo)

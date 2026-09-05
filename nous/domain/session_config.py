@@ -1,7 +1,7 @@
 """セッション管理設定 — SessionConfig.
 
 ChatConfig から分割された、セッション管理・リフレクション・メモリ拡張・
-音声・忘却・MemoRAGに関する設定を保持する。
+音声・忘却に関する設定を保持する。
 """
 
 from __future__ import annotations
@@ -91,14 +91,6 @@ class SessionConfig(BaseModel):
     forgetting_forget_strength: float = 0.5
     forgetting_decay_interval_seconds: int = 86400  # 24h default
     forgetting_min_strength: float = 0.1
-
-    # MemoRAG
-    memorag_chunk_size: int = 512
-    memorag_chunk_overlap: int = 64
-    memorag_top_k: int = 5
-    memorag_similarity_threshold: float = 0.7
-    memorag_enabled: bool = False
-    memorag_snapshot_interval_hours: int = 24
 
     @field_validator("reflection_threshold")
     @classmethod

@@ -45,22 +45,6 @@ class ServerConfig(BaseModel):
     port: int = 26262
 
 
-class MemoRAGConfig(BaseModel):
-    """MemoRAG-inspired memory context snapshot configuration."""
-
-    enabled: bool = True
-    """Enable MemoryContextSnapshot building (LLM-free, always safe to enable)."""
-
-    rebuild_threshold: int = 20
-    """Rebuild snapshot when memory count increases by this many since last build."""
-
-    snapshot_top_memories: int = 20
-    """Number of top-importance memories to include in the snapshot."""
-
-    snapshot_interval_hours: float = 1.0
-    """Minimum hours between automatic snapshot rebuilds."""
-
-
 class ForgettingConfig(BaseModel):
     """FSRS v6 forgetting curve configuration."""
 
@@ -254,7 +238,6 @@ class Settings(BaseSettings):
     reranker: RerankerConfig = RerankerConfig()
     qdrant: QdrantConfig = QdrantConfig()
     forgetting: ForgettingConfig = ForgettingConfig()
-    memorag: MemoRAGConfig = MemoRAGConfig()
     memory_enrichment: MemoryEnrichmentConfig = MemoryEnrichmentConfig()
     auto_capture: AutoCaptureConfig = AutoCaptureConfig()
     cors: CorsConfig = CorsConfig()

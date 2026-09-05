@@ -403,22 +403,11 @@ class AppContext:
                 EmotionRecallBiasRanker(),
                 TopicAffinityRanker(),
             )
-            # Build memorag config from ChatConfig or fallback to Settings
-            if self._config:
-                memorag_config = {
-                    "chunk_size": self._config.memorag_chunk_size,
-                    "chunk_overlap": self._config.memorag_chunk_overlap,
-                    "top_k": self._config.memorag_top_k,
-                    "similarity_threshold": self._config.memorag_similarity_threshold,
-                }
-            else:
-                memorag_config = self.settings.memorag
             self._search_engine = SearchEngine(
                 keyword,
                 semantic,
                 ranker,
                 memory_repo=self.memory_repo,
-                memorag_config=memorag_config,
                 reranker=self._reranker,
                 entity_service=self.entity_service,
                 link_repo=self.entity_repo,

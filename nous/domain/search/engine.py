@@ -101,7 +101,6 @@ class SearchEngine:
         semantic_search: SemanticSearchStrategy | None = None,
         ranker: ResultRanker | None = None,
         memory_repo=None,
-        memorag_config=None,
         reranker=None,
         link_repo=None,
         entity_service=None,
@@ -110,7 +109,6 @@ class SearchEngine:
         self._semantic = semantic_search
         self._ranker = ranker
         self._memory_repo = memory_repo
-        self._memorag_config = memorag_config
         self._reranker = reranker
         self._link_repo = link_repo
         self._entity_service = entity_service

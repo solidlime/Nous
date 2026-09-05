@@ -134,3 +134,53 @@
 .venv\Scripts\python.exe -m ruff check nous scripts
 .venv\Scripts\python.exe -m mypy nous
 ```
+
+---
+
+# Phase 4: 残フォローアップ4件（2026-09-05 追記、#081設計判断済み）
+
+実装順序: F4 → F3 → F2 → F1（F1はUI削除含むため最後・独立コミット推奨）
+
+## F4. ChatConfig二重実装の解消（SQLite版削除・マイグレーション経路は残す）
+- `chat_settings`テーブルはschema.pyに存在しない（CREATE TABLEゼロ）——SQLite版repoはレガシーDB専用の遺物。本番利用者はPhase 3でゼロになった
+- (1) `_get_base_type`をモジュールレベル関数に移動（`ChatConfigFileRepository._migrate_from_sqlite`が参照中: chat_config.py:444）
+- (2) `ChatConfigRepository`クラス削除（chat_config.py:215-402）＋`_TYPE_SQL`削除（:38、SQLite repo内でのみ使用）
+- (3) `_migrate_from_sqlite`は**残す**——既存デプロイのmemory.sqlite→config.json一回限りアップグレード経路。生SQLで読むのでクラス削除と独立
+- (4) schema.pyは触らない（テーブル定義なし確認済み、レガシーDBのテーブルは自然に残る）
+- (5) tests: TestChatConfigRepository/TestChatConfigRepositoryResilience削除。**TestSqliteMigrationは移植**——レガシーテーブルのセットアップをrepoクラスから生SQL（CREATE TABLE+INSERT）に変え、マイグレーション経路のカバレッジ維持
+
+## F3. tool.called二重発行の解消
+- 不変条件: **「MCPツールは自分のイベントを自分で発行する（全パスで）。registryはMCP以外だけ発行する」**
+- MCPツール側は絶対に止めない——直接MCP呼び出し（Claude Desktop等）の唯一の記録経路だから
+- (1) registry.py:95/110の発行条件に`and not self.is_mcp_tool(tool_name)`を追加（2箇所）。builtin/search_toolsはregistry発行のまま
+- (2) 自己発行ゼロの5個のMCPツール（memory_create・memory_update・memory_delete・invoke_skill・update_context）に成功・失敗パスの発行を追加（既存28箇所と同一パターン、session_id付き）
+- (3) result_summaryのregistry側抽出は**やらない**——リッチなsummaryはツール関数が持つ知識
+- activity.jsはレンダリングのみでペア前提なし→フロントエンド変更不要
+- テスト: (a) registryがMCPツール名で発行しない（mock mcp_pool）(b) builtinでは発行する (c) **監査テスト**: 全13 MCPツール関数をmock ctxで成功・失敗パス両方呼び、`tool.called`発行≥1をパラメータ化で強制（不変条件の自動保証・ツール追加時の発行忘れ防止）
+
+## F2. decay()配線（最小実装・floor 0.5の不変条件が命）
+- **最重要不変条件: 永続weight ≥ 0.5**。union読替えは「永続weightが共起0.5を上書き」するため、floor 0.1で減衰すると減衰リンク(0.1)が共起0.5を上書きして**逆に劣化**する。減衰は[0.5, 1.0]区間内の差別化のみ
+- (1) `EntityRepository.decay_stale_links(cutoff_iso, rate, floor=0.5)` — **単一UPDATE文**: `UPDATE memory_links SET weight = MAX(?, weight - ?) WHERE last_activated < ? AND weight > ?`（cutoffはPython側で計算して渡す。N+1禁止）
+- (2) 配線: `DecayWorker._decay_cycle`末尾に1行（per-persona ctx、hourlyサイクルを流用——**別workerは作らない**）
+- (3) パラメータ: idle閾値7日、rate 0.005/cycle（hourly）→1.0→0.5が約11日放置で到達。定数はメソッドデフォルト引数に置く（ハードコード禁止）
+- (4) `MemoryLink.decay()`（dataclass、floor 0.1）は**削除**（テストも）——SQL方式を採るなら再びデッドになる
+- テスト: decay_stale_links単体4本（新規リンク無影響/7日超で-rate/floor 0.5で停止/境界日時）+ workerが呼ぶことの1本
+
+## F1. MemoryContextSnapshot機能の削除（カスケード全体・半端削除禁止）
+#081判断: 消費者は一度も存在せず、context_loader.py:178-277が既に充実した文脈注入を持つため重複。本物のMemoRAGはLLM呼び出しを要する新設計であって「配線」ではない。`SearchEngine._memorag_config`は保存されるだけで一度も読まれない（engine.py:104/113）。
+1. `nous/application/workers/context_snapshot_worker.py`削除＋main.py:204-213の生成ブロック（_workers登録も）
+2. `nous/domain/search/context_snapshot.py`削除
+3. `SearchEngine.__init__`の`memorag_config`引数と`self._memorag_config`（engine.py:104/113）＋use_cases.py:406-415の構築ブロック
+4. `session_config.py:96-101`のmemorag_* 6フィールド——pydantic既定はextra='ignore'なので既存config.jsonの残存キーは読み飛ばされるだけで壊れない
+5. WebUI: chat_sidebar.py（13箇所）・chat-settings.js（12箇所）・chat-core.js（1箇所）のmemoragセクション削除——**UI変更なので実確認必須**（agent-browser不在のためサーバー起動＋HTTPレベル確認で代替: ページレンダリング・memoragセクション不在・他セクション無傷）
+6. settings.py:49-52のMemoragSettings削除（runtime_config/adminには露出なし確認済み）
+7. テスト: test_context_snapshot_worker.py削除
+8. 既存DBの`_global_context`ブロック（memory_blocks内）は**放置**（読まれないだけで無害、クリーンアップSQL不要）
+
+## Phase 4検証コマンド
+```
+.venv\Scripts\python.exe -m pytest tests -x -q
+.venv\Scripts\python.exe -m ruff check nous scripts
+.venv\Scripts\python.exe -m ruff format --check nous scripts tests
+.venv\Scripts\python.exe -m mypy nous
+```
