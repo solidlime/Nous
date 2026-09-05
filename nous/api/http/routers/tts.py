@@ -277,7 +277,7 @@ def register_tts_routes(mcp) -> None:
             return JSONResponse({"ok": False, "error": "text is required"}, status_code=400)
 
         # Optional voice override (body > chat_config.voice_model > global)
-        voice_override = body.get("voice") or (chat_config.voice_model or None)
+        voice_override = _body_str(body, "voice") or (chat_config.voice_model or None)
         if voice_override:
             from nous.infrastructure.voice.irodori import IrodoriEngine
 
@@ -595,7 +595,7 @@ def register_tts_routes(mcp) -> None:
         chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
         irodori_config = _get_irodori_config(ctx, chat_config)
         voice_speed = float(getattr(chat_config, "voice_speed", 1.0) or 1.0)
-        voice_override = body.get("voice") or (chat_config.voice_model or None)
+        voice_override = _body_str(body, "voice") or (chat_config.voice_model or None)
         voice_resolved = voice_override or chat_config.voice_model or ctx.settings.irodori.voice
         emotion, caption, use_override = _resolve_tts_override(body)
         if not use_override:

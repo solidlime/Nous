@@ -154,3 +154,42 @@ async def test_non_string_emotion_coerced(monkeypatch, tmp_path):
     resp = await fn(_req({"text": "hi", "emotion": ["x"]}))
     assert resp.status_code == 200
     assert json.loads(resp.body)["emotion"] == "neutral"
+
+
+def _voice_recording_engine(monkeypatch):
+    import nous.infrastructure.voice.irodori as irodori_mod
+
+    created = []
+
+    class _FakeIrodori:
+        _voice = None
+
+        async def health_check(self):
+            return True
+
+        async def synthesize(self, **kw):
+            return b"RIFF...."
+
+    monkeypatch.setattr(irodori_mod, "IrodoriEngine", _FakeIrodori)
+    monkeypatch.setattr(tts_mod, "get_voice_engine", lambda cfg: created.append(_FakeIrodori()) or created[-1])
+    return created
+
+
+async def test_non_string_voice_uses_default(monkeypatch, tmp_path):
+    # list voiceは欠落扱い → engine._voiceに触れず200（absent時と同一振る舞い）。
+    _fake_ctx(monkeypatch, tmp_path, mode="off", forbid_state=True)
+    created = _voice_recording_engine(monkeypatch)
+    fn = _routes()[("/api/tts/{persona}", ("POST",))]
+    resp = await fn(_req({"text": "hi", "voice": ["x"]}))
+    assert resp.status_code == 200
+    assert created[0]._voice is None
+
+
+async def test_numeric_voice_coerced_to_string(monkeypatch, tmp_path):
+    # 数値voiceはstr化（emotion/captionと同一則）→ 下流に非strが流れない。
+    _fake_ctx(monkeypatch, tmp_path, mode="off", forbid_state=True)
+    created = _voice_recording_engine(monkeypatch)
+    fn = _routes()[("/api/tts/{persona}", ("POST",))]
+    resp = await fn(_req({"text": "hi", "voice": 123}))
+    assert resp.status_code == 200
+    assert created[0]._voice == "123"

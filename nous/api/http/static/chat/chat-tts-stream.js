@@ -116,7 +116,9 @@ function _commonPrefix(a, b) {
   return n;
 }
 function _advance(stream, sens, includeLast) {
-  // #5: advance only over the matching prefix; never resend assigned text.
+  // Positional enqueue over the prefix-verified range [k, end): entries
+  // before k matched doneTexts, so nothing already sent is re-enqueued —
+  // including textually identical repeats, which are distinct positions.
   var k = _commonPrefix(sens, stream.doneTexts);
   if (k > 0 && k < stream.doneTexts.length) {
     // Genuine boundary shift: the tail was superseded (it can never be
@@ -128,9 +130,7 @@ function _advance(stream, sens, includeLast) {
     stream.files.length = k;
   }
   var end = includeLast ? sens.length : sens.length - 1;
-  for (var i = k; i < end; i++) {
-    if (stream.doneTexts.indexOf(sens[i]) === -1) _enqueue(stream, sens[i]);
-  }
+  for (var i = k; i < end; i++) _enqueue(stream, sens[i]);
 }
 T.startStream = function(persona) {
   if (N.Chat.tts && N.Chat.tts._endSession) { try { N.Chat.tts._endSession("stream-start"); } catch (e) {} }
