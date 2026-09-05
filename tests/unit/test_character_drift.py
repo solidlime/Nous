@@ -218,7 +218,7 @@ class TestDriftRecall:
     async def test_injection_includes_valid_drift(self):
         drift = SimpleNamespace(content="私は一人称を誤った", valid_until=get_now() + timedelta(days=1))
         section = await _build_context_section(_make_drift_ctx([drift]), _make_state())
-        assert "内面の違和感" in section
+        assert "前回の反省" in section
         assert "私は一人称を誤った" in section
 
     @pytest.mark.asyncio
@@ -230,4 +230,4 @@ class TestDriftRecall:
     @pytest.mark.asyncio
     async def test_injection_without_drift(self):
         section = await _build_context_section(_make_drift_ctx([]), _make_state())
-        assert "内面の違和感" not in section
+        assert "前回の反省" not in section

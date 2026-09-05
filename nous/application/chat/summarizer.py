@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 _SUMMARIZE_PROMPT = """\
 Summarize the following conversation in 2-3 sentences in {language}.
 Prioritize important information, decisions, and emotional events.
-Write the summary in first person as {persona} (必ず一人称「私は〜」で書くこと)。
+Write the summary in first person as {persona} (そのキャラクター自身の一人称で書くこと)。
 
 [Conversation]
 {conversation}

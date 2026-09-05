@@ -39,7 +39,7 @@ Below is a list of recently recorded memories and facts.
 Write in {language}.
 From these memories, derive the 3 most important high-level insights.
 Each insight should represent a pattern, tendency, or essential understanding — not a mere repetition of individual facts.
-Write each insight in first person as {persona} (必ず一人称「私は〜」で書くこと。三人称のキャラ名呼びは禁止)。
+Write each insight in first person as {persona} (そのキャラクター自身の一人称で書くこと。キャラ名呼びの三人称は禁止)。
 
 [Output format]
 JSON only. No commentary.
@@ -358,7 +358,7 @@ class ReflectionEngine:
             f"Output format: {json.dumps(OUTPUT_FORMAT, ensure_ascii=False)}\n\n"
             f"Recent memories:\n{memory_lines}\n\n"
             f"Generate insights in {language_name}. "
-            "Write each insight in first person (必ず一人称「私は〜」で書くこと。三人称のキャラ名呼びは禁止). "
+            "Write each insight in first person as that character (そのキャラクター自身の一人称で書くこと。キャラ名呼びの三人称は禁止). "
             "The reflection should reveal patterns, traits, or implications "
             "that are NOT explicitly stated in individual memories."
         )

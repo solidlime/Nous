@@ -276,8 +276,6 @@ async def _build_context_section(
                 if valid:
                     latest = _sanitize_text(valid[0].content)
                     if latest:
-                        if not latest.startswith("私"):
-                            latest = "私は" + latest
                         t3.append("前回の反省:\n  ⚠ " + latest)
         except Exception as e:
             logger.debug("Failed to fetch character drift: %s", e)
