@@ -86,6 +86,7 @@ def save_thought(
     if conf < MOT_CONFIDENCE_THRESHOLD:
         return False
     ensure_thoughts_table(db_conn)
+    prune_expired(db_conn)
     db_conn.execute(
         "INSERT INTO mot_thoughts (key, consolidation_key, trace, confidence, created_at) VALUES (?, ?, ?, ?, ?)",
         (key, consolidation_key, trace, conf, created_at or format_iso(get_now())),
