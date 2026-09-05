@@ -32,16 +32,20 @@ class QdrantClientManager:
     async def connect(self) -> AsyncQdrantClient:
         """Lazily connect to Qdrant (thread-safe via asyncio.Lock)."""
         async with self._lock:
-            if self._client is None:
-                from qdrant_client import AsyncQdrantClient
+            return await self._connect_locked()
 
-                self._client = AsyncQdrantClient(
-                    url=self.url,
-                    api_key=self.api_key,
-                    timeout=30,
-                )
-                logger.info("Qdrant client connected to %s", self.url)
-            return self._client
+    async def _connect_locked(self) -> AsyncQdrantClient:
+        """Create the client if absent. Caller must hold _lock (non-reentrant)."""
+        if self._client is None:
+            from qdrant_client import AsyncQdrantClient
+
+            self._client = AsyncQdrantClient(
+                url=self.url,
+                api_key=self.api_key,
+                timeout=30,
+            )
+            logger.info("Qdrant client connected to %s", self.url)
+        return self._client
 
     async def close(self) -> None:
         """Close the Qdrant client connection."""
@@ -70,43 +74,44 @@ class QdrantClientManager:
         new_api_key: str | None = None,
     ) -> dict:
         """Reconnect the client (thread-safe via asyncio.Lock)."""
-        old_client = self._client
-        old_url = self.url
-        old_api_key = self.api_key
+        async with self._lock:
+            old_client = self._client
+            old_url = self.url
+            old_api_key = self.api_key
 
-        if new_url:
-            self.url = new_url
-        if new_api_key is not None:
-            self.api_key = new_api_key
+            if new_url:
+                self.url = new_url
+            if new_api_key is not None:
+                self.api_key = new_api_key
 
-        self._client = None
+            self._client = None
 
-        try:
-            client = await self.connect()
-            collections = await client.get_collections()
-            # Close old client
-            if old_client is not None:
-                with contextlib.suppress(Exception):
-                    await old_client.close()
-            logger.info("Qdrant reconnected to %s", self.url)
-            return {
-                "status": "connected",
-                "url": self.url,
-                "collections": len(collections.collections),
-                "message": f"Connected to {self.url}",
-            }
-        except Exception as e:
-            logger.error("Failed to reconnect to Qdrant: %s", e)
-            # Fallback: restore old client
-            self._client = old_client
-            self.url = old_url
-            self.api_key = old_api_key
-            return {
-                "status": "error",
-                "url": self.url,
-                "collections": 0,
-                "message": f"Reconnect failed, reverted: {e}",
-            }
+            try:
+                client = await self._connect_locked()
+                collections = await client.get_collections()
+                # Close old client
+                if old_client is not None:
+                    with contextlib.suppress(Exception):
+                        await old_client.close()
+                logger.info("Qdrant reconnected to %s", self.url)
+                return {
+                    "status": "connected",
+                    "url": self.url,
+                    "collections": len(collections.collections),
+                    "message": f"Connected to {self.url}",
+                }
+            except Exception as e:
+                logger.error("Failed to reconnect to Qdrant: %s", e)
+                # Fallback: restore old client
+                self._client = old_client
+                self.url = old_url
+                self.api_key = old_api_key
+                return {
+                    "status": "error",
+                    "url": self.url,
+                    "collections": 0,
+                    "message": f"Reconnect failed, reverted: {e}",
+                }
 
     async def get_connection_status(self) -> dict:
         """Return connection status."""
