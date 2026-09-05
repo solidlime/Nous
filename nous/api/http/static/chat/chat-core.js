@@ -434,20 +434,29 @@ function chatInputInputHandler() {
 // ------------------------------------------------------------------
 async function loadChatCommitments() {
   if (!S.persona) return;
+  // Registered by chat-memory-panel.js. Skip quietly (no error toast) when
+  // the panel script failed to load — a missing panel is not a data failure.
+  var mp = N.Chat.memoryPanel;
+  if (!mp || (typeof mp.update !== "function" && typeof mp.updateReflection !== "function")) {
+    console.warn("[loadChatCommitments] memoryPanel not registered; skipping");
+    return;
+  }
   try {
     const data = await api(
       "/api/chat/" + encodeURIComponent(S.persona) + "/commitments",
     );
-    if (Array.isArray(data.goals)) {
-      N.Chat.memoryPanel.update(undefined, undefined, data.goals);
+    if (Array.isArray(data.goals) && typeof mp.update === "function") {
+      mp.update(undefined, undefined, data.goals);
     }
-    if (data.insights && data.insights.length > 0) {
-      N.Chat.memoryPanel.updateReflection(data.insights);
+    if (data.insights && data.insights.length > 0 && typeof mp.updateReflection === "function") {
+      mp.updateReflection(data.insights);
     }
   } catch (e) {
     console.error("[loadChatCommitments] failed:", e);
     toast("リフレクション読込失敗: " + e.message, "error");
-    N.Chat.memoryPanel.updateReflection([]);
+    if (typeof mp.updateReflection === "function") {
+      try { mp.updateReflection([]); } catch (_) {}
+    }
   }
 }
 

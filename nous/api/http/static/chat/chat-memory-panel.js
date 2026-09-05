@@ -7,10 +7,11 @@ var C = N.Core;
 var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var showConfirm = C.showConfirm, showAlert = C.showAlert;
 var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
-var renderEmotionBadges = N.Components.memoryCard.renderEmotionBadges;
-var renderBodyStateCompact = N.Components.memoryCard.renderBodyStateCompact;
 "use strict";
 var S = window.S;
+// Namespace first: the delegation block below reads N.Chat.memoryPanel,
+// and the expose block uses Object.assign so a double-load keeps _delegated.
+N.Chat.memoryPanel = N.Chat.memoryPanel || {};
 
 // ------------------------------------------------------------------
 // Memory panel update (retrieved / saved / goals)
@@ -323,13 +324,13 @@ if (typeof document !== "undefined" && !N.Chat.memoryPanel._delegated) {
 // ------------------------------------------------------------------
 // Expose on N.Chat.memoryPanel
 // ------------------------------------------------------------------
-N.Chat.memoryPanel = {
+Object.assign(N.Chat.memoryPanel, {
   update: updateMemoryPanel,
   updateReflection: updateReflectionPanel,
   sessionSummarized: showSessionSummarized,
   contextCompressed: showContextCompressed,
   deleteCard: deleteMemCard,
   completeGoal: completeGoal,
-};
+});
 
 })(window.Nous);

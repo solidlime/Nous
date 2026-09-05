@@ -14,6 +14,13 @@ var S = window.S;
 var CHAT = N.Chat.state;
 var _memoryActivityTimer = null;
 
+// memoryPanel is registered by chat-memory-panel.js; noop when absent
+// (e.g. panel script failed to load) so streaming never crashes on it.
+function _mem(fn) {
+  var mp = (N.Chat && N.Chat.memoryPanel) || {};
+  return typeof mp[fn] === "function" ? mp[fn].bind(mp) : function () {};
+}
+
 // ------------------------------------------------------------------
 // Append a chat message to the DOM
 // ------------------------------------------------------------------
@@ -582,9 +589,9 @@ async function chatSend(retry) {
           statusEl.textContent = "応答中...";
         } else if (evt.type === "memory_activity") {
           if (evt.preliminary) {
-            N.Chat.memoryPanel.update(evt.retrieved, undefined, undefined, undefined);
+            _mem("update")(evt.retrieved, undefined, undefined, undefined);
           } else {
-            N.Chat.memoryPanel.update(evt.retrieved, evt.saved, evt.goals, evt.promises);
+            _mem("update")(evt.retrieved, evt.saved, evt.goals, evt.promises);
           }
           if (_memoryActivityTimer) clearTimeout(_memoryActivityTimer);
           _memoryActivityTimer = setTimeout(function() { N.Chat.core.loadCommitments(); }, 500);
@@ -601,9 +608,9 @@ async function chatSend(retry) {
         } else if (evt.type === "character_flag") {
           N.Chat.showCharacterFlag(assistantDiv, evt.violation, evt.detail);
         } else if (evt.type === "session_summarized") {
-          N.Chat.memoryPanel.sessionSummarized(evt.summary);
+          _mem("sessionSummarized")(evt.summary);
         } else if (evt.type === "context_compressed") {
-          N.Chat.memoryPanel.contextCompressed(evt);
+          _mem("contextCompressed")(evt);
         } else if (evt.type === "image_gen_start") {
           N.Chat.tools.showGenSpinner(evt);
         } else if (evt.type === "image_gen_result") {
