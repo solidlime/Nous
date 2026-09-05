@@ -221,6 +221,7 @@ function _createAssistantDiv() {
   div.appendChild(actions);
   container.appendChild(div);
   N.Core.refreshIcons();
+  if (window.Nous && Nous.Chat.ttsStream && Nous.Chat.ttsStream.startStream && document.getElementById("chat-voice-streaming")?.checked) { try { Nous.Chat.ttsStream.startStream(S.persona); } catch (_e) {} }
   return div;
 }
 
@@ -487,6 +488,7 @@ async function chatSend(retry) {
             contentParts.push({ type: "text", bubble: currentTextBubble, content: "" });
           }
           currentTextContent += evt.content;
+          if (window.Nous && Nous.Chat.ttsStream && Nous.Chat.ttsStream.onDelta && document.getElementById("chat-voice-streaming")?.checked) { try { Nous.Chat.ttsStream.onDelta(currentTextContent); } catch (_e) {} }
           contentParts[contentParts.length - 1].content = currentTextContent;
 
           // rAF-batched DOM update
@@ -638,8 +640,15 @@ async function chatSend(retry) {
           }
           // TE04: Auto-play TTS for all text
           var voiceAutoPlay = document.getElementById("chat-voice-auto-play");
+          var voiceStreaming = document.getElementById("chat-voice-streaming");
           if (voiceAutoPlay && voiceAutoPlay.checked && allText.trim()) {
-            N.Chat.tts.autoPlay(allText.trim());
+            if (voiceStreaming && voiceStreaming.checked && Nous.Chat.ttsStream && Nous.Chat.ttsStream.finish) {
+              var _msgEls = document.querySelectorAll("#chat-messages .chat-msg");
+              var _msgEl = _msgEls.length ? _msgEls[_msgEls.length - 1] : null;
+              Nous.Chat.ttsStream.finish(allText.trim(), _msgEl);
+            } else {
+              N.Chat.tts.autoPlay(allText.trim());
+            }
           }
           // Clean up: remove assistant div if it has no content (text, tools, or thinking)
           if (assistantDiv) {

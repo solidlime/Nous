@@ -232,6 +232,7 @@ def _render_voice_section() -> str:
                                             style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
                                         <label for="chat-voice-auto-play" class="chat-field-label" style="margin:0;cursor:pointer;">応答を自動再生</label>
                                     </div>
+                                    <label style="display:flex;gap:6px;align-items:center;font-size:0.8rem;"><input type="checkbox" id="chat-voice-streaming" checked /> 文ごと逐次再生（ストリーミング）</label>
                                     <!-- Voice volume -->
                                     <div>
                                         <div style="display:flex;justify-content:space-between;">

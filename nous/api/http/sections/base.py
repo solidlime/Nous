@@ -67,6 +67,7 @@ def render_head() -> str:
     <script src="/static/chat/chat-commands.js" defer></script>
     <script src="/static/chat/chat-attachments.js" defer></script>
     <script src="/static/chat/chat-tts.js" defer></script>
+    <script src="/static/chat/chat-tts-stream.js" defer></script>
     <script src="/static/chat/chat-voice.js" defer></script>
     <!-- Feature page scripts (defer so N.Core is available) -->
     <script src="/static/features/overview/overview-blocks.js" defer></script>
