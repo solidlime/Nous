@@ -70,3 +70,8 @@ CMD ["python", "-m", "nous.main"]
 # - Development tip: place environment overrides in a top-level `.env` (or use Compose `env_file:`)
 #   and add to `.gitignore` to avoid checking secrets into git.
 # - `docker-compose.yml` has an `env_file:` line so `.env` values will be injected into the container.
+# - pip is uninstalled to slim the image; the SBOM is requirements-prod.txt (pinned).
+#   Regenerate it with `pip freeze` from a builder-stage container when auditing.
+# - Runtime USER is intentionally left as root: /data is a host-mounted volume with
+#   unpredictable ownership. Switching to `USER nous` needs `chown` of /app + /data
+#   first — separate arch decision, do not change blindly.

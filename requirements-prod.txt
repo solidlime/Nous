@@ -5,42 +5,44 @@
 # 開発/テスト用依存は requirements-dev.txt を参照。
 
 # Embedding & Reranker (ONNX Runtime — PyTorch-free)
-onnxruntime>=1.18.0
-tokenizers>=0.21.0
-huggingface_hub>=0.20
-sentencepiece>=0.1.99  # Required for cl-nagoya/ruri-v3-30m tokenizer
+onnxruntime>=1.18.0,<2
+tokenizers>=0.21.0,<1
+huggingface_hub>=0.20,<2
+sentencepiece>=0.1.99,<1  # Required for cl-nagoya/ruri-v3-30m tokenizer
 
 # MCP Server Framework (mcp>=2: v2 MCPServer API. FastMCP renamed to MCPServer)
+# NOTE: server code imports `mcp` (MCPServer) only; `fastmcp` is kept for
+# external MCP client compat — do not dedupe without an arch decision.
 mcp>=2.0.0,<3
-fastmcp>=3.4.4
-fastapi>=0.139.0
-uvicorn>=0.51.0
+fastmcp>=3.4.4,<4
+fastapi>=0.139.0,<1
+uvicorn>=0.51.0,<1
 
 # Async SQLite
-aiosqlite>=0.22.1
+aiosqlite>=0.22.1,<1
 
 # Data Validation & Settings
 pydantic>=2.0.0,<3.0.0
-pydantic-settings>=2.0.0
+pydantic-settings>=2.0.0,<3
 
 # Timezone database (required on Windows — no system tzdb; ignored on Linux)
-tzdata>=2024.1
+tzdata>=2024.1,<2030
 
 # Vector Store
-qdrant-client>=1.8.2
+qdrant-client>=1.8.2,<2
 
 # Numerical
-numpy>=1.24.0
+numpy>=1.24.0,<3
 
 # LLM Providers (Chat feature — all connections via OpenAI-compatible API)
-openai>=1.50.0
+openai>=1.50.0,<3
 
 
 # Japanese NER (entity extraction)
 # sudachidict_core is no longer installed via pip — downloaded at runtime to NOUS_DATA_ROOT/sudachi/
-sudachipy>=0.6.0
+sudachipy>=0.6.0,<1
 
 # PDF/Document Parsing (read_pdf tool)
-PyMuPDF>=1.24.0
-pdfplumber>=0.11.0
-pytesseract>=0.3.10
+PyMuPDF>=1.24.0,<2
+pdfplumber>=0.11.0,<1
+pytesseract>=0.3.10,<1
