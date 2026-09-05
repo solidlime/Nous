@@ -68,12 +68,17 @@ def _is_vision_model(model: str) -> bool:
 
     Known non-vision models (gpt-3.5) return False.
     Known vision models (gpt-4o, gpt-4-turbo, o1, etc.) return True.
+    DeepSeek models return True only if 'vision' is in the name
+    (deepseek-v4-flash is text-only).
     All other models default to True (safe side — API errors are visible).
     """
+    lowered = model.lower()
     if model.startswith(_NON_VISION_MODEL_PREFIXES):
         return False
     if model.startswith(_VISION_MODEL_PREFIXES):
         return True
+    if lowered.startswith("deepseek"):
+        return "vision" in lowered
     # Unknown model / OpenRouter: default to True (safe side)
     return True
 
@@ -133,6 +138,17 @@ class OpenAICompatProvider(LLMProvider):
                     }
                 )
             elif msg.role == "user" and msg.content_parts:
+                # Defense-in-depth: text-only models reject image_url with 400.
+                # Strip non-text parts when the model is not vision-capable.
+                if not self.supports_vision():
+                    texts = [p.get("text", "") for p in msg.content_parts if p.get("type") == "text" and p.get("text")]
+                    fallback = "\n".join(texts) if texts else (content or "")
+                    logger.info(
+                        "OpenAICompatProvider: stripping non-text content_parts for text-only model %s",
+                        self.model,
+                    )
+                    result.append({"role": "user", "content": fallback})
+                    continue
                 # Use rich content parts (text + images) for multimodal
                 logger.info(
                     "OpenAICompatProvider: using content_parts with %d parts for user message (types: %s)",

@@ -417,24 +417,40 @@ class InferenceStep:
                                 )
 
             if image_parts:
-                logger.info(
-                    "InferenceStep: injecting %d image content_parts into user message (types: %s)",
-                    len(image_parts),
-                    [p.get("type", "?") for p in image_parts],
-                )
-                messages.append(
-                    LLMMessage(
-                        role="user",
-                        content="The tool execution produced image(s). Please analyze:",
-                        content_parts=[
-                            {
-                                "type": "text",
-                                "text": "The previous tool execution produced the following image(s). Please analyze them carefully.",
-                            },
-                            *image_parts,
-                        ],
+                if not provider.supports_vision():
+                    logger.info(
+                        "InferenceStep: omitting %d image(s) for text-only model",
+                        len(image_parts),
                     )
-                )
+                    messages.append(
+                        LLMMessage(
+                            role="user",
+                            content=(
+                                f"The previous tool execution produced {len(image_parts)} image(s), "
+                                "but the current model does not support vision. "
+                                "Continuing text-only."
+                            ),
+                        )
+                    )
+                else:
+                    logger.info(
+                        "InferenceStep: injecting %d image content_parts into user message (types: %s)",
+                        len(image_parts),
+                        [p.get("type", "?") for p in image_parts],
+                    )
+                    messages.append(
+                        LLMMessage(
+                            role="user",
+                            content="The tool execution produced image(s). Please analyze:",
+                            content_parts=[
+                                {
+                                    "type": "text",
+                                    "text": "The previous tool execution produced the following image(s). Please analyze them carefully.",
+                                },
+                                *image_parts,
+                            ],
+                        )
+                    )
             else:
                 logger.debug(
                     "InferenceStep: no image data found in %d tool calls",
