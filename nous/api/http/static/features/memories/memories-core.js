@@ -116,8 +116,8 @@ async function loadMemories(page) {
             blocksListHtml += '<span style="font-weight:600;color:var(--accent-purple);font-size:0.85rem">' + esc(name) + '</span>';
             if (priority != null) blocksListHtml += '<span class="badge badge-yellow">P' + esc(String(priority)) + '</span>';
             blocksListHtml += '<div style="display:flex;gap:6px;margin-left:auto">';
-            blocksListHtml += '<button class="glass-btn" data-bname="' + esc(name) + '" data-bcontent="' + esc(content) + '" data-bpriority="' + (priority||0) + '" onclick="var el=this;N.Features.Overview.showEditBlock(el.dataset.bname,el.dataset.bcontent,parseInt(el.dataset.bpriority||0))" style="padding:3px 10px;font-size:0.75rem"><i data-lucide="pencil"></i> Edit</button>';
-            blocksListHtml += '<button class="glass-btn" data-bname="' + esc(name) + '" onclick="N.Features.Overview.deleteBlock(this.dataset.bname)" style="padding:3px 10px;font-size:0.75rem;color:var(--accent-red)"><i data-lucide="trash-2"></i> Delete</button>';
+            blocksListHtml += '<button type="button" class="glass-btn" data-block-action="edit" data-bname="' + esc(name) + '" data-bcontent="' + esc(content) + '" data-bpriority="' + (priority||0) + '"><i data-lucide="pencil"></i> Edit</button>';
+            blocksListHtml += '<button type="button" class="glass-btn" data-block-action="delete" data-bname="' + esc(name) + '"><i data-lucide="trash-2"></i> Delete</button>';
             blocksListHtml += '</div></div>';
             if (content) blocksListHtml += '<div style="font-size:0.82rem;color:var(--text-muted)">' + esc(truncate(String(content), 80)) + '</div>';
             blocksListHtml += '</div>';
@@ -155,7 +155,7 @@ async function loadMemories(page) {
 
     // Core Memory Blocks
     dashboardHtml += '<div class="glass glass-hoverable p-6 mb-6">';
-    dashboardHtml += '<div class="card-title" style="justify-content:space-between"><span>&#129504; Core Memory Blocks</span><button onclick="N.Features.Overview.showCreateBlock()" class="glass-btn" style="padding:4px 12px;font-size:0.78rem"><i data-lucide="plus"></i> New Block</button></div>';
+    dashboardHtml += '<div class="card-title"><span>🧠 Core Memory Blocks</span><button type="button" class="glass-btn" data-block-action="create"><i data-lucide="plus"></i> New Block</button></div>';
     dashboardHtml += blocksListHtml;
     dashboardHtml += '</div>';
 
@@ -219,7 +219,7 @@ async function loadMemories(page) {
                 options:{...N.Components.chart.defaults(),cutout:'60%'}
             });
         } else if (tgCtx) {
-            tgCtx.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-muted);font-size:0.85rem;">No tags yet</div>';
+            safeSetHTML(tgCtx.parentElement, '<div>No tags yet</div>');
         }
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }, 100);
@@ -447,4 +447,22 @@ Object.assign(N.Features.Memories, {
     loadMemories: loadMemories,
     bindMemoryEvents: bindMemoryEvents,
 });
+
+/* CSP-safe delegation for Core Memory Block buttons (no inline onclick) */
+if (typeof document !== "undefined" && !bindMemoryEvents._blockDelegated) {
+    bindMemoryEvents._blockDelegated = true;
+    document.addEventListener("click", function (e) {
+        var btn = e.target && e.target.closest ? e.target.closest("[data-block-action]") : null;
+        if (!btn) return;
+        var action = btn.getAttribute("data-block-action");
+        var Ov = window.Nous && window.Nous.Features && window.Nous.Features.Overview;
+        if (!Ov) return;
+        if (action === "create" && typeof Ov.showCreateBlock === "function") Ov.showCreateBlock();
+        else if (action === "edit" && typeof Ov.showEditBlock === "function") {
+            Ov.showEditBlock(btn.dataset.bname, btn.dataset.bcontent, parseInt(btn.dataset.bpriority || "0", 10));
+        } else if (action === "delete" && typeof Ov.deleteBlock === "function") {
+            Ov.deleteBlock(btn.dataset.bname);
+        }
+    });
+}
 })();

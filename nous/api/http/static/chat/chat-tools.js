@@ -230,9 +230,9 @@ function showImageGenResult(evt) {
     if (portraitEl) {
       var imgUrl = evt.images[0].url || ("data:image/png;base64," + (evt.images[0].base64 || ""));
       portraitEl.style.display = 'block';
-      safeSetHTML(portraitEl, '<div class="glass p-4" style="text-align:center;max-width:400px;margin:0 auto 16px">'
-          + '<img src="' + esc(imgUrl) + '" alt="自画像" style="max-width:100%;max-height:300px;border-radius:8px;cursor:pointer" onclick="N.Chat.attachments.openViewer(\'' + esc(imgUrl) + '\',\'image\')">'
-          + '<div style="margin-top:6px;font-size:0.75rem;color:var(--text-muted)">最新の自画像</div>'
+      safeSetHTML(portraitEl, '<div class="glass p-4">'
+          + '<img src="' + esc(imgUrl) + '" alt="自画像" data-tool-viewer="1" data-url="' + esc(imgUrl) + '">'
+          + '<div>最新の自画像</div>'
           + '</div>');
     }
   }
@@ -390,5 +390,17 @@ N.Chat.tools = {
   fetch: fetchMcpTools,
   toggle: toggleTool,
 };
+
+/* CSP-safe delegation: tool portrait viewer (no inline onclick) */
+if (typeof document !== "undefined" && !showImageGenResult._delegated) {
+  showImageGenResult._delegated = true;
+  document.addEventListener("click", function (e) {
+    var img = e.target && e.target.closest ? e.target.closest("[data-tool-viewer]") : null;
+    if (!img) return;
+    if (N.Chat.attachments && typeof N.Chat.attachments.openViewer === "function") {
+      N.Chat.attachments.openViewer(img.getAttribute("data-url"), "image");
+    }
+  });
+}
 
 })(window.Nous);

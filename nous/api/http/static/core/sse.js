@@ -15,6 +15,11 @@ function _setSseStatus(state) {
 
 N.Core.connectSSE = function connectSSE(persona) {
   _setSseStatus("connecting");
+  // Single-flight: cancel any pending reconnect timer before (re)connecting
+  if (N.Core._sseTimer) {
+    clearTimeout(N.Core._sseTimer);
+    N.Core._sseTimer = null;
+  }
   // Clean up old SSE
   if (N.Core._sse) {
     try {
@@ -25,10 +30,12 @@ N.Core.connectSSE = function connectSSE(persona) {
         });
       }
       N.Core._sse.onerror = null;
+      N.Core._sse.onopen = null;
       N.Core._sse.close();
     } catch (e) {
       console.warn("[SSE] close failed:", e.message);
     }
+    N.Core._sse = null;
   }
   N.Core._sseBackoff = 5000;
   var es = new EventSource(
@@ -136,16 +143,32 @@ N.Core.connectSSE = function connectSSE(persona) {
   };
 
   es.onerror = function handleSSEError() {
-    N.Core._sse = null;
+    try { es.close(); } catch (_) {}
+    if (N.Core._sse === es) N.Core._sse = null;
     _setSseStatus("reconnecting");
     var backoff = N.Core._sseBackoff || 5000;
     N.Core._sseBackoff = Math.min(backoff * 2, 60000);
-    setTimeout(function() {
+    /* Single-flight reconnect: exactly one pending timer, id stored for cancel */
+    if (N.Core._sseTimer) clearTimeout(N.Core._sseTimer);
+    N.Core._sseTimer = setTimeout(function() {
+      N.Core._sseTimer = null;
       var p = N.Core.store ? N.Core.store.get("persona") : null;
       if (p) N.Core.connectSSE(p);
     }, backoff);
   };
   N.Core._sse = es;
+};
+
+/* Tear down SSE + cancel any pending reconnect (page hide / unload) */
+N.Core.disconnectSSE = function disconnectSSE() {
+  if (N.Core._sseTimer) {
+    clearTimeout(N.Core._sseTimer);
+    N.Core._sseTimer = null;
+  }
+  if (N.Core._sse) {
+    try { N.Core._sse.close(); } catch (_) {}
+    N.Core._sse = null;
+  }
 };
 
 /* Memories tab debounced refresh — called from memory SSE handlers */

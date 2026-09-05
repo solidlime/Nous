@@ -23,8 +23,8 @@ describe('N.Core.esc', () => {
     expect(N.esc('say "hello"')).toBe('say &quot;hello&quot;');
   });
 
-  it('does not escape single quote (textContent→innerHTML behavior)', () => {
-    expect(N.esc("it's fine")).toBe("it's fine");
+  it('escapes single quote (CSP/attr-safe)', () => {
+    expect(N.esc("it's fine")).toBe("it&#39;s fine");
   });
 
   it('handles null', () => {

@@ -88,17 +88,20 @@ function skeletonList(n) {
   return html;
 }
 
-/* ── Error card with retry support ── */
+/* ── Error card with retry support (CSP-safe: delegation, no inline onclick) ── */
+var _retrySeq = 0;
+var _retryRegistry = {};
 function errorCard(message, retryFn) {
   var html =
-    '<div class="glass p-6 text-center" style="color:var(--accent-red)"><p style="font-size:1.2rem;margin-bottom:8px"><i data-lucide="alert-triangle"></i></p><p>' +
+    '<div class="glass p-6 text-center skeleton-error-card"><p><i data-lucide="alert-triangle"></i></p><p>' +
     C.esc(message || "") +
     "</p>";
   if (typeof retryFn === "function") {
+    _retrySeq += 1;
+    var rid = "retry-" + _retrySeq + "-" + Date.now().toString(36);
+    _retryRegistry[rid] = retryFn;
     html +=
-      '<button class="glass-btn" style="margin-top:12px" onclick="(' +
-      retryFn.toString() +
-      ')()"><i data-lucide="refresh-cw"></i> Retry</button>';
+      '<button type="button" class="glass-btn" data-skeleton-retry="' + rid + '"><i data-lucide="refresh-cw"></i> Retry</button>';
   }
   html += "</div>";
   return html;
@@ -121,6 +124,20 @@ function emptyState(icon, title, description) {
       : "") +
     "</div>"
   );
+}
+
+/* ── Export ── */
+if (typeof document !== "undefined" && !show._delegated) {
+  show._delegated = true;
+  document.addEventListener("click", function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest("[data-skeleton-retry]") : null;
+    if (!btn) return;
+    var rid = btn.getAttribute("data-skeleton-retry");
+    var fn = rid && _retryRegistry[rid];
+    if (typeof fn === "function") {
+      try { fn(); } finally { delete _retryRegistry[rid]; }
+    }
+  });
 }
 
 /* ── Export ── */

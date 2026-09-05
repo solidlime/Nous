@@ -46,6 +46,22 @@ async function doAutoSave(cat, key, inputId, value) {
     var input = document.getElementById(inputId);
     if (!statusEl) return;
 
+    /* Q9: masked secrets (e.g. general.api_key) — never resend mask placeholders */
+    if (input && input.dataset && input.dataset.masked === 'true') {
+        if (value === '***' || (typeof value === 'string' && value.indexOf('•') !== -1)) {
+            statusEl.className = 'setting-status status-saved visible';
+            safeSetHTML(statusEl, '• kept');
+            setTimeout(function() { statusEl.classList.remove('visible'); }, 2000);
+            return;
+        }
+        if (typeof value === 'string' && value !== '' && value.length < 16) {
+            statusEl.className = 'setting-status status-error visible';
+            safeSetHTML(statusEl, 'min 16 chars');
+            setTimeout(function() { statusEl.classList.remove('visible'); }, 3000);
+            return;
+        }
+    }
+
     /* Show saving state */
     statusEl.className = 'setting-status status-saving visible';
     safeSetHTML(statusEl, '<span class="setting-spinner"></span> Saving...');

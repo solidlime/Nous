@@ -116,7 +116,8 @@ N.Core.updateLastTime = updateLastTime;
    PAGE CLEANUP (beforeunload)
    ================================================================= */
 window.addEventListener("beforeunload", function cleanupBeforeUnload() {
-  if (C._sse) {
+  if (C.disconnectSSE) C.disconnectSSE();
+  else if (C._sse) {
     C._sse.close();
     C._sse = null;
   }
@@ -407,17 +408,25 @@ async function init() {
    ================================================================= */
 /* animateCards exported as N.Core.animateCards for settings-form.js */
 function animateCards(container) {
-  if (!container) return;
+  if (!container || !container.isConnected) return;
+  /* Cancel any in-flight animation on this container before restarting */
+  var pending = animateCards._timers && animateCards._timers.get(container);
+  if (pending) pending.forEach(function (t) { clearTimeout(t); });
+  var timers = [];
   const cards = container.querySelectorAll(".glass");
   cards.forEach(function (card, i) {
     card.style.opacity = "0";
     card.style.transform = "translateY(16px)";
-    setTimeout(function () {
+    timers.push(setTimeout(function () {
+      /* Skip if container was hidden/removed mid-animation */
+      if (!container.isConnected || container.offsetParent === null && container.style.display === "none") return;
       card.style.transition = "opacity 0.4s ease, transform 0.4s ease";
       card.style.opacity = "1";
       card.style.transform = "translateY(0)";
-    }, i * 60);
+    }, i * 60));
   });
+  if (!animateCards._timers) animateCards._timers = new WeakMap();
+  animateCards._timers.set(container, timers);
 }
 N.Core.animateCards = animateCards;
 

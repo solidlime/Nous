@@ -4,10 +4,10 @@
 ;(function(N) {
 
 N.Core.esc = function esc(s) {
-  if (!s) return "";
+  if (s === null || s === undefined) return "";
   var d = document.createElement("div");
   d.textContent = String(s);
-  return d.innerHTML.replace(/"/g, "&quot;");
+  return d.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 };
 
 N.Core.truncate = function truncate(s, n) {
@@ -16,6 +16,7 @@ N.Core.truncate = function truncate(s, n) {
 
 var _iconRefreshPending = false;
 N.Core.refreshIcons = function() {
+  if (typeof lucide === "undefined" || !lucide.createIcons) return;
   if (_iconRefreshPending) return;
   _iconRefreshPending = true;
   requestAnimationFrame(function() {
@@ -25,10 +26,13 @@ N.Core.refreshIcons = function() {
 };
 
 /**
- * Safely set innerHTML via DOMPurify.
+ * Safely set innerHTML via DOMPurify (CSP-safe: no inline handlers allowed).
+ * script-src 'self' forbids inline onclick/onchange — use delegation + data-*.
  * Falls back to textContent if DOMPurify is unavailable.
  */
 N.Core.safeSetHTML = function safeSetHTML(element, html) {
+  if (!element) return;
+  if (typeof html !== "string") html = String(html == null ? "" : html);
   if (typeof DOMPurify !== "undefined") {
     element.innerHTML = DOMPurify.sanitize(html, {
       ALLOWED_TAGS: [
@@ -41,13 +45,13 @@ N.Core.safeSetHTML = function safeSetHTML(element, html) {
       ],
       ALLOWED_ATTR: [
         "class","id","href","src","alt","title","target","rel","data-*",
-        "style","width","height","viewBox","fill","stroke","stroke-width",
+        "width","height","viewBox","fill","stroke","stroke-width",
         "d","cx","cy","r","x","y","x1","y1","x2","y2","points","transform",
         "aria-*","role","type","value","placeholder","checked","disabled",
         "selected","for","name","required","min","max","step","pattern",
         "autocomplete","rows","cols","readonly","tabindex",
-        "onclick","onchange",
       ],
+      FORBID_ATTR: ["style", "onclick", "onchange", "onerror", "onload", "oninput", "onmouseover", "onfocus"],
     });
   } else {
     element.textContent = html;

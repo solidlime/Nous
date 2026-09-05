@@ -6,8 +6,15 @@
 var safeSetHTML = N.Core.safeSetHTML;
 
 N.Core.applyTheme = function applyTheme() {
-  var dark = localStorage.getItem("mmcp-dark") !== "false";
-  document.documentElement.className = dark ? "dark" : "light";
+  var dark = true;
+  try { dark = localStorage.getItem("mmcp-dark") !== "false"; } catch (_) {}
+  /* classList.toggle preserves non-theme classes on <html> (no wipe) */
+  if (document.documentElement.classList) {
+    document.documentElement.classList.toggle("dark", dark);
+    document.documentElement.classList.toggle("light", !dark);
+  } else {
+    document.documentElement.className = dark ? "dark" : "light";
+  }
   var toggleEl = document.getElementById("dark-toggle");
   if (toggleEl) {
     safeSetHTML(toggleEl, dark

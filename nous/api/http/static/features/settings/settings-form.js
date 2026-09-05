@@ -33,12 +33,12 @@ function renderSettings(el, settings, status) {
     html += '<div id="profiles-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>';
     html += '</div>';
 
-    /* ── Search bar ── */
-    html += '<div class="glass p-4 mb-6" style="position:sticky;top:120px;z-index:30">';
-    html += '<div style="position:relative">';
-    html += '<span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:0.9rem"><i data-lucide="search"></i></span>';
-    html += '<input id="settings-search" type="text" class="glass-input" placeholder="Search settings..." style="width:100%;padding-left:38px;padding-right:36px;font-size:0.9rem" oninput="N.Features.Settings.filterSettings(this.value)">';
-    html += '<button id="settings-search-clear" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.85rem;display:none" onclick="document.getElementById(\'settings-search\');N.Features.Settings.filterSettings(\'\')"><i data-lucide="x"></i></button>';
+    /* ── Search bar (classes in components.css — no inline style: stripped by sanitizer) ── */
+    html += '<div class="glass p-4 mb-6 settings-search-card">';
+    html += '<div class="settings-search-wrap">';
+    html += '<span class="settings-search-icon"><i data-lucide="search"></i></span>';
+    html += '<input id="settings-search" type="text" class="glass-input" placeholder="Search settings...">';
+    html += '<button type="button" id="settings-search-clear"><i data-lucide="x"></i></button>';
     html += '</div>';
     html += '</div>';
 
@@ -106,8 +106,16 @@ function renderSettings(el, settings, status) {
         html += statusHtml;
         html += '<div id="cat-body-' + cat + '" class="cat-body">';
 
-        /* ── Fields ── */
-        Object.entries(fields).forEach(function(entry) {
+        /* ── Fields (Q9: general.api_key renders first — display order only) ── */
+        var fieldEntries = Object.entries(fields);
+        if (cat === 'general') {
+            fieldEntries.sort(function(a, b) {
+                if (a[0] === 'api_key') return -1;
+                if (b[0] === 'api_key') return 1;
+                return 0;
+            });
+        }
+        fieldEntries.forEach(function(entry) {
             var key = entry[0], meta = entry[1];
             if (typeof meta !== 'object' || meta === null) return;
             var val = meta.value != null ? meta.value : '';
@@ -141,9 +149,8 @@ function renderSettings(el, settings, status) {
             var autosaveAttr = hot ? ' data-autosave="true"' : '';
             if (isMasked) {
                 /* ── Password / masked field with toggle ── */
-                var displayVal = isMasked && val === '***' ? '••••••••' : String(val);
                 html += '<div style="flex:1;min-width:160px;position:relative;display:flex;align-items:center">';
-                html += '<input id="' + inputId + '" type="password" class="glass-input" style="flex:1;padding-right:36px" value="' + esc(String(val)) + '" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '" data-masked="true"' + autosaveAttr + ' placeholder="' + (val === '***' ? '•••••••• (set via env/override)' : 'Enter value...') + '">';
+                html += '<input id="' + inputId + '" type="password" class="glass-input" value="" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '" data-masked="true"' + autosaveAttr + ' placeholder="' + (isMasked ? 'stored: 16+ chars to change, clear to restore open access' : 'Enter value...') + '">';
                 html += '<button class="pw-toggle-btn" data-input="' + inputId + '" style="position:absolute;right:8px;background:none;border:none;color:var(--text-muted);cursor:pointer;padding:2px;font-size:0.8rem" title="Show/hide"><i data-lucide="eye"></i></button>';
                 html += '</div>';
             } else if (key === 'log_level') {
@@ -211,6 +218,12 @@ function renderSettings(el, settings, status) {
     /* Save profile button */
     var saveProfileBtn = document.getElementById('save-profile-btn');
     if (saveProfileBtn) saveProfileBtn.onclick = N.Features.Settings.saveSettingsProfile;
+
+    /* Search input (CSP-safe: bound here, no inline oninput) */
+    var searchInput = document.getElementById('settings-search');
+    if (searchInput) searchInput.addEventListener('input', function() {
+        N.Features.Settings.filterSettings(this.value);
+    });
 
     /* Search clear button */
     var searchClearBtn = document.getElementById('settings-search-clear');
@@ -401,6 +414,16 @@ function renderSettings(el, settings, status) {
                 var meta = S.settingsData && S.settingsData[cat] && S.settingsData[cat][key];
                 if (!meta) return;
                 var value = this.value;
+                /* Q9: masked secrets — never resend mask placeholders, enforce min length */
+                if (this.dataset.masked === 'true') {
+                    if (value === '***' || value.indexOf('•') !== -1) return;
+                    if (value !== '' && value.length < 16) {
+                        var errEl = this.closest('.setting-row').querySelector('.setting-validation-error');
+                        this.style.borderColor = 'var(--accent-red)';
+                        if (errEl) { errEl.textContent = 'Minimum 16 characters (empty clears the key).'; errEl.style.display = 'block'; }
+                        return;
+                    }
+                }
                 if (this.tagName === 'SELECT') {
                     if (value === 'true') value = true;
                     else if (value === 'false') value = false;
@@ -418,10 +441,15 @@ function renderSettings(el, settings, status) {
     var expBtn = document.getElementById('export-config-btn');
     if (expBtn) expBtn.onclick = function() {
         var blob = new Blob([JSON.stringify(settings, null, 2)], {type: 'application/json'});
+        var url = URL.createObjectURL(blob);
         var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
+        a.href = url;
         a.download = 'nous-config.json';
+        document.body.appendChild(a);
         a.click();
+        a.remove();
+        /* Revoke the object URL — no Blob leak */
+        setTimeout(function() { try { URL.revokeObjectURL(url); } catch (_) {} }, 1000);
         toast('<i data-lucide="download"></i> Config exported', 'success');
     };
 

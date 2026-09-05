@@ -28,7 +28,7 @@ async function loadOverview() {
         if (portraitUrl && portraitEl) {
             portraitEl.style.display = 'block';
             safeSetHTML(portraitEl, '<div class="ov-hero-portrait">'
-                + '<img src="' + esc(portraitUrl) + '" alt="Self Portrait" onclick="N.Chat.attachments.openViewer(\'' + esc(portraitUrl) + '\',\'image\')" style="cursor:pointer">'
+                + '<img src="' + esc(portraitUrl) + '" alt="Self Portrait" data-ov-action="viewer" data-url="' + esc(portraitUrl) + '" data-kind="image">'
                 + '</div>');
         } else if (portraitEl) {
             portraitEl.style.display = 'none';
@@ -45,7 +45,7 @@ async function loadOverview() {
                 const prompt = img.revised_prompt || '';
                 const tooltipAttr = prompt ? ' title="' + esc(prompt) + '"' : '';
                 const badgeHtml = (img.self_portrait || img.is_self_portrait) ? '<span class="image-history-badge">🖼️ SP</span>' : '';
-                genImagesHtml += '<div class="image-history-thumb"' + tooltipAttr + ' onclick="N.Chat.attachments.openViewer(\'' + esc(img.url) + '\',\'image\',null,{revised_prompt:\'' + esc(prompt).replace(/'/g, "\\'") + '\',negative_prompt:\'' + esc(img.negative_prompt || '').replace(/'/g, "\\'") + '\'})">';
+                genImagesHtml += '<div class="image-history-thumb" data-ov-action="viewer" data-url="' + esc(img.url) + '" data-kind="image" data-revised="' + esc(prompt) + '" data-negative="' + esc(img.negative_prompt || '') + '"' + tooltipAttr + '>';
                 genImagesHtml += '<img src="' + esc(img.url) + '" alt="' + esc(img.filename) + '" loading="lazy">';
                 genImagesHtml += badgeHtml;
                 genImagesHtml += '</div>';
@@ -74,12 +74,12 @@ async function loadOverview() {
             equipHtml += '<span class="badge badge-blue" style="min-width:80px;text-align:center">' + esc(slot) + '</span>';
             if (itemName) {
                 equipHtml += '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)">' + esc(itemName) + '</span>';
-                equipHtml += '<button data-slot="' + esc(slot) + '" onclick="N.Features.Overview.unequipSlot(this.dataset.slot)" style="font-size:0.72rem;padding:2px 8px;border-radius:4px;border:1px solid var(--glass-border);background:var(--glass-bg);color:var(--text-muted);cursor:pointer" title="Unequip"><i data-lucide="x"></i></button>';
+                equipHtml += '<button type="button" class="glass-btn" data-ov-action="unequip" data-slot="' + esc(slot) + '" title="Unequip"><i data-lucide="x"></i></button>';
             } else {
                 equipHtml += '<span style="flex:1;font-size:0.82rem;color:var(--text-muted);font-style:italic">empty</span>';
                 const slotItems = items.filter(it => it.name);
                 if (slotItems.length > 0) {
-                    equipHtml += '<select data-slot="' + esc(slot) + '" onchange="if(this.value) N.Features.Overview.changeEquipSlot(this.dataset.slot, this.value)" style="font-size:0.78rem;background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:4px;color:var(--text-secondary);padding:2px 4px"><option value="">equip...</option>';
+                    equipHtml += '<select data-ov-slot="' + esc(slot) + '"><option value="">equip...</option>';
                     slotItems.forEach(it => { equipHtml += '<option value="' + esc(it.name) + '">' + esc(it.name) + '</option>'; });
                     equipHtml += '</select>';
                 }
@@ -107,8 +107,8 @@ async function loadOverview() {
                 invHtml += '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)" title="' + esc(desc) + '">' + esc(it.name) + '</span>';
                 if (it.quantity > 1) invHtml += '<span style="font-size:0.78rem;color:var(--text-muted)">x' + it.quantity + '</span>';
                 if (truncDesc) invHtml += '<span class="badge badge-purple" title="' + esc(desc) + '">' + esc(truncDesc) + '</span>';
-                invHtml += '<button data-item="' + esc(it.name) + '" onclick="N.Features.Overview.openEditItemModal(this.dataset.item)" style="padding:2px 8px;border-radius:4px;border:1px solid rgba(var(--accent-blue-rgb), 0.3);background:rgba(var(--accent-blue-rgb), 0.08);color:var(--accent-blue);cursor:pointer;font-size:0.78rem" title="Edit item"><i data-lucide="pencil"></i></button>';
-                invHtml += '<button data-item="' + esc(it.name) + '" onclick="N.Features.Overview.deleteItem(this.dataset.item)" style="padding:2px 8px;border-radius:4px;border:1px solid rgba(255,100,100,0.3);background:rgba(255,100,100,0.08);color:#f87171;cursor:pointer;font-size:0.78rem" title="Delete item"><i data-lucide="trash-2"></i></button>';
+                invHtml += '<button type="button" class="glass-btn" data-ov-action="edit-item" data-item="' + esc(it.name) + '" title="Edit item"><i data-lucide="pencil"></i></button>';
+                invHtml += '<button type="button" class="glass-btn" data-ov-action="delete-item" data-item="' + esc(it.name) + '" title="Delete item"><i data-lucide="trash-2"></i></button>';
                 invHtml += '</div>';
             });
             invHtml += '</div>';
@@ -191,7 +191,7 @@ async function loadOverview() {
         <div class="glass glass-hoverable p-6 mb-6">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
                 <div class="card-title" style="margin-bottom:0"><i data-lucide="backpack"></i> Inventory</div>
-                <button onclick="N.Features.Overview.openAddItemModal()" style="padding:4px 14px;border-radius:6px;border:1px solid rgba(var(--accent-blue-rgb), 0.4);background:rgba(var(--accent-blue-rgb), 0.1);color:var(--accent-blue);cursor:pointer;font-size:0.82rem;font-weight:600">+ Add Item</button>
+                <button type="button" class="glass-btn" data-ov-action="open-add-item">+ Add Item</button>
             </div>
             ${invHtml}
         </div>
@@ -207,8 +207,8 @@ async function loadOverview() {
                     <input id="new-item-qty" type="number" value="1" min="1" placeholder="Quantity" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
                 </div>
                 <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
-                    <button onclick="N.Features.Overview.closeAddItemModal()" style="padding:7px 18px;border-radius:7px;border:1px solid var(--glass-border);background:var(--glass-bg);color:var(--text-muted);cursor:pointer;font-size:0.88rem">Cancel</button>
-                    <button onclick="N.Features.Overview.saveNewItem()" style="padding:7px 18px;border-radius:7px;border:1px solid rgba(var(--accent-blue-rgb), 0.5);background:rgba(var(--accent-blue-rgb), 0.2);color:var(--accent-blue);cursor:pointer;font-size:0.88rem;font-weight:600">Save</button>
+                    <button type="button" class="glass-btn" data-ov-action="close-add-item">Cancel</button>
+                    <button type="button" class="glass-btn" data-ov-action="save-new-item">Save</button>
                 </div>
             </div>
         </div>
@@ -225,8 +225,8 @@ async function loadOverview() {
                     <input id="edit-item-tags" type="text" placeholder="Tags (comma-separated)" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
                 </div>
                 <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
-                    <button onclick="N.Features.Overview.closeEditItemModal()" style="padding:7px 18px;border-radius:7px;border:1px solid var(--glass-border);background:var(--glass-bg);color:var(--text-muted);cursor:pointer;font-size:0.88rem">Cancel</button>
-                    <button onclick="N.Features.Overview.saveEditItem()" style="padding:7px 18px;border-radius:7px;border:1px solid rgba(var(--accent-blue-rgb), 0.5);background:rgba(var(--accent-blue-rgb), 0.2);color:var(--accent-blue);cursor:pointer;font-size:0.88rem;font-weight:600">Save</button>
+                    <button type="button" class="glass-btn" data-ov-action="close-edit-item">Cancel</button>
+                    <button type="button" class="glass-btn" data-ov-action="save-edit-item">Save</button>
                 </div>
             </div>
         </div>
@@ -249,17 +249,20 @@ async function loadOverview() {
                     <input type="number" id="block-modal-priority" class="glass-input" style="width:100%;padding:8px 12px;box-sizing:border-box" value="0" min="0" max="100">
                 </div>
                 <div style="display:flex;gap:12px;justify-content:flex-end">
-                    <button onclick="N.Features.Overview.hideBlockModal()" class="glass-btn" style="padding:8px 20px">Cancel</button>
-                    <button onclick="N.Features.Overview.saveBlock()" class="glass-btn" style="padding:8px 20px;background:var(--accent);color:white">Save</button>
+                    <button type="button" data-ov-action="hide-block-modal" class="glass-btn">Cancel</button>
+                    <button type="button" data-ov-action="save-block" class="glass-btn">Save</button>
                 </div>
             </div>
         </div>`);
 
-        // --- Move portrait into hero slot ---
+        // --- Move portrait into hero slot (clone nodes, no innerHTML string copy) ---
         var heroSlot = document.getElementById('hero-portrait-slot');
         var portraitEl2 = document.getElementById('overview-portrait');
         if (heroSlot && portraitEl2 && portraitEl2.style.display !== 'none') {
-            heroSlot.innerHTML = portraitEl2.innerHTML;
+            heroSlot.replaceChildren();
+            Array.prototype.forEach.call(portraitEl2.childNodes, function (n) {
+                heroSlot.appendChild(n.cloneNode(true));
+            });
             portraitEl2.style.display = 'none';
         }
 
@@ -292,4 +295,39 @@ Object.assign(N.Features.Overview, {
     loadOverview: loadOverview,
     generateExpressionSet: generateExpressionSet,
 });
+
+/* CSP-safe delegation for overview actions (no inline onclick/onchange) */
+if (typeof document !== "undefined" && !loadOverview._delegated) {
+    loadOverview._delegated = true;
+    document.addEventListener("click", function (e) {
+        var btn = e.target && e.target.closest ? e.target.closest("[data-ov-action]") : null;
+        if (!btn) return;
+        var action = btn.getAttribute("data-ov-action");
+        var Ov = N.Features.Overview;
+        if (action === "viewer" && N.Chat && N.Chat.attachments) {
+            var data = null;
+            if (btn.getAttribute("data-revised") || btn.getAttribute("data-negative")) {
+                data = { revised_prompt: btn.getAttribute("data-revised") || "", negative_prompt: btn.getAttribute("data-negative") || "" };
+            }
+            N.Chat.attachments.openViewer(btn.getAttribute("data-url"), btn.getAttribute("data-kind") || "image", null, data);
+        }
+        else if (action === "unequip" && typeof Ov.unequipSlot === "function") Ov.unequipSlot(btn.dataset.slot);
+        else if (action === "edit-item" && typeof Ov.openEditItemModal === "function") Ov.openEditItemModal(btn.dataset.item);
+        else if (action === "delete-item" && typeof Ov.deleteItem === "function") Ov.deleteItem(btn.dataset.item);
+        else if (action === "open-add-item" && typeof Ov.openAddItemModal === "function") Ov.openAddItemModal();
+        else if (action === "close-add-item" && typeof Ov.closeAddItemModal === "function") Ov.closeAddItemModal();
+        else if (action === "save-new-item" && typeof Ov.saveNewItem === "function") Ov.saveNewItem();
+        else if (action === "close-edit-item" && typeof Ov.closeEditItemModal === "function") Ov.closeEditItemModal();
+        else if (action === "save-edit-item" && typeof Ov.saveEditItem === "function") Ov.saveEditItem();
+        else if (action === "hide-block-modal" && typeof Ov.hideBlockModal === "function") Ov.hideBlockModal();
+        else if (action === "save-block" && typeof Ov.saveBlock === "function") Ov.saveBlock();
+    });
+    document.addEventListener("change", function (e) {
+        var sel = e.target && e.target.closest ? e.target.closest("select[data-ov-slot]") : null;
+        if (!sel) return;
+        if (sel.value && typeof N.Features.Overview.changeEquipSlot === "function") {
+            N.Features.Overview.changeEquipSlot(sel.getAttribute("data-ov-slot"), sel.value);
+        }
+    });
+}
 })();

@@ -45,9 +45,9 @@ function openMemModal(mem) {
     h += '<div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:4px">Memory Key</div>';
     h += '<div style="display:flex;align-items:center;gap:6px">';
     h += '<span style="font-family:monospace;font-size:0.85rem;color:var(--accent-purple)">' + esc(mem.key) + '</span>';
-    h += '<button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + esc(mem.key).replace(/'/g,'\\\'') + '\');window.Nous.Core.toast(\'Key copied!\',\'info\')" title="Copy key">\uD83D\uDCCB</button>';
+    h += '<button type="button" class="copy-btn" data-mem-copy="1" title="Copy key">';
     h += '</div></div>';
-    h += '<button class="mem-modal-close" onclick="N.Features.Memories.closeMemModal()"><i data-lucide="x"></i></button>';
+    h += '<button type="button" class="mem-modal-close" data-mem-close="1"><i data-lucide="x"></i></button>';
     h += '</div>';
 
     /* Full content */
@@ -148,7 +148,7 @@ function openMemModal(mem) {
 
     /* Action buttons */
     h += '<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">';
-    h += '<button class="glass-btn glass-btn-danger" onclick="N.Features.Memories.deleteMemory(\'' + esc(mem.key).replace(/'/g,'\\\'') + '\')">\uD83D\uDDD1 Delete</button>';
+    h += '<button type="button" class="glass-btn glass-btn-danger" data-mem-del="1">Delete</button>';
     h += '<button class="glass-btn glass-btn-success" id="mem-modal-edit-btn">\u270F\uFE0F Edit</button>';
     h += '</div>';
 
@@ -158,7 +158,19 @@ function openMemModal(mem) {
     document.addEventListener('keydown', _memModalKeyHandler);
 
     var editBtn = document.getElementById('mem-modal-edit-btn');
-    if (editBtn) editBtn.onclick = function() { openEditModal(mem); };
+    if (editBtn) editBtn.addEventListener('click', function() { openEditModal(mem); });
+    /* CSP-safe bindings (no inline onclick): copy key / close / delete */
+    var copyBtn = content.querySelector('[data-mem-copy]');
+    if (copyBtn) copyBtn.addEventListener('click', function() {
+        var done = function() { toast('Key copied!', 'info'); };
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            navigator.clipboard.writeText(mem.key).then(done, done);
+        } else { done(); }
+    });
+    var closeBtn = content.querySelector('[data-mem-close]');
+    if (closeBtn) closeBtn.addEventListener('click', function() { closeMemModal(); });
+    var delBtn = content.querySelector('[data-mem-del]');
+    if (delBtn) delBtn.addEventListener('click', function() { deleteMemory(mem.key); });
 }
 /* N.Features.Memories.openMemModal registered below */
 
@@ -197,12 +209,12 @@ function _renderEditTags() {
         wrap.insertBefore(chip, inp);
     });
     wrap.querySelectorAll('.tag-chip-remove').forEach(function(btn) {
-        btn.onclick = function(e) {
+        btn.addEventListener('click', function(e) {
             e.stopPropagation();
-            var i = parseInt(btn.dataset.tidx);
+            var i = parseInt(btn.dataset.tidx, 10);
             _editTags.splice(i, 1);
             _renderEditTags();
-        };
+        });
     });
 }
 

@@ -1,6 +1,9 @@
 /**
  * Loads core IIFE modules into jsdom's window context.
- * Uses new Function(code)() which runs in the global scope.
+ *
+ * NOTE (CSP): new Function() is used ONLY here in the vitest harness —
+ * it never ships to the browser (CSP script-src 'self' forbids it).
+ * Browser entry is plain <script src> tags, no runtime code generation.
  *
  * Usage:
  *   import { loadCore, loadStore } from './load-core.js';
@@ -17,6 +20,14 @@ function functionEval(file) {
   const code = readFileSync(resolve(__dirname, file), 'utf-8');
   const fn = new Function(code);
   fn();
+}
+
+/**
+ * Load a single core file by name (e.g. loadFile('sse.js')).
+ * Test-only helper — keeps raw new Function() out of individual test files.
+ */
+export function loadFile(file) {
+  functionEval(file);
 }
 
 /**

@@ -109,10 +109,12 @@ function safeMarkdown(text) {
       // Pre-process fenced code blocks to preserve onclick handlers through DOMPurify
       const codeBlocks = [];
       const textWithPlaceholders = text.replace(
-        /```(\w*)\n([\s\S]*?)```/g,
+        /```([\w+#-]*)\n([\s\S]*?)```/g,
         function (_, lang, code) {
+          /* Fence-lang allowlist: word chars plus + # - (e.g. c++, c#, f#). Else plain. */
+          var safeLang = /^[\w+#-]{0,32}$/.test(lang || "") ? lang : "";
           const idx = codeBlocks.length;
-          codeBlocks.push(renderCodeBlock(lang || "", code.trimEnd()));
+          codeBlocks.push(renderCodeBlock(safeLang || "", code.trimEnd()));
           return "CODEBLOCK_PLACEHOLDER_" + idx + "_END";
         },
       );

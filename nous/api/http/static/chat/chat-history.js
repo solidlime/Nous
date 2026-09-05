@@ -25,11 +25,12 @@ var _historyRestorePending = false; // restore 未完了（バックグラウン
 // ------------------------------------------------------------------
 function resetToWelcome() {
   const container = document.getElementById("chat-messages");
+  if (!container) return;
   safeSetHTML(container, `
         <div class="chat-welcome" id="chat-welcome">
             <div class="chat-welcome-icon"><i data-lucide="message-circle"></i></div>
             <p>チャットを開始するには下のテキストボックスにメッセージを入力してください。</p>
-            <p class="chat-welcome-hint">APIキーとBase URLを設定してください。<br><a href="#" onclick="N.Chat.core.toggleSettings();return false;" class="chat-welcome-link"><i data-lucide="settings"></i> 設定パネルを開く</a></p>
+            <p class="chat-welcome-hint">APIキーとBase URLを設定してください。<br><a href="#" data-chat-welcome-settings="1" class="chat-welcome-link"><i data-lucide="settings"></i> 設定パネルを開く</a></p>
             <div class="chat-welcome-commands">
                 <span class="chat-welcome-cmd">/memory</span>
                 <span class="chat-welcome-cmd">/goal</span>
@@ -228,7 +229,7 @@ function _appendSegmentsToBubble(msg, msgDiv) {
   }
   // Remove empty bubbles (初期の空バブル＋空textセグメント由来を全除去)
   msgDiv.querySelectorAll(".chat-bubble").forEach(function(b) {
-    if (!b.innerHTML.trim()) b.remove();
+    if (!(b.textContent || "").trim() && !b.querySelector("img,video,audio,canvas")) b.remove();
   });
   // Set time
   var timeEl = msgDiv.querySelector(".chat-time");
@@ -906,6 +907,17 @@ function bindHistoryLazyLoadListeners() {
   });
 }
 bindHistoryLazyLoadListeners();
+
+/* CSP-safe delegation: welcome settings link (no inline onclick) */
+if (typeof document !== "undefined" && !resetToWelcome._delegated) {
+  resetToWelcome._delegated = true;
+  document.addEventListener("click", function (e) {
+    var a = e.target && e.target.closest ? e.target.closest("[data-chat-welcome-settings]") : null;
+    if (!a) return;
+    e.preventDefault();
+    if (N.Chat.core && typeof N.Chat.core.toggleSettings === "function") N.Chat.core.toggleSettings();
+  });
+}
 
 // ------------------------------------------------------------------
 // Expose on N.Chat.history

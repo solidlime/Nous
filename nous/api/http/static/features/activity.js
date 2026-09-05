@@ -102,7 +102,7 @@ async function loadActivity(reset = false) {
                 loadMoreEl.id = 'act-load-more';
                 loadMoreEl.className = 'act-load-more';
                 loadMoreEl.textContent = 'Load more...';
-                loadMoreEl.onclick = () => loadActivity(false);
+                loadMoreEl.addEventListener('click', function () { loadActivity(false); });
                 feed.appendChild(loadMoreEl);
             }
         } else if (loadMoreEl) {
@@ -143,7 +143,7 @@ function renderActivityFeed() {
         const openClass = sess.open ? ' open' : '';
 
         html += '<div class="act-session' + openClass + '" data-session="' + esc(sid) + '">';
-        html += '<div class="act-session-header" tabindex="0" role="button" onclick="N.Features.Activity.toggleActivitySession(\'' + esc(sid) + '\')">';
+        html += '<div class="act-session-header" tabindex="0" role="button" data-act-session="' + esc(sid) + '">';
         html += '<span class="act-chevron">▶</span>';
         html += '<span class="act-session-id">' + esc(sid) + '</span>';
         html += '<span class="act-session-meta">';
@@ -165,11 +165,11 @@ function renderActivityFeed() {
             const label = ACT_LABELS[ev.event_type] || ev.event_type;
             const hasDetail = ev.detail && ev.detail.length > 0;
             html += '<div class="act-event type-' + esc(ev.event_type) + '"';
-            if (hasDetail) html += ' onclick="N.Features.Activity.toggleActivityDetail(this)" style="cursor:pointer"';
+            if (hasDetail) html += ' data-act-detail="1" tabindex="0" role="button"';
             html += '>';
             html += '<span class="act-event-icon">' + icon + '</span>';
             html += '<div class="act-event-body">';
-            html += '<div class="act-event-summary"><span style="font-size:0.68rem;color:var(--act-color);font-weight:600">' + esc(label) + '</span> ' + esc(ev.summary) + '</div>';
+            html += '<div class="act-event-summary"><span>' + esc(label) + '</span> ' + esc(ev.summary) + '</div>';
             html += '<div class="act-event-time">' + new Date(ev.timestamp).toLocaleString('ja-JP') + '</div>';
             if (hasDetail) {
                 html += '<div class="act-event-detail">' + esc(ev.detail) + '</div>';
@@ -192,7 +192,7 @@ function toggleActivitySession(sid) {
         sessionEl.classList.add('open');
         // Update chevron
         const body = sessionEl.querySelector('.act-session-body');
-        if (body && body.innerHTML.trim() === '') {
+        if (body && (body.textContent || '').trim() === '') {
             // Lazy render events
             const sess = ACT.sessions[sid];
             const sorted = [...sess.events];
@@ -205,11 +205,11 @@ function toggleActivitySession(sid) {
                 const label = ACT_LABELS[ev.event_type] || ev.event_type;
                 const hasDetail = ev.detail && ev.detail.length > 0;
                 h += '<div class="act-event type-' + esc(ev.event_type) + '"';
-                if (hasDetail) h += ' onclick="N.Features.Activity.toggleActivityDetail(this)" style="cursor:pointer"';
+                if (hasDetail) h += ' data-act-detail="1" tabindex="0" role="button"';
                 h += '>';
                 h += '<span class="act-event-icon">' + icon + '</span>';
                 h += '<div class="act-event-body">';
-                h += '<div class="act-event-summary"><span style="font-size:0.68rem;color:var(--act-color);font-weight:600">' + esc(label) + '</span> ' + esc(ev.summary) + '</div>';
+                h += '<div class="act-event-summary"><span>' + esc(label) + '</span> ' + esc(ev.summary) + '</div>';
                 h += '<div class="act-event-time">' + new Date(ev.timestamp).toLocaleString('ja-JP') + '</div>';
                 if (hasDetail) h += '<div class="act-event-detail">' + esc(ev.detail) + '</div>';
                 h += '</div></div>';
@@ -229,9 +229,21 @@ function toggleActivityDetail(el) {
 /* N.Features.Activity.toggleActivityDetail registered below */
 
 // Keyboard: Enter/Space on session headers and event detail toggles
+// Click delegation (CSP-safe: no inline onclick)
+document.addEventListener("click", function(e) {
+    var sessHeader = e.target && e.target.closest ? e.target.closest("[data-act-session]") : null;
+    if (sessHeader) {
+        toggleActivitySession(sessHeader.getAttribute("data-act-session"));
+        return;
+    }
+    var detail = e.target && e.target.closest ? e.target.closest("[data-act-detail]") : null;
+    if (detail) {
+        toggleActivityDetail(detail);
+    }
+});
 document.addEventListener("keydown", function(e) {
     if (e.key === "Enter" || e.key === " ") {
-        var target = e.target.closest(".act-session-header, .act-event[onclick]");
+        var target = e.target.closest(".act-session-header, .act-event[data-act-detail]");
         if (target) {
             e.preventDefault();
             target.click();

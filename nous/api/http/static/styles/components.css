@@ -646,3 +646,70 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
         grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     }
 }
+
+/* ============================================================
+   CSP-SAFE — replacements for inline styles/handlers removed for
+   script-src 'self' (Task 6). Keep visuals in stylesheets, never
+   in style="" attributes (stripped by the sanitizer).
+   ============================================================ */
+.memory-item-card .mem-score-extra {
+    font-size: 0.7rem;
+    margin-top: 3px;
+}
+
+[data-ov-action="viewer"],
+.ov-hero-portrait img {
+    cursor: pointer;
+}
+
+.act-event[data-act-detail],
+.act-session-header {
+    cursor: pointer;
+}
+
+.settings-search-card {
+    position: sticky;
+    top: 120px;
+    z-index: 30;
+}
+
+.settings-search-wrap {
+    position: relative;
+}
+
+.settings-search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+#settings-search {
+    width: 100%;
+    padding-left: 38px;
+    padding-right: 36px;
+    font-size: 0.9rem;
+}
+
+#settings-search-clear {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+    display: none;
+}
+
+.skeleton-error-card {
+    color: var(--accent-red);
+}
+
+.skeleton-error-card .glass-btn {
+    margin-top: 12px;
+}

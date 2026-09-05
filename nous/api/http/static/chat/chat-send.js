@@ -19,6 +19,7 @@ var _memoryActivityTimer = null;
 // ------------------------------------------------------------------
 function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
   const container = document.getElementById("chat-messages");
+  if (!container) return null;
   // Remove welcome message if present
   const welcome = container.querySelector(".chat-welcome");
   if (welcome) welcome.remove();

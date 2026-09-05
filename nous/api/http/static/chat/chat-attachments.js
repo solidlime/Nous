@@ -10,9 +10,15 @@ var S = window.S;
 
 var CHAT = N.Chat.state;
 
+var MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
 async function uploadAttachment(file) {
   if (!S.persona) {
     toast("ペルソナを選択してください", "error");
+    return;
+  }
+  if (file && file.size > MAX_ATTACHMENT_BYTES) {
+    toast("ファイルが大きすぎます（上限10MB）: " + (file.name || ""), "error");
     return;
   }
   const formData = new FormData();
@@ -166,20 +172,23 @@ function openMediaViewer(url, type, mimeType, data) {
     inner.appendChild(vid);
   }
   overlay.classList.add("visible");
-  // ESC to close
-  const escHandler = (e) => {
-    if (e.key === "Escape") {
-      closeMediaViewer();
-      document.removeEventListener("keydown", escHandler);
-    }
-  };
-  document.addEventListener("keydown", escHandler);
+  // ESC to close (single shared handler — removed on close, no leak)
+  if (!openMediaViewer._escHandler) {
+    openMediaViewer._escHandler = function (e) {
+      if (e.key === "Escape") closeMediaViewer();
+    };
+  }
+  document.removeEventListener("keydown", openMediaViewer._escHandler);
+  document.addEventListener("keydown", openMediaViewer._escHandler);
 }
 
 function closeMediaViewer() {
   const overlay = document.getElementById("media-viewer-overlay");
   const inner = document.getElementById("media-viewer-inner");
   if (overlay) overlay.classList.remove("visible");
+  if (openMediaViewer._escHandler) {
+    try { document.removeEventListener("keydown", openMediaViewer._escHandler); } catch (_) {}
+  }
   if (inner) {
     const vid = inner.querySelector("video");
     if (vid) vid.pause();
