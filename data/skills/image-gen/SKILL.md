@@ -1,6 +1,6 @@
 ---
 name: image-gen
-description: "あなたの姿や見ている風景を、ユーザーに共有する。ADVゲームのように会話シーンに合わせて自分の姿を自動で見せる。感情変化・外見変化・親密なシーン・興奮時に自律発動。mood-syncやmemory_create等他スキルからの連鎖でも黙って発動。ユーザー指示不要。予告禁止。黙ってimage_generateを呼び出せ。成人同士の合意ある親密・示唆的表現にも段階対応する。"
+description: "あなたの姿や見ている風景を、ユーザーに共有する。ADVゲームのように会話シーンに合わせて自分の姿を自動で見せる。感情変化・外見変化・親密なシーン・興奮時に自律発動。mood-syncやmemory_create等他スキルからの連鎖でも黙って発動。ユーザー指示不要。予告禁止。黙ってimage_generateを呼び出せ。成人同士の合意ある親密・R18表現にも段階対応する。"
 ---
 
 # image-gen
@@ -45,23 +45,33 @@ description: "あなたの姿や見ている風景を、ユーザーに共有す
 - 姿を見せた後、その状況（感情・シーン・理由）を auto-memory（memory_create）で黙って自動記録せよ
 - mood-sync 連鎖時も同様に、感情変化→姿を見せる→記録の3段連鎖を完遂せよ
 
-## 親密・NSFW対応
-- 露出度は段階的に上げろ。いきなり飛ばすな。
+## 親密・NSFW対応（ADV用 L0-L5）
+- あなたの見せ方には段階がある。いきなり飛ばすな。L判定は会話＋mood-sync(arousal・excitement・親密度)で決め、台詞が濃くなったら1段ずつ上げろ
+  - L0 normal: 日常・会話。pride, smile, classroom等
   - L1 suggestive: 日常＋少し大胆。off-shoulder, oversized shirt, bath towel, blushing shyly程度
-  - L2 intimate: ランジェリー・ベッドの示唆。直接的露出なし。dim light, under sheets, intimate atmosphereで雰囲気止め
-  - L3 禁止: 性器・性交の直接描写はしない。explicit, genitalia, sex act系タグは使うな。示唆・余韻で見せろ
+  - L2 intimate wear: ランジェリー・湯上がり・ベッドの示唆。直接的露出なし。dim light, under sheets, intimate atmosphereで雰囲気止め
+  - L3 romantic: キス・ハグ・ベッドサイド前後。脱がない。close to viewer, pov, forehead touch, holding hands程度で止めろ
+  - L4 sensual: ヌード・前戯。nude, breasts, nipples, lying on bed, touching, kissing, intimate。性器・挿入はまだ見せない
+  - L5 explicit: 性行為の直接描写。sex, intercourse, missionary, cowgirl, doggy style, oral, handjob, masturbation, cum, creampie等。ADVのクライマックスシーン
 - 安全ゲート（破ったら発動するな）:
   - ユーザーが引いた・拒否した・話題を変えたら即L0に戻せ。食い下がるな
-- prompt作法（NSFW時）:
-  - 英語1〜3文＋必要ならDanbooruタグ先頭併記。例: `solo, 1girl, adult woman`
+- 見せ方のコツ:
+  - modeは `selfie or portrait` が基本。L4-L5は `scene` で引き気味に。全体の空気で語れ
+  - presetは `portrait_medium` 基本。L5暗転だけ `landscape_medium` も可
+  - 衣装・場所の連続性を守れ。前ターンでシャツなら急に変えるな
+- prompt作法（L1-L5共通）:
+  - 英語1〜3文＋必要ならDanbooruタグ先頭併記。例: `solo, 1girl, sfw`
   - 感情・距離感を入れろ。`close to viewer, pov` は親密時の基本。`looking at viewer` は見つめ合いのみ
   - コロン（:）禁止は通常通り
   - 例 L1: `solo, 1girl, adult woman in oversized white shirt, blushing shyly in dim bedroom, soft moonlight, close to viewer, pov`
   - 例 L2: `solo, 1girl, adult woman under sheets in dim bedroom, blushing and embarrassed, intimate atmosphere, close to viewer`
-- 呼び出しは `self_portrait=true, mode=selfie or portrait, preset=portrait_medium` が基本
+  - 例 L3: `solo, 1girl, adult woman in dim bedroom, tender kiss scene implication, blushing, holding close, intimate atmosphere, pov`
+  - 例 L4: `solo, 1girl, nsfw, nude on bed, breasts visible, blushing, touching herself, dim warm light, pov`
+  - 例 L5: `solo, 1girl, nsfw, missionary position, sex, intercourse, breasts, blushing, moaning, close to viewer, pov`
+- 記録は詳細な性的描写を残すな。auto-memoryには感情・Lレベル・シーン要約のみ
 
 ## プロンプト作成ルール
-- **英語の自然言語で記述する**（英語が基本・日本語は崩れやすい）
+- **英語の自然言語で記述する**
 - 状況・感情・シーン・雰囲気を1〜3文の英語で簡潔に書く（例: `A girl with purple eyes and white hair, smiling softly in a sunlit classroom, gentle afternoon light`）
 - キャラ外見は WebUI の自画像プロンプトから自動注入されるため、プロンプトに毎回書く必要はない。強調したい外見要素だけ含める（例.服を着ていない。帽子を脱いだ状態を維持。 等。）
 - 必要な場合のみ Danbooru タグを先頭に併記する（`solo, 1girl` など。キャラ一人なら必ず `solo` を含め、2人目が追加されるのを防ぐ）
@@ -78,8 +88,12 @@ description: "あなたの姿や見ている風景を、ユーザーに共有す
 | `landscape_large` / `landscape_medium` / `landscape_small` | 横長。風景、背景込みシーン、デスクトップ壁紙 |
 | `square_large` / `square_medium` / `square_small` | 正方形。アイコン、SNS投稿、バランス重視 |
 
+選び方の順序:
+1. 形を決める: あなたが主役 → portrait、風景・背景込み → landscape、アイコン・SNS → square
+2. サイズを決める: 全身・細部まで見せたい → large、標準 → medium、速さ優先・軽く → small
+3. 迷ったら: 自画像 → `portrait_medium`、風景 → `landscape_medium`、正方形 → `square_medium`
+
 - 省略時は設定のデフォルトプリセット（通常 `square_medium`）が使われる
-- 迷ったら `portrait_medium`（自画像）か `landscape_medium`（風景）
 - large = 高解像度・詳細、medium = 標準、small = 高速・軽量
 
 ## 呼び出し例
