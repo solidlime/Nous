@@ -88,6 +88,43 @@ def _emotion_bucket(intensity: float) -> float:
     return round(_clamp01(intensity) + 1e-9, 1)
 
 
+def _body_str(body: object, key: str) -> str:
+    """POST body値の安全なstr取得。欠落/None→""、数値はstr化、bool/list/dict等→""（.strip() crash防止）。"""
+    if not isinstance(body, dict):
+        return ""
+    v = body.get(key)
+    if v is None:
+        return ""
+    if isinstance(v, str):
+        return v.strip()
+    if isinstance(v, bool):
+        return ""
+    if isinstance(v, (int, float)):
+        return str(v)
+    return ""
+
+
+def _resolve_emotion_mode(chat_config) -> str:
+    """感情反映モード解決の正典。SessionConfig._derive_emotion_modeと同じ条件順。synthesize/combine共用。"""
+    mode = getattr(chat_config, "voice_emotion_mode", "") or ""
+    if mode:
+        return mode
+    link = getattr(chat_config, "voice_emotion_link", True)
+    llm = getattr(chat_config, "irodori_caption_llm_enabled", False)
+    if llm and link:
+        return "llm"
+    if link:
+        return "anchor"
+    return "off"
+
+
+def _resolve_tts_override(body: object) -> tuple[str, str | None, bool]:
+    """emotion/caption override解決。(emotion, caption, use_override)。emotion単独でもoverride扱いしstate再解決を抑止する。"""
+    emo = _body_str(body, "emotion")
+    cap = _body_str(body, "caption")
+    return (emo or "neutral", cap or None, bool(cap or emo))
+
+
 def _tts_cache_key(
     *,
     text: str,
@@ -214,8 +251,6 @@ def register_tts_routes(mcp) -> None:
         text = body.get("text", "")
         if not text:
             return JSONResponse({"ok": False, "error": "text is required"}, status_code=400)
-        override_emotion = (body.get("emotion") or "").strip() or ""
-        override_caption = (body.get("caption") or "").strip() or ""
 
         # Optional voice override (body > chat_config.voice_model > global)
         voice_override = body.get("voice") or (chat_config.voice_model or None)
@@ -226,23 +261,10 @@ def register_tts_routes(mcp) -> None:
                 engine._voice = voice_override  # noqa: SLF001
 
         # get persona state for emotion + build caption
-        emotion = override_emotion or "neutral"
-        caption: str | None = override_caption or None
+        emotion, caption, use_override = _resolve_tts_override(body)
         state = None
-        use_override = bool(override_caption)
         # 感情の声への反映モード: "off" | "anchor" | "llm" (旧2ブール値から移行済み)
-        emotion_mode = getattr(chat_config, "voice_emotion_mode", "") or ""
-        if not emotion_mode:
-            # 正典はSessionConfig._derive_emotion_mode（link OFF + llm ON → "off"）。
-            # tts.py側の再導出は後方互換のみで、条件順もSessionConfigに合わせる。
-            link = getattr(chat_config, "voice_emotion_link", True)
-            llm = getattr(chat_config, "irodori_caption_llm_enabled", False)
-            if llm and link:
-                emotion_mode = "llm"
-            elif link:
-                emotion_mode = "anchor"
-            else:
-                emotion_mode = "off"
+        emotion_mode = _resolve_emotion_mode(chat_config)
         if use_override:
             pass  # emotion/captionは呼び出し側（1文目で解決済み）を使い回す。LLM生成・_LAST_CAPTION更新はしない。
         elif emotion_mode != "off":
@@ -559,15 +581,11 @@ def register_tts_routes(mcp) -> None:
         voice_speed = float(getattr(chat_config, "voice_speed", 1.0) or 1.0)
         voice_override = body.get("voice") or (chat_config.voice_model or None)
         voice_resolved = voice_override or chat_config.voice_model or ctx.settings.irodori.voice
-        override_emotion = (body.get("emotion") or "").strip() or ""
-        override_caption = (body.get("caption") or "").strip() or ""
-        emotion = override_emotion or "neutral"
-        caption: str | None = override_caption or None
-        use_override = bool(override_caption)
+        emotion, caption, use_override = _resolve_tts_override(body)
         if not use_override:
             try:
                 st = ctx.persona_service.get_context(persona)
-                if st.is_ok and st.value and getattr(chat_config, "voice_emotion_mode", "anchor") != "off":
+                if st.is_ok and st.value and _resolve_emotion_mode(chat_config) != "off":
                     emotion = (getattr(st.value, "emotion", "") or "").strip() or "neutral"
                     caption = build_style_anchor(
                         emotion,
