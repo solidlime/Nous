@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from .base import (
@@ -40,6 +41,26 @@ _VISION_MODEL_PREFIXES = (
 )
 
 _NON_VISION_MODEL_PREFIXES = ("gpt-3.5",)
+
+_MAX_ERROR_MESSAGE_LEN = 300
+
+
+def _sanitize_error_message(raw: str) -> str:
+    lowered = raw.lower()
+    if "<!doctype html" in lowered or "<html" in lowered:
+        m = re.search(r"(?:status(?:_code)?|error code)[^\d]*(\d{3})", raw, re.IGNORECASE)
+        code = m.group(1) if m else None
+        if code is None:
+            m2 = re.search(r"\b([1-5]\d\d)\b", raw)
+            code = m2.group(1) if m2 else "unknown"
+        return (
+            f"LLM request failed with HTTP {code}: got HTML page instead of API response. "
+            "Base URL may point at a website rather than an API endpoint "
+            "(check trailing path, e.g. missing /zen/go/v1)."
+        )
+    if len(raw) > _MAX_ERROR_MESSAGE_LEN:
+        return raw[:_MAX_ERROR_MESSAGE_LEN]
+    return raw
 
 
 def _is_vision_model(model: str) -> bool:
@@ -267,4 +288,4 @@ class OpenAICompatProvider(LLMProvider):
             )
 
         except Exception as e:
-            yield ErrorEvent(message=str(e))
+            yield ErrorEvent(message=_sanitize_error_message(str(e)))
