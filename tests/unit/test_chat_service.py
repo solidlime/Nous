@@ -899,3 +899,191 @@ def test_chat_js_has_single_panel_toggle_definitions():
     assert js.count("function toggleMemoryPanel()") == 1
     assert js.count("function toggleSettingsPanel()") == 1
     assert "memory-panel-toggle-btn" not in js
+
+
+# ─────────────────────────────────────────────────────────────
+# Tool-only turn fallback (empty text + tool calls → non-empty save)
+# ─────────────────────────────────────────────────────────────
+
+
+class TestToolOnlyFallback:
+    def _make_ctx(self):
+        ctx = MagicMock()
+        ctx.persona = "test_persona"
+        ctx.event_bus = MagicMock()
+        ctx.event_bus.publish = AsyncMock()
+        state = MagicMock()
+        state.emotion = "neutral"
+        state.emotion_intensity = 0.5
+        state.mental_state = None
+        state.physical_state = None
+        state.environment = None
+        state.fatigue = None
+        state.warmth = None
+        state.arousal = None
+        state.last_conversation_time = None
+        state.heart_rate = None
+        state.pain = None
+        state_result = MagicMock()
+        state_result.is_ok = True
+        state_result.value = state
+        ctx.persona_service.get_context.return_value = state_result
+        search_result = MagicMock()
+        search_result.is_ok = True
+        search_result.value = []
+        ctx.search_engine.search.return_value = search_result
+        return ctx
+
+    def _make_config(self, api_key="sk-valid-key"):
+        return ChatConfig(
+            persona="test_persona",
+            provider="anthropic",
+            api_key=api_key,
+            model="claude-opus-4-5",
+        )
+
+    @pytest.mark.asyncio
+    async def test_tool_only_turn_saves_nonempty_fallback(self):
+        """空テキスト＋ツール有り → 保存されるassistantテキストが非空になること。"""
+        from nous.application.chat_service import ChatService
+
+        tool_evt = ToolCallEvent(
+            tool_name="memory_search",
+            tool_input={"query": "test"},
+            tool_use_id="tool_001",
+        )
+        call_count = 0
+
+        async def mock_stream(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                yield tool_evt
+                yield DoneEvent(full_content="", tool_calls=[tool_evt])
+            else:
+                yield DoneEvent(full_content="", tool_calls=[])
+
+        mock_provider = MagicMock()
+        mock_provider.stream = mock_stream
+        ctx = self._make_ctx()
+        cfg = self._make_config()
+        service = ChatService()
+        mock_session = MagicMock()
+        with (
+            patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider),
+            patch("nous.application.chat.service._session_manager.get_or_create", return_value=mock_session),
+        ):
+            async for _ in service.chat(ctx, cfg, "sess-tool-only", "hello"):
+                pass
+        assistant_calls = [c for c in mock_session.add.call_args_list if c.args[0] == "assistant"]
+        assert assistant_calls, "assistant メッセージの保存呼び出しが存在すること"
+        content = assistant_calls[0].args[1]
+        assert content != "", "ツールのみターンは空保存してはならない"
+        assert "テキスト応答がありませんでした" in content
+
+    @pytest.mark.asyncio
+    async def test_tool_only_image_turn_uses_tool_message(self):
+        """画像生成ツールのみターン → ツール結果のmessageがフォールバック文に使われること。"""
+        from unittest.mock import AsyncMock
+
+        from nous.application.chat_service import ChatService
+
+        tool_evt = ToolCallEvent(
+            tool_name="image_generate",
+            tool_input={"prompt": "a cat"},
+            tool_use_id="tool_img_001",
+        )
+        call_count = 0
+
+        async def mock_stream(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                yield tool_evt
+                yield DoneEvent(full_content="", tool_calls=[tool_evt])
+            else:
+                yield DoneEvent(full_content="", tool_calls=[])
+
+        mock_provider = MagicMock()
+        mock_provider.stream = mock_stream
+        ctx = self._make_ctx()
+        cfg = self._make_config()
+        service = ChatService()
+        mock_session = MagicMock()
+        image_result = {
+            "status": "success",
+            "message": "Generated 1 image(s)",
+            "images": [{"url": "http://x/1.png", "revised_prompt": "a cat"}],
+            "provider": "comfyui",
+        }
+        with (
+            patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider),
+            patch("nous.application.chat.service._session_manager.get_or_create", return_value=mock_session),
+            patch(
+                "nous.application.chat.tools.registry.ToolRegistry.execute",
+                new=AsyncMock(return_value=image_result),
+            ),
+        ):
+            async for _ in service.chat(ctx, cfg, "sess-tool-img", "draw a cat"):
+                pass
+        assistant_calls = [c for c in mock_session.add.call_args_list if c.args[0] == "assistant"]
+        assert assistant_calls, "assistant メッセージの保存呼び出しが存在すること"
+        content = assistant_calls[0].args[1]
+        assert content != ""
+        assert "Generated 1 image(s)" in content
+
+    @pytest.mark.asyncio
+    async def test_nonempty_turn_unchanged(self):
+        """full_response非空ターンは一切触らないこと。"""
+        from nous.application.chat_service import ChatService
+
+        tool_evt = ToolCallEvent(
+            tool_name="memory_search",
+            tool_input={"query": "test"},
+            tool_use_id="tool_001",
+        )
+        call_count = 0
+
+        async def mock_stream(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                yield tool_evt
+                yield DoneEvent(full_content="", tool_calls=[tool_evt])
+            else:
+                yield TextDeltaEvent(content="Found it!")
+                yield DoneEvent(full_content="Found it!", tool_calls=[])
+
+        mock_provider = MagicMock()
+        mock_provider.stream = mock_stream
+        ctx = self._make_ctx()
+        from datetime import datetime as _dt
+
+        from nous.domain.memory.entities import Memory
+        from nous.domain.search.engine import SearchResult
+
+        mem = Memory(
+            key="mem_001",
+            content="test memory",
+            created_at=_dt(2025, 1, 1, 12, 0, 0),
+            updated_at=_dt(2025, 1, 1, 12, 0, 0),
+            importance=0.8,
+            emotion="neutral",
+        )
+        search_result = MagicMock()
+        search_result.is_ok = True
+        search_result.value = [SearchResult(memory=mem, score=0.9, source="keyword")]
+        ctx.search_engine.search.return_value = search_result
+        cfg = self._make_config()
+        service = ChatService()
+        mock_session = MagicMock()
+        with (
+            patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider),
+            patch("nous.application.chat.service._session_manager.get_or_create", return_value=mock_session),
+        ):
+            async for _ in service.chat(ctx, cfg, "sess-nonempty", "hello"):
+                pass
+        assistant_calls = [c for c in mock_session.add.call_args_list if c.args[0] == "assistant"]
+        assert assistant_calls, "assistant メッセージの保存呼び出しが存在すること"
+        content = assistant_calls[0].args[1]
+        assert content == "Found it!"

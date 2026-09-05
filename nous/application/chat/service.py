@@ -84,6 +84,41 @@ async def _execute_search_tools(
     }
 
 
+def _build_tool_only_fallback(tool_calls_log: list[dict]) -> str:
+    """空テキスト＋ツール有りターンの保存用フォールバック文を合成する。"""
+    import json
+
+    for entry in tool_calls_log or []:
+        if not isinstance(entry, dict):
+            continue
+        for key in ("result_raw", "result"):
+            src = entry.get(key)
+            if not isinstance(src, dict):
+                continue
+            if src.get("images") and isinstance(src.get("message"), str) and src["message"].strip():
+                return src["message"].strip()
+            if isinstance(src.get("images_summary"), str) and src["images_summary"].strip():
+                return src["images_summary"].strip()
+            content = src.get("content")
+            if isinstance(content, str) and content.strip().startswith("{"):
+                try:
+                    data = json.loads(content)
+                except Exception:
+                    data = None
+                if isinstance(data, dict):
+                    if isinstance(data.get("images_summary"), str) and data["images_summary"].strip():
+                        if isinstance(data.get("message"), str) and data["message"].strip():
+                            return data["message"].strip()
+                        return data["images_summary"].strip()
+                    msg = data.get("message")
+                    if isinstance(msg, str) and ("Generated" in msg or "image" in msg.lower()):
+                        return msg.strip()
+    names = [str(e.get("name", "?")) for e in (tool_calls_log or []) if isinstance(e, dict)]
+    if names:
+        return f"[ツール実行: 完了（{', '.join(names)}）] テキスト応答がありませんでした"
+    return "[ツール実行: 完了] テキスト応答がありませんでした"
+
+
 class ChatService:
     async def chat(
         self,
@@ -237,6 +272,8 @@ class ChatService:
 
                 # Save assistant response BEFORE PostProcessStep
                 if full_response or turn_ctx.tool_calls_log:
+                    if not full_response and turn_ctx.tool_calls_log:
+                        full_response = _build_tool_only_fallback(turn_ctx.tool_calls_log)
                     assistant_msg_id = session.add(
                         "assistant",
                         full_response,
