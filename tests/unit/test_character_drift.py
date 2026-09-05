@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from nous.application.chat.memory_extractor import run_memory_llm
 from nous.application.chat.memory_prompts import _MEMORY_LLM_PROMPT, _build_drift_section
+from nous.application.chat.pipeline.context_loader import _build_context_section
+from nous.application.chat.pipeline.memory_retriever import _search_memories
 from nous.application.chat.pipeline.post import _with_drift
+from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now
 
@@ -163,3 +167,67 @@ class TestWithDrift:
     def test_missing_detail_defaults_empty(self):
         out = _with_drift({"user": "u", "assistant": "a"}, {"violation": "character"})
         assert out["drift"] == {"violation": "character", "detail": ""}
+
+
+def _make_state():
+    return SimpleNamespace(
+        persona="herta",
+        emotion="",
+        emotion_intensity=0.0,
+        mental_state="",
+        physical_state="",
+        environment="",
+        relationship_status="",
+        user_info={},
+        persona_info={},
+    )
+
+
+def _make_drift_ctx(drifts):
+    """context_loader用ctx。driftはcharacter_driftタグでのみ返し、他タグは空にする。"""
+    ctx = MagicMock()
+    ctx.connection.get_memory_db.side_effect = Exception("no db in unit test")
+
+    def _by_tags(tags):
+        if "character_drift" in tags:
+            return Success(list(drifts))
+        return Success([])
+
+    ctx.memory_service.get_by_tags = MagicMock(side_effect=_by_tags)
+    ctx.persona_service.get_emotion_history = MagicMock(return_value=MagicMock(is_ok=False))
+    ctx.equipment_service.get_equipment = MagicMock(return_value=MagicMock(is_ok=False))
+    return ctx
+
+
+class TestDriftRecall:
+    @pytest.mark.asyncio
+    async def test_retriever_passes_valid_at(self):
+        ctx = MagicMock()
+        ctx.search_engine.search = AsyncMock(return_value=MagicMock(is_ok=False))
+        config = MagicMock()
+        config.retrieval_recency_weight = 0.3
+        config.retrieval_importance_weight = 0.3
+        config.retrieval_relevance_weight = 0.4
+        config.retrieval_rrf_k = 5.0
+        await _search_memories(ctx, "こんにちは", None, config)
+        query = ctx.search_engine.search.await_args[0][0]
+        assert isinstance(query, SearchQuery)
+        assert query.valid_at is not None
+
+    @pytest.mark.asyncio
+    async def test_injection_includes_valid_drift(self):
+        drift = SimpleNamespace(content="私は一人称を誤った", valid_until=get_now() + timedelta(days=1))
+        section = await _build_context_section(_make_drift_ctx([drift]), _make_state())
+        assert "内面の違和感" in section
+        assert "私は一人称を誤った" in section
+
+    @pytest.mark.asyncio
+    async def test_injection_excludes_expired_drift(self):
+        drift = SimpleNamespace(content="古い反省", valid_until=get_now() - timedelta(days=1))
+        section = await _build_context_section(_make_drift_ctx([drift]), _make_state())
+        assert "古い反省" not in section
+
+    @pytest.mark.asyncio
+    async def test_injection_without_drift(self):
+        section = await _build_context_section(_make_drift_ctx([]), _make_state())
+        assert "内面の違和感" not in section

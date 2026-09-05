@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from nous.application.chat.pipeline.emotion_decay import _compute_recency_decay
 from nous.domain.memory.recall_annotator import RecallAnnotator
 from nous.domain.search.engine import SearchQuery
+from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -68,7 +69,7 @@ async def _search_memories(
 
     async def _run(q: str) -> list:
         try:
-            result = await ctx.search_engine.search(SearchQuery(text=q, top_k=top_k))
+            result = await ctx.search_engine.search(SearchQuery(text=q, top_k=top_k, valid_at=get_now()))
             return result.value if result.is_ok else []
         except Exception as e:
             logger.warning("search_memory failed (query=%s): %s", q[:40], e)

@@ -266,6 +266,20 @@ async def _build_context_section(
         except Exception as e:
             logger.debug("Failed to fetch task states: %s", e)
 
+    # Character drift — skip in light mode
+    if not _is_light:
+        try:
+            drift_result = ctx.memory_service.get_by_tags(["character_drift"])
+            if isinstance(drift_result, Success) and drift_result.value:
+                now = get_now()
+                valid = [m for m in drift_result.value if m.content and (m.valid_until is None or m.valid_until > now)]
+                if valid:
+                    latest = _sanitize_text(valid[0].content)
+                    if latest:
+                        t3.append("内面の違和感:\n  ⚠ " + latest)
+        except Exception as e:
+            logger.debug("Failed to fetch character drift: %s", e)
+
     try:
         equip_result = ctx.equipment_service.get_equipment()
         if equip_result.is_ok:
