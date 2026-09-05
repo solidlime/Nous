@@ -13,7 +13,6 @@ import typing
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
-from pydantic_core import PydanticUndefined
 
 from nous.domain.compression_config import CompressionConfig
 
@@ -28,22 +27,28 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-if TYPE_CHECKING:
-    import sqlite3
-
 # 後方互換のため定数は残すが内容は空（各 persona 個別生成）
 DEFAULT_MCP_SERVERS: list[dict] = []
 
-# SQL type mapping for dynamic ALTER TABLE ADD COLUMN
-_TYPE_SQL: dict[type, tuple[str, str]] = {
-    bool: ("INTEGER", "0"),
-    int: ("INTEGER", "0"),
-    float: ("REAL", "0.0"),
-    str: ("TEXT", "''"),
-    list: ("TEXT", "''"),
-    dict: ("TEXT", "''"),
-    type(None): ("TEXT", "NULL"),
-}
+
+def _get_base_type(annotation: object) -> type:
+    """Extract base Python type from a type annotation (handling Optional, Union, generics)."""
+    if annotation is type(None):
+        return type(None)
+    origin = typing.get_origin(annotation)
+    if origin is not None:
+        if origin is typing.Union:
+            non_none = [a for a in typing.get_args(annotation) if a is not type(None)]
+            if non_none:
+                return _get_base_type(non_none[0])
+            return type(None)
+        if origin is list:
+            return list
+        if origin is dict:
+            return dict
+        return origin
+    return annotation
+
 
 # Sub-config field name → class mapping
 _SUB_CONFIG_MAP: dict[str, type[BaseModel]] = {
@@ -208,199 +213,6 @@ class ChatConfig(BaseModel):
 
 
 # ──────────────────────────────────────────────
-# Repository: SQLite CRUD (自動マイグレーション付き)
-# ──────────────────────────────────────────────
-
-
-class ChatConfigRepository:
-    """SQLite CRUD for ChatConfig, stored in the persona's memory.sqlite."""
-
-    def __init__(self, db: sqlite3.Connection) -> None:
-        self._db = db
-
-    # --- Schema introspection & auto-migration helpers ---
-
-    def _get_db_columns(self) -> set[str]:
-        """Return set of existing column names in chat_settings."""
-        cursor = self._db.execute("PRAGMA table_info(chat_settings)")
-        return {row[1] for row in cursor.fetchall()}
-
-    def _ensure_columns(self, db_columns: set[str]) -> set[str]:
-        """Add missing ChatConfig columns to chat_settings. Returns updated column set."""
-        new_columns = set(db_columns)
-        for field_name, field_info in ChatConfig._all_flat_fields().items():
-            if field_name in ("persona", "updated_at"):
-                continue
-            if field_name not in db_columns:
-                col_type = self._infer_column_type(field_info)
-                default = self._infer_default_value(field_info)
-                sql = f"ALTER TABLE chat_settings ADD COLUMN {field_name} {col_type} DEFAULT {default}"
-                self._db.execute(sql)
-                logger.info("chat_config: added column %s (%s DEFAULT %s)", field_name, col_type, default)
-                new_columns.add(field_name)
-        return new_columns
-
-    @staticmethod
-    def _get_base_type(annotation: object) -> type:
-        """Extract base Python type from a type annotation (handling Optional, Union, generics)."""
-        if annotation is type(None):
-            return type(None)
-        origin = typing.get_origin(annotation)
-        if origin is not None:
-            if origin is typing.Union:
-                non_none = [a for a in typing.get_args(annotation) if a is not type(None)]
-                if non_none:
-                    return ChatConfigRepository._get_base_type(non_none[0])
-                return type(None)
-            if origin is list:
-                return list
-            if origin is dict:
-                return dict
-            return origin
-        return annotation
-
-    @staticmethod
-    def _infer_column_type(field_info) -> str:
-        """Infer SQL column type string from a Pydantic FieldInfo."""
-        base = ChatConfigRepository._get_base_type(field_info.annotation)
-        return _TYPE_SQL.get(base, ("TEXT", "''"))[0]
-
-    @staticmethod
-    def _infer_default_value(field_info) -> str:
-        """Infer SQL DEFAULT expression from a Pydantic FieldInfo (pydantic default 優先)."""
-        base = ChatConfigRepository._get_base_type(field_info.annotation)
-        _, type_default = _TYPE_SQL.get(base, ("TEXT", "''"))
-        default = getattr(field_info, "default", None)
-        if default is PydanticUndefined:
-            factory = getattr(field_info, "default_factory", None)
-            try:
-                default = factory() if factory else None
-            except Exception:
-                default = None
-        if default is None:
-            return type_default
-        if base is bool:
-            return str(int(bool(default)))
-        if base is int:
-            return str(int(typing.cast("int", default)))
-        if base is float:
-            return str(float(typing.cast("float", default)))
-        return "'" + str(default).replace("'", "''") + "'"
-
-    @staticmethod
-    def _to_bind_value(field_name: str, value: object) -> object:
-        """Convert a ChatConfig field value to a bindable SQL value."""
-        if value is None:
-            return None
-        all_fields = ChatConfig._all_flat_fields()
-        field_info = all_fields.get(field_name)
-        if field_info is None:
-            return value
-        base = ChatConfigRepository._get_base_type(field_info.annotation)
-        if base is bool:
-            return int(value)
-        if base in (list, dict):
-            return json.dumps(value, ensure_ascii=False)
-        return value
-
-    def get(self, persona: str) -> ChatConfig:
-        """Load config for persona, returning defaults if not found."""
-        cursor = self._db.execute(
-            "SELECT * FROM chat_settings WHERE persona = ?",
-            (persona,),
-        )
-        row = cursor.fetchone()
-        if row is None:
-            return ChatConfig(persona=persona)
-
-        # Dynamic column-name → value mapping (not hardcoded indices)
-        columns = [d[0] for d in cursor.description]
-        data = dict(zip(columns, row, strict=False))
-
-        # Parse stored JSON fields with resilience
-        for jf in ("mcp_servers", "enabled_skills", "disabled_tools", "image_gen_presets"):
-            if data.get(jf) is not None:
-                try:
-                    data[jf] = json.loads(data[jf])
-                except json.JSONDecodeError:
-                    logger.warning("chat_config.get: corrupted JSON in '%s', falling back to []", jf)
-                    data[jf] = []
-
-        # Build kwargs: only pass known ChatConfig fields, skip None unless nullable
-        nullable = {"updated_at", "context_max_tokens", "top_p"}
-        all_fields = ChatConfig._all_flat_fields()
-        kwargs = {k: v for k, v in data.items() if k in all_fields and (v is not None or k in nullable)}
-
-        # Construct with resilience — strip invalid fields on ValidationError
-        try:
-            return ChatConfig(**kwargs)
-        except ValidationError as e:
-            for err in e.errors():
-                field = err["loc"][0] if err.get("loc") else None
-                if field and field in kwargs:
-                    logger.warning("chat_config.get: stripping invalid field '%s': %s", field, err["msg"])
-                    kwargs.pop(field)
-            try:
-                return ChatConfig(**kwargs)
-            except ValidationError:
-                logger.warning("chat_config.get: still invalid after stripping fields, returning defaults")
-                return ChatConfig(persona=persona)
-
-    def get_or_create(self, persona: str) -> ChatConfig:
-        """Get existing config or create new with defaults for fresh personas."""
-        config = self.get(persona)
-        # Only fill defaults for truly new personas (no mcp_servers configured)
-        if not config.mcp_servers:
-            config.mcp_servers = []
-            self.save(config)
-        return config
-
-    def save(self, config: ChatConfig) -> None:
-        """Insert or replace config for persona. Auto-creates missing columns."""
-        now = format_iso(get_now())
-
-        # 1. Introspect DB columns and auto-create missing ones
-        db_columns = self._get_db_columns()
-        db_columns = self._ensure_columns(db_columns)
-
-        # 2. Build dynamic INSERT + UPSERT
-        insert_fields: list[str] = []
-        bind_values: list[object] = []
-        update_set: list[str] = []
-
-        for field_name in ChatConfig._all_flat_fields():
-            if field_name not in db_columns:
-                continue
-            insert_fields.append(field_name)
-            if field_name == "persona":
-                bind_values.append(config.persona)
-            elif field_name == "updated_at":
-                bind_values.append(now)
-            else:
-                value = getattr(config, field_name, None)
-                bind_values.append(self._to_bind_value(field_name, value))
-            if field_name != "persona":
-                update_set.append(f"{field_name}=excluded.{field_name}")
-
-        columns = ", ".join(insert_fields)
-        placeholders = ", ".join("?" for _ in insert_fields)
-        update_clause = ", ".join(update_set)
-
-        sql = (
-            f"INSERT INTO chat_settings ({columns})\n"  # column names from dataclass fields x DB introspection; values bound via params  # nosec B608
-            f"VALUES ({placeholders})\n"
-            f"ON CONFLICT(persona) DO UPDATE SET {update_clause}"
-        )
-
-        self._db.execute(sql, bind_values)
-        self._db.commit()
-
-    def delete(self, persona: str) -> None:
-        self._db.execute("DELETE FROM chat_settings WHERE persona = ?", (persona,))
-        self._db.commit()
-
-
-# ──────────────────────────────────────────────
 # File-based repository (replaces SQLite chat_settings table)
 # ──────────────────────────────────────────────
 
@@ -440,9 +252,7 @@ class ChatConfigFileRepository:
                         data[jf] = []
             # bool→int の逆変換 (SQLite は bool を INTEGER で保存している)
             all_fields = ChatConfig._all_flat_fields()
-            bool_fields = {
-                k for k, fi in all_fields.items() if ChatConfigRepository._get_base_type(fi.annotation) is bool
-            }
+            bool_fields = {k for k, fi in all_fields.items() if _get_base_type(fi.annotation) is bool}
             for bf in bool_fields:
                 if bf in data and data[bf] is not None:
                     data[bf] = bool(data[bf])
@@ -459,7 +269,7 @@ class ChatConfigFileRepository:
         path = self._config_path(persona)
         if os.path.exists(path):
             try:
-                with open(path) as f:
+                with open(path, encoding="utf-8") as f:
                     data = json.load(f)
                 return ChatConfig(**data)
             except (json.JSONDecodeError, ValidationError) as e:
@@ -488,7 +298,7 @@ class ChatConfigFileRepository:
         data = config.model_dump(mode="json")
         data["updated_at"] = format_iso(get_now())
         tmp_path = path + ".tmp"
-        with open(tmp_path, "w") as f:
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         os.replace(tmp_path, path)
 

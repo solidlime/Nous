@@ -680,98 +680,11 @@ class TestCompressStep:
 class TestDogfooding:
     """Basic conversation round-trip tests to verify nothing is broken."""
 
-    def test_pipeline_chatconfig_roundtrip(self):
+    def test_pipeline_chatconfig_roundtrip(self, tmp_path):
         """Verify ChatConfig → repository save/load preserves new fields."""
-        import sqlite3
+        from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository
 
-        from nous.domain.chat_config import ChatConfig, ChatConfigRepository
-
-        db = sqlite3.connect(":memory:")
-
-        # Create schema with all columns (including new ones)
-        db.execute("""
-            CREATE TABLE chat_settings (
-                persona TEXT PRIMARY KEY,
-                provider TEXT DEFAULT 'anthropic',
-                model TEXT DEFAULT '',
-                api_key TEXT DEFAULT '',
-                base_url TEXT DEFAULT '',
-                system_prompt TEXT DEFAULT '',
-                temperature REAL DEFAULT 0.7,
-                max_tokens INTEGER DEFAULT 2048,
-                max_tool_calls INTEGER DEFAULT 5,
-                updated_at TEXT,
-                auto_extract INTEGER DEFAULT 1,
-                extract_model TEXT DEFAULT '',
-                extract_max_tokens INTEGER DEFAULT 512,
-                tool_result_max_chars INTEGER DEFAULT 4000,
-                mcp_servers TEXT DEFAULT '[]',
-                enabled_skills TEXT DEFAULT '[]',
-                reflection_enabled INTEGER DEFAULT 1,
-                reflection_threshold REAL DEFAULT 1.0,
-                reflection_min_interval_hours REAL DEFAULT 1.0,
-                session_summarize INTEGER DEFAULT 1,
-                retrieval_recency_weight REAL DEFAULT 0.3,
-                retrieval_importance_weight REAL DEFAULT 0.3,
-                retrieval_relevance_weight REAL DEFAULT 0.4,
-                retrieval_rrf_k REAL DEFAULT 5.0,
-                display_history_turns INTEGER DEFAULT 10,
-                housekeeping_threshold INTEGER DEFAULT 10,
-                mental_model_enabled INTEGER DEFAULT 1,
-                mental_model_min_samples INTEGER DEFAULT 3,
-                max_stored_messages INTEGER DEFAULT 200,
-                context_max_tokens INTEGER,
-                context_compression_threshold REAL DEFAULT 0.8,
-                context_compression_mode TEXT DEFAULT 'auto',
-                context_keep_recent_turns INTEGER DEFAULT 2,
-                context_compress_system_prompt INTEGER DEFAULT 1,
-                context_compress_history INTEGER DEFAULT 1,
-                memory_preload_count INTEGER DEFAULT 3,
-                enable_parallel_tools INTEGER DEFAULT 1,
-                image_gen_enabled INTEGER DEFAULT 0,
-                image_gen_provider TEXT DEFAULT 'comfyui',
-                image_gen_comfyui_url TEXT DEFAULT '',
-                image_gen_comfyui_checkpoint TEXT DEFAULT 'noobai-xl-epsilon-pred-11.safetensors',
-                image_gen_comfyui_loras TEXT DEFAULT '',
-                image_gen_comfyui_width INTEGER DEFAULT 1024,
-                image_gen_comfyui_height INTEGER DEFAULT 1024,
-                image_gen_comfyui_steps INTEGER DEFAULT 28,
-                image_gen_comfyui_cfg REAL DEFAULT 5.5,
-                image_gen_comfyui_sampler TEXT DEFAULT 'euler_ancestral',
-                image_gen_comfyui_scheduler TEXT DEFAULT 'normal',
-                image_gen_comfyui_seed INTEGER DEFAULT 0,
-                image_gen_comfyui_denoise REAL DEFAULT 0.7,
-                image_gen_max_width INTEGER DEFAULT 1200,
-                image_gen_max_height INTEGER DEFAULT 1200,
-                image_gen_comfyui_speed_lora_path TEXT DEFAULT '',
-                image_gen_comfyui_speed_lora_weight REAL DEFAULT 1.0,
-                image_gen_comfyui_speed_lora_method TEXT DEFAULT 'lcm',
-                enable_memory_tools INTEGER DEFAULT 1,
-                debug_mode INTEGER DEFAULT 0,
-                dynamic_temperature INTEGER DEFAULT 1,
-                emotion_temperature_scale REAL DEFAULT 0.2,
-                top_p REAL,
-                context_use_llm_summary INTEGER DEFAULT 1,
-                episode_consolidation_enabled INTEGER DEFAULT 1,
-                episode_search_enabled INTEGER DEFAULT 1,
-                dynamic_tool_selection INTEGER DEFAULT 1,
-                voice_auto_play INTEGER DEFAULT 0,
-                voice_emotion_link INTEGER DEFAULT 1,
-                voice_model TEXT DEFAULT '',
-                voice_url TEXT DEFAULT '',
-                voice_volume REAL DEFAULT 1.0,
-                irodori_num_steps INTEGER DEFAULT 30,
-                irodori_cfg_scale_text REAL DEFAULT 3.2,
-                irodori_cfg_scale_speaker REAL DEFAULT 5.0,
-                irodori_cfg_scale_caption REAL DEFAULT 4.2,
-                irodori_chunk_min_chars INTEGER DEFAULT 85,
-                irodori_seed INTEGER,
-                disabled_tools TEXT DEFAULT '[]'
-            )
-        """)
-        db.commit()
-
-        repo = ChatConfigRepository(db)
+        repo = ChatConfigFileRepository(str(tmp_path))
         cfg = ChatConfig(
             persona="test",
             provider="openrouter",

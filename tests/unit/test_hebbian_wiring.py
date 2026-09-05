@@ -191,6 +191,70 @@ class TestLinkServiceHebbianWiring:
 
 
 # ---------------------------------------------------------------------------
+# F2: decay_stale_links (floor 0.5 invariant)
+# ---------------------------------------------------------------------------
+
+
+def _insert_link(db, src: str, dst: str, weight: float, last_activated: str) -> None:
+    db.execute(
+        "INSERT INTO memory_links (source_key, target_key, weight, link_type, co_activation_count, last_activated) "
+        "VALUES (?, ?, ?, 'semantic', 1, ?)",
+        (src, dst, weight, last_activated),
+    )
+
+
+class TestDecayStaleLinks:
+    def test_recent_links_untouched(self, sqlite_conn):
+        """7日以内のリンクは無影響."""
+        repo = SQLiteEntityRepository(sqlite_conn)
+        recent = "2099-01-01T00:00:00+00:00"
+        _insert_link(sqlite_conn.get_memory_db(), "a", "b", 0.8, recent)
+        repo.decay_stale_links("2000-01-01T00:00:00+00:00")
+        row = sqlite_conn.get_memory_db().execute("SELECT weight FROM memory_links").fetchone()
+        assert row["weight"] == pytest.approx(0.8)
+
+    def test_stale_link_decayed_by_rate(self, sqlite_conn):
+        """7日超のリンクは rate だけ減衰."""
+        repo = SQLiteEntityRepository(sqlite_conn)
+        stale = "2020-01-01T00:00:00+00:00"
+        _insert_link(sqlite_conn.get_memory_db(), "a", "b", 0.8, stale)
+        repo.decay_stale_links("2021-01-01T00:00:00+00:00", rate=0.005)
+        row = sqlite_conn.get_memory_db().execute("SELECT weight FROM memory_links").fetchone()
+        assert row["weight"] == pytest.approx(0.795)
+
+    def test_floor_at_0_5(self, sqlite_conn):
+        """floor 0.5 で停止——永続weight ≥ 0.5 の不変条件."""
+        repo = SQLiteEntityRepository(sqlite_conn)
+        stale = "2020-01-01T00:00:00+00:00"
+        _insert_link(sqlite_conn.get_memory_db(), "a", "b", 0.52, stale)
+        # 大きな rate でも floor を割らない
+        repo.decay_stale_links("2021-01-01T00:00:00+00:00", rate=0.1)
+        row = sqlite_conn.get_memory_db().execute("SELECT weight FROM memory_links").fetchone()
+        assert row["weight"] == 0.5
+
+    def test_boundary_timestamp_not_decayed(self, sqlite_conn):
+        """last_activated == cutoff は減衰対象外（厳密な < 比较）."""
+        repo = SQLiteEntityRepository(sqlite_conn)
+        boundary = "2021-01-01T00:00:00+00:00"
+        _insert_link(sqlite_conn.get_memory_db(), "a", "b", 0.8, boundary)
+        repo.decay_stale_links(boundary)
+        row = sqlite_conn.get_memory_db().execute("SELECT weight FROM memory_links").fetchone()
+        assert row["weight"] == pytest.approx(0.8)
+
+    def test_decay_worker_calls_decay_stale_links(self):
+        """DecayWorker._decay_cycle が decay_stale_links を呼ぶこと."""
+        from unittest.mock import MagicMock
+
+        from nous.application.workers.decay_worker import DecayWorker
+
+        ctx = MagicMock()
+        ctx.memory_repo.get_all_strengths.return_value = MagicMock(is_ok=True, value=[])
+        worker = DecayWorker(ctx, interval_seconds=9999)
+        worker._decay_cycle()
+        ctx.entity_repo.decay_stale_links.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
 # 4. session_id propagation: registry → recorder
 # ---------------------------------------------------------------------------
 

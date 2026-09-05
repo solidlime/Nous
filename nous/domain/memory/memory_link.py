@@ -46,7 +46,3 @@ class MemoryLink:
         self.weight = min(1.0, self.weight + strength)
         self.co_activation_count += 1
         self.last_activated = datetime.now(UTC).isoformat()
-
-    def decay(self, rate: float = 0.01) -> None:
-        """Spontaneous decay for unused links.  Weight floor at 0.1."""
-        self.weight = max(0.1, self.weight - rate)

@@ -130,6 +130,18 @@ class DecayWorker:
             errors,
         )
 
+        # Hebbian link decay: links idle >7 days drift toward the 0.5 floor
+        # (never below — persistent weight must stay ≥ the co-occurrence base).
+        try:
+            from datetime import timedelta
+
+            from nous.domain.shared.time_utils import format_iso
+
+            cutoff = format_iso(now - timedelta(days=7))
+            self.context.entity_repo.decay_stale_links(cutoff)
+        except Exception:
+            logger.warning("Hebbian link decay failed", exc_info=True)
+
     def _maybe_run_reflection(self) -> None:
         """Run reflection if engine and LLM provider are configured.
 

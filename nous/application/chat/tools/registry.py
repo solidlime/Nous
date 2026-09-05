@@ -91,8 +91,10 @@ class ToolRegistry:
             else:
                 result = await execute_tool(ctx, config, tool_name, tool_input)
 
-            # Publish tool.called event on success
-            if hasattr(ctx, "event_bus") and ctx.event_bus is not None:
+            # Publish tool.called event on success.
+            # Invariant: MCP tools publish their own events (all paths) —
+            # registry only publishes for builtin/search_tools.
+            if hasattr(ctx, "event_bus") and ctx.event_bus is not None and not self.is_mcp_tool(tool_name):
                 await ctx.event_bus.publish(
                     "tool.called",
                     {
@@ -106,8 +108,8 @@ class ToolRegistry:
             return result
         except Exception as e:
             logger.exception("ToolRegistry.execute failed: %s", tool_name)
-            # Publish tool.called event on failure
-            if hasattr(ctx, "event_bus") and ctx.event_bus is not None:
+            # Publish tool.called event on failure (same invariant as above)
+            if hasattr(ctx, "event_bus") and ctx.event_bus is not None and not self.is_mcp_tool(tool_name):
                 await ctx.event_bus.publish(
                     "tool.called",
                     {

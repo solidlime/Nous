@@ -17,6 +17,7 @@ from nous.api.mcp._tools_helpers import (  # noqa: E402
     _apply_body_decay,
     _apply_emotion_decay,
     _format_lightweight_response,
+    tool_called_audited,
 )
 
 
@@ -126,6 +127,7 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> dict:
     return {"ok": True, "result": result_text}
 
 
+@tool_called_audited("update_context")
 async def _tool_update_context(
     ctx: AppContext,
     persona: str,

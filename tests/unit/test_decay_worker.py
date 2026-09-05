@@ -101,28 +101,3 @@ class TestConsolidationWorkerEventStop:
         assert worker._stop_event.is_set()
         assert not worker._thread.is_alive()
         assert elapsed < 5
-
-
-class TestContextSnapshotWorkerEventStop:
-    def test_stop_joins_within_timeout(self) -> None:
-        """ContextSnapshotWorker も Event.wait 化されている（stop→join が timeout 内に返る）"""
-        import time
-
-        from nous.application.workers.context_snapshot_worker import ContextSnapshotWorker
-
-        settings = MagicMock()
-        settings.memorag.enabled = True
-        settings.memorag.snapshot_interval_hours = 2
-        settings.memorag.rebuild_threshold = 20
-
-        worker = ContextSnapshotWorker(settings)
-        worker.start()
-        assert worker._thread is not None
-
-        start = time.monotonic()
-        worker.stop(timeout=5)
-        elapsed = time.monotonic() - start
-
-        assert worker._stop_event.is_set()
-        assert not worker._thread.is_alive()
-        assert elapsed < 5

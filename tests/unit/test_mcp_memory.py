@@ -491,9 +491,10 @@ class TestMemoryUpdate:
         data = json.loads(result)
         assert data["ok"] is True
         # Verify the event bus was called with changes=["content"]
-        call_args = ctx.event_bus.publish.call_args
-        assert call_args is not None
-        _event_name, payload = call_args[0]
+        # (tool.called self-publication may follow; find the memory.updated call)
+        updated_calls = [c for c in ctx.event_bus.publish.call_args_list if c[0][0] == "memory.updated"]
+        assert updated_calls, "memory.updated event must be published"
+        payload = updated_calls[-1][0][1]
         assert payload["changes"] == ["content"]
 
     @pytest.mark.asyncio
@@ -512,9 +513,9 @@ class TestMemoryUpdate:
 
         data = json.loads(result)
         assert data["ok"] is True
-        call_args = ctx.event_bus.publish.call_args
-        assert call_args is not None
-        _event_name, payload = call_args[0]
+        updated_calls = [c for c in ctx.event_bus.publish.call_args_list if c[0][0] == "memory.updated"]
+        assert updated_calls, "memory.updated event must be published"
+        payload = updated_calls[-1][0][1]
         # content, importance, tags — in insertion order
         assert payload["changes"] == ["content", "importance", "tags"]
 

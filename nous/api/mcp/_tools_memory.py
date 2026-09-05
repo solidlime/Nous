@@ -6,6 +6,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from nous.api.mcp._tools_helpers import tool_called_audited
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.errors import DuplicateMemoryError
 from nous.domain.value_objects import _VALID_EMOTIONS, normalize_importance
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
 
 
+@tool_called_audited("memory_create")
 async def _tool_memory_create(
     ctx: AppContext,
     persona: str,
@@ -170,6 +172,7 @@ async def _tool_memory_read(
         return {"success": False, "data": None, "result_summary": str(memories_result.error)}
 
 
+@tool_called_audited("memory_update")
 async def _tool_memory_update(
     ctx: AppContext,
     persona: str,
@@ -269,6 +272,7 @@ async def _tool_memory_update(
     return {"success": False, "data": None, "result_summary": str(result.error)}
 
 
+@tool_called_audited("memory_delete")
 async def _tool_memory_delete(
     ctx: AppContext, persona: str, memory_key: str | None = None, query: str | None = None
 ) -> str:

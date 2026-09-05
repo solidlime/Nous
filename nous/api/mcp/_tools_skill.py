@@ -6,12 +6,15 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
+from nous.api.mcp._tools_helpers import tool_called_audited
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
 
 
+@tool_called_audited("invoke_skill")
 async def _tool_invoke_skill(ctx: AppContext, persona: str, name: str, task: str) -> dict:
     """スキルの完全な指示内容を返す。別LLMは呼び出さない。
 

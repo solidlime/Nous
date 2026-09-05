@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 from typing import TYPE_CHECKING
 
 from nous.domain.shared.time_utils import relative_time_str
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from nous.application.use_cases import AppContext
     from nous.domain.persona.emotion_decay import EmotionDecayResult
     from nous.domain.persona.entities import PersonaState
@@ -21,6 +24,97 @@ _DEFAULT_METRIC_LABELS = {
     "heart_rate": "heart",
     "pain": "pain",
 }
+
+
+# ── tool.called self-publication (F3 invariant) ──
+# Invariant: MCP tools publish their own tool.called events on ALL paths;
+# ToolRegistry skips MCP tools.  Tools that already publish inline
+# (memory_read/search/stats, get_context, goal_manage, item_*) keep their
+# rich summaries; the 5 tools below had zero self-publication and use the
+# audited wrapper to guarantee coverage on every success/failure path.
+
+
+def _tool_called_result_success(result: object) -> bool:
+    """Classify a tool return value as success/failure."""
+    if isinstance(result, dict):
+        if "success" in result:
+            return bool(result["success"])
+        if "ok" in result:
+            return bool(result["ok"])
+        if "status" in result:
+            return bool(result["status"] == "ok")
+        return True
+    if isinstance(result, str):
+        return not (result.startswith("Error") or result.startswith("No memory"))
+    return True
+
+
+def _tool_called_result_summary(result: object) -> str:
+    """Extract a human-readable summary from a tool return value."""
+    if isinstance(result, dict):
+        for key in ("result_summary", "result", "error", "message"):
+            if result.get(key):
+                return str(result[key])
+        return ""
+    return str(result)
+
+
+async def _emit_tool_called(
+    ctx: AppContext,
+    tool_name: str,
+    result_summary: str,
+    success: bool,
+    params_summary: str = "",
+    error: str | None = None,
+) -> None:
+    """Publish a tool.called event (best-effort — never breaks the tool flow)."""
+    try:
+        data: dict = {
+            "tool_name": tool_name,
+            "params_summary": params_summary[:200],
+            "result_summary": result_summary[:80],
+            "success": success,
+            "session_id": getattr(ctx, "session_id", None),
+        }
+        if error:
+            data["error"] = error
+        await ctx.event_bus.publish("tool.called", data)
+    except Exception:
+        logger.warning("tool.called publication failed for %s", tool_name, exc_info=True)
+
+
+def tool_called_audited(
+    tool_name: str,
+) -> Callable[[Callable[..., Awaitable[object]]], Callable[..., Awaitable[object]]]:
+    """Decorator: guarantee tool.called publication on all paths of an MCP tool.
+
+    Success/failure is classified from the return value; exceptions emit a
+    failure event and re-raise.
+    """
+
+    def deco(fn: Callable[..., Awaitable[object]]) -> Callable[..., Awaitable[object]]:
+        @functools.wraps(fn)
+        async def wrapper(ctx: AppContext, persona: str, *args: object, **kwargs: object) -> object:
+            params_summary = str(kwargs)
+            try:
+                result = await fn(ctx, persona, *args, **kwargs)
+            except Exception as e:
+                await _emit_tool_called(
+                    ctx, tool_name, str(e), success=False, params_summary=params_summary, error=str(e)
+                )
+                raise
+            await _emit_tool_called(
+                ctx,
+                tool_name,
+                _tool_called_result_summary(result),
+                _tool_called_result_success(result),
+                params_summary=params_summary,
+            )
+            return result
+
+        return wrapper
+
+    return deco
 
 
 def _format_body_metrics(state: PersonaState, labels: dict[str, str] | None = None) -> str:
