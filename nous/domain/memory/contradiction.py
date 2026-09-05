@@ -28,8 +28,8 @@ class ContradictionResult:
 
     When type is EXTENDABLE, updated_fields contains the metadata changes
     (tags, context_tags, importance, etc.) to apply to the existing memory.
-    When type is CONTRADICTORY, the existing memory should be tombstoned
-    and the new memory saved independently.
+    When type is CONTRADICTORY, the existing memory's validity window is closed
+    (valid_until + superseded_by) and the new memory saved independently.
     """
 
     type: ContradictionType
