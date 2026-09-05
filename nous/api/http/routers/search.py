@@ -106,10 +106,11 @@ def register_search_routes(mcp) -> None:
         q = request.query_params.get("q", "")
         try:
             limit = int(request.query_params.get("limit", "20"))
-            if limit < 1 or limit > 1000:
-                return JSONResponse({"error": "limit must be between 1 and 1000"}, status_code=400)
         except ValueError:
             return JSONResponse({"error": "limit must be an integer"}, status_code=400)
+        if limit < 1:
+            return JSONResponse({"error": "limit must be between 1 and 100"}, status_code=400)
+        limit = min(limit, 100)
         mode = request.query_params.get("mode", "hybrid")
         date_range = request.query_params.get("date_range")
         min_importance_str = request.query_params.get("min_importance")
@@ -142,6 +143,7 @@ def register_search_routes(mcp) -> None:
                 {
                     "persona": persona,
                     "query": q,
+                    "limit": limit,
                     "results": [
                         {
                             "memory": _memory_to_dict(r.memory),

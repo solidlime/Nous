@@ -73,14 +73,14 @@ class TestFilterByKind:
         out = SearchEngine._filter_by_kind(results, "episodic")
         assert out == []
 
-    def test_invalid_kind_returns_all(self) -> None:
-        """Invalid kind value should not filter (backward compat)."""
+    def test_invalid_kind_returns_empty(self) -> None:
+        """Invalid kind value matches nothing (Task 4: truthful filter)."""
         results = [
             _result("k1", 1.0, kind="episodic"),
             _result("k2", 0.9, kind="semantic"),
         ]
         out = SearchEngine._filter_by_kind(results, "bogus_kind")
-        assert len(out) == 2
+        assert out == []
 
 
 class TestSearchEngineKindIntegration:

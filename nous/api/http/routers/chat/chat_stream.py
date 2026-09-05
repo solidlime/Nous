@@ -113,7 +113,8 @@ async def chat_endpoint(request: Request) -> StreamingResponse:
     user_message = (body.get("message") or "").strip()
     session_id = (body.get("session_id") or "main").strip()
     debug_mode = bool(body.get("debug", False))
-    images: list[dict] = body.get("images") or []
+    _images_raw = body.get("images") or []
+    images: list[dict] = _images_raw if isinstance(_images_raw, list) else []
 
     if not user_message:
         return StreamingResponse(_empty(), media_type="text/event-stream")

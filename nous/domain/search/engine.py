@@ -213,7 +213,7 @@ class SearchEngine:
         from nous.domain.memory.entities import VALID_KINDS
 
         if kind not in VALID_KINDS:
-            return results
+            return []
         return [r for r in results if r.memory.kind == kind]
 
     @staticmethod
