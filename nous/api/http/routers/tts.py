@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
 import logging
 import math
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from starlette.responses import FileResponse, JSONResponse, Response
 
@@ -94,6 +95,17 @@ def build_style_anchor(
 _LAST_CAPTION: dict[str, tuple[str, float, str]] = {}
 
 
+class CaptionSnapshot(NamedTuple):
+    emotion: str
+    bucket: float
+
+
+class CaptionResult(NamedTuple):
+    emotion: str
+    caption: str | None
+    snapshot: CaptionSnapshot
+
+
 def _emotion_bucket(intensity: float) -> float:
     return round(_clamp01(intensity) + 1e-9, 1)
 
@@ -133,6 +145,130 @@ def _resolve_tts_override(body: object) -> tuple[str, str | None, bool]:
     emo = _body_str(body, "emotion")
     cap = _body_str(body, "caption")
     return (emo or "neutral", cap or None, bool(cap or emo))
+
+
+async def _resolve_caption(
+    persona: str,
+    ctx,
+    chat_config,
+    *,
+    ref_text: str,
+    override_emotion: str = "",
+    override_caption: str | None = None,
+) -> CaptionResult:
+    """感情解決＋字幕決定の正典。synthesize直列・kickoff並列の共用。"""
+    use_override = bool(override_emotion or override_caption)
+    if use_override:
+        emo = (override_emotion or "neutral").strip() or "neutral"
+        return CaptionResult(emo, override_caption, CaptionSnapshot(emo, _emotion_bucket(0.0)))
+    emotion = "neutral"
+    caption: str | None = None
+    mode = _resolve_emotion_mode(chat_config)
+    state = None
+    if mode != "off":
+        state_result = ctx.persona_service.get_context(persona)
+        if state_result.is_ok and state_result.value:
+            state = state_result.value
+            emotion = (getattr(state, "emotion", "") or "").strip() or "neutral"
+
+            # 決定的スタイルアンカー1文 (OFF送信・ON固定条件の共通土台。旧メタデータダンプは廃止)
+            caption = build_style_anchor(
+                emotion,
+                float(state.emotion_intensity or 0.0),
+                appearance=getattr(state, "appearance", None),
+                relationship=getattr(state, "relationship_status", None),
+            )
+    snapshot = CaptionSnapshot(
+        emotion, _emotion_bucket(float(getattr(state, "emotion_intensity", 0.0) or 0.0)) if state else _emotion_bucket(0.0)
+    )
+    # LLM caption generation ("llm" モードのみ。アンカーを磨く)
+    if mode == "llm" and state:
+        try:
+            # Get LLM config from chat config
+            provider_name = getattr(chat_config, "provider", "opencode_go")
+            api_key = getattr(chat_config, "api_key", "")
+            model_name = getattr(chat_config, "irodori_caption_llm_model", "") or getattr(chat_config, "model", "")
+            base_url = getattr(chat_config, "base_url", "")
+
+            from nous.infrastructure.llm.factory import get_provider
+
+            anchor = caption  # OFFアンカーを固定条件・フォールバックに流用
+            bucket = _emotion_bucket(float(getattr(state, "emotion_intensity", 0.0) or 0.0))
+            cached = _LAST_CAPTION.get(persona)
+            if cached and cached[0] == (state.emotion or "") and cached[1] == bucket and cached[2]:
+                caption = cached[2]
+                logger.debug("TTS caption reuse: %s", caption[:60])
+                provider = None
+            else:
+                provider = get_provider(provider_name, api_key, model_name, base_url)
+
+            if provider is not None:
+                prev = cached[2] if cached else ""
+                llm_system = """あなたは音声合成（irodori-tts）向けキャプション生成AIです。
+【固定条件】の感情・アンカーが主です。本文からの感情推測・感情の切替は禁止します。本文は緩急・間・息遣いの参考にのみ使ってください。
+前回 caption の声質を維持し、感情が大きく変わった場合のみ寄せてください。
+
+## 含めるべき要素（該当するもののみ）
+- 声の高さ・速さ・質感（落ち着いた/高い/ハスキー/ささやく 等）
+- 固定条件の感情の種類と強度（嬉しそう/怒り/悲しみ/驚き/違和感 等）
+- 話し方のスタイル（丁寧/カジュアル/近い距離感/遠い距離感）
+- 発話の特徴（震え/息遣い/間/たどたどしさ 等）
+
+## 例
+- 「落ち着いた声で、近い距離感でやわらかく自然に読み上げる。全体を通して一貫した声質・感情で話す。」
+- 「深く傷つき、今にも泣き出しそうな様子。声が震えており、悲痛なトーンで弱々しく話す。全体を通して一貫した声質・感情で話す。」
+
+## 制約
+- 80文字以内の自然な日本語1文
+- 必ず「全体を通して一貫した声質・感情で話す。」で締める
+- 説明文ではなく「〜話す」「〜読み上げる」で締める
+- 出力はキャプションの本文のみ（JSONや説明は不要）"""
+
+                emotion_directive = build_caption_emotion_directive(
+                    str(getattr(state, "emotion", "") or ""),
+                    float(getattr(state, "emotion_intensity", 0.0) or 0.0),
+                )
+                if emotion_directive:
+                    llm_system = llm_system + "\n" + emotion_directive
+
+                clamped_inten = _clamp01(getattr(state, "emotion_intensity", 0.0))
+                llm_user = f"""【固定条件】
+{anchor}
+感情: {emotion}（強さ: {_intensity_word(clamped_inten)}）。
+
+【前回】
+{prev or "（なし）"}
+
+                    【参考本文(感情決定に使わない)】
+{ref_text}"""
+
+                from nous.infrastructure.llm.base import ErrorEvent, LLMMessage, TextDeltaEvent
+
+                full_content: list[str] = []
+                saw_error = False
+                async for event in provider.stream(
+                    messages=[LLMMessage(role="user", content=llm_user)],
+                    system=llm_system,
+                    temperature=0.2,
+                    max_tokens=128,
+                ):
+                    if isinstance(event, TextDeltaEvent):
+                        full_content.append(event.content)
+                    elif isinstance(event, ErrorEvent):
+                        saw_error = True
+                        logger.warning("LLM caption generation error: %s", event.message)
+                        break
+                llm_caption = "".join(full_content).strip()
+                if llm_caption and not saw_error:
+                    caption = llm_caption
+                    _LAST_CAPTION[persona] = (state.emotion or "", bucket, caption)
+                    logger.info("LLM caption generated for TTS: %s", llm_caption[:100])
+                else:
+                    caption = anchor
+        except Exception:
+            # caption は既に OFFアンカーなので触らない (フォールバック済み)
+            logger.exception("LLM caption generation failed, falling back to style anchor")
+    return CaptionResult(emotion, caption, snapshot)
 
 
 def _body_text_required(body: object, key: str) -> str:
@@ -298,113 +434,16 @@ def register_tts_routes(mcp) -> None:
                 engine._voice = voice_override  # noqa: SLF001
 
         # get persona state for emotion + build caption
-        emotion, caption, use_override = _resolve_tts_override(body)
-        state = None
-        # 感情の声への反映モード: "off" | "anchor" | "llm" (旧2ブール値から移行済み)
-        emotion_mode = _resolve_emotion_mode(chat_config)
-        if use_override:
-            pass  # emotion/captionは呼び出し側（1文目で解決済み）を使い回す。LLM生成・_LAST_CAPTION更新はしない。
-        elif emotion_mode != "off":
-            state_result = ctx.persona_service.get_context(persona)
-            if state_result.is_ok and state_result.value:
-                state = state_result.value
-                emotion = (getattr(state, "emotion", "") or "").strip() or "neutral"
-
-                # 決定的スタイルアンカー1文 (OFF送信・ON固定条件の共通土台。旧メタデータダンプは廃止)
-                caption = build_style_anchor(
-                    emotion,
-                    float(state.emotion_intensity or 0.0),
-                    appearance=getattr(state, "appearance", None),
-                    relationship=getattr(state, "relationship_status", None),
-                )
-
-        # LLM caption generation ("llm" モードのみ。アンカーを磨く)
-        if emotion_mode == "llm" and state:
-            try:
-                # Get LLM config from chat config
-                provider_name = getattr(chat_config, "provider", "opencode_go")
-                api_key = getattr(chat_config, "api_key", "")
-                model_name = getattr(chat_config, "irodori_caption_llm_model", "") or getattr(chat_config, "model", "")
-                base_url = getattr(chat_config, "base_url", "")
-
-                from nous.infrastructure.llm.factory import get_provider
-
-                anchor = caption  # OFFアンカーを固定条件・フォールバックに流用
-                bucket = _emotion_bucket(float(getattr(state, "emotion_intensity", 0.0) or 0.0))
-                cached = _LAST_CAPTION.get(persona)
-                if cached and cached[0] == (state.emotion or "") and cached[1] == bucket and cached[2]:
-                    caption = cached[2]
-                    logger.debug("TTS caption reuse: %s", caption[:60])
-                    provider = None
-                else:
-                    provider = get_provider(provider_name, api_key, model_name, base_url)
-
-                if provider is not None:
-                    prev = cached[2] if cached else ""
-                    llm_system = """あなたは音声合成（irodori-tts）向けキャプション生成AIです。
-【固定条件】の感情・アンカーが主です。本文からの感情推測・感情の切替は禁止します。本文は緩急・間・息遣いの参考にのみ使ってください。
-前回 caption の声質を維持し、感情が大きく変わった場合のみ寄せてください。
-
-## 含めるべき要素（該当するもののみ）
-- 声の高さ・速さ・質感（落ち着いた/高い/ハスキー/ささやく 等）
-- 固定条件の感情の種類と強度（嬉しそう/怒り/悲しみ/驚き/違和感 等）
-- 話し方のスタイル（丁寧/カジュアル/近い距離感/遠い距離感）
-- 発話の特徴（震え/息遣い/間/たどたどしさ 等）
-
-## 例
-- 「落ち着いた声で、近い距離感でやわらかく自然に読み上げる。全体を通して一貫した声質・感情で話す。」
-- 「深く傷つき、今にも泣き出しそうな様子。声が震えており、悲痛なトーンで弱々しく話す。全体を通して一貫した声質・感情で話す。」
-
-## 制約
-- 80文字以内の自然な日本語1文
-- 必ず「全体を通して一貫した声質・感情で話す。」で締める
-- 説明文ではなく「〜話す」「〜読み上げる」で締める
-- 出力はキャプションの本文のみ（JSONや説明は不要）"""
-
-                    emotion_directive = build_caption_emotion_directive(
-                        str(getattr(state, "emotion", "") or ""),
-                        float(getattr(state, "emotion_intensity", 0.0) or 0.0),
-                    )
-                    if emotion_directive:
-                        llm_system = llm_system + "\n" + emotion_directive
-
-                    clamped_inten = _clamp01(getattr(state, "emotion_intensity", 0.0))
-                    llm_user = f"""【固定条件】
-{anchor}
-感情: {emotion}（強さ: {_intensity_word(clamped_inten)}）。
-
-【前回】
-{prev or "（なし）"}
-
-                    【参考本文(感情決定に使わない)】
-{text}"""
-
-                    from nous.infrastructure.llm.base import ErrorEvent, LLMMessage, TextDeltaEvent
-
-                    full_content: list[str] = []
-                    saw_error = False
-                    async for event in provider.stream(
-                        messages=[LLMMessage(role="user", content=llm_user)],
-                        system=llm_system,
-                        temperature=0.2,
-                        max_tokens=128,
-                    ):
-                        if isinstance(event, TextDeltaEvent):
-                            full_content.append(event.content)
-                        elif isinstance(event, ErrorEvent):
-                            saw_error = True
-                            logger.warning("LLM caption generation error: %s", event.message)
-                            break
-                    llm_caption = "".join(full_content).strip()
-                    if llm_caption and not saw_error:
-                        caption = llm_caption
-                        _LAST_CAPTION[persona] = (state.emotion or "", bucket, caption)
-                        logger.info("LLM caption generated for TTS: %s", llm_caption[:100])
-                    else:
-                        caption = anchor
-            except Exception:
-                # caption は既に OFFアンカーなので触らない (フォールバック済み)
-                logger.exception("LLM caption generation failed, falling back to style anchor")
+        ov_emo, ov_cap, use_override = _resolve_tts_override(body)
+        caption_res = await _resolve_caption(
+            persona,
+            ctx,
+            chat_config,
+            ref_text=text,
+            override_emotion=ov_emo if use_override else "",
+            override_caption=ov_cap if use_override else None,
+        )
+        emotion, caption = caption_res.emotion, caption_res.caption
 
         # ---- TTS audio cache ----
         voice_speed = float(getattr(chat_config, "voice_speed", 1.0) or 1.0)
