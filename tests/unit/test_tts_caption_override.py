@@ -132,3 +132,25 @@ def test_override_cache_key_uses_resolved_values():
     k1 = _tts_cache_key(text="a", emotion="joy", caption="明るく", voice_speed=1.0, voice_override=None)
     k2 = _tts_cache_key(text="a", emotion="joy", caption="暗く", voice_speed=1.0, voice_override=None)
     assert k1 != k2
+
+
+async def test_non_string_text_returns_400(monkeypatch, tmp_path):
+    _fake_ctx(monkeypatch, tmp_path, mode="anchor", forbid_state=True)
+    fn = _routes()[("/api/tts/{persona}", ("POST",))]
+    resp = await fn(_req({"text": 123}))
+    assert resp.status_code == 400
+
+
+async def test_non_dict_body_returns_400(monkeypatch, tmp_path):
+    _fake_ctx(monkeypatch, tmp_path, mode="anchor", forbid_state=True)
+    fn = _routes()[("/api/tts/{persona}", ("POST",))]
+    resp = await fn(_req(["x"]))
+    assert resp.status_code == 400
+
+
+async def test_non_string_emotion_coerced(monkeypatch, tmp_path):
+    _fake_ctx(monkeypatch, tmp_path, mode="off", forbid_state=True)
+    fn = _routes()[("/api/tts/{persona}", ("POST",))]
+    resp = await fn(_req({"text": "hi", "emotion": ["x"]}))
+    assert resp.status_code == 200
+    assert json.loads(resp.body)["emotion"] == "neutral"

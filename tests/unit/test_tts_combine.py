@@ -1,6 +1,9 @@
 import wave, io, math, struct
+import json
+import types
 import pytest
 pytestmark = pytest.mark.unit
+from nous.api.http.routers import tts as tts_mod
 from nous.api.http.routers.tts import _concat_wav
 
 def _sine_wav(nframes=16000):
@@ -30,3 +33,121 @@ def test_concat_rejects_mismatch(tmp_path):
     b.write_bytes(buf.getvalue())
     with pytest.raises(ValueError):
         _concat_wav([a, b])
+
+
+def _combine_fn(monkeypatch, *, state=None):
+    captured = {}
+
+    class _MCP:
+        def custom_route(self, path, methods):
+            def deco(fn):
+                captured[(path, tuple(methods))] = fn
+                return fn
+
+            return deco
+
+    tts_mod.register_tts_routes(_MCP())
+
+    def _get_context(persona):
+        return types.SimpleNamespace(is_ok=True, value=state)
+
+    fake_ctx = types.SimpleNamespace(
+        settings=types.SimpleNamespace(
+            irodori=types.SimpleNamespace(url="http://127.0.0.1:9", voice="v", model="m", timeout_seconds=5)
+        ),
+        persona_service=types.SimpleNamespace(get_context=_get_context),
+    )
+    monkeypatch.setattr(tts_mod, "_safe_get_context", lambda persona: fake_ctx)
+    return captured[("/api/tts/{persona}/combine", ("POST",))]
+
+
+def _req(body):
+    async def _json():
+        return body
+
+    return types.SimpleNamespace(path_params={"persona": "herta"}, headers={}, json=_json)
+
+
+async def test_combine_non_string_fulltext_400(monkeypatch):
+    fn = _combine_fn(monkeypatch)
+    resp = await fn(_req({"files": ["a.wav"], "fullText": 123}))
+    assert resp.status_code == 400
+
+
+async def test_combine_non_list_files_400(monkeypatch):
+    fn = _combine_fn(monkeypatch)
+    resp = await fn(_req({"files": 123, "fullText": "hi"}))
+    assert resp.status_code == 400
+
+
+async def test_combine_key_matches_synthesize_key(monkeypatch, tmp_path):
+    # anchor mode + 固定state: 全文POSTのキー == combineの全文キー（同一URL）。
+    captured = {}
+
+    class _MCP:
+        def custom_route(self, path, methods):
+            def deco(fn):
+                captured[(path, tuple(methods))] = fn
+                return fn
+
+            return deco
+
+    tts_mod.register_tts_routes(_MCP())
+    state = types.SimpleNamespace(emotion="joy", emotion_intensity=0.8, appearance=None, relationship_status=None)
+    chat_cfg = types.SimpleNamespace(
+        voice_model="",
+        voice_url="",
+        voice_speed=1.0,
+        voice_emotion_mode="anchor",
+        voice_emotion_link=True,
+        irodori_caption_llm_enabled=False,
+        provider="x",
+        model="m",
+        api_key="",
+        base_url="",
+        irodori_caption_llm_model="",
+        irodori_num_steps=30,
+        irodori_cfg_scale_text=3.2,
+        irodori_cfg_scale_speaker=5.0,
+        irodori_cfg_scale_caption=4.2,
+        irodori_chunk_min_chars=85,
+        irodori_seed=0,
+    )
+    import nous.domain.chat_config as chat_config_mod
+
+    monkeypatch.setattr(
+        chat_config_mod, "ChatConfigFileRepository", lambda root: types.SimpleNamespace(get=lambda persona: chat_cfg)
+    )
+    monkeypatch.setattr(
+        "nous.config.settings.get_settings",
+        lambda: types.SimpleNamespace(data_root=str(tmp_path)),
+    )
+    fake_ctx = types.SimpleNamespace(
+        settings=types.SimpleNamespace(
+            irodori=types.SimpleNamespace(url="http://127.0.0.1:9", voice="v", model="m", timeout_seconds=5)
+        ),
+        persona_service=types.SimpleNamespace(
+            get_context=lambda persona: types.SimpleNamespace(is_ok=True, value=state)
+        ),
+    )
+    monkeypatch.setattr(tts_mod, "_safe_get_context", lambda persona: fake_ctx)
+
+    class _Engine:
+        async def health_check(self):
+            return True
+
+        async def synthesize(self, **kw):
+            return _sine_wav(1600)
+
+    monkeypatch.setattr(tts_mod, "get_voice_engine", lambda cfg: _Engine())
+
+    full = "結合テスト用の全文です。ほら、これが一致するはずだよ。"
+    syn = captured[("/api/tts/{persona}", ("POST",))]
+    r1 = await syn(_req({"text": full}))
+    assert r1.status_code == 200
+    url1 = json.loads(r1.body)["audio_url"]
+    comb = captured[("/api/tts/{persona}/combine", ("POST",))]
+    r2 = await comb(_req({"files": [url1.split("/")[-1]], "fullText": full}))
+    assert r2.status_code == 200
+    assert json.loads(r2.body)["audio_url"] == url1
+

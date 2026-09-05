@@ -125,6 +125,28 @@ def _resolve_tts_override(body: object) -> tuple[str, str | None, bool]:
     return (emo or "neutral", cap or None, bool(cap or emo))
 
 
+def _body_text_required(body: object, key: str) -> str:
+    """本文系の厳密取得。strのみ受け付け、前後空白除去。非str/空は""（呼び出し側で400）。"""
+    if not isinstance(body, dict):
+        return ""
+    v = body.get(key)
+    if not isinstance(v, str):
+        return ""
+    return v.strip()
+
+
+def _find_cache_file(cache_dir: Path, cache_key: str) -> tuple[Path | None, str]:
+    """フルハッシュ一致のキャッシュ探索。旧12文字globはstem完全一致のみ救済。戻り値(path|None, url用filename)。"""
+    new_path = cache_dir / f"{cache_key}.wav"
+    if new_path.exists():
+        return new_path, new_path.name
+    for p in sorted(cache_dir.glob(f"{cache_key[:12]}*.wav")):
+        if p.stem == cache_key:
+            logger.warning("TTS legacy cache hit (migrating): %s", p.name)
+            return p, p.name
+    return None, new_path.name
+
+
 def _tts_cache_key(
     *,
     text: str,
@@ -248,7 +270,9 @@ def register_tts_routes(mcp) -> None:
             body = await request.json()
         except (json.JSONDecodeError, TypeError):
             body = {}
-        text = body.get("text", "")
+        if not isinstance(body, dict):
+            body = {}
+        text = _body_text_required(body, "text")
         if not text:
             return JSONResponse({"ok": False, "error": "text is required"}, status_code=400)
 
@@ -396,17 +420,7 @@ def register_tts_routes(mcp) -> None:
         )
         new_filename = f"{cache_key}.wav"
         new_cache_path = cache_dir / new_filename
-        found_path = None
-        audio_url_filename = new_filename
-        if new_cache_path.exists():
-            found_path = new_cache_path
-        else:
-            # 旧12文字形式の移行救済。フルハッシュと無関係な衝突を返さないよう件数確認のみ。
-            legacy = sorted(cache_dir.glob(f"{cache_key[:12]}*.wav"))
-            if legacy:
-                logger.warning("TTS legacy cache hit (migrating): %s", legacy[0].name)
-                found_path = legacy[0]
-                audio_url_filename = found_path.name
+        found_path, audio_url_filename = _find_cache_file(cache_dir, cache_key)
         audio_url = f"/api/tts/{persona}/cache/{audio_url_filename}"
 
         if found_path:
@@ -552,9 +566,11 @@ def register_tts_routes(mcp) -> None:
             body = await request.json()
         except (json.JSONDecodeError, TypeError):
             body = {}
+        if not isinstance(body, dict):
+            body = {}
         files = body.get("files", [])
-        full_text = (body.get("fullText") or "").strip()
-        if not files or not full_text:
+        full_text = _body_text_required(body, "fullText")
+        if not isinstance(files, list) or not files or not full_text:
             return JSONResponse({"ok": False, "error": "files and fullText are required"}, status_code=400)
         if len(files) > 50:
             return JSONResponse({"ok": False, "error": "too many files"}, status_code=400)

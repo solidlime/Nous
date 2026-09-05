@@ -2,7 +2,8 @@
 
 import pytest
 
-from nous.api.http.routers.tts import _tts_cache_key
+from nous.api.http.routers import tts as tts_mod
+from nous.api.http.routers.tts import _find_cache_file, _tts_cache_key
 
 pytestmark = pytest.mark.unit
 
@@ -37,3 +38,30 @@ def test_full_hash_filename_and_resolved_voice():
     k2 = _tts_cache_key(text="a", emotion="neutral", caption=None, voice_speed=1.0, voice_override=None, voice_resolved="v2", model="irodori-tts", seed=0, num_steps=30, cfg_text=3.2, cfg_speaker=5.0, cfg_caption=4.2, chunk_min_chars=85)
     assert len(k1) == 64
     assert k1 != k2
+
+
+def test_find_cache_exact_hit(tmp_path):
+    key = "a" * 64
+    p = tmp_path / f"{key}.wav"
+    p.write_bytes(b"RIFF....")
+    found, name = _find_cache_file(tmp_path, key)
+    assert found == p and name == p.name
+
+
+def test_find_cache_miss_empty(tmp_path):
+    found, name = _find_cache_file(tmp_path, "b" * 64)
+    assert found is None and name == "b" * 64 + ".wav"
+
+
+def test_legacy_prefix_only_is_miss(tmp_path):
+    key = "c" * 64
+    (tmp_path / f"{key[:12]}xxxx.wav").write_bytes(b"RIFF....")
+    found, name = _find_cache_file(tmp_path, key)
+    assert found is None and name == f"{key}.wav"
+
+
+def test_synthesize_lookup_uses_full_stem_match():
+    import inspect
+
+    src = inspect.getsource(tts_mod.register_tts_routes)
+    assert "_find_cache_file(cache_dir, cache_key)" in src
