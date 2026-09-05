@@ -172,9 +172,13 @@ def register_tts_routes(mcp) -> None:
         # 感情の声への反映モード: "off" | "anchor" | "llm" (旧2ブール値から移行済み)
         emotion_mode = getattr(chat_config, "voice_emotion_mode", "") or ""
         if not emotion_mode:
-            if getattr(chat_config, "irodori_caption_llm_enabled", False):
+            # 正典はSessionConfig._derive_emotion_mode（link OFF + llm ON → "off"）。
+            # tts.py側の再導出は後方互換のみで、条件順もSessionConfigに合わせる。
+            link = getattr(chat_config, "voice_emotion_link", True)
+            llm = getattr(chat_config, "irodori_caption_llm_enabled", False)
+            if llm and link:
                 emotion_mode = "llm"
-            elif getattr(chat_config, "voice_emotion_link", True):
+            elif link:
                 emotion_mode = "anchor"
             else:
                 emotion_mode = "off"
@@ -182,7 +186,7 @@ def register_tts_routes(mcp) -> None:
             state_result = ctx.persona_service.get_context(persona)
             if state_result.is_ok and state_result.value:
                 state = state_result.value
-                emotion = state.emotion or "neutral"
+                emotion = (getattr(state, "emotion", "") or "").strip() or "neutral"
 
                 # 決定的スタイルアンカー1文 (OFF送信・ON固定条件の共通土台。旧メタデータダンプは廃止)
                 caption = build_style_anchor(
@@ -256,6 +260,7 @@ def register_tts_routes(mcp) -> None:
                     from nous.infrastructure.llm.base import ErrorEvent, LLMMessage, TextDeltaEvent
 
                     full_content: list[str] = []
+                    saw_error = False
                     async for event in provider.stream(
                         messages=[LLMMessage(role="user", content=llm_user)],
                         system=llm_system,
@@ -265,10 +270,11 @@ def register_tts_routes(mcp) -> None:
                         if isinstance(event, TextDeltaEvent):
                             full_content.append(event.content)
                         elif isinstance(event, ErrorEvent):
+                            saw_error = True
                             logger.warning("LLM caption generation error: %s", event.message)
                             break
                     llm_caption = "".join(full_content).strip()
-                    if llm_caption:
+                    if llm_caption and not saw_error:
                         caption = llm_caption
                         _LAST_CAPTION[persona] = (state.emotion or "", bucket, caption)
                         logger.info("LLM caption generated for TTS: %s", llm_caption[:100])
