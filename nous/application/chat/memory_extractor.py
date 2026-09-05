@@ -11,7 +11,8 @@ from nous.application.chat.memory_prompts import _MEMORY_LLM_PROMPT, _build_drif
 from nous.domain.language import LanguageResolver
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.time_utils import get_now
-from nous.domain.value_objects import normalize_emotion, normalize_importance
+from nous.domain.value_objects import normalize_emotion
+from nous.domain.value_objects import normalize_importance as _vo_normalize_importance
 from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.factory import get_provider
 from nous.infrastructure.logging.structured import get_logger
@@ -23,6 +24,27 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 DRIFT_VALID_DAYS = 7
+EXTRACT_FALLBACK_IMPORTANCE = 0.6
+EXTRACT_FALLBACK_TAGS = ["auto_extract"]
+
+
+def normalize_importance(v: object) -> float:
+    """LLM産のimportanceを[0.0, 1.0]に正規化。非数値・範囲外・boolは0.6。"""
+    if isinstance(v, bool):
+        return EXTRACT_FALLBACK_IMPORTANCE
+    try:
+        f = float(v)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return EXTRACT_FALLBACK_IMPORTANCE
+    return f if 0.0 <= f <= 1.0 else EXTRACT_FALLBACK_IMPORTANCE
+
+
+def normalize_tags(v: object) -> list[str]:
+    """LLM産のtagsをlist[str]に正規化。文字列混入はsubstring誤爆防止で破棄→["auto_extract"]。"""
+    if not isinstance(v, list):
+        return list(EXTRACT_FALLBACK_TAGS)
+    cleaned = [t.strip() for t in v if isinstance(t, str) and t.strip()]
+    return cleaned or list(EXTRACT_FALLBACK_TAGS)
 
 
 def _normalize_drift_fact(fact: dict, violation: str) -> bool:
@@ -330,13 +352,13 @@ async def run_memory_llm(
                     fact["_saved"] = False
                     continue
             _normalize_drift_fact(fact, drift_violation)
-            tags = fact.get("tags", ["auto_extract"]) or ["auto_extract"]
+            tags = normalize_tags(fact.get("tags"))
             save_kwargs: dict = {}
             if "character_drift" in tags:
                 save_kwargs["valid_until"] = get_now() + timedelta(days=DRIFT_VALID_DAYS)
             mem_result = await ctx.memory_service.create_memory(
                 content=content,
-                importance=float(fact.get("importance", 0.6)),
+                importance=normalize_importance(fact.get("importance")),
                 tags=tags,
                 emotion=fact.get("emotion", "neutral"),
                 **save_kwargs,
@@ -473,7 +495,7 @@ async def run_memory_llm(
                 ctx_update["emotion"] = normalized
                 # f2: 非数値・範囲外を境界で正規化、失敗時は欠損扱い
                 try:
-                    _norm_int = normalize_importance(float(intensity) if intensity is not None else None)
+                    _norm_int = _vo_normalize_importance(float(intensity) if intensity is not None else None)
                 except (TypeError, ValueError):
                     _norm_int = 0.5
                     ctx_update.pop("emotion_intensity", None)
@@ -583,7 +605,7 @@ async def run_memory_llm(
         # Optional reflection trigger: run reflection when 3+ facts extracted
         if len(facts) >= 3:
             try:
-                importance_sum = sum(float(f.get("importance", 0.6)) for f in facts)
+                importance_sum = sum(normalize_importance(f.get("importance")) for f in facts)
                 from nous.application.chat.reflection import maybe_run_reflection
 
                 await maybe_run_reflection(ctx, config, importance_sum)
