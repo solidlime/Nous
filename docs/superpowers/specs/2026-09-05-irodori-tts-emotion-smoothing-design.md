@@ -59,3 +59,12 @@ PersonaState(emotion, intensity, appearance, relationship)
 ## リスク
 - caption を強くすると抑揚の幅が狭まる (意図通りだが、物足りなければ `cfg_scale_caption` を 4.2→3.5 方向で後調整)。
 - プロセス内キャッシュのため多ワーカー時はワーカー毎に別 caption (実害は軽微)。
+
+## 追補 (2026-09-05): 感情反映モード3択化
+- 旧2ブール値 (`voice_emotion_link` / `irodori_caption_llm_enabled`) は4通りの組合せを持ち、
+  link OFF + LLM ON が死に設定だった。これを `voice_emotion_mode: "off" | "anchor" | "llm"` に一本化。
+- 旧設定ファイルは `SessionConfig` の before-validator で旧値から導出
+  (llm ON かつ link ON → `llm`、link ON → `anchor`、それ以外 → `off`。死に設定は実際に聞こえていた通り `off`)。
+- 不正値は `anchor` に倒す。旧2キーは保存時にモードから再導出して書き戻すため、ファイルは自己一貫を保つ。
+- WebUI は3ラジオ (`反映しない` / `反映する（標準）` / `反映する＋LLMで磨く`) に変更。
+  モデル名入力は `llm` 選択時のみ表示。`応答を自動再生` は独立のまま。

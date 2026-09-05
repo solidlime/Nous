@@ -207,10 +207,25 @@ def _render_voice_section() -> str:
                                             aria-label="音声名" />
                                     </div>
                                     <!-- Checkboxes -->
-                                    <div style="display:flex;align-items:center;gap:8px;">
-                                        <input type="checkbox" id="chat-voice-emotion-link" checked
-                                            style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
-                                        <label for="chat-voice-emotion-link" class="chat-field-label" style="margin:0;cursor:pointer;">感情を音声に反映</label>
+                                    <div>
+                                        <div class="chat-field-label">感情の反映</div>
+                                        <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;">
+                                            <label class="chat-field-label" style="margin:0;cursor:pointer;font-weight:normal;">
+                                                <input type="radio" name="chat-voice-emotion-mode" value="off"
+                                                    style="accent-color:var(--accent-purple);cursor:pointer;"
+                                                    onchange="document.getElementById('chat-irodori-caption-llm-model-wrap').style.display='none'" />
+                                                反映しない</label>
+                                            <label class="chat-field-label" style="margin:0;cursor:pointer;font-weight:normal;">
+                                                <input type="radio" name="chat-voice-emotion-mode" value="anchor" checked
+                                                    style="accent-color:var(--accent-purple);cursor:pointer;"
+                                                    onchange="document.getElementById('chat-irodori-caption-llm-model-wrap').style.display='none'" />
+                                                反映する（標準）</label>
+                                            <label class="chat-field-label" style="margin:0;cursor:pointer;font-weight:normal;">
+                                                <input type="radio" name="chat-voice-emotion-mode" value="llm"
+                                                    style="accent-color:var(--accent-purple);cursor:pointer;"
+                                                    onchange="document.getElementById('chat-irodori-caption-llm-model-wrap').style.display='block'" />
+                                                反映する＋LLMで磨く（少し遅くなります）</label>
+                                        </div>
                                     </div>
                                     <div style="display:flex;align-items:center;gap:8px;">
                                         <input type="checkbox" id="chat-voice-auto-play"
@@ -305,21 +320,12 @@ def _render_voice_section() -> str:
                                                     value="0" min="0"
                                                     style="width:100%;" />
                                             </div>
-                                            <!-- LLM caption generation -->
-                                            <div style="margin-top:8px;">
-                                                <div style="display:flex;align-items:center;gap:6px;">
-                                                    <input type="checkbox" id="chat-irodori-caption-llm" class="chat-field-input"
-                                                        style="width:auto;accent-color:var(--accent-purple);"
-                                                        onchange="document.getElementById('chat-irodori-caption-llm-model-wrap').style.display=this.checked?'block':'none'" />
-                                                    <span class="chat-field-label" style="font-size:0.78rem;">LLMキャプション生成</span>
-                                                </div>
-                                                <div id="chat-irodori-caption-llm-model-wrap" style="display:none;margin-top:6px;">
-                                                    <span class="chat-field-label" style="font-size:0.72rem;color:var(--text-muted);">モデル名（空=ペルソナモデル）</span>
-                                                    <input type="text" id="chat-irodori-caption-llm-model" class="chat-field-input"
-                                                        placeholder="ペルソナモデルを使用"
-                                                        style="width:100%;font-size:0.78rem;" />
-                                                </div>
-                                                <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">OFFでも声質アンカーで感情を一貫させます。ONはアンカーをLLMが磨きます（少し遅くなります）。</div>
+                                            <!-- LLM caption model (「反映する＋LLMで磨く」のときのみ表示) -->
+                                            <div id="chat-irodori-caption-llm-model-wrap" style="display:none;margin-top:6px;">
+                                                <span class="chat-field-label" style="font-size:0.72rem;color:var(--text-muted);">モデル名（空=ペルソナモデル）</span>
+                                                <input type="text" id="chat-irodori-caption-llm-model" class="chat-field-input"
+                                                    placeholder="ペルソナモデルを使用"
+                                                    style="width:100%;font-size:0.78rem;" />
                                             </div>
                                         </div>
                                     </details>

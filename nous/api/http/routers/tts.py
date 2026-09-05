@@ -163,7 +163,16 @@ def register_tts_routes(mcp) -> None:
         emotion = "neutral"
         caption: str | None = None
         state = None
-        if chat_config.voice_emotion_link:
+        # 感情の声への反映モード: "off" | "anchor" | "llm" (旧2ブール値から移行済み)
+        emotion_mode = getattr(chat_config, "voice_emotion_mode", "") or ""
+        if not emotion_mode:
+            if getattr(chat_config, "irodori_caption_llm_enabled", False):
+                emotion_mode = "llm"
+            elif getattr(chat_config, "voice_emotion_link", True):
+                emotion_mode = "anchor"
+            else:
+                emotion_mode = "off"
+        if emotion_mode != "off":
             state_result = ctx.persona_service.get_context(persona)
             if state_result.is_ok and state_result.value:
                 state = state_result.value
@@ -177,9 +186,8 @@ def register_tts_routes(mcp) -> None:
                     relationship=getattr(state, "relationship_status", None),
                 )
 
-        # LLM caption generation (when enabled, overrides simple context injection)
-        irodori_caption_llm_enabled = getattr(chat_config, "irodori_caption_llm_enabled", False)
-        if irodori_caption_llm_enabled and state:
+        # LLM caption generation ("llm" モードのみ。アンカーを磨く)
+        if emotion_mode == "llm" and state:
             try:
                 # Get LLM config from chat config
                 provider_name = getattr(chat_config, "provider", "opencode_go")

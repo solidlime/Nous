@@ -203,7 +203,16 @@ function applyChatConfig(cfg) {
   }
   var voiceUrlInput = document.getElementById("chat-voice-url");
   if (voiceUrlInput) voiceUrlInput.value = cfg.voice_url || "";
-  setChecked("chat-voice-emotion-link", cfg.voice_emotion_link !== false);
+  // Emotion reflection mode: "off" | "anchor" | "llm" (legacy bools fallback)
+  var emotionMode = cfg.voice_emotion_mode;
+  if (emotionMode !== "off" && emotionMode !== "anchor" && emotionMode !== "llm") {
+    emotionMode = cfg.irodori_caption_llm_enabled && cfg.voice_emotion_link !== false ? "llm"
+      : cfg.voice_emotion_link !== false ? "anchor" : "off";
+  }
+  var modeRadio = document.querySelector('input[name="chat-voice-emotion-mode"][value="' + emotionMode + '"]');
+  if (modeRadio) modeRadio.checked = true;
+  var llmModelWrap = document.getElementById("chat-irodori-caption-llm-model-wrap");
+  if (llmModelWrap) llmModelWrap.style.display = emotionMode === "llm" ? "block" : "none";
   setChecked("chat-voice-auto-play", cfg.voice_auto_play === true);
   // Load voice model name (text input now)
   var voiceModelInput = document.getElementById("chat-voice-model");
@@ -226,13 +235,6 @@ function applyChatConfig(cfg) {
   if (irodoriChunkMin) document.getElementById("chat-irodori-chunk-min-val").textContent = cfg.irodori_chunk_min_chars ?? 85;
   var irodoriSeed = document.getElementById("chat-irodori-seed");
   if (irodoriSeed) irodoriSeed.value = cfg.irodori_seed ?? 0;
-  // LLM caption generation
-  var irodoriCaptionLLM = document.getElementById("chat-irodori-caption-llm");
-  if (irodoriCaptionLLM) {
-    irodoriCaptionLLM.checked = cfg.irodori_caption_llm_enabled === true;
-    var modelWrap = document.getElementById("chat-irodori-caption-llm-model-wrap");
-    if (modelWrap) modelWrap.style.display = irodoriCaptionLLM.checked ? "block" : "none";
-  }
   var irodoriCaptionLLMModel = document.getElementById("chat-irodori-caption-llm-model");
   if (irodoriCaptionLLMModel) irodoriCaptionLLMModel.value = cfg.irodori_caption_llm_model || "";
   // Voice volume
@@ -509,7 +511,8 @@ async function saveChatConfig() {
     // Voice / TTS settings (TE04)
     voice_url: document.getElementById("chat-voice-url")?.value || "",
     voice_auto_play: getChecked("chat-voice-auto-play"),
-    voice_emotion_link: getChecked("chat-voice-emotion-link"),
+    voice_emotion_mode: document.querySelector('input[name="chat-voice-emotion-mode"]:checked')?.value || "anchor",
+    voice_emotion_link: (document.querySelector('input[name="chat-voice-emotion-mode"]:checked')?.value || "anchor") !== "off",
     voice_model: document.getElementById("chat-voice-model")?.value || "",
     // Irodori advanced params
     irodori_num_steps: parseInt(document.getElementById("chat-irodori-num-steps")?.value) || 30,
@@ -518,7 +521,7 @@ async function saveChatConfig() {
     irodori_cfg_scale_caption: parseFloat(document.getElementById("chat-irodori-cfg-scale-caption")?.value) || 4.2,
     irodori_chunk_min_chars: parseInt(document.getElementById("chat-irodori-chunk-min-chars")?.value) || 85,
     irodori_seed: parseInt(document.getElementById("chat-irodori-seed")?.value) || 0,
-    irodori_caption_llm_enabled: document.getElementById("chat-irodori-caption-llm")?.checked || false,
+    irodori_caption_llm_enabled: (document.querySelector('input[name="chat-voice-emotion-mode"]:checked')?.value || "anchor") === "llm",
     irodori_caption_llm_model: document.getElementById("chat-irodori-caption-llm-model")?.value || "",
     // Voice volume
     voice_volume: parseFloat(document.getElementById("chat-voice-volume")?.value) ?? 1.0,

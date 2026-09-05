@@ -6,9 +6,11 @@ ChatConfig から分割された、セッション管理・リフレクション
 
 from __future__ import annotations
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from nous.domain.value_objects import normalize_importance
+
+VOICE_EMOTION_MODES = ("off", "anchor", "llm")
 
 
 class SessionConfig(BaseModel):
@@ -55,6 +57,10 @@ class SessionConfig(BaseModel):
     # Irodori LLM emotion caption
     irodori_caption_llm_enabled: bool = False
     irodori_caption_llm_model: str = ""  # empty = use persona's configured model
+    # 感情の声への反映モード: "off" | "anchor" | "llm"。
+    # 旧2ブール値 (voice_emotion_link / irodori_caption_llm_enabled) の上位概念。
+    # 旧設定ファイルには本キーが無いので before-validator で旧値から導出する。
+    voice_emotion_mode: str = "anchor"
 
     # Auto-capture
     auto_capture_enabled: bool = False
@@ -91,6 +97,28 @@ class SessionConfig(BaseModel):
     forgetting_forget_strength: float = 0.5
     forgetting_decay_interval_seconds: int = 86400  # 24h default
     forgetting_min_strength: float = 0.1
+
+    @field_validator("voice_emotion_mode")
+    @classmethod
+    def _clamp_emotion_mode(cls, v: str) -> str:
+        return v if v in VOICE_EMOTION_MODES else "anchor"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _derive_emotion_mode(cls, data):
+        """旧2ブール値しかない入力から voice_emotion_mode を導出する (移行用)。"""
+        if isinstance(data, dict) and "voice_emotion_mode" not in data:
+            data = dict(data)
+            link = data.get("voice_emotion_link", True)
+            llm = data.get("irodori_caption_llm_enabled", False)
+            if llm and link:
+                data["voice_emotion_mode"] = "llm"
+            elif link:
+                data["voice_emotion_mode"] = "anchor"
+            else:
+                # link OFF + llm ON の死に設定は、実際に聞こえていた通り "off" に倒す
+                data["voice_emotion_mode"] = "off"
+        return data
 
     @field_validator("reflection_threshold")
     @classmethod
