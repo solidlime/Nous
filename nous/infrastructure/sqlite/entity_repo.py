@@ -179,12 +179,17 @@ class SQLiteEntityRepository(SQLiteRepository):
         target_key: str,
         link_type: str = "semantic",
         strength: float = 0.1,
+        eta: float = 0.05,
     ) -> Result[None, RepositoryError]:
         """Atomically strengthen a Hebbian link (single-statement upsert).
 
-        New edge starts at weight 0.5 + strength; existing edges accumulate
-        weight (capped at 1.0) and bump co_activation_count.  Read-modify-write
-        is forbidden by design — the ON CONFLICT clause makes the update atomic.
+        Oja-normalized update on conflict (T3): with y = current weight and
+        coact = ``strength``,
+        ``weight = MIN(1.0, MAX(0.5, w + η·c − η·w²·c))`` — self-normalizing,
+        converges without pinning at 1.0 and never breaches the 0.5 floor.
+        New edge starts at weight 0.5 + strength; co_activation_count bumps
+        and last_activated refreshes. Read-modify-write is forbidden by
+        design — the ON CONFLICT clause makes the update atomic.
         """
         try:
             now = format_iso(get_now())
@@ -193,11 +198,11 @@ class SQLiteEntityRepository(SQLiteRepository):
                 INSERT INTO memory_links (source_key, target_key, weight, link_type, co_activation_count, last_activated)
                 VALUES (?, ?, 0.5 + ?, ?, 1, ?)
                 ON CONFLICT(source_key, target_key, link_type) DO UPDATE SET
-                    weight = MIN(1.0, weight + ?),
+                    weight = MIN(1.0, MAX(0.5, weight + ? * ? - ? * weight * weight * ?)),
                     co_activation_count = co_activation_count + 1,
                     last_activated = ?
                 """,
-                (source_key, target_key, strength, link_type, now, strength, now),
+                (source_key, target_key, strength, link_type, now, eta, strength, eta, strength, now),
             )
             return Success(None)
         except Exception as e:

@@ -61,6 +61,26 @@ class Memory:
             raise ValueError(f"Invalid source_type: {self.source_type}")
 
 
+def importance_scaled_exponent(
+    base_exponent: float,
+    importance: float,
+    k: float = 0.5,
+    lambda_min: float = 0.0,
+) -> float:
+    """Importance-scaled forgetting exponent (F1/T1).
+
+    ``λ_eff = clamp(base * (1 - k * importance), lambda_min, base)``.
+    Higher importance → smaller exponent → slower decay. Applies to
+    ``memory_strength`` decay only; ``memory_links`` decay is out of scope.
+    """
+    try:
+        imp = max(0.0, min(1.0, float(importance)))
+    except (TypeError, ValueError):
+        imp = 0.5
+    eff = base_exponent * (1.0 - k * imp)
+    return max(lambda_min, min(base_exponent, eff))
+
+
 @dataclass
 class MemoryStrength:
     """FSRS v6 power-law forgetting curve + 7-factor scoring for a memory."""

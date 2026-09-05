@@ -4,6 +4,7 @@ import contextlib
 import threading
 from typing import TYPE_CHECKING, Any
 
+from nous.domain.memory.entities import importance_scaled_exponent
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
@@ -66,6 +67,38 @@ class DecayWorker:
         if self._cycle_count % self.REFLECTION_INTERVAL == 0:
             self._maybe_run_reflection()
 
+    def _batch_importance_map(self) -> dict[str, float]:
+        """Return memory_key → importance in one query (no N+1). Empty on any failure."""
+        try:
+            result = self.context.memory_repo.find_all()
+            if not getattr(result, "is_ok", False):
+                return {}
+            values = getattr(result, "value", None)
+            if not isinstance(values, list):
+                return {}
+            out: dict[str, float] = {}
+            for m in values:
+                try:
+                    out[m.key] = max(0.0, min(1.0, float(m.importance)))
+                except (TypeError, ValueError, AttributeError):
+                    continue
+            return out
+        except Exception:
+            return {}
+
+    def _resolve_lambda_k(self) -> float:
+        """Resolve importance-λ factor k (default 0.5); non-numeric config → default."""
+        candidates = []
+        if self._config is not None:
+            candidates.append(getattr(self._config, "importance_lambda_k", None))
+        candidates.append(getattr(getattr(self.context.settings, "forgetting", None), "importance_lambda_k", None))
+        for c in candidates:
+            if isinstance(c, bool):
+                continue
+            if isinstance(c, (int, float)) and c >= 0:
+                return float(c)
+        return 0.5
+
     def _decay_cycle(self) -> None:
         """Run one decay cycle: update all memory strengths."""
         result = self.context.memory_repo.get_all_strengths()
@@ -76,6 +109,10 @@ class DecayWorker:
         strengths = result.value
         logger.debug("Decay cycle started, checking %d strengths", len(strengths))
 
+        # Batch-resolve real memory importance once (no N+1 per strength)
+        importance_by_key = self._batch_importance_map()
+        lambda_k = self._resolve_lambda_k()
+
         processed = 0
         updated = 0
         skipped = 0
@@ -84,10 +121,12 @@ class DecayWorker:
             processed += 1
             elapsed = (now - strength.last_decay).total_seconds() / 3600 if strength.last_decay else 24.0
 
-            # LTM uses slower decay exponent
-            decay_exp = 0.3 if strength.is_ltm else 0.5
+            importance = importance_by_key.get(strength.memory_key, 0.5)
+            # LTM uses slower decay exponent; importance scales it down (T1)
+            base_exp = 0.3 if strength.is_ltm else 0.5
+            decay_exp = importance_scaled_exponent(base_exp, importance, k=lambda_k)
             recall = strength.compute_recall(elapsed, decay_exponent=decay_exp)
-            score = strength.compute_strength_score()
+            score = strength.compute_strength_score(importance=importance)
             new_strength_val = recall * score
 
             # STM → LTM automatic promotion (before min_strength check)

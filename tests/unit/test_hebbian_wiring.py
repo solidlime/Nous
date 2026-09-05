@@ -59,20 +59,23 @@ class TestUpsertLink:
             .execute("SELECT * FROM memory_links WHERE source_key='a' AND target_key='b'")
             .fetchone()
         )
-        assert row["weight"] == pytest.approx(0.7)
+        # Oja: 0.6 + 0.05*0.1 - 0.05*0.6*0.6*0.1 = 0.6032
+        assert row["weight"] == pytest.approx(0.6032)
         assert row["co_activation_count"] == 2
 
     def test_weight_caps_at_one(self, sqlite_conn):
         repo = SQLiteEntityRepository(sqlite_conn)
-        for _ in range(6):
+        for _ in range(500):
             repo.upsert_link("a", "b", "semantic", strength=0.1)
         row = (
             sqlite_conn.get_memory_db()
             .execute("SELECT * FROM memory_links WHERE source_key='a' AND target_key='b'")
             .fetchone()
         )
-        assert row["weight"] == 1.0
-        assert row["co_activation_count"] == 6
+        # Oja converges asymptotically: never exceeds 1.0, never pins exactly
+        assert row["weight"] <= 1.0
+        assert row["weight"] == pytest.approx(1.0, abs=0.01)
+        assert row["co_activation_count"] == 500
 
 
 # ---------------------------------------------------------------------------
