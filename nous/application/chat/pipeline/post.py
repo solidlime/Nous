@@ -221,20 +221,40 @@ class PostProcessStep:
 
             return json.dumps(val, ensure_ascii=False)
 
+        def _is_saved(item: dict) -> bool:
+            # memory_extractor が _saved を付与済みならそれに従う。
+            # 旧形式（_savedなし）の結果は後方互換で全件表示する。
+            if "_saved" in item:
+                return bool(item.get("_saved"))
+            return True
+
         saved_facts = [
             {
                 "content": _ensure_str(f.get("content")),
                 "tags": f.get("tags", []),
                 "emotion": f.get("emotion", "neutral"),
+                "key": f.get("memory_key", ""),
             }
             for f in memory_result.get("facts", [])
-            if f.get("content")
+            if f.get("content") and _is_saved(f)
         ]
         saved_goals = [
-            {"content": _ensure_str(g.get("content"))} for g in memory_result.get("goals", []) if g.get("content")
+            {
+                "content": _ensure_str(g.get("content")),
+                "key": g.get("memory_key", ""),
+                "action": g.get("action", "create"),
+            }
+            for g in memory_result.get("goals", [])
+            if (g.get("content") or g.get("memory_key")) and _is_saved(g)
         ]
         saved_promises = [
-            {"content": _ensure_str(p.get("content"))} for p in memory_result.get("promises", []) if p.get("content")
+            {
+                "content": _ensure_str(p.get("content")),
+                "key": p.get("memory_key", ""),
+                "action": p.get("action", "create"),
+            }
+            for p in memory_result.get("promises", [])
+            if (p.get("content") or p.get("memory_key")) and _is_saved(p)
         ]
         yield MemoryActivitySSE(
             retrieved=retrieved_for_sse,

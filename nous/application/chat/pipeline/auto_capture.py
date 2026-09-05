@@ -211,7 +211,7 @@ async def run_auto_capture(
             try:
                 db = ctx.connection.get_memory_db()
                 existing = db.execute(
-                    "SELECT key FROM memories WHERE persona = ? AND LOWER(content) = LOWER(?) AND deleted_at IS NULL LIMIT 1",
+                    "SELECT key FROM memories WHERE persona = ? AND LOWER(content) = LOWER(?) AND lifecycle_status != 'tombstoned' LIMIT 1",
                     (ctx.persona, text.strip()),
                 ).fetchone()
                 if existing:

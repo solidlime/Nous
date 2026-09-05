@@ -283,6 +283,7 @@ async def run_memory_llm(
         for fact in facts:
             content = fact.get("content", "")
             if not content:
+                fact["_saved"] = False
                 continue
             dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
             if dup_check.is_ok and dup_check.value:
@@ -290,6 +291,7 @@ async def run_memory_llm(
                 hit_score = top_hit.score if hasattr(top_hit, "score") else 0.0
                 if hit_score > 0.85:
                     logger.debug("MemoryLLM: skipping duplicate fact (score=%.2f): %s", hit_score, content[:60])
+                    fact["_saved"] = False
                     continue
             tags = fact.get("tags", ["auto_extract"]) or ["auto_extract"]
             save_kwargs: dict = {}
@@ -305,6 +307,11 @@ async def run_memory_llm(
             if mem_result.is_ok and ctx.vector_store is not None:
                 with contextlib.suppress(Exception):
                     await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
+            if mem_result.is_ok:
+                fact["memory_key"] = mem_result.value.key
+                fact["_saved"] = True
+            else:
+                fact["_saved"] = False
         if facts:
             logger.info("MemoryLLM: processed %d facts for persona=%s", len(facts), persona)
 
@@ -320,17 +327,24 @@ async def run_memory_llm(
                 logger.info("MemoryLLM: goal achieved key=%s", memory_key)
                 if not upd.is_ok:
                     logger.warning("MemoryLLM: goal achieve failed key=%s: %s", memory_key, upd.error)
+                    goal["_saved"] = False
+                else:
+                    goal["_saved"] = True
             elif action == "cancel" and memory_key:
                 upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "cancelled"])
                 logger.info("MemoryLLM: goal cancelled key=%s", memory_key)
                 if not upd.is_ok:
                     logger.warning("MemoryLLM: goal cancel failed key=%s: %s", memory_key, upd.error)
+                    goal["_saved"] = False
+                else:
+                    goal["_saved"] = True
             elif action == "create" and content:
                 dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
                 if dup_check.is_ok and dup_check.value:
                     top_hit = dup_check.value[0]
                     if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
                         logger.debug("MemoryLLM: skipping duplicate goal: %s", content[:60])
+                        goal["_saved"] = False
                         continue
                 mem_result = await ctx.memory_service.create_memory(
                     content=content,
@@ -341,6 +355,13 @@ async def run_memory_llm(
                 if mem_result.is_ok and ctx.vector_store is not None:
                     with contextlib.suppress(Exception):
                         await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
+                if mem_result.is_ok:
+                    goal["memory_key"] = mem_result.value.key
+                    goal["_saved"] = True
+                else:
+                    goal["_saved"] = False
+            else:
+                goal["_saved"] = False
         if goals:
             logger.info("MemoryLLM: processed %d goals for persona=%s", len(goals), persona)
 
@@ -358,6 +379,9 @@ async def run_memory_llm(
                 logger.info("MemoryLLM: interpersonal goal achieved key=%s", memory_key)
                 if not upd.is_ok:
                     logger.warning("MemoryLLM: interpersonal goal achieve failed key=%s: %s", memory_key, upd.error)
+                    promise["_saved"] = False
+                else:
+                    promise["_saved"] = True
             elif action == "cancel" and memory_key:
                 upd = ctx.memory_service.update_memory(
                     memory_key, tags=["goal", "cancelled", "archived", "interpersonal"]
@@ -365,12 +389,16 @@ async def run_memory_llm(
                 logger.info("MemoryLLM: interpersonal goal cancelled key=%s", memory_key)
                 if not upd.is_ok:
                     logger.warning("MemoryLLM: interpersonal goal cancel failed key=%s: %s", memory_key, upd.error)
+                    promise["_saved"] = False
+                else:
+                    promise["_saved"] = True
             elif action == "create" and content:
                 dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
                 if dup_check.is_ok and dup_check.value:
                     top_hit = dup_check.value[0]
                     if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
                         logger.debug("MemoryLLM: skipping duplicate interpersonal goal: %s", content[:60])
+                        promise["_saved"] = False
                         continue
                 mem_result = await ctx.memory_service.create_memory(
                     content=content,
@@ -381,6 +409,13 @@ async def run_memory_llm(
                 if mem_result.is_ok and ctx.vector_store is not None:
                     with contextlib.suppress(Exception):
                         await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
+                if mem_result.is_ok:
+                    promise["memory_key"] = mem_result.value.key
+                    promise["_saved"] = True
+                else:
+                    promise["_saved"] = False
+            else:
+                promise["_saved"] = False
         if promises:
             logger.info("MemoryLLM: processed %d interpersonal goals for persona=%s", len(promises), persona)
 
