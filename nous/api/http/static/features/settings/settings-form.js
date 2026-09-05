@@ -143,7 +143,7 @@ function renderSettings(el, settings, status) {
                 /* ── Password / masked field with toggle ── */
                 var displayVal = isMasked && val === '***' ? '••••••••' : String(val);
                 html += '<div style="flex:1;min-width:160px;position:relative;display:flex;align-items:center">';
-                html += '<input id="' + inputId + '" type="password" class="glass-input" style="flex:1;padding-right:36px" value="' + esc(String(val)) + '" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '" data-masked="true"' + autosaveAttr + ' placeholder="' + (val === '***' ? '•••••••• (set via env/override)' : 'Enter value...') + '"' + (!hot ? ' disabled' : '') + '>';
+                html += '<input id="' + inputId + '" type="password" class="glass-input" style="flex:1;padding-right:36px" value="' + esc(String(val)) + '" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '" data-masked="true"' + autosaveAttr + ' placeholder="' + (val === '***' ? '•••••••• (set via env/override)' : 'Enter value...') + '">';
                 html += '<button class="pw-toggle-btn" data-input="' + inputId + '" style="position:absolute;right:8px;background:none;border:none;color:var(--text-muted);cursor:pointer;padding:2px;font-size:0.8rem" title="Show/hide"><i data-lucide="eye"></i></button>';
                 html += '</div>';
             } else if (key === 'log_level') {
@@ -165,7 +165,7 @@ function renderSettings(el, settings, status) {
                 html += '</select>';
             } else {
                 var inputType = (typeof val === 'number' && key !== 'host') ? 'number' : 'text';
-                html += '<input id="' + inputId + '" type="' + inputType + '" class="glass-input" style="flex:1;min-width:160px" value="' + esc(String(val)) + '" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '"' + autosaveAttr + (typeof val === 'number' ? ' step="any"' : '') + (!hot ? ' disabled' : '') + '>';
+                html += '<input id="' + inputId + '" type="' + inputType + '" class="glass-input" style="flex:1;min-width:160px" value="' + esc(String(val)) + '" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '"' + autosaveAttr + (typeof val === 'number' ? ' step="any"' : '') + '>';
             }
 
             /* Hot reload badge */
