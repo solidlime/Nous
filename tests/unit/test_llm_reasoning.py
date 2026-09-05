@@ -105,6 +105,16 @@ class TestOpenAICompatReasoning:
         assert kwargs["temperature"] == 0.7
 
     @pytest.mark.asyncio
+    async def test_reasoning_uses_max_completion_tokens(self):
+        """reasoning_effort 指定時 → max_tokens ではなく max_completion_tokens を送る (o1系非対応)."""
+        provider = self._make_provider(base_url=None)
+        async for _ in provider.stream(messages=[], system="", reasoning_effort="high", max_tokens=500):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert "max_tokens" not in kwargs
+        assert kwargs["max_completion_tokens"] == 500
+
+    @pytest.mark.asyncio
     async def test_base_url_stored_on_instance(self):
         """__init__ が base_url を self.base_url に保存する."""
         provider = OpenAICompatProvider(api_key="test-key", model="gpt-4o", base_url="https://openrouter.ai/api/v1")

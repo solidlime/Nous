@@ -213,8 +213,11 @@ class OpenAICompatProvider(LLMProvider):
                     # Anthropic 互換 (上記分岐) は未知キーを無視しないため併送対象外。
                     kwargs["reasoning_effort"] = reasoning_effort
                     kwargs["extra_body"] = {"thinking": {"type": "enabled"}, "enable_thinking": True}
-                # TODO: 推論モデルは max_tokens ではなく max_completion_tokens が必要。
-                # モデル名検出が必要で侵襲が大きいため次回候補（未実施）
+                # 推論モデル (o1/o3/o4-mini 等) は max_tokens 非対応のため
+                # OpenAI系パスでは max_completion_tokens に載せ替える。
+                # Anthropic互換パスは Messages API 仕様で max_tokens のまま。
+                if not is_anthropic_compat:
+                    kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
             else:
                 kwargs["temperature"] = temperature
                 if top_p is not None:
