@@ -307,12 +307,7 @@ async def _handle_image_generate(ctx: AppContext, config: ChatConfig, tool_input
             )
             saved_idx += 1
 
-        # 結果イベントを送信（event_busは使われていないが後方互換のため残す）
-        if hasattr(ctx, "event_bus") and ctx.event_bus is not None:
-            await ctx.event_bus.publish(
-                "sse_event",
-                {"type": "image_gen_result", "images": images_data, "provider": provider_name},
-            )
+        # 結果イベント送信はInferenceStepのImageGenResultSSEに一本化（b2: 死にpublish削除）
 
         # サマリーを返す（base64が大きくなるため全文はimagesに入れる）
         summary = f"Generated {len(generated)} image(s)"

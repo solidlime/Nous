@@ -112,36 +112,6 @@ class MemoryActivitySSE:
 
 
 @dataclass
-class ReflectionStartSSE:
-    def to_sse(self) -> str:
-        return _sse_encode("reflection_start", {})
-
-
-@dataclass
-class ReflectionDoneSSE:
-    insights: list  # list of insight strings
-
-    def to_sse(self) -> str:
-        return _sse_encode("reflection_done", {"insights": self.insights})
-
-
-@dataclass
-class MentalModelStartSSE:
-    message: str = ""
-
-    def to_sse(self) -> str:
-        return _sse_encode("mental_model_start", {"message": self.message})
-
-
-@dataclass
-class MentalModelDoneSSE:
-    message: str = ""
-
-    def to_sse(self) -> str:
-        return _sse_encode("mental_model_done", {"message": self.message})
-
-
-@dataclass
 class SessionSummarizedSSE:
     summary: str
 
@@ -234,17 +204,8 @@ class ImageGenResultSSE:
                 "images": self.images,
                 "provider": self.provider,
                 "tool_use_id": self.tool_use_id,
+                # f1: フラグ名統一 — 新旧両キーを送出（self_portrait正典）
                 "self_portrait": self.self_portrait,
+                "is_self_portrait": self.self_portrait,
             },
         )
-
-
-@dataclass
-class SkillLoadSSE:
-    """スキル読み込み完了イベント（セッション初回のみ発火）"""
-
-    skill_names: list[str]
-    type: str = "skill_load"
-
-    def to_sse(self) -> str:
-        return _sse_encode("skill_load", {"skill_names": self.skill_names})
