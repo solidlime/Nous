@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import contextlib
 import json
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from nous.application.chat.memory_prompts import _MEMORY_LLM_PROMPT
+from nous.application.chat.memory_prompts import _MEMORY_LLM_PROMPT, _build_drift_section
 from nous.domain.language import LanguageResolver
 from nous.domain.search.engine import SearchQuery
+from nous.domain.shared.time_utils import get_now
 from nous.domain.value_objects import normalize_emotion, normalize_importance
 from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.factory import get_provider
@@ -19,6 +21,8 @@ if TYPE_CHECKING:
     from nous.domain.chat_config import ChatConfig
 
 logger = get_logger(__name__)
+
+DRIFT_VALID_DAYS = 7
 
 
 class MemoryLLM:
@@ -35,6 +39,7 @@ class MemoryLLM:
         inventory: str = "",
         persona_name: str = "assistant",
         persona_identity: str = "",
+        drift: dict | None = None,
     ) -> dict:
         extract_model = config.extract_model.strip() or config.get_effective_model()
         api_key = config.get_effective_api_key()
@@ -63,6 +68,7 @@ class MemoryLLM:
             inventory=inventory.strip() or "(なし)",
             user_message=user_message[:500],
             assistant_response=assistant_response[:500],
+            drift_section=_build_drift_section(drift),
         )
 
         from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, TextDeltaEvent
@@ -265,6 +271,7 @@ async def run_memory_llm(
             inventory=inventory_str,
             persona_name=persona_name,
             persona_identity=persona_identity,
+            drift=payload.get("drift"),
         )
         if not result:
             return {}
@@ -284,11 +291,16 @@ async def run_memory_llm(
                 if hit_score > 0.85:
                     logger.debug("MemoryLLM: skipping duplicate fact (score=%.2f): %s", hit_score, content[:60])
                     continue
+            tags = fact.get("tags", ["auto_extract"]) or ["auto_extract"]
+            save_kwargs: dict = {}
+            if "character_drift" in tags:
+                save_kwargs["valid_until"] = get_now() + timedelta(days=DRIFT_VALID_DAYS)
             mem_result = await ctx.memory_service.create_memory(
                 content=content,
                 importance=float(fact.get("importance", 0.6)),
-                tags=fact.get("tags", ["auto_extract"]),
+                tags=tags,
                 emotion=fact.get("emotion", "neutral"),
+                **save_kwargs,
             )
             if mem_result.is_ok and ctx.vector_store is not None:
                 with contextlib.suppress(Exception):
