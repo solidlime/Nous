@@ -25,8 +25,6 @@ class PersonaState:
     persona_info: dict = field(default_factory=dict)
     last_conversation_time: datetime | None = None
     last_state_update: datetime | None = None
-    author_note: str | None = None
-    author_note_frequency: str = "always"  # "always" | "every_n" | "on_emotion_change"
 
 
 @dataclass

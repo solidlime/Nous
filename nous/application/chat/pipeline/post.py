@@ -89,7 +89,6 @@ class PostProcessStep:
     Validation gaps (2026-07-26):
     - No character consistency / tone verification exists
     - No contradiction detection against persona settings
-    - Author's Note (injected at prompt.py:118) has no contradiction check
     - LLM output trusted as-is; verification relies solely on system prompt quality
     - Response validation added via ResponseValidator (see response_validator.py)
     """

@@ -75,8 +75,6 @@ class SQLitePersonaRepository(SQLiteRepository):
                     persona_info=persona_info,
                     last_conversation_time=_resolve_last_conversation_time(self._db, state_map),
                     last_state_update=_parse_or_none(state_map.get("last_state_update")),
-                    author_note=state_map.get("author_note"),
-                    author_note_frequency=state_map.get("author_note_frequency", "always"),
                 )
             )
         except Exception as e:

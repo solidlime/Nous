@@ -23,9 +23,6 @@ class ChatTurnContext:
     memories_raw: list[dict] = field(default_factory=list)
     memories_objects: list = field(default_factory=list)
     memory_debug: dict = field(default_factory=dict)
-    # Author's Note (injected into system prompt)
-    author_note: str | None = None
-    author_note_frequency: str = "always"
     # PromptBuildStep が埋める
     system_prompt: str = ""
     skills_raw: list[dict] = field(default_factory=list)

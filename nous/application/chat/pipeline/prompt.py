@@ -128,11 +128,6 @@ class PromptBuildStep:
         if turn_ctx.related_memories:
             dynamic_parts.append(f"\n--- 関連記憶 ---\n{turn_ctx.related_memories}")
 
-        # Author's Note: inject at end of system prompt if set
-        author_note = getattr(turn_ctx, "author_note", None)
-        if author_note:
-            dynamic_parts.append(f"\n[Author's Note]\n{author_note}")
-
         # キャラ厳守ブロック: system prompt の末尾（recency 位置）に配置
         dynamic_parts.append(CHARACTER_ADHERENCE_BLOCK.format(persona=persona))
 

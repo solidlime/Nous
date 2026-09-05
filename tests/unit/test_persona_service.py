@@ -49,8 +49,6 @@ class InMemoryPersonaRepository:
                 user_info=user_info,
                 persona_info=persona_info,
                 appearance=state_map.get("appearance"),
-                author_note=state_map.get("author_note"),
-                author_note_frequency=state_map.get("author_note_frequency", "always"),
             )
         )
 
@@ -312,37 +310,3 @@ class TestRecordConversationTime:
         result = service.record_conversation_time(PERSONA)
         assert result.is_ok
         assert "last_conversation_time" in repo._state.get(PERSONA, {})
-
-
-class TestAuthorNote:
-    def test_author_note_default_is_none(self, service: PersonaService):
-        result = service.get_context(PERSONA)
-        assert result.is_ok
-        state = result.value
-        assert state.author_note is None
-        assert state.author_note_frequency == "always"
-
-    def test_author_note_persisted_via_update_state(self, service: PersonaService, repo: InMemoryPersonaRepository):
-        result = service.update_state(PERSONA, "author_note", "Remember: you are a helpful assistant.")
-        assert result.is_ok
-        assert repo._state[PERSONA]["author_note"] == "Remember: you are a helpful assistant."
-
-        result = service.get_context(PERSONA)
-        assert result.is_ok
-        state = result.value
-        assert state.author_note == "Remember: you are a helpful assistant."
-
-    def test_author_note_frequency_custom(self, service: PersonaService, repo: InMemoryPersonaRepository):
-        service.update_state(PERSONA, "author_note_frequency", "on_emotion_change")
-        result = service.get_context(PERSONA)
-        assert result.is_ok
-        state = result.value
-        assert state.author_note_frequency == "on_emotion_change"
-
-    def test_author_note_roundtrip_with_empty(self, service: PersonaService):
-        service.update_state(PERSONA, "author_note", "test note")
-        service.update_state(PERSONA, "author_note", "")
-        result = service.get_context(PERSONA)
-        assert result.is_ok
-        state = result.value
-        assert state.author_note == ""

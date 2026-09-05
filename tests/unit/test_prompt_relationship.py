@@ -140,7 +140,6 @@ class TestBuildRelationshipContext:
             "【参照情報】\n"
         )
         turn_ctx.related_memories = ""
-        turn_ctx.author_note = None
         turn_ctx.system_prompt = ""
         turn_ctx.skills_raw = []
 

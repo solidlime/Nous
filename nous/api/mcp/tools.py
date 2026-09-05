@@ -266,8 +266,6 @@ def register_tools(mcp: MCPServer) -> None:
         persona_info: dict | None = None,
         nickname: str | None = None,
         relationship_type: str | None = None,
-        author_note: str | None = None,
-        author_note_frequency: str | None = None,
         appearance: str | None = None,
     ) -> str:
         """Update persona state. context_note: short note on current activity (session continuity).
@@ -276,7 +274,6 @@ def register_tools(mcp: MCPServer) -> None:
         physical_state / mental_state / environment: free-text descriptions.
         relationship_status / relationship_type: interpersonal context.
         user_info: {name, nickname, preferred_address}. persona_info: {nickname, ...}.
-        author_note: persistent system prompt injection. author_note_frequency: 'always' | 'every_n' | 'on_emotion_change'.
         appearance: free-text description of current appearance (clothing, hair, accessories)."""
         p = _resolve_persona()
         r = await _tool_update_context(
@@ -294,8 +291,6 @@ def register_tools(mcp: MCPServer) -> None:
             persona_info=persona_info,
             nickname=nickname,
             relationship_type=relationship_type,
-            author_note=author_note,
-            author_note_frequency=author_note_frequency,
             appearance=appearance,
         )
         if r.get("ok"):

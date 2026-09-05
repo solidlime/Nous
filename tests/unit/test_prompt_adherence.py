@@ -30,7 +30,6 @@ def test_prompt_build_appends_block():
     turn_ctx = MagicMock()
     turn_ctx.context_section = ""
     turn_ctx.related_memories = ""
-    turn_ctx.author_note = None
     turn_ctx.system_prompt = ""
     turn_ctx.skills_raw = []
 

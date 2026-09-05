@@ -270,8 +270,7 @@ class PersonaService:
     def update_state(self, persona: str, key: str, value: str) -> Result[None, DomainError]:
         """Update an arbitrary persona state key-value pair.
 
-        Low-level access for fields not covered by dedicated methods
-        (e.g. author_note, author_note_frequency).
+        Low-level access for fields not covered by dedicated methods.
         """
         return self._repo.update_state(persona, key, value)
 

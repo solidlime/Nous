@@ -118,12 +118,6 @@
 - ComfyUI は別コンテナ/別マシンが前提（GPU必須）。Nous 側は URL 設定のみで疎結合
 - `auto_generate` + `emotion_threshold` の組み合わせで頻繁な再生成を防止。`generate_interval_min` + `max_monthly_budget` で二重のレート制限
 
-### Author's Note
-- `context_state` テーブルに `author_note` / `author_note_frequency` カラム追加 (v031)
-- 既存の `persona_state` アクセスパターンと異なり、`update_state()` でキー・バリュー形式で書き込む（persona_info 経由ではない）
-- `prompt.py` の `build_system_prompt()` で `getattr(turn_ctx, "author_note", None)` により `None` と空文字を区別（空文字/None の場合は注入しない）
-- `author_note_frequency` の3モード (`always` / `every_n` / `on_emotion_change`) は現状 `always` のみ完全実装。他モードは将来拡張
-
 ### Voice (Irodori-TTS)
 - `IrodoriConfig` は `Settings` にネスト設定。環境変数は `NOUS__IRODORI__*` 形式
 - デフォルトOFF必須（GPUサーバー依存のため）

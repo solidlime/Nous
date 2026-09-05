@@ -54,21 +54,3 @@ class TestCharacterConsistencyGap:
 
         source = textwrap.dedent(inspect.getsource(PostProcessStep.run))
         assert "validate_response" in source, "PostProcessStep.run() must call validate_response()"
-
-    def test_author_note_no_contradiction_check(self):
-        """Author's Note injection code has no contradiction detection."""
-        from nous.application.chat.pipeline import prompt as prompt_module
-
-        source = textwrap.dedent(inspect.getsource(prompt_module))
-        # Check that there's no contradiction detection logic
-        # near the Author's Note injection
-        contradiction_keywords = [
-            "contradiction",
-            "inconsist",
-            "conflict",
-            "validate",
-            "sanitize",
-        ]
-        author_note_section = source[source.find("Author's Note") :]
-        for keyword in contradiction_keywords:
-            assert keyword not in author_note_section.lower(), f"Author's Note code unexpectedly contains '{keyword}'"

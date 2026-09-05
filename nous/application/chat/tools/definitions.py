@@ -80,7 +80,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="update_context",
-        description="ペルソナの状態（感情・体調・環境・関係性・Author's Note・コンテキストノート）を更新する。会話中にペルソナの内外状態が意味のある変化をした時に使え。変化がないのに更新するな。自明な微細変動は無視せよ。emotion, physical_state, environment, relationship_status, author_note, context_note など任意のフィールドを指定可能。",
+        description="ペルソナの状態（感情・体調・環境・関係性・コンテキストノート）を更新する。会話中にペルソナの内外状態が意味のある変化をした時に使え。変化がないのに更新するな。自明な微細変動は無視せよ。emotion, physical_state, environment, relationship_status, context_note など任意のフィールドを指定可能。",
         input_schema={
             "type": "object",
             "properties": {
@@ -109,12 +109,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 "user_info": {"type": "object", "description": "ユーザー情報 {name, nickname, preferred_address}"},
                 "persona_info": {"type": "object", "description": "ペルソナ情報 {nickname, ...}"},
                 "nickname": {"type": "string", "description": "ペルソナのニックネーム"},
-                "author_note": {"type": "string", "description": "システムプロンプトに常時注入されるコンテキスト"},
-                "author_note_frequency": {
-                    "type": "string",
-                    "enum": ["always", "every_n", "on_emotion_change"],
-                    "description": "Author's Note の注入頻度: always / every_n / on_emotion_change",
-                },
             },
         },
     ),

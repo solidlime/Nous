@@ -143,14 +143,10 @@ async def _tool_update_context(
     persona_info: dict | None = None,
     nickname: str | None = None,
     relationship_type: str | None = None,
-    author_note: str | None = None,
-    author_note_frequency: str | None = None,
     appearance: str | None = None,
 ) -> dict:
     """Update persona state. context_note: short note on current activity for session continuity.
     body_state: {fatigue, warmth, arousal, heart_rate, pain (0.0-1.0)}.
-    author_note: constant context injected into system prompt.
-    author_note_frequency: 'always' | 'every_n' | 'on_emotion_change'.
     appearance: free-text description of current appearance (clothing, hair, accessories)."""
     updated: list[str] = []
 
@@ -212,14 +208,6 @@ async def _tool_update_context(
         if result.is_ok:
             updated.append(f"nickname={nickname}")
 
-    # Author's Note
-    if author_note is not None:
-        ctx.persona_service.update_state(persona, "author_note", author_note)
-        updated.append(f"author_note={author_note[:40]}…" if len(author_note) > 40 else f"author_note={author_note}")
-    if author_note_frequency is not None:
-        ctx.persona_service.update_state(persona, "author_note_frequency", author_note_frequency)
-        updated.append(f"frequency={author_note_frequency}")
-
     # Appearance
     if appearance is not None:
         ctx.persona_service.update_state(persona, "appearance", appearance)
@@ -237,8 +225,6 @@ async def _tool_update_context(
             "emotion_intensity": emotion_intensity,
             "body_state": body_state,
             "context_note": context_note,
-            "author_note": author_note,
-            "author_note_frequency": author_note_frequency,
         },
     )
     return {"ok": True, "result": f"Context updated: {', '.join(updated)}"}
