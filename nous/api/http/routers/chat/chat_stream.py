@@ -118,6 +118,13 @@ async def chat_endpoint(request: Request) -> StreamingResponse:
     if not user_message:
         return StreamingResponse(_empty(), media_type="text/event-stream")
 
+    try:
+        from nous.api.http.routers.tts import kickoff_caption_task
+
+        kickoff_caption_task(persona, ctx, user_message)
+    except Exception:
+        logger.exception("chat_endpoint: caption kickoff failed")
+
     return StreamingResponse(
         _do_chat(persona, ctx, user_message, session_id, debug_mode, images),
         media_type="text/event-stream; charset=utf-8",

@@ -94,6 +94,34 @@ def build_style_anchor(
 
 _LAST_CAPTION: dict[str, tuple[str, float, str]] = {}
 
+_CAPTION_TASKS: dict[str, asyncio.Task] = {}
+
+
+def kickoff_caption_task(persona: str, ctx, user_message: str) -> None:
+    """chat開始時に字幕LLMを先行開始する。llmモード以外は何もしない。旧タスクは取消。"""
+    prev = _CAPTION_TASKS.pop(persona, None)
+    if prev is not None and not prev.done():
+        prev.cancel()
+    try:
+        from nous.config.settings import get_settings
+        from nous.domain.chat_config import ChatConfigFileRepository
+
+        chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
+        if _resolve_emotion_mode(chat_config) != "llm":
+            return
+
+        async def _run():
+            return await _resolve_caption(persona, ctx, chat_config, ref_text=user_message)
+
+        _CAPTION_TASKS[persona] = asyncio.get_running_loop().create_task(_run())
+    except Exception:
+        logger.exception("caption kickoff failed")
+
+
+def take_caption_task(persona: str):
+    """stream EPが回収する。popなので二重消費なし。"""
+    return _CAPTION_TASKS.pop(persona, None)
+
 
 class CaptionSnapshot(NamedTuple):
     emotion: str
