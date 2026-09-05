@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import logging
+import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -30,14 +31,27 @@ EMOTION_TONE_HINTS: dict[str, str] = {
 }
 
 
+def _clamp01(v: object) -> float:
+    """NaN/inf/None/文字列を0.0に倒し0.0-1.0にclampする。全intensity解決の正典。"""
+    try:
+        f = float(v or 0.0)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
+    if math.isnan(f) or math.isinf(f):
+        return 0.0
+    return max(0.0, min(1.0, f))
+
+
 def build_caption_emotion_directive(emotion: str, intensity: float) -> str:
     """caption LLM 用の感情トーン指示文を組み立てる。感情が空なら空文字（混入防止）。"""
-    if not emotion:
+    emo = (emotion or "").strip()
+    if not emo:
         return ""
-    tone = EMOTION_TONE_HINTS.get(emotion, f"「{emotion}」の感情に合った話し方で")
-    if intensity < 0.3:
+    inten = _clamp01(intensity)
+    tone = EMOTION_TONE_HINTS.get(emo, f"「{emo}」の感情に合った話し方で")
+    if inten < 0.3:
         tone = "感情を抑えめに、穏やかな話し方で"
-    return f"現在の感情は {emotion}（強度 {intensity:.0%}）です。{tone}、セリフのキャプションを生成してください。"
+    return f"現在の感情は {emo}（強度 {inten:.0%}）です。{tone}、セリフのキャプションを生成してください。"
 
 
 def build_style_anchor(
@@ -48,11 +62,7 @@ def build_style_anchor(
 ) -> str:
     """決定的スタイルアンカー1文。OFF送信・ON固定条件の共通土台。"""
     emo = (emotion or "").strip()
-    try:
-        inten = float(intensity or 0.0)
-    except (TypeError, ValueError):
-        inten = 0.0
-    inten = max(0.0, min(1.0, inten))
+    inten = _clamp01(intensity)
     if emo and emo in EMOTION_TONE_HINTS:
         tone = EMOTION_TONE_HINTS[emo]
     elif emo:
@@ -75,11 +85,7 @@ _LAST_CAPTION: dict[str, tuple[str, float, str]] = {}
 
 
 def _emotion_bucket(intensity: float) -> float:
-    try:
-        v = float(intensity or 0.0)
-    except (TypeError, ValueError):
-        v = 0.0
-    return round(v + 1e-9, 1)
+    return round(_clamp01(intensity) + 1e-9, 1)
 
 
 def _tts_cache_key(
@@ -236,9 +242,10 @@ def register_tts_routes(mcp) -> None:
                     if emotion_directive:
                         llm_system = llm_system + "\n" + emotion_directive
 
+                    clamped_inten = _clamp01(getattr(state, "emotion_intensity", 0.0))
                     llm_user = f"""【固定条件】
 {anchor}
-感情: {state.emotion} (強度: {int((state.emotion_intensity or 0.0) * 10)}/10)
+感情: {emotion} (強度: {clamped_inten:.0%})
 
 【前回】
 {prev or "（なし）"}
