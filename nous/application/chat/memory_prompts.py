@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 def _build_drift_section(drift: dict | None) -> str:
     """キャラ一貫性監査の指摘をMemoryLLMプロンプト用の追記ブロックに変換する。"""
     if not drift or drift.get("violation") in (None, "none"):
