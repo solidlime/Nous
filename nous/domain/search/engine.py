@@ -428,7 +428,7 @@ class SearchEngine:
 
                     # Seeds come from F2-filtered results (tombstone/validity already applied)
                     sa = SpreadingActivation(hops=2, reset_prob=0.15)
-                    activations = sa.propagate(seed_keys, all_links)
+                    activations = sa.propagate(seed_keys, all_links, persona=getattr(self._semantic, "persona", None))
                     for r in deduped:
                         if r.memory.key in activations:
                             # Cap absolute boost to prevent accumulation on hub nodes

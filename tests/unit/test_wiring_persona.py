@@ -111,6 +111,13 @@ class TestHookPersona:
             e for e in wiring_events.snapshot_after(0, persona="p1") if e["kind"] != "ppr_hit"
         ]
 
+    def test_propagate_persona_attributed(self) -> None:
+        links = [MemoryLink(source_key="s", target_key="n", weight=1.0)]
+        SpreadingActivation().propagate(["s"], links, persona="p1")
+        fires = wiring_events.snapshot_after(0, persona="p1")
+        assert any(e["kind"] == "ppr_hit" and e["source"] == "s" for e in fires)
+        assert wiring_events.snapshot_after(0, persona="other") == []
+
 
 class TestSSEPersona:
     @pytest.mark.asyncio

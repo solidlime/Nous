@@ -55,7 +55,12 @@ class SpreadingActivation:
         self.llm_seed_filter = llm_seed_filter
         self.seed_filter = seed_filter
 
-    def propagate(self, seed_keys: list[str], links: list[MemoryLink]) -> dict[str, float]:
+    def propagate(
+        self,
+        seed_keys: list[str],
+        links: list[MemoryLink],
+        persona: str | None = None,
+    ) -> dict[str, float]:
         """Run PPR diffusion and return {target_key: activation_score}."""
         seeds = list(dict.fromkeys(seed_keys))
         if self.llm_seed_filter and self.seed_filter is not None:
@@ -100,7 +105,10 @@ class SpreadingActivation:
 
             ranked = sorted(((k, curr.get(k, 0.0)) for k in seeds), key=lambda kv: kv[1], reverse=True)[:5]
             for rank, (seed_key, score) in enumerate(ranked):
-                _wiring_emit("ppr_hit", source=seed_key, weight=score, meta={"rank": rank})
+                meta: dict = {"rank": rank}
+                if persona is not None:
+                    meta["persona"] = persona
+                _wiring_emit("ppr_hit", source=seed_key, weight=score, meta=meta)
         except Exception:
             import logging
 
