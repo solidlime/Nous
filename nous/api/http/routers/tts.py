@@ -106,7 +106,21 @@ def _tts_cache_key(
 ) -> str:
     """TTS音声キャッシュのキー。解決済みvoice・model・advanced全値を含める。区切り衝突回避のためjson結合。"""
     material = json.dumps(
-        [text, emotion, caption or "", voice_speed, voice_override or "", voice_resolved, model, seed or 0, num_steps, cfg_text, cfg_speaker, cfg_caption, chunk_min_chars],
+        [
+            text,
+            emotion,
+            caption or "",
+            voice_speed,
+            voice_override or "",
+            voice_resolved,
+            model,
+            seed or 0,
+            num_steps,
+            cfg_text,
+            cfg_speaker,
+            cfg_caption,
+            chunk_min_chars,
+        ],
         ensure_ascii=False,
         separators=(",", ":"),
     )
@@ -555,10 +569,29 @@ def register_tts_routes(mcp) -> None:
                 st = ctx.persona_service.get_context(persona)
                 if st.is_ok and st.value and getattr(chat_config, "voice_emotion_mode", "anchor") != "off":
                     emotion = (getattr(st.value, "emotion", "") or "").strip() or "neutral"
-                    caption = build_style_anchor(emotion, _clamp01(getattr(st.value, "emotion_intensity", 0.0)), getattr(st.value, "appearance", None), getattr(st.value, "relationship_status", None))
+                    caption = build_style_anchor(
+                        emotion,
+                        _clamp01(getattr(st.value, "emotion_intensity", 0.0)),
+                        getattr(st.value, "appearance", None),
+                        getattr(st.value, "relationship_status", None),
+                    )
             except Exception:
                 logger.exception("combine emotion resolve failed")
-        full_key = _tts_cache_key(text=full_text, emotion=emotion, caption=caption, voice_speed=voice_speed, voice_override=voice_override, voice_resolved=voice_resolved, model=irodori_config.model, seed=irodori_config.advanced.seed, num_steps=irodori_config.advanced.num_steps, cfg_text=irodori_config.advanced.cfg_scale_text, cfg_speaker=irodori_config.advanced.cfg_scale_speaker, cfg_caption=irodori_config.advanced.cfg_scale_caption, chunk_min_chars=irodori_config.advanced.chunk_min_chars)
+        full_key = _tts_cache_key(
+            text=full_text,
+            emotion=emotion,
+            caption=caption,
+            voice_speed=voice_speed,
+            voice_override=voice_override,
+            voice_resolved=voice_resolved,
+            model=irodori_config.model,
+            seed=irodori_config.advanced.seed,
+            num_steps=irodori_config.advanced.num_steps,
+            cfg_text=irodori_config.advanced.cfg_scale_text,
+            cfg_speaker=irodori_config.advanced.cfg_scale_speaker,
+            cfg_caption=irodori_config.advanced.cfg_scale_caption,
+            chunk_min_chars=irodori_config.advanced.chunk_min_chars,
+        )
         out = cache_dir / f"{full_key}.wav"
         out.write_bytes(blob)
         return JSONResponse({"ok": True, "audio_url": f"/api/tts/{persona}/cache/{out.name}"})

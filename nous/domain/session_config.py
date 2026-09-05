@@ -128,6 +128,7 @@ class SessionConfig(BaseModel):
         except (TypeError, ValueError):
             return 1.0
         import math
+
         if math.isnan(f) or math.isinf(f):
             return 1.0
         return max(0.25, min(4.0, f))
