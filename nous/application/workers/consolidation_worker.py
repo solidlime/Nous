@@ -1,18 +1,27 @@
-"""Consolidation Worker — CraniMem-inspired memory consolidation.
+"""Consolidation Worker — CraniMem-inspired two-layer (CLS) consolidation.
 
 Replaces the old date-based extractive summarization worker.
 Operates on archived memories (set by DecayWorker) and entity clusters:
 
 1. Finds archived memories (lifecycle_status='archived', set by DecayWorker)
+   that are still valid (valid_until IS NULL — F2 bitemporal contract:
+   superseded memories are never gistified)
 2. Groups by shared entity relations (entity_relations table)
-3. Creates consolidated summary memories
-4. Links consolidated memory to sources via related_keys
+3. Creates gist summaries from the semantic layer only; episodic memories
+   stay raw (never deleted, never merged into the gist)
+4. Links gist to semantic sources via related_keys + derived_from, marked
+   kind='semantic' / source_type='consolidated'
+
+ADR: archived → tombstoned transition is NOT performed. Consolidated
+sources stay archived (queryable history); tombstone remains reserved
+for explicit user deletion (F2 contract).
 
 Philosophy: "Memories don't disappear — they consolidate."
 """
 
 from __future__ import annotations
 
+import json
 import threading
 from typing import TYPE_CHECKING
 
@@ -51,6 +60,11 @@ def _memory_entity_map(entity_repo, memory_keys: list[str]) -> dict[str, set[str
         if ent_result.is_ok and ent_result.value:
             result[key] = {e.id for e in ent_result.value}
     return result
+
+
+def _semantic_layer(memories: list) -> list:
+    """Semantic layer of a group (episodic stays raw — never gistified)."""
+    return [m for m in memories if getattr(m, "kind", "semantic") == "semantic"]
 
 
 class ConsolidationWorker:
@@ -111,12 +125,15 @@ class ConsolidationWorker:
 
     def _consolidate_persona(self, ctx, persona: str) -> None:
         """Consolidate archived memories for a single persona."""
-        # 1. Find all non-tombstoned memories, filter for archived
+        # 1. Find all non-tombstoned memories, filter for archived + still valid.
+        #    Superseded (valid_until set) memories are F2 history — never gistified.
         all_result = ctx.memory_repo.find_all()
         if not all_result.is_ok or not all_result.value:
             return
 
-        archived = [m for m in all_result.value if m.lifecycle_status == "archived"]
+        archived = [
+            m for m in all_result.value if m.lifecycle_status == "archived" and getattr(m, "valid_until", None) is None
+        ]
         if len(archived) < self.min_memories_per_group:
             logger.debug(
                 "ConsolidationWorker: %s has %d archived (< %d)", persona, len(archived), self.min_memories_per_group
@@ -190,18 +207,44 @@ class ConsolidationWorker:
         return groups
 
     def _build_consolidated(self, memories: list) -> str | None:
-        """Build a consolidated summary from a group of archived memories.
+        """Build a gist from the semantic layer of a group (CLS two-layer).
+
+        Semantic memories are distilled via :meth:`_build_gist`; episodic
+        memories stay raw — never merged, never deleted.
+        Returns None when the group has no semantic layer (episodic-only).
+        """
+        if not memories:
+            return None
+        semantic = _semantic_layer(memories)
+        if not semantic:
+            return None
+        return self._build_gist(semantic)
+
+    def _build_gist(self, memories: list) -> str | None:
+        """Build an extractive gist from semantic memories.
 
         Concatenation-based (LLM-ready for future enhancement).
         """
         if not memories:
             return None
 
-        memories_sorted = sorted(memories, key=lambda m: m.created_at or "", reverse=True)
-        lines = [f"## Consolidated Memory Group ({len(memories)} merged)"]
+        def _sort_key(m) -> str:
+            created = m.created_at
+            if isinstance(created, str):
+                return created
+            return created.isoformat() if created is not None else ""
+
+        memories_sorted = sorted(memories, key=_sort_key, reverse=True)
+        lines = [f"## Consolidated Gist ({len(memories)} merged)"]
 
         for mem in memories_sorted[:20]:  # cap at 20 per group
-            date_str = mem.created_at[:10] if mem.created_at else "?"
+            created = mem.created_at
+            if isinstance(created, str):
+                date_str = created[:10]
+            elif created is not None:
+                date_str = created.date().isoformat()
+            else:
+                date_str = "?"
             content_preview = mem.content[:200] if mem.content else "(empty)"
             lines.append(f"- [{date_str}] {content_preview}")
 
@@ -214,8 +257,17 @@ class ConsolidationWorker:
         sources: list,
         entity_key: str,
     ) -> None:
-        """Save the consolidated memory and link it to sources."""
+        """Save the gist memory and link it to semantic sources.
+
+        Provenance: kind='semantic' / source_type='consolidated' /
+        derived_from=[source keys as JSON]. Sources stay archived —
+        no archived → tombstoned transition (ADR).
+        """
+        sources = _semantic_layer(sources)
+        if not sources:
+            return
         avg_importance = sum(m.importance for m in sources) / len(sources) if sources else 0.5
+        source_keys = [m.key for m in sources]
 
         import asyncio as _asyncio
 
@@ -228,7 +280,10 @@ class ConsolidationWorker:
                 tags=["consolidated", "auto"],
                 privacy_level="private",
                 source_context="consolidation_worker",
-                related_keys=[m.key for m in sources],
+                related_keys=source_keys,
+                kind="semantic",
+                source_type="consolidated",
+                derived_from=json.dumps(source_keys, ensure_ascii=False),
             )
         )
 
