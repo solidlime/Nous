@@ -87,3 +87,19 @@ def test_cache_key_version_breaks_old_entries():
     old_key = hashlib.sha256(old_material.encode()).hexdigest()
     assert len(new_key) == 64
     assert new_key != old_key
+
+
+def test_cache_key_ignores_chunking_params():
+    from nous.api.http.routers.tts import _tts_cache_key
+
+    def _call():
+        return _tts_cache_key(text="あ", emotion="neutral", caption=None, voice_speed=1.0,
+                    voice_override=None, voice_resolved="v", model="irodori-tts",
+                    seed=0, num_steps=30, cfg_text=3.2, cfg_speaker=5.0,
+                    cfg_caption=4.2, chunk_min_chars=85)
+    k1 = _call()
+    k2 = _call()
+    assert k1 == k2 and len(k1) == 64
+    # _tts_cache_keyの引数に first_sentence_chunk_min_chars が存在しないこと（キー外のlock-in）
+    import inspect
+    assert "first_sentence" not in inspect.signature(_tts_cache_key).parameters

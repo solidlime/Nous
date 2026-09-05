@@ -166,8 +166,11 @@ class IrodoriAdvancedParams(BaseModel):
     cfg_scale_caption: float = 4.2
     """Emotion/style strength. Range: 1.0-8.0."""
 
-    chunk_min_chars: int = 85
+    chunk_min_chars: int = 40
     """Min chars per chunk for long text. Range: 30-200."""
+
+    first_sentence_chunk_min_chars: int = 1
+    """First-sentence fast-path chunk threshold for SSE. Range: 1-200."""
 
     seed: int | None = None
     """Random seed. None = random. Set to int for deterministic output."""

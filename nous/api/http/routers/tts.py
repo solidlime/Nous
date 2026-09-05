@@ -374,7 +374,8 @@ def _get_irodori_config(ctx, chat_config) -> IrodoriConfig:
         cfg_scale_text=getattr(chat_config, "irodori_cfg_scale_text", 3.2),
         cfg_scale_speaker=getattr(chat_config, "irodori_cfg_scale_speaker", 5.0),
         cfg_scale_caption=getattr(chat_config, "irodori_cfg_scale_caption", 4.2),
-        chunk_min_chars=getattr(chat_config, "irodori_chunk_min_chars", 85),
+        chunk_min_chars=getattr(chat_config, "irodori_chunk_min_chars", 40),
+        first_sentence_chunk_min_chars=getattr(chat_config, "irodori_first_sentence_chunk_min_chars", 1),
         seed=getattr(chat_config, "irodori_seed", None),
     )
     return IrodoriConfig(

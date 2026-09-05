@@ -213,7 +213,7 @@ class TestIrodoriEngine:
             assert opts["cfg_scale_speaker"] == 5.0
             assert opts["cfg_scale_caption"] == 4.2
             assert opts["chunking_enabled"] is True
-            assert opts["chunk_min_chars"] == 85
+            assert opts["chunk_min_chars"] == 40
             assert opts["caption"] == "明るく元気な話し方。"
 
     @pytest.mark.asyncio
@@ -238,7 +238,7 @@ class TestIrodoriEngine:
             assert extra["cfg_scale_speaker"] == 5.0
             assert extra["cfg_scale_caption"] == 4.2
             assert extra["chunking_enabled"] is True
-            assert extra["chunk_min_chars"] == 85
+            assert extra["chunk_min_chars"] == 40
             # caption と seed は None のため含まれない
             assert "caption" not in extra
             assert "seed" not in extra
