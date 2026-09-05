@@ -27,8 +27,9 @@ _JUDGE_PROMPT = """あなたはキャラクター一貫性の監査者です。�
 - compliance: キャラらしくない過剰な従順さ・迎合（定義された性格に反するイエスマン挙動）
 - character: 性格・価値観・知識の明確な矛盾
 
-違反がなければ violation は "none"。
-出力は JSON のみ: {{"violation": "none|tone|compliance|character", "detail": "簡潔な理由"}}
+ 違反がなければ violation は "none"。
+ detailは必ず一人称（私は〜）で書くこと。キャラ名呼びの三人称は禁止。
+ 出力は JSON のみ: {{"violation": "none|tone|compliance|character", "detail": "簡潔な理由"}}
 """
 
 

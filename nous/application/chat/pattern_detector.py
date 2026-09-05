@@ -32,6 +32,7 @@ _PROMPT_TEMPLATE = """\
 
 【出力形式】
 JSONのみ。コメント不要。
+各モデルは主語を明示すること（ユーザーの習慣・傾向→「ユーザー：」、{persona}自身の振る舞い・傾向→「私：」）。
 {{"models": ["モデル1", "モデル2", "モデル3"]}}
 """
 
@@ -157,7 +158,7 @@ async def maybe_run_mental_model(
             recent = sorted(memories, key=lambda m: m.created_at, reverse=True)[:20]
             memory_lines = "\n".join(f"- [{m.importance:.1f}] {m.content[:200]}" for m in recent)
 
-            prompt = _PROMPT_TEMPLATE.format(type_tag=type_tag, memories=memory_lines)
+            prompt = _PROMPT_TEMPLATE.format(type_tag=type_tag, memories=memory_lines, persona=ctx.persona)
 
             try:
                 provider = get_provider(config.provider, api_key, extract_model, config.get_effective_base_url())

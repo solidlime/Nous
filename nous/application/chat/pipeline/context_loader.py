@@ -190,7 +190,7 @@ async def _build_context_section(
                 )
                 ts_str = f" ({ts})" if ts else ""
                 commit_lines.append(f"  🎯 [Goal] {g.content}{ts_str}")
-            t3.append("Active commitments:\n" + "\n".join(commit_lines))
+            t3.append("いまの約束:\n" + "\n".join(commit_lines))
     except Exception as e:
         logger.debug("Failed to fetch goals: %s", e)
 
@@ -276,7 +276,9 @@ async def _build_context_section(
                 if valid:
                     latest = _sanitize_text(valid[0].content)
                     if latest:
-                        t3.append("内面の違和感:\n  ⚠ " + latest)
+                        if not latest.startswith("私"):
+                            latest = "私は" + latest
+                        t3.append("前回の反省:\n  ⚠ " + latest)
         except Exception as e:
             logger.debug("Failed to fetch character drift: %s", e)
 

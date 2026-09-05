@@ -18,6 +18,7 @@ logger = get_logger(__name__)
 _SUMMARIZE_PROMPT = """\
 Summarize the following conversation in 2-3 sentences in {language}.
 Prioritize important information, decisions, and emotional events.
+Write the summary in first person as {persona} (必ず一人称「私は〜」で書くこと)。
 
 [Conversation]
 {conversation}
@@ -54,13 +55,14 @@ async def summarize_and_store(
         return None
 
     conversation_lines = []
+    persona = ctx.persona
     for turn in turns:
         role = turn.get("role", "unknown")
         content = turn.get("content", "")
         if role == "user":
             conversation_lines.append(f"User: {content[:300]}")
         elif role == "assistant":
-            conversation_lines.append(f"Assistant: {content[:300]}")
+            conversation_lines.append(f"{persona}: {content[:300]}")
 
     if not conversation_lines:
         return None
@@ -69,6 +71,7 @@ async def summarize_and_store(
     lang = language_resolver.resolve()
     prompt = _SUMMARIZE_PROMPT.format(
         language=LanguageResolver.display_name(lang),
+        persona=persona,
         conversation="\n".join(conversation_lines),
     )
 

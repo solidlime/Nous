@@ -9,7 +9,7 @@ def _build_drift_section(drift: dict | None) -> str:
         return ""
     violation = str(drift.get("violation", ""))
     detail = str(drift.get("detail", ""))
-    return f"【キャラ一貫性監査の指摘】\n- 種別: {violation}\n- 詳細: {detail}\n"
+    return f"【前回の振り返り】\n- 気になった点: {violation}\n- 内容: {detail}\n"
 
 
 _MEMORY_LLM_PROMPT = """\

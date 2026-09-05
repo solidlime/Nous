@@ -979,7 +979,7 @@ class TestToolOnlyFallback:
         assert assistant_calls, "assistant メッセージの保存呼び出しが存在すること"
         content = assistant_calls[0].args[1]
         assert content != "", "ツールのみターンは空保存してはならない"
-        assert "テキスト応答がありませんでした" in content
+        assert "うまく言葉にできなかった" in content
 
     @pytest.mark.asyncio
     async def test_tool_only_image_turn_uses_tool_message(self):

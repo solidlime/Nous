@@ -55,7 +55,7 @@ class InferenceStep:
     ]:
         api_key = config.get_effective_api_key()
         if not api_key:
-            yield ErrorSSE(message="APIキーが設定されていません。チャット設定でAPIキーを入力してください。")
+            yield ErrorSSE(message="（ごめん、APIキーが設定されてないみたい…設定を確認して？）")
             return
 
         try:
@@ -65,8 +65,9 @@ class InferenceStep:
                 config.get_effective_model(),
                 config.get_effective_base_url(),
             )
-        except Exception as e:
-            yield ErrorSSE(message=f"LLMプロバイダーの初期化に失敗: {e}")
+        except Exception:
+            logger.exception("InferenceStep: provider init failed")
+            yield ErrorSSE(message="（ごめん、今のうまく処理できなかった…もう一度言って？）")
             return
 
         messages = list(session_messages)
@@ -88,16 +89,14 @@ class InferenceStep:
                 captions = await captioner.caption_batch(turn_ctx.images)
                 caption_text = "\n".join(f"[Image {i + 1}]: {c}" for i, c in enumerate(captions) if c)
                 if caption_text:
-                    turn_ctx.user_message = (
-                        f"{turn_ctx.user_message}\n\n---\nAttached images described:\n{caption_text}"
-                    )
+                    turn_ctx.user_message = f"{turn_ctx.user_message}\n\n---\n添付画像の説明:\n{caption_text}"
                 else:
                     logger.warning(
                         "Image captioning failed for %d images, attaching fallback note",
                         len(turn_ctx.images),
                     )
                     turn_ctx.user_message = (
-                        f"[User attached {len(turn_ctx.images)} image(s) but current model does not support vision]\n"
+                        f"[画像が{len(turn_ctx.images)}枚添付されたけど、今のモデルは画像を見られないの]\n"
                         f"{turn_ctx.user_message}"
                     )
                 messages.append(LLMMessage(role="user", content=turn_ctx.user_message, timestamp=datetime.now()))
@@ -272,7 +271,7 @@ class InferenceStep:
                     # Save partial text as assistant message for continuation context
                     messages.append(LLMMessage(role="assistant", content=current_text))
                     # Non-empty placeholder: Anthropic rejects empty user messages (400)
-                    messages.append(LLMMessage(role="user", content="(continue)"))
+                    messages.append(LLMMessage(role="user", content="（つづき）"))
                     current_text = ""
                     _seg_text = ""
                     continue  # back to top of while loop for another stream
@@ -426,9 +425,8 @@ class InferenceStep:
                         LLMMessage(
                             role="user",
                             content=(
-                                f"The previous tool execution produced {len(image_parts)} image(s), "
-                                "but the current model does not support vision. "
-                                "Continuing text-only."
+                                f"直前のツール実行で画像が{len(image_parts)}枚作られたけど、"
+                                "今のモデルは画像を見られないの。テキストだけで続けて。"
                             ),
                         )
                     )
@@ -441,11 +439,11 @@ class InferenceStep:
                     messages.append(
                         LLMMessage(
                             role="user",
-                            content="The tool execution produced image(s). Please analyze:",
+                            content="ツール実行で画像が作られたの。見てあげて：",
                             content_parts=[
                                 {
                                     "type": "text",
-                                    "text": "The previous tool execution produced the following image(s). Please analyze them carefully.",
+                                    "text": "直前のツール実行で作られた画像だよ。よく見てあげて。",
                                 },
                                 *image_parts,
                             ],

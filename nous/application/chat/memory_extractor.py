@@ -62,7 +62,7 @@ class MemoryLLM:
         prompt = _MEMORY_LLM_PROMPT.format(
             language=LanguageResolver.display_name(lang),
             persona_name=persona_name,
-            persona_identity=persona_identity.strip() or f"あなたは {persona_name} として振る舞います。",
+            persona_identity=persona_identity.strip() or f"あなたは{persona_name}です。",
             context=context.strip() or "(情報なし)",
             commitments=commitments.strip() or "(なし)",
             inventory=inventory.strip() or "(なし)",

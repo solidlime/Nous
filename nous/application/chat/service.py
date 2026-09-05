@@ -113,10 +113,7 @@ def _build_tool_only_fallback(tool_calls_log: list[dict]) -> str:
                     msg = data.get("message")
                     if isinstance(msg, str) and ("Generated" in msg or "image" in msg.lower()):
                         return msg.strip()
-    names = [str(e.get("name", "?")) for e in (tool_calls_log or []) if isinstance(e, dict)]
-    if names:
-        return f"[ツール実行: 完了（{', '.join(names)}）] テキスト応答がありませんでした"
-    return "[ツール実行: 完了] テキスト応答がありませんでした"
+    return "（ツールは使ったけど、うまく言葉にできなかった…もう一度言って？）"
 
 
 class ChatService:
@@ -193,7 +190,7 @@ class ChatService:
                 builtin = get_filtered_tools(config) if config.enable_memory_tools else []
                 _tool_names = [t.name for t in builtin]
                 has_img = "image_generate" in _tool_names
-                logger.warning(
+                logger.info(
                     "Chat tools assembled: image_gen_enabled=%s, tools=%d, has_image_generate=%s, names=%s",
                     getattr(config, "image_gen_enabled", "MISSING"),
                     len(builtin),
@@ -307,7 +304,7 @@ class ChatService:
                 logger.exception("Chat pipeline crashed")
                 from nous.application.chat.events import ErrorSSE
 
-                yield ErrorSSE(message="チャット処理中に内部エラーが発生しました。").to_sse()
+                yield ErrorSSE(message="（ごめん、今のうまく処理できなかった…もう一度言って？）").to_sse()
             finally:
                 # Always persist, even on GeneratorExit (client disconnect during PostProcessStep)
                 session.flush()
@@ -315,4 +312,4 @@ class ChatService:
             logger.exception("Chat pipeline crashed")
             from nous.application.chat.events import ErrorSSE
 
-            yield ErrorSSE(message="チャット処理中に内部エラーが発生しました。").to_sse()
+            yield ErrorSSE(message="（ごめん、今のうまく処理できなかった…もう一度言って？）").to_sse()
