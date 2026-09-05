@@ -21,6 +21,14 @@ updates:
           - "sentence-transformers*"
           - "transformers*"
 
+  - package-ecosystem: "npm"
+    directory: "/nous/api/http/static"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

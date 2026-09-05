@@ -147,8 +147,69 @@ jobs:
         run: pytest --cov=nous --cov-fail-under=70 --cov-report=term --ignore=tests/contracts
 
   # ------------------------------------------------------------------
+  # Contract: Pact consumer tests (needs [contract] extra, no server required)
+  # Provider verification (tests/contracts/provider) needs a running server
+  # (NOUS_PROVIDER_URL) and stays manual — see tests/contracts/provider/.
+  # ------------------------------------------------------------------
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies with contract extra
+        run: |
+          pip install -r requirements-prod.txt -r requirements-dev.txt
+          pip install ".[contract]"
+
+      - name: Run consumer contract tests
+        run: pytest tests/contracts/consumer -q --timeout=60
+
+  # ------------------------------------------------------------------
+  # Frontend: vitest + JS syntax lint (stylelint runs via lint:css locally;
+  # npm audit is report-only - devDependency advisories tracked via dependabot)
+  # ------------------------------------------------------------------
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: nous/api/http/static/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefix nous/api/http/static
+
+      - name: Run vitest
+        run: npm test --prefix nous/api/http/static
+
+      - name: Run JS lint
+        run: npm run lint:js --prefix nous/api/http/static
+
+      - name: npm audit (report-only)
+        run: npm audit --prefix nous/api/http/static --audit-level=moderate
+        continue-on-error: true
+
+  # ------------------------------------------------------------------
   # Security: bandit static analysis
   # ------------------------------------------------------------------
+  # -ll gates on MEDIUM+: LOW findings are tracked via the local
+  # bandit_report.json artifact (gitignored) and dependabot, not the gate.
+  # Known B608 placeholders are marked # nosec at the call site.
   bandit:
     runs-on: ubuntu-latest
     timeout-minutes: 10

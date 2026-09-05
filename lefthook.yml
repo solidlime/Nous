@@ -1,8 +1,16 @@
 pre-commit:
   commands:
     ruff-format:
-      glob: "*.py"
+      glob:
+        - "nous/**/*.py"
+        - "tests/**/*.py"
       run: ruff format nous/ tests/
     ruff-check:
-      glob: "*.py"
+      glob:
+        - "nous/**/*.py"
+        - "tests/**/*.py"
       run: ruff check nous/ tests/
+    mypy:
+      glob:
+        - "nous/**/*.py"
+      run: mypy nous/

@@ -7,7 +7,13 @@ test:
 	pytest tests/unit/ -q
 
 test-all:
-	pytest -q
+	pytest -q --ignore=tests/contracts
+
+contract:
+	pytest tests/contracts/consumer -q
+
+docs-sync:
+	! grep -rn "run_tests\.py" CLAUDE.md README.md docs/http_api_reference.md docs/architecture.md
 
 typecheck:
 	mypy nous/
@@ -21,4 +27,4 @@ coverage-fail:
 bandit:
 	bandit -r nous/ -ll
 
-ci: lint typecheck test-all bandit coverage-fail
+ci: lint typecheck test-all contract bandit coverage-fail docs-sync
