@@ -1,7 +1,8 @@
 # Memory MCP — HTTP API Reference
 
-All endpoints are served from the MCP HTTP server (default port **`26262`**).  
-Persona is resolved from the `Authorization: Bearer <persona>` header, `X-Persona` header, or falls back to `"default"`.
+All endpoints are served from the MCP HTTP server (default port **`26262`**).
+Persona is resolved from the path parameter, the `Authorization: Bearer <persona>` header, the `X-Persona` header, or falls back to `"default"` (priority: path > Bearer > X-Persona > default > env).
+When `NOUS_API_KEY` is set, the Bearer token must equal the key (401 otherwise) and the persona comes from the path param / `X-Persona` header only.
 
 ---
 
@@ -9,6 +10,7 @@ Persona is resolved from the `Authorization: Bearer <persona>` header, `X-Person
 
 | Priority | Method | Example |
 |----------|--------|---------|
+| 0 | Path parameter | `/api/memories/herta` |
 | 1 | Bearer token | `Authorization: Bearer herta` |
 | 2 | X-Persona header | `X-Persona: herta` |
 | 3 | Environment variable | `PERSONA=herta` or `MEMORY_MCP_DEFAULT_PERSONA=herta` |
@@ -49,7 +51,7 @@ Health check with Qdrant connectivity status.
 ```json
 {
   "status": "ok",
-  "version": "3.0.0",
+  "version": "3.5.0",
   "qdrant": "connected"
 }
 ```

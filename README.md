@@ -134,7 +134,7 @@ DATA_ROOT=./data
 }
 ```
 
-> **Persona の指定方法**: 優先順位は `Bearer トークン` > `X-Persona ヘッダー` > 環境変数 `PERSONA` > デフォルト `"default"`。
+> **Persona の指定方法**: 優先順位は `パスパラメータ` > `Bearer トークン` > `X-Persona ヘッダー` > 環境変数 `PERSONA` > デフォルト `"default"`。`NOUS_API_KEY` 設定時は Bearer がキーと一致必須（401）。公開する場合は事前に設定すること。
 
 ---
 

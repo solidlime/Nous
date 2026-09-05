@@ -9,8 +9,8 @@ Nous の技術スタック、ディレクトリ構造、設計パターンを解
 | カテゴリ | 技術 |
 |----------|------|
 | 言語 | Python 3.12+ |
-| MCP フレームワーク | FastMCP |
-| HTTP フレームワーク | Starlette |
+| MCP フレームワーク | MCPServer（`mcp` パッケージ v2 API） |
+| HTTP フレームワーク | Starlette（`mcp` に同梱、SecurityHeaders + CORS ミドルウェア付き） |
 | データベース | SQLite（WAL モード） |
 | ベクトルストア | Qdrant |
 | 埋め込みモデル | cl-nagoya/ruri-v3-30m（日本語特化） |
@@ -19,7 +19,7 @@ Nous の技術スタック、ディレクトリ構造、設計パターンを解
 | 設定管理 | Pydantic v2 |
 | ロギング | structlog |
 | コンテナ | Docker / Docker Compose |
-| フロントエンド | Vanilla JS (ES Modules) + CSS (@layer) |
+| フロントエンド | Vanilla JS (IIFE + loader、`window.Nous` 名前空間) + CSS (@layer) |
 | テスト | pytest + Vitest |
 
 ---
@@ -187,7 +187,9 @@ nous/
 |----------|-----------|------|
 | `NOUS_DATA_ROOT` | `./data` | 全データの保存先 |
 | `NOUS_SERVER__PORT` | `26262` | HTTP ポート |
-| `NOUS_SERVER__HOST` | `0.0.0.0` | バインドアドレス |
+| `NOUS_SERVER__HOST` | `0.0.0.0` | バインドアドレス。公開する場合は `NOUS_API_KEY` を事前設定すること（未設定はdev素通し）。 |
+| `NOUS_API_KEY` | `""`（空） | HTTP Bearer 資格情報。空はdev素通し（Bearer=persona名）。非空時は Bearer 一致必須（401）。復旧は `{data_root}/config/config_overrides.json` の `general.api_key` 削除→再起動。 |
+| `NOUS_CORS_ALLOWED_ORIGINS` | （未設定） | CORS上書き（カンマ区切り or JSON配列）。既定はlocalhost開発originのみ。`" * "` は明示時のみ（credentials強制off）。 |
 | `NOUS_QDRANT__URL` | `http://localhost:6333` | Qdrant 接続先 |
 | `NOUS_EMBEDDING__MODEL` | `cl-nagoya/ruri-v3-30m` | 埋め込みモデル（日本語特化） |
 | `NOUS_DEFAULT_PERSONA` | `default` | デフォルト Persona 名 |

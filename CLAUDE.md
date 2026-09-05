@@ -6,28 +6,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Docker での起動（推奨）: nous + Qdrant を一括起動
-docker-compose up -d
+docker compose up -d
 
 # 停止
-docker-compose down
+docker compose down
 
 # ログ確認
-docker-compose logs -f nous
-docker-compose logs -f qdrant
+docker compose logs -f nous
+docker compose logs -f qdrant
 
 # サーバー起動（ローカル開発時: Qdrant は別途起動が必要）
 # volume mount 付きで起動しないと ./storage エラーになるので注意
 docker run -d -p 6333:6333 -v "$(pwd)/data/qdrant:/qdrant/storage" qdrant/qdrant
 python -m nous.main
 
-# 全テスト実行（サーバーが localhost:26262 で起動中であること）
-python run_tests.py
+# 全テスト実行
+pytest tests/unit/ -q
 
 # 個別テスト
-python run_tests.py --test http      # HTTP APIテスト
-python run_tests.py --test search    # 検索精度テスト
-python run_tests.py --test migrate   # DBスキーママイグレーション
-python run_tests.py -v               # 詳細出力
+pytest tests/unit/test_http_routers.py -q  # HTTP APIテスト
+pytest tests/search/ -q                    # 検索精度テスト
+pytest tests/unit/test_migration.py -q     # DBスキーママイグレーション
 
 # ONNX Runtime（PyTorch不要）
 pip install -r requirements-prod.txt -r requirements-dev.txt
@@ -37,7 +36,7 @@ pip install -r requirements-prod.txt -r requirements-dev.txt
 
 ### エントリポイント
 
-`nous.main` が唯一のエントリポイント（`python -m nous.main`）。FastMCPサーバーとして起動し、HTTP API（port 26262）も同時に公開する。Persona識別はBearerトークン、X-Personaヘッダー、または環境変数（PERSONA / NOUS_DEFAULT_PERSONA）で行う（優先順位: Bearer > X-Persona > 環境変数 > "default"）。
+`nous.main` が唯一のエントリポイント（`python -m nous.main`）。MCPServerサーバーとして起動し、HTTP API（port 26262）も同時に公開する。Persona識別はパスパラメータ、Bearerトークン、X-Personaヘッダー、または環境変数（PERSONA / NOUS_DEFAULT_PERSONA）で行う（優先順位: パスパラメータ > Bearer > X-Persona > 環境変数 > "default"）。`NOUS_API_KEY` が非空のときは Bearer がキーと一致必須（不一致は401）。
 
 ### レイヤー構成
 
@@ -68,7 +67,7 @@ nous/
 | `memory_read(memory_key, limit, offset)` | 記憶読み取り・一覧 |
 | `memory_update(memory_key, content, importance, tags, ...)` | 記憶更新（指定フィールドのみ変更） |
 | `memory_delete(memory_key, query)` | 記憶削除（tombstone） |
-| `memory_search(query, top_k, tags, date_range, min_importance, emotion, importance_weight, recency_weight, vector_weight, keyword_weight)` | ハイブリッド検索。mode廃止 — vector/keyword/importance/recency weightで調整。date_range: `"7d"`, `"30d"`, `"昨日"` |
+| `memory_search(query, top_k, tags, date_range, min_importance, emotion, importance_weight, recency_weight, vector_weight, keyword_weight)` | ハイブリッド検索。mode指定可（`hybrid`既定 / `semantic` / `keyword` / `smart`、不明値はhybrid）。date_range: `"7d"`, `"30d"`, `"昨日"` |
 | `memory_stats(top_n)` | 統計情報（件数・タグ分布・感情分布） |
 | `update_context(emotion, emotion_intensity, physical_state, mental_state, environment, body_state, user_info, persona_info, ...)` | ペルソナ状態更新。`body_state`: `{fatigue, warmth, arousal, heart_rate, pain}` |
 | `item_add(item_name, category, description, quantity, ...)` | インベントリにアイテム追加 |
