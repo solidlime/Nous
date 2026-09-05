@@ -24,6 +24,35 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _memory_entity_map(entity_repo, memory_keys: list[str]) -> dict[str, set[str]]:
+    """Map memory_key → entity ids with one batch query (N+1 avoidance).
+
+    Uses ``get_entities_for_memories`` when available; falls back to
+    per-memory ``get_memory_entities`` for legacy repos.
+    """
+    result: dict[str, set[str]] = {k: set() for k in memory_keys}
+    get_batch = getattr(entity_repo, "get_entities_for_memories", None)
+    if get_batch is not None:
+        try:
+            for row in get_batch(list(memory_keys), limit=50) or []:
+                key = row.get("memory_key")
+                eid = row.get("id")
+                if key in result and eid:
+                    result[key].add(eid)
+            return result
+        except Exception:
+            logger.exception("ConsolidationWorker: batch entity fetch failed; falling back")
+    for key in memory_keys:
+        try:
+            ent_result = entity_repo.get_memory_entities(key)
+        except Exception:
+            logger.exception("ConsolidationWorker: entity fetch failed for %s", key)
+            continue
+        if ent_result.is_ok and ent_result.value:
+            result[key] = {e.id for e in ent_result.value}
+    return result
+
+
 class ConsolidationWorker:
     """Periodically consolidates archived memories into merged summaries."""
 
@@ -96,14 +125,8 @@ class ConsolidationWorker:
 
         logger.info("ConsolidationWorker: %s has %d archived memories", persona, len(archived))
 
-        # 2. Build memory → entity IDs mapping
-        mem_entities: dict[str, set[str]] = {}
-        for mem in archived:
-            ent_result = ctx.entity_repo.get_memory_entities(mem.key)
-            if ent_result.is_ok and ent_result.value:
-                mem_entities[mem.key] = {e.id for e in ent_result.value}
-            else:
-                mem_entities[mem.key] = set()
+        # 2. Build memory → entity IDs mapping (single batch query)
+        mem_entities = _memory_entity_map(ctx.entity_repo, [m.key for m in archived])
 
         # 3. Group by shared entities
         groups = self._group_by_entities(archived, mem_entities)
