@@ -201,6 +201,24 @@ def _migrate_remove_chat_kind_v6(
         logger.info("Migration v6: no records with kind='chat' found")
 
 
+def _migrate_add_superseded_by_v7(
+    db_conn: sqlite3.Connection,
+    persona: str,  # noqa: ARG001
+) -> None:
+    """Add ``superseded_by`` column + index to ``memories`` (bitemporal chain)."""
+    try:
+        db_conn.execute("ALTER TABLE memories ADD COLUMN superseded_by TEXT")
+        db_conn.commit()
+        logger.info("Added superseded_by column to memories (migration v7)")
+    except sqlite3.OperationalError:
+        pass  # column already exists
+    try:
+        db_conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_superseded_by ON memories(superseded_by)")
+        db_conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Migration registry  (ordered by version)
 # ---------------------------------------------------------------------------
@@ -214,4 +232,5 @@ MIGRATIONS = [
     (4, "cleanup_orphan_strengths", _migrate_cleanup_orphan_strengths_v4),
     (5, "Add persona column to emotion_history", _migrate_add_persona_to_emotion_history_v5),
     (6, "Replace kind='chat' with 'semantic'", _migrate_remove_chat_kind_v6),
+    (7, "Add superseded_by column to memories", _migrate_add_superseded_by_v7),
 ]

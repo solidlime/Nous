@@ -45,6 +45,7 @@ class Memory:
     # temporal validity fields (bi-temporal memory model)
     valid_from: datetime | None = None  # when this memory became valid
     valid_until: datetime | None = None  # None = currently valid
+    superseded_by: str | None = None  # key of the newer memory that closed this window
 
     # source provenance fields (Chunk 1.4)
     source_type: str = (

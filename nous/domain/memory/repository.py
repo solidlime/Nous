@@ -116,6 +116,7 @@ class MemoryAuxiliaryRepository(Protocol):
         memory_key: str,
         valid_from: datetime | None = None,
         valid_until: datetime | None = None,
+        superseded_by: str | None = None,
     ) -> Result[None, RepositoryError]: ...
 
     # Goals / Promises (planned: tag-based retrieval via get_by_tags)

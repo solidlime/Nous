@@ -55,7 +55,8 @@ class MemoryEvolutionService:
         1. Find semantically similar existing memories.
         2. Run HiMem contradiction classification:
            - EXTENDABLE → update existing memory's metadata only.
-           - CONTRADICTORY → tombstone existing memory.
+           - CONTRADICTORY → close validity window + chain via superseded_by
+             (bitemporal; old fact is kept, tombstone is user-delete only).
            - INDEPENDENT → no action (both coexist).
         3. Update access metadata, Hebbian links, and summary_ref on
            surviving memories.
@@ -80,7 +81,7 @@ class MemoryEvolutionService:
                 return
 
             # --- HiMem-style 3-op contradiction classification ---
-            tombstoned_keys: set[str] = set()
+            invalidated_keys: set[str] = set()
 
             if self._enricher is not None:
                 candidates = [
@@ -141,14 +142,14 @@ class MemoryEvolutionService:
                                     )
                                 self._repo.update(result.existing_memory_key, **updates)
                         elif result.type == ContradictionType.CONTRADICTORY:
-                            self._repo.tombstone(result.existing_memory_key)
-                            tombstoned_keys.add(result.existing_memory_key)
+                            self._close_superseded_memory(result.existing_memory_key, new_memory_key)
+                            invalidated_keys.add(result.existing_memory_key)
                         # INDEPENDENT: do nothing, both coexist
 
-            # --- Existing evolution logic (skip tombstoned) ---
+            # --- Existing evolution logic (skip invalidated) ---
             for result in similar.value:
                 existing = result.memory
-                if existing.key == new_memory_key or existing.key in tombstoned_keys:
+                if existing.key == new_memory_key or existing.key in invalidated_keys:
                     continue
 
                 # 1. Update access metadata on existing memory
@@ -172,6 +173,50 @@ class MemoryEvolutionService:
         except Exception:
             # Evolution is best-effort, never blocks the main flow
             logger.debug("Memory evolution failed", exc_info=True)
+
+    def _close_superseded_memory(self, old_key: str, new_key: str) -> None:
+        """Close the old memory's validity window and chain it to the new memory.
+
+        Bitemporal invalidation: ``old.valid_until = new.valid_from`` and
+        ``old.superseded_by = new.key``. The old fact is kept (no tombstone —
+        tombstone is reserved for explicit user deletion).
+        """
+        try:
+            old_res = self._repo.find_by_key(old_key)
+            new_res = self._repo.find_by_key(new_key)
+            if not old_res.is_ok or not new_res.is_ok:
+                return
+            old = old_res.value  # type: ignore[union-attr]
+            new = new_res.value  # type: ignore[union-attr]
+            if old is None or new is None:
+                return
+            if old.lifecycle_status == "tombstoned" or old.valid_until is not None:
+                return  # already closed — chain stays idempotent
+            valid_from = new.valid_from or get_now()
+            # Snapshot pre-close state into version history (never break it)
+            snapshot = {
+                "content": old.content,
+                "importance": old.importance,
+                "emotion": old.emotion,
+                "tags": old.tags,
+            }
+            ver = self._repo.get_latest_version_number(old_key)  # type: ignore[attr-defined]
+            next_ver = (ver.value + 1) if ver.is_ok else 1
+            self._repo.save_version(  # type: ignore[attr-defined]
+                memory_key=old_key,
+                version=next_ver,
+                content=old.content,
+                metadata=snapshot,
+                changed_by="evolution",
+                change_type="superseded",
+            )
+            self._repo.update_validity_window(  # type: ignore[attr-defined]
+                memory_key=old_key,
+                valid_until=valid_from,
+                superseded_by=new_key,
+            )
+        except Exception:
+            logger.debug("Supersede failed for %s", old_key, exc_info=True)
 
     async def _invalidate_contradicted_memory(
         self,
@@ -201,17 +246,7 @@ class MemoryEvolutionService:
             threshold = report.value.threshold
             for candidate in report.value.candidates:
                 if candidate.similarity >= threshold:
-                    # Skip memories that are already tombstoned or whose
-                    # validity window is already closed — nothing to invalidate.
-                    mem = self._repo.find_by_key(candidate.memory_key)
-                    if not mem.is_ok or mem.value is None:  # type: ignore[union-attr]
-                        continue
-                    if mem.value.lifecycle_status == "tombstoned" or mem.value.valid_until is not None:  # type: ignore[union-attr]
-                        continue
-                    self._repo.update_validity_window(
-                        memory_key=candidate.memory_key,
-                        valid_until=valid_from,
-                    )
+                    self._close_superseded_memory(candidate.memory_key, new_memory_key)
         except Exception:
             logger.debug("Contradiction invalidation failed", exc_info=True)
 

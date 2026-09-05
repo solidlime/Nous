@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from nous.domain.shared.result import Failure, Result, Success
-from nous.domain.shared.time_utils import parse_date_range
+from nous.domain.shared.time_utils import get_now, parse_date_range
 from nous.domain.value_objects import normalize_emotion
 
 if TYPE_CHECKING:
@@ -115,12 +115,18 @@ class SearchEngine:
         self._reranker_unloaded_warned = False
 
     def _post_filter(self, results: list[SearchResult], query: SearchQuery) -> list[SearchResult]:
-        """Apply per-request filters/sort outside the query cache."""
-        filtered = self._filter_by_emotion(results, query.emotion)
+        """Apply per-request filters/sort outside the query cache.
+
+        Bitemporal recall rule, always enforced:
+        ``lifecycle != tombstoned AND (valid_until IS NULL OR valid_until > valid_at)``
+        with ``valid_at`` defaulting to now.
+        """
+        filtered = self._filter_out_tombstoned(results)
+        filtered = self._filter_by_emotion(filtered, query.emotion)
         filtered = self._filter_by_kind(filtered, query.kind)
         filtered = self._filter_by_tags(filtered, query.tags)
-        if query.valid_at is not None:
-            filtered = self._filter_by_valid_at(filtered, query.valid_at)
+        effective_valid_at = query.valid_at if query.valid_at is not None else get_now()
+        filtered = self._filter_by_valid_at(filtered, effective_valid_at)
         if query.sort == "updated_at":
             filtered.sort(key=lambda r: r.memory.updated_at, reverse=True)
         return filtered
@@ -192,6 +198,11 @@ class SearchEngine:
         return Success(self._post_filter(result.value, query))
 
     @staticmethod
+    def _filter_out_tombstoned(results: list[SearchResult]) -> list[SearchResult]:
+        """Drop logically deleted memories (tombstone is user-delete only, never recalled)."""
+        return [r for r in results if getattr(r.memory, "lifecycle_status", "active") != "tombstoned"]
+
+    @staticmethod
     def _filter_by_emotion(
         results: list[SearchResult],
         emotion: str | None,
@@ -237,13 +248,21 @@ class SearchEngine:
         A memory is valid at ``valid_at`` if:
         - ``valid_from`` is None OR ``valid_from <= valid_at``
         - ``valid_until`` is None OR ``valid_until > valid_at``
+
+        Non-datetime values (e.g. test doubles) are treated as unconstrained.
         """
-        return [
-            r
-            for r in results
-            if (r.memory.valid_from is None or r.memory.valid_from <= valid_at)
-            and (r.memory.valid_until is None or r.memory.valid_until > valid_at)
-        ]
+        from datetime import datetime
+
+        def _includes(r: SearchResult) -> bool:
+            valid_from = r.memory.valid_from
+            valid_until = r.memory.valid_until
+            if valid_from is not None and not isinstance(valid_from, datetime):
+                valid_from = None
+            if valid_until is not None and not isinstance(valid_until, datetime):
+                valid_until = None
+            return (valid_from is None or valid_from <= valid_at) and (valid_until is None or valid_until > valid_at)
+
+        return [r for r in results if _includes(r)]
 
     @staticmethod
     def _to_search_results(

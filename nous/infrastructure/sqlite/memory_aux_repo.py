@@ -32,11 +32,13 @@ class MemoryAuxMixin(MemoryVersionMixin, MemoryStatsMixin):
         memory_key: str,
         valid_from: datetime | None = None,
         valid_until: datetime | None = None,
+        superseded_by: str | None = None,
     ) -> Result[None, RepositoryError]:
         """Set validity window for a memory.
 
         ``valid_until=None`` means "currently valid" (open-ended).
         ``valid_from=None`` leaves the existing value unchanged.
+        ``superseded_by`` chains to the newer memory key; ``None`` leaves it unchanged.
         """
         try:
             existing = self._db.execute("SELECT * FROM memories WHERE key = ?", (memory_key,)).fetchone()
@@ -53,6 +55,8 @@ class MemoryAuxMixin(MemoryVersionMixin, MemoryStatsMixin):
             else:
                 # Explicitly set valid_until to NULL to mark as currently valid
                 params["valid_until"] = None
+            if superseded_by is not None:
+                params["superseded_by"] = superseded_by
 
             set_clause = ", ".join(f"{k} = ?" for k in params)
             values = list(params.values()) + [memory_key]

@@ -49,6 +49,7 @@ class MemoryCrudMixin:
             "derived_from",
             "valid_from",
             "valid_until",
+            "superseded_by",
         }
     )
     """Updatable columns for :meth:`update` (SQL-injection allowlist, oracle Q8)."""
@@ -74,8 +75,8 @@ class MemoryCrudMixin:
                     lifecycle_status,
                     kind, episodic_time, episodic_place, episodic_people,
                     source_type, confidence, derived_from,
-                    valid_from, valid_until
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    valid_from, valid_until, superseded_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     memory.key,
@@ -109,6 +110,7 @@ class MemoryCrudMixin:
                     memory.derived_from,
                     format_iso(memory.valid_from) if memory.valid_from else None,
                     format_iso(memory.valid_until) if memory.valid_until else None,
+                    memory.superseded_by,
                 ),
             )
             # T4-A: Insert initial memory_strength record so WebUI shows a
@@ -303,4 +305,5 @@ class MemoryCrudMixin:
             # temporal validity (safe defaults for old rows)
             valid_from=self._parse_iso_or_none(row["valid_from"]) if "valid_from" in row_keys else None,
             valid_until=self._parse_iso_or_none(row["valid_until"]) if "valid_until" in row_keys else None,
+            superseded_by=row["superseded_by"] if "superseded_by" in row_keys else None,
         )
