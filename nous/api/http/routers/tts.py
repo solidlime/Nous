@@ -95,9 +95,21 @@ def _tts_cache_key(
     caption: str | None,
     voice_speed: float,
     voice_override: str | None,
+    voice_resolved: str = "",
+    model: str = "irodori-tts",
+    seed: int | None = 0,
+    num_steps: int = 30,
+    cfg_text: float = 3.2,
+    cfg_speaker: float = 5.0,
+    cfg_caption: float = 4.2,
+    chunk_min_chars: int = 85,
 ) -> str:
-    """TTS 音声キャッシュのキー。声（voice_override）も含める — 声違いで旧音声を返さないため。"""
-    material = f"{text}|{emotion}|{caption or ''}|{voice_speed}|{voice_override or ''}"
+    """TTS音声キャッシュのキー。解決済みvoice・model・advanced全値を含める。区切り衝突回避のためjson結合。"""
+    material = json.dumps(
+        [text, emotion, caption or "", voice_speed, voice_override or "", voice_resolved, model, seed or 0, num_steps, cfg_text, cfg_speaker, cfg_caption, chunk_min_chars],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
     return hashlib.sha256(material.encode()).hexdigest()
 
 
@@ -291,26 +303,34 @@ def register_tts_routes(mcp) -> None:
         settings = get_settings()
         cache_dir = Path(settings.data_root) / "persona" / persona / "tts_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
+        voice_resolved = voice_override or chat_config.voice_model or ctx.settings.irodori.voice
         cache_key = _tts_cache_key(
             text=text,
             emotion=emotion,
             caption=caption,
             voice_speed=voice_speed,
             voice_override=voice_override,
+            voice_resolved=voice_resolved,
+            model=irodori_config.model,
+            seed=irodori_config.advanced.seed,
+            num_steps=irodori_config.advanced.num_steps,
+            cfg_text=irodori_config.advanced.cfg_scale_text,
+            cfg_speaker=irodori_config.advanced.cfg_scale_speaker,
+            cfg_caption=irodori_config.advanced.cfg_scale_caption,
+            chunk_min_chars=irodori_config.advanced.chunk_min_chars,
         )
-        hash12 = cache_key[:12]
-        new_filename = f"{hash12}.wav"
+        new_filename = f"{cache_key}.wav"
         new_cache_path = cache_dir / new_filename
-
-        # Backward-compatible cache lookup: try new format first, then glob old format
         found_path = None
         audio_url_filename = new_filename
         if new_cache_path.exists():
             found_path = new_cache_path
         else:
-            matches = sorted(cache_dir.glob(f"{hash12}*.wav"))
-            if matches:
-                found_path = matches[0]
+            # 旧12文字形式の移行救済。フルハッシュと無関係な衝突を返さないよう件数確認のみ。
+            legacy = sorted(cache_dir.glob(f"{cache_key[:12]}*.wav"))
+            if legacy:
+                logger.warning("TTS legacy cache hit (migrating): %s", legacy[0].name)
+                found_path = legacy[0]
                 audio_url_filename = found_path.name
         audio_url = f"/api/tts/{persona}/cache/{audio_url_filename}"
 

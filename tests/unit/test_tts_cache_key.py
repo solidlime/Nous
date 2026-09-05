@@ -29,3 +29,11 @@ def test_none_and_missing_voice_share_key():
 
 def test_same_voice_same_key():
     assert _key("voice_a") == _key("voice_a")
+
+
+def test_full_hash_filename_and_resolved_voice():
+    from nous.api.http.routers.tts import _tts_cache_key
+    k1 = _tts_cache_key(text="a", emotion="neutral", caption=None, voice_speed=1.0, voice_override=None, voice_resolved="v1", model="irodori-tts", seed=0, num_steps=30, cfg_text=3.2, cfg_speaker=5.0, cfg_caption=4.2, chunk_min_chars=85)
+    k2 = _tts_cache_key(text="a", emotion="neutral", caption=None, voice_speed=1.0, voice_override=None, voice_resolved="v2", model="irodori-tts", seed=0, num_steps=30, cfg_text=3.2, cfg_speaker=5.0, cfg_caption=4.2, chunk_min_chars=85)
+    assert len(k1) == 64
+    assert k1 != k2
