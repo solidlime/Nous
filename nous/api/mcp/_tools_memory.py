@@ -13,6 +13,17 @@ from nous.domain.value_objects import _VALID_EMOTIONS, normalize_importance
 
 logger = logging.getLogger(__name__)
 
+
+def _ok(payload: dict) -> str:
+    """Success wrapper: dict → JSON str (Q4: all tools return str)."""
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _err(msg: str) -> str:
+    """Error wrapper: message → JSON str with {success: False} shape."""
+    return json.dumps({"success": False, "data": None, "result_summary": msg}, ensure_ascii=False)
+
+
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
 
@@ -35,9 +46,9 @@ async def _tool_memory_create(
     memory_create if your emotional/physical state has changed, so the snapshot
     captures your latest state."""
     if not content:
-        return {"success": False, "data": None, "result_summary": "content is required"}
+        return _err("content is required")
     if importance is not None and not (0.0 <= importance <= 1.0):
-        return {"success": False, "data": None, "result_summary": "importance must be between 0.0 and 1.0"}
+        return _err("importance must be between 0.0 and 1.0")
     importance = importance if importance is not None else 0.5
 
     # Auto-snapshot current persona state
@@ -82,7 +93,7 @@ async def _tool_memory_create(
             response["duplicate_of"] = dup.duplicate_key
         return json.dumps(response, ensure_ascii=False)
 
-    return {"success": False, "data": None, "result_summary": str(result.error)}
+    return _err(str(result.error))
 
 
 async def _tool_memory_read(
@@ -169,7 +180,7 @@ async def _tool_memory_read(
                 "success": False,
             },
         )
-        return {"success": False, "data": None, "result_summary": str(memories_result.error)}
+        return _err(str(memories_result.error))
 
 
 @tool_called_audited("memory_update")
@@ -193,52 +204,48 @@ async def _tool_memory_update(
     if query and not memory_key:
         search_result = await ctx.search_engine.search(SearchQuery(text=query, top_k=1))
         if not search_result.is_ok or not search_result.value:
-            return {"success": False, "data": None, "result_summary": f"No memory found for query: {query}"}
+            return _err(f"No memory found for query: {query}")
         item = search_result.value[0]
         mem = item[0] if isinstance(item, tuple) else item
         memory_key = getattr(mem, "key", "")
         if not memory_key:
-            return {"success": False, "data": None, "result_summary": "memory key not found"}
+            return _err("memory key not found")
 
     # builtin からの new_content フォールバック
     if content is None and new_content is not None:
         content = new_content
 
     if not memory_key:
-        return {"success": False, "data": None, "result_summary": "memory_key is required for update"}
+        return _err("memory_key is required for update")
 
     # ── Input validation ──
     if content is not None and len(content) > 50000:
-        return {"success": False, "data": None, "result_summary": "content too long (max 50000 chars)"}
+        return _err("content too long (max 50000 chars)")
 
     if importance is not None and not (0.0 <= importance <= 1.0):
-        return {"success": False, "data": None, "result_summary": "importance must be between 0.0 and 1.0"}
+        return _err("importance must be between 0.0 and 1.0")
 
     if emotion is not None and emotion not in _VALID_EMOTIONS:
-        return {"success": False, "data": None, "result_summary": f"invalid emotion: {emotion}"}
+        return _err(f"invalid emotion: {emotion}")
 
     if emotion_intensity is not None:
         try:
             emotion_intensity = float(emotion_intensity)
             emotion_intensity = max(0.0, min(1.0, emotion_intensity))
         except (TypeError, ValueError):
-            return {"success": False, "data": None, "result_summary": "emotion_intensity must be a number"}
+            return _err("emotion_intensity must be a number")
 
     if tags is not None:
         if not isinstance(tags, list):
-            return {"success": False, "data": None, "result_summary": "tags must be a list"}
+            return _err("tags must be a list")
         if not all(isinstance(t, str) for t in tags):
-            return {"success": False, "data": None, "result_summary": "all tags must be strings"}
+            return _err("all tags must be strings")
         if any(len(t) > 100 for t in tags):
-            return {"success": False, "data": None, "result_summary": "tag too long (max 100 chars)"}
+            return _err("tag too long (max 100 chars)")
 
     valid_privacy = {"internal", "private", "public"}
     if privacy_level is not None and privacy_level not in valid_privacy:
-        return {
-            "success": False,
-            "data": None,
-            "result_summary": f"invalid privacy_level: {privacy_level}. Must be: {', '.join(sorted(valid_privacy))}",
-        }
+        return _err(f"invalid privacy_level: {privacy_level}. Must be: {', '.join(sorted(valid_privacy))}")
 
     updates: dict = {}
     if content is not None:
@@ -255,7 +262,7 @@ async def _tool_memory_update(
         updates["privacy_level"] = privacy_level
 
     if not updates:
-        return {"success": False, "data": None, "result_summary": "no fields to update"}
+        return _err("no fields to update")
 
     result = ctx.memory_service.update_memory(memory_key, **updates)
     if result.is_ok:
@@ -269,7 +276,7 @@ async def _tool_memory_update(
             },
         )
         return json.dumps({"ok": True, "key": memory_key}, ensure_ascii=False)
-    return {"success": False, "data": None, "result_summary": str(result.error)}
+    return _err(str(result.error))
 
 
 @tool_called_audited("memory_delete")
@@ -333,7 +340,7 @@ async def _tool_memory_search(
 ) -> str:
     """Search memories with hybrid retrieval. sort: "updated_at" 指定で更新日時降順（最新優先）"""
     if top_k is not None and (top_k < 1 or top_k > 200):
-        return {"success": False, "data": None, "result_summary": "top_k must be between 1 and 200"}
+        return _err("top_k must be between 1 and 200")
     top_k = min(top_k or 5, 200)
     # Clamp RRF weights to [0.0, 1.0]
     importance_weight = max(0.0, min(1.0, importance_weight))
@@ -368,7 +375,7 @@ async def _tool_memory_search(
                 "success": False,
             },
         )
-        return {"success": False, "data": None, "result_summary": str(result.error)}
+        return _err(str(result.error))
     if not result.value:
         await ctx.event_bus.publish(
             "tool.called",

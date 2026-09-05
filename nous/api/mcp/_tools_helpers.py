@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -45,12 +46,27 @@ def _tool_called_result_success(result: object) -> bool:
             return bool(result["status"] == "ok")
         return True
     if isinstance(result, str):
+        try:
+            payload = json.loads(result)
+        except ValueError:
+            payload = None
+        if isinstance(payload, dict):
+            return _tool_called_result_success(payload)
         return not (result.startswith("Error") or result.startswith("No memory"))
     return True
 
 
 def _tool_called_result_summary(result: object) -> str:
     """Extract a human-readable summary from a tool return value."""
+    if isinstance(result, str):
+        try:
+            payload = json.loads(result)
+        except ValueError:
+            payload = None
+        if isinstance(payload, dict):
+            result = payload
+        else:
+            return str(result)
     if isinstance(result, dict):
         for key in ("result_summary", "result", "error", "message"):
             if result.get(key):
