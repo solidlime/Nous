@@ -425,7 +425,8 @@ class SearchEngine:
                 if all_links:
                     from nous.domain.search.spreading_activation import SpreadingActivation
 
-                    sa = SpreadingActivation(hops=2)
+                    # Seeds come from F2-filtered results (tombstone/validity already applied)
+                    sa = SpreadingActivation(hops=2, reset_prob=0.15)
                     activations = sa.propagate(seed_keys, all_links)
                     for r in deduped:
                         if r.memory.key in activations:

@@ -1,23 +1,36 @@
-"""Collins & Loftus 1975 + SYNAPSE 2026: spreading activation through memory network."""
+"""Collins & Loftus 1975 + PPR-lite diffusion through memory network."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from nous.domain.memory.memory_link import MemoryLink
 
 
 class SpreadingActivation:
-    """Spreading activation over a memory link network.
+    """Personalized PageRank diffusion over a memory link network.
 
-    Starting from seed memory keys, activation propagates along associative
-    links for ``hops`` iterations.  Each hop:
-      * Activation decays by ``decay`` factor.
-      * Source retains ``retention`` fraction of its activation.
-      * Spread is divided by degree (outgoing link count).
+    Starting from seed memory keys, activation diffuses along associative
+    links with random restart to the seed distribution ``p_0``::
 
-    Result excludes seed keys — only activated neighbours are returned.
+        p_{t+1} = (1 − α) · W · p_t + α · p_0
+
+    ``W`` is column-stochastic: each source's outgoing mass is split by
+    out-strength (degree split weighted by link weight). Dangling nodes
+    (no outgoing links) teleport their mass back to the seed distribution
+    ``p_0`` — dead ends anchor rather than inflate. Iteration runs
+    up to ``max_iters`` with L1 ``tol`` convergence check (deterministic:
+    nodes are visited in sorted order).
+
+    ``hops`` / ``decay`` / ``retention`` are pre-PPR legacy params kept
+    for API compatibility (no effect on PPR diffusion). ``threshold``
+    filters the output. Result excludes seed keys.
+
+    LLM seed filtering is OFF by default (latency): ``seed_filter`` runs
+    only when ``llm_seed_filter`` is True.
     """
 
     def __init__(
@@ -26,36 +39,60 @@ class SpreadingActivation:
         decay: float = 0.5,
         retention: float = 0.3,
         threshold: float = 0.01,
+        reset_prob: float = 0.15,
+        max_iters: int = 20,
+        tol: float = 1e-4,
+        llm_seed_filter: bool = False,
+        seed_filter: Callable[[list[str]], list[str]] | None = None,
     ) -> None:
         self.hops = hops
         self.decay = decay
         self.retention = retention
         self.threshold = threshold
+        self.reset_prob = reset_prob
+        self.max_iters = max_iters
+        self.tol = tol
+        self.llm_seed_filter = llm_seed_filter
+        self.seed_filter = seed_filter
 
     def propagate(self, seed_keys: list[str], links: list[MemoryLink]) -> dict[str, float]:
-        """Run spreading activation and return {target_key: activation_score}."""
-        activation: dict[str, float] = {k: 1.0 for k in seed_keys}
+        """Run PPR diffusion and return {target_key: activation_score}."""
+        seeds = list(dict.fromkeys(seed_keys))
+        if self.llm_seed_filter and self.seed_filter is not None:
+            seeds = list(dict.fromkeys(self.seed_filter(seeds)))
+        if not seeds:
+            return {}
 
-        for _ in range(self.hops):
-            next_act: dict[str, float] = {}
+        # Column-stochastic W: out-strength normalized, dangling → self-loop
+        out_strength: dict[str, float] = {}
+        for link in links:
+            out_strength[link.source_key] = out_strength.get(link.source_key, 0.0) + link.weight
+        nodes = sorted({k for link in links for k in (link.source_key, link.target_key)} | set(seeds))
+        p0 = {k: (1.0 / len(seeds) if k in seeds else 0.0) for k in nodes}
+        curr = dict(p0)
+        restart = self.reset_prob
 
-            for src, curr in activation.items():
-                if curr <= self.threshold:
+        for _ in range(max(1, self.max_iters)):
+            nxt = {k: restart * p0[k] for k in nodes}
+            dangling_mass = 0.0
+            for link in links:
+                mass = curr.get(link.source_key, 0.0)
+                if mass <= 0.0:
                     continue
+                denom = out_strength.get(link.source_key, 0.0)
+                if denom > 0.0:
+                    nxt[link.target_key] = nxt.get(link.target_key, 0.0) + (1.0 - restart) * mass * link.weight / denom
+            for k in nodes:
+                if out_strength.get(k, 0.0) <= 0.0:
+                    dangling_mass += curr.get(k, 0.0)
+            if dangling_mass > 0.0:
+                for k in nodes:
+                    if p0[k] > 0.0:
+                        nxt[k] = nxt.get(k, 0.0) + (1.0 - restart) * dangling_mass * p0[k]
+            if sum(abs(nxt[k] - curr[k]) for k in nodes) < self.tol:
+                curr = nxt
+                break
+            curr = nxt
 
-                outgoing = [link for link in links if link.source_key == src]
-                degree = max(len(outgoing), 1)
-
-                for link in outgoing:
-                    spread = (curr * (1 - self.retention) * link.weight) / degree
-                    next_act[link.target_key] = next_act.get(link.target_key, 0.0) + spread
-
-                # Retention: source keeps a fraction of its activation
-                next_act[src] = next_act.get(src, 0.0) + curr * self.retention
-
-            # Combine with decay
-            all_keys = set(activation) | set(next_act)
-            activation = {k: activation.get(k, 0.0) * self.decay + next_act.get(k, 0.0) for k in all_keys}
-
-        # Remove seed keys from result — only return activated neighbours
-        return {k: v for k, v in activation.items() if k not in seed_keys}
+        seed_set = set(seeds)
+        return {k: v for k, v in curr.items() if k not in seed_set and v > self.threshold}
