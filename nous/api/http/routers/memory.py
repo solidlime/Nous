@@ -24,16 +24,20 @@ logger = get_logger(__name__)
 
 
 async def _wiring_stream_gen(request: Request, poll_interval: float = 0.5):
-    """SSE body: immediate buffer flush, then live (no server-side thinning)."""
+    """SSE body: immediate buffer flush, then live (no server-side thinning).
+
+    ``?persona=`` filters by event persona; omitted streams everything.
+    """
     from nous.domain.memory.wiring_events import snapshot_after
 
     yield "event: connected\ndata: {}\n\n"
+    persona_filter = request.query_params.get("persona") or None
     last_seq = 0
     idle = 0.0
     while True:
         if await request.is_disconnected():
             break
-        fresh = snapshot_after(last_seq)
+        fresh = snapshot_after(last_seq, persona=persona_filter)
         for event in fresh:
             last_seq = max(last_seq, event["seq"])
             yield f"event: wiring\ndata: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"

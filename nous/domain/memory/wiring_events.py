@@ -80,10 +80,26 @@ def emit(
     return True
 
 
-def snapshot_after(last_seq: int = 0) -> list[dict[str, Any]]:
-    """Ordered event dicts with seq greater than *last_seq* (no thinning)."""
+def snapshot_after(last_seq: int = 0, persona: str | None = None) -> list[dict[str, Any]]:
+    """Ordered event dicts with seq greater than *last_seq* (no thinning).
+
+    ``persona`` filters on ``meta["persona"]``; None returns everything
+    (backward compatible, legacy events included).
+    """
     with _lock:
-        return [asdict(e) for e in _buffer if e.seq > last_seq]
+        events = [e for e in _buffer if e.seq > last_seq]
+    if persona is None:
+        return [asdict(e) for e in events]
+    return [asdict(e) for e in events if e.meta.get("persona") == persona]
+
+
+def repo_persona(repo: Any) -> str | None:
+    """Best-effort persona from a repo's connection (None when unavailable)."""
+    try:
+        persona = getattr(getattr(repo, "_conn", None), "persona", None)
+        return persona if isinstance(persona, str) else None
+    except Exception:
+        return None
 
 
 def clear() -> None:

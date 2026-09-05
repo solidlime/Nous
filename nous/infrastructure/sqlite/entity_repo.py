@@ -206,6 +206,7 @@ class SQLiteEntityRepository(SQLiteRepository):
             )
             try:
                 from nous.domain.memory.wiring_events import emit as _wiring_emit
+                from nous.domain.memory.wiring_events import repo_persona as _repo_persona
 
                 row = self._db.execute(
                     "SELECT weight FROM memory_links WHERE source_key = ? AND target_key = ? AND link_type = ?",
@@ -217,7 +218,7 @@ class SQLiteEntityRepository(SQLiteRepository):
                         source=source_key,
                         target=target_key,
                         weight=float(row["weight"]),
-                        meta={"link_type": link_type, "coact": strength},
+                        meta={"link_type": link_type, "coact": strength, "persona": _repo_persona(self)},
                     )
             except Exception:
                 logger.debug("wiring emit failed for %s->%s", source_key, target_key, exc_info=True)

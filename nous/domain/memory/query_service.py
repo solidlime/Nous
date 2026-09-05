@@ -118,12 +118,17 @@ class MemoryQueryService:
             return Failure(save_result.error)
         try:
             from nous.domain.memory.wiring_events import emit as _wiring_emit
+            from nous.domain.memory.wiring_events import repo_persona as _repo_persona
 
             _wiring_emit(
                 "recall_boost",
                 source=key,
                 weight=float(strength.strength),
-                meta={"recall_count": strength.recall_count, "stability": strength.stability},
+                meta={
+                    "recall_count": strength.recall_count,
+                    "stability": strength.stability,
+                    "persona": _repo_persona(self._repo),
+                },
             )
         except Exception:
             logger.debug("wiring emit failed for %s", key, exc_info=True)
