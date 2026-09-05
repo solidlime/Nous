@@ -893,22 +893,22 @@ class TestStaticServingSecurity:
 
 @pytest.mark.integration
 class TestFileServePersonaValidation:
-    """File-serving routes must reject invalid persona (.. etc.) with 404."""
+    """File-serving routes must reject invalid persona (.. etc.) with 400."""
 
     async def test_tts_cache_traversal_persona_blocked(self, client):
         resp = await client.get("/api/tts/%2e%2e/cache/000000000000.wav")
-        assert resp.status_code == 404
+        assert resp.status_code == 400
 
     async def test_tts_cache_invalid_persona_blocked(self, client):
         resp = await client.get("/api/tts/bad%20persona/cache/000000000000.wav")
-        assert resp.status_code == 404
+        assert resp.status_code == 400
 
     async def test_attachment_traversal_persona_blocked(self, client):
         resp = await client.get("/api/chat/%2e%2e/attachment/whatever.txt")
-        assert resp.status_code == 404
+        assert resp.status_code == 400
 
     async def test_memory_image_traversal_persona_blocked(self, client):
         resp = await client.get("/api/chat/%2e%2e/persona/images/x.png")
-        assert resp.status_code == 404
+        assert resp.status_code == 400
 
     # d7: export削除に伴い traversal テストも削除

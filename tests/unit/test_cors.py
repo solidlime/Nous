@@ -208,21 +208,31 @@ class TestCorsConfigFromEnv:
         assert settings.cors.allowed_origins == ["http://z.com"]
 
     def test_cors_env_not_set_uses_default(self, monkeypatch):
-        """NOUS_CORS_ALLOWED_ORIGINS 未設定 → デフォルト *"""
+        """NOUS_CORS_ALLOWED_ORIGINS 未設定 → 明示localhostデフォルト"""
         monkeypatch.delenv("NOUS_CORS_ALLOWED_ORIGINS", raising=False)
         settings = Settings()
-        assert settings.cors.allowed_origins == ["*"]
+        assert settings.cors.allowed_origins == [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ]
 
-    def test_default_is_wildcard(self):
-        """未設定時のデフォルトは ['*']"""
+    def test_default_is_explicit_localhost(self):
+        """未設定時のデフォルトは明示localhost origins（ワイルドカード禁止）"""
         settings = Settings()
-        assert settings.cors.allowed_origins == ["*"]
+        assert settings.cors.allowed_origins == [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ]
+        assert "*" not in settings.cors.allowed_origins
 
     def test_allow_credentials_default_true(self):
-        """allow_credentials の設定値デフォルトは True だが、ワイルドカード origins とは両立しないため強制 False"""
+        """allow_credentials デフォルト True は明示originsと両立し維持される"""
         settings = Settings()
-        assert settings.cors.allowed_origins == ["*"]
-        assert settings.cors.allow_credentials is False
+        assert settings.cors.allow_credentials is True
 
     def test_explicit_origins_keep_allow_credentials(self):
         """明示 origins なら allow_credentials=True は維持される"""
@@ -238,12 +248,19 @@ class TestCorsConfigFromEnv:
         assert settings.cors.allow_credentials is False
         assert "allow_credentials" in caplog.text
 
-    def test_allow_methods_default_wildcard(self):
-        """allow_methods のデフォルトは ['*']"""
+    def test_allow_methods_default_explicit(self):
+        """allow_methods のデフォルトは明示メソッドリスト"""
         settings = Settings()
-        assert settings.cors.allow_methods == ["*"]
+        assert settings.cors.allow_methods == ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 
-    def test_allow_headers_default_wildcard(self):
-        """allow_headers のデフォルトは ['*']"""
+    def test_allow_headers_default_explicit(self):
+        """allow_headers のデフォルトは明示ヘッダリスト"""
         settings = Settings()
-        assert settings.cors.allow_headers == ["*"]
+        assert settings.cors.allow_headers == ["Authorization", "Content-Type", "X-Persona"]
+
+    def test_default_origins_allow_localhost_dev(self):
+        """デフォルト設定で localhost:3000 からのGETにACAOが付く"""
+        client = _make_app(Settings())
+        resp = client.get("/test-cors", headers={"Origin": "http://localhost:3000"})
+        assert resp.status_code == 200
+        assert resp.headers.get("access-control-allow-origin") == "http://localhost:3000"

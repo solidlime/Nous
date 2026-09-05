@@ -53,6 +53,11 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "log_level": {"hot_reload": True, "description": "Log level"},
         "persona_dir": {"hot_reload": False, "description": "Persona data directory"},
         "default_persona": {"hot_reload": True, "description": "Default persona"},
+        "api_key": {
+            "hot_reload": True,
+            "masked": True,
+            "description": "HTTP Bearer credential (empty = dev pass-through, restart not required)",
+        },
         "contradiction_threshold": {"hot_reload": True, "description": "Contradiction detection threshold"},
         "duplicate_threshold": {"hot_reload": True, "description": "Duplicate detection threshold"},
     },

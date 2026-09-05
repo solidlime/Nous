@@ -16,6 +16,43 @@ logger = get_logger(__name__)
 class MemoryCrudMixin:
     """Mixin providing CRUD operations for SQLiteMemoryRepository."""
 
+    ALLOWED_FIELDS = frozenset(
+        {
+            "content",
+            "updated_at",
+            "tags",
+            "importance",
+            "emotion",
+            "emotion_intensity",
+            "physical_state",
+            "mental_state",
+            "environment",
+            "relationship_status",
+            "action_tag",
+            "source_context",
+            "related_keys",
+            "summary_ref",
+            "equipped_items",
+            "access_count",
+            "last_accessed",
+            "privacy_level",
+            "body_state",
+            "state_snapped_at",
+            "lifecycle_status",
+            "last_consumed_at",
+            "kind",
+            "episodic_time",
+            "episodic_place",
+            "episodic_people",
+            "source_type",
+            "confidence",
+            "derived_from",
+            "valid_from",
+            "valid_until",
+        }
+    )
+    """Updatable columns for :meth:`update` (SQL-injection allowlist, oracle Q8)."""
+
     @staticmethod
     def _active_where() -> str:
         """Return WHERE clause fragment to exclude tombstoned memories."""
@@ -119,6 +156,9 @@ class MemoryCrudMixin:
 
     def update(self, key: str, **kwargs: Any) -> Result[Memory, RepositoryError]:
         """Update specific fields of a memory."""
+        unknown = set(kwargs) - self.ALLOWED_FIELDS
+        if unknown:
+            raise ValueError(f"Unknown memory fields: {sorted(unknown)}")
         try:
             self._db.execute("BEGIN IMMEDIATE")
             existing = self._db.execute("SELECT * FROM memories WHERE key = ?", (key,)).fetchone()

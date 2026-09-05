@@ -14,8 +14,19 @@ from nous.infrastructure.sqlite.schema import (
 logger = get_logger(__name__)
 
 
+class _ThreadConnections(threading.local):
+    """Per-thread connection cache (declared attrs keep mypy happy)."""
+
+    connections: dict[str, sqlite3.Connection]
+
+
 class SQLiteConnection:
     """SQLite connection manager with WAL mode and per-persona DB isolation.
+
+    Connections are cached per thread (``threading.local``): each thread
+    gets its own ``sqlite3.Connection`` with the default
+    ``check_same_thread=True``, so connections are never shared across
+    threads.
 
     Args:
         data_dir: Base directory for per-persona data (i.e. persona_dir,
@@ -27,8 +38,7 @@ class SQLiteConnection:
     def __init__(self, data_dir: str, persona: str) -> None:
         self.data_dir = data_dir
         self.persona = persona
-        self._lock = threading.Lock()
-        self._connections: dict[str, sqlite3.Connection] = {}
+        self._local = _ThreadConnections()
 
     def get_memory_db(self) -> sqlite3.Connection:
         """Get connection to memory.sqlite for this persona."""
@@ -38,18 +48,25 @@ class SQLiteConnection:
         """Get connection to inventory.sqlite for this persona."""
         return self._get_or_create(f"{self.persona}/inventory.sqlite")
 
+    def _thread_conns(self) -> dict[str, sqlite3.Connection]:
+        try:
+            return self._local.connections
+        except AttributeError:
+            self._local.connections = {}
+            return self._local.connections
+
     def _get_or_create(self, relative_path: str) -> sqlite3.Connection:
-        with self._lock:
-            if relative_path not in self._connections:
-                db_path = Path(self.data_dir) / relative_path
-                db_path.parent.mkdir(parents=True, exist_ok=True)
-                conn = sqlite3.connect(str(db_path), check_same_thread=False, isolation_level=None)
-                conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute("PRAGMA foreign_keys=ON")
-                conn.row_factory = sqlite3.Row
-                self._connections[relative_path] = conn
-                logger.info("SQLite connection opened: %s", db_path)
-            return self._connections[relative_path]
+        conns = self._thread_conns()
+        if relative_path not in conns:
+            db_path = Path(self.data_dir) / relative_path
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(str(db_path), isolation_level=None)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.row_factory = sqlite3.Row
+            conns[relative_path] = conn
+            logger.info("SQLite connection opened: %s", db_path)
+        return conns[relative_path]
 
     def initialize_schema(self) -> None:
         """Create all tables if they don't exist."""
@@ -128,12 +145,12 @@ class SQLiteConnection:
         logger.info("FTS5 schema initialized for persona '%s'", self.persona)
 
     def close(self) -> None:
-        """Close all managed connections."""
-        with self._lock:
-            for path, conn in self._connections.items():
-                try:
-                    conn.close()
-                    logger.info("SQLite connection closed: %s", path)
-                except Exception as e:
-                    logger.warning("Error closing SQLite connection %s: %s", path, e)
-            self._connections.clear()
+        """Close all connections owned by the calling thread."""
+        conns = self._thread_conns()
+        for path, conn in conns.items():
+            try:
+                conn.close()
+                logger.info("SQLite connection closed: %s", path)
+            except Exception as e:
+                logger.warning("Error closing SQLite connection %s: %s", path, e)
+        conns.clear()

@@ -4,8 +4,15 @@ from dataclasses import asdict
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException
 
-from nous.api.mcp.middleware import _PERSONA_PATTERN, resolve_persona_from_headers  # noqa: F401
+from nous.api.mcp.middleware import (
+    _PERSONA_PATTERN,  # noqa: F401  (re-exported for routers)
+    PersonaAuthError,
+    PersonaRequiredError,
+    resolve_persona,
+    resolve_persona_from_headers,  # noqa: F401  (backward-compat re-export)
+)
 from nous.application.use_cases import AppContextRegistry
 from nous.infrastructure.logging.structured import get_logger
 
@@ -88,17 +95,27 @@ def _strength_to_dict(s) -> dict:
     return d
 
 
-def _resolve_persona_from_request(request: Request, *, default: str | None = None) -> str:
+def _resolve_persona_from_request(request: Request, *, default: str | None = None, api_key: str | None = None) -> str:
     """Resolve persona from path params, HTTP headers, or environment.
 
     Priority: path parameter > Bearer token > X-Persona header > *default* > env var.
-    """
-    persona = request.path_params.get("persona")
-    if persona:
-        return persona
+    Fully delegates to :func:`nous.api.mcp.middleware.resolve_persona`.
 
-    return resolve_persona_from_headers(
-        authorization=request.headers.get("authorization"),
-        x_persona=request.headers.get("x-persona"),
-        default=default,
-    )
+    Raises:
+        HTTPException(401): API-key mismatch (strict mode) or no persona found.
+        HTTPException(400): invalid ``persona`` path parameter.
+    """
+    try:
+        return resolve_persona(
+            request.path_params.get("persona"),
+            request.headers.get("authorization"),
+            request.headers.get("x-persona"),
+            default=default,
+            api_key=api_key,
+        )
+    except PersonaAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc) or "Invalid API key") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PersonaRequiredError as exc:
+        raise HTTPException(status_code=401, detail=str(exc) or "Persona required") from exc

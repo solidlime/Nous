@@ -53,17 +53,30 @@ def run_migrations(db_conn: sqlite3.Connection, persona: str) -> None:
 
 
 def _ensure_version_table(db_conn: sqlite3.Connection) -> None:
-    """Create ``_migration_version`` if it somehow doesn't exist yet."""
-    db_conn.execute(
-        "CREATE TABLE IF NOT EXISTS _migration_version (    version INTEGER PRIMARY KEY,    applied_at TEXT NOT NULL)"
-    )
+    """Create ``_migration_version`` if it somehow doesn't exist yet (atomic)."""
+    own_txn = not db_conn.in_transaction
+    if own_txn:
+        db_conn.execute("BEGIN")
+    try:
+        db_conn.execute(
+            "CREATE TABLE IF NOT EXISTS _migration_version (    version INTEGER PRIMARY KEY,    applied_at TEXT NOT NULL)"
+        )
+    except Exception:
+        if own_txn:
+            db_conn.rollback()
+        raise
+    if own_txn:
+        db_conn.execute("COMMIT")
 
 
 def _get_current_version(db_conn: sqlite3.Connection) -> int:
     """Return the highest applied migration version (0 = none)."""
     try:
         row = db_conn.execute("SELECT COALESCE(MAX(version), 0) AS v FROM _migration_version").fetchone()
-        return row["v"]
+        if row is None:
+            return 0
+        version = row["v"]
+        return version if version is not None else 0
     except sqlite3.OperationalError:
         return 0
 

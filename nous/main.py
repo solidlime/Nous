@@ -86,10 +86,12 @@ def _default_transport_security() -> TransportSecuritySettings:
 
 
 class MemoryFastMCP(MCPServer):
-    """MCPServer subclass that injects PersonaMiddleware + CORSMiddleware."""
+    """MCPServer subclass injecting PersonaMiddleware + SecurityHeaders + CORS."""
 
     def _add_cors_middleware(self, app):
         from starlette.middleware.cors import CORSMiddleware
+
+        from nous.api.http.middleware import SecurityHeadersMiddleware
 
         settings = get_settings()
         cfg = settings.cors
@@ -100,6 +102,7 @@ class MemoryFastMCP(MCPServer):
             allow_methods=cfg.allow_methods,
             allow_headers=cfg.allow_headers,
         )
+        app.add_middleware(SecurityHeadersMiddleware)
 
     def streamable_http_app(self, **kwargs):
         kwargs.setdefault("json_response", True)

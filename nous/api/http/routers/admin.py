@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from starlette.responses import JSONResponse
 
@@ -11,6 +11,32 @@ if TYPE_CHECKING:
     from starlette.requests import Request
 
 logger = get_logger(__name__)
+
+#: Minimum length for a non-empty ``general.api_key`` value (oracle Q9).
+_API_KEY_MIN_LENGTH = 16
+
+
+def _api_key_gate(request: Request, value: Any) -> JSONResponse | None:
+    """Enforce the ``general.api_key`` PUT auth rule (oracle Q9).
+
+    Returns a ``JSONResponse`` (401/400) when the request is rejected,
+    else None to let the update proceed.
+    """
+    from nous.api.mcp.middleware import verify_bearer
+    from nous.config.runtime_config import RuntimeConfigManager
+
+    current, _ = RuntimeConfigManager().get_effective_value("general", "api_key")
+    current = current if isinstance(current, str) else ""
+    if current.strip():
+        authorization = request.headers.get("authorization")
+        if not verify_bearer(authorization, current.strip()):
+            return JSONResponse({"error": "Valid API key required"}, status_code=401)
+    if value and (not isinstance(value, str) or len(value) < _API_KEY_MIN_LENGTH):
+        return JSONResponse(
+            {"error": f"API key must be at least {_API_KEY_MIN_LENGTH} characters"},
+            status_code=400,
+        )
+    return None
 
 
 def register_admin_routes(mcp) -> None:
@@ -41,6 +67,13 @@ def register_admin_routes(mcp) -> None:
                 {"error": "Fields 'category' and 'key' are required"},
                 status_code=400,
             )
+        if category == "general" and key == "api_key":
+            # Oracle Q9: empty effective key = first-boot bootstrap (no auth);
+            # non-empty = old-key Bearer required to change or clear ("").
+            # Non-empty values shorter than 16 chars are rejected (400).
+            gate = _api_key_gate(request, value)
+            if gate is not None:
+                return gate
         try:
             from nous.config.runtime_config import RuntimeConfigManager
 

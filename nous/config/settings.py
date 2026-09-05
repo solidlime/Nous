@@ -197,17 +197,27 @@ class IrodoriConfig(BaseModel):
 
 
 class CorsConfig(BaseModel):
-    """CORS (Cross-Origin Resource Sharing) configuration."""
+    """CORS (Cross-Origin Resource Sharing) configuration.
 
-    allowed_origins: list[str] = ["*"]
+    Secure defaults: explicit localhost dev origins with credentials allowed.
+    A wildcard (``"*"``) is only used when explicitly set via
+    ``NOUS_CORS_ALLOWED_ORIGINS`` (credentials are then forced off).
+    """
+
+    allowed_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
     """Allowed origins. Env var ``NOUS_CORS__ALLOWED_ORIGINS`` accepts JSON array
     (e.g. ``'["http://a.com","http://b.com"]'``) **or** comma-separated string
     (e.g. ``http://a.com,http://b.com``).
-    Default: ``["*"]`` (development only). Production should set explicit origins."""
+    Default: explicit localhost dev origins. Production should set explicit origins."""
 
     allow_credentials: bool = True
-    allow_methods: list[str] = ["*"]
-    allow_headers: list[str] = ["*"]
+    allow_methods: list[str] = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    allow_headers: list[str] = ["Authorization", "Content-Type", "X-Persona"]
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
@@ -275,6 +285,13 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     google_api_key: str = ""  # env: NOUS_GOOGLE_API_KEY
     opencode_go_api_key: str = ""  # env: NOUS_OPENCODE_GO_API_KEY
+    api_key: str = ""
+    """HTTP Bearer credential (env ``NOUS_API_KEY``).
+
+    Empty (default) is a documented dev pass-through: the Bearer token is
+    treated as the persona name. When non-empty, strict mode applies —
+    ``Authorization: Bearer <api_key>`` must match exactly, else HTTP 401.
+    """
 
     embedding: EmbeddingConfig = EmbeddingConfig()
     reranker: RerankerConfig = RerankerConfig()

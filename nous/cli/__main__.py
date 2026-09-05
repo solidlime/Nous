@@ -172,8 +172,29 @@ def _handle_auto_import(args: argparse.Namespace, settings: Settings) -> None:
             print(f"  {table}: {count} records")
 
 
+_COUNTABLE_TABLES = frozenset(
+    {
+        "memories",
+        "memory_strength",
+        "memory_blocks",
+        "emotion_history",
+        "context_state",
+        "goals",
+        "promises",
+        "items",
+        "equipment_slots",
+        "equipment_history",
+    }
+)
+"""Tables allowed in _print_count's COUNT query (static allowlist)."""
+
+
 def _print_count(db, table: str, label: str) -> None:
     try:
+        if table not in _COUNTABLE_TABLES:
+            raise ValueError(f"Table not allowed in stats query: {table!r}")
+        # Safe: `table` is validated against the static _COUNTABLE_TABLES
+        # allowlist above, so identifier interpolation cannot inject SQL.
         count = db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # noqa: S608  # nosec B608
         print(f"  {label}: {count}")
     except Exception:  # noqa: BLE001
