@@ -549,8 +549,8 @@ N.Chat.showCharacterFlag = function (msgEl, violation, detail) {
   if (!msgEl) return;
   var badge = document.createElement("div");
   badge.className = "character-flag";
-  badge.title = detail || "";
-  badge.textContent = "⚠ 内面に違和感(" + violation + ")";
+  badge.title = violation ? violation + (detail ? ": " + detail : "") : (detail || "");
+  badge.textContent = "⚠ 内面に違和感";
   msgEl.appendChild(badge);
 };
 

@@ -278,7 +278,7 @@ async function generateExpressionSet(btn) {
     btn.textContent = '生成中…';
     try {
         const d = await api('/api/chat/' + encodeURIComponent(S.persona) + '/persona/expressions/generate', { method: 'POST' });
-        btn.textContent = '生成 ' + d.generated.length + ' / skip ' + d.skipped.length + ' / 失敗 ' + d.failed.length;
+        btn.textContent = '生成 ' + d.generated.length + ' / スキップ ' + d.skipped.length + ' / 失敗 ' + d.failed.length;
     } catch (e) {
         btn.textContent = '失敗: ' + e.message;
     } finally {

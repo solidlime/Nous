@@ -105,7 +105,7 @@ async function doAutoSave(cat, key, inputId, value) {
         /* Show error state */
         var errMsg = e.message || 'Save failed';
         statusEl.className = 'setting-status status-error visible';
-        safeSetHTML(statusEl, '✕ Error');
+        safeSetHTML(statusEl, '✕ エラー');
         if (errEl) {
             errEl.textContent = errMsg;
             errEl.className = 'setting-inline-error visible';
@@ -228,7 +228,7 @@ function startStatusPoll() {
                     } else if (s && s.status === 'error') {
                         document.querySelectorAll('[data-category="' + cat + '"] .setting-status.status-reloading').forEach(function(el) {
                             el.className = 'setting-status status-error visible';
-                            safeSetHTML(el, '✕ Error');
+                            safeSetHTML(el, '✕ エラー');
                             setTimeout(function() { el.classList.remove('visible'); }, 3000);
                         });
                     }

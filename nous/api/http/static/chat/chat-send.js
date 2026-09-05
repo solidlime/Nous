@@ -597,7 +597,6 @@ async function chatSend(retry) {
         } else if (evt.type === "image_gen_start") {
           N.Chat.tools.showGenSpinner(evt);
         } else if (evt.type === "image_gen_result") {
-          console.log("[SSE] image_gen_result received:", Object.keys(evt), "images:", evt.images ? evt.images.length : "NONE");
           N.Chat.tools.showGenResult(evt);
         } else if (evt.type === "error") {
           removeTypingIndicator();
@@ -649,12 +648,12 @@ async function chatSend(retry) {
           CHAT._streamingSince = null;
           sendBtn.style.display = "";
           if (cancelBtn) cancelBtn.style.display = "none";
-          statusEl.textContent = "記憶を整理中...";
+          statusEl.textContent = "ちょっと考えてる…";
           // Show truncation notice when response was auto-continued
           if (evt.truncated) {
             const notice = document.createElement("div");
             notice.className = "chat-truncation-notice";
-            notice.textContent = "⚠️ 応答が長すぎたため自動継続されました";
+            notice.textContent = "（つづき）";
             // Insert after the last text bubble inside assistantDiv
             const lastBubble = assistantDiv.querySelector(".chat-bubble:last-of-type");
             if (lastBubble) {
@@ -669,7 +668,7 @@ async function chatSend(retry) {
             const tokenInfo = document.createElement("div");
             tokenInfo.className = "chat-token-info";
             tokenInfo.style.cssText = "font-size:0.72rem;color:var(--text-muted);margin-top:4px;opacity:0.7;";
-            tokenInfo.textContent = "🔤 " + u.prompt_tokens + "↑ " + u.completion_tokens + "↓ = " + u.total_tokens + " total";
+            tokenInfo.textContent = "🔤 " + u.prompt_tokens + "↑ " + u.completion_tokens + "↓ = " + u.total_tokens + " 合計";
             assistantDiv.appendChild(tokenInfo);
           }
           // Set message IDs from server

@@ -55,7 +55,7 @@ function updateMemoryPanel(retrieved, saved, goals, promises) {
               .join(" ");
             var _contentStr = typeof m.content === "object" && m.content !== null ? JSON.stringify(m.content) : String(m.content || "");
             return (
-              '<div class="memory-item-card" data-key="' +
+              '<div class="memory-item-card" title="' + escAttr(meta) + '" data-key="' +
               escAttr(key) +
               '" data-content="' +
               escAttr(_contentStr) +
@@ -64,7 +64,6 @@ function updateMemoryPanel(retrieved, saved, goals, promises) {
               '" data-tags="' +
               escAttr((m.tags || []).join(",")) +
               '">' +
-              (meta ? '<div class="mem-score">' + esc(meta) + "</div>" : "") +
               content +
               (extra
                 ? '<div class="mem-score" style="font-size:0.7rem;margin-top:3px">' +
@@ -91,7 +90,6 @@ function updateMemoryPanel(retrieved, saved, goals, promises) {
           .map((m) => {
             var _raw = typeof m.content === "object" && m.content !== null ? JSON.stringify(m.content) : String(m.content || "");
             const content = esc(_raw.substring(0, 80));
-            const tags = m.tags ? m.tags.join(", ") : "";
             const key = m.key || "";
             const emotionBadges = N.Components.memoryCard.renderEmotionBadges(
               m.emotion,
@@ -113,7 +111,6 @@ function updateMemoryPanel(retrieved, saved, goals, promises) {
               escAttr((m.tags || []).join(",")) +
               '">' +
               content +
-              (tags ? '<div class="mem-score">' + esc(tags) + "</div>" : "") +
               (extra
                 ? '<div class="mem-score" style="font-size:0.7rem;margin-top:3px">' +
                   extra +
@@ -243,7 +240,7 @@ function showContextCompressed(evt) {
       evt.before_tokens +
       "→" +
       evt.after_tokens +
-      " tokens (" +
+      " トークン (" +
       beforePct +
       "%→" +
       afterPct +

@@ -265,7 +265,7 @@ async function loadMemories(page) {
             totalCount = data.total_count || 0;
         }
         if (!memories || memories.length === 0) {
-            safeSetHTML(el, N.Components.skeleton.emptyState('file-text', 'No memories', 'Try adjusting your search or create a new memory.'));
+            safeSetHTML(el, N.Components.skeleton.emptyState('file-text', '記憶がありません', '検索条件を変えるか、新しい記憶を作成してください。'));
             N.Core.updateLastTime();
             return;
         }

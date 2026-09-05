@@ -319,7 +319,7 @@ async function deleteMemory(key) {
    ================================================================ */
 async function batchDeleteMemories() {
     var keys = Array.from(S.mem.selected);
-    if (keys.length === 0) { toast('No memories selected', 'error'); return; }
+    if (keys.length === 0) { toast('記憶が選択されていません', 'error'); return; }
     N.Components.modal.showConfirm(keys.length + '件の記憶を削除しますか？この操作は取り消せません。', async function() {
         var ok = 0, failures = [];
         for (var i = 0; i < keys.length; i++) {

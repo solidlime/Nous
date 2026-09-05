@@ -15,6 +15,14 @@ var S = window.S;
 
 var CHAT = N.Chat.state;
 
+// persona非依存のツール表示名（生JSONはdetailsに維持）
+var TOOL_LABELS = {
+  memory_search: "記憶をたどっている…",
+  update_context: "気持ちを整理中…",
+  image_generate: "絵を描いてる…",
+};
+function toolLabel(name) { return TOOL_LABELS[name] || name || ""; }
+
 // ------------------------------------------------------------------
 // Append tool call/result event to the DOM
 // ------------------------------------------------------------------
@@ -34,8 +42,8 @@ function appendToolEvent(eventType, data, targetDiv) {
     safeSetHTML(div,
       '<details><summary>' +
       '<span class="chat-tool-summary-left">' +
-      '<i data-lucide="wrench"></i> <strong>' +
-      esc(data.name) +
+      '<i data-lucide="wrench"></i> <strong title="' + esc(data.name || "") + '">' +
+      esc(toolLabel(data.name)) +
       '</strong></span>' +
       '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
       '<span class="chat-tool-status">実行中...</span></summary>' +
@@ -109,8 +117,8 @@ function appendToolEvent(eventType, data, targetDiv) {
       safeSetHTML(div,
         '<details><summary>' +
         '<span class="chat-tool-summary-left">' +
-        '<i data-lucide="check"></i> <strong>' +
-        esc(data.name) +
+        '<i data-lucide="check"></i> <strong title="' + esc(data.name || "") + '">' +
+        esc(toolLabel(data.name)) +
         '</strong></span>' +
         '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
         '</summary>' +
@@ -192,7 +200,7 @@ function showImageGenSpinner(evt) {
 
   const spinner = document.createElement("div");
   spinner.className = "chat-image-gen-spinner";
-  safeSetHTML(spinner, '<div class="spinner"></div> 画像を生成中... (' + esc(evt.provider) + ', ' + evt.n + '枚)');
+  safeSetHTML(spinner, '<div class="spinner"></div> 画像を生成中…（' + evt.n + '枚）');
 
   _imageGenSpinnerId = "image-gen-spinner-" + Date.now();
   spinner.id = _imageGenSpinnerId;
@@ -204,7 +212,6 @@ function showImageGenSpinner(evt) {
 }
 
 function showImageGenResult(evt) {
-  console.log("[showImageGenResult] evt:", JSON.stringify({type: evt.type, imagesCount: evt.images?.length, hasImages: !!evt.images, spinnerId: _imageGenSpinnerId}));
   const container = findChatLogContainer();
   if (!container) return;
 
@@ -215,7 +222,6 @@ function showImageGenResult(evt) {
     _imageGenSpinnerId = null;
   }
 
-  console.log("[showImageGenResult] images check:", {images: !!evt.images, length: evt.images?.length, self_portrait: evt.self_portrait});
   if (!evt.images || !evt.images.length) return;
 
   // Self-portrait → update Overview tab
@@ -225,15 +231,13 @@ function showImageGenResult(evt) {
       var imgUrl = evt.images[0].url || ("data:image/png;base64," + (evt.images[0].base64 || ""));
       portraitEl.style.display = 'block';
       safeSetHTML(portraitEl, '<div class="glass p-4" style="text-align:center;max-width:400px;margin:0 auto 16px">'
-          + '<img src="' + esc(imgUrl) + '" alt="Self Portrait" style="max-width:100%;max-height:300px;border-radius:8px;cursor:pointer" onclick="N.Chat.attachments.openViewer(\'' + esc(imgUrl) + '\',\'image\')">'
-          + '<div style="margin-top:6px;font-size:0.75rem;color:var(--text-muted)">Latest Self Portrait</div>'
+          + '<img src="' + esc(imgUrl) + '" alt="自画像" style="max-width:100%;max-height:300px;border-radius:8px;cursor:pointer" onclick="N.Chat.attachments.openViewer(\'' + esc(imgUrl) + '\',\'image\')">'
+          + '<div style="margin-top:6px;font-size:0.75rem;color:var(--text-muted)">最新の自画像</div>'
           + '</div>');
     }
   }
 
   evt.images.forEach(function (img) {
-    console.log("[showImageGenResult] img keys:", Object.keys(img));
-    console.log("[showImageGenResult] base64 len:", img.base64?.length, "first 10:", img.base64?.substring(0, 10));
     var card = document.createElement("div");
     card.className = "chat-image-gen-card";
 
@@ -278,7 +282,7 @@ function showImageGenResult(evt) {
       imgEl.style.display = "none";
       var errDiv = document.createElement("div");
       errDiv.className = "image-gen-error";
-      errDiv.textContent = "⚠️ 画像のデコードに失敗しました（" + (img.base64?.length || 0) + " bytes）";
+      errDiv.textContent = "⚠️ 画像のデコードに失敗しました";
       card.insertBefore(errDiv, card.firstChild);
       if (typeof _isNearBottom !== 'undefined' && _isNearBottom(container)) scrollToBottom(container);
       // エラー時は即時revoke（画像は非表示になったので不要）
@@ -304,7 +308,7 @@ function showImageGenResult(evt) {
     if (rp) {
       var promptSpan = document.createElement("span");
       promptSpan.textContent =
-        rp.length > 80 ? rp.substring(0, 80) + "..." : rp;
+        "生成イメージ: " + (rp.length > 80 ? rp.substring(0, 80) + "..." : rp);
       promptSpan.style.fontStyle = "italic";
       meta.appendChild(promptSpan);
     }

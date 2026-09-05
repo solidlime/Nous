@@ -76,11 +76,11 @@ function renderSettings(el, settings, status) {
         if (catStatus && catStatus.status && catStatus.status !== 'idle') {
             var st = catStatus.status;
             if (st === 'loading' || st === 'reloading') {
-                statusHtml = '<div style="margin-top:8px"><div style="font-size:0.78rem;color:var(--accent-yellow);margin-bottom:4px"><i data-lucide="clock"></i> ' + esc(catStatus.message || 'Loading...') + '</div><div class="progress-wrap"><div class="progress-bar progress-indeterminate"></div></div></div>';
+                statusHtml = '<div style="margin-top:8px"><div style="font-size:0.78rem;color:var(--accent-yellow);margin-bottom:4px"><i data-lucide="clock"></i> ' + esc(catStatus.message || '読み込み中…') + '</div><div class="progress-wrap"><div class="progress-bar progress-indeterminate"></div></div></div>';
             } else if (st === 'ready' || st === 'success') {
-                statusHtml = '<div style="margin-top:8px;font-size:0.78rem;color:var(--accent-green)"><i data-lucide="check-circle"></i> ' + esc(catStatus.message || 'Ready') + '</div>';
+                statusHtml = '<div style="margin-top:8px;font-size:0.78rem;color:var(--accent-green)"><i data-lucide="check-circle"></i> ' + esc(catStatus.message || '準備完了') + '</div>';
             } else if (st === 'error') {
-                statusHtml = '<div style="margin-top:8px;font-size:0.78rem;color:var(--accent-red)"><i data-lucide="x-circle"></i> ' + esc(catStatus.message || 'Error') + '</div>';
+                statusHtml = '<div style="margin-top:8px;font-size:0.78rem;color:var(--accent-red)"><i data-lucide="x-circle"></i> ' + esc(catStatus.message || 'エラー') + '</div>';
             }
         }
 

@@ -50,7 +50,7 @@ function _stripMarkdown(text) {
   return text
     .replace(/<time_context>[\s\S]*?<\/time_context>/g, "")
     .replace(/<!-- msg_at:.*?-->/g, "")
-    .replace(/```[\s\S]*?```/g, "コードブロック")
+    .replace(/```[\s\S]*?```/g, "")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/[*_~>#-]/g, "")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
@@ -220,7 +220,7 @@ async function testVoicePlayback() {
   try {
     var urlInput = document.getElementById("chat-voice-url");
     var modelInput = document.getElementById("chat-voice-model");
-    var body = { text: "こんにちは、音声合成のテストです。正常に動作しています。" };
+    var body = { text: "こんにちは、" + (S.persona || "私") + "です。音声合成のテストをしています。" };
     if (modelInput && modelInput.value) {
       body.voice = modelInput.value;
     }
