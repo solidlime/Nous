@@ -177,7 +177,7 @@ class MemoryService:
 
         # ── 5. Persist ──
         result = self._repo.save(memory)
-        if not result.is_ok:
+        if isinstance(result, Failure):
             return Failure(result.error)
 
         # ── 6. Version 1 ──
@@ -189,7 +189,7 @@ class MemoryService:
             changed_by="user",
             change_type="create",
         )
-        if not ver_result.is_ok:
+        if isinstance(ver_result, Failure):
             logger.warning("Failed to record initial version for %s: %s", key, ver_result.error)
 
         # ── 7. Entity extraction hook (best-effort) ──
@@ -236,7 +236,7 @@ class MemoryService:
     def update_memory(self, key: str, **updates: object) -> Result[Memory, DomainError]:
         """Update fields of an existing memory."""
         existing = self._repo.find_by_key(key)
-        if not existing.is_ok:
+        if isinstance(existing, Failure):
             return Failure(existing.error)
         if existing.value is None:
             return Failure(MemoryNotFoundError(f"Memory not found: {key}"))
@@ -260,12 +260,12 @@ class MemoryService:
             if tag_error is not None:
                 return Failure(tag_error)
         result = self._repo.update(key, **updates)
-        if not result.is_ok:
+        if isinstance(result, Failure):
             return Failure(result.error)
 
         # Record new version
         ver_result = self._repo.get_latest_version_number(key)
-        next_ver = (ver_result.value + 1) if ver_result.is_ok else 1
+        next_ver = (ver_result.value + 1) if isinstance(ver_result, Success) else 1
         self._repo.save_version(
             memory_key=key,
             version=next_ver,
@@ -288,7 +288,7 @@ class MemoryService:
         but the record remains in the database for potential recovery.
         """
         existing = self._repo.find_by_key(key)
-        if not existing.is_ok:
+        if isinstance(existing, Failure):
             return Failure(existing.error)
         if existing.value is None:
             return Failure(MemoryNotFoundError(f"Memory not found: {key}"))
@@ -296,12 +296,12 @@ class MemoryService:
         # Tombstone first, then record the delete version — a failed
         # tombstone must never leave an active memory with a "delete" version.
         tomb_result = self._repo.tombstone(key)
-        if not tomb_result.is_ok:
+        if isinstance(tomb_result, Failure):
             return Failure(tomb_result.error)
 
         old_memory = existing.value
         ver_result = self._repo.get_latest_version_number(key)
-        next_ver = (ver_result.value + 1) if ver_result.is_ok else 1
+        next_ver = (ver_result.value + 1) if isinstance(ver_result, Success) else 1
         snapshot = {
             "content": old_memory.content,
             "importance": old_memory.importance,

@@ -183,7 +183,7 @@ class SearchEngine:
         else:
             result = await self._hybrid_search(query, date_from, date_to)
 
-        if not result.is_ok:
+        if isinstance(result, Failure):
             return result
         # Never cache empty results: cold-start fallbacks (e.g. embedding not
         # loaded yet) would otherwise poison the cache for the full TTL.
@@ -263,7 +263,7 @@ class SearchEngine:
         result = self._keyword.search(
             query.text, limit=query.top_k, date_from=date_from, date_to=date_to, tags=query.tags
         )
-        if not result.is_ok:
+        if isinstance(result, Failure):
             return Failure(result.error)
         return Success(self._to_search_results(result.value, "keyword"))
 
@@ -272,7 +272,7 @@ class SearchEngine:
         from nous.domain.shared.errors import SearchError
 
         result = self._memory_repo.get_by_tags(query.tags)
-        if not result.is_ok:
+        if isinstance(result, Failure):
             return Failure(SearchError(str(result.error)))
         results = self._to_search_results([(m, 0.0) for m in result.value], "keyword")
         if query.sort == "updated_at":
@@ -286,7 +286,7 @@ class SearchEngine:
         if self._semantic is None:
             return self._keyword_search(query, date_from, date_to)
         result = await self._semantic.search(query.text, limit=query.top_k, date_from=date_from, date_to=date_to)
-        if not result.is_ok:
+        if isinstance(result, Failure):
             return self._keyword_search(query, date_from, date_to)
         return Success(self._to_search_results(result.value, "semantic"))
 
@@ -304,7 +304,7 @@ class SearchEngine:
         kw_result = self._keyword.search(
             query.text, limit=query.top_k, date_from=date_from, date_to=date_to, tags=query.tags
         )
-        if kw_result.is_ok:
+        if isinstance(kw_result, Success):
             all_results.extend(self._to_search_results(kw_result.value, "keyword"))
 
         # 2. FTS5 full-text search (BM25 ranked)
@@ -312,7 +312,7 @@ class SearchEngine:
             fts_result = self._memory_repo.search_fts(
                 query.text, top_k=query.top_k * 2, date_from=date_from, date_to=date_to, tags=query.tags
             )
-            if fts_result.is_ok:
+            if isinstance(fts_result, Success):
                 all_results.extend(self._to_search_results(fts_result.value, "fts"))
 
         # 3. Semantic vector search (Qdrant)
@@ -320,7 +320,7 @@ class SearchEngine:
             sem_result = await self._semantic.search(
                 query.text, limit=query.top_k, date_from=date_from, date_to=date_to
             )
-            if sem_result.is_ok:
+            if isinstance(sem_result, Success):
                 sem_results = self._to_search_results(sem_result.value, "semantic")
                 # Apply similarity_flag for high-confidence matches
                 if query.similarity_threshold > 0:
@@ -363,7 +363,7 @@ class SearchEngine:
                 entity_linked_keys: set[str] = set()
                 for eid in query_entity_ids:
                     mem_keys_result = self._entity_service.find_related_memories(eid, limit=20)
-                    if mem_keys_result.is_ok:
+                    if isinstance(mem_keys_result, Success):
                         entity_linked_keys.update(mem_keys_result.value)
 
                 # Boost results that match entity-linked memories
@@ -433,7 +433,7 @@ class SearchEngine:
 
         # 1. Run the original hybrid search
         original = await self._hybrid_search(query)
-        if original.is_ok:
+        if isinstance(original, Success):
             all_results.extend(original.value)
 
         # 2. Generate expanded sub-queries and run additional searches
@@ -455,7 +455,7 @@ class SearchEngine:
                 kind=query.kind,
             )
             result = await self._hybrid_search(sub)
-            if result.is_ok:
+            if isinstance(result, Success):
                 all_results.extend(result.value)
 
         if not all_results:

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 from nous.domain.memory.entities import Memory
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.errors import DuplicateMemoryError, MemoryValidationError
+from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import generate_memory_key, get_now
 from nous.domain.value_objects import normalize_emotion, normalize_importance
 
@@ -40,7 +41,7 @@ class MemoryWriteService:
         if self._search_engine is not None:
             try:
                 search_result = await self._search_engine.search(SearchQuery(text=content, top_k=3))
-                if search_result.is_ok and search_result.value:
+                if isinstance(search_result, Success) and search_result.value:
                     duplicates = [
                         {
                             "key": item.memory.key,
@@ -62,7 +63,7 @@ class MemoryWriteService:
         # 2. Exact match check (sync, via repository)
         try:
             exact = self._repo.find_by_content_exact(content)
-            if exact.is_ok and exact.value is not None:
+            if isinstance(exact, Success) and exact.value is not None:
                 return DuplicateMemoryError(
                     f"Identical content already exists (key: {exact.value.key}). Skipped.",
                     duplicate_key=exact.value.key,

@@ -39,13 +39,13 @@ class EquipmentService:
             return Failure(ItemValidationError("Item name must not be empty"))
 
         existing = self._repo.find_item_by_name(name.strip())
-        if not existing.is_ok:
+        if isinstance(existing, Failure):
             return Failure(existing.error)
 
         if existing.value is not None:
             new_qty = existing.value.quantity + quantity
             result = self._repo.update_item(name.strip(), quantity=new_qty)
-            if not result.is_ok:
+            if isinstance(result, Failure):
                 return Failure(result.error)
             self._repo.add_history(
                 EquipmentHistory(
@@ -69,7 +69,7 @@ class EquipmentService:
             updated_at=now,
         )
         result = self._repo.add_item(item)
-        if result.is_ok:
+        if isinstance(result, Success):
             self._repo.add_history(
                 EquipmentHistory(
                     action="add",
@@ -83,19 +83,19 @@ class EquipmentService:
     def remove_item(self, name: str) -> Result[None, DomainError]:
         """Remove an item and unequip from any slot."""
         existing = self._repo.find_item_by_name(name)
-        if not existing.is_ok:
+        if isinstance(existing, Failure):
             return Failure(existing.error)
         if existing.value is None:
             return Failure(ItemNotFoundError(f"Item not found: {name}"))
 
         slots_result = self._repo.get_all_slots()
-        if slots_result.is_ok:
+        if isinstance(slots_result, Success):
             for slot in slots_result.value:
                 if slot.item_name == name:
                     self._repo.unequip_slot(slot.slot)
 
         result = self._repo.remove_item(name)
-        if result.is_ok:
+        if isinstance(result, Success):
             self._repo.add_history(
                 EquipmentHistory(
                     action="remove",
@@ -108,7 +108,7 @@ class EquipmentService:
     def update_item(self, name: str, **updates: object) -> Result[Item, DomainError]:
         """Update item fields. Supports renaming via item_name key."""
         existing = self._repo.find_item_by_name(name)
-        if not existing.is_ok:
+        if isinstance(existing, Failure):
             return Failure(existing.error)
         if existing.value is None:
             return Failure(ItemNotFoundError(f"Item not found: {name}"))
@@ -119,7 +119,7 @@ class EquipmentService:
 
         updates["updated_at"] = get_now()
         result = self._repo.update_item(name, **updates)
-        if result.is_ok:
+        if isinstance(result, Success):
             self._repo.add_history(
                 EquipmentHistory(
                     action="update",
@@ -143,7 +143,7 @@ class EquipmentService:
                 continue
             desc = item_name
             item_result = self._repo.find_item_by_name(item_name)
-            if item_result.is_ok and item_result.value and item_result.value.visual_desc:
+            if isinstance(item_result, Success) and item_result.value and item_result.value.visual_desc:
                 desc = item_result.value.visual_desc
             parts.append(desc)
         return ", ".join(parts)
@@ -163,7 +163,7 @@ class EquipmentService:
 
             if auto_add:
                 existing = self._repo.find_item_by_name(item_name)
-                if existing.is_ok and existing.value is None:
+                if isinstance(existing, Success) and existing.value is None:
                     self._repo.add_item(
                         Item(
                             name=item_name,
@@ -173,7 +173,7 @@ class EquipmentService:
                     )
 
             equip_result = self._repo.equip_slot(slot, item_name)
-            if not equip_result.is_ok:
+            if isinstance(equip_result, Failure):
                 return Failure(equip_result.error)
 
             self._repo.add_history(
@@ -198,7 +198,7 @@ class EquipmentService:
                 return Failure(ItemValidationError(f"Invalid slot: {slot!r}. Valid: {VALID_SLOTS}"))
 
             slots_result = self._repo.get_all_slots()
-            if slots_result.is_ok:
+            if isinstance(slots_result, Success):
                 for s in slots_result.value:
                     if s.slot == slot and s.item_name:
                         self._repo.add_history(
@@ -211,7 +211,7 @@ class EquipmentService:
                         )
 
             result = self._repo.unequip_slot(slot)
-            if not result.is_ok:
+            if isinstance(result, Failure):
                 return Failure(result.error)
 
         return Success(None)
@@ -227,6 +227,6 @@ class EquipmentService:
     def get_equipment(self) -> Result[dict[str, str | None], DomainError]:
         """Get current equipment state as {slot: item_name}."""
         result = self._repo.get_all_slots()
-        if not result.is_ok:
+        if isinstance(result, Failure):
             return Failure(result.error)
         return Success({s.slot: s.item_name for s in result.value})

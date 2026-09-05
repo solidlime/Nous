@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol
 
-from nous.domain.shared.result import Result, Success
+from nous.domain.shared.result import Failure, Result, Success
 
 if TYPE_CHECKING:
     from nous.domain.shared.errors import DomainError, VectorStoreError
@@ -241,7 +241,7 @@ class ContradictionDetector:
             )
 
         search_result = await self._vector_store.search(persona, content, limit=10)
-        if not search_result.is_ok:
+        if isinstance(search_result, Failure):
             return Success(
                 ContradictionReport(
                     query_content=content,

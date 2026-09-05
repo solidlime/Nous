@@ -21,7 +21,7 @@ class MemoryQueryService:
     def get_memory(self, key: str) -> Result[Memory, DomainError]:
         """Retrieve a memory by key (excludes tombstoned memories)."""
         result = self._repo.find_by_key(key)
-        if not result.is_ok:
+        if isinstance(result, Failure):
             return Failure(result.error)
         if result.value is None:
             return Failure(MemoryNotFoundError(f"Memory not found: {key}"))
@@ -44,11 +44,11 @@ class MemoryQueryService:
             top_n: Maximum number of entries to return in tag/emotion distributions (default 20).
         """
         count_result = self._repo.count()
-        if not count_result.is_ok:
+        if isinstance(count_result, Failure):
             return Failure(count_result.error)
 
         all_result = self._repo.find_all()
-        if not all_result.is_ok:
+        if isinstance(all_result, Failure):
             return Failure(all_result.error)
 
         memories = all_result.value
@@ -96,7 +96,7 @@ class MemoryQueryService:
                 (Bower 1981 emotion-congruent recall). Stored in strength.valence.
         """
         strength_result = self._repo.get_strength(key)
-        if not strength_result.is_ok:
+        if isinstance(strength_result, Failure):
             return Failure(strength_result.error)
 
         strength = strength_result.value
@@ -111,7 +111,7 @@ class MemoryQueryService:
         strength.last_recall = get_now()
 
         save_result = self._repo.save_strength(strength)
-        if not save_result.is_ok:
+        if isinstance(save_result, Failure):
             return Failure(save_result.error)
         return Success(strength)
 
@@ -134,7 +134,7 @@ class MemoryQueryService:
         Returns a list with the latest memory if found, else empty list.
         """
         result = self._repo.get_by_tags([tag])
-        if not result.is_ok or not result.value:
+        if isinstance(result, Failure) or not result.value:
             return Success([])
         memories = sorted(result.value, key=lambda m: m.created_at or get_now(), reverse=True)
         latest = memories[0]
