@@ -317,6 +317,7 @@ function applyChatConfig(cfg) {
   setChecked("chat-brain-auto-run", cfg.brain_enrich_auto_run === true);
   set("chat-brain-enrich-interval", cfg.brain_enrich_interval_seconds ?? 60);
   set("chat-brain-batch-limit", cfg.brain_enrich_batch_limit ?? 5);
+  setChecked("chat-brain-monologue", cfg.brain_monologue_enabled === true);
   set("chat-brain-novelty-sim", cfg.brain_novelty_sim_threshold ?? 0.75);
   set("chat-brain-novelty-importance", cfg.brain_novelty_importance_threshold ?? 0.6);
   set("chat-brain-novelty-multiplier", cfg.brain_novelty_stability_multiplier ?? 2.0);
@@ -486,6 +487,7 @@ async function saveChatConfig() {
     brain_enrich_auto_run: getChecked("chat-brain-auto-run"),
     brain_enrich_interval_seconds: parseInt(document.getElementById("chat-brain-enrich-interval")?.value || "60"),
     brain_enrich_batch_limit: parseInt(document.getElementById("chat-brain-batch-limit")?.value || "5"),
+    brain_monologue_enabled: getChecked("chat-brain-monologue"),
     brain_novelty_sim_threshold: parseFloat(document.getElementById("chat-brain-novelty-sim")?.value || "0.75"),
     brain_novelty_importance_threshold: parseFloat(document.getElementById("chat-brain-novelty-importance")?.value || "0.6"),
     brain_novelty_stability_multiplier: parseFloat(document.getElementById("chat-brain-novelty-multiplier")?.value || "2.0"),

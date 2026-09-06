@@ -60,6 +60,7 @@ function buildForm() {
     + BRAIN_CHECK_IDS.map((id) => `<input type="checkbox" id="${id}" />`).join('')
     + '<input type="checkbox" id="chat-memory-enrichment-enabled" />'
     + '<input type="checkbox" id="chat-brain-llm-dedicated" />'
+    + '<input type="checkbox" id="chat-brain-monologue" />'
     + '<div id="chat-brain-llm-fields" class="settings-body-hidden">'
     + '<input type="text" id="chat-brain-llm-provider" value="" />'
     + '<input type="text" id="chat-brain-llm-model" value="" />'
@@ -210,5 +211,22 @@ describe('brain simulation settings', () => {
     expect(document.getElementById('chat-brain-llm-model').value).toBe('deepseek-v4');
     expect(document.getElementById('chat-brain-llm-base-url').value).toBe('https://api.deepseek.example/v1');
     expect(document.getElementById('chat-brain-llm-api-key').value).toBe('sk-brain');
+  });
+
+  it('REM monologue: round-trips brain_monologue_enabled through the checkbox', async () => {
+    window.Nous.Chat.settings.apply({});
+    expect(document.getElementById('chat-brain-monologue').checked).toBe(false);
+
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    document.getElementById('chat-brain-monologue').checked = true;
+    apiStub.mockResolvedValueOnce({});
+    await window.Nous.Chat.settings.save();
+    const body = JSON.parse(apiStub.mock.calls[0][1].body);
+    expect(body.brain_monologue_enabled).toBe(true);
+
+    const savedCfg = { brain_monologue_enabled: true };
+    apiStub.mockResolvedValueOnce(savedCfg);
+    window.Nous.Chat.settings.apply(savedCfg);
+    expect(document.getElementById('chat-brain-monologue').checked).toBe(true);
   });
 });

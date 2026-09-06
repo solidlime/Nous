@@ -149,6 +149,7 @@ _BRAIN_HELP = {
     "auto_run": "定期実行（REM 相当）のオン/オフ。睡眠中の記憶再生のように、新しい記憶をバックグラウンドで再処理します。",
     "interval": "記憶強化ループの実行間隔（秒）。REM 睡眠の短い周期に相当します。",
     "batch_limit": "1 周で処理する記憶の上限。一度に大量に再処理すると記憶が乱れるため、小分けにします。",
+    "monologue": "REM 処理（drain）の後に、処理した記憶をもとに一人称の独り言を生成して保存します。再会時に自然に触れるための記録です。",
     "novelty_sim": "海馬-VTA ループのドーパミンゲート。既存記憶との類似がこの値より低いほど「新規」と判定され、長期記憶への定着が強まります。",
     "novelty_importance": "新規性判定の対象になる重要度のしきい値。重要な記憶だけを新規性ゲートに通します。",
     "novelty_multiplier": "新規と判定された記憶の初期安定度の倍率。新規性ブーストは作成後 1 回だけ与えられます（長期増強）。",
@@ -202,6 +203,10 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                         <div>
                                             <div class="chat-field-label">1 周あたり上限件数 {help_("batch_limit")}</div>
                                             <input type="number" id="chat-brain-batch-limit" class="chat-field-input" min="1" max="50" step="1" value="5" />
+                                        </div>
+                                        <div class="chat-check-row">
+                                            <input type="checkbox" id="chat-brain-monologue" />
+                                            <label for="chat-brain-monologue">REM 独り言 {help_("monologue")}</label>
                                         </div>
                                     </div>
                                 </details>
