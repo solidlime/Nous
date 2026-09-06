@@ -53,6 +53,7 @@ def _config(**overrides) -> MagicMock:
     cfg.brain_idle_after_seconds = 120
     cfg.brain_min_batch_size = 3
     cfg.brain_max_defer_seconds = 3600
+    cfg.brain_monologue_enabled = False
     for name, value in overrides.items():
         setattr(cfg, name, value)
     return cfg
@@ -87,6 +88,21 @@ def _idle_ctx(ctx, idle_seconds: float) -> MagicMock:
     ctx._session_event_repo = MagicMock()
     ctx._session_event_repo.last_activity_at.return_value = get_now() - timedelta(seconds=idle_seconds)
     return ctx
+
+
+class _FakeMonologueGenerator:
+    """MonologueGenerator フェイク (worker フックのテスト用)。"""
+
+    def __init__(self, text: str = "ふふ、いい夢だった。", fail: bool = False) -> None:
+        self.text = text
+        self.fail = fail
+        self.calls: list[tuple[str, list[str]]] = []
+
+    async def generate(self, persona: str, memory_texts: list[str]) -> str | None:
+        self.calls.append((persona, memory_texts))
+        if self.fail:
+            raise RuntimeError("boom")
+        return self.text
 
 
 class TestIdleGatedDrain:
@@ -254,6 +270,86 @@ class TestNoveltyGate:
             worker._run_cycle()
 
         assert ctx.memory_repo.save_strength.call_count == 2, "loop must continue after emit failure"
+
+
+class TestMonologueHook:
+    """drain 完了後の独り言フック (spec §4.2)。"""
+
+    def _worker(self, ctx, keys, generator=None, *, disable=False, insert_side_effect=None):
+        memories = [_memory(k) for k in keys]
+        ctx.memory_repo.find_by_key.side_effect = lambda key: Success(next(m for m in memories if m.key == key))
+        _wire_queue(ctx, keys)
+        _idle_ctx(ctx, idle_seconds=600)
+        if insert_side_effect is not None:
+            ctx._session_event_repo.insert.side_effect = insert_side_effect
+        cfg = _config(brain_monologue_enabled=not disable, brain_min_batch_size=1)
+        if generator is not None:
+            ctx.monologue_generator = generator
+        worker = EnrichmentWorker(ctx, cfg)
+        with patch("nous.application.workers.enrichment_worker.MemoryEnrichService") as svc_cls:
+            svc_cls.return_value.enrich_memory = AsyncMock()
+            worker._run_cycle()
+        return worker
+
+    def test_drain_nonempty_generates_monologue_and_saves_event(self) -> None:
+        ctx = _ctx()
+        gen = _FakeMonologueGenerator()
+        self._worker(ctx, ["k1", "k2"], generator=gen)
+
+        assert gen.calls == [("test_persona", ["内容 k1", "内容 k2"])]
+        assert ctx._session_event_repo.insert.call_count == 1
+        event = ctx._session_event_repo.insert.call_args.args[0]
+        assert event.event_type == "brain.monologue"
+        assert event.persona == "test_persona"
+        assert event.summary == "ふふ、いい夢だった。"
+        assert event.metadata == {"memory_keys": ["k1", "k2"]}
+        fires = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "monologue"]
+        assert len(fires) == 1
+
+    def test_drain_empty_does_not_call_generator(self) -> None:
+        ctx = _ctx()
+        _idle_ctx(ctx, idle_seconds=600)
+        gen = _FakeMonologueGenerator()
+        ctx.enrichment_queue.pending_keys.return_value = []
+        worker = EnrichmentWorker(ctx, _config(brain_monologue_enabled=True))
+        ctx.monologue_generator = gen
+
+        worker._run_cycle()
+
+        assert gen.calls == []
+
+    def test_disabled_config_does_not_call_generator(self) -> None:
+        ctx = _ctx()
+        gen = _FakeMonologueGenerator()
+        self._worker(ctx, ["k1", "k2", "k3"], generator=gen, disable=True)
+
+        assert gen.calls == []
+
+    def test_generator_none_is_skipped_silently(self) -> None:
+        ctx = _ctx()
+        ctx.monologue_generator = None
+        self._worker(ctx, ["k1", "k2", "k3"])
+
+        assert ctx.enrichment_queue.mark_processed.call_count == 3
+        assert [e for e in wiring_events.snapshot_after(0) if e["kind"] == "monologue"] == []
+
+    def test_session_event_insert_failure_does_not_break_cycle(self) -> None:
+        gen = _FakeMonologueGenerator()
+        ctx = _ctx()
+
+        self._worker(ctx, ["k1", "k2"], generator=gen, insert_side_effect=RuntimeError("db boom"))
+
+        fires = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "monologue"]
+        assert len(fires) == 1
+
+    def test_emit_uses_no_source_and_persona_meta(self) -> None:
+        ctx = _ctx()
+        gen = _FakeMonologueGenerator()
+        self._worker(ctx, ["k1"], generator=gen)
+
+        fires = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "monologue"]
+        assert fires[0]["source"] == ""
+        assert fires[0]["meta"] == {"persona": "test_persona", "text": "ふふ、いい夢だった。"}
 
 
 class TestSessionEventRepoLastActivity:

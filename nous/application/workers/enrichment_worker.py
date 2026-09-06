@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from nous.domain.memory import wiring_events
 from nous.domain.memory.enrich_service import MemoryEnrichService
+from nous.domain.memory.session_event import SessionEvent
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
@@ -105,15 +106,58 @@ class EnrichmentWorker:
 
         # Drain: DISTINCT keys, has_processed prevents re-enrich, mark after
         # processing so a crash/shutdown loses nothing.
+        drained: list[tuple[str, str]] = []
         for item in pending:
             try:
                 if self._queue.has_processed(item.memory_key):
                     self._queue.mark_processed(item.memory_key)
                     continue
-                self._enrich_one(item.memory_key)
+                content = self._enrich_one(item.memory_key)
                 self._queue.mark_processed(item.memory_key)
+                if content is not None:
+                    drained.append((item.memory_key, content))
             except Exception:
                 logger.debug("EnrichmentWorker: queue item failed for %s", item.memory_key, exc_info=True)
+        self._maybe_monologue(drained)
+
+    def _maybe_monologue(self, drained: list[tuple[str, str]]) -> None:
+        """REM drain 完了後に一人称独り言を生成・保存・emit (spec §4.2)。
+
+        全工程 try/except debug 包み — enrichment 本体は壊さない。
+        """
+        if not drained:
+            return
+        if not getattr(self._config, "brain_monologue_enabled", False):
+            return
+        generator = getattr(self.context, "monologue_generator", None)
+        if generator is None:
+            return
+        try:
+            text = self._run_async(generator.generate(self._persona, [c for _k, c in drained]))
+        except Exception:
+            logger.debug("EnrichmentWorker: monologue generate failed", exc_info=True)
+            return
+        if not text:
+            return
+        try:
+            repo = getattr(self.context, "_session_event_repo", None)
+            if repo is not None:
+                repo.insert(
+                    SessionEvent(
+                        session_id="unknown",
+                        persona=self._persona,
+                        event_type="brain.monologue",
+                        summary=text,
+                        timestamp=get_now(),
+                        metadata={"memory_keys": [k for k, _c in drained]},
+                    )
+                )
+        except Exception:
+            logger.debug("EnrichmentWorker: monologue event insert failed", exc_info=True)
+        try:
+            wiring_events.emit("monologue", meta={"persona": self._persona, "text": text})
+        except Exception:
+            logger.debug("EnrichmentWorker: monologue wiring emit failed", exc_info=True)
 
     def _now(self) -> datetime:
         return get_now()
@@ -131,19 +175,22 @@ class EnrichmentWorker:
             return None
         return (self._naive(now) - self._naive(last)).total_seconds()
 
-    def _enrich_one(self, memory_key: str) -> None:
+    def _enrich_one(self, memory_key: str) -> str | None:
+        """Enrich one memory. Returns its content when processed (monologue input)."""
         try:
             result = self.context.memory_repo.find_by_key(memory_key)
         except Exception:
             logger.debug("EnrichmentWorker: find_by_key failed for %s", memory_key, exc_info=True)
-            return
+            return None
         memory = getattr(result, "value", None) if getattr(result, "is_ok", False) else None
         if memory is None:
-            return
+            return None
         if getattr(memory, "lifecycle_status", "active") != "active":
-            return
+            return None
         self._novelty_gate(memory)
         self._enrich_batch([memory])
+        content = getattr(memory, "content", "")
+        return content if isinstance(content, str) and content else None
 
     @staticmethod
     def _naive(value: datetime) -> datetime:

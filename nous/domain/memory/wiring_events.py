@@ -23,7 +23,7 @@ from nous.domain.shared.time_utils import format_iso, get_now
 
 logger = logging.getLogger(__name__)
 
-WIRING_KINDS = frozenset(["link_fire", "recall_boost", "ppr_hit", "replay_fire", "novelty_gate"])
+WIRING_KINDS = frozenset(["link_fire", "recall_boost", "ppr_hit", "replay_fire", "novelty_gate", "monologue"])
 WIRING_BUFFER_SIZE = 200
 
 
