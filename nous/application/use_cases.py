@@ -175,6 +175,14 @@ class AppContext:
     def _init_enricher(self) -> None:
         """Resolve LLM provider settings and create MemoryEnricher if configured.
 
+        Resolution chain (single point for the brain-simulator LLM):
+        - cfg is None (e.g. MCP-only startup): legacy settings.memory_enrichment chain.
+        - brain_llm_dedicated OFF: reuse the chat provider/model/base_url/api_key
+          4-piece set verbatim (no mixed provider).
+        - brain_llm_dedicated ON: brain_llm_* with the legacy fallback chain;
+          the chat api_key is a final fallback ONLY when the brain provider
+          matches the chat provider (no key mixing across providers).
+
         Depends on: _init_storage (self._config, self.settings).
         Best-effort; failure results in enricher=None (logged as debug).
         """
@@ -182,33 +190,30 @@ class AppContext:
         cfg = self._config
         mem_enrich_enabled = cfg.memory_enrichment_enabled if cfg else self.settings.memory_enrichment.enabled
         if mem_enrich_enabled:
-            # Use global MemoryEnrichmentConfig for provider/base_url/min_chars;
-            # model can be overridden via session config.
-            provider = self.settings.memory_enrichment.provider
-            base_url = self.settings.memory_enrichment.base_url
             min_chars = self.settings.memory_enrichment.min_chars
-            if cfg:
-                model = cfg.memory_enrichment_model or self.settings.memory_enrichment.model
-                api_key = ""
-                if provider == "openrouter":
-                    api_key = self.settings.openrouter_api_key
-                elif provider == "anthropic":
-                    api_key = self.settings.anthropic_api_key
-                elif provider == "openai":
-                    api_key = self.settings.openai_api_key
-                elif provider == "google":
-                    api_key = self.settings.google_api_key
-                elif provider == "opencode_go":
-                    api_key = self.settings.opencode_go_api_key
-                if not api_key:
-                    from nous.config.runtime_config import RuntimeConfigManager
-
-                    key_name = f"{provider}_api_key"
-                    value, _ = RuntimeConfigManager().get_effective_value("api_keys", key_name)
-                    api_key = value or ""
-            else:
-                api_key = self.settings.memory_enrichment.get_effective_api_key(self.settings)
+            if cfg is None:
+                provider = self.settings.memory_enrichment.provider
                 model = self.settings.memory_enrichment.model
+                base_url = self.settings.memory_enrichment.base_url
+                api_key = self.settings.memory_enrichment.get_effective_api_key(self.settings)
+            elif not cfg.brain_llm_dedicated:
+                # OFF: chat 4-piece set.
+                p = cfg.provider_config
+                provider = p.provider
+                model = p.get_effective_model()
+                base_url = p.get_effective_base_url()
+                api_key = p.get_effective_api_key()
+            else:
+                # ON: brain_llm_* + legacy fallback chain.
+                me = self.settings.memory_enrichment
+                provider = cfg.brain_llm_provider or me.provider
+                model = cfg.brain_llm_model or me.model
+                base_url = cfg.brain_llm_base_url or me.base_url
+                api_key = cfg.brain_llm_api_key or self._provider_api_key(provider)
+                if not api_key and provider == cfg.provider_config.provider:
+                    api_key = cfg.provider_config.get_effective_api_key()
+                if not api_key:
+                    logger.debug("brain LLM: no api_key for provider '%s'; enrichment disabled", provider)
             if api_key:
                 from nous.infrastructure.llm.memory_enricher import MemoryEnricher
 
@@ -220,6 +225,39 @@ class AppContext:
                     min_chars=min_chars,
                 )
         self._enricher = enricher
+
+    def _provider_api_key(self, provider: str) -> str:
+        """Legacy api_key chain for an arbitrary provider.
+
+        settings.<provider>_api_key → RuntimeConfigManager → legacy env var.
+        """
+        settings_key = getattr(self.settings, f"{provider}_api_key", "")
+        if settings_key:
+            return str(settings_key)
+        try:
+            from nous.config.runtime_config import RuntimeConfigManager
+
+            value, _ = RuntimeConfigManager().get_effective_value("api_keys", f"{provider}_api_key")
+            if value:
+                return str(value)
+        except Exception:
+            logger.debug("RuntimeConfigManager lookup failed for %s", provider, exc_info=True)
+        legacy_env = {
+            "anthropic": "ANTHROPIC_API_KEY",
+            "openai": "OPENAI_API_KEY",
+            "openrouter": "OPENROUTER_API_KEY",
+            "google": "GEMINI_API_KEY",
+            "opencode_go": "OPENCODE_GO_API_KEY",
+        }.get(provider)
+        if legacy_env:
+            import os
+
+            return os.environ.get(legacy_env, "")
+        return ""
+
+    def reload_enricher(self) -> None:
+        """Re-resolve the enricher after a config save (chat settings route hook)."""
+        self._init_enricher()
 
     def _init_services(self) -> None:
         """Create EventBus and all domain services.

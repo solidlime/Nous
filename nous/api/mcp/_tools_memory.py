@@ -7,8 +7,9 @@ import logging
 from typing import TYPE_CHECKING
 
 from nous.api.mcp._tools_helpers import tool_called_audited
-from nous.domain.search.engine import SearchQuery
+from nous.domain.search.engine import SearchQuery, SearchResult
 from nous.domain.shared.errors import DuplicateMemoryError
+from nous.domain.shared.result import Success
 from nous.domain.value_objects import _VALID_EMOTIONS, normalize_importance
 
 logger = logging.getLogger(__name__)
@@ -402,7 +403,7 @@ async def _tool_memory_search(
     # Boost the top hits (cap 10) and record co-access (cap 3 — don't churn
     # the 20-item co-access window), then queue unprocessed memories for the
     # idle enrichment worker.
-    hits = result.value
+    hits: list[SearchResult] = result.value if isinstance(result, Success) else []
     for sr in hits[: min(10, len(hits))]:
         try:
             ctx.memory_service.boost_recall(sr.memory.key)

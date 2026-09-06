@@ -106,6 +106,12 @@ class SessionConfig(BaseModel):
     brain_idle_after_seconds: int = 120
     brain_min_batch_size: int = 3
     brain_max_defer_seconds: int = 3600
+    # Dedicated LLM for the brain simulator (OFF = reuse the chat 4-piece set)
+    brain_llm_dedicated: bool = False
+    brain_llm_provider: str = ""
+    brain_llm_model: str = ""
+    brain_llm_base_url: str = ""
+    brain_llm_api_key: str = ""
 
     # Forgetting
     forgetting_enabled: bool = False

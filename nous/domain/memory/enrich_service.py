@@ -67,13 +67,14 @@ class MemoryEnrichService:
                     )
 
                     persona = _repo_persona(self._repo)
-                    if enrichment.usage:
+                    usage = getattr(enrichment, "usage", None)
+                    if usage:
                         logger.info(
                             "enrichment usage for %s: %s",
                             key,
-                            enrichment.usage,
+                            usage,
                         )
-                    usage_meta = {"persona": persona, "memory_key": key, "usage": enrichment.usage}
+                    usage_meta = {"persona": persona, "memory_key": key, "usage": usage}
                     # Update importance if auto-evaluated differently
                     if enrichment.importance != 0.5:
                         clamped = normalize_importance(enrichment.importance)

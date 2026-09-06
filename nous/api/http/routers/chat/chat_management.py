@@ -226,6 +226,11 @@ async def save_chat_config(request: Request) -> JSONResponse:
     except Exception:  # 最終防衛線: Pydantic/domain validation
         logger.exception("save_chat_config: config validation failed")
         return JSONResponse({"error": "Invalid config"}, status_code=400)
+    # Re-resolve the enricher so brain_llm_* toggles apply immediately (B1).
+    try:
+        ctx.reload_enricher()
+    except Exception:
+        logger.debug("save_chat_config: reload_enricher failed", exc_info=True)
     return JSONResponse(result)
 
 

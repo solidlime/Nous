@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from nous.domain.memory import wiring_events
@@ -11,6 +10,8 @@ from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from nous.application.use_cases import AppContext
     from nous.domain.chat_config import ChatConfig
     from nous.domain.memory.entities import Memory
