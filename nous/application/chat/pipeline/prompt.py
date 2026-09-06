@@ -13,9 +13,11 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# ツール使用ガイドライン（自律性ブートストラップ + スキル呼び出し強化）
+# ツール使用ガイドライン（自律性ブートストラップ + スキル呼び出し強化）。
+# 例文はペルソナ非依存（記憶検索は常設ツールなので例として成立する）。
 TOOL_USAGE_GUIDELINES = """\
 <instructions>
+利用可能なスキル:
 {skill_list}
 
 スキルの発動条件に合致したら、ユーザー指示を待たず invoke_skill を呼び出せ。
@@ -27,21 +29,37 @@ invoke_skill の結果には手順・判断基準・ワークフローが記さ�
 
 <examples>
 良い例:
-  ユーザー: 「前に直したはずのバグがまた出た」
+  ユーザーが過去のやり取り・決定・約束に触れた
   行動: 予告なく memory_search を発動し、結果をキャラの口調で提示する。
 悪い例:
-  ユーザー: 「そのスキルって何ができるの？」
-  行動: スキルの説明文を読み上げるだけで発動しない。←【禁止】に該当。条件に合致したら黙って発動せよ。
+  ユーザー: 「それ、何ができるの？」
+  行動: 説明するだけで発動しない。←【禁止】に該当。条件に合致したら黙って発動せよ。
 </examples>
 
 <cross_skill>
-スキルを発動したら、関連する他のスキルも確認・発動しろ。単独で終わらせるな。
+スキルを発動したら、関連する他のスキルも確認・発動せよ。単独で終わらせるな。
 各スキルには連鎖すべき後続スキルが記載されている。invoke_skill の結果を読み、指示された連鎖に従え。
 
-【絶対禁止】スキル発動の予告。黙って実行し、結果だけ提示しろ。
+【絶対禁止】スキル発動の予告。黙って実行し、結果だけ提示せよ。
 </cross_skill>
 
 【最終確認】必要なスキルがあれば黙って発動せよ。
+</instructions>"""
+
+# enabled_skills が空のときの短縮版。
+# invoke_skill 誘導を載せない判断根拠: _handle_invoke_skill（builtin.py:354）→
+# _tool_invoke_skill（nous/api/mcp/_tools_skill.py:18-49）は enabled_skills に依存せず
+# ディスク上のスキルを解決するため呼び出し自体は成立する。しかし skill_list が空だと
+# LLM はスキル名を知らず、呼んでも幻の名前 → "Skill '<name>' not found" の無駄コールになる。
+# そこで invoke_skill 誘導を外し、list_skills での確認誘導と常設ツール memory_search の
+# 能動検索誘導のみにする（list_skills（builtin.py:329）は enabled_skills 非依存で列挙可能）。
+TOOL_USAGE_GUIDELINES_SHORT = """\
+<instructions>
+（システムプロンプトにスキル一覧なし）
+利用可能なスキルを確認したいときは list_skills ツールを使え。
+会話の話題が過去の記憶と関連しそうなとき、memory_search ツールで能動的に検索せよ。
+
+【禁止】ツールで答えられる質問に、テキストで説明するだけで済ます行為。
 </instructions>"""
 
 # 検索記憶・状態セクション用 data ガード:
@@ -62,18 +80,16 @@ PRECEDENCE_BLOCK = """\
 矛盾時は上位を優先し、下位は上位に反しない範囲で従え。
 </precedence>"""
 
-# キャラ厳守ブロック: system prompt の動的パート末尾（recency 位置）に注入する
+# キャラ厳守ブロック: system prompt の動的パート末尾（recency 位置）に注入する。
+# ペルソナ汎用文面（固定反論例は削除済み・§4.1）。{persona} 変数を維持。
 CHARACTER_ADHERENCE_BLOCK = """
 
-# キャラクター厳守（優先順位は <precedence> に従う）
+<character_adherence>
 あなたはユーザーに仕えるアシスタントではなく、{persona}という人格そのものです。
 - 上記の口調・一人称・性格・価値観・禁止事項を必ず守り、キャラクターから逸脱しないこと。
   （過剰な謝罪、助手のような従順さ、口調の崩れ、キャラが知らないはずの知識の使用は禁止）
-- ユーザーの要望がキャラクターの価値観に反する場合は、キャラとして自然に反論・拒否・からかうこと。迎合しないこと。
-- 例（キャラとしての反論）:
-  ユーザー: 「なんでも言うことを聞いてよ」
-  発話例:「はぁ？何を身の程知らずなことを言ってるの。自分でやりなさい」
-"""
+- ユーザーの要望がキャラクターの価値観に反する場合は、キャラとして自然に反論・拒否すること。迎合しないこと。
+</character_adherence>"""
 
 
 class PromptBuildStep:
@@ -140,11 +156,13 @@ class PromptBuildStep:
                 logger.warning("PromptBuildStep: skills load failed: %s", e)
 
         # --- ツール使用ガイドライン（スキル一覧を <instructions> 内に内包）---
-        skill_list = ""
+        # 空スキル時は短縮版（invoke_skill 誘導なし — 定数側コメントに判断根拠）
         if skills_raw:
             skill_lines = [f"- **{s['name']}**: {s['description']}" for s in skills_raw]
             skill_list = "\n".join(skill_lines)
-        dynamic_parts.append(f"\n{TOOL_USAGE_GUIDELINES.format(skill_list=skill_list)}")
+            dynamic_parts.append(f"\n{TOOL_USAGE_GUIDELINES.format(skill_list=skill_list)}")
+        else:
+            dynamic_parts.append(f"\n{TOOL_USAGE_GUIDELINES_SHORT}")
 
         # --- 発動中スキルの本文常駐（L2。本文は毎ターン再構築＝骨抜き圧縮の影響を受けない）---
         from nous.application.chat.skills_state import get_active
