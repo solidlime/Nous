@@ -121,7 +121,7 @@ describe('wiring SSE subscription', () => {
     G.setFlashEnabled(true);
     G.setFlashEnabled(true); // single-flight: no second socket
     expect(instances.length).toBe(1);
-    expect(instances[0].url).toBe('/api/memory/wiring/stream');
+    expect(instances[0].url).toBe('/api/memory/wiring/stream?persona=p1');
     instances[0].emit('wiring', JSON.stringify({ seq: 1, kind: 'recall_boost', source: 'm1', target: '' }));
     expect(nodes.store.m1.color.background).toBe(G.FLASH_COLORS.recall_boost);
     // off-graph tab: events ignored (socket stays — memory-panel manners)

@@ -113,7 +113,10 @@ function handleWiringEvent(ev) {
 
 function connectGraphFlash() {
     if (flashSSE) return flashSSE; // single-flight
-    flashSSE = new EventSource('/api/memory/wiring/stream');
+    // EventSource cannot send X-Persona headers — pass persona via query param
+    // (same channel as the chat wiring feed; server resolves it in deps.py).
+    flashSSE = new EventSource('/api/memory/wiring/stream' +
+        (S.persona ? '?persona=' + encodeURIComponent(S.persona) : ''));
     flashSSE.addEventListener('wiring', function (e) {
         var ev;
         try { ev = JSON.parse(e.data); } catch (err) { return; }
