@@ -357,14 +357,8 @@ var WIRING_FLUSH_WINDOW_MS = 500;
 var _wiringSuspendRender = false;
 var _wiringFlushTimer = null;
 
-function _wiringEscAttr(s) {
-  return String(s == null ? "" : s)
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
+// Attribute escaping for generated markup goes through N.Core.esc
+// (escapes & " ' < >) — no bespoke escAttr helper anymore.
 
 function getFireLimit() {
   try {
@@ -577,7 +571,7 @@ function _wiringMetaBadge(ev) {
   if (isFinite(st)) parts.push("安定 " + st.toFixed(2));
   if (!parts.length) return "";
   var text = parts.join(" · ");
-  return '<span class="wiring-meta" title="' + _wiringEscAttr(text) + '">' +
+  return '<span class="wiring-meta" title="' + esc(text) + '">' +
     esc(text) + "</span>";
 }
 
@@ -588,8 +582,8 @@ function _wiringWeightBar(ev) {
   var color = WIRING_BAR_COLORS[ev.kind] || WIRING_BAR_COLORS.ppr_hit;
   return '<span class="wiring-weight-bar">' +
     '<span class="wiring-track"><span class="mem-bar-fill" data-fill="' + pct +
-    '" data-color="' + _wiringEscAttr(color) + '"></span></span>' +
-    '<span class="wiring-weight">' + _wiringEscAttr(w.toFixed(2)) + "</span></span>";
+    '" data-color="' + esc(color) + '"></span></span>' +
+    '<span class="wiring-weight">' + esc(w.toFixed(2)) + "</span></span>";
 }
 
 function _renderWiringItem(ev, fresh) {
@@ -606,27 +600,34 @@ function _renderWiringItem(ev, fresh) {
   if (summary) {
     var cut = summary.length > 64 ? summary.substring(0, 64) + "…" : summary;
     line = '<span class="wiring-edge wiring-edge-main" title="' +
-      _wiringEscAttr(summary) + '">' + esc(cut) + "</span>";
+      esc(summary) + '">' + esc(cut) + "</span>";
   } else if (mem && mem.kind) {
     // content empty / unrenderable — type-level name fallback
     line = '<span class="wiring-edge wiring-edge-main" title="' +
-      _wiringEscAttr(edge) + '">' + esc(mem.kind) + "</span>";
+      esc(edge) + '">' + esc(mem.kind) + "</span>";
   } else {
     // not resolved yet or fetch failed — raw key fallback
     line = '<span class="wiring-edge wiring-edge-main" title="' +
-      _wiringEscAttr(edge) + '">' + esc(mainKey || "—") + "</span>";
+      esc(edge) + '">' + esc(mainKey || "—") + "</span>";
   }
   return (
-    '<div class="wiring-fire-item wiring-kind-' + _wiringEscAttr(ev.kind) +
-    (fresh ? " is-fresh" : "") + '" data-seq="' + _wiringEscAttr(ev.seq) + '"' +
+    '<div class="wiring-fire-item wiring-kind-' + esc(ev.kind) +
+    (fresh ? " is-fresh" : "") + '" data-seq="' + esc(ev.seq) + '"' +
     (mainKey
-      ? ' data-wiring-open="' + _wiringEscAttr(mainKey) + '" role="button" tabindex="0"' +
-        ' aria-label="' + _wiringEscAttr(label + ": " + (summary || mainKey)) + '"'
+      ? ' data-wiring-open="' + esc(mainKey) + '" role="button" tabindex="0"' +
+        ' aria-label="' + esc(label + ": " + (summary || mainKey)) + '"'
       : "") +
     ">" +
     '<span class="wiring-kind-badge">' + label + "</span>" +
     line +
     tail +
+    (mainKey
+      ? // Row action: open the memory itself in the unified mem modal
+        // (the edge detail modal stays on row click).
+        '<button type="button" class="wiring-open-memory" data-action="wiring-open-memory"' +
+        ' data-wiring-key="' + esc(mainKey) + '" title="記憶の詳細を開く"' +
+        ' aria-label="記憶 ' + esc(mainKey) + ' の詳細を開く">&#9656;</button>'
+      : "") +
     "</div>"
   );
 }
@@ -891,7 +892,7 @@ function _wiringDetailHTML(key, mem, ev, failed) {
       h += '<span class="mem-bar-pct">weight ' + esc(w.toFixed(2)) + "</span>";
     }
   }
-  h += '<button type="button" class="mem-modal-close" data-wiring-close="1" aria-label="閉じる"><i data-lucide="x"></i></button>';
+  h += '<button type="button" class="mem-modal-close" data-action="wiring-close" aria-label="閉じる"><i data-lucide="x"></i></button>';
   h += "</div>";
   h += '<div class="wiring-detail-content">';
   if (mem && mem.content) {
@@ -905,34 +906,29 @@ function _wiringDetailHTML(key, mem, ev, failed) {
   if (mem) {
     h += '<div class="mem-modal-row"><span class="mem-modal-key">種別</span><span class="badge badge-purple">' +
       esc(mem.kind || "memory") + "</span></div>";
-    if (mem.importance != null) {
-      var imp = Math.max(0, Math.min(100, Math.round(mem.importance * 100)));
-      h += '<div class="mem-modal-row"><span class="mem-modal-key">Importance</span><span class="modal-progress"><span class="modal-progress-bar wide"><span class="modal-progress-fill" data-fill="' + imp +
-        '" data-color="linear-gradient(90deg,var(--accent-purple),var(--accent-yellow))"></span></span><span class="mem-bar-pct ov-accent-yellow">' +
-        (imp / 100).toFixed(2) + "</span></span></div>";
-    }
+    h += N.Components.memoryCard.renderImportanceBars(mem.importance);
     var tags = mem.tags || [];
     if (tags.length) {
       h += '<div class="mem-modal-row"><span class="mem-modal-key">Tags</span><span class="wiring-detail-tags">' +
         tags.map(function (t) {
-          return '<span class="wiring-detail-chip">' + esc(t) + "</span>";
+          return N.Features.Memories.tagChipHtml(t);
         }).join("") + "</span></div>";
     }
     var rel = mem.related_keys || [];
     if (rel.length) {
       h += '<div class="mem-modal-row"><span class="mem-modal-key">関連</span><span class="wiring-detail-tags">' +
         rel.map(function (rk) {
-          return '<span class="wiring-detail-chip" title="' + _wiringEscAttr(rk) + '">' +
+          return '<span class="wiring-detail-chip" title="' + esc(rk) + '">' +
             esc(_wiringKeyShort(rk)) + "</span>";
         }).join("") + "</span></div>";
     }
     if (mem.created_at) {
       h += '<div class="mem-modal-row"><span class="mem-modal-key">Created</span><span>' +
-        esc(fmtDate ? fmtDate(mem.created_at) : mem.created_at) + "</span></div>";
+        esc(fmtDate(mem.created_at)) + "</span></div>";
     }
     if (mem.updated_at && mem.updated_at !== mem.created_at) {
       h += '<div class="mem-modal-row"><span class="mem-modal-key">Updated</span><span>' +
-        esc(fmtDate ? fmtDate(mem.updated_at) : mem.updated_at) + "</span></div>";
+        esc(fmtDate(mem.updated_at)) + "</span></div>";
     }
   }
   if (ev && (ev.source || ev.target)) {
@@ -946,8 +942,7 @@ function _wiringDetailHTML(key, mem, ev, failed) {
 function _wiringPaintDetail(overlay, key, ev, mem, failed) {
   safeSetHTML(overlay, _wiringDetailHTML(key, mem, ev, failed));
   _wiringApplyFills(overlay);
-  var closeBtn = overlay.querySelector("[data-wiring-close]");
-  if (closeBtn) closeBtn.addEventListener("click", closeWiringDetail);
+  // Close button closes via delegation (data-action="wiring-close").
   if (typeof N.Core.refreshIcons === "function") N.Core.refreshIcons();
 }
 
@@ -993,33 +988,12 @@ function closeWiringDetail() {
   _wiringDetailOpener = null;
 }
 
-// CSP delegation: fire rows open the detail modal (click + keyboard).
-if (typeof document !== "undefined" && !N.Chat.memoryPanel._detailDelegated) {
-  N.Chat.memoryPanel._detailDelegated = true;
-  document.addEventListener("click", function (e) {
-    if (!e.target || !e.target.closest) return;
-    var row = e.target.closest("[data-wiring-open]");
-    if (row) {
-      openWiringDetail(row.getAttribute("data-wiring-open"));
-      return;
-    }
-    if (e.target.closest("[data-wiring-close]")) closeWiringDetail();
-  });
-  document.addEventListener("keydown", function (e) {
-    var overlay = document.getElementById("wiring-detail-overlay");
-    var open = overlay && overlay.style.display !== "none";
-    if (open && e.key === "Escape") {
-      e.stopPropagation();
-      closeWiringDetail();
-      return;
-    }
-    if ((e.key === "Enter" || e.key === " ") && !open &&
-        e.target && e.target.closest && e.target.closest("[data-wiring-open]")) {
-      e.preventDefault();
-      openWiringDetail(e.target.closest("[data-wiring-open]").getAttribute("data-wiring-open"));
-    }
-  });
-}
+// CSP delegation moved to core/delegation.js:
+//   click  [data-wiring-open]        → openWiringDetail (edge modal)
+//   click  [data-action=wiring-open-memory] → N.Components.memModal.open
+//   click  [data-action=wiring-close] → closeWiringDetail
+//   keydown Escape (overlay open)    → closeWiringDetail
+//   keydown Enter/Space on rows      → openWiringDetail
 
 // ------------------------------------------------------------------
 // Expose on N.Chat.memoryPanel

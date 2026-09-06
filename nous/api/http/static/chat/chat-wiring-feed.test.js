@@ -43,8 +43,17 @@ beforeAll(() => {
   N.Components.memoryCard = {
     renderEmotionBadges: () => '',
     renderBodyStateCompact: () => '',
+    renderImportanceBars: (imp) =>
+      imp == null ? '' :
+        '<div class="mem-modal-row"><span class="modal-progress"><span class="modal-progress-fill" data-fill="' +
+        Math.round(imp * 100) + '"></span></span></div>',
   };
+  // Detail modal tags render via the shared Memories tag chip
+  N.Features = N.Features || {};
+  N.Features.Memories = N.Features.Memories || {};
+  N.Features.Memories.tagChipHtml = (t) => '<span class="mem-tag-chip">' + t + '</span>';
   loadChat('chat-memory-panel.js');
+  loadFile('delegation.js'); // row clicks / Escape / Enter now route here
   MP = N.Chat.memoryPanel;
 });
 
@@ -427,5 +436,23 @@ describe('content-first rows (memory resolution + weight bar)', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(overlay.style.display).toBe('none');
     expect(document.activeElement).toBe(row);
+  });
+
+  it('row mem-open action opens the unified mem modal, not the edge modal', async () => {
+    vi.stubGlobal('fetch', fetchMemoriesByKey((key) => memFor(key)));
+    const openMem = vi.fn();
+    N.Components.memModal = { open: openMem };
+    MP.clearWiring();
+    MP.pushWiringEvent(fire(1, 'link_fire', 'w1', 'w2', 0.24));
+    await flushMicrotasks();
+    const row = wiringList().querySelector('[data-wiring-open="w2"]');
+    const btn = row.querySelector('[data-action="wiring-open-memory"]');
+    expect(btn).not.toBeNull();
+    expect(btn.getAttribute('data-wiring-key')).toBe('w2');
+    btn.click();
+    expect(openMem).toHaveBeenCalledWith('w2');
+    // the edge detail modal must NOT have opened from the same click
+    const overlay = document.getElementById('wiring-detail-overlay');
+    expect(overlay === null || overlay.style.display !== 'flex').toBe(true);
   });
 });

@@ -103,6 +103,19 @@ function renderEmotionBars(emotion, emotion_intensity) {
   );
 }
 
+/* ── Importance bar for modals (purple→yellow, Memories-modal style) ── */
+function renderImportanceBars(importance) {
+  if (importance == null) return "";
+  scheduleApply();
+  return (
+    '<div class="mem-modal-row"><span class="mem-modal-key">Importance</span><span class="modal-progress"><span class="modal-progress-bar wide"><span class="modal-progress-fill" data-fill="' +
+    Math.round(importance * 100) +
+    '" data-color="linear-gradient(90deg,var(--accent-purple),var(--accent-yellow))"></span></span><span class="mem-bar-pct ov-accent-yellow">' +
+    importance.toFixed(2) +
+    "</span></span></div>"
+  );
+}
+
 /* ── Compact emotion badges for list/card views ── */
 function renderEmotionBadges(emotion, emotion_intensity) {
   if (!emotion) return "";
@@ -140,6 +153,7 @@ function renderBodyStateCompact(bodyState) {
 N.Components.memoryCard = {
   renderBodyStateBars: renderBodyStateBars,
   renderEmotionBars: renderEmotionBars,
+  renderImportanceBars: renderImportanceBars,
   renderEmotionBadges: renderEmotionBadges,
   renderBodyStateCompact: renderBodyStateCompact,
   applyDataStyles: applyDataStyles,

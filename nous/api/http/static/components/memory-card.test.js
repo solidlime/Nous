@@ -30,6 +30,16 @@ describe('renderBodyStateBars / renderEmotionBars (data-fill, no style=)', () =>
   });
 });
 
+describe('renderImportanceBars — shared modal importance bar', () => {
+  it('emits the Memories-modal importance markup via data-fill', () => {
+    const html = N.Components.memoryCard.renderImportanceBars(0.42);
+    expect(html).toContain('data-fill="42"');
+    expect(html).toContain('ov-accent-yellow');
+    expect(html).not.toContain('style=');
+    expect(N.Components.memoryCard.renderImportanceBars(null)).toBe('');
+  });
+});
+
 describe('applyDataStyles — fills applied from data attributes', () => {
   it('applies width + background from data attributes', () => {
     // Direct innerHTML: in-browser the markup arrives via safeSetHTML with

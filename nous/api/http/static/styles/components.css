@@ -1285,6 +1285,27 @@ textarea.ov-field {
     outline: none;
     box-shadow: 0 0 0 2px rgba(191, 90, 242, 0.45);
 }
+/* Row action: open the memory itself in the unified mem modal */
+.wiring-open-memory {
+    flex-shrink: 0;
+    margin-left: auto;
+    background: none;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1;
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: color var(--duration-fast) var(--ease-apple),
+                border-color var(--duration-fast) var(--ease-apple);
+}
+.wiring-open-memory:hover,
+.wiring-open-memory:focus-visible {
+    color: var(--accent-purple);
+    border-color: rgba(191, 90, 242, 0.45);
+    outline: none;
+}
 .wiring-edge-main {
     font-size: 0.8rem;
     color: var(--text-primary);

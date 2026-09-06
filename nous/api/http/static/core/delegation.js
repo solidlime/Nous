@@ -28,7 +28,18 @@
   // ------------------------------------------------------------------
   document.addEventListener("click", function(e) {
     var el = e.target && e.target.closest ? e.target.closest("[data-action]") : null;
-    if (!el) return;
+    if (!el) {
+      // Wiring rows: role="button" rows open the edge detail modal
+      // (chat-memory-panel.js). Reached only when no [data-action]
+      // element matched — the row's mem-open button returns first.
+      var wiringRow = e.target && e.target.closest
+        ? e.target.closest("[data-wiring-open]") : null;
+      if (wiringRow) {
+        callChat("memoryPanel", "openWiringDetail",
+          wiringRow.getAttribute("data-wiring-open"));
+      }
+      return;
+    }
     var action = el.getAttribute("data-action");
     switch (action) {
       // Chat shell (chat_layout.py)
@@ -99,6 +110,18 @@
       case "act-refresh":
         callFeature("Activity", "loadActivity", true);
         break;
+      // Chat memory panel — wiring feed (chat-memory-panel.js)
+      case "wiring-close":
+        callChat("memoryPanel", "closeWiringDetail");
+        break;
+      case "wiring-open-memory":
+        // Open the memory itself in the unified mem modal. Return (not
+        // break): the row beneath carries [data-wiring-open] and must
+        // NOT also fire the edge detail modal.
+        if (N.Components && N.Components.memModal) {
+          N.Components.memModal.open(el.getAttribute("data-wiring-key"));
+        }
+        return;
       default:
         break;
     }
@@ -152,6 +175,29 @@
   document.addEventListener("submit", function(e) {
     var form = e.target && e.target.closest ? e.target.closest("[data-password-form]") : null;
     if (form) e.preventDefault();
+  });
+
+  // ------------------------------------------------------------------
+  // Wiring detail keyboard: Escape closes the overlay, Enter/Space
+  // activates role="button" rows (moved from chat-memory-panel.js).
+  // ------------------------------------------------------------------
+  document.addEventListener("keydown", function(e) {
+    if (e.key !== "Escape" && e.key !== "Enter" && e.key !== " ") return;
+    var overlay = document.getElementById("wiring-detail-overlay");
+    var open = overlay && overlay.style.display !== "none";
+    if (open && e.key === "Escape") {
+      e.stopPropagation();
+      callChat("memoryPanel", "closeWiringDetail");
+      return;
+    }
+    if ((e.key === "Enter" || e.key === " ") && !open &&
+        e.target && e.target.closest && e.target.closest("[data-wiring-open]") &&
+        // A focused [data-action] control handles its own click natively.
+        !e.target.closest("[data-action]")) {
+      e.preventDefault();
+      var row = e.target.closest("[data-wiring-open]");
+      callChat("memoryPanel", "openWiringDetail", row.getAttribute("data-wiring-open"));
+    }
   });
 
   // ------------------------------------------------------------------
