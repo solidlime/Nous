@@ -25,6 +25,7 @@ _VALID_RELATION_TYPES = frozenset(
         "located_in",
         "part_of",
         "related_to",
+        "summarizes",
     }
 )
 
@@ -40,7 +41,7 @@ _SYSTEM_PROMPT = """あなたは記憶分析アシスタントです。与えら
    各関係は以下の形式です：
    - source: 関係の主体（エンティティ名）
    - target: 関係の対象（エンティティ名）
-   - type: 関係タイプ（knows, works_with, manages, created, located_in, part_of, related_to のいずれか）
+   - type: 関係タイプ（knows, works_with, manages, created, located_in, part_of, related_to, summarizes のいずれか。summarizes は一方がもう一方の要約である関係）
    - confidence: 抽出の確信度（0.0〜1.0）
 
 出力は必ず以下のJSON形式に従ってください：

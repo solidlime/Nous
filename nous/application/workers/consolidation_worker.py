@@ -10,7 +10,8 @@ Operates on archived memories (set by DecayWorker) and entity clusters:
 3. Creates gist summaries from the semantic layer only; episodic memories
    stay raw (never deleted, never merged into the gist)
 4. Links gist to semantic sources via related_keys + derived_from, marked
-   kind='semantic' / source_type='consolidated'
+   kind='semantic' / source_type='consolidated', plus per-source
+   memory_links rows (link_type='summarizes', source memory → gist node)
 
 ADR: archived → tombstoned transition is NOT performed. Consolidated
 sources stay archived (queryable history); tombstone remains reserved
@@ -251,6 +252,24 @@ class ConsolidationWorker:
 
         return "\n".join(lines)
 
+    def _link_summarizes(self, ctx, gist_key: str | None, source_keys: list[str]) -> None:
+        """Link each source memory → gist node in memory_links (link_type='summarizes').
+
+        Best-effort per the wiring convention: a failed link never fails
+        consolidation. ``upsert_link`` emits ``link_fire`` internally with
+        its own try/except — no additional emit here.
+        """
+        if not gist_key:
+            return
+        upsert = getattr(ctx.entity_repo, "upsert_link", None)
+        if upsert is None:
+            return
+        for key in source_keys:
+            try:
+                upsert(key, gist_key, link_type="summarizes")
+            except Exception:
+                logger.debug("summarizes link failed for %s -> %s", key, gist_key, exc_info=True)
+
     def _save_consolidated(
         self,
         ctx,
@@ -289,6 +308,8 @@ class ConsolidationWorker:
         )
 
         if result.is_ok:
+            gist_key = getattr(result.value, "key", None)
+            self._link_summarizes(ctx, gist_key, source_keys)
             logger.info(
                 "Consolidated %d memories into key=%s (entity=%s)",
                 len(sources),
