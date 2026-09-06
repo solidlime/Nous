@@ -63,6 +63,25 @@ def verify_bearer(authorization: str | None, effective_key: str) -> bool:
     return scheme == "Bearer" and bool(token) and _keys_equal(token, effective_key)
 
 
+def bearer_from_query(query_string: str | bytes | None) -> str | None:
+    """Return the ``token`` query param as a Bearer-equivalent credential.
+
+    EventSource (SSE) clients cannot send an ``Authorization`` header, so the
+    dashboard passes ``?token=<api_key>`` for SSE endpoints. The header wins
+    when both are present. Accepted tradeoff: the token may appear in access
+    logs; a cookie/login session design is the proper long-term fix.
+    """
+    if not query_string:
+        return None
+    from urllib.parse import parse_qs
+
+    if isinstance(query_string, bytes):
+        query_string = query_string.decode("latin-1")
+    values = parse_qs(query_string).get("token")
+    token = values[0].strip() if values else ""
+    return token or None
+
+
 def _valid_persona(value: object) -> str | None:
     """Return stripped *value* when it matches ``_PERSONA_PATTERN``, else None."""
     if not isinstance(value, str):
@@ -220,6 +239,12 @@ class PersonaMiddleware:
                     authorization = value.decode("latin-1") if isinstance(value, bytes) else value
                 elif lower_name == b"x-persona":
                     x_persona = value.decode("latin-1") if isinstance(value, bytes) else value
+
+            # SSE (EventSource) cannot send headers: fall back to ?token=.
+            if not authorization:
+                query_token = bearer_from_query(scope.get("query_string"))
+                if query_token:
+                    authorization = f"Bearer {query_token}"
 
             _params = scope.get("path_params")
             path_param = _params.get("persona") if isinstance(_params, dict) else None

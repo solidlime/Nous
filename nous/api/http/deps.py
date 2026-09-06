@@ -10,6 +10,8 @@ from nous.api.mcp.middleware import (
     _PERSONA_PATTERN,  # noqa: F401  (re-exported for routers)
     PersonaAuthError,
     PersonaRequiredError,
+    _valid_persona,
+    bearer_from_query,
     resolve_persona,
     resolve_persona_from_headers,  # noqa: F401  (backward-compat re-export)
 )
@@ -96,19 +98,39 @@ def _strength_to_dict(s) -> dict:
 
 
 def _resolve_persona_from_request(request: Request, *, default: str | None = None, api_key: str | None = None) -> str:
-    """Resolve persona from path params, HTTP headers, or environment.
+    """Resolve persona from path params, HTTP headers, query params, or environment.
 
-    Priority: path parameter > Bearer token > X-Persona header > *default* > env var.
-    Fully delegates to :func:`nous.api.mcp.middleware.resolve_persona`.
+    Priority: path parameter > Bearer token > X-Persona header > ``?persona=``
+    query param > *default* > env var. Fully delegates to
+    :func:`nous.api.mcp.middleware.resolve_persona`.
+
+    SSE (EventSource) cannot send headers, so two query-param channels exist:
+
+    - ``?persona=<name>``: lowest-priority persona source (pattern-validated).
+      Used by the dashboard's ``/api/memory/wiring/stream?persona=...``.
+    - ``?token=<api_key>``: Bearer-equivalent credential, honored only when no
+      ``Authorization`` header is present (see
+      :func:`nous.api.mcp.middleware.bearer_from_query`).
 
     Raises:
         HTTPException(401): API-key mismatch (strict mode) or no persona found.
         HTTPException(400): invalid ``persona`` path parameter.
     """
+    query_params = request.query_params
+    authorization = request.headers.get("authorization")
+    if not authorization:
+        query_token = bearer_from_query(str(query_params))
+        if query_token:
+            authorization = f"Bearer {query_token}"
+    path_param = request.path_params.get("persona")
+    if path_param is None:
+        query_persona = _valid_persona(query_params.get("persona"))
+        if query_persona is not None:
+            default = default or query_persona
     try:
         return resolve_persona(
-            request.path_params.get("persona"),
-            request.headers.get("authorization"),
+            path_param,
+            authorization,
             request.headers.get("x-persona"),
             default=default,
             api_key=api_key,
