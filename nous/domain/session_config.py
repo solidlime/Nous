@@ -83,7 +83,7 @@ class SessionConfig(BaseModel):
         "   各関係は以下の形式です：\n"
         "   - source: 関係の主体（エンティティ名）\n"
         "   - target: 関係の対象（エンティティ名）\n"
-        "   - type: 関係タイプ（knows, works_with, manages, created, located_in, part_of, related_to のいずれか）\n"
+        "   - type: 関係タイプ（knows, works_with, manages, created, located_in, part_of, related_to, summarizes のいずれか）\n"
         "   - confidence: 抽出の確信度（0.0〜1.0）\n\n"
         "出力は必ず以下のJSON形式に従ってください：\n"
         '{"importance": 0.5, "relations": [{"source": "entity1", "target": "entity2", "type": "knows", "confidence": 0.9}]}\n\n'

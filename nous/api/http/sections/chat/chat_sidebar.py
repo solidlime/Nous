@@ -5,8 +5,8 @@ import sys
 from .chat_sidebar_core import _render_context_section, _render_core_section, _render_sidebar_header
 from .chat_sidebar_media import _render_image_section, _render_voice_section
 from .chat_sidebar_memory import (
+    _render_brain_simulation_section,
     _render_forgetting_section,
-    _render_memory_enrichment_section,
     _render_memory_section,
     _render_mental_section,
     _render_reflection_section,
@@ -63,7 +63,7 @@ def render_chat_sidebar() -> str:
             _render_reflection_section(),
             _render_mental_section(),
             _render_auto_capture_section(),
-            _render_memory_enrichment_section(),
+            _render_brain_simulation_section(),
             _render_forgetting_section(),
             _render_weights_section(),
             _render_mcp_section(sys.executable),

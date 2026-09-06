@@ -156,7 +156,7 @@ def _brain_help(key: str) -> str:
     return f'<span class="chat-help-tip" title="{text}" aria-label="説明" tabindex="0">?</span>'
 
 
-def _render_memory_enrichment_section() -> str:
+def _render_brain_simulation_section() -> str:
     """脳シミュレーション設定 — 旧 memory_enrichment セクションを吸収・置換。
 
     関数名は chat_sidebar.py の import 互換のため維持（chat_sidebar.py は
