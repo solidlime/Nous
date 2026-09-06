@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -8,6 +9,8 @@ if TYPE_CHECKING:
     from nous.domain.memory.repository import MemoryRepository
 
 from nous.domain.value_objects import normalize_importance
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryEnrichService:
@@ -74,6 +77,7 @@ class MemoryEnrichService:
                     # Register auto-extracted relations
                     if enrichment.relations and self._entity_service is not None:
                         for rel in enrichment.relations:
+                            ok = False
                             with contextlib.suppress(Exception):
                                 self._entity_service.add_relation(
                                     source=rel.source_entity,
@@ -82,19 +86,33 @@ class MemoryEnrichService:
                                     memory_key=key,
                                     confidence=rel.confidence,
                                 )
+                                ok = True
                             # Offline reactivation pulse — one per registered
                             # relation; importance-only path fires below.
+                            if ok:
+                                try:
+                                    _wiring_emit(
+                                        "replay_fire",
+                                        source=rel.source_entity,
+                                        target=rel.target_entity,
+                                        weight=rel.confidence,
+                                        meta={"persona": persona, "memory_key": key},
+                                    )
+                                except Exception:
+                                    logger.debug(
+                                        "wiring emit failed for %s->%s",
+                                        rel.source_entity,
+                                        rel.target_entity,
+                                        exc_info=True,
+                                    )
+                    elif enrichment.importance != 0.5:
+                        clamped = normalize_importance(enrichment.importance)
+                        try:
                             _wiring_emit(
                                 "replay_fire",
-                                source=rel.source_entity,
-                                target=rel.target_entity,
-                                weight=rel.confidence,
+                                source=key,
+                                weight=clamped,
                                 meta={"persona": persona, "memory_key": key},
                             )
-                    elif enrichment.importance != 0.5:
-                        _wiring_emit(
-                            "replay_fire",
-                            source=key,
-                            weight=enrichment.importance,
-                            meta={"persona": persona, "memory_key": key},
-                        )
+                        except Exception:
+                            logger.debug("wiring emit failed for %s", key, exc_info=True)

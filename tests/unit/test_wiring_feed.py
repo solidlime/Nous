@@ -140,6 +140,35 @@ class TestEnrichFires:
         assert fires[0]["source"] == "k2" and fires[0]["target"] == ""
         assert fires[0]["weight"] == 0.9
 
+    @pytest.mark.asyncio
+    async def test_failed_relation_does_not_fire(self) -> None:
+        rel = SimpleNamespace(
+            source_entity="s1",
+            target_entity="s2",
+            relation_type="related",
+            confidence=0.8,
+        )
+        enrichment = SimpleNamespace(importance=0.5, relations=[rel])
+        entity_service = MagicMock()
+        entity_service.add_relation.side_effect = RuntimeError("db down")
+        svc = self._svc(enrichment, entity_service=entity_service)
+        with patch("nous.domain.memory.sudachi_extractor.SudachiExtractor") as ner:
+            ner.return_value.extract.return_value = []
+            await svc.enrich_memory(MagicMock(importance=0.5), "内容", None, "k3", 0.5)
+        assert [e for e in wiring_events.snapshot_after(0) if e["kind"] == "replay_fire"] == []
+
+    @pytest.mark.asyncio
+    async def test_importance_only_clamps_weight(self) -> None:
+        enrichment = SimpleNamespace(importance=1.3, relations=[])
+        svc = self._svc(enrichment)
+        memory = MagicMock(importance=0.5)
+        with patch("nous.domain.memory.sudachi_extractor.SudachiExtractor") as ner:
+            ner.return_value.extract.return_value = []
+            await svc.enrich_memory(memory, "内容", None, "k4", 0.5)
+        fires = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "replay_fire"]
+        assert len(fires) == 1
+        assert fires[0]["weight"] == 1.0
+
 
 class _FakeRequest:
     def __init__(self, disconnect_after: int = 99):
