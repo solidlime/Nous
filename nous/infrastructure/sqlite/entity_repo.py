@@ -180,8 +180,14 @@ class SQLiteEntityRepository(SQLiteRepository):
         link_type: str = "semantic",
         strength: float = 0.1,
         eta: float = 0.05,
+        similarity: float | None = None,
     ) -> Result[None, RepositoryError]:
         """Atomically strengthen a Hebbian link (single-statement upsert).
+
+        Pattern separation (O'Reilly & McClelland 1994, brain-sim design §3.7):
+        when ``similarity`` is given, links below ``brain_link_separation_threshold``
+        (default 0.75) are not created — low-similarity pairs stay separated.
+        Callers without a similarity signal (legacy) are unaffected.
 
         Oja-normalized update on conflict (T3): with y = current weight and
         coact = ``strength``,
@@ -191,6 +197,19 @@ class SQLiteEntityRepository(SQLiteRepository):
         and last_activated refreshes. Read-modify-write is forbidden by
         design — the ON CONFLICT clause makes the update atomic.
         """
+        if similarity is not None:
+            from nous.domain.memory.query_service import resolve_brain_config
+
+            threshold = resolve_brain_config(self)["brain_link_separation_threshold"]
+            if similarity < threshold:
+                logger.debug(
+                    "link %s->%s below separation threshold (%.3f < %.3f); skipped",
+                    source_key,
+                    target_key,
+                    similarity,
+                    threshold,
+                )
+                return Success(None)
         try:
             now = format_iso(get_now())
             self._db.execute(

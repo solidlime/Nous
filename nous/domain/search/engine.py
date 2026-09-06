@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from nous.domain.memory.query_service import resolve_brain_config
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import get_now, parse_date_range
 from nous.domain.value_objects import normalize_emotion
@@ -30,6 +31,10 @@ logger = get_logger(__name__)
 # Query result cache: key -> (monotonic timestamp, results). TTL-only invalidation.
 _CACHE_TTL_S = 30.0
 _CACHE_MAX = 256
+# Retrieval-induced forgetting (Anderson 1994, brain-sim design §3.4):
+# suppress the top-K candidates excluded from the final recall result.
+_RIF_TOP_K = 5
+_STRENGTH_FLOOR = 0.005  # min_strength（nous/infrastructure/config/settings.py:91）
 _query_cache: dict[tuple, tuple[float, list[SearchResult]]] = {}
 _query_lock = threading.Lock()
 
@@ -196,7 +201,47 @@ class SearchEngine:
         # loaded yet) would otherwise poison the cache for the full TTL.
         if cache_key is not None and result.value:
             _cache_put(cache_key, result.value)
-        return Success(self._post_filter(result.value, query))
+        filtered = self._post_filter(result.value, query)
+        self._apply_rif(result.value, filtered)
+        return Success(filtered)
+
+    def _apply_rif(self, candidates: list[SearchResult], recalled: list[SearchResult]) -> None:
+        """Retrieval-induced forgetting: suppress top-K non-recalled competitors.
+
+        Competitors = the highest-ranked candidates (excluding tombstoned
+        memories) that did NOT make the final recall result — at most
+        ``_RIF_TOP_K`` per search, ``strength *= (1 - ρ)`` each. Recalled
+        memories are untouched; importance is untouched; no wiring emit.
+        Suppression failures are logged and never break the search.
+        """
+        repo = self._memory_repo
+        if repo is None or not candidates:
+            return
+        recalled_keys = {r.memory.key for r in recalled}
+        competitors: list[str] = []
+        for r in candidates:
+            if r.memory.key in recalled_keys:
+                continue
+            if getattr(r.memory, "lifecycle_status", "active") == "tombstoned":
+                continue
+            competitors.append(r.memory.key)
+            if len(competitors) >= _RIF_TOP_K:
+                break
+        if not competitors:
+            return
+        rho = resolve_brain_config(repo)["brain_rif_suppression_rho"]
+        if rho <= 0:
+            return
+        for key in competitors:
+            try:
+                strength_result = repo.get_strength(key)
+                strength = strength_result.value if strength_result.is_ok and strength_result.value is not None else None
+                if strength is None:
+                    continue
+                strength.strength = max(_STRENGTH_FLOOR, strength.strength * (1.0 - rho))
+                repo.save_strength(strength)
+            except Exception:
+                logger.debug("RIF suppression failed for %s", key, exc_info=True)
 
     @staticmethod
     def _filter_out_tombstoned(results: list[SearchResult]) -> list[SearchResult]:

@@ -178,10 +178,17 @@ class MemoryStrength:
         score = recency + frequency + importance_score + utility + novelty + confidence + interference + chain + emotion
         return max(0.0, min(1.0, score))
 
-    def boost_on_recall(self, emotion_intensity: float = 0.0) -> None:
-        """Increase stability on successful recall + update emotion peak."""
+    def boost_on_recall(self, emotion_intensity: float | None = None, gain_k: float = 0.5) -> None:
+        """Increase stability on successful recall + update emotion peak.
+
+        Gain is emotion-modulated (brain-sim design §3.2, McGaugh 2004):
+        ``gain = min(1 + gain_k * emotion_intensity, 1.5)`` — cap mandatory.
+        ``emotion_intensity=None`` (legacy no-arg callers) keeps the legacy
+        1.5x boost unchanged; explicit intensity 0.0 (neutral) yields gain 1.0.
+        """
         self.recall_count += 1
-        self.stability = min(self.stability * 1.5, 365.0)
+        gain = 1.5 if emotion_intensity is None else min(1.0 + gain_k * max(0.0, emotion_intensity), 1.5)
+        self.stability = min(self.stability * gain, 365.0)
         self.strength = 1.0
         self.last_recall = datetime.now()
-        self.emotion_peak = max(self.emotion_peak, emotion_intensity)
+        self.emotion_peak = max(self.emotion_peak, emotion_intensity or 0.0)

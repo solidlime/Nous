@@ -258,3 +258,30 @@ class TestGetRelationsBetweenEntities:
 
     def test_empty_db_noop(self, entity_repo):
         assert entity_repo.get_relations_between_entities(["x"]) == []
+
+
+class TestLinkSeparationThreshold:
+    """pattern separation（O'Reilly & McClelland 1994 / 設計 3.7）.
+
+    brain_link_separation_threshold（デフォルト 0.75）未満の類似度では
+    Hebbian リンクを作らない。similarity 未指定の既存呼び出しは従来動作。
+    """
+
+    def test_link_separation_threshold(self, sqlite_conn, entity_repo):
+        # 閾値（デフォルト 0.75）未満 → リンクを作らない
+        result = entity_repo.upsert_link("la", "lb", "semantic", similarity=0.6)
+        assert result.is_ok
+        assert entity_repo.get_links_for_keys(["la"]) == []
+
+        # 閾値以上 → リンクを作る
+        result = entity_repo.upsert_link("la", "lc", "semantic", similarity=0.9)
+        assert result.is_ok
+        links = entity_repo.get_links_for_keys(["la"])
+        assert any(link.target_key == "lc" for link in links)
+
+    def test_similarity_omitted_keeps_legacy_behavior(self, sqlite_conn, entity_repo):
+        """similarity 未指定の既存呼び出しはゲートなしでリンクを作る."""
+        result = entity_repo.upsert_link("ld", "le", "semantic")
+        assert result.is_ok
+        links = entity_repo.get_links_for_keys(["ld"])
+        assert any(link.target_key == "le" for link in links)

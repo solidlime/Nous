@@ -205,3 +205,40 @@ class TestChainEmotionBoost:
         # 両方向: aware な now を明示的に渡しても落ちない
         score2 = ms.compute_strength_score(now=datetime(2026, 6, 30, 12, 0, 0, tzinfo=UTC))
         assert 0.0 <= score2 <= 1.0
+
+
+class TestEmotionGainCap:
+    """感情修飾 recall gain（脳シミュレーション拡張）.
+
+    gain = min(1 + gain_k * emotion_intensity, 1.5)（cap 必須）.
+    注: 計画書の「emotion_intensity=0 で従来どおり 1.5 倍上限に一致」は起草時の
+    誤記（無引数呼び出しの誤り）と記録済み——無引数（emotion_intensity=None,
+    レガシー呼び出し側）は従来どおり 1.5 倍を維持し、明示的な感情強度は式に従う。
+    """
+
+    def test_emotion_gain_capped(self):
+        """i=1.0 で cap 1.5 に一致、i=0.5 は式どおり、明示 i=0.0 は gain 1.0."""
+        full = MemoryStrength(memory_key="full", stability=2.0)
+        full.boost_on_recall(emotion_intensity=1.0)
+        assert full.stability == pytest.approx(2.0 * 1.5)
+
+        # 単調性: 弱い感情は cap 未満の gain（1 + 0.5 * 0.5 = 1.25）
+        mid = MemoryStrength(memory_key="mid", stability=2.0)
+        mid.boost_on_recall(emotion_intensity=0.5)
+        assert mid.stability == pytest.approx(2.0 * 1.25)
+        assert mid.stability < full.stability
+
+        # 明示的な中立（0.0）は式どおり gain 1.0
+        neutral = MemoryStrength(memory_key="neutral", stability=2.0)
+        neutral.boost_on_recall(emotion_intensity=0.0)
+        assert neutral.stability == pytest.approx(2.0 * 1.0)
+
+        # 無引数（レガシー呼び出し）は従来どおり 1.5 倍
+        legacy = MemoryStrength(memory_key="legacy", stability=2.0)
+        legacy.boost_on_recall()
+        assert legacy.stability == pytest.approx(2.0 * 1.5)
+
+        # cap: stability は 365 を超えない
+        big = MemoryStrength(memory_key="big", stability=300.0)
+        big.boost_on_recall(emotion_intensity=1.0)
+        assert big.stability == pytest.approx(min(300.0 * 1.5, 365.0))

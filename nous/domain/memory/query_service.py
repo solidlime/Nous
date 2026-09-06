@@ -14,6 +14,34 @@ from nous.domain.shared.time_utils import get_now
 
 logger = logging.getLogger(__name__)
 
+# brain_* 設定のデフォルト（Global Constraints / session_config.py:95-104 と同期）。
+# lane1 が session_config に定義済みのキーを getattr で安全参照し、
+# 未定義・読み込み失敗時はこのデフォルトへフォールバックする。
+_BRAIN_DEFAULTS = {
+    "brain_emotion_gain_k": 0.5,
+    "brain_rif_suppression_rho": 0.05,
+    "brain_link_separation_threshold": 0.75,
+}
+
+
+def resolve_brain_config(repo: object) -> dict[str, float]:
+    """brain_* 設定の getattr 安全参照（失敗時はデフォルト）。
+
+    repo の接続（``_conn``: data_dir + persona）から per-persona ChatConfig を
+    解決する。テスト用フェイクや参照不能な repo ではデフォルト値を返す。
+    """
+    values = dict(_BRAIN_DEFAULTS)
+    try:
+        from nous.domain.chat_config import ChatConfigFileRepository
+
+        conn = getattr(repo, "_conn", None)
+        cfg = ChatConfigFileRepository(conn.data_dir).get(conn.persona)
+        for key in values:
+            values[key] = float(getattr(cfg, key, values[key]))
+    except Exception:
+        pass
+    return values
+
 
 class MemoryQueryService:
     """Handles read operations, statistics, and recall boosting."""
@@ -110,7 +138,12 @@ class MemoryQueryService:
         if emotion_intensity is not None:
             strength.valence = emotion_intensity
 
-        strength.boost_on_recall(emotion_intensity=emotion_intensity or 0.0)
+        # 感情情報なし（None）は従来動作（gain 1.5）を維持するためそのまま透過。
+        # 明示的な感情強度のみ brain_emotion_gain_k による式が適用される。
+        strength.boost_on_recall(
+            emotion_intensity=emotion_intensity,
+            gain_k=resolve_brain_config(self._repo)["brain_emotion_gain_k"],
+        )
         strength.last_recall = get_now()
 
         save_result = self._repo.save_strength(strength)
