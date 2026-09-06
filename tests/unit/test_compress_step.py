@@ -560,48 +560,48 @@ class TestCompressStep:
         result = await CompressStep().run(ctx, config, tctx, msgs)
         assert isinstance(result, list)
 
-    # ── Stage 4: LLM summarization tests ──────────────
+    # ── Stage 3: LLM summarization tests ──────────────
 
     def test_should_summarize_false_when_disabled(self):
         """_should_summarize returns False when context_use_llm_summary is False."""
         from nous.application.chat.pipeline.compress import CompressStep
 
         config = _make_chat_config(context_use_llm_summary=False)
-        msgs = _long_messages(num_pairs=10)
-        assert not CompressStep._should_summarize(msgs, config)
+        removed = _long_messages(num_pairs=10)[:18]
+        assert not CompressStep._should_summarize(removed, config)
 
     def test_should_summarize_false_when_not_configured(self):
         """_should_summarize returns False when provider has no API key."""
         from nous.application.chat.pipeline.compress import CompressStep
 
         config = _make_chat_config(context_use_llm_summary=True, api_key="")
-        msgs = _long_messages(num_pairs=10)
-        assert not CompressStep._should_summarize(msgs, config)
+        removed = _long_messages(num_pairs=10)[:18]
+        assert not CompressStep._should_summarize(removed, config)
 
-    def test_should_summarize_false_when_few_turns(self):
-        """_should_summarize returns False when not enough user messages beyond keep_recent."""
+    def test_should_summarize_false_when_no_user_content(self):
+        """_should_summarize returns False when removed slice has no user content."""
         from nous.application.chat.pipeline.compress import CompressStep
 
         config = _make_chat_config(context_use_llm_summary=True, api_key="sk-test")
-        msgs = _long_messages(num_pairs=1)  # 1 user message, keep_recent=1 → 1 > 1 = False
-        assert not CompressStep._should_summarize(msgs, config)
+        removed = [LLMMessage(role="assistant", content="only assistant")]
+        assert not CompressStep._should_summarize(removed, config)
 
     def test_should_summarize_true_when_conditions_met(self):
         """_should_summarize returns True when all conditions are satisfied."""
         from nous.application.chat.pipeline.compress import CompressStep
 
         config = _make_chat_config(context_use_llm_summary=True, api_key="sk-test")
-        msgs = _long_messages(num_pairs=6)  # Exactly 6 turns
-        assert CompressStep._should_summarize(msgs, config)
+        removed = _long_messages(num_pairs=6)[:10]
+        assert CompressStep._should_summarize(removed, config)
 
     @pytest.mark.asyncio
-    async def test_stage4_invoked_when_over_budget_with_enough_turns(self):
-        """Stage 4 is invoked when over budget, enough turns, and configured."""
+    async def test_stage3_invoked_when_over_budget_with_removed(self):
+        """Stage 3 is invoked when over budget and Stage 0 produced a removed slice."""
         from nous.application.chat.pipeline.compress import CompressStep
 
         config = _make_chat_config(
             context_max_tokens=200,
-            context_keep_recent_turns=0,  # Disable Stage 0 to test Stage 3
+            context_keep_recent_turns=1,
             api_key="sk-test",
             context_use_llm_summary=True,
         )
@@ -614,19 +614,24 @@ class TestCompressStep:
             result = await CompressStep().run(ctx, config, tctx, msgs)
 
             mock_summarize.assert_awaited_once()
-            # Should contain the summary message + recent turns
-            summary_msgs = [m for m in result if "過去の会話要約" in (m.content or "")]
-            assert len(summary_msgs) == 1
-            assert "ユーザーがテスト質問" in summary_msgs[0].content  # type: ignore[union-attr]
+            # 入力は Stage 0 の removed slice
+            removed_arg = mock_summarize.call_args.kwargs["removed"]
+            assert len(removed_arg) == 10  # 12 - keep_count(2)
+            # 要約は system プロンプトの <conversation_history_summary> に注入
+            assert "<conversation_history_summary>" in tctx.system_prompt
+            assert "ユーザーがテスト質問" in tctx.system_prompt
+            # 要約はメッセージには混ぜない（removed 分は Stage 0 で消滅済み）
+            assert len(result) == 2
+            assert not any("過去の会話要約" in (m.content or "") for m in result)
 
     @pytest.mark.asyncio
-    async def test_stage4_graceful_fallback_on_error(self):
-        """Stage 4 gracefully falls back to mechanical compression when LLM fails."""
+    async def test_stage3_graceful_fallback_on_error(self):
+        """Stage 3 gracefully falls back when LLM summarization fails."""
         from nous.application.chat.pipeline.compress import CompressStep
 
         config = _make_chat_config(
             context_max_tokens=200,
-            context_keep_recent_turns=0,  # Disable Stage 0 to test Stage 3
+            context_keep_recent_turns=1,
             api_key="sk-test",
             context_use_llm_summary=True,
         )
@@ -638,12 +643,10 @@ class TestCompressStep:
             mock_summarize.side_effect = RuntimeError("LLM unavailable")
             result = await CompressStep().run(ctx, config, tctx, msgs)
             mock_summarize.assert_awaited_once()
-            # Should still return a valid list (mechanical compression fallback)
             assert isinstance(result, list)
             assert len(result) > 0
-            # No summary message should be present
-            summary_msgs = [m for m in result if "過去の会話要約" in (m.content or "")]
-            assert len(summary_msgs) == 0
+            # 要約本文は system プロンプトに入らない
+            assert "ユーザーがテスト質問" not in tctx.system_prompt
 
     @pytest.mark.asyncio
     async def test_stage3_not_invoked_when_under_budget(self):
@@ -654,7 +657,7 @@ class TestCompressStep:
             context_max_tokens=100000,
             api_key="sk-test",
             context_use_llm_summary=True,
-            context_keep_recent_turns=0,  # Disable Stage 0 to test Stage 3 skip
+            context_keep_recent_turns=0,  # no removed slice
         )
         ctx = _dummy_app_context()
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=2))
@@ -664,6 +667,128 @@ class TestCompressStep:
             result = await CompressStep().run(ctx, config, tctx, msgs)
             mock_summarize.assert_not_awaited()
             assert isinstance(result, list)
+
+
+# ──────────────────────────────────────────────
+# <conversation_history_summary> injection tests
+# ──────────────────────────────────────────────
+
+
+class TestHistorySummaryInjection:
+    """CompressStep による system プロンプトへの要約/ハイライト注入（§4.2）。"""
+
+    @staticmethod
+    def _helper():
+        from nous.application.chat.pipeline.compress import CompressStep
+
+        return CompressStep._append_history_summary
+
+    def test_sibling_tag_after_retrieved_data(self):
+        """<conversation_history_summary> は </retrieved_data> の直後に兄弟として置かれる。"""
+        tctx = _dummy_turn_ctx("base\n<retrieved_data>\nデータ\n</retrieved_data>\n<trailer>")
+        self._helper()(tctx, "要約本文")
+        prompt = tctx.system_prompt
+        assert "<conversation_history_summary>" in prompt
+        assert "</conversation_history_summary>" in prompt
+        after = prompt.index("</retrieved_data>")
+        start = prompt.index("<conversation_history_summary>")
+        end = prompt.index("</conversation_history_summary>")
+        # 兄弟タグ（外）: retrieved_data 閉じタグの直後
+        assert after < start < end
+        # 内側に入らない
+        assert prompt.index("<conversation_history_summary>") > prompt.index("</retrieved_data>")
+        # 後続要素は壊さない
+        assert "<trailer>" in prompt
+
+    def test_appended_at_end_without_retrieved_data(self):
+        """<retrieved_data> 無し時は末尾に単独ブロックで追加。"""
+        tctx = _dummy_turn_ctx("base prompt")
+        self._helper()(tctx, "要約本文")
+        prompt = tctx.system_prompt
+        assert prompt.startswith("base prompt")
+        assert "<conversation_history_summary>\n過去会話の圧縮要約" in prompt
+        assert "要約本文" in prompt
+
+    def test_merge_into_existing_tag(self):
+        """既にタグがある場合は二重化せず中に追記する。"""
+        tctx = _dummy_turn_ctx("base")
+        self._helper()(tctx, "一回目")
+        self._helper()(tctx, "二回目")
+        prompt = tctx.system_prompt
+        assert prompt.count("<conversation_history_summary>") == 1
+        assert prompt.count("</conversation_history_summary>") == 1
+        assert "一回目" in prompt
+        assert "二回目" in prompt
+
+    def test_guard_framing_not_inside_tag(self):
+        """タグの直前に framing 文（precedence が優先）が入る。"""
+        tctx = _dummy_turn_ctx("base")
+        self._helper()(tctx, "本文X")
+        assert "最新のユーザー指示と <precedence> が優先" in tctx.system_prompt
+
+    @pytest.mark.asyncio
+    async def test_stage0_injects_highlights_into_system(self):
+        """Stage 0 切り詰め時、ハイライトが system の <conversation_history_summary> に現れる。"""
+        from nous.application.chat.pipeline.compress import CompressStep
+
+        config = _make_chat_config(
+            context_max_tokens=1_000_000,  # under budget
+            context_keep_recent_turns=1,
+            context_use_llm_summary=False,
+        )
+        ctx = _dummy_app_context()
+        tctx = _dummy_turn_ctx("base prompt")
+        msgs = _long_messages(num_pairs=10)
+
+        result = await CompressStep().run(ctx, config, tctx, msgs)
+        assert len(result) == 2
+        assert "<conversation_history_summary>" in tctx.system_prompt
+        assert "[0] user:" in tctx.system_prompt
+        assert "[1] assistant:" in tctx.system_prompt
+        # メッセージには偽装文が無い
+        assert not any("[システム:" in (m.content or "") for m in result)
+
+    @pytest.mark.asyncio
+    async def test_stage0_sibling_position_with_retrieved_data(self):
+        """system に <retrieved_data> がある場合、ハイライトはその直後に兄弟配置される。"""
+        from nous.application.chat.pipeline.compress import CompressStep
+
+        prompt = "base\n<!-- __STATIC_END__ -->\n<retrieved_data>\nデータ\n</retrieved_data>\n<char>固守</char>"
+        config = _make_chat_config(
+            context_max_tokens=1_000_000,
+            context_keep_recent_turns=1,
+            context_use_llm_summary=False,
+        )
+        ctx = _dummy_app_context()
+        tctx = _dummy_turn_ctx(prompt)
+        msgs = _long_messages(num_pairs=3)
+
+        await CompressStep().run(ctx, config, tctx, msgs)
+        p = tctx.system_prompt
+        idx_retrieved_close = p.index("</retrieved_data>")
+        idx_summary = p.index("<conversation_history_summary>")
+        assert idx_retrieved_close < idx_summary
+        # キャッシュ境界（__STATIC_END__）より後ろ＝動的領域側
+        assert p.index("<!-- __STATIC_END__ -->") < idx_summary
+        # 既存のタグを壊さない
+        assert "<char>固守</char>" in p
+
+    @pytest.mark.asyncio
+    async def test_no_injection_when_no_truncation(self):
+        """切り詰め無し（keep=0・予算内）なら system は汚さない。"""
+        from nous.application.chat.pipeline.compress import CompressStep
+
+        config = _make_chat_config(
+            context_max_tokens=1_000_000,
+            context_keep_recent_turns=0,
+            context_use_llm_summary=False,
+        )
+        ctx = _dummy_app_context()
+        tctx = _dummy_turn_ctx("base prompt")
+        msgs = _long_messages(num_pairs=2)
+
+        await CompressStep().run(ctx, config, tctx, msgs)
+        assert "<conversation_history_summary>" not in tctx.system_prompt
 
 
 # ──────────────────────────────────────────────

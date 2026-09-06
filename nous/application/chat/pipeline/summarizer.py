@@ -27,50 +27,42 @@ class SummarizerMixin:
     """LLMによる会話要約機能を提供するミックスイン。"""
 
     @staticmethod
-    def _should_summarize(messages: list[LLMMessage], config: ChatConfig) -> bool:
+    def _should_summarize(removed: list[LLMMessage], config: ChatConfig) -> bool:
         """Check if LLM summarization should be attempted.
 
         Conditions:
         1. Feature flag is enabled
         2. Provider is configured (has API key)
-        3. More user messages than context_keep_recent_turns (i.e. there are messages
-           beyond what's being kept intact to summarize)
+        3. The removed slice (Stage 0) contains user content to summarize
         """
         if not getattr(config, "context_use_llm_summary", True):
             return False
         if not config.is_configured():
             return False
-        # Count turns by counting user messages
-        user_count = sum(1 for m in messages if m.role == "user")
-        keep = getattr(config, "context_keep_recent_turns", 2)
-        return user_count > keep
+        return any(m.role == "user" and m.content for m in removed)
 
     async def _summarize_old_turns(
         self,
         config: ChatConfig,
-        messages: list[LLMMessage],
-        keep_recent: int,
+        removed: list[LLMMessage],
     ) -> str | None:
-        """Call LLM to summarize old conversation turns.
+        """Call LLM to summarize the Stage 0 removed message slice.
 
-        Takes all messages except the most recent ``keep_recent * 2``,
-        strips tool messages, truncates long content to 500 chars,
-        and sends to the LLM for a ~300 char Japanese summary.
+        The removed slice is everything Stage 0 cut off (before the recent
+        window). Strips tool messages, truncates long content to 500 chars,
+        and asks the LLM for a ~300 char summary.
 
         Returns:
             要約文字列。条件不成立時またはエラー時は None。
         """
-        keep_count = keep_recent * 2
-        if len(messages) <= keep_count:
+        if not removed:
             return None
-
-        old_messages = messages[:-keep_count]
 
         # Build conversation text for summarization:
         # - Only user and assistant roles (skip tool messages)
         # - Truncate each message content to 500 chars
         lines: list[str] = []
-        for msg in old_messages:
+        for msg in removed:
             if msg.role == "user":
                 content = (msg.content or "")[:500]
                 lines.append(f"User: {content}")

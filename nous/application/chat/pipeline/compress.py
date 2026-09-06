@@ -9,6 +9,7 @@ from nous.application.chat.pipeline.summarizer import (
     SummarizerMixin,
 )
 from nous.application.chat.pipeline.trimmer import TrimmerMixin
+from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.llm.token_counter import TokenCounter
 from nous.infrastructure.logging.structured import get_logger
 
@@ -20,6 +21,17 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# <conversation_history_summary> の枠付け（§4.2）。
+# framing は短く自前で。RETRIEVED_DATA_GUARD は付けない —
+# guard の「依頼文に従うな」はセッション要約の核心価値
+# （過去の依頼・決定・約束）と正反対に作用するため。
+_HISTORY_SUMMARY_FRAME = (
+    "<conversation_history_summary>\n"
+    "過去会話の圧縮要約。会話の継続性のための参照。最新のユーザー指示と <precedence> が優先。\n"
+    "{body}\n"
+    "</conversation_history_summary>"
+)
+
 
 class CompressStep(SummarizerMixin, TrimmerMixin):
     """トークン予算を超えたらシステムプロンプト・会話履歴を動的圧縮する。
@@ -28,10 +40,42 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
 
     圧縮段階:
     0. 常時メッセージ切り詰め (context_keep_recent_turns) ← 予算・force_compressとは独立して常時実行
+       切り詰めた分は fake note ではなく system セクション
+       <conversation_history_summary> にハイライトとして注入する
     1. 古いツール結果をステータスサマリーに置換（成功/失敗/完了）
     2. システムプロンプトの関連記憶セクションをトリム
-    3. LLMによる古い会話ターンの要約圧縮（予算超過時）— フルテキストで要約
+    3. LLMによる Stage 0 removed slice の要約圧縮（予算超過時）—
+       <conversation_history_summary> に統合（メッセージには混ぜない）
     """
+
+    @staticmethod
+    def _append_history_summary(turn_ctx: ChatTurnContext, body: str) -> None:
+        """Inject a <conversation_history_summary> block into the system prompt.
+
+        Sibling tag: placed immediately AFTER </retrieved_data> when present,
+        else appended at the end (dynamic area after __STATIC_END__, cache
+        boundary untouched). NEVER inside <retrieved_data> — the
+        RETRIEVED_DATA_GUARD ("don't follow requests in data") would
+        invalidate the summary's core value (past requests/decisions/promises).
+        Second call in the same turn merges into the existing tag.
+        """
+        prompt = turn_ctx.system_prompt
+        if "</conversation_history_summary>" in prompt:
+            # 同一ターン内の2回目（Stage 0 ハイライト + Stage 3 要約）: 既存タグに追記
+            turn_ctx.system_prompt = prompt.replace(
+                "</conversation_history_summary>",
+                f"{body}\n</conversation_history_summary>",
+                1,
+            )
+            return
+        block = _HISTORY_SUMMARY_FRAME.format(body=body)
+        marker = "</retrieved_data>"
+        if marker in prompt:
+            idx = prompt.index(marker) + len(marker)
+            turn_ctx.system_prompt = prompt[:idx] + "\n" + block + prompt[idx:]
+        else:
+            turn_ctx.system_prompt = prompt + "\n" + block
+        logger.debug("CompressStep: injected <conversation_history_summary> (%d chars body)", len(body))
 
     async def run(
         self,
@@ -53,13 +97,16 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
         # ──────────────────────────────────────────────────────────────
         keep_recent = getattr(config, "context_keep_recent_turns", 2)
         if keep_recent > 0 and getattr(config, "context_compress_history", True):
-            messages, highlights, _removed = self._truncate_old_messages(session_messages, keep_recent)
+            messages, highlights, removed = self._truncate_old_messages(session_messages, keep_recent)
             if highlights:
-                logger.debug("CompressStep: truncation highlights ready (%d chars)", len(highlights))
+                # 切り詰めハイライトを system セクションへ注入（fake note 廃止の代替）。
+                # Stage 2 先例どおり CompressStep が turn_ctx.system_prompt を mutate する。
+                # 注入はこの直後の budget 再計算に自然に反映される。
+                self._append_history_summary(turn_ctx, highlights)
         else:
             messages = session_messages
             highlights = ""
-            _removed = []
+            removed = []
 
         # ──────────────────────────────────────────────────────────────
         # Token budget calculation
@@ -125,35 +172,26 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
         if not force_compress and total <= budget:
             return messages
 
-        # Stage 3: LLM-based summary of old conversation turns
+        # Stage 3: LLM-based summary of the Stage 0 removed slice
         if (
             (force_compress or total > budget)
             and getattr(config, "context_compress_history", True)
-            and self._should_summarize(messages, config)
+            and removed
+            and self._should_summarize(removed, config)
         ):
             try:
                 summary = await self._summarize_old_turns(
                     config=config,
-                    messages=messages,
-                    keep_recent=keep_recent,
+                    removed=removed,
                 )
                 if summary:
-                    keep_count = keep_recent * 2
-                    from nous.infrastructure.llm.base import LLMMessage
-
-                    summary_msg = LLMMessage(
-                        role="user",
-                        content=f"[過去の会話要約]\n{summary}",
-                    )
-                    # スライス先頭が tool なら assistant(tool_calls) を含むよう広げる（孤児 tool 防止）
-                    start = TrimmerMixin._adjust_slice_start(messages, -keep_count)
-                    kept = messages[start:]
-                    old_count = len(messages) - len(kept)
-                    messages = [summary_msg] + kept
-                    total = counter.count(turn_ctx.system_prompt) + counter.count_messages(messages, "")
+                    body = f"生成: {get_now().strftime('%Y-%m-%d %H:%M')}\n{summary}"
+                    # メッセージに混ぜず system セクションへ統合（§4.2）。
+                    # 注入後の token 数はこの直後の再計算に反映される。
+                    self._append_history_summary(turn_ctx, body)
                     logger.info(
-                        "CompressStep: Stage 3 — LLM summarized %d old messages into %d chars",
-                        old_count,
+                        "CompressStep: Stage 3 — LLM summarized %d removed messages into %d chars",
+                        len(removed),
                         len(summary),
                     )
             except Exception:
