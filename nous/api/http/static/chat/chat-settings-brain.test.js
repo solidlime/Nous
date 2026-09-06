@@ -129,8 +129,9 @@ describe('brain simulation settings', () => {
     expect(body.brain_novelty_stability_multiplier).toBe(2.5);
     expect(body.brain_emotion_gain_k).toBe(0.4);
     expect(body.brain_rif_suppression_rho).toBe(0.1);
-    expect(body.brain_link_separation_threshold).toBe(0.8);
     expect(body.brain_graph_flash_enabled).toBe(false);
+    // dormant knob: not collected (merge API keeps the stored value)
+    expect(body.brain_link_separation_threshold).toBeUndefined();
     // legacy auto-run/interval keys are replaced by the brain_* keys
     expect(body.memory_enrichment_auto_run).toBeUndefined();
     expect(body.memory_enrichment_interval).toBeUndefined();

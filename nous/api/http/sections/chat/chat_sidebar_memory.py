@@ -145,7 +145,7 @@ _BRAIN_HELP = {
     "novelty_multiplier": "新規と判定された記憶の初期安定度の倍率。新規性ブーストは作成後 1 回だけ与えられます（長期増強）。",
     "emotion_gain": "感情が強い記憶ほど想起時に強化されやすくなる係数（扁桃体モデル）。上限は内部で固定されます。",
     "rif_rho": "想起のたびに、手がかりを共有する競合記憶がわずかに抑制されます（検索誘発性忘却）。",
-    "separation": "記憶同士のシナプス結合を作る類似度のしきい値。高いほど似た記憶だけが結合し、pattern separation が強まります。",
+    "separation": "記憶同士のシナプス結合を作る類似度のしきい値。高いほど似た記憶だけが結合し、pattern separation が強まります（将来実装。類似度ソースが未接続のため現在は未使用）。",
     "flash": "シナプス発火イベントを記憶グラフ上で発光表示します。",
 }
 
@@ -219,7 +219,8 @@ def _render_brain_simulation_section() -> str:
                                         </div>
                                         <div>
                                             <div class="chat-field-label">リンク分離しきい値 {help_("separation")}</div>
-                                            <input type="number" id="chat-brain-separation-threshold" class="chat-field-input" min="0.5" max="1" step="0.01" value="0.75" />
+                                            <!-- 将来実装: upsert_link(similarity=) の類似度ソース未接線のため休止中 -->
+                                            <input type="number" id="chat-brain-separation-threshold" class="chat-field-input" min="0.5" max="1" step="0.01" value="0.75" disabled />
                                         </div>
                                     </div>
                                 </details>

@@ -480,7 +480,7 @@ async function saveChatConfig() {
     brain_novelty_stability_multiplier: parseFloat(document.getElementById("chat-brain-novelty-multiplier")?.value || "2.0"),
     brain_emotion_gain_k: parseFloat(document.getElementById("chat-brain-emotion-gain-k")?.value || "0.5"),
     brain_rif_suppression_rho: parseFloat(document.getElementById("chat-brain-rif-rho")?.value || "0.05"),
-    brain_link_separation_threshold: parseFloat(document.getElementById("chat-brain-separation-threshold")?.value || "0.75"),
+    // brain_link_separation_threshold is dormant (similarity source not wired) — not collected
     brain_graph_flash_enabled: getChecked("chat-brain-graph-flash"),
     // === Forgetting (moved from Settings) ===
     forgetting_enabled: getChecked("chat-forgetting-enabled"),
