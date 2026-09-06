@@ -230,6 +230,21 @@ async function init() {
     // Event: Create persona (replaces inline onclick from base.py)
   document.getElementById("create-persona-btn").onclick = openCreatePersonaModal;
 
+  // Event: Persona modal bindings (static DOM in base.py — bind once)
+  var personaModal = document.getElementById('create-persona-modal');
+  if (personaModal) {
+    // Close on overlay click
+    personaModal.addEventListener('click', function(e) {
+      if (e.target === personaModal) closeCreatePersonaModal();
+    });
+    // Submit handler (replaces inline onsubmit)
+    var personaForm = document.getElementById("create-persona-form");
+    if (personaForm) personaForm.onsubmit = submitCreatePersona;
+    // Cancel button (replaces inline onclick)
+    var personaCancel = document.getElementById("create-persona-cancel");
+    if (personaCancel) personaCancel.onclick = closeCreatePersonaModal;
+  }
+
   // Event: Delete persona (replaces inline onclick from base.py)
   document.getElementById("delete-persona-btn").onclick = deleteCurrentPersona;
 
@@ -537,38 +552,13 @@ if (document.readyState === "loading") {
 }
 
 /* =================================================================
-   CREATE PERSONA MODAL
+   CREATE PERSONA MODAL — static DOM (sections/base.py), opened via
+   the .active class toggle (parity with ov-modal-overlay modals).
    ================================================================= */
 function openCreatePersonaModal() {
   var modal = document.getElementById('create-persona-modal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'create-persona-modal';
-    modal.className = 'modal-overlay';
-    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
-    safeSetHTML(modal, '\
-      <div style="background:var(--bg-secondary);border-radius:16px;padding:24px;min-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.3)">\
-        <h2 style="margin:0 0 4px 0;font-size:1.2rem"><i data-lucide="user-plus"></i> Create Persona</h2>\
-        <p style="color:var(--text-muted);font-size:0.85rem;margin:0 0 16px 0">Enter a name for the new persona.</p>\
-        <form id="create-persona-form" style="display:flex;flex-direction:column;gap:12px">\
-          <input id="new-persona-name" type="text" placeholder="e.g. assistant, friend, scholar" class="glass-input" style="width:100%;padding:10px" required autofocus>\
-          <div style="display:flex;gap:8px;justify-content:flex-end">\
-            <button type="button" id="create-persona-cancel" class="glass-btn">Cancel</button>\
-            <button type="submit" class="glass-btn" style="background:var(--accent-purple);color:white">Create</button>\
-          </div>\
-        </form>\
-      </div>');
-    document.body.appendChild(modal);
-    // Close on overlay click
-    modal.addEventListener('click', function(e) {
-      if (e.target === modal) closeCreatePersonaModal();
-    });
-    // Submit handler (replaces inline onsubmit)
-    document.getElementById("create-persona-form").onsubmit = submitCreatePersona;
-    // Cancel button (replaces inline onclick)
-    document.getElementById("create-persona-cancel").onclick = closeCreatePersonaModal;
-  }
-  modal.style.display = 'flex';
+  if (!modal) return;
+  modal.classList.add('active');
   setTimeout(function() {
     var input = document.getElementById('new-persona-name');
     if (input) input.focus();
@@ -577,7 +567,7 @@ function openCreatePersonaModal() {
 
 function closeCreatePersonaModal() {
   var modal = document.getElementById('create-persona-modal');
-  if (modal) modal.style.display = 'none';
+  if (modal) modal.classList.remove('active');
 }
 
 function submitCreatePersona(e) {
@@ -624,7 +614,7 @@ function deleteCurrentPersona() {
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     var modal = document.getElementById('create-persona-modal');
-    if (modal && modal.style.display !== 'none') closeCreatePersonaModal();
+    if (modal && modal.classList.contains('active')) closeCreatePersonaModal();
   }
 });
 })();

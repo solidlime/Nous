@@ -17,7 +17,7 @@ function showCreateBlock() {
     document.getElementById('block-modal-name').disabled = false;
     document.getElementById('block-modal-content').value = '';
     document.getElementById('block-modal-priority').value = '0';
-    document.getElementById('block-edit-modal').style.display = 'flex';
+    document.getElementById('block-edit-modal').classList.add('active');
 }
 
 function showEditBlock(name, content, priority) {
@@ -27,11 +27,11 @@ function showEditBlock(name, content, priority) {
     document.getElementById('block-modal-name').disabled = true;
     document.getElementById('block-modal-content').value = content || '';
     document.getElementById('block-modal-priority').value = priority || 0;
-    document.getElementById('block-edit-modal').style.display = 'flex';
+    document.getElementById('block-edit-modal').classList.add('active');
 }
 
 function hideBlockModal() {
-    document.getElementById('block-edit-modal').style.display = 'none';
+    document.getElementById('block-edit-modal').classList.remove('active');
 }
 
 async function saveBlock() {

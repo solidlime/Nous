@@ -22,12 +22,12 @@ async function deleteItem(itemName) {
 
 function openAddItemModal() {
     const m = document.getElementById('add-item-modal');
-    if (m) { m.style.display = 'flex'; }
+    if (m) { m.classList.add('active'); }
 }
 
 function closeAddItemModal() {
     const m = document.getElementById('add-item-modal');
-    if (m) { m.style.display = 'none'; }
+    if (m) { m.classList.remove('active'); }
     ['new-item-name','new-item-category','new-item-desc','new-item-qty'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = id === 'new-item-qty' ? '1' : '';
@@ -69,11 +69,11 @@ function openEditItemModal(itemName) {
     document.getElementById('edit-item-desc').value = item.description || '';
     document.getElementById('edit-item-qty').value = item.quantity || 1;
     document.getElementById('edit-item-tags').value = (item.tags || []).join(', ');
-    document.getElementById('edit-item-modal').style.display = 'flex';
+    document.getElementById('edit-item-modal').classList.add('active');
 }
 
 function closeEditItemModal() {
-    document.getElementById('edit-item-modal').style.display = 'none';
+    document.getElementById('edit-item-modal').classList.remove('active');
 }
 
 async function saveEditItem() {

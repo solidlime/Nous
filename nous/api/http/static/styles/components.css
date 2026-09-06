@@ -987,6 +987,54 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
+/* Open/close via class toggle (parity with .mem-edit-overlay.active /
+   .mem-modal-overlay.show) — style.display manipulation is retired. */
+.ov-modal-overlay.active {
+    display: flex;
+}
+
+/* Create persona modal — static DOM in sections/base.py, opened via
+   the .active class toggle. Panel styling mirrors the previous
+   JS-built inline cssText (visual parity, no layout change). */
+.persona-modal-card {
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    padding: 24px;
+    min-width: 360px;
+    max-width: 92vw;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+.persona-modal-card h2 {
+    margin: 0 0 4px 0;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.persona-modal-card p {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0 0 16px 0;
+}
+.persona-modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.persona-modal-form .glass-input {
+    width: 100%;
+    padding: 10px;
+    box-sizing: border-box;
+}
+.persona-modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+.persona-modal-submit {
+    background: var(--accent-purple);
+    color: white;
+}
 .ov-modal {
     background: #1e1b2e;
     border: 1px solid rgba(var(--accent-blue-rgb), 0.3);

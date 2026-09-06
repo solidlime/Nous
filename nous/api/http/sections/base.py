@@ -193,6 +193,22 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str) -> str:
         '        <div class="mem-modal" id="mem-modal-content"></div>\n'
         "    </div>\n"
         "\n"
+        "    <!-- Create Persona Modal (open/close via .active class toggle,\n"
+        "         base.js openCreatePersonaModal) -->\n"
+        '    <div id="create-persona-modal" class="ov-modal-overlay" role="dialog" aria-modal="true" aria-label="Create Persona">\n'
+        '        <div class="persona-modal-card">\n'
+        '            <h2><i data-lucide="user-plus"></i> Create Persona</h2>\n'
+        "            <p>Enter a name for the new persona.</p>\n"
+        '            <form id="create-persona-form" class="persona-modal-form">\n'
+        '                <input id="new-persona-name" type="text" placeholder="e.g. assistant, friend, scholar" class="glass-input" required />\n'
+        '                <div class="persona-modal-actions">\n'
+        '                    <button type="button" id="create-persona-cancel" class="glass-btn">Cancel</button>\n'
+        '                    <button type="submit" class="glass-btn persona-modal-submit">Create</button>\n'
+        "                </div>\n"
+        "            </form>\n"
+        "        </div>\n"
+        "    </div>\n"
+        "\n"
         "    <!-- Toast container -->\n"
         '    <div id="toast-container" class="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>\n'
         "</body>\n"
