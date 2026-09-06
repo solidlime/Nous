@@ -11,10 +11,12 @@ huggingface_hub>=0.20,<2
 sentencepiece>=0.1.99,<1  # Required for cl-nagoya/ruri-v3-30m tokenizer
 
 # MCP Server Framework (mcp>=2: v2 MCPServer API. FastMCP renamed to MCPServer)
-# NOTE: server code imports `mcp` (MCPServer) only; `fastmcp` is kept for
-# external MCP client compat — do not dedupe without an arch decision.
+# NOTE: server code imports `mcp` (MCPServer) only. External MCP clients
+# connect via the MCP protocol (HTTP/stdio) and do not require the fastmcp
+# package (arch decision 2026-09-06: fastmcp 3.4.x is unresolvable with
+# mcp>=2 via its fastmcp-slim[client,server] -> mcp<2.0 chain, and is
+# imported nowhere).
 mcp>=2.0.0,<3
-fastmcp>=3.4.4,<4
 fastapi>=0.139.0,<1
 uvicorn>=0.51.0,<1
 

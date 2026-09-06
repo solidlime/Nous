@@ -9,7 +9,6 @@ dependencies = [
     "pytesseract>=0.3.10",
     "sudachipy>=0.6.0",
     "sudachidict_core>=20240716",
-    "fastmcp>=3.4.4",
     "fastapi>=0.139.0",
     "uvicorn>=0.51.0",
     "aiosqlite>=0.22.1",
