@@ -411,7 +411,7 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 .mem-modal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
 .mem-modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; padding: 0 4px; line-height: 1; }
 .mem-modal-close:hover { color: var(--text-primary); }
-.mem-modal-content { white-space: pre-wrap; word-break: break-word; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.7; margin-bottom: 16px; padding: 12px; background: var(--glass-bg); border-radius: var(--radius-md); max-height: none; overflow: visible; }
+.mem-modal-body { white-space: pre-wrap; word-break: break-word; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.7; margin-bottom: 16px; padding: 12px; background: var(--glass-bg); border-radius: var(--radius-md); max-height: none; overflow: visible; }
 .mem-modal-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 6px 0; border-bottom: 0.5px solid var(--separator-non-opaque); font-size: 0.82rem; }
 .mem-modal-row:last-child { border-bottom: none; }
 .mem-modal-key { color: var(--text-muted); min-width: 100px; flex-shrink: 0; }

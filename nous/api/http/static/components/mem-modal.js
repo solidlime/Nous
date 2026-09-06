@@ -59,7 +59,7 @@ function openMemModal(mem) {
     h += '</div>';
 
     /* Full content */
-    h += '<div class="mem-modal-content">' + esc(mem.content) + '</div>';
+    h += '<div class="mem-modal-body">' + esc(mem.content) + '</div>';
 
     /* Tags */
     if (tagsHtml) {

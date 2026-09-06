@@ -70,7 +70,7 @@ describe('N.Components.memModal — open(key) fetch path', () => {
     expect(globalThis.__apiUrl).toBe('/api/memories/p1/k1');
     const overlay = document.getElementById('mem-modal-overlay');
     expect(overlay.classList.contains('show')).toBe(true);
-    expect(overlay.querySelector('.mem-modal-content').textContent)
+    expect(overlay.querySelector('.mem-modal-body').textContent)
       .toContain('黒いロングコート');
   });
 
