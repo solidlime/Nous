@@ -980,19 +980,21 @@ function closeWiringDetail() {
 //   keydown Enter/Space on rows      → openWiringDetail
 
 // ------------------------------------------------------------------
-// Panel detail modal — goal / promise / reflection detail.
+// Panel detail modal — goal / promise detail.
 // Reuses the mem-modal vocabulary (.mem-modal-overlay / .mem-modal /
 // mem-modal-row / ov-modal-actions) — zero new CSS. Goal/promise rows
 // get 完了/削除 actions routed through the existing [data-mem-action]
 // delegation (completeGoal → goal_manage achieve; deleteCard →
 // DELETE /api/memories — promises are goals tagged goal/active/
-// interpersonal, so both paths apply unchanged). Retrieved/saved rows
-// go through the unified N.Components.memModal: complete key →
-// open(key) (fresh fetch), partial data → openMemory(partial).
+// interpersonal, so both paths apply unchanged). Retrieved/saved/
+// reflection rows go through the unified N.Components.memModal:
+// complete key → open(key) (fresh fetch), partial data →
+// openMemory(partial). Reflections carry full memory keys, so they
+// open the rich memory modal, not this one.
 // Non-blocking: focus + Escape + backdrop click + focus restore.
 // ------------------------------------------------------------------
 var _panelDetailOpener = null;
-var PANEL_KIND_LABELS = { goal: "目標", promise: "約束", reflection: "リフレクション" };
+var PANEL_KIND_LABELS = { goal: "目標", promise: "約束" };
 
 function _panelTagsHtml(tags) {
   return (tags || []).map(function (t) {
@@ -1051,7 +1053,10 @@ function openPanelDetail(card) {
   if (!card || !card.getAttribute) return;
   var kind = card.getAttribute("data-panel-kind");
   var item = _panelAttrs(card);
-  if (!kind || kind === "memory") {
+  // Reflections are memories (they carry a full memory key), so they go
+  // through the unified memModal like memory rows — the sparse panel
+  // modal is only for goal/promise, which are not memories.
+  if (!kind || kind === "memory" || kind === "reflection") {
     if (item.key) N.Components.memModal.open(item.key);
     else N.Components.memModal.openMemory({
       content: item.content,

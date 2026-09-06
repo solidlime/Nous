@@ -163,19 +163,25 @@ describe('panel detail modals + row delegation', () => {
     expect(document.getElementById('panel-detail-overlay').classList.contains('show')).toBe(false);
   });
 
-  it('object insights render content (not [object Object]) and open reflection detail', () => {
+  it('object insights render content (not [object Object]) and open the memory modal by key', () => {
     N.Chat.memoryPanel.updateReflection([{ content: 'insight body', key: 'r1', created_at: '2026-09-07T10:00:00' }]);
     const row = document.querySelector('#memory-reflection-list .reflection-insight');
     expect(row.textContent).toContain('insight body');
     expect(row.getAttribute('data-panel-kind')).toBe('reflection');
     row.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-    const overlay = document.getElementById('panel-detail-overlay');
-    expect(overlay.classList.contains('show')).toBe(true);
-    expect(overlay.textContent).toContain('insight body');
-    expect(overlay.textContent).toContain('r1');
-    expect(overlay.textContent).toMatch(/2026\/0?9\/0?7/);
-    // Reflection is read-only: no complete/delete actions
-    expect(overlay.querySelector('[data-mem-action]')).toBeNull();
+    // Reflections carry a full memory key → unified memModal, not the
+    // sparse panel modal (which is goal/promise only).
+    expect(open).toHaveBeenCalledWith('r1');
+    // Panel modal is goal/promise only — never shown for reflections.
+    expect(document.querySelector('#panel-detail-overlay.show')).toBeNull();
+  });
+
+  it('keyless reflection insights fall back to openMemory(partial)', () => {
+    N.Chat.memoryPanel.updateReflection([{ content: 'no-key insight', key: '', created_at: null }]);
+    const row = document.querySelector('#memory-reflection-list .reflection-insight');
+    row.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    expect(open).not.toHaveBeenCalled();
+    expect(openMemory).toHaveBeenCalledWith(expect.objectContaining({ content: 'no-key insight' }));
   });
 
   it('string insights (legacy format) still render', () => {
