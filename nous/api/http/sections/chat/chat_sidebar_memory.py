@@ -1,10 +1,14 @@
 """Memory settings — extraction, reflection, mental models, weights, enrichment, forgetting."""
 
 
-def _render_memory_section() -> str:
-    """Memory extraction settings — auto-extract, models, memory tools."""
-    return """
-                        <!-- Memory extraction -->
+def _render_memory_section(children: str = "") -> str:
+    """Memory intake group — extraction fields + nested child accordions.
+
+    children: .chat-subsection markup (auto-capture, mental model,
+    reflection) — everything that WRITES memories into the store.
+    """
+    return f"""
+                        <!-- Memory extraction (intake group) -->
                         <details data-category="memory">
                             <summary><i data-lucide="brain"></i> 記憶・抽出 <span class="chat-help-icon" data-category="memory" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
@@ -37,59 +41,64 @@ def _render_memory_section() -> str:
                                     <div class="chat-field-label">中立感情閾値</div>
                                     <input type="number" id="chat-emotion-neutral-threshold" class="chat-field-input" min="0" step="0.01" value="0.01" />
                                 </div>
+                                {children}
                             </div>
                         </details>"""
 
 
 def _render_reflection_section() -> str:
-    """Reflection toggle, threshold, interval, session summary."""
+    """Reflection settings — nested child of the 記憶・抽出 group.
+
+    Content keeps class="details-body": chat-memory-panel.js injects the
+    発火表示数 field into `details[data-category="reflection"] .details-body`.
+    """
     return """
-                        <!-- Reflection -->
-                        <details data-category="reflection">
-                            <summary><i data-lucide="sparkles"></i> リフレクション <span class="chat-help-icon" data-category="reflection" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
-                            <div class="details-body">
-                                <div class="chat-check-row">
-                                    <input type="checkbox" id="chat-reflection-enabled" checked />
-                                    <label for="chat-reflection-enabled">リフレクション有効</label>
-                                </div>
-                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                                    <div>
-                                        <div class="chat-field-label">閾値</div>
-                                        <input type="number" id="chat-reflection-threshold" class="chat-field-input"
-                                            min="0.1" max="100" step="0.1" value="1.0" />
+                                <!-- Reflection (child of memory group) -->
+                                <details class="chat-subsection" data-category="reflection">
+                                    <summary>リフレクション <span class="chat-help-icon" data-category="reflection" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
+                                    <div class="details-body">
+                                        <div class="chat-check-row">
+                                            <input type="checkbox" id="chat-reflection-enabled" checked />
+                                            <label for="chat-reflection-enabled">リフレクション有効</label>
+                                        </div>
+                                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                            <div>
+                                                <div class="chat-field-label">閾値</div>
+                                                <input type="number" id="chat-reflection-threshold" class="chat-field-input"
+                                                    min="0.1" max="100" step="0.1" value="1.0" />
+                                            </div>
+                                            <div>
+                                                <div class="chat-field-label">最小間隔 (時間)</div>
+                                                <input type="number" id="chat-reflection-interval" class="chat-field-input"
+                                                    min="0" max="168" step="0.5" value="1.0" />
+                                            </div>
+                                        </div>
+                                        <div class="chat-check-row">
+                                            <input type="checkbox" id="chat-session-summarize" checked />
+                                            <label for="chat-session-summarize">セッション要約</label>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <div class="chat-field-label">最小間隔 (時間)</div>
-                                        <input type="number" id="chat-reflection-interval" class="chat-field-input"
-                                            min="0" max="168" step="0.5" value="1.0" />
-                                    </div>
-                                </div>
-                                <div class="chat-check-row">
-                                    <input type="checkbox" id="chat-session-summarize" checked />
-                                    <label for="chat-session-summarize">セッション要約</label>
-                                </div>
-                            </div>
-                        </details>"""
+                                </details>"""
 
 
 def _render_mental_section() -> str:
-    """Mental model extraction toggle and min samples."""
+    """Mental model settings — nested child of the 記憶・抽出 group."""
     return """
-                        <!-- Mental Model -->
-                        <details data-category="mental">
-                            <summary><i data-lucide="puzzle"></i> メンタルモデル <span class="chat-help-icon" data-category="mental" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
-                            <div class="details-body">
-                                <div class="chat-check-row">
-                                    <input type="checkbox" id="chat-mental-model-enabled" checked />
-                                    <label for="chat-mental-model-enabled">メンタルモデル抽出を有効</label>
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">最小サンプル数</div>
-                                    <input type="number" id="chat-mental-model-min-samples" class="chat-field-input"
-                                        min="1" max="20" value="3" />
-                                </div>
-                            </div>
-                        </details>"""
+                                <!-- Mental Model (child of memory group) -->
+                                <details class="chat-subsection" data-category="mental">
+                                    <summary>メンタルモデル <span class="chat-help-icon" data-category="mental" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
+                                    <div class="details-body">
+                                        <div class="chat-check-row">
+                                            <input type="checkbox" id="chat-mental-model-enabled" checked />
+                                            <label for="chat-mental-model-enabled">メンタルモデル抽出を有効</label>
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">最小サンプル数</div>
+                                            <input type="number" id="chat-mental-model-min-samples" class="chat-field-input"
+                                                min="1" max="20" value="3" />
+                                        </div>
+                                    </div>
+                                </details>"""
 
 
 def _render_weights_section() -> str:
@@ -161,9 +170,11 @@ def _brain_help(key: str) -> str:
     return f'<span class="chat-help-tip" title="{text}" aria-label="説明" tabindex="0">?</span>'
 
 
-def _render_brain_simulation_section() -> str:
+def _render_brain_simulation_section(children: str = "") -> str:
     """脳シミュレーション設定 — 旧 memory_enrichment セクションを吸収・置換。
 
+    children: 忘却機構など、保存済み記憶を「鍛える/減衰させる」系の
+    ネスト subsection を想起と忘却の後に差し込む。
     関数名は chat_sidebar.py の import 互換のため維持（chat_sidebar.py は
     lane3 の所有外）。実体は brain_simulation カテゴリの 1 セクション。
     """
@@ -261,6 +272,7 @@ def _render_brain_simulation_section() -> str:
                                         </div>
                                     </div>
                                 </details>
+                                {children}
                                 <details class="chat-subsection">
                                     <summary>可視化</summary>
                                     <div style="padding-top:6px;">
@@ -275,47 +287,51 @@ def _render_brain_simulation_section() -> str:
 
 
 def _render_forgetting_section() -> str:
-    """Forgetting mechanism — threshold, decay, strength sliders."""
+    """Forgetting mechanism — nested child of the 脳シミュレーション group.
+
+    時間減衰ベースの忘却ワーカー設定。脳の「想起と忘却」(RIF) と同じ
+    忘却系なので brain_simulation 配下にまとめる。
+    """
     return """
-                        <!-- Forgetting (moved from Settings) -->
-                        <details data-category="forgetting">
-                            <summary><i data-lucide="eraser"></i> 忘却機構<span class="chat-help-icon" data-category="forgetting" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
-                            <div class="details-body">
-                                <div class="chat-check-row">
-                                    <input type="checkbox" id="chat-forgetting-enabled" />
-                                    <label for="chat-forgetting-enabled">忘却機構を有効化</label>
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">忘却トリガー閾値</div>
-                                    <input type="number" id="chat-forgetting-trigger-threshold" class="chat-field-input" min="1" step="1" value="100" />
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">減衰間隔（秒）</div>
-                                    <input type="number" id="chat-forgetting-decay-interval-seconds" class="chat-field-input" min="60" step="1" value="86400" />
-                                </div>
-                                <div>
-                                    <div class="chat-field-label chat-field-label-row">
-                                        <span>最小強度</span>
-                                        <span id="chat-forgetting-min-strength-val" class="chat-field-value">0.10</span>
+                                <!-- Forgetting (child of brain group, moved from Settings) -->
+                                <details class="chat-subsection" data-category="forgetting">
+                                    <summary>忘却機構 <span class="chat-help-icon" data-category="forgetting" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
+                                    <div class="details-body">
+                                        <div class="chat-check-row">
+                                            <input type="checkbox" id="chat-forgetting-enabled" />
+                                            <label for="chat-forgetting-enabled">忘却機構を有効化</label>
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">忘却トリガー閾値</div>
+                                            <input type="number" id="chat-forgetting-trigger-threshold" class="chat-field-input" min="1" step="1" value="100" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">減衰間隔（秒）</div>
+                                            <input type="number" id="chat-forgetting-decay-interval-seconds" class="chat-field-input" min="60" step="1" value="86400" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label chat-field-label-row">
+                                                <span>最小強度</span>
+                                                <span id="chat-forgetting-min-strength-val" class="chat-field-value">0.10</span>
+                                            </div>
+                                            <input type="range" id="chat-forgetting-min-strength" class="chat-field-input" min="0" max="1" step="0.05" value="0.1"
+                                                data-mirror="chat-forgetting-min-strength-val" data-mirror-format="fixed2" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label chat-field-label-row">
+                                                <span>忘却対象率</span>
+                                                <span id="chat-forgetting-forget-ratio-val" class="chat-field-value">0.20</span>
+                                            </div>
+                                            <input type="range" id="chat-forgetting-forget-ratio" class="chat-field-input" min="0" max="1" step="0.05" value="0.2"
+                                                data-mirror="chat-forgetting-forget-ratio-val" data-mirror-format="fixed2" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label chat-field-label-row">
+                                                <span>忘却強度</span>
+                                                <span id="chat-forgetting-forget-strength-val" class="chat-field-value">0.50</span>
+                                            </div>
+                                            <input type="range" id="chat-forgetting-forget-strength" class="chat-field-input" min="0" max="1" step="0.05" value="0.5"
+                                                data-mirror="chat-forgetting-forget-strength-val" data-mirror-format="fixed2" />
+                                        </div>
                                     </div>
-                                    <input type="range" id="chat-forgetting-min-strength" class="chat-field-input" min="0" max="1" step="0.05" value="0.1"
-                                        data-mirror="chat-forgetting-min-strength-val" data-mirror-format="fixed2" />
-                                </div>
-                                <div>
-                                    <div class="chat-field-label chat-field-label-row">
-                                        <span>忘却対象率</span>
-                                        <span id="chat-forgetting-forget-ratio-val" class="chat-field-value">0.20</span>
-                                    </div>
-                                    <input type="range" id="chat-forgetting-forget-ratio" class="chat-field-input" min="0" max="1" step="0.05" value="0.2"
-                                        data-mirror="chat-forgetting-forget-ratio-val" data-mirror-format="fixed2" />
-                                </div>
-                                <div>
-                                    <div class="chat-field-label chat-field-label-row">
-                                        <span>忘却強度</span>
-                                        <span id="chat-forgetting-forget-strength-val" class="chat-field-value">0.50</span>
-                                    </div>
-                                    <input type="range" id="chat-forgetting-forget-strength" class="chat-field-input" min="0" max="1" step="0.05" value="0.5"
-                                        data-mirror="chat-forgetting-forget-strength-val" data-mirror-format="fixed2" />
-                                </div>
-                            </div>
-                        </details>"""
+                                </details>"""

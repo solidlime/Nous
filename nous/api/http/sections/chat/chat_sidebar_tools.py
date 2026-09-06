@@ -48,23 +48,23 @@ def _render_skills_section() -> str:
 
 
 def _render_auto_capture_section() -> str:
-    """Auto-capture settings — interval, max memories."""
+    """Auto-capture settings — nested child of the 記憶・抽出 group."""
     return """
-                        <!-- Auto-capture (moved from Settings) -->
-                        <details data-category="auto_capture">
-                            <summary><i data-lucide="camera"></i> 自動キャプチャ<span class="chat-help-icon" data-category="auto_capture" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
-                            <div class="details-body">
-                                <div class="chat-check-row">
-                                    <input type="checkbox" id="chat-auto-capture-enabled" />
-                                    <label for="chat-auto-capture-enabled">自動キャプチャ有効</label>
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">実行間隔（秒）</div>
-                                    <input type="number" id="chat-auto-capture-interval" class="chat-field-input" min="60" step="1" value="300" />
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">最大メモリ数</div>
-                                    <input type="number" id="chat-auto-capture-max-memories" class="chat-field-input" min="1" max="50" step="1" value="10" />
-                                </div>
-                            </div>
-                        </details>"""
+                                <!-- Auto-capture (child of memory group, moved from Settings) -->
+                                <details class="chat-subsection" data-category="auto_capture">
+                                    <summary>自動キャプチャ <span class="chat-help-icon" data-category="auto_capture" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
+                                    <div class="details-body">
+                                        <div class="chat-check-row">
+                                            <input type="checkbox" id="chat-auto-capture-enabled" />
+                                            <label for="chat-auto-capture-enabled">自動キャプチャ有効</label>
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">実行間隔（秒）</div>
+                                            <input type="number" id="chat-auto-capture-interval" class="chat-field-input" min="60" step="1" value="300" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">最大メモリ数</div>
+                                            <input type="number" id="chat-auto-capture-max-memories" class="chat-field-input" min="1" max="50" step="1" value="10" />
+                                        </div>
+                                    </div>
+                                </details>"""

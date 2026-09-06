@@ -48,8 +48,11 @@ def render_chat_sidebar() -> str:
 
     Section order is grouped by mental model:
       1. connection & generation (core, context)
-      2. memory family (extraction, reflection, mental model, auto-capture,
-         enrichment, forgetting, retrieval weights)
+      2. memory pipeline (write → consolidate → read):
+         記憶・抽出 (intake: auto-capture, mental model, reflection as
+         nested children) → 脳シミュレーション (consolidation/decay:
+         REM, dedicated LLM, learning gates, recall & forgetting,
+         forgetting mechanism as nested children) → 検索重み (retrieval)
       3. external tools (MCP, skills)
       4. media output (image, voice)
       5. everything else (debug) — always last
@@ -59,12 +62,12 @@ def render_chat_sidebar() -> str:
             _render_sidebar_header(),
             _render_core_section(),
             _render_context_section(),
-            _render_memory_section(),
-            _render_reflection_section(),
-            _render_mental_section(),
-            _render_auto_capture_section(),
-            _render_brain_simulation_section(),
-            _render_forgetting_section(),
+            _render_memory_section(
+                _render_auto_capture_section()
+                + _render_mental_section()
+                + _render_reflection_section()
+            ),
+            _render_brain_simulation_section(_render_forgetting_section()),
             _render_weights_section(),
             _render_mcp_section(sys.executable),
             _render_skills_section(),
