@@ -2211,18 +2211,20 @@ input[type="range"].chat-field-input:focus {
   margin-top: 4px;
 }
 
-/* Collapsible subsection with divider */
+/* Collapsible subsection (nested accordion).
+   Inherits the #settings-panel details box (border/background from the ID
+   rule wins over class rules here) — so no extra padding/border-top band,
+   which used to render as a visible gap between the child header and its
+   content. Keep the child flush with its box like the parent accordion. */
 .chat-subsection {
   margin-top: 4px;
-  padding-top: 8px;
-  border-top: 1px solid var(--glass-border);
 }
-.chat-subsection > summary {
+/* ID-scoped so it beats "#settings-panel summary" (11px/14px top-level) */
+#settings-panel .chat-subsection > summary {
+  padding: 8px 12px;
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-secondary);
-  cursor: pointer;
-  padding: 4px 0;
 }
 .chat-subsection .chat-field-label,
 .chat-subsection .chat-field-input {
