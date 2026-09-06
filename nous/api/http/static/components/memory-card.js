@@ -33,6 +33,10 @@ function applyDataStyles(root) {
     b.style.color = c;
     b.style.border = "1px solid " + c + "44";
   }
+  var chips = scope.querySelectorAll("[data-hue]");
+  for (var k = 0; k < chips.length; k++) {
+    chips[k].style.setProperty("--chip-hue", chips[k].getAttribute("data-hue"));
+  }
 }
 
 /* Render helpers emit data-fill markup that consumers insert via

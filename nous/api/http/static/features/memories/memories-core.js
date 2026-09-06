@@ -30,7 +30,7 @@ function hashToHue(str) {
 /* ── Tag chip HTML ── */
 function tagChipHtml(tag) {
     var hue = hashToHue(tag);
-    return '<span class="mem-tag-chip" style="--chip-hue:' + hue + '">' + esc(tag) + '</span>';
+    return '<span class="mem-tag-chip" data-hue="' + hue + '">' + esc(tag) + '</span>';
 }
 
 /* ── Client-side sort helper ── */

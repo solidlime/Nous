@@ -44,3 +44,16 @@ describe('applyDataStyles — fills applied from data attributes', () => {
     expect(fill.style.background).toContain('linear-gradient');
   });
 });
+
+describe('applyDataStyles — tag chip hue', () => {
+  it('sets --chip-hue custom property from data-hue', () => {
+    const host = document.createElement('div');
+    host.innerHTML = '<span class="mem-tag-chip" data-hue="123">tag</span>';
+    const chip = host.querySelector('.mem-tag-chip');
+    // markup arrives without a style attribute (safeSetHTML strips it)
+    expect(chip.getAttribute('style')).toBe(null);
+    N.Components.memoryCard.applyDataStyles(host);
+    // JS-set styles survive sanitizing — custom property is applied
+    expect(chip.style.getPropertyValue('--chip-hue')).toBe('123');
+  });
+});

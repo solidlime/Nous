@@ -182,6 +182,7 @@ function renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSe
         html += '</div>';
     }
     safeSetHTML(el, html);
+    if (N.Components.memoryCard) N.Components.memoryCard.applyDataStyles(el);
 }
 
 /* ================================================================
