@@ -864,6 +864,105 @@ class TestChatService:
 
 
 # ─────────────────────────────────────────────────────────────
+# max_stored_messages truncation path highlights (§4.2)
+# ─────────────────────────────────────────────────────────────
+
+
+class TestMaxStoredMessagesHighlights:
+    """keep_recent_turns=0 構成で第2切り詰め経路（max_stored_messages スライス）発火時、
+    ハイライトが system セクション <conversation_history_summary> に現れること。"""
+
+    def _make_ctx(self):
+        ctx = MagicMock()
+        ctx.persona = "test_persona"
+        ctx.event_bus = MagicMock()
+        ctx.event_bus.publish = AsyncMock()
+        state = MagicMock()
+        state.emotion = "neutral"
+        state.emotion_intensity = 0.5
+        state.mental_state = None
+        state.physical_state = None
+        state.environment = None
+        state.fatigue = None
+        state.warmth = None
+        state.arousal = None
+        state.last_conversation_time = None
+        state.heart_rate = None
+        state.pain = None
+        state_result = MagicMock()
+        state_result.is_ok = True
+        state_result.value = state
+        ctx.persona_service.get_context.return_value = state_result
+        search_result = MagicMock()
+        search_result.is_ok = True
+        search_result.value = []
+        ctx.search_engine.search.return_value = search_result
+        return ctx
+
+    @pytest.mark.asyncio
+    async def test_max_stored_messages_path_injects_highlights(self):
+        from nous.application.chat_service import ChatService
+        from nous.infrastructure.llm.base import LLMMessage
+
+        async def mock_stream(*args, **kwargs):
+            yield TextDeltaEvent(content="ok")
+            yield DoneEvent(full_content="ok", tool_calls=[])
+
+        mock_provider = MagicMock()
+        mock_provider.stream = mock_stream
+
+        ctx = self._make_ctx()
+        cfg = ChatConfig(
+            persona="test_persona",
+            provider="anthropic",
+            api_key="sk-valid-key",
+            model="claude-opus-4-5",
+        )
+        cfg.context_keep_recent_turns = 0  # Stage 0 無効 → 第2経路が唯一の切り詰め
+        cfg.max_stored_messages = 4
+        cfg.context_use_llm_summary = False
+
+        session_msgs: list[LLMMessage] = []
+        for i in range(6):
+            session_msgs.append(LLMMessage(role="user", content=f"user question {i}"))
+            session_msgs.append(LLMMessage(role="assistant", content=f"assistant answer {i}"))
+
+        mock_session = MagicMock()
+        mock_session.get_labeled_messages.return_value = session_msgs
+
+        captured: dict = {}
+
+        def _capture_prompt_build(ctx, config, turn_ctx):
+            turn_ctx.system_prompt = "base sys\n<!-- __STATIC_END__ -->"
+            captured["turn_ctx"] = turn_ctx
+
+        service = ChatService()
+        with (
+            patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider),
+            patch("nous.application.chat.service._session_manager.get_or_create", return_value=mock_session),
+            patch("nous.application.chat.service.PromptBuildStep") as mock_pbs,
+        ):
+            mock_pbs.return_value.run.side_effect = _capture_prompt_build
+            async for _ in service.chat(ctx, cfg, "sess-highlights", "hello"):
+                pass
+
+        assert "turn_ctx" in captured
+        system_prompt = captured["turn_ctx"].system_prompt
+        # ハイライトが system に現れる（メッセージ偽装ではなく）
+        assert "<conversation_history_summary>" in system_prompt
+        assert "[0] user: user question 0" in system_prompt
+        assert "[7] assistant: assistant answer 3" in system_prompt
+        # 先頭3 + 末尾3（[3]〜[4] は落ちる）
+        hl_block = system_prompt.split("<conversation_history_summary>", 1)[1].split(
+            "</conversation_history_summary>", 1
+        )[0]
+        assert "[3]" not in hl_block
+        assert "[4]" not in hl_block
+        # キャッシュ境界の後ろ（動的領域）に注入される
+        assert system_prompt.index("<!-- __STATIC_END__ -->") < system_prompt.index("<conversation_history_summary>")
+
+
+# ─────────────────────────────────────────────────────────────
 # Chat tab control tests
 # ─────────────────────────────────────────────────────────────
 

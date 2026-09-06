@@ -229,6 +229,13 @@ class ChatService:
                     before_count = len(messages)
                     # スライス先頭が tool なら assistant(tool_calls) を含むよう広げる（孤児 tool 防止）
                     start = TrimmerMixin._adjust_slice_start(messages, -max_msgs)
+                    removed = messages[:start]
+                    if removed:
+                        # 第2切り詰め経路でも同一ヘルパーでハイライト生成・注入
+                        # （重複実装禁止。keep_recent_turns=0 構成ではこの経路が唯一の切り詰め）
+                        highlights = TrimmerMixin._build_truncation_highlights(removed, len(removed), 0)
+                        if highlights:
+                            CompressStep._append_history_summary(turn_ctx, highlights)
                     messages = messages[start:]
                     logger.info(
                         "Truncated session messages: %d → %d (max_stored_messages=%d)",
