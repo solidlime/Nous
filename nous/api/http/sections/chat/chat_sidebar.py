@@ -22,10 +22,9 @@ def _render_debug_section() -> str:
                         <details data-category="other">
                             <summary><i data-lucide="bug"></i> デバッグ・その他 <span class="chat-help-icon" data-category="other" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <input type="checkbox" id="chat-debug-mode"
-                                        style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
-                                    <label for="chat-debug-mode" class="chat-field-label" style="margin:0;cursor:pointer;"><i data-lucide="bug"></i> デバッグモード</label>
+                                <div class="chat-check-row">
+                                    <input type="checkbox" id="chat-debug-mode" />
+                                    <label for="chat-debug-mode"><i data-lucide="bug"></i> デバッグモード</label>
                                 </div>
                             </div>
                         </details>"""
@@ -45,24 +44,33 @@ def _render_sidebar_footer() -> str:
 
 
 def render_chat_sidebar() -> str:
-    """Return the settings sidebar HTML with all configuration panels."""
+    """Return the settings sidebar HTML with all configuration panels.
+
+    Section order is grouped by mental model:
+      1. connection & generation (core, context)
+      2. memory family (extraction, reflection, mental model, auto-capture,
+         enrichment, forgetting, retrieval weights)
+      3. external tools (MCP, skills)
+      4. media output (image, voice)
+      5. everything else (debug) — always last
+    """
     return "".join(
         [
             _render_sidebar_header(),
             _render_core_section(),
             _render_context_section(),
             _render_memory_section(),
-            _render_mcp_section(sys.executable),
-            _render_skills_section(),
             _render_reflection_section(),
             _render_mental_section(),
-            _render_weights_section(),
-            _render_image_section(),
-            _render_voice_section(),
-            _render_debug_section(),
             _render_auto_capture_section(),
             _render_memory_enrichment_section(),
             _render_forgetting_section(),
+            _render_weights_section(),
+            _render_mcp_section(sys.executable),
+            _render_skills_section(),
+            _render_image_section(),
+            _render_voice_section(),
+            _render_debug_section(),
             _render_sidebar_footer(),
         ]
     )

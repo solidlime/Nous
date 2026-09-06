@@ -682,6 +682,9 @@ async function restoreChatHistory(showSkeleton) {
   if (c) {
     requestAnimationFrame(function() {
       c.scrollTop = c.scrollHeight;
+      // Final pass after the last restored chunk: scroll-save handlers fire
+      // mid-restore, so re-assert bottom one frame after the layout settles
+      requestAnimationFrame(function() { c.scrollTop = c.scrollHeight; });
     });
   }
   } finally {

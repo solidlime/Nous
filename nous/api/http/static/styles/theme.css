@@ -109,3 +109,51 @@ html.light .glass-input option { background: var(--bg-primary); color: var(--tex
 .collapsible > * {
     min-height: 0;
 }
+
+/* ============================================================
+   DARK GLASS POLISH — restraint pass (focus, hover edge, scroll)
+   ============================================================ */
+/* Keyboard focus is a first-class citizen: one consistent ring */
+.glass-btn:focus-visible,
+.glass-input:focus-visible,
+.tab-btn:focus-visible,
+.mem-action-btn:focus-visible,
+.copy-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+}
+/* Quiet edge response on raised cards (background lift already exists) */
+.glass-hoverable:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+}
+html.light .glass-hoverable:hover {
+    border-color: rgba(0, 0, 0, 0.14);
+}
+/* Text selection keeps the persona accent, never the browser default */
+::selection {
+    background: rgba(88, 86, 214, 0.35);
+    color: var(--text-primary);
+}
+html.light ::selection {
+    background: rgba(88, 86, 214, 0.25);
+    color: #000000;
+}
+/* Thin, low-contrast scrollbars — chrome that stays out of the way */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-tertiary) transparent;
+}
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--separator-opaque);
+}

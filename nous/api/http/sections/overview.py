@@ -19,10 +19,8 @@ def render_overview_tab() -> str:
         <section id="tab-overview" class="tab-panel active" role="tabpanel">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
                 <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="layout-dashboard"></i></span> Overview</h2>
-                <button data-action="ov-gen-expressions" style="padding:4px 14px;border-radius:6px;border:1px solid rgba(var(--accent-blue-rgb), 0.4);background:rgba(var(--accent-blue-rgb), 0.1);color:var(--accent-blue);cursor:pointer;font-size:0.82rem;font-weight:600">表情セット生成</button>
             </div>
             <div id="overview-portrait" style="margin-bottom:16px; display:none;"></div>
-            <div id="overview-images-grid" style="display:none;"></div>
             <div id="overview-content">
                 <div class="glass p-6 mb-6"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text" style="width:70%"></div></div>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">

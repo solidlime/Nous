@@ -119,7 +119,9 @@ async function loadTimeline() {
             height: '100%',
             minHeight: isMobile ? '350px' : '500px',
             start: items.length > 0 ? new Date(items[items.length-1].start.getTime() - 86400000 * (isMobile ? 3 : 7)) : new Date(),
-            end: new Date(),
+            /* Layout-only: buffer past "now" so today's item boxes don't clip at the
+               container's right edge (vis renders boxes beyond the window end). */
+            end: new Date(Date.now() + 26 * 3600 * 1000),
             zoomable: true,
             moveable: true,
             selectable: true,

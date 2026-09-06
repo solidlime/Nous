@@ -26,8 +26,11 @@
 
     /* Text hierarchy */
     --text-primary: #ffffff;
-    --text-secondary: rgba(235, 235, 245, 0.6);
+    --text-secondary: rgba(235, 235, 245, 0.72);
     --text-muted: rgba(235, 235, 245, 0.6);
+
+    /* Focus ring (shared :focus-visible treatment) */
+    --focus-ring: 0 0 0 3px rgba(0, 122, 255, 0.35);
 
     /* Accent colors (Apple-inspired) */
     --accent-blue: #007aff;
@@ -108,8 +111,11 @@ html.light {
 
     /* Light text */
     --text-primary: #000000;
-    --text-secondary: rgba(60, 60, 67, 0.6);
+    --text-secondary: rgba(60, 60, 67, 0.78);
     --text-muted: rgba(60, 60, 67, 0.55);
+
+    /* Light focus ring */
+    --focus-ring: 0 0 0 3px rgba(0, 122, 255, 0.3);
 
     /* Light accents (same hues, slightly adjusted) */
     --accent-blue: #007aff;

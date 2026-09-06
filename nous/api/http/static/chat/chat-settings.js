@@ -253,10 +253,10 @@ function applyChatConfig(cfg) {
   if (statusEl) {
     if (cfg.is_configured) {
       safeSetHTML(statusEl,
-        '<span style="color:var(--accent-green)"><i data-lucide="check"></i> APIキー設定済み</span>');
+        '<span class="chat-config-ok"><i data-lucide="check"></i> APIキー設定済み</span>');
     } else {
       safeSetHTML(statusEl,
-        '<span style="color:var(--accent-yellow)"><i data-lucide="alert-triangle"></i> APIキー未設定</span>');
+        '<span class="chat-config-warn"><i data-lucide="alert-triangle"></i> APIキー未設定</span>');
     }
   }
 

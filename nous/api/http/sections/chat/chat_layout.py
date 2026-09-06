@@ -85,8 +85,7 @@ def render_chat_layout_suffix() -> str:
             <!-- highlight.js for syntax highlighting in chat bubbles -->
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
             <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" crossorigin="anonymous"></script>
-            <!-- Media viewer overlay -->
-            <div id="media-viewer-overlay" data-action="chat-close-viewer">
-                <div id="media-viewer-inner"></div>
-            </div>
+            <!-- Media viewer overlay moved to base.py render_layout_shell (global layer:
+                 shared by Chat attachments and Overview Generated Images; must not
+                 live inside a tab panel or it leaks / hides across tab switches). -->
         </section>"""

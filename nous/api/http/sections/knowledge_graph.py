@@ -81,9 +81,13 @@ def render_graph_tab() -> str:
             #graph-tag-filter {
               scrollbar-width: thin;
             }
+            /* Collapsed state: show only the checked option(s) so a partial
+               second row never clips under "All Tags" */
+            #graph-tag-filter option:not(:checked) { display: none; }
             #graph-tag-filter:focus {
               max-height: 160px !important;
             }
+            #graph-tag-filter:focus option { display: block; }
 
             /* Make vis-network canvas fill container */
             #graph-container .vis-network {
@@ -108,7 +112,7 @@ def render_graph_tab() -> str:
                 <select id="graph-tag-filter" class="glass-input" multiple
                         style="min-width:150px;max-height:36px"
                         title="Filter by tags (hold Ctrl/Cmd to select multiple)">
-                  <option value="">All Tags</option>
+                  <option value="" selected>All Tags</option>
                 </select>
 
                 <!-- Emotion filter -->

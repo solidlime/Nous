@@ -179,6 +179,14 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str) -> str:
         '    <main id="main-content" class="main-content" tabindex="-1">\n' + tab_contents + "\n"
         "    </main>\n"
         "\n"
+        "    <!-- Media viewer overlay — global layer (shared by Chat + Overview,\n"
+        "         must stay OUTSIDE tab panels: it is opened cross-tab via\n"
+        "         N.Chat.attachments.openViewer) -->\n"
+        '    <div id="media-viewer-overlay" data-action="chat-close-viewer">\n'
+        '        <button type="button" class="media-viewer-close" data-action="chat-close-viewer" aria-label="プレビューを閉じる">&times;</button>\n'
+        '        <div id="media-viewer-inner"></div>\n'
+        "    </div>\n"
+        "\n"
         "    <!-- Memory Detail Modal -->\n"
         '    <div id="mem-modal-overlay" class="mem-modal-overlay">\n'
         '        <div class="mem-modal" id="mem-modal-content"></div>\n'

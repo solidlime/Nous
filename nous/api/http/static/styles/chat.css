@@ -55,7 +55,9 @@
   color: var(--text-primary);
   font-size: 1rem;
   resize: none;
-  min-height: 44px;
+  /* 2 lines + padding — keeps the wrapped placeholder fully visible
+     (placeholder "…(Ctrl+Enter で送信、Enter で改行)" is 2 lines at sidebar widths) */
+  min-height: calc(2 * 1.47em + 26px);
   max-height: 160px;
   font-family: inherit;
   outline: none;
@@ -775,6 +777,10 @@ input[type="range"].chat-field-input:focus {
   font-weight: 600;
   transition: all var(--duration-fast) var(--ease-apple);
   letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .chat-save-btn:hover {
@@ -799,6 +805,10 @@ input[type="range"].chat-field-input:focus {
   font-size: 0.84rem;
   font-weight: 500;
   transition: all var(--duration-fast) var(--ease-apple);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .chat-clear-btn:hover {
@@ -856,6 +866,16 @@ input[type="range"].chat-field-input:focus {
   padding: 4px 16px;
   min-height: 20px;
 }
+/* Footer config status (#chat-config-status) — sanitizer-safe classes */
+.chat-config-ok,
+.chat-config-warn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.chat-config-ok { color: var(--accent-green); }
+.chat-config-warn { color: var(--accent-yellow); }
 .chat-welcome {
   flex: 1;
   display: flex;
@@ -992,6 +1012,9 @@ input[type="range"].chat-field-input:focus {
   font-weight: 600;
   color: var(--text-secondary);
   margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .memory-section-header {
   font-size: 0.75rem;
@@ -1002,6 +1025,9 @@ input[type="range"].chat-field-input:focus {
   margin-bottom: 6px;
   padding-bottom: 4px;
   border-bottom: 0.5px solid var(--separator-non-opaque);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .memory-item-card {
   background: var(--glass-bg-light);
@@ -1239,6 +1265,38 @@ input[type="range"].chat-field-input:focus {
 }
 .media-viewer-prompts .prompt-text:last-child {
   margin-bottom: 0;
+}
+/* Close button for media viewer — matches .ov-modal / glass control feel */
+.media-viewer-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 0.5px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px) saturate(180%);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-apple), transform var(--duration-fast) var(--ease-apple);
+}
+.media-viewer-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+.media-viewer-close:active {
+  transform: scale(0.96);
+}
+.media-viewer-close:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 /* Chat bubble markdown styles — Apple HIG */
 .chat-bubble h1,
@@ -1936,8 +1994,25 @@ input[type="range"].chat-field-input:focus {
     height: 100%;
     border-radius: 4px;
     transition: width 0.5s ease;
+    background: linear-gradient(90deg, var(--accent-pink), var(--accent-purple));
+    width: 0;
 }
-
+/* Sanitizer-safe emotion header row (no inline styles survive safeSetHTML) */
+.ov-emotion-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.ov-emotion-name {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.ov-emotion-pct {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
 /* Section title in status panel */
 .ov-section-title {
     font-size: 0.78rem;
@@ -1956,6 +2031,33 @@ input[type="range"].chat-field-input:focus {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
+}
+.ov-body-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 3px;
+}
+.ov-body-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+.ov-body-value {
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+.ov-body-bar {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.ov-body-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.4s ease;
+    background: var(--accent-blue);
+    width: 0;
 }
 
 /* Memory stats in status panel */
@@ -2020,4 +2122,187 @@ input[type="range"].chat-field-input:focus {
   margin-top: 4px;
   display: inline-block;
   cursor: help;
+}
+
+/* ============================================================
+   CHAT SETTINGS PANEL — shared field patterns
+   Replaces per-element inline styles in chat_sidebar*.py so
+   label/row/subsection/test-control styling stays uniform.
+   ============================================================ */
+
+/* Range sliders inside the settings panel: full width + accent */
+#settings-panel input[type="range"].chat-field-input {
+  width: 100%;
+  accent-color: var(--accent-purple);
+}
+
+/* Checkbox row: [ ] label */
+.chat-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chat-check-row input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent-purple);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.chat-check-row label {
+  margin: 0;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* Label wrapping its own control (radios, inline checkboxes) */
+.chat-inline-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.chat-inline-check input[type="checkbox"],
+.chat-inline-check input[type="radio"] {
+  accent-color: var(--accent-purple);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* Slider rows: label left, live value right */
+.chat-field-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.chat-field-value {
+  color: var(--accent-purple);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* Group heading inside an accordion body */
+#settings-panel .details-body h4 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 8px 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Divider block (non-collapsible group inside an accordion body) */
+.chat-sub-block {
+  border-top: 1px solid var(--glass-border);
+  padding-top: 8px;
+  margin-top: 4px;
+}
+
+/* Collapsible subsection with divider */
+.chat-subsection {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--glass-border);
+}
+.chat-subsection > summary {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 0;
+}
+.chat-subsection .chat-field-label,
+.chat-subsection .chat-field-input {
+  font-size: 0.76rem;
+}
+
+/* Missing accordion category accent colors (parity with existing map) */
+#settings-panel details[data-category="image"] summary::before {
+  color: var(--accent-pink);
+}
+#settings-panel details[data-category="auto_capture"] summary::before {
+  color: var(--accent-green);
+}
+#settings-panel details[data-category="memory_enrichment"] summary::before {
+  color: var(--accent-yellow);
+}
+#settings-panel details[data-category="forgetting"] summary::before {
+  color: var(--accent-red);
+}
+
+/* Compact action button (test generation / test playback) */
+.chat-btn-sm {
+  width: auto;
+  font-size: 0.78rem;
+  padding: 6px 12px;
+}
+.chat-test-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 122, 255, 0.08);
+  border: 0.5px solid rgba(0, 122, 255, 0.2);
+  color: var(--accent-blue);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 500;
+  transition: all var(--duration-fast) var(--ease-apple);
+}
+.chat-test-btn:hover {
+  background: rgba(0, 122, 255, 0.16);
+  border-color: rgba(0, 122, 255, 0.35);
+}
+.chat-test-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.chat-test-status {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  min-height: 16px;
+}
+
+/* Field hints (settings panel + subsections) */
+.chat-field-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: -6px;
+  margin-bottom: 8px;
+}
+.setting-hint {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* Image-gen preset resolution grid (compact table, settings panel) */
+.chat-preset-grid {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr 1fr;
+  gap: 4px 6px;
+  align-items: center;
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+.chat-preset-grid .chat-field-input {
+  font-size: 0.72rem;
+  text-align: center;
+}
+.chat-preset-grid .chat-field-label {
+  color: var(--text-dim);
 }

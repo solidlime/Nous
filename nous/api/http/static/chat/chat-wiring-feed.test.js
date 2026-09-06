@@ -161,9 +161,19 @@ describe('wiring feed trim + render', () => {
     const list = wiringList();
     expect(list.querySelector('img')).toBeNull();
     expect(list.querySelector('[onerror]')).toBeNull();
-    expect(list.textContent).toContain('<img src=x onerror=alert(1)>');
+    // content-first rows: unresolved target key falls back to the raw key
     expect(list.textContent).toContain('b&c');
     expect(list.querySelectorAll('.wiring-fire-item').length).toBe(2);
+    // the hostile source key never parses into live elements — it shows
+    // up escaped in the detail modal's Edge row
+    MP.openWiringDetail('b&c');
+    const overlay = document.getElementById('wiring-detail-overlay');
+    expect(overlay.style.display).toBe('flex');
+    expect(overlay.querySelector('img')).toBeNull();
+    expect(overlay.querySelector('.wiring-edge-detail').textContent)
+      .toContain('<img src=x onerror=alert(1)>');
+    MP.closeWiringDetail();
+    expect(overlay.style.display).toBe('none');
   });
 
   it('injects the feed next to reflection and the numeric setting without inline handlers', () => {
@@ -334,5 +344,74 @@ describe('toggleMemory drives the feed', () => {
     } finally {
       MP.setWiringVisible = orig;
     }
+  });
+});
+
+describe('content-first rows (memory resolution + weight bar)', () => {
+  function flushMicrotasks() {
+    // ~10 ticks covers fetch -> json -> remember -> allSettled -> re-render
+    let p = Promise.resolve();
+    for (let i = 0; i < 10; i++) p = p.then(() => {});
+    return p;
+  }
+
+  function fetchMemoriesByKey(payload) {
+    return vi.fn((url) => {
+      const key = decodeURIComponent(String(url).split('/').pop());
+      return Promise.resolve({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: () => Promise.resolve({ memory: payload(key) }),
+      });
+    });
+  }
+
+  const memFor = (key) => ({
+    key,
+    // fresh keys (w1/w2) — earlier tests mark their keys as fetch-failed in
+    // the panel's cache, and that map intentionally persists per file
+    content: key === 'w2' ? '彼女は黒いロングコートを選んだ — なかなかの選択ね' : 'old memory w1',
+    kind: 'semantic',
+    importance: 0.5,
+    tags: ['fashion'],
+    created_at: '2026-09-06T07:00:02+09:00',
+    related_keys: [],
+  });
+
+  it('shows the content summary and a data-fill weight bar', async () => {
+    vi.stubGlobal('fetch', fetchMemoriesByKey((key) => memFor(key)));
+    MP.clearWiring();
+    MP.pushWiringEvent(fire(1, 'link_fire', 'w1', 'w2', 0.24));
+    await flushMicrotasks();
+    const row = wiringList().querySelector('[data-wiring-open="w2"]');
+    expect(row).not.toBeNull();
+    expect(row.textContent).toContain('黒いロングコート');
+    expect(row.getAttribute('role')).toBe('button');
+    expect(row.getAttribute('tabindex')).toBe('0');
+    const fill = row.querySelector('.mem-bar-fill');
+    expect(fill.getAttribute('data-fill')).toBe('24');
+    expect(row.querySelector('.wiring-weight').textContent).toBe('0.24');
+  });
+
+  it('opens the detail modal with full content, kind, tags, importance bar', async () => {
+    vi.stubGlobal('fetch', fetchMemoriesByKey((key) => memFor(key)));
+    MP.clearWiring();
+    MP.pushWiringEvent(fire(1, 'link_fire', 'w1', 'w2', 0.24));
+    await flushMicrotasks();
+    const row = wiringList().querySelector('[data-wiring-open="w2"]');
+    row.focus();
+    row.click();
+    const overlay = document.getElementById('wiring-detail-overlay');
+    expect(overlay.style.display).toBe('flex');
+    expect(overlay.querySelector('.wiring-detail-text').textContent)
+      .toContain('黒いロングコートを選んだ');
+    expect(overlay.textContent).toContain('semantic');
+    expect(overlay.textContent).toContain('fashion');
+    expect(overlay.querySelector('.modal-progress-fill').getAttribute('data-fill')).toBe('50');
+    expect(overlay.textContent).toContain('w1');
+    // Escape closes and restores focus to the opening row
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(overlay.style.display).toBe('none');
+    expect(document.activeElement).toBe(row);
   });
 });

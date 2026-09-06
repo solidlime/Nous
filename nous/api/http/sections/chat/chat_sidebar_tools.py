@@ -20,18 +20,16 @@ def _render_mcp_section(sys_executable: str) -> str:
                                     <div id="chat-mcp-json-error" style="font-size:0.72rem;color:var(--accent-red);margin-top:3px;display:none;"></div>
                                 </div>
                                 <div>
-                                    <div class="chat-field-label" style="display:flex;justify-content:space-between;">
+                                    <div class="chat-field-label chat-field-label-row">
                                         <span>ツール結果最大文字数</span>
-                                        <span id="chat-tool-max-val" style="color:var(--accent-purple);">4000</span>
+                                        <span id="chat-tool-max-val" class="chat-field-value">4000</span>
                                     </div>
                                     <input type="range" id="chat-tool-result-max" class="chat-field-input" min="500" max="100000" step="500" value="4000"
-                                        data-mirror="chat-tool-max-val" data-mirror-format="raw"
-                                        style="width:100%;accent-color:var(--accent-purple);" />
+                                        data-mirror="chat-tool-max-val" data-mirror-format="raw" />
                                 </div>
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <input type="checkbox" id="chat-dynamic-tool-selection" checked
-                                        style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
-                                    <label for="chat-dynamic-tool-selection" class="chat-field-label" style="margin:0;cursor:pointer;">動的ツール選択</label>
+                                <div class="chat-check-row">
+                                    <input type="checkbox" id="chat-dynamic-tool-selection" checked />
+                                    <label for="chat-dynamic-tool-selection">動的ツール選択</label>
                                 </div>
                             </div>
                         </details>"""
@@ -56,10 +54,9 @@ def _render_auto_capture_section() -> str:
                         <details data-category="auto_capture">
                             <summary><i data-lucide="camera"></i> 自動キャプチャ<span class="chat-help-icon" data-category="auto_capture" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <input type="checkbox" id="chat-auto-capture-enabled"
-                                        style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" />
-                                    <label for="chat-auto-capture-enabled" class="chat-field-label" style="margin:0;cursor:pointer;">自動キャプチャ有効</label>
+                                <div class="chat-check-row">
+                                    <input type="checkbox" id="chat-auto-capture-enabled" />
+                                    <label for="chat-auto-capture-enabled">自動キャプチャ有効</label>
                                 </div>
                                 <div>
                                     <div class="chat-field-label">実行間隔（秒）</div>

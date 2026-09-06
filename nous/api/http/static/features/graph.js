@@ -96,7 +96,7 @@ function populateGraphFilters(nodes) {
     var emotionFilter = document.getElementById('graph-emotion-filter');
     if (!tagFilter || !emotionFilter) return;
     var currentTags = Array.from(tagFilter.selectedOptions).map(function(o) { return o.value; }).filter(Boolean);
-    safeSetHTML(tagFilter, '<option value="">All Tags</option>' +
+    safeSetHTML(tagFilter, '<option value=""' + (currentTags.length ? '' : ' selected') + '>All Tags</option>' +
         Array.from(tagSet).sort().map(function(t) {
             return '<option value="' + esc(t) + '"' +
                    (currentTags.includes(t) ? ' selected' : '') + '>' + esc(t) + '</option>';

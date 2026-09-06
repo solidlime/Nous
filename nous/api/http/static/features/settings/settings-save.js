@@ -264,11 +264,11 @@ function updateCategoryStatusBanners(rs) {
         var s = rs[cat];
         var statusHtml = '';
         if (s && s.status === 'loading') {
-            statusHtml = '<div style="margin-top:8px"><div style="font-size:0.78rem;color:var(--accent-yellow);margin-bottom:4px"><i data-lucide="clock"></i> Reloading ' + esc(cat) + ' model...</div><div class="progress-wrap"><div class="progress-bar progress-indeterminate"></div></div></div>';
+            statusHtml = '<div class="cat-status"><div class="cat-status-loading"><i data-lucide="clock"></i> Reloading ' + esc(cat) + ' model...</div><div class="progress-wrap"><div class="progress-bar progress-indeterminate"></div></div></div>';
         } else if (s && (s.status === 'ready' || s.status === 'success')) {
-            statusHtml = '<div style="margin-top:8px;font-size:0.78rem;color:var(--accent-green)"><i data-lucide="check-circle"></i> ' + esc(cat) + ' ready</div>';
+            statusHtml = '<div class="cat-status cat-status-ready"><i data-lucide="check-circle"></i> ' + esc(cat) + ' ready</div>';
         } else if (s && s.status === 'error') {
-            statusHtml = '<div style="margin-top:8px;font-size:0.78rem;color:var(--accent-red)"><i data-lucide="x-circle"></i> ' + esc(cat) + ' error: ' + esc(s.error || 'Unknown') + '</div>';
+            statusHtml = '<div class="cat-status cat-status-error"><i data-lucide="x-circle"></i> ' + esc(cat) + ' error: ' + esc(s.error || 'Unknown') + '</div>';
         }
         var card = document.querySelector('[data-category="' + cat + '"]');
         if (card) {
@@ -345,7 +345,7 @@ function renderSettingsProfiles() {
     var html = '';
     /* Built-in profiles */
     Object.keys(BUILTIN_PROFILES).forEach(function(name) {
-        html += '<button data-profile-action="load-builtin" data-profile-name="' + esc(name) + '" class="glass-btn profile-chip" style="padding:5px 14px;font-size:0.78rem;background:linear-gradient(135deg,rgba(var(--accent-blue-rgb),0.15),rgba(var(--accent-pink-rgb),0.15));border-color:rgba(var(--accent-blue-rgb),0.3)">';
+        html += '<button data-profile-action="load-builtin" data-profile-name="' + esc(name) + '" class="glass-btn profile-chip profile-chip-builtin">';
         html += '<i data-lucide="package"></i> ' + esc(name);
         html += '</button>';
     });
@@ -357,14 +357,14 @@ function renderSettingsProfiles() {
     }
     profileKeys.forEach(function(k) {
         var pName = k.replace('nous_profile_', '');
-        html += '<div style="display:inline-flex;align-items:center;gap:0">';
-        html += '<button data-profile-action="load-user" data-profile-name="' + esc(pName) + '" class="glass-btn profile-chip" style="padding:5px 14px;font-size:0.78rem;border-top-right-radius:0;border-bottom-right-radius:0">';
+        html += '<div class="profile-chip-group">';
+        html += '<button data-profile-action="load-user" data-profile-name="' + esc(pName) + '" class="glass-btn profile-chip profile-chip-join-right">';
         html += '<i data-lucide="user"></i> ' + esc(pName);
         html += '</button>';
-        html += '<button data-profile-action="delete" data-profile-name="' + esc(pName) + '" class="glass-btn glass-btn-danger" style="padding:5px 8px;font-size:0.72rem;border-top-left-radius:0;border-bottom-left-radius:0;border-left:none" title="Delete profile"><i data-lucide="x"></i></button>';
+        html += '<button data-profile-action="delete" data-profile-name="' + esc(pName) + '" class="glass-btn glass-btn-danger profile-chip profile-chip-delete" title="Delete profile"><i data-lucide="x"></i></button>';
         html += '</div>';
     });
-    if (!html) html = '<span style="font-size:0.8rem;color:var(--text-muted)">No profiles yet</span>';
+    if (!html) html = '<span class="memory-muted-text">No profiles yet</span>';
     safeSetHTML(container, html);
 }
 

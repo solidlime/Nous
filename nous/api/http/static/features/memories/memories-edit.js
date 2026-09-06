@@ -42,9 +42,9 @@ function openMemModal(mem) {
     var h = '';
     h += '<div class="mem-modal-header">';
     h += '<div>';
-    h += '<div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:4px">Memory Key</div>';
-    h += '<div style="display:flex;align-items:center;gap:6px">';
-    h += '<span style="font-family:monospace;font-size:0.85rem;color:var(--accent-purple)">' + esc(mem.key) + '</span>';
+    h += '<div class="mem-modal-kicker">Memory Key</div>';
+    h += '<div class="mem-key-row">';
+    h += '<span class="mem-key-mono">' + esc(mem.key) + '</span>';
     h += '<button type="button" class="copy-btn" data-mem-copy="1" title="Copy key">';
     h += '</div></div>';
     h += '<button type="button" class="mem-modal-close" data-mem-close="1"><i data-lucide="x"></i></button>';
@@ -61,11 +61,9 @@ function openMemModal(mem) {
     /* Emotion */
     if (mem.emotion) {
         h += '<div class="mem-modal-row"><span class="mem-modal-key">Emotion</span><span>';
-        h += '<span class="badge" style="background:' + emoColor + '22;color:' + emoColor + ';border:1px solid ' + emoColor + '44">' + esc(mem.emotion) + '</span>';
+        h += '<span class="badge mem-emo-badge" data-color-base="' + emoColor + '">' + esc(mem.emotion) + '</span>';
         if (mem.emotion_intensity != null) {
-            h += ' <div class="modal-progress" style="display:inline-flex;width:120px;vertical-align:middle">';
-            h += '<div class="modal-progress-bar"><div class="modal-progress-fill" style="width:' + (mem.emotion_intensity * 100) + '%;background:' + emoColor + '"></div></div>';
-            h += '<span style="font-size:0.75rem;color:' + emoColor + '">' + mem.emotion_intensity.toFixed(2) + '</span></div>';
+            h += ' <span class="modal-progress"><span class="modal-progress-bar"><span class="modal-progress-fill" data-fill="' + Math.round(mem.emotion_intensity * 100) + '" data-color="' + emoColor + '"></span></span><span class="mem-bar-pct">' + mem.emotion_intensity.toFixed(2) + '</span></span>';
         }
         h += '</span></div>';
     }
@@ -73,18 +71,14 @@ function openMemModal(mem) {
     /* Importance */
     if (mem.importance != null) {
         h += '<div class="mem-modal-row"><span class="mem-modal-key">Importance</span><span>';
-        h += '<div class="modal-progress" style="display:inline-flex;width:160px">';
-        h += '<div class="modal-progress-bar"><div class="modal-progress-fill" style="width:' + (mem.importance * 100) + '%;background:linear-gradient(90deg,var(--accent-purple),var(--accent-yellow))"></div></div>';
-        h += '<span style="font-size:0.78rem;color:var(--accent-yellow);font-weight:600">' + mem.importance.toFixed(2) + '</span></div>';
+        h += '<span class="modal-progress"><span class="modal-progress-bar wide"><span class="modal-progress-fill" data-fill="' + Math.round(mem.importance * 100) + '" data-color="linear-gradient(90deg,var(--accent-purple),var(--accent-yellow))"></span></span><span class="mem-bar-pct ov-accent-yellow">' + mem.importance.toFixed(2) + '</span></span>';
         h += '</span></div>';
     }
 
     /* Strength */
     if (mem.strength != null) {
         h += '<div class="mem-modal-row"><span class="mem-modal-key">Strength</span><span>';
-        h += '<div class="modal-progress" style="display:inline-flex;width:160px">';
-        h += '<div class="modal-progress-bar"><div class="modal-progress-fill" style="width:' + Math.min(mem.strength * 100, 100) + '%;background:linear-gradient(90deg,var(--accent-green),var(--accent-blue))"></div></div>';
-        h += '<span style="font-size:0.78rem;color:var(--accent-green);font-weight:600">' + mem.strength.toFixed(3) + '</span></div>';
+        h += '<span class="modal-progress"><span class="modal-progress-bar wide"><span class="modal-progress-fill" data-fill="' + Math.round(Math.min(mem.strength * 100, 100)) + '" data-color="linear-gradient(90deg,var(--accent-green),var(--accent-blue))"></span></span><span class="mem-bar-pct ov-accent-green">' + mem.strength.toFixed(3) + '</span></span>';
         h += '</span></div>';
     }
 
@@ -100,54 +94,34 @@ function openMemModal(mem) {
 
     /* Source context */
     if (mem.source_context) {
-        h += '<div class="mem-modal-row"><span class="mem-modal-key">Source</span><span style="color:var(--text-muted)">' + esc(mem.source_context) + '</span></div>';
+        h += '<div class="mem-modal-row"><span class="mem-modal-key">Source</span><span class="ov-muted">' + esc(mem.source_context) + '</span></div>';
     }
 
-    /* Body State */
-    if (mem.body_state) {
-        var bodyKeys = Object.keys(N.Core.BODY_BAR_COLORS);
-        var hasBody = bodyKeys.some(function(k){ return mem.body_state[k] != null; });
-        if (hasBody) {
-            h += '<div class=\"mem-modal-row\"><span class=\"mem-modal-key\">Body</span><span style=\"display:flex;flex-direction:column;gap:6px;flex:1\">';
-            bodyKeys.forEach(function(k) {
-                if (mem.body_state[k] != null) {
-                    var val = mem.body_state[k];
-                    var pct = Math.round(val * 100);
-                    h += '<div style=\"display:flex;align-items:center;gap:8px\">';
-                    h += '<span style=\"font-size:0.75rem;color:var(--text-muted);min-width:80px\">' + N.Core.BODY_LABELS[k] + '</span>';
-                    h += '<div style=\"flex:1;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden\">';
-                    h += '<div style=\"height:100%;width:' + pct + '%;background:' + N.Core.BODY_BAR_COLORS[k] + ';border-radius:3px\"></div>';
-                    h += '</div>';
-                    h += '<span style=\"font-size:0.75rem;color:var(--text-muted);min-width:32px;text-align:right\">' + pct + '%</span>';
-                    h += '</div>';
-                }
-            });
-            h += '</span></div>';
-        }
-    }
+    /* Body State (renderer + data-fill pass live in memory-card.js) */
+    h += N.Components.memoryCard.renderBodyStateBars(mem.body_state);
 
     /* Emotion bar */
     if (mem.emotion) {
-        h += '<div style=\"margin-bottom:16px\">' + N.Components.memoryCard.renderEmotionBars(mem.emotion, mem.emotion_intensity) + '</div>';
+        h += N.Components.memoryCard.renderEmotionBars(mem.emotion, mem.emotion_intensity);
     }
 
     /* Created at */
     if (mem.created_at) {
-        h += '<div class="mem-modal-row"><span class="mem-modal-key">Created</span><span>\uD83D\uDCC5 ' + relativeTime(mem.created_at) + ' <span style="color:var(--text-muted);font-size:0.75rem">(' + new Date(mem.created_at).toLocaleString() + ')</span></span></div>';
+        h += '<div class="mem-modal-row"><span class="mem-modal-key">Created</span><span>\uD83D\uDCC5 ' + relativeTime(mem.created_at) + ' <span class="mem-time-note">(' + new Date(mem.created_at).toLocaleString() + ')</span></span></div>';
     }
 
     /* State snapped at (if different from created) */
     if (mem.state_snapped_at && mem.state_snapped_at !== mem.created_at) {
-        h += '<div class="mem-modal-row"><span class="mem-modal-key">State</span><span><i data-lucide="camera-off"></i> ' + relativeTime(mem.state_snapped_at) + ' <span style="color:var(--text-muted);font-size:0.75rem">(' + new Date(mem.state_snapped_at).toLocaleString() + ')</span></span></div>';
+        h += '<div class="mem-modal-row"><span class="mem-modal-key">State</span><span><i data-lucide="camera-off"></i> ' + relativeTime(mem.state_snapped_at) + ' <span class="mem-time-note">(' + new Date(mem.state_snapped_at).toLocaleString() + ')</span></span></div>';
     }
 
     /* Updated at */
     if (mem.updated_at) {
-        h += '<div class="mem-modal-row"><span class="mem-modal-key">Updated</span><span>\uD83D\uDCC5 ' + relativeTime(mem.updated_at) + ' <span style="color:var(--text-muted);font-size:0.75rem">(' + new Date(mem.updated_at).toLocaleString() + ')</span></span></div>';
+        h += '<div class="mem-modal-row"><span class="mem-modal-key">Updated</span><span>\uD83D\uDCC5 ' + relativeTime(mem.updated_at) + ' <span class="mem-time-note">(' + new Date(mem.updated_at).toLocaleString() + ')</span></span></div>';
     }
 
     /* Action buttons */
-    h += '<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">';
+    h += '<div class="ov-modal-actions">';
     h += '<button type="button" class="glass-btn glass-btn-danger" data-mem-del="1">Delete</button>';
     h += '<button class="glass-btn glass-btn-success" id="mem-modal-edit-btn">\u270F\uFE0F Edit</button>';
     h += '</div>';

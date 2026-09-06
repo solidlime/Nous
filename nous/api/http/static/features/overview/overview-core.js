@@ -11,6 +11,9 @@ N.Features.Overview = N.Features.Overview || {};
 ;(function() {
 var S = window.S;
 var { esc, toast, api, truncate, relativeTime, fmtDate, safeSetHTML } = window.Nous.Core;
+var BAR_COLORS = window.Nous.Core;
+var EMOTION_BAR_COLORS = BAR_COLORS.EMOTION_BAR_COLORS || {};
+var BODY_BAR_COLORS = BAR_COLORS.BODY_BAR_COLORS || {};
 
 async function loadOverview() {
     const el = document.getElementById('overview-content');
@@ -66,20 +69,20 @@ async function loadOverview() {
         const mentalContent = (sm.mental_state?.content) || ctx.mental_state;
         // --- Equipment display ---
         const EQUIP_SLOTS = ['top','bottom','shoes','outer','head','accessory_1','accessory_2','accessory_3'];
-        let equipHtml = '<div style="display:grid;gap:6px;margin-top:8px">';
+        let equipHtml = '<div class="ov-equip-list">';
         EQUIP_SLOTS.forEach(slot => {
             const current = equip[slot];
             const itemName = typeof current === 'string' ? current : (current ? (current.name || '') : '');
-            equipHtml += '<div style="display:flex;align-items:center;gap:8px">';
-            equipHtml += '<span class="badge badge-blue" style="min-width:80px;text-align:center">' + esc(slot) + '</span>';
+            equipHtml += '<div class="ov-equip-row">';
+            equipHtml += '<span class="badge badge-blue ov-equip-slot">' + esc(slot) + '</span>';
             if (itemName) {
-                equipHtml += '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)">' + esc(itemName) + '</span>';
+                equipHtml += '<span class="ov-equip-name">' + esc(itemName) + '</span>';
                 equipHtml += '<button type="button" class="glass-btn" data-ov-action="unequip" data-slot="' + esc(slot) + '" title="Unequip"><i data-lucide="x"></i></button>';
             } else {
-                equipHtml += '<span style="flex:1;font-size:0.82rem;color:var(--text-muted);font-style:italic">empty</span>';
+                equipHtml += '<span class="ov-equip-empty">empty</span>';
                 const slotItems = items.filter(it => it.name);
                 if (slotItems.length > 0) {
-                    equipHtml += '<select data-ov-slot="' + esc(slot) + '"><option value="">equip...</option>';
+                    equipHtml += '<select class="glass-input ov-equip-select" data-ov-slot="' + esc(slot) + '"><option value="">equip...</option>';
                     slotItems.forEach(it => { equipHtml += '<option value="' + esc(it.name) + '">' + esc(it.name) + '</option>'; });
                     equipHtml += '</select>';
                 }
@@ -96,16 +99,16 @@ async function loadOverview() {
         // --- Inventory items HTML ---
         let invHtml = '';
         if (items.length === 0) {
-            invHtml = '<span style="color:var(--text-muted)">No items in inventory</span>';
+            invHtml = '<span class="ov-muted">No items in inventory</span>';
         } else {
-            invHtml = '<div style="display:grid;gap:4px">';
+            invHtml = '<div class="ov-inv-list">';
             items.forEach(it => {
                 const desc = it.description || '';
                 const truncDesc = desc.length > 40 ? desc.slice(0, 40) + '...' : desc;
-                invHtml += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)">';
+                invHtml += '<div class="ov-inv-row">';
                 invHtml += '<span class="badge badge-blue">' + esc(it.category || 'item') + '</span>';
-                invHtml += '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)" title="' + esc(desc) + '">' + esc(it.name) + '</span>';
-                if (it.quantity > 1) invHtml += '<span style="font-size:0.78rem;color:var(--text-muted)">x' + it.quantity + '</span>';
+                invHtml += '<span class="ov-inv-name" title="' + esc(desc) + '">' + esc(it.name) + '</span>';
+                if (it.quantity > 1) invHtml += '<span class="ov-inv-qty">x' + it.quantity + '</span>';
                 if (truncDesc) invHtml += '<span class="badge badge-purple" title="' + esc(desc) + '">' + esc(truncDesc) + '</span>';
                 invHtml += '<button type="button" class="glass-btn" data-ov-action="edit-item" data-item="' + esc(it.name) + '" title="Edit item"><i data-lucide="pencil"></i></button>';
                 invHtml += '<button type="button" class="glass-btn" data-ov-action="delete-item" data-item="' + esc(it.name) + '" title="Delete item"><i data-lucide="trash-2"></i></button>';
@@ -121,11 +124,11 @@ async function loadOverview() {
             <div id="hero-portrait-slot"></div>
             <div class="ov-status-panel">
                 <!-- 1. Profile & Relationship -->
-                <div class="glass p-4" style="border-radius:var(--radius-md);backdrop-filter:blur(20px) saturate(180%)">
+                <div class="glass p-4">
                     <div class="ov-section-title"><i data-lucide="user-circle"></i> Profile &amp; Relationship</div>
-                    ${Object.entries(userInfo).length ? Object.entries(userInfo).map(([k,v]) => '<div class="ov-quick-row" style="padding:2px 0"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value">' + esc(String(v)) + '</span></div>').join('') : '<span style="color:var(--text-muted);font-size:0.82rem">No user info</span>'}
-                    ${(() => { const _GK = new Set(['goals','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GK.has(k)); return filtered.length ? filtered.map(([k,v]) => '<div class="ov-quick-row" style="padding:2px 0"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value" style="color:var(--accent-purple)">' + esc(String(v)) + '</span></div>').join('') : ''; })()}
-                    <div class="ov-quick-row"><span class="ov-quick-label">Relationship</span><span class="ov-quick-value" style="color:var(--accent-pink);font-weight:600">${esc(relStatus)}</span></div>
+                    ${Object.entries(userInfo).length ? Object.entries(userInfo).map(([k,v]) => '<div class="ov-quick-row ov-quick-tight"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value">' + esc(String(v)) + '</span></div>').join('') : '<span class="ov-muted">No user info</span>'}
+                    ${(() => { const _GK = new Set(['goals','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GK.has(k)); return filtered.length ? filtered.map(([k,v]) => '<div class="ov-quick-row ov-quick-tight"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value ov-accent-purple">' + esc(String(v)) + '</span></div>').join('') : ''; })()}
+                    <div class="ov-quick-row"><span class="ov-quick-label">Relationship</span><span class="ov-quick-value ov-accent-pink">${esc(relStatus)}</span></div>
                     ${ctx.last_conversation_time ? '<div class="ov-quick-row"><span class="ov-quick-label"><i data-lucide="clock"></i> Last</span><span class="ov-quick-value">' + relativeTime(ctx.last_conversation_time) + '</span></div>' : ''}
                     <div class="ov-quick-row"><span class="ov-quick-label">Physical</span><span class="ov-quick-value">${esc(physicalContent || '--')}</span></div>
                     <div class="ov-quick-row"><span class="ov-quick-label">Mental</span><span class="ov-quick-value">${esc(mentalContent || '--')}</span></div>
@@ -133,35 +136,34 @@ async function loadOverview() {
                 </div>
 
                 <!-- 2. Status (Emotion + Body) -->
-                <div class="glass p-4" style="border-radius:var(--radius-md);backdrop-filter:blur(20px) saturate(180%)">
+                <div class="glass p-4">
                     <div class="ov-section-title"><i data-lucide="activity"></i> Status</div>
                     ${(function(){
-                        var emoColor = N.Core.EMOTION_COLORS[ctx.emotion] || N.Core.EMOTION_COLORS.neutral;
                         var pct = Math.round((ctx.emotion_intensity || 0) * 100);
-                        return '<div class="ov-emotion-section" style="border-color:' + emoColor + '44;margin-bottom:12px">'
-                            + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
-                            + '<span style="font-size:0.85rem;font-weight:700;color:' + emoColor + '">' + esc(ctx.emotion || 'neutral') + '</span>'
-                            + '<span style="font-size:0.75rem;color:var(--text-secondary);font-weight:600">' + pct + '%</span>'
+                        var color = EMOTION_BAR_COLORS[ctx.emotion] || EMOTION_BAR_COLORS.neutral || '';
+                        return '<div class="ov-emotion-section">'
+                            + '<div class="ov-emotion-head">'
+                            + '<span class="ov-emotion-name">' + esc(ctx.emotion || 'neutral') + '</span>'
+                            + '<span class="ov-emotion-pct">' + pct + '%</span>'
                             + '</div>'
-                            + '<div class="ov-emotion-bar-wrap"><div class="ov-emotion-bar-fill" style="width:' + pct + '%;background:' + (N.Core.EMOTION_BAR_COLORS[ctx.emotion] || N.Core.EMOTION_BAR_COLORS.neutral) + '"></div></div>'
+                            + '<div class="ov-emotion-bar-wrap"><div class="ov-emotion-bar-fill" data-fill="' + pct + '"' + (color ? ' data-color="' + color + '"' : '') + '></div></div>'
                             + '</div>';
                     })()}
                     <div class="ov-body-grid">
                         ${(['fatigue','warmth','arousal','heart_rate','pain']).map(k => {
                             var val = stats[k];
                             var label = N.Core.BODY_LABELS[k] || k;
-                            var barColor = N.Core.BODY_BAR_COLORS[k] || 'var(--text-muted)';
                             if (val != null) {
-                                return '<div>'
-                                    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'
-                                    + '<span style="font-size:0.72rem;color:var(--text-muted)">' + label + '</span>'
-                                    + '<span style="font-size:0.72rem;color:var(--text-secondary);font-weight:600">' + (val * 100).toFixed(0) + '%</span>'
+                                var pct = Math.round(val * 100);
+                                var color = BODY_BAR_COLORS[k] || '';
+                                return '<div class="ov-body-item">'
+                                    + '<div class="ov-body-row">'
+                                    + '<span class="ov-body-label">' + label + '</span>'
+                                    + '<span class="ov-body-value">' + pct + '%</span>'
                                     + '</div>'
-                                    + '<div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden">'
-                                    + '<div style="height:100%;width:' + (val * 100).toFixed(1) + '%;background:' + barColor + ';border-radius:2px;transition:width 0.4s ease"></div>'
-                                    + '</div></div>';
+                                    + '<div class="ov-body-bar"><div class="ov-body-bar-fill" data-fill="' + pct + '"' + (color ? ' data-color="' + color + '"' : '') + '></div></div></div>';
                             } else {
-                                return '<div><span style="font-size:0.72rem;color:var(--text-muted)">' + label + '</span> <span style="font-size:0.72rem;color:var(--text-muted)">--</span></div>';
+                                return '<div class="ov-body-item ov-body-idle"><span class="ov-body-label">' + label + '</span> <span class="ov-body-label ov-body-value">--</span></div>';
                             }
                         }).join('')}
                     </div>
@@ -179,81 +181,83 @@ async function loadOverview() {
         ${data.relationship_highlights && data.relationship_highlights.length > 0 ? `
         <div class="glass glass-hoverable p-6 mb-6">
             <div class="card-title"><i data-lucide="heart"></i> Relationship Highlights</div>
-            <div style="max-height:200px;overflow-y:auto">
+            <div class="ov-hl-list">
             ${data.relationship_highlights.map(h => `
-                <div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.82rem;color:var(--text-secondary)">
-                    <span style="color:var(--accent-pink);margin-right:6px"><i data-lucide="message-circle"></i></span>${esc(h.content || h)}
+                <div class="ov-hl-row">
+                    <span class="ov-hl-icon"><i data-lucide="message-circle"></i></span>${esc(h.content || h)}
                 </div>
             `).join('')}
             </div>
         </div>` : ''}
         <!-- Inventory -->
         <div class="glass glass-hoverable p-6 mb-6">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-                <div class="card-title" style="margin-bottom:0"><i data-lucide="backpack"></i> Inventory</div>
-                <button type="button" class="glass-btn" data-ov-action="open-add-item">+ Add Item</button>
-            </div>
+            <div class="card-title card-title-with-action"><span><i data-lucide="backpack"></i> Inventory</span><button type="button" class="glass-btn card-action-btn" data-ov-action="open-add-item">+ Add Item</button></div>
             ${invHtml}
         </div>
         ${genImagesHtml}
         <!-- Add Item Modal -->
-        <div id="add-item-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center">
-            <div style="background:#1e1b2e;border:1px solid rgba(var(--accent-blue-rgb), 0.3);border-radius:14px;padding:28px;width:420px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,0.6)">
-                <div style="font-weight:700;font-size:1.05rem;margin-bottom:18px;color:var(--accent-purple)"><i data-lucide="plus"></i> Add Inventory Item</div>
-                <div style="display:flex;flex-direction:column;gap:12px">
-                    <input id="new-item-name" type="text" placeholder="Item name *" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
-                    <input id="new-item-category" type="text" placeholder="Category (e.g. clothing, weapon)" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
-                    <input id="new-item-desc" type="text" placeholder="Description" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
-                    <input id="new-item-qty" type="number" value="1" min="1" placeholder="Quantity" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
+        <div id="add-item-modal" class="ov-modal-overlay" role="dialog" aria-modal="true" aria-label="Add Inventory Item">
+            <div class="ov-modal">
+                <div class="ov-modal-title"><i data-lucide="plus"></i> Add Inventory Item</div>
+                <div class="ov-modal-fields">
+                    <input id="new-item-name" type="text" class="ov-field" placeholder="Item name *" aria-label="Item name (required)">
+                    <input id="new-item-category" type="text" class="ov-field" placeholder="Category (e.g. clothing, weapon)" aria-label="Category">
+                    <input id="new-item-desc" type="text" class="ov-field" placeholder="Description" aria-label="Description">
+                    <input id="new-item-qty" type="number" value="1" min="1" class="ov-field" placeholder="Quantity" aria-label="Quantity">
                 </div>
-                <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+                <div class="ov-modal-actions">
                     <button type="button" class="glass-btn" data-ov-action="close-add-item">Cancel</button>
                     <button type="button" class="glass-btn" data-ov-action="save-new-item">Save</button>
                 </div>
             </div>
         </div>
         <!-- Edit Item Modal -->
-        <div id="edit-item-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center">
-            <div style="background:#1e1b2e;border:1px solid rgba(var(--accent-blue-rgb), 0.3);border-radius:14px;padding:28px;width:420px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,0.6)">
-                <div style="font-weight:700;font-size:1.05rem;margin-bottom:18px;color:var(--accent-purple)"><i data-lucide="pencil"></i> Edit Inventory Item</div>
+        <div id="edit-item-modal" class="ov-modal-overlay" role="dialog" aria-modal="true" aria-label="Edit Inventory Item">
+            <div class="ov-modal">
+                <div class="ov-modal-title"><i data-lucide="pencil"></i> Edit Inventory Item</div>
                 <input type="hidden" id="edit-item-original-name" value="">
-                <div style="display:flex;flex-direction:column;gap:12px">
-                    <input id="edit-item-name" type="text" placeholder="Item name *" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
-                    <input id="edit-item-category" type="text" placeholder="Category (e.g. clothing, weapon)" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
-                    <textarea id="edit-item-desc" placeholder="Description" rows="2" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box;resize:vertical"></textarea>
-                    <input id="edit-item-qty" type="number" value="1" min="1" placeholder="Quantity" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
-                    <input id="edit-item-tags" type="text" placeholder="Tags (comma-separated)" style="width:100%;padding:8px 12px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text-primary);font-size:0.88rem;outline:none;box-sizing:border-box">
+                <div class="ov-modal-fields">
+                    <input id="edit-item-name" type="text" class="ov-field" placeholder="Item name *" aria-label="Item name (required)">
+                    <input id="edit-item-category" type="text" class="ov-field" placeholder="Category (e.g. clothing, weapon)" aria-label="Category">
+                    <textarea id="edit-item-desc" class="ov-field" placeholder="Description" rows="2" aria-label="Description"></textarea>
+                    <input id="edit-item-qty" type="number" value="1" min="1" class="ov-field" placeholder="Quantity" aria-label="Quantity">
+                    <input id="edit-item-tags" type="text" class="ov-field" placeholder="Tags (comma-separated)" aria-label="Tags (comma-separated)">
                 </div>
-                <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+                <div class="ov-modal-actions">
                     <button type="button" class="glass-btn" data-ov-action="close-edit-item">Cancel</button>
                     <button type="button" class="glass-btn" data-ov-action="save-edit-item">Save</button>
                 </div>
             </div>
         </div>
         <!-- Block Edit Modal -->
-        <div id="block-edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);z-index:1000;align-items:center;justify-content:center">
-            <div class="glass p-6" style="max-width:500px;width:90%;border-radius:16px;max-height:80vh;overflow-y:auto">
-                <h3 style="font-size:1.2rem;font-weight:600;color:var(--text-primary);margin-bottom:16px">
+        <div id="block-edit-modal" class="ov-modal-overlay blur" role="dialog" aria-modal="true" aria-label="Edit Block">
+            <div class="glass p-6 ov-modal wide">
+                <h3 class="ov-block-title">
                     <span id="block-modal-title"><i data-lucide="pencil"></i> New Block</span></h3>
                 <input type="hidden" id="block-modal-mode" value="create">
-                <div style="margin-bottom:12px">
-                    <label style="display:block;font-size:0.85rem;color:var(--text-muted);margin-bottom:4px">Block Name</label>
-                    <input type="text" id="block-modal-name" class="glass-input" style="width:100%;padding:8px 12px;box-sizing:border-box" placeholder="e.g. system_notes">
+                <div class="ov-field-block">
+                    <label class="ov-form-label" for="block-modal-name">Block Name</label>
+                    <input type="text" id="block-modal-name" class="glass-input" placeholder="e.g. system_notes">
                 </div>
-                <div style="margin-bottom:12px">
-                    <label style="display:block;font-size:0.85rem;color:var(--text-muted);margin-bottom:4px">Content</label>
-                    <textarea id="block-modal-content" class="glass-input" rows="6" style="width:100%;padding:8px 12px;box-sizing:border-box;resize:vertical"></textarea>
+                <div class="ov-field-block">
+                    <label class="ov-form-label" for="block-modal-content">Content</label>
+                    <textarea id="block-modal-content" class="glass-input" rows="6"></textarea>
                 </div>
-                <div style="margin-bottom:16px">
-                    <label style="display:block;font-size:0.85rem;color:var(--text-muted);margin-bottom:4px">Priority (0-100)</label>
-                    <input type="number" id="block-modal-priority" class="glass-input" style="width:100%;padding:8px 12px;box-sizing:border-box" value="0" min="0" max="100">
+                <div class="ov-field-block">
+                    <label class="ov-form-label" for="block-modal-priority">Priority (0-100)</label>
+                    <input type="number" id="block-modal-priority" class="glass-input" value="0" min="0" max="100">
                 </div>
-                <div style="display:flex;gap:12px;justify-content:flex-end">
+                <div class="ov-modal-actions">
                     <button type="button" data-ov-action="hide-block-modal" class="glass-btn">Cancel</button>
                     <button type="button" data-ov-action="save-block" class="glass-btn">Save</button>
                 </div>
             </div>
         </div>`);
+
+        // safeSetHTML strips style= — apply data-fill/data-color to bar fills now
+        if (N.Components.memoryCard && N.Components.memoryCard.applyDataStyles) {
+            N.Components.memoryCard.applyDataStyles(el);
+        }
 
         // --- Move portrait into hero slot (clone nodes, no innerHTML string copy) ---
         var heroSlot = document.getElementById('hero-portrait-slot');
@@ -275,25 +279,9 @@ async function loadOverview() {
 }
 /* N.Features.Overview.loadOverview registered below */
 
-async function generateExpressionSet(btn) {
-    btn.disabled = true;
-    const original = btn.textContent;
-    btn.textContent = '生成中…';
-    try {
-        const d = await api('/api/chat/' + encodeURIComponent(S.persona) + '/persona/expressions/generate', { method: 'POST' });
-        btn.textContent = '生成 ' + d.generated.length + ' / スキップ ' + d.skipped.length + ' / 失敗 ' + d.failed.length;
-    } catch (e) {
-        btn.textContent = '失敗: ' + e.message;
-    } finally {
-        btn.disabled = false;
-        setTimeout(() => { btn.textContent = original; }, 5000);
-    }
-}
-
 // Register in namespace (CRUD helpers live in overview-blocks.js / overview-inventory.js)
 Object.assign(N.Features.Overview, {
     loadOverview: loadOverview,
-    generateExpressionSet: generateExpressionSet,
 });
 
 /* CSP-safe delegation for overview actions (no inline onclick/onchange) */

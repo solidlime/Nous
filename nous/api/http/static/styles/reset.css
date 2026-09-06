@@ -29,6 +29,14 @@
   }
 }
 
+/* Lucide icons are inline glyphs — the @layer reset svg{display:block} rule
+   must not force them onto their own line inside buttons/labels/titles. */
+svg.lucide,
+i[data-lucide] {
+    display: inline-block;
+    vertical-align: middle;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", "Inter", sans-serif;
     font-size: 17px;

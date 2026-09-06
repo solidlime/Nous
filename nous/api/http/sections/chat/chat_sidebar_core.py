@@ -37,59 +37,51 @@ def _render_core_section() -> str:
                                     <input type="text" id="chat-base-url" class="chat-field-input" placeholder="https://api.commandcode.ai/provider/v1" />
                                 </div>
                                 <div>
-                                    <div class="chat-field-label" style="display:flex;justify-content:space-between;">
+                                    <div class="chat-field-label chat-field-label-row">
                                         <span>Temperature</span>
-                                        <span id="chat-temp-val" style="color:var(--accent-purple);">0.7</span>
+                                        <span id="chat-temp-val" class="chat-field-value">0.7</span>
                                     </div>
                                     <input type="range" id="chat-temperature" class="chat-field-input" min="0" max="2" step="0.05" value="0.7"
-                                        data-mirror="chat-temp-val" data-mirror-format="fixed2"
-                                        style="width:100%;accent-color:var(--accent-purple);" />
+                                        data-mirror="chat-temp-val" data-mirror-format="fixed2" />
                                 </div>
-                                <div style="border-top:1px solid var(--glass-border);padding-top:8px;margin-top:4px;">
-                                    <h4 style="font-size:0.82rem;font-weight:600;color:var(--text-secondary);margin:8px 0 4px;display:flex;align-items:center;gap:6px;"><i data-lucide="thermometer"></i> 動的温度調整</h4>
-                                    <div class="chat-config-row" style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                                        <label class="chat-config-label" style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-secondary);cursor:pointer;">
-                                            <input type="checkbox" id="chat-dynamic-temperature" class="chat-config-checkbox" style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" checked
-                                                data-toggle-target="chat-emotion-temperature-scale" data-toggle-mode="disabled" />
-                                            <span>動的温度調整を有効にする</span>
-                                        </label>
+                                <div class="chat-sub-block">
+                                    <h4><i data-lucide="thermometer"></i> 動的温度調整</h4>
+                                    <div class="chat-check-row">
+                                        <input type="checkbox" id="chat-dynamic-temperature" class="chat-config-checkbox" checked
+                                            data-toggle-target="chat-emotion-temperature-scale" data-toggle-mode="disabled" />
+                                        <label for="chat-dynamic-temperature">動的温度調整を有効にする</label>
                                     </div>
                                     <div>
-                                        <div class="chat-field-label" style="display:flex;justify-content:space-between;">
+                                        <div class="chat-field-label chat-field-label-row">
                                             <span>感情温度スケール</span>
-                                            <span id="chat-emotion-temp-scale-val" style="color:var(--accent-purple);">0.20</span>
+                                            <span id="chat-emotion-temp-scale-val" class="chat-field-value">0.20</span>
                                         </div>
                                         <input type="range" id="chat-emotion-temperature-scale" class="chat-field-input" min="0" max="1" step="0.05" value="0.2"
-                                            data-mirror="chat-emotion-temp-scale-val" data-mirror-format="fixed2"
-                                            style="width:100%;accent-color:var(--accent-purple);" />
+                                            data-mirror="chat-emotion-temp-scale-val" data-mirror-format="fixed2" />
                                     </div>
                                     <div>
-                                        <div class="chat-field-label" style="display:flex;justify-content:space-between;">
+                                        <div class="chat-field-label chat-field-label-row">
                                             <span>Top P</span>
-                                            <span id="chat-top-p-val" style="color:var(--accent-purple);">1.00</span>
+                                            <span id="chat-top-p-val" class="chat-field-value">1.00</span>
                                         </div>
                                         <input type="range" id="chat-top-p" class="chat-field-input" min="0" max="1" step="0.05" value=""
-                                            data-mirror="chat-top-p-val" data-mirror-format="topP"
-                                            style="width:100%;accent-color:var(--accent-purple);" />
+                                            data-mirror="chat-top-p-val" data-mirror-format="topP" />
                                     </div>
                                 </div>
-                                <div style="border-top:1px solid var(--glass-border);padding-top:8px;margin-top:4px;">
-                                    <h4 style="font-size:0.82rem;font-weight:600;color:var(--text-secondary);margin:8px 0 4px;display:flex;align-items:center;gap:6px;"><i data-lucide="brain"></i> 思考モード（Reasoning）</h4>
-                                    <div class="chat-config-row" style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                                        <label class="chat-config-label" style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-secondary);cursor:pointer;">
-                                            <input type="checkbox" id="chat-reasoning-enabled" class="chat-config-checkbox" style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;"
-                                                data-toggle-target="chat-reasoning-effort" data-toggle-mode="disabled" />
-                                            <span>推論（thinking）を有効にする</span>
-                                        </label>
+                                <div class="chat-sub-block">
+                                    <h4><i data-lucide="brain"></i> 思考モード（Reasoning）</h4>
+                                    <div class="chat-check-row">
+                                        <input type="checkbox" id="chat-reasoning-enabled" class="chat-config-checkbox"
+                                            data-toggle-target="chat-reasoning-effort" data-toggle-mode="disabled" />
+                                        <label for="chat-reasoning-enabled">推論（thinking）を有効にする</label>
                                     </div>
                                     <div>
-                                        <div class="chat-field-label" style="display:flex;justify-content:space-between;">
+                                        <div class="chat-field-label chat-field-label-row">
                                             <span>思考の深さ（Variant）</span>
-                                            <span id="chat-reasoning-effort-val" style="color:var(--accent-purple);">medium</span>
+                                            <span id="chat-reasoning-effort-val" class="chat-field-value">medium</span>
                                         </div>
                                         <input type="range" id="chat-reasoning-effort" class="chat-field-input" min="0" max="3" step="1" value="1" disabled
-                                            data-mirror="chat-reasoning-effort-val" data-mirror-format="effort"
-                                            style="width:100%;accent-color:var(--accent-purple);" />
+                                            data-mirror="chat-reasoning-effort-val" data-mirror-format="effort" />
                                     </div>
                                 </div>
                                 <div>
@@ -106,9 +98,9 @@ def _render_core_section() -> str:
                                         <option value="auto">自動</option>
                                     </select>
                                 </div>
-                                <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+                                <div class="chat-check-row">
                                     <input type="checkbox" id="chat-show-timestamps">
-                                    <label for="chat-show-timestamps" style="font-size:0.8rem;">メッセージにタイムスタンプを表示</label>
+                                    <label for="chat-show-timestamps">メッセージにタイムスタンプを表示</label>
                                 </div>
                             </div>
                         </details>"""
@@ -132,20 +124,20 @@ def _render_context_section() -> str:
                                         style="flex:1;resize:vertical;min-height:70px;max-height:300px;overflow-y:auto;"></textarea>
                                 </div>
                                 <!-- コンテキスト最適化 (v2.1) -->
-                                <details class="chat-subsection" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--glass-border);">
-                                  <summary style="font-size:0.82rem;font-weight:600;color:var(--text-secondary);cursor:pointer;padding:4px 0;">🧠 コンテキスト最適化</summary>
+                                <details class="chat-subsection">
+                                  <summary><i data-lucide="brain"></i> コンテキスト最適化</summary>
                                   <div style="padding-top:8px;">
 
                                   <div class="chat-field-label">保存メッセージ数</div>
                                   <input type="number" id="chat-stored-msgs" class="chat-field-input" value="200" min="2" max="2000" />
-                                  <div class="chat-field-hint" style="font-size:0.7rem;color:var(--text-muted);margin-top:-6px;margin-bottom:8px;">SQLiteに保存する最大メッセージ数（セッション永続化用）</div>
+                                  <div class="chat-field-hint">SQLiteに保存する最大メッセージ数（セッション永続化用）</div>
 
                                   <div class="chat-field-label">トークン上限</div>
                                   <input type="number" id="chat-context-max-tokens" class="chat-field-input" value="" placeholder="自動（モデル判定）" min="1000" max="1000000" />
-                                  <div class="chat-field-hint" style="font-size:0.7rem;color:var(--text-muted);margin-top:-6px;margin-bottom:8px;">空欄でモデルのコンテキストウィンドウを自動判定</div>
+                                  <div class="chat-field-hint">空欄でモデルのコンテキストウィンドウを自動判定</div>
 
                                   <div class="chat-field-label">圧縮閾値 <span id="threshold-display">80%</span></div>
-                                  <input type="range" id="chat-compression-threshold" min="50" max="100" value="80" style="width:100%;margin:4px 0;" />
+                                  <input type="range" id="chat-compression-threshold" class="chat-field-input" min="50" max="100" value="80" />
 
                                   <div class="chat-field-label">圧縮モード</div>
                                   <select id="chat-compression-mode" class="chat-field-input">
@@ -161,33 +153,33 @@ def _render_context_section() -> str:
 
                                   <div class="chat-field-label">記憶プリロード数</div>
                                   <input type="number" id="chat-memory-preload" class="chat-field-input" value="5" min="0" max="20" />
-                                  <div class="chat-field-hint" style="font-size:0.7rem;color:var(--text-muted);margin-top:-6px;margin-bottom:8px;">systemプロンプトに含める関連記憶の数。0で全件オンデマンド検索</div>
+                                  <div class="chat-field-hint">systemプロンプトに含める関連記憶の数。0で全件オンデマンド検索</div>
 
                                   <div class="chat-field-label">記憶ダイジェスト数</div>
                                   <input type="number" id="chat-memory-digest" class="chat-field-input" value="5" min="0" max="20" />
-                                  <div class="chat-field-hint" style="font-size:0.7rem;color:var(--text-muted);margin-top:-6px;margin-bottom:8px;">毎ターン最新 user 発言前に注入する最近の記憶の数。0で無効</div>
+                                  <div class="chat-field-hint">毎ターン最新 user 発言前に注入する最近の記憶の数。0で無効</div>
 
-                                  <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+                                  <div class="chat-check-row">
                                     <input type="checkbox" id="chat-compress-system" checked>
-                                    <label for="chat-compress-system" style="font-size:0.8rem;">システムプロンプト圧縮</label>
+                                    <label for="chat-compress-system">システムプロンプト圧縮</label>
                                   </div>
-                                  <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+                                  <div class="chat-check-row">
                                     <input type="checkbox" id="chat-compress-history" checked>
-                                    <label for="chat-compress-history" style="font-size:0.8rem;">会話履歴圧縮</label>
+                                    <label for="chat-compress-history">会話履歴圧縮</label>
                                   </div>
-                                  <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+                                  <div class="chat-check-row">
                                     <input type="checkbox" id="chat-parallel-tools" checked>
-                                    <label for="chat-parallel-tools" style="font-size:0.8rem;">並列ツール実行</label>
+                                    <label for="chat-parallel-tools">並列ツール実行</label>
                                   </div>
-                                  <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+                                  <div class="chat-check-row">
                                     <input type="checkbox" id="chat-llm-summary" checked>
-                                    <label for="chat-llm-summary" style="font-size:0.8rem;">LLM要約圧縮</label>
+                                    <label for="chat-llm-summary">LLM要約圧縮</label>
                                   </div>
-                                   <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
-                                     <input type="checkbox" id="chat-episode-search" checked>
-                                     <label for="chat-episode-search" style="font-size:0.8rem;">エピソード検索</label>
-                                   </div>
-                                   </div>
+                                  <div class="chat-check-row">
+                                    <input type="checkbox" id="chat-episode-search" checked>
+                                    <label for="chat-episode-search">エピソード検索</label>
+                                  </div>
+                                  </div>
                                  </details>
                             </div>
                         </details>"""

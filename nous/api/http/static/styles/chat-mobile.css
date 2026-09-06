@@ -156,7 +156,8 @@
   #chat-input {
     padding: 10px 12px;
     font-size: 0.92rem;
-    min-height: 40px;
+    /* 2 lines + padding — keeps the wrapped placeholder fully visible */
+    min-height: calc(2 * 1.47em + 24px);
   }
   /* Send button: slightly smaller padding */
   #chat-send-btn {

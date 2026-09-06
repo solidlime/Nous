@@ -111,19 +111,19 @@ async function loadMemories(page) {
             const name = typeof b === 'string' ? b : (b.name || b.block_name || 'block');
             const content = typeof b === 'object' ? (b.content || b.value || '') : '';
             const priority = typeof b === 'object' ? b.priority : null;
-            blocksListHtml += '<div style="padding:10px 0;border-bottom:1px solid var(--glass-border)">';
-            blocksListHtml += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
-            blocksListHtml += '<span style="font-weight:600;color:var(--accent-purple);font-size:0.85rem">' + esc(name) + '</span>';
+            blocksListHtml += '<div class="memory-block-row">';
+            blocksListHtml += '<div class="memory-block-head">';
+            blocksListHtml += '<span class="memory-block-name">' + esc(name) + '</span>';
             if (priority != null) blocksListHtml += '<span class="badge badge-yellow">P' + esc(String(priority)) + '</span>';
-            blocksListHtml += '<div style="display:flex;gap:6px;margin-left:auto">';
+            blocksListHtml += '<div class="memory-block-actions">';
             blocksListHtml += '<button type="button" class="glass-btn" data-block-action="edit" data-bname="' + esc(name) + '" data-bcontent="' + esc(content) + '" data-bpriority="' + (priority||0) + '"><i data-lucide="pencil"></i> Edit</button>';
             blocksListHtml += '<button type="button" class="glass-btn" data-block-action="delete" data-bname="' + esc(name) + '"><i data-lucide="trash-2"></i> Delete</button>';
             blocksListHtml += '</div></div>';
-            if (content) blocksListHtml += '<div style="font-size:0.82rem;color:var(--text-muted)">' + esc(truncate(String(content), 80)) + '</div>';
+            if (content) blocksListHtml += '<div class="memory-muted-text">' + esc(truncate(String(content), 80)) + '</div>';
             blocksListHtml += '</div>';
         });
     } else {
-        blocksListHtml = '<span style="color:var(--text-muted)">No core memory blocks</span>';
+        blocksListHtml = '<span class="memory-muted-text">No core memory blocks</span>';
     }
 
     // Build chart data
@@ -144,18 +144,18 @@ async function loadMemories(page) {
     dashboardHtml += '<div class="card-title"><i data-lucide="bar-chart-3"></i> Memory Stats</div>';
     dashboardHtml += '<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">';
     dashboardHtml += '<div><div class="stat-value">' + (stats.total_count ?? '--') + '</div><div class="stat-label">Total Memories</div></div>';
-    dashboardHtml += '<div><div class="stat-value" style="color:var(--accent-green)">' + (str.avg ?? '--') + '</div><div class="stat-label">Avg Strength</div></div>';
-    dashboardHtml += '<div><div class="stat-value" style="color:var(--accent-blue)">' + (stats.tagged_ratio != null ? (stats.tagged_ratio*100).toFixed(1)+'%' : '--') + '</div><div class="stat-label">Tagged</div></div>';
-    dashboardHtml += '<div><div class="stat-value" style="color:var(--accent-yellow)">' + (stats.linked_ratio != null ? (stats.linked_ratio*100).toFixed(1)+'%' : '--') + '</div><div class="stat-label">Linked</div></div>';
+    dashboardHtml += '<div><div class="stat-value stat-accent-green">' + (str.avg ?? '--') + '</div><div class="stat-label">Avg Strength</div></div>';
+    dashboardHtml += '<div><div class="stat-value stat-accent-blue">' + (stats.tagged_ratio != null ? (stats.tagged_ratio*100).toFixed(1)+'%' : '--') + '</div><div class="stat-label">Tagged</div></div>';
+    dashboardHtml += '<div><div class="stat-value stat-accent-yellow">' + (stats.linked_ratio != null ? (stats.linked_ratio*100).toFixed(1)+'%' : '--') + '</div><div class="stat-label">Linked</div></div>';
     dashboardHtml += '</div>';
-    if (topTags.length) { dashboardHtml += '<div style="margin-bottom:6px">' + topTags.map(([t,c])=>'<span class="badge badge-purple">'+esc(t)+' <span style="opacity:0.7">('+c+')</span></span>').join(' ')+'</div>'; }
-    if (hasMemTypes) { dashboardHtml += '<div style="margin-bottom:6px">' + Object.entries(memTypeCounts).map(([t,c])=>'<span class="badge '+MEMORY_TYPES[t].color+'">'+MEMORY_TYPES[t].icon+' '+esc(t)+' <span style="opacity:0.7">('+c+')</span></span>').join(' ')+'</div>'; }
-    if (topEmo.length) { dashboardHtml += '<div>' + topEmo.map(([e,c])=>'<span class="badge badge-pink">'+esc(e)+' <span style="opacity:0.7">('+c+')</span></span>').join(' ')+'</div>'; }
+    if (topTags.length) { dashboardHtml += '<div class="mb-4">' + topTags.map(([t,c])=>'<span class="badge badge-purple">'+esc(t)+' <span class="badge-count">('+c+')</span></span>').join(' ')+'</div>'; }
+    if (hasMemTypes) { dashboardHtml += '<div class="mb-4">' + Object.entries(memTypeCounts).map(([t,c])=>'<span class="badge '+MEMORY_TYPES[t].color+'">'+MEMORY_TYPES[t].icon+' '+esc(t)+' <span class="badge-count">('+c+')</span></span>').join(' ')+'</div>'; }
+    if (topEmo.length) { dashboardHtml += '<div>' + topEmo.map(([e,c])=>'<span class="badge badge-pink">'+esc(e)+' <span class="badge-count">('+c+')</span></span>').join(' ')+'</div>'; }
     dashboardHtml += '</div>';
 
     // Core Memory Blocks
     dashboardHtml += '<div class="glass glass-hoverable p-6 mb-6">';
-    dashboardHtml += '<div class="card-title"><span>🧠 Core Memory Blocks</span><button type="button" class="glass-btn" data-block-action="create"><i data-lucide="plus"></i> New Block</button></div>';
+    dashboardHtml += '<div class="card-title card-title-with-action"><span>🧠 Core Memory Blocks</span><button type="button" class="glass-btn card-action-btn" data-block-action="create"><i data-lucide="plus"></i> New Block</button></div>';
     dashboardHtml += blocksListHtml;
     dashboardHtml += '</div>';
 
@@ -171,25 +171,25 @@ async function loadMemories(page) {
             else if (status === 'achieved' || status === 'fulfilled') icon = '<i data-lucide="check-circle"></i>';
             else if (status === 'cancelled') icon = '<i data-lucide="x-circle"></i>';
             else icon = '<i data-lucide="refresh-cw"></i>';
-            goalsListHtml += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0">';
+            goalsListHtml += '<div class="goal-row">';
             goalsListHtml += '<span>' + icon + '</span>';
-            goalsListHtml += '<span style="flex:1;font-size:0.85rem;color:var(--text-secondary)">' + esc(content) + '</span>';
+            goalsListHtml += '<span class="goal-text">' + esc(content) + '</span>';
             var ts = typeof item === 'object' && (item.created_at || item.date);
-            if (ts) goalsListHtml += '<span style="font-size:0.72rem;color:var(--text-muted)">' + relativeTime(ts) + '</span>';
+            if (ts) goalsListHtml += '<span class="goal-time">' + relativeTime(ts) + '</span>';
             goalsListHtml += '</div>';
         });
     } else {
-        goalsListHtml = '<span style="color:var(--text-muted)">No goals</span>';
+        goalsListHtml = '<span class="memory-muted-text">No goals</span>';
     }
     dashboardHtml += '<div class="glass glass-hoverable p-6 mb-6">';
-    dashboardHtml += '<div class="card-title"><i data-lucide="target"></i> Goals <span style="opacity:0.6;font-weight:400;font-size:0.78rem;text-transform:none;letter-spacing:0">(' + effectiveGoals.length + ')</span></div>';
-    dashboardHtml += '<div style="max-height:240px;overflow-y:auto;padding-right:4px">' + goalsListHtml + '</div>';
+    dashboardHtml += '<div class="card-title"><i data-lucide="target"></i> Goals <span class="card-title-count">(' + effectiveGoals.length + ')</span></div>';
+    dashboardHtml += '<div class="goals-scroll">' + goalsListHtml + '</div>';
     dashboardHtml += '</div>';
 
     // Charts placeholders
     dashboardHtml += '<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">';
-    dashboardHtml += '<div class="glass p-6"><div class="card-title"><i data-lucide="calendar"></i> 7-Day Timeline</div><div style="height:220px;position:relative"><canvas id="chart-timeline"></canvas></div></div>';
-    dashboardHtml += '<div class="glass p-6"><div class="card-title"><i data-lucide="tag"></i> Tag Distribution</div><div style="height:220px;position:relative"><canvas id="chart-tags"></canvas></div></div>';
+    dashboardHtml += '<div class="glass p-6"><div class="card-title"><i data-lucide="calendar"></i> 7-Day Timeline</div><div class="chart-box"><canvas id="chart-timeline"></canvas></div></div>';
+    dashboardHtml += '<div class="glass p-6"><div class="card-title"><i data-lucide="tag"></i> Tag Distribution</div><div class="chart-box"><canvas id="chart-tags"></canvas></div></div>';
     dashboardHtml += '</div>';
 
     // Inject dashboard HTML at the beginning of the memories content area

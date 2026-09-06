@@ -338,6 +338,11 @@ var WIRING_KINDS = {
   recall_boost: "想起",
   ppr_hit: "PPR",
 };
+var WIRING_BAR_COLORS = {
+  link_fire: "linear-gradient(90deg,var(--accent-purple),var(--accent-pink))",
+  recall_boost: "linear-gradient(90deg,var(--accent-green),var(--accent-teal))",
+  ppr_hit: "linear-gradient(90deg,var(--accent-blue),var(--accent-teal))",
+};
 var _wiringEvents = []; // newest-first
 var _wiringMaxSeq = 0;
 var _wiringVisible = true;
@@ -491,6 +496,70 @@ function _updateLiveDot() {
   dot.classList.toggle("is-off", !on);
 }
 
+// ── Memory content resolution ──
+// Feed rows lead with the memory's content, not its raw ID. Keys resolve
+// through /api/memories/{persona}/{key} into a small LRU-ish cache;
+// failures are remembered so a deleted memory never retries forever.
+var _wiringMemCache = {};    // key -> memory object
+var _wiringMemPending = {};  // key -> in-flight promise
+var _wiringMemFailed = {};   // key -> true (fetch failed)
+var WIRING_MEM_CACHE_CAP = 300;
+
+function _wiringRemember(key, mem) {
+  _wiringMemCache[key] = mem || null;
+  var keys = Object.keys(_wiringMemCache);
+  if (keys.length > WIRING_MEM_CACHE_CAP) {
+    keys.slice(0, keys.length - WIRING_MEM_CACHE_CAP).forEach(function (k) {
+      delete _wiringMemCache[k];
+    });
+  }
+}
+
+function _wiringSummary(mem) {
+  if (!mem || !mem.content) return "";
+  var raw = typeof mem.content === "object" && mem.content !== null
+    ? JSON.stringify(mem.content) : String(mem.content);
+  return raw.replace(/\s+/g, " ").trim();
+}
+
+function _wiringKeyShort(key) {
+  var s = String(key == null ? "" : key);
+  return s.length > 22 ? s.substring(0, 22) + "…" : s;
+}
+
+// Resolve unknown source/target keys for the visible rows; one batched
+// re-render when the whole batch settles (no per-fetch flicker).
+function _wiringEnsureMemories(events, onDone) {
+  var persona = _currentPersona();
+  if (!persona) return;
+  var missing = [];
+  events.forEach(function (ev) {
+    [ev.source, ev.target].forEach(function (k) {
+      if (k && !_wiringMemCache[k] && !_wiringMemPending[k] &&
+          !_wiringMemFailed[k] && missing.indexOf(k) === -1) {
+        missing.push(k);
+      }
+    });
+  });
+  if (!missing.length) return;
+  Promise.allSettled(missing.map(function (k) {
+    var p = api(
+      "/api/memories/" + encodeURIComponent(persona) + "/" + encodeURIComponent(k),
+    )
+      .then(function (d) { _wiringRemember(k, d && d.memory); })
+      .catch(function () { _wiringMemFailed[k] = true; })
+      .then(function () { delete _wiringMemPending[k]; });
+    _wiringMemPending[k] = p;
+    return p;
+  })).then(onDone).catch(function () {});
+}
+
+function _wiringApplyFills(scope) {
+  if (N.Components.memoryCard && typeof N.Components.memoryCard.applyDataStyles === "function") {
+    N.Components.memoryCard.applyDataStyles(scope);
+  }
+}
+
 // recall_boost weight sits at ≈1.00 post-boost (monotone) — show the
 // recall_count / stability from meta instead; weight stays the fallback
 // when meta is absent (legacy events).
@@ -508,24 +577,51 @@ function _wiringMetaBadge(ev) {
     esc(text) + "</span>";
 }
 
+function _wiringWeightBar(ev) {
+  var w = Number(ev.weight);
+  if (!isFinite(w)) return "";
+  var pct = Math.max(0, Math.min(100, Math.round(w * 100)));
+  var color = WIRING_BAR_COLORS[ev.kind] || WIRING_BAR_COLORS.ppr_hit;
+  return '<span class="wiring-weight-bar">' +
+    '<span class="wiring-track"><span class="mem-bar-fill" data-fill="' + pct +
+    '" data-color="' + _wiringEscAttr(color) + '"></span></span>' +
+    '<span class="wiring-weight">' + _wiringEscAttr(w.toFixed(2)) + "</span></span>";
+}
+
 function _renderWiringItem(ev, fresh) {
   var label = WIRING_KINDS[ev.kind] || esc(String(ev.kind));
   var s = ev.source || "";
   var t = ev.target || "";
+  var mainKey = t || s;
   var edge = s && t ? s + " → " + t : s || t || "—";
-  var w = Number(ev.weight);
-  var weight = isFinite(w) ? w.toFixed(2) : "";
+  var mem = _wiringMemCache[mainKey];
+  var summary = _wiringSummary(mem);
   var metaBadge = _wiringMetaBadge(ev);
-  var tail = metaBadge ||
-    (weight
-      ? '<span class="wiring-weight">' + _wiringEscAttr(weight) + "</span>"
-      : "");
+  var tail = metaBadge || _wiringWeightBar(ev);
+  var line;
+  if (summary) {
+    var cut = summary.length > 64 ? summary.substring(0, 64) + "…" : summary;
+    line = '<span class="wiring-edge wiring-edge-main" title="' +
+      _wiringEscAttr(summary) + '">' + esc(cut) + "</span>";
+  } else if (mem && mem.kind) {
+    // content empty / unrenderable — type-level name fallback
+    line = '<span class="wiring-edge wiring-edge-main" title="' +
+      _wiringEscAttr(edge) + '">' + esc(mem.kind) + "</span>";
+  } else {
+    // not resolved yet or fetch failed — raw key fallback
+    line = '<span class="wiring-edge wiring-edge-main" title="' +
+      _wiringEscAttr(edge) + '">' + esc(mainKey || "—") + "</span>";
+  }
   return (
     '<div class="wiring-fire-item wiring-kind-' + _wiringEscAttr(ev.kind) +
-    (fresh ? " is-fresh" : "") + '" data-seq="' + _wiringEscAttr(ev.seq) + '">' +
+    (fresh ? " is-fresh" : "") + '" data-seq="' + _wiringEscAttr(ev.seq) + '"' +
+    (mainKey
+      ? ' data-wiring-open="' + _wiringEscAttr(mainKey) + '" role="button" tabindex="0"' +
+        ' aria-label="' + _wiringEscAttr(label + ": " + (summary || mainKey)) + '"'
+      : "") +
+    ">" +
     '<span class="wiring-kind-badge">' + label + "</span>" +
-    '<span class="wiring-edge" title="' + _wiringEscAttr(edge) + '">' +
-    esc(edge) + "</span>" +
+    line +
     tail +
     "</div>"
   );
@@ -555,6 +651,9 @@ function renderWiringFeed() {
       return _renderWiringItem(ev, i === 0);
     })
     .join(""));
+  _wiringApplyFills(list);
+  // Content-first rows: resolve unknown memory keys, repaint once settled.
+  _wiringEnsureMemories(view, renderWiringFeed);
 }
 
 // Reconnect replays the ring buffer, so dedupe by seq (monotonic).
@@ -762,6 +861,163 @@ ensureFireLimitSetting();
 renderWiringFeed();
 
 // ------------------------------------------------------------------
+// Fire detail modal — reuses the .ov-modal system (sanitizer-safe:
+// class-based markup + data-fill bars via memoryCard.applyDataStyles).
+// Non-blocking viewer: focus + Escape + overlay click + focus restore.
+// ------------------------------------------------------------------
+var _wiringDetailOpener = null;
+
+function _wiringFindEvent(key) {
+  for (var i = 0; i < _wiringEvents.length; i++) {
+    if (_wiringEvents[i].source === key || _wiringEvents[i].target === key) {
+      return _wiringEvents[i];
+    }
+  }
+  return null;
+}
+
+function _wiringDetailHTML(key, mem, ev, failed) {
+  var h = '<div class="ov-modal wide">';
+  h += '<div class="wiring-detail-head">';
+  if (ev) {
+    h += '<span class="wiring-kind-badge">' +
+      esc(WIRING_KINDS[ev.kind] || String(ev.kind)) + "</span>";
+    var w = Number(ev.weight);
+    if (isFinite(w)) {
+      h += '<span class="mem-bar-pct">weight ' + esc(w.toFixed(2)) + "</span>";
+    }
+  }
+  h += '<button type="button" class="mem-modal-close" data-wiring-close="1" aria-label="閉じる"><i data-lucide="x"></i></button>';
+  h += "</div>";
+  h += '<div class="wiring-detail-content">';
+  if (mem && mem.content) {
+    h += '<div class="wiring-detail-text">' + esc(_wiringSummary(mem)) + "</div>";
+  } else if (failed) {
+    h += '<div class="memory-empty">記憶の詳細を取得できませんでした</div>';
+  } else {
+    h += '<div class="memory-empty">読み込み中…</div>';
+  }
+  h += "</div>";
+  if (mem) {
+    h += '<div class="mem-modal-row"><span class="mem-modal-key">種別</span><span class="badge badge-purple">' +
+      esc(mem.kind || "memory") + "</span></div>";
+    if (mem.importance != null) {
+      var imp = Math.max(0, Math.min(100, Math.round(mem.importance * 100)));
+      h += '<div class="mem-modal-row"><span class="mem-modal-key">Importance</span><span class="modal-progress"><span class="modal-progress-bar wide"><span class="modal-progress-fill" data-fill="' + imp +
+        '" data-color="linear-gradient(90deg,var(--accent-purple),var(--accent-yellow))"></span></span><span class="mem-bar-pct ov-accent-yellow">' +
+        (imp / 100).toFixed(2) + "</span></span></div>";
+    }
+    var tags = mem.tags || [];
+    if (tags.length) {
+      h += '<div class="mem-modal-row"><span class="mem-modal-key">Tags</span><span class="wiring-detail-tags">' +
+        tags.map(function (t) {
+          return '<span class="wiring-detail-chip">' + esc(t) + "</span>";
+        }).join("") + "</span></div>";
+    }
+    var rel = mem.related_keys || [];
+    if (rel.length) {
+      h += '<div class="mem-modal-row"><span class="mem-modal-key">関連</span><span class="wiring-detail-tags">' +
+        rel.map(function (rk) {
+          return '<span class="wiring-detail-chip" title="' + _wiringEscAttr(rk) + '">' +
+            esc(_wiringKeyShort(rk)) + "</span>";
+        }).join("") + "</span></div>";
+    }
+    if (mem.created_at) {
+      h += '<div class="mem-modal-row"><span class="mem-modal-key">Created</span><span>' +
+        esc(fmtDate ? fmtDate(mem.created_at) : mem.created_at) + "</span></div>";
+    }
+    if (mem.updated_at && mem.updated_at !== mem.created_at) {
+      h += '<div class="mem-modal-row"><span class="mem-modal-key">Updated</span><span>' +
+        esc(fmtDate ? fmtDate(mem.updated_at) : mem.updated_at) + "</span></div>";
+    }
+  }
+  if (ev && (ev.source || ev.target)) {
+    h += '<div class="mem-modal-row"><span class="mem-modal-key">Edge</span><span class="mem-key-mono wiring-edge-detail">' +
+      esc(ev.source + " → " + ev.target) + "</span></div>";
+  }
+  h += "</div>";
+  return h;
+}
+
+function _wiringPaintDetail(overlay, key, ev, mem, failed) {
+  safeSetHTML(overlay, _wiringDetailHTML(key, mem, ev, failed));
+  _wiringApplyFills(overlay);
+  var closeBtn = overlay.querySelector("[data-wiring-close]");
+  if (closeBtn) closeBtn.addEventListener("click", closeWiringDetail);
+  if (typeof N.Core.refreshIcons === "function") N.Core.refreshIcons();
+}
+
+function openWiringDetail(key) {
+  if (!key) return;
+  var overlay = document.getElementById("wiring-detail-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "wiring-detail-overlay";
+    overlay.className = "ov-modal-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "発火した記憶の詳細");
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) closeWiringDetail();
+    });
+  }
+  var ev = _wiringFindEvent(key);
+  _wiringDetailOpener = document.activeElement;
+  _wiringPaintDetail(overlay, key, ev, _wiringMemCache[key] || null, false);
+  overlay.style.display = "flex";
+  var closeBtn = overlay.querySelector("[data-wiring-close]");
+  if (closeBtn) closeBtn.focus();
+  if (!_wiringMemCache[key] && !_wiringMemFailed[key]) {
+    var repaint = function () {
+      var ov = document.getElementById("wiring-detail-overlay");
+      if (ov && ov.style.display !== "none") {
+        _wiringPaintDetail(ov, key, _wiringFindEvent(key), _wiringMemCache[key] || null, true);
+      }
+    };
+    if (_wiringMemPending[key]) _wiringMemPending[key].then(repaint);
+    else _wiringEnsureMemories([{ source: key, target: "" }], repaint);
+  }
+}
+
+function closeWiringDetail() {
+  var overlay = document.getElementById("wiring-detail-overlay");
+  if (overlay) overlay.style.display = "none";
+  if (_wiringDetailOpener && typeof _wiringDetailOpener.focus === "function") {
+    try { _wiringDetailOpener.focus(); } catch (_) {}
+  }
+  _wiringDetailOpener = null;
+}
+
+// CSP delegation: fire rows open the detail modal (click + keyboard).
+if (typeof document !== "undefined" && !N.Chat.memoryPanel._detailDelegated) {
+  N.Chat.memoryPanel._detailDelegated = true;
+  document.addEventListener("click", function (e) {
+    if (!e.target || !e.target.closest) return;
+    var row = e.target.closest("[data-wiring-open]");
+    if (row) {
+      openWiringDetail(row.getAttribute("data-wiring-open"));
+      return;
+    }
+    if (e.target.closest("[data-wiring-close]")) closeWiringDetail();
+  });
+  document.addEventListener("keydown", function (e) {
+    var overlay = document.getElementById("wiring-detail-overlay");
+    var open = overlay && overlay.style.display !== "none";
+    if (open && e.key === "Escape") {
+      e.stopPropagation();
+      closeWiringDetail();
+      return;
+    }
+    if ((e.key === "Enter" || e.key === " ") && !open &&
+        e.target && e.target.closest && e.target.closest("[data-wiring-open]")) {
+      e.preventDefault();
+      openWiringDetail(e.target.closest("[data-wiring-open]").getAttribute("data-wiring-open"));
+    }
+  });
+}
+
+// ------------------------------------------------------------------
 // Expose on N.Chat.memoryPanel
 // ------------------------------------------------------------------
 Object.assign(N.Chat.memoryPanel, {
@@ -780,6 +1036,8 @@ Object.assign(N.Chat.memoryPanel, {
   disconnectWiring: disconnectWiring,
   switchWiringPersona: switchWiringPersona,
   setWiringVisible: setWiringVisible,
+  openWiringDetail: openWiringDetail,
+  closeWiringDetail: closeWiringDetail,
 });
 
 })(window.Nous);

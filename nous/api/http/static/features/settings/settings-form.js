@@ -26,11 +26,11 @@ function renderSettings(el, settings, status) {
 
     /* ── Profiles section ── */
     html += '<div class="glass p-4 mb-6">';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">';
-    html += '<h3 style="font-size:1rem;font-weight:600;color:var(--text-primary)"><i data-lucide="clipboard-list"></i> Settings Profiles</h3>';
-    html += '<button id="save-profile-btn" class="glass-btn" style="padding:6px 14px;font-size:0.8rem"><i data-lucide="save"></i> Save Current as Profile</button>';
+    html += '<div class="settings-card-header">';
+    html += '<h3 class="settings-card-title"><i data-lucide="clipboard-list"></i> Settings Profiles</h3>';
+    html += '<button id="save-profile-btn" class="glass-btn"><i data-lucide="save"></i> Save Current as Profile</button>';
     html += '</div>';
-    html += '<div id="profiles-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>';
+    html += '<div id="profiles-list" class="profiles-list"></div>';
     html += '</div>';
 
     /* ── Search bar (classes in components.css — no inline style: stripped by sanitizer) ── */
@@ -76,31 +76,31 @@ function renderSettings(el, settings, status) {
         if (catStatus && catStatus.status && catStatus.status !== 'idle') {
             var st = catStatus.status;
             if (st === 'loading' || st === 'reloading') {
-                statusHtml = '<div style="margin-top:8px"><div style="font-size:0.78rem;color:var(--accent-yellow);margin-bottom:4px"><i data-lucide="clock"></i> ' + esc(catStatus.message || '読み込み中…') + '</div><div class="progress-wrap"><div class="progress-bar progress-indeterminate"></div></div></div>';
+                statusHtml = '<div class="cat-status"><div class="cat-status-loading"><i data-lucide="clock"></i> ' + esc(catStatus.message || '読み込み中…') + '</div><div class="progress-wrap"><div class="progress-bar progress-indeterminate"></div></div></div>';
             } else if (st === 'ready' || st === 'success') {
-                statusHtml = '<div style="margin-top:8px;font-size:0.78rem;color:var(--accent-green)"><i data-lucide="check-circle"></i> ' + esc(catStatus.message || '準備完了') + '</div>';
+                statusHtml = '<div class="cat-status cat-status-ready"><i data-lucide="check-circle"></i> ' + esc(catStatus.message || '準備完了') + '</div>';
             } else if (st === 'error') {
-                statusHtml = '<div style="margin-top:8px;font-size:0.78rem;color:var(--accent-red)"><i data-lucide="x-circle"></i> ' + esc(catStatus.message || 'エラー') + '</div>';
+                statusHtml = '<div class="cat-status cat-status-error"><i data-lucide="x-circle"></i> ' + esc(catStatus.message || 'エラー') + '</div>';
             }
         }
 
         /* Card wrapper */
         html += '<div class="glass p-6 mb-6 setting-category-card" data-category="' + esc(cat) + '" data-searchtext="' + esc(catSearchText) + '">';
-        html += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">';
-        html += '<div style="display:flex;align-items:center;gap:10px">';
-        html += '<button class="cat-toggle-btn" id="cat-toggle-' + cat + '" data-toggle-cat="' + cat + '" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.8rem;padding:2px" title="Toggle section">▼</button>';
-        html += '<span class="card-title" style="margin:0">' + icon + ' ' + esc(catLabel) + '</span>';
+        html += '<div class="settings-card-header">';
+        html += '<div class="settings-card-header-group">';
+        html += '<button class="cat-toggle-btn" id="cat-toggle-' + cat + '" data-toggle-cat="' + cat + '" title="Toggle section">▼</button>';
+        html += '<span class="card-title">' + icon + ' ' + esc(catLabel) + '</span>';
         html += '</div>';
-        html += '<div style="display:flex;align-items:center;gap:8px">';
+        html += '<div class="settings-card-header-group">';
         if (hasDiffs) {
-            html += '<button class="cat-reset-btn" data-reset-cat="' + cat + '" style="font-size:0.75rem;padding:4px 10px;border-radius:8px;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);color:var(--accent-red);cursor:pointer">↩ Reset Category</button>';
+            html += '<button class="cat-reset-btn" data-reset-cat="' + cat + '">↩ Reset Category</button>';
         }
         html += '</div>';
         html += '</div>';
 
         /* Category description */
         if (catDesc) {
-            html += '<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:12px;line-height:1.4;padding-left:22px">' + esc(catDesc) + '</div>';
+            html += '<div class="cat-desc">' + esc(catDesc) + '</div>';
         }
 
         html += statusHtml;
@@ -128,18 +128,18 @@ function renderSettings(el, settings, status) {
             var desc = meta.description || '';
             var isDiff = !isMasked && defaultVal != null && String(val) !== String(defaultVal);
             var reloadHint = hot
-                ? '<i data-lucide="refresh-cw" style="width:13px;height:13px"></i> Hot-reload'
-                : '<i data-lucide="lock" style="width:13px;height:13px"></i> Restart required';
+                ? '<i data-lucide="refresh-cw" class="lucide-sm"></i> Hot-reload'
+                : '<i data-lucide="lock" class="lucide-sm"></i> Restart required';
             var tooltipText = reloadHint + (meta.reload_time ? ' (' + meta.reload_time + ')' : '');
             var searchText = key.replace(/_/g, ' ') + ' ' + desc + ' ' + cat;
 
-            html += '<div class="setting-row" data-setting-key="' + cat + '.' + key + '" data-category="' + cat + '" data-searchtext="' + esc(searchText) + '">';
+            html += '<div class="setting-row' + (isDiff ? ' is-diff' : '') + '" data-setting-key="' + cat + '.' + key + '" data-category="' + cat + '" data-searchtext="' + esc(searchText) + '">';
 
             /* Label column with diff dot */
-            html += '<div style="display:flex;flex-direction:column;gap:2px;flex:0 0 auto;min-width:160px;position:relative">';
-            html += '<span class="setting-diff-dot" style="' + (isDiff ? '' : 'display:none;') + 'position:absolute;left:-14px;top:8px;width:8px;height:8px;border-radius:50%;background:var(--accent-blue)"></span>';
-            html += '<label class="setting-label" for="' + inputId + '" title="' + esc(tooltipText) + '" style="margin-bottom:0">' + esc(key.replace(/_/g, ' ')) + '</label>';
-            if (desc) html += '<span style="font-size:0.7rem;color:var(--text-muted);line-height:1.3">' + esc(desc) + '</span>';
+            html += '<div class="setting-label-col">';
+            html += '<span class="setting-diff-dot"></span>';
+            html += '<label class="setting-label" for="' + inputId + '" title="' + esc(tooltipText) + '">' + esc(key.replace(/_/g, ' ')) + '</label>';
+            if (desc) html += '<span class="setting-desc">' + esc(desc) + '</span>';
             html += '</div>';
 
             /* Source icon */
@@ -149,30 +149,30 @@ function renderSettings(el, settings, status) {
             var autosaveAttr = hot ? ' data-autosave="true"' : '';
             if (isMasked) {
                 /* ── Password / masked field with toggle ── */
-                html += '<div style="flex:1;min-width:160px;position:relative;display:flex;align-items:center">';
+                html += '<div class="setting-input-col">';
                 html += '<input id="' + inputId + '" type="password" class="glass-input" value="" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '" data-masked="true"' + autosaveAttr + ' placeholder="' + (isMasked ? 'stored: 16+ chars to change, clear to restore open access' : 'Enter value...') + '">';
-                html += '<button class="pw-toggle-btn" data-input="' + inputId + '" style="position:absolute;right:8px;background:none;border:none;color:var(--text-muted);cursor:pointer;padding:2px;font-size:0.8rem" title="Show/hide"><i data-lucide="eye"></i></button>';
+                html += '<button class="pw-toggle-btn" data-input="' + inputId + '" title="Show/hide"><i data-lucide="eye"></i></button>';
                 html += '</div>';
             } else if (key === 'log_level') {
-                html += '<select id="' + inputId + '" class="glass-input" style="flex:1;min-width:120px" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '"' + autosaveAttr + '">';
+                html += '<select id="' + inputId + '" class="glass-input" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '"' + autosaveAttr + '">';
                 ['DEBUG','INFO','WARNING','ERROR','CRITICAL'].forEach(function(lv) {
                     html += '<option value="' + lv + '"' + (String(val).toUpperCase() === lv ? ' selected' : '') + '>' + lv + '</option>';
                 });
                 html += '</select>';
             } else if (key === 'device') {
-                html += '<select id="' + inputId + '" class="glass-input" style="flex:1;min-width:120px" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '"' + autosaveAttr + '">';
+                html += '<select id="' + inputId + '" class="glass-input" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '"' + autosaveAttr + '">';
                 ['cpu','cuda','mps','auto'].forEach(function(d) {
                     html += '<option value="' + d + '"' + (String(val) === d ? ' selected' : '') + '>' + d + '</option>';
                 });
                 html += '</select>';
             } else if (isBool) {
-                html += '<select id="' + inputId + '" class="glass-input" style="flex:1;min-width:120px" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '"' + autosaveAttr + '">';
+                html += '<select id="' + inputId + '" class="glass-input" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '"' + autosaveAttr + '">';
                 html += '<option value="true"' + (val === true ? ' selected' : '') + '>true</option>';
                 html += '<option value="false"' + (val === false ? ' selected' : '') + '>false</option>';
                 html += '</select>';
             } else {
                 var inputType = (typeof val === 'number' && key !== 'host') ? 'number' : 'text';
-                html += '<input id="' + inputId + '" type="' + inputType + '" class="glass-input" style="flex:1;min-width:160px" value="' + esc(String(val)) + '" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '"' + autosaveAttr + (typeof val === 'number' ? ' step="any"' : '') + '>';
+                html += '<input id="' + inputId + '" type="' + inputType + '" class="glass-input" value="' + esc(String(val)) + '" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '"' + autosaveAttr + (typeof val === 'number' ? ' step="any"' : '') + '>';
             }
 
             /* Hot reload badge */
@@ -183,11 +183,11 @@ function renderSettings(el, settings, status) {
                 html += '<span class="setting-status" id="status-' + inputId + '"></span>';
             }
 
-            /* Reset button (hidden when no diff) */
-            html += '<button class="setting-reset-btn" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '" style="' + (isDiff ? '' : 'display:none;') + 'padding:4px 10px;font-size:0.72rem;background:none;border:1px solid var(--glass-border);border-radius:6px;color:var(--text-muted);cursor:pointer">↩ Reset</button>';
+            /* Reset button (hidden unless row carries .is-diff) */
+            html += '<button class="setting-reset-btn" data-cat="' + esc(cat) + '" data-key="' + esc(key) + '">↩ Reset</button>';
 
             /* Validation error placeholder */
-            html += '<div class="setting-validation-error" role="alert" style="display:none;width:100%;font-size:0.72rem;color:var(--accent-red);margin-top:2px"></div>';
+            html += '<div class="setting-validation-error" role="alert"></div>';
 
             html += '</div>'; /* end setting-row */
         });
@@ -198,7 +198,7 @@ function renderSettings(el, settings, status) {
 
     /* ── Action buttons ── */
     html += '<div class="glass p-6">';
-    html += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
+    html += '<div class="settings-actions">';
     html += '<button id="export-config-btn" class="glass-btn-success glass-btn"><i data-lucide="download"></i> Export Config</button>';
     html += '<button id="reset-config-btn" class="glass-btn-danger glass-btn"><i data-lucide="trash-2"></i> Reset All to Defaults</button>';
     html += '</div>';
@@ -206,9 +206,9 @@ function renderSettings(el, settings, status) {
 
     /* ── Global Apply for restart-required changes ── */
     html += '<div class="global-apply-section">';
-    html += '<button id="global-apply-btn" class="primary-btn" disabled style="padding:10px 24px;font-size:0.85rem;font-weight:600;border-radius:10px;background:linear-gradient(135deg,rgba(var(--accent-blue-rgb),0.2),rgba(var(--accent-teal-rgb),0.2));border:1px solid rgba(var(--accent-blue-rgb),0.3);color:var(--text-primary);cursor:not-allowed;opacity:0.4;transition:all 0.2s"><i data-lucide="save"></i> Apply Restart-Required Changes</button>';
+    html += '<button id="global-apply-btn" class="primary-btn global-apply-btn" disabled><i data-lucide="save"></i> Apply Restart-Required Changes</button>';
     html += '<span id="global-apply-status" class="setting-status"></span>';
-    html += '<div id="global-apply-details" style="display:none;width:100%;margin-top:8px;font-size:0.78rem;color:var(--text-muted)"></div>';
+    html += '<div id="global-apply-details" class="global-apply-details"></div>';
     html += '</div>';
 
     safeSetHTML(el, html);

@@ -869,11 +869,11 @@ class TestChatService:
 
 
 def test_chat_tab_buttons_use_panel_toggle_handlers():
-    """Top control buttons should call the panel toggle functions directly."""
+    """Top control buttons route through CSP-safe data-action delegation."""
     html = render_chat_tab()
 
-    assert 'onclick="N.Chat.core.toggleMemory()"' in html
-    assert 'onclick="N.Chat.core.toggleSettings()"' in html
+    assert 'data-action="chat-toggle-memory"' in html
+    assert 'data-action="chat-toggle-settings"' in html
 
 
 def test_chat_tab_renders_all_toggle_panels():
