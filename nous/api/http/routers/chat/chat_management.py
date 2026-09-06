@@ -87,7 +87,7 @@ async def _do_list_mcp_tools(persona: str, ctx) -> dict:
 async def _do_get_commitments(persona: str, ctx) -> dict:
     """Return active goals and latest reflection insights."""
     goals: list[dict] = []
-    insights: list[str] = []
+    insights: list[dict] = []
 
     try:
         goal_result = ctx.memory_service.get_by_tags(["goal", "active"])
@@ -104,7 +104,18 @@ async def _do_get_commitments(persona: str, ctx) -> dict:
                 key=lambda m: getattr(m, "created_at", None) or "",
                 reverse=True,
             )
-            insights = [m.content for m in sorted_refs[:5]]
+            # メタ付きオブジェクト: パネルの詳細モーダルが本文＋メタを
+            # 表示できるよう key / created_at を同梱（旧文字列形式の
+            # 消費者には content プロパティで後方互換なし — 呼び出し元は
+            # chat-core.js のみで、フロント側は両形式に対応済み）。
+            insights = [
+                {
+                    "content": m.content,
+                    "key": m.key,
+                    "created_at": getattr(m, "created_at", None),
+                }
+                for m in sorted_refs[:5]
+            ]
     except Exception as e:  # 目標/洞察の取得失敗は非致命的
         logger.warning("get_chat_commitments: insights failed: %s", e)
 

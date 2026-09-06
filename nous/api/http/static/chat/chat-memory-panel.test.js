@@ -89,6 +89,102 @@ describe('chat-memory-panel registration', () => {
   });
 });
 
+describe('panel detail modals + row delegation', () => {
+  let open, openMemory;
+  beforeAll(() => {
+    ensurePanel();
+    // DOMPurify is a browser CDN global, absent in vitest. Identity stub
+    // so safeSetHTML builds real DOM (same trick as chat-wiring-feed.test.js).
+    globalThis.DOMPurify = { sanitize: (html) => String(html) };
+  });
+  beforeEach(() => {
+    N.Components.memModal = {
+      open: open = vi.fn(),
+      openMemory: openMemory = vi.fn(),
+      close: vi.fn(),
+    };
+  });
+
+  it('memory row with a complete key opens the unified mem modal by key', () => {
+    N.Chat.memoryPanel.update([{ key: 'm1', content: 'fact one', importance: 0.6, tags: [], score: 0.9 }], undefined, undefined, undefined);
+    const card = document.querySelector('#memory-retrieved-list .memory-item-card');
+    expect(card.getAttribute('data-panel-kind')).toBe('memory');
+    card.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    expect(open).toHaveBeenCalledWith('m1');
+  });
+
+  it('memory row without a key falls back to openMemory(partial)', () => {
+    N.Chat.memoryPanel.update(undefined, [{ key: '', content: 'partial fact', importance: 0.4, tags: ['a', 'b'] }], undefined, undefined);
+    const card = document.querySelector('#memory-saved-list .memory-item-card');
+    card.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    expect(open).not.toHaveBeenCalled();
+    expect(openMemory).toHaveBeenCalledWith(expect.objectContaining({ content: 'partial fact', importance: 0.4 }));
+  });
+
+  it('goal row opens the panel detail modal with 完了/削除 buttons', () => {
+    N.Chat.memoryPanel.update(undefined, undefined, [{ key: 'g1', content: 'run the marathon', importance: 0.8, tags: ['goal', 'active'] }], undefined);
+    const card = document.querySelector('#memory-goals-list .memory-item-card');
+    expect(card.getAttribute('data-panel-kind')).toBe('goal');
+    card.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    const overlay = document.getElementById('panel-detail-overlay');
+    expect(overlay.classList.contains('show')).toBe(true);
+    expect(overlay.textContent).toContain('run the marathon');
+    expect(overlay.querySelector('[data-mem-action="complete"]')).not.toBeNull();
+    expect(overlay.querySelector('[data-mem-action="delete"]')).not.toBeNull();
+  });
+
+  it('promise row opens the detail modal (約束 kicker)', () => {
+    N.Chat.memoryPanel.update(undefined, undefined, undefined, [{ key: 'p1', content: 'call back tomorrow', importance: 0.8, tags: [] }]);
+    const card = document.querySelector('#memory-promises-list .memory-item-card');
+    card.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    const overlay = document.getElementById('panel-detail-overlay');
+    expect(overlay.classList.contains('show')).toBe(true);
+    expect(overlay.textContent).toContain('約束');
+    expect(overlay.textContent).toContain('call back tomorrow');
+  });
+
+  it('complete inside the modal closes it and routes to completeGoal', () => {
+    const done = vi.fn();
+    N.Chat.memoryPanel.completeGoal = done;
+    N.Chat.memoryPanel.update(undefined, undefined, [{ key: 'g1', content: 'run the marathon', importance: 0.8, tags: [] }], undefined);
+    document.querySelector('#memory-goals-list .memory-item-card')
+      .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    document.querySelector('#panel-detail-overlay [data-mem-action="complete"]')
+      .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    expect(done).toHaveBeenCalledWith('g1', 'run the marathon');
+    expect(document.getElementById('panel-detail-overlay').classList.contains('show')).toBe(false);
+  });
+
+  it('Escape closes the panel detail modal', () => {
+    N.Chat.memoryPanel.update(undefined, undefined, [{ key: 'g1', content: 'run the marathon', importance: 0.8, tags: [] }], undefined);
+    document.querySelector('#memory-goals-list .memory-item-card')
+      .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(document.getElementById('panel-detail-overlay').classList.contains('show')).toBe(false);
+  });
+
+  it('object insights render content (not [object Object]) and open reflection detail', () => {
+    N.Chat.memoryPanel.updateReflection([{ content: 'insight body', key: 'r1', created_at: '2026-09-07T10:00:00' }]);
+    const row = document.querySelector('#memory-reflection-list .reflection-insight');
+    expect(row.textContent).toContain('insight body');
+    expect(row.getAttribute('data-panel-kind')).toBe('reflection');
+    row.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    const overlay = document.getElementById('panel-detail-overlay');
+    expect(overlay.classList.contains('show')).toBe(true);
+    expect(overlay.textContent).toContain('insight body');
+    expect(overlay.textContent).toContain('r1');
+    expect(overlay.textContent).toMatch(/2026\/0?9\/0?7/);
+    // Reflection is read-only: no complete/delete actions
+    expect(overlay.querySelector('[data-mem-action]')).toBeNull();
+  });
+
+  it('string insights (legacy format) still render', () => {
+    N.Chat.memoryPanel.updateReflection(['legacy insight']);
+    expect(document.querySelector('#memory-reflection-list .reflection-insight').textContent)
+      .toContain('legacy insight');
+  });
+});
+
 describe('loadChatCommitments guard', () => {
   it('skips quietly (no toast) when memoryPanel is not registered', async () => {
     N.Core.toast = vi.fn();
