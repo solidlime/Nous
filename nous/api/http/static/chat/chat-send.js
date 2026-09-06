@@ -786,6 +786,78 @@ async function chatSend(retry) {
 }
 
 // ------------------------------------------------------------------
+// REM monologue — display-only whisper fed by the wiring stream
+// (kind=monologue, meta={persona,text}). Lives in the DOM only: no
+// chat history array, no session-save call, vanishes on reload.
+// Class is deliberately separate from .chat-thinking-bubble —
+// thinking belongs to the chat stream, this to the wiring stream.
+// ------------------------------------------------------------------
+var MONOLOGUE_URL = "/api/memory/wiring/stream";
+var _monologuePersona = null;
+
+function appendMonologueBubble(text) {
+  if (!text || typeof text !== "string") return;
+  var container = findChatLogContainer();
+  if (!container) return;
+  var bubble = document.createElement("details");
+  bubble.className = "chat-monologue-bubble";
+  var summary = document.createElement("summary");
+  summary.textContent = "💭";
+  var body = document.createElement("div");
+  body.className = "chat-monologue-text";
+  body.textContent = text; // CSP-safe: textContent, never parsed as HTML
+  bubble.appendChild(summary);
+  bubble.appendChild(body);
+  container.appendChild(bubble);
+  // Follow the stream only while the user is already at the bottom
+  if (container.scrollHeight - container.scrollTop - container.clientHeight < 80) {
+    container.scrollTop = container.scrollHeight;
+  }
+}
+
+function handleMonologueWiring(data) {
+  try {
+    var evt = JSON.parse(data);
+    if (!evt || evt.kind !== "monologue") return;
+    var meta = evt.meta || {};
+    // Stale socket from a previous persona: drop quietly.
+    if (meta.persona && window.S && meta.persona !== window.S.persona) return;
+    appendMonologueBubble(meta.text);
+  } catch (err) {
+    console.warn("[monologue wiring parse]:", err.message);
+  }
+}
+
+function connectMonologueStream(persona) {
+  _monologuePersona = persona || (window.S && window.S.persona) || null;
+  N.Core.connectStream("wiring-chat", {
+    url: function () {
+      return _monologuePersona
+        ? MONOLOGUE_URL + "?persona=" + encodeURIComponent(_monologuePersona)
+        : null;
+    },
+    handlers: {
+      wiring: function (e) { handleMonologueWiring(e.data); },
+    },
+  });
+}
+
+// Persona select (init + change) funnels through N.Core.connectSSE —
+// mirror it so the monologue stream always follows the active persona
+// (wraps once, even under script double-load).
+if (typeof N.Core.connectSSE === "function" && !N.Core._monologueConnectWrapped) {
+  N.Core._monologueConnectWrapped = true;
+  (function () {
+    var _origConnect = N.Core.connectSSE;
+    N.Core.connectSSE = function (persona) {
+      var r = _origConnect.apply(this, arguments);
+      try { connectMonologueStream(persona); } catch (_e) {}
+      return r;
+    };
+  })();
+}
+
+// ------------------------------------------------------------------
 // Expose on N.Chat
 // ------------------------------------------------------------------
 N.Chat.send = chatSend;
@@ -796,6 +868,11 @@ N.Chat.ui = {
   removeTyping: removeTypingIndicator,
   scrollToBottom: scrollToBottom,
   findLog: findChatLogContainer,
+};
+N.Chat.monologue = {
+  append: appendMonologueBubble,
+  handle: handleMonologueWiring,
+  connect: connectMonologueStream,
 };
 
 // ------------------------------------------------------------------

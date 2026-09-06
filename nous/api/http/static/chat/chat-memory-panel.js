@@ -362,6 +362,7 @@ var WIRING_KINDS = {
   ppr_hit: "PPR",
   replay_fire: "リプレイ",
   novelty_gate: "新規性",
+  monologue: "独り言",
 };
 var WIRING_BAR_COLORS = {
   link_fire: "linear-gradient(90deg,var(--accent-purple),var(--accent-pink))",
