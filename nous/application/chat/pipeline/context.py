@@ -18,6 +18,7 @@ class ChatTurnContext:
     context_section: str = ""
     time_context: str = ""  # ★ <TIME_CONTEXT> ブロック（システムプロンプト先頭に注入）
     related_memories: str = ""
+    monologue_entries: list[str] = field(default_factory=list)  # 再会時独り言 (spec §4.3)
     recency_digest: str = ""  # PrepareStep が埋める（§1 直近記憶ダイジェスト）
     state_raw: dict = field(default_factory=dict)
     memories_raw: list[dict] = field(default_factory=list)

@@ -13,6 +13,7 @@ from nous.application.chat.pipeline.context_loader import (  # noqa: F401
     _build_relationship_context,
     _build_time_context,
     _classify_gap,
+    _fetch_monologue_entries,
     _is_suspicious_cp,
 )
 
@@ -180,6 +181,9 @@ class PrepareStep:
                 turn_ctx.time_context = _build_time_context(state)
             else:
                 turn_ctx.time_context = ""
+
+            # 再会時独り言 (spec §4.3): time_context とは独立・注入条件は取得側で判定
+            turn_ctx.monologue_entries = _fetch_monologue_entries(ctx, state, config)
 
             # context_section 構築
             context_task = asyncio.create_task(

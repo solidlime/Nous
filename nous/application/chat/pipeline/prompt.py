@@ -193,6 +193,17 @@ class PromptBuildStep:
                 f"\n<retrieved_data>\n{RETRIEVED_DATA_GUARD}\n" + "\n".join(retrieved_inner) + "\n</retrieved_data>"
             )
 
+        # --- 再会時独り言コンテキスト (spec §4.3: 兄弟タグ・生の < は本文に入れない) ---
+        if turn_ctx.monologue_entries:
+            lines = [line.replace("<", "＜").replace(">", "＞") for line in turn_ctx.monologue_entries]
+            body = (
+                "最終会話からしばらくが経過している。この間、あなたは独り言として次のように考えていた:\n"
+                + "\n".join(f"- {line}" for line in lines)
+                + "\n再会直後の挨拶で自然に触れてよい。参照は1つまで。日記の読み上げをしないこと。"
+                "ユーザーの入力が再会の挨拶でない場合は触れない。"
+            )
+            dynamic_parts.append(f"\n<monologue_context>\n{body}\n</monologue_context>")
+
         # 優先順位（一本化）→ キャラ厳守ブロック: system prompt の末尾（recency 位置）に配置
         dynamic_parts.append(f"\n{PRECEDENCE_BLOCK}")
         dynamic_parts.append(CHARACTER_ADHERENCE_BLOCK.format(persona=persona))

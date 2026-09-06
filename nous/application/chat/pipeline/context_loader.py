@@ -353,6 +353,46 @@ _TIME_OF_DAY: list[tuple[int, str]] = [
     (24, "深夜"),
 ]
 
+REUNION_GAP_SECONDS = 900  # 再会判定の閾値（time_context 表示と monologue 注入の共通条件）
+
+
+def _fetch_monologue_entries(ctx, state, config) -> list[str]:
+    """ギャップ中に生成された独り言（直近3件・古い順）を返す (spec §4.3)。
+
+    注入条件をすべてここで判定する（enabled / repo / 最終会話時刻 /
+    経過 > REUNION_GAP_SECONDS / ギャップ中のエントリ）。失敗は静かに空。
+    """
+    if not getattr(config, "brain_monologue_enabled", False):
+        return []
+    repo = getattr(ctx, "_session_event_repo", None)
+    lct = getattr(state, "last_conversation_time", None)
+    if repo is None or lct is None:
+        return []
+    try:
+        from zoneinfo import ZoneInfo
+
+        from nous.config.settings import get_settings
+
+        tz = get_settings().timezone
+        now = get_now(tz=tz)
+        if lct.tzinfo is None:
+            lct = lct.replace(tzinfo=ZoneInfo(tz))
+        if (now - lct).total_seconds() <= REUNION_GAP_SECONDS:
+            return []
+        events = repo.get_by_persona(getattr(state, "persona", ""), "brain.monologue", 10)
+        lct_naive = lct.replace(tzinfo=None)
+        recent = [
+            e.summary
+            for e in sorted(
+                events, key=lambda e: e.timestamp.replace(tzinfo=None) if e.timestamp.tzinfo else e.timestamp
+            )
+            if e.summary and (e.timestamp.replace(tzinfo=None) if e.timestamp.tzinfo else e.timestamp) > lct_naive
+        ]
+        return recent[-3:]
+    except Exception as exc:
+        logger.debug("monologue fetch failed: %s", exc)
+        return []
+
 
 def _build_time_context(state) -> str:
     """Build <TIME_CONTEXT> block for injection at the TOP of system prompt."""
@@ -383,7 +423,7 @@ def _build_time_context(state) -> str:
             last_conv = last_conv.replace(tzinfo=ZoneInfo(tz))
         elapsed_seconds = (now_local - last_conv).total_seconds()
 
-        if elapsed_seconds > 900:  # 15分以上のギャップから表示
+        if elapsed_seconds > REUNION_GAP_SECONDS:
             gap = _classify_gap(elapsed_seconds / 3600.0)
             if gap:
                 # 経過時間の表示（日本語、時間/分単位）
