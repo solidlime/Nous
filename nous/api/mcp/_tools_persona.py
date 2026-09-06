@@ -161,13 +161,6 @@ async def _tool_update_context(
         result = ctx.persona_service.update_emotion(persona, emotion, _intensity, context="manual_update")
         if result.is_ok:
             updated.append(f"emotion={emotion}")
-            # 表情画像を同期（既存画像あれば即 publish、無ければ非同期生成）
-            try:
-                from nous.application.chat.pipeline.post import update_expression
-
-                await update_expression(ctx, getattr(ctx, "config", None), emotion)
-            except Exception as e:  # 表情はベストエフォート
-                logger.warning("update_context: expression sync failed: %s", e)
 
     physical_updates: dict[str, str] = {}
     if physical_state is not None:

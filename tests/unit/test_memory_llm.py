@@ -957,7 +957,7 @@ class TestRunMemoryLLM:
             0.8,
             context="llm_suggested",
         )
-        # ctx_update も update_emotion も正規化済み — update_expression("Joy") の silent stop を防ぐ
+        # ctx_update も update_emotion も正規化済み（非正典ラベルは下流で扱わない）
         assert llm_result["context_update"]["emotion"] == "joy"
         assert llm_result["context_update"]["emotion_intensity"] == 0.8
 

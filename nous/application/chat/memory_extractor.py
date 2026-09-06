@@ -488,9 +488,9 @@ async def run_memory_llm(
             emotion = ctx_update.get("emotion")
             intensity = ctx_update.get("emotion_intensity")
             # 不変条件: ctx_update は「適用された値」のみを保持する。
-            # post.py がこの dict を ContextUpdateSSE / update_expression にそのまま
-            # 流すため、適用しなかった感情フィールドは捨てる（非正典ラベルが
-            # ゴミ表情生成に繋がる／メインLLMが書いた感情と二重書きになるのを防ぐ）。
+            # post.py がこの dict を ContextUpdateSSE にそのまま流すため、
+            # 適用しなかった感情フィールドは捨てる（非正典ラベルが捨てられ、
+            # メインLLMが書いた感情と二重書きになるのを防ぐ）。
             normalized = normalize_emotion(str(emotion).strip()) if emotion else ""
             if normalized and normalized != "neutral" and not skip_emotion:
                 ctx_update["emotion"] = normalized

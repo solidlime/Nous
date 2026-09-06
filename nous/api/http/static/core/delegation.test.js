@@ -11,7 +11,6 @@ const DOM = `
 <button data-action="chat-toggle-next" id="b-next">adv</button><div id="nx" style="display:none">x</div>
 <div data-action="chat-close-viewer" id="ov"><div id="media-viewer-inner"><span id="ov-in">x</span></div></div>
 <div data-action="mem-edit-backdrop" id="bd"><span id="bd-in">x</span></div>
-<button data-action="ov-gen-expressions" id="b-ov">gen</button>
 <input id="m-fixed2" data-mirror="t-fixed2" data-mirror-format="fixed2" value="0.7"><span id="t-fixed2"></span>
 <input id="m-topP" data-mirror="t-topP" data-mirror-format="topP" value=""><span id="t-topP"></span>
 <input id="m-effort" data-mirror="t-effort" data-mirror-format="effort" value="2"><span id="t-effort"></span>
@@ -51,7 +50,6 @@ beforeAll(() => {
     Memories: { closeEditModal: vi.fn(), saveMemory: vi.fn() },
     Timeline: { loadTimeline: vi.fn(), closeTimelineDetail: vi.fn() },
     Activity: { loadActivity: vi.fn() },
-    Overview: { generateExpressionSet: vi.fn() },
   };
   document.body.innerHTML = DOM;
   loadFile('delegation.js');
@@ -61,13 +59,6 @@ describe('delegation click routing', () => {
   it('routes data-action clicks to N.* receivers', () => {
     click(document.getElementById('b-send'));
     expect(window.Nous.Chat.send).toHaveBeenCalledTimes(1);
-  });
-
-  it('passes the button element to generateExpressionSet', () => {
-    const btn = document.getElementById('b-ov');
-    click(btn);
-    expect(window.Nous.Chat.send).toHaveBeenCalledTimes(1); // unchanged
-    expect(window.Nous.Features.Overview.generateExpressionSet).toHaveBeenCalledWith(btn);
   });
 
   it('passes true to loadActivity on refresh', () => {

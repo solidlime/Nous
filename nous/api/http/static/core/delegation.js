@@ -102,9 +102,6 @@
       case "act-refresh":
         callFeature("Activity", "loadActivity", true);
         break;
-      case "ov-gen-expressions":
-        callFeature("Overview", "generateExpressionSet", el);
-        break;
       default:
         break;
     }

@@ -10,7 +10,6 @@ from starlette.responses import HTMLResponse, JSONResponse
 
 from nous.api.http.deps import _memory_to_dict, _resolve_persona_from_request
 from nous.api.http.routers.persona.persona_helpers import _resolve_request
-from nous.application.chat.expression import generate_expression_image
 from nous.config.settings import Settings, get_settings
 from nous.infrastructure.logging.structured import get_logger
 
@@ -258,45 +257,6 @@ async def dashboard_data(request: Request) -> JSONResponse:
     except Exception as exc:
         logger.exception("Unexpected error: %s", exc)
         return JSONResponse({"error": "Internal server error"}, status_code=500)
-
-
-async def _generate_expression_set(config, persona: str) -> dict:
-    """基本感情ラベル分の表情を一括生成する（既存は skip）。
-
-    ponytail: 同期ループ（1 感情あたり ComfyUI で 10-30 秒）。長時間化するなら
-    バックグラウンドタスク化 + 進捗 SSE に拡張する。
-    """
-    from nous.application.chat.expression import resolve_expression_url
-    from nous.domain.value_objects import VALID_EMOTIONS
-
-    generated: list[str] = []
-    skipped: list[str] = []
-    failed: list[str] = []
-    for emotion in sorted(VALID_EMOTIONS):
-        if resolve_expression_url(persona, emotion) is not None:
-            skipped.append(emotion)
-            continue
-        try:
-            url = await generate_expression_image(config, persona, emotion)
-        except Exception:
-            url = None
-        if url:
-            generated.append(emotion)
-        else:
-            failed.append(emotion)
-    return {"generated": generated, "skipped": skipped, "failed": failed}
-
-
-async def generate_expressions(request: Request) -> JSONResponse:
-    """POST /api/chat/{persona}/persona/expressions/generate — 表情セット一括生成。"""
-    persona, ctx = _resolve_request(request)
-    if not ctx:
-        return JSONResponse({"error": "Persona not found"}, status_code=404)
-    from nous.domain.chat_config import ChatConfigFileRepository
-
-    config = ChatConfigFileRepository(get_settings().data_root).get(persona)
-    result = await _generate_expression_set(config, persona)
-    return JSONResponse(result)
 
 
 def _render_setup_page() -> str:

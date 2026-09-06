@@ -88,17 +88,8 @@ def registered_tools(mock_app_context):
 
 
 class TestUpdateContext:
-    @pytest.fixture(autouse=True)
-    def _mock_expression(self):
-        """update_context の表情同期を inert 化（各テストで検証できるよう mock を差し出す）。"""
-        with patch(
-            "nous.application.chat.pipeline.post.update_expression",
-            new_callable=AsyncMock,
-        ) as m:
-            yield m
-
     @pytest.mark.asyncio
-    async def test_update_emotion(self, registered_tools, _mock_expression):
+    async def test_update_emotion(self, registered_tools):
         tools, ctx, _ = registered_tools
         ctx.persona_service.update_emotion.return_value = Success(None)
         update_context = tools["update_context"]
@@ -110,22 +101,6 @@ class TestUpdateContext:
             result = await update_context(emotion="joy", emotion_intensity=0.9)
         assert "emotion=joy" in result
         ctx.persona_service.update_emotion.assert_called_once_with("test_persona", "joy", 0.9, context="manual_update")
-        _mock_expression.assert_awaited_once_with(ctx, ctx.config, "joy")
-
-    @pytest.mark.asyncio
-    async def test_update_emotion_expression_failure_is_swallowed(self, registered_tools, _mock_expression):
-        """表情同期が失敗しても context 更新自体は成功する。"""
-        tools, ctx, _ = registered_tools
-        ctx.persona_service.update_emotion.return_value = Success(None)
-        _mock_expression.side_effect = RuntimeError("boom")
-        update_context = tools["update_context"]
-        with (
-            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
-            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
-        ):
-            mock_reg_cls.get.return_value = ctx
-            result = await update_context(emotion="sad")
-        assert "emotion=sad" in result
 
     @pytest.mark.asyncio
     async def test_update_physical_state(self, registered_tools):

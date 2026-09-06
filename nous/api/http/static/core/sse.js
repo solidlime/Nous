@@ -110,18 +110,6 @@ N.Core.connectSSE = function connectSSE(persona) {
       }
     } catch (err) { console.warn("[SSE parse] context.body_state_changed:", err.message); }
   });
-  es._sseHandlers["context.expression_changed"] = function handleExpressionChanged(e) {
-    try {
-      var d = JSON.parse(e.data);
-      if (d.url) {
-        var avatar = document.getElementById("chat-persona-avatar");
-        if (avatar) avatar.src = d.url + "?t=" + Date.now();
-      }
-      window.dispatchEvent(new CustomEvent("expression-changed", { detail: d }));
-    } catch (err) { console.warn("[SSE parse] context.expression_changed:", err.message); }
-  };
-  es.addEventListener("context.expression_changed", es._sseHandlers["context.expression_changed"]);
-
   es._sseHandlers["session.rollback"] = function handleSessionRollback(e) {
     try {
       var d = JSON.parse(e.data);
