@@ -6,6 +6,7 @@
    ================================================================= */
 import { loadCore, loadFile } from '../core/load-core.js';
 
+const instances = [];
 let N;
 
 function monologueEvt(text, persona) {
@@ -32,7 +33,29 @@ beforeAll(() => {
 beforeEach(() => {
   document.body.innerHTML = '<div id="chat-messages"></div>';
   N.Chat.state.messages.length = 0;
+  window.S.persona = 'p1';
   N.Chat._sseStreams = {}; // fresh stream registry per test
+  instances.length = 0;
+  // jsdom (vitest env) lacks EventSource — minimal recording stub.
+  vi.stubGlobal('EventSource', class {
+    constructor(url) {
+      this.url = url;
+      this._listeners = {};
+      this.close = vi.fn();
+      instances.push(this);
+    }
+    addEventListener(ev, fn) { (this._listeners[ev] = this._listeners[ev] || []).push(fn); }
+    removeEventListener(ev, fn) {
+      const arr = this._listeners[ev] || [];
+      const i = arr.indexOf(fn);
+      if (i !== -1) arr.splice(i, 1);
+    }
+    emit(ev, data) { (this._listeners[ev] || []).forEach((fn) => fn({ data })); }
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('monologue bubble rendering', () => {
@@ -64,6 +87,24 @@ describe('monologue bubble rendering', () => {
     expect(bubbles().length).toBe(0);
   });
 
+  it('dedupes replayed ring-buffer events by seq and resets on persona switch', () => {
+    N.Chat.monologue.connect('p1'); // reset seq guard via the persona funnel
+    N.Chat.monologue.handle(JSON.stringify({ kind: 'monologue', seq: 5, meta: { persona: 'p1', text: '一回目。' } }));
+    // reconnect replays the ring buffer with the same/lower seqs — no new bubbles
+    N.Chat.monologue.handle(JSON.stringify({ kind: 'monologue', seq: 5, meta: { persona: 'p1', text: 'リプレイ。' } }));
+    N.Chat.monologue.handle(JSON.stringify({ kind: 'monologue', seq: 3, meta: { persona: 'p1', text: '古いリプレイ。' } }));
+    expect(bubbles().length).toBe(1);
+    // a genuinely new event still renders
+    N.Chat.monologue.handle(JSON.stringify({ kind: 'monologue', seq: 6, meta: { persona: 'p1', text: '新しい。' } }));
+    expect(bubbles().length).toBe(2);
+    expect(bubbles()[1].textContent).toContain('新しい。');
+    // persona switch resets the guard — old seqs for the new persona render once
+    window.S.persona = 'p2';
+    N.Chat.monologue.connect('p2');
+    N.Chat.monologue.handle(JSON.stringify({ kind: 'monologue', seq: 2, meta: { persona: 'p2', text: '新ペルソナ。' } }));
+    expect(bubbles().length).toBe(3);
+  });
+
   it('renders hostile text as text only — HTML fragments never parse', () => {
     N.Chat.monologue.handle(monologueEvt('<img src=x onerror=alert(1)>&<b>太字</b>'));
     const b = bubbles()[0];
@@ -92,32 +133,16 @@ describe('monologue is display-only', () => {
 
 describe('monologue stream wiring', () => {
   it('opens the wiring-chat stream scoped to the persona', () => {
-    const instances = [];
-    vi.stubGlobal('EventSource', class {
-      constructor(url) {
-        this.url = url;
-        this._listeners = {};
-        this.close = vi.fn();
-        instances.push(this);
-      }
-      addEventListener(ev, fn) { (this._listeners[ev] = this._listeners[ev] || []).push(fn); }
-      removeEventListener() {}
-      emit(ev, data) { (this._listeners[ev] || []).forEach((fn) => fn({ data })); }
-    });
-    try {
-      N.Chat.monologue.connect('p1');
-      expect(instances.length).toBe(1);
-      expect(instances[0].url).toBe('/api/memory/wiring/stream?persona=p1');
-      // end-to-end: a wiring event through the live socket renders a bubble
-      instances[0].emit('wiring', monologueEvt('ソケット経由。'));
-      expect(bubbles().length).toBe(1);
-      // url() re-evaluates persona on scheduled reconnects
-      window.S.persona = 'p2';
-      N.Chat.monologue.connect('p2');
-      expect(instances.length).toBe(2);
-      expect(instances[1].url).toBe('/api/memory/wiring/stream?persona=p2');
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    N.Chat.monologue.connect('p1');
+    expect(instances.length).toBe(1);
+    expect(instances[0].url).toBe('/api/memory/wiring/stream?persona=p1');
+    // end-to-end: a wiring event through the live socket renders a bubble
+    instances[0].emit('wiring', monologueEvt('ソケット経由。'));
+    expect(bubbles().length).toBe(1);
+    // url() re-evaluates persona on scheduled reconnects
+    window.S.persona = 'p2';
+    N.Chat.monologue.connect('p2');
+    expect(instances.length).toBe(2);
+    expect(instances[1].url).toBe('/api/memory/wiring/stream?persona=p2');
   });
 });

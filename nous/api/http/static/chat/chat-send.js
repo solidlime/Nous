@@ -794,6 +794,7 @@ async function chatSend(retry) {
 // ------------------------------------------------------------------
 var MONOLOGUE_URL = "/api/memory/wiring/stream";
 var _monologuePersona = null;
+var _monologueMaxSeq = 0;
 
 function appendMonologueBubble(text) {
   if (!text || typeof text !== "string") return;
@@ -819,6 +820,14 @@ function handleMonologueWiring(data) {
   try {
     var evt = JSON.parse(data);
     if (!evt || evt.kind !== "monologue") return;
+    // The endpoint flushes its whole ring buffer (last_seq=0) on every
+    // connect, so a reconnect re-delivers old monologues as if fresh.
+    // Same seq dedupe as the panel's pushWiringEvent.
+    var seq = Number(evt.seq);
+    if (isFinite(seq) && seq > 0) {
+      if (seq <= _monologueMaxSeq) return;
+      _monologueMaxSeq = seq;
+    }
     var meta = evt.meta || {};
     // Stale socket from a previous persona: drop quietly.
     if (meta.persona && window.S && meta.persona !== window.S.persona) return;
@@ -830,6 +839,9 @@ function handleMonologueWiring(data) {
 
 function connectMonologueStream(persona) {
   _monologuePersona = persona || (window.S && window.S.persona) || null;
+  // Persona switch: replayed buffer entries for the new persona must
+  // render once — start the seq guard from zero (clearWiring's twin).
+  _monologueMaxSeq = 0;
   N.Core.connectStream("wiring-chat", {
     url: function () {
       return _monologuePersona
