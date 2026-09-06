@@ -69,7 +69,9 @@ async def _search_memories(
 
     async def _run(q: str) -> list:
         try:
-            result = await ctx.search_engine.search(SearchQuery(text=q, top_k=top_k, valid_at=get_now()))
+            result = await ctx.search_engine.search(
+                SearchQuery(text=q, top_k=top_k, valid_at=get_now(), apply_rif=True)
+            )
             return result.value if result.is_ok else []
         except Exception as e:
             logger.warning("search_memory failed (query=%s): %s", q[:40], e)
@@ -235,7 +237,9 @@ async def _search_episodes(
 
         # Use semantic search via search_engine for relevance if available
         if hasattr(ctx, "search_engine") and ctx.search_engine is not None:
-            search_result = await ctx.search_engine.search(SearchQuery(text=query, top_k=top_k, mode="semantic"))
+            search_result = await ctx.search_engine.search(
+                SearchQuery(text=query, top_k=top_k, mode="semantic", apply_rif=True)
+            )
             if search_result.is_ok and search_result.value:
                 episodes = []
                 for hit in search_result.value:

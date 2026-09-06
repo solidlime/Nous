@@ -184,7 +184,8 @@ class MemoryStrength:
         Gain is emotion-modulated (brain-sim design §3.2, McGaugh 2004):
         ``gain = min(1 + gain_k * emotion_intensity, 1.5)`` — cap mandatory.
         ``emotion_intensity=None`` (legacy no-arg callers) keeps the legacy
-        1.5x boost unchanged; explicit intensity 0.0 (neutral) yields gain 1.0.
+        1.5x boost unchanged; explicit intensity 0.0 (neutral) yields gain 1.0
+        (intentional growth stop — #081 arbitration 1, conditional approval).
         """
         self.recall_count += 1
         gain = 1.5 if emotion_intensity is None else min(1.0 + gain_k * max(0.0, emotion_intensity), 1.5)

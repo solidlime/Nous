@@ -1,6 +1,8 @@
 """Retrieval-induced forgetting (RIF) tests — SearchEngine competitor suppression.
 
-契約（Anderson 1994 / 脳シミュレーション設計 3.4）:
+契約（Anderson 1994 / 脳シミュレーション設計 3.4 + #081 REVIEW 修正）:
+- RIF は ``SearchQuery.apply_rif=True`` の真の recall 経路のみ発火（デフォルト False——
+  dup_check・reflection・admin 検索などの探索系は一切抑制しない）
 - 競合群 = 最終 recall 結果から除外された上位 K(=5) 件の候補
 - 効果: strength *= (1 - ρ)、recall（search 呼び出し）あたり 1 回
 - 床: min_strength = 0.005、importance 不変、emit なし
@@ -72,7 +74,9 @@ class TestRifSuppression:
         repo = _StrengthRepo({k: _strength(k, 0.8) for k in ("r1", "r2", "c1", "c2")})
         engine = _make_engine(pairs, repo)
 
-        result = await engine.search(SearchQuery(text="rif-basic", mode="keyword", emotion="joy", top_k=4))
+        result = await engine.search(
+            SearchQuery(text="rif-basic", mode="keyword", emotion="joy", top_k=4, apply_rif=True)
+        )
         assert result.is_ok
         assert {r.memory.key for r in result.value} == {"r1", "r2"}
 
@@ -92,7 +96,9 @@ class TestRifSuppression:
         repo = _StrengthRepo({"kept": _strength("kept", 0.8), "low": _strength("low", FLOOR)})
         engine = _make_engine(pairs, repo)
 
-        result = await engine.search(SearchQuery(text="rif-floor", mode="keyword", emotion="joy", top_k=2))
+        result = await engine.search(
+            SearchQuery(text="rif-floor", mode="keyword", emotion="joy", top_k=2, apply_rif=True)
+        )
         assert result.is_ok
 
         assert repo.strengths["kept"].strength == pytest.approx(0.8)
@@ -106,7 +112,9 @@ class TestRifSuppression:
         repo = _StrengthRepo({m.key: _strength(m.key, 0.8) for m, _ in pairs})
         engine = _make_engine(pairs, repo)
 
-        result = await engine.search(SearchQuery(text="rif-cap", mode="keyword", emotion="joy", top_k=8))
+        result = await engine.search(
+            SearchQuery(text="rif-cap", mode="keyword", emotion="joy", top_k=8, apply_rif=True)
+        )
         assert result.is_ok
 
         for i in range(5):
@@ -119,6 +127,64 @@ class TestRifSuppression:
         """memory_repo なしでも検索は壊れない。"""
         pairs = [(_mem("a"), 0.9), (_mem("b"), 0.5)]
         engine = _make_engine(pairs, repo=None)
-        result = await engine.search(SearchQuery(text="rif-norepo", mode="keyword", top_k=2))
+        result = await engine.search(
+            SearchQuery(text="rif-norepo", mode="keyword", top_k=2, apply_rif=True)
+        )
         assert result.is_ok
         assert len(result.value) == 2
+
+
+class TestRifGate:
+    """RIF は apply_rif=True の recall 経路のみ発火（#081 REVIEW 修正）."""
+
+    @pytest.mark.asyncio
+    async def test_rif_off_by_default(self):
+        """apply_rif 未指定（dup_check 等の探索系検索）は一切抑制しない。"""
+        pairs = [
+            (_mem("r1", emotion="joy"), 0.9),
+            (_mem("c1"), 0.7),
+            (_mem("c2"), 0.6),
+        ]
+        repo = _StrengthRepo({k: _strength(k, 0.8) for k in ("r1", "c1", "c2")})
+        engine = _make_engine(pairs, repo)
+
+        # dup_check 型: フラグなし検索を繰り返しても strength は不変
+        for _ in range(3):
+            result = await engine.search(
+                SearchQuery(text="dup-check-q", mode="keyword", emotion="joy", top_k=3)
+            )
+            assert result.is_ok
+
+        assert repo.strengths["r1"].strength == pytest.approx(0.8)
+        assert repo.strengths["c1"].strength == pytest.approx(0.8)
+        assert repo.strengths["c2"].strength == pytest.approx(0.8)
+
+    @pytest.mark.asyncio
+    async def test_rif_applies_only_on_recall_path(self):
+        """同一セットアップで apply_rif=True のときのみ抑制される。"""
+        pairs = [
+            (_mem("r1", emotion="joy"), 0.9),
+            (_mem("c1"), 0.7),
+        ]
+
+        def fresh_repo() -> _StrengthRepo:
+            return _StrengthRepo({"r1": _strength("r1", 0.8), "c1": _strength("c1", 0.8)})
+
+        # フラグなし → 不変
+        off_repo = fresh_repo()
+        engine_off = _make_engine(pairs, off_repo)
+        result = await engine_off.search(
+            SearchQuery(text="gate-q", mode="keyword", emotion="joy", top_k=2)
+        )
+        assert result.is_ok
+        assert off_repo.strengths["c1"].strength == pytest.approx(0.8)
+
+        # apply_rif=True → 抑制
+        on_repo = fresh_repo()
+        engine_on = _make_engine(pairs, on_repo)
+        result = await engine_on.search(
+            SearchQuery(text="gate-q", mode="keyword", emotion="joy", top_k=2, apply_rif=True)
+        )
+        assert result.is_ok
+        assert on_repo.strengths["r1"].strength == pytest.approx(0.8)
+        assert on_repo.strengths["c1"].strength == pytest.approx(0.8 * (1 - RHO))

@@ -86,6 +86,10 @@ class SearchQuery:
     valid_at: datetime | None = None  # Only return memories valid at this timestamp
     kind: str | None = None  # episodic / semantic / procedural / prospective
     sort: str | None = None  # "updated_at" 指定時は updated_at 降順
+    # Retrieval-induced forgetting gate (#081 REVIEW): only the true recall
+    # path (chat pipeline memory retrieval consumed by the LLM) sets True.
+    # Exploration / dup_check / reflection / admin searches stay False.
+    apply_rif: bool = False
 
 
 @dataclass
@@ -202,18 +206,24 @@ class SearchEngine:
         if cache_key is not None and result.value:
             _cache_put(cache_key, result.value)
         filtered = self._post_filter(result.value, query)
-        self._apply_rif(result.value, filtered)
+        self._apply_rif(result.value, filtered, query)
         return Success(filtered)
 
-    def _apply_rif(self, candidates: list[SearchResult], recalled: list[SearchResult]) -> None:
+    def _apply_rif(self, candidates: list[SearchResult], recalled: list[SearchResult], query: SearchQuery) -> None:
         """Retrieval-induced forgetting: suppress top-K non-recalled competitors.
 
+        Fires ONLY when ``query.apply_rif`` is True (true recall path).
         Competitors = the highest-ranked candidates (excluding tombstoned
         memories) that did NOT make the final recall result — at most
         ``_RIF_TOP_K`` per search, ``strength *= (1 - ρ)`` each. Recalled
         memories are untouched; importance is untouched; no wiring emit.
         Suppression failures are logged and never break the search.
+
+        Applied on the fresh-search path only: re-applying on cache hits
+        would suppress the same competitors twice within the 30s TTL.
         """
+        if not query.apply_rif:
+            return
         repo = self._memory_repo
         if repo is None or not candidates:
             return
