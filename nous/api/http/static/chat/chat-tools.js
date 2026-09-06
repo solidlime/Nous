@@ -32,22 +32,16 @@ var TOOL_LABELS = {
   image_generate: "絵を描いてる…",
   list_skills: "使える技を確認してる…",
   invoke_skill: "技を繰り出す準備…",
-  recall_weaver: "過去の記憶を呼び起こしてる…",
 };
-// 未知のツールは生名を晒さず、系統で推測したナラーションに落とす
-// （生名は summary の title と details 内の JSON で確認できる）
+// nous コアツールのみ没入ラベル。スキル等の非 nous ツールは生名のまま表示
+// （ユーザー指示: recall_weaver 等はスキル名なのでそのまま。生JSONはdetailsに維持）
 function toolLabel(name) {
-  if (TOOL_LABELS[name]) return TOOL_LABELS[name];
-  if (/skill/.test(name)) return "技を使ってる…";
-  if (/^memory_/.test(name)) return "記憶を操作してる…";
-  if (/^item_/.test(name)) return "持ち物を確認してる…";
-  if (/^goal_/.test(name)) return "目標を整理してる…";
-  return "作業してる…";
+  return TOOL_LABELS[name] || name || "";
 }
 // wrench は汎用ツール系のみ。系統ごとに象徴的な lucide アイコン。
 function toolIcon(name) {
   if (name === "image_generate") return "image";
-  if (/skill/.test(name) || name === "recall_weaver") return "sparkles";
+  if (/skill/.test(name)) return "sparkles";
   if (/^memory_/.test(name) || name === "get_context" || name === "update_context") return "brain";
   if (/^item_/.test(name)) return "backpack";
   if (/^goal_/.test(name)) return "target";

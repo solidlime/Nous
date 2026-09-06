@@ -30,14 +30,12 @@ describe('N.Chat.tools — labels', () => {
   it('maps known tools to persona-neutral narration', () => {
     expect(N.Chat.tools.label('memory_create')).toBe('思い出を刻んでる…');
     expect(N.Chat.tools.label('invoke_skill')).toBe('技を繰り出す準備…');
-    expect(N.Chat.tools.label('recall_weaver')).toBe('過去の記憶を呼び起こしてる…');
   });
 
-  it('never shows a raw tool name, even for unknown tools', () => {
-    const label = N.Chat.tools.label('weird_mcp_tool_xyz');
-    expect(label).not.toContain('weird_mcp_tool_xyz');
-    expect(label).toMatch(/…$/);
-    expect(N.Chat.tools.label('some_skill_helper')).toBe('技を使ってる…');
+  it('shows raw names for non-nous tools (skills, MCP)', () => {
+    // スキル名は没入ラベル化しない（ユーザー指示: recall_weaver は生名のまま）
+    expect(N.Chat.tools.label('recall_weaver')).toBe('recall_weaver');
+    expect(N.Chat.tools.label('weird_mcp_tool_xyz')).toBe('weird_mcp_tool_xyz');
   });
 });
 
