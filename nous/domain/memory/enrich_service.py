@@ -56,6 +56,14 @@ class MemoryEnrichService:
                     entities=extracted_entities,
                 )
                 if enrichment is not None:
+                    from nous.domain.memory.wiring_events import (
+                        emit as _wiring_emit,
+                    )
+                    from nous.domain.memory.wiring_events import (
+                        repo_persona as _repo_persona,
+                    )
+
+                    persona = _repo_persona(self._repo)
                     # Update importance if auto-evaluated differently
                     if enrichment.importance != 0.5:
                         clamped = normalize_importance(enrichment.importance)
@@ -74,3 +82,19 @@ class MemoryEnrichService:
                                     memory_key=key,
                                     confidence=rel.confidence,
                                 )
+                            # Offline reactivation pulse — one per registered
+                            # relation; importance-only path fires below.
+                            _wiring_emit(
+                                "replay_fire",
+                                source=rel.source_entity,
+                                target=rel.target_entity,
+                                weight=rel.confidence,
+                                meta={"persona": persona, "memory_key": key},
+                            )
+                    elif enrichment.importance != 0.5:
+                        _wiring_emit(
+                            "replay_fire",
+                            source=key,
+                            weight=enrichment.importance,
+                            meta={"persona": persona, "memory_key": key},
+                        )

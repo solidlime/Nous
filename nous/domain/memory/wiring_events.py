@@ -1,7 +1,8 @@
 """Synapse fire event feed — thread-safe ring buffer for UI visualization.
 
 Kinds: ``link_fire`` (Hebbian co-activation), ``recall_boost``
-(strength boost on recall), ``ppr_hit`` (PPR top seeds with scores).
+(strength boost on recall), ``ppr_hit`` (PPR top seeds with scores),
+``replay_fire`` (offline reactivation / memory enrichment).
 
 Emitters must never break main flows: wrap :func:`emit` in try/except
 at call sites (debug log, always continue).
@@ -20,7 +21,7 @@ from nous.domain.shared.time_utils import format_iso, get_now
 
 logger = logging.getLogger(__name__)
 
-WIRING_KINDS = frozenset(["link_fire", "recall_boost", "ppr_hit"])
+WIRING_KINDS = frozenset(["link_fire", "recall_boost", "ppr_hit", "replay_fire"])
 WIRING_BUFFER_SIZE = 200
 
 

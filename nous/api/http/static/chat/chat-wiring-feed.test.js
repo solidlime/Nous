@@ -152,6 +152,13 @@ describe('wiring feed trim + render', () => {
     expect(wiringList().innerHTML).toContain('まだシナプスは静か');
   });
 
+  it('renders the replay_fire kind with the リプレイ badge', () => {
+    expect(MP.pushWiringEvent(fire(1, 'replay_fire', 'a', 'b', 0.6))).toBe(true);
+    const item = wiringList().querySelector('.wiring-fire-item');
+    expect(item.classList.contains('wiring-kind-replay_fire')).toBe(true);
+    expect(item.querySelector('.wiring-kind-badge').textContent).toBe('リプレイ');
+  });
+
   it('drops unknown kinds, dedupes replayed seqs, escapes XSS', () => {
     expect(MP.pushWiringEvent(fire(1, 'nope', 'a', 'b', 1))).toBe(false);
     expect(MP.pushWiringEvent(null)).toBe(false);

@@ -325,7 +325,7 @@ if (typeof document !== "undefined" && !N.Chat.memoryPanel._delegated) {
 // Wiring fire feed — live synapse pulses (GET /api/memory/wiring/stream)
 // Server flushes its ring buffer on connect, then pushes live events:
 //   {seq, kind, source, target, weight, meta}
-//   kind ∈ {link_fire, recall_boost, ppr_hit} — no server-side thinning.
+//   kind ∈ {link_fire, recall_boost, ppr_hit, replay_fire} — no server-side thinning.
 // Client keeps a top-N view (default 8, 0 hides). Panel hidden ⇒ SSE off.
 // ------------------------------------------------------------------
 var WIRING_URL = "/api/memory/wiring/stream";
@@ -337,11 +337,13 @@ var WIRING_KINDS = {
   link_fire: "発火",
   recall_boost: "想起",
   ppr_hit: "PPR",
+  replay_fire: "リプレイ",
 };
 var WIRING_BAR_COLORS = {
   link_fire: "linear-gradient(90deg,var(--accent-purple),var(--accent-pink))",
   recall_boost: "linear-gradient(90deg,var(--accent-green),var(--accent-teal))",
   ppr_hit: "linear-gradient(90deg,var(--accent-blue),var(--accent-teal))",
+  replay_fire: "linear-gradient(90deg,var(--accent-blue),var(--accent-purple))",
 };
 var _wiringEvents = []; // newest-first
 var _wiringMaxSeq = 0;

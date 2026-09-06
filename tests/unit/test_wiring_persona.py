@@ -63,6 +63,13 @@ class TestPersonaFilter:
         wiring_events.emit("ppr_hit", source="s", meta={"persona": None})
         assert wiring_events.snapshot_after(0, persona="p1") == []
 
+    def test_replay_fire_scoped(self) -> None:
+        wiring_events.emit("replay_fire", source="s1", target="s2", weight=0.8, meta={"persona": "p1"})
+        wiring_events.emit("replay_fire", source="s3", target="s4", weight=0.6, meta={"persona": "p2"})
+        got = wiring_events.snapshot_after(0, persona="p1")
+        assert [e["source"] for e in got] == ["s1"]
+        assert got[0]["kind"] == "replay_fire" and got[0]["meta"]["persona"] == "p1"
+
 
 class TestHookPersona:
     def test_upsert_link_persona(self, tmp_path) -> None:
@@ -103,6 +110,27 @@ class TestHookPersona:
         fires = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "recall_boost"]
         assert len(fires) == 1
         assert fires[0]["meta"].get("persona") is None
+
+    @pytest.mark.asyncio
+    async def test_replay_fire_persona_attributed(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from nous.domain.memory.enrich_service import MemoryEnrichService
+
+        repo = MagicMock()
+        repo._conn.persona = "p2"
+        rel = SimpleNamespace(source_entity="s1", target_entity="s2", relation_type="related", confidence=0.8)
+        enricher = SimpleNamespace(
+            enrich_async=AsyncMock(return_value=SimpleNamespace(importance=0.5, relations=[rel]))
+        )
+        svc = MemoryEnrichService(enricher, MagicMock(), repo)
+        with patch("nous.domain.memory.sudachi_extractor.SudachiExtractor") as ner:
+            ner.return_value.extract.return_value = []
+            await svc.enrich_memory(MagicMock(importance=0.5), "内容", None, "k", 0.5)
+        fires = wiring_events.snapshot_after(0, persona="p2")
+        assert len(fires) == 1 and fires[0]["kind"] == "replay_fire"
+        assert fires[0]["meta"]["persona"] == "p2" and fires[0]["meta"]["memory_key"] == "k"
 
     def test_propagate_persona_none(self) -> None:
         links = [MemoryLink(source_key="s", target_key="n", weight=1.0)]
@@ -248,7 +276,5 @@ class TestSSEAuth:
         from starlette.exceptions import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
-            await self.seen[("/api/memory/wiring/stream", "GET")](
-                _FakeRequest(query_params={"persona": "herta"})
-            )
+            await self.seen[("/api/memory/wiring/stream", "GET")](_FakeRequest(query_params={"persona": "herta"}))
         assert exc_info.value.status_code == 401

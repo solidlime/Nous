@@ -911,6 +911,11 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
     color: var(--accent-blue);
     border-color: rgba(0, 122, 255, 0.3);
 }
+.wiring-kind-replay_fire .wiring-kind-badge {
+    background: rgba(94, 92, 230, 0.15);
+    color: var(--accent-blue);
+    border-color: rgba(94, 92, 230, 0.3);
+}
 .wiring-edge {
     flex: 1;
     min-width: 0;
