@@ -19,13 +19,6 @@ N.Chat.memoryPanel = N.Chat.memoryPanel || {};
 function updateMemoryPanel(retrieved, saved, goals, promises) {
   const panel = document.getElementById("memory-panel");
   if (!panel || panel.style.display === "none") return;
-  const escAttr = (s) =>
-    String(s)
-      .replace(/&/g, "&amp;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
   if (retrieved !== undefined) {
     const retrievedList = document.getElementById("memory-retrieved-list");
     if (retrievedList) {
@@ -56,14 +49,14 @@ function updateMemoryPanel(retrieved, saved, goals, promises) {
               .join(" ");
             var _contentStr = typeof m.content === "object" && m.content !== null ? JSON.stringify(m.content) : String(m.content || "");
             return (
-              '<div class="memory-item-card" title="' + escAttr(meta) + '" data-key="' +
-              escAttr(key) +
+              '<div class="memory-item-card" title="' + esc(meta) + '" data-key="' +
+              esc(key) +
               '" data-content="' +
-              escAttr(_contentStr) +
+              esc(_contentStr) +
               '" data-importance="' +
               (m.importance || 0.5) +
               '" data-tags="' +
-              escAttr((m.tags || []).join(",")) +
+              esc((m.tags || []).join(",")) +
               '">' +
               content +
               (extra
@@ -72,7 +65,7 @@ function updateMemoryPanel(retrieved, saved, goals, promises) {
                   "</div>"
                 : "") +
               '<div class="mem-actions"><button type="button" class="mem-action-btn del" data-mem-action="delete" data-mem-key="' +
-              escAttr(key) +
+              esc(key) +
               '">削除</button></div>' +
               "</div>"
             );
@@ -103,13 +96,13 @@ function updateMemoryPanel(retrieved, saved, goals, promises) {
             var _contentStr = typeof m.content === "object" && m.content !== null ? JSON.stringify(m.content) : String(m.content || "");
             return (
               '<div class="memory-item-card" data-key="' +
-              escAttr(key) +
+              esc(key) +
               '" data-content="' +
-              escAttr(_contentStr) +
+              esc(_contentStr) +
               '" data-importance="' +
               (m.importance || 0.5) +
               '" data-tags="' +
-              escAttr((m.tags || []).join(",")) +
+              esc((m.tags || []).join(",")) +
               '">' +
               content +
               (extra
@@ -118,7 +111,7 @@ function updateMemoryPanel(retrieved, saved, goals, promises) {
                   "</div>"
                 : "") +
               '<div class="mem-actions"><button type="button" class="mem-action-btn del" data-mem-action="delete" data-mem-key="' +
-              escAttr(key) +
+              esc(key) +
               '">削除</button></div>' +
               "</div>"
             );
@@ -140,23 +133,23 @@ function updateMemoryPanel(retrieved, saved, goals, promises) {
               ? '<span class="mem-action-badge">更新</span> ' : "";
             return (
               '<div class="memory-item-card" data-key="' +
-              escAttr(key) +
+              esc(key) +
               '" data-content="' +
-              escAttr(g.content || "") +
+              esc(g.content || "") +
               '" data-importance="' +
               (g.importance || 0.75) +
               '" data-tags="' +
-              escAttr((g.tags || []).join(",")) +
+              esc((g.tags || []).join(",")) +
               '">' +
               '<i data-lucide="target"></i> ' +
               actionBadge +
               esc((g.content || "").substring(0, 80)) +
               '<div class="mem-actions"><button type="button" class="mem-action-btn done" data-mem-action="complete" data-mem-key="' +
-              escAttr(key) +
+              esc(key) +
               '" data-mem-content="' +
-              escAttr((g.content || "").substring(0, 50)) +
+              esc((g.content || "").substring(0, 50)) +
               '">完了</button><button type="button" class="mem-action-btn del" data-mem-action="delete" data-mem-key="' +
-              escAttr(key) +
+              esc(key) +
               '">削除</button></div>' +
               "</div>"
             );
@@ -178,19 +171,19 @@ function updateMemoryPanel(retrieved, saved, goals, promises) {
               ? '<span class="mem-action-badge">更新</span> ' : "";
             return (
               '<div class="memory-item-card" data-key="' +
-              escAttr(key) +
+              esc(key) +
               '" data-content="' +
-              escAttr(g.content || "") +
+              esc(g.content || "") +
               '" data-importance="' +
               (g.importance || 0.8) +
               '" data-tags="' +
-              escAttr((g.tags || []).join(",")) +
+              esc((g.tags || []).join(",")) +
               '">' +
               '<i data-lucide="handshake"></i> ' +
               actionBadge +
               esc((g.content || "").substring(0, 80)) +
               '<div class="mem-actions"><button type="button" class="mem-action-btn del" data-mem-action="delete" data-mem-key="' +
-              escAttr(key) +
+              esc(key) +
               '">削除</button></div>' +
               "</div>"
             );
