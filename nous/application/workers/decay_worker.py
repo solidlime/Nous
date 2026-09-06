@@ -132,6 +132,7 @@ class DecayWorker:
         for strength in strengths:
             processed += 1
             memory_key = strength.memory_key
+            old_strength_val = strength.strength
 
             # Gist transformation resists decay: consolidated semantic nodes
             # are the stable cortical summary and never decay here.
@@ -158,8 +159,10 @@ class DecayWorker:
             new_strength_val = strength.strength - decay_amount * ease
 
             # STM → LTM automatic promotion (before min_strength check)
+            promoted = False
             if not strength.is_ltm and new_strength_val > 0.7 and strength.recall_count >= 3:
                 strength.is_ltm = True
+                promoted = True
 
             # Archive condition (before min_strength check)
             if new_strength_val < 0.2 and strength.last_recall:
@@ -186,16 +189,21 @@ class DecayWorker:
             save_result = self.context.memory_repo.save_strength(strength)
             if save_result.is_ok:
                 updated += 1
-                # Stability-type replay pulse — success-only emit (wiring convention).
-                try:
-                    wiring_events.emit(
-                        "replay_fire",
-                        source=memory_key,
-                        weight=strength.strength,
-                        meta={"persona": wiring_events.repo_persona(self.context.memory_repo)},
-                    )
-                except Exception:
-                    logger.debug("wiring emit failed", exc_info=True)
+                # Stability-type replay pulse — success-only emit (wiring
+                # convention), gated by visibility: fire only on LTM promotion
+                # or a notable strength change so per-cycle micro-decay does
+                # not flood the 200-slot ring buffer.
+                delta = abs(strength.strength - old_strength_val)
+                if promoted or delta > 0.05:
+                    try:
+                        wiring_events.emit(
+                            "replay_fire",
+                            source=memory_key,
+                            weight=strength.strength,
+                            meta={"persona": wiring_events.repo_persona(self.context.memory_repo)},
+                        )
+                    except Exception:
+                        logger.debug("wiring emit failed", exc_info=True)
             else:
                 errors += 1
 

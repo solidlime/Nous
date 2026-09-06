@@ -138,6 +138,47 @@ class TestEnrichmentWorker:
         ctx.memory_repo.save_strength.assert_not_called()
         assert [e for e in wiring_events.snapshot_after(0) if e["kind"] == "novelty_gate"] == []
 
+    def test_overflow_processed_next_cycle(self) -> None:
+        """周上限を超えた溢れ分は 2 周目で処理される（永久取りこぼし防止）。"""
+        memories = [_memory(f"k{i}") for i in range(8)]
+        ctx = _ctx(memories)
+        worker = EnrichmentWorker(ctx, _config())
+        _backdate(worker, memories)
+
+        with patch("nous.application.workers.enrichment_worker.MemoryEnrichService") as svc_cls:
+            svc = svc_cls.return_value
+            svc.enrich_memory = AsyncMock()
+            worker._run_cycle()
+            assert svc.enrich_memory.await_count == 5
+
+            worker._run_cycle()
+            assert svc.enrich_memory.await_count == 8
+            keys = [c.args[3] for c in svc.enrich_memory.await_args_list]
+            assert keys == [f"k{i}" for i in range(8)]
+
+            worker._run_cycle()
+            assert svc.enrich_memory.await_count == 8, "no third-cycle rework"
+
+    def test_tie_created_at_processed_across_cycles(self) -> None:
+        """同一 created_at の tie は processed-keys 集合で 1 回限り・後続周で処理。"""
+        now = get_now().replace(tzinfo=None)
+        memories = [_memory(f"t{i}", created_at=now) for i in range(3)]
+        ctx = _ctx(memories)
+        worker = EnrichmentWorker(ctx, _config())
+        worker._batch_limit = 1
+        _backdate(worker, memories)
+
+        with patch("nous.application.workers.enrichment_worker.MemoryEnrichService") as svc_cls:
+            svc = svc_cls.return_value
+            svc.enrich_memory = AsyncMock()
+            worker._run_cycle()
+            worker._run_cycle()
+            worker._run_cycle()
+            assert svc.enrich_memory.await_count == 3
+            assert {c.args[3] for c in svc.enrich_memory.await_args_list} == {"t0", "t1", "t2"}
+            worker._run_cycle()
+            assert svc.enrich_memory.await_count == 3, "tie must not re-enrich processed memories"
+
     def test_emits_follow_convention(self) -> None:
         """emit 失敗（raise）でもループは継続する。"""
         memories = [_memory("k1", importance=0.8), _memory("k2", importance=0.9)]

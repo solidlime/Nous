@@ -93,7 +93,11 @@ class TestDecayWorker:
 
 
 def _make_memory(
-    key: str, emotion_intensity: float = 0.0, kind: str = "semantic", source_type: str = "user_stated"
+    key: str,
+    emotion_intensity: float = 0.0,
+    kind: str = "semantic",
+    source_type: str = "user_stated",
+    importance: float = 0.5,
 ) -> Memory:
     now = get_now().replace(tzinfo=None)
     return Memory(
@@ -101,6 +105,7 @@ def _make_memory(
         content=f"内容 {key}",
         created_at=now,
         updated_at=now,
+        importance=importance,
         emotion_intensity=emotion_intensity,
         kind=kind,
         source_type=source_type,
@@ -150,6 +155,38 @@ class TestDecayWorkerBrain:
 
         assert ctx.memory_repo.save_strength.call_count == 2
         assert s1.strength > s0.strength
+
+    def test_subtle_decay_does_not_fire(self) -> None:
+        """微細な減衰（delta ≤ 0.05）では replay_fire を発火しない。"""
+        strength = _make_strength("subtle", strength=0.26)
+        ctx = _make_ctx([strength])
+
+        worker = DecayWorker(ctx, interval_seconds=3600)
+        worker._decay_cycle()
+
+        assert ctx.memory_repo.save_strength.call_count == 1
+        assert [e for e in wiring_events.snapshot_after(0) if e["kind"] == "replay_fire"] == []
+
+    def test_promotion_fires_replay(self) -> None:
+        """STM→LTM 昇格時は delta が小さくても replay_fire を発火する。"""
+        strength = _make_strength("promo", strength=0.85)
+        strength.recall_count = 3
+        strength.last_recall = get_now()
+        strength.last_utility = get_now()
+        ctx = _make_ctx([strength])
+        ctx.memory_repo.find_all.return_value = MagicMock(
+            is_ok=True,
+            value=[_make_memory("promo", importance=0.9)],
+        )
+
+        worker = DecayWorker(ctx, interval_seconds=3600)
+        worker._decay_cycle()
+
+        assert strength.is_ltm is True
+        fires = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "replay_fire"]
+        assert len(fires) == 1
+        assert fires[0]["source"] == "promo"
+        assert fires[0]["weight"] == pytest.approx(strength.strength)
 
 
 class TestConsolidationWorkerEventStop:

@@ -42,6 +42,10 @@ class EnrichmentWorker:
         self._importance_threshold = self._num("brain_novelty_importance_threshold", 0.6)
         self._stability_multiplier = self._num("brain_novelty_stability_multiplier", 2.0)
         self._cursor: datetime = get_now().replace(tzinfo=None)
+        # Memories processed by this worker instance (ties with the cursor's
+        # created_at can exist; the set guarantees once-only processing).
+        # Cleared on restart together with the cursor=now reset.
+        self._processed_keys: set[str] = set()
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
 
@@ -82,13 +86,18 @@ class EnrichmentWorker:
         candidates = self._memories_since_cursor()
         if not candidates:
             return
-        for memory in candidates:
+        batch = candidates[: self._batch_limit]
+        # Mark as processed up-front: gates/enrichment are best-effort, and a
+        # failure must not turn into an infinite retry loop.
+        for memory in batch:
+            self._processed_keys.add(memory.key)
+        for memory in batch:
             self._novelty_gate(memory)
-        self._enrich_batch(candidates)
+        self._enrich_batch(batch)
+        self._advance_cursor(batch)
 
     def _memories_since_cursor(self) -> list[Memory]:
-        """Active memories created after the previous cycle (cursor advances to now)."""
-        now = get_now().replace(tzinfo=None)
+        """Active memories at/after the cursor and not yet processed (sorted)."""
         found: list[tuple[datetime, Memory]] = []
         try:
             result = self.context.memory_repo.find_all()
@@ -101,16 +110,30 @@ class EnrichmentWorker:
                             continue
                         if created.tzinfo is not None:
                             created = created.replace(tzinfo=None)
-                        if created > self._cursor and getattr(m, "lifecycle_status", "active") == "active":
+                        if (
+                            created >= self._cursor
+                            and m.key not in self._processed_keys
+                            and getattr(m, "lifecycle_status", "active") == "active"
+                        ):
                             found.append((created, m))
         except Exception:
             logger.debug("EnrichmentWorker: find_all failed", exc_info=True)
-        # Advance the cursor past every processed memory (clock-granularity
-        # safe: created_at can tie with `now` on coarse clocks) and to now.
-        latest = max((c for c, _ in found), default=None)
-        self._cursor = max(now, latest) if latest is not None else now
         found.sort(key=lambda pair: pair[0])
         return [m for _, m in found]
+
+    def _advance_cursor(self, batch: list[Memory]) -> None:
+        """Advance the cursor to the last processed memory's created_at.
+
+        Overflow (memories beyond the batch limit) keeps created_at >= cursor
+        and stays outside ``_processed_keys``, so the next cycle picks it up.
+        """
+        latest = max((self._naive(m.created_at) for m in batch), default=None)
+        if latest is not None:
+            self._cursor = max(self._cursor, latest)
+
+    @staticmethod
+    def _naive(value: datetime) -> datetime:
+        return value.replace(tzinfo=None) if value.tzinfo is not None else value
 
     # ------------------------------------------------------------------
     # Novelty gate (vector search only — no LLM)
