@@ -29,7 +29,7 @@ def _req(body):
     async def _json():
         return body
 
-    return types.SimpleNamespace(path_params={"persona": "herta"}, headers={}, json=_json)
+    return types.SimpleNamespace(path_params={"persona": "herta"}, headers={}, query_params={}, json=_json)
 
 
 def _wav_blob(frames: bytes) -> bytes:
