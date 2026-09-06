@@ -157,6 +157,7 @@ N.Components.memoryCard = {
   renderEmotionBadges: renderEmotionBadges,
   renderBodyStateCompact: renderBodyStateCompact,
   applyDataStyles: applyDataStyles,
+  scheduleApply: scheduleApply,
 };
 
 })(window.Nous);

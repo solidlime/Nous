@@ -37,13 +37,14 @@ beforeAll(() => {
   globalThis.DOMPurify = { sanitize: (html) => String(html) };
   // Feature-side collaborators are runtime lookups — stub them.
   N.Features.Memories = N.Features.Memories || {};
-  N.Features.Memories.tagChipHtml = (t) => '<span class="tag-chip">' + t + '</span>';
+  N.Features.Memories.tagChipHtml = (t) => '<span class="mem-tag-chip" data-hue="200">' + t + '</span>';
   N.Features.Memories.openEditModal = () => {};
   N.Features.Memories.deleteMemory = () => {};
-  N.Components.memoryCard = {
-    renderBodyStateBars: () => '',
-    renderEmotionBars: () => '',
-  };
+  // Real memory-card provides scheduleApply/applyDataStyles (the
+  // post-render pass under test); stub only its bar renderers.
+  loadFile('../components/memory-card.js');
+  N.Components.memoryCard.renderBodyStateBars = () => '';
+  N.Components.memoryCard.renderEmotionBars = () => '';
   loadFile('../components/mem-modal.js');
 });
 
@@ -116,5 +117,30 @@ describe('N.Components.memModal — openMemory(mem) render', () => {
     N.Components.memModal.openMemory(mem);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(document.getElementById('mem-modal-overlay').classList.contains('show')).toBe(false);
+  });
+});
+
+describe('N.Components.memModal — post-render data-style pass', () => {
+  it('schedules applyDataStyles even when body_state is empty and emotion intensity is 0', async () => {
+    // Regression: renderEmotionBars/renderBodyStateBars early-return on
+    // empty data, so the modal must schedule the data-fill pass itself
+    // or bars render at width 0 with no color.
+    N.Components.memModal.openMemory({
+      key: 'k2',
+      content: 'neutral memory',
+      importance: 0.5,
+      emotion: 'neutral',
+      emotion_intensity: 0,
+      tags: ['tag1'],
+    });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const overlay = document.getElementById('mem-modal-overlay');
+    const fills = overlay.querySelectorAll('.modal-progress-fill');
+    // [0] = emotion intensity bar (0.00), [1] = importance bar (0.5)
+    expect(fills[0].getAttribute('data-fill')).toBe('0');
+    expect(fills[0].style.width).toBe('0%');
+    expect(fills[1].style.width).toBe('50%');
+    const chip = overlay.querySelector('.mem-tag-chip');
+    expect(chip.style.getPropertyValue('--chip-hue')).toBe('200');
   });
 });

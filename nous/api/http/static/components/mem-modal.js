@@ -136,6 +136,11 @@ function openMemModal(mem) {
 
     safeSetHTML(content, h);
     overlay.classList.add('show');
+    /* Bars/chips travel as data-* (sanitizer strips style=); schedule the
+       post-render pass that turns data-fill/data-color/data-hue into
+       inline styles. The memory-card renderers above only schedule when
+       their data is non-empty, so the modal must schedule itself. */
+    N.Components.memoryCard.scheduleApply();
     document.removeEventListener('keydown', _memModalKeyHandler);
     document.addEventListener('keydown', _memModalKeyHandler);
 
