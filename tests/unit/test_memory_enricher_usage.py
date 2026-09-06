@@ -73,7 +73,9 @@ def test_enrich_service_logs_failure_debug(caplog):
     from nous.domain.shared.time_utils import get_now
 
     now = get_now()
-    memory = Memory(key="k1", content="some content", created_at=now.replace(tzinfo=None), updated_at=now.replace(tzinfo=None))
+    memory = Memory(
+        key="k1", content="some content", created_at=now.replace(tzinfo=None), updated_at=now.replace(tzinfo=None)
+    )
 
     service = MemoryEnrichService(enricher, None, MagicMock())
     with caplog.at_level(logging.DEBUG, logger="nous.domain.memory.enrich_service"):

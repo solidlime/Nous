@@ -247,6 +247,7 @@ class TestToolCalledAudit:
 # (d) enrichment queue wiring: read/search enqueue only unprocessed hits
 # ---------------------------------------------------------------------------
 
+
 def _record_memory_access_fn(keys: list[str]):
     """Real AppContext.record_memory_access logic over a plain list."""
 
@@ -297,9 +298,7 @@ class TestEnrichmentQueueWiring:
         _setup_success_ctx(mock_app_context)
         processed = {"m1"}
         mock_app_context.enrichment_queue.has_processed.side_effect = lambda key: key in processed
-        hits = [
-            SearchResult(memory=_mem(f"m{i}"), score=0.5, source="keyword") for i in range(3)
-        ]
+        hits = [SearchResult(memory=_mem(f"m{i}"), score=0.5, source="keyword") for i in range(3)]
         mock_app_context.search_engine.search.return_value = Success(hits)
 
         asyncio.run(_tool_memory_search(mock_app_context, PERSONA, query="q"))

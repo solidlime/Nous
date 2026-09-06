@@ -52,17 +52,14 @@ class EnrichmentQueueRepository:
     def mark_processed(self, memory_key: str) -> None:
         """Mark all pending rows for the key as processed."""
         self._db.execute(
-            "UPDATE enrichment_queue"
-            " SET processed_at = ?"
-            " WHERE memory_key = ? AND processed_at IS NULL",
+            "UPDATE enrichment_queue SET processed_at = ? WHERE memory_key = ? AND processed_at IS NULL",
             (format_iso(get_now()), memory_key),
         )
 
     def has_processed(self, memory_key: str) -> bool:
         """Whether any processed row exists for the key (re-enrich guard)."""
         row = self._db.execute(
-            "SELECT 1 FROM enrichment_queue"
-            " WHERE memory_key = ? AND processed_at IS NOT NULL LIMIT 1",
+            "SELECT 1 FROM enrichment_queue WHERE memory_key = ? AND processed_at IS NOT NULL LIMIT 1",
             (memory_key,),
         ).fetchone()
         return row is not None

@@ -215,9 +215,7 @@ def service_factory():
     """Factory fixture to create MemoryService with optional enricher and entity_service."""
 
     def _create(repo, enricher=None, entity_service=None, enrichment_queue=None):
-        return MemoryService(
-            repo, entity_service=entity_service, enricher=enricher, enrichment_queue=enrichment_queue
-        )
+        return MemoryService(repo, entity_service=entity_service, enricher=enricher, enrichment_queue=enrichment_queue)
 
     return _create
 

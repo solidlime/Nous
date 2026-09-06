@@ -92,9 +92,7 @@ def _idle_ctx(ctx, idle_seconds: float) -> MagicMock:
 class TestIdleGatedDrain:
     def _worker_with_repo(self, ctx, keys: list[str], **cfg_overrides):
         memories = [_memory(k) for k in keys]
-        ctx.memory_repo.find_by_key.side_effect = lambda key: Success(
-            next(m for m in memories if m.key == key)
-        )
+        ctx.memory_repo.find_by_key.side_effect = lambda key: Success(next(m for m in memories if m.key == key))
         return EnrichmentWorker(ctx, _config(**cfg_overrides)), memories
 
     def test_drains_when_idle(self) -> None:

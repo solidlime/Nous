@@ -61,9 +61,7 @@ def test_pending_keys_returns_minimum_enqueued_at(repo):
     repo.enqueue("k1")
     # backdate via direct SQL to simulate an older enqueue
     db = repo._db
-    db.execute(
-        "UPDATE enrichment_queue SET enqueued_at = '2020-01-01T00:00:00+09:00' WHERE memory_key = 'k1'"
-    )
+    db.execute("UPDATE enrichment_queue SET enqueued_at = '2020-01-01T00:00:00+09:00' WHERE memory_key = 'k1'")
     repo.mark_processed("k1")
     repo.enqueue("k1")
     pending = repo.pending_keys()
