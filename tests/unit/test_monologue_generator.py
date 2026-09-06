@@ -66,3 +66,13 @@ async def test_generate_max_five_memories_eighty_chars():
 async def test_generate_blank_output_returns_none():
     gen = MonologueGenerator(FakeProvider(chunks=["   "]))
     assert await gen.generate("herta", ["x"]) is None
+
+
+@pytest.mark.asyncio
+async def test_generate_debug_logs_usage(caplog):
+    import logging
+
+    gen = MonologueGenerator(FakeProvider())
+    with caplog.at_level(logging.DEBUG, logger="nous.infrastructure.llm.monologue_generator"):
+        await gen.generate("herta", ["x"])
+    assert "monologue usage: {'prompt_tokens': 100, 'completion_tokens': 20}" in caplog.text

@@ -80,5 +80,6 @@ class MonologueGenerator:
                 return None, None
             elif isinstance(event, DoneEvent):
                 usage = event.usage
+                logger.debug("monologue usage: %s", usage)
         text = "".join(full_content) if full_content else None
         return text, usage
