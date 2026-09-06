@@ -43,7 +43,7 @@ class MemoryEnrichService:
         4. Register extracted relations
         """
         if self._enricher is not None and importance == 0.5:
-            with contextlib.suppress(Exception):
+            try:
                 # Extract entities using Sudachi NER (accurate path) for LLM context.
                 from nous.domain.memory.sudachi_extractor import (
                     SudachiExtractor,
@@ -67,6 +67,13 @@ class MemoryEnrichService:
                     )
 
                     persona = _repo_persona(self._repo)
+                    if enrichment.usage:
+                        logger.info(
+                            "enrichment usage for %s: %s",
+                            key,
+                            enrichment.usage,
+                        )
+                    usage_meta = {"persona": persona, "memory_key": key, "usage": enrichment.usage}
                     # Update importance if auto-evaluated differently
                     if enrichment.importance != 0.5:
                         clamped = normalize_importance(enrichment.importance)
@@ -96,7 +103,7 @@ class MemoryEnrichService:
                                         source=rel.source_entity,
                                         target=rel.target_entity,
                                         weight=rel.confidence,
-                                        meta={"persona": persona, "memory_key": key},
+                                        meta=usage_meta,
                                     )
                                 except Exception:
                                     logger.debug(
@@ -112,7 +119,9 @@ class MemoryEnrichService:
                                 "replay_fire",
                                 source=key,
                                 weight=clamped,
-                                meta={"persona": persona, "memory_key": key},
+                                meta=usage_meta,
                             )
                         except Exception:
                             logger.debug("wiring emit failed for %s", key, exc_info=True)
+            except Exception as exc:
+                logger.debug("enrich failed: %s", exc)

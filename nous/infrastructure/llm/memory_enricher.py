@@ -113,16 +113,19 @@ class MemoryEnricher:
                 model=self._model,
                 base_url=self._base_url,
             )
-            result_text = await self._call_llm(provider, _SYSTEM_PROMPT, user_message)
+            result_text, usage = await self._call_llm(provider, _SYSTEM_PROMPT, user_message)
             if not result_text:
                 return None
-            return self._parse_response(result_text)
+            result = self._parse_response(result_text)
+            if result is not None:
+                result.usage = usage
+            return result
         except Exception:
             logger.exception("Memory enrichment failed")
             return None
 
-    async def _call_llm(self, provider: LLMProvider, system: str, user_message: str) -> str | None:
-        """Call the LLM stream and collect the full text response."""
+    async def _call_llm(self, provider: LLMProvider, system: str, user_message: str) -> tuple[str | None, dict | None]:
+        """Call the LLM stream and collect the full text response plus token usage."""
         from nous.infrastructure.llm.base import (
             DoneEvent,
             ErrorEvent,
@@ -131,6 +134,7 @@ class MemoryEnricher:
         )
 
         full_content: list[str] = []
+        usage: dict | None = None
         async for event in provider.stream(
             messages=[LLMMessage(role="user", content=user_message)],
             system=system,
@@ -141,10 +145,11 @@ class MemoryEnricher:
                 full_content.append(event.content)
             elif isinstance(event, ErrorEvent):
                 logger.warning("LLM stream error: %s", event.message)
-                return None
+                return None, None
             elif isinstance(event, DoneEvent):
-                pass  # final event, ignore here
-        return "".join(full_content) if full_content else None
+                usage = event.usage  # {"prompt_tokens": N, "completion_tokens": M, ...}
+        text = "".join(full_content) if full_content else None
+        return text, usage
 
     def _parse_response(self, text: str) -> EnrichmentResult | None:
         """Parse JSON from LLM response and return EnrichmentResult."""

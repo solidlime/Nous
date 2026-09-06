@@ -21,3 +21,4 @@ class EnrichmentResult:
 
     importance: float
     relations: list[RelationCandidate] = field(default_factory=list)
+    usage: dict | None = None  # token usage from DoneEvent.usage; None when unavailable
