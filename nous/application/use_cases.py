@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from nous.config.settings import Settings
     from nous.domain.chat_config import ChatConfig
     from nous.infrastructure.embedding.reranker import RerankerModel
+    from nous.infrastructure.llm.monologue_generator import MonologueGenerator
 
 
 class SQLiteKeywordSearch:
@@ -187,6 +188,7 @@ class AppContext:
         Best-effort; failure results in enricher=None (logged as debug).
         """
         enricher: MemoryEnricher | None = None
+        monologue_generator: MonologueGenerator | None = None
         cfg = self._config
         mem_enrich_enabled = cfg.memory_enrichment_enabled if cfg else self.settings.memory_enrichment.enabled
         if mem_enrich_enabled:
@@ -216,6 +218,7 @@ class AppContext:
                     logger.debug("brain LLM: no api_key for provider '%s'; enrichment disabled", provider)
             if api_key:
                 from nous.infrastructure.llm.memory_enricher import MemoryEnricher
+                from nous.infrastructure.llm.monologue_generator import MonologueGenerator
 
                 enricher = MemoryEnricher(
                     provider=provider,
@@ -224,7 +227,13 @@ class AppContext:
                     base_url=base_url,
                     min_chars=min_chars,
                 )
+                # MonologueGenerator shares the SAME resolved provider chain
+                # (brain_llm_dedicated ON/OFF both inherit via this path).
+                monologue_generator = MonologueGenerator.from_config(
+                    provider_name=provider, api_key=api_key, model=model, base_url=base_url
+                )
         self._enricher = enricher
+        self.monologue_generator = monologue_generator
 
     def _provider_api_key(self, provider: str) -> str:
         """Legacy api_key chain for an arbitrary provider.

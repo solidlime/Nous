@@ -112,6 +112,8 @@ class SessionConfig(BaseModel):
     brain_llm_model: str = ""
     brain_llm_base_url: str = ""
     brain_llm_api_key: str = ""
+    # REM 独り言 (drain バッチ完走時に LLM 1 call で生成・session_events 保存)
+    brain_monologue_enabled: bool = False
 
     # Forgetting
     forgetting_enabled: bool = False
