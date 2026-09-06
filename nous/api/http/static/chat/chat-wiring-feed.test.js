@@ -159,6 +159,13 @@ describe('wiring feed trim + render', () => {
     expect(item.querySelector('.wiring-kind-badge').textContent).toBe('リプレイ');
   });
 
+  it('renders the novelty_gate kind with the 新規性 badge', () => {
+    expect(MP.pushWiringEvent(fire(1, 'novelty_gate', 'a', '', 1.0))).toBe(true);
+    const item = wiringList().querySelector('.wiring-fire-item');
+    expect(item.classList.contains('wiring-kind-novelty_gate')).toBe(true);
+    expect(item.querySelector('.wiring-kind-badge').textContent).toBe('新規性');
+  });
+
   it('drops unknown kinds, dedupes replayed seqs, escapes XSS', () => {
     expect(MP.pushWiringEvent(fire(1, 'nope', 'a', 'b', 1))).toBe(false);
     expect(MP.pushWiringEvent(null)).toBe(false);

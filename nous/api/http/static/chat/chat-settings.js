@@ -311,12 +311,23 @@ function applyChatConfig(cfg) {
   setChecked("chat-auto-capture-enabled", cfg.auto_capture_enabled === true);
   set("chat-auto-capture-interval", cfg.auto_capture_interval ?? 300);
   set("chat-auto-capture-max-memories", cfg.auto_capture_max_memories ?? 10);
-  // === Memory enrichment (simplified) ===
+  // === Memory enrichment (enabled toggle lives in the brain section) ===
   setChecked("chat-memory-enrichment-enabled", cfg.memory_enrichment_enabled === true);
-  set("chat-memory-enrichment-model", cfg.memory_enrichment_model || "");
-  setChecked("chat-memory-enrichment-auto-run", cfg.memory_enrichment_auto_run === true);
-  set("chat-memory-enrichment-interval", cfg.memory_enrichment_interval ?? 60);
-  set("chat-memory-enrichment-prompt-template", cfg.memory_enrichment_prompt_template || "");
+  // === Brain simulation ===
+  setChecked("chat-brain-auto-run", cfg.brain_enrich_auto_run === true);
+  set("chat-brain-enrich-interval", cfg.brain_enrich_interval_seconds ?? 60);
+  set("chat-brain-batch-limit", cfg.brain_enrich_batch_limit ?? 5);
+  set("chat-brain-novelty-sim", cfg.brain_novelty_sim_threshold ?? 0.75);
+  set("chat-brain-novelty-importance", cfg.brain_novelty_importance_threshold ?? 0.6);
+  set("chat-brain-novelty-multiplier", cfg.brain_novelty_stability_multiplier ?? 2.0);
+  set("chat-brain-emotion-gain-k", cfg.brain_emotion_gain_k ?? 0.5);
+  set("chat-brain-rif-rho", cfg.brain_rif_suppression_rho ?? 0.05);
+  set("chat-brain-separation-threshold", cfg.brain_link_separation_threshold ?? 0.75);
+  setChecked("chat-brain-graph-flash", cfg.brain_graph_flash_enabled !== false);
+  // Graph flash SSE follows the brain setting (graph.js may be absent on some pages)
+  if (N.Features && N.Features.Graph && N.Features.Graph.setFlashEnabled) {
+    N.Features.Graph.setFlashEnabled(cfg.brain_graph_flash_enabled !== false);
+  }
   // === Forgetting (moved from Settings) ===
   setChecked("chat-forgetting-enabled", cfg.forgetting_enabled === true);
   set("chat-forgetting-trigger-threshold", cfg.forgetting_trigger_threshold ?? 100);
@@ -458,12 +469,19 @@ async function saveChatConfig() {
     auto_capture_enabled: getChecked("chat-auto-capture-enabled"),
     auto_capture_interval: parseInt(document.getElementById("chat-auto-capture-interval")?.value || "300"),
     auto_capture_max_memories: parseInt(document.getElementById("chat-auto-capture-max-memories")?.value || "10"),
-    // === Memory enrichment (simplified) ===
+    // === Memory enrichment (enabled toggle lives in the brain section) ===
     memory_enrichment_enabled: getChecked("chat-memory-enrichment-enabled"),
-    memory_enrichment_model: document.getElementById("chat-memory-enrichment-model")?.value.trim() || "",
-    memory_enrichment_auto_run: getChecked("chat-memory-enrichment-auto-run"),
-    memory_enrichment_interval: parseInt(document.getElementById("chat-memory-enrichment-interval")?.value || "60"),
-    memory_enrichment_prompt_template: document.getElementById("chat-memory-enrichment-prompt-template")?.value.trim() || "",
+    // === Brain simulation ===
+    brain_enrich_auto_run: getChecked("chat-brain-auto-run"),
+    brain_enrich_interval_seconds: parseInt(document.getElementById("chat-brain-enrich-interval")?.value || "60"),
+    brain_enrich_batch_limit: parseInt(document.getElementById("chat-brain-batch-limit")?.value || "5"),
+    brain_novelty_sim_threshold: parseFloat(document.getElementById("chat-brain-novelty-sim")?.value || "0.75"),
+    brain_novelty_importance_threshold: parseFloat(document.getElementById("chat-brain-novelty-importance")?.value || "0.6"),
+    brain_novelty_stability_multiplier: parseFloat(document.getElementById("chat-brain-novelty-multiplier")?.value || "2.0"),
+    brain_emotion_gain_k: parseFloat(document.getElementById("chat-brain-emotion-gain-k")?.value || "0.5"),
+    brain_rif_suppression_rho: parseFloat(document.getElementById("chat-brain-rif-rho")?.value || "0.05"),
+    brain_link_separation_threshold: parseFloat(document.getElementById("chat-brain-separation-threshold")?.value || "0.75"),
+    brain_graph_flash_enabled: getChecked("chat-brain-graph-flash"),
     // === Forgetting (moved from Settings) ===
     forgetting_enabled: getChecked("chat-forgetting-enabled"),
     forgetting_trigger_threshold: parseInt(document.getElementById("chat-forgetting-trigger-threshold")?.value || "100"),

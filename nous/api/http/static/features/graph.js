@@ -44,6 +44,93 @@ function _graphEdgeColor(type) {
     };
 }
 
+/* ---- Wiring flash (brain simulation visualization) ---- */
+
+/* Kind → flash color. novelty_gate is the biggest pulse (gold);
+   replay_fire blue-purple; recall_boost keeps the existing emphasis. */
+var FLASH_COLORS = {
+    novelty_gate: '#ffd60a',
+    replay_fire: '#7c7cf0',
+    recall_boost: '#30d158',
+    link_fire: '#bf5af2',
+    ppr_hit: '#007aff'
+};
+var FLASH_RESTORE_MS = 500;
+var FLASH_PULSE = { novelty_gate: 2.0, default: 1.6 };
+var flashTimers = {}; // per-node generation token: exactly one timer per node
+var flashBases = {};  // original node data captured at rest — restore source
+var graphDataSet = null;
+var flashSSE = null;
+
+/* renderNetwork hands its fresh DataSet over (also the test hook). */
+function setGraphFlashDataSet(ds) {
+    Object.keys(flashTimers).forEach(function (id) { clearTimeout(flashTimers[id]); });
+    flashTimers = {};
+    flashBases = {};
+    graphDataSet = ds;
+}
+
+/* Flash one node: newest flash wins, restore is a diff update against
+   the original node data (captured when the node was at rest — a flash
+   mid-pulse must not corrupt the base). buildVisData keeps the pristine
+   originals in _data; setGraphFlashDataSet resets everything on re-render. */
+function flashNodeOn(nodes, id, kind) {
+    var color = FLASH_COLORS[kind];
+    if (!nodes || !color) return false;
+    var node = nodes.get(id);
+    if (!node) return false;
+    if (flashTimers[id]) clearTimeout(flashTimers[id]); // old generation loses
+    var base = flashBases[id] || { size: node.size || 10, color: node.color };
+    flashBases[id] = base;
+    var pulse = FLASH_PULSE[kind] || FLASH_PULSE.default;
+    nodes.update({
+        id: id,
+        color: {
+            background: color,
+            border: color,
+            highlight: base.color.highlight,
+            hover: base.color.hover
+        },
+        size: base.size * pulse
+    });
+    flashTimers[id] = setTimeout(function () {
+        delete flashTimers[id];
+        delete flashBases[id];
+        nodes.update({ id: id, color: base.color, size: base.size });
+    }, FLASH_RESTORE_MS);
+    return true;
+}
+
+function handleWiringEvent(ev) {
+    if (S.tab !== 'graph') return false; // graph view only
+    var nodes = graphDataSet && graphDataSet.nodes;
+    if (!nodes) return false;
+    var flashed = false;
+    if (ev.source) flashed = flashNodeOn(nodes, ev.source, ev.kind) || flashed;
+    if (ev.target) flashed = flashNodeOn(nodes, ev.target, ev.kind) || flashed;
+    return flashed;
+}
+
+function connectGraphFlash() {
+    if (flashSSE) return flashSSE; // single-flight
+    flashSSE = new EventSource('/api/memory/wiring/stream');
+    flashSSE.addEventListener('wiring', function (e) {
+        var ev;
+        try { ev = JSON.parse(e.data); } catch (err) { return; }
+        handleWiringEvent(ev);
+    });
+    return flashSSE;
+}
+
+function disconnectGraphFlash() {
+    if (flashSSE) { flashSSE.close(); flashSSE = null; }
+}
+
+function setFlashEnabled(enabled) {
+    if (enabled) connectGraphFlash();
+    else disconnectGraphFlash();
+}
+
 /* ---- Main loader ---- */
 
 async function loadGraph() {
@@ -70,6 +157,11 @@ async function loadGraph() {
         if (statsEl) {
             statsEl.textContent = filtered.nodes.length + ' nodes · ' + filtered.edges.length + ' edges';
         }
+
+        /* Flash subscription follows the brain setting (graph view is live here) */
+        api('/api/chat/' + encodeURIComponent(S.persona) + '/config')
+            .then(function (cfg) { setFlashEnabled(cfg.brain_graph_flash_enabled !== false); })
+            .catch(function () { /* config unavailable → no subscription */ });
 
     } catch (e) {
         console.error('graph load failed:', e);
@@ -298,6 +390,7 @@ function renderNetwork(container, nodes, edges) {
     if (graphNetwork) { graphNetwork.destroy(); }
 
     graphNetwork = new vis.Network(container, dataSet, options);
+    setGraphFlashDataSet(dataSet); // flash target + timer reset on re-render
 
     /* Click → open side panel */
     graphNetwork.on('click', function(params) {
@@ -512,5 +605,13 @@ Object.assign(N.Features.Graph, {
     openGraphDetailPanel: openGraphDetailPanel,
     closeGraphDetailPanel: closeGraphDetailPanel,
     _graphRefilter: _graphRefilter,
+    FLASH_COLORS: FLASH_COLORS,
+    setGraphFlashDataSet: setGraphFlashDataSet,
+    flashNodeOn: flashNodeOn,
+    handleWiringEvent: handleWiringEvent,
+    connectGraphFlash: connectGraphFlash,
+    disconnectGraphFlash: disconnectGraphFlash,
+    setFlashEnabled: setFlashEnabled,
+    _flashTimers: function () { return flashTimers; },
 });
 })();

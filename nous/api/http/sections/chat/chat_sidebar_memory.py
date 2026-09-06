@@ -135,34 +135,101 @@ def _render_weights_section() -> str:
                         </details>"""
 
 
+_BRAIN_HELP = {
+    "enabled": "LLM による記憶エンリッチメントを有効化します。オフにすると自動評価も新規性ゲートも実行されません。",
+    "auto_run": "定期実行（REM 相当）のオン/オフ。睡眠中の記憶再生のように、新しい記憶をバックグラウンドで再処理します。",
+    "interval": "記憶強化ループの実行間隔（秒）。REM 睡眠の短い周期に相当します。",
+    "batch_limit": "1 周で処理する記憶の上限。一度に大量に再処理すると記憶が乱れるため、小分けにします。",
+    "novelty_sim": "海馬-VTA ループのドーパミンゲート。既存記憶との類似がこの値より低いほど「新規」と判定され、長期記憶への定着が強まります。",
+    "novelty_importance": "新規性判定の対象になる重要度のしきい値。重要な記憶だけを新規性ゲートに通します。",
+    "novelty_multiplier": "新規と判定された記憶の初期安定度の倍率。新規性ブーストは作成後 1 回だけ与えられます（長期増強）。",
+    "emotion_gain": "感情が強い記憶ほど想起時に強化されやすくなる係数（扁桃体モデル）。上限は内部で固定されます。",
+    "rif_rho": "想起のたびに、手がかりを共有する競合記憶がわずかに抑制されます（検索誘発性忘却）。",
+    "separation": "記憶同士のシナプス結合を作る類似度のしきい値。高いほど似た記憶だけが結合し、pattern separation が強まります。",
+    "flash": "シナプス発火イベントを記憶グラフ上で発光表示します。",
+}
+
+
+def _brain_help(key: str) -> str:
+    """? マークホバー（title 属性）— 脳神経科学由来の説明文。"""
+    text = _BRAIN_HELP[key].replace('"', "'")
+    return f'<span class="chat-help-tip" title="{text}" aria-label="説明" tabindex="0">?</span>'
+
+
 def _render_memory_enrichment_section() -> str:
-    """Memory enrichment settings — auto-run, model, interval, advanced prompt template."""
-    return """
-                        <!-- Memory enrichment (moved from Settings) -->
-                        <details data-category="memory_enrichment">
-                            <summary><i data-lucide="layers"></i> 記憶エンリッチメント<span class="chat-help-icon" data-category="memory_enrichment" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
+    """脳シミュレーション設定 — 旧 memory_enrichment セクションを吸収・置換。
+
+    関数名は chat_sidebar.py の import 互換のため維持（chat_sidebar.py は
+    lane3 の所有外）。実体は brain_simulation カテゴリの 1 セクション。
+    """
+    help_ = _brain_help
+    return f"""
+                        <!-- Brain simulation (absorbs memory enrichment) -->
+                        <details data-category="brain_simulation">
+                            <summary><i data-lucide="brain-circuit"></i> 脳シミュレーション <span class="chat-help-icon" data-category="brain_simulation" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
-                                <div class="chat-check-row">
-                                    <input type="checkbox" id="chat-memory-enrichment-enabled" />
-                                    <label for="chat-memory-enrichment-enabled">記憶エンリッチメント有効</label>
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">モデル <span style="color:var(--text-muted);font-size:0.7rem;">（空白でチャットと同モデル）</span></div>
-                                    <input type="text" id="chat-memory-enrichment-model" class="chat-field-input" placeholder="例: openai/gpt-4o-mini" />
-                                </div>
-                                <div class="chat-check-row">
-                                    <input type="checkbox" id="chat-memory-enrichment-auto-run" />
-                                    <label for="chat-memory-enrichment-auto-run">自動実行</label>
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">実行間隔（分）</div>
-                                    <input type="number" id="chat-memory-enrichment-interval" class="chat-field-input" min="1" step="1" value="60" />
-                                </div>
                                 <details class="chat-subsection">
-                                    <summary>詳細設定（プロンプトテンプレート）</summary>
+                                    <summary>記憶強化（REM）</summary>
                                     <div style="padding-top:6px;">
-                                        <div class="chat-field-label">プロンプトテンプレート</div>
-                                        <textarea id="chat-memory-enrichment-prompt-template" class="chat-field-input" rows="4" style="resize:vertical;font-family:monospace;"></textarea>
+                                        <div class="chat-check-row">
+                                            <input type="checkbox" id="chat-memory-enrichment-enabled" />
+                                            <label for="chat-memory-enrichment-enabled">記憶エンリッチメント有効 {help_("enabled")}</label>
+                                        </div>
+                                        <div class="chat-check-row">
+                                            <input type="checkbox" id="chat-brain-auto-run" />
+                                            <label for="chat-brain-auto-run">自動実行 {help_("auto_run")}</label>
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">実行間隔（秒）{help_("interval")}</div>
+                                            <input type="number" id="chat-brain-enrich-interval" class="chat-field-input" min="10" step="10" value="60" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">1 周あたり上限件数 {help_("batch_limit")}</div>
+                                            <input type="number" id="chat-brain-batch-limit" class="chat-field-input" min="1" max="50" step="1" value="5" />
+                                        </div>
+                                    </div>
+                                </details>
+                                <details class="chat-subsection">
+                                    <summary>学習ゲート</summary>
+                                    <div style="padding-top:6px;">
+                                        <div>
+                                            <div class="chat-field-label">新規性 類似度しきい値 {help_("novelty_sim")}</div>
+                                            <input type="number" id="chat-brain-novelty-sim" class="chat-field-input" min="0" max="1" step="0.01" value="0.75" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">新規性 重要度しきい値 {help_("novelty_importance")}</div>
+                                            <input type="number" id="chat-brain-novelty-importance" class="chat-field-input" min="0" max="1" step="0.01" value="0.6" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">新規性 ブースト倍率 {help_("novelty_multiplier")}</div>
+                                            <input type="number" id="chat-brain-novelty-multiplier" class="chat-field-input" min="1" max="5" step="0.1" value="2.0" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">感情 gain 係数 k {help_("emotion_gain")}</div>
+                                            <input type="number" id="chat-brain-emotion-gain-k" class="chat-field-input" min="0" max="1" step="0.05" value="0.5" />
+                                        </div>
+                                    </div>
+                                </details>
+                                <details class="chat-subsection">
+                                    <summary>想起と忘却</summary>
+                                    <div style="padding-top:6px;">
+                                        <div>
+                                            <div class="chat-field-label">競合抑制係数 ρ {help_("rif_rho")}</div>
+                                            <input type="number" id="chat-brain-rif-rho" class="chat-field-input" min="0" max="0.5" step="0.01" value="0.05" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">リンク分離しきい値 {help_("separation")}</div>
+                                            <input type="number" id="chat-brain-separation-threshold" class="chat-field-input" min="0.5" max="1" step="0.01" value="0.75" />
+                                        </div>
+                                    </div>
+                                </details>
+                                <details class="chat-subsection">
+                                    <summary>可視化</summary>
+                                    <div style="padding-top:6px;">
+                                        <div class="chat-check-row">
+                                            <input type="checkbox" id="chat-brain-graph-flash" checked />
+                                            <label for="chat-brain-graph-flash">グラフ発光 {help_("flash")}</label>
+                                        </div>
                                     </div>
                                 </details>
                             </div>
