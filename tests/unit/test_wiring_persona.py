@@ -32,8 +32,11 @@ def _clean_buffer():
 
 class _FakeRequest:
     def __init__(self, query_params=None, disconnect_after: int = 99):
-        self.query_params: dict = query_params or {}
+        from starlette.datastructures import QueryParams
+
+        self.query_params: QueryParams = QueryParams(query_params or {})
         self.path_params: dict = {}
+        self.headers: dict = {}
         self._calls = 0
         self._disconnect_after = disconnect_after
 
@@ -157,3 +160,95 @@ class TestSSEPersona:
         chunks = [c async for c in response.body_iterator]
         sources = [json.loads(c.split("data: ", 1)[1])["source"] for c in chunks if c.startswith("event: wiring")]
         assert sources == ["a", "legacy"]
+
+
+class TestSSEAuth:
+    """SSE endpoints resolve persona from ?persona= (EventSource can't send headers).
+
+    Regression: dashboard opens `/api/memory/wiring/stream?persona=herta` but the
+    resolver ignored query params → PersonaRequiredError → HTTP 401.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _handlers(self):
+        seen: dict = {}
+
+        class FakeMCP:
+            def custom_route(self, path, methods=None):
+                def deco(fn):
+                    seen[(path, methods[0] if methods else "GET")] = fn
+                    return fn
+
+                return deco
+
+        from nous.api.http.routers.memory import register_memory_routes
+
+        register_memory_routes(FakeMCP())
+        self.seen = seen
+        yield
+
+    @pytest.fixture()
+    def _strict_key(self, monkeypatch, tmp_path):
+        from nous.config.runtime_config import RuntimeConfigManager
+        from nous.config.settings import Settings
+
+        RuntimeConfigManager.reset()
+        monkeypatch.delenv("NOUS_API_KEY", raising=False)
+        monkeypatch.setattr(
+            "nous.config.runtime_config.get_settings",
+            lambda: Settings(data_root=str(tmp_path)),
+        )
+        RuntimeConfigManager().update("general", "api_key", "x" * 16)
+        yield
+        RuntimeConfigManager.reset()
+
+    @pytest.fixture(autouse=True)
+    def _no_context(self):
+        """Bypass AppContextRegistry — endpoint auth is what's under test."""
+        with (
+            patch("nous.api.http.routers.memory._safe_get_context", return_value=MagicMock()),
+            patch("nous.api.http.routers.memory._wiring_stream_gen"),
+        ):
+            yield
+
+    async def test_query_persona_resolves(self):
+        """dev pass-through: ?persona= が解決され 200 (旧コードでは 401)"""
+        response = await self.seen[("/api/memory/wiring/stream", "GET")](
+            _FakeRequest(query_params={"persona": "herta"})
+        )
+        assert response.status_code == 200
+
+    async def test_no_persona_still_401(self):
+        """?persona= 無しは従来どおり 401"""
+        from starlette.exceptions import HTTPException
+
+        with pytest.raises(HTTPException) as exc_info:
+            await self.seen[("/api/memory/wiring/stream", "GET")](_FakeRequest())
+        assert exc_info.value.status_code == 401
+
+    async def test_strict_valid_token_200(self, _strict_key):
+        """api_key 設定下: 正当 ?token= 付きはダッシュボード由来の正当アクセスとして 200"""
+        response = await self.seen[("/api/memory/wiring/stream", "GET")](
+            _FakeRequest(query_params={"persona": "herta", "token": "x" * 16})
+        )
+        assert response.status_code == 200
+
+    async def test_strict_invalid_token_401(self, _strict_key):
+        """api_key 設定下: 不正 token は 401 のまま"""
+        from starlette.exceptions import HTTPException
+
+        with pytest.raises(HTTPException) as exc_info:
+            await self.seen[("/api/memory/wiring/stream", "GET")](
+                _FakeRequest(query_params={"persona": "herta", "token": "wrong"})
+            )
+        assert exc_info.value.status_code == 401
+
+    async def test_strict_missing_token_401(self, _strict_key):
+        """api_key 設定下: token 無しは 401（匿名全開放にはしない）"""
+        from starlette.exceptions import HTTPException
+
+        with pytest.raises(HTTPException) as exc_info:
+            await self.seen[("/api/memory/wiring/stream", "GET")](
+                _FakeRequest(query_params={"persona": "herta"})
+            )
+        assert exc_info.value.status_code == 401

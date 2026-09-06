@@ -32,6 +32,7 @@ def _request(
         "method": "GET",
         "path": "/",
         "headers": headers,
+        "query_string": b"",
         "path_params": {"persona": path_persona} if path_persona is not None else {},
     }
     return Request(scope)

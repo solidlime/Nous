@@ -241,6 +241,102 @@ class TestPersonaMiddleware:
 
 
 # =========================================================================
+# D2. PersonaMiddleware + ?token= query param (SSE / EventSource)
+# =========================================================================
+
+
+class TestQueryTokenAuth:
+    """SSE (EventSource) can't send headers — ?token= acts as Bearer-equivalent."""
+
+    @pytest.fixture()
+    def _strict_key(self, monkeypatch, tmp_path):
+        from nous.config.runtime_config import RuntimeConfigManager
+        from nous.config.settings import Settings
+
+        RuntimeConfigManager.reset()
+        monkeypatch.delenv("NOUS_API_KEY", raising=False)
+        monkeypatch.setattr(
+            "nous.config.runtime_config.get_settings",
+            lambda: Settings(data_root=str(tmp_path)),
+        )
+        RuntimeConfigManager().update("general", "api_key", "x" * 16)
+        yield
+        RuntimeConfigManager.reset()
+
+    @staticmethod
+    def _capture_app(captured: dict) -> object:
+        async def app(scope, receive, send):  # noqa: ARG001
+            captured["persona"] = get_current_persona()
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b""})
+
+        return app
+
+    @staticmethod
+    async def _run(app, scope) -> list[dict]:
+        messages: list[dict] = []
+
+        async def send(msg: dict) -> None:
+            messages.append(msg)
+
+        await PersonaMiddleware(app)(scope, None, send)  # type: ignore[arg-type]
+        return messages
+
+    async def test_valid_query_token_passes(self, _strict_key):
+        """api_key 設定下で ?token= が正当なら通過（X-Persona で persona 解決）"""
+        captured: dict = {}
+        scope = {
+            "type": "http",
+            "headers": [(b"x-persona", b"alice")],
+            "query_string": b"token=" + b"x" * 16,
+        }
+        messages = await self._run(self._capture_app(captured), scope)
+        assert captured["persona"] == "alice"
+        assert messages[0]["status"] == 200
+
+    async def test_invalid_query_token_401(self, _strict_key):
+        """不正 token は 401 のまま"""
+        captured: dict = {}
+        scope = {
+            "type": "http",
+            "headers": [],
+            "query_string": b"token=wrong",
+        }
+        messages = await self._run(self._capture_app(captured), scope)
+        assert "persona" not in captured
+        assert messages[0]["status"] == 401
+
+    async def test_missing_token_401_in_strict_mode(self, _strict_key):
+        """token 無し（ヘッダも無し）は strict mode で 401"""
+        captured: dict = {}
+        scope = {"type": "http", "headers": [], "query_string": b"persona=alice"}
+        messages = await self._run(self._capture_app(captured), scope)
+        assert "persona" not in captured
+        assert messages[0]["status"] == 401
+
+    async def test_header_wins_over_query_token(self, _strict_key):
+        """Authorization ヘッダーがある時は ?token= を無視"""
+        captured: dict = {}
+        scope = {
+            "type": "http",
+            "headers": [(b"authorization", b"Bearer " + b"x" * 16), (b"x-persona", b"alice")],
+            "query_string": b"token=wrong",
+        }
+        messages = await self._run(self._capture_app(captured), scope)
+        assert captured["persona"] == "alice"
+        assert messages[0]["status"] == 200
+
+    async def test_dev_mode_query_token_ignored(self, monkeypatch):
+        """dev pass-through（key 空）では token は無くても通る"""
+        monkeypatch.delenv("NOUS_API_KEY", raising=False)
+        captured: dict = {}
+        scope = {"type": "http", "headers": [(b"x-persona", b"alice")], "query_string": b""}
+        messages = await self._run(self._capture_app(captured), scope)
+        assert captured["persona"] == "alice"
+        assert messages[0]["status"] == 200
+
+
+# =========================================================================
 # E. _resolve_persona() in tools.py
 # =========================================================================
 
