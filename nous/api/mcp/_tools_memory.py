@@ -113,6 +113,12 @@ async def _tool_memory_read(
                 logger.warning(f"boost_recall failed: {e}")
             m = result.value
             ctx.record_memory_access(m.key)
+            # Defer enrichment to the idle worker (has_processed guard avoids re-enrich)
+            try:
+                if not ctx.enrichment_queue.has_processed(m.key):
+                    ctx.enrichment_queue.enqueue(m.key)
+            except Exception:
+                logger.debug("enrichment enqueue failed for %s", m.key, exc_info=True)
             emotion_line = f"Emotion: {m.emotion}"
             if m.emotion_intensity:
                 emotion_line += f" (intensity: {m.emotion_intensity})"
@@ -392,6 +398,24 @@ async def _tool_memory_search(
         total_count = count_result.value if count_result.is_ok else 0
         return json.dumps({"ok": True, "memories": [], "total_count": total_count}, ensure_ascii=False)
     ctx.memory_service.log_search(query, "hybrid", len(result.value))
+
+    # Boost the top hits (cap 10) and record co-access (cap 3 — don't churn
+    # the 20-item co-access window), then queue unprocessed memories for the
+    # idle enrichment worker.
+    hits = result.value
+    for sr in hits[: min(10, len(hits))]:
+        try:
+            ctx.memory_service.boost_recall(sr.memory.key)
+        except Exception as e:
+            logger.warning(f"boost_recall failed: {e}")
+    for sr in hits[: min(3, len(hits))]:
+        ctx.record_memory_access(sr.memory.key)
+    for sr in hits:
+        try:
+            if not ctx.enrichment_queue.has_processed(sr.memory.key):
+                ctx.enrichment_queue.enqueue(sr.memory.key)
+        except Exception:
+            logger.debug("enrichment enqueue failed for %s", sr.memory.key, exc_info=True)
 
     # Normalize scores to 0-1 for intuitive LLM consumption
     scores = [sr.score for sr in result.value]

@@ -241,3 +241,79 @@ class TestToolCalledAudit:
         _failure_call(tool_name, mock_app_context)
         events = _tool_called_events(mock_app_context)
         assert any(e["success"] is False for e in events), f"{tool_name} must publish tool.called on its failure path"
+
+
+# ---------------------------------------------------------------------------
+# (d) enrichment queue wiring: read/search enqueue only unprocessed hits
+# ---------------------------------------------------------------------------
+
+def _record_memory_access_fn(keys: list[str]):
+    """Real AppContext.record_memory_access logic over a plain list."""
+
+    def record(key: str) -> None:
+        if not key:
+            return
+        try:
+            if key in keys:
+                keys.remove(key)
+            keys.append(key)
+            del keys[:-20]
+        except Exception:
+            pass
+
+    return record
+
+
+class TestEnrichmentQueueWiring:
+    def test_search_coaccess_window_grows_at_most_3(self, mock_app_context):
+        """top_k=200 search must record co-access for at most the top 3 hits."""
+        _setup_success_ctx(mock_app_context)
+        keys: list[str] = []
+        mock_app_context.record_memory_access = _record_memory_access_fn(keys)
+        hits = [SearchResult(memory=_mem(f"m{i:03d}"), score=0.5, source="keyword") for i in range(200)]
+        mock_app_context.search_engine.search.return_value = Success(hits)
+
+        asyncio.run(_tool_memory_search(mock_app_context, PERSONA, query="q", top_k=200))
+
+        assert len(keys) == 3
+
+    def test_read_enqueues_unprocessed_memory(self, mock_app_context):
+        _setup_success_ctx(mock_app_context)
+        mock_app_context.enrichment_queue.has_processed.return_value = False
+
+        asyncio.run(_tool_memory_read(mock_app_context, PERSONA, memory_key="mem_001"))
+
+        mock_app_context.enrichment_queue.enqueue.assert_called_once_with("mem_001")
+
+    def test_read_skips_enqueue_when_already_processed(self, mock_app_context):
+        _setup_success_ctx(mock_app_context)
+        mock_app_context.enrichment_queue.has_processed.return_value = True
+
+        asyncio.run(_tool_memory_read(mock_app_context, PERSONA, memory_key="mem_001"))
+
+        mock_app_context.enrichment_queue.enqueue.assert_not_called()
+
+    def test_search_enqueues_only_unprocessed_hits(self, mock_app_context):
+        _setup_success_ctx(mock_app_context)
+        processed = {"m1"}
+        mock_app_context.enrichment_queue.has_processed.side_effect = lambda key: key in processed
+        hits = [
+            SearchResult(memory=_mem(f"m{i}"), score=0.5, source="keyword") for i in range(3)
+        ]
+        mock_app_context.search_engine.search.return_value = Success(hits)
+
+        asyncio.run(_tool_memory_search(mock_app_context, PERSONA, query="q"))
+
+        enqueued = [call.args[0] for call in mock_app_context.enrichment_queue.enqueue.call_args_list]
+        assert enqueued == ["m0", "m2"]
+
+    def test_search_boosts_at_most_top_10(self, mock_app_context):
+        _setup_success_ctx(mock_app_context)
+        hits = [SearchResult(memory=_mem(f"m{i:03d}"), score=0.5, source="keyword") for i in range(30)]
+        mock_app_context.search_engine.search.return_value = Success(hits)
+
+        asyncio.run(_tool_memory_search(mock_app_context, PERSONA, query="q", top_k=30))
+
+        boosted = [call.args[0] for call in mock_app_context.memory_service.boost_recall.call_args_list]
+        assert len(boosted) == 10
+        assert boosted[0] == "m000"

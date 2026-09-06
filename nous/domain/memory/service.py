@@ -17,8 +17,8 @@ if TYPE_CHECKING:
     )
     from nous.domain.search.engine import SearchEngine
     from nous.infrastructure.llm.memory_enricher import MemoryEnricher
+    from nous.infrastructure.sqlite.enrichment_queue_repo import EnrichmentQueueRepository
 
-from nous.domain.memory.enrich_service import MemoryEnrichService
 from nous.domain.memory.evolution_service import MemoryEvolutionService
 from nous.domain.memory.link_service import MemoryLinkService
 from nous.domain.memory.query_service import MemoryQueryService
@@ -61,6 +61,7 @@ class MemoryService:
         strength_repo: MemoryStrengthRepository | None = None,
         aux_repo: MemoryAuxiliaryRepository | None = None,
         coaccess_tracker: list[str] | None = None,
+        enrichment_queue: EnrichmentQueueRepository | None = None,
     ) -> None:
         self._repo = repo
         # Mutable wrapper for late search_engine injection (see use_cases.py:362)
@@ -71,10 +72,10 @@ class MemoryService:
         self._contradiction_detector = contradiction_detector
         self._strength_repo = strength_repo
         self._aux_repo = aux_repo
+        self._enrichment_queue = enrichment_queue
 
         # Sub-services
         self._write_service = MemoryWriteService(repo, self._search_engine_ref)
-        self._enrich_service = MemoryEnrichService(enricher, entity_service, repo)
         self._link_service = MemoryLinkService(
             link_repo,
             self._search_engine_ref,
@@ -201,16 +202,12 @@ class MemoryService:
                     tags=tags,
                 )
 
-        # ── 8. Enrichment (background: LLM wait must not block create) ──
-        _track_background_task(
-            self._enrich_service.enrich_memory(
-                memory=memory,
-                content=content,
-                type_hints=type_hints,
-                key=key,
-                importance=importance,
-            )
-        )
+        # ── 8. Enrichment queue (idle worker drains; no immediate LLM call) ──
+        if self._enrichment_queue is not None:
+            try:
+                self._enrichment_queue.enqueue(key)
+            except Exception:
+                logger.debug("enrichment enqueue failed for %s", key, exc_info=True)
 
         # ── 9. Hebbian co-activation links ──
         if self._link_repo is not None:

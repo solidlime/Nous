@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -10,8 +9,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from nous.domain.memory.enrichment import EnrichmentResult, RelationCandidate
-from nous.domain.memory.service import MemoryService, _background_tasks
+from nous.domain.memory.service import MemoryService
 from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
 
@@ -216,8 +214,10 @@ def service(repo):
 def service_factory():
     """Factory fixture to create MemoryService with optional enricher and entity_service."""
 
-    def _create(repo, enricher=None, entity_service=None):
-        return MemoryService(repo, entity_service=entity_service, enricher=enricher)
+    def _create(repo, enricher=None, entity_service=None, enrichment_queue=None):
+        return MemoryService(
+            repo, entity_service=entity_service, enricher=enricher, enrichment_queue=enrichment_queue
+        )
 
     return _create
 
@@ -558,131 +558,54 @@ class TestTagValidation:
         assert result.is_ok
 
 
-class TestMemoryEnrichment:
-    """Test that create_memory correctly interacts with the MemoryEnricher."""
+class TestCreateEnrichmentQueue:
+    """create_memory must not enrich immediately — it enqueues for the idle worker."""
 
     @staticmethod
-    async def _drain_background_tasks() -> None:
-        """Wait for all tracked background tasks (enrichment/evolution) to finish."""
-        while _background_tasks:
-            tasks = list(_background_tasks)
-            await asyncio.gather(*tasks, return_exceptions=True)
+    def _make_queue():
+        queue = MagicMock()
+        queue.has_processed.return_value = False
+        return queue
 
-    async def test_skips_enrichment_when_importance_explicitly_set(self, repo, service_factory):
-        """When importance != 0.5, enrichment should not be called."""
+    async def test_create_does_not_call_enricher(self, repo, service_factory):
+        """LLM enrichment is never triggered from create (deferred to worker)."""
         mock_enricher = MagicMock()
         mock_enricher.enrich_async = AsyncMock()
-        svc = service_factory(repo, enricher=mock_enricher)
-
-        await svc.create_memory(content="This is a meaningful memory about John.", importance=0.9)
-        await self._drain_background_tasks()
-
-        mock_enricher.enrich_async.assert_not_called()
-
-    async def test_calls_enricher_when_importance_is_default_0_5(self, repo, service_factory):
-        """When importance is default 0.5, enrichment should be called."""
-        mock_enricher = MagicMock()
-        mock_enricher.enrich_async = AsyncMock(return_value=EnrichmentResult(importance=0.8, relations=[]))
         svc = service_factory(repo, enricher=mock_enricher)
 
         result = await svc.create_memory(content="This is a meaningful memory about John.")
         assert result.is_ok
 
-        await self._drain_background_tasks()
-        mock_enricher.enrich_async.assert_called_once()
-
-    async def test_enricher_updates_importance_on_memory(self, repo, service_factory):
-        """When enricher returns importance != 0.5, the memory importance is updated."""
-        mock_enricher = MagicMock()
-        mock_enricher.enrich_async = AsyncMock(return_value=EnrichmentResult(importance=0.9, relations=[]))
-        svc = service_factory(repo, enricher=mock_enricher)
-
-        result = await svc.create_memory(content="This is an important memory.")
-        assert result.is_ok
-        memory = result.value
-
-        await self._drain_background_tasks()
-        assert memory.importance == 0.9
-
-    async def test_enricher_does_not_override_explicit_importance(self, repo, service_factory):
-        """When importance is explicitly set, enricher is not called."""
-        mock_enricher = MagicMock()
-        mock_enricher.enrich_async = AsyncMock()
-        svc = service_factory(repo, enricher=mock_enricher)
-
-        result = await svc.create_memory(content="Memory with explicit importance", importance=0.3)
-        assert result.is_ok
-        memory = result.value
-
-        await self._drain_background_tasks()
-        assert memory.importance == 0.3
         mock_enricher.enrich_async.assert_not_called()
 
-    async def test_enricher_failure_does_not_block_create(self, repo, service_factory):
-        """When enricher raises an exception, memory creation still succeeds."""
-        mock_enricher = MagicMock()
-        mock_enricher.enrich_async = AsyncMock(side_effect=RuntimeError("LLM down"))
-        svc = service_factory(repo, enricher=mock_enricher)
+    async def test_create_enqueues_new_memory(self, repo, service_factory):
+        queue = self._make_queue()
+        svc = service_factory(repo, enrichment_queue=queue)
 
-        result = await svc.create_memory(content="This memory should still be created.")
-        assert result.is_ok
-        memory = result.value
-        assert memory.content == "This memory should still be created."
-
-        await self._drain_background_tasks()
-
-    async def test_enrichment_does_not_block_create(self, repo, service_factory):
-        """create_memory returns before enrichment completes (background task)."""
-        started = asyncio.Event()
-        release = asyncio.Event()
-
-        async def slow_enrich(**kwargs):
-            started.set()
-            await release.wait()  # stays pending until we release it
-            return EnrichmentResult(importance=0.9, relations=[])
-
-        mock_enricher = MagicMock()
-        mock_enricher.enrich_async = slow_enrich
-        svc = service_factory(repo, enricher=mock_enricher)
-
-        result = await svc.create_memory(content="This memory should return before enrichment finishes.")
+        result = await svc.create_memory(content="queued memory")
         assert result.is_ok
 
-        # create already returned; enrichment task is still blocked on `release`
-        await asyncio.wait_for(started.wait(), timeout=1.0)
-        assert not release.is_set(), "create returned while enrichment was still pending"
+        queue.enqueue.assert_called_once_with(result.value.key)
 
-        # let the background task finish, then drain it
-        release.set()
-        await self._drain_background_tasks()
+    async def test_create_enqueues_regardless_of_importance(self, repo, service_factory):
+        queue = self._make_queue()
+        svc = service_factory(repo, enrichment_queue=queue)
 
-    async def test_enricher_relations_added_through_entity_service(self, repo, service_factory):
-        """When enricher returns relations, entity_service.add_relation is called."""
-        mock_enricher = MagicMock()
-        mock_enricher.enrich_async = AsyncMock(
-            return_value=EnrichmentResult(
-                importance=0.7,
-                relations=[
-                    RelationCandidate(
-                        source_entity="Alice",
-                        target_entity="Bob",
-                        relation_type="knows",
-                        confidence=0.9,
-                    )
-                ],
-            )
-        )
-        mock_entity_service = MagicMock()
-        svc = service_factory(repo, enricher=mock_enricher, entity_service=mock_entity_service)
-
-        result = await svc.create_memory(content="Alice knows Bob.")
+        result = await svc.create_memory(content="explicit importance", importance=0.9)
         assert result.is_ok
 
-        await self._drain_background_tasks()
-        mock_entity_service.add_relation.assert_called_once_with(
-            source="Alice",
-            target="Bob",
-            relation_type="knows",
-            memory_key=result.value.key,
-            confidence=0.9,
-        )
+        queue.enqueue.assert_called_once_with(result.value.key)
+
+    async def test_create_without_queue_still_succeeds(self, repo, service_factory):
+        svc = service_factory(repo, enricher=MagicMock())
+
+        result = await svc.create_memory(content="no queue wired")
+        assert result.is_ok
+
+    async def test_enqueue_failure_does_not_block_create(self, repo, service_factory):
+        queue = self._make_queue()
+        queue.enqueue.side_effect = RuntimeError("db down")
+        svc = service_factory(repo, enrichment_queue=queue)
+
+        result = await svc.create_memory(content="enqueue raises")
+        assert result.is_ok

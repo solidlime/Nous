@@ -161,6 +161,11 @@ class AppContext:
         self.equipment_repo = SQLiteEquipmentRepository(self.connection)
         self.entity_repo = SQLiteEntityRepository(self.connection)
 
+        # Persistent enrichment queue (drained by EnrichmentWorker when idle)
+        from nous.infrastructure.sqlite.enrichment_queue_repo import EnrichmentQueueRepository
+
+        self.enrichment_queue = EnrichmentQueueRepository(self.connection)
+
         # Entity graph (optional — never blocks core memory operations)
         # Must be initialized before MemoryService so it can be injected
         from nous.domain.memory.graph import EntityService
@@ -245,6 +250,7 @@ class AppContext:
             enricher=self._enricher,
             link_repo=self.entity_repo,
             coaccess_tracker=self._coaccess_keys,
+            enrichment_queue=self.enrichment_queue,
         )
         self.persona_service = PersonaService(
             self.persona_repo, event_bus=self.event_bus, memory_service=self.memory_service
