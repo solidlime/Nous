@@ -40,7 +40,7 @@ class SessionEventRecorder:
     async def _on_event(self, event_type: str, data: dict) -> None:
         """Handles an event: converts to SessionEvent and persists."""
         try:
-            session_id = data.get("session_id", "unknown")
+            session_id = data.get("session_id") or "unknown"
             persona = data.get("persona", "unknown")
             summary = self._build_summary(event_type, data)
             timestamp_str = data.get("timestamp")

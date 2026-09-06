@@ -42,7 +42,7 @@ class QdrantVectorStore:
         try:
             from qdrant_client.models import Distance, VectorParams
 
-            client = self.client_manager.client
+            client = await self.client_manager.get_client()
             collections = (await client.get_collections()).collections
             if not any(c.name == name for c in collections):
                 dim = await self.embedding.async_dimension()
@@ -97,7 +97,7 @@ class QdrantVectorStore:
                 vector=vector.tolist(),
                 payload=payload,
             )
-            await self.client_manager.client.upsert(
+            await (await self.client_manager.get_client()).upsert(
                 collection_name=self.collection_name(persona),
                 points=[point],
             )
@@ -122,7 +122,7 @@ class QdrantVectorStore:
             return Success([])
         try:
             vector = await self.embedding.async_encode(query, is_query=True)
-            client = self.client_manager.client
+            client = await self.client_manager.get_client()
             response = await client.query_points(
                 collection_name=self.collection_name(persona),
                 query=vector.tolist(),
@@ -154,7 +154,7 @@ class QdrantVectorStore:
 
             contents = [content for _, content in memories]
             vectors = await self.embedding.async_encode_batch(contents, is_query=False)
-            client = self.client_manager.client
+            client = await self.client_manager.get_client()
             total = 0
             for i in range(0, len(memories), batch_size):
                 batch = memories[i : i + batch_size]
@@ -188,7 +188,7 @@ class QdrantVectorStore:
         try:
             from qdrant_client.models import PointIdsList
 
-            await self.client_manager.client.delete(
+            await (await self.client_manager.get_client()).delete(
                 collection_name=self.collection_name(persona),
                 points_selector=PointIdsList(points=[self._key_to_id(key)]),
             )
@@ -201,7 +201,7 @@ class QdrantVectorStore:
     async def count(self, persona: str) -> Result[int, VectorStoreError]:
         """Count points in the persona's collection."""
         try:
-            info = await self.client_manager.client.get_collection(
+            info = await (await self.client_manager.get_client()).get_collection(
                 collection_name=self.collection_name(persona),
             )
             return Success(info.points_count or 0)
@@ -214,7 +214,7 @@ class QdrantVectorStore:
         name = self.collection_name(persona)
         try:
             try:
-                await self.client_manager.client.delete_collection(name)
+                await (await self.client_manager.get_client()).delete_collection(name)
                 logger.info("Deleted collection: %s", name)
             except Exception:
                 logger.debug(

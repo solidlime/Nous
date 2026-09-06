@@ -288,6 +288,22 @@ class TestSessionEventRecorder:
         assert summary == "▶ Session started: sess_abc"
 
     @pytest.mark.asyncio
+    async def test_on_event_session_id_none_falls_back(self, recorder, mock_repo):
+        """Explicit None session_id must not violate NOT NULL — falls back to 'unknown'."""
+        data = {
+            "session_id": None,
+            "persona": "test_persona",
+            "tool_name": "memory_search",
+            "success": True,
+        }
+
+        await recorder._on_event("tool.called", data)
+
+        mock_repo.insert.assert_called_once()
+        event: SessionEvent = mock_repo.insert.call_args[0][0]
+        assert event.session_id == "unknown"
+
+    @pytest.mark.asyncio
     async def test_on_event_inserts_chat_message(self, recorder, mock_repo):
         """Verify _on_event handles chat.message correctly."""
         data = {

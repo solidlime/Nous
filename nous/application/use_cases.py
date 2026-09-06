@@ -149,8 +149,8 @@ class AppContext:
         self.connection = SQLiteConnection(self.settings.persona_dir, self.persona)
         try:
             self.connection.initialize_schema()
-        except Exception as e:
-            logging.getLogger("nous").warning("Schema initialization failed for persona '%s': %s", self.persona, e)
+        except Exception:
+            logging.getLogger("nous").exception("Schema initialization failed for persona '%s'", self.persona)
             # Continue - migration will attempt repair, and if it also fails,
             # AppContext will still be created but functionality may be degraded
 

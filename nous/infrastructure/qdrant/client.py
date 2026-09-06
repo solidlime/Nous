@@ -19,15 +19,19 @@ class QdrantClientManager:
         self.url = url
         self.api_key = api_key
         self._client: AsyncQdrantClient | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._lock = asyncio.Lock()
 
-    @property
-    def client(self) -> AsyncQdrantClient:
-        """Get the connected client. Raises RuntimeError if not connected."""
-        if self._client is None:
-            msg = "Client not connected. Call await connect() first."
-            raise RuntimeError(msg)
-        return self._client
+    async def get_client(self) -> AsyncQdrantClient:
+        """Get a client bound to the current running loop, reconnecting if stale."""
+        async with self._lock:
+            if self._client is not None and self._loop is not asyncio.get_running_loop():
+                # Stale client from a dead/temporary event loop (e.g. asyncio.run).
+                # Close best-effort; if it fails, leave it to the GC.
+                with contextlib.suppress(Exception):
+                    await self._client.close()
+                self._client = None
+            return await self._connect_locked()
 
     async def connect(self) -> AsyncQdrantClient:
         """Lazily connect to Qdrant (thread-safe via asyncio.Lock)."""
@@ -44,6 +48,7 @@ class QdrantClientManager:
                 api_key=self.api_key,
                 timeout=30,
             )
+            self._loop = asyncio.get_running_loop()
             logger.info("Qdrant client connected to %s", self.url)
         return self._client
 

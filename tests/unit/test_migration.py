@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import sqlite3
 
+from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.migrations import (
     _ensure_version_table,
     _migrate_add_persona_to_emotion_history_v5,
 )
-
-if TYPE_CHECKING:
-    import sqlite3
+from nous.infrastructure.sqlite.schema import _MEMORY_SCHEMA
 
 
 def _create_emotion_history_without_persona(conn: sqlite3.Connection) -> None:
@@ -107,3 +106,41 @@ class TestMigrationV5:
         )
         row = tmp_db.execute("SELECT * FROM emotion_history").fetchone()
         assert row["persona"] == "test_persona"
+
+
+def _create_legacy_memories(conn: sqlite3.Connection) -> None:
+    """Create a pre-v7 memories table: current schema minus the superseded_by column."""
+    legacy_ddl = _MEMORY_SCHEMA.split("CREATE TABLE IF NOT EXISTS memory_strength")[0]
+    legacy_ddl = legacy_ddl.replace("    valid_until TEXT,\n    superseded_by TEXT\n", "    valid_until TEXT\n")
+    conn.executescript(legacy_ddl)
+    conn.commit()
+
+
+class TestLegacySchemaInit:
+    """旧スキーマ DB (superseded_by カラム無し) からの schema 初期化。"""
+
+    def test_executescript_on_legacy_db(self, tmp_db: sqlite3.Connection) -> None:
+        """_MEMORY_SCHEMA の executescript が旧スキーマ DB 上で例外なく成功する。"""
+        _create_legacy_memories(tmp_db)
+
+        tmp_db.executescript(_MEMORY_SCHEMA)
+
+        cols = [r["name"] for r in tmp_db.execute("PRAGMA table_info(memories)").fetchall()]
+        assert "superseded_by" not in cols  # executescript は既存テーブルを触らない
+
+    def test_initialize_schema_repairs_legacy_db(self, tmp_path) -> None:
+        """旧スキーマ DB 上で initialize_schema() が完走し、カラム+インデックスが修復される。"""
+        persona_dir = tmp_path / "legacy_persona"
+        persona_dir.mkdir()
+        legacy_conn = sqlite3.connect(str(persona_dir / "memory.sqlite"))
+        _create_legacy_memories(legacy_conn)
+        legacy_conn.close()
+
+        connection = SQLiteConnection(str(tmp_path), "legacy_persona")
+        connection.initialize_schema()  # 例外なく完走
+
+        mem = connection.get_memory_db()
+        cols = [r["name"] for r in mem.execute("PRAGMA table_info(memories)").fetchall()]
+        assert "superseded_by" in cols
+        indexes = [r["name"] for r in mem.execute("PRAGMA index_list(memories)").fetchall()]
+        assert "idx_memories_superseded_by" in indexes
