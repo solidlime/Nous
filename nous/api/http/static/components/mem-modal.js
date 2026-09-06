@@ -18,12 +18,15 @@
 var C = N.Core;
 var esc = C.esc, toast = C.toast, api = C.api, relativeTime = C.relativeTime;
 var safeSetHTML = C.safeSetHTML;
-var S = window.S;
 
 /* ── open(key) — Fetch memory by key and open the modal ── */
 async function openMemModalByKey(key) {
     try {
-        var data = await api('/api/memories/' + encodeURIComponent(S.persona) + '/' + encodeURIComponent(key));
+        /* window.S is read at call time — mem-modal.js loads before
+           base.js assigns window.S, so a load-time capture would be
+           stale. */
+        var persona = window.S && window.S.persona;
+        var data = await api('/api/memories/' + encodeURIComponent(persona) + '/' + encodeURIComponent(key));
         if (data.memory) {
             openMemModal(data.memory);
         } else {
