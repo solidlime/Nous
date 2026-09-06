@@ -29,17 +29,19 @@
 
 ## 3. A: REM アイドル駆動化
 
-### 3.1 永続キュー
+### 3.1 永続キュー（#081 レビュー反映: dedupe 設定）
 
-- 新テーブル `enrichment_queue`（memory.sqlite）: `id`, `memory_key`, `event_type` (`create`|`read`), `enqueued_at`, `processed_at`（NULL=未処理）。
-- `memory_create`: `service.py:204-213` の即時 `enrich_memory` バックグラウンドタスクを廃止 → キュー記録のみ。
-- `memory_read` / `memory_search`: 既存の boost_recall（read のみ現状）＋共アクセス記録は維持し、両者に **read イベントのキュー記録を追加**。search も boost_recall + record_memory_access を呼ぶよう修正（drive-by）。
+- 新テーブル `enrichment_queue`（memory.sqlite）: `id`, `memory_key`, `enqueued_at`, `processed_at`（NULL=未処理）。`event_type` 列は作らない（処理が type で分岐しないため YAGNI）。
+- **一意制約で dedupe**: 部分一意インデックス `ux_enrichment_queue_pending ON enrichment_queue(memory_key) WHERE processed_at IS NULL`。enqueue は `INSERT OR IGNORE`。DDL は `nous/infrastructure/sqlite/schema.py` に追加。
+- `memory_create`: `service.py:204-213` の即時 `enrich_memory` バックグラウンドタスクを廃止 → enqueue のみ。
+- `memory_read` / `memory_search`: boost_recall（read のみ現状・**boost はヒット先頭 10 件に cap**）＋ record_memory_access（**search はヒット上位 `min(3, len(hits))` 件のみ**に限定——co-access 窓 20 件の撹乱防止）を呼び、かつ未 enrich の memory を enqueue。
+- **drain 側 dedupe**: worker は `SELECT DISTINCT memory_key WHERE processed_at IS NULL` で取得、memory 単位で 1 回だけ enrich。同一 memory_key の processed 行が既にあれば再 enrich しない（read トリガーでの再課金を構造的に排除。processed 履歴が永続的な enrich 済みマーカーになり、現行 `_processed_keys`（enrichment_worker.py:48）の「メモリ上のみ・再起動で消失」問題を同時に解消する）。
 - 処理完了後に processed マーク＝シャットダウンで喪失なし。
 
 ### 3.2 EnrichmentWorker 変更
 
 - スレッド構造は維持（T072 設計書 §3.1 の ADR を踏襲）。`brain_enrich_interval_seconds` は**キュー監視間隔**に降格（軽量 DB チェックのみ、LLM 呼び出しは含まない）。
-- **アイドルゲート**: 最終活動（チャットメッセージ / ツール呼び出し）からの経過秒 ≥ `brain_idle_after_seconds`（デフォルト **120**）でドレイン開始。
+- **アイドルゲート**: 源は `session_events` テーブル（`SELECT MAX(timestamp) FROM session_events WHERE persona = ?`、既存インデックス `idx_session_events_persona` で軽量）。経過秒 ≥ `brain_idle_after_seconds`（デフォルト **120**）でドレイン開始。`_session_event_repo` が None の場合は**アイドル未達として扱う**（`max_defer_seconds` 超過分だけは例外として強制ドレイン）。
 - **最小バッチ**: 未処理 < `brain_min_batch_size`（デフォルト **3**）なら待機。
 - **飢餓対策**: `enqueued_at` から `brain_max_defer_seconds`（デフォルト **3600**）経過したイベントがあればアクティブ中でも強制ドレイン。
 - novelty ゲート（ベクトルのみ・LLM 不使用）とカーソル契約は維持。キュー導入後は「キューに create イベントがある記憶」が主対象。
@@ -47,7 +49,7 @@
 
 ### 3.3 併せて直す（小規模）
 
-- `nous/infrastructure/llm/memory_enricher.py:124-131`: `_call_llm` が `DoneEvent.usage` を破棄 → usage を記録し実測トークンを可視化。
+- `nous/infrastructure/llm/memory_enricher.py:124-131`: `_call_llm` が `DoneEvent.usage` を破棄 → **戻り値 `(text, usage)` 化して上流へ渡す**（インスタンス属性保持は禁止——`enrich_async` は background task と worker スレッドから並行呼び出され競合する）。`enrich_service` で INFO ログ + `replay_fire` meta に usage を含め実測トークンを可視化。
 - `enrich_service.py:46` の `contextlib.suppress(Exception)` による LLM 失敗の黙殺: 失敗を debug ログに残す（二重課金と失敗の区別が付く最低限のみ）。
 
 ## 4. B: 脳シミュレーター用 LLM 設定
@@ -61,11 +63,13 @@
 
 ### 4.2 解決（一点のみ）
 
-`use_cases.py:185-217` `_init_enricher`:
+`use_cases.py:185-217` `_init_enricher`（#081 レビュー反映）:
 
-- `brain_llm_dedicated == false` → チャットの provider/model/base_url/api_key（既存の `get_effective_*` チェーン経由）
+- `cfg is None`（ChatConfig 無しの MCP 起動等）→ **現行の `settings.memory_enrichment` 鎖を維持**（トグル OFF の意味は「cfg がある時に chat 鎖を使う」に限定）
+- `brain_llm_dedicated == false`（cfg あり）→ チャットの **provider/model/base_url/api_key の 4 点セット**を `cfg.provider_config` の `get_effective_*` チェーン経由で使用（provider だけ混合しない）
 - `== true` → `brain_llm_*` を使用。空フィールドは既存フォールバック鎖（`settings.memory_enrichment` → RuntimeConfigManager → レガシー env）に落とす
-- API キーが空なら「対話用と同じキー」を最終フォールバックにする（キーだけ別プロバイダのときの取りこぼし防止）
+- チャットキーの最終フォールバックは **brain provider == chat provider の場合のみ**適用。異種プロバイダなら enricher 生成を止め（enrichment 無効）＋ debug ログ（キー混用防止）
+- **再解決フック**: 設定保存後に enricher を再生成（`chat_management` の config 保存ルートから ctx 経由で `_init_enricher` を再実行）し、稼働中のトグル切替を即時反映。実ブラウザ検証にトグル切替後の反映確認を含める
 
 ### 4.3 WebUI
 
