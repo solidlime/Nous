@@ -58,7 +58,14 @@ function buildForm() {
   }).join('');
   const brains = BRAIN_NUM_IDS.map((id) => `<input type="number" id="${id}" value="" />`).join('')
     + BRAIN_CHECK_IDS.map((id) => `<input type="checkbox" id="${id}" />`).join('')
-    + '<input type="checkbox" id="chat-memory-enrichment-enabled" />';
+    + '<input type="checkbox" id="chat-memory-enrichment-enabled" />'
+    + '<input type="checkbox" id="chat-brain-llm-dedicated" />'
+    + '<div id="chat-brain-llm-fields" class="settings-body-hidden">'
+    + '<input type="text" id="chat-brain-llm-provider" value="" />'
+    + '<input type="text" id="chat-brain-llm-model" value="" />'
+    + '<input type="text" id="chat-brain-llm-base-url" value="" />'
+    + '<input type="password" id="chat-brain-llm-api-key" value="" />'
+    + '</div>';
   document.body.innerHTML = `<div>${html}${brains}</div>`;
 }
 
@@ -156,5 +163,52 @@ describe('brain simulation settings', () => {
     expect(document.getElementById('chat-brain-novelty-sim').value).toBe('0.9');
     expect(document.getElementById('chat-brain-auto-run').checked).toBe(true);
     expect(document.getElementById('chat-brain-graph-flash').checked).toBe(false);
+  });
+
+  it('dedicated LLM: OFF (default) hides the fields and sends only the toggle', async () => {
+    window.Nous.Chat.settings.apply({});
+    expect(document.getElementById('chat-brain-llm-dedicated').checked).toBe(false);
+    expect(document.getElementById('chat-brain-llm-fields').classList.contains('settings-body-hidden')).toBe(true);
+
+    apiStub.mockResolvedValueOnce({});
+    // apply({}) clears chat-base-url (empty cfg) — restore the required field
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    await window.Nous.Chat.settings.save();
+    const body = JSON.parse(apiStub.mock.calls[0][1].body);
+    expect(body.brain_llm_dedicated).toBe(false);
+    // OFF: dedicated fields are not sent (merge API keeps stored values)
+    expect(body.brain_llm_provider).toBeUndefined();
+    expect(body.brain_llm_model).toBeUndefined();
+    expect(body.brain_llm_base_url).toBeUndefined();
+    expect(body.brain_llm_api_key).toBeUndefined();
+  });
+
+  it('dedicated LLM: ON round-trips the 5 keys and shows the fields', async () => {
+    const set = (id, v) => { document.getElementById(id).value = v; };
+    document.getElementById('chat-brain-llm-dedicated').checked = true;
+    set('chat-brain-llm-provider', 'deepseek');
+    set('chat-brain-llm-model', 'deepseek-v4');
+    set('chat-brain-llm-base-url', 'https://api.deepseek.example/v1');
+    set('chat-brain-llm-api-key', 'sk-brain');
+
+    const savedCfg = { brain_llm_dedicated: true, brain_llm_provider: 'deepseek',
+      brain_llm_model: 'deepseek-v4', brain_llm_base_url: 'https://api.deepseek.example/v1',
+      brain_llm_api_key: 'sk-brain' };
+    apiStub.mockResolvedValueOnce(savedCfg);
+    await window.Nous.Chat.settings.save();
+    const body = JSON.parse(apiStub.mock.calls[0][1].body);
+    expect(body.brain_llm_dedicated).toBe(true);
+    expect(body.brain_llm_provider).toBe('deepseek');
+    expect(body.brain_llm_model).toBe('deepseek-v4');
+    expect(body.brain_llm_base_url).toBe('https://api.deepseek.example/v1');
+    expect(body.brain_llm_api_key).toBe('sk-brain');
+
+    window.Nous.Chat.settings.apply(savedCfg);
+    expect(document.getElementById('chat-brain-llm-dedicated').checked).toBe(true);
+    expect(document.getElementById('chat-brain-llm-fields').classList.contains('settings-body-hidden')).toBe(false);
+    expect(document.getElementById('chat-brain-llm-provider').value).toBe('deepseek');
+    expect(document.getElementById('chat-brain-llm-model').value).toBe('deepseek-v4');
+    expect(document.getElementById('chat-brain-llm-base-url').value).toBe('https://api.deepseek.example/v1');
+    expect(document.getElementById('chat-brain-llm-api-key').value).toBe('sk-brain');
   });
 });

@@ -155,6 +155,17 @@
   // Enable/display toggles: data-toggle-target + data-toggle-mode
   // ------------------------------------------------------------------
   document.addEventListener("change", function(e) {
+    // Brain dedicated-LLM toggle: show/hide the dedicated fields
+    // (B2 — checkbox, so routed on change not click).
+    var brainTgl = e.target && e.target.closest
+      ? e.target.closest('[data-action="brain-llm-toggle"]') : null;
+    if (brainTgl) {
+      var brainFields = document.getElementById("chat-brain-llm-fields");
+      if (brainFields) {
+        brainFields.classList.toggle("settings-body-hidden", !brainTgl.checked);
+      }
+      return;
+    }
     var el = e.target && e.target.closest ? e.target.closest("[data-toggle-target]") : null;
     if (!el) return;
     var target = document.getElementById(el.getAttribute("data-toggle-target"));

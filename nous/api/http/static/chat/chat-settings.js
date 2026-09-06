@@ -324,6 +324,17 @@ function applyChatConfig(cfg) {
   set("chat-brain-rif-rho", cfg.brain_rif_suppression_rho ?? 0.05);
   set("chat-brain-separation-threshold", cfg.brain_link_separation_threshold ?? 0.75);
   setChecked("chat-brain-graph-flash", cfg.brain_graph_flash_enabled !== false);
+  // === Brain dedicated LLM (fields show/hide tracks the toggle; the
+  //     change-side wiring lives in core/delegation.js brain-llm-toggle) ===
+  setChecked("chat-brain-llm-dedicated", cfg.brain_llm_dedicated === true);
+  set("chat-brain-llm-provider", cfg.brain_llm_provider || "");
+  set("chat-brain-llm-model", cfg.brain_llm_model || "");
+  set("chat-brain-llm-base-url", cfg.brain_llm_base_url || "");
+  set("chat-brain-llm-api-key", cfg.brain_llm_api_key || "");
+  var brainLlmFields = document.getElementById("chat-brain-llm-fields");
+  if (brainLlmFields) {
+    brainLlmFields.classList.toggle("settings-body-hidden", cfg.brain_llm_dedicated !== true);
+  }
   // Graph flash SSE follows the brain setting (graph.js may be absent on some pages)
   if (N.Features && N.Features.Graph && N.Features.Graph.setFlashEnabled) {
     N.Features.Graph.setFlashEnabled(cfg.brain_graph_flash_enabled !== false);
@@ -482,6 +493,9 @@ async function saveChatConfig() {
     brain_rif_suppression_rho: parseFloat(document.getElementById("chat-brain-rif-rho")?.value || "0.05"),
     // brain_link_separation_threshold is dormant (similarity source not wired) — not collected
     brain_graph_flash_enabled: getChecked("chat-brain-graph-flash"),
+    // === Brain dedicated LLM: toggle is always sent; dedicated fields
+    //     only when ON (OFF = reuse chat LLM, keep stored values) ===
+    brain_llm_dedicated: getChecked("chat-brain-llm-dedicated"),
     // === Forgetting (moved from Settings) ===
     forgetting_enabled: getChecked("chat-forgetting-enabled"),
     forgetting_trigger_threshold: parseInt(document.getElementById("chat-forgetting-trigger-threshold")?.value || "100"),
@@ -546,6 +560,12 @@ async function saveChatConfig() {
     voice_speed: parseFloat(document.getElementById("chat-voice-speed")?.value) ?? 1.0,
     voice_enabled: getChecked("chat-voice-enabled"),
   };
+  if (getChecked("chat-brain-llm-dedicated")) {
+    payload.brain_llm_provider = document.getElementById("chat-brain-llm-provider")?.value.trim() || "";
+    payload.brain_llm_model = document.getElementById("chat-brain-llm-model")?.value.trim() || "";
+    payload.brain_llm_base_url = document.getElementById("chat-brain-llm-base-url")?.value.trim() || "";
+    payload.brain_llm_api_key = document.getElementById("chat-brain-llm-api-key")?.value || "";
+  }
   const btn = document.querySelector(".chat-save-btn");
   if (btn) {
     btn.disabled = true;

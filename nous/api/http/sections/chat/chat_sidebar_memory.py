@@ -147,6 +147,11 @@ _BRAIN_HELP = {
     "rif_rho": "想起のたびに、手がかりを共有する競合記憶がわずかに抑制されます（検索誘発性忘却）。",
     "separation": "記憶同士のシナプス結合を作る類似度のしきい値。高いほど似た記憶だけが結合し、pattern separation が強まります（将来実装。類似度ソースが未接続のため現在は未使用）。",
     "flash": "シナプス発火イベントを記憶グラフ上で発光表示します。",
+    "llm_dedicated": "OFF ではチャット設定と同じ LLM を脳シミュレーターに使います。ON にすると専用の provider / model / API キーを設定できます。",
+    "llm_provider": "脳シミュレーター専用 LLM のプロバイダ。空欄なら従来の記憶強化設定を引き継ぎます。",
+    "llm_model": "専用 LLM のモデル名。空欄なら従来の記憶強化設定を引き継ぎます。",
+    "llm_base_url": "専用 LLM の API エンドポイント。空欄なら従来の記憶強化設定を引き継ぎます。",
+    "llm_api_key": "専用 LLM の API キー。空欄でプロバイダがチャットと一致する場合はチャットのキーをフォールバックに使います。",
 }
 
 
@@ -186,6 +191,38 @@ def _render_brain_simulation_section() -> str:
                                         <div>
                                             <div class="chat-field-label">1 周あたり上限件数 {help_("batch_limit")}</div>
                                             <input type="number" id="chat-brain-batch-limit" class="chat-field-input" min="1" max="50" step="1" value="5" />
+                                        </div>
+                                    </div>
+                                </details>
+                                <details class="chat-subsection">
+                                    <summary>専用 LLM</summary>
+                                    <div style="padding-top:6px;">
+                                        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                                            <span class="chat-field-label" style="margin:0;">脳シミュレーター専用 LLM を使う {help_("llm_dedicated")}</span>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" id="chat-brain-llm-dedicated" data-action="brain-llm-toggle" />
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                        <div id="chat-brain-llm-fields" class="settings-body-hidden">
+                                            <div>
+                                                <div class="chat-field-label">Provider {help_("llm_provider")}</div>
+                                                <input type="text" id="chat-brain-llm-provider" class="chat-field-input" placeholder="例: openai" />
+                                            </div>
+                                            <div>
+                                                <div class="chat-field-label">Model {help_("llm_model")}</div>
+                                                <input type="text" id="chat-brain-llm-model" class="chat-field-input" placeholder="例: gpt-4o-mini" />
+                                            </div>
+                                            <div>
+                                                <div class="chat-field-label">Base URL {help_("llm_base_url")}</div>
+                                                <input type="text" id="chat-brain-llm-base-url" class="chat-field-input" placeholder="https://api.example.com/v1" />
+                                            </div>
+                                            <div>
+                                                <div class="chat-field-label">APIキー {help_("llm_api_key")}</div>
+                                                <form data-password-form="chat-brain-llm-api-key" style="margin:0">
+                                                <input type="password" id="chat-brain-llm-api-key" class="chat-field-input" placeholder="sk-..." autocomplete="off" />
+                                                </form>
+                                            </div>
                                         </div>
                                     </div>
                                 </details>
