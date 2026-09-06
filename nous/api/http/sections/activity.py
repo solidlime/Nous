@@ -149,7 +149,7 @@ def render_activity_tab() -> str:
                         <option value="asc">Oldest first</option>
                     </select>
                 </label>
-                <button id="act-btn-refresh" onclick="N.Features.Activity.loadActivity(true)" style="margin-left:auto;">
+                <button id="act-btn-refresh" data-action="act-refresh" style="margin-left:auto;">
                     <i data-lucide="refresh-cw"></i> Refresh
                 </button>
             </div>

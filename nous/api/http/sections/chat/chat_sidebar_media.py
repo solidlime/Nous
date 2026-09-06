@@ -151,7 +151,9 @@ def _render_image_section() -> str:
                                             </div>
                                             <div>
                                                 <div class="chat-field-label" style="font-size:0.75rem;">APIキー</div>
+                                                <form data-password-form="chat-image-caption-api-key" style="margin:0">
                                                 <input type="password" id="chat-image-caption-api-key" class="chat-field-input" autocomplete="off" style="width:100%;font-size:0.75rem;" />
+                                                </form>
                                             </div>
                                             <div>
                                                 <div class="chat-field-label" style="font-size:0.75rem;">Base URL</div>
@@ -164,7 +166,7 @@ def _render_image_section() -> str:
                                             style="max-width:100%;max-height:240px;border-radius:8px;object-fit:contain;" />
                                     </div>
                                     <div style="display:flex;gap:8px;align-items:center;">
-                                        <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="N.Chat.settings.testImageGen()"><i data-lucide="play"></i> テスト生成</button>
+                                        <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" data-action="chat-test-image"><i data-lucide="play"></i> テスト生成</button>
                                         <span id="chat-image-test-status" style="font-size:0.72rem;color:var(--text-muted);min-height:16px;"></span>
                                     </div>
                                 </div>
@@ -213,17 +215,17 @@ def _render_voice_section() -> str:
                                             <label class="chat-field-label" style="margin:0;cursor:pointer;font-weight:normal;">
                                                 <input type="radio" name="chat-voice-emotion-mode" value="off"
                                                     style="accent-color:var(--accent-purple);cursor:pointer;"
-                                                    onchange="document.getElementById('chat-irodori-caption-llm-model-wrap').style.display='none'" />
+                                                    data-toggle-target="chat-irodori-caption-llm-model-wrap" data-toggle-mode="display" data-toggle-value="none" />
                                                 反映しない</label>
                                             <label class="chat-field-label" style="margin:0;cursor:pointer;font-weight:normal;">
                                                 <input type="radio" name="chat-voice-emotion-mode" value="anchor" checked
                                                     style="accent-color:var(--accent-purple);cursor:pointer;"
-                                                    onchange="document.getElementById('chat-irodori-caption-llm-model-wrap').style.display='none'" />
+                                                    data-toggle-target="chat-irodori-caption-llm-model-wrap" data-toggle-mode="display" data-toggle-value="none" />
                                                 反映する（標準）</label>
                                             <label class="chat-field-label" style="margin:0;cursor:pointer;font-weight:normal;">
                                                 <input type="radio" name="chat-voice-emotion-mode" value="llm"
                                                     style="accent-color:var(--accent-purple);cursor:pointer;"
-                                                    onchange="document.getElementById('chat-irodori-caption-llm-model-wrap').style.display='block'" />
+                                                    data-toggle-target="chat-irodori-caption-llm-model-wrap" data-toggle-mode="display" data-toggle-value="block" />
                                                 反映する＋LLMで磨く（少し遅くなります）</label>
                                         </div>
                                     </div>
@@ -241,7 +243,7 @@ def _render_voice_section() -> str:
                                         </div>
                                         <input type="range" id="chat-voice-volume" class="chat-field-input"
                                             min="0.0" max="1.0" step="0.05" value="1.0"
-                                            oninput="document.getElementById('chat-voice-volume-val').textContent=Math.round(this.value*100)+'%'"
+                                            data-mirror="chat-voice-volume-val" data-mirror-format="percent"
                                             style="width:100%;accent-color:var(--accent-purple);" />
                                     </div>
                                     <!-- Voice speed -->
@@ -252,7 +254,7 @@ def _render_voice_section() -> str:
                                         </div>
                                         <input type="range" id="chat-voice-speed" class="chat-field-input"
                                             min="0.25" max="4.0" step="0.05" value="1.0"
-                                            oninput="document.getElementById('chat-voice-speed-val').textContent=parseFloat(this.value).toFixed(2)+'x'"
+                                            data-mirror="chat-voice-speed-val" data-mirror-format="fixed2" data-mirror-suffix="x"
                                             style="width:100%;accent-color:var(--accent-purple);" />
                                     </div>
                                     <!-- Irodori advanced params -->
@@ -267,7 +269,7 @@ def _render_voice_section() -> str:
                                                 </div>
                                                 <input type="range" id="chat-irodori-num-steps" class="chat-field-input"
                                                     min="10" max="50" step="1" value="30"
-                                                    oninput="document.getElementById('chat-irodori-num-steps-val').textContent=this.value"
+                                                    data-mirror="chat-irodori-num-steps-val" data-mirror-format="raw"
                                                     style="width:100%;accent-color:var(--accent-purple);" />
                                             </div>
                                             <!-- cfg_scale_text: range 1.0-5.0, step 0.1, default 3.2 -->
@@ -278,7 +280,7 @@ def _render_voice_section() -> str:
                                                 </div>
                                                 <input type="range" id="chat-irodori-cfg-scale-text" class="chat-field-input"
                                                     min="1.0" max="5.0" step="0.1" value="3.2"
-                                                    oninput="document.getElementById('chat-irodori-cfg-text-val').textContent=parseFloat(this.value).toFixed(1)"
+                                                    data-mirror="chat-irodori-cfg-text-val" data-mirror-format="fixed1"
                                                     style="width:100%;accent-color:var(--accent-purple);" />
                                             </div>
                                             <!-- cfg_scale_speaker: range 1.0-8.0, step 0.1, default 5.0 -->
@@ -289,7 +291,7 @@ def _render_voice_section() -> str:
                                                 </div>
                                                 <input type="range" id="chat-irodori-cfg-scale-speaker" class="chat-field-input"
                                                     min="1.0" max="8.0" step="0.1" value="5.0"
-                                                    oninput="document.getElementById('chat-irodori-cfg-speaker-val').textContent=parseFloat(this.value).toFixed(1)"
+                                                    data-mirror="chat-irodori-cfg-speaker-val" data-mirror-format="fixed1"
                                                     style="width:100%;accent-color:var(--accent-purple);" />
                                             </div>
                                             <!-- cfg_scale_caption: range 1.0-8.0, step 0.1, default 4.2 -->
@@ -300,7 +302,7 @@ def _render_voice_section() -> str:
                                                 </div>
                                                 <input type="range" id="chat-irodori-cfg-scale-caption" class="chat-field-input"
                                                     min="1.0" max="8.0" step="0.1" value="4.2"
-                                                    oninput="document.getElementById('chat-irodori-cfg-caption-val').textContent=parseFloat(this.value).toFixed(1)"
+                                                    data-mirror="chat-irodori-cfg-caption-val" data-mirror-format="fixed1"
                                                     style="width:100%;accent-color:var(--accent-purple);" />
                                             </div>
                                             <!-- chunk_min_chars: range 30-200, step 5, default 85 -->
@@ -311,7 +313,7 @@ def _render_voice_section() -> str:
                                                 </div>
                                                 <input type="range" id="chat-irodori-chunk-min-chars" class="chat-field-input"
                                                     min="30" max="200" step="5" value="85"
-                                                    oninput="document.getElementById('chat-irodori-chunk-min-val').textContent=this.value"
+                                                    data-mirror="chat-irodori-chunk-min-val" data-mirror-format="raw"
                                                     style="width:100%;accent-color:var(--accent-purple);" />
                                             </div>
                                             <!-- seed: number input, 0=random -->
@@ -332,7 +334,7 @@ def _render_voice_section() -> str:
                                     </details>
                                     <!-- Test playback -->
                                     <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
-                                        <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" onclick="N.Chat.tts.test()" aria-label="音声をテスト再生"><i data-lucide="play"></i> テスト再生</button>
+                                        <button class="chat-clear-btn" style="font-size:0.78rem;padding:6px 12px;" data-action="chat-test-tts" aria-label="音声をテスト再生"><i data-lucide="play"></i> テスト再生</button>
                                         <span id="chat-voice-test-status" style="font-size:0.72rem;color:var(--text-muted);min-height:16px;"></span>
                                     </div>
                                 </div>

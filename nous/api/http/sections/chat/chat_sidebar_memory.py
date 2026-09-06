@@ -110,7 +110,7 @@ def _render_weights_section() -> str:
                                         <span id="chat-recency-weight-val" style="color:var(--accent-purple);">0.30</span>
                                     </div>
                                     <input type="range" id="chat-recency-weight" class="chat-field-input" min="0" max="1" step="0.05" value="0.3"
-                                        oninput="document.getElementById('chat-recency-weight-val').textContent=parseFloat(this.value).toFixed(2)"
+                                        data-mirror="chat-recency-weight-val" data-mirror-format="fixed2"
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
                                 <div>
@@ -119,7 +119,7 @@ def _render_weights_section() -> str:
                                         <span id="chat-importance-weight-val" style="color:var(--accent-purple);">0.30</span>
                                     </div>
                                     <input type="range" id="chat-importance-weight" class="chat-field-input" min="0" max="1" step="0.05" value="0.3"
-                                        oninput="document.getElementById('chat-importance-weight-val').textContent=parseFloat(this.value).toFixed(2)"
+                                        data-mirror="chat-importance-weight-val" data-mirror-format="fixed2"
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
                                 <div>
@@ -128,7 +128,7 @@ def _render_weights_section() -> str:
                                         <span id="chat-relevance-weight-val" style="color:var(--accent-purple);">0.40</span>
                                     </div>
                                     <input type="range" id="chat-relevance-weight" class="chat-field-input" min="0" max="1" step="0.05" value="0.4"
-                                        oninput="document.getElementById('chat-relevance-weight-val').textContent=parseFloat(this.value).toFixed(2)"
+                                        data-mirror="chat-relevance-weight-val" data-mirror-format="fixed2"
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
                                 <div>
@@ -137,7 +137,7 @@ def _render_weights_section() -> str:
                                         <span id="chat-retrieval-rrf-k-val" style="color:var(--accent-purple);">5</span>
                                     </div>
                                     <input type="range" id="chat-retrieval-rrf-k" class="chat-field-input" min="1" max="100" step="1" value="5"
-                                        oninput="document.getElementById('chat-retrieval-rrf-k-val').textContent=this.value"
+                                        data-mirror="chat-retrieval-rrf-k-val" data-mirror-format="raw"
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
                             </div>
@@ -170,7 +170,7 @@ def _render_memory_enrichment_section() -> str:
                                     <input type="number" id="chat-memory-enrichment-interval" class="chat-field-input" min="1" step="1" value="60" />
                                 </div>
                                 <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border-subtle);">
-                                    <button type="button" class="chat-advanced-toggle" onclick="(function(btn){var b=btn.nextElementSibling;b.style.display=b.style.display==='none'?'':'none';})(this)" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.72rem;padding:2px 0;">▼ 詳細設定（プロンプトテンプレート）</button>
+                                    <button type="button" class="chat-advanced-toggle" data-action="chat-toggle-next" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.72rem;padding:2px 0;">▼ 詳細設定（プロンプトテンプレート）</button>
                                     <div style="display:none;margin-top:4px;">
                                         <div class="chat-field-label">プロンプトテンプレート</div>
                                         <textarea id="chat-memory-enrichment-prompt-template" class="chat-field-input" rows="4" style="resize:vertical;font-size:0.78rem;font-family:monospace;"></textarea>
@@ -206,7 +206,7 @@ def _render_forgetting_section() -> str:
                                         <span id="chat-forgetting-min-strength-val" style="font-size:0.72rem;color:var(--accent-purple);">0.10</span>
                                     </div>
                                     <input type="range" id="chat-forgetting-min-strength" class="chat-field-input" min="0" max="1" step="0.05" value="0.1"
-                                        oninput="document.getElementById('chat-forgetting-min-strength-val').textContent=parseFloat(this.value).toFixed(2)"
+                                        data-mirror="chat-forgetting-min-strength-val" data-mirror-format="fixed2"
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
                                 <div>
@@ -215,7 +215,7 @@ def _render_forgetting_section() -> str:
                                         <span id="chat-forgetting-forget-ratio-val" style="font-size:0.72rem;color:var(--accent-purple);">0.20</span>
                                     </div>
                                     <input type="range" id="chat-forgetting-forget-ratio" class="chat-field-input" min="0" max="1" step="0.05" value="0.2"
-                                        oninput="document.getElementById('chat-forgetting-forget-ratio-val').textContent=parseFloat(this.value).toFixed(2)"
+                                        data-mirror="chat-forgetting-forget-ratio-val" data-mirror-format="fixed2"
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
                                 <div>
@@ -224,7 +224,7 @@ def _render_forgetting_section() -> str:
                                         <span id="chat-forgetting-forget-strength-val" style="font-size:0.72rem;color:var(--accent-purple);">0.50</span>
                                     </div>
                                     <input type="range" id="chat-forgetting-forget-strength" class="chat-field-input" min="0" max="1" step="0.05" value="0.5"
-                                        oninput="document.getElementById('chat-forgetting-forget-strength-val').textContent=parseFloat(this.value).toFixed(2)"
+                                        data-mirror="chat-forgetting-forget-strength-val" data-mirror-format="fixed2"
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
                             </div>

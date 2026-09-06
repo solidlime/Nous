@@ -37,8 +37,8 @@ def _render_sidebar_footer() -> str:
                     </div>
                     <!-- Sticky footer buttons -->
                     <div class="settings-footer">
-                        <button class="chat-save-btn" onclick="N.Chat.settings.save()" aria-label="チャット設定を保存"><i data-lucide="save"></i> 設定を保存</button>
-                        <button class="chat-clear-btn" onclick="N.Chat.history.clear()" aria-label="会話履歴をリセット"><i data-lucide="trash-2"></i> 会話をリセット</button>
+                        <button class="chat-save-btn" data-action="chat-save" aria-label="チャット設定を保存"><i data-lucide="save"></i> 設定を保存</button>
+                        <button class="chat-clear-btn" data-action="chat-clear" aria-label="会話履歴をリセット"><i data-lucide="trash-2"></i> 会話をリセット</button>
                         <div id="chat-config-status" style="font-size:0.75rem; text-align:center; min-height:16px;"></div>
                     </div>
                 </div>"""

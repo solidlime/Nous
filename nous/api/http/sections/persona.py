@@ -10,6 +10,7 @@ def render_persona_tab() -> str:
     """Return the HTML for the Personas tab panel."""
     return (
         "<!-- ========== PERSONAS TAB ========== -->"
+        "<!-- DEAD: unreachable, no receiver -->"
         '<section id="tab-personas" class="tab-panel" role="tabpanel">'
         '<div style="margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">'
         '<h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;">'
@@ -19,7 +20,7 @@ def render_persona_tab() -> str:
         # --- Header with create button ---
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">'
         '<h3 style="font-size:1.1rem;font-weight:600;color:var(--text-primary)">Manage Personas</h3>'
-        '<button onclick="showCreatePersona()" class="glass-btn" style="padding:8px 20px">'
+        '<button data-dead-persona="show-create" class="glass-btn" style="padding:8px 20px">'
         "\u2795 New Persona</button>"
         "</div>"
         # --- Persona cards grid ---
@@ -40,8 +41,8 @@ def render_persona_tab() -> str:
         '<p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:16px">'
         "Allowed: letters, numbers, underscores, hyphens (1-50 chars)</p>"
         '<div style="display:flex;gap:12px;justify-content:flex-end">'
-        '<button onclick="hideCreatePersona()" class="glass-btn" style="padding:8px 20px">Cancel</button>'
-        '<button onclick="createPersona()" class="glass-btn" '
+        '<button data-dead-persona="hide-create" class="glass-btn" style="padding:8px 20px">Cancel</button>'
+        '<button data-dead-persona="create" class="glass-btn" '
         'style="padding:8px 20px;background:var(--accent-purple);color:white">Create</button>'
         "</div>"
         "</div>"
@@ -87,8 +88,8 @@ def render_persona_tab() -> str:
         "</div>"
         # -- Modal buttons --
         '<div style="display:flex;gap:12px;justify-content:flex-end;margin-top:20px">'
-        '<button onclick="hideEditProfile()" class="glass-btn" style="padding:8px 20px">Cancel</button>'
-        '<button onclick="saveProfile()" class="glass-btn" '
+        '<button data-dead-persona="hide-edit" class="glass-btn" style="padding:8px 20px">Cancel</button>'
+        '<button data-dead-persona="save" class="glass-btn" '
         'style="padding:8px 20px;background:var(--accent-purple);color:white">Save</button>'
         "</div>"
         "</div>"
@@ -144,7 +145,7 @@ def render_persona_js() -> str:
         "                ? '<span style=\"font-size:0.75rem;background:var(--accent-purple);color:white;padding:2px 8px;border-radius:9999px;margin-left:8px\">Active</span>'\n"
         "                : '';\n"
         "            var switchBtn = !isActive\n"
-        '                ? \'<button onclick="switchPersonaTo(\\\'\' + esc(name) + \'\\\')" class="glass-btn" style="padding:6px 14px;font-size:0.85rem"><i data-lucide="refresh-cw"></i> Switch</button>\'\n'
+        '                ? \'<button data-dead-persona="switch" data-dead-name="&#39;\' + esc(name) + \'&#39;" class="glass-btn" style="padding:6px 14px;font-size:0.85rem"><i data-lucide="refresh-cw"></i> Switch</button>\'\n'
         "                : '';\n"
         "            var deleteStyle = 'padding:6px 14px;font-size:0.85rem';\n"
         "            html += '<div class=\"glass glass-hoverable p-5\" style=\"border-radius:12px;' + activeBorder + '\">'\n"
@@ -166,9 +167,9 @@ def render_persona_js() -> str:
         "                })()\n"
         "                + '</div>'\n"
         "                + '<div style=\"display:flex;gap:8px;flex-wrap:wrap\">'\n"
-        "                + '<button onclick=\"editPersonaProfile(\\'' + esc(name) + '\\')\" class=\"glass-btn\" style=\"padding:6px 14px;font-size:0.85rem\">\\u270f\\ufe0f Edit</button>'\n"
+        "                + '<button data-dead-persona=\"edit\" data-dead-name=\"&#39;" + esc(name) + "&#39;\" class=\"glass-btn\" style=\"padding:6px 14px;font-size:0.85rem\">\\u270f\\ufe0f Edit</button>'\n"
         "                + switchBtn\n"
-        "                + '<button onclick=\"deletePersona(\\'' + esc(name) + '\\')\" class=\"glass-btn\" style=\"' + deleteStyle + '\"><i data-lucide=\"trash-2\"></i> Delete</button>'\n"
+        "                + '<button data-dead-persona=\"delete\" data-dead-name=\"&#39;" + esc(name) + "&#39;\" class=\"glass-btn\" style=\"' + deleteStyle + '\"><i data-lucide=\"trash-2\"></i> Delete</button>'\n"
         "                + '</div></div>';\n"
         "        });\n"
         "        safeSetHTML(grid, html);\n"

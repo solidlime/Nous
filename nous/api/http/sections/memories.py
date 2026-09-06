@@ -205,11 +205,11 @@ def render_memories_tab() -> str:
             </div>
 
             <!-- Edit/Create Modal -->
-            <div id="mem-edit-overlay" class="mem-edit-overlay" onclick="if(event.target===this)N.Features.Memories.closeEditModal()">
+            <div id="mem-edit-overlay" class="mem-edit-overlay" data-action="mem-edit-backdrop">
                 <div class="mem-edit-modal">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
                         <h3 id="edit-modal-title" style="font-size:1.1rem;font-weight:700;color:var(--text-primary)">Edit Memory</h3>
-                        <button class="mem-modal-close" onclick="N.Features.Memories.closeEditModal()">&#10005;</button>
+                        <button class="mem-modal-close" data-action="mem-edit-close">&#10005;</button>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Content *</label>
@@ -265,8 +265,8 @@ def render_memories_tab() -> str:
                     </div>
                     <input type="hidden" id="edit-memory-key" value="">
                     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
-                        <button class="glass-btn" onclick="N.Features.Memories.closeEditModal()">Cancel</button>
-                        <button class="glass-btn glass-btn-success" onclick="N.Features.Memories.saveMemory()"><i data-lucide="save"></i> Save</button>
+                        <button class="glass-btn" data-action="mem-edit-close">Cancel</button>
+                        <button class="glass-btn glass-btn-success" data-action="mem-edit-save"><i data-lucide="save"></i> Save</button>
                     </div>
                 </div>
             </div>

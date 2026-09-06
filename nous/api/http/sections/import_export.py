@@ -9,6 +9,7 @@ def render_import_export_tab() -> str:
     """Return the HTML for the Import/Export tab panel."""
     return """
         <!-- ========== IMPORT/EXPORT TAB ========== -->
+        <!-- DEAD: unreachable — dashboard.py never renders this tab and tab_js is dropped, so no JS receiver exists. data-dead-* attrs are CSP-safe placeholders only. -->
         <section id="tab-import-export" class="tab-panel" role="tabpanel">
             <div style="margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
                 <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="refresh-cw"></i></span> Import / Export</h2>
@@ -21,7 +22,7 @@ def render_import_export_tab() -> str:
               <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">Import user messages from a conversation export file on the server. Supports Claude Code JSONL, Claude.ai JSON, ChatGPT JSON.</p>
               <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
                 <input id="conv-import-path" type="text" class="glass-input" placeholder="/path/to/conversation.json" style="flex:1;min-width:280px;padding:8px 14px;font-size:0.88rem">
-                <button onclick="importConversation()" class="glass-btn" style="padding:8px 24px;white-space:nowrap"><i data-lucide="download"></i> Import</button>
+                <button data-dead-io="import-conversation" class="glass-btn" style="padding:8px 24px;white-space:nowrap"><i data-lucide="download"></i> Import</button>
               </div>
               <div id="conv-import-result" style="display:none;margin-top:8px;font-size:0.85rem;padding:10px 14px;border-radius:8px;background:rgba(255,255,255,0.04)"></div>
             </div>
@@ -60,7 +61,7 @@ def render_import_export_tab() -> str:
                   <option value="zip">ZIP Archive (full backup)</option>
                   <option value="json">JSON (memories only)</option>
                 </select>
-                <button onclick="exportData()" class="glass-btn" style="padding:8px 24px"><i data-lucide="download"></i> Download</button>
+                <button data-dead-io="export-data" class="glass-btn" style="padding:8px 24px"><i data-lucide="download"></i> Download</button>
               </div>
               <div id="export-preview" style="margin-top:16px;font-size:0.85rem;color:var(--text-muted)">
                 Loading export info...

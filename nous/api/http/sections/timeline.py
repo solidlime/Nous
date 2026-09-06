@@ -121,7 +121,7 @@ def render_timeline_tab() -> str:
 
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
                 <h2 style="font-size:1.1rem;font-weight:600;color:var(--text-primary);"><i data-lucide="clock"></i> Memory Timeline</h2>
-                <button onclick="N.Features.Timeline.loadTimeline()" style="background:none;border:1px solid var(--glass-border);border-radius:6px;color:var(--text-muted);padding:4px 10px;cursor:pointer;font-size:0.75rem;"><i data-lucide="refresh-cw"></i> 更新</button>
+                <button data-action="tl-reload" style="background:none;border:1px solid var(--glass-border);border-radius:6px;color:var(--text-muted);padding:4px 10px;cursor:pointer;font-size:0.75rem;"><i data-lucide="refresh-cw"></i> 更新</button>
             </div>
 
             <div class="tl-toolbar">
@@ -136,7 +136,7 @@ def render_timeline_tab() -> str:
             <div id="tl-legend"></div>
 
             <div id="tl-detail-panel">
-                <button class="tl-detail-close" onclick="N.Features.Timeline.closeTimelineDetail()"><i data-lucide="x"></i></button>
+                <button class="tl-detail-close" data-action="tl-detail-close"><i data-lucide="x"></i></button>
                 <div class="tl-detail-label">内容</div>
                 <div class="tl-detail-content" id="tl-detail-content"></div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">

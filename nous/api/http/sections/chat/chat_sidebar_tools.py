@@ -12,7 +12,7 @@ def _render_mcp_section(sys_executable: str) -> str:
                                 <div>
                                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                                         <div style="font-size:0.72rem;color:var(--text-muted);">Claude の mcp.json 形式で貼り付け・編集できます</div>
-                                        <button type="button" id="chat-mcp-format-btn" class="mem-action-btn" style="font-size:0.65rem;padding:2px 8px;" onclick="N.Chat.settings.formatMcpJson()" title="JSONを整形">整形</button>
+                                        <button type="button" id="chat-mcp-format-btn" class="mem-action-btn" style="font-size:0.65rem;padding:2px 8px;" data-action="chat-format-mcp" title="JSONを整形">整形</button>
                                     </div>
                                     <textarea id="chat-mcp-json" class="chat-field-input" rows="6"
                                         style="resize:vertical;min-height:100px;font-family:monospace;font-size:0.73rem;line-height:1.45;"
@@ -25,7 +25,7 @@ def _render_mcp_section(sys_executable: str) -> str:
                                         <span id="chat-tool-max-val" style="color:var(--accent-purple);">4000</span>
                                     </div>
                                     <input type="range" id="chat-tool-result-max" class="chat-field-input" min="500" max="100000" step="500" value="4000"
-                                        oninput="document.getElementById('chat-tool-max-val').textContent=this.value"
+                                        data-mirror="chat-tool-max-val" data-mirror-format="raw"
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
                                 <div style="display:flex;align-items:center;gap:8px;">

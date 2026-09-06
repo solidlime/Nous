@@ -7,7 +7,7 @@ def _render_sidebar_header() -> str:
                 <!-- Settings sidebar -->
                 <div id="settings-panel" class="glass" style="margin:0; border-radius:0; border-left:1px solid var(--glass-border); padding:0;">
                     <!-- Mobile close button -->
-                    <button id="settings-panel-close-btn" class="settings-panel-close" onclick="N.Chat.core.toggleSettings()" title="設定パネルを閉じる" aria-label="設定パネルを閉じる"><i data-lucide="x"></i></button>
+                    <button id="settings-panel-close-btn" class="settings-panel-close" data-action="chat-toggle-settings" title="設定パネルを閉じる" aria-label="設定パネルを閉じる"><i data-lucide="x"></i></button>
                     <div class="settings-scroll-container">
                         <div style="position:sticky;top:0;z-index:10;background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);font-size:0.9rem;font-weight:600;color:var(--text-primary);padding:12px 0 8px;margin:0 -16px 8px;border-bottom:1px solid var(--glass-border);display:flex;align-items:center;gap:8px;">
                             <span style="font-size:1.1rem;margin-left:16px;"><i data-lucide="settings"></i></span>
@@ -28,7 +28,9 @@ def _render_core_section() -> str:
                                 </div>
                                 <div>
                                     <div class="chat-field-label">APIキー</div>
+                                    <form data-password-form="chat-api-key" style="margin:0">
                                     <input type="password" id="chat-api-key" class="chat-field-input" placeholder="sk-..." autocomplete="off" />
+                                    </form>
                                 </div>
                                 <div>
                                     <div class="chat-field-label">Base URL <span style="color:var(--accent-blue);font-size:0.7rem;">（必須）</span></div>
@@ -40,7 +42,7 @@ def _render_core_section() -> str:
                                         <span id="chat-temp-val" style="color:var(--accent-purple);">0.7</span>
                                     </div>
                                     <input type="range" id="chat-temperature" class="chat-field-input" min="0" max="2" step="0.05" value="0.7"
-                                        oninput="document.getElementById('chat-temp-val').textContent=parseFloat(this.value).toFixed(2)"
+                                        data-mirror="chat-temp-val" data-mirror-format="fixed2"
                                         style="width:100%;accent-color:var(--accent-purple);" />
                                 </div>
                                 <div style="border-top:1px solid var(--glass-border);padding-top:8px;margin-top:4px;">
@@ -48,7 +50,7 @@ def _render_core_section() -> str:
                                     <div class="chat-config-row" style="display:flex;align-items:center;gap:8px;margin:4px 0;">
                                         <label class="chat-config-label" style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-secondary);cursor:pointer;">
                                             <input type="checkbox" id="chat-dynamic-temperature" class="chat-config-checkbox" style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;" checked
-                                                onchange="document.getElementById('chat-emotion-temperature-scale').disabled=!this.checked;" />
+                                                data-toggle-target="chat-emotion-temperature-scale" data-toggle-mode="disabled" />
                                             <span>動的温度調整を有効にする</span>
                                         </label>
                                     </div>
@@ -58,7 +60,7 @@ def _render_core_section() -> str:
                                             <span id="chat-emotion-temp-scale-val" style="color:var(--accent-purple);">0.20</span>
                                         </div>
                                         <input type="range" id="chat-emotion-temperature-scale" class="chat-field-input" min="0" max="1" step="0.05" value="0.2"
-                                            oninput="document.getElementById('chat-emotion-temp-scale-val').textContent=parseFloat(this.value).toFixed(2)"
+                                            data-mirror="chat-emotion-temp-scale-val" data-mirror-format="fixed2"
                                             style="width:100%;accent-color:var(--accent-purple);" />
                                     </div>
                                     <div>
@@ -67,7 +69,7 @@ def _render_core_section() -> str:
                                             <span id="chat-top-p-val" style="color:var(--accent-purple);">1.00</span>
                                         </div>
                                         <input type="range" id="chat-top-p" class="chat-field-input" min="0" max="1" step="0.05" value=""
-                                            oninput="var v=parseFloat(this.value);document.getElementById('chat-top-p-val').textContent=isNaN(v)?'—':v.toFixed(2)"
+                                            data-mirror="chat-top-p-val" data-mirror-format="topP"
                                             style="width:100%;accent-color:var(--accent-purple);" />
                                     </div>
                                 </div>
@@ -76,7 +78,7 @@ def _render_core_section() -> str:
                                     <div class="chat-config-row" style="display:flex;align-items:center;gap:8px;margin:4px 0;">
                                         <label class="chat-config-label" style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-secondary);cursor:pointer;">
                                             <input type="checkbox" id="chat-reasoning-enabled" class="chat-config-checkbox" style="width:15px;height:15px;accent-color:var(--accent-purple);cursor:pointer;"
-                                                onchange="document.getElementById('chat-reasoning-effort').disabled=!this.checked;" />
+                                                data-toggle-target="chat-reasoning-effort" data-toggle-mode="disabled" />
                                             <span>推論（thinking）を有効にする</span>
                                         </label>
                                     </div>
@@ -86,7 +88,7 @@ def _render_core_section() -> str:
                                             <span id="chat-reasoning-effort-val" style="color:var(--accent-purple);">medium</span>
                                         </div>
                                         <input type="range" id="chat-reasoning-effort" class="chat-field-input" min="0" max="3" step="1" value="1" disabled
-                                            oninput="var labels=['low','medium','high','max'];document.getElementById('chat-reasoning-effort-val').textContent=labels[parseInt(this.value)]"
+                                            data-mirror="chat-reasoning-effort-val" data-mirror-format="effort"
                                             style="width:100%;accent-color:var(--accent-purple);" />
                                     </div>
                                 </div>
