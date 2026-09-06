@@ -213,12 +213,19 @@ async def _build_context_section(
                     prev = recent_emotions[-2]
                     if prev.emotion != state.emotion:
 
-                        def _fmt(emotion: str, context: str | None = None) -> str:
-                            return f"{emotion}({context})" if context else emotion
+                        def _fmt(emotion: str, context: str | None = None, ts: datetime | None = None) -> str:
+                            base = f"{emotion}({context})" if context else emotion
+                            if ts is None:
+                                return base
+                            # 当日は時刻のみ / 過去日は M/D HH:MM（設計 §4.3）
+                            now = get_now()
+                            if ts.date() == now.date():
+                                return f"{base}（{ts.strftime('%H:%M')}）"
+                            return f"{base}（{ts.month}/{ts.day} {ts.strftime('%H:%M')}）"
 
-                        trend = " → ".join(_fmt(r.emotion, r.context) for r in recent_emotions[-4:])
+                        trend = " → ".join(_fmt(r.emotion, r.context, r.timestamp) for r in recent_emotions[-4:])
                         last_ctx = recent_emotions[-1].context if recent_emotions else None
-                        trend += f" → {_fmt(state.emotion, last_ctx)}"
+                        trend += f" → {_fmt(state.emotion, last_ctx, get_now())}"
                         t3.append(f"感情推移: {trend}")
         except Exception as e:
             logger.debug("Failed to build emotion trend: %s", e)

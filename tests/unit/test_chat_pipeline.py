@@ -533,6 +533,90 @@ class TestBuildContextSectionTierContent:
         assert "hidden_goal" not in result
 
 
+class TestEmotionTrendTimestamp:
+    """感情推移行に EmotionRecord.timestamp の時刻が含まれること（設計 §4.3 / P5）。
+
+    形式: 当日 → HH:MM のみ / 過去日 → M/D HH:MM。
+    """
+
+    def _make_ctx(self, records):
+        from unittest.mock import MagicMock
+
+        ctx = MagicMock()
+        ctx.persona = "test"
+        ctx.memory_service = MagicMock()
+        ctx.memory_service.get_by_tags.return_value = MagicMock()
+        ctx.memory_service.get_by_tags.return_value.is_ok = False
+        ctx.persona_service = MagicMock()
+        eh = MagicMock()
+        eh.is_ok = True
+        eh.value = records
+        ctx.persona_service.get_emotion_history.return_value = eh
+        ctx.equipment_service = MagicMock()
+        ctx.equipment_service.get_equipment.return_value = MagicMock()
+        ctx.equipment_service.get_equipment.return_value.is_ok = False
+        return ctx
+
+    def _make_state(self, emotion):
+        from unittest.mock import MagicMock
+
+        state = MagicMock()
+        state.last_conversation_time = None
+        state.emotion = emotion
+        state.emotion_intensity = 0.5
+        state.mental_state = None
+        state.physical_state = None
+        state.environment = None
+        state.relationship_status = None
+        state.user_info = {}
+        state.persona_info = {}
+        state.fatigue = None
+        state.pain = None
+        state.arousal = None
+        return state
+
+    @pytest.mark.asyncio
+    async def test_emotion_trend_includes_timestamps(self):
+        import re
+        from datetime import datetime, timedelta
+
+        from nous.application.chat.pipeline.prepare import _build_context_section
+        from nous.domain.persona.entities import EmotionRecord
+
+        records = [
+            EmotionRecord(emotion="平和", timestamp=datetime.now() - timedelta(hours=3), context="通常"),
+            EmotionRecord(emotion="好奇心", timestamp=datetime.now() - timedelta(hours=1), context="強"),
+        ]
+        ctx = self._make_ctx(records)
+        state = self._make_state("喜び")  # prev(好奇心) != 喜び → 推移行が出る
+
+        result = await _build_context_section(ctx, state)
+
+        assert "感情推移:" in result
+        line = [ln for ln in result.splitlines() if "感情推移:" in ln][0]
+        # 各要素に時刻（当日 HH:MM か過去日 M/D HH:MM）が付く
+        stamps = re.findall(r"（(?:\d{1,2}/\d{1,2} )?\d{2}:\d{2}）", line)
+        assert len(stamps) >= 2, f"expected timestamps in trend line: {line}"
+
+    @pytest.mark.asyncio
+    async def test_emotion_trend_no_timestamp_without_change(self):
+        """前回と同じ感情なら推移行自体が出ない（既存挙動の維持）。"""
+        from datetime import datetime, timedelta
+
+        from nous.application.chat.pipeline.prepare import _build_context_section
+        from nous.domain.persona.entities import EmotionRecord
+
+        records = [
+            EmotionRecord(emotion="喜び", timestamp=datetime.now() - timedelta(hours=3), context="通常"),
+            EmotionRecord(emotion="喜び", timestamp=datetime.now() - timedelta(hours=1), context="強"),
+        ]
+        ctx = self._make_ctx(records)
+        state = self._make_state("喜び")
+
+        result = await _build_context_section(ctx, state)
+        assert "感情推移:" not in result
+
+
 class TestDecayNoteInContextSection:
     """decay_note が Tier 2（身体・環境）ブロックに出力されること。"""
 
