@@ -70,6 +70,34 @@ describe('N.Core.truncate', () => {
   });
 });
 
+describe('N.Core.refreshIcons', () => {
+  function nextFrame() {
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  }
+
+  afterEach(() => {
+    delete globalThis.lucide;
+  });
+
+  it('skips silently when the lucide CDN is blocked/absent', async () => {
+    delete globalThis.lucide;
+    expect(() => N.refreshIcons()).not.toThrow();
+    // Flush the rAF callback: the re-guard must not throw either.
+    await nextFrame();
+    await nextFrame();
+  });
+
+  it('calls createIcons once per frame when lucide is present', async () => {
+    const createIcons = vi.fn();
+    globalThis.lucide = { createIcons };
+    N.refreshIcons();
+    N.refreshIcons(); // coalesced into a single frame
+    await nextFrame();
+    await nextFrame();
+    expect(createIcons).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('N.Core.safeSetHTML', () => {
   it('falls back to textContent when DOMPurify is unavailable', () => {
     const el = document.createElement('div');

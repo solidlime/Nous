@@ -101,6 +101,9 @@ function getChatSessionId() {
 // into the given message div. Uses restoreChatHistory's rendering logic.
 // ------------------------------------------------------------------
 function _appendSegmentsToBubble(msg, msgDiv) {
+  // Graceful degradation: callers pass container.querySelector(".chat-msg:last-child"),
+  // which is null when the bubble was never appended (e.g. sanitizer fallback).
+  if (!msg || !msgDiv || typeof msgDiv.querySelector !== "function") return;
   if (!msg.segments || !msg.segments.length) return;
   var toolCallDivs = {};
   for (var si = 0; si < msg.segments.length; si++) {
@@ -130,7 +133,10 @@ function _appendSegmentsToBubble(msg, msgDiv) {
         '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
         '<span class="chat-tool-status"><i data-lucide="check"></i> 完了</span></summary>' +
         '<div class="chat-thinking-body"></div>');
-      thinkDiv.querySelector(".chat-thinking-body").textContent = seg.content;
+      var thinkBody = thinkDiv.querySelector(".chat-thinking-body");
+      // Guard: sanitizer fallback (textContent) leaves no .chat-thinking-body —
+      // skip the segment instead of failing the whole history restore.
+      if (thinkBody) thinkBody.textContent = seg.content;
       var timeDiv3 = msgDiv.querySelector(".chat-time");
       if (timeDiv3) msgDiv.insertBefore(thinkDiv, timeDiv3);
       else msgDiv.appendChild(thinkDiv);

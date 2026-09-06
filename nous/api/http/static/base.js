@@ -316,7 +316,10 @@ async function init() {
         openNavDrawer();
       }
     });
-    document.getElementById("nav-drawer-close").addEventListener("click", closeNavDrawer);
+    // Guard: drawerHeader is sanitized HTML — the close button may be
+    // absent when DOMPurify is unavailable (textContent fallback).
+    var navCloseBtn = document.getElementById("nav-drawer-close");
+    if (navCloseBtn) navCloseBtn.addEventListener("click", closeNavDrawer);
     backdrop.addEventListener("click", closeNavDrawer);
 
     function openNavDrawer() {
@@ -325,7 +328,8 @@ async function init() {
       hamBtn.setAttribute("aria-expanded", "true");
       document.body.style.overflow = "hidden";
       setTimeout(function() {
-        document.getElementById("nav-drawer-close").focus();
+        var navCloseFocus = document.getElementById("nav-drawer-close");
+        if (navCloseFocus) navCloseFocus.focus();
       }, 100);
     }
 

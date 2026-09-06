@@ -20,8 +20,10 @@ N.Core.refreshIcons = function() {
   if (_iconRefreshPending) return;
   _iconRefreshPending = true;
   requestAnimationFrame(function() {
-    lucide.createIcons();
     _iconRefreshPending = false;
+    // Re-guard: lucide CDN may be blocked/absent even if present at call time.
+    if (typeof lucide === "undefined" || !lucide.createIcons) return;
+    lucide.createIcons();
   });
 };
 
