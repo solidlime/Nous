@@ -37,7 +37,7 @@ class SecurityHeadersMiddleware:
                     [
                         (
                             b"content-security-policy",
-                            b"default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
+                            b"default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdnjs.cloudflare.com; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; media-src 'self' data: blob:",
                         ),
                         (b"x-content-type-options", b"nosniff"),
                         (b"x-frame-options", b"DENY"),
