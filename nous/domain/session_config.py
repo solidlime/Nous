@@ -102,6 +102,10 @@ class SessionConfig(BaseModel):
     brain_rif_suppression_rho: float = 0.05
     brain_link_separation_threshold: float = 0.75
     brain_graph_flash_enabled: bool = True
+    # Idle-gated REM drain (persistent enrichment queue)
+    brain_idle_after_seconds: int = 120
+    brain_min_batch_size: int = 3
+    brain_max_defer_seconds: int = 3600
 
     # Forgetting
     forgetting_enabled: bool = False

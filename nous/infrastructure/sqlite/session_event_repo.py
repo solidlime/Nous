@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from nous.domain.memory.session_event import SessionEvent
@@ -114,6 +115,16 @@ class SessionEventRepository:
 
         return [self._row_to_event(r) for r in rows], total
 
+    def last_activity_at(self, persona: str) -> datetime | None:
+        """Most recent session event timestamp for the persona (None if any)."""
+        row = self._db.execute(
+            "SELECT MAX(timestamp) FROM session_events WHERE persona = ?",
+            (persona,),
+        ).fetchone()
+        if row is None or row[0] is None:
+            return None
+        return datetime.fromisoformat(row[0])
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -121,8 +132,6 @@ class SessionEventRepository:
     @staticmethod
     def _row_to_event(row: Any) -> SessionEvent:
         """Convert a database row to a SessionEvent."""
-        from datetime import datetime
-
         return SessionEvent(
             id=row["id"],
             session_id=row["session_id"],

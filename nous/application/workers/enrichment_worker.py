@@ -21,31 +21,29 @@ _NOVELTY_SEARCH_LIMIT = 10  # same breadth as ContradictionDetector.find_potenti
 
 
 class EnrichmentWorker:
-    """REM-equivalent background worker: novelty gate + LLM memory enrichment.
+    """REM-equivalent background worker: idle-gated drain of the enrichment queue.
 
     Same lifecycle pattern as DecayWorker (threading.Thread + Event.wait).
 
-    - Cursor contract: only memories created after the previous cycle are
-      processed (idempotent; bounds LLM cost).
-    - Batch limit: LLM enrichment capped at ``brain_enrich_batch_limit``
-      memories per cycle.
-    - Novelty gate: vector-search only (no LLM). Empty search results count
-      as novel (max_cosine := 0.0). Boost fires at most once per memory.
+    - Queue drain: create/read/search enqueue keys; the worker drains them
+      only when the persona has been idle for ``brain_idle_after_seconds``
+      (or when a pending item exceeded ``brain_max_defer_seconds``).
+    - Min batch: fewer than ``brain_min_batch_size`` pending items → wait.
+    - has_processed guard: processed history persists across restarts, so a
+      memory is enriched at most once (read triggers never re-enrich).
+    - Novelty gate: vector-search only (no LLM). Boost fires at most once.
     """
 
     def __init__(self, context: AppContext, config: ChatConfig | None = None) -> None:
         self.context = context
         self._config = config
+        self._persona = context.persona
+        self._queue = context.enrichment_queue
         self.interval = self._num("brain_enrich_interval_seconds", 60.0)
         self._batch_limit = max(1, int(self._num("brain_enrich_batch_limit", 5.0)))
         self._sim_threshold = self._num("brain_novelty_sim_threshold", 0.75)
         self._importance_threshold = self._num("brain_novelty_importance_threshold", 0.6)
         self._stability_multiplier = self._num("brain_novelty_stability_multiplier", 2.0)
-        self._cursor: datetime = get_now().replace(tzinfo=None)
-        # Memories processed by this worker instance (ties with the cursor's
-        # created_at can exist; the set guarantees once-only processing).
-        # Cleared on restart together with the cursor=now reset.
-        self._processed_keys: set[str] = set()
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
 
@@ -83,53 +81,68 @@ class EnrichmentWorker:
     # ------------------------------------------------------------------
 
     def _run_cycle(self) -> None:
-        candidates = self._memories_since_cursor()
-        if not candidates:
-            return
-        batch = candidates[: self._batch_limit]
-        # Mark as processed up-front: gates/enrichment are best-effort, and a
-        # failure must not turn into an infinite retry loop.
-        for memory in batch:
-            self._processed_keys.add(memory.key)
-        for memory in batch:
-            self._novelty_gate(memory)
-        self._enrich_batch(batch)
-        self._advance_cursor(batch)
-
-    def _memories_since_cursor(self) -> list[Memory]:
-        """Active memories at/after the cursor and not yet processed (sorted)."""
-        found: list[tuple[datetime, Memory]] = []
+        now = self._now()
         try:
-            result = self.context.memory_repo.find_all()
-            if getattr(result, "is_ok", False):
-                values = getattr(result, "value", None)
-                if isinstance(values, list):
-                    for m in values:
-                        created = getattr(m, "created_at", None)
-                        if not isinstance(created, datetime):
-                            continue
-                        if created.tzinfo is not None:
-                            created = created.replace(tzinfo=None)
-                        if (
-                            created >= self._cursor
-                            and m.key not in self._processed_keys
-                            and getattr(m, "lifecycle_status", "active") == "active"
-                        ):
-                            found.append((created, m))
+            pending = self._queue.pending_keys()
         except Exception:
-            logger.debug("EnrichmentWorker: find_all failed", exc_info=True)
-        found.sort(key=lambda pair: pair[0])
-        return [m for _, m in found]
+            logger.debug("EnrichmentWorker: pending_keys failed", exc_info=True)
+            return
 
-    def _advance_cursor(self, batch: list[Memory]) -> None:
-        """Advance the cursor to the last processed memory's created_at.
+        defer_exceeded = any(
+            (self._naive(now) - self._naive(item.enqueued_at)).total_seconds()
+            >= self._num("brain_max_defer_seconds", 3600)
+            for item in pending
+        )
+        if not defer_exceeded:
+            idle = self._seconds_since_last_activity(now)
+            if idle is None:  # no session_event_repo → treat as not idle
+                return
+            if idle < self._num("brain_idle_after_seconds", 120):
+                return
+            if len(pending) < self._num("brain_min_batch_size", 3):
+                return
 
-        Overflow (memories beyond the batch limit) keeps created_at >= cursor
-        and stays outside ``_processed_keys``, so the next cycle picks it up.
-        """
-        latest = max((self._naive(m.created_at) for m in batch), default=None)
-        if latest is not None:
-            self._cursor = max(self._cursor, latest)
+        # Drain: DISTINCT keys, has_processed prevents re-enrich, mark after
+        # processing so a crash/shutdown loses nothing.
+        for item in pending:
+            try:
+                if self._queue.has_processed(item.memory_key):
+                    self._queue.mark_processed(item.memory_key)
+                    continue
+                self._enrich_one(item.memory_key)
+                self._queue.mark_processed(item.memory_key)
+            except Exception:
+                logger.debug("EnrichmentWorker: queue item failed for %s", item.memory_key, exc_info=True)
+
+    def _now(self) -> datetime:
+        return get_now()
+
+    def _seconds_since_last_activity(self, now: datetime) -> float | None:
+        repo = getattr(self.context, "_session_event_repo", None)
+        if repo is None:
+            return None
+        try:
+            last = repo.last_activity_at(self._persona)
+        except Exception:
+            logger.debug("EnrichmentWorker: last_activity_at failed", exc_info=True)
+            return None
+        if last is None:
+            return None
+        return (self._naive(now) - self._naive(last)).total_seconds()
+
+    def _enrich_one(self, memory_key: str) -> None:
+        try:
+            result = self.context.memory_repo.find_by_key(memory_key)
+        except Exception:
+            logger.debug("EnrichmentWorker: find_by_key failed for %s", memory_key, exc_info=True)
+            return
+        memory = getattr(result, "value", None) if getattr(result, "is_ok", False) else None
+        if memory is None:
+            return
+        if getattr(memory, "lifecycle_status", "active") != "active":
+            return
+        self._novelty_gate(memory)
+        self._enrich_batch([memory])
 
     @staticmethod
     def _naive(value: datetime) -> datetime:
