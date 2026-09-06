@@ -53,9 +53,13 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
         # ──────────────────────────────────────────────────────────────
         keep_recent = getattr(config, "context_keep_recent_turns", 2)
         if keep_recent > 0 and getattr(config, "context_compress_history", True):
-            messages = self._truncate_old_messages(session_messages, keep_recent)
+            messages, highlights, _removed = self._truncate_old_messages(session_messages, keep_recent)
+            if highlights:
+                logger.debug("CompressStep: truncation highlights ready (%d chars)", len(highlights))
         else:
             messages = session_messages
+            highlights = ""
+            _removed = []
 
         # ──────────────────────────────────────────────────────────────
         # Token budget calculation

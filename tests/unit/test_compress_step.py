@@ -286,13 +286,13 @@ class TestCompressStep:
 
     @pytest.mark.asyncio
     async def test_old_messages_truncated(self):
-        """Old messages should be removed entirely and replaced with a [システム:] notice."""
+        """Old messages should be removed entirely (no fake note in messages)."""
         from nous.application.chat.pipeline.compress import CompressStep
 
         config = _make_chat_config(
             context_max_tokens=200,
             context_keep_recent_turns=1,
-            context_use_llm_summary=False,  # Disable Stage 3 to isolate Stage 4
+            context_use_llm_summary=False,  # Disable Stage 3 to isolate Stage 0
         )
         ctx = _dummy_app_context()
         tctx = _dummy_turn_ctx(_long_system_prompt(num_memories=5))
@@ -302,21 +302,11 @@ class TestCompressStep:
 
         result = await CompressStep().run(ctx, config, tctx, msgs)
 
-        # Old messages are REMOVED entirely — result should be much shorter
-        # Stage 0: 20 msgs → [システムnotice] + last_2_msgs = 3 msgs
-        assert len(result) < len(msgs), f"Expected fewer messages after truncation: {len(result)}"
+        # Old messages are REMOVED entirely — result is just the recent 2
+        assert len(result) == 2, f"Expected 2 recent messages, got {len(result)}"
 
-        # Should contain the [システム:] notice
-        notices = [m for m in result if "[システム:" in (m.content or "")]
-        assert len(notices) == 1, f"Expected exactly 1 system notice, got {len(notices)}"
-
-        # Most recent 2 messages should be preserved intact (keep_recent_turns=1)
-        last_two = result[-2:]
-        for msg in last_two:
-            if msg.role in ("user", "assistant") and msg.content:
-                assert "[システム:" not in msg.content, (
-                    f"Recent message should not be the notice: {msg.content[:50]}..."
-                )
+        # No fake [システム:] notice message anywhere
+        assert not any("[システム:" in (m.content or "") for m in result)
 
     @pytest.mark.asyncio
     async def test_compression_preserves_tool_call_ids(self):
@@ -481,14 +471,13 @@ class TestCompressStep:
             LLMMessage(role="assistant", content="Another response"),
         ]
         # keep_recent_turns=1 → keep last 2 messages intact
-        result = CompressStep._truncate_old_messages(msgs, keep_recent_turns=1)
-        # Old messages are REMOVED: [システムnotice] + last_2_msgs = 3 total
-        assert len(result) == 3, f"Expected 3 messages (notice + 2 recent), got {len(result)}"
-        # First message is the system notice
-        assert "[システム:" in (result[0].content or "")
-        # Last 2 messages are preserved intact
-        assert result[1].content == "Another short"
-        assert result[2].content == "Another response"
+        result, highlights, removed = CompressStep._truncate_old_messages(msgs, keep_recent_turns=1)
+        # Old messages are REMOVED entirely (fake note 廃止): last 2 only
+        assert len(result) == 2, f"Expected 2 recent messages, got {len(result)}"
+        assert not any("[システム:" in (m.content or "") for m in result)
+        # Highlights propagate via return value
+        assert "[0] user: Short user message" in highlights
+        assert removed == msgs[:2]
 
     def test_truncate_old_messages_within_keep_count(self):
         """When total messages <= keep_recent_turns*2, no truncation."""
@@ -498,9 +487,10 @@ class TestCompressStep:
             LLMMessage(role="user", content="Short"),
             LLMMessage(role="assistant", content="Response"),
         ]
-        result = CompressStep._truncate_old_messages(msgs, keep_recent_turns=5)
-        assert len(result) == len(msgs)
+        result, highlights, removed = CompressStep._truncate_old_messages(msgs, keep_recent_turns=5)
         assert result is msgs  # Same object reference = no modification
+        assert highlights == ""
+        assert removed == []
         # Content should be unchanged
         assert result[0].content == "Short"
         assert result[1].content == "Response"
@@ -775,17 +765,19 @@ class TestTrimmerToolOrphan:
             self._msg("tool", "r3", tool_call_id="call_3"),
         ]
         # 9件 / keep=2 → keep_count=4 → 素朴な [-4:] は [tool, user, assistant(tc), tool] で先頭が tool 孤児になる
-        result = TrimmerMixin._truncate_old_messages(msgs, keep_recent_turns=2)
+        result, highlights, removed = TrimmerMixin._truncate_old_messages(msgs, keep_recent_turns=2)
 
-        # 先頭は [システムnotice]、その後に assistant(tool_calls) → tool が続く（孤児なし）
-        assert "[システム:" in (result[0].content or "")
-        assert result[1].role == "assistant"
-        assert result[1].tool_calls
-        assert result[2].role == "tool"
-        assert result[2].tool_call_id == result[1].tool_calls[0]["id"]
+        # fake note 廃止: 先頭は assistant(tool_calls) → tool が続く（孤児なし）
+        assert result[0].role == "assistant"
+        assert result[0].tool_calls
+        assert result[1].role == "tool"
+        assert result[1].tool_call_id == result[0].tool_calls[0]["id"]
         # 広げた分、末尾の a(tc call_3) → tool r3 も含まれる
         assert result[-1].role == "tool"
         assert result[-1].tool_call_id == "call_3"
+        # ハイライト・removed slice は戻り値で伝播
+        assert highlights
+        assert len(removed) == len(msgs) - len(result)
 
     def test_normal_slice_unchanged(self):
         """スライス先頭が tool でない通常ケース → 従来動作を維持。"""
@@ -801,15 +793,16 @@ class TestTrimmerToolOrphan:
             self._msg("user", "q3"),
             self._msg("assistant", "final answer"),
         ]
-        result = TrimmerMixin._truncate_old_messages(msgs, keep_recent_turns=2)
+        result, highlights, removed = TrimmerMixin._truncate_old_messages(msgs, keep_recent_turns=2)
 
         # 素朴な [-4:] と同じ開始位置（先頭が tool でないので広がらない）
-        assert len(result) == 5  # [システムnotice] + 末尾4件
-        assert "[システム:" in (result[0].content or "")
-        assert result[1].role == "assistant"
-        assert result[1].tool_calls
-        assert result[2].role == "tool"
+        assert len(result) == 4  # 末尾4件（fake note 廃止で notice なし）
+        assert result[0].role == "assistant"
+        assert result[0].tool_calls
+        assert result[1].role == "tool"
         assert result[-1].content == "final answer"
+        assert highlights
+        assert removed
 
     def test_keep_zero_returns_unchanged(self):
         """keep_recent_turns=0 → 無変更。"""
@@ -821,8 +814,10 @@ class TestTrimmerToolOrphan:
             self._msg("user", "q2"),
             self._msg("assistant", "a2"),
         ]
-        result = TrimmerMixin._truncate_old_messages(msgs, keep_recent_turns=0)
+        result, highlights, removed = TrimmerMixin._truncate_old_messages(msgs, keep_recent_turns=0)
         assert result == msgs
+        assert highlights == ""
+        assert removed == []
 
     def test_all_tool_tail_does_not_crash(self):
         """末尾が全て tool の極端ケースでクラッシュしない（広げすぎない）。"""
@@ -833,6 +828,6 @@ class TestTrimmerToolOrphan:
             self._msg("tool", "r2", tool_call_id="call_1"),
             self._msg("tool", "r3", tool_call_id="call_1"),
         ]
-        result = TrimmerMixin._truncate_old_messages(msgs, keep_recent_turns=1)
+        result, highlights, removed = TrimmerMixin._truncate_old_messages(msgs, keep_recent_turns=1)
         assert isinstance(result, list)
         assert len(result) > 0

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -129,20 +130,53 @@ class TrimmerMixin:
         return result
 
     @staticmethod
-    def _truncate_old_messages(messages: list[LLMMessage], keep_recent_turns: int) -> list[LLMMessage]:
+    def _build_truncation_highlights(removed: list[LLMMessage], removed_count: int, keep_recent: int) -> str:
+        """Build truncation highlights for the system prompt section.
+
+        Format: `[N] user: {snippet}` / `[N] assistant: {snippet}` — roles are
+        explicit for BOTH roles. N is the index in the original message list
+        (removed is a prefix, so its positions are the original indices).
+        First 3 + last 3 (≤6 keeps all), 80-char snippets, newlines → spaces.
+        Includes the truncation time. Returns "" when nothing to show.
+        """
+        candidates = [(i, m) for i, m in enumerate(removed) if m.role in ("user", "assistant") and m.content]
+        if not candidates:
+            return ""
+        if len(candidates) > 6:
+            candidates = candidates[:3] + candidates[-3:]
+
+        parts = [
+            f"過去{removed_count}件のメッセージを切り詰めました（{get_now().strftime('%Y-%m-%d %H:%M')}）。",
+        ]
+        if keep_recent > 0:
+            parts.append(f"直近{keep_recent}ターンのみ保持。")
+        for i, m in candidates:
+            snippet = (m.content or "")[:80].replace("\n", " ")
+            parts.append(f"[{i}] {m.role}: {snippet}")
+        return "\n".join(parts)
+
+    @staticmethod
+    def _truncate_old_messages(
+        messages: list[LLMMessage],
+        keep_recent_turns: int,
+    ) -> tuple[list[LLMMessage], str, list[LLMMessage]]:
         """Cut off old messages beyond keep_recent_turns, keeping only recent ones intact.
 
-        Old messages (user/assistant/tool) before the last N turns are removed entirely
-        and replaced with a single system notice. This is a hard cutoff — messages
-        beyond the window are NOT visible to the LLM.
+        Old messages (user/assistant/tool) before the last N turns are removed
+        entirely — nothing is inserted in their place (the old fake assistant
+        note is gone; the missing context is covered by the system-side
+        highlights section). Returns the highlights and the removed slice so
+        the caller can inject them into the system prompt / Stage 3 summary.
 
         When keep_recent_turns == 0, no truncation is performed.
-        """
-        from nous.infrastructure.llm.base import LLMMessage
 
+        Returns:
+            (messages_after_truncation, highlights, removed) — highlights/removed
+            are ""/[] when nothing was removed.
+        """
         keep_count = keep_recent_turns * 2  # user + assistant = one turn
         if keep_recent_turns == 0 or len(messages) <= keep_count:
-            return messages
+            return messages, "", []
 
         # スライス開始位置が tool メッセージを指す場合、1件前に広げて
         # 対応する assistant(tool_calls) を含める（孤児 tool 防止）
@@ -150,38 +184,10 @@ class TrimmerMixin:
 
         # Keep only the last keep_count messages intact
         recent = messages[start:]
+        removed = messages[:start]
         removed_count = len(messages) - len(recent)
 
-        # Build a brief summary of cut user messages for context
-        old_messages = messages[:start]
-        user_msgs = [m for m in old_messages if m.role == "user" and m.content]
-        summary_parts: list[str] = []
-        if user_msgs:
-            # Pick first few and last few user messages as highlights
-            sample = []
-            n_sample = min(6, len(user_msgs))
-            if n_sample <= 6:
-                sample = user_msgs
-            else:
-                half = n_sample // 2
-                sample = user_msgs[:half] + user_msgs[-half:]
-            for m in sample:
-                snippet = (m.content or "")[:80].replace("\n", " ")
-                summary_parts.append(f"  - {snippet}")
-
-        summary_text = ""
-        if summary_parts:
-            summary_text = "\n切り詰めた会話のハイライト:\n" + "\n".join(summary_parts)
-
-        # Insert a system notice in place of removed messages
-        note = LLMMessage(
-            role="assistant",
-            content=(
-                f"[システム: 過去{removed_count}件のメッセージを切り詰めました。"
-                f"{summary_text}\n"
-                f"直近{keep_recent_turns}ターンのみ保持しています。]"
-            ),
-        )
+        highlights = TrimmerMixin._build_truncation_highlights(removed, removed_count, keep_recent_turns)
 
         logger.debug(
             "CompressStep: removed %d old messages (kept %d recent turns)",
@@ -189,4 +195,4 @@ class TrimmerMixin:
             keep_recent_turns,
         )
 
-        return [note] + recent
+        return recent, highlights, removed
