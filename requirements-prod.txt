@@ -37,7 +37,7 @@ qdrant-client>=1.8.2,<2
 numpy>=1.24.0,<3
 
 # LLM Providers (Chat feature — all connections via OpenAI-compatible API)
-openai>=1.50.0,<3
+openai>=3.7.0,<4
 
 
 # Japanese NER (entity extraction)
