@@ -16,7 +16,7 @@
 "use strict";
 
 var C = N.Core;
-var esc = C.esc, toast = C.toast, api = C.api, relativeTime = C.relativeTime;
+var esc = C.esc, toast = C.toast, api = C.api, relativeTime = C.relativeTime, fmtDateTime = C.fmtDateTime;
 var safeSetHTML = C.safeSetHTML;
 
 /* ── open(key) — Fetch memory by key and open the modal ── */
@@ -115,17 +115,17 @@ function openMemModal(mem) {
 
     /* Created at */
     if (mem.created_at) {
-        h += '<div class="mem-modal-row"><span class="mem-modal-key">Created</span><span>\uD83D\uDCC5 ' + relativeTime(mem.created_at) + ' <span class="mem-time-note">(' + new Date(mem.created_at).toLocaleString() + ')</span></span></div>';
+        h += '<div class="mem-modal-row"><span class="mem-modal-key">Created</span><span>\uD83D\uDCC5 ' + relativeTime(mem.created_at) + ' <span class="mem-time-note">(' + fmtDateTime(mem.created_at) + ')</span></span></div>';
     }
 
     /* State snapped at (if different from created) */
     if (mem.state_snapped_at && mem.state_snapped_at !== mem.created_at) {
-        h += '<div class="mem-modal-row"><span class="mem-modal-key">State</span><span><i data-lucide="camera-off"></i> ' + relativeTime(mem.state_snapped_at) + ' <span class="mem-time-note">(' + new Date(mem.state_snapped_at).toLocaleString() + ')</span></span></div>';
+        h += '<div class="mem-modal-row"><span class="mem-modal-key">State</span><span><i data-lucide="camera-off"></i> ' + relativeTime(mem.state_snapped_at) + ' <span class="mem-time-note">(' + fmtDateTime(mem.state_snapped_at) + ')</span></span></div>';
     }
 
     /* Updated at */
     if (mem.updated_at) {
-        h += '<div class="mem-modal-row"><span class="mem-modal-key">Updated</span><span>\uD83D\uDCC5 ' + relativeTime(mem.updated_at) + ' <span class="mem-time-note">(' + new Date(mem.updated_at).toLocaleString() + ')</span></span></div>';
+        h += '<div class="mem-modal-row"><span class="mem-modal-key">Updated</span><span>\uD83D\uDCC5 ' + relativeTime(mem.updated_at) + ' <span class="mem-time-note">(' + fmtDateTime(mem.updated_at) + ')</span></span></div>';
     }
 
     /* Action buttons */

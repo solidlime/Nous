@@ -6,7 +6,7 @@ N.Features.Activity = N.Features.Activity || {};
 
 ;(function() {
 var S = window.S;
-var { esc, api, relativeTime, safeSetHTML } = window.Nous.Core;
+var { esc, api, relativeTime, fmtDateTime, safeSetHTML } = window.Nous.Core;
 
 /* =================================================================
    ACTIVITY TAB
@@ -170,7 +170,7 @@ function renderActivityFeed() {
             html += '<span class="act-event-icon">' + icon + '</span>';
             html += '<div class="act-event-body">';
             html += '<div class="act-event-summary"><span>' + esc(label) + '</span> ' + esc(ev.summary) + '</div>';
-            html += '<div class="act-event-time">' + new Date(ev.timestamp).toLocaleString('ja-JP') + '</div>';
+            html += '<div class="act-event-time">' + fmtDateTime(ev.timestamp) + '</div>';
             if (hasDetail) {
                 html += '<div class="act-event-detail">' + esc(ev.detail) + '</div>';
             }
@@ -210,7 +210,7 @@ function toggleActivitySession(sid) {
                 h += '<span class="act-event-icon">' + icon + '</span>';
                 h += '<div class="act-event-body">';
                 h += '<div class="act-event-summary"><span>' + esc(label) + '</span> ' + esc(ev.summary) + '</div>';
-                h += '<div class="act-event-time">' + new Date(ev.timestamp).toLocaleString('ja-JP') + '</div>';
+                h += '<div class="act-event-time">' + fmtDateTime(ev.timestamp) + '</div>';
                 if (hasDetail) h += '<div class="act-event-detail">' + esc(ev.detail) + '</div>';
                 h += '</div></div>';
             }

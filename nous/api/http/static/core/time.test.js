@@ -69,3 +69,21 @@ describe('N.Core.fmtDate', () => {
     expect(result.length).toBeGreaterThan(0);
   });
 });
+
+describe('N.Core.fmtDateTime', () => {
+  it('returns "--" for null/undefined/empty string', () => {
+    expect(N.fmtDateTime(null)).toBe('--');
+    expect(N.fmtDateTime(undefined)).toBe('--');
+    expect(N.fmtDateTime('')).toBe('--');
+  });
+
+  it('formats a full date-time string', () => {
+    const result = N.fmtDateTime('2026-01-15T12:00:00.000Z');
+    expect(typeof result).toBe('string');
+    expect(result).not.toBe('--');
+    expect(result.length).toBeGreaterThan(0);
+    // full date-time variant: date AND time components present
+    expect(result).toMatch(/2026/);
+    expect(result).toMatch(/(0?[0-9]|1[0-9]|2[0-3]):[0-5][0-9]/);
+  });
+});

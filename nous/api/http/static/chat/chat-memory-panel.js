@@ -6,7 +6,7 @@
 var C = N.Core;
 var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var showConfirm = C.showConfirm, showAlert = C.showAlert;
-var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
+var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate, fmtDateTime = C.fmtDateTime;
 "use strict";
 var S = window.S;
 // Namespace first: the delegation block below reads N.Chat.memoryPanel,
@@ -917,11 +917,11 @@ function _wiringDetailHTML(key, mem, ev, failed) {
     }
     if (mem.created_at) {
       h += '<div class="mem-modal-row"><span class="mem-modal-key">Created</span><span>' +
-        esc(fmtDate(mem.created_at)) + "</span></div>";
+        esc(fmtDateTime(mem.created_at)) + "</span></div>";
     }
     if (mem.updated_at && mem.updated_at !== mem.created_at) {
       h += '<div class="mem-modal-row"><span class="mem-modal-key">Updated</span><span>' +
-        esc(fmtDate(mem.updated_at)) + "</span></div>";
+        esc(fmtDateTime(mem.updated_at)) + "</span></div>";
     }
   }
   if (ev && (ev.source || ev.target)) {

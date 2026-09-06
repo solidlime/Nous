@@ -20,4 +20,9 @@ N.Core.fmtDate = function fmtDate(iso) {
   });
 };
 
+N.Core.fmtDateTime = function fmtDateTime(iso) {
+  if (!iso) return "--";
+  return new Date(iso).toLocaleString("ja-JP");
+};
+
 })(window.Nous);
