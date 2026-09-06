@@ -193,6 +193,17 @@ CREATE INDEX IF NOT EXISTS idx_session_events_session ON session_events(session_
 CREATE INDEX IF NOT EXISTS idx_session_events_persona ON session_events(persona, timestamp);
 CREATE INDEX IF NOT EXISTS idx_session_events_type ON session_events(event_type, timestamp);
 
+CREATE TABLE IF NOT EXISTS enrichment_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    memory_key TEXT NOT NULL,
+    enqueued_at TEXT NOT NULL,
+    processed_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_enrichment_queue_pending
+    ON enrichment_queue(memory_key) WHERE processed_at IS NULL;
+CREATE INDEX IF NOT EXISTS ix_enrichment_queue_key
+    ON enrichment_queue(memory_key);
+
 CREATE TABLE IF NOT EXISTS memory_links (
     source_key TEXT NOT NULL,
     target_key TEXT NOT NULL,
