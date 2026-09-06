@@ -71,9 +71,7 @@ beforeEach(() => {
     },
     configurable: true,
   });
-  N.Core._wiringSSE = null;
-  N.Core._wiringTimer = null;
-  N.Core._wiringBackoff = 5000;
+  N.Core._sseStreams = {};
   vi.stubGlobal('EventSource', class {
     constructor(url) {
       this.url = url;
@@ -222,7 +220,7 @@ describe('wiring SSE single-flight + visibility', () => {
     MP.connectWiring();
     expect(instances[0].close).toHaveBeenCalled();
     expect(instances.length).toBe(2);
-    expect(N.Core._wiringSSE).toBe(instances[1]);
+    expect(N.Core.streamSocket('wiring')).toBe(instances[1]);
   });
 
   it('live events land in the feed, newest on top', () => {
@@ -240,20 +238,20 @@ describe('wiring SSE single-flight + visibility', () => {
     expect(instances.length).toBe(1);
     instances[0].onerror();
     instances[0].onerror();
-    expect(N.Core._wiringTimer).not.toBeNull();
+    expect(N.Core._sseStreams.wiring.timer).not.toBeNull();
     vi.runAllTimers();
     /* second error cancelled the first timer: exactly one reconnect */
     expect(instances.length).toBe(2);
-    expect(N.Core._wiringSSE).toBe(instances[1]);
+    expect(N.Core.streamSocket('wiring')).toBe(instances[1]);
   });
 
   it('panel hidden cuts the stream, reshown reconnects', () => {
     MP.connectWiring();
-    expect(N.Core._wiringSSE).not.toBeNull();
+    expect(N.Core.streamSocket('wiring')).not.toBeNull();
     MP.setWiringVisible(false);
-    expect(N.Core._wiringSSE).toBeNull();
+    expect(N.Core.streamSocket('wiring')).toBeNull();
     MP.setWiringVisible(true);
-    expect(N.Core._wiringSSE).not.toBeNull();
+    expect(N.Core.streamSocket('wiring')).not.toBeNull();
     expect(instances.length).toBe(2);
   });
 
@@ -261,10 +259,10 @@ describe('wiring SSE single-flight + visibility', () => {
     MP.connectWiring();
     const es = instances[0];
     es.onerror();
-    expect(N.Core._wiringTimer).not.toBeNull();
+    expect(N.Core._sseStreams.wiring.timer).not.toBeNull();
     N.Core.disconnectSSE();
-    expect(N.Core._wiringTimer).toBeNull();
-    expect(N.Core._wiringSSE).toBeNull();
+    expect(N.Core._sseStreams.wiring.timer).toBeNull();
+    expect(N.Core.streamSocket('wiring')).toBeNull();
   });
 });
 
@@ -300,11 +298,11 @@ describe('backoff + flush batching', () => {
   it('resets backoff to 5000 on open (main-stream manners)', () => {
     MP.connectWiring();
     instances[0].onerror();
-    expect(N.Core._wiringBackoff).toBe(10000);
+    expect(N.Core._sseStreams.wiring.backoff).toBe(10000);
     vi.runAllTimers();
     expect(instances.length).toBe(2);
     instances[1].onopen();
-    expect(N.Core._wiringBackoff).toBe(5000);
+    expect(N.Core._sseStreams.wiring.backoff).toBe(5000);
   });
 
   it('batches the connect flush into a single paint', () => {

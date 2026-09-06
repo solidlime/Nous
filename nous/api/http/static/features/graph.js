@@ -60,7 +60,6 @@ var FLASH_PULSE = { novelty_gate: 2.0, default: 1.6 };
 var flashTimers = {}; // per-node generation token: exactly one timer per node
 var flashBases = {};  // original node data captured at rest — restore source
 var graphDataSet = null;
-var flashSSE = null;
 
 /* renderNetwork hands its fresh DataSet over (also the test hook). */
 function setGraphFlashDataSet(ds) {
@@ -112,21 +111,28 @@ function handleWiringEvent(ev) {
 }
 
 function connectGraphFlash() {
-    if (flashSSE) return flashSSE; // single-flight
+    if (N.Core.streamSocket('graph-flash')) return; // single-flight
     // EventSource cannot send X-Persona headers — pass persona via query param
     // (same channel as the chat wiring feed; server resolves it in deps.py).
-    flashSSE = new EventSource('/api/memory/wiring/stream' +
-        (S.persona ? '?persona=' + encodeURIComponent(S.persona) : ''));
-    flashSSE.addEventListener('wiring', function (e) {
-        var ev;
-        try { ev = JSON.parse(e.data); } catch (err) { return; }
-        handleWiringEvent(ev);
+    // Rides the shared core stream manager — backoff reconnect now matches
+    // the main stream (previously: no reconnect at all).
+    N.Core.connectStream('graph-flash', {
+        url: function () {
+            return '/api/memory/wiring/stream' +
+                (S.persona ? '?persona=' + encodeURIComponent(S.persona) : '');
+        },
+        handlers: {
+            wiring: function (e) {
+                var ev;
+                try { ev = JSON.parse(e.data); } catch (err) { return; }
+                handleWiringEvent(ev);
+            },
+        },
     });
-    return flashSSE;
 }
 
 function disconnectGraphFlash() {
-    if (flashSSE) { flashSSE.close(); flashSSE = null; }
+    N.Core.disconnectStream('graph-flash');
 }
 
 function setFlashEnabled(enabled) {

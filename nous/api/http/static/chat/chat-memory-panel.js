@@ -483,7 +483,7 @@ function _wiringURL(persona) {
 function _updateLiveDot() {
   var dot = document.querySelector("#memory-wiring-section .wiring-live-dot");
   if (!dot) return;
-  var on = _wiringShouldRun() && !!N.Core._wiringSSE;
+  var on = _wiringShouldRun() && !!N.Core.streamSocket("wiring");
   dot.classList.toggle("is-off", !on);
 }
 
@@ -717,89 +717,50 @@ function _clearWiringFlush() {
   _wiringSuspendRender = false;
 }
 
-// Single-flight wiring SSE — same discipline as N.Core.connectSSE:
-// exactly one live connection plus at most one pending retry timer.
+// Wiring SSE rides the shared core stream manager (core/sse.js):
+// single-flight, backoff 5000→60s cap and handler detach live there.
+// url() re-evaluates the gate + persona on every (re)connect.
 function connectWiring() {
-  if (N.Core._wiringTimer) {
-    clearTimeout(N.Core._wiringTimer);
-    N.Core._wiringTimer = null;
-  }
   _clearWiringFlush();
-  if (N.Core._wiringSSE) {
-    try {
-      var old = N.Core._wiringSSE;
-      if (old._wiringHandler) {
-        old.removeEventListener("wiring", old._wiringHandler);
-      }
-      if (old._wiringConnectedHandler) {
-        old.removeEventListener("connected", old._wiringConnectedHandler);
-      }
-      old.onerror = null;
-      old.onopen = null;
-      old.close();
-    } catch (e) {
-      console.warn("[wiring] close failed:", e.message);
-    }
-    N.Core._wiringSSE = null;
-  }
   if (!_wiringShouldRun()) {
+    N.Core.disconnectStream("wiring");
     _updateLiveDot();
     return;
   }
-  ensureWiringFeed();
   var persona = _wiringPersona || _currentPersona();
   _wiringPersona = persona || null;
-  N.Core._wiringBackoff = N.Core._wiringBackoff || 5000;
-  var es = new EventSource(_wiringURL(persona));
-  es._wiringHandler = function (e) {
-    handleWiringMessage(e.data);
-  };
-  es.addEventListener("wiring", es._wiringHandler);
-  es._wiringConnectedHandler = function () {
-    _beginWiringFlush();
-  };
-  es.addEventListener("connected", es._wiringConnectedHandler);
-  // Main-stream manners (sse.js): a healthy open resets the backoff.
-  es.onopen = function () {
-    N.Core._wiringBackoff = 5000;
-    _updateLiveDot();
-  };
-  es.onerror = function () {
-    try { es.close(); } catch (_) {}
-    if (N.Core._wiringSSE === es) N.Core._wiringSSE = null;
-    _updateLiveDot();
-    if (!_wiringShouldRun()) return;
-    var backoff = N.Core._wiringBackoff || 5000;
-    N.Core._wiringBackoff = Math.min(backoff * 2, 60000);
-    if (N.Core._wiringTimer) clearTimeout(N.Core._wiringTimer);
-    N.Core._wiringTimer = setTimeout(function () {
-      N.Core._wiringTimer = null;
-      connectWiring();
-    }, backoff);
-  };
-  N.Core._wiringSSE = es;
+  ensureWiringFeed();
+  N.Core.connectStream("wiring", {
+    url: function () {
+      return _wiringShouldRun() && _wiringPersona
+        ? _wiringURL(_wiringPersona)
+        : null;
+    },
+    handlers: {
+      wiring: function (e) {
+        handleWiringMessage(e.data);
+      },
+      // Server greets every connect with `connected`, then replays the
+      // buffer. Hold paints for one window, then paint once.
+      connected: function () {
+        _beginWiringFlush();
+      },
+    },
+    // Main-stream manners: a healthy open resets the backoff.
+    onOpen: function () {
+      _updateLiveDot();
+    },
+    onError: function () {
+      _updateLiveDot();
+      return _wiringShouldRun();
+    },
+  });
   _updateLiveDot();
 }
 
 function disconnectWiring() {
-  if (N.Core._wiringTimer) {
-    clearTimeout(N.Core._wiringTimer);
-    N.Core._wiringTimer = null;
-  }
+  N.Core.disconnectStream("wiring");
   _clearWiringFlush();
-  if (N.Core._wiringSSE) {
-    try {
-      var es = N.Core._wiringSSE;
-      if (es._wiringHandler) {
-        es.removeEventListener("wiring", es._wiringHandler);
-      }
-      if (es._wiringConnectedHandler) {
-        es.removeEventListener("connected", es._wiringConnectedHandler);
-      }
-      es.close();
-    } catch (_) {}
-    N.Core._wiringSSE = null;
-  }
   _updateLiveDot();
 }
 
@@ -808,7 +769,7 @@ function disconnectWiring() {
 // through N.Core.connectSSE), so no other hook point is needed.
 function switchWiringPersona(persona) {
   if (!persona) persona = _currentPersona();
-  if (persona && persona === _wiringPersona && N.Core._wiringSSE) return;
+  if (persona && persona === _wiringPersona && N.Core.streamSocket("wiring")) return;
   _wiringPersona = persona || null;
   clearWiring();
   if (_wiringVisible) connectWiring();

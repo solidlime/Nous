@@ -1,5 +1,5 @@
 /* =================================================================
-   SSE REAL-TIME EVENTS
+   SSE REAL-TIME EVENTS — named multi-stream manager
    ================================================================= */
 ;(function(N) {
 "use strict";
@@ -13,72 +13,132 @@ function _setSseStatus(state) {
   el.title = labels[state] || state;
 }
 
-N.Core.connectSSE = function connectSSE(persona) {
-  _setSseStatus("connecting");
-  // Single-flight: cancel any pending reconnect timer before (re)connecting
-  if (N.Core._sseTimer) {
-    clearTimeout(N.Core._sseTimer);
-    N.Core._sseTimer = null;
-  }
-  // Clean up old SSE
-  if (N.Core._sse) {
-    try {
-      if (N.Core._sse._sseHandlers) {
-        var handlers = N.Core._sse._sseHandlers;
-        Object.keys(handlers).forEach(function(ev) {
-          N.Core._sse.removeEventListener(ev, handlers[ev]);
-        });
-      }
-      N.Core._sse.onerror = null;
-      N.Core._sse.onopen = null;
-      N.Core._sse.close();
-    } catch (e) {
-      console.warn("[SSE] close failed:", e.message);
-    }
-    N.Core._sse = null;
-  }
-  N.Core._sseBackoff = 5000;
-  var es = new EventSource(
-    "/api/events/" + encodeURIComponent(persona) +
-    "?topics=memory,context,emotion,body,session"
-  );
-  es._sseHandlers = {};
+/* ── Stream engine ──
+   Each named stream owns its socket plus reconnect state: single-flight
+   timer, exponential backoff (5s → 60s cap), handler set (detached on
+   teardown). The URL is re-evaluated on every (re)connect — url() for
+   the initial connect, reconnectUrl() (falling back to url()) for
+   scheduled reconnects — so persona switches and gates are picked up
+   without re-registering handlers. url() returning null opens nothing
+   (gated streams). */
+function _streams() {
+  return (N.Core._sseStreams = N.Core._sseStreams || {});
+}
 
-  es._sseHandlers["memory.created"] = function handleMemoryCreated(e) {
+function _detachHandlers(rec, es) {
+  if (!rec.handlers || !es || typeof es.removeEventListener !== "function") return;
+  Object.keys(rec.handlers).forEach(function (ev) {
+    es.removeEventListener(ev, rec.handlers[ev]);
+  });
+}
+
+function _closeSocket(rec) {
+  var es = rec.socket;
+  if (!es) return;
+  try {
+    _detachHandlers(rec, es);
+    es.onerror = null;
+    es.onopen = null;
+    es.close();
+  } catch (e) {
+    console.warn("[SSE] close failed:", e.message);
+  }
+  rec.socket = null;
+}
+
+function _open(name, reconnect) {
+  var rec = _streams()[name], opts = rec.opts;
+  var url = reconnect && opts.reconnectUrl ? opts.reconnectUrl() : opts.url();
+  if (!url) return;
+  var es = new EventSource(url);
+  rec.socket = es;
+  rec.handlers = {};
+  Object.keys(opts.handlers).forEach(function (ev) {
+    rec.handlers[ev] = opts.handlers[ev];
+    es.addEventListener(ev, opts.handlers[ev]);
+  });
+  if (opts.onConnecting) opts.onConnecting(es);
+  es.onopen = function () {
+    rec.backoff = opts.initialBackoff || 5000;
+    if (opts.onOpen) opts.onOpen(es);
+  };
+  es.onerror = function () {
+    try { es.close(); } catch (_) {}
+    if (rec.socket === es) rec.socket = null;
+    if (opts.onError && opts.onError(es) === false) return;
+    var backoff = rec.backoff || opts.initialBackoff || 5000;
+    rec.backoff = Math.min(backoff * 2, opts.maxBackoff || 60000);
+    /* Single-flight reconnect: exactly one pending timer */
+    if (rec.timer) clearTimeout(rec.timer);
+    rec.timer = setTimeout(function () {
+      rec.timer = null;
+      _open(name, true);
+    }, backoff);
+  };
+}
+
+N.Core.connectStream = function connectStream(name, opts) {
+  var rec = _streams()[name] || (_streams()[name] = { socket: null });
+  if (rec.timer) {
+    clearTimeout(rec.timer);
+    rec.timer = null;
+  }
+  rec.opts = opts;
+  rec.backoff = opts.initialBackoff || 5000;
+  _closeSocket(rec);
+  _open(name, false);
+};
+
+N.Core.streamSocket = function streamSocket(name) {
+  var rec = _streams()[name];
+  return rec ? rec.socket : null;
+};
+
+N.Core.disconnectStream = function disconnectStream(name) {
+  var rec = _streams()[name];
+  if (!rec) return;
+  if (rec.timer) {
+    clearTimeout(rec.timer);
+    rec.timer = null;
+  }
+  _closeSocket(rec);
+};
+
+/* ── Main event stream (all tabs) ── */
+var MAIN_EVENTS_URL = function MAIN_EVENTS_URL(persona) {
+  return "/api/events/" + encodeURIComponent(persona) +
+    "?topics=memory,context,emotion,body,session";
+};
+
+var MAIN_HANDLERS = {
+  "memory.created": function handleMemoryCreated(e) {
     try {
       var d = JSON.parse(e.data);
       N.Core.toast("\ud83d\udcdd \u65b0\u3057\u3044\u8a18\u61b6: " +
         (d.content_preview || "...").substring(0, 50), "info");
       _scheduleMemoriesRefresh();
     } catch (err) { console.warn("[SSE parse] memory.created:", err.message); }
-  };
-  es.addEventListener("memory.created", es._sseHandlers["memory.created"]);
-
-  es._sseHandlers["memory.updated"] = function handleMemoryUpdated(e) {
+  },
+  "memory.updated": function handleMemoryUpdated(e) {
     try {
       var d = JSON.parse(e.data);
       N.Core.toast("\ud83d\udd04 \u8a18\u61b6\u66f4\u65b0: " +
         (d.content_preview || "...").substring(0, 50), "info");
       _scheduleMemoriesRefresh();
     } catch (err) { console.warn("[SSE parse] memory.updated:", err.message); }
-  };
-  es.addEventListener("memory.updated", es._sseHandlers["memory.updated"]);
-
-  es._sseHandlers["memory.deleted"] = function handleMemoryDeleted(e) {
+  },
+  "memory.deleted": function handleMemoryDeleted(e) {
     try {
       var d = JSON.parse(e.data);
       N.Core.toast("\ud83d\uddd1 \u8a18\u61b6\u524a\u9664: " +
         (d.content_preview || "...").substring(0, 50), "info");
       _scheduleMemoriesRefresh();
     } catch (err) { console.warn("[SSE parse] memory.deleted:", err.message); }
-  };
-  es.addEventListener("memory.deleted", es._sseHandlers["memory.deleted"]);
-
-  es.addEventListener("context.updated", function(e) {
+  },
+  "context.updated": function handleContextUpdated(e) {
     N.Core.toast("\ud83d\udc64 \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u66f4\u65b0\u3055\u308c\u307e\u3057\u305f", "info");
-  });
-
-  es.addEventListener("context.emotion_changed", function(e) {
+  },
+  "context.emotion_changed": function handleEmotionChanged(e) {
     try {
       var d = JSON.parse(e.data);
       if (d.emotion) {
@@ -87,9 +147,8 @@ N.Core.connectSSE = function connectSSE(persona) {
         window.dispatchEvent(new CustomEvent("emotion-changed", { detail: d }));
       }
     } catch (err) { console.warn("[SSE parse] context.emotion_changed:", err.message); }
-  });
-
-  es.addEventListener("context.body_state_changed", function(e) {
+  },
+  "context.body_state_changed": function handleBodyStateChanged(e) {
     try {
       var d = JSON.parse(e.data);
       if (d.states) {
@@ -109,8 +168,8 @@ N.Core.connectSSE = function connectSSE(persona) {
         window.dispatchEvent(new CustomEvent("body-state-changed", { detail: d }));
       }
     } catch (err) { console.warn("[SSE parse] context.body_state_changed:", err.message); }
-  });
-  es._sseHandlers["session.rollback"] = function handleSessionRollback(e) {
+  },
+  "session.rollback": function handleSessionRollback(e) {
     try {
       var d = JSON.parse(e.data);
       // Only sync if the rollback is for the current chat session (cross-tab sync)
@@ -122,41 +181,27 @@ N.Core.connectSSE = function connectSSE(persona) {
         restoreChatHistory(false);
       }
     } catch (err) { console.warn("[SSE parse] session.rollback:", err.message); }
-  };
-  es.addEventListener("session.rollback", es._sseHandlers["session.rollback"]);
-
-  es.onopen = function handleSSEOpen() {
-    _setSseStatus("connected");
-    N.Core._sseBackoff = 5000;
-  };
-
-  es.onerror = function handleSSEError() {
-    try { es.close(); } catch (_) {}
-    if (N.Core._sse === es) N.Core._sse = null;
-    _setSseStatus("reconnecting");
-    var backoff = N.Core._sseBackoff || 5000;
-    N.Core._sseBackoff = Math.min(backoff * 2, 60000);
-    /* Single-flight reconnect: exactly one pending timer, id stored for cancel */
-    if (N.Core._sseTimer) clearTimeout(N.Core._sseTimer);
-    N.Core._sseTimer = setTimeout(function() {
-      N.Core._sseTimer = null;
-      var p = N.Core.store ? N.Core.store.get("persona") : null;
-      if (p) N.Core.connectSSE(p);
-    }, backoff);
-  };
-  N.Core._sse = es;
+  },
 };
 
-/* Tear down SSE + cancel any pending reconnect (page hide / unload) */
+N.Core.connectSSE = function connectSSE(persona) {
+  N.Core.connectStream("main", {
+    url: function () { return MAIN_EVENTS_URL(persona); },
+    // Scheduled reconnects follow the live persona from the store.
+    reconnectUrl: function () {
+      var p = N.Core.store ? N.Core.store.get("persona") : null;
+      return p ? MAIN_EVENTS_URL(p) : null;
+    },
+    handlers: MAIN_HANDLERS,
+    onConnecting: function () { _setSseStatus("connecting"); },
+    onOpen: function () { _setSseStatus("connected"); },
+    onError: function () { _setSseStatus("reconnecting"); },
+  });
+};
+
+/* Tear down the main stream + cancel any pending reconnect (page hide / unload) */
 N.Core.disconnectSSE = function disconnectSSE() {
-  if (N.Core._sseTimer) {
-    clearTimeout(N.Core._sseTimer);
-    N.Core._sseTimer = null;
-  }
-  if (N.Core._sse) {
-    try { N.Core._sse.close(); } catch (_) {}
-    N.Core._sse = null;
-  }
+  N.Core.disconnectStream("main");
 };
 
 /* Memories tab debounced refresh — called from memory SSE handlers */

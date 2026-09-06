@@ -7,7 +7,7 @@
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { loadCore } from '../core/load-core.js';
+import { loadCore, loadFile } from '../core/load-core.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -25,6 +25,7 @@ function fakeNodes(initial) {
 
 beforeAll(() => {
   loadCore();
+  loadFile('sse.js'); // graph flash rides the shared stream manager
   window.S = { persona: 'p1', tab: 'graph' };
   globalThis.N = window.Nous; // graph.js references bare N (script-tag global)
   const code = readFileSync(resolve(__dirname, 'graph.js'), 'utf-8');
@@ -134,5 +135,28 @@ describe('wiring SSE subscription', () => {
     expect(instances[0].close).toHaveBeenCalled();
     G.setFlashEnabled(true);
     expect(instances.length).toBe(2);
+  });
+
+  it('reconnects with backoff through the core stream manager', () => {
+    window.S.tab = 'graph';
+    G.setGraphFlashDataSet({ nodes: fakeNodes({}) });
+    G.setFlashEnabled(true);
+    instances[0].onerror();
+    expect(N.Core._sseStreams['graph-flash'].timer).not.toBeNull();
+    vi.runAllTimers();
+    // backoff reconnect now matches the main stream (was: dead socket)
+    expect(instances.length).toBe(2);
+    expect(instances[1].url).toBe('/api/memory/wiring/stream?persona=p1');
+  });
+
+  it('disconnect cancels a pending reconnect timer', () => {
+    window.S.tab = 'graph';
+    G.setGraphFlashDataSet({ nodes: fakeNodes({}) });
+    G.setFlashEnabled(true);
+    instances[0].onerror();
+    G.setFlashEnabled(false);
+    expect(N.Core._sseStreams['graph-flash'].timer).toBeNull();
+    vi.runAllTimers();
+    expect(instances.length).toBe(1); // no reconnect after teardown
   });
 });
