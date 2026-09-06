@@ -57,7 +57,7 @@
 
 **compress.py CompressStep**:
 - Stage 0 で切り詰めた slice `removed = messages[:start]` をローカル保持（Stage 3 の入力に使う、下記）
-- 注入ヘルパー `_append_history_summary(turn_ctx, body)` を追加: `turn_ctx.system_prompt` 内に `<retrieved_data>` があれば `</retrieved_data>` 直前に挿入、無ければ末尾（`__STATIC_END__` より後＝動的領域）に `<conversation_history_summary>` 単独ブロックで追加。**キャッシュ効率は無傷**（boundary は cache_utils.py:7 が `__STATIC_END__` を消費）
+- 注入ヘルパー `_append_history_summary(turn_ctx, body)` を追加: `turn_ctx.system_prompt` 内に `<retrieved_data>` があれば**閉じタグ `</retrieved_data>` の直後**に `<conversation_history_summary>` を兄弟タグとして挿入、無ければ末尾（`__STATIC_END__` より後＝動的領域）に `<conversation_history_summary>` 単独ブロックで追加。**タグの内側には入れない**（guard との意味論矛盾、§4.5 表参照）。**キャッシュ効率は無傷**（boundary は cache_utils.py:7 が `__STATIC_END__` を消費）
 - 注入条件: Stage 0 で `removed_count > 0`、または Stage 3 で `summary` が取れたターンのみ（turn_ctx 毎ターン新規なので二重注入なし）
 - **budget 計算との整合**: 注入は compress.py:120/:149/:161 の再計算より前に済ませる（Stage 2 と同じ mutate パターンなので自然に順守）
 
