@@ -395,7 +395,7 @@ function renderNetwork(container, nodes, edges) {
     graphNetwork = new vis.Network(container, dataSet, options);
     setGraphFlashDataSet(dataSet); // flash target + timer reset on re-render
 
-    /* Click → open side panel */
+    /* Click → open side panel (entity) or the shared mem modal (memory) */
     graphNetwork.on('click', function(params) {
         if (params.nodes.length > 0) {
             var nodeId = params.nodes[0];
@@ -408,24 +408,6 @@ function renderNetwork(container, nodes, edges) {
         }
     });
 
-    /* Double-click → open full modal via openMemModal (entity nodes have no memory modal) */
-    graphNetwork.on('doubleClick', function(params) {
-        if (params.nodes.length > 0) {
-            var nodeId = params.nodes[0];
-            var node = dataSet.nodes.get(nodeId);
-            if (node && node._data && !node._data.kind) {
-                var d = node._data;
-                N.Features.Memories.openMemModal({
-                    memory_key:  d.key,
-                    content:     d.content,
-                    tags:        d.tags,
-                    emotion: d.emotion,
-                    importance:  d.importance
-                });
-            }
-        }
-    });
-
     /* Stabilization done → stop physics jitter */
     graphNetwork.once('stabilizationIterationsDone', function() {
         graphNetwork.setOptions({ physics: { stabilization: { enabled: false } } });
@@ -435,91 +417,24 @@ function renderNetwork(container, nodes, edges) {
 /* ---- Detail side panel ---- */
 
 function openGraphDetailPanel(data) {
+    /* Entity node: compact side-panel info card stays here.
+       Memory nodes open the unified mem modal instead (components/mem-modal.js). */
+    if (data.kind !== 'entity') {
+        N.Components.memModal.open(data.key);
+        return;
+    }
+
     var panel   = document.getElementById('graph-detail-panel');
     var overlay = document.getElementById('graph-panel-overlay');
     var body    = document.getElementById('graph-panel-body');
 
-    /* Entity node: compact info card instead of memory details */
-    if (data.kind === 'entity') {
-        var entHtml = '<div style="margin-bottom:12px">' +
-            '<div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px">Entity</div>' +
-            '<div style="font-size:1.05rem;font-weight:600;color:var(--text-primary)">' + esc(data.label || data.key) + '</div>' +
-            '</div>' +
-            '<div style="color:var(--text-secondary);font-size:0.85rem">' +
-            esc(data.entity_type || 'entity') + ' &#183; mentioned in ' + (data.mention_count || 0) + ' memories</div>';
-        safeSetHTML(body, entHtml);
-        panel.style.right = '0';
-        overlay.style.display = 'block';
-        return;
-    }
-
-    var tags = (data.tags || []).map(function(t) {
-        return '<span class="badge badge-purple">' + esc(t) + '</span>';
-    }).join(' ');
-
-    var emoColor = N.Core.EMOTION_COLORS[data.emotion] || '#94a3b8';
-
-    var html = '';
-    /* Key */
-    html += '<div style="margin-bottom:16px">';
-    html += '  <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px">Key</div>';
-    html += '  <div style="font-family:monospace;font-size:0.8rem;color:var(--accent-purple);word-break:break-all">' + esc(data.key) + '</div>';
-    html += '</div>';
-
-    /* Content */
-    html += '<div style="margin-bottom:16px">';
-    html += '  <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px">Content</div>';
-    html += '  <div style="color:var(--text-primary);line-height:1.6;white-space:pre-wrap">' + esc(data.content) + '</div>';
-    html += '</div>';
-
-    /* Tags */
-    if (tags) {
-        html += '<div style="margin-bottom:16px">';
-        html += '  <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:6px">Tags</div>';
-        html += '  <div style="display:flex;flex-wrap:wrap;gap:4px">' + tags + '</div>';
-        html += '</div>';
-    }
-
-    /* Emotion */
-    if (data.emotion) {
-        html += '<div style="margin-bottom:16px">';
-        html += '  <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px">Emotion</div>';
-        html += '  <div style="display:flex;align-items:center;gap:6px">';
-        html += '    <span style="width:10px;height:10px;border-radius:50%;background:' + emoColor + ';display:inline-block"></span>';
-        html += '    <span style="color:var(--text-secondary)">' + esc(data.emotion) + '</span>';
-        html += '  </div>';
-        html += '</div>';
-    }
-
-    /* Emotion bar */
-    if (data.emotion) {
-        html += '<div style="margin-bottom:16px">';
-        html += N.Components.memoryCard.renderEmotionBars(data.emotion, data.emotion_intensity);
-        html += '</div>';
-    }
-
-    /* Body state bars */
-    if (data.body_state && Object.keys(data.body_state).length > 0) {
-        html += '<div style="margin-bottom:16px">';
-        html += N.Components.memoryCard.renderBodyStateBars(data.body_state);
-        html += '</div>';
-    }
-
-    /* Importance bar */
-    if (data.importance != null) {
-        var pct = (data.importance * 100).toFixed(0);
-        html += '<div style="margin-bottom:16px">';
-        html += '  <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px">Importance</div>';
-        html += '  <div style="display:flex;align-items:center;gap:8px">';
-        html += '    <div style="flex:1;height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden">';
-        html += '      <div style="width:' + pct + '%;height:100%;background:var(--accent-yellow);border-radius:3px"></div>';
-        html += '    </div>';
-        html += '    <span style="color:var(--accent-yellow);font-size:0.85rem">' + pct + '%</span>';
-        html += '  </div>';
-        html += '</div>';
-    }
-
-    safeSetHTML(body, html);
+    var entHtml = '<div style="margin-bottom:12px">' +
+        '<div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px">Entity</div>' +
+        '<div style="font-size:1.05rem;font-weight:600;color:var(--text-primary)">' + esc(data.label || data.key) + '</div>' +
+        '</div>' +
+        '<div style="color:var(--text-secondary);font-size:0.85rem">' +
+        esc(data.entity_type || 'entity') + ' &#183; mentioned in ' + (data.mention_count || 0) + ' memories</div>';
+    safeSetHTML(body, entHtml);
     panel.style.right = '0';
     overlay.style.display = 'block';
 }
