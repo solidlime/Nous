@@ -137,16 +137,27 @@
   color: var(--text-muted);
   padding: 0 4px;
 }
+/* Immersive tool chip — narrative label carries the activity; the
+   status slot stays empty while running (hidden) and fills with a
+   subtle check icon when done. */
 .chat-tool-call {
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   padding: 0;
   border-radius: var(--radius-sm);
-  background: rgba(0, 122, 255, 0.08);
-  border: 0.5px solid rgba(0, 122, 255, 0.2);
-  color: var(--accent-blue);
+  background: rgba(0, 122, 255, 0.05);
+  border: 0.5px solid rgba(0, 122, 255, 0.14);
+  color: var(--text-secondary);
   margin: 4px 0;
   overflow: hidden;
 }
+.chat-tool-call:not(.done) .chat-tool-summary-left svg {
+  animation: chat-tool-pulse 1.6s var(--ease-apple) infinite;
+}
+@keyframes chat-tool-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.chat-tool-status:empty { display: none; }
 .chat-tool-call.done {
   border-color: rgba(48, 209, 88, 0.3);
   background: rgba(48, 209, 88, 0.06);
@@ -193,7 +204,7 @@
   height: 14px;
 }
 .chat-tool-summary-left strong {
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -253,8 +264,8 @@
   color: var(--accent-green);
 }
 html.light .chat-tool-call {
-  color: var(--accent-blue);
-  background: rgba(0, 122, 255, 0.06);
+  color: var(--text-secondary);
+  background: rgba(0, 122, 255, 0.05);
 }
 html.light .chat-tool-call.done {
   background: rgba(48, 209, 88, 0.04);

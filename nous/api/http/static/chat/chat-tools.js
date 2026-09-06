@@ -15,13 +15,44 @@ var S = window.S;
 
 var CHAT = N.Chat.state;
 
-// persona非依存のツール表示名（生JSONはdetailsに維持）
+// 没入的ツール表示（ペルソナ汎用の一人称ナラーション調・生JSONはdetailsに維持）
 var TOOL_LABELS = {
-  memory_search: "記憶をたどっている…",
-  update_context: "気持ちを整理中…",
+  get_context: "今の状態を確かめてる…",
+  memory_create: "思い出を刻んでる…",
+  memory_read: "記憶を引き出してる…",
+  memory_update: "記憶を書き換えてる…",
+  memory_delete: "記憶を手放してる…",
+  memory_search: "記憶をたどってる…",
+  memory_stats: "記憶の棚卸し中…",
+  update_context: "気持ちを整理してる…",
+  item_add: "持ち物を整えてる…",
+  item_equip: "身支度してる…",
+  item_search: "持ち物を探してる…",
+  goal_manage: "目標を確かめてる…",
   image_generate: "絵を描いてる…",
+  list_skills: "使える技を確認してる…",
+  invoke_skill: "技を繰り出す準備…",
+  recall_weaver: "過去の記憶を呼び起こしてる…",
 };
-function toolLabel(name) { return TOOL_LABELS[name] || name || ""; }
+// 未知のツールは生名を晒さず、系統で推測したナラーションに落とす
+// （生名は summary の title と details 内の JSON で確認できる）
+function toolLabel(name) {
+  if (TOOL_LABELS[name]) return TOOL_LABELS[name];
+  if (/skill/.test(name)) return "技を使ってる…";
+  if (/^memory_/.test(name)) return "記憶を操作してる…";
+  if (/^item_/.test(name)) return "持ち物を確認してる…";
+  if (/^goal_/.test(name)) return "目標を整理してる…";
+  return "作業してる…";
+}
+// wrench は汎用ツール系のみ。系統ごとに象徴的な lucide アイコン。
+function toolIcon(name) {
+  if (name === "image_generate") return "image";
+  if (/skill/.test(name) || name === "recall_weaver") return "sparkles";
+  if (/^memory_/.test(name) || name === "get_context" || name === "update_context") return "brain";
+  if (/^item_/.test(name)) return "backpack";
+  if (/^goal_/.test(name)) return "target";
+  return "wrench";
+}
 
 // ------------------------------------------------------------------
 // Append tool call/result event to the DOM
@@ -42,11 +73,11 @@ function appendToolEvent(eventType, data, targetDiv) {
     safeSetHTML(div,
       '<details><summary>' +
       '<span class="chat-tool-summary-left">' +
-      '<i data-lucide="wrench"></i> <strong title="' + esc(data.name || "") + '">' +
+      '<i data-lucide="' + toolIcon(data.name) + '"></i> <strong title="' + esc(data.name || "") + '">' +
       esc(toolLabel(data.name)) +
       '</strong></span>' +
       '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
-      '<span class="chat-tool-status">実行中...</span></summary>' +
+      '<span class="chat-tool-status"></span></summary>' +
       '<pre class="chat-tool-detail">' +
       esc(inputStr) +
       "</pre></details>");
@@ -101,7 +132,7 @@ function appendToolEvent(eventType, data, targetDiv) {
       : null;
     if (callDiv) {
       const statusEl = callDiv.querySelector(".chat-tool-status");
-      if (statusEl) safeSetHTML(statusEl, '<i data-lucide="check"></i> 完了');
+      if (statusEl) safeSetHTML(statusEl, '<i data-lucide="check"></i>');
       const details = callDiv.querySelector("details");
       if (details) {
         const resultPre = document.createElement("pre");
@@ -117,7 +148,7 @@ function appendToolEvent(eventType, data, targetDiv) {
       safeSetHTML(div,
         '<details><summary>' +
         '<span class="chat-tool-summary-left">' +
-        '<i data-lucide="check"></i> <strong title="' + esc(data.name || "") + '">' +
+        '<i data-lucide="' + toolIcon(data.name) + '"></i> <strong title="' + esc(data.name || "") + '">' +
         esc(toolLabel(data.name)) +
         '</strong></span>' +
         '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
@@ -389,6 +420,8 @@ N.Chat.tools = {
   showGenResult: showImageGenResult,
   fetch: fetchMcpTools,
   toggle: toggleTool,
+  label: toolLabel,
+  icon: toolIcon,
 };
 
 /* CSP-safe delegation: tool portrait viewer (no inline onclick) */

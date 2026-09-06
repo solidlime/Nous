@@ -419,6 +419,29 @@ async function chatSend(retry) {
   let thinkingDetails = null;   // <details class="chat-thinking-bubble">
   let thinkingContent = "";     // accumulated thinking text
 
+  // F3: close the active text bubble before the next content part (tool
+  // call / result) takes over. The rAF batch reads currentTextBubble at
+  // fire time, so a bubble closed before its frame was never written —
+  // it sat as an empty white bubble while the tool ran. Flush pending
+  // text into the bubble synchronously; drop whitespace-only bubbles
+  // (they render empty) so nothing lingers under the tool chip.
+  function _closeTextBubble() {
+    if (!currentTextBubble) return;
+    if ((currentTextContent || "").trim()) {
+      currentTextBubble.textContent = currentTextContent;
+    } else {
+      currentTextBubble.remove();
+      // Drop the trailing whitespace-only part so the next text_delta
+      // starts a fresh bubble instead of writing into the removed one.
+      const last = contentParts[contentParts.length - 1];
+      if (last && last.type === "text" && last.bubble === currentTextBubble) {
+        contentParts.pop();
+      }
+    }
+    currentTextBubble = null;
+    currentTextContent = "";
+  }
+
   try {
     const response = await fetch("/api/chat/" + encodeURIComponent(S.persona), {
       method: "POST",
@@ -568,23 +591,22 @@ async function chatSend(retry) {
             assistantDiv = _createAssistantDiv();
           }
           // End current text bubble — next text_delta will create a new one
-          currentTextBubble = null;
-          currentTextContent = "";
+          _closeTextBubble();
           const toolDiv = N.Chat.tools.append("tool_call", evt, assistantDiv);
           contentParts.push({ type: "tool_call", div: toolDiv, id: evt.id, name: evt.name });
-          // image_generate は image_gen_start が専用のスピナー表示を行うので、
-          // ここでは generic な「…を実行中」ではなく専用テキストを表示して重複を避ける
+          // status bar mirrors the chip's narrative label (no raw tool name);
+          // image_generate keeps its dedicated text (image_gen_start has its own spinner)
           if (evt.name === "image_generate") {
             safeSetHTML(statusEl,
               '<i data-lucide="image"></i> 画像を生成中...');
           } else {
             safeSetHTML(statusEl,
-              '<i data-lucide="wrench"></i> ' + esc(evt.name) + " を実行中...");
+              '<i data-lucide="' + N.Chat.tools.icon(evt.name) + '"></i> ' +
+              esc(N.Chat.tools.label(evt.name)));
           }
         } else if (evt.type === "tool_result") {
           N.Chat.tools.append("tool_result", evt);
-          currentTextBubble = null; // ensure next text_delta creates new bubble
-          currentTextContent = "";
+          _closeTextBubble(); // ensure next text_delta creates new bubble
           contentParts.push({ type: "tool_result", id: evt.id, result: evt.result });
           statusEl.textContent = "応答中...";
         } else if (evt.type === "memory_activity") {
