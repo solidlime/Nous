@@ -90,6 +90,19 @@ class SessionConfig(BaseModel):
         "関係が見つからない場合は relations を空配列にしてください。"
     )
 
+    # Brain simulation (cross-lane contract: key names / defaults are fixed —
+    # lane3 UI consumes them verbatim; see docs/superpowers/plans/2026-09-06-brain-simulation.md)
+    brain_enrich_auto_run: bool = False
+    brain_enrich_interval_seconds: int = 60
+    brain_enrich_batch_limit: int = 5
+    brain_novelty_sim_threshold: float = 0.75
+    brain_novelty_importance_threshold: float = 0.6
+    brain_novelty_stability_multiplier: float = 2.0
+    brain_emotion_gain_k: float = 0.5
+    brain_rif_suppression_rho: float = 0.05
+    brain_link_separation_threshold: float = 0.75
+    brain_graph_flash_enabled: bool = True
+
     # Forgetting
     forgetting_enabled: bool = False
     forgetting_trigger_threshold: int = 100

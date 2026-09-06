@@ -53,6 +53,14 @@ class TestEmitBuffer:
         assert events[0]["source"] == "a" and events[0]["target"] == "b"
         assert events[0]["ts"] != ""
 
+    def test_novelty_gate_kind(self) -> None:
+        """novelty_gate kind（新規性ゲート、lane1 契約）が受信される。"""
+        assert wiring_events.emit("novelty_gate", source="k1", weight=2.0) is True
+        events = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "novelty_gate"]
+        assert len(events) == 1
+        assert events[0]["source"] == "k1"
+        assert events[0]["weight"] == 2.0
+
     def test_unknown_kind_dropped(self) -> None:
         assert wiring_events.emit("nope") is False
         assert wiring_events.snapshot_after(0) == []

@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from nous.application.workers.decay_worker import DecayWorker
+    from nous.application.workers.enrichment_worker import EnrichmentWorker
     from nous.config.settings import Settings
     from nous.domain.chat_config import ChatConfig
     from nous.infrastructure.embedding.reranker import RerankerModel
@@ -520,6 +521,7 @@ class AppContextRegistry:
 
     _contexts: dict[str, AppContext] = {}
     _decay_workers: dict[str, DecayWorker] = {}
+    _enrichment_workers: dict[str, EnrichmentWorker] = {}
     _settings: Settings | None = None
     _lock = threading.Lock()
 
@@ -568,14 +570,34 @@ class AppContextRegistry:
                 decay_worker.start()
                 cls._decay_workers[persona] = decay_worker
 
+            # EnrichmentWorker (REM-equivalent): strict `is True` guards so
+            # mock settings/configs in tests never start real threads.
+            enrichment_enabled = (
+                config.memory_enrichment_enabled
+                if config
+                else getattr(cls._settings.memory_enrichment, "enabled", False)
+            ) is True
+            brain_auto_run = (
+                config.brain_enrich_auto_run if config else getattr(cls._settings.memory_enrichment, "auto_run", False)
+            ) is True
+            if enrichment_enabled and brain_auto_run:
+                from nous.application.workers.enrichment_worker import EnrichmentWorker
+
+                enrichment_worker = EnrichmentWorker(ctx, config)
+                enrichment_worker.start()
+                cls._enrichment_workers[persona] = enrichment_worker
+
         return ctx
 
     @classmethod
     def stop_decay_workers(cls, timeout: float = 5.0) -> None:
-        """Stop all decay workers (graceful shutdown)."""
+        """Stop all decay and enrichment workers (graceful shutdown)."""
         for worker in cls._decay_workers.values():
             worker.stop(timeout=timeout)
         cls._decay_workers.clear()
+        for worker in cls._enrichment_workers.values():
+            worker.stop(timeout=timeout)
+        cls._enrichment_workers.clear()
 
     @classmethod
     def close_all(cls) -> None:
