@@ -1,0 +1,11 @@
+{
+  "name": "vrm-avatar-prototype",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Standalone VRM avatar prototype (no relation to nous/api/http)",
+  "dependencies": {
+    "three": "0.180.0",
+    "@pixiv/three-vrm": "3.5.5"
+  }
+}
