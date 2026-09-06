@@ -48,7 +48,7 @@ beforeAll(() => {
   };
   N.Features = {
     Memories: { closeEditModal: vi.fn(), saveMemory: vi.fn() },
-    Timeline: { loadTimeline: vi.fn(), closeTimelineDetail: vi.fn() },
+    Timeline: { loadTimeline: vi.fn() },
     Activity: { loadActivity: vi.fn() },
   };
   document.body.innerHTML = DOM;

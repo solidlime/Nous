@@ -139,7 +139,8 @@ async function loadTimeline() {
             if (props.items.length > 0) {
                 const id = props.items[0];
                 const mem = _timelineData.find(m => (m.key || '') === id);
-                if (mem) showTimelineDetail(mem);
+                /* Unified memory detail: the Memories modal IS the detail view */
+                if (mem && mem.key) N.Components.memModal.open(mem.key);
             }
         });
 
@@ -157,56 +158,6 @@ async function loadTimeline() {
 }
 
 /* N.Features.Timeline.loadTimeline registered below */
-
-function showTimelineDetail(mem) {
-    const panel = document.getElementById('tl-detail-panel');
-    if (!panel) return;
-    document.getElementById('tl-detail-content').textContent = mem.content || '';
-    const style = getEmotionStyle(mem.emotion || 'neutral');
-    safeSetHTML(document.getElementById('tl-detail-emotion'), style.emoji + ' ' + esc(mem.emotion || 'neutral'));
-    document.getElementById('tl-detail-importance').textContent = (mem.importance != null ? mem.importance.toFixed(2) : '0.50');
-    document.getElementById('tl-detail-time').textContent = mem.created_at
-        ? new Date(mem.created_at).toLocaleString('ja-JP') : '—';
-    document.getElementById('tl-detail-tags').textContent = (mem.tags || []).join(', ') || '—';
-
-    /* Body State & Emotions bars */
-    var bodyHtml = '';
-    if (mem.body_state) {
-        var bodyKeys = ['fatigue','warmth','arousal','heart_rate','pain'];
-        /* Constants now from core/constants.js via adapter globals */
-        var hasBody = bodyKeys.some(function(k){ return mem.body_state[k] != null; });
-        if (hasBody) {
-            bodyHtml += '<div style="margin-bottom:10px;"><div class="tl-detail-label">Body State</div>';
-            bodyKeys.forEach(function(k) {
-                if (mem.body_state[k] != null) {
-                    var val = mem.body_state[k];
-                    var pct = Math.round(val * 100);
-                    bodyHtml += '<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">';
-                    bodyHtml += '<span style="font-size:0.7rem;color:var(--text-muted);min-width:70px">' + N.Core.BODY_LABELS[k] + '</span>';
-                    bodyHtml += '<div style="flex:1;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden">';
-                    bodyHtml += '<div style="height:100%;width:' + pct + '%;background:' + N.Core.BODY_BAR_COLORS[k] + ';border-radius:2px"></div>';
-                    bodyHtml += '</div>';
-                    bodyHtml += '<span style="font-size:0.7rem;color:var(--text-muted);min-width:28px;text-align:right">' + pct + '%</span>';
-                    bodyHtml += '</div>';
-                }
-            });
-            bodyHtml += '</div>';
-        }
-    }
-    if (mem.emotion) {
-        bodyHtml += '<div style="margin-bottom:16px">' + N.Components.memoryCard.renderEmotionBars(mem.emotion, mem.emotion_intensity) + '</div>';
-    }
-    safeSetHTML(document.getElementById('tl-detail-body'), bodyHtml);
-
-    panel.classList.add('open');
-    setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
-}
-
-function closeTimelineDetail() {
-    document.getElementById('tl-detail-panel')?.classList.remove('open');
-}
-
-/* N.Features.Timeline.closeTimelineDetail registered below */
 
 // Initialize — watch tab activation via DOM class changes (replaces switchTab monkey-patch)
 document.addEventListener('DOMContentLoaded', () => {
@@ -238,8 +189,6 @@ document.addEventListener('DOMContentLoaded', () => {
 // Register in namespace
 Object.assign(N.Features.Timeline, {
     loadTimeline: loadTimeline,
-    showTimelineDetail: showTimelineDetail,
-    closeTimelineDetail: closeTimelineDetail,
     getEmotionStyle: getEmotionStyle,
     buildEmotionLegend: buildEmotionLegend,
 });

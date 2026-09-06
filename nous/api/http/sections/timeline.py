@@ -75,35 +75,6 @@ def render_timeline_tab() -> str:
                     padding: 4px 8px; white-space: nowrap; overflow: hidden;
                     text-overflow: ellipsis; max-width: 200px;
                 }
-                /* Timeline detail panel */
-                #tl-detail-panel {
-                    position: fixed; top: 0; right: -420px; width: 400px; height: 100vh;
-                    background: var(--bg-primary); border-left: 1px solid var(--glass-border);
-                    box-shadow: -4px 0 24px rgba(0,0,0,0.4); z-index: 500;
-                    transition: right 0.3s ease; display: flex; flex-direction: column;
-                    padding: 20px; gap: 10px; overflow-y: auto;
-                }
-                #tl-detail-panel.open { right: 0; }
-                #tl-detail-panel .tl-detail-close {
-                    position: absolute; top: 12px; right: 12px;
-                    background: none; border: 1px solid var(--glass-border); border-radius: 6px;
-                    color: var(--text-muted); padding: 4px 10px; cursor: pointer; font-size: 0.82rem;
-                }
-                #tl-detail-panel .tl-detail-close:hover { color: var(--text-primary); background: var(--glass-bg); }
-                #tl-detail-panel .tl-detail-label {
-                    font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;
-                    letter-spacing: 0.04em;
-                }
-                #tl-detail-panel .tl-detail-value {
-                    font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5;
-                    word-break: break-word;
-                }
-                #tl-detail-panel .tl-detail-content {
-                    background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border);
-                    border-radius: 8px; padding: 10px; font-size: 0.85rem;
-                    color: var(--text-primary); line-height: 1.6; word-break: break-word;
-                    max-height: 300px; overflow-y: auto;
-                }
                 #tl-loading {
                     display: flex; align-items: center; justify-content: center;
                     height: 500px; color: var(--text-muted); font-size: 0.9rem;
@@ -134,19 +105,6 @@ def render_timeline_tab() -> str:
             <div id="tl-container"><div id="tl-loading">読み込み中...</div></div>
 
             <div id="tl-legend"></div>
-
-            <div id="tl-detail-panel">
-                <button class="tl-detail-close" data-action="tl-detail-close"><i data-lucide="x"></i></button>
-                <div class="tl-detail-label">内容</div>
-                <div class="tl-detail-content" id="tl-detail-content"></div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                    <div><div class="tl-detail-label">感情</div><div class="tl-detail-value" id="tl-detail-emotion"></div></div>
-                    <div><div class="tl-detail-label">重要度</div><div class="tl-detail-value" id="tl-detail-importance"></div></div>
-                    <div><div class="tl-detail-label">日時</div><div class="tl-detail-value" id="tl-detail-time"></div></div>
-                    <div><div class="tl-detail-label">タグ</div><div class="tl-detail-value" id="tl-detail-tags"></div></div>
-                </div>
-                <div id="tl-detail-body" style="margin-top:10px;"></div>
-            </div>
         </section>
     """
 

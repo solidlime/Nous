@@ -96,9 +96,6 @@
       case "tl-reload":
         callFeature("Timeline", "loadTimeline");
         break;
-      case "tl-detail-close":
-        callFeature("Timeline", "closeTimelineDetail");
-        break;
       case "act-refresh":
         callFeature("Activity", "loadActivity", true);
         break;
