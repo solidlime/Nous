@@ -84,6 +84,11 @@ async def _do_list_mcp_tools(persona: str, ctx) -> dict:
     return {"tools": tools_out, "errors": errors_out}
 
 
+def _iso_or_raw(value):
+    """datetime を ISO 文字列化する（JSON シリアライズ対策）。他型はそのまま。"""
+    return value.isoformat() if hasattr(value, "isoformat") else value
+
+
 async def _do_get_commitments(persona: str, ctx) -> dict:
     """Return active goals and latest reflection insights."""
     goals: list[dict] = []
@@ -112,7 +117,8 @@ async def _do_get_commitments(persona: str, ctx) -> dict:
                 {
                     "content": m.content,
                     "key": m.key,
-                    "created_at": getattr(m, "created_at", None),
+                    # datetime は JSON シリアライズ不可のため ISO 文字列化
+                    "created_at": _iso_or_raw(getattr(m, "created_at", None)),
                 }
                 for m in sorted_refs[:5]
             ]
