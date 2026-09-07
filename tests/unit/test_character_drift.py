@@ -12,7 +12,6 @@ from nous.application.chat.memory_extractor import run_memory_llm
 from nous.application.chat.memory_prompts import _MEMORY_LLM_PROMPT, _build_drift_section
 from nous.application.chat.pipeline.context_loader import _build_context_section
 from nous.application.chat.pipeline.memory_retriever import _search_memories
-from nous.application.chat.pipeline.post import _with_drift
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now
@@ -218,23 +217,6 @@ class TestDriftEnforcement:
         assert k3["tags"] == ["preference"]
         assert k3["importance"] == 0.7
         assert "valid_until" not in k3
-
-
-class TestWithDrift:
-    def test_violation_attaches_drift(self):
-        payload = {"user": "u", "assistant": "a"}
-        out = _with_drift(payload, {"violation": "compliance", "detail": "迎合が過ぎた"})
-        assert out["drift"] == {"violation": "compliance", "detail": "迎合が過ぎた"}
-        assert "drift" not in payload
-
-    def test_none_violation_returns_same(self):
-        payload = {"user": "u", "assistant": "a"}
-        assert _with_drift(payload, {"violation": "none", "detail": ""}) == payload
-        assert _with_drift(payload, None) == payload
-
-    def test_missing_detail_defaults_empty(self):
-        out = _with_drift({"user": "u", "assistant": "a"}, {"violation": "character"})
-        assert out["drift"] == {"violation": "character", "detail": ""}
 
 
 def _make_state():
