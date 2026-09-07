@@ -647,13 +647,6 @@ function _renderWiringItem(ev, fresh) {
     '<span class="wiring-kind-badge">' + label + "</span>" +
     line +
     tail +
-    (mainKey
-      ? // Row action: open the memory itself in the unified mem modal
-        // (the edge detail modal stays on row click).
-        '<button type="button" class="wiring-open-memory" data-action="wiring-open-memory"' +
-        ' data-wiring-key="' + esc(mainKey) + '" title="記憶の詳細を開く"' +
-        ' aria-label="記憶 ' + esc(mainKey) + ' の詳細を開く">&#9656;</button>'
-      : "") +
     "</div>"
   );
 }

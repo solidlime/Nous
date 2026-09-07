@@ -213,6 +213,18 @@ describe('wiring feed trim + render', () => {
     expect(wiringList().querySelectorAll('.wiring-fire-item').length).toBe(0);
   });
 
+  it('the ov-modal card and wiring detail use theme tokens, not fixed dark colors', () => {
+    const css = readFileSync(resolve(__dirname, '../styles/components.css'), 'utf-8');
+    // the card body was hardcoded to a dark purple — must ride the theme
+    expect(css).not.toMatch(/\.ov-modal\s*\{[^}]*#1e1b2e/);
+    expect(css).toMatch(/\.ov-modal\s*\{[^}]*var\(--bg-secondary\)/);
+    // white-alpha field chrome (dark-premise) must be tokenized too
+    expect(css).not.toMatch(/\.ov-field\s*\{[^}]*rgba\(255,\s*255,\s*255/);
+    // wiring-kind badge tints ride the accent rgb tokens
+    expect(css).not.toMatch(/wiring-kind-\w+ \.wiring-kind-badge\s*\{[^}]*rgba\(191/);
+    expect(css).toMatch(/wiring-kind-link_fire \.wiring-kind-badge\s*\{[^}]*var\(--accent-purple-rgb\)/);
+  });
+
   it('injects the feed next to reflection and the numeric setting without inline handlers', () => {
     MP.renderWiringFeed();
     const section = document.getElementById('memory-wiring-section');
@@ -415,6 +427,19 @@ describe('content-first rows (memory resolution + weight bar)', () => {
     related_keys: [],
   });
 
+  it('rows open the detail modal themselves — the separate open button is gone', async () => {
+    vi.stubGlobal('fetch', fetchMemoriesByKey((key) => memFor(key)));
+    MP.pushWiringEvent(fire(1, 'link_fire', 'w1', 'w2', 0.24));
+    await flushMicrotasks();
+    const row = wiringList().querySelector('[data-wiring-open="w2"]');
+    expect(row).not.toBeNull();
+    expect(row.getAttribute('role')).toBe('button');
+    expect(row.getAttribute('tabindex')).toBe('0');
+    // the ▸ "詳細を開く" button is removed — the whole row is the target
+    expect(row.querySelector('.wiring-open-memory')).toBeNull();
+    expect(row.querySelector('[data-action="wiring-open-memory"]')).toBeNull();
+  });
+
   it('shows the content summary and a data-fill weight bar', async () => {
     vi.stubGlobal('fetch', fetchMemoriesByKey((key) => memFor(key)));
     MP.clearWiring();
@@ -452,7 +477,7 @@ describe('content-first rows (memory resolution + weight bar)', () => {
     expect(document.activeElement).toBe(row);
   });
 
-  it('row mem-open action opens the unified mem modal, not the edge modal', async () => {
+  it('row click opens the edge detail modal, never the unified mem modal', async () => {
     vi.stubGlobal('fetch', fetchMemoriesByKey((key) => memFor(key)));
     const openMem = vi.fn();
     N.Components.memModal = { open: openMem };
@@ -460,13 +485,13 @@ describe('content-first rows (memory resolution + weight bar)', () => {
     MP.pushWiringEvent(fire(1, 'link_fire', 'w1', 'w2', 0.24));
     await flushMicrotasks();
     const row = wiringList().querySelector('[data-wiring-open="w2"]');
-    const btn = row.querySelector('[data-action="wiring-open-memory"]');
-    expect(btn).not.toBeNull();
-    expect(btn.getAttribute('data-wiring-key')).toBe('w2');
-    btn.click();
-    expect(openMem).toHaveBeenCalledWith('w2');
-    // the edge detail modal must NOT have opened from the same click
+    expect(row).not.toBeNull();
+    await flushMicrotasks(); // content resolution lands before the click
+    row.click();
     const overlay = document.getElementById('wiring-detail-overlay');
-    expect(overlay === null || overlay.classList.contains('active') === false).toBe(true);
+    expect(overlay.classList.contains('active')).toBe(true);
+    expect(overlay.textContent).toContain('黒いロングコートを選んだ');
+    // the unified mem modal must NOT have opened from the same click
+    expect(openMem).not.toHaveBeenCalled();
   });
 });

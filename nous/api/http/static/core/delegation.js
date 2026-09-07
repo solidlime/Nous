@@ -114,14 +114,6 @@
       case "wiring-close":
         callChat("memoryPanel", "closeWiringDetail");
         break;
-      case "wiring-open-memory":
-        // Open the memory itself in the unified mem modal. Return (not
-        // break): the row beneath carries [data-wiring-open] and must
-        // NOT also fire the edge detail modal.
-        if (N.Components && N.Components.memModal) {
-          N.Components.memModal.open(el.getAttribute("data-wiring-key"));
-        }
-        return;
       default:
         break;
     }
@@ -195,7 +187,8 @@
   document.addEventListener("keydown", function(e) {
     if (e.key !== "Escape" && e.key !== "Enter" && e.key !== " ") return;
     var overlay = document.getElementById("wiring-detail-overlay");
-    var open = overlay && overlay.style.display !== "none";
+    // C6 unified the open/close to the .active class — style.display is retired
+    var open = overlay && overlay.classList.contains("active");
     if (open && e.key === "Escape") {
       e.stopPropagation();
       callChat("memoryPanel", "closeWiringDetail");
