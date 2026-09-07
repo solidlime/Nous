@@ -288,5 +288,15 @@ class EnrichmentWorker:
             asyncio.set_event_loop(loop)
             return loop.run_until_complete(coro)
         finally:
+            # コルーチン内で spawn された pending task を close 前に処理する
+            # （放流すると "Task was destroyed but it is pending!" で作業消失）
+            pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
+            if pending:
+                loop.run_until_complete(asyncio.wait(pending, timeout=5.0))
+                still = [t for t in asyncio.all_tasks(loop) if not t.done()]
+                for task in still:
+                    task.cancel()
+                if still:
+                    loop.run_until_complete(asyncio.wait(still, timeout=1.0))
             asyncio.set_event_loop(None)
             loop.close()

@@ -508,3 +508,52 @@ class TestRegistryWiring:
         ):
             AppContextRegistry.get("p1", config)
             mock_cls.assert_not_called()
+
+
+class TestRunAsyncDrainsPendingTasks:
+    """_run_async は temp loop を close する — コルーチン内 spawn の pending task を
+    close 前に drain しないと 'Task was destroyed but it is pending!' になる (2026-09-08 実機)。
+    """
+
+    def _worker(self) -> EnrichmentWorker:
+        return EnrichmentWorker(MagicMock(), _config())
+
+    def test_background_task_completes_before_loop_close(self) -> None:
+        import asyncio
+        import threading
+
+        done = threading.Event()
+        flag: list[str] = []
+
+        async def coro() -> None:
+            async def bg() -> None:
+                await asyncio.sleep(0.05)
+                done.set()
+                flag.append("ok")
+
+            asyncio.create_task(bg())
+            await asyncio.sleep(0.01)
+
+        self._worker()._run_async(coro())
+        assert done.wait(timeout=2.0), "spawn された task が loop close 前に完遂していない"
+        assert flag == ["ok"]
+
+    def test_unfinishable_task_is_cancelled_not_destroyed(self) -> None:
+        import asyncio
+        import threading
+
+        cancelled = threading.Event()
+
+        async def coro() -> None:
+            async def never() -> None:
+                try:
+                    await asyncio.sleep(100)
+                except asyncio.CancelledError:
+                    cancelled.set()
+                    raise
+
+            asyncio.create_task(never())
+            await asyncio.sleep(0.01)
+
+        self._worker()._run_async(coro())
+        assert cancelled.wait(timeout=2.0), "残タスクはキャンセルされて loop を閉じるべき"
