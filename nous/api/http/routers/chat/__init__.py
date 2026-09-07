@@ -24,7 +24,7 @@ from nous.api.http.routers.chat.chat_messages import (  # noqa: F401
     rollback_chat_session,
     update_chat_message,
 )
-from nous.api.http.routers.chat.chat_stream import chat_endpoint  # noqa: F401
+from nous.api.http.routers.chat.chat_stream import chat_endpoint, chat_events  # noqa: F401
 
 
 def register_chat_routes(mcp) -> None:
@@ -33,6 +33,7 @@ def register_chat_routes(mcp) -> None:
     mcp.custom_route("/api/chat/{persona}/config", methods=["POST"])(save_chat_config)
     mcp.custom_route("/api/chat/{persona}/mcp-tools", methods=["GET"])(list_mcp_tools)
     mcp.custom_route("/api/chat/{persona}", methods=["POST"])(chat_endpoint)
+    mcp.custom_route("/api/chat/{persona}/events", methods=["GET"])(chat_events)
     mcp.custom_route("/api/chat/{persona}/commitments", methods=["GET"])(get_chat_commitments)
     mcp.custom_route("/api/chat/{persona}/sessions/{session_id}", methods=["GET"])(get_chat_session)
     mcp.custom_route("/api/chat/{persona}/sessions/{session_id}", methods=["DELETE"])(delete_chat_session)

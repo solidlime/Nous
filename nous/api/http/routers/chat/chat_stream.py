@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import TYPE_CHECKING
 
-from starlette.responses import StreamingResponse
+from starlette.responses import JSONResponse, StreamingResponse
 
 from nous.api.http.deps import _resolve_persona_from_request, _safe_get_context
 from nous.config.settings import get_settings
@@ -27,42 +28,6 @@ def _resolve_request(request: Request):
 
 
 # ── extracted inner helpers (were nested inside chat_endpoint) ─────
-
-
-async def _not_found():
-    yield f"data: {json.dumps({'type': 'error', 'message': 'Persona not found'})}\n\n"
-
-
-async def _bad_request():
-    yield f"data: {json.dumps({'type': 'error', 'message': 'Invalid JSON'})}\n\n"
-
-
-async def _empty():
-    yield f"data: {json.dumps({'type': 'error', 'message': 'message is required'})}\n\n"
-
-
-# ── pure logic layer (_do_*) ───────────────────────────────────────
-
-
-async def _do_chat(
-    persona: str,
-    ctx,
-    user_message: str,
-    session_id: str,
-    debug: bool = False,
-    images: list[dict] | None = None,
-):
-    """Async generator yielding SSE chunks for chat response."""
-    from nous.application.chat_service import ChatService
-
-    repo = ChatConfigFileRepository(get_settings().data_root)
-    config = repo.get(persona)
-    service = ChatService()
-    if ctx.search_engine is not None:
-        ctx.search_engine.set_persona(persona)
-
-    async for chunk in service.chat(ctx, config, session_id, user_message, debug=debug, images=images or []):
-        yield chunk
 
 
 async def _do_get_chat_session(persona: str, ctx, session_id: str, limit: int | None = None, offset: int = 0) -> dict:
@@ -98,17 +63,21 @@ async def _do_delete_chat_session(persona: str, ctx, session_id: str) -> dict:
 # ── HTTP adapter layer ─────────────────────────────────────────────
 
 
-async def chat_endpoint(request: Request) -> StreamingResponse:
-    """POST /api/chat/{persona} — streaming chat completion."""
+async def chat_endpoint(request: Request) -> JSONResponse:
+    """POST /api/chat/{persona} — register a chat turn (E3 チャット分離)。
+
+    ターンはサーバー内タスクで完遂し、イベントは GET /{persona}/events の SSE ハブから配信。
+    202 {"turn_id"} / 実行中 409 / persona 不在 404。
+    """
     persona, ctx = _resolve_request(request)
     if not ctx:
-        return StreamingResponse(_not_found(), media_type="text/event-stream")
+        return JSONResponse({"detail": "Persona not found"}, status_code=404)
 
     try:
         body = await request.json()
     except (json.JSONDecodeError, TypeError):
         logger.exception("chat_endpoint: invalid JSON body")
-        return StreamingResponse(_bad_request(), media_type="text/event-stream")
+        return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
 
     user_message = (body.get("message") or "").strip()
     session_id = (body.get("session_id") or "main").strip()
@@ -117,7 +86,7 @@ async def chat_endpoint(request: Request) -> StreamingResponse:
     images: list[dict] = _images_raw if isinstance(_images_raw, list) else []
 
     if not user_message:
-        return StreamingResponse(_empty(), media_type="text/event-stream")
+        return JSONResponse({"detail": "message is required"}, status_code=400)
 
     try:
         from nous.api.http.routers.tts import kickoff_caption_task
@@ -126,8 +95,69 @@ async def chat_endpoint(request: Request) -> StreamingResponse:
     except Exception:
         logger.exception("chat_endpoint: caption kickoff failed")
 
+    from nous.application.chat.service import ChatService, TurnBusyError
+
+    repo = ChatConfigFileRepository(get_settings().data_root)
+    config = repo.get(persona)
+    if ctx.search_engine is not None:
+        ctx.search_engine.set_persona(persona)
+    service = ChatService()
+    try:
+        turn_id = await service.chat_turn(ctx, config, user_message, session_id, debug=debug_mode, images=images)
+    except TurnBusyError:
+        return JSONResponse({"detail": "turn already running"}, status_code=409)
+    return JSONResponse({"turn_id": turn_id}, status_code=202)
+
+
+async def chat_event_stream(request: Request, persona: str, last_seq: int = 0):
+    """SSE generator: snapshot_after リプレイ（id: <seq> 付き）→ ライブ push → keepalive 15s。"""
+    from nous.application.chat.service import get_turn_hub
+
+    hub = get_turn_hub()
+    queue = hub.subscribe(persona)
+    try:
+        last = last_seq
+        for seq, sse in hub.snapshot_after(persona, last_seq):
+            last = seq
+            yield f"id: {seq}\n{sse}"
+        while True:
+            if await request.is_disconnected():
+                break
+            try:
+                seq, sse = await asyncio.wait_for(queue.get(), timeout=15.0)
+            except TimeoutError:
+                # Keepalive comment (SSE spec: lines starting with : are comments)
+                yield ": keepalive\n\n"
+                continue
+            if seq <= last:
+                continue  # リプレイ済み（subscribe と snapshot の競合分）
+            last = seq
+            yield f"id: {seq}\n{sse}"
+    except asyncio.CancelledError:
+        raise  # finally の unsubscribe のみ行い、キャンセルは外へ伝播させる
+    except Exception as e:
+        logger.debug("chat SSE stream error for persona '%s': %s", persona, e)
+    finally:
+        hub.unsubscribe(persona, queue)
+
+
+async def chat_events(request: Request) -> StreamingResponse:
+    """GET /api/chat/{persona}/events?last_seq=N — SSE hub stream for chat turns."""
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+
+        async def not_found():
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Persona not found'})}\n\n"
+
+        return StreamingResponse(not_found(), media_type="text/event-stream")
+
+    try:
+        last_seq = int(request.query_params.get("last_seq") or 0)
+    except ValueError:
+        last_seq = 0
+
     return StreamingResponse(
-        _do_chat(persona, ctx, user_message, session_id, debug_mode, images),
+        chat_event_stream(request, persona, last_seq),
         media_type="text/event-stream; charset=utf-8",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

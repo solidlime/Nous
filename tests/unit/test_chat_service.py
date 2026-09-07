@@ -1001,6 +1001,136 @@ def test_chat_js_has_single_panel_toggle_definitions():
 
 
 # ─────────────────────────────────────────────────────────────
+# ChatService.chat_turn (E3 server-side turn hub)
+# ─────────────────────────────────────────────────────────────
+
+
+class TestChatTurn:
+    @pytest.fixture(autouse=True)
+    def _fresh_hub(self, monkeypatch):
+        """TurnHub シングルトンをテスト毎に交換（状態リーク防止）。"""
+        import nous.application.chat.service as svc
+        from nous.application.chat.turn_hub import TurnHub
+
+        hub = TurnHub()
+        monkeypatch.setattr(svc, "_turn_hub", hub)
+        self._hub = hub
+        yield
+
+    def _make_ctx(self):
+        ctx = MagicMock()
+        ctx.persona = "test_persona"
+        return ctx
+
+    @pytest.mark.asyncio
+    async def test_returns_turn_id_and_publishes_events(self):
+        import asyncio
+
+        from nous.application.chat.service import ChatService, get_turn_hub
+        from nous.domain.chat_config import ChatConfig
+
+        hub = get_turn_hub()
+        q = hub.subscribe("test_persona")
+        try:
+            service = ChatService()
+
+            async def fake_chat(self, ctx, config, session_id, user_message, debug=False, images=None):
+                yield 'data: {"type": "text_delta", "content": "hi"}\n\n'
+                yield 'data: {"type": "done", "message": ""}\n\n'
+
+            ctx = self._make_ctx()
+            cfg = ChatConfig(persona="test_persona")
+            with patch.object(ChatService, "chat", fake_chat):
+                turn_id = await service.chat_turn(ctx, cfg, "hello", "main")
+                assert isinstance(turn_id, str) and turn_id
+                for _ in range(50):
+                    await asyncio.sleep(0)
+                    if len(hub.snapshot_after("test_persona", 0)) >= 3:
+                        break
+            events = [sse for _, sse in hub.snapshot_after("test_persona", 0)]
+            assert '"turn_started"' in events[0]
+            assert '"text_delta"' in events[1]
+            assert '"done"' in events[2]
+            # タスク完遂で end_turn → 再 begin 可能
+            assert hub.begin_turn("test_persona") is not None
+        finally:
+            hub.unsubscribe("test_persona", q)
+
+    @pytest.mark.asyncio
+    async def test_busy_raises_turn_busy_error(self):
+        import pytest
+
+        from nous.application.chat.service import ChatService, TurnBusyError, get_turn_hub
+        from nous.domain.chat_config import ChatConfig
+
+        hub = get_turn_hub()
+        assert hub.begin_turn("test_persona") is not None
+        try:
+            service = ChatService()
+            with pytest.raises(TurnBusyError):
+                await service.chat_turn(self._make_ctx(), ChatConfig(persona="test_persona"), "hello", "main")
+        finally:
+            hub.end_turn("test_persona")
+
+    @pytest.mark.asyncio
+    async def test_exception_publishes_error_and_ends_turn(self):
+        import asyncio
+
+        from nous.application.chat.service import ChatService, get_turn_hub
+        from nous.domain.chat_config import ChatConfig
+
+        hub = get_turn_hub()
+        service = ChatService()
+
+        async def fake_chat(self, ctx, config, session_id, user_message, debug=False, images=None):
+            yield 'data: {"type": "text_delta", "content": "x"}\n\n'
+            raise RuntimeError("boom")
+
+        ctx = self._make_ctx()
+        cfg = ChatConfig(persona="test_persona")
+        with patch.object(ChatService, "chat", fake_chat):
+            await service.chat_turn(ctx, cfg, "hello", "main")
+            for _ in range(50):
+                await asyncio.sleep(0)
+                events = [sse for _, sse in hub.snapshot_after("test_persona", 0)]
+                if any('"error"' in e for e in events):
+                    break
+        events = [sse for _, sse in hub.snapshot_after("test_persona", 0)]
+        assert any('"error"' in e for e in events)
+        # 例外でも end_turn されている
+        assert hub.begin_turn("test_persona") is not None
+
+    @pytest.mark.asyncio
+    async def test_turn_started_contains_user_message_and_session(self):
+        import asyncio
+
+        from nous.application.chat.service import ChatService, get_turn_hub
+        from nous.domain.chat_config import ChatConfig
+
+        hub = get_turn_hub()
+        service = ChatService()
+
+        async def fake_chat(self, ctx, config, session_id, user_message, debug=False, images=None):
+            yield 'data: {"type": "done", "message": ""}\n\n'
+
+        ctx = self._make_ctx()
+        cfg = ChatConfig(persona="test_persona")
+        with patch.object(ChatService, "chat", fake_chat):
+            await service.chat_turn(ctx, cfg, "こんにちは", "sess9")
+            for _ in range(50):
+                await asyncio.sleep(0)
+                events2 = [sse for _, sse in hub.snapshot_after("test_persona", 0)]
+                if '"turn_started"' in "".join(events2):
+                    break
+        events2 = [sse for _, sse in hub.snapshot_after("test_persona", 0)]
+        import json
+
+        started = json.loads(next(e for e in events2 if '"turn_started"' in e)[6:].strip())
+        assert started["user_message"] == "こんにちは"
+        assert started["session_id"] == "sess9"
+
+
+# ─────────────────────────────────────────────────────────────
 # Tool-only turn fallback (empty text + tool calls → non-empty save)
 # ─────────────────────────────────────────────────────────────
 

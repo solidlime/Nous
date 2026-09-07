@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 from nous.application.chat.pipeline.compress import CompressStep
@@ -14,6 +15,7 @@ from nous.application.chat.pipeline.trimmer import TrimmerMixin
 from nous.application.chat.session_store import SessionManager
 from nous.application.chat.tools.definitions import get_filtered_tools
 from nous.application.chat.tools.registry import ToolRegistry
+from nous.application.chat.turn_hub import TurnHub
 from nous.application.event_bus import CHAT_LLM_RESPONSE, CHAT_MESSAGE, SESSION_COMPACT
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
@@ -29,6 +31,18 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _session_manager = SessionManager()
+
+# E3 チャット分離: persona 毎のターンイベント配信ハブ（プロセス内シングルトン）
+_turn_hub = TurnHub()
+
+
+def get_turn_hub() -> TurnHub:
+    """TurnHub シングルトンを返す（router の SSE エンドポイントから使用）。"""
+    return _turn_hub
+
+
+class TurnBusyError(Exception):
+    """同一 persona のターン実行中に新規ターン要求（router は 409 を返す）。"""
 
 
 # ── Tool search engine (search_tools) ─────────────────────────────────────────
@@ -117,6 +131,39 @@ def _build_tool_only_fallback(tool_calls_log: list[dict]) -> str:
 
 
 class ChatService:
+    async def chat_turn(
+        self,
+        ctx: AppContext,
+        config: ChatConfig,
+        message: str,
+        session_id: str = "main",
+        debug: bool = False,
+        images: list[dict] | None = None,
+    ) -> str:
+        """ターンをサーバー内タスクで完遂し、全SSEイベントをハブへ配信する（E3 チャット分離）。
+
+        戻り値は turn_id。実行中なら TurnBusyError（router は 409）。
+        """
+        turn_id = _turn_hub.begin_turn(ctx.persona)
+        if turn_id is None:
+            raise TurnBusyError(ctx.persona)
+        _turn_hub.publish_synthetic(
+            ctx.persona, {"type": "turn_started", "user_message": message, "session_id": session_id}
+        )
+
+        async def _consume() -> None:
+            try:
+                async for evt in self.chat(ctx, config, session_id, message, debug=debug, images=images or []):
+                    _turn_hub.publish(ctx.persona, evt)
+            except Exception:
+                _turn_hub.publish_synthetic(ctx.persona, {"type": "error", "message": "internal error"})
+                logger.exception("chat_turn failed persona=%s", ctx.persona)
+            finally:
+                _turn_hub.end_turn(ctx.persona)
+
+        asyncio.create_task(_consume())
+        return turn_id
+
     async def chat(
         self,
         ctx: AppContext,
