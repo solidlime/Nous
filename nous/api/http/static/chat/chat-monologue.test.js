@@ -115,6 +115,19 @@ describe('monologue bubble rendering', () => {
 });
 
 describe('monologue is display-only', () => {
+  it('opens the memory detail modal from the summary click', () => {
+    const openMemory = vi.fn();
+    N.Components = N.Components || {};
+    N.Components.memModal = { openMemory };
+    N.Chat.monologue.handle(monologueEvt('モーダルで読みたい。'));
+    const summary = bubbles()[0].querySelector('summary');
+    summary.click();
+    expect(openMemory).toHaveBeenCalledTimes(1);
+    expect(openMemory).toHaveBeenCalledWith({ content: 'モーダルで読みたい。', tags: ['monologue'] });
+    // the click opens the modal, so the bubble itself stays collapsed
+    expect(bubbles()[0].open).toBe(false);
+  });
+
   it('never touches the chat history array or a save API', async () => {
     const fetchSpy = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }));
     vi.stubGlobal('fetch', fetchSpy);

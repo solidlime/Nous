@@ -804,6 +804,16 @@ function appendMonologueBubble(text) {
   bubble.className = "chat-monologue-bubble";
   var summary = document.createElement("summary");
   summary.textContent = "💭";
+  // The canonical reader is the memory modal (keyless preview — no
+  // Edit/Delete); suppress the native details toggle so the click does
+  // exactly one legible thing. CSP-safe: listener, no inline handler.
+  summary.addEventListener("click", function (e) {
+    e.preventDefault();
+    if (N.Components && N.Components.memModal &&
+        typeof N.Components.memModal.openMemory === "function") {
+      N.Components.memModal.openMemory({ content: text, tags: ["monologue"] });
+    }
+  });
   var body = document.createElement("div");
   body.className = "chat-monologue-text";
   body.textContent = text; // CSP-safe: textContent, never parsed as HTML
