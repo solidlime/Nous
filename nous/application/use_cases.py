@@ -189,6 +189,7 @@ class AppContext:
         """
         enricher: MemoryEnricher | None = None
         monologue_generator: MonologueGenerator | None = None
+        introspection_engine: IntrospectionEngine | None = None
         cfg = self._config
         mem_enrich_enabled = cfg.memory_enrichment_enabled if cfg else self.settings.memory_enrichment.enabled
         if mem_enrich_enabled:
@@ -232,8 +233,16 @@ class AppContext:
                 monologue_generator = MonologueGenerator.from_config(
                     provider_name=provider, api_key=api_key, model=model, base_url=base_url
                 )
+                # IntrospectionEngine shares the SAME resolved provider chain.
+                from nous.application.chat.introspection import IntrospectionEngine
+                from nous.infrastructure.llm.factory import get_provider
+
+                introspection_engine = IntrospectionEngine(
+                    get_provider(provider=provider, api_key=api_key, model=model, base_url=base_url)
+                )
         self._enricher = enricher
         self.monologue_generator = monologue_generator
+        self.introspection_engine = introspection_engine
 
     def _provider_api_key(self, provider: str) -> str:
         """Legacy api_key chain for an arbitrary provider.

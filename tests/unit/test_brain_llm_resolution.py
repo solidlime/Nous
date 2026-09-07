@@ -158,6 +158,30 @@ def test_introspection_config_persisted(tmp_path):
     assert repo.get("p1").brain_introspection_enabled is False
 
 
+class TestIntrospectionEngineWiring:
+    def test_engine_none_when_resolution_fails(self):
+        """解決失敗（api_key 無し）→ introspection_engine None。"""
+        ctx = _ctx(_cfg(brain_llm_dedicated=True, brain_llm_provider="google"))
+        ctx._init_enricher()
+        assert ctx._enricher is None
+        assert ctx.introspection_engine is None
+
+    def test_reload_rebuilds_engine(self):
+        """reload_enricher() で introspection_engine も再構築される。"""
+        ctx = _ctx(_cfg())
+        ctx._init_enricher()
+        first = ctx.introspection_engine
+        assert first is not None
+
+        ctx._config.session_config.brain_llm_dedicated = True
+        ctx._config.session_config.brain_llm_provider = "anthropic"
+        ctx._config.session_config.brain_llm_api_key = "anthropic-key"
+        ctx.reload_enricher()
+        second = ctx.introspection_engine
+        assert second is not None
+        assert second is not first
+
+
 class TestReloadEnricher:
     def test_reload_enricher_swaps_enricher(self):
         """reload_enricher() re-runs the resolution chain with current config."""
