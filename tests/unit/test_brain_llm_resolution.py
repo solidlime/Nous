@@ -143,6 +143,21 @@ class TestToggleOn:
         assert any("no api_key" in r.message for r in caplog.records)
 
 
+def test_introspection_enabled_default_true():
+    cfg = ChatConfig()
+    assert cfg.brain_introspection_enabled is True
+
+
+def test_introspection_config_persisted(tmp_path):
+    from nous.domain.chat_config import ChatConfigFileRepository
+
+    repo = ChatConfigFileRepository(str(tmp_path))
+    cfg = repo.get("p1")
+    cfg.brain_introspection_enabled = False
+    repo.save(cfg)
+    assert repo.get("p1").brain_introspection_enabled is False
+
+
 class TestReloadEnricher:
     def test_reload_enricher_swaps_enricher(self):
         """reload_enricher() re-runs the resolution chain with current config."""

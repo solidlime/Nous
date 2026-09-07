@@ -114,6 +114,8 @@ class SessionConfig(BaseModel):
     brain_llm_api_key: str = ""
     # REM 独り言 (drain バッチ完走時に LLM 1 call で生成・session_events 保存)
     brain_monologue_enabled: bool = False
+    # 内省エンジン (drain 後の単一 LLM 呼び出し: 独り言＋逸脱判定＋反省＋感情/身体)
+    brain_introspection_enabled: bool = True
 
     # Forgetting
     forgetting_enabled: bool = False
