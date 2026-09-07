@@ -28,6 +28,9 @@ beforeAll(() => {
   N.Chat.state = { messages: [], streaming: false };
   N.Chat.markdown = { render: (s) => s };
   loadFile('../chat/chat-send.js');
+  // api is captured at module load — stub before chat-history.js loads
+  N.Core.api = vi.fn();
+  loadFile('../chat/chat-history.js');
 });
 
 beforeEach(() => {
@@ -35,6 +38,7 @@ beforeEach(() => {
   N.Chat.state.messages.length = 0;
   window.S.persona = 'p1';
   N.Chat._sseStreams = {}; // fresh stream registry per test
+  N.Core.api.mockReset();
   instances.length = 0;
   // jsdom (vitest env) lacks EventSource — minimal recording stub.
   vi.stubGlobal('EventSource', class {
@@ -157,5 +161,43 @@ describe('monologue stream wiring', () => {
     N.Chat.monologue.connect('p2');
     expect(instances.length).toBe(2);
     expect(instances[1].url).toBe('/api/memory/wiring/stream?persona=p2');
+  });
+});
+
+describe('monologue restore from session events (chat-history.js)', () => {
+  it('restores bubbles in chronological order after history render', async () => {
+    N.Core.api.mockResolvedValueOnce({ events: [
+      { event_type: 'brain.monologue', summary: '新しい独り言。' },
+      { event_type: 'brain.monologue', summary: '古い独り言。' },
+    ]});
+    await N.Chat.monologue.restore();
+    const texts = Array.from(document.querySelectorAll('.chat-monologue-text'))
+      .map((e) => e.textContent);
+    expect(texts).toEqual(['古い独り言。', '新しい独り言。']);
+    // display-only: never enters the chat history array
+    expect(N.Chat.state.messages.length).toBe(0);
+  });
+
+  it('re-fetches scoped to the persona and drops stale responses', async () => {
+    N.Core.api.mockResolvedValueOnce({ events: [] });
+    window.S.persona = 'p2';
+    await N.Chat.monologue.restore();
+    expect(N.Core.api).toHaveBeenLastCalledWith(
+      '/api/session-events/p2?event_type=brain.monologue&limit=20&order=desc',
+    );
+    // a response that lands after the persona moved on appends nothing
+    N.Core.api.mockResolvedValueOnce({ events: [
+      { event_type: 'brain.monologue', summary: '遅れて着いた独り言。' },
+    ]});
+    const pending = N.Chat.monologue.restore(); // captures p2
+    window.S.persona = 'p1';
+    await pending;
+    expect(bubbles().length).toBe(0);
+  });
+
+  it('swallows API failures quietly', async () => {
+    N.Core.api.mockRejectedValueOnce(new Error('boom'));
+    await expect(N.Chat.monologue.restore()).resolves.toBeUndefined();
+    expect(bubbles().length).toBe(0);
   });
 });

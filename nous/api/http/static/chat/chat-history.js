@@ -663,6 +663,8 @@ async function restoreChatHistory(showSkeleton) {
       CHAT.messages = [];
       _historyComplete = true;
       resetToWelcome();
+      // No chat history either way — monologue whispers still restore
+      restoreMonologueBubbles();
       return;
     }
     // Successful fetch — now safe to reset DOM (Bug B3 fix: only reset after fetch succeeds)
@@ -670,6 +672,10 @@ async function restoreChatHistory(showSkeleton) {
     container.textContent = "";
     renderMessages(data.messages, { prepend: false });
     N.Core.refreshIcons();
+    // REM monologue bubbles ride on top of the restored history
+    // (display-only; every restore re-fetches, so persona switches
+    // get a fresh set after the container wipe).
+    restoreMonologueBubbles();
   } catch (e) {
     console.error("[restoreChatHistory] failed:", e);
     toast("チャット履歴復元失敗: " + e.message, "error");
@@ -890,6 +896,35 @@ async function deleteChatMessage(msgId) {
 }
 
 // ------------------------------------------------------------------
+// REM monologue bubbles — display-only restore from session events.
+// Fetched after each history render; persona switches re-fetch because
+// restoreChatHistory wipes the container first. Never touches
+// CHAT.messages — the whispers live and die with the DOM.
+// ------------------------------------------------------------------
+async function restoreMonologueBubbles() {
+  if (!S.persona) return;
+  var monologue = N.Chat.monologue;
+  if (!monologue || typeof monologue.append !== "function") return;
+  var personaAtRequest = S.persona;
+  try {
+    var data = await api(
+      "/api/session-events/" + encodeURIComponent(personaAtRequest) +
+      "?event_type=brain.monologue&limit=20&order=desc",
+    );
+    // A response that lands after the persona moved on is stale — drop it
+    if (S.persona !== personaAtRequest) return;
+    var events = (data && data.events) || [];
+    // API returns newest-first; render chronologically so the whisper
+    // trail reads the way it happened.
+    for (var i = events.length - 1; i >= 0; i--) {
+      if (events[i] && events[i].summary) monologue.append(events[i].summary);
+    }
+  } catch (e) {
+    console.warn("[monologue restore]:", e.message);
+  }
+}
+
+// ------------------------------------------------------------------
 // Lazy-load triggers — registered once at init
 // ------------------------------------------------------------------
 var _historyListenersBound = false;
@@ -941,5 +976,8 @@ N.Chat.history = {
   reset: resetToWelcome,
   getSessionId: getChatSessionId,
 };
+// Wire the restore hook into the monologue API (chat-send.js owns the
+// bubble renderer; the fetch-and-replay flow lives here).
+if (N.Chat.monologue) N.Chat.monologue.restore = restoreMonologueBubbles;
 
 })(window.Nous);
