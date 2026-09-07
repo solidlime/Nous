@@ -206,6 +206,55 @@ def asyncio_run_generate(engine):
     )
 
 
+class TestReasoningBudget:
+    """openrouter free alias は reasoning モデル（CoT が max_tokens を使い切る）対策。
+
+    2026-09-08 実機: budget=512 で thinking だけ消費 → content 空 → monologue なし。
+    """
+
+    def _engine_with_stream(self, stream_fn) -> tuple[IntrospectionEngine, MagicMock]:
+        provider = MagicMock()
+        provider.stream = stream_fn
+        return IntrospectionEngine(provider), provider
+
+    def test_generate_requests_reasoning_safe_max_tokens(self) -> None:
+        captured: dict = {}
+
+        async def stream(messages, system, temperature, max_tokens):
+            captured["max_tokens"] = max_tokens
+            from nous.infrastructure.llm.base import DoneEvent
+
+            yield DoneEvent(full_content="ok", tool_calls=[])
+
+        engine, _ = self._engine_with_stream(stream)
+        assert asyncio_run_generate(engine) is None  # "ok" は JSON でない → None
+        assert captured["max_tokens"] >= 2048
+
+    def test_prompt_requires_monologue_when_turns_exist(self) -> None:
+        from nous.application.chat.introspection import _INTROSPECTION_PROMPT
+
+        assert "monologue" in _INTROSPECTION_PROMPT
+        assert "必ず" in _INTROSPECTION_PROMPT
+
+    def test_reasoning_only_stream_logs_info(self, caplog) -> None:
+        """text 空でも reasoning delta があれば INFO ログで判別できること。"""
+        import asyncio
+        import logging
+
+        from nous.infrastructure.llm.base import DoneEvent, ThinkingDeltaEvent
+
+        async def stream(messages, system, temperature, max_tokens):
+            yield ThinkingDeltaEvent(content="thinking only")
+            yield DoneEvent(full_content="", tool_calls=[])
+
+        engine, _ = self._engine_with_stream(stream)
+        # get_logger(__name__) が "nous." を二重付与する既有挙動 (nous.infrastructure.logging.structured)
+        with caplog.at_level(logging.INFO, logger="nous.nous.application.chat.introspection"):
+            text, usage = asyncio.new_event_loop().run_until_complete(engine._call_llm("x"))
+        assert text is None
+        assert any("reasoning" in r.message for r in caplog.records if r.levelname == "INFO")
+
+
 class TestRunIntrospection:
     def test_applies_state_and_records(self, ctx, sqlite_conn) -> None:
         base = datetime.now()

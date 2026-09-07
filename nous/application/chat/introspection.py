@@ -30,6 +30,10 @@ _MAX_TURNS = 12
 _MAX_TOTAL_CHARS = 8000
 _MAX_MEMORIES = 5
 _MAX_CHARS_PER_MEMORY = 80
+# openrouter free alias は reasoning モデル（CoT が数百〜千トークン消費）。
+# 512 だと推論だけで budget を使い切り content が空になる（2026-09-08 実機確認）。
+# ponytail: reasoning > ~1800 tokens で budget 溢れ → INFO ログで検知、retry は要る時だけ足す。
+_MAX_TOKENS = 2048
 
 _CHAT_SESSIONS_SCHEMA = (
     "CREATE TABLE IF NOT EXISTS chat_sessions ("
@@ -50,7 +54,7 @@ _INTROSPECTION_PROMPT = """あなたは {persona} です。
 【ペルソナ設定（逸脱判定の基準）】
 {persona_identity}
 
-【出力形式】JSONのみ。
+【出力形式】JSONのみ。新規会話がある限り monologue は必ず書くこと（null 禁止）。
 {{
   "monologue": "独り言（最大5文・この間の出来事と気持ちを織り込む）",
   "violation": "キャラ逸脱があれば種別を一言。なければ null",
@@ -134,25 +138,36 @@ class IntrospectionEngine:
             ErrorEvent,
             LLMMessage,
             TextDeltaEvent,
+            ThinkingDeltaEvent,
         )
 
         parts: list[str] = []
         usage: dict | None = None
+        thinking_chars = 0
         async for event in self._provider.stream(
             messages=[LLMMessage(role="user", content=user_message)],
             system="",
             temperature=0.7,
-            max_tokens=512,
+            max_tokens=_MAX_TOKENS,
         ):
             if isinstance(event, TextDeltaEvent):
                 parts.append(event.content)
+            elif isinstance(event, ThinkingDeltaEvent):
+                thinking_chars += len(event.content)
             elif isinstance(event, ErrorEvent):
                 logger.debug("introspection LLM stream error: %s", event.message)
                 return None, None
             elif isinstance(event, DoneEvent):
                 usage = event.usage
                 logger.debug("introspection usage: %s", usage)
-        return ("".join(parts) if parts else None), usage
+        text = "".join(parts) if parts else None
+        if text is None and thinking_chars:
+            # reasoning モデルが budget を使い切ったケースを success と区別できるようにする
+            logger.info(
+                "introspection: text empty after reasoning (%d chars) — max_tokens budget likely exhausted",
+                thinking_chars,
+            )
+        return text, usage
 
 
 def _resolve_llm_config(config: ChatConfig | None, settings) -> tuple[str, str, str, str]:
