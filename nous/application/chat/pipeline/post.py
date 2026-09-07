@@ -7,7 +7,6 @@ import time
 from typing import TYPE_CHECKING
 
 from nous.application.chat.events import (
-    CharacterFlagSSE,
     ContextUpdateSSE,
     DebugInfoSSE,
     DoneSSE,
@@ -104,19 +103,6 @@ async def _safe_mental_model(ctx: AppContext, config: ChatConfig) -> None:
         logger.warning("background mental model failed", exc_info=True)
 
 
-def _with_drift(payload: dict, judgment: dict | None) -> dict:
-    """違反判定があればpayloadにdriftを載せたコピーを返す。なければ元のまま。"""
-    if judgment and judgment.get("violation") not in (None, "none"):
-        return {
-            **payload,
-            "drift": {
-                "violation": str(judgment["violation"]),
-                "detail": str(judgment.get("detail", "")),
-            },
-        }
-    return payload
-
-
 class PostProcessStep:
     """MemoryLLM await実行 + Reflection SSE + セッション更新 + debug_info/done SSEの送出。
 
@@ -135,13 +121,7 @@ class PostProcessStep:
         turn_ctx: ChatTurnContext,
         debug: bool = False,
     ) -> AsyncIterator[
-        DebugInfoSSE
-        | DoneSSE
-        | MemoryActivitySSE
-        | SessionSummarizedSSE
-        | ContextUpdateSSE
-        | InventoryUpdateSSE
-        | CharacterFlagSSE
+        DebugInfoSSE | DoneSSE | MemoryActivitySSE | SessionSummarizedSSE | ContextUpdateSSE | InventoryUpdateSSE
     ]:
         # evict_callback を設定（session.add は service.py で既に実行済み）
         _summary_tasks: list[asyncio.Task] = []
@@ -204,28 +184,15 @@ class PostProcessStep:
             assistant_msg_id=turn_ctx.assistant_msg_id,
         )
 
-        # MemoryLLM + CharacterJudge: judge→memoryの順に逐次実行（judgmentをpayloadに載せ替え）
+        # MemoryLLM: キャラ判定は idle 内省 (introspection.py) に移行 (spec §2)
         memory_result: dict = {}
-        judgment: dict | None = None
         if turn_ctx.full_response:
             payload = {"user": turn_ctx.user_message, "assistant": turn_ctx.full_response}
-            wants_memory = config.auto_extract
-            wants_judge = getattr(config, "character_judge_enabled", True)
-            if wants_judge:
-                from nous.application.chat.character_judge import judge_character
-
+            if config.auto_extract:
                 try:
-                    judgment = await judge_character(config, turn_ctx.system_prompt, turn_ctx.full_response)
+                    memory_result = await run_memory_llm(ctx, config, payload, tool_calls_log=turn_ctx.tool_calls_log)
                 except Exception as e:
-                    logger.warning("PostProcessStep: judge_character failed drift=judge_exception: %s", e)
-                    judgment = None
-            if wants_memory:
-                try:
-                    memory_result = await run_memory_llm(
-                        ctx, config, _with_drift(payload, judgment), tool_calls_log=turn_ctx.tool_calls_log
-                    )
-                except Exception as e:
-                    logger.warning("PostProcessStep: run_memory_llm failed drift=memory_exception: %s", e)
+                    logger.warning("PostProcessStep: run_memory_llm failed: %s", e)
 
         # MemoryActivitySSE: 取得された記憶と保存された記憶・goals・promises を通知
         retrieved_for_sse = turn_ctx.memories_raw[:5]
@@ -310,10 +277,6 @@ class PostProcessStep:
                     _inv[k] = v
             if _inv:
                 yield InventoryUpdateSSE(update=_inv)
-
-        # CharacterFlagSSE: キャラ一貫性違反のフラグ（非破壊・表示のみ）
-        if judgment and judgment.get("violation") not in (None, "none"):
-            yield CharacterFlagSSE(violation=judgment["violation"], detail=judgment.get("detail", ""))
 
         # debug_info SSE — only when debug flag is enabled
         if debug:

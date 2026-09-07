@@ -10,6 +10,23 @@ import inspect
 import textwrap
 
 
+class TestPerTurnJudgeRemoved:
+    """毎ターンキャラ判定は idle 内省 (introspection) に移行 (spec §2)。"""
+
+    def test_run_does_not_call_judge_character(self):
+        from nous.application.chat.pipeline.post import PostProcessStep
+
+        source = inspect.getsource(PostProcessStep.run)
+        assert "judge_character" not in source, "per-turn judge must be removed from PostProcessStep"
+        assert "_with_drift" not in source
+
+    def test_memory_llm_still_called(self):
+        from nous.application.chat.pipeline.post import PostProcessStep
+
+        source = inspect.getsource(PostProcessStep.run)
+        assert "run_memory_llm" in source, "MemoryLLM extraction must remain per-turn"
+
+
 class TestCharacterConsistencyGap:
     """R2: Character contradiction detection gap."""
 
