@@ -219,14 +219,3 @@ class TestPostBuildsSavedOnlySSE:
 
         src = inspect.getsource(post_mod.PostProcessStep.run)
         assert "action" in src
-
-
-class TestAutoCaptureLifecycle:
-    def test_no_deleted_at_reference(self):
-        import inspect
-
-        from nous.application.chat.pipeline import auto_capture as ac
-
-        src = inspect.getsource(ac.run_auto_capture)
-        assert "deleted_at" not in src
-        assert "lifecycle_status" in src

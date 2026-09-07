@@ -307,10 +307,6 @@ function applyChatConfig(cfg) {
   if (_defPreset && cfg.image_gen_default_preset) _defPreset.value = cfg.image_gen_default_preset;
   // スライダー値表示更新
   N.Chat.settings.updateSliderLabels();
-  // === Auto-capture (moved from Settings) ===
-  setChecked("chat-auto-capture-enabled", cfg.auto_capture_enabled === true);
-  set("chat-auto-capture-interval", cfg.auto_capture_interval ?? 300);
-  set("chat-auto-capture-max-memories", cfg.auto_capture_max_memories ?? 10);
   // === Memory enrichment (enabled toggle lives in the brain section) ===
   setChecked("chat-memory-enrichment-enabled", cfg.memory_enrichment_enabled === true);
   // === Brain simulation ===
@@ -477,10 +473,7 @@ async function saveChatConfig() {
       document.getElementById("chat-mental-model-min-samples")?.value || "3",
     ),
     debug_mode: getChecked("chat-debug-mode"),
-    // === Auto-capture (moved from Settings) ===
-    auto_capture_enabled: getChecked("chat-auto-capture-enabled"),
-    auto_capture_interval: parseInt(document.getElementById("chat-auto-capture-interval")?.value || "300"),
-    auto_capture_max_memories: parseInt(document.getElementById("chat-auto-capture-max-memories")?.value || "10"),
+
     // === Memory enrichment (enabled toggle lives in the brain section) ===
     memory_enrichment_enabled: getChecked("chat-memory-enrichment-enabled"),
     // === Brain simulation ===

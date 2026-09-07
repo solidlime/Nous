@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from typing import TYPE_CHECKING
 
 from nous.application.chat.events import (
@@ -30,10 +29,6 @@ if TYPE_CHECKING:
     from nous.domain.chat_config import ChatConfig
 
 logger = get_logger(__name__)
-
-# persona ごとの最終 auto_capture 実行時刻（monotonic）。
-# PostProcessStep は毎ターン新規インスタンス化されるためモジュールレベルで保持。
-_last_auto_capture_at: dict[str, float] = {}
 
 # Fire-and-forget タスクの強参照（GC 防止）＋上限。完了タスクはコールバックで除去。
 # PostProcessStep は毎ターン新規インスタンス化されるためモジュールレベルで保持。
@@ -140,30 +135,6 @@ class PostProcessStep:
                     yield SessionSummarizedSSE(summary=summary)
             except Exception as e:
                 logger.warning("SessionSummarizedSSE failed: %s", e)
-
-        # Auto-capture: セッション会話から重要情報を記憶として抽出（interval throttle 付き）
-        try:
-            interval = max(0, int(getattr(config, "auto_capture_interval", 300)))
-            now = time.monotonic()
-            last = _last_auto_capture_at.get(ctx.persona)
-            due = interval <= 0 or last is None or (now - last) >= interval
-            if config.auto_capture_enabled and session._messages and due:
-                _last_auto_capture_at[ctx.persona] = now
-                from nous.application.chat.pipeline.auto_capture import run_auto_capture
-
-                _track_background(
-                    asyncio.create_task(
-                        run_auto_capture(
-                            ctx=ctx,
-                            config=config,
-                            persona=ctx.persona,
-                            messages=list(session._messages),
-                            max_memories=config.auto_capture_max_memories,
-                        )
-                    )
-                )
-        except Exception as e:
-            logger.warning("PostProcessStep: auto_capture failed: %s", e)
 
         # 最終会話時刻を記録
         try:

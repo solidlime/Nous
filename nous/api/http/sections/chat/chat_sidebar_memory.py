@@ -4,7 +4,7 @@
 def _render_memory_section(children: str = "") -> str:
     """Memory intake group — extraction fields + nested child accordions.
 
-    children: .chat-subsection markup (auto-capture, mental model,
+    children: .chat-subsection markup (mental model,
     reflection) — everything that WRITES memories into the store.
     """
     return f"""

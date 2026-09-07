@@ -2276,9 +2276,6 @@ input[type="range"].chat-field-input:focus {
 #settings-panel details[data-category="image"] summary::before {
   color: var(--accent-pink);
 }
-#settings-panel details[data-category="auto_capture"] summary::before {
-  color: var(--accent-green);
-}
 #settings-panel details[data-category="memory_enrichment"] summary::before {
   color: var(--accent-yellow);
 }

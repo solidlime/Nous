@@ -141,16 +141,6 @@ class MemoryEnrichmentConfig(BaseModel):
         return os.environ.get(env_var, "")
 
 
-class AutoCaptureConfig(BaseModel):
-    """Auto-capture: extract key information from session as memories."""
-
-    enabled: bool = False
-    """Auto-capture memories at end of each chat turn."""
-
-    max_memories: int = 5
-    """Maximum memories to create per session."""
-
-
 class IrodoriAdvancedParams(BaseModel):
     """Irodori-TTS top-level irodori options (num_steps / cfg_* / chunking / caption / seed)."""
 
@@ -298,7 +288,6 @@ class Settings(BaseSettings):
     qdrant: QdrantConfig = QdrantConfig()
     forgetting: ForgettingConfig = ForgettingConfig()
     memory_enrichment: MemoryEnrichmentConfig = MemoryEnrichmentConfig()
-    auto_capture: AutoCaptureConfig = AutoCaptureConfig()
     cors: CorsConfig = CorsConfig()
     irodori: IrodoriConfig = Field(default_factory=IrodoriConfig)
     timezone: str = "Asia/Tokyo"

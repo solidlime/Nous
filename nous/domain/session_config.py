@@ -62,11 +62,6 @@ class SessionConfig(BaseModel):
     # 旧設定ファイルには本キーが無いので before-validator で旧値から導出する。
     voice_emotion_mode: str = "anchor"
 
-    # Auto-capture
-    auto_capture_enabled: bool = False
-    auto_capture_interval: int = 300
-    auto_capture_max_memories: int = 10
-
     # Memory enrichment
     memory_enrichment_enabled: bool = False
     memory_enrichment_auto_run: bool = False
