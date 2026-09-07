@@ -615,10 +615,13 @@ async function restoreChatHistory(showSkeleton) {
     CHAT._justReset = false;
     return; // リセット直後は履歴を再取得しない
   }
-  // Generation counter — prevent stale response from overwriting newer data
-  var myGen = ++_historyGen;
-  // Exclusive lock — prevent concurrent restore calls
+  // Generation counter — prevent stale response from overwriting newer data.
+  // Bump AFTER the lock check: a call rejected by the lock must not bump
+  // the generation, or the in-flight restore's response fails the
+  // freshness check below and is silently discarded (page-load backlog:
+  // loadChat's restore races the chat-events hub replay's restore).
   if (_restoreLock) return;
+  var myGen = ++_historyGen;
   _restoreLock = true;
   _historyRestorePending = true; // バックグラウンド復帰時の再実行判定用
   try {
