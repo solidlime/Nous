@@ -107,7 +107,7 @@ N.Core.disconnectStream = function disconnectStream(name) {
 /* ── Main event stream (all tabs) ── */
 var MAIN_EVENTS_URL = function MAIN_EVENTS_URL(persona) {
   return "/api/events/" + encodeURIComponent(persona) +
-    "?topics=memory,context,emotion,body,session";
+    "?topics=memory,context,emotion,body,session,config";
 };
 
 var MAIN_HANDLERS = {
@@ -182,7 +182,36 @@ var MAIN_HANDLERS = {
       }
     } catch (err) { console.warn("[SSE parse] session.rollback:", err.message); }
   },
+  "config.updated": function handleConfigUpdated() {
+    /* Settings sync: the backend emits config.updated when a config
+       write lands. While the settings panel is open, re-read the config
+       once per burst (trailing debounce) so the UI never shows stale
+       values. Guarded — N.Chat may be absent on non-chat pages. */
+    if (!_settingsPanelOpen()) return;
+    if (_configReloadTimer) clearTimeout(_configReloadTimer);
+    _configReloadTimer = setTimeout(function () {
+      _configReloadTimer = null;
+      if (!_settingsPanelOpen()) return;
+      if (N.Chat && N.Chat.settings && typeof N.Chat.settings.load === "function") {
+        try {
+          var p = N.Chat.settings.load();
+          if (p && typeof p.catch === "function") {
+            p.catch(function (e) { console.warn("[config reload]:", e && e.message); });
+          }
+        } catch (err) { console.warn("[config reload]:", err && err.message); }
+      }
+    }, 800);
+  },
 };
+
+/* Settings-panel visibility — the toggle marks closure with .collapsed
+   on both desktop (width 0) and mobile (slide-out). */
+function _settingsPanelOpen() {
+  var panel = document.getElementById("settings-panel");
+  return !!(panel && !panel.classList.contains("collapsed") &&
+            panel.style.display !== "none");
+}
+var _configReloadTimer = null;
 
 N.Core.connectSSE = function connectSSE(persona) {
   N.Core.connectStream("main", {

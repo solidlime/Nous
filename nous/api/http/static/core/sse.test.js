@@ -2,7 +2,8 @@
    SSE tests — named multi-stream manager in core/sse.js
    Covers: main stream single-flight, live-persona reconnect,
    backoff doubling + reset on open, teardown, stream independence,
-   gated streams (url() → null opens nothing).
+   gated streams (url() → null opens nothing), config.updated
+   settings sync listener.
    ================================================================= */
 import { loadCore, loadFile } from './load-core.js';
 
@@ -73,7 +74,7 @@ describe('main stream (connectSSE)', () => {
     instances[0].onerror();
     vi.runAllTimers();
     expect(instances[1].url)
-      .toBe('/api/events/p2?topics=memory,context,emotion,body,session');
+      .toBe('/api/events/p2?topics=memory,context,emotion,body,session,config');
   });
 
   it('no reconnect when the store has no persona', () => {
@@ -135,5 +136,40 @@ describe('stream engine (multi-stream)', () => {
     });
     first.emit('tick', '{}');
     expect(handler).not.toHaveBeenCalled();
+  });
+});
+
+describe('config sync listener (config.updated)', () => {
+  beforeEach(() => {
+    document.body.innerHTML =
+      '<span id="sse-status"></span>' +
+      '<div id="settings-panel"><input id="chat-model" value="m" /></div>';
+    N.Chat = { state: {}, settings: { load: vi.fn(() => Promise.resolve({})) } };
+  });
+
+  it('subscribes to the config topic', () => {
+    N.Core.connectSSE('p1');
+    expect(instances[0].url).toContain('topics=memory,context,emotion,body,session,config');
+    expect(instances[0]._listeners['config.updated']).toHaveLength(1);
+  });
+
+  it('reloads settings once per burst while the panel is open', () => {
+    N.Core.connectSSE('p1');
+    const es = instances[0];
+    es.emit('config.updated', '{}');
+    es.emit('config.updated', '{}'); // burst — debounce collapses it
+    expect(N.Chat.settings.load).not.toHaveBeenCalled(); // not yet
+    vi.advanceTimersByTime(900);
+    expect(N.Chat.settings.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reload while the settings panel is closed', () => {
+    document.body.innerHTML =
+      '<span id="sse-status"></span>' +
+      '<div id="settings-panel" class="collapsed"><input id="chat-model" value="m" /></div>';
+    N.Core.connectSSE('p1');
+    instances[0].emit('config.updated', '{}');
+    vi.advanceTimersByTime(5000);
+    expect(N.Chat.settings.load).not.toHaveBeenCalled();
   });
 });
