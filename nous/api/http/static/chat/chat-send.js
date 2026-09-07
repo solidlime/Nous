@@ -252,18 +252,12 @@ function _createTextBubble(assistantDiv) {
 // Cancel streaming
 // ------------------------------------------------------------------
 function chatCancel() {
-  CHAT.streaming = false;
-  if (CHAT.abortController) {
-    CHAT.abortController.abort();
-    CHAT.abortController = null;
-  }
-  const cancelBtn = document.getElementById("chat-cancel-btn");
-  const sendBtn = document.getElementById("chat-send-btn");
-  const statusEl = document.getElementById("chat-status");
-  if (cancelBtn) cancelBtn.style.display = "none";
-  if (sendBtn) sendBtn.style.display = "";
-  if (statusEl) statusEl.textContent = "中断しました";
+  // The turn keeps running server-side (no cancel endpoint) — cancel
+  // stops local rendering only; the hub's done re-syncs history.
   removeTypingIndicator();
+  _endTurnSession();
+  const statusEl = document.getElementById("chat-status");
+  if (statusEl) statusEl.textContent = "中断しました";
 }
 
 // ------------------------------------------------------------------
@@ -398,16 +392,9 @@ async function chatSend(retry) {
   appendChatMessage("user", displayMsg, timeStr);
   showTypingIndicator();
 
-  CHAT.streaming = true;
-  CHAT._streamingSince = Date.now();
-  CHAT.abortController = new AbortController();
-  sendBtn.style.display = "none";
-  if (cancelBtn) cancelBtn.style.display = "";
-  statusEl.textContent = "記憶処理中...";
-  CHAT._firstContent = true;
-
   const sessionId = N.Chat.history.getSessionId();
   // F3: content_parts-based rendering — tracks interleaved text/tool_call/tool_result
+  // (state lives in the module-level _turn session, fed by the hub stream)
   let contentParts = [];       // [{type:"text"|"tool_call"|"tool_result", ...}]
   let assistantDiv = null;
   let currentTextBubble = null;  // DOM element currently being streamed to
@@ -442,347 +429,459 @@ async function chatSend(retry) {
     currentTextContent = "";
   }
 
+  // Turn session + persistent hub subscription: the POST only REGISTERS
+  // the turn (202 + turn_id); every event — turn_started → … → done —
+  // arrives on the chat-events SSE stream. The session is created
+  // BEFORE the POST so the turn_started race (the hub publishes it
+  // before the 202 lands) dedupes against the local user bubble.
+  _beginTurnSession(message);
+
   try {
-    const response = await fetch("/api/chat/" + encodeURIComponent(S.persona), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: message,
-        session_id: sessionId,
-        images: images.length > 0 ? images : undefined,
-        debug: document.getElementById("chat-debug-mode")?.checked || false,
-      }),
-      signal: CHAT.abortController.signal,
-    });
-
-    if (!response.ok) {
-      throw new Error("HTTP " + response.status);
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let streamDone = false;
-    var _rafPending = false;
-    var _thinkingRafPending = false;
-    var _scrollListener = null;
-    var chatMessages = document.getElementById("chat-messages");
-
-    removeTypingIndicator();
-
-    // Track user scroll intent during streaming
-    CHAT._userScrolledUp = false;
-    if (chatMessages) {
-      _scrollListener = function _onChatScroll() {
-        var threshold = 80;
-        CHAT._userScrolledUp = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight > threshold;
-      };
-      chatMessages.addEventListener("scroll", _scrollListener, { passive: true });
-    }
-
-    while (true) {
-      const readPromise = reader.read();
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Stream timeout: no data for 120s")), 120000),
-      );
-      const { value, done } = await Promise.race([readPromise, timeoutPromise]);
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split("\n");
-      buffer = lines.pop(); // keep incomplete line
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        let evt;
-        try {
-          evt = JSON.parse(line.slice(6));
-        } catch {
-          continue;
-        }
-
-        if (evt.type === "text_delta") {
-          if (!evt.content) continue;
-          if (CHAT._firstContent) {
-            CHAT._firstContent = false;
-            statusEl.textContent = "応答中...";
-          }
-          // F3: content_parts — create or continue text bubble inside assistant div
-          if (!assistantDiv) {
-            assistantDiv = _createAssistantDiv();
-          }
-          // If the last part was a tool call, start a new text bubble
-          const lastPart = contentParts[contentParts.length - 1];
-          if (!lastPart || lastPart.type !== "text") {
-            currentTextBubble = _createTextBubble(assistantDiv);
-            currentTextContent = "";
-            contentParts.push({ type: "text", bubble: currentTextBubble, content: "" });
-          }
-          currentTextContent += evt.content;
-          if (window.Nous && Nous.Chat.ttsStream && Nous.Chat.ttsStream.onDelta && document.getElementById("chat-voice-streaming")?.checked) { try { Nous.Chat.ttsStream.onDelta(currentTextContent); } catch (_e) {} }
-          contentParts[contentParts.length - 1].content = currentTextContent;
-
-          // rAF-batched DOM update
-          if (!_rafPending) {
-            _rafPending = true;
-            requestAnimationFrame(function() {
-              _rafPending = false;
-              if (currentTextBubble) {
-                currentTextBubble.textContent = currentTextContent;
-              }
-              // Auto-scroll with user intent detection
-              if (chatMessages) {
-                var isAtBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 80;
-                if (isAtBottom || !CHAT._userScrolledUp) {
-                  chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
-              }
-            });
-          }
-        } else if (evt.type === "thinking_delta") {
-          // CoT (thinking) display — R6: dedicated .chat-thinking-bubble <details>.
-          // Structural TTS/copy exclusion: content NOT pushed to contentParts and
-          // class is NOT .chat-bubble, so TTS auto-play / manual / copy never see it.
-          if (CHAT._firstContent) {
-            CHAT._firstContent = false;
-            statusEl.textContent = "応答中...";
-          }
-          if (!assistantDiv) {
-            assistantDiv = _createAssistantDiv();
-          }
-          if (!thinkingDetails) {
-            thinkingDetails = document.createElement("details");
-            thinkingDetails.className = "chat-thinking-bubble";
-            safeSetHTML(
-              thinkingDetails,
-              '<summary>' +
-                '<span class="chat-thinking-summary-left">' +
-                '<i data-lucide="brain"></i> <strong>思考</strong></span>' +
-                '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
-                '<span class="chat-tool-status">処理中...</span></summary>' +
-                '<div class="chat-thinking-body"></div>',
-            );
-            // Keep thinking block at the head of the assistant div
-            assistantDiv.insertBefore(thinkingDetails, assistantDiv.firstChild);
-            thinkingContent = "";
-            N.Core.refreshIcons();
-          }
-          thinkingContent += evt.content;
-          const thinkBody = thinkingDetails.querySelector(
-            ".chat-thinking-body",
-          );
-          // rAF-batched DOM update (independent of text_delta batching)
-          if (!_thinkingRafPending) {
-            _thinkingRafPending = true;
-            requestAnimationFrame(function() {
-              _thinkingRafPending = false;
-              if (thinkBody) thinkBody.textContent = thinkingContent;
-              if (chatMessages) {
-                var isAtBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 80;
-                if (isAtBottom || !CHAT._userScrolledUp) {
-                  chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
-              }
-            });
-          }
-        } else if (evt.type === "tool_call") {
-          CHAT._firstContent = false;
-          if (!assistantDiv) {
-            assistantDiv = _createAssistantDiv();
-          }
-          // End current text bubble — next text_delta will create a new one
-          _closeTextBubble();
-          const toolDiv = N.Chat.tools.append("tool_call", evt, assistantDiv);
-          contentParts.push({ type: "tool_call", div: toolDiv, id: evt.id, name: evt.name });
-          // status bar mirrors the chip's narrative label (no raw tool name);
-          // image_generate keeps its dedicated text (image_gen_start has its own spinner)
-          if (evt.name === "image_generate") {
-            safeSetHTML(statusEl,
-              '<i data-lucide="image"></i> 画像を生成中...');
-          } else {
-            safeSetHTML(statusEl,
-              '<i data-lucide="' + N.Chat.tools.icon(evt.name) + '"></i> ' +
-              esc(N.Chat.tools.label(evt.name)));
-          }
-        } else if (evt.type === "tool_result") {
-          N.Chat.tools.append("tool_result", evt);
-          _closeTextBubble(); // ensure next text_delta creates new bubble
-          contentParts.push({ type: "tool_result", id: evt.id, result: evt.result });
-          statusEl.textContent = "応答中...";
-        } else if (evt.type === "memory_activity") {
-          if (evt.preliminary) {
-            _mem("update")(evt.retrieved, undefined, undefined, undefined);
-          } else {
-            _mem("update")(evt.retrieved, evt.saved, evt.goals, evt.promises);
-          }
-          if (_memoryActivityTimer) clearTimeout(_memoryActivityTimer);
-          _memoryActivityTimer = setTimeout(function() { N.Chat.core.loadCommitments(); }, 500);
-          statusEl.textContent = "";
-        } else if (evt.type === "inventory_update") {
-          N.Chat.equipment.update(evt.update);
-        } else if (evt.type === "context_update") {
-          try {
-            var _cu = evt.update || {};
-            if (_cu.emotion) {
-              window.dispatchEvent(new CustomEvent("emotion-changed", { detail: _cu }));
-            }
-          } catch (_e) { console.warn("[context_update] handle failed:", _e); }
-        } else if (evt.type === "character_flag") {
-          N.Chat.showCharacterFlag(assistantDiv, evt.violation, evt.detail);
-        } else if (evt.type === "session_summarized") {
-          _mem("sessionSummarized")(evt.summary);
-        } else if (evt.type === "context_compressed") {
-          _mem("contextCompressed")(evt);
-        } else if (evt.type === "image_gen_start") {
-          N.Chat.tools.showGenSpinner(evt);
-        } else if (evt.type === "image_gen_result") {
-          N.Chat.tools.showGenResult(evt);
-        } else if (evt.type === "error") {
-          removeTypingIndicator();
-          toast("エラー: " + evt.message, "error");
-          statusEl.textContent = "";
-          streamDone = true;
-          break;
-        } else if (evt.type === "debug_info") {
-          console.debug("[debug_info received]", Object.keys(evt));
-          N.Chat.core.debug(assistantDiv, evt);
-        } else if (evt.type === "done") {
-          // F3: render all text parts as final markdown
-          // 空delta由来の空バブルを除去（ツール合間の空バブル対策）
-          for (const part of contentParts) {
-            if (part.type === "text" && part.bubble && !(part.content || "").trim()) {
-              part.bubble.remove();
-            }
-          }
-          let allText = "";
-          for (const part of contentParts) {
-            if (part.type === "text" && part.bubble && part.content) {
-              safeSetHTML(part.bubble, safeMarkdown(part.content));
-              part.bubble.querySelectorAll("img").forEach((img) => {
-                img.style.cssText =
-                  "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
-                img.addEventListener("click", () =>
-                  N.Chat.attachments.openViewer(img.src, "image"),
-                );
-              });
-              allText += part.content + "\n";
-            }
-          }
-          // TE04: Auto-play TTS for all text
-          var voiceAutoPlay = document.getElementById("chat-voice-auto-play");
-          var voiceStreaming = document.getElementById("chat-voice-streaming");
-          if (voiceAutoPlay && voiceAutoPlay.checked && allText.trim()) {
-            if (voiceStreaming && voiceStreaming.checked && Nous.Chat.ttsStream && Nous.Chat.ttsStream.finish) {
-              var _msgEls = document.querySelectorAll("#chat-messages .chat-msg");
-              var _msgEl = _msgEls.length ? _msgEls[_msgEls.length - 1] : null;
-              Nous.Chat.ttsStream.finish(allText.trim(), _msgEl);
-            } else {
-              N.Chat.tts.autoPlay(allText.trim());
-            }
-          }
-          // Clean up: remove assistant div if it has no content (text, tools, or thinking)
-          if (assistantDiv) {
-            const hasToolCalls = assistantDiv.querySelector(".chat-tool-call");
-            const hasTextBubbles = assistantDiv.querySelector(".chat-bubble");
-            const hasThinking = assistantDiv.querySelector(".chat-thinking-bubble");
-            if (!hasToolCalls && !hasTextBubbles && !hasThinking) {
-              assistantDiv.remove();
-            }
-          }
-          // Re-enable send immediately, keep SSE reader alive for memory_activity
-          CHAT.streaming = false;
-          CHAT._streamingSince = null;
-          sendBtn.style.display = "";
-          if (cancelBtn) cancelBtn.style.display = "none";
-          statusEl.textContent = "ちょっと考えてる…";
-          // Show truncation notice when response was auto-continued
-          if (evt.truncated) {
-            const notice = document.createElement("div");
-            notice.className = "chat-truncation-notice";
-            notice.textContent = "（つづき）";
-            // e1: 空応答時はassistantDivがnullのためガード
-            if (assistantDiv) {
-              // Insert after the last text bubble inside assistantDiv
-              const lastBubble = assistantDiv.querySelector(".chat-bubble:last-of-type");
-              if (lastBubble) {
-                lastBubble.insertAdjacentElement("afterend", notice);
-              } else {
-                assistantDiv.appendChild(notice);
-              }
-            }
-          }
-          // Show token usage info when available
-          if (evt.usage && assistantDiv) {
-            const u = evt.usage;
-            const tokenInfo = document.createElement("div");
-            tokenInfo.className = "chat-token-info";
-            tokenInfo.style.cssText = "font-size:0.72rem;color:var(--text-muted);margin-top:4px;opacity:0.7;";
-            tokenInfo.textContent = "🔤 " + u.prompt_tokens + "↑ " + u.completion_tokens + "↓ = " + u.total_tokens + " 合計";
-            assistantDiv.appendChild(tokenInfo);
-          }
-          // Set message IDs from server
-          if (evt.user_msg_id || evt.assistant_msg_id) {
-            if (evt.user_msg_id) {
-              const userMsgs = document.querySelectorAll(".chat-msg.user");
-              const lastUser = userMsgs[userMsgs.length - 1];
-              // Only set if not already assigned (retry may reuse existing msgId)
-              if (lastUser && !lastUser.dataset.msgId) {
-                lastUser.dataset.msgId = evt.user_msg_id;
-              }
-            }
-            if (evt.assistant_msg_id && assistantDiv) {
-              assistantDiv.dataset.msgId = evt.assistant_msg_id;
-            }
-          }
-        }
-      }
-      if (streamDone) break;
-    }
+    const resp = await api(
+      "/api/chat/" + encodeURIComponent(S.persona),
+      {
+        method: "POST",
+        body: JSON.stringify({
+          message: message,
+          session_id: sessionId,
+          images: images.length > 0 ? images : undefined,
+          debug: document.getElementById("chat-debug-mode")?.checked || false,
+        }),
+      },
+    );
+    if (!resp || !resp.turn_id) throw new Error("no turn_id in 202 response");
   } catch (e) {
     removeTypingIndicator();
-    if (e.name !== "AbortError") {
-      toast("送信失敗: " + e.message, "error");
+    toast("送信失敗: " + e.message, "error");
+    var els = _els();
+    if (els.statusEl) els.statusEl.textContent = "";
+    _endTurnSession();
+    return;
+  }
+}
+// ------------------------------------------------------------------
+// Turn hub engine — event supply switched from the fetch-stream loop
+// to the persistent chat-events SSE stream (E3: server-side turn task).
+// Per-turn rendering state lives in _turn so hub handlers — possibly
+// resumed mid-turn after a reconnect replay — share one session.
+// ------------------------------------------------------------------
+var _chatLastSeq = 0;        // last hub event seq applied (EventSource id:)
+var _chatEventsPersona = null;
+var _turn = null;            // active turn rendering session
+
+function _els() {
+  return {
+    sendBtn: document.getElementById("chat-send-btn"),
+    cancelBtn: document.getElementById("chat-cancel-btn"),
+    statusEl: document.getElementById("chat-status"),
+  };
+}
+
+function _beginTurnSession(localMessage) {
+  _turn = {
+    // Raw posted message — matches turn_started.user_message so the
+    // hub echo dedupes against the locally rendered user bubble.
+    localMessage: localMessage || null,
+    contentParts: [],
+    assistantDiv: null,
+    currentTextBubble: null,
+    currentTextContent: "",
+    thinkingDetails: null,
+    thinkingContent: "",
+    rafPending: false,
+    thinkingRafPending: false,
+    scrollListener: null,
+    chatMessages: document.getElementById("chat-messages"),
+  };
+  CHAT.streaming = true;
+  CHAT._streamingSince = Date.now();
+  CHAT._firstContent = true;
+  CHAT._userScrolledUp = false;
+  var els = _els();
+  if (els.sendBtn) els.sendBtn.style.display = "none";
+  if (els.cancelBtn) els.cancelBtn.style.display = "";
+  if (els.statusEl) els.statusEl.textContent = "記憶処理中...";
+  if (_turn.chatMessages) {
+    _turn.scrollListener = function _onChatScroll() {
+      if (!_turn) return;
+      var threshold = 80;
+      CHAT._userScrolledUp = _turn.chatMessages.scrollHeight - _turn.chatMessages.scrollTop - _turn.chatMessages.clientHeight > threshold;
+    };
+    _turn.chatMessages.addEventListener("scroll", _turn.scrollListener, { passive: true });
+  }
+}
+
+function _endTurnSession() {
+  var t = _turn;
+  _turn = null;
+  if (t && t.scrollListener && t.chatMessages) {
+    t.chatMessages.removeEventListener("scroll", t.scrollListener);
+  }
+  CHAT.streaming = false;
+  CHAT._streamingSince = null;
+  CHAT._userScrolledUp = false;
+  CHAT._firstContent = false;
+  var els = _els();
+  if (els.sendBtn) els.sendBtn.style.display = "";
+  if (els.cancelBtn) els.cancelBtn.style.display = "none";
+  var inputEl = document.getElementById("chat-input");
+  if (inputEl) inputEl.focus();
+}
+
+// F3: close the active text bubble before the next content part (tool
+// call / result) takes over. The rAF batch reads the bubble at fire
+// time, so a bubble closed before its frame was never written — flush
+// pending text into it synchronously; drop whitespace-only bubbles
+// (they render empty) so nothing lingers under the tool chip.
+function _closeTextBubble() {
+  var t = _turn;
+  if (!t || !t.currentTextBubble) return;
+  if ((t.currentTextContent || "").trim()) {
+    t.currentTextBubble.textContent = t.currentTextContent;
+  } else {
+    t.currentTextBubble.remove();
+    // Drop the trailing whitespace-only part so the next text_delta
+    // starts a fresh bubble instead of writing into the removed one.
+    var last = t.contentParts[t.contentParts.length - 1];
+    if (last && last.type === "text" && last.bubble === t.currentTextBubble) {
+      t.contentParts.pop();
     }
-    statusEl.textContent = "";
-  } finally {
-    CHAT.streaming = false;
-    CHAT._streamingSince = null;
-    CHAT.abortController = null;
-    if (_scrollListener && chatMessages) {
-      chatMessages.removeEventListener("scroll", _scrollListener);
-      _scrollListener = null;
+  }
+  t.currentTextBubble = null;
+  t.currentTextContent = "";
+}
+
+function _syncAfterForeignDone() {
+  var els = _els();
+  if (els.statusEl) els.statusEl.textContent = "";
+  // A turn this tab did not render (other client / page-load backlog /
+  // post-cancel) completed — pull the canonical history instead of
+  // replaying deltas.
+  if (N.Chat.history && typeof N.Chat.history.restore === "function") {
+    N.Chat.history.restore(false);
+  }
+}
+
+// Per-event rendering — bodies carried over from the fetch-stream loop.
+function _handleChatEvent(evt) {
+  var t = _turn;
+  var els = _els();
+  var chatMessages = t ? t.chatMessages : null;
+
+  if (evt.type === "text_delta") {
+    if (!evt.content) return;
+    if (CHAT._firstContent) {
+      CHAT._firstContent = false;
+      if (els.statusEl) els.statusEl.textContent = "応答中...";
     }
-    CHAT._userScrolledUp = false;
+    // F3: content_parts — create or continue text bubble inside assistant div
+    if (!t.assistantDiv) {
+      t.assistantDiv = _createAssistantDiv();
+    }
+    // If the last part was a tool call, start a new text bubble
+    const lastPart = t.contentParts[t.contentParts.length - 1];
+    if (!lastPart || lastPart.type !== "text") {
+      t.currentTextBubble = _createTextBubble(t.assistantDiv);
+      t.currentTextContent = "";
+      t.contentParts.push({ type: "text", bubble: t.currentTextBubble, content: "" });
+    }
+    t.currentTextContent += evt.content;
+    if (window.Nous && Nous.Chat.ttsStream && Nous.Chat.ttsStream.onDelta && document.getElementById("chat-voice-streaming")?.checked) { try { Nous.Chat.ttsStream.onDelta(t.currentTextContent); } catch (_e) {} }
+    t.contentParts[t.contentParts.length - 1].content = t.currentTextContent;
+
+    // rAF-batched DOM update
+    if (!t.rafPending) {
+      t.rafPending = true;
+      requestAnimationFrame(function() {
+        t.rafPending = false;
+        if (t.currentTextBubble) {
+          t.currentTextBubble.textContent = t.currentTextContent;
+        }
+        // Auto-scroll with user intent detection
+        if (chatMessages) {
+          var isAtBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 80;
+          if (isAtBottom || !CHAT._userScrolledUp) {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+          }
+        }
+      });
+    }
+  } else if (evt.type === "thinking_delta") {
+    // CoT (thinking) display — R6: dedicated .chat-thinking-bubble <details>.
+    // Structural TTS/copy exclusion: content NOT pushed to contentParts and
+    // class is NOT .chat-bubble, so TTS auto-play / manual / copy never see it.
+    if (CHAT._firstContent) {
+      CHAT._firstContent = false;
+      if (els.statusEl) els.statusEl.textContent = "応答中...";
+    }
+    if (!t.assistantDiv) {
+      t.assistantDiv = _createAssistantDiv();
+    }
+    if (!t.thinkingDetails) {
+      t.thinkingDetails = document.createElement("details");
+      t.thinkingDetails.className = "chat-thinking-bubble";
+      safeSetHTML(
+        t.thinkingDetails,
+        '<summary>' +
+          '<span class="chat-thinking-summary-left">' +
+          '<i data-lucide="brain"></i> <strong>思考</strong></span>' +
+          '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
+          '<span class="chat-tool-status">処理中...</span></summary>' +
+          '<div class="chat-thinking-body"></div>',
+      );
+      // Keep thinking block at the head of the assistant div
+      t.assistantDiv.insertBefore(t.thinkingDetails, t.assistantDiv.firstChild);
+      t.thinkingContent = "";
+      N.Core.refreshIcons();
+    }
+    t.thinkingContent += evt.content;
+    const thinkBody = t.thinkingDetails.querySelector(
+      ".chat-thinking-body",
+    );
+    // rAF-batched DOM update (independent of text_delta batching)
+    if (!t.thinkingRafPending) {
+      t.thinkingRafPending = true;
+      requestAnimationFrame(function() {
+        t.thinkingRafPending = false;
+        if (thinkBody) thinkBody.textContent = t.thinkingContent;
+        if (chatMessages) {
+          var isAtBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 80;
+          if (isAtBottom || !CHAT._userScrolledUp) {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+          }
+        }
+      });
+    }
+  } else if (evt.type === "tool_call") {
     CHAT._firstContent = false;
-    _rafPending = false;
-    _thinkingRafPending = false;
-    sendBtn.style.display = "";
-    if (cancelBtn) cancelBtn.style.display = "none";
-    inputEl.focus();
-    // Fallback: render markdown if stream ended without 'done' event
-    // F3: iterate over all text content parts
-    // 空バブル除去（done無し切断時も空バブルを残さない）
-    for (const part of contentParts) {
-      if (part.type === "text" && part.bubble && !(part.content || "").trim()) {
-        part.bubble.remove();
-      }
+    if (!t.assistantDiv) {
+      t.assistantDiv = _createAssistantDiv();
     }
-    for (const part of contentParts) {
-      if (
-        part.type === "text" &&
-        part.bubble &&
-        part.content &&
-        part.bubble.children.length === 0
-      ) {
-        safeSetHTML(part.bubble, safeMarkdown(part.content));
-        part.bubble.querySelectorAll("img").forEach((img) => {
-          img.style.cssText =
-            "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
-          img.addEventListener("click", () => N.Chat.attachments.openViewer(img.src, "image"));
-        });
+    // End current text bubble — next text_delta will create a new one
+    _closeTextBubble();
+    const toolDiv = N.Chat.tools.append("tool_call", evt, t.assistantDiv);
+    t.contentParts.push({ type: "tool_call", div: toolDiv, id: evt.id, name: evt.name });
+    // status bar mirrors the chip's narrative label (no raw tool name);
+    // image_generate keeps its dedicated text (image_gen_start has its own spinner)
+    if (evt.name === "image_generate") {
+      safeSetHTML(els.statusEl,
+        '<i data-lucide="image"></i> 画像を生成中...');
+    } else {
+      safeSetHTML(els.statusEl,
+        '<i data-lucide="' + N.Chat.tools.icon(evt.name) + '"></i> ' +
+        esc(N.Chat.tools.label(evt.name)));
+    }
+  } else if (evt.type === "tool_result") {
+    N.Chat.tools.append("tool_result", evt);
+    _closeTextBubble(); // ensure next text_delta creates new bubble
+    t.contentParts.push({ type: "tool_result", id: evt.id, result: evt.result });
+    if (els.statusEl) els.statusEl.textContent = "応答中...";
+  } else if (evt.type === "memory_activity") {
+    if (evt.preliminary) {
+      _mem("update")(evt.retrieved, undefined, undefined, undefined);
+    } else {
+      _mem("update")(evt.retrieved, evt.saved, evt.goals, evt.promises);
+    }
+    if (_memoryActivityTimer) clearTimeout(_memoryActivityTimer);
+    _memoryActivityTimer = setTimeout(function() { N.Chat.core.loadCommitments(); }, 500);
+    if (els.statusEl) els.statusEl.textContent = "";
+  } else if (evt.type === "inventory_update") {
+    N.Chat.equipment.update(evt.update);
+  } else if (evt.type === "context_update") {
+    try {
+      var _cu = evt.update || {};
+      if (_cu.emotion) {
+        window.dispatchEvent(new CustomEvent("emotion-changed", { detail: _cu }));
+      }
+    } catch (_e) { console.warn("[context_update] handle failed:", _e); }
+  } else if (evt.type === "character_flag") {
+    N.Chat.showCharacterFlag(t.assistantDiv, evt.violation, evt.detail);
+  } else if (evt.type === "session_summarized") {
+    _mem("sessionSummarized")(evt.summary);
+  } else if (evt.type === "context_compressed") {
+    _mem("contextCompressed")(evt);
+  } else if (evt.type === "image_gen_start") {
+    N.Chat.tools.showGenSpinner(evt);
+  } else if (evt.type === "image_gen_result") {
+    N.Chat.tools.showGenResult(evt);
+  } else if (evt.type === "debug_info") {
+    console.debug("[debug_info received]", Object.keys(evt));
+    N.Chat.core.debug(t.assistantDiv, evt);
+  } else if (evt.type === "error") {
+    removeTypingIndicator();
+    toast("エラー: " + evt.message, "error");
+    if (els.statusEl) els.statusEl.textContent = "";
+    _endTurnSession();
+    return;
+  } else if (evt.type === "done") {
+    _finalizeTurn(evt);
+  }
+}
+
+function _finalizeTurn(evt) {
+  var t = _turn;
+  var els = _els();
+  // F3: render all text parts as final markdown
+  // 空delta由来の空バブルを除去（ツール合間の空バブル対策）
+  for (const part of t.contentParts) {
+    if (part.type === "text" && part.bubble && !(part.content || "").trim()) {
+      part.bubble.remove();
+    }
+  }
+  let allText = "";
+  for (const part of t.contentParts) {
+    if (part.type === "text" && part.bubble && part.content) {
+      safeSetHTML(part.bubble, safeMarkdown(part.content));
+      part.bubble.querySelectorAll("img").forEach((img) => {
+        img.style.cssText =
+          "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
+        img.addEventListener("click", () =>
+          N.Chat.attachments.openViewer(img.src, "image"),
+        );
+      });
+      allText += part.content + "\n";
+    }
+  }
+  // TE04: Auto-play TTS for all text
+  var voiceAutoPlay = document.getElementById("chat-voice-auto-play");
+  var voiceStreaming = document.getElementById("chat-voice-streaming");
+  if (voiceAutoPlay && voiceAutoPlay.checked && allText.trim()) {
+    if (voiceStreaming && voiceStreaming.checked && Nous.Chat.ttsStream && Nous.Chat.ttsStream.finish) {
+      var _msgEls = document.querySelectorAll("#chat-messages .chat-msg");
+      var _msgEl = _msgEls.length ? _msgEls[_msgEls.length - 1] : null;
+      Nous.Chat.ttsStream.finish(allText.trim(), _msgEl);
+    } else {
+      N.Chat.tts.autoPlay(allText.trim());
+    }
+  }
+  // Clean up: remove assistant div if it has no content (text, tools, or thinking)
+  if (t.assistantDiv) {
+    const hasToolCalls = t.assistantDiv.querySelector(".chat-tool-call");
+    const hasTextBubbles = t.assistantDiv.querySelector(".chat-bubble");
+    const hasThinking = t.assistantDiv.querySelector(".chat-thinking-bubble");
+    if (!hasToolCalls && !hasTextBubbles && !hasThinking) {
+      t.assistantDiv.remove();
+    }
+  }
+  var wasRemote = !t.localMessage;
+  _endTurnSession();
+  if (els.statusEl) els.statusEl.textContent = "ちょっと考えてる…";
+  // Show truncation notice when response was auto-continued
+  if (evt.truncated) {
+    const notice = document.createElement("div");
+    notice.className = "chat-truncation-notice";
+    notice.textContent = "（つづき）";
+    // e1: 空応答時はassistantDivがnullのためガード
+    if (t.assistantDiv) {
+      // Insert after the last text bubble inside assistantDiv
+      const lastBubble = t.assistantDiv.querySelector(".chat-bubble:last-of-type");
+      if (lastBubble) {
+        lastBubble.insertAdjacentElement("afterend", notice);
+      } else {
+        t.assistantDiv.appendChild(notice);
       }
     }
   }
+  // Show token usage info when available
+  if (evt.usage && t.assistantDiv) {
+    const u = evt.usage;
+    const tokenInfo = document.createElement("div");
+    tokenInfo.className = "chat-token-info";
+    tokenInfo.style.cssText = "font-size:0.72rem;color:var(--text-muted);margin-top:4px;opacity:0.7;";
+    tokenInfo.textContent = "🔤 " + u.prompt_tokens + "↑ " + u.completion_tokens + "↓ = " + u.total_tokens + " 合計";
+    t.assistantDiv.appendChild(tokenInfo);
+  }
+  // Set message IDs from server
+  if (evt.user_msg_id || evt.assistant_msg_id) {
+    if (evt.user_msg_id) {
+      const userMsgs = document.querySelectorAll(".chat-msg.user");
+      const lastUser = userMsgs[userMsgs.length - 1];
+      // Only set if not already assigned (retry may reuse existing msgId)
+      if (lastUser && !lastUser.dataset.msgId) {
+        lastUser.dataset.msgId = evt.user_msg_id;
+      }
+    }
+    if (evt.assistant_msg_id && t.assistantDiv) {
+      t.assistantDiv.dataset.msgId = evt.assistant_msg_id;
+    }
+  }
+  // Viewer tab (other client / late join): pull the canonical history
+  // — the sender keeps its live-rendered DOM plus the msg_ids above.
+  if (wasRemote && N.Chat.history && typeof N.Chat.history.restore === "function") {
+    N.Chat.history.restore(false);
+  }
+}
+
+// Hub message: seq dedupe (EventSource id:) → turn_started lifecycle →
+// per-event dispatch. Backlog replay while idle (page load, post-cancel)
+// is swallowed: deltas drop, done re-syncs via history reload.
+function _handleHubMessage(e) {
+  var seq = parseInt(e.lastEventId, 10);
+  if (isFinite(seq) && seq > 0) {
+    if (seq <= _chatLastSeq) return; // replayed duplicate
+    _chatLastSeq = seq;
+  }
+  var evt;
+  try {
+    evt = JSON.parse(e.data);
+  } catch (err) {
+    console.warn("[chat hub parse]:", err.message);
+    return;
+  }
+  if (!evt || !evt.type) return;
+
+  if (evt.type === "turn_started") {
+    removeTypingIndicator();
+    if (_turn && _turn.localMessage != null &&
+        String(_turn.localMessage) === String(evt.user_message || "")) {
+      return; // sender echo — user bubble already rendered before the POST
+    }
+    if (!_turn) {
+      // Page-load backlog: the history restore already displayed this
+      // turn — swallow it (deltas drop below; done re-syncs).
+      var lastUser = document.querySelectorAll("#chat-messages .chat-msg.user .chat-bubble");
+      var lastText = lastUser.length ? lastUser[lastUser.length - 1].textContent : "";
+      if (lastText && lastText === evt.user_message) return;
+      // Another client started a turn — render it live here.
+      _beginTurnSession(null);
+      appendChatMessage("user", evt.user_message || "");
+    }
+    return;
+  }
+  if (!_turn) {
+    if (evt.type === "done") {
+      _syncAfterForeignDone();
+      return;
+    }
+    // Panel-level updates ride past the session; every other event is
+    // turn-scoped and belongs to backlog/post-cancel — drop it.
+    if (evt.type === "memory_activity" || evt.type === "inventory_update" ||
+        evt.type === "context_update" || evt.type === "session_summarized" ||
+        evt.type === "context_compressed") {
+      _handleChatEvent(evt);
+    }
+    return;
+  }
+  _handleChatEvent(evt);
+}
+
+function connectChatEvents(persona) {
+  _chatEventsPersona = persona || (window.S && window.S.persona) || null;
+  // Persona switch voids any in-flight rendering (the container is
+  // wiped by the history restore that follows) and restarts the seq
+  // baseline — the fresh snapshot is swallowed by the idle rules.
+  _endTurnSession();
+  _chatLastSeq = 0;
+  N.Core.connectStream("chat-events", {
+    url: function () {
+      return _chatEventsPersona
+        ? "/api/chat/" + encodeURIComponent(_chatEventsPersona) + "/events?last_seq=" + _chatLastSeq
+        : null;
+    },
+    handlers: {
+      message: function (e) { _handleHubMessage(e); },
+    },
+  });
 }
 
 // ------------------------------------------------------------------
@@ -865,8 +964,8 @@ function connectMonologueStream(persona) {
 }
 
 // Persona select (init + change) funnels through N.Core.connectSSE —
-// mirror it so the monologue stream always follows the active persona
-// (wraps once, even under script double-load).
+// mirror it so the monologue AND chat-events streams always follow the
+// active persona (wraps once, even under script double-load).
 if (typeof N.Core.connectSSE === "function" && !N.Core._monologueConnectWrapped) {
   N.Core._monologueConnectWrapped = true;
   (function () {
@@ -874,6 +973,7 @@ if (typeof N.Core.connectSSE === "function" && !N.Core._monologueConnectWrapped)
     N.Core.connectSSE = function (persona) {
       var r = _origConnect.apply(this, arguments);
       try { connectMonologueStream(persona); } catch (_e) {}
+      try { connectChatEvents(persona); } catch (_e) {}
       return r;
     };
   })();
