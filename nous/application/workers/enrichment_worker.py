@@ -66,6 +66,7 @@ class EnrichmentWorker:
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+        logger.info("EnrichmentWorker started (interval=%ss)", self.interval)
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop_event.set()

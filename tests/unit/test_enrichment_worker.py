@@ -557,3 +557,17 @@ class TestRunAsyncDrainsPendingTasks:
 
         self._worker()._run_async(coro())
         assert cancelled.wait(timeout=2.0), "残タスクはキャンセルされて loop を閉じるべき"
+
+
+class TestWorkerStartLog:
+    def test_start_logs_info(self, caplog) -> None:
+        import logging
+
+        worker = EnrichmentWorker(MagicMock(), _config())
+        with (
+            caplog.at_level(logging.INFO, logger="nous.nous.application.workers.enrichment_worker"),
+            patch("nous.application.workers.enrichment_worker.threading.Thread") as mock_thread,
+        ):
+            worker.start()
+        assert mock_thread.return_value.start.called
+        assert any("EnrichmentWorker started" in r.message for r in caplog.records if r.levelname == "INFO")

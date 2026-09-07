@@ -319,8 +319,9 @@ def _dup_character_drift(ctx: AppContext, reflection: str) -> bool:
 
 
 async def run_introspection(ctx: AppContext, config: ChatConfig | None, engine, drained_texts: list[str]) -> None:
-    """ガード→ターン取得→generate→適用（全段 try/except+debug、worker停止しない）。"""
+    """ガード→ターン取得→generate→適用（全段 try/except、worker停止しない）。"""
     if engine is None:
+        logger.info("introspection: engine not configured — skip")
         return
     if not getattr(config, "brain_introspection_enabled", False):
         return
@@ -349,10 +350,13 @@ async def run_introspection(ctx: AppContext, config: ChatConfig | None, engine, 
     try:
         result = await engine.generate(persona, persona_identity, turns, drained_texts)
     except Exception:
-        logger.debug("introspection: engine generate failed", exc_info=True)
+        logger.info("introspection: generate failed", exc_info=True)
         result = None
+    if result is None:
+        logger.info("introspection: generate returned None (LLM error / empty content / parse failed)")
 
     applied: list[str] = []
+    monologue_emitted = False
     if result is not None:
         if result.emotion:
             try:
@@ -405,8 +409,18 @@ async def run_introspection(ctx: AppContext, config: ChatConfig | None, engine, 
                 logger.debug("introspection: monologue event insert failed", exc_info=True)
             try:
                 wiring_events.emit("monologue", meta={"persona": persona, "text": result.monologue})
+                monologue_emitted = True
             except Exception:
                 logger.debug("introspection: monologue wiring emit failed", exc_info=True)
+
+    if result is not None:
+        logger.info(
+            "introspection ok: applied=%s monologue=%s new_turns=%d memory_count=%d",
+            applied or [],
+            "yes" if monologue_emitted else "no",
+            len(turns),
+            len(drained_texts),
+        )
 
     # brain.introspection 記録（メタ: violation 有無・適用内容）
     try:

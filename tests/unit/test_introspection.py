@@ -368,3 +368,57 @@ class TestRunIntrospection:
         )
 
         engine.generate.assert_not_called()
+
+
+class TestIntrospectionObservability:
+    """失敗と成功を区別できること — 2026-09-08 の「内省は成功なのに独り言ゼロ」盲点対策。"""
+
+    def _run(self, coro):
+        import asyncio
+
+        return asyncio.new_event_loop().run_until_complete(coro)
+
+    def _caplog_info(self, caplog):
+        import logging
+
+        return caplog.at_level(logging.INFO, logger="nous.nous.application.chat.introspection")
+
+    def _messages(self, caplog) -> str:
+        return " ".join(r.message for r in caplog.records if r.levelname == "INFO")
+
+    def test_success_outcome_logged(self, ctx, sqlite_conn, caplog) -> None:
+        base = datetime.now()
+        _insert_turns(sqlite_conn.get_memory_db(), "test", [("user", "u1"), ("assistant", "a1")], base)
+        engine = _engine_with(_result(), ctx)
+        with self._caplog_info(caplog):
+            self._run(run_introspection(ctx, _config(), engine, ["m1"]))
+        msgs = self._messages(caplog)
+        assert "applied" in msgs
+        assert "monologue=yes" in msgs
+
+    def test_monologue_suppressed_is_visible(self, ctx, sqlite_conn, caplog) -> None:
+        base = datetime.now()
+        _insert_turns(sqlite_conn.get_memory_db(), "test", [("user", "u1")], base)
+        engine = _engine_with(_result(monologue=None), ctx)
+        with self._caplog_info(caplog):
+            self._run(run_introspection(ctx, _config(), engine, []))
+        assert "monologue=no" in self._messages(caplog)
+
+    def test_generate_none_distinguishable_from_success(self, ctx, sqlite_conn, caplog) -> None:
+        base = datetime.now()
+        _insert_turns(sqlite_conn.get_memory_db(), "test", [("user", "u1")], base)
+        engine = _engine_with(None, ctx)
+        with self._caplog_info(caplog):
+            self._run(run_introspection(ctx, _config(), engine, []))
+        msgs = self._messages(caplog)
+        assert "generate returned None" in msgs
+        assert "applied" not in msgs
+
+    def test_generate_exception_logged_at_info(self, ctx, sqlite_conn, caplog) -> None:
+        base = datetime.now()
+        _insert_turns(sqlite_conn.get_memory_db(), "test", [("user", "u1")], base)
+        engine = MagicMock()
+        engine.generate = AsyncMock(side_effect=RuntimeError("boom"))
+        with self._caplog_info(caplog):
+            self._run(run_introspection(ctx, _config(), engine, []))
+        assert "generate failed" in self._messages(caplog)
