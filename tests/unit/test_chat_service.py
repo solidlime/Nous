@@ -63,8 +63,8 @@ class TestTreeSessionWindow:
         msgs = win.get_labeled_messages(now)
         assert msgs[0].time_label == "just now"
 
-    def test_flush_persists_to_sqlite_immediately(self):
-        """flush() forces DB write even when batch_size not reached."""
+    def test_add_persists_immediately(self):
+        """add() 直後に DB から読み取れる（ブラウザ切断セーフ・batch_size ゲート撤去）。"""
         import json
         import sqlite3
 
@@ -79,31 +79,25 @@ class TestTreeSessionWindow:
 
         win = TreeSessionWindow(max_messages=20, batch_size=10)  # batch_size=10 > 1 message
         win.attach_db(db, "test_persona", "test_session")
-        win.add("user", "hello")  # 1 message, won't trigger _persist (batch_size=10)
+        win.add("user", "hello")  # 1 メッセージでも即 persist される
 
-        # Before flush: DB should be empty
-        row_before = db.execute(
+        row = db.execute(
             "SELECT messages FROM chat_sessions WHERE persona=? AND session_id=?",
             ("test_persona", "test_session"),
         ).fetchone()
-        assert row_before is None, "DB should be empty before flush (batch_size not reached)"
+        assert row is not None, "add() 直後に DB から読み取れること（flush 不要）"
+        data = json.loads(row[0])
+        assert data["nodes"][0]["role"] == "user"
+        assert data["nodes"][0]["content"] == "hello"
 
-        # Act
+        # flush() は冪等な上書きとして機能し続ける
         win.flush()
-
-        # After flush: DB should have the message
         row_after = db.execute(
             "SELECT messages FROM chat_sessions WHERE persona=? AND session_id=?",
             ("test_persona", "test_session"),
         ).fetchone()
-        assert row_after is not None, "DB should have data after flush"
-        data = json.loads(row_after[0])
-        assert "root_id" in data
-        assert "active_leaf_id" in data
-        assert "nodes" in data
-        assert len(data["nodes"]) == 1
-        assert data["nodes"][0]["role"] == "user"
-        assert data["nodes"][0]["content"] == "hello"
+        assert row_after is not None
+        assert len(json.loads(row_after[0])["nodes"]) == 1
 
 
 # ─────────────────────────────────────────────────────────────

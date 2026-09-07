@@ -88,8 +88,9 @@ class TreeSessionWindow:
                 with contextlib.suppress(Exception):
                     self.evict_callback(evicted)
 
-        if len(self._nodes) - self._persisted_count >= self._batch_size:
-            self._persist()
+        # 即時永続化（E4: batch_size ゲート撤去 — ターン頻度は低く JSON は小さい。
+        # 送信中のブラウザ切断でも user メッセージが残る）
+        self._persist()
         return node_id
 
     def get_active_path(self) -> list[dict]:
