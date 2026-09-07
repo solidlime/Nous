@@ -255,6 +255,44 @@ class TestReasoningBudget:
         assert any("reasoning" in r.message for r in caplog.records if r.levelname == "INFO")
 
 
+class TestParseLiteralNull:
+    """モデルが JSON null でなく文字列 "null" を返すことがある（2026-09-08 プローブ実測）。
+
+    文字列 "null" が truthy のまま通ると violation 誤検知・"null" 反省メモリ・
+    "null" 独り言 emit が起きる。
+    """
+
+    def test_literal_null_strings_normalized(self) -> None:
+        from nous.application.chat.introspection import _parse_result
+
+        raw = json.dumps(
+            {
+                "monologue": "null",
+                "violation": "null",
+                "violation_detail": "null",
+                "reflection": "null",
+                "emotion": {"emotion": "joy", "emotion_intensity": 0.7},
+                "body_state": None,
+            },
+            ensure_ascii=False,
+        )
+        r = _parse_result(raw)
+        assert r is not None
+        assert r.monologue is None
+        assert r.violation is None
+        assert r.violation_detail == ""
+        assert r.reflection is None
+        assert r.emotion is not None  # 実データは温存
+
+    def test_real_monologue_survives(self) -> None:
+        from nous.application.chat.introspection import _parse_result
+
+        raw = json.dumps({"monologue": "ふふ、返せた。", "violation": None}, ensure_ascii=False)
+        r = _parse_result(raw)
+        assert r is not None
+        assert r.monologue == "ふふ、返せた。"
+
+
 class TestRunIntrospection:
     def test_applies_state_and_records(self, ctx, sqlite_conn) -> None:
         base = datetime.now()

@@ -188,6 +188,16 @@ def _resolve_llm_config(config: ChatConfig | None, settings) -> tuple[str, str, 
     return provider, api_key, model, base_url
 
 
+def _clean_optional(value) -> str | None:
+    """文字列 "null"/"none"/空 を None に正規化（モデルが JSON null でなく文字列を返すことがある）。"""
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    if not stripped or stripped.lower() in ("null", "none"):
+        return None
+    return stripped
+
+
 def _parse_result(text: str) -> IntrospectionResult | None:
     cleaned = text.strip()
     if cleaned.startswith("```"):
@@ -200,19 +210,17 @@ def _parse_result(text: str) -> IntrospectionResult | None:
         return None
     if not isinstance(data, dict):
         return None
-    violation = data.get("violation")
-    if not isinstance(violation, str) or not violation.strip() or violation.strip() == "none":
-        violation = None
-    detail = data.get("violation_detail") if violation else None
-    reflection = data.get("reflection")
-    monologue = data.get("monologue")
+    violation = _clean_optional(data.get("violation"))
+    detail = _clean_optional(data.get("violation_detail")) if violation else None
+    reflection = _clean_optional(data.get("reflection"))
+    monologue = _clean_optional(data.get("monologue"))
     emotion = data.get("emotion") if isinstance(data.get("emotion"), dict) else None
     body_state = data.get("body_state") if isinstance(data.get("body_state"), dict) else None
     return IntrospectionResult(
-        monologue=monologue.strip() if isinstance(monologue, str) and monologue.strip() else None,
+        monologue=monologue,
         violation=violation,
         violation_detail=detail.strip() if isinstance(detail, str) else "",
-        reflection=reflection.strip() if isinstance(reflection, str) and reflection.strip() else None,
+        reflection=reflection,
         emotion=emotion,
         body_state=body_state,
     )
