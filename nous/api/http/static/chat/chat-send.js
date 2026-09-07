@@ -468,6 +468,13 @@ async function chatSend(retry) {
 var _chatLastSeq = 0;        // last hub event seq applied (EventSource id:)
 var _chatEventsPersona = null;
 var _turn = null;            // active turn rendering session
+// SSE carries no snapshot/live boundary marker, so the connect-time
+// backlog burst (snapshot_after replays the whole ring buffer on every
+// connect) is swallowed via this flag: set on open while idle, cleared
+// at the burst's first terminal event (done/error). A live turn that
+// starts inside the burst window recovers at its done via history
+// reload — transient, never permanent.
+var _hubSkipMode = false;
 
 function _els() {
   return {
@@ -482,6 +489,8 @@ function _beginTurnSession(localMessage) {
     // Raw posted message — matches turn_started.user_message so the
     // hub echo dedupes against the locally rendered user bubble.
     localMessage: localMessage || null,
+    isLocal: !!localMessage,
+    pendingEcho: !!localMessage,
     contentParts: [],
     assistantDiv: null,
     currentTextBubble: null,
@@ -493,6 +502,8 @@ function _beginTurnSession(localMessage) {
     scrollListener: null,
     chatMessages: document.getElementById("chat-messages"),
   };
+  // A session — local or remote — is live traffic by definition.
+  _hubSkipMode = false;
   CHAT.streaming = true;
   CHAT._streamingSince = Date.now();
   CHAT._firstContent = true;
@@ -763,7 +774,7 @@ function _finalizeTurn(evt) {
       t.assistantDiv.remove();
     }
   }
-  var wasRemote = !t.localMessage;
+  var wasRemote = !t.isLocal;
   _endTurnSession();
   if (els.statusEl) els.statusEl.textContent = "ちょっと考えてる…";
   // Show truncation notice when response was auto-continued
@@ -832,23 +843,29 @@ function _handleHubMessage(e) {
 
   if (evt.type === "turn_started") {
     removeTypingIndicator();
-    if (_turn && _turn.localMessage != null &&
-        String(_turn.localMessage) === String(evt.user_message || "")) {
-      return; // sender echo — user bubble already rendered before the POST
+    if (_turn) {
+      // Sender echo — the user bubble was already rendered before the
+      // POST landed. Consume the echo exactly once; any later
+      // turn_started with the same text is a genuinely new turn.
+      if (_turn.pendingEcho &&
+          String(_turn.localMessage) === String(evt.user_message || "")) {
+        _turn.pendingEcho = false;
+      }
+      return; // one turn per persona — a stray ts never steals the session
     }
-    if (!_turn) {
-      // Page-load backlog: the history restore already displayed this
-      // turn — swallow it (deltas drop below; done re-syncs).
-      var lastUser = document.querySelectorAll("#chat-messages .chat-msg.user .chat-bubble");
-      var lastText = lastUser.length ? lastUser[lastUser.length - 1].textContent : "";
-      if (lastText && lastText === evt.user_message) return;
-      // Another client started a turn — render it live here.
-      _beginTurnSession(null);
-      appendChatMessage("user", evt.user_message || "");
-    }
+    if (_hubSkipMode) return; // connect-time backlog burst
+    // Another client started a turn — render it live here.
+    _beginTurnSession(null);
+    appendChatMessage("user", evt.user_message || "");
     return;
   }
   if (!_turn) {
+    if (_hubSkipMode) {
+      // Swallow the burst until its first terminal event marks the end.
+      if (evt.type === "done" || evt.type === "error") _hubSkipMode = false;
+      if (evt.type === "done") _syncAfterForeignDone();
+      return;
+    }
     if (evt.type === "done") {
       _syncAfterForeignDone();
       return;
@@ -880,6 +897,13 @@ function connectChatEvents(persona) {
     },
     handlers: {
       message: function (e) { _handleHubMessage(e); },
+    },
+    onOpen: function () {
+      // Connect-time snapshot burst (the endpoint replays its whole ring
+      // buffer on every connect): while idle, swallow it until the first
+      // terminal event. A mid-turn reconnect (session active) must NOT
+      // skip — the replayed deltas are the live turn's missing tail.
+      if (!_turn) _hubSkipMode = true;
     },
   });
 }

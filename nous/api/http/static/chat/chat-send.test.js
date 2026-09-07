@@ -73,6 +73,7 @@ beforeEach(() => {
   N.Core._sseStreams = {};
   N.Core.api.mockReset();
   N.Core.toast.mockClear();
+  N.Chat.history.restore.mockClear();
   // End any turn session leaked by a previous test (module-level _turn)
   N.Chat.cancel();
   vi.stubGlobal('EventSource', class {
@@ -181,17 +182,61 @@ describe('chat hub — send flow', () => {
     expect(N.Chat.history.restore).toHaveBeenCalledWith(false);
   });
 
-  it('swallows the page-load backlog replay without rendering', async () => {
+  it('swallows the page-load backlog burst until its terminal event, then renders live turns', async () => {
     const es = chatStream();
+    es.onopen(); // connect-time burst begins while the tab is idle
     // history restore already displayed this turn — hub replays it on connect
     const restored = document.createElement('div');
     restored.className = 'chat-msg user';
     restored.innerHTML = '<div class="chat-bubble">復元済みの発言</div>';
     document.getElementById('chat-messages').appendChild(restored);
     es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '復元済みの発言' }), '1');
-    expect(userBubbles().length).toBe(1); // no duplicate
+    expect(userBubbles().length).toBe(1); // no duplicate from the burst
     es.emit('message', JSON.stringify({ type: 'text_delta', content: '過去の応答' }), '2');
     await raf();
     expect(bubbles().length).toBe(1); // backlog deltas drop while idle
+    // the burst's terminal event ends skip mode and re-syncs the viewer
+    es.emit('message', JSON.stringify({ type: 'done', message: 'completed' }), '3');
+    expect(N.Chat.history.restore).toHaveBeenCalledWith(false);
+    // a LIVE remote turn after the burst renders normally
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '生きターン' }), '4');
+    expect(userBubbles().length).toBe(2);
+    es.emit('message', JSON.stringify({ type: 'text_delta', content: 'ライブ応答' }), '5');
+    await raf();
+    expect(bubbles()[2].textContent).toBe('ライブ応答');
+  });
+
+  it('never swallows a live remote turn just because its text repeats the last user bubble', async () => {
+    const es = chatStream();
+    // no connect burst pending — viewer is watching (skip mode already cleared)
+    const restored = document.createElement('div');
+    restored.className = 'chat-msg user';
+    restored.innerHTML = '<div class="chat-bubble">こんにちは</div>';
+    document.getElementById('chat-messages').appendChild(restored);
+    // the other client sends the SAME text again (retry / repeat)
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: 'こんにちは' }), '10');
+    expect(userBubbles().length).toBe(2); // rendered, not swallowed
+    es.emit('message', JSON.stringify({ type: 'text_delta', content: '返事' }), '11');
+    await raf();
+    expect(bubbles()[2].textContent).toBe('返事');
+    es.emit('message', JSON.stringify({ type: 'done', message: 'completed' }), '12');
+    expect(N.Chat.history.restore).toHaveBeenCalledWith(false);
+  });
+
+  it('backlog with several turns: burst ends at its first done, next turn renders live', async () => {
+    const es = chatStream();
+    es.onopen();
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '過去1' }), '20');
+    es.emit('message', JSON.stringify({ type: 'text_delta', content: 'A' }), '21');
+    es.emit('message', JSON.stringify({ type: 'done', message: 'completed' }), '22');
+    expect(N.Chat.history.restore).toHaveBeenCalledWith(false);
+    expect(userBubbles().length).toBe(0); // burst still swallowed up to here
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '過去2' }), '23');
+    es.emit('message', JSON.stringify({ type: 'text_delta', content: 'B' }), '24');
+    await raf();
+    expect(userBubbles().length).toBe(1); // rendered (transient duplicate is acceptable)
+    expect(bubbles()[1].textContent).toBe('B');
+    es.emit('message', JSON.stringify({ type: 'done', message: 'completed' }), '25');
+    expect(N.Chat.history.restore).toHaveBeenCalledTimes(2);
   });
 });
