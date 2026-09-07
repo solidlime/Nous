@@ -197,6 +197,11 @@ describe('wiring feed trim + render', () => {
     expect(overlay.style.display).toBe('none');
   });
 
+  it('excludes monologue from the feed — whispers live as chat bubbles only', () => {
+    expect(MP.pushWiringEvent(fire(1, 'monologue', '', '', 0))).toBe(false);
+    expect(wiringList().querySelectorAll('.wiring-fire-item').length).toBe(0);
+  });
+
   it('injects the feed next to reflection and the numeric setting without inline handlers', () => {
     MP.renderWiringFeed();
     const section = document.getElementById('memory-wiring-section');

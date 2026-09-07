@@ -362,7 +362,9 @@ var WIRING_KINDS = {
   ppr_hit: "PPR",
   replay_fire: "リプレイ",
   novelty_gate: "新規性",
-  monologue: "独り言",
+  // monologue は意図的にフィードから除外 — 独り言はチャット側の
+  // 💭バブル（chat-send.js）で受ける表示専用イベントなので、
+  // pushWiringEvent の未知 kind 落としに乗る。
 };
 var WIRING_BAR_COLORS = {
   link_fire: "linear-gradient(90deg,var(--accent-purple),var(--accent-pink))",
