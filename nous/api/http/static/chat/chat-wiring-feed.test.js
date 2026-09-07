@@ -189,12 +189,23 @@ describe('wiring feed trim + render', () => {
     // up escaped in the detail modal's Edge row
     MP.openWiringDetail('b&c');
     const overlay = document.getElementById('wiring-detail-overlay');
-    expect(overlay.style.display).toBe('flex');
+    expect(overlay.classList.contains('active')).toBe(true);
     expect(overlay.querySelector('img')).toBeNull();
     expect(overlay.querySelector('.wiring-edge-detail').textContent)
       .toContain('<img src=x onerror=alert(1)>');
     MP.closeWiringDetail();
-    expect(overlay.style.display).toBe('none');
+    expect(overlay.classList.contains('active')).toBe(false);
+  });
+
+  it('wiring detail modal toggles via the .active class, not style.display', () => {
+    MP.pushWiringEvent(fire(9, 'ppr_hit', 'k1', 'k2', 0.77));
+    MP.openWiringDetail('k1');
+    const overlay = document.getElementById('wiring-detail-overlay');
+    expect(overlay.classList.contains('active')).toBe(true);
+    expect(overlay.style.display).toBe('');
+    MP.closeWiringDetail();
+    expect(overlay.classList.contains('active')).toBe(false);
+    expect(overlay.style.display).toBe('');
   });
 
   it('excludes monologue from the feed — whispers live as chat bubbles only', () => {
@@ -428,7 +439,7 @@ describe('content-first rows (memory resolution + weight bar)', () => {
     row.focus();
     row.click();
     const overlay = document.getElementById('wiring-detail-overlay');
-    expect(overlay.style.display).toBe('flex');
+    expect(overlay.classList.contains('active')).toBe(true);
     expect(overlay.querySelector('.wiring-detail-text').textContent)
       .toContain('黒いロングコートを選んだ');
     expect(overlay.textContent).toContain('semantic');
@@ -437,7 +448,7 @@ describe('content-first rows (memory resolution + weight bar)', () => {
     expect(overlay.textContent).toContain('w1');
     // Escape closes and restores focus to the opening row
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    expect(overlay.style.display).toBe('none');
+    expect(overlay.classList.contains('active')).toBe(false);
     expect(document.activeElement).toBe(row);
   });
 
@@ -456,6 +467,6 @@ describe('content-first rows (memory resolution + weight bar)', () => {
     expect(openMem).toHaveBeenCalledWith('w2');
     // the edge detail modal must NOT have opened from the same click
     const overlay = document.getElementById('wiring-detail-overlay');
-    expect(overlay === null || overlay.style.display !== 'flex').toBe(true);
+    expect(overlay === null || overlay.classList.contains('active') === false).toBe(true);
   });
 });

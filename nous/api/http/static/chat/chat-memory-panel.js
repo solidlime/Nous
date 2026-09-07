@@ -951,13 +951,13 @@ function openWiringDetail(key) {
   var ev = _wiringFindEvent(key);
   _wiringDetailOpener = document.activeElement;
   _wiringPaintDetail(overlay, key, ev, _wiringMemCache[key] || null, false);
-  overlay.style.display = "flex";
+  overlay.classList.add("active");
   var closeBtn = overlay.querySelector("[data-wiring-close]");
   if (closeBtn) closeBtn.focus();
   if (!_wiringMemCache[key] && !_wiringMemFailed[key]) {
     var repaint = function () {
       var ov = document.getElementById("wiring-detail-overlay");
-      if (ov && ov.style.display !== "none") {
+      if (ov && ov.classList.contains("active")) {
         _wiringPaintDetail(ov, key, _wiringFindEvent(key), _wiringMemCache[key] || null, true);
       }
     };
@@ -968,7 +968,7 @@ function openWiringDetail(key) {
 
 function closeWiringDetail() {
   var overlay = document.getElementById("wiring-detail-overlay");
-  if (overlay) overlay.style.display = "none";
+  if (overlay) overlay.classList.remove("active");
   if (_wiringDetailOpener && typeof _wiringDetailOpener.focus === "function") {
     try { _wiringDetailOpener.focus(); } catch (_) {}
   }
@@ -1083,6 +1083,10 @@ function openPanelDetail(card) {
   overlay.setAttribute("aria-label", PANEL_KIND_LABELS[kind] || "詳細");
   _panelDetailOpener = document.activeElement;
   safeSetHTML(overlay, _panelDetailHTML(kind, item));
+  // Force a reflow between insert and .show — same-frame open would
+  // skip the fade/scale transition entirely (fresh element never got
+  // a first paint at its hidden state).
+  void overlay.offsetWidth;
   overlay.classList.add("show");
   document.removeEventListener("keydown", _panelDetailKeyHandler);
   document.addEventListener("keydown", _panelDetailKeyHandler);

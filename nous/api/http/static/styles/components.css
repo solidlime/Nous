@@ -1415,8 +1415,8 @@ html.light .wiring-track {
     padding: 2px 8px;
     border-radius: var(--radius-pill);
     color: var(--accent-purple);
-    background: rgba(191, 90, 242, 0.12);
-    border: 0.5px solid rgba(191, 90, 242, 0.3);
+    background: color-mix(in srgb, var(--accent-purple) 12%, transparent);
+    border: 0.5px solid color-mix(in srgb, var(--accent-purple) 30%, transparent);
     font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Noto Sans Mono CJK JP', monospace;
 }
 .wiring-edge-detail {
