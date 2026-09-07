@@ -38,6 +38,7 @@ _ALL_EVENT_TYPES = frozenset(
         EVENT_EMOTION_CHANGED,
         EVENT_BODY_STATE_CHANGED,
         SESSION_ROLLBACK,
+        "config.updated",
     }
 )
 

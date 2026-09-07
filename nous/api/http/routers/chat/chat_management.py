@@ -248,6 +248,11 @@ async def save_chat_config(request: Request) -> JSONResponse:
         ctx.reload_enricher()
     except Exception:
         logger.debug("save_chat_config: reload_enricher failed", exc_info=True)
+    # 複数 WebUI クライアントの設定同期（E3）。publish 失敗は保存に影響させない。
+    try:
+        await ctx.event_bus.publish("config.updated", {"persona": persona})
+    except Exception:
+        logger.debug("save_chat_config: config.updated publish failed", exc_info=True)
     return JSONResponse(result)
 
 
