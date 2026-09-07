@@ -352,6 +352,61 @@ class TestMonologueHook:
         assert fires[0]["meta"] == {"persona": "test_persona", "text": "ふふ、いい夢だった。"}
 
 
+class TestRegistryPersonaConfigLoad:
+    """registry.get(persona) config 無し時に persona config.json を読む (バグ修正)."""
+
+    def setup_method(self) -> None:
+        AppContextRegistry._contexts.clear()
+        AppContextRegistry._enrichment_workers.clear()
+        AppContextRegistry._decay_workers.clear()
+
+    def teardown_method(self) -> None:
+        AppContextRegistry._contexts.clear()
+        AppContextRegistry._enrichment_workers.clear()
+        AppContextRegistry._decay_workers.clear()
+
+    def test_config_argument_loaded_from_persona_config_json(self, tmp_path, monkeypatch) -> None:
+        persona_dir = tmp_path / "persona" / "p1"
+        persona_dir.mkdir(parents=True)
+        (persona_dir / "config.json").write_text(
+            '{"brain_enrich_auto_run": true, "memory_enrichment_enabled": true}', encoding="utf-8"
+        )
+        settings = MagicMock()
+        settings.persona_dir = str(tmp_path / "persona")
+        settings.forgetting.enabled = False
+        AppContextRegistry.configure(settings)
+
+        fake_settings = MagicMock()
+        fake_settings.data_root = str(tmp_path)
+        monkeypatch.setattr("nous.config.settings.get_settings", lambda: fake_settings)
+
+        with (
+            patch("nous.application.use_cases.AppContext") as mock_app_ctx,
+            patch("nous.application.workers.enrichment_worker.EnrichmentWorker"),
+        ):
+            AppContextRegistry.get("p1")
+            cfg = mock_app_ctx.call_args.kwargs["config"]
+            assert cfg is not None
+            assert cfg.brain_enrich_auto_run is True
+            assert cfg.memory_enrichment_enabled is True
+
+    def test_no_config_json_keeps_none(self, tmp_path, monkeypatch) -> None:
+        """config.json 無し → config は None のまま（settings 鎖の契約を維持）."""
+        (tmp_path / "persona" / "p1").mkdir(parents=True)
+        settings = MagicMock()
+        settings.persona_dir = str(tmp_path / "persona")
+        settings.forgetting.enabled = False
+        AppContextRegistry.configure(settings)
+
+        fake_settings = MagicMock()
+        fake_settings.data_root = str(tmp_path)
+        monkeypatch.setattr("nous.config.settings.get_settings", lambda: fake_settings)
+
+        with patch("nous.application.use_cases.AppContext") as mock_app_ctx:
+            AppContextRegistry.get("p1")
+            assert mock_app_ctx.call_args.kwargs["config"] is None
+
+
 class TestSessionEventRepoLastActivity:
     def test_last_activity_at(self, sqlite_conn) -> None:
         from datetime import datetime

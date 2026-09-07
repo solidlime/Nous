@@ -607,6 +607,22 @@ class AppContextRegistry:
             if not persona_root.is_dir():
                 raise ValueError(f"Persona '{persona}' not found")
 
+            # config 無し (HTTP 共有依存等が chat より先に ctx を作るケース) →
+            # persona の永続 config.json を best-effort で読む。ファイルが無い
+            # 場合は None のまま（settings 鎖の契約を維持）。
+            if config is None:
+                try:
+                    import os
+
+                    from nous.config.settings import get_settings
+                    from nous.domain.chat_config import ChatConfigFileRepository
+
+                    data_root = str(get_settings().data_root)
+                    if os.path.exists(os.path.join(data_root, "persona", persona, "config.json")):
+                        config = ChatConfigFileRepository(data_root).get(persona)
+                except Exception:
+                    logger.debug("persona config load failed for '%s'", persona, exc_info=True)
+
             ctx = AppContext(cls._settings, persona, config=config)
             cls._contexts[persona] = ctx
 
