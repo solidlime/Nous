@@ -113,6 +113,24 @@ describe('N.Components.memModal — openMemory(mem) render', () => {
     expect(document.getElementById('mem-modal-overlay').classList.contains('show')).toBe(false);
   });
 
+  it('hides Edit/Delete for keyless memory previews', () => {
+    // Panel partials / monologue whispers open without a key — nothing
+    // to edit or delete server-side. Content and copy header stay.
+    N.Components.memModal.openMemory({ content: 'partial fact', importance: 0.4 });
+    const overlay = document.getElementById('mem-modal-overlay');
+    expect(overlay.classList.contains('show')).toBe(true);
+    expect(overlay.textContent).toContain('partial fact');
+    expect(overlay.querySelector('[data-mem-del]')).toBeNull();
+    expect(document.getElementById('mem-modal-edit-btn')).toBeNull();
+  });
+
+  it('keeps Edit/Delete for keyed memories', () => {
+    N.Components.memModal.openMemory(mem);
+    const overlay = document.getElementById('mem-modal-overlay');
+    expect(overlay.querySelector('[data-mem-del]')).not.toBeNull();
+    expect(document.getElementById('mem-modal-edit-btn')).not.toBeNull();
+  });
+
   it('Escape closes the modal', () => {
     N.Components.memModal.openMemory(mem);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));

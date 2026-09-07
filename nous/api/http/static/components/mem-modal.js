@@ -128,11 +128,15 @@ function openMemModal(mem) {
         h += '<div class="mem-modal-row"><span class="mem-modal-key">Updated</span><span>\uD83D\uDCC5 ' + relativeTime(mem.updated_at) + ' <span class="mem-time-note">(' + fmtDateTime(mem.updated_at) + ')</span></span></div>';
     }
 
-    /* Action buttons */
-    h += '<div class="ov-modal-actions">';
-    h += '<button type="button" class="glass-btn glass-btn-danger" data-mem-del="1">Delete</button>';
-    h += '<button class="glass-btn glass-btn-success" id="mem-modal-edit-btn">\u270F\uFE0F Edit</button>';
-    h += '</div>';
+    /* Action buttons — keyless previews (panel partials, monologue
+       whispers) have nothing to edit or delete server-side, so the
+       buttons are not rendered at all. */
+    if (mem.key) {
+        h += '<div class="ov-modal-actions">';
+        h += '<button type="button" class="glass-btn glass-btn-danger" data-mem-del="1">Delete</button>';
+        h += '<button class="glass-btn glass-btn-success" id="mem-modal-edit-btn">\u270F\uFE0F Edit</button>';
+        h += '</div>';
+    }
 
     safeSetHTML(content, h);
     overlay.classList.add('show');
