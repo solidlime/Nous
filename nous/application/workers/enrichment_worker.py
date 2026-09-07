@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any
 
 from nous.domain.memory import wiring_events
 from nous.domain.memory.enrich_service import MemoryEnrichService
-from nous.domain.memory.session_event import SessionEvent
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
@@ -102,6 +101,8 @@ class EnrichmentWorker:
             if idle < self._num("brain_idle_after_seconds", 120):
                 return
             if len(pending) < self._num("brain_min_batch_size", 3):
+                # pending 不足でも内省は前回以降の新規ターンがあれば実行 (spec §2)
+                self._maybe_introspect([])
                 return
 
         # Drain: DISTINCT keys, has_processed prevents re-enrich, mark after
@@ -118,46 +119,28 @@ class EnrichmentWorker:
                     drained.append((item.memory_key, content))
             except Exception:
                 logger.debug("EnrichmentWorker: queue item failed for %s", item.memory_key, exc_info=True)
-        self._maybe_monologue(drained)
+        self._maybe_introspect(drained)
 
-    def _maybe_monologue(self, drained: list[tuple[str, str]]) -> None:
-        """REM drain 完了後に一人称独り言を生成・保存・emit (spec §4.2)。
+    def _maybe_introspect(self, drained: list[tuple[str, str]]) -> None:
+        """REM drain 完了後に内省エンジンを実行 (spec §2)。
 
-        全工程 try/except debug 包み — enrichment 本体は壊さない。
+        ガード（introspection トグル・新規ターン有無・repo 有無）は
+        introspection.run_introspection 側に集約済み。全工程 try/except debug —
+        enrichment 本体は壊さない。
         """
-        if not drained:
-            return
-        if not getattr(self._config, "brain_monologue_enabled", False):
-            return
-        generator = getattr(self.context, "monologue_generator", None)
-        if generator is None:
-            return
         try:
-            text = self._run_async(generator.generate(self._persona, [c for _k, c in drained]))
-        except Exception:
-            logger.debug("EnrichmentWorker: monologue generate failed", exc_info=True)
-            return
-        if not text:
-            return
-        try:
-            repo = getattr(self.context, "_session_event_repo", None)
-            if repo is not None:
-                repo.insert(
-                    SessionEvent(
-                        session_id="unknown",
-                        persona=self._persona,
-                        event_type="brain.monologue",
-                        summary=text,
-                        timestamp=get_now(),
-                        metadata={"memory_keys": [k for k, _c in drained]},
-                    )
+            from nous.application.chat.introspection import run_introspection
+
+            self._run_async(
+                run_introspection(
+                    self.context,
+                    self._config,
+                    getattr(self.context, "introspection_engine", None),
+                    [c for _k, c in drained],
                 )
+            )
         except Exception:
-            logger.debug("EnrichmentWorker: monologue event insert failed", exc_info=True)
-        try:
-            wiring_events.emit("monologue", meta={"persona": self._persona, "text": text})
-        except Exception:
-            logger.debug("EnrichmentWorker: monologue wiring emit failed", exc_info=True)
+            logger.debug("EnrichmentWorker: introspection failed", exc_info=True)
 
     def _now(self) -> datetime:
         return get_now()

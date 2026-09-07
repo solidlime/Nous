@@ -303,7 +303,7 @@ def _dup_character_drift(ctx: AppContext, reflection: str) -> bool:
     return False
 
 
-async def run_introspection(ctx: AppContext, config: ChatConfig, engine, drained_texts: list[str]) -> None:
+async def run_introspection(ctx: AppContext, config: ChatConfig | None, engine, drained_texts: list[str]) -> None:
     """ガード→ターン取得→generate→適用（全段 try/except+debug、worker停止しない）。"""
     if engine is None:
         return
