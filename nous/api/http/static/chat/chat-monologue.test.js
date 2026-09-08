@@ -5,6 +5,11 @@
    CSP-safe textContent rendering.
    ================================================================= */
 import { loadCore, loadFile } from '../core/load-core.js';
+import { readFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const instances = [];
 let N;
@@ -63,6 +68,19 @@ afterEach(() => {
 });
 
 describe('monologue bubble rendering', () => {
+  it('keeps monologue bubbles unshrinkable inside the flex chat log', () => {
+    // #chat-messages is a flex column; overflow:hidden would zero out the
+    // automatic minimum size and collapse restored bubbles to their border
+    // (2px line). The bubble must refuse to shrink instead.
+    const css = readFileSync(resolve(__dirname, '../styles/chat.css'), 'utf-8');
+    const block = css.slice(
+      css.indexOf('.chat-monologue-bubble {'),
+      css.indexOf('.chat-monologue-bubble summary'),
+    );
+    expect(block).toContain('flex-shrink: 0');
+    expect(block).toContain('overflow: hidden'); // collapse guard stays for the summary
+  });
+
   it('creates a collapsed details bubble with meta.text as textContent', () => {
     N.Chat.monologue.handle(monologueEvt('ふふ、まだ考えてる。'));
     const bs = bubbles();

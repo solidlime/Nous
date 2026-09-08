@@ -380,8 +380,12 @@ html.light .chat-thinking-body {
   color: var(--text-muted);
 }
 /* REM monologue — display-only whisper from the wiring stream.
-   .chat-thinking-bubble's quiet vocabulary, no new tokens. */
+   .chat-thinking-bubble's quiet vocabulary, no new tokens.
+   flex-shrink: 0 — #chat-messages is a flex column; overflow:hidden
+   zeroes the automatic minimum size, so without this the bubble
+   collapses to its border (2px line) when the log overflows. */
 .chat-monologue-bubble {
+  flex-shrink: 0;
   font-style: italic;
   color: var(--text-secondary);
   opacity: 0.85;
