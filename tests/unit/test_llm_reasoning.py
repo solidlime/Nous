@@ -71,15 +71,42 @@ class TestOpenAICompatReasoning:
         assert kwargs["extra_body"] == {"thinking": {"type": "enabled"}, "enable_thinking": True}
 
     @pytest.mark.asyncio
-    async def test_none_adds_nothing(self):
-        """reasoning_effort=None → effort も extra_body も入らない."""
+    async def test_none_openrouter_disables_reasoning(self):
+        """OpenRouter + reasoning_effort=None → 統一 reasoning パラメータで推論を無効化.
+
+        free alias が reasoning モデル (cohere north-mini-code 等) にルーティングされ
+        max_tokens を reasoning で使い切る事故対策 (2026-09-08 実機, srv8 18:56 再発含む).
+        実機プローブ: enabled:false で reasoning_tokens=0 を確認済み.
+        """
         provider = self._make_provider(base_url="https://openrouter.ai/api/v1")
+        async for _ in provider.stream(messages=[], system="", reasoning_effort=None):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert kwargs["extra_body"] == {"reasoning": {"enabled": False}}
+        assert "reasoning_effort" not in kwargs
+
+    @pytest.mark.asyncio
+    async def test_none_non_openrouter_adds_nothing(self):
+        """openrouter 以外 (api.openai.com 等) + reasoning_effort=None → extra_body を付けない.
+
+        未知キー 400 リスクを避けるため.
+        """
+        provider = self._make_provider(base_url="https://api.openai.com/v1")
         async for _ in provider.stream(messages=[], system="", reasoning_effort=None):
             pass
         kwargs = self._capture_kwargs(provider)
         assert "reasoning" not in kwargs
         assert "reasoning_effort" not in kwargs
         assert "extra_body" not in kwargs
+
+    @pytest.mark.asyncio
+    async def test_none_keeps_temperature(self):
+        """reasoning 無効化パスでも temperature は従来どおり送る."""
+        provider = self._make_provider(base_url="https://openrouter.ai/api/v1")
+        async for _ in provider.stream(messages=[], system="", temperature=0.7, reasoning_effort=None):
+            pass
+        kwargs = self._capture_kwargs(provider)
+        assert kwargs["temperature"] == 0.7
 
     @pytest.mark.asyncio
     async def test_reasoning_drops_sampling_params(self):

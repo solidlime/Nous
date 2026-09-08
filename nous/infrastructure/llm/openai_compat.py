@@ -222,6 +222,13 @@ class OpenAICompatProvider(LLMProvider):
                 kwargs["temperature"] = temperature
                 if top_p is not None:
                     kwargs["top_p"] = top_p
+                if "openrouter.ai" in (self.base_url or ""):
+                    # 推論を要求していない呼び出しは推論させない (OpenRouter 統一 reasoning パラメータ)。
+                    # free alias が reasoning モデル (cohere north-mini-code 等) にルーティングされ、
+                    # reasoning だけで max_tokens を使い切る事故対策。実機プローブ:
+                    # enabled:false で reasoning_tokens=0・finish=stop を確認 (2026-09-08)。
+                    # ponytail: 将来 effort=None でも推論したいモデルが出たら settings で上書きする。
+                    kwargs["extra_body"] = {"reasoning": {"enabled": False}}
             if openai_tools:
                 kwargs["tools"] = openai_tools
                 kwargs["tool_choice"] = "auto"
