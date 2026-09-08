@@ -105,9 +105,27 @@ function _appendSegmentsToBubble(msg, msgDiv) {
   // which is null when the bubble was never appended (e.g. sanitizer fallback).
   if (!msg || !msgDiv || typeof msgDiv.querySelector !== "function") return;
   if (!msg.segments || !msg.segments.length) return;
+  // Conversation-order normalization: the turn persists text before
+  // thinking within a round (two separate accumulators flush text
+  // first), but live streaming shows ALL thinking merged into ONE
+  // details bubble at the head of the message. Fold every thinking
+  // segment into a single head bubble so a reload matches the live
+  // view — for new and already-stored turns alike.
+  var thinkingText = "";
+  var flow = [];
+  for (var fi = 0; fi < msg.segments.length; fi++) {
+    if (msg.segments[fi].type === "thinking") {
+      thinkingText += msg.segments[fi].content || "";
+    } else {
+      flow.push(msg.segments[fi]);
+    }
+  }
+  var segs = thinkingText.trim()
+    ? [{ type: "thinking", content: thinkingText }].concat(flow)
+    : flow;
   var toolCallDivs = {};
-  for (var si = 0; si < msg.segments.length; si++) {
-    var seg = msg.segments[si];
+  for (var si = 0; si < segs.length; si++) {
+    var seg = segs[si];
     if (seg.type === "text") {
       if (!seg.content || !seg.content.trim()) continue;
       var bubble = document.createElement("div");
@@ -146,10 +164,15 @@ function _appendSegmentsToBubble(msg, msgDiv) {
       var div = document.createElement("div");
       div.className = "chat-tool-call done";
       if (seg.id) div.dataset.toolId = seg.id;
+      // Immersive chip label/icon (same vocabulary as live chips);
+      // raw name kept in the title + details for debugging.
+      var toolApi = N.Chat.tools || {};
+      var toolName = typeof toolApi.label === "function" ? toolApi.label(seg.name) : (seg.name || "");
+      var toolGlyph = typeof toolApi.icon === "function" ? toolApi.icon(seg.name) : "wrench";
       safeSetHTML(div, '<details><summary>' +
         '<span class="chat-tool-summary-left">' +
-        '<i data-lucide="wrench"></i> <strong>' +
-        esc(seg.name) + '</strong></span>' +
+        '<i data-lucide="' + toolGlyph + '"></i> <strong title="' + esc(seg.name || "") + '">' +
+        esc(toolName) + '</strong></span>' +
         '<span class="chat-tool-chevron"><i data-lucide="chevron-right"></i></span>' +
         '<span class="chat-tool-status"><i data-lucide="check"></i> 完了</span></summary>' +
         '<pre class="chat-tool-detail">' + esc(inputStr) + '</pre></details>');
@@ -978,6 +1001,7 @@ N.Chat.history = {
   export: exportChatHistory,
   reset: resetToWelcome,
   getSessionId: getChatSessionId,
+  renderSegments: _appendSegmentsToBubble,
 };
 // Wire the restore hook into the monologue API (chat-send.js owns the
 // bubble renderer; the fetch-and-replay flow lives here).

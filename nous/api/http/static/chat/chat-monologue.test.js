@@ -33,6 +33,10 @@ beforeAll(() => {
   N.Chat.state = { messages: [], streaming: false };
   N.Chat.markdown = { render: (s) => s };
   loadFile('../chat/chat-send.js');
+  N.Chat.tools = {
+    label: (n) => (n === 'memory_search' ? '記憶をたどってる…' : '作業してる…'),
+    icon: (n) => (n === 'memory_search' ? 'brain' : 'wrench'),
+  };
   // api is captured at module load — stub before chat-history.js loads
   N.Core.api = vi.fn();
   loadFile('../chat/chat-history.js');
@@ -163,6 +167,68 @@ describe('monologue is display-only', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('history segment rendering (chat-history.js)', () => {
+  function msgShell() {
+    const div = document.createElement('div');
+    div.className = 'chat-msg assistant';
+    div.innerHTML = '<div class="chat-time">10:00</div><div class="chat-msg-actions"></div>';
+    document.body.appendChild(div);
+    return div;
+  }
+
+  it('folds thinking into one head bubble — reload matches live order', () => {
+    // persisted order is [text, thinking] (server flushes text first)
+    // but live shows thinking at the head of the message
+    const div = msgShell();
+    N.Chat.history.renderSegments({
+      segments: [
+        { type: 'text', content: '答えはこう。' },
+        { type: 'thinking', content: 'まず考えた。' },
+      ],
+      time: '10:00',
+    }, div);
+    const kinds = Array.from(div.children).map((e) => e.className.split(' ')[0]);
+    expect(kinds).toEqual(['chat-thinking-bubble', 'chat-bubble', 'chat-time', 'chat-msg-actions']);
+    expect(div.querySelector('.chat-thinking-body').textContent).toBe('まず考えた。');
+    expect(div.querySelector('.chat-bubble').textContent).toBe('答えはこう。');
+  });
+
+  it('merges multi-round thinking segments into the single head bubble', () => {
+    const div = msgShell();
+    N.Chat.history.renderSegments({
+      segments: [
+        { type: 'thinking', content: '一期目。' },
+        { type: 'text', content: '本文。' },
+        { type: 'tool_call', name: 'memory_search', id: 't1', input: {} },
+        { type: 'text', content: '続き。' },
+        { type: 'thinking', content: '二期目。' },
+      ],
+      time: '10:00',
+    }, div);
+    const bodies = Array.from(div.querySelectorAll('.chat-thinking-body'));
+    expect(bodies.length).toBe(1); // one bubble, like live
+    expect(bodies[0].textContent).toBe('一期目。二期目。');
+    const kinds = Array.from(div.children).map((e) => e.className.split(' ')[0]);
+    // thinking at head, then text → tool → text, chronological
+    expect(kinds.slice(0, 4)).toEqual(['chat-thinking-bubble', 'chat-bubble', 'chat-tool-call', 'chat-bubble']);
+  });
+
+  it('renders restored tool chips with the immersive label and icon', () => {
+    const div = msgShell();
+    N.Chat.history.renderSegments({
+      segments: [
+        { type: 'tool_call', name: 'memory_search', id: 't9', input: { q: 'remember' } },
+      ],
+      time: '10:00',
+    }, div);
+    const chip = div.querySelector('.chat-tool-call');
+    expect(chip).not.toBeNull();
+    expect(chip.querySelector('strong').textContent).toBe('記憶をたどってる…'); // no raw name
+    expect(chip.querySelector('strong').getAttribute('title')).toBe('memory_search'); // debug kept
+    expect(chip.querySelector('.chat-tool-summary-left i').getAttribute('data-lucide')).toBe('brain');
   });
 });
 
