@@ -220,7 +220,7 @@ class TestReasoningBudget:
     def test_generate_requests_reasoning_safe_max_tokens(self) -> None:
         captured: dict = {}
 
-        async def stream(messages, system, temperature, max_tokens):
+        async def stream(messages, system, temperature, max_tokens, reasoning_effort=None):
             captured["max_tokens"] = max_tokens
             from nous.infrastructure.llm.base import DoneEvent
 
@@ -229,6 +229,69 @@ class TestReasoningBudget:
         engine, _ = self._engine_with_stream(stream)
         assert asyncio_run_generate(engine) is None  # "ok" は JSON でない → None
         assert captured["max_tokens"] >= 2048
+
+    def test_engine_passes_brain_reasoning_effort_to_stream(self) -> None:
+        """brain_reasoning_enabled ON → stream に effort を渡す（推論モデルは予算も増える）。"""
+        captured: dict = {}
+
+        async def stream(messages, system, temperature, max_tokens, reasoning_effort=None):
+            captured["effort"] = reasoning_effort
+            from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+
+            yield TextDeltaEvent(content='{"monologue": "ふふ、推論した。"}')
+            yield DoneEvent(full_content='{"monologue": "ふふ、推論した。"}', tool_calls=[])
+
+        engine, _ = self._engine_with_stream(stream)
+        engine._reasoning_effort = "high"
+        result = asyncio_run_generate(engine)
+        assert captured["effort"] == "high"
+        assert result is not None
+        assert result.monologue == "ふふ、推論した。"
+
+    def test_engine_default_effort_is_none(self) -> None:
+        captured: dict = {}
+
+        async def stream(messages, system, temperature, max_tokens, reasoning_effort=None):
+            captured["effort"] = reasoning_effort
+            from nous.infrastructure.llm.base import DoneEvent
+
+            yield DoneEvent(full_content='{"monologue": "x"}', tool_calls=[])
+
+        engine, _ = self._engine_with_stream(stream)
+        asyncio_run_generate(engine)
+        assert captured["effort"] is None
+
+    def test_from_config_resolves_brain_reasoning(self) -> None:
+        provider_cfg = MagicMock()
+        provider_cfg.provider = "openai"
+        provider_cfg.get_effective_api_key.return_value = "key"
+        provider_cfg.get_effective_model.return_value = "model-x"
+        provider_cfg.get_effective_base_url.return_value = "https://x/v1"
+        cfg = MagicMock()
+        cfg.provider_config = provider_cfg
+        cfg.brain_llm_dedicated = False
+        cfg.brain_reasoning_enabled = True
+        cfg.brain_reasoning_effort = "max"
+
+        engine = IntrospectionEngine.from_config(cfg)
+        assert engine is not None
+        assert engine._reasoning_effort == "max"
+
+    def test_from_config_disabled_effort_is_none(self) -> None:
+        provider_cfg = MagicMock()
+        provider_cfg.provider = "openai"
+        provider_cfg.get_effective_api_key.return_value = "key"
+        provider_cfg.get_effective_model.return_value = "model-x"
+        provider_cfg.get_effective_base_url.return_value = "https://x/v1"
+        cfg = MagicMock()
+        cfg.provider_config = provider_cfg
+        cfg.brain_llm_dedicated = False
+        cfg.brain_reasoning_enabled = False
+        cfg.brain_reasoning_effort = "high"
+
+        engine = IntrospectionEngine.from_config(cfg)
+        assert engine is not None
+        assert engine._reasoning_effort is None
 
     def test_prompt_requires_monologue_when_turns_exist(self) -> None:
         from nous.application.chat.introspection import _INTROSPECTION_PROMPT
@@ -243,7 +306,7 @@ class TestReasoningBudget:
 
         from nous.infrastructure.llm.base import DoneEvent, ThinkingDeltaEvent
 
-        async def stream(messages, system, temperature, max_tokens):
+        async def stream(messages, system, temperature, max_tokens, reasoning_effort=None):
             yield ThinkingDeltaEvent(content="thinking only")
             yield DoneEvent(full_content="", tool_calls=[])
 

@@ -111,6 +111,18 @@ class SessionConfig(BaseModel):
     brain_monologue_enabled: bool = False
     # 内省エンジン (drain 後の単一 LLM 呼び出し: 独り言＋逸脱判定＋反省＋感情/身体)
     brain_introspection_enabled: bool = True
+    # 脳専用 reasoning トグル (chat の reasoning_enabled/effort とは独立)。
+    # ON で脳側呼び出し (内省・記憶強化) に reasoning_effort を渡す。OFF は None
+    # (openai_compat が openrouter + effort=None で reasoning を無効化する)。
+    brain_reasoning_enabled: bool = False
+    brain_reasoning_effort: str = "medium"
+
+    @field_validator("brain_reasoning_effort")
+    @classmethod
+    def _clamp_brain_reasoning_effort(cls, v: str) -> str:
+        from nous.domain.provider_config import REASONING_EFFORTS
+
+        return v if v in REASONING_EFFORTS else "medium"  # 不正値は既存 clamp と同一形式
 
     # Forgetting
     forgetting_enabled: bool = False

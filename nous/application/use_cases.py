@@ -218,19 +218,27 @@ class AppContext:
             if api_key:
                 from nous.infrastructure.llm.memory_enricher import MemoryEnricher
 
+                # 脳専用 reasoning トグル (chat の reasoning とは独立)。cfg None → None
+                # (settings 鎖に脳用キーは足さない — per-persona 設定の一元維持)。
+                brain_effort = None
+                if cfg is not None and getattr(cfg, "brain_reasoning_enabled", False):
+                    brain_effort = str(getattr(cfg, "brain_reasoning_effort", "medium") or "medium")
+
                 enricher = MemoryEnricher(
                     provider=provider,
                     api_key=api_key,
                     model=model,
                     base_url=base_url,
                     min_chars=min_chars,
+                    reasoning_effort=brain_effort,
                 )
                 # IntrospectionEngine shares the SAME resolved provider chain.
                 from nous.application.chat.introspection import IntrospectionEngine
                 from nous.infrastructure.llm.factory import get_provider
 
                 introspection_engine = IntrospectionEngine(
-                    get_provider(provider=provider, api_key=api_key, model=model, base_url=base_url)
+                    get_provider(provider=provider, api_key=api_key, model=model, base_url=base_url),
+                    reasoning_effort=brain_effort,
                 )
         self._enricher = enricher
         self.introspection_engine = introspection_engine

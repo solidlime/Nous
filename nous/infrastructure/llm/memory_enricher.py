@@ -64,12 +64,15 @@ class MemoryEnricher:
         model: str,
         base_url: str = "",
         min_chars: int = 10,
+        reasoning_effort: str | None = None,
     ) -> None:
         self._provider_name = provider
         self._api_key = api_key
         self._model = model
         self._base_url = base_url
         self._min_chars = min_chars
+        # 脳専用 reasoning トグル (chat の reasoning とは独立)。None なら effort を渡さない。
+        self._reasoning_effort = reasoning_effort
 
     async def enrich_async(
         self,
@@ -140,6 +143,7 @@ class MemoryEnricher:
             system=system,
             temperature=0.3,
             max_tokens=512,
+            reasoning_effort=self._reasoning_effort,
         ):
             if isinstance(event, TextDeltaEvent):
                 full_content.append(event.content)

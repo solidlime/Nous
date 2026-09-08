@@ -80,8 +80,11 @@ class IntrospectionResult:
 class IntrospectionEngine:
     """単一 LLM 呼び出しで内省結果 (JSON) を産出する。"""
 
-    def __init__(self, provider: LLMProvider) -> None:
+    def __init__(self, provider: LLMProvider, reasoning_effort: str | None = None) -> None:
         self._provider = provider
+        # 脳専用 reasoning トグル (chat の reasoning とは独立)。None なら effort を渡さず
+        # openai_compat 側の openrouter reasoning 無効化が効く。
+        self._reasoning_effort = reasoning_effort
 
     @classmethod
     def from_config(cls, config: ChatConfig | None, settings=None) -> IntrospectionEngine | None:
@@ -104,7 +107,7 @@ class IntrospectionEngine:
         except Exception:
             logger.debug("introspection provider init failed", exc_info=True)
             return None
-        return cls(provider)
+        return cls(provider, reasoning_effort=_brain_reasoning_effort(config))
 
     async def generate(
         self,
@@ -149,6 +152,7 @@ class IntrospectionEngine:
             system="",
             temperature=0.7,
             max_tokens=_MAX_TOKENS,
+            reasoning_effort=self._reasoning_effort,
         ):
             if isinstance(event, TextDeltaEvent):
                 parts.append(event.content)
@@ -168,6 +172,13 @@ class IntrospectionEngine:
                 thinking_chars,
             )
         return text, usage
+
+
+def _brain_reasoning_effort(config: ChatConfig | None) -> str | None:
+    """脳専用 reasoning トグル → stream に渡す effort。OFF/未設定は None。"""
+    if config is None or not getattr(config, "brain_reasoning_enabled", False):
+        return None
+    return str(getattr(config, "brain_reasoning_effort", "medium") or "medium")
 
 
 def _resolve_llm_config(config: ChatConfig | None, settings) -> tuple[str, str, str, str]:

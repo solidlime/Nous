@@ -202,3 +202,51 @@ class TestReloadEnricher:
         assert second is not first
         assert second._provider_name == "openai"
         assert second._api_key == "brain-key"
+
+
+class TestBrainReasoningKeys:
+    def test_default_off_medium(self):
+        cfg = ChatConfig()
+        assert cfg.brain_reasoning_enabled is False
+        assert cfg.brain_reasoning_effort == "medium"
+
+    def test_effort_clamped(self):
+        from nous.domain.session_config import SessionConfig
+
+        assert SessionConfig(brain_reasoning_effort="bogus").brain_reasoning_effort == "medium"
+
+    def test_config_roundtrip(self, tmp_path):
+        from nous.domain.chat_config import ChatConfigFileRepository
+
+        repo = ChatConfigFileRepository(str(tmp_path))
+        cfg = repo.get("p1")
+        cfg.brain_reasoning_enabled = True
+        cfg.brain_reasoning_effort = "high"
+        repo.save(cfg)
+        got = repo.get("p1")
+        assert got.brain_reasoning_enabled is True
+        assert got.brain_reasoning_effort == "high"
+
+
+class TestBrainReasoningWiring:
+    def test_wiring_passes_effort_to_enricher_and_engine(self):
+        ctx = _ctx(_cfg(brain_reasoning_enabled=True, brain_reasoning_effort="high"))
+        ctx._init_enricher()
+        assert ctx._enricher is not None
+        assert ctx._enricher._reasoning_effort == "high"
+        assert ctx.introspection_engine is not None
+        assert ctx.introspection_engine._reasoning_effort == "high"
+
+    def test_disabled_passes_none(self):
+        ctx = _ctx(_cfg())
+        ctx._init_enricher()
+        assert ctx._enricher is not None
+        assert ctx._enricher._reasoning_effort is None
+        assert ctx.introspection_engine is not None
+        assert ctx.introspection_engine._reasoning_effort is None
+
+    def test_cfg_none_passes_none(self):
+        ctx = _ctx(None)
+        ctx._init_enricher()
+        assert ctx._enricher is not None
+        assert ctx._enricher._reasoning_effort is None
