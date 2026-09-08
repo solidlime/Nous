@@ -56,6 +56,9 @@ _INTROSPECTION_PROMPT = """あなたは {persona} です。
 【ペルソナ設定（逸脱判定の基準）】
 {persona_identity}
 
+【現在の状態】
+{current_state}
+
 【出力形式】JSONのみ。新規会話がある限り monologue は必ず書くこと（null 禁止）。
 {{
   "monologue": "独り言（最大5文・この間の出来事と気持ちを織り込む）",
@@ -65,7 +68,31 @@ _INTROSPECTION_PROMPT = """あなたは {persona} です。
   "emotion": {{"emotion": "正典25語の感情名", "emotion_intensity": 0.0-1.0}},
   "body_state": {{"fatigue": 0.0-1.0, "warmth": 0.0-1.0, "arousal": 0.0-1.0}}
 }}
-感情・身体は会話から自然に推定した場合のみ記載し、変化なしなら null。
+感情・身体は現在値との変化が会話から推定できる場合のみ記載し、現在値と同じ・変化なしなら null。
+"""
+
+_SPONTANEOUS_PROMPT = """あなたは {persona} です。誰も話しかけてこない静かな時間です。
+現在の状態と最近の記憶から、一人称の独り言・内省を出力せよ（最大5文）。
+
+【現在の状態】
+{current_state}
+
+【最近の記憶】
+{memory_texts}
+
+【ペルソナ設定（逸脱判定の基準）】
+{persona_identity}
+
+【出力形式】JSONのみ。monologue は必ず書くこと（null 禁止）。
+{{
+  "monologue": "独り言（最大5文・この静かな時間の気持ちを織り込む）",
+  "violation": "キャラ逸脱があれば種別を一言。なければ null",
+  "violation_detail": "逸脱の具体内容。なければ null",
+  "reflection": "逸脱があった場合の一人称反省文1文。なければ null",
+  "emotion": {{"emotion": "正典25語の感情名", "emotion_intensity": 0.0-1.0}},
+  "body_state": {{"fatigue": 0.0-1.0, "warmth": 0.0-1.0, "arousal": 0.0-1.0}}
+}}
+感情・身体は現在値との変化が記憶から推定できる場合のみ記載し、現在値と同じ・変化なしなら null。
 """
 
 
@@ -127,8 +154,9 @@ class IntrospectionEngine:
         system_prompt: str,
         recent_turns: list[dict],
         memory_texts: list[str],
+        current_state: dict | None = None,
     ) -> IntrospectionResult | None:
-        """直近会話＋記憶から内省結果 JSON を産出する。失敗時 None。"""
+        """直近会話＋記憶＋現在状態から内省結果 JSON を産出する。失敗時 None。"""
         turns_text = "\n".join(f"{t.get('role', '?')}: {t.get('content', '')}" for t in recent_turns) or "(なし)"
         mems = "\n".join(f"- {t[:_MAX_CHARS_PER_MEMORY]}" for t in memory_texts[:_MAX_MEMORIES]) or "(なし)"
         user_message = _INTROSPECTION_PROMPT.format(
@@ -136,11 +164,36 @@ class IntrospectionEngine:
             recent_turns=turns_text,
             memory_texts=mems,
             persona_identity=(system_prompt or "")[:2000],
+            current_state=_format_current_state(current_state),
         )
         try:
             text, _usage = await self._call_llm(user_message)
         except Exception:
             logger.debug("introspection generate failed", exc_info=True)
+            return None
+        if not text:
+            return None
+        return _parse_result(text)
+
+    async def generate_spontaneous(
+        self,
+        persona: str,
+        system_prompt: str,
+        memory_texts: list[str],
+        current_state: dict | None = None,
+    ) -> IntrospectionResult | None:
+        """自発的内省: 誰も話しかけてこない静かな時間に記憶＋現在状態から独り言を産出。失敗時 None。"""
+        mems = "\n".join(f"- {t[:_MAX_CHARS_PER_MEMORY]}" for t in memory_texts[:_MAX_MEMORIES]) or "(なし)"
+        user_message = _SPONTANEOUS_PROMPT.format(
+            persona=persona,
+            current_state=_format_current_state(current_state),
+            memory_texts=mems,
+            persona_identity=(system_prompt or "")[:2000],
+        )
+        try:
+            text, _usage = await self._call_llm(user_message)
+        except Exception:
+            logger.debug("introspection spontaneous generate failed", exc_info=True)
             return None
         if not text:
             return None
@@ -191,6 +244,47 @@ def _brain_reasoning_effort(config: ChatConfig | None) -> str | None:
     if config is None or not getattr(config, "brain_reasoning_enabled", False):
         return None
     return str(getattr(config, "brain_reasoning_effort", "medium") or "medium")
+
+
+def _format_current_state(state: dict | None) -> str:
+    """【現在の状態】節の本文。取得失敗時は明示プレースホルダ。"""
+    if not state:
+        return "（取得できませんでした）"
+    emotion = state.get("emotion", "不明")
+    intensity = state.get("emotion_intensity", "不明")
+    body = state.get("body_state") or {}
+    body_text = ", ".join(f"{k}={v}" for k, v in body.items()) if body else "不明"
+    elapsed = state.get("elapsed") or "不明"
+    return f"感情: {emotion}（強度 {intensity}）/ 身体: {body_text} / 前回の内省から {elapsed}"
+
+
+def _format_seconds(seconds: float | None) -> str:
+    """経過秒 → 人間可読（例: 2時間5分）。None は不明。"""
+    if seconds is None:
+        return "不明"
+    total = max(0, int(seconds))
+    if total < 60:
+        return f"{total}秒"
+    minutes = total // 60
+    if minutes < 60:
+        return f"{minutes}分"
+    hours = minutes // 60
+    return f"{hours}時間{minutes % 60}分" if minutes % 60 else f"{hours}時間"
+
+
+def _build_current_state(ctx: AppContext, persona: str, elapsed_seconds: float | None) -> dict | None:
+    """get_state_snapshot → current_state dict。失敗時 None（材料はベストエフォート）。"""
+    try:
+        emotion, intensity, body_state, _snap = ctx.persona_service.get_state_snapshot(persona)
+        return {
+            "emotion": emotion,
+            "emotion_intensity": intensity,
+            "body_state": body_state,
+            "elapsed": _format_seconds(elapsed_seconds),
+        }
+    except Exception:
+        logger.debug("introspection: state snapshot failed", exc_info=True)
+        return None
 
 
 def _resolve_brain_max_tokens(config: ChatConfig | None) -> int:
@@ -385,97 +479,177 @@ async def run_introspection(ctx: AppContext, config: ChatConfig | None, engine, 
     if not turns:
         return
 
+    # 材料強化: 現在の感情・身体状態＋前回内省からの経過時間（ベストエフォート）
+    elapsed_seconds: float | None = None
+    naive_ts = _naive(last_ts)
+    if naive_ts is not None:
+        try:
+            elapsed_seconds = (get_now() - naive_ts).total_seconds()
+        except Exception:
+            elapsed_seconds = None
+    current_state = _build_current_state(ctx, persona, elapsed_seconds)
+
     persona_identity = getattr(config, "system_prompt", "") or f"あなたは{persona}です。"
     try:
-        result = await engine.generate(persona, persona_identity, turns, drained_texts)
+        result = await engine.generate(persona, persona_identity, turns, drained_texts, current_state=current_state)
     except Exception:
         logger.info("introspection: generate failed", exc_info=True)
         result = None
     if result is None:
         logger.info("introspection: generate returned None (LLM error / empty content / parse failed)")
 
-    applied: list[str] = []
-    monologue_emitted = False
-    if result is not None:
-        if result.emotion:
-            try:
-                ctx.persona_service.update_emotion(
-                    persona,
-                    str(result.emotion.get("emotion", "neutral")),
-                    float(result.emotion.get("emotion_intensity", 0.0)),
-                    context="introspection",
-                )
-                applied.append("emotion")
-            except Exception:
-                logger.debug("introspection: emotion apply failed", exc_info=True)
-        if result.body_state:
-            try:
-                ctx.persona_service.update_physical_state(
-                    persona,
-                    fatigue=_clamp01(result.body_state.get("fatigue")),
-                    warmth=_clamp01(result.body_state.get("warmth")),
-                    arousal=_clamp01(result.body_state.get("arousal")),
-                    context="introspection",
-                )
-                applied.append("body_state")
-            except Exception:
-                logger.debug("introspection: body_state apply failed", exc_info=True)
-        if result.violation and result.reflection and not _dup_character_drift(ctx, result.reflection):
-            try:
-                await ctx.memory_service.create_memory(
-                    content=result.reflection,
-                    importance=0.8,
-                    tags=["character_drift", "introspection"],
-                    source_context="introspection",
-                )
-                applied.append("reflection")
-            except Exception:
-                logger.debug("introspection: reflection memory failed", exc_info=True)
-        # monologue: brain_monologue_enabled 時のみ保存・emit（判定・状態適用はトグルと独立）
-        if result.monologue and getattr(config, "brain_monologue_enabled", False):
-            try:
-                repo.insert(
-                    SessionEvent(
-                        session_id="unknown",
-                        persona=persona,
-                        event_type="brain.monologue",
-                        summary=result.monologue,
-                        timestamp=get_now(),
-                        metadata=None,
-                    )
-                )
-            except Exception:
-                logger.debug("introspection: monologue event insert failed", exc_info=True)
-            try:
-                wiring_events.emit("monologue", meta={"persona": persona, "text": result.monologue})
-                monologue_emitted = True
-            except Exception:
-                logger.debug("introspection: monologue wiring emit failed", exc_info=True)
+    applied, monologue_emitted = await _apply_result(ctx, config, repo, persona, result)
 
     if result is not None:
         logger.info(
             "introspection ok: applied=%s monologue=%s new_turns=%d memory_count=%d",
-            applied or [],
+            applied,
             "yes" if monologue_emitted else "no",
             len(turns),
             len(drained_texts),
         )
 
-    # brain.introspection 記録（メタ: violation 有無・適用内容）
+    _record_introspection_event(repo, persona, "brain.introspection", result, applied, len(turns), len(drained_texts))
+
+
+async def run_spontaneous(
+    ctx: AppContext, config: ChatConfig | None, engine, idle_seconds: float | None = None
+) -> None:
+    """自発的内省: 誰も話しかけてこない静かな時間に記憶＋現在状態から独り言を産出。
+
+    発火間隔のガードは worker 側 (_maybe_spontaneous)。ここでは実行と記録のみ。
+    イベント種別は brain.introspection_spontaneous — ターン駆動の「前回内省時刻」
+    (brain.introspection のみを読む) を壊さないための種別分離。
+    """
+    if engine is None:
+        return
+    if not getattr(config, "brain_spontaneous_enabled", False):
+        return
+    repo = getattr(ctx, "_session_event_repo", None)
+    if repo is None:
+        return
+    persona = ctx.persona
+
+    # 材料: 最近の記憶（ベストエフォート）
+    memory_texts: list[str] = []
+    try:
+        recent = ctx.memory_service.get_recent(limit=10)
+        items = getattr(recent, "value", None) if getattr(recent, "is_ok", False) else None
+        memory_texts = [str(m.content) for m in items or [] if getattr(m, "content", None)]
+    except Exception:
+        logger.debug("introspection spontaneous: memory fetch failed", exc_info=True)
+
+    # 材料: 現在状態＋アイドル経過時間
+    current_state = _build_current_state(ctx, persona, idle_seconds)
+
+    persona_identity = getattr(config, "system_prompt", "") or f"あなたは{persona}です。"
+    try:
+        result = await engine.generate_spontaneous(persona, persona_identity, memory_texts, current_state)
+    except Exception:
+        logger.info("introspection spontaneous: generate failed", exc_info=True)
+        result = None
+    if result is None:
+        logger.info("introspection spontaneous: generate returned None (LLM error / empty content / parse failed)")
+
+    applied, monologue_emitted = await _apply_result(ctx, config, repo, persona, result)
+
+    if result is not None:
+        logger.info(
+            "introspection spontaneous ok: applied=%s monologue=%s memory_count=%d",
+            applied,
+            "yes" if monologue_emitted else "no",
+            len(memory_texts),
+        )
+
+    _record_introspection_event(repo, persona, "brain.introspection_spontaneous", result, applied, 0, len(memory_texts))
+
+
+async def _apply_result(
+    ctx: AppContext, config: ChatConfig | None, repo, persona: str, result
+) -> tuple[list[str], bool]:
+    """emotion/body_state/reflection/monologue を適用（ターン駆動・自発の両モード共用）。
+
+    戻り値は (applied, monologue_emitted)。monologue は brain_monologue_enabled 時のみ
+    保存・emit（判定・状態適用はトグルと独立）。
+    """
+    applied: list[str] = []
+    monologue_emitted = False
+    if result is None:
+        return applied, monologue_emitted
+    if result.emotion:
+        try:
+            ctx.persona_service.update_emotion(
+                persona,
+                str(result.emotion.get("emotion", "neutral")),
+                float(result.emotion.get("emotion_intensity", 0.0)),
+                context="introspection",
+            )
+            applied.append("emotion")
+        except Exception:
+            logger.debug("introspection: emotion apply failed", exc_info=True)
+    if result.body_state:
+        try:
+            ctx.persona_service.update_physical_state(
+                persona,
+                fatigue=_clamp01(result.body_state.get("fatigue")),
+                warmth=_clamp01(result.body_state.get("warmth")),
+                arousal=_clamp01(result.body_state.get("arousal")),
+                context="introspection",
+            )
+            applied.append("body_state")
+        except Exception:
+            logger.debug("introspection: body_state apply failed", exc_info=True)
+    if result.violation and result.reflection and not _dup_character_drift(ctx, result.reflection):
+        try:
+            await ctx.memory_service.create_memory(
+                content=result.reflection,
+                importance=0.8,
+                tags=["character_drift", "introspection"],
+                source_context="introspection",
+            )
+            applied.append("reflection")
+        except Exception:
+            logger.debug("introspection: reflection memory failed", exc_info=True)
+    if result.monologue and getattr(config, "brain_monologue_enabled", False):
+        try:
+            repo.insert(
+                SessionEvent(
+                    session_id="unknown",
+                    persona=persona,
+                    event_type="brain.monologue",
+                    summary=result.monologue,
+                    timestamp=get_now(),
+                    metadata=None,
+                )
+            )
+        except Exception:
+            logger.debug("introspection: monologue event insert failed", exc_info=True)
+        try:
+            wiring_events.emit("monologue", meta={"persona": persona, "text": result.monologue})
+            monologue_emitted = True
+        except Exception:
+            logger.debug("introspection: monologue wiring emit failed", exc_info=True)
+    return applied, monologue_emitted
+
+
+def _record_introspection_event(
+    repo, persona: str, event_type: str, result, applied: list[str], new_turns: int, memory_count: int
+) -> None:
+    """brain.introspection(_spontaneous) 記録（メタ: violation 有無・適用内容）。"""
     try:
         repo.insert(
             SessionEvent(
                 session_id="unknown",
                 persona=persona,
-                event_type="brain.introspection",
+                event_type=event_type,
                 summary="内省: " + (result.violation if result and result.violation else "violationなし"),
                 timestamp=get_now(),
                 metadata={
                     "violation": result.violation if result else None,
                     "violation_detail": result.violation_detail if result else "",
                     "applied": applied,
-                    "new_turns": len(turns),
-                    "memory_count": len(drained_texts),
+                    "new_turns": new_turns,
+                    "memory_count": memory_count,
                 },
             )
         )

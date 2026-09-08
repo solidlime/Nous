@@ -13,7 +13,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nous.application.chat.introspection import IntrospectionEngine, fetch_recent_turns, run_introspection
+from nous.application.chat.introspection import (
+    IntrospectionEngine,
+    fetch_recent_turns,
+    run_introspection,
+    run_spontaneous,
+)
 from nous.domain.memory import wiring_events
 from nous.domain.memory.service import MemoryService
 from nous.domain.persona.service import PersonaService
@@ -99,7 +104,7 @@ def _insert_turns(db, persona: str, role_content: list[tuple[str, str]], base: d
 def _engine_with(result_or_none, ctx) -> MagicMock:
     engine = MagicMock()
 
-    async def fake_generate(persona, system_prompt, recent_turns, memory_texts):
+    async def fake_generate(persona, system_prompt, recent_turns, memory_texts, current_state=None):
         assert isinstance(recent_turns, list)
         return result_or_none
 
@@ -570,3 +575,229 @@ class TestBrainMaxTokens:
         engine = IntrospectionEngine.from_config(cfg)
         assert engine is not None
         assert engine._max_tokens == 3072
+
+
+class TestStateMaterial:
+    """材料強化: 現在の感情・身体状態＋経過時間を prompt に渡す（ターン駆動モードの穴塞ぎ）。"""
+
+    def test_turn_prompt_has_current_state_section(self) -> None:
+        from nous.application.chat.introspection import _INTROSPECTION_PROMPT
+
+        assert "【現在の状態】" in _INTROSPECTION_PROMPT
+        assert "{current_state}" in _INTROSPECTION_PROMPT
+        assert "現在値との変化" in _INTROSPECTION_PROMPT
+
+    def test_generate_injects_state_into_prompt(self) -> None:
+        import asyncio
+
+        captured: dict = {}
+
+        async def stream(messages, system, temperature, max_tokens, reasoning_effort=None):
+            captured["user_message"] = messages[0].content
+            from nous.infrastructure.llm.base import DoneEvent
+
+            yield DoneEvent(full_content="", tool_calls=[])
+
+        provider = MagicMock()
+        provider.stream = stream
+        engine = IntrospectionEngine(provider)
+        state = {
+            "emotion": "joy",
+            "emotion_intensity": 0.7,
+            "body_state": {"fatigue": 0.2, "warmth": 0.6},
+            "elapsed": "2時間5分",
+        }
+        asyncio.new_event_loop().run_until_complete(
+            engine.generate("test", "sp", [{"role": "user", "content": "hi"}], [], current_state=state)
+        )
+        msg = captured["user_message"]
+        assert "感情: joy（強度 0.7）" in msg
+        assert "fatigue=0.2" in msg
+        assert "前回の内省から 2時間5分" in msg
+
+    def test_generate_state_none_placeholder(self) -> None:
+        import asyncio
+
+        captured: dict = {}
+
+        async def stream(messages, system, temperature, max_tokens, reasoning_effort=None):
+            captured["user_message"] = messages[0].content
+            from nous.infrastructure.llm.base import DoneEvent
+
+            yield DoneEvent(full_content="", tool_calls=[])
+
+        provider = MagicMock()
+        provider.stream = stream
+        engine = IntrospectionEngine(provider)
+        asyncio.new_event_loop().run_until_complete(
+            engine.generate("test", "sp", [{"role": "user", "content": "hi"}], [], current_state=None)
+        )
+        assert "取得できませんでした" in captured["user_message"]
+
+    def test_run_introspection_fetches_snapshot_and_passes_state(self, ctx, sqlite_conn) -> None:
+        import asyncio
+
+        base = datetime.now()
+        _insert_turns(sqlite_conn.get_memory_db(), "test", [("user", "u1")], base)
+        captured: dict = {}
+
+        async def fake_generate(persona, system_prompt, recent_turns, memory_texts, current_state=None):
+            captured["current_state"] = current_state
+            return _result()
+
+        engine = MagicMock()
+        engine.generate = AsyncMock(side_effect=fake_generate)
+        asyncio.new_event_loop().run_until_complete(run_introspection(ctx, _config(), engine, ["m1"]))
+        state = captured["current_state"]
+        assert state is not None
+        assert state["emotion"] == "neutral"
+        assert "elapsed" in state
+
+
+class TestGenerateSpontaneous:
+    """自発的内省エンジン: 静かな時間に記憶＋現在状態から独り言を産出。"""
+
+    def _engine(self, captured: dict) -> IntrospectionEngine:
+        async def stream(messages, system, temperature, max_tokens, reasoning_effort=None):
+            captured["user_message"] = messages[0].content
+            from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+
+            yield TextDeltaEvent(content=_JSON_OK)
+            yield DoneEvent(full_content=_JSON_OK, tool_calls=[])
+
+        provider = MagicMock()
+        provider.stream = stream
+        return IntrospectionEngine(provider)
+
+    def test_prompt_content_and_memories(self) -> None:
+        import asyncio
+
+        captured: dict = {}
+        engine = self._engine(captured)
+        result = asyncio.new_event_loop().run_until_complete(
+            engine.generate_spontaneous(
+                "test",
+                "あなたはテスト人格である。",
+                ["思い出その1", "思い出その2"],
+                {"emotion": "calm", "emotion_intensity": 0.3, "body_state": None, "elapsed": "7時間"},
+            )
+        )
+        assert result is not None
+        assert result.monologue == "ふふ、ちゃんと返せた。"
+        msg = captured["user_message"]
+        assert "静かな時間" in msg
+        assert "思い出その1" in msg
+        assert "感情: calm（強度 0.3）" in msg
+        assert "7時間" in msg
+        assert "monologue は必ず書くこと" in msg
+
+    def test_broken_json_returns_none(self) -> None:
+        import asyncio
+
+        async def stream(messages, system, temperature, max_tokens, reasoning_effort=None):
+            from nous.infrastructure.llm.base import DoneEvent
+
+            yield DoneEvent(full_content="not json", tool_calls=[])
+
+        provider = MagicMock()
+        provider.stream = stream
+        engine = IntrospectionEngine(provider)
+        assert asyncio.new_event_loop().run_until_complete(engine.generate_spontaneous("t", "sp", [], None)) is None
+
+
+class TestRunSpontaneous:
+    """自発モード実行: 記憶取得→generate→適用、イベント種別は brain.introspection_spontaneous。"""
+
+    def _ctx_with_memories(self, ctx, memories: list[str]) -> None:
+        items = [SimpleNamespace(content=m) for m in memories]
+        ctx.memory_service.get_recent = MagicMock(return_value=SimpleNamespace(is_ok=True, value=items))
+
+    def _engine(self, result_or_none, captured: dict | None = None) -> MagicMock:
+        engine = MagicMock()
+
+        async def fake_generate_spontaneous(persona, system_prompt, memory_texts, current_state=None):
+            if captured is not None:
+                captured["memory_texts"] = memory_texts
+                captured["current_state"] = current_state
+            return result_or_none
+
+        engine.generate_spontaneous = AsyncMock(side_effect=fake_generate_spontaneous)
+        return engine
+
+    def test_applies_and_records_spontaneous_event(self, ctx) -> None:
+        import asyncio
+
+        self._ctx_with_memories(ctx, ["思い出1", "思い出2"])
+        engine = self._engine(_result())
+        asyncio.new_event_loop().run_until_complete(run_spontaneous(ctx, _config(), engine, idle_seconds=25200.0))
+
+        repo = ctx._session_event_repo
+        mono = repo.get_by_persona("test", "brain.monologue", 10)
+        assert len(mono) == 1
+        events = repo.get_by_persona("test", "brain.introspection_spontaneous", 10)
+        assert len(events) == 1
+        # ターン駆動の前回内省時刻を壊さない（種別分離）
+        assert repo.get_by_persona("test", "brain.introspection", 10) == []
+        fires = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "monologue"]
+        assert len(fires) == 1
+
+    def test_engine_receives_memories_and_state(self, ctx) -> None:
+        import asyncio
+
+        self._ctx_with_memories(ctx, ["思い出1"])
+        captured: dict = {}
+        engine = self._engine(_result(), captured)
+        asyncio.new_event_loop().run_until_complete(run_spontaneous(ctx, _config(), engine, idle_seconds=25200.0))
+        assert captured["memory_texts"] == ["思い出1"]
+        assert captured["current_state"] is not None
+        assert captured["current_state"]["emotion"] == "neutral"
+        assert captured["current_state"]["elapsed"] == "7時間"
+
+    def test_generate_none_still_records_event(self, ctx) -> None:
+        import asyncio
+
+        self._ctx_with_memories(ctx, [])
+        engine = self._engine(None)
+        asyncio.new_event_loop().run_until_complete(run_spontaneous(ctx, _config(), engine, None))
+        repo = ctx._session_event_repo
+        assert len(repo.get_by_persona("test", "brain.introspection_spontaneous", 10)) == 1
+        assert repo.get_by_persona("test", "brain.monologue", 10) == []
+
+    def test_disabled_config_skips(self, ctx) -> None:
+        import asyncio
+
+        engine = self._engine(_result())
+        asyncio.new_event_loop().run_until_complete(
+            run_spontaneous(ctx, _config(brain_spontaneous_enabled=False), engine, None)
+        )
+        assert not engine.generate_spontaneous.called
+        assert ctx._session_event_repo.get_by_persona("test", "brain.introspection_spontaneous", 10) == []
+
+    def test_turn_mode_not_polluted_by_spontaneous_state(self, ctx, sqlite_conn) -> None:
+        """ターン駆動の前回内省時刻判定は brain.introspection のみを読む（種別分離）。"""
+        import asyncio
+
+        from nous.domain.memory.session_event import SessionEvent
+
+        base = datetime.now()
+        _insert_turns(sqlite_conn.get_memory_db(), "test", [("user", "u1")], base)
+        ctx._session_event_repo.insert(
+            SessionEvent(
+                session_id="unknown",
+                persona="test",
+                event_type="brain.introspection_spontaneous",
+                summary="自発",
+                timestamp=base - timedelta(minutes=5),
+                metadata=None,
+            )
+        )
+        # brain.introspection が無い（自発のみ）→ ターン駆動は last_ts=None 扱いで全ターン対象
+        engine = _engine_with(_result(), ctx)
+
+        async def fake_generate(persona, system_prompt, recent_turns, memory_texts, current_state=None):
+            fake_generate.seen_turns = recent_turns
+            return _result()
+
+        engine.generate = AsyncMock(side_effect=fake_generate)
+        asyncio.new_event_loop().run_until_complete(run_introspection(ctx, _config(), engine, []))
+        assert fake_generate.seen_turns  # 自発イベントが last_ts になっていたら空になる

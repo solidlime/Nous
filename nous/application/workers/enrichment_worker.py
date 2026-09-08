@@ -101,6 +101,8 @@ class EnrichmentWorker:
                 return
             if idle < self._num("brain_idle_after_seconds", 120):
                 return
+            # 自発的内省 (spec): idle 達成時に間隔ガードを worker 側で判定して発火
+            self._maybe_spontaneous(idle)
             if len(pending) < self._num("brain_min_batch_size", 3):
                 # pending 不足でも内省は前回以降の新規ターンがあれば実行 (spec §2)
                 self._maybe_introspect([])
@@ -121,6 +123,46 @@ class EnrichmentWorker:
             except Exception:
                 logger.debug("EnrichmentWorker: queue item failed for %s", item.memory_key, exc_info=True)
         self._maybe_introspect(drained)
+
+    def _maybe_spontaneous(self, idle_seconds: float) -> None:
+        """自発的内省 (spec): idle 達成 + 両内省種別の最新から interval_hours 経過で発火。
+
+        ガードは全て worker 側。種別は brain.introspection と brain.introspection_spontaneous
+        の両方を見る（自発がターン駆動の「前回内省時刻」を上書きしないための分離）。
+        全工程 try/except debug — enrichment 本体は壊さない。
+        """
+        try:
+            if not getattr(self._config, "brain_spontaneous_enabled", False):
+                return
+            if getattr(self.context, "introspection_engine", None) is None:
+                return
+            repo = getattr(self.context, "_session_event_repo", None)
+            if repo is None:
+                return
+            interval = self._num("brain_spontaneous_interval_hours", 6.0)
+            last: datetime | None = None
+            for etype in ("brain.introspection", "brain.introspection_spontaneous"):
+                events = repo.get_by_persona(self._persona, etype, 1)
+                if events:
+                    ts = events[0].timestamp
+                    if last is None or ts > last:
+                        last = ts
+            if last is not None:
+                elapsed = (self._naive(self._now()) - self._naive(last)).total_seconds()
+                if elapsed < interval * 3600.0:
+                    return
+            from nous.application.chat.introspection import run_spontaneous
+
+            self._run_async(
+                run_spontaneous(
+                    self.context,
+                    self._config,
+                    self.context.introspection_engine,
+                    idle_seconds=idle_seconds,
+                )
+            )
+        except Exception:
+            logger.debug("EnrichmentWorker: spontaneous introspection failed", exc_info=True)
 
     def _maybe_introspect(self, drained: list[tuple[str, str]]) -> None:
         """REM drain 完了後に内省エンジンを実行 (spec §2)。

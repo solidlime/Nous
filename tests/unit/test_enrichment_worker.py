@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -571,3 +572,109 @@ class TestWorkerStartLog:
             worker.start()
         assert mock_thread.return_value.start.called
         assert any("EnrichmentWorker started" in r.message for r in caplog.records if r.levelname == "INFO")
+
+
+class TestSpontaneousIntrospection:
+    """自発的内省の発火ガード（worker 側）。
+
+    条件: brain_spontaneous_enabled AND engine AND idle 達成 AND
+    brain.introspection / brain.introspection_spontaneous の最新タイムスタンプ
+    両者の MAX から interval_hours 以上経過。
+    """
+
+    def _worker(self, ctx: MagicMock, enabled: bool = True, interval_hours: int = 6) -> EnrichmentWorker:
+        ctx.introspection_engine = MagicMock()
+        ctx._session_event_repo = MagicMock()
+        return EnrichmentWorker(
+            ctx, _config(brain_spontaneous_enabled=enabled, brain_spontaneous_interval_hours=interval_hours)
+        )
+
+    def _repo_with_last(self, ctx: MagicMock, hours_ago: float | None) -> MagicMock:
+        repo = ctx._session_event_repo
+        if hours_ago is None:
+            repo.get_by_persona.return_value = []
+        else:
+            from nous.domain.shared.time_utils import get_now
+
+            ev = SimpleNamespace(timestamp=get_now() - timedelta(hours=hours_ago))
+            repo.get_by_persona.return_value = [ev]
+        return repo
+
+    def _patch_run(self):
+        return patch("nous.application.chat.introspection.run_spontaneous")
+
+    def test_fires_when_interval_elapsed(self) -> None:
+
+        ctx = MagicMock()
+        worker = self._worker(ctx)
+        self._repo_with_last(ctx, hours_ago=7.0)
+        with self._patch_run() as mock_run:
+            worker._maybe_spontaneous(25200.0)
+        assert mock_run.called
+        args = mock_run.call_args
+        assert args.args[0] is ctx
+        assert args.kwargs["idle_seconds"] == 25200.0
+
+    def test_skips_when_recent_turn_introspection(self) -> None:
+        """ターン駆動が最近でも自発が古くても、最新（MAX）が新しい → 発火しない。"""
+        ctx = MagicMock()
+        worker = self._worker(ctx)
+        repo = ctx._session_event_repo
+
+        def by_persona(persona, etype, limit):
+            from nous.domain.shared.time_utils import get_now
+
+            if etype == "brain.introspection":
+                return [SimpleNamespace(timestamp=get_now() - timedelta(minutes=10))]
+            return [SimpleNamespace(timestamp=get_now() - timedelta(hours=10))]
+
+        repo.get_by_persona.side_effect = by_persona
+        with self._patch_run() as mock_run:
+            worker._maybe_spontaneous(600.0)
+        assert not mock_run.called
+
+    def test_no_history_fires(self) -> None:
+        ctx = MagicMock()
+        worker = self._worker(ctx)
+        self._repo_with_last(ctx, hours_ago=None)
+        with self._patch_run() as mock_run:
+            worker._maybe_spontaneous(3600.0)
+        assert mock_run.called
+
+    def test_disabled_no_fire(self) -> None:
+        ctx = MagicMock()
+        worker = self._worker(ctx, enabled=False)
+        with self._patch_run() as mock_run:
+            worker._maybe_spontaneous(3600.0)
+        assert not mock_run.called
+
+    def test_no_engine_no_fire(self) -> None:
+        ctx = MagicMock()
+        ctx.introspection_engine = None
+        worker = self._worker(ctx)
+        ctx.introspection_engine = None
+        with self._patch_run() as mock_run:
+            worker._maybe_spontaneous(3600.0)
+        assert not mock_run.called
+
+    def test_run_cycle_reaches_spontaneous_when_idle(self) -> None:
+        """_run_cycle が idle 達成時に _maybe_spontaneous を呼ぶこと。"""
+        ctx = MagicMock()
+        worker = self._worker(ctx)
+        self._repo_with_last(ctx, hours_ago=None)
+        ctx.enrichment_queue.pending_keys.return_value = []
+        ctx._session_event_repo.last_activity_at.return_value = None  # idle None → not idle
+        # idle None は「not idle」扱い → 自発も発火しない（既存 idle gate 流用）
+        with patch.object(worker, "_maybe_spontaneous") as mock_sp:
+            worker._run_cycle()
+        assert not mock_sp.called
+
+        # idle 達成
+        from datetime import timedelta as td
+
+        from nous.domain.shared.time_utils import get_now
+
+        ctx._session_event_repo.last_activity_at.return_value = get_now() - td(hours=1)
+        with patch.object(worker, "_maybe_spontaneous") as mock_sp:
+            worker._run_cycle()
+        assert mock_sp.called

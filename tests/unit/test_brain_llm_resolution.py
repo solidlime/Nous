@@ -305,3 +305,28 @@ class TestBrainMaxTokensWiring:
         assert ctx._enricher._max_tokens == 512
         assert ctx.introspection_engine is not None
         assert ctx.introspection_engine._max_tokens == 2048
+
+
+class TestBrainSpontaneousKeys:
+    def test_default_off_6h(self):
+        cfg = ChatConfig()
+        assert cfg.brain_spontaneous_enabled is False
+        assert cfg.brain_spontaneous_interval_hours == 6
+
+    def test_interval_clamped_1_to_72(self):
+        from nous.domain.session_config import SessionConfig
+
+        assert SessionConfig(brain_spontaneous_interval_hours=0).brain_spontaneous_interval_hours == 1
+        assert SessionConfig(brain_spontaneous_interval_hours=100).brain_spontaneous_interval_hours == 72
+
+    def test_config_roundtrip(self, tmp_path):
+        from nous.domain.chat_config import ChatConfigFileRepository
+
+        repo = ChatConfigFileRepository(str(tmp_path))
+        cfg = repo.get("p1")
+        cfg.brain_spontaneous_enabled = True
+        cfg.brain_spontaneous_interval_hours = 12
+        repo.save(cfg)
+        got = repo.get("p1")
+        assert got.brain_spontaneous_enabled is True
+        assert got.brain_spontaneous_interval_hours == 12

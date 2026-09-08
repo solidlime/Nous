@@ -119,6 +119,11 @@ class SessionConfig(BaseModel):
     # 脳側呼び出しの共通 max_tokens（下限の意味: reasoning ON 時は openai_compat が
     # max(max_tokens, budget+1024) に引き上げる）。enricher / introspection で共有。
     brain_max_tokens: int = 2048
+    # 自発的内省: 誰も話しかけてこない静かな時間に記憶と現在状態から独り言を産出。
+    # 発火間隔は brain.introspection / brain.introspection_spontaneous 両種別の
+    # 最新タイムスタンプから interval_hours 以上経過で判定（worker 側ガード）。
+    brain_spontaneous_enabled: bool = False
+    brain_spontaneous_interval_hours: int = 6
 
     @field_validator("brain_reasoning_effort")
     @classmethod
@@ -132,6 +137,11 @@ class SessionConfig(BaseModel):
     def _clamp_brain_max_tokens(cls, v: int) -> int:
         # 下限 256: interpretation エラー防止の実用下限（provider 側 1..32768 と同型）
         return max(256, min(32768, v))
+
+    @field_validator("brain_spontaneous_interval_hours")
+    @classmethod
+    def _clamp_brain_spontaneous_interval(cls, v: int) -> int:
+        return max(1, min(72, v))
 
     # Forgetting
     forgetting_enabled: bool = False
