@@ -61,6 +61,11 @@ function buildForm() {
     + '<input type="checkbox" id="chat-memory-enrichment-enabled" />'
     + '<input type="checkbox" id="chat-brain-llm-dedicated" />'
     + '<input type="checkbox" id="chat-brain-monologue" />'
+    + '<input type="checkbox" id="chat-brain-reasoning" />'
+    + '<select id="chat-brain-reasoning-effort">'
+    + '<option value="low">low</option><option value="medium">medium</option>'
+    + '<option value="high">high</option><option value="max">max</option>'
+    + '</select>'
     + '<div id="chat-brain-llm-fields" class="settings-body-hidden">'
     + '<input type="text" id="chat-brain-llm-provider" value="" />'
     + '<input type="text" id="chat-brain-llm-model" value="" />'
@@ -230,3 +235,33 @@ describe('brain simulation settings', () => {
     expect(document.getElementById('chat-brain-monologue').checked).toBe(true);
   });
 });
+
+  it('brain reasoning: OFF (default) does not send effort, sends enabled=false', async () => {
+    window.Nous.Chat.settings.apply({});
+    expect(document.getElementById('chat-brain-reasoning').checked).toBe(false);
+    expect(document.getElementById('chat-brain-reasoning-effort').value).toBe('medium');
+
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    apiStub.mockResolvedValueOnce({});
+    await window.Nous.Chat.settings.save();
+    const body = JSON.parse(apiStub.mock.calls[0][1].body);
+    expect(body.brain_reasoning_enabled).toBe(false);
+    // OFF: effort is not sent (merge API keeps the stored value)
+    expect(body.brain_reasoning_effort).toBeUndefined();
+  });
+
+  it('brain reasoning: ON round-trips the 2 keys', async () => {
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    document.getElementById('chat-brain-reasoning').checked = true;
+    document.getElementById('chat-brain-reasoning-effort').value = 'high';
+    const savedCfg = { brain_reasoning_enabled: true, brain_reasoning_effort: 'high' };
+    apiStub.mockResolvedValueOnce(savedCfg);
+    await window.Nous.Chat.settings.save();
+    const body = JSON.parse(apiStub.mock.calls[0][1].body);
+    expect(body.brain_reasoning_enabled).toBe(true);
+    expect(body.brain_reasoning_effort).toBe('high');
+
+    window.Nous.Chat.settings.apply(savedCfg);
+    expect(document.getElementById('chat-brain-reasoning').checked).toBe(true);
+    expect(document.getElementById('chat-brain-reasoning-effort').value).toBe('high');
+  });

@@ -150,6 +150,7 @@ _BRAIN_HELP = {
     "interval": "記憶強化ループの実行間隔（秒）。REM 睡眠の短い周期に相当します。",
     "batch_limit": "1 周で処理する記憶の上限。一度に大量に再処理すると記憶が乱れるため、小分けにします。",
     "monologue": "REM 処理（drain）の後に、処理した記憶をもとに一人称の独り言を生成して保存します。再会時に自然に触れるための記録です。",
+    "brain_reasoning": "脳側の呼び出し（内省・記憶強化）で推論（reasoning）を有効化します。chat 側の reasoning 設定とは独立。OFF では OpenRouter 経由のとき推論を無効化します（推論だけで予算を使い切る事故対策）。",
     "novelty_sim": "海馬-VTA ループのドーパミンゲート。既存記憶との類似がこの値より低いほど「新規」と判定され、長期記憶への定着が強まります。",
     "novelty_importance": "新規性判定の対象になる重要度のしきい値。重要な記憶だけを新規性ゲートに通します。",
     "novelty_multiplier": "新規と判定された記憶の初期安定度の倍率。新規性ブーストは作成後 1 回だけ与えられます（長期増強）。",
@@ -207,6 +208,19 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                         <div class="chat-check-row">
                                             <input type="checkbox" id="chat-brain-monologue" />
                                             <label for="chat-brain-monologue">REM 独り言 {help_("monologue")}</label>
+                                        </div>
+                                        <div class="chat-check-row">
+                                            <input type="checkbox" id="chat-brain-reasoning" />
+                                            <label for="chat-brain-reasoning">脳側 reasoning {help_("brain_reasoning")}</label>
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">推論 effort {help_("brain_reasoning")}</div>
+                                            <select id="chat-brain-reasoning-effort" class="chat-field-input">
+                                                <option value="low">low</option>
+                                                <option value="medium" selected>medium</option>
+                                                <option value="high">high</option>
+                                                <option value="max">max</option>
+                                            </select>
                                         </div>
                                     </div>
                                 </details>
