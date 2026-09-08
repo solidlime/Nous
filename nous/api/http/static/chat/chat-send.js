@@ -926,7 +926,7 @@ function appendMonologueBubble(text) {
   var bubble = document.createElement("details");
   bubble.className = "chat-monologue-bubble";
   var summary = document.createElement("summary");
-  summary.textContent = "💭";
+  summary.textContent = "💭 独り言";
   // The canonical reader is the memory modal (keyless preview — no
   // Edit/Delete); suppress the native details toggle so the click does
   // exactly one legible thing. CSP-safe: listener, no inline handler.

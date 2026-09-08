@@ -29,7 +29,7 @@ var TOOL_LABELS = {
   item_equip: "身支度してる…",
   item_search: "持ち物を探してる…",
   goal_manage: "目標を確かめてる…",
-  image_generate: "絵を描いてる…",
+  image_generate: "絵を仕上げてる…",
   list_skills: "使える技を確認してる…",
   invoke_skill: "技を繰り出す準備…",
 };

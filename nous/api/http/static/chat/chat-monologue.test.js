@@ -87,7 +87,7 @@ describe('monologue bubble rendering', () => {
     expect(bs.length).toBe(1);
     const b = bs[0];
     expect(b.tagName).toBe('DETAILS');
-    expect(b.querySelector('summary').textContent).toBe('💭');
+    expect(b.querySelector('summary').textContent).toBe('💭 独り言');
     expect(b.querySelector('.chat-monologue-text').textContent).toBe('ふふ、まだ考えてる。');
   });
 
