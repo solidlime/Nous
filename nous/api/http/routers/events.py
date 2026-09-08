@@ -134,7 +134,7 @@ def register_events_routes(mcp) -> None:
                         # Keepalive comment (SSE spec: lines starting with : are comments)
                         yield ": keepalive\n\n"
             except asyncio.CancelledError:
-                pass
+                raise  # キャンセルは飲み込まない（外側 wait_for が StopAsyncIteration に化ける事故防止）
             # SSEストリーミング中の非致命的エラー
             except Exception as e:
                 logger.debug("SSE stream error for persona '%s': %s", persona, e)

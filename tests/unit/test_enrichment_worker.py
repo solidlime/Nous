@@ -566,7 +566,7 @@ class TestWorkerStartLog:
 
         worker = EnrichmentWorker(MagicMock(), _config())
         with (
-            caplog.at_level(logging.INFO, logger="nous.nous.application.workers.enrichment_worker"),
+            caplog.at_level(logging.INFO, logger="nous.application.workers.enrichment_worker"),
             patch("nous.application.workers.enrichment_worker.threading.Thread") as mock_thread,
         ):
             worker.start()

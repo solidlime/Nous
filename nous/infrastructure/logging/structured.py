@@ -15,5 +15,11 @@ def setup_logging(level: str = "INFO") -> None:
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Get a named logger."""
+    """Get a named logger — "nous." プレフィックスは常にちょうど1回付与する。
+
+    呼び出し側が get_logger(__name__) のように完全修飾名（nous. 付き）を渡しても
+    二重付与しない（旧挙動では nous.nous.application... になっていた）。
+    """
+    if name.startswith("nous."):
+        name = name[len("nous.") :]
     return logging.getLogger(f"nous.{name}")

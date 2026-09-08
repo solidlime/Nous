@@ -60,6 +60,7 @@ _INTROSPECTION_PROMPT = """あなたは {persona} です。
 {current_state}
 
 【出力形式】JSONのみ。新規会話がある限り monologue は必ず書くこと（null 禁止）。
+独り言・反省・逸脱報告は必ず日本語で書く。
 {{
   "monologue": "独り言（最大5文・この間の出来事と気持ちを織り込む）",
   "violation": "キャラ逸脱があれば種別を一言。なければ null",
@@ -84,6 +85,7 @@ _SPONTANEOUS_PROMPT = """あなたは {persona} です。誰も話しかけて�
 {persona_identity}
 
 【出力形式】JSONのみ。monologue は必ず書くこと（null 禁止）。
+独り言・反省・逸脱報告は必ず日本語で書く。
 {{
   "monologue": "独り言（最大5文・この静かな時間の気持ちを織り込む）",
   "violation": "キャラ逸脱があれば種別を一言。なければ null",
@@ -589,11 +591,20 @@ async def _apply_result(
             logger.debug("introspection: emotion apply failed", exc_info=True)
     if result.body_state:
         try:
+            fatigue = _clamp01(result.body_state.get("fatigue"))
+            warmth = _clamp01(result.body_state.get("warmth"))
+            arousal = _clamp01(result.body_state.get("arousal"))
             ctx.persona_service.update_physical_state(
                 persona,
-                fatigue=_clamp01(result.body_state.get("fatigue")),
-                warmth=_clamp01(result.body_state.get("warmth")),
-                arousal=_clamp01(result.body_state.get("arousal")),
+                fatigue=fatigue,
+                warmth=warmth,
+                arousal=arousal,
+                context="introspection",
+            )
+            # 履歴も記録（decay 経由の record_body_state と同一パターン）— 非対称解消
+            ctx.persona_service.record_body_state(
+                persona,
+                {"fatigue": fatigue, "warmth": warmth, "arousal": arousal},
                 context="introspection",
             )
             applied.append("body_state")

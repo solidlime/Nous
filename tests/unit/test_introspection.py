@@ -317,7 +317,7 @@ class TestReasoningBudget:
 
         engine, _ = self._engine_with_stream(stream)
         # get_logger(__name__) が "nous." を二重付与する既有挙動 (nous.infrastructure.logging.structured)
-        with caplog.at_level(logging.INFO, logger="nous.nous.application.chat.introspection"):
+        with caplog.at_level(logging.INFO, logger="nous.application.chat.introspection"):
             text, usage = asyncio.new_event_loop().run_until_complete(engine._call_llm("x"))
         assert text is None
         assert any("reasoning" in r.message for r in caplog.records if r.levelname == "INFO")
@@ -487,7 +487,7 @@ class TestIntrospectionObservability:
     def _caplog_info(self, caplog):
         import logging
 
-        return caplog.at_level(logging.INFO, logger="nous.nous.application.chat.introspection")
+        return caplog.at_level(logging.INFO, logger="nous.application.chat.introspection")
 
     def _messages(self, caplog) -> str:
         return " ".join(r.message for r in caplog.records if r.levelname == "INFO")
@@ -801,3 +801,35 @@ class TestRunSpontaneous:
         engine.generate = AsyncMock(side_effect=fake_generate)
         asyncio.new_event_loop().run_until_complete(run_introspection(ctx, _config(), engine, []))
         assert fake_generate.seen_turns  # 自発イベントが last_ts になっていたら空になる
+
+
+class TestBodyStateHistory:
+    """内省経由の身体状態適用も履歴テーブルに記録されること（decay 経由との非対称解消）。"""
+
+    def test_apply_records_body_state_history(self, ctx, sqlite_conn) -> None:
+        base = datetime.now()
+        _insert_turns(sqlite_conn.get_memory_db(), "test", [("user", "u1")], base)
+        engine = _engine_with(_result(body_state={"fatigue": 0.3, "warmth": 0.5, "arousal": 0.4}), ctx)
+
+        import asyncio
+
+        asyncio.new_event_loop().run_until_complete(run_introspection(ctx, _config(), engine, ["m1"]))
+
+        hist = ctx.persona_service.get_body_state_history("test", limit=10)
+        assert hist.is_ok
+        assert hist.value, "body_state_history が空のまま（内省経由の記録漏れ）"
+        assert any(r.context == "introspection" for r in hist.value)
+        row = next(r for r in hist.value if r.context == "introspection")
+        assert row.fatigue == pytest.approx(0.3)
+        assert row.arousal == pytest.approx(0.4)
+
+
+class TestPromptLanguage:
+    """独り言・反省・逸脱報告の言語固定（モデル言語揺れ対策）。"""
+
+    def test_prompts_require_japanese(self) -> None:
+        from nous.application.chat.introspection import _INTROSPECTION_PROMPT, _SPONTANEOUS_PROMPT
+
+        for prompt in (_INTROSPECTION_PROMPT, _SPONTANEOUS_PROMPT):
+            assert "日本語" in prompt
+            assert "必ず日本語で書く" in prompt
