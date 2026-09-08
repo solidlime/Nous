@@ -152,6 +152,7 @@ _BRAIN_HELP = {
     "monologue": "REM 処理（drain）の後に、処理した記憶をもとに一人称の独り言を生成して保存します。再会時に自然に触れるための記録です。",
     "brain_reasoning": "脳側の呼び出し（内省・記憶強化）で推論（reasoning）を有効化します。chat 側の reasoning 設定とは独立。OFF では OpenRouter 経由のとき推論を無効化します（推論だけで予算を使い切る事故対策）。",
     "brain_max_tokens": "脳側呼び出し（内省・記憶強化）の共通トークン上限。reasoning を有効化した場合は推論分も消費するため、必要に応じて増やします（256〜32768）。",
+    "spontaneous": "誰も話しかけてこない静かな時間に、最近の記憶と現在の状態から一人称の独り言を自発的に生成します。間隔は前回の内省（会話駆動・自発とも）からの経過時間で判定されます。",
     "novelty_sim": "海馬-VTA ループのドーパミンゲート。既存記憶との類似がこの値より低いほど「新規」と判定され、長期記憶への定着が強まります。",
     "novelty_importance": "新規性判定の対象になる重要度のしきい値。重要な記憶だけを新規性ゲートに通します。",
     "novelty_multiplier": "新規と判定された記憶の初期安定度の倍率。新規性ブーストは作成後 1 回だけ与えられます（長期増強）。",
@@ -213,6 +214,14 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                         <div class="chat-check-row">
                                             <input type="checkbox" id="chat-brain-reasoning" />
                                             <label for="chat-brain-reasoning">脳側 reasoning {help_("brain_reasoning")}</label>
+                                        </div>
+                                        <div class="chat-check-row">
+                                            <input type="checkbox" id="chat-brain-spontaneous" />
+                                            <label for="chat-brain-spontaneous">自発的内省 {help_("spontaneous")}</label>
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">自発間隔（時間）{help_("spontaneous")}</div>
+                                            <input type="number" id="chat-brain-spontaneous-interval" class="chat-field-input" min="1" max="72" step="1" value="6" />
                                         </div>
                                         <div>
                                             <div class="chat-field-label">推論 effort {help_("brain_reasoning")}</div>

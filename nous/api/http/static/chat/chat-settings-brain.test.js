@@ -62,6 +62,8 @@ function buildForm() {
     + '<input type="checkbox" id="chat-brain-llm-dedicated" />'
     + '<input type="checkbox" id="chat-brain-monologue" />'
     + '<input type="checkbox" id="chat-brain-reasoning" />'
+    + '<input type="checkbox" id="chat-brain-spontaneous" />'
+    + '<input type="number" id="chat-brain-spontaneous-interval" value="" />'
     + '<select id="chat-brain-reasoning-effort">'
     + '<option value="low">low</option><option value="medium">medium</option>'
     + '<option value="high">high</option><option value="max">max</option>'
@@ -291,4 +293,33 @@ describe('brain simulation settings', () => {
     await window.Nous.Chat.settings.save();
     const body = JSON.parse(apiStub.mock.calls[0][1].body);
     expect(body.brain_max_tokens).toBeUndefined();
+  });
+
+  it('spontaneous introspection: OFF does not send interval, sends enabled=false', async () => {
+    window.Nous.Chat.settings.apply({});
+    expect(document.getElementById('chat-brain-spontaneous').checked).toBe(false);
+    expect(document.getElementById('chat-brain-spontaneous-interval').value).toBe('6');
+
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    apiStub.mockResolvedValueOnce({});
+    await window.Nous.Chat.settings.save();
+    const body = JSON.parse(apiStub.mock.calls[0][1].body);
+    expect(body.brain_spontaneous_enabled).toBe(false);
+    expect(body.brain_spontaneous_interval_hours).toBeUndefined();
+  });
+
+  it('spontaneous introspection: ON round-trips the 2 keys', async () => {
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    document.getElementById('chat-brain-spontaneous').checked = true;
+    document.getElementById('chat-brain-spontaneous-interval').value = '12';
+    const savedCfg = { brain_spontaneous_enabled: true, brain_spontaneous_interval_hours: 12 };
+    apiStub.mockResolvedValueOnce(savedCfg);
+    await window.Nous.Chat.settings.save();
+    const body = JSON.parse(apiStub.mock.calls[0][1].body);
+    expect(body.brain_spontaneous_enabled).toBe(true);
+    expect(body.brain_spontaneous_interval_hours).toBe(12);
+
+    window.Nous.Chat.settings.apply(savedCfg);
+    expect(document.getElementById('chat-brain-spontaneous').checked).toBe(true);
+    expect(document.getElementById('chat-brain-spontaneous-interval').value).toBe('12');
   });

@@ -316,6 +316,8 @@ function applyChatConfig(cfg) {
   setChecked("chat-brain-monologue", cfg.brain_monologue_enabled === true);
   setChecked("chat-brain-reasoning", cfg.brain_reasoning_enabled === true);
   set("chat-brain-reasoning-effort", cfg.brain_reasoning_effort || "medium");
+  setChecked("chat-brain-spontaneous", cfg.brain_spontaneous_enabled === true);
+  set("chat-brain-spontaneous-interval", cfg.brain_spontaneous_interval_hours ?? 6);
   set("chat-brain-max-tokens", cfg.brain_max_tokens ?? 2048);
   set("chat-brain-novelty-sim", cfg.brain_novelty_sim_threshold ?? 0.75);
   set("chat-brain-novelty-importance", cfg.brain_novelty_importance_threshold ?? 0.6);
@@ -486,6 +488,10 @@ async function saveChatConfig() {
     brain_monologue_enabled: getChecked("chat-brain-monologue"),
     brain_reasoning_enabled: getChecked("chat-brain-reasoning"),
     brain_reasoning_effort: getChecked("chat-brain-reasoning") ? (document.getElementById("chat-brain-reasoning-effort")?.value || "medium") : undefined,
+    brain_spontaneous_enabled: getChecked("chat-brain-spontaneous"),
+    brain_spontaneous_interval_hours: getChecked("chat-brain-spontaneous")
+      ? parseInt(document.getElementById("chat-brain-spontaneous-interval")?.value || "6")
+      : undefined,
     brain_novelty_sim_threshold: parseFloat(document.getElementById("chat-brain-novelty-sim")?.value || "0.75"),
     brain_novelty_importance_threshold: parseFloat(document.getElementById("chat-brain-novelty-importance")?.value || "0.6"),
     brain_novelty_stability_multiplier: parseFloat(document.getElementById("chat-brain-novelty-multiplier")?.value || "2.0"),
