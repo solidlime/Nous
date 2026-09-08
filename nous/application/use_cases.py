@@ -223,6 +223,9 @@ class AppContext:
                 brain_effort = None
                 if cfg is not None and getattr(cfg, "brain_reasoning_enabled", False):
                     brain_effort = str(getattr(cfg, "brain_reasoning_effort", "medium") or "medium")
+                # brain_max_tokens は両者共通の上限値。cfg あり → cfg 値 (デフォルト 2048)。
+                # cfg なし → 各 ctor デフォルト (enricher 512 / introspection 2048) を維持。
+                brain_max_tokens = int(getattr(cfg, "brain_max_tokens", 2048) or 2048) if cfg is not None else None
 
                 enricher = MemoryEnricher(
                     provider=provider,
@@ -231,6 +234,7 @@ class AppContext:
                     base_url=base_url,
                     min_chars=min_chars,
                     reasoning_effort=brain_effort,
+                    **({"max_tokens": brain_max_tokens} if brain_max_tokens is not None else {}),
                 )
                 # IntrospectionEngine shares the SAME resolved provider chain.
                 from nous.application.chat.introspection import IntrospectionEngine
@@ -239,6 +243,7 @@ class AppContext:
                 introspection_engine = IntrospectionEngine(
                     get_provider(provider=provider, api_key=api_key, model=model, base_url=base_url),
                     reasoning_effort=brain_effort,
+                    **({"max_tokens": brain_max_tokens} if brain_max_tokens is not None else {}),
                 )
         self._enricher = enricher
         self.introspection_engine = introspection_engine

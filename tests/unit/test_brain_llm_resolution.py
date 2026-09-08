@@ -250,3 +250,58 @@ class TestBrainReasoningWiring:
         ctx._init_enricher()
         assert ctx._enricher is not None
         assert ctx._enricher._reasoning_effort is None
+
+
+class TestBrainMaxTokensKeys:
+    def test_default_2048(self):
+        cfg = ChatConfig()
+        assert cfg.brain_max_tokens == 2048
+
+    def test_clamped_256_to_32768(self):
+        from nous.domain.session_config import SessionConfig
+
+        assert SessionConfig(brain_max_tokens=100).brain_max_tokens == 256
+        assert SessionConfig(brain_max_tokens=40000).brain_max_tokens == 32768
+
+    def test_config_roundtrip(self, tmp_path):
+        from nous.domain.chat_config import ChatConfigFileRepository
+
+        repo = ChatConfigFileRepository(str(tmp_path))
+        cfg = repo.get("p1")
+        cfg.brain_max_tokens = 4096
+        repo.save(cfg)
+        assert repo.get("p1").brain_max_tokens == 4096
+
+
+class TestBrainMaxTokensWiring:
+    """brain_max_tokens は両者共通の上限値。
+
+    - cfg あり → enricher / introspection ともに cfg.brain_max_tokens（デフォルト 2048 含む）
+    - cfg なし → 各 ctor デフォルト（enricher 512 / introspection 2048）を維持
+    - reasoning ON 時は openai_compat が max(max_tokens, budget+1024) をするため
+      ここで渡す値は「下限」の意味。
+    """
+
+    def test_cfg_present_passes_explicit_value_to_both(self):
+        ctx = _ctx(_cfg(brain_max_tokens=4096))
+        ctx._init_enricher()
+        assert ctx._enricher is not None
+        assert ctx._enricher._max_tokens == 4096
+        assert ctx.introspection_engine is not None
+        assert ctx.introspection_engine._max_tokens == 4096
+
+    def test_cfg_present_default_2048_shared(self):
+        ctx = _ctx(_cfg())
+        ctx._init_enricher()
+        assert ctx._enricher is not None
+        assert ctx._enricher._max_tokens == 2048
+        assert ctx.introspection_engine is not None
+        assert ctx.introspection_engine._max_tokens == 2048
+
+    def test_cfg_none_uses_ctor_defaults(self):
+        ctx = _ctx(None)
+        ctx._init_enricher()
+        assert ctx._enricher is not None
+        assert ctx._enricher._max_tokens == 512
+        assert ctx.introspection_engine is not None
+        assert ctx.introspection_engine._max_tokens == 2048

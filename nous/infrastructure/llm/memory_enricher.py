@@ -65,6 +65,7 @@ class MemoryEnricher:
         base_url: str = "",
         min_chars: int = 10,
         reasoning_effort: str | None = None,
+        max_tokens: int = 512,
     ) -> None:
         self._provider_name = provider
         self._api_key = api_key
@@ -73,6 +74,9 @@ class MemoryEnricher:
         self._min_chars = min_chars
         # 脳専用 reasoning トグル (chat の reasoning とは独立)。None なら effort を渡さない。
         self._reasoning_effort = reasoning_effort
+        # max_tokens はデフォルト 512 (relations JSON 専用で小さくてよい)。
+        # cfg.brain_max_tokens があれば両者共通の値を受け取る（下限の意味）。
+        self._max_tokens = max_tokens
 
     async def enrich_async(
         self,
@@ -142,7 +146,7 @@ class MemoryEnricher:
             messages=[LLMMessage(role="user", content=user_message)],
             system=system,
             temperature=0.3,
-            max_tokens=512,
+            max_tokens=self._max_tokens,
             reasoning_effort=self._reasoning_effort,
         ):
             if isinstance(event, TextDeltaEvent):

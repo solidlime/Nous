@@ -116,6 +116,9 @@ class SessionConfig(BaseModel):
     # (openai_compat が openrouter + effort=None で reasoning を無効化する)。
     brain_reasoning_enabled: bool = False
     brain_reasoning_effort: str = "medium"
+    # 脳側呼び出しの共通 max_tokens（下限の意味: reasoning ON 時は openai_compat が
+    # max(max_tokens, budget+1024) に引き上げる）。enricher / introspection で共有。
+    brain_max_tokens: int = 2048
 
     @field_validator("brain_reasoning_effort")
     @classmethod
@@ -123,6 +126,12 @@ class SessionConfig(BaseModel):
         from nous.domain.provider_config import REASONING_EFFORTS
 
         return v if v in REASONING_EFFORTS else "medium"  # 不正値は既存 clamp と同一形式
+
+    @field_validator("brain_max_tokens")
+    @classmethod
+    def _clamp_brain_max_tokens(cls, v: int) -> int:
+        # 下限 256: interpretation エラー防止の実用下限（provider 側 1..32768 と同型）
+        return max(256, min(32768, v))
 
     # Forgetting
     forgetting_enabled: bool = False

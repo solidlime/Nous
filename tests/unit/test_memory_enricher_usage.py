@@ -89,3 +89,37 @@ def _failing_enricher():
         raise RuntimeError("LLM down")
 
     return enrich_async
+
+
+def test_max_tokens_default_512(enricher: MemoryEnricher):
+    """デフォルト 512 を維持（enricher は relations JSON 専用）。"""
+    with patch("nous.infrastructure.llm.memory_enricher.get_provider") as mock:
+        provider = MagicMock()
+        provider.stream.return_value = _async_iter(
+            [TextDeltaEvent(content='{"importance": 0.5, "relations": []}'), DoneEvent()]
+        )
+        mock.return_value = provider
+        asyncio.run(
+            enricher.enrich_async(
+                "enough length content for enrichment to run",
+                type_tags=["t"],
+            )
+        )
+    assert provider.stream.call_args.kwargs["max_tokens"] == 512
+
+
+def test_max_tokens_ctor_override(enricher: MemoryEnricher):
+    rich = MemoryEnricher(
+        provider="openrouter",
+        api_key="test-key",
+        model="test-model",
+        max_tokens=2048,
+    )
+    with patch("nous.infrastructure.llm.memory_enricher.get_provider") as mock:
+        provider = MagicMock()
+        provider.stream.return_value = _async_iter(
+            [TextDeltaEvent(content='{"importance": 0.5, "relations": []}'), DoneEvent()]
+        )
+        mock.return_value = provider
+        asyncio.run(rich.enrich_async("enough length content for enrichment to run", type_tags=["t"]))
+    assert provider.stream.call_args.kwargs["max_tokens"] == 2048

@@ -523,3 +523,50 @@ class TestIntrospectionObservability:
         with self._caplog_info(caplog):
             self._run(run_introspection(ctx, _config(), engine, []))
         assert "generate failed" in self._messages(caplog)
+
+
+class TestBrainMaxTokens:
+    def test_engine_ctor_max_tokens_reaches_stream(self) -> None:
+        captured: dict = {}
+
+        async def stream(messages, system, temperature, max_tokens, reasoning_effort=None):
+            captured["max_tokens"] = max_tokens
+            from nous.infrastructure.llm.base import DoneEvent
+
+            yield DoneEvent(full_content="", tool_calls=[])
+
+        provider = MagicMock()
+        provider.stream = stream
+        engine = IntrospectionEngine(provider, max_tokens=4096)
+        asyncio_run_generate(engine)
+        assert captured["max_tokens"] == 4096
+
+    def test_engine_default_max_tokens_2048(self) -> None:
+        captured: dict = {}
+
+        async def stream(messages, system, temperature, max_tokens, reasoning_effort=None):
+            captured["max_tokens"] = max_tokens
+            from nous.infrastructure.llm.base import DoneEvent
+
+            yield DoneEvent(full_content="", tool_calls=[])
+
+        provider = MagicMock()
+        provider.stream = stream
+        engine = IntrospectionEngine(provider)
+        asyncio_run_generate(engine)
+        assert captured["max_tokens"] == 2048
+
+    def test_from_config_resolves_brain_max_tokens(self) -> None:
+        provider_cfg = MagicMock()
+        provider_cfg.provider = "openai"
+        provider_cfg.get_effective_api_key.return_value = "key"
+        provider_cfg.get_effective_model.return_value = "model-x"
+        provider_cfg.get_effective_base_url.return_value = "https://x/v1"
+        cfg = MagicMock()
+        cfg.provider_config = provider_cfg
+        cfg.brain_llm_dedicated = False
+        cfg.brain_max_tokens = 3072
+
+        engine = IntrospectionEngine.from_config(cfg)
+        assert engine is not None
+        assert engine._max_tokens == 3072

@@ -30,10 +30,12 @@ _MAX_TURNS = 12
 _MAX_TOTAL_CHARS = 8000
 _MAX_MEMORIES = 5
 _MAX_CHARS_PER_MEMORY = 80
+
 # openrouter free alias は reasoning モデル（CoT が数百〜千トークン消費）。
 # 512 だと推論だけで budget を使い切り content が空になる（2026-09-08 実機確認）。
-# ponytail: reasoning > ~1800 tokens で budget 溢れ → INFO ログで検知、retry は要る時だけ足す。
-_MAX_TOKENS = 2048
+# デフォルト値 — cfg.brain_max_tokens で上書き可能（256..32768 に clamp 済み）。
+# ponytail: reasoning > 予算超え → INFO ログで検知、retry は要る時だけ足す。
+_DEFAULT_MAX_TOKENS = 2048
 
 _CHAT_SESSIONS_SCHEMA = (
     "CREATE TABLE IF NOT EXISTS chat_sessions ("
@@ -80,11 +82,17 @@ class IntrospectionResult:
 class IntrospectionEngine:
     """単一 LLM 呼び出しで内省結果 (JSON) を産出する。"""
 
-    def __init__(self, provider: LLMProvider, reasoning_effort: str | None = None) -> None:
+    def __init__(
+        self,
+        provider: LLMProvider,
+        reasoning_effort: str | None = None,
+        max_tokens: int = _DEFAULT_MAX_TOKENS,
+    ) -> None:
         self._provider = provider
         # 脳専用 reasoning トグル (chat の reasoning とは独立)。None なら effort を渡さず
         # openai_compat 側の openrouter reasoning 無効化が効く。
         self._reasoning_effort = reasoning_effort
+        self._max_tokens = max_tokens
 
     @classmethod
     def from_config(cls, config: ChatConfig | None, settings=None) -> IntrospectionEngine | None:
@@ -107,7 +115,11 @@ class IntrospectionEngine:
         except Exception:
             logger.debug("introspection provider init failed", exc_info=True)
             return None
-        return cls(provider, reasoning_effort=_brain_reasoning_effort(config))
+        return cls(
+            provider,
+            reasoning_effort=_brain_reasoning_effort(config),
+            max_tokens=_resolve_brain_max_tokens(config),
+        )
 
     async def generate(
         self,
@@ -151,7 +163,7 @@ class IntrospectionEngine:
             messages=[LLMMessage(role="user", content=user_message)],
             system="",
             temperature=0.7,
-            max_tokens=_MAX_TOKENS,
+            max_tokens=self._max_tokens,
             reasoning_effort=self._reasoning_effort,
         ):
             if isinstance(event, TextDeltaEvent):
@@ -179,6 +191,14 @@ def _brain_reasoning_effort(config: ChatConfig | None) -> str | None:
     if config is None or not getattr(config, "brain_reasoning_enabled", False):
         return None
     return str(getattr(config, "brain_reasoning_effort", "medium") or "medium")
+
+
+def _resolve_brain_max_tokens(config: ChatConfig | None) -> int:
+    """cfg.brain_max_tokens を解決。cfg None / 未設定 / 不正値はデフォルト 2048。"""
+    try:
+        return int(getattr(config, "brain_max_tokens", 0) or _DEFAULT_MAX_TOKENS)
+    except (TypeError, ValueError):
+        return _DEFAULT_MAX_TOKENS
 
 
 def _resolve_llm_config(config: ChatConfig | None, settings) -> tuple[str, str, str, str]:
