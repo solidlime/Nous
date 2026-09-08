@@ -151,6 +151,7 @@ _BRAIN_HELP = {
     "batch_limit": "1 周で処理する記憶の上限。一度に大量に再処理すると記憶が乱れるため、小分けにします。",
     "monologue": "REM 処理（drain）の後に、処理した記憶をもとに一人称の独り言を生成して保存します。再会時に自然に触れるための記録です。",
     "brain_reasoning": "脳側の呼び出し（内省・記憶強化）で推論（reasoning）を有効化します。chat 側の reasoning 設定とは独立。OFF では OpenRouter 経由のとき推論を無効化します（推論だけで予算を使い切る事故対策）。",
+    "brain_max_tokens": "脳側呼び出し（内省・記憶強化）の共通トークン上限。reasoning を有効化した場合は推論分も消費するため、必要に応じて増やします（256〜32768）。",
     "novelty_sim": "海馬-VTA ループのドーパミンゲート。既存記憶との類似がこの値より低いほど「新規」と判定され、長期記憶への定着が強まります。",
     "novelty_importance": "新規性判定の対象になる重要度のしきい値。重要な記憶だけを新規性ゲートに通します。",
     "novelty_multiplier": "新規と判定された記憶の初期安定度の倍率。新規性ブーストは作成後 1 回だけ与えられます（長期増強）。",
@@ -221,6 +222,10 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                                 <option value="high">high</option>
                                                 <option value="max">max</option>
                                             </select>
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">脳側 max tokens {help_("brain_max_tokens")}</div>
+                                            <input type="number" id="chat-brain-max-tokens" class="chat-field-input" min="256" max="32768" step="256" value="2048" />
                                         </div>
                                     </div>
                                 </details>

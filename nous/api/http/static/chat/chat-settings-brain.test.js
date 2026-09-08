@@ -66,6 +66,7 @@ function buildForm() {
     + '<option value="low">low</option><option value="medium">medium</option>'
     + '<option value="high">high</option><option value="max">max</option>'
     + '</select>'
+    + '<input type="number" id="chat-brain-max-tokens" value="" />'
     + '<div id="chat-brain-llm-fields" class="settings-body-hidden">'
     + '<input type="text" id="chat-brain-llm-provider" value="" />'
     + '<input type="text" id="chat-brain-llm-model" value="" />'
@@ -264,4 +265,30 @@ describe('brain simulation settings', () => {
     window.Nous.Chat.settings.apply(savedCfg);
     expect(document.getElementById('chat-brain-reasoning').checked).toBe(true);
     expect(document.getElementById('chat-brain-reasoning-effort').value).toBe('high');
+  });
+
+  it('brain max tokens: load applies contract default 2048 and save sends the number', async () => {
+    window.Nous.Chat.settings.apply({});
+    expect(document.getElementById('chat-brain-max-tokens').value).toBe('2048');
+
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    document.getElementById('chat-brain-max-tokens').value = '4096';
+    const savedCfg = { brain_max_tokens: 4096 };
+    apiStub.mockResolvedValueOnce(savedCfg);
+    await window.Nous.Chat.settings.save();
+    const body = JSON.parse(apiStub.mock.calls[0][1].body);
+    expect(body.brain_max_tokens).toBe(4096);
+
+    window.Nous.Chat.settings.apply(savedCfg);
+    expect(document.getElementById('chat-brain-max-tokens').value).toBe('4096');
+  });
+
+  it('brain max tokens: empty input is not sent (merge API keeps stored value)', async () => {
+    window.Nous.Chat.settings.apply({});
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    document.getElementById('chat-brain-max-tokens').value = '';
+    apiStub.mockResolvedValueOnce({});
+    await window.Nous.Chat.settings.save();
+    const body = JSON.parse(apiStub.mock.calls[0][1].body);
+    expect(body.brain_max_tokens).toBeUndefined();
   });

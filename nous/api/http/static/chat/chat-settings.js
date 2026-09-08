@@ -316,6 +316,7 @@ function applyChatConfig(cfg) {
   setChecked("chat-brain-monologue", cfg.brain_monologue_enabled === true);
   setChecked("chat-brain-reasoning", cfg.brain_reasoning_enabled === true);
   set("chat-brain-reasoning-effort", cfg.brain_reasoning_effort || "medium");
+  set("chat-brain-max-tokens", cfg.brain_max_tokens ?? 2048);
   set("chat-brain-novelty-sim", cfg.brain_novelty_sim_threshold ?? 0.75);
   set("chat-brain-novelty-importance", cfg.brain_novelty_importance_threshold ?? 0.6);
   set("chat-brain-novelty-multiplier", cfg.brain_novelty_stability_multiplier ?? 2.0);
@@ -497,6 +498,11 @@ async function saveChatConfig() {
     brain_llm_dedicated: getChecked("chat-brain-llm-dedicated"),
     // === Forgetting (moved from Settings) ===
     forgetting_enabled: getChecked("chat-forgetting-enabled"),
+    // brain_max_tokens: 空なら送らない (merge API keeps the stored value)
+    brain_max_tokens: (() => {
+      var v = (document.getElementById("chat-brain-max-tokens")?.value || "").trim();
+      return v ? parseInt(v) : undefined;
+    })(),
     forgetting_trigger_threshold: parseInt(document.getElementById("chat-forgetting-trigger-threshold")?.value || "100"),
     forgetting_decay_interval_seconds: parseInt(document.getElementById("chat-forgetting-decay-interval-seconds")?.value || "86400"),
     forgetting_min_strength: parseFloat(document.getElementById("chat-forgetting-min-strength")?.value || "0.1"),
