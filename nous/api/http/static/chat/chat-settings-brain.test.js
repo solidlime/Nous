@@ -239,6 +239,86 @@ describe('brain simulation settings', () => {
   });
 });
 
+// ------------------------------------------------------------------
+// Structural verification — the Python-rendered sidebar markup must
+// keep every setting id (save/load contract) and the pipeline order:
+// timing → monologue/introspection → LLM → gates → recall → visualize.
+// ------------------------------------------------------------------
+const BRAIN_PY = resolve(__dirname, '../../sections/chat/chat_sidebar_memory.py');
+
+const BRAIN_IDS = [
+  'chat-memory-enrichment-enabled',
+  'chat-brain-auto-run',
+  'chat-brain-enrich-interval',
+  'chat-brain-batch-limit',
+  'chat-brain-monologue',
+  'chat-brain-spontaneous',
+  'chat-brain-spontaneous-interval',
+  'chat-brain-reasoning',
+  'chat-brain-reasoning-effort',
+  'chat-brain-max-tokens',
+  'chat-brain-llm-dedicated',
+  'chat-brain-llm-provider',
+  'chat-brain-llm-model',
+  'chat-brain-llm-base-url',
+  'chat-brain-llm-api-key',
+  'chat-brain-novelty-sim',
+  'chat-brain-novelty-importance',
+  'chat-brain-novelty-multiplier',
+  'chat-brain-emotion-gain-k',
+  'chat-brain-rif-rho',
+  'chat-brain-separation-threshold',
+  'chat-brain-graph-flash',
+];
+
+const BRAIN_SUBSECTION_ORDER = [
+  '実行タイミング（REM）',
+  '独り言・内省',
+  'LLM',
+  '学習ゲート',
+  '想起と忘却',
+  '可視化',
+];
+
+describe('brain section structure (chat_sidebar_memory.py)', () => {
+  let src;
+  beforeAll(() => {
+    src = readFileSync(BRAIN_PY, 'utf-8');
+  });
+
+  it('renders every setting id exactly once (save/load contract intact)', () => {
+    for (const id of BRAIN_IDS) {
+      const hits = src.split('id="' + id + '"').length - 1;
+      expect(hits).toBe(1);
+    }
+  });
+
+  it('keeps the brain_simulation category and its help-icon wiring', () => {
+    expect(src).toContain('<details data-category="brain_simulation">');
+    expect(src).toContain('data-category="brain_simulation" tabindex="0"');
+  });
+
+  it('groups subsections in pipeline order (timing → monologue → llm → gates → recall → visualize)', () => {
+    const block = src.slice(src.indexOf('<details data-category="brain_simulation">'));
+    let pos = -1;
+    for (const label of BRAIN_SUBSECTION_ORDER) {
+      const next = block.indexOf('<summary>' + label + '</summary>');
+      expect(next).toBeGreaterThan(pos);
+      pos = next;
+    }
+    // legacy flat grouping is gone
+    expect(block).not.toContain('<summary>記憶強化（REM）</summary>');
+    expect(block).not.toContain('<summary>専用 LLM</summary>');
+  });
+
+  it('keeps the dedicated-llm toggle contract and the monologue toggle', () => {
+    expect(src).toContain('id="chat-brain-llm-fields" class="settings-body-hidden"');
+    expect(src).toContain('data-action="brain-llm-toggle"');
+    expect(src).toContain('id="chat-brain-monologue"');
+    expect(src).toContain('id="chat-brain-spontaneous"');
+  });
+});
+
   it('brain reasoning: OFF (default) does not send effort, sends enabled=false', async () => {
     window.Nous.Chat.settings.apply({});
     expect(document.getElementById('chat-brain-reasoning').checked).toBe(false);

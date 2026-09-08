@@ -189,7 +189,7 @@ def _render_brain_simulation_section(children: str = "") -> str:
                             <summary><i data-lucide="brain-circuit"></i> 脳シミュレーション <span class="chat-help-icon" data-category="brain_simulation" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
                                 <details class="chat-subsection">
-                                    <summary>記憶強化（REM）</summary>
+                                    <summary>実行タイミング（REM）</summary>
                                     <div style="padding-top:6px;">
                                         <div class="chat-check-row">
                                             <input type="checkbox" id="chat-memory-enrichment-enabled" />
@@ -207,13 +207,14 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                             <div class="chat-field-label">1 周あたり上限件数 {help_("batch_limit")}</div>
                                             <input type="number" id="chat-brain-batch-limit" class="chat-field-input" min="1" max="50" step="1" value="5" />
                                         </div>
+                                    </div>
+                                </details>
+                                <details class="chat-subsection">
+                                    <summary>独り言・内省</summary>
+                                    <div style="padding-top:6px;">
                                         <div class="chat-check-row">
                                             <input type="checkbox" id="chat-brain-monologue" />
                                             <label for="chat-brain-monologue">REM 独り言 {help_("monologue")}</label>
-                                        </div>
-                                        <div class="chat-check-row">
-                                            <input type="checkbox" id="chat-brain-reasoning" />
-                                            <label for="chat-brain-reasoning">脳側 reasoning {help_("brain_reasoning")}</label>
                                         </div>
                                         <div class="chat-check-row">
                                             <input type="checkbox" id="chat-brain-spontaneous" />
@@ -222,6 +223,15 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                         <div>
                                             <div class="chat-field-label">自発間隔（時間）{help_("spontaneous")}</div>
                                             <input type="number" id="chat-brain-spontaneous-interval" class="chat-field-input" min="1" max="72" step="1" value="6" />
+                                        </div>
+                                    </div>
+                                </details>
+                                <details class="chat-subsection">
+                                    <summary>LLM</summary>
+                                    <div style="padding-top:6px;">
+                                        <div class="chat-check-row">
+                                            <input type="checkbox" id="chat-brain-reasoning" />
+                                            <label for="chat-brain-reasoning">脳側 reasoning {help_("brain_reasoning")}</label>
                                         </div>
                                         <div>
                                             <div class="chat-field-label">推論 effort {help_("brain_reasoning")}</div>
@@ -236,11 +246,6 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                             <div class="chat-field-label">脳側 max tokens {help_("brain_max_tokens")}</div>
                                             <input type="number" id="chat-brain-max-tokens" class="chat-field-input" min="256" max="32768" step="256" value="2048" />
                                         </div>
-                                    </div>
-                                </details>
-                                <details class="chat-subsection">
-                                    <summary>専用 LLM</summary>
-                                    <div style="padding-top:6px;">
                                         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
                                             <span class="chat-field-label" style="margin:0;">脳シミュレーター専用 LLM を使う {help_("llm_dedicated")}</span>
                                             <label class="toggle-switch">
