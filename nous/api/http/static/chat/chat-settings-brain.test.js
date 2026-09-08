@@ -33,6 +33,9 @@ const REQUIRED_SAVE_IDS = [
 const BRAIN_NUM_IDS = [
   'chat-brain-enrich-interval',
   'chat-brain-batch-limit',
+  'chat-brain-idle-after-seconds',
+  'chat-brain-min-batch-size',
+  'chat-brain-max-defer-seconds',
   'chat-brain-novelty-sim',
   'chat-brain-novelty-importance',
   'chat-brain-novelty-multiplier',
@@ -251,6 +254,9 @@ const BRAIN_IDS = [
   'chat-brain-auto-run',
   'chat-brain-enrich-interval',
   'chat-brain-batch-limit',
+  'chat-brain-idle-after-seconds',
+  'chat-brain-min-batch-size',
+  'chat-brain-max-defer-seconds',
   'chat-brain-monologue',
   'chat-brain-spontaneous',
   'chat-brain-spontaneous-interval',
@@ -309,6 +315,51 @@ describe('brain section structure (chat_sidebar_memory.py)', () => {
     // legacy flat grouping is gone
     expect(block).not.toContain('<summary>記憶強化（REM）</summary>');
     expect(block).not.toContain('<summary>専用 LLM</summary>');
+  });
+
+  it('REM scheduling knobs round-trip and stay silent when blank', async () => {
+    window.Nous.Chat.settings.apply({
+      brain_idle_after_seconds: 300,
+      brain_min_batch_size: 4,
+      brain_max_defer_seconds: 7200,
+    });
+    expect(document.getElementById('chat-brain-idle-after-seconds').value).toBe('300');
+    expect(document.getElementById('chat-brain-min-batch-size').value).toBe('4');
+    expect(document.getElementById('chat-brain-max-defer-seconds').value).toBe('7200');
+    // defaults when the config omits them
+    window.Nous.Chat.settings.apply({});
+    expect(document.getElementById('chat-brain-idle-after-seconds').value).toBe('120');
+    expect(document.getElementById('chat-brain-min-batch-size').value).toBe('3');
+    expect(document.getElementById('chat-brain-max-defer-seconds').value).toBe('3600');
+
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    document.getElementById('chat-brain-idle-after-seconds').value = '90';
+    document.getElementById('chat-brain-min-batch-size').value = '2';
+    document.getElementById('chat-brain-max-defer-seconds').value = '5400';
+    apiStub.mockResolvedValue({});
+    // a save also fires a refresh GET — collect POST bodies only
+    const postBodies = () => apiStub.mock.calls
+      .filter((c) => c[1] && c[1].body)
+      .map((c) => JSON.parse(c[1].body));
+    await window.Nous.Chat.settings.save();
+    let body = postBodies()[0];
+    expect(body.brain_idle_after_seconds).toBe(90);
+    expect(body.brain_min_batch_size).toBe(2);
+    expect(body.brain_max_defer_seconds).toBe(5400);
+
+    // blank → omitted (merge API keeps the stored value).
+    // (save#1's apply({}) reset the form — base-url must be set again or
+    // save short-circuits before the POST.)
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    document.getElementById('chat-brain-idle-after-seconds').value = '';
+    document.getElementById('chat-brain-min-batch-size').value = '';
+    document.getElementById('chat-brain-max-defer-seconds').value = '';
+    apiStub.mockResolvedValue({});
+    await window.Nous.Chat.settings.save();
+    body = postBodies().pop();
+    expect(body).not.toHaveProperty('brain_idle_after_seconds');
+    expect(body).not.toHaveProperty('brain_min_batch_size');
+    expect(body).not.toHaveProperty('brain_max_defer_seconds');
   });
 
   it('keeps the dedicated-llm toggle contract and the monologue toggle', () => {

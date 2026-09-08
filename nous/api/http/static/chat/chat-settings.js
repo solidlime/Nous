@@ -313,6 +313,9 @@ function applyChatConfig(cfg) {
   setChecked("chat-brain-auto-run", cfg.brain_enrich_auto_run === true);
   set("chat-brain-enrich-interval", cfg.brain_enrich_interval_seconds ?? 60);
   set("chat-brain-batch-limit", cfg.brain_enrich_batch_limit ?? 5);
+  set("chat-brain-idle-after-seconds", cfg.brain_idle_after_seconds ?? 120);
+  set("chat-brain-min-batch-size", cfg.brain_min_batch_size ?? 3);
+  set("chat-brain-max-defer-seconds", cfg.brain_max_defer_seconds ?? 3600);
   setChecked("chat-brain-monologue", cfg.brain_monologue_enabled === true);
   setChecked("chat-brain-reasoning", cfg.brain_reasoning_enabled === true);
   set("chat-brain-reasoning-effort", cfg.brain_reasoning_effort || "medium");
@@ -485,6 +488,19 @@ async function saveChatConfig() {
     brain_enrich_auto_run: getChecked("chat-brain-auto-run"),
     brain_enrich_interval_seconds: parseInt(document.getElementById("chat-brain-enrich-interval")?.value || "60"),
     brain_enrich_batch_limit: parseInt(document.getElementById("chat-brain-batch-limit")?.value || "5"),
+    // REM scheduling knobs: 空なら送らない (merge API keeps the stored value)
+    brain_idle_after_seconds: (() => {
+      var v = (document.getElementById("chat-brain-idle-after-seconds")?.value || "").trim();
+      return v ? parseInt(v) : undefined;
+    })(),
+    brain_min_batch_size: (() => {
+      var v = (document.getElementById("chat-brain-min-batch-size")?.value || "").trim();
+      return v ? parseInt(v) : undefined;
+    })(),
+    brain_max_defer_seconds: (() => {
+      var v = (document.getElementById("chat-brain-max-defer-seconds")?.value || "").trim();
+      return v ? parseInt(v) : undefined;
+    })(),
     brain_monologue_enabled: getChecked("chat-brain-monologue"),
     brain_reasoning_enabled: getChecked("chat-brain-reasoning"),
     brain_reasoning_effort: getChecked("chat-brain-reasoning") ? (document.getElementById("chat-brain-reasoning-effort")?.value || "medium") : undefined,

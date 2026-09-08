@@ -149,6 +149,9 @@ _BRAIN_HELP = {
     "auto_run": "定期実行（REM 相当）のオン/オフ。睡眠中の記憶再生のように、新しい記憶をバックグラウンドで再処理します。",
     "interval": "記憶強化ループの実行間隔（秒）。REM 睡眠の短い周期に相当します。",
     "batch_limit": "1 周で処理する記憶の上限。一度に大量に再処理すると記憶が乱れるため、小分けにします。",
+    "idle_after": "会話がこの秒数静かなら脳をアイドル状態とみなし、REM 処理を起こします。眠りに入るまでの寝返りのような猶予です。",
+    "min_batch": "REM を起こすのに必要な未処理記憶の最少件数。わずかな揺らぎで眠らないための起床閾値です。",
+    "max_defer": "未処理記憶が残っていても、REM の開始を最大ここまで遅らせます。深い睡眠を妨げないための上限です。",
     "monologue": "REM 処理（drain）の後に、処理した記憶をもとに一人称の独り言を生成して保存します。再会時に自然に触れるための記録です。",
     "brain_reasoning": "脳側の呼び出し（内省・記憶強化）で推論（reasoning）を有効化します。chat 側の reasoning 設定とは独立。OFF では OpenRouter 経由のとき推論を無効化します（推論だけで予算を使い切る事故対策）。",
     "brain_max_tokens": "脳側呼び出し（内省・記憶強化）の共通トークン上限。reasoning を有効化した場合は推論分も消費するため、必要に応じて増やします（256〜32768）。",
@@ -206,6 +209,18 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                         <div>
                                             <div class="chat-field-label">1 周あたり上限件数 {help_("batch_limit")}</div>
                                             <input type="number" id="chat-brain-batch-limit" class="chat-field-input" min="1" max="50" step="1" value="5" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">アイドル判定（秒）{help_("idle_after")}</div>
+                                            <input type="number" id="chat-brain-idle-after-seconds" class="chat-field-input" min="30" max="3600" step="10" value="120" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">最小バッチ件数 {help_("min_batch")}</div>
+                                            <input type="number" id="chat-brain-min-batch-size" class="chat-field-input" min="1" max="50" step="1" value="3" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">最大延期（秒）{help_("max_defer")}</div>
+                                            <input type="number" id="chat-brain-max-defer-seconds" class="chat-field-input" min="60" max="86400" step="60" value="3600" />
                                         </div>
                                     </div>
                                 </details>
