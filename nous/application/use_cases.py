@@ -227,6 +227,10 @@ class AppContext:
                 # cfg なし → 各 ctor デフォルト (enricher 512 / introspection 2048) を維持。
                 brain_max_tokens = int(getattr(cfg, "brain_max_tokens", 2048) or 2048) if cfg is not None else None
 
+                # OpenCode Go 用の脳側安定セッションID (persona ベース)。persona 未設定なら None
+                # (provider 生成側のプロセス既定にフォールバック)。
+                brain_session = f"nous-brain-{self.persona}" if getattr(self, "persona", "") else None
+
                 enricher = MemoryEnricher(
                     provider=provider,
                     api_key=api_key,
@@ -235,15 +239,23 @@ class AppContext:
                     min_chars=min_chars,
                     reasoning_effort=brain_effort,
                     **({"max_tokens": brain_max_tokens} if brain_max_tokens is not None else {}),
+                    session_id=brain_session,
                 )
                 # IntrospectionEngine shares the SAME resolved provider chain.
                 from nous.application.chat.introspection import IntrospectionEngine
                 from nous.infrastructure.llm.factory import get_provider
 
                 introspection_engine = IntrospectionEngine(
-                    get_provider(provider=provider, api_key=api_key, model=model, base_url=base_url),
+                    get_provider(
+                        provider=provider,
+                        api_key=api_key,
+                        model=model,
+                        base_url=base_url,
+                        session_id=brain_session,
+                    ),
                     reasoning_effort=brain_effort,
                     **({"max_tokens": brain_max_tokens} if brain_max_tokens is not None else {}),
+                    session_id=brain_session,
                 )
         self._enricher = enricher
         self.introspection_engine = introspection_engine

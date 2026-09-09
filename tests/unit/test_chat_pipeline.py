@@ -1925,3 +1925,28 @@ class TestInferenceBugfixes:
         assert len(sse_events) == 1
         debug_dir = os.path.join(tempfile.gettempdir(), "nous_debug")
         assert any(f.startswith("prompt_") for f in os.listdir(debug_dir))
+
+
+@pytest.mark.asyncio
+async def test_inference_passes_chat_session_id_to_provider():
+    """チャット推論は persona+session を Go セッションIDとして provider に渡す。"""
+    from unittest.mock import MagicMock, patch
+
+    from nous.application.chat.pipeline import inference as inf
+    from nous.domain.chat_config import ChatConfig
+    from nous.domain.provider_config import ProviderConfig
+
+    captured: dict = {}
+
+    def fake_get_provider(provider, api_key, model, base_url="", session_id=None):
+        captured["session_id"] = session_id
+        raise RuntimeError("stop here")
+
+    turn_ctx = ChatTurnContext(session_id="sess9", user_message="hi")
+    ctx = MagicMock()
+    ctx.persona = "herta"
+    config = ChatConfig(provider_config=ProviderConfig(api_key="k", model="m"))
+    with patch.object(inf, "get_provider", fake_get_provider):
+        step = inf.InferenceStep()
+        _ = [e async for e in step.run(ctx, config, [], turn_ctx, MagicMock())]
+    assert captured["session_id"] == "nous-chat-herta-sess9"

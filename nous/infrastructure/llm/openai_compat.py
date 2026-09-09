@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import uuid
 from typing import TYPE_CHECKING
 
 from .base import (
@@ -25,6 +26,10 @@ if TYPE_CHECKING:
 
 _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
+
+# OpenCode Go 用フォールバック: プロセス内で安定したセッションID
+# (呼び出し側が session_id を渡さない場合の最終フォールバック。再起動で変わるのは許容)
+_PROCESS_GO_SESSION = uuid.uuid4().hex
 
 # 旧 AnthropicProvider (anthropic.py:24) と同じ effort→budget 変換。
 # Anthropic の thinking.enabled は budget_tokens 必須 (無しで 400) のため互換分岐で使う。
@@ -89,20 +94,36 @@ class OpenAICompatProvider(LLMProvider):
     def supports_vision(self) -> bool:
         return _is_vision_model(self.model)
 
-    def __init__(self, api_key: str, model: str = "gpt-4o", base_url: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "gpt-4o",
+        base_url: str | None = None,
+        session_id: str | None = None,
+    ) -> None:
         try:
             import httpx
             from openai import AsyncOpenAI
 
+            from nous import __version__
+
+            self.base_url = base_url or _OPENAI_BASE_URL
+            # OpenCode Go は会話ごとの安定セッションIDを x-opencode-session で要求
+            # (無しは 400 MissingSessionID)。他プロバイダには付けない。
+            # ponytail: settings での明示上書きが必要になったら header 構築を差し替える。
+            headers: dict | None = None
+            if "opencode.ai/zen/go" in self.base_url:
+                stable = session_id or _PROCESS_GO_SESSION
+                headers = {"x-opencode-session": stable, "User-Agent": f"nous/{__version__}"}
             self._client = AsyncOpenAI(
                 api_key=api_key,
-                base_url=base_url or _OPENAI_BASE_URL,
+                base_url=self.base_url,
                 http_client=httpx.AsyncClient(timeout=httpx.Timeout(60.0)),
+                default_headers=headers,
             )
         except ImportError as e:
             raise ImportError("openai package required: pip install openai") from e
         self.model = model
-        self.base_url = base_url or _OPENAI_BASE_URL
 
     def _to_api_messages(self, messages: list[LLMMessage]) -> list[dict]:
         result = []

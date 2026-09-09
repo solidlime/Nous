@@ -66,6 +66,7 @@ class MemoryEnricher:
         min_chars: int = 10,
         reasoning_effort: str | None = None,
         max_tokens: int = 512,
+        session_id: str | None = None,
     ) -> None:
         self._provider_name = provider
         self._api_key = api_key
@@ -77,6 +78,8 @@ class MemoryEnricher:
         # max_tokens はデフォルト 512 (relations JSON 専用で小さくてよい)。
         # cfg.brain_max_tokens があれば両者共通の値を受け取る（下限の意味）。
         self._max_tokens = max_tokens
+        # OpenCode Go 用の安定セッションID (persona ベース、例: nous-brain-<persona>)
+        self._session_id = session_id
 
     async def enrich_async(
         self,
@@ -119,6 +122,7 @@ class MemoryEnricher:
                 api_key=self._api_key,
                 model=self._model,
                 base_url=self._base_url,
+                session_id=self._session_id,
             )
             result_text, usage = await self._call_llm(provider, _SYSTEM_PROMPT, user_message)
             if not result_text:
@@ -246,6 +250,7 @@ class MemoryEnricher:
                 api_key=self._api_key,
                 model=self._model,
                 base_url=self._base_url,
+                session_id=self._session_id,
             )
             result = await classify_contradiction(
                 new_content=new_content,

@@ -17,12 +17,19 @@ _DEFAULT_BASE_URLS: dict[str, str] = {
 }
 
 
-def get_provider(provider: str, api_key: str, model: str, base_url: str = "") -> OpenAICompatProvider:
+def get_provider(
+    provider: str,
+    api_key: str,
+    model: str,
+    base_url: str = "",
+    session_id: str | None = None,
+) -> OpenAICompatProvider:
     """常に OpenAICompatProvider を返す（シグネチャ互換維持・18 call sites）。
 
     base_url が空の場合、旧 provider 名に応じた互換エンドポイントをデフォルト解決する。
+    session_id は OpenCode Go 用の x-opencode-session ヘッダー（会話内で安定した値）。
     """
     from .openai_compat import OpenAICompatProvider
 
     resolved_base_url = base_url or _DEFAULT_BASE_URLS.get(provider, "")
-    return OpenAICompatProvider(api_key=api_key, model=model, base_url=resolved_base_url)
+    return OpenAICompatProvider(api_key=api_key, model=model, base_url=resolved_base_url, session_id=session_id)

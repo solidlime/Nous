@@ -330,3 +330,22 @@ class TestBrainSpontaneousKeys:
         got = repo.get("p1")
         assert got.brain_spontaneous_enabled is True
         assert got.brain_spontaneous_interval_hours == 12
+
+
+class TestBrainSessionIdWiring:
+    """脳側の Go セッションID: persona ベースで安定 (nous-brain-<persona>)。"""
+
+    def test_brain_providers_get_persona_session(self):
+        ctx = _ctx(_cfg())
+        ctx.persona = "herta"
+        ctx._init_enricher()
+        assert ctx._enricher is not None
+        assert ctx._enricher._session_id == "nous-brain-herta"
+        assert ctx.introspection_engine is not None
+        assert ctx.introspection_engine._session_id == "nous-brain-herta"
+
+    def test_no_persona_falls_back_to_none(self):
+        ctx = _ctx(_cfg())  # persona 未設定 (空文字)
+        ctx._init_enricher()
+        assert ctx._enricher is not None
+        assert ctx._enricher._session_id is None

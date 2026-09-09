@@ -116,12 +116,15 @@ class IntrospectionEngine:
         provider: LLMProvider,
         reasoning_effort: str | None = None,
         max_tokens: int = _DEFAULT_MAX_TOKENS,
+        session_id: str | None = None,
     ) -> None:
         self._provider = provider
         # 脳専用 reasoning トグル (chat の reasoning とは独立)。None なら effort を渡さず
         # openai_compat 側の openrouter reasoning 無効化が効く。
         self._reasoning_effort = reasoning_effort
         self._max_tokens = max_tokens
+        # OpenCode Go 用の脳側安定セッションID (例: nous-brain-<persona>)
+        self._session_id = session_id
 
     @classmethod
     def from_config(cls, config: ChatConfig | None, settings=None) -> IntrospectionEngine | None:

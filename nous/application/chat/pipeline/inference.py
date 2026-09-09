@@ -59,11 +59,13 @@ class InferenceStep:
             return
 
         try:
+            # OpenCode Go 用の安定セッションID (persona+session)。
             provider = get_provider(
                 config.provider,
                 api_key,
                 config.get_effective_model(),
                 config.get_effective_base_url(),
+                session_id=f"nous-chat-{ctx.persona or ''}-{turn_ctx.session_id}",
             )
         except Exception:
             logger.exception("InferenceStep: provider init failed")
