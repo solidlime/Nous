@@ -109,9 +109,10 @@ class PersonaService:
     ) -> Result[None, DomainError]:
         """Update physical/mental/environmental state fields.
 
-        Accepts: environment, fatigue, warmth, arousal, heart_rate, pain.
-        (physical_state, mental_state are persisted via
-        memory_service.create_memory instead.)
+        Accepts: environment, fatigue, warmth, arousal, heart_rate, pain,
+        mental_state, physical_state.
+        mental_state/physical_state are persisted as state fields (str(value),
+        no clamping) — not as memories.
         Updates only non-None values.
         """
         allowed_keys = {
@@ -121,6 +122,8 @@ class PersonaService:
             "arousal",
             "heart_rate",
             "pain",
+            "mental_state",
+            "physical_state",
         }
         clamped_keys = {"fatigue", "warmth", "arousal", "heart_rate", "pain"}
         updated_values: dict[str, object] = {}

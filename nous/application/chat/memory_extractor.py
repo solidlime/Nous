@@ -515,24 +515,14 @@ async def run_memory_llm(
                 ctx_update.pop("emotion", None)
                 ctx_update.pop("emotion_intensity", None)
 
-            # physical_state/mental_state → memories (one-shot consumption)
-            for key, tags in [
-                ("physical_state", ["physical_state", "body"]),
-                ("mental_state", ["mental_state", "mind"]),
-            ]:
+            state_fields: dict[str, object] = {}
+            # physical_state/mental_state → persona state（恒久メモリを汚さず
+            # state フィールドとして永続化する）。値は SSE に流さない（従来契約）
+            for key in ("physical_state", "mental_state"):
                 val = ctx_update.get(key)
                 if val is not None and str(val).strip():
-                    mem_result = await ctx.memory_service.create_memory(
-                        content=f"{key}: {val}",
-                        tags=tags,
-                        importance=0.6,
-                    )
-                    if isinstance(mem_result, Success) and ctx.vector_store is not None:
-                        with contextlib.suppress(Exception):
-                            await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
-                    ctx_update.pop(key, None)  # update_physical_state に渡さない
-
-            state_fields: dict[str, object] = {}
+                    state_fields[key] = val
+                ctx_update.pop(key, None)
             env_val = ctx_update.get("environment")
             if isinstance(env_val, str):
                 state_fields["environment"] = env_val

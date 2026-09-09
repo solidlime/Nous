@@ -689,7 +689,7 @@ class TestRunMemoryLLM:
 
     @pytest.mark.asyncio
     async def test_context_update_applies(self, mock_ctx, mock_config):
-        """LLM result with context_update → update_emotion / memory for mental_state / update_persona_info."""
+        """LLM result with context_update → update_emotion / state for mental_state / update_persona_info."""
         payload = {"user": "こんにちは", "assistant": "楽しいね！"}
         llm_result = {
             "facts": [],
@@ -716,13 +716,15 @@ class TestRunMemoryLLM:
             0.85,
             context="llm_suggested",
         )
-        # mental_state → memory, not update_physical_state
-        mock_ctx.memory_service.create_memory.assert_any_call(
-            content="mental_state: リラックス",
-            tags=["mental_state", "mind"],
-            importance=0.6,
+        # mental_state → persona state (not memory)
+        mock_ctx.persona_service.update_physical_state.assert_called_once_with(
+            "test_persona",
+            mental_state="リラックス",
         )
-        mock_ctx.persona_service.update_physical_state.assert_not_called()
+        for call in mock_ctx.memory_service.create_memory.call_args_list:
+            _, kwargs = call
+            content = kwargs.get("content", "")
+            assert not content.startswith("mental_state:"), f"Memory should not be created: {content}"
         mock_ctx.persona_service.update_persona_info.assert_called_once_with(
             "test_persona",
             {"context_note": "会話は和やかだった"},
@@ -779,7 +781,7 @@ class TestRunMemoryLLM:
 
     @pytest.mark.asyncio
     async def test_context_update_physical_state_only(self, mock_ctx, mock_config):
-        """Only physical state fields — emotion not called. physical_state → memory, environment → update_physical_state."""
+        """Only physical state fields — emotion not called. physical_state/environment → update_physical_state."""
         payload = {"user": "test", "assistant": "response"}
         llm_result = {
             "facts": [],
@@ -799,15 +801,14 @@ class TestRunMemoryLLM:
             await run_memory_llm(mock_ctx, mock_config, payload)
 
         mock_ctx.persona_service.update_emotion.assert_not_called()
-        # physical_state → memory
-        mock_ctx.memory_service.create_memory.assert_any_call(
-            content="physical_state: 疲れている",
-            tags=["physical_state", "body"],
-            importance=0.6,
-        )
-        # environment → update_physical_state (allowed key)
+        # physical_state/environment → persona state (not memory)
+        for call in mock_ctx.memory_service.create_memory.call_args_list:
+            _, kwargs = call
+            content = kwargs.get("content", "")
+            assert not content.startswith("physical_state:"), f"Memory should not be created: {content}"
         mock_ctx.persona_service.update_physical_state.assert_called_once_with(
             "test_persona",
+            physical_state="疲れている",
             environment="自宅",
         )
         mock_ctx.persona_service.update_persona_info.assert_not_called()

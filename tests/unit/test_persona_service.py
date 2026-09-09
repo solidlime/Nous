@@ -227,6 +227,18 @@ class TestUpdatePhysicalState:
         assert result.is_ok
         assert "unknown_key" not in repo._state.get(PERSONA, {})
 
+    def test_persists_mental_state_as_state_field(self, service: PersonaService, repo: InMemoryPersonaRepository):
+        """mental_state/physical_state は clamp されず str(value) で state に永続化される."""
+        result = service.update_physical_state(PERSONA, mental_state="リラックス", physical_state="元気")
+        assert result.is_ok
+        assert repo._state[PERSONA]["mental_state"] == "リラックス"
+        assert repo._state[PERSONA]["physical_state"] == "元気"
+
+    def test_mental_state_not_clamped(self, service: PersonaService, repo: InMemoryPersonaRepository):
+        """mental_state は数値 clamp 対象外（文字列そのまま）。"""
+        service.update_physical_state(PERSONA, mental_state="5.2")
+        assert repo._state[PERSONA]["mental_state"] == "5.2"
+
     def test_clamps_numeric_body_state(self, service: PersonaService, repo: InMemoryPersonaRepository):
         """数値で来た fatigue/warmth/arousal/heart_rate/pain は 0.0-1.0 に clamp."""
         service.update_physical_state(PERSONA, fatigue=5.2, warmth=-0.3, arousal=0.5, heart_rate=2, pain=0.9)
