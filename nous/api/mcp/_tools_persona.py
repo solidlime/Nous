@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -133,6 +134,8 @@ async def _tool_update_context(
     persona: str,
     emotion: str | None = None,
     emotion_intensity: float | None = None,
+    valence: float | None = None,
+    arousal: float | None = None,
     physical_state: str | None = None,
     mental_state: str | None = None,
     environment: str | None = None,
@@ -147,8 +150,33 @@ async def _tool_update_context(
 ) -> dict:
     """Update persona state. context_note: short note on current activity for session continuity.
     body_state: {fatigue, warmth, arousal, heart_rate, pain (0.0-1.0)}.
+    valence/arousal: direct emotion rating in [-1, 1] (both required, together with emotion).
+    Stored as {"va": [v, a]} JSON in the emotion history record's context.
     appearance: free-text description of current appearance (clothing, hair, accessories)."""
     updated: list[str] = []
+
+    # Direct V-A rating (Phase 0 spike). Priority: direct > derived (emotion_to_va).
+    va_context: str | None = None
+    if valence is not None or arousal is not None:
+        if emotion is None:
+            return {"ok": False, "error": "valence/arousal requires emotion"}
+        if valence is None or arousal is None:
+            return {"ok": False, "error": "valence and arousal must be provided together"}
+        try:
+            _v = max(-1.0, min(1.0, float(valence)))
+            _a = max(-1.0, min(1.0, float(arousal)))
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "valence/arousal must be numbers"}
+        va_context = json.dumps({"va": [_v, _a]})
+        from nous.domain.value_objects import emotion_to_va, normalize_emotion
+
+        logger.info(
+            "va_direct=(%.2f, %.2f) va_derived=%s persona=%s",
+            _v,
+            _a,
+            emotion_to_va(normalize_emotion(emotion)),
+            persona,
+        )
 
     if emotion is not None:
         # f2: 0.0を欠損扱いしない（or 0.5は0.0を潰す）＋範囲正規化
@@ -158,7 +186,7 @@ async def _tool_update_context(
             _intensity = normalize_importance(float(emotion_intensity) if emotion_intensity is not None else None)
         except (TypeError, ValueError):
             _intensity = 0.5
-        result = ctx.persona_service.update_emotion(persona, emotion, _intensity, context="manual_update")
+        result = ctx.persona_service.update_emotion(persona, emotion, _intensity, context=va_context or "manual_update")
         if result.is_ok:
             updated.append(f"emotion={emotion}")
 

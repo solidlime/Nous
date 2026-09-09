@@ -126,6 +126,50 @@ def normalize_emotion(text: str | None) -> str:
     return "neutral"
 
 
+# ──────────────────────────────────────────────
+# 感情→Valence-Arousal 2次元マッピング（Phase 0 spike）
+# ──────────────────────────────────────────────
+# Keys must stay in sync with _EMOTION_KEYWORD_MAP.
+# NOTE: emotion_to_va expects an already-normalized canonical label
+# (i.e. a key of _EMOTION_KEYWORD_MAP). Unknown labels → (0.0, 0.0).
+_EMOTION_VA_MAP: dict[str, tuple[float, float]] = {
+    "joy": (0.9, 0.4),
+    "sadness": (-0.7, -0.4),
+    "anger": (-0.6, 0.8),
+    "fear": (-0.5, 0.7),
+    "surprise": (0.1, 0.8),
+    "disgust": (-0.6, 0.5),
+    "love": (0.9, 0.4),
+    "neutral": (0.0, 0.0),
+    "anticipation": (0.4, 0.6),
+    "trust": (0.6, 0.2),
+    "anxiety": (-0.4, 0.6),
+    "excitement": (0.6, 0.8),
+    "frustration": (-0.5, 0.6),
+    "nostalgia": (0.2, -0.3),
+    "pride": (0.7, 0.4),
+    "shame": (-0.7, 0.3),
+    "guilt": (-0.6, 0.3),
+    "loneliness": (-0.7, -0.5),
+    "contentment": (0.7, -0.5),
+    "curiosity": (0.4, 0.5),
+    "awe": (0.4, 0.6),
+    "relief": (0.5, -0.4),
+    "envy": (-0.5, 0.5),
+    "gratitude": (0.7, 0.2),
+    "contempt": (-0.6, 0.4),
+}
+
+
+def emotion_to_va(emotion: str) -> tuple[float, float]:
+    """Map a normalized emotion label to (valence, arousal) in [-1.0, 1.0].
+
+    Expects a canonical label (a key of _EMOTION_KEYWORD_MAP). Returns
+    (0.0, 0.0) for unknown labels.
+    """
+    return _EMOTION_VA_MAP.get(emotion, (0.0, 0.0))
+
+
 # Canonical set of valid emotion labels (frozenset for fast O(1) membership checks)
 _VALID_EMOTIONS: frozenset[str] = frozenset(_EMOTION_KEYWORD_MAP.keys())
 

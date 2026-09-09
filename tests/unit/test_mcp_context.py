@@ -103,6 +103,80 @@ class TestUpdateContext:
         ctx.persona_service.update_emotion.assert_called_once_with("test_persona", "joy", 0.9, context="manual_update")
 
     @pytest.mark.asyncio
+    async def test_update_va_stored_in_context(self, registered_tools):
+        """Direct V-A rating is stored as {"va": [v, a]} JSON in EmotionRecord.context."""
+        tools, ctx, _ = registered_tools
+        ctx.persona_service.update_emotion.return_value = Success(None)
+        update_context = tools["update_context"]
+        with (
+            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
+            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
+        ):
+            mock_reg_cls.get.return_value = ctx
+            await update_context(emotion="joy", emotion_intensity=0.9, valence=0.95, arousal=0.3)
+        import json
+
+        ctx.persona_service.update_emotion.assert_called_once_with(
+            "test_persona", "joy", 0.9, context=json.dumps({"va": [0.95, 0.3]})
+        )
+
+    @pytest.mark.asyncio
+    async def test_update_va_clamped(self, registered_tools):
+        tools, ctx, _ = registered_tools
+        ctx.persona_service.update_emotion.return_value = Success(None)
+        update_context = tools["update_context"]
+        with (
+            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
+            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
+        ):
+            mock_reg_cls.get.return_value = ctx
+            await update_context(emotion="anger", valence=-1.5, arousal=2.0)
+        import json
+
+        ctx.persona_service.update_emotion.assert_called_once_with(
+            "test_persona", "anger", 0.5, context=json.dumps({"va": [-1.0, 1.0]})
+        )
+
+    @pytest.mark.asyncio
+    async def test_update_va_non_numeric_rejected(self, registered_tools):
+        tools, ctx, _ = registered_tools
+        update_context = tools["update_context"]
+        with (
+            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
+            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
+        ):
+            mock_reg_cls.get.return_value = ctx
+            result = await update_context(emotion="joy", valence="high", arousal=0.3)
+        assert "Error" in result
+        ctx.persona_service.update_emotion.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_update_va_requires_both(self, registered_tools):
+        tools, ctx, _ = registered_tools
+        update_context = tools["update_context"]
+        with (
+            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
+            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
+        ):
+            mock_reg_cls.get.return_value = ctx
+            result = await update_context(emotion="joy", valence=0.5)
+        assert "Error" in result
+        ctx.persona_service.update_emotion.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_update_va_requires_emotion(self, registered_tools):
+        tools, ctx, _ = registered_tools
+        update_context = tools["update_context"]
+        with (
+            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
+            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
+        ):
+            mock_reg_cls.get.return_value = ctx
+            result = await update_context(valence=0.5, arousal=0.5)
+        assert "Error" in result
+        ctx.persona_service.update_emotion.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_update_physical_state(self, registered_tools):
         tools, ctx, _ = registered_tools
         ctx.persona_service.update_physical_state.return_value = Success(None)

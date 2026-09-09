@@ -256,6 +256,8 @@ def register_tools(mcp: MCPServer) -> None:
     async def update_context(
         emotion: str | None = None,
         emotion_intensity: float | None = None,
+        valence: float | None = None,
+        arousal: float | None = None,
         physical_state: str | None = None,
         mental_state: str | None = None,
         environment: str | None = None,
@@ -271,6 +273,8 @@ def register_tools(mcp: MCPServer) -> None:
         """Update persona state. context_note: short note on current activity (session continuity).
         body_state: {fatigue, warmth, arousal, heart_rate, pain (0.0-1.0)} — numeric body metrics.
         emotion + emotion_intensity: emotional state override.
+        valence/arousal: direct emotion rating in [-1, 1] (both required, together with emotion);
+        stored in the emotion history record's context. Priority: direct > derived.
         physical_state / mental_state / environment: free-text descriptions.
         relationship_status / relationship_type: interpersonal context.
         user_info: {name, nickname, preferred_address}. persona_info: {nickname, ...}.
@@ -281,6 +285,8 @@ def register_tools(mcp: MCPServer) -> None:
             p,
             emotion=emotion,
             emotion_intensity=emotion_intensity,
+            valence=valence,
+            arousal=arousal,
             physical_state=physical_state,
             mental_state=mental_state,
             environment=environment,
