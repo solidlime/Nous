@@ -29,7 +29,7 @@ beforeEach(() => {
 describe('N.Chat.tools — labels', () => {
   it('maps known tools to persona-neutral narration', () => {
     expect(N.Chat.tools.label('memory_create')).toBe('思い出を刻んでる…');
-    expect(N.Chat.tools.label('invoke_skill')).toBe('技を繰り出す準備…');
+    expect(N.Chat.tools.label('invoke_skill')).toBe('スキルを呼び出す準備…');
   });
 
   it('shows raw names for non-nous tools (skills, MCP)', () => {
@@ -59,7 +59,7 @@ describe('N.Chat.tools — chip markup', () => {
     expect(div.className).toBe('chat-tool-call');
     expect(div.dataset.toolId).toBe('t1');
     const strong = div.querySelector('strong');
-    expect(strong.textContent).toBe('使える技を確認してる…');
+    expect(strong.textContent).toBe('スキルを確認してる…');
     expect(strong.getAttribute('title')).toBe('list_skills'); // raw name kept for debug
     expect(div.querySelector('.chat-tool-summary-left i').getAttribute('data-lucide')).toBe('sparkles');
     // running state: no duplicate status text; slot hidden via :empty

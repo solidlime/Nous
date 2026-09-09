@@ -29,9 +29,9 @@ var TOOL_LABELS = {
   item_equip: "身支度してる…",
   item_search: "持ち物を探してる…",
   goal_manage: "目標を確かめてる…",
-  image_generate: "絵を仕上げてる…",
-  list_skills: "使える技を確認してる…",
-  invoke_skill: "技を繰り出す準備…",
+  image_generate: "イメージを描き出してる…",
+  list_skills: "スキルを確認してる…",
+  invoke_skill: "スキルを呼び出す準備…",
 };
 // nous コアツールのみ没入ラベル。スキル等の非 nous ツールは生名のまま表示
 // （ユーザー指示: recall_weaver 等はスキル名なのでそのまま。生JSONはdetailsに維持）
