@@ -7,6 +7,8 @@ and the new language-agnostic ReflectionEngine class.
 from __future__ import annotations
 
 import json
+import math
+from collections import Counter
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -29,6 +31,53 @@ logger = get_logger(__name__)
 _REFLECTION_META_TAG = "_reflection_meta"
 _REFLECTION_THRESHOLD_DEFAULT = 3.0
 _REFLECTION_MIN_INTERVAL_HOURS_DEFAULT = 1.0
+
+# Dedup: skip insights too similar to existing reflection memories
+# (same pattern as memory_extractor.py fact dedup, threshold 0.85).
+_DEDUP_THRESHOLD = 0.85
+_DEDUP_SCAN_LIMIT = 100
+
+
+def _cosine_similarity(a: str, b: str) -> float:
+    """Character-bigram cosine similarity (language-agnostic, 0.0-1.0).
+
+    Bigrams work for CJK without a tokenizer; near-identical paraphrases
+    score high, unrelated sentences score low.
+    """
+
+    def bigrams(text: str) -> Counter[str]:
+        return Counter(text[i : i + 2] for i in range(len(text) - 1))
+
+    va, vb = bigrams(a), bigrams(b)
+    if not va or not vb:
+        return 0.0
+    dot = sum(n * vb[g] for g, n in va.items())
+    na = math.sqrt(sum(n * n for n in va.values()))
+    nb = math.sqrt(sum(n * n for n in vb.values()))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (na * nb)
+
+
+def _is_duplicate_insight(content: str, existing_contents: list[str], threshold: float = _DEDUP_THRESHOLD) -> bool:
+    """True when *content* is too similar to any existing reflection memory."""
+    return any(_cosine_similarity(content, existing) > threshold for existing in existing_contents)
+
+
+def _reflection_contents(memory_service: MemoryService) -> list[str]:
+    """Contents of recent reflection-tagged memories (cheapest dedup source).
+
+    Non-list results (mocked services) are treated as empty.
+    """
+    try:
+        result = memory_service.get_by_tags(["reflection"])
+    except Exception:
+        return []
+    values = getattr(result, "value", None)
+    if result.is_ok and isinstance(values, list):
+        return [str(m.content) for m in values[-_DEDUP_SCAN_LIMIT:]]
+    return []
+
 
 _REFLECTION_PROMPT = """\
 Below is a list of recently recorded memories and facts.
@@ -180,18 +229,30 @@ async def maybe_run_reflection(
     if not insights:
         return []
 
+    existing_contents = _reflection_contents(ctx.memory_service)
+    evidence_keys = [str(k) for m in memories[:20] if (k := getattr(m, "key", None))]
+    stored: list[str] = []
     for insight in insights:
+        if _is_duplicate_insight(insight, existing_contents):
+            logger.info("Reflection: duplicate insight skipped: %s", insight[:60])
+            continue
         await ctx.memory_service.create_memory(
             content=insight,
             importance=0.9,
             tags=["reflection"],
             emotion="neutral",
             persona=ctx.persona,
+            related_keys=evidence_keys,
         )
+        existing_contents.append(insight)
+        stored.append(insight)
+
+    if not stored:
+        return []
 
     await _store_last_reflection_at(ctx, now)
-    logger.info("ReflectionEngine: stored %d insights for persona=%s", len(insights), ctx.persona)
-    return insights
+    logger.info("ReflectionEngine: stored %d insights for persona=%s", len(stored), ctx.persona)
+    return stored
 
 
 def _parse_insights(text: str) -> list[str]:
@@ -311,12 +372,22 @@ class ReflectionEngine:
         if not insights:
             return []
 
-        # 5. Persist as semantic memories
+        # 5. Persist as semantic memories (with dedup + evidence link)
+        existing_contents = _reflection_contents(memory_service)
         results: list[dict[str, Any]] = []
         for insight in insights:
             content = insight.get("insight", "")
             if not content:
                 continue
+            if _is_duplicate_insight(content, existing_contents):
+                self._logger.info("ReflectionEngine: duplicate insight skipped: %s", content[:60])
+                continue
+            evidence = insight.get("evidence_keys")
+            save_kwargs: dict[str, Any] = {}
+            if isinstance(evidence, list):
+                keys = [k for k in evidence if isinstance(k, str) and k]
+                if keys:
+                    save_kwargs["related_keys"] = keys
             mem_result = await memory_service.create_memory(
                 persona=persona,
                 content=content,
@@ -325,8 +396,10 @@ class ReflectionEngine:
                 confidence=insight.get("confidence", 0.7),
                 importance=0.8,
                 tags=["reflection"],
+                **save_kwargs,
             )
             if mem_result.is_ok:
+                existing_contents.append(content)
                 results.append(insight)
         self._logger.info(
             "ReflectionEngine: stored %d insights for persona=%s",
