@@ -249,6 +249,15 @@ describe('monologue stream wiring', () => {
 });
 
 describe('monologue restore from session events (chat-history.js)', () => {
+  function msgAt(hhmm) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg assistant';
+    div.dataset.time = hhmm;
+    div.innerHTML = '<div class="chat-bubble">msg ' + hhmm + '</div>';
+    document.getElementById('chat-messages').appendChild(div);
+    return div;
+  }
+
   it('restores bubbles in chronological order after history render', async () => {
     N.Core.api.mockResolvedValueOnce({ events: [
       { event_type: 'brain.monologue', summary: '新しい独り言。' },
@@ -260,6 +269,26 @@ describe('monologue restore from session events (chat-history.js)', () => {
     expect(texts).toEqual(['古い独り言。', '新しい独り言。']);
     // display-only: never enters the chat history array
     expect(N.Chat.state.messages.length).toBe(0);
+  });
+
+  it('inserts restored whispers between messages by timestamp, not at the end', async () => {
+    msgAt('10:00');
+    const later = msgAt('11:00');
+    N.Core.api.mockResolvedValueOnce({ events: [
+      // API returns newest-first; each event carries an ISO timestamp
+      { event_type: 'brain.monologue', summary: '遅い独り言。', timestamp: '2026-09-09T10:45:00+09:00' },
+      { event_type: 'brain.monologue', summary: '早い独り言。', timestamp: '2026-09-09T10:30:00+09:00' },
+    ]});
+    await N.Chat.monologue.restore();
+    const container = document.getElementById('chat-messages');
+    // chronological slots between the two messages — NOT stacked at the end
+    expect(container.lastElementChild).toBe(later);
+    const order = Array.from(container.children).map((e) => e.className.split(' ')[0]);
+    expect(order).toEqual([
+      'chat-msg', 'chat-monologue-bubble', 'chat-monologue-bubble', 'chat-msg',
+    ]);
+    const texts = Array.from(container.querySelectorAll('.chat-monologue-text')).map((e) => e.textContent);
+    expect(texts).toEqual(['早い独り言。', '遅い独り言。']);
   });
 
   it('re-fetches scoped to the persona and drops stale responses', async () => {

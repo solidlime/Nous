@@ -38,6 +38,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
   div.className = "chat-msg " + role;
   div.dataset.msgIndex = msgIndex;
   div.dataset.msgId = msgId || "";
+  div.dataset.time = timeStr || ""; // restore-side chronological anchoring
   const bubble = document.createElement("div");
   bubble.className = "chat-bubble";
   if (isMarkdown && role === "assistant") {
@@ -919,7 +920,7 @@ var MONOLOGUE_URL = "/api/memory/wiring/stream";
 var _monologuePersona = null;
 var _monologueMaxSeq = 0;
 
-function appendMonologueBubble(text) {
+function appendMonologueBubble(text, timeToken) {
   if (!text || typeof text !== "string") return;
   var container = findChatLogContainer();
   if (!container) return;
@@ -942,7 +943,20 @@ function appendMonologueBubble(text) {
   body.textContent = text; // CSP-safe: textContent, never parsed as HTML
   bubble.appendChild(summary);
   bubble.appendChild(body);
-  container.appendChild(bubble);
+  // Restore-time whispers carry their timestamp ("HH:MM") — slot them
+  // between messages in conversation order instead of the tail. Live
+  // whispers (no token) keep append-at-end, which IS their order.
+  var isTime = typeof timeToken === "string" && /^\d{2}:\d{2}$/.test(timeToken);
+  var anchor = null;
+  if (isTime) {
+    var nodes = container.children;
+    for (var i = 0; i < nodes.length; i++) {
+      var t = nodes[i].dataset && nodes[i].dataset.time;
+      if (t && t > timeToken) { anchor = nodes[i]; break; }
+    }
+  }
+  if (anchor) container.insertBefore(bubble, anchor);
+  else container.appendChild(bubble);
   // Follow the stream only while the user is already at the bottom
   if (container.scrollHeight - container.scrollTop - container.clientHeight < 80) {
     container.scrollTop = container.scrollHeight;

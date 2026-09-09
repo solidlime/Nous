@@ -941,9 +941,14 @@ async function restoreMonologueBubbles() {
     if (S.persona !== personaAtRequest) return;
     var events = (data && data.events) || [];
     // API returns newest-first; render chronologically so the whisper
-    // trail reads the way it happened.
+    // trail reads the way it happened. Each whisper slots between the
+    // messages by its timestamp ("HH:MM" from the ISO value).
     for (var i = events.length - 1; i >= 0; i--) {
-      if (events[i] && events[i].summary) monologue.append(events[i].summary);
+      var ev = events[i];
+      if (ev && ev.summary) {
+        var ts = String(ev.timestamp || "");
+        monologue.append(ev.summary, ts.length >= 16 ? ts.substring(11, 16) : "");
+      }
     }
   } catch (e) {
     console.warn("[monologue restore]:", e.message);
