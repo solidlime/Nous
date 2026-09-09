@@ -274,3 +274,103 @@ class TestReflectionEngineEdgeCases:
         """Engine uses REFLECTION_SCHEMA by default."""
         eng = ReflectionEngine()
         assert eng._schema is REFLECTION_SCHEMA
+
+
+class TestReflectionDedup:
+    """既存 reflection 記憶との重複スキップ + evidence_keys 保存のテスト."""
+
+    @pytest.fixture
+    def engine(self):
+        return ReflectionEngine()
+
+    @staticmethod
+    def _service_with_existing(existing_contents: list[str]):
+        """MemoryService mock: 12 recent memories + given existing reflections."""
+        svc = MagicMock()
+        recent = MagicMock()
+        recent.is_ok = True
+        recent.value = [MagicMock(content=f"memory {i}") for i in range(12)]
+        svc.get_recent.return_value = recent
+
+        tags = MagicMock()
+        tags.is_ok = True
+        tags.value = [MagicMock(content=c) for c in existing_contents]
+        svc.get_by_tags.return_value = tags
+
+        create_result = MagicMock()
+        create_result.is_ok = True
+        svc.create_memory = AsyncMock(return_value=create_result)
+        return svc
+
+    @staticmethod
+    def _llm_streaming(insights: list[dict]):
+        llm = MagicMock()
+
+        async def stream_iter(**kwargs):
+            from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+
+            yield TextDeltaEvent(content=json.dumps(insights))
+            yield DoneEvent(full_content="")
+
+        llm.stream = stream_iter
+        return llm
+
+    @pytest.mark.asyncio
+    async def test_duplicate_insight_skipped(self, engine):
+        """既存 reflection と同一の洞察は create_memory されない."""
+        dup = "The user consistently prefers sci-fi themes."
+        svc = self._service_with_existing([dup])
+        llm = self._llm_streaming(
+            [
+                {"insight": dup, "evidence_keys": [], "confidence": 0.8},
+                {"insight": "A completely different observation about food.", "evidence_keys": [], "confidence": 0.7},
+            ]
+        )
+        results = await engine.reflect("p", svc, llm)
+        # 重複は保存されず、新規のみ保存される
+        assert [r["insight"] for r in results] == ["A completely different observation about food."]
+        assert svc.create_memory.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_in_batch_duplicates_skipped(self, engine):
+        """同一バッチ内で内容が同じ洞察も2つ目は保存しない."""
+        svc = self._service_with_existing([])
+        insight = "The user consistently prefers sci-fi themes."
+        llm = self._llm_streaming(
+            [
+                {"insight": insight, "evidence_keys": [], "confidence": 0.8},
+                {"insight": insight, "evidence_keys": [], "confidence": 0.8},
+            ]
+        )
+        results = await engine.reflect("p", svc, llm)
+        assert svc.create_memory.call_count == 1
+        assert len(results) == 1
+
+    @pytest.mark.asyncio
+    async def test_evidence_keys_saved_as_related_keys(self, engine):
+        """evidence_keys は create_memory の related_keys に渡って保存される."""
+        svc = self._service_with_existing([])
+        llm = self._llm_streaming(
+            [
+                {"insight": "An observation about books.", "evidence_keys": ["mem_001"], "confidence": 0.8},
+                {
+                    "insight": "Another observation about music.",
+                    "evidence_keys": ["mem_002", "mem_003"],
+                    "confidence": 0.7,
+                },
+            ]
+        )
+        results = await engine.reflect("p", svc, llm)
+        assert len(results) == 2
+        calls = svc.create_memory.call_args_list
+        assert calls[0].kwargs["related_keys"] == ["mem_001"]
+        assert calls[1].kwargs["related_keys"] == ["mem_002", "mem_003"]
+
+    @pytest.mark.asyncio
+    async def test_missing_evidence_keys_omits_related_keys(self, engine):
+        """evidence_keys 欠落時は related_keys を渡さない（LLM出力の揺れに強い）."""
+        svc = self._service_with_existing([])
+        llm = self._llm_streaming([{"insight": "Some new insight.", "confidence": 0.7}])
+        results = await engine.reflect("p", svc, llm)
+        assert len(results) == 1
+        assert "related_keys" not in svc.create_memory.call_args.kwargs

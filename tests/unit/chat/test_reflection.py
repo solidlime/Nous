@@ -230,3 +230,48 @@ class TestMaybeRunReflectionPersona:
 
         assert result == ["Yet another insight."]
         mock_ctx.memory_service.create_memory.assert_called()
+
+    # ---- dedup + evidence_keys ---------------------------------------
+
+    @staticmethod
+    async def _run_dedup(ctx, config, insight: str):
+        fake_provider = AsyncMock()
+
+        async def fake_stream(**kwargs):
+            from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+
+            yield TextDeltaEvent(content=insight)
+            yield DoneEvent(full_content=insight)
+
+        fake_provider.stream = fake_stream
+        with patch(
+            "nous.application.chat.reflection.get_provider",
+            return_value=fake_provider,
+        ):
+            # await inside the patch context — returning the coroutine would
+            # run it after patch exit and hit the real LLM provider.
+            return await maybe_run_reflection(ctx, config, recent_importance_sum=5.0)
+
+    @pytest.mark.asyncio
+    async def test_duplicate_insight_skipped(self, mock_ctx, mock_config):
+        """既存 reflection と同一の洞察は保存されず、空リストを返す."""
+        existing = MagicMock()
+        existing.content = "Deep insight about user."
+        tags_result = MagicMock()
+        tags_result.is_ok = True
+        tags_result.value = [existing]
+        mock_ctx.memory_service.get_by_tags.return_value = tags_result
+
+        result = await self._run_dedup(mock_ctx, mock_config, json.dumps({"insights": ["Deep insight about user."]}))
+
+        assert result == []
+        mock_ctx.memory_service.create_memory.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_new_insight_saved_with_evidence_keys(self, mock_ctx, mock_config):
+        """新規洞察は related_keys に直近メモリ keys を持って保存される."""
+        result = await self._run_dedup(mock_ctx, mock_config, json.dumps({"insights": ["Fresh insight."]}))
+
+        assert result == ["Fresh insight."]
+        insight_kwargs = mock_ctx.memory_service.create_memory.call_args_list[0].kwargs
+        assert insight_kwargs["related_keys"] == ["mem_001"]
