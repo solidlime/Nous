@@ -236,7 +236,9 @@ async def _build_context_section(
             reflection_result = ctx.memory_service.get_by_tags(["reflection"])
             if reflection_result.is_ok and reflection_result.value:
                 query_text = (getattr(turn_ctx, "user_message", "") or "") if turn_ctx else ""
-                contents = [r.content for r in reflection_result.value if r.content]
+                # get_by_tags は無 LIMIT・updated_at DESC。全件 encode はレイテンシが単調増加するため直近のみ。
+                # 相対閾値の比較基準もこの「直近N件の候補集合」内で完結する。
+                contents = [r.content for r in reflection_result.value if r.content][:20]
                 insights = _select_reflection_insights(ctx, query_text, contents)
                 if insights:
                     sanitized = [_sanitize_text(i) for i in insights if i]
