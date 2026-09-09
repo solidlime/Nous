@@ -40,6 +40,7 @@ async def judge_character(config, persona_identity: str, response: str) -> dict 
     api_key = config.get_effective_api_key()
     model = config.extract_model.strip() or config.get_effective_model()
     if not api_key or not model:
+        logger.warning("CharacterJudge: skipped: api_key/model missing")
         return None
     try:
         provider = get_provider(config.provider, api_key, model, config.get_effective_base_url())
