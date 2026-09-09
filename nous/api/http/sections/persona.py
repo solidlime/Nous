@@ -167,9 +167,9 @@ def render_persona_js() -> str:
         "                })()\n"
         "                + '</div>'\n"
         "                + '<div style=\"display:flex;gap:8px;flex-wrap:wrap\">'\n"
-        "                + '<button data-dead-persona=\"edit\" data-dead-name=\"&#39;" + esc(name) + "&#39;\" class=\"glass-btn\" style=\"padding:6px 14px;font-size:0.85rem\">\\u270f\\ufe0f Edit</button>'\n"
+        '                + \'<button data-dead-persona="edit" data-dead-name="&#39;\' + esc(name) + \'&#39;" class="glass-btn" style="padding:6px 14px;font-size:0.85rem">\\u270f\\ufe0f Edit</button>\'\n'
         "                + switchBtn\n"
-        "                + '<button data-dead-persona=\"delete\" data-dead-name=\"&#39;" + esc(name) + "&#39;\" class=\"glass-btn\" style=\"' + deleteStyle + '\"><i data-lucide=\"trash-2\"></i> Delete</button>'\n"
+        '                + \'<button data-dead-persona="delete" data-dead-name="&#39;\' + esc(name) + \'&#39;" class="glass-btn" style="\' + deleteStyle + \'"><i data-lucide="trash-2"></i> Delete</button>\'\n'
         "                + '</div></div>';\n"
         "        });\n"
         "        safeSetHTML(grid, html);\n"
