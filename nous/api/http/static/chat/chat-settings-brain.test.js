@@ -42,6 +42,9 @@ const BRAIN_NUM_IDS = [
   'chat-brain-emotion-gain-k',
   'chat-brain-rif-rho',
   'chat-brain-separation-threshold',
+  'chat-brain-reflection-retrieval-penalty',
+  'chat-brain-reflection-injection-min-similarity',
+  'chat-brain-graph-flash',
 ];
 
 const BRAIN_CHECK_IDS = ['chat-brain-auto-run', 'chat-brain-graph-flash'];
@@ -274,6 +277,8 @@ const BRAIN_IDS = [
   'chat-brain-emotion-gain-k',
   'chat-brain-rif-rho',
   'chat-brain-separation-threshold',
+  'chat-brain-reflection-retrieval-penalty',
+  'chat-brain-reflection-injection-min-similarity',
   'chat-brain-graph-flash',
 ];
 

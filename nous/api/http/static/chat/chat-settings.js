@@ -328,6 +328,8 @@ function applyChatConfig(cfg) {
   set("chat-brain-emotion-gain-k", cfg.brain_emotion_gain_k ?? 0.5);
   set("chat-brain-rif-rho", cfg.brain_rif_suppression_rho ?? 0.05);
   set("chat-brain-separation-threshold", cfg.brain_link_separation_threshold ?? 0.75);
+  set("chat-brain-reflection-retrieval-penalty", cfg.reflection_retrieval_penalty ?? 0.5);
+  set("chat-brain-reflection-injection-min-similarity", cfg.reflection_injection_min_similarity ?? 0.45);
   setChecked("chat-brain-graph-flash", cfg.brain_graph_flash_enabled !== false);
   // === Brain dedicated LLM (fields show/hide tracks the toggle; the
   //     change-side wiring lives in core/delegation.js brain-llm-toggle) ===
@@ -513,6 +515,15 @@ async function saveChatConfig() {
     brain_novelty_stability_multiplier: parseFloat(document.getElementById("chat-brain-novelty-multiplier")?.value || "2.0"),
     brain_emotion_gain_k: parseFloat(document.getElementById("chat-brain-emotion-gain-k")?.value || "0.5"),
     brain_rif_suppression_rho: parseFloat(document.getElementById("chat-brain-rif-rho")?.value || "0.05"),
+    // リフレクション降格・注入ゲート: 空なら送らない (merge API keeps the stored value)
+    reflection_retrieval_penalty: (() => {
+      var v = (document.getElementById("chat-brain-reflection-retrieval-penalty")?.value || "").trim();
+      return v ? parseFloat(v) : undefined;
+    })(),
+    reflection_injection_min_similarity: (() => {
+      var v = (document.getElementById("chat-brain-reflection-injection-min-similarity")?.value || "").trim();
+      return v ? parseFloat(v) : undefined;
+    })(),
     // brain_link_separation_threshold is dormant (similarity source not wired) — not collected
     brain_graph_flash_enabled: getChecked("chat-brain-graph-flash"),
     // === Brain dedicated LLM: toggle is always sent; dedicated fields
