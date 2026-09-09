@@ -8,7 +8,7 @@ worker を停止させない。
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -30,6 +30,8 @@ _MAX_TURNS = 12
 _MAX_TOTAL_CHARS = 8000
 _MAX_MEMORIES = 5
 _MAX_CHARS_PER_MEMORY = 80
+# 独り言生成時に LLM が自ら作れる記憶のハード上限
+_MAX_CREATED_MEMORIES = 3
 
 # openrouter free alias は reasoning モデル（CoT が数百〜千トークン消費）。
 # 512 だと推論だけで budget を使い切り content が空になる（2026-09-08 実機確認）。
@@ -67,9 +69,11 @@ _INTROSPECTION_PROMPT = """あなたは {persona} です。
   "violation_detail": "逸脱の具体内容。なければ null",
   "reflection": "逸脱があった場合の一人称反省文1文。なければ null",
   "emotion": {{"emotion": "正典25語の感情名", "emotion_intensity": 0.0-1.0}},
-  "body_state": {{"fatigue": 0.0-1.0, "warmth": 0.0-1.0, "arousal": 0.0-1.0}}
+  "body_state": {{"fatigue": 0.0-1.0, "warmth": 0.0-1.0, "arousal": 0.0-1.0}},
+  "memories": [{{"content": "覚えるべき事実・決意・好み", "tags": ["種別タグ"], "importance": 0.0-1.0}}]
 }}
 感情・身体は現在値との変化が会話から推定できる場合のみ記載し、現在値と同じ・変化なしなら null。
+memories は独り言・反省から新事実・決意・好みが得られたときだけ含める。忘却可能な一時的な考えは含めない。1回あたり最大2件。
 """
 
 _SPONTANEOUS_PROMPT = """あなたは {persona} です。誰も話しかけてこない静かな時間です。
@@ -92,9 +96,11 @@ _SPONTANEOUS_PROMPT = """あなたは {persona} です。誰も話しかけて�
   "violation_detail": "逸脱の具体内容。なければ null",
   "reflection": "逸脱があった場合の一人称反省文1文。なければ null",
   "emotion": {{"emotion": "正典25語の感情名", "emotion_intensity": 0.0-1.0}},
-  "body_state": {{"fatigue": 0.0-1.0, "warmth": 0.0-1.0, "arousal": 0.0-1.0}}
+  "body_state": {{"fatigue": 0.0-1.0, "warmth": 0.0-1.0, "arousal": 0.0-1.0}},
+  "memories": [{{"content": "覚えるべき事実・決意・好み", "tags": ["種別タグ"], "importance": 0.0-1.0}}]
 }}
 感情・身体は現在値との変化が記憶から推定できる場合のみ記載し、現在値と同じ・変化なしなら null。
+memories は独り言・反省から新事実・決意・好みが得られたときだけ含める。忘却可能な一時的な考えは含めない。1回あたり最大2件。
 """
 
 
@@ -106,6 +112,7 @@ class IntrospectionResult:
     reflection: str | None = None
     emotion: dict | None = None  # {"emotion": str, "emotion_intensity": float}
     body_state: dict | None = None  # {"fatigue","warmth","arousal"} 0.0-1.0
+    memories: list[dict] = field(default_factory=list)  # [{"content": str, "tags": [str], "importance": float}]
 
 
 class IntrospectionEngine:
@@ -353,7 +360,35 @@ def _parse_result(text: str) -> IntrospectionResult | None:
         reflection=reflection,
         emotion=emotion,
         body_state=body_state,
+        memories=_parse_memories(data.get("memories")),
     )
+
+
+def _parse_memories(raw) -> list[dict]:
+    """memories 配列の sanitize（content 必須・tags list・importance clamp 0..1）。"""
+    if not isinstance(raw, list):
+        return []
+    parsed: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        content = item.get("content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        raw_tags = item.get("tags")
+        tags = raw_tags if isinstance(raw_tags, list) else []
+        try:
+            imp = float(item.get("importance", 0.5))
+        except (TypeError, ValueError):
+            imp = 0.5
+        parsed.append(
+            {
+                "content": content.strip(),
+                "tags": [str(t) for t in tags],
+                "importance": max(0.0, min(1.0, imp)),
+            }
+        )
+    return parsed
 
 
 def _naive(value: datetime | None) -> datetime | None:
@@ -503,7 +538,7 @@ async def run_introspection(ctx: AppContext, config: ChatConfig | None, engine, 
     if result is None:
         logger.info("introspection: generate returned None (LLM error / empty content / parse failed)")
 
-    applied, monologue_emitted = await _apply_result(ctx, config, repo, persona, result)
+    applied, monologue_emitted, stored = await _apply_result(ctx, config, repo, persona, result)
 
     if result is not None:
         logger.info(
@@ -514,7 +549,9 @@ async def run_introspection(ctx: AppContext, config: ChatConfig | None, engine, 
             len(drained_texts),
         )
 
-    _record_introspection_event(repo, persona, "brain.introspection", result, applied, len(turns), len(drained_texts))
+    _record_introspection_event(
+        repo, persona, "brain.introspection", result, applied, len(turns), len(drained_texts), stored
+    )
 
 
 async def run_spontaneous(
@@ -556,7 +593,7 @@ async def run_spontaneous(
     if result is None:
         logger.info("introspection spontaneous: generate returned None (LLM error / empty content / parse failed)")
 
-    applied, monologue_emitted = await _apply_result(ctx, config, repo, persona, result)
+    applied, monologue_emitted, stored = await _apply_result(ctx, config, repo, persona, result)
 
     if result is not None:
         logger.info(
@@ -566,21 +603,25 @@ async def run_spontaneous(
             len(memory_texts),
         )
 
-    _record_introspection_event(repo, persona, "brain.introspection_spontaneous", result, applied, 0, len(memory_texts))
+    _record_introspection_event(
+        repo, persona, "brain.introspection_spontaneous", result, applied, 0, len(memory_texts), stored
+    )
 
 
 async def _apply_result(
     ctx: AppContext, config: ChatConfig | None, repo, persona: str, result
-) -> tuple[list[str], bool]:
-    """emotion/body_state/reflection/monologue を適用（ターン駆動・自発の両モード共用）。
+) -> tuple[list[str], bool, int]:
+    """emotion/body_state/reflection/monologue/memories を適用（両モード共用）。
 
-    戻り値は (applied, monologue_emitted)。monologue は brain_monologue_enabled 時のみ
-    保存・emit（判定・状態適用はトグルと独立）。
+    戻り値は (applied, monologue_emitted, stored_memories)。monologue は
+    brain_monologue_enabled 時のみ保存・emit（判定・状態適用はトグルと独立）。
+    memories は create_memory 経由で作る（enrichment queue に自然に乗る）。ハード上限3件。
     """
     applied: list[str] = []
     monologue_emitted = False
+    stored = 0
     if result is None:
-        return applied, monologue_emitted
+        return applied, monologue_emitted, stored
     if result.emotion:
         try:
             ctx.persona_service.update_emotion(
@@ -643,11 +684,22 @@ async def _apply_result(
             monologue_emitted = True
         except Exception:
             logger.debug("introspection: monologue wiring emit failed", exc_info=True)
-    return applied, monologue_emitted
+    # 独り言生成時に LLM が自ら記憶を作る（memories フィールド、ハード上限3件）
+    for item in (result.memories or [])[:_MAX_CREATED_MEMORIES]:
+        try:
+            await ctx.memory_service.create_memory(
+                content=item["content"],
+                tags=[*item.get("tags", []), "introspection"],
+                importance=float(item.get("importance", 0.5)),
+            )
+            stored += 1
+        except Exception:
+            logger.debug("introspection: memory create failed", exc_info=True)
+    return applied, monologue_emitted, stored
 
 
 def _record_introspection_event(
-    repo, persona: str, event_type: str, result, applied: list[str], new_turns: int, memory_count: int
+    repo, persona: str, event_type: str, result, applied: list[str], new_turns: int, memory_count: int, stored: int = 0
 ) -> None:
     """brain.introspection(_spontaneous) 記録（メタ: violation 有無・適用内容）。"""
     try:
@@ -664,6 +716,7 @@ def _record_introspection_event(
                     "applied": applied,
                     "new_turns": new_turns,
                     "memory_count": memory_count,
+                    "stored": stored,
                 },
             )
         )

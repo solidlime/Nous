@@ -833,3 +833,59 @@ class TestPromptLanguage:
         for prompt in (_INTROSPECTION_PROMPT, _SPONTANEOUS_PROMPT):
             assert "日本語" in prompt
             assert "必ず日本語で書く" in prompt
+
+
+class TestIntrospectionMemories:
+    """独り言生成時に LLM が自ら記憶を作れる（memories フィールド）。"""
+
+    def _run(self, coro):
+        import asyncio
+
+        return asyncio.new_event_loop().run_until_complete(coro)
+
+    def test_memories_create_memory_with_introspection_tag(self, ctx, sqlite_conn) -> None:
+        base = datetime.now()
+        _insert_turns(sqlite_conn.get_memory_db(), "test", [("user", "u1")], base)
+        engine = _engine_with(
+            _result(memories=[{"content": "新しい好み", "tags": ["preference"], "importance": 0.7}]), ctx
+        )
+        self._run(run_introspection(ctx, _config(), engine, ["m1"]))
+        kwargs = ctx.memory_service.create_memory.call_args.kwargs
+        assert kwargs["content"] == "新しい好み"
+        assert "introspection" in kwargs["tags"]
+        assert kwargs["importance"] == 0.7
+        ev = ctx._session_event_repo.get_by_persona("test", "brain.introspection", 1)[0]
+        assert ev.metadata["stored"] == 1
+
+    def test_no_memories_no_create(self, ctx, sqlite_conn) -> None:
+        base = datetime.now()
+        _insert_turns(sqlite_conn.get_memory_db(), "test", [("user", "u1")], base)
+        engine = _engine_with(_result(), ctx)
+        self._run(run_introspection(ctx, _config(), engine, ["m1"]))
+        assert not ctx.memory_service.create_memory.called
+
+    def test_capped_at_three(self, ctx, sqlite_conn) -> None:
+        base = datetime.now()
+        _insert_turns(sqlite_conn.get_memory_db(), "test", [("user", "u1")], base)
+        items = [{"content": f"事実{i}", "tags": [], "importance": 0.5} for i in range(5)]
+        engine = _engine_with(_result(memories=items), ctx)
+        self._run(run_introspection(ctx, _config(), engine, ["m1"]))
+        assert ctx.memory_service.create_memory.call_count == 3
+        ev = ctx._session_event_repo.get_by_persona("test", "brain.introspection", 1)[0]
+        assert ev.metadata["stored"] == 3
+
+    def test_create_failure_does_not_break_introspection(self, ctx, sqlite_conn) -> None:
+        base = datetime.now()
+        _insert_turns(sqlite_conn.get_memory_db(), "test", [("user", "u1")], base)
+        engine = _engine_with(_result(memories=[{"content": "x", "tags": [], "importance": 0.5}]), ctx)
+        ctx.memory_service.create_memory = AsyncMock(side_effect=Exception("boom"))
+        self._run(run_introspection(ctx, _config(), engine, ["m1"]))  # raise しない
+        ev = ctx._session_event_repo.get_by_persona("test", "brain.introspection", 1)[0]
+        assert ev.metadata["stored"] == 0
+
+    def test_prompts_have_memories_guide(self) -> None:
+        from nous.application.chat.introspection import _INTROSPECTION_PROMPT, _SPONTANEOUS_PROMPT
+
+        for prompt in (_INTROSPECTION_PROMPT, _SPONTANEOUS_PROMPT):
+            assert '"memories"' in prompt
+            assert "最大2件" in prompt
