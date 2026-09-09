@@ -383,8 +383,8 @@ def _parse_memories(raw) -> list[dict]:
             imp = 0.5
         parsed.append(
             {
-                "content": content.strip(),
-                "tags": [str(t) for t in tags],
+                "content": content.strip()[:500],
+                "tags": [str(t) for t in tags if str(t).strip()],
                 "importance": max(0.0, min(1.0, imp)),
             }
         )
@@ -657,6 +657,7 @@ async def _apply_result(
     if result.violation and result.reflection and not _dup_character_drift(ctx, result.reflection):
         try:
             await ctx.memory_service.create_memory(
+                persona=persona,
                 content=result.reflection,
                 importance=0.8,
                 tags=["character_drift", "introspection"],
@@ -688,6 +689,7 @@ async def _apply_result(
     for item in (result.memories or [])[:_MAX_CREATED_MEMORIES]:
         try:
             await ctx.memory_service.create_memory(
+                persona=persona,
                 content=item["content"],
                 tags=[*item.get("tags", []), "introspection"],
                 importance=float(item.get("importance", 0.5)),
