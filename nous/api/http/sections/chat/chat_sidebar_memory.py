@@ -132,14 +132,6 @@ def _render_weights_section() -> str:
                                     <input type="range" id="chat-relevance-weight" class="chat-field-input" min="0" max="1" step="0.05" value="0.4"
                                         data-mirror="chat-relevance-weight-val" data-mirror-format="fixed2" />
                                 </div>
-                                <div>
-                                    <div class="chat-field-label chat-field-label-row">
-                                        <span>RRF K値</span>
-                                        <span id="chat-retrieval-rrf-k-val" class="chat-field-value">5</span>
-                                    </div>
-                                    <input type="range" id="chat-retrieval-rrf-k" class="chat-field-input" min="1" max="100" step="1" value="5"
-                                        data-mirror="chat-retrieval-rrf-k-val" data-mirror-format="raw" />
-                                </div>
                             </div>
                         </details>"""
 
@@ -163,6 +155,7 @@ _BRAIN_HELP = {
     "rif_rho": "想起のたびに、手がかりを共有する競合記憶がわずかに抑制されます（検索誘発性忘却）。",
     "reflection_penalty": "リフレクション系の記憶が検索に引っかかりやすすぎないよう、想起スコアを押し下げる強さ。値が大きいほど思い出しにくくなります（思い出しにくさの踏ん張り）。",
     "reflection_injection_sim": "リフレクションを文脈に注入するときの類似度ゲート。この値より似ていない記憶は注入されません（無関係な思い出しの防止）。",
+    "reflection_injection_margin": "注入候補の選択を、候補集合内の最良値からの差（マージン）でも許容します。小さいほど最良に近い候補だけが注入されます（0 で類似度ゲートのみ）。",
     "separation": "記憶同士のシナプス結合を作る類似度のしきい値。高いほど似た記憶だけが結合し、pattern separation が強まります（将来実装。類似度ソースが未接続のため現在は未使用）。",
     "flash": "シナプス発火イベントを記憶グラフ上で発光表示します。",
     "llm_dedicated": "OFF ではチャット設定と同じ LLM を脳シミュレーターに使います。ON にすると専用の provider / model / API キーを設定できます。",
@@ -332,6 +325,10 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                         <div>
                                             <div class="chat-field-label">リフレクション注入 類似度ゲート {help_("reflection_injection_sim")}</div>
                                             <input type="number" id="chat-brain-reflection-injection-min-similarity" class="chat-field-input" min="0" max="1" step="0.05" value="0.45" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">リフレクション注入 相対マージン {help_("reflection_injection_margin")}</div>
+                                            <input type="number" id="chat-brain-reflection-injection-margin" class="chat-field-input" min="0" max="1" step="0.01" value="0.08" />
                                         </div>
                                     </div>
                                 </details>

@@ -2,7 +2,8 @@
 
 reflection タグ付き記憶は主題不定の抽象文 (importance 高め) で、通常検索に
 無選別混入する。MemGPT archival 分離相当の対処:
-① 検索複合スコアにペナルティ係数 ② 無条件注入にベクトル類似チェック。
+① 検索複合スコアにペナルティ係数 (relevance は絶対コサイン) ② 無条件注入に
+相対閾値フィルタ (max_sim - margin AND floor)。
 """
 
 from __future__ import annotations
@@ -85,6 +86,13 @@ class TestReflectionPenaltyConfig:
         assert SessionConfig(reflection_injection_min_similarity=-0.1).reflection_injection_min_similarity == 0.0
         assert SessionConfig(reflection_injection_min_similarity=1.5).reflection_injection_min_similarity == 1.0
 
+    def test_injection_margin_clamped_0_to_1(self):
+        from nous.domain.session_config import SessionConfig
+
+        assert SessionConfig(reflection_injection_margin=-0.5).reflection_injection_margin == 0.0
+        assert SessionConfig(reflection_injection_margin=2.0).reflection_injection_margin == 1.0
+        assert SessionConfig().reflection_injection_margin == 0.08
+
 
 class TestReflectionRetrievalPenalty:
     @pytest.mark.asyncio
@@ -156,3 +164,121 @@ class TestReflectionInjectionSimilarity:
         section = await _build_context_section(ctx, _state(), turn_ctx)
         assert "related" in section
         assert "unrelated" in section
+
+
+class TestReflectionInjectionMargin:
+    """相対閾値: sim >= (max_sim - margin) AND sim >= floor。
+
+    絶対コサインでは関連 (0.82-0.92) / 無関係 (0.73-0.84) の分布が重なるため、
+    候補集合内の最大値との差で分離する。
+    """
+
+    def _vecs(self) -> dict:
+        return {
+            "ユーザーの発言": np.array([1.0, 0.0]),
+            "best": np.array([0.9, 0.1]),  # cos 0.9
+            "middle": np.array([0.8, 0.2]),  # cos 0.8
+            "weak": np.array([0.5, 0.5]),  # cos 0.5
+        }
+
+    @pytest.mark.asyncio
+    async def test_relative_margin_drops_second_tier(self):
+        """floor は超えるが max-0.08 未満の候補は落とす。"""
+        from nous.application.chat.pipeline.context_loader import _build_context_section
+
+        refs = [_mem("r1", "best"), _mem("r2", "middle"), _mem("r3", "weak")]
+        ctx = _ctx_with_reflections(refs, self._vecs(), ChatConfig(reflection_injection_margin=0.08))
+        turn_ctx = SimpleNamespace(user_message="ユーザーの発言")
+        section = await _build_context_section(ctx, _state(), turn_ctx)
+        assert "best" in section
+        # middle (0.8) は floor 0.45 以上だが max-0.08=0.82 未満 → 落ちる
+        assert "middle" not in section
+        assert "weak" not in section
+
+    @pytest.mark.asyncio
+    async def test_margin_1_ignores_relative_gate(self):
+        """margin=1.0 → 相対ゲート無効、floor のみ効く。"""
+        from nous.application.chat.pipeline.context_loader import _build_context_section
+
+        refs = [_mem("r1", "best"), _mem("r2", "middle"), _mem("r3", "weak")]
+        ctx = _ctx_with_reflections(refs, self._vecs(), ChatConfig(reflection_injection_margin=1.0))
+        turn_ctx = SimpleNamespace(user_message="ユーザーの発言")
+        section = await _build_context_section(ctx, _state(), turn_ctx)
+        assert "best" in section
+        assert "middle" in section
+        assert "weak" in section
+
+    @pytest.mark.asyncio
+    async def test_single_candidate_floor_only(self):
+        """候補1件は相対比較が自明に真 → floor のみ（旧絶対閾値と同一挙動）。"""
+        from nous.application.chat.pipeline.context_loader import _build_context_section
+
+        refs = [_mem("r1", "middle")]
+        ctx = _ctx_with_reflections(refs, self._vecs(), ChatConfig(reflection_injection_margin=0.08))
+        turn_ctx = SimpleNamespace(user_message="ユーザーの発言")
+        section = await _build_context_section(ctx, _state(), turn_ctx)
+        assert "middle" in section  # 0.8 >= floor 0.45 かつ max=自分 → 残る
+
+
+class TestCosineRelevance:
+    """memory_retriever の relevance: RRF → 絶対コサイン類似度。
+
+    旧 RRF (上限≈0.13) では importance+recency 支配で新鮮な無関係事実が
+    常時首位だった。絶対コサインで relevance_w が実質的に効く。
+    """
+
+    @staticmethod
+    def _cos_ctx(results: list[SearchResult], content_vecs: dict[str, object]) -> MagicMock:
+        ctx = _ctx_with(results)
+        ctx._embedding = MagicMock()
+
+        def _encode(text: str, is_query: bool = False):
+            if is_query:
+                return np.array([1.0, 0.0])
+            return content_vecs[text]
+
+        ctx._embedding.encode = MagicMock(side_effect=_encode)
+        return ctx
+
+    @pytest.mark.asyncio
+    async def test_cosine_beats_fresh_importance(self):
+        """関連度高×低importance が 無関係×高importance・新鮮 を上回る。"""
+        from nous.application.chat.pipeline.memory_retriever import _search_memories
+
+        fresh_unrelated = _mem("m1", "無関係トピックの話", importance=1.0)
+        relevant = _mem("m2", "関連する記憶", importance=0.1)
+        ctx = self._cos_ctx(
+            [_result(fresh_unrelated), _result(relevant)],
+            {"無関係トピックの話": np.array([0.0, 1.0]), "関連する記憶": np.array([0.9, 0.1])},
+        )
+        _f, debug, mems = await _search_memories(ctx, "クエリ", None, ChatConfig())
+        # rel: 0.3*1.0 + 0.3*0.1 + 0.4*0.9 = 0.69 > unrelated: 0.3*1.0 + 0.3*1.0 + 0 = 0.6
+        assert mems[0] is relevant
+        assert debug["results"][0]["content"] == "関連する記憶"
+        assert debug["results"][0]["cosine"] == pytest.approx(0.9, abs=1e-3)
+
+    @pytest.mark.asyncio
+    async def test_no_embedding_relevance_zero_fail_open(self):
+        """埋め込み無し → relevance 0.0 で継続（fail-open、rec+imp のみでランク）。"""
+        from nous.application.chat.pipeline.memory_retriever import _search_memories
+
+        mem1 = _mem("m1", "記憶その1", importance=0.9)
+        mem2 = _mem("m2", "記憶その2", importance=0.2)
+        ctx = _ctx_with([_result(mem2), _result(mem1)])
+        ctx._embedding = None
+        _f, debug, mems = await _search_memories(ctx, "クエリ", None, ChatConfig())
+        assert mems[0] is mem1
+        assert debug["results"][0]["cosine"] == 0.0
+
+    @pytest.mark.asyncio
+    async def test_two_query_merge_takes_max(self):
+        """2クエリの relevance は max 統合（加算しない）。"""
+        from nous.application.chat.pipeline.memory_retriever import _search_memories
+
+        mem = _mem("m1", "関連する記憶")
+        ctx = _ctx_with([_result(mem)])
+        ctx._embedding = MagicMock()
+        ctx._embedding.encode = MagicMock(side_effect=lambda text, is_query=False: np.array([1.0, 0.0]))
+        # user_message と last_assistant の両方で cos 0.9 → max 0.9 (0.9+0.9 ではない)
+        _f, debug, _m = await _search_memories(ctx, "クエリ", "前回の応答", ChatConfig())
+        assert debug["results"][0]["cosine"] == pytest.approx(1.0, abs=1e-3)

@@ -37,11 +37,13 @@ class SessionConfig(BaseModel):
     retrieval_recency_weight: float = 0.3
     retrieval_importance_weight: float = 0.3
     retrieval_relevance_weight: float = 0.4
-    retrieval_rrf_k: float = 5.0  # RRF k parameter for memory search relevance scoring
     # リフレクション記憶の無関係想起対策 (MemGPT archival 分離相当):
     # 検索複合スコアの降格係数 (1.0 で無効) と無条件注入のベクトル類似閾値 (0.0 で無効)
     reflection_retrieval_penalty: float = 0.5
     reflection_injection_min_similarity: float = 0.45
+    # 注入候補の相対閾値マージン: sim >= (max_sim - margin) AND sim >= floor
+    # (絶対閾値では関連/無関内省のコサイン分布が重なるため、集合内の相対選択で分離)
+    reflection_injection_margin: float = 0.08
 
     @field_validator("reflection_retrieval_penalty")
     @classmethod
@@ -51,6 +53,11 @@ class SessionConfig(BaseModel):
     @field_validator("reflection_injection_min_similarity")
     @classmethod
     def _clamp_reflection_similarity(cls, v: float) -> float:
+        return max(0.0, min(1.0, v))
+
+    @field_validator("reflection_injection_margin")
+    @classmethod
+    def _clamp_reflection_margin(cls, v: float) -> float:
         return max(0.0, min(1.0, v))
 
     # Voice / TTS settings (TE04)
@@ -214,8 +221,3 @@ class SessionConfig(BaseModel):
     @classmethod
     def _clamp_retrieval_weights(cls, v: float) -> float:
         return normalize_importance(v)
-
-    @field_validator("retrieval_rrf_k")
-    @classmethod
-    def _clamp_retrieval_rrf_k(cls, v: float) -> float:
-        return max(0.1, min(100.0, v))

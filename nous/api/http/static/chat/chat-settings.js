@@ -157,11 +157,6 @@ function applyChatConfig(cfg) {
       ? cfg.retrieval_relevance_weight
       : 0.4,
   );
-  setSlider(
-    "chat-retrieval-rrf-k",
-    "chat-retrieval-rrf-k-val",
-    cfg.retrieval_rrf_k != null ? cfg.retrieval_rrf_k : 5,
-  );
   // Context compression settings
   set("chat-stored-msgs", cfg.max_stored_messages ?? 200);
   set("chat-context-max-tokens", cfg.context_max_tokens ?? "");
@@ -330,6 +325,7 @@ function applyChatConfig(cfg) {
   set("chat-brain-separation-threshold", cfg.brain_link_separation_threshold ?? 0.75);
   set("chat-brain-reflection-retrieval-penalty", cfg.reflection_retrieval_penalty ?? 0.5);
   set("chat-brain-reflection-injection-min-similarity", cfg.reflection_injection_min_similarity ?? 0.45);
+  set("chat-brain-reflection-injection-margin", cfg.reflection_injection_margin ?? 0.08);
   setChecked("chat-brain-graph-flash", cfg.brain_graph_flash_enabled !== false);
   // === Brain dedicated LLM (fields show/hide tracks the toggle; the
   //     change-side wiring lives in core/delegation.js brain-llm-toggle) ===
@@ -475,9 +471,6 @@ async function saveChatConfig() {
     retrieval_relevance_weight: parseFloat(
       document.getElementById("chat-relevance-weight")?.value || "0.4",
     ),
-    retrieval_rrf_k: parseFloat(
-      document.getElementById("chat-retrieval-rrf-k")?.value || "5",
-    ),
     mental_model_enabled: getChecked("chat-mental-model-enabled"),
     mental_model_min_samples: parseInt(
       document.getElementById("chat-mental-model-min-samples")?.value || "3",
@@ -522,6 +515,10 @@ async function saveChatConfig() {
     })(),
     reflection_injection_min_similarity: (() => {
       var v = (document.getElementById("chat-brain-reflection-injection-min-similarity")?.value || "").trim();
+      return v ? parseFloat(v) : undefined;
+    })(),
+    reflection_injection_margin: (() => {
+      var v = (document.getElementById("chat-brain-reflection-injection-margin")?.value || "").trim();
       return v ? parseFloat(v) : undefined;
     })(),
     // brain_link_separation_threshold is dormant (similarity source not wired) — not collected

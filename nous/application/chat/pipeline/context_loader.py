@@ -236,12 +236,8 @@ async def _build_context_section(
             reflection_result = ctx.memory_service.get_by_tags(["reflection"])
             if reflection_result.is_ok and reflection_result.value:
                 query_text = (getattr(turn_ctx, "user_message", "") or "") if turn_ctx else ""
-                threshold = _reflection_similarity_threshold(ctx)
-                insights = [
-                    r.content
-                    for r in reflection_result.value[:3]
-                    if r.content and _reflection_similar(ctx, query_text, r.content, threshold)
-                ]
+                contents = [r.content for r in reflection_result.value if r.content]
+                insights = _select_reflection_insights(ctx, query_text, contents)
                 if insights:
                     sanitized = [_sanitize_text(i) for i in insights if i]
                     if sanitized:
@@ -325,32 +321,58 @@ async def _build_context_section(
 
 
 def _reflection_similarity_threshold(ctx) -> float:
-    """reflection 注入のベクトル類似閾値。未設定/不正値はデフォルト 0.45。"""
+    """reflection 注入のベクトル類似の絶対下限 (floor)。未設定/不正値はデフォルト 0.45。"""
     try:
         return float(getattr(getattr(ctx, "_config", None), "reflection_injection_min_similarity", 0.45))
     except (TypeError, ValueError):
         return 0.45
 
 
-def _reflection_similar(ctx, query: str, content: str, threshold: float) -> bool:
-    """クエリと reflection のベクトル類似が閾値以上か。
+def _reflection_injection_margin(ctx) -> float:
+    """reflection 注入の相対閾値マージン。未設定/不正値はデフォルト 0.08。"""
+    try:
+        return float(getattr(getattr(ctx, "_config", None), "reflection_injection_margin", 0.08))
+    except (TypeError, ValueError):
+        return 0.08
 
-    閾値 0（無効）/ クエリ空 / 埋め込みモデル無し / 失敗時は現行動作（fail-open）。
+
+def _select_reflection_insights(ctx, query: str, contents: list[str]) -> list[str]:
+    """reflection 注入候補を選択する（相対閾値フィルタ）。
+
+    実測コサイン (ruri-v3-30m, is_query=True) では関連 0.8151-0.9242 /
+    無関係 0.7252-0.8409 と分布が重なり絶対閾値で分離できないため、
+    候補集合内の相対選択でフィルタする: sim >= (max_sim - margin) AND sim >= floor。
+
+    設計限界（集合内の相対選択）: 候補全件が互いに類似した無関係な内省文
+    の場合 max_sim も無関係側に張り付くため、最大1件は注入される。
+
+    fail-open ショートサーキット（floor<=0 / 空 query / 埋め込みモデル無し /
+    例外）は埋め込みを一切呼ばず元リストの先頭3件を返す（現行動作）。
     """
+    threshold = _reflection_similarity_threshold(ctx)
     if threshold <= 0.0 or not query.strip():
-        return True
+        return contents[:3]
     embedding = getattr(ctx, "_embedding", None)
     if embedding is None:
-        return True
+        return contents[:3]
     try:
         import numpy as np
 
+        margin = _reflection_injection_margin(ctx)
         q = embedding.encode(query, is_query=True)
-        d = embedding.encode(content)
-        return float(np.dot(q, d)) >= threshold
+        sims = [float(np.dot(q, embedding.encode(c))) for c in contents]
+        logger.debug(
+            "reflection injection sims=%s (floor=%s, margin=%s)",
+            [round(s, 4) for s in sims],
+            threshold,
+            margin,
+        )
+        max_sim = max(sims)
+        kept = [c for c, s in zip(contents, sims, strict=False) if s >= threshold and s >= max_sim - margin]
+        return kept[:3]
     except Exception as e:
         logger.debug("reflection similarity check failed: %s", e)
-        return True
+        return contents[:3]
 
 
 def _classify_gap(elapsed_hours: float) -> str:

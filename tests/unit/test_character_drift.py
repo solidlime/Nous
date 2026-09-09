@@ -258,7 +258,6 @@ class TestDriftRecall:
         config.retrieval_recency_weight = 0.3
         config.retrieval_importance_weight = 0.3
         config.retrieval_relevance_weight = 0.4
-        config.retrieval_rrf_k = 5.0
         await _search_memories(ctx, "こんにちは", None, config)
         query = ctx.search_engine.search.await_args[0][0]
         assert isinstance(query, SearchQuery)

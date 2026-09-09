@@ -61,7 +61,6 @@ async def _search_memories(
     recency_w: float = getattr(config, "retrieval_recency_weight", 0.3)
     importance_w: float = getattr(config, "retrieval_importance_weight", 0.3)
     relevance_w: float = getattr(config, "retrieval_relevance_weight", 0.4)
-    rrf_k: float = getattr(config, "retrieval_rrf_k", 5.0)
     # リフレクション記憶の降格係数 (主題不定の抽象文が通常検索に混入するのを防ぐ)。
     # 1.0 で無効。
     reflection_penalty = float(getattr(config, "reflection_retrieval_penalty", 0.5))
@@ -82,13 +81,11 @@ async def _search_memories(
 
     results = await asyncio.gather(*[_run(q) for q in queries])
 
-    # Collect all candidates with RRF position scores per content
+    # Collect unique candidates by content
     seen: set[str] = set()
     mem_by_content: dict[str, object] = {}
-    rrf_scores: dict[str, float] = {}
-
-    for _rank_idx, result_list in enumerate(results):
-        for pos, item in enumerate(result_list):
+    for result_list in results:
+        for item in result_list:
             if isinstance(item, tuple):
                 mem = item[0]
             elif hasattr(item, "memory"):
@@ -96,22 +93,42 @@ async def _search_memories(
             else:
                 mem = item
             content = getattr(mem, "content", str(mem))
-            rrf_score = 1.0 / (rrf_k + pos + 1)
-            if content in seen:
-                rrf_scores[content] = rrf_scores.get(content, 0.0) + rrf_score
-            else:
+            if content not in seen:
                 seen.add(content)
                 mem_by_content[content] = mem
-                rrf_scores[content] = rrf_score
 
-    # Compute composite score for each unique memory
-    scored: list[tuple[float, object]] = []
+    # relevance = 絶対コサイン類似度 (旧RRFは新鮮記憶支配を招くため廃止)。
+    # 2クエリ間は max で統合 (コサイン値域 [0,1] を超えない)。
+    # 候補過多時は rec+imp 部分で事前ランキングし上位のみエンコード。
+    # 埋め込み取得不能時は relevance=0.0 で継続 (fail-open)。
+    pre: list[tuple[float, str, object]] = []
     for content, mem in mem_by_content.items():
         importance = float(getattr(mem, "importance", 0.5))
         created_at = getattr(mem, "created_at", None)
         recency = _compute_recency_decay(created_at)
-        relevance = rrf_scores.get(content, 0.0)
-        composite = recency_w * recency + importance_w * importance + relevance_w * relevance
+        pre.append((recency_w * recency + importance_w * importance, content, mem))
+    if len(pre) > 30:
+        pre.sort(key=lambda x: x[0], reverse=True)
+        pre = pre[:30]
+
+    cos_scores: dict[str, float] = {content: 0.0 for _, content, _ in pre}
+    embedding = getattr(ctx, "_embedding", None)
+    if embedding is not None and pre:
+        try:
+            import numpy as np
+
+            qvecs = [embedding.encode(q, is_query=True) for q in queries]
+            for _, content, _ in pre:
+                d = embedding.encode(content)
+                cos_scores[content] = max(float(np.dot(qv, d)) for qv in qvecs)
+        except Exception as e:
+            logger.debug("memory relevance cosine failed: %s", e)
+
+    # Compute composite score for each unique memory
+    scored: list[tuple[float, object]] = []
+    for base, content, mem in pre:
+        relevance = cos_scores[content]
+        composite = base + relevance_w * relevance
         if "reflection" in (getattr(mem, "tags", None) or []):
             composite *= reflection_penalty
         scored.append((composite, mem))
@@ -122,18 +139,15 @@ async def _search_memories(
     if not top:
         return "", {"queries": queries, "results": []}, []
 
-    # Debug: RRF score range
-    rrf_values = [rrf_scores.get(getattr(m, "content", str(m)), 0.0) for _, m in scored]
-    if rrf_values:
-        logger.debug(
-            "RRF scores: min=%.4f, max=%.4f, k=%s, top_%d_composite_range=[%.4f, %.4f]",
-            min(rrf_values),
-            max(rrf_values),
-            rrf_k,
-            len(top),
-            top[-1][0],
-            top[0][0],
-        )
+    cos_values = list(cos_scores.values())
+    logger.debug(
+        "cosine relevance: min=%.4f, max=%.4f, top_%d_composite_range=[%.4f, %.4f]",
+        min(cos_values),
+        max(cos_values),
+        len(top),
+        top[-1][0],
+        top[0][0],
+    )
 
     annotator = RecallAnnotator()
     now = datetime.now(tz=UTC)
@@ -166,6 +180,7 @@ async def _search_memories(
             "content": getattr(m, "content", str(m)),
             "importance": round(float(getattr(m, "importance", 0.5)), 2),
             "score": round(score, 4),
+            "cosine": round(cos_scores.get(getattr(m, "content", str(m)), 0.0), 4),
         }
         for score, m in top
     ]

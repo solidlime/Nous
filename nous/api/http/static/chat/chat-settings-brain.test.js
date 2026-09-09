@@ -44,6 +44,7 @@ const BRAIN_NUM_IDS = [
   'chat-brain-separation-threshold',
   'chat-brain-reflection-retrieval-penalty',
   'chat-brain-reflection-injection-min-similarity',
+  'chat-brain-reflection-injection-margin',
   'chat-brain-graph-flash',
 ];
 
@@ -243,6 +244,32 @@ describe('brain simulation settings', () => {
     window.Nous.Chat.settings.apply(savedCfg);
     expect(document.getElementById('chat-brain-monologue').checked).toBe(true);
   });
+
+  it('reflection injection margin: load applies contract default 0.08 and save round-trips it', async () => {
+    window.Nous.Chat.settings.apply({});
+    expect(document.getElementById('chat-brain-reflection-injection-margin').value).toBe('0.08');
+
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    document.getElementById('chat-brain-reflection-injection-margin').value = '0.12';
+    const savedCfg = { reflection_injection_margin: 0.12 };
+    apiStub.mockResolvedValueOnce(savedCfg);
+    await window.Nous.Chat.settings.save();
+    const body = JSON.parse(apiStub.mock.calls[0][1].body);
+    expect(body.reflection_injection_margin).toBe(0.12);
+
+    window.Nous.Chat.settings.apply(savedCfg);
+    expect(document.getElementById('chat-brain-reflection-injection-margin').value).toBe('0.12');
+  });
+
+  it('reflection injection margin: empty input is not sent (merge API keeps stored value)', async () => {
+    window.Nous.Chat.settings.apply({});
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    document.getElementById('chat-brain-reflection-injection-margin').value = '';
+    apiStub.mockResolvedValueOnce({});
+    await window.Nous.Chat.settings.save();
+    const body = JSON.parse(apiStub.mock.calls[0][1].body);
+    expect(body.reflection_injection_margin).toBeUndefined();
+  });
 });
 
 // ------------------------------------------------------------------
@@ -279,6 +306,7 @@ const BRAIN_IDS = [
   'chat-brain-separation-threshold',
   'chat-brain-reflection-retrieval-penalty',
   'chat-brain-reflection-injection-min-similarity',
+  'chat-brain-reflection-injection-margin',
   'chat-brain-graph-flash',
 ];
 
