@@ -299,9 +299,12 @@ async def _build_context_section(
     try:
         equip_result = ctx.equipment_service.get_equipment()
         if equip_result.is_ok:
-            equipped = {k: v for k, v in equip_result.value.items() if v}
-            if equipped:
-                equip_lines = "\n".join(f"  {slot}: {item}" for slot, item in equipped.items())
+            equipment = equip_result.value
+            if equipment:
+                # 未装着スロットも明示する（裸の自覚が装備行動の前提）
+                equip_lines = "\n".join(
+                    f"  {slot}: {item}" if item else f"  {slot}: 未装着" for slot, item in equipment.items()
+                )
                 t3.append(f"あなたの現在の装備:\n{equip_lines}")
     except Exception as e:
         logger.debug("Failed to fetch equipment: %s", e)

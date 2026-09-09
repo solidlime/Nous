@@ -281,3 +281,43 @@ class TestDriftRecall:
     async def test_injection_without_drift(self):
         section = await _build_context_section(_make_drift_ctx([]), _make_state())
         assert "前回の反省" not in section
+
+
+class TestEquipmentContext:
+    """装備コンテキスト: 未装着スロットも注入する（裸の自覚が装備行動の前提）。"""
+
+    def _ctx_with_equipment(self, equipment: dict):
+        ctx = _make_drift_ctx([])
+        ctx.equipment_service.get_equipment = MagicMock(return_value=MagicMock(is_ok=True, value=equipment))
+        return ctx
+
+    @pytest.mark.asyncio
+    async def test_unequipped_slots_shown_as_not_worn(self):
+        from nous.domain.equipment.entities import VALID_SLOTS
+
+        equipment = {s: None for s in VALID_SLOTS}
+        equipment["top"] = "パーカー"
+        section = await _build_context_section(self._ctx_with_equipment(equipment), _make_state())
+        assert "top: パーカー" in section
+        assert "bottom: 未装着" in section
+        # 全8スロット中、装備済み1 + 未装着7
+        assert section.count("未装着") == 7
+
+    @pytest.mark.asyncio
+    async def test_all_empty_still_lists_slots(self):
+        from nous.domain.equipment.entities import VALID_SLOTS
+
+        section = await _build_context_section(self._ctx_with_equipment({s: None for s in VALID_SLOTS}), _make_state())
+        assert "あなたの現在の装備" in section
+        assert section.count("未装着") == len(VALID_SLOTS)
+
+    @pytest.mark.asyncio
+    async def test_every_slot_listed_exactly_once(self):
+        from nous.domain.equipment.entities import VALID_SLOTS
+
+        equipment = {s: ("テスト服" if s == "shoes" else None) for s in VALID_SLOTS}
+        section = await _build_context_section(self._ctx_with_equipment(equipment), _make_state())
+        for slot in VALID_SLOTS:
+            assert slot in section
+        assert section.count("shoes:") == 1
+        assert section.count("top:") == 1
