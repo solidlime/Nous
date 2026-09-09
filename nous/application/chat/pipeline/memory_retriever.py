@@ -62,6 +62,9 @@ async def _search_memories(
     importance_w: float = getattr(config, "retrieval_importance_weight", 0.3)
     relevance_w: float = getattr(config, "retrieval_relevance_weight", 0.4)
     rrf_k: float = getattr(config, "retrieval_rrf_k", 5.0)
+    # リフレクション記憶の降格係数 (主題不定の抽象文が通常検索に混入するのを防ぐ)。
+    # 1.0 で無効。
+    reflection_penalty = float(getattr(config, "reflection_retrieval_penalty", 0.5))
 
     queries = [user_message]
     if last_assistant:
@@ -109,6 +112,8 @@ async def _search_memories(
         recency = _compute_recency_decay(created_at)
         relevance = rrf_scores.get(content, 0.0)
         composite = recency_w * recency + importance_w * importance + relevance_w * relevance
+        if "reflection" in (getattr(mem, "tags", None) or []):
+            composite *= reflection_penalty
         scored.append((composite, mem))
 
     scored.sort(key=lambda x: x[0], reverse=True)

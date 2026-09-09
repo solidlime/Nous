@@ -235,7 +235,13 @@ async def _build_context_section(
         try:
             reflection_result = ctx.memory_service.get_by_tags(["reflection"])
             if reflection_result.is_ok and reflection_result.value:
-                insights = [r.content for r in reflection_result.value[:3] if r.content]
+                query_text = (getattr(turn_ctx, "user_message", "") or "") if turn_ctx else ""
+                threshold = _reflection_similarity_threshold(ctx)
+                insights = [
+                    r.content
+                    for r in reflection_result.value[:3]
+                    if r.content and _reflection_similar(ctx, query_text, r.content, threshold)
+                ]
                 if insights:
                     sanitized = [_sanitize_text(i) for i in insights if i]
                     if sanitized:
@@ -316,6 +322,35 @@ async def _build_context_section(
     if t3:
         result += "\n\n【あなたの記憶と洞察】\n" + "\n".join(t3)
     return result
+
+
+def _reflection_similarity_threshold(ctx) -> float:
+    """reflection 注入のベクトル類似閾値。未設定/不正値はデフォルト 0.45。"""
+    try:
+        return float(getattr(getattr(ctx, "_config", None), "reflection_injection_min_similarity", 0.45))
+    except (TypeError, ValueError):
+        return 0.45
+
+
+def _reflection_similar(ctx, query: str, content: str, threshold: float) -> bool:
+    """クエリと reflection のベクトル類似が閾値以上か。
+
+    閾値 0（無効）/ クエリ空 / 埋め込みモデル無し / 失敗時は現行動作（fail-open）。
+    """
+    if threshold <= 0.0 or not query.strip():
+        return True
+    embedding = getattr(ctx, "_embedding", None)
+    if embedding is None:
+        return True
+    try:
+        import numpy as np
+
+        q = embedding.encode(query, is_query=True)
+        d = embedding.encode(content)
+        return float(np.dot(q, d)) >= threshold
+    except Exception as e:
+        logger.debug("reflection similarity check failed: %s", e)
+        return True
 
 
 def _classify_gap(elapsed_hours: float) -> str:

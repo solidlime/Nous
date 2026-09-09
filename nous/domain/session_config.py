@@ -38,6 +38,20 @@ class SessionConfig(BaseModel):
     retrieval_importance_weight: float = 0.3
     retrieval_relevance_weight: float = 0.4
     retrieval_rrf_k: float = 5.0  # RRF k parameter for memory search relevance scoring
+    # リフレクション記憶の無関係想起対策 (MemGPT archival 分離相当):
+    # 検索複合スコアの降格係数 (1.0 で無効) と無条件注入のベクトル類似閾値 (0.0 で無効)
+    reflection_retrieval_penalty: float = 0.5
+    reflection_injection_min_similarity: float = 0.45
+
+    @field_validator("reflection_retrieval_penalty")
+    @classmethod
+    def _clamp_reflection_penalty(cls, v: float) -> float:
+        return max(0.1, min(1.0, v))
+
+    @field_validator("reflection_injection_min_similarity")
+    @classmethod
+    def _clamp_reflection_similarity(cls, v: float) -> float:
+        return max(0.0, min(1.0, v))
 
     # Voice / TTS settings (TE04)
     voice_enabled: bool = False
