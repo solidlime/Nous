@@ -918,3 +918,283 @@ class TestIntrospectionMemories:
         for prompt in (_INTROSPECTION_PROMPT, _SPONTANEOUS_PROMPT):
             assert '"memories"' in prompt
             assert "最大2件" in prompt
+
+
+# --- 好奇心探索（Task 3）: アイドル時に気になったことを MCP ツールで調べる ---
+
+
+class FakeTool:
+    def __init__(self, name, description="", input_schema=None):
+        self.name = name
+        self.description = description
+        self.input_schema = input_schema or {}
+
+
+class FakePool:
+    """nous.infrastructure.mcp_client.MCPClientPool の差し替え。"""
+
+    instances: list[FakePool] = []
+
+    def __init__(self, server_configs):
+        self.server_configs = server_configs
+        self.calls: list[tuple[str, dict]] = []
+        FakePool.instances.append(self)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return None
+
+    def list_all_tools(self):
+        return [
+            FakeTool("srv__search", "web検索する", {"query": {"type": "string"}}),
+            FakeTool("srv__disabled", "無効化済みツール", {}),
+        ]
+
+    async def call_tool(self, name, args):
+        self.calls.append((name, args))
+        return {"result": "雲は平均して500トンほどの重さがある", "isError": False}
+
+
+class FakeLLMEngine:
+    """_call_llm に台本どおりの返答を返す。"""
+
+    def __init__(self, replies):
+        self._replies = list(replies)
+        self.prompts: list[str] = []
+
+    async def _call_llm(self, prompt):
+        self.prompts.append(prompt)
+        return (self._replies.pop(0) if self._replies else None), None
+
+
+class FakeMemoryService:
+    def __init__(self):
+        self.created: list[dict] = []
+
+    async def create_memory(self, **kw):
+        self.created.append(kw)
+        return SimpleNamespace(is_ok=True)
+
+
+def _explorer_ctx(persona="herta", mem=None):
+    return SimpleNamespace(
+        persona=persona,
+        memory_service=mem or FakeMemoryService(),
+        _session_event_repo=None,
+    )
+
+
+def _patch_env(monkeypatch, enabled=True, servers=None):
+    settings = SimpleNamespace(explorer=SimpleNamespace(enabled=enabled, max_tool_calls=1))
+    monkeypatch.setattr("nous.config.settings.get_settings", lambda: settings)
+    monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", FakePool)
+    return SimpleNamespace(
+        mcp_servers=servers if servers is not None else [{"name": "srv", "transport": "http", "url": "http://x"}],
+        disabled_tools=["srv__disabled"],
+        brain_monologue_enabled=True,
+        brain_spontaneous_enabled=True,
+    )
+
+
+def _spont_result(curiosity="雲ってどのくらい重いのかな"):
+    from nous.application.chat.introspection import IntrospectionResult
+
+    return IntrospectionResult(
+        monologue="静かね…",
+        curiosity=curiosity,
+        emotion={"emotion": "interest", "emotion_intensity": 0.5},
+    )
+
+
+def test_curiosity_skips_when_curiosity_none(monkeypatch):
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    asyncio.run(
+        _run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(curiosity=None), FakeLLMEngine([]))
+    )
+    assert FakePool.instances == []
+    assert wiring_events.snapshot_after(0) == []
+
+
+def test_curiosity_skips_when_disabled(monkeypatch):
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=False)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), FakeLLMEngine([])))
+    assert FakePool.instances == []
+
+
+def test_curiosity_skips_when_monologue_disabled(monkeypatch):
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True)
+    config.brain_monologue_enabled = False
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), FakeLLMEngine([])))
+    assert FakePool.instances == []
+    assert wiring_events.snapshot_after(0) == []
+
+
+def test_curiosity_skips_when_no_servers(monkeypatch):
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, servers=[])
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), FakeLLMEngine([])))
+    assert wiring_events.snapshot_after(0) == []
+
+
+def test_curiosity_llm_returns_null(monkeypatch):
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    eng = FakeLLMEngine([json.dumps({"tool_name": None})])
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
+    assert FakePool.instances[0].calls == []
+    assert wiring_events.snapshot_after(0) == []
+
+
+def test_curiosity_disabled_tool_not_in_prompt(monkeypatch):
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    eng = FakeLLMEngine([json.dumps({"tool_name": None})])
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
+    assert eng.prompts and "srv__disabled" not in eng.prompts[0]
+    assert "srv__search" in eng.prompts[0]
+
+
+def test_curiosity_select_unknown_tool_is_rejected(monkeypatch):
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    eng = FakeLLMEngine([json.dumps({"tool_name": "srv__hallucinated", "args": {}})])
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
+    assert FakePool.instances[0].calls == []
+    assert wiring_events.snapshot_after(0) == []
+
+
+def test_curiosity_happy_path(monkeypatch):
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        [
+            json.dumps({"tool_name": "srv__search", "args": {"query": "雲の重さ"}}),
+            "調べたら、雲は平均500トンくらいあるんだって。ふうん…すごいわね",
+        ]
+    )
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    pool = FakePool.instances[0]
+    assert pool.calls == [("srv__search", {"query": "雲の重さ"})]
+    assert len(mem.created) == 1
+    assert "exploration" in mem.created[0]["tags"]
+    assert mem.created[0]["importance"] == 0.4
+    events = wiring_events.snapshot_after(0)
+    assert len(events) == 1
+    assert events[0]["kind"] == "monologue"
+    assert events[0]["meta"]["persona"] == "herta"
+    assert "500トン" in events[0]["meta"]["text"]
+
+
+def test_curiosity_tool_error_swallows(monkeypatch):
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    class ErrPool(FakePool):
+        async def call_tool(self, name, args):
+            return {"error": "connection refused"}
+
+    monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", ErrPool)
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine([json.dumps({"tool_name": "srv__search", "args": {"query": "x"}})])
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    assert mem.created == []
+    assert wiring_events.snapshot_after(0) == []
+
+
+class FakeSpontEngine(FakeLLMEngine):
+    """run_spontaneous 用: generate_spontaneous が固定結果を返り、探索用 _call_llm も持つ。"""
+
+    def __init__(self, result, replies):
+        super().__init__(replies)
+        self._result = result
+
+    async def generate_spontaneous(self, persona, system_prompt, memory_texts, current_state):
+        return self._result
+
+
+def test_spontaneous_monologue_survives_pool_crash(monkeypatch):
+    """プール構築が死んでも本体独り言の emit とイベント記録は生きる。"""
+    from nous.application.chat.introspection import run_spontaneous
+
+    config = _patch_env(monkeypatch, enabled=True)
+
+    class BoomPool(FakePool):
+        def __init__(self, *a, **kw):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", BoomPool)
+
+    class FakeRepo:
+        def __init__(self):
+            self.inserted = []
+
+        def insert(self, ev):
+            self.inserted.append(ev)
+
+    mem = FakeMemoryService()
+    ctx = _explorer_ctx(mem=mem)
+    ctx._session_event_repo = FakeRepo()
+    ctx.persona_service = SimpleNamespace(
+        update_emotion=lambda *a, **kw: None,
+        update_physical_state=lambda *a, **kw: None,
+        record_body_state=lambda *a, **kw: None,
+    )
+    ctx.memory_service.get_recent = lambda **kw: SimpleNamespace(is_ok=False, value=None)
+    wiring_events.clear()
+    import asyncio
+
+    eng = FakeSpontEngine(_spont_result(curiosity="雲の重さ"), [json.dumps({"monologue": "独り言だよ"})])
+    asyncio.run(run_spontaneous(ctx, config, eng, 300.0))
+    events = wiring_events.snapshot_after(0)
+    assert len(events) == 1  # 本体独り言のみ。探索は BoomPool で静かに死ぬ
+    assert "静かね" in events[0]["meta"]["text"]

@@ -599,6 +599,12 @@ async def run_spontaneous(
 
     applied, monologue_emitted, stored = await _apply_result(ctx, config, repo, persona, result)
 
+    # 好奇心探索: 本体独り言 emit 済みの後に走る後処理。どんな失敗でも worker を止めない。
+    try:
+        await _run_curiosity_exploration(ctx, config, persona, result, engine)
+    except Exception:
+        logger.info("introspection: curiosity exploration crashed", exc_info=True)
+
     if result is not None:
         logger.info(
             "introspection spontaneous ok: applied=%s monologue=%s memory_count=%d",
@@ -737,3 +743,148 @@ def _record_introspection_event(
         )
     except Exception:
         logger.debug("introspection: event insert failed", exc_info=True)
+
+
+_EXPLORATION_RESULT_MAX_CHARS = 2000
+_EXPLORATION_SUMMARY_MAX_CHARS = 500
+
+
+async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None, persona: str, result, engine) -> None:
+    """curiosity 非null かつ explorer.enabled のとき、MCP ツールで1回調べて記憶＋独り言バブル。
+
+    呼び出し側は try/except 済みだが、内部も全段ベストエフォート。
+    """
+    if result is None or not getattr(result, "curiosity", None):
+        return
+    # 本体独り言がオフなら探索もしない（brain_monologue_enabled 尊重・コスト節約）。
+    if not getattr(config, "brain_monologue_enabled", False):
+        return
+    try:
+        from nous.config.settings import get_settings
+
+        explorer = getattr(get_settings(), "explorer", None)
+        if explorer is None or not getattr(explorer, "enabled", False):
+            return
+    except Exception:
+        logger.debug("introspection: explorer settings unavailable", exc_info=True)
+        return
+
+    curiosity = str(result.curiosity)[:500]
+    try:
+        from nous.infrastructure.mcp_client import MCPClientPool
+
+        async with MCPClientPool(list(getattr(config, "mcp_servers", None) or [])) as pool:
+            disabled = set(getattr(config, "disabled_tools", None) or [])
+            tools = [t for t in pool.list_all_tools() if t.name not in disabled]
+            if not tools:
+                logger.info("introspection: curiosity — no MCP tools available")
+                return
+            call = await _select_tool(engine, curiosity, tools)
+            if not call:
+                logger.info("introspection: curiosity — no tool selected")
+                return
+            tool_result = await pool.call_tool(call["tool_name"], call.get("args") or {})
+            if "error" in tool_result or tool_result.get("isError"):
+                logger.info("introspection: curiosity — tool call errored: %s", tool_result)
+                return
+    except Exception:
+        logger.info("introspection: curiosity select/call failed", exc_info=True)
+        return
+
+    try:
+        await _summarize_and_record(ctx, engine, persona, curiosity, call["tool_name"], tool_result)
+    except Exception:
+        logger.info("introspection: curiosity summarize failed", exc_info=True)
+
+
+async def _select_tool(engine, curiosity: str, tools: list) -> dict | None:
+    """MCP ツール一覧＋curiosity から実行すべきツールを LLM 1回で判断する。
+
+    返り値: {"tool_name": str, "args": dict}。適合なし/判断失敗は None。
+    """
+    catalog = "\n".join(f"- {t.name}: {(t.description or '')[:200]} | args: {_json_schema_preview(t)}" for t in tools)
+    prompt = (
+        "あなたは静かな時間に気になったことを、登録済みのMCPツールで自分で調べる。\n"
+        f"気になっていること:\n{curiosity}\n\n"
+        f"使えるツール:\n{catalog}\n\n"
+        '調べる価値があり実行できるツールがあれば {"tool_name": "<候補の名前>", '
+        '"args": {<input_schemaに沿った引数>}} の JSON を、それ以外は null だけを返せ。'
+        "JSON のみで、前置きは不要。"
+    )
+    try:
+        text, _usage = await engine._call_llm(prompt)
+    except Exception:
+        logger.debug("introspection: tool select LLM failed", exc_info=True)
+        return None
+    if not text:
+        return None
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        cleaned = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        logger.debug("introspection: tool select parse failed: %s", text[:200])
+        return None
+    if not isinstance(data, dict):
+        return None
+    name = data.get("tool_name")
+    valid = {t.name for t in tools}
+    if not isinstance(name, str) or name not in valid:
+        return None
+    args = data.get("args")
+    return {"tool_name": name, "args": args if isinstance(args, dict) else {}}
+
+
+def _json_schema_preview(tool) -> str:
+    try:
+        return json.dumps(tool.input_schema or {}, ensure_ascii=False)[:300]
+    except (TypeError, ValueError):
+        return "{}"
+
+
+async def _summarize_and_record(
+    ctx: AppContext, engine, persona: str, curiosity: str, tool_name: str, tool_result: dict
+) -> None:
+    """ツール結果を一人称で要約し、記憶に保存して本体独り言の後の別バブルとして emit。"""
+    result_text = str(tool_result.get("result") or "")[:_EXPLORATION_RESULT_MAX_CHARS] or "(空の結果)"
+    prompt = (
+        "静かな時間に気になって調べたことを、あなたらしい一人称の独り言にして。\n"
+        f"気になっていたこと: {curiosity}\n"
+        f"使ったツール: {tool_name}\n"
+        f"結果:\n{result_text}\n\n"
+        "わかったことを3文以内で。「調べたら〜だった」の調子で。"
+        "ツール名や「結果」という単語は出さない。"
+    )
+    try:
+        text, _usage = await engine._call_llm(prompt)
+    except Exception:
+        logger.info("introspection: curiosity summary LLM failed", exc_info=True)
+        return
+    if not text or not text.strip():
+        return
+    summary = text.strip()[:_EXPLORATION_SUMMARY_MAX_CHARS]
+
+    try:
+        await ctx.memory_service.create_memory(
+            persona=persona,
+            content=summary,
+            importance=0.4,
+            tags=["exploration", "introspection"],
+            source_context="introspection",
+        )
+    except Exception:
+        logger.debug("introspection: exploration memory failed", exc_info=True)
+
+    try:
+        wiring_events.emit(
+            "monologue",
+            meta={
+                "persona": persona,
+                "text": summary,
+                "timestamp": get_now().isoformat(),
+            },
+        )
+    except Exception:
+        logger.debug("introspection: exploration emit failed", exc_info=True)
