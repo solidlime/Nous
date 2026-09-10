@@ -253,6 +253,13 @@ class PluginConfig(BaseModel):
     Set ``NOUS_PLUGIN__API_KEY=<strong_key>``."""
 
 
+class ExplorerConfig(BaseModel):
+    """アイドル時好奇心探索（NOUS_EXPLORER__ENABLED 等）。"""
+
+    enabled: bool = False
+    max_tool_calls: int = 1
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -286,6 +293,7 @@ class Settings(BaseSettings):
     qdrant: QdrantConfig = QdrantConfig()
     forgetting: ForgettingConfig = ForgettingConfig()
     memory_enrichment: MemoryEnrichmentConfig = MemoryEnrichmentConfig()
+    explorer: ExplorerConfig = Field(default_factory=ExplorerConfig)
     cors: CorsConfig = CorsConfig()
     irodori: IrodoriConfig = Field(default_factory=IrodoriConfig)
     timezone: str = "Asia/Tokyo"
