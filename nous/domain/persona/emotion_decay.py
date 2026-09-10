@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from nous.domain.persona.decay import compute_exponential_decay
+from nous.domain.shared.result import Failure
 
 if TYPE_CHECKING:
     from nous.domain.persona.entities import PersonaState
@@ -22,7 +23,9 @@ logger = logging.getLogger(__name__)
 # DOI 10.1037/a0016570) は「記憶の情動荷重」構成概念につき現在状態減衰に混入させない。
 # 再付与時の半減期リセットは意図的仕様（再トリガー=新エピソード開始、Verduyn のエピソード概念準拠）。
 # clamp は不採用。LLM 側の過剰再付与は減衰の責務外。
-# ⚠ envy/contempt は反芻仮説の暫定値、love は medium 仮置き——観察後に再校正。
+# ⚠ envy/contempt は暫定値 (long 48h, 再校正 2026-09-10 維持判断)。反芻仮説だが、
+#   V&L2015 測定値の同族感情 hatred=60h (sadness=120h, joy=35h) が long 帯を支持。
+#   medium 格下げの直接証拠なし。再校正トリガー: 反芻(再付与頻度)機構実装時——未到達。
 _EMOTION_CATEGORY: dict[str, str] = {
     # brief: V&L2015 最短群 + Scherer1994 最下位
     "surprise": "brief",
@@ -178,25 +181,26 @@ async def apply_emotion_decay_if_needed(
 
     try:
         result = persona_service.update_emotion(persona, new_emotion, new_intensity, context="time_decay")
-        if result.is_ok:
-            decay_note = " (high intensity, slow decay)" if current_intensity >= 0.7 else ""
-            logger.info(
-                "EmotionDecay: %s(%.2f)→%s(%.2f) — faded over %.1fh%s",
-                state.emotion,
-                current_intensity,
-                new_emotion,
-                new_intensity,
-                elapsed_hours,
-                decay_note,
-            )
-            return EmotionDecayResult(
-                before_emotion=state.emotion,
-                before_intensity=current_intensity,
-                after_emotion=new_emotion,
-                after_intensity=new_intensity,
-                elapsed_hours=elapsed_hours,
-            )
-        logger.warning("EmotionDecay: update_emotion failed: %s", result.error)
+        if isinstance(result, Failure):
+            logger.warning("EmotionDecay: update_emotion failed: %s", result.error)
+            return None
+        decay_note = " (high intensity, slow decay)" if current_intensity >= 0.7 else ""
+        logger.info(
+            "EmotionDecay: %s(%.2f)→%s(%.2f) — faded over %.1fh%s",
+            state.emotion,
+            current_intensity,
+            new_emotion,
+            new_intensity,
+            elapsed_hours,
+            decay_note,
+        )
+        return EmotionDecayResult(
+            before_emotion=state.emotion,
+            before_intensity=current_intensity,
+            after_emotion=new_emotion,
+            after_intensity=new_intensity,
+            elapsed_hours=elapsed_hours,
+        )
     except Exception as e:
         logger.warning("EmotionDecay: unexpected error: %s", e)
     return None

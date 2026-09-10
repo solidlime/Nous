@@ -128,6 +128,8 @@ class TestResolveHalfLife:
         assert resolve_half_life("sadness", None) == 48.0  # long
         assert resolve_half_life("grief", None) == 48.0  # long
         assert resolve_half_life("loneliness", None) == 48.0  # long
+        assert resolve_half_life("envy", None) == 48.0  # long (暫定・反芻仮説)
+        assert resolve_half_life("contempt", None) == 48.0  # long (暫定・反芻仮説)
 
     def test_neutral_and_unknown_fall_back_to_24(self) -> None:
         assert resolve_half_life("neutral", None) == 24.0

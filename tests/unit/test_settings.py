@@ -43,7 +43,6 @@ class TestDefaultValues:
         assert cfg.enabled is True
         assert cfg.decay_interval_seconds == 3600
         assert cfg.min_strength == 0.005
-        assert cfg.emotion_half_life_hours == 24.0
 
     def test_irodori_defaults(self):
         cfg = IrodoriConfig()

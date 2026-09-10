@@ -89,8 +89,6 @@ class ForgettingConfig(BaseModel):
     enabled: bool = True
     decay_interval_seconds: int = 3600
     min_strength: float = 0.005
-    emotion_half_life_hours: float = 24.0
-    """Base half-life for emotion decay. Effective half-life = base * max(0.3, intensity)."""
 
 
 class MemoryEnrichmentConfig(BaseModel):
