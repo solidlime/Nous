@@ -393,7 +393,11 @@ class TestRunIntrospection:
 
         fires = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "monologue"]
         assert len(fires) == 1
-        assert fires[0]["meta"] == {"persona": "test", "text": "ふふ、ちゃんと返せた。"}
+        meta = fires[0]["meta"]
+        assert meta["persona"] == "test"
+        assert meta["text"] == "ふふ、ちゃんと返せた。"
+        # ライブ配信に ISO timestamp を同梱（フロントの時系列スロット用）
+        datetime.fromisoformat(meta["timestamp"])
 
     def test_skips_when_no_new_turns(self, ctx) -> None:
         engine = _engine_with(_result(), ctx)

@@ -667,6 +667,7 @@ async def _apply_result(
         except Exception:
             logger.debug("introspection: reflection memory failed", exc_info=True)
     if result.monologue and getattr(config, "brain_monologue_enabled", False):
+        now = get_now()
         try:
             repo.insert(
                 SessionEvent(
@@ -674,14 +675,22 @@ async def _apply_result(
                     persona=persona,
                     event_type="brain.monologue",
                     summary=result.monologue,
-                    timestamp=get_now(),
+                    timestamp=now,
                     metadata=None,
                 )
             )
         except Exception:
             logger.debug("introspection: monologue event insert failed", exc_info=True)
         try:
-            wiring_events.emit("monologue", meta={"persona": persona, "text": result.monologue})
+            # timestamp: フロントがライブ独り言を正しい時系列位置へスロットするため
+            wiring_events.emit(
+                "monologue",
+                meta={
+                    "persona": persona,
+                    "text": result.monologue,
+                    "timestamp": now.isoformat(),
+                },
+            )
             monologue_emitted = True
         except Exception:
             logger.debug("introspection: monologue wiring emit failed", exc_info=True)

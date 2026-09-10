@@ -116,6 +116,7 @@ class SessionManager:
                         "role": msg["role"],
                         "content": msg["content"],
                         "time": time_label,
+                        "ts": ts_str,
                     }
                     if msg.get("tool_calls"):
                         fixed_tc = []
@@ -155,6 +156,7 @@ class SessionManager:
                         "role": node["role"],
                         "content": node["content"],
                         "time": time_label,
+                        "ts": node.get("created_at", ""),
                         "id": node["id"],
                     }
                     if node.get("tool_calls"):
