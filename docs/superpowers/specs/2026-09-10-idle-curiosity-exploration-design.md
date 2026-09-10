@@ -16,8 +16,10 @@
 - `ReflectionEngine` / `ConsolidationWorker` — 洞察の記憶化・gist 統合
 
 探索に使う既存機構:
-- `ToolSearchEngine.search`（nous/infrastructure/tools/tool_search_engine.py:32）— Qdrant セマンティック＋キーワードのハイブリッドでツール候補を返す（chat service.py が既に利用）
+- `MCPClientPool.list_all_tools()`（nous/infrastructure/mcp_client/pool.py:44）— 接続済みサーバーの全 MCP ツールを ToolDefinition（name/description/input_schema）で返す
 - `MCPClientPool.call_tool`（nous/infrastructure/mcp_client/pool.py:57）— `{server_name}__{tool_name}` でルーティング、タイムアウト 30s
+
+**訂正（実装計画時に発見）**: 当初案の `ToolSearchEngine` は使わない。`ToolDefinition.defer_loading` のデフォルトは False（nous/infrastructure/llm/base.py:28）で、MCP ツール生成時に指定されないため **MCP ツールは Qdrant の tool_definitions コレクションに索引されない**（`_ensure_tool_index` は deferred ツールのみ索引、nous/application/chat/service.py:69）。代わりに `pool.list_all_tools()` の一覧をそのまま選択プロンプトに載せる（ツール数は数十程度で、候補絞り込み＋引数生成が同一 LLM 呼出で済む。Qdrant/embedding 依存も消える）。無効ツールの除外は `config.disabled_tools`（nous/domain/tool_config.py:17）。
 
 ## 設計
 
@@ -38,9 +40,9 @@
 - `explorer.enabled` が true（settings）
 
 実行内容:
-1. `ToolSearchEngine.search(curiosity, top_k=5)` で MCP ツール候補を取得。対象はペルソナの無効ツール（disabledTools）を除外した集合
-2. LLM 1回: 候補＋curiosity を渡し、`{"tool_name": "...", "args": {...}}` または `null`（適合ツールなし）を判定させる — これが「MCP ツールの自動判断」
-3. `null` でなければ `MCPClientPool.call_tool(tool_name, args)` を実行（≤ `explorer.max_tool_calls` 回、デフォルト1）
+1. `MCPClientPool(config.mcp_servers)` を `async with` で開き、`pool.list_all_tools()` から無効ツール（`config.disabled_tools`）を除外した候補一覧を取得。空ならスキップ
+2. LLM 1回: 候補一覧（name/description/input_schema）＋curiosity を渡し、`{"tool_name": "...", "args": {...}}` または `null`（適合ツールなし）を判定させる — これが「MCP ツールの自動判断」。`tool_name` は候補一覧に存在する名前に限定（ハルシネーション排除）
+3. `null` でなければ `MCPClientPool.call_tool(tool_name, args)` を実行（≤ `explorer.max_tool_calls` 回、デフォルト1）。エラー応答（`error` キー or `isError`）なら要約・記憶に進まず静かに終了
 4. 結果を LLM 1回で一人称・独り言調に要約
 5. 要約を `memory_create`（semantic、tags に `exploration`、importance 0.4）
 6. 既存 emit 経路で、独り言本体の後に**別バブル**として発行（`brain_monologue_enabled` 尊重）——「気になった→調べた→ぽつり」の連なりで見える
