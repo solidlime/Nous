@@ -65,6 +65,6 @@ class ToolConfig(BaseModel):
     image_caption_base_url: str = ""
 
     # Emotion decay config
-    emotion_decay_half_life_hours: float = 24.0
+    emotion_decay_half_life_hours: float | None = None
     emotion_decay_threshold: float = 0.005
     emotion_neutral_threshold: float = 0.01
