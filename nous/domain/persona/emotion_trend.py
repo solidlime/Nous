@@ -9,7 +9,11 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from nous.domain.shared.time_utils import get_now
+
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from nous.domain.persona.entities import EmotionRecord
 
 _MAX_CONTEXT_CHARS = 40
@@ -17,6 +21,18 @@ _MAX_CONTEXT_CHARS = 40
 
 def _truncate(s: str) -> str:
     return s[:_MAX_CONTEXT_CHARS] + "…" if len(s) > _MAX_CONTEXT_CHARS else s
+
+
+def _format_elapsed(hours: float) -> str:
+    """_tools_helpers._format_emotion_decay_note と同一仕様の経過時刻表記。
+
+    重複はこの2箇所のみ。層を跨ぐ統合はしない。
+    """
+    if hours >= 24:
+        return f"{hours / 24:.0f}日"
+    if hours >= 1:
+        return f"{hours:.0f}時間"
+    return f"{hours * 60:.0f}分"
 
 
 def _intensity_label(intensity: float) -> str:
@@ -61,8 +77,8 @@ def build_emotion_trend_narrative(
 
     空文字列ならセクション省略。3タイプ: 移行 / 減衰 / 一様。
     """
-    pts: list[tuple[str, float, str | None]] = [
-        (r.emotion, r.intensity, r.context) for r in records if r.context != "time_decay"
+    pts: list[tuple[str, float, str | None, datetime]] = [
+        (r.emotion, r.intensity, r.context, r.timestamp) for r in records if r.context != "time_decay"
     ]
     if len(pts) < 2:
         return ""
@@ -72,16 +88,23 @@ def build_emotion_trend_narrative(
     if pts[-1][0] == current_emotion:
         last_ctx = pts[-1][2]
         pts = pts[:-1]
-    pts.append((current_emotion, current_intensity, last_ctx))
+    pts.append((current_emotion, current_intensity, last_ctx, get_now()))
 
     prev, cur = pts[-2], pts[-1]
     prev_label = _intensity_label(prev[1])
     cur_label = _intensity_label(cur[1])
 
+    if prev[0] == "neutral" and cur[0] != "neutral":
+        # prev=neutral は update_context の normalize（calm→neutral 等）で到達可能。
+        # 移行テンプレートの「まず neutralを感じ」破文を避ける neutral 起点テンプレート。
+        return f"感情の流れ: 静かに落ち着いていたが、{_point(cur[0], cur[2])}へ移った。いまは {cur[0]}（{cur_label}）。"
+
     if prev[0] != cur[0] and (cur[0] == "neutral" or (cur_label == "弱い" and prev_label != "弱い")):
+        elapsed_hours = max(0.0, (cur[3] - prev[3]).total_seconds() / 3600.0)
+        t = _format_elapsed(elapsed_hours)
         if cur[0] == "neutral":
-            return f"感情の流れ: {_point(prev[0], prev[2])}を感じていたが、数時間のうちに静かに薄れて落ち着いた。いまは落ち着いている。"
-        return f"感情の流れ: {_point(prev[0], prev[2])}を感じていたが、数時間のうちに静かに薄れて落ち着いた。いまは {cur[0]}（{cur_label}）。"
+            return f"感情の流れ: {_point(prev[0], prev[2])}を感じていたが、{t}のうちに静かに薄れて落ち着いた。いまは落ち着いている。"
+        return f"感情の流れ: {_point(prev[0], prev[2])}を感じていたが、{t}のうちに静かに薄れて落ち着いた。いまは {cur[0]}（{cur_label}）。"
 
     if prev[0] == cur[0]:
         if prev_label == cur_label:

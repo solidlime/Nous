@@ -47,6 +47,7 @@ _EMOTION_CATEGORY: dict[str, str] = {
     "love": "medium",
     # long: V&L2015 最長 + 反芻駆動群
     "sadness": "long",
+    "grief": "long",  # V&L2015 sadness 同群——悲嘆は sadness と同列の最長群
     "loneliness": "long",
     "anxiety": "long",
     "guilt": "long",

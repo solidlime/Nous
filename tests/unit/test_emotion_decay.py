@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from nous.domain.persona.emotion_decay import compute_emotion_decay, resolve_half_life
+
+if TYPE_CHECKING:
+    from nous.domain.persona.service import PersonaService
 
 
 class TestComputeEmotionDecay:
@@ -121,6 +126,7 @@ class TestResolveHalfLife:
         assert resolve_half_life("contentment", None) == 24.0  # medium
         assert resolve_half_life("love", None) == 24.0  # medium
         assert resolve_half_life("sadness", None) == 48.0  # long
+        assert resolve_half_life("grief", None) == 48.0  # long
         assert resolve_half_life("loneliness", None) == 48.0  # long
 
     def test_neutral_and_unknown_fall_back_to_24(self) -> None:
@@ -148,8 +154,41 @@ class TestBehaviorChange:
 
     def test_apply_if_needed_passes_none_through_to_table(self) -> None:
         """apply_emotion_decay_if_needed は None を compute に素通ししカテゴリテーブルが効く。"""
-        _, fear = compute_emotion_decay(intensity=0.8, elapsed_hours=24.0, emotion="fear")
-        _, sadness = compute_emotion_decay(intensity=0.8, elapsed_hours=24.0, emotion="sadness")
-        assert fear < 0.15
-        assert sadness > 0.45
-        assert fear < sadness
+        from datetime import timedelta
+        from types import SimpleNamespace
+
+        from nous.domain.persona.emotion_decay import apply_emotion_decay_if_needed
+        from nous.domain.persona.entities import PersonaState
+        from nous.domain.shared.time_utils import get_now
+
+        async def run(state: PersonaState) -> list[tuple[str, float]]:
+            from typing import cast
+
+            calls: list[tuple[str, float]] = []
+
+            class FakeService:
+                def update_emotion(self, persona: str, emotion: str, intensity: float, context: str = "") -> object:
+                    calls.append((emotion, intensity))
+                    return SimpleNamespace(is_ok=True, error=None)
+
+            result = await apply_emotion_decay_if_needed(cast("PersonaService", FakeService()), "heruta", state)
+            assert result is not None
+            return calls
+
+        def asyncio_run(coro: object) -> list[tuple[str, float]]:
+            import asyncio
+
+            return asyncio.run(coro)  # type: ignore[arg-type]
+
+        # fear: テーブル 9.6h(brief) で大幅減衰。sadness: 48h(long) で微減。
+        for emotion, low_bound, high_bound in (("fear", 0.0, 0.15), ("sadness", 0.45, 0.8)):
+            state = PersonaState(
+                persona="heruta",
+                emotion=emotion,
+                emotion_intensity=0.8,
+                last_conversation_time=get_now() - timedelta(hours=24.0),
+            )
+            calls = asyncio_run(run(state))
+            assert len(calls) == 1
+            assert calls[0][0] == emotion
+            assert low_bound < calls[0][1] < high_bound

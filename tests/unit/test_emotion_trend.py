@@ -39,6 +39,31 @@ class TestBuildEmotionTrendNarrative:
         out = build_emotion_trend_narrative(records, "neutral", 0.0)
         assert "いまは落ち着いている。" in out
 
+    def test_transition_from_neutral(self) -> None:
+        """prev=neutral（calm 等の normalize 到達点）からの移行は破文にならない。"""
+        records = [_rec("neutral", 0.0, None, hours_ago=4.0), _rec("relief", 0.4, "無事の連絡")]
+        out = build_emotion_trend_narrative(records, "relief", 0.45)
+        assert out.startswith("感情の流れ: ")
+        assert "静かに落ち着いていたが" in out
+        assert "relief（無事の連絡）へ移った" in out
+        assert "いまは relief（やや強い）。" in out
+        assert "neutralを感じ" not in out
+
+    def test_neutral_to_neutral_is_empty(self) -> None:
+        records = [_rec("neutral", 0.0, None, hours_ago=4.0), _rec("neutral", 0.0, None)]
+        assert build_emotion_trend_narrative(records, "neutral", 0.0) == ""
+
+    def test_fade_elapsed_time_format(self) -> None:
+        """減衰文の経過時刻は timestamp 計算（≥24h→日 / ≥1h→時間 / else→分）。"""
+        out_day = build_emotion_trend_narrative(
+            [_rec("joy", 0.8, None, hours_ago=48.0), _rec("neutral", 0.0, None)], "neutral", 0.0
+        )
+        assert "2日のうちに" in out_day
+        out_min = build_emotion_trend_narrative(
+            [_rec("joy", 0.8, None, hours_ago=0.5), _rec("neutral", 0.0, None)], "neutral", 0.0
+        )
+        assert "30分のうちに" in out_min
+
     def test_uniform_deepening(self) -> None:
         records = [_rec("loneliness", 0.5, "返信待ち", hours_ago=4.0), _rec("loneliness", 0.5, "返信待ち")]
         out = build_emotion_trend_narrative(records, "loneliness", 0.8)
