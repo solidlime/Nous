@@ -968,17 +968,20 @@ function appendMonologueBubble(text, ts) {
       N.Components.memModal.openMemory({ content: text, tags: ["monologue"] });
     }
   });
+  // Timestamp rides in the summary, not the details body: the bubble
+  // renders collapsed (the modal is the canonical reader), so a label
+  // inside the body would stay display:none and never be seen.
+  if (!isNaN(_tsEpoch(ts))) {
+    var timeSpan = document.createElement("span");
+    timeSpan.className = "chat-time chat-monologue-time";
+    timeSpan.textContent = fmtStamp(ts);
+    summary.appendChild(timeSpan);
+  }
   var body = document.createElement("div");
   body.className = "chat-monologue-text";
   body.textContent = text; // CSP-safe: textContent, never parsed as HTML
   bubble.appendChild(summary);
   bubble.appendChild(body);
-  if (!isNaN(_tsEpoch(ts))) {
-    var timeDiv = document.createElement("div");
-    timeDiv.className = "chat-time chat-monologue-time";
-    timeDiv.textContent = fmtStamp(ts);
-    bubble.appendChild(timeDiv);
-  }
   // Restored whispers carry their ISO timestamp — slot them between
   // messages in conversation order instead of the tail. Live whispers
   // (no parseable timestamp) keep append-at-end, which IS their order.

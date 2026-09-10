@@ -414,8 +414,9 @@ html.light .chat-thinking-body {
   word-break: break-word;
 }
 .chat-monologue-time {
-  padding: 0 10px 6px;
   font-style: normal;
+  margin-left: 8px;
+  opacity: 0.75;
 }
 .chat-typing {
   display: flex;

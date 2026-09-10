@@ -147,6 +147,9 @@ describe('monologue bubble rendering', () => {
     const b = bubbles()[0];
     expect(b.dataset.ts).toBe('2026-09-09T10:30:00');
     expect(b.querySelector('.chat-monologue-time').textContent).toMatch(/2026\/09\/09 10:30/);
+    // The bubble renders collapsed — the label must live in the summary,
+    // not the hidden details body, or the timestamp is never visible.
+    expect(b.querySelector('summary').contains(b.querySelector('.chat-monologue-time'))).toBe(true);
   });
 });
 
