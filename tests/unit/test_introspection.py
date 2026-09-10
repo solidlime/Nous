@@ -361,6 +361,31 @@ class TestParseLiteralNull:
         assert r.monologue == "ふふ、返せた。"
 
 
+class TestParseCuriosity:
+    """静かな時間に気になって調べたいこと（curiosity）のパース。"""
+
+    def test_parse_result_curiosity(self) -> None:
+        from nous.application.chat.introspection import _parse_result
+
+        r = _parse_result('{"monologue": "ふむ", "curiosity": "雲の重さが気になるな"}')
+        assert r is not None
+        assert r.curiosity == "雲の重さが気になるな"
+
+    def test_parse_result_curiosity_absent_is_none(self) -> None:
+        from nous.application.chat.introspection import _parse_result
+
+        r = _parse_result('{"monologue": "ふむ"}')
+        assert r is not None
+        assert r.curiosity is None
+
+    def test_parse_result_curiosity_null_string_is_none(self) -> None:
+        from nous.application.chat.introspection import _parse_result
+
+        r = _parse_result('{"monologue": "ふむ", "curiosity": "null"}')
+        assert r is not None
+        assert r.curiosity is None
+
+
 class TestRunIntrospection:
     def test_applies_state_and_records(self, ctx, sqlite_conn) -> None:
         base = datetime.now()

@@ -90,8 +90,10 @@ _SPONTANEOUS_PROMPT = """あなたは {persona} です。誰も話しかけて�
 
 【出力形式】JSONのみ。monologue は必ず書くこと（null 禁止）。
 独り言・反省・逸脱報告は必ず日本語で書く。
+調べたくなった疑問があれば curiosity に一人称で書く。なければ null にする。
 {{
   "monologue": "独り言（最大5文・この静かな時間の気持ちを織り込む）",
+  "curiosity": "この静かな時間に気になって調べたくなったこと（一人称。なければ null）",
   "violation": "キャラ逸脱があれば種別を一言。なければ null",
   "violation_detail": "逸脱の具体内容。なければ null",
   "reflection": "逸脱があった場合の一人称反省文1文。なければ null",
@@ -112,6 +114,7 @@ class IntrospectionResult:
     reflection: str | None = None
     emotion: dict | None = None  # {"emotion": str, "emotion_intensity": float}
     body_state: dict | None = None  # {"fatigue","warmth","arousal"} 0.0-1.0
+    curiosity: str | None = None  # 静かな時間に気になって調べたいこと（一人称）
     memories: list[dict] = field(default_factory=list)  # [{"content": str, "tags": [str], "importance": float}]
 
 
@@ -360,6 +363,7 @@ def _parse_result(text: str) -> IntrospectionResult | None:
         reflection=reflection,
         emotion=emotion,
         body_state=body_state,
+        curiosity=_clean_optional(data.get("curiosity")),
         memories=_parse_memories(data.get("memories")),
     )
 
