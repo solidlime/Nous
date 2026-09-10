@@ -353,7 +353,8 @@ function applyChatConfig(cfg) {
   var fs = document.getElementById("chat-forgetting-min-strength");
   if (fs) document.getElementById("chat-forgetting-min-strength-val").textContent = parseFloat(fs.value).toFixed(2);
   // Emotion decay
-  set("chat-emotion-decay-half-life-hours", cfg.emotion_decay_half_life_hours ?? 24);
+  // unset → 空欄 (カテゴリテーブルのデフォルトを使用)
+  set("chat-emotion-decay-half-life-hours", cfg.emotion_decay_half_life_hours ?? "");
   set("chat-emotion-decay-threshold", cfg.emotion_decay_threshold ?? 0.005);
   set("chat-emotion-neutral-threshold", cfg.emotion_neutral_threshold ?? 0.01);
   // ComfyUI URLが設定済みなら疎通確認を自動実行
@@ -539,7 +540,11 @@ async function saveChatConfig() {
     forgetting_forget_ratio: parseFloat(document.getElementById("chat-forgetting-forget-ratio")?.value || "0.2"),
     forgetting_forget_strength: parseFloat(document.getElementById("chat-forgetting-forget-strength")?.value || "0.5"),
     // Emotion decay
-    emotion_decay_half_life_hours: parseFloat(document.getElementById("chat-emotion-decay-half-life-hours")?.value || "24"),
+    // 空欄なら null を送り保存値を解除 (カテゴリテーブル有効化)
+    emotion_decay_half_life_hours: (function () {
+      var v = (document.getElementById("chat-emotion-decay-half-life-hours")?.value || "").trim();
+      return v === "" ? null : parseFloat(v);
+    })(),
     emotion_decay_threshold: parseFloat(document.getElementById("chat-emotion-decay-threshold")?.value || "0.005"),
     emotion_neutral_threshold: parseFloat(document.getElementById("chat-emotion-neutral-threshold")?.value || "0.01"),
     // 画像生成設定 — ComfyUI
