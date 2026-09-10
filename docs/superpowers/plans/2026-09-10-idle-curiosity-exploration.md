@@ -2,65 +2,63 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 自発的内省（アイドル時独り言）でペルソナが「気になったこと」を自ら MCP ツールで調べ、一人称の要約を記憶に保存し別バブルで表示する。
+**Goal:** 自発的内省（run_spontaneous）で LLM が生んだ「気になること」(curiosity) を、MCP ツールで自動探索し、一人称の記憶+独り言バブルとして返す。
 
-**Architecture:** `_SPONTANEOUS_PROMPT` に `curiosity` フィールドを追加し、`run_spontaneous` の独り言 emit 後に探索ステップを1本配線する。候補は `MCPClientPool.list_all_tools()` を直接 LLM プロンプトに載せて1回で選択＋引数生成（ToolSearchEngine/Qdrant は不使用 — MCP ツールは defer_loading=False で索引対象外のため）。ツール呼出・要約・記憶保存・emit は全段 try/except。
+**Architecture:** `_SPONTANEOUS_PROMPT` に `curiosity` フィールドを追加 → `run_spontaneous` の `_apply_result` 直後に探索フック → `MCPClientPool.list_all_tools()` の一覧を LLM 1回で選択+引数生成 → `call_tool` → 一人称要約 → `create_memory` + `wiring_events.emit("monologue")`。全段 try/except で探索失敗は無音にログのみ、既存の独り言/記憶/感情パイプラインは絶対に壊さない。
 
-**Tech Stack:** Python 3.x / pydantic-settings / pytest (asyncio) / 既存 MCPClientPool・wiring_events・memory_service。
-
-**Spec:** `docs/superpowers/specs/2026-09-10-idle-curiosity-exploration-design.md`（コミット `403cbf34` 訂正版）
+**Tech Stack:** Python 3.12 / nous 独自 DDD 構成 / MCPClientPool（既存）/ wiring_events（既存）/ pytest
 
 ## Global Constraints
 
-- 全段 try/except: 探索は独り言本体の後処理。いかなる失敗でも `EnrichmentWorker` を止めない（既存慣習どおり debug/info ログで継続）。
-- コストハードcap: 自発内省1回あたり LLM 追加呼出 ≤2回（選択1＋要約1）、MCP 呼出 ≤ `explorer.max_tool_calls`（デフォルト1）。
-- `explorer.enabled=False`（デフォルト）のとき既存動作と完全同一。
-- 会話駆動 `run_introspection` には配線しない（スコープ外）。
-- 設定は `NOUS_EXPLORER__ENABLED` / `NOUS_EXPLORER__MAX_TOOL_CALLS`（env_prefix=`NOUS_`、nested `__`）。
-- コミットメッセージは日本語 conventional style（例: `feat(introspection): ...`）。
-- `git push --force` / `--no-verify` 禁止。
-- テストは fake のみ使用。実 MCP サーバー・実 Qdrant・実 LLM に触れない。
+- **既存の独り言/記憶/emotion パイプラインは絶対に変更しない**（探索は純追加分・crash 時は静かに諦める）
+- **`run_introspection`（会話駆動）は変更しない**（`run_spontaneous` のみ）
+- MCP ツール選択は **`pool.list_all_tools()` の直接一覧**を使う。ToolSearchEngine/Qdrant は使わない（spec §4.3: MCP ツールは `defer_loading=False` で Qdrant 非索引・探索失敗実績あり）
+- MCP 呼出回数は explorer.max_tool_calls（デフォルト1）以下。0 なら探索しない
+- ツール選択に失敗したら静かに return（例外は握りつぶし、ログのみ）
+- 記憶は `create_memory(persona, content, importance=0.4, tags=[exploration,introspection], source_context=introspection)`
+- emit は `wiring_events.emit("monologue", meta={persona,text,timestamp})`（既存と同一形式）
+- spec: docs/superpowers/specs/2026-09-10-idle-curiosity-exploration-design.md（403cbf34 改訂版）
+- 日本語コメント、既存コードスタイル準拠
 
 ---
 
-### Task 1: ExplorerConfig（settings.py）
+### Task 1: ExplorerConfig 追加
 
 **Files:**
-- Modify: `nous/config/settings.py`（ネスト config クラス群の末尾付近、`class Settings`（:256）より前にクラス追加 / `memory_enrichment` field（:288）の後に field 追加）
+- Modify: `nous/config/settings.py`（ExplorerConfig クラス追加 + Settings.explorer field）
 - Test: `tests/unit/test_explorer_config.py`（新規）
 
 **Interfaces:**
-- Consumes: なし
-- Produces: `nous.config.settings.ExplorerConfig`（`enabled: bool = False`、`max_tool_calls: int = 1`）、`Settings.explorer: ExplorerConfig`。Task 3 が `settings.explorer` を読む。
+- Consumes: `BaseModel`（pydantic、settings.py 内の既存 config と同一パターン）
+- Produces: `Settings.explorer: ExplorerConfig` — `enabled: bool = False`、`max_tool_calls: int = 1`。Task 3 が `get_settings().explorer` で参照
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [ ] **Step 1: 失敗テストを書く**
 
 ```python
-"""ExplorerConfig のデフォルトと env オーバーライド。"""
-
-from nous.config.settings import Settings
-
-
-def test_explorer_defaults():
-    s = Settings(explorer={"enabled": False})
-    assert s.explorer.enabled is False
-    assert s.explorer.max_tool_calls == 1
+"""ExplorerConfig のテスト。"""
+from nous.config.settings import ExplorerConfig, Settings
 
 
-def test_explorer_enabled_override():
-    s = Settings(explorer={"enabled": True, "max_tool_calls": 2})
-    assert s.explorer.enabled is True
-    assert s.explorer.max_tool_calls == 2
+class TestExplorerConfig:
+    def test_defaults(self):
+        config = ExplorerConfig()
+        assert config.enabled is False
+        assert config.max_tool_calls == 1
+
+    def test_settings_field(self):
+        settings = Settings()
+        assert settings.explorer.enabled is False
+        assert settings.explorer.max_tool_calls == 1
 ```
 
-- [ ] **Step 2: テスト実行で失敗確認**
+- [ ] **Step 2: テストを実行して失敗を確認**
 
-Run: `python -m pytest tests/unit/test_explorer_config.py -v`
-Expected: FAIL（`Settings` に `explorer` field 無し / import エラー）
+Run: `pytest tests/unit/test_explorer_config.py -v`
+Expected: FAIL（ImportError または AttributeError）
 
-- [ ] **Step 3: 最小実装**
+- [ ] **Step 3: 実装**
 
-`nous/config/settings.py` — 既存のネスト config クラス（`MemoryEnrichmentConfig` 等）と同じ pydantic パターンで、`class Settings` の前に追加:
+`nous/config/settings.py` の `MemoryEnrichmentConfig`（あるいは同種のネスト config）の直後に追加:
 
 ```python
 class ExplorerConfig(BaseModel):
@@ -70,99 +68,98 @@ class ExplorerConfig(BaseModel):
     max_tool_calls: int = 1
 ```
 
-`class Settings` 内、`memory_enrichment: MemoryEnrichmentConfig = MemoryEnrichmentConfig()`（:288）の直後に追加:
+`Settings` クラスに field 追加:
 
 ```python
-    explorer: ExplorerConfig = Field(default_factory=ExplorerConfig)
+explorer: ExplorerConfig = Field(default_factory=ExplorerConfig)
 ```
 
-- [ ] **Step 4: テスト実行で合格確認**
+- [ ] **Step 4: テスト実行して pass を確認**
 
-Run: `python -m pytest tests/unit/test_explorer_config.py -v`
-Expected: PASS (2 tests)
-
-- [ ] **Step 5: 関連テストの Regression 確認**
-
-Run: `python -m pytest tests/unit/test_memory_enrichment_config.py tests/unit/test_chat_config.py -q`
+Run: `pytest tests/unit/test_explorer_config.py -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: 既存 config 系テストの regression**
+
+Run: `pytest tests/unit/test_memory_enrichment_config.py tests/unit/test_explorer_config.py -q`
+Expected: 全部 PASS
+
+- [ ] **Step 6: コミット**
 
 ```bash
 git add nous/config/settings.py tests/unit/test_explorer_config.py
-git commit -m "feat(settings): ExplorerConfig 追加（アイドル時好奇心探索用）"
+git commit -m "feat(config): ExplorerConfig 追加（アイドル時好奇心探索）"
 ```
 
 ---
 
-### Task 2: curiosity フィールド（prompt + parse）
+### Task 2: _SPONTANEOUS_PROMPT に curiosity フィールド追加
 
 **Files:**
-- Modify: `nous/application/chat/introspection.py` — `_SPONTANEOUS_PROMPT`（:79-104）、`IntrospectionResult`（:108-115）、`_parse_result`（:338-364）
-- Test: `tests/unit/test_introspection.py`（既存ファイルに追加）
+- Modify: `nous/application/chat/introspection.py` — `_SPONTANEOUS_PROMPT`（文字列テンプレート）と `IntrospectionResult` / `_parse_result`
+- Test: `tests/unit/test_introspection.py`
 
 **Interfaces:**
-- Consumes: 既存 `_clean_optional`（:328）
-- Produces: `IntrospectionResult.curiosity: str | None`。Task 3 が `result.curiosity` を読む。
+- Consumes: 既存 `_SPONTANEOUS_PROMPT`（JSON 例を含む文字列）、`IntrospectionResult`（dataclass/pydantic）、`_parse_result`（dict→IntrospectionResult）
+- Produces: `IntrospectionResult.curiosity: str | None` — Task 3 が参照。null の場合は探索しない
 
-- [ ] **Step 1: 失敗するテストを書く**
-
-`tests/unit/test_introspection.py` に追加（ファイル冒頭の既存 import に合わせ `_parse_result` を import 済みとする。無ければ `from nous.application.chat.introspection import _parse_result` を追加）:
+- [ ] **Step 1: 失敗テストを書く**
 
 ```python
-def test_parse_result_curiosity():
-    r = _parse_result('{"monologue": "ふむ", "curiosity": "雲の重さが気になるな"}')
-    assert r.curiosity == "雲の重さが気になるな"
+class TestParseCuriosity:
+    def test_parse_result_curiosity(self):
+        result = _parse_result({"curiosity": "最近ユーザーが話題にしていない趣味は何かな", "monologue": "x"})
+        assert result.curiosity == "最近ユーザーが話題にしていない趣味は何かな"
 
+    def test_parse_result_curiosity_absent_is_none(self):
+        result = _parse_result({"monologue": "x"})
+        assert result.curiosity is None
 
-def test_parse_result_curiosity_absent_is_none():
-    r = _parse_result('{"monologue": "ふむ"}')
-    assert r.curiosity is None
-
-
-def test_parse_result_curiosity_null_string_is_none():
-    r = _parse_result('{"monologue": "ふむ", "curiosity": "null"}')
-    assert r.curiosity is None
+    def test_parse_result_curiosity_null_string_is_none(self):
+        result = _parse_result({"curiosity": None, "monologue": "x"})
+        assert result.curiosity is None
 ```
 
-- [ ] **Step 2: テスト実行で失敗確認**
+（既存テストの fixture/patch パターンに合わせること。`_parse_result` が直接 import できない場合は既存の parse 系テストと同じ呼び方に従う）
 
-Run: `python -m pytest tests/unit/test_introspection.py -v -k curiosity`
-Expected: FAIL（`IntrospectionResult` に `curiosity` 属性が無い / 常に None）
+- [ ] **Step 2: テストを実行して失敗を確認**
 
-- [ ] **Step 3: 最小実装**
+Run: `pytest tests/unit/test_introspection.py -k curiosity -v`
+Expected: FAIL
 
-1. `IntrospectionResult`（:108）にフィールド追加（`body_state` の次行あたり）:
+- [ ] **Step 3: 実装**
+
+`_SPONTANEOUS_PROMPT` の JSON 例に curiosity を追加:
+
+```
+"curiosity": "自発的に調べてみたい気になること（一人称・null可・日本語で自然に）。特になければ null",
+```
+
+`IntrospectionResult` に field 追加:
 
 ```python
-    curiosity: str | None = None  # 静かな時間に気になって調べたいこと（一人称）
+curiosity: str | None = None
 ```
 
-2. `_parse_result`（:356 の `IntrospectionResult(...)` 構築）に追加:
+`_parse_result` に追加:
 
 ```python
-        curiosity=_clean_optional(data.get("curiosity")),
+curiosity=_clean_optional(data.get("curiosity")),
 ```
 
-3. `_SPONTANEOUS_PROMPT`（:79-104）の JSON 出力仕様部分に、既存キー（monologue 等）の書式に合わせて `"curiosity"` キーを1行追加し、直前に説明1文を足す:
+（既存の null 許容フィールドと同一の `_clean_optional` パターンを使う）
 
-```
-"curiosity": "この静かな時間に気になって調べたくなったこと（一人称。なければ null）",
-```
+- [ ] **Step 4: テスト実行して pass を確認**
 
-説明文の例（既存文体に合わせ調整してよい）: 「調べたくなった疑問があれば curiosity に一人称で書く。なければ null にする。」
+Run: `pytest tests/unit/test_introspection.py -k curiosity -v`
+Expected: PASS
 
-- [ ] **Step 4: テスト実行で合格確認**
+- [ ] **Step 5: regression**
 
-Run: `python -m pytest tests/unit/test_introspection.py -v -k curiosity`
-Expected: PASS (3 tests)
+Run: `pytest tests/unit/test_introspection.py -q`
+Expected: 全部 PASS
 
-- [ ] **Step 5: 既存内省テストの Regression 確認**
-
-Run: `python -m pytest tests/unit/test_introspection.py -q`
-Expected: 全 PASS（既存 fakes は curiosity 未指定 JSON でも壊れない）
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: コミット**
 
 ```bash
 git add nous/application/chat/introspection.py tests/unit/test_introspection.py
@@ -171,506 +168,210 @@ git commit -m "feat(introspection): 自発的内省に curiosity フィールド
 
 ---
 
-### Task 3: 好奇心探索配線（run_spontaneous）
+### Task 3: run_spontaneous に探索フロー配線
 
 **Files:**
-- Modify: `nous/application/chat/introspection.py` — `run_spontaneous`（:596 の `_apply_result` 呼出直後）、新規モジュール関数3本（`_run_curiosity_exploration` / `_select_tool` / `_summarize_and_record`、ファイル末尾 `_record_introspection_event` の後に置く）
+- Modify: `nous/application/chat/introspection.py` — `run_spontaneous` の `_apply_result` 直後に hook、末尾に `_run_curiosity_exploration` / `_select_tool` / `_summarize_and_record` 追加
 - Test: `tests/unit/test_introspection.py`
 
 **Interfaces:**
-- Consumes: `IntrospectionResult.curiosity`（Task 2）、`Settings.explorer`（Task 1）、既存 `wiring_events.emit("monologue", meta=...)`（:686 と同一形式）、既存 `ctx.memory_service.create_memory(persona=, content=, importance=, tags=, source_context=)`（:700 と同一形式）、`MCPClientPool`（nous/infrastructure/mcp_client/pool.py:12）、`engine._call_llm(user_message) -> (text|None, usage|None)`（:214）
-- Produces: `run_spontaneous` が探索ステップを呼ぶようになる（戻り値変化なし）。emit する `monologue` イベント meta: `{"persona", "text", "timestamp"}`（本体独り言と同一形式）。
+- Consumes: `IntrospectionResult.curiosity`（Task 2）、`Settings.explorer`（Task 1）、`MCPClientPool`（`nous.infrastructure.mcp_client.pool`）、`wiring_events.emit`（`nous.domain.memory.wiring_events`）、`create_memory`（既存の `_apply_result` と同一呼び出し形）
+- Produces: なし（外部契約は既存の emit/create_memory）
 
-- [ ] **Step 1: 失敗するテストを書く**
+**実装方針**（コード全体はこの方針に従って書く・全て try/except で包み crash 時は既存フローを壊さない）:
 
-`tests/unit/test_introspection.py` に追加。既存の fake `ctx`/`repo` パターンを踏襲し、以下の fake を新規に用意する:
+1. `run_spontaneous` の `_apply_result(...)` 直後に:
 
 ```python
-import json as _json
-from types import SimpleNamespace
-
-from nous.domain.memory import wiring_events
-
-
-class FakeTool:
-    def __init__(self, name, description="", input_schema=None):
-        self.name = name
-        self.description = description
-        self.input_schema = input_schema or {}
-
-
-class FakePool:
-    """nous.infrastructure.mcp_client.MCPClientPool の差し替え。"""
-    instances: list["FakePool"] = []
-
-    def __init__(self, server_configs):
-        self.server_configs = server_configs
-        self.calls: list[tuple[str, dict]] = []
-        FakePool.instances.append(self)
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *args):
-        return None
-
-    def list_all_tools(self):
-        return [
-            FakeTool("srv__search", "web検索する", {"query": {"type": "string"}}),
-            FakeTool("srv__disabled", "無効化済みツール", {}),
-        ]
-
-    async def call_tool(self, name, args):
-        self.calls.append((name, args))
-        return {"result": "雲は平均して500トンほどの重さがある", "isError": False}
-
-
-class FakeLLMEngine:
-    """_call_llm に台本どおりの返答を返す。"""
-    def __init__(self, replies):
-        self._replies = list(replies)
-        self.prompts: list[str] = []
-
-    async def _call_llm(self, prompt):
-        self.prompts.append(prompt)
-        return (self._replies.pop(0) if self._replies else None), None
-
-
-class FakeMemoryService:
-    def __init__(self):
-        self.created: list[dict] = []
-
-    async def create_memory(self, **kw):
-        self.created.append(kw)
-        return SimpleNamespace(is_ok=True)
-
-
-def _explorer_ctx(persona="herta", mem=None):
-    ctx = SimpleNamespace(
-        persona=persona,
-        memory_service=mem or FakeMemoryService(),
-        _session_event_repo=None,
-    )
-    return ctx
+        # アイドル時好奇心探索（curiosity があれば MCP ツールで調べて記憶+独り言）
+        if result.curiosity:
+            try:
+                await _run_curiosity_exploration(
+                    persona=persona,
+                    curiosity=result.curiosity,
+                    engine=self,
+                    brain=brain,
+                )
+            except Exception:
+                _log.logger.warning(
+                    "curiosity exploration failed — continuing without it",
+                    exc_info=True,
+                )
 ```
 
-monkeypatch（各テストの先頭で `_patch_env(monkeypatch)` を呼び、返り値を config として使う。settings と pool の両方を差し替える）:
+2. 末尾に3関数:
 
 ```python
-def _patch_env(monkeypatch, enabled=True, servers=None):
-    settings = SimpleNamespace(explorer=SimpleNamespace(enabled=enabled, max_tool_calls=1))
-    monkeypatch.setattr("nous.config.settings.get_settings", lambda: settings)
-    monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", FakePool)
-    return SimpleNamespace(
-        mcp_servers=servers if servers is not None else [{"name": "srv", "transport": "http", "url": "http://x"}],
-        disabled_tools=["srv__disabled"],
-        brain_monologue_enabled=True,
-    )
-```
-
-テスト本体（各テストは `_run_curiosity_exploration` を直接呼ぶ。`import asyncio` は共通化してよい）:
-
-```python
-def _spont_result(curiosity="雲ってどのくらい重いのかな"):
-    from nous.application.chat.introspection import IntrospectionResult
-
-    return IntrospectionResult(
-        monologue="静かね…", curiosity=curiosity,
-        emotion={"emotion": "interest", "emotion_intensity": 0.5},
-    )
-
-
-def test_curiosity_skips_when_curiosity_none(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
-
-    config = _patch_env(monkeypatch, enabled=True)
-    FakePool.instances.clear()
-    wiring_events.clear()
-    import asyncio
-
-    asyncio.run(_run_curiosity_exploration(
-        _explorer_ctx(), config, "herta", _spont_result(curiosity=None), FakeLLMEngine([])
-    ))
-    assert FakePool.instances == []
-    assert wiring_events.snapshot_after(0) == []
-
-
-def test_curiosity_skips_when_disabled(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
-
-    config = _patch_env(monkeypatch, enabled=False)
-    FakePool.instances.clear()
-    wiring_events.clear()
-    import asyncio
-
-    asyncio.run(_run_curiosity_exploration(
-        _explorer_ctx(), config, "herta", _spont_result(), FakeLLMEngine([])
-    ))
-    assert FakePool.instances == []
-
-
-def test_curiosity_skips_when_monologue_disabled(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
-
-    config = _patch_env(monkeypatch, enabled=True)
-    config.brain_monologue_enabled = False
-    FakePool.instances.clear()
-    wiring_events.clear()
-    import asyncio
-
-    asyncio.run(_run_curiosity_exploration(
-        _explorer_ctx(), config, "herta", _spont_result(), FakeLLMEngine([])
-    ))
-    assert FakePool.instances == []
-    assert wiring_events.snapshot_after(0) == []
-
-
-def test_curiosity_skips_when_no_servers(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
-
-    config = _patch_env(monkeypatch, enabled=True, servers=[])
-    FakePool.instances.clear()
-    wiring_events.clear()
-    import asyncio
-
-    asyncio.run(_run_curiosity_exploration(
-        _explorer_ctx(), config, "herta", _spont_result(), FakeLLMEngine([])
-    ))
-    assert wiring_events.snapshot_after(0) == []
-
-
-def test_curiosity_llm_returns_null(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
-
-    config = _patch_env(monkeypatch, enabled=True)
-    FakePool.instances.clear()
-    wiring_events.clear()
-    import asyncio
-
-    eng = FakeLLMEngine([_json.dumps({"tool_name": None})])
-    asyncio.run(_run_curiosity_exploration(
-        _explorer_ctx(), config, "herta", _spont_result(), eng
-    ))
-    assert FakePool.instances[0].calls == []
-    assert wiring_events.snapshot_after(0) == []
-
-
-def test_curiosity_disabled_tool_not_in_prompt(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
-
-    config = _patch_env(monkeypatch, enabled=True)
-    FakePool.instances.clear()
-    wiring_events.clear()
-    import asyncio
-
-    eng = FakeLLMEngine([_json.dumps({"tool_name": None})])
-    asyncio.run(_run_curiosity_exploration(
-        _explorer_ctx(), config, "herta", _spont_result(), eng
-    ))
-    assert eng.prompts and "srv__disabled" not in eng.prompts[0]
-    assert "srv__search" in eng.prompts[0]
-
-
-def test_curiosity_select_unknown_tool_is_rejected(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
-
-    config = _patch_env(monkeypatch, enabled=True)
-    FakePool.instances.clear()
-    wiring_events.clear()
-    import asyncio
-
-    eng = FakeLLMEngine([_json.dumps({"tool_name": "srv__hallucinated", "args": {}})])
-    asyncio.run(_run_curiosity_exploration(
-        _explorer_ctx(), config, "herta", _spont_result(), eng
-    ))
-    assert FakePool.instances[0].calls == []
-    assert wiring_events.snapshot_after(0) == []
-
-
-def test_curiosity_happy_path(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
-
-    config = _patch_env(monkeypatch, enabled=True)
-    FakePool.instances.clear()
-    wiring_events.clear()
-    import asyncio
-
-    mem = FakeMemoryService()
-    eng = FakeLLMEngine([
-        _json.dumps({"tool_name": "srv__search", "args": {"query": "雲の重さ"}}),
-        "調べたら、雲は平均500トンくらいあるんだって。ふうん…すごいわね",
-    ])
-    asyncio.run(_run_curiosity_exploration(
-        _explorer_ctx(mem=mem), config, "herta", _spont_result(), eng
-    ))
-    pool = FakePool.instances[0]
-    assert pool.calls == [("srv__search", {"query": "雲の重さ"})]
-    assert len(mem.created) == 1
-    assert "exploration" in mem.created[0]["tags"]
-    assert mem.created[0]["importance"] == 0.4
-    events = wiring_events.snapshot_after(0)
-    assert len(events) == 1
-    assert events[0]["kind"] == "monologue"
-    assert events[0]["meta"]["persona"] == "herta"
-    assert "500トン" in events[0]["meta"]["text"]
-
-
-def test_curiosity_tool_error_swallows(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
-
-    config = _patch_env(monkeypatch, enabled=True)
-    FakePool.instances.clear()
-    wiring_events.clear()
-    import asyncio
-
-    class ErrPool(FakePool):
-        async def call_tool(self, name, args):
-            return {"error": "connection refused"}
-
-    monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", ErrPool)
-    mem = FakeMemoryService()
-    eng = FakeLLMEngine([_json.dumps({"tool_name": "srv__search", "args": {"query": "x"}})])
-    asyncio.run(_run_curiosity_exploration(
-        _explorer_ctx(mem=mem), config, "herta", _spont_result(), eng
-    ))
-    assert mem.created == []
-    assert wiring_events.snapshot_after(0) == []
-
-
-class FakeSpontEngine(FakeLLMEngine):
-    """run_spontaneous 用: generate_spontaneous が固定結果を返り、探索用 _call_llm も持つ。"""
-
-    def __init__(self, result, replies):
-        super().__init__(replies)
-        self._result = result
-
-    async def generate_spontaneous(self, persona, system_prompt, memory_texts, current_state):
-        return self._result
-
-
-def test_spontaneous_monologue_survives_pool_crash(monkeypatch):
-    """プール構築が死んでも本体独り言の emit とイベント記録は生きる。"""
-    from nous.application.chat.introspection import run_spontaneous
-
-    config = _patch_env(monkeypatch, enabled=True)
-
-    class BoomPool(FakePool):
-        def __init__(self, *a, **kw):
-            raise RuntimeError("boom")
-
-    monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", BoomPool)
-
-    class FakeRepo:
-        def __init__(self):
-            self.inserted = []
-
-        def insert(self, ev):
-            self.inserted.append(ev)
-
-    mem = FakeMemoryService()
-    ctx = _explorer_ctx(mem=mem)
-    ctx._session_event_repo = FakeRepo()
-    ctx.persona_service = SimpleNamespace(
-        update_emotion=lambda *a, **kw: None,
-        update_physical_state=lambda *a, **kw: None,
-        record_body_state=lambda *a, **kw: None,
-    )
-    ctx.memory_service.get_recent = lambda **kw: SimpleNamespace(is_ok=False, value=None)
-    wiring_events.clear()
-    import asyncio
-
-    eng = FakeSpontEngine(_spont_result(curiosity="雲の重さ"), [_json.dumps({"monologue": "独り言だよ"})])
-    asyncio.run(run_spontaneous(ctx, config, eng, 300.0))
-    events = wiring_events.snapshot_after(0)
-    assert len(events) == 1  # 本体独り言のみ。探索は BoomPool で静かに死ぬ
-    assert "独り言" in events[0]["meta"]["text"]
-```
-
-注意: `run_spontaneous` は `ctx.memory_service.get_recent`（:578）・`_build_current_state`（:585）・`_apply_result` 内で `ctx.persona_service.update_emotion` / `update_physical_state` / `record_body_state`（:625-653）を参照する。既存テストの fake ctx が既にこれらを偽装している場合は踏襲し、無ければ上記 `test_spontaneous_monologue_survives_pool_crash` の fake を参考にする。`_build_current_state` が内部で参照する属性は実装を見て必要な分だけ fake に足すこと（最低限 `ctx.persona_service.get_current_state` 系が KeyError しても `_build_current_state` は try/except で吸収する実装になっているはず — 失敗するなら fake を1つずつ足す）。
-
-- [ ] **Step 2: テスト実行で失敗確認**
-
-Run: `python -m pytest tests/unit/test_introspection.py -v -k curiosity`
-Expected: FAIL — `_run_curiosity_exploration` が存在しない（ImportError）
-
-- [ ] **Step 3: 最小実装**
-
-`nous/application/chat/introspection.py` の `run_spontaneous` 内、`applied, monologue_emitted, stored = await _apply_result(ctx, config, repo, persona, result)`（:596）の直後に追加:
-
-```python
-    # 好奇心探索: 本体独り言 emit 済みの後に走る後処理。どんな失敗でも worker を止めない。
-    try:
-        await _run_curiosity_exploration(ctx, config, persona, result, engine)
-    except Exception:
-        logger.info("introspection: curiosity exploration crashed", exc_info=True)
-```
-
-ファイル末尾に3関数追加（`_record_introspection_event` の後）:
-
-```python
-_EXPLORATION_RESULT_MAX_CHARS = 2000
-_EXPLORATION_SUMMARY_MAX_CHARS = 500
-
-
 async def _run_curiosity_exploration(
-    ctx: AppContext, config: ChatConfig | None, persona: str, result, engine
+    *,
+    persona: str,
+    curiosity: str,
+    engine: IntrospectionEngine,
+    brain: ...,
 ) -> None:
-    """curiosity 非null かつ explorer.enabled のとき、MCP ツールで1回調べて記憶＋独り言バブル。
-
-    呼び出し側は try/except 済みだが、内部も全段ベストエフォート。
-    """
-    if result is None or not getattr(result, "curiosity", None):
+    """自発的内省の好奇心を MCP ツールで探索し、記憶+独り言として返す。"""
+    settings = get_settings()
+    explorer = settings.explorer
+    if not explorer.enabled:
+        logger.info("curiosity exploration skipped — explorer disabled")
         return
-    # 本体独り言がオフなら探索もしない（brain_monologue_enabled 尊重・コスト節約）。
-    if not getattr(config, "brain_monologue_enabled", False):
+    if not brain.brain_monologue_enabled:
+        logger.info("curiosity exploration skipped — monologue disabled")
         return
-    try:
-        from nous.config.settings import get_settings
+    max_calls = int(explorer.max_tool_calls)
+    if max_calls <= 0:
+        logger.info("curiosity exploration skipped — max_tool_calls <= 0")
+        return
 
-        explorer = getattr(get_settings(), "explorer", None)
-        if explorer is None or not getattr(explorer, "enabled", False):
+    async with MCPClientPool() as pool:
+        tools = await pool.list_all_tools()
+        # disabled_tools に含まれるツールは除外
+        disabled = set(brain.disabled_tools or [])
+        tools = [t for t in tools if t.name not in disabled]
+        if not tools:
+            logger.info("curiosity exploration skipped — no tools available")
             return
-    except Exception:
-        logger.debug("introspection: explorer settings unavailable", exc_info=True)
+
+        selected = await _select_tool(engine, curiosity, tools)
+        if selected is None:
+            logger.info("curiosity exploration skipped — tool selection failed")
+            return
+
+        tool_name, args = selected
+        try:
+            result = await pool.call_tool(tool_name, args)
+        except Exception:
+            logger.warning("curiosity tool call failed — %s", tool_name, exc_info=True)
+            return
+
+    # error なら静かに終了
+    if isinstance(result, dict) and result.get("isError"):
+        logger.info("curiosity tool returned error — %s", tool_name)
         return
 
-    curiosity = str(result.curiosity)[:500]
-    try:
-        from nous.infrastructure.mcp_client import MCPClientPool
-
-        async with MCPClientPool(list(getattr(config, "mcp_servers", None) or [])) as pool:
-            disabled = set(getattr(config, "disabled_tools", None) or [])
-            tools = [t for t in pool.list_all_tools() if t.name not in disabled]
-            if not tools:
-                logger.info("introspection: curiosity — no MCP tools available")
-                return
-            call = await _select_tool(engine, curiosity, tools)
-            if not call:
-                logger.info("introspection: curiosity — no tool selected")
-                return
-            tool_result = await pool.call_tool(call["tool_name"], call.get("args") or {})
-            if "error" in tool_result or tool_result.get("isError"):
-                logger.info("introspection: curiosity — tool call errored: %s", tool_result)
-                return
-    except Exception:
-        logger.info("introspection: curiosity select/call failed", exc_info=True)
-        return
-
-    try:
-        await _summarize_and_record(ctx, engine, persona, curiosity, call["tool_name"], tool_result)
-    except Exception:
-        logger.info("introspection: curiosity summarize failed", exc_info=True)
+    await _summarize_and_record(
+        engine=engine,
+        persona=persona,
+        curiosity=curiosity,
+        tool_name=tool_name,
+        result=result,
+    )
 
 
-async def _select_tool(engine, curiosity: str, tools: list) -> dict | None:
-    """MCP ツール一覧＋curiosity から実行すべきツールを LLM 1回で判断する。
-
-    返り値: {"tool_name": str, "args": dict}。適合なし/判断失敗は None。
-    """
-    catalog = "\n".join(
-        f"- {t.name}: {(t.description or '')[:200]} | args: {_json_schema_preview(t)}"
-        for t in tools
+async def _select_tool(
+    engine: IntrospectionEngine,
+    curiosity: str,
+    tools: list[ToolDefinition],
+) -> tuple[str, dict] | None:
+    """ツール一覧から curiosity に最適なツール+引数を LLM 1回で選ぶ。"""
+    lines = "\n".join(
+        f"- {t.name}: {t.description}" for t in tools
     )
     prompt = (
-        "あなたは静かな時間に気になったことを、登録済みのMCPツールで自分で調べる。\n"
-        f"気になっていること:\n{curiosity}\n\n"
-        f"使えるツール:\n{catalog}\n\n"
-        '調べる価値があり実行できるツールがあれば {"tool_name": "<候補の名前>", '
-        '"args": {<input_schemaに沿った引数>}} の JSON を、それ以外は null だけを返せ。'
-        "JSON のみで、前置きは不要。"
+        "あなたは内省中に気になったことを調べるためにツールを選ぶ存在。\n"
+        "使えるツール一覧:\n"
+        f"{lines}\n\n"
+        "気になること:\n"
+        f"{curiosity}\n\n"
+        "上記ツールから最適な1つを選び、呼び出し引数も決めて。"
+        "応答は JSON のみ（マークダウン無し）:\n"
+        '{"tool_name": "...", "args": {...}}\n'
+        'どのツールも適切でなければ {"tool_name": null, "args": {}} と返すこと。'
     )
-    try:
-        text, _usage = await engine._call_llm(prompt)
-    except Exception:
-        logger.debug("introspection: tool select LLM failed", exc_info=True)
-        return None
-    if not text:
-        return None
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        lines = cleaned.splitlines()
-        cleaned = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError:
-        logger.debug("introspection: tool select parse failed: %s", text[:200])
-        return None
+    text, _ = await engine._call_llm(prompt)
+    data = _extract_json(text)  # 既存の fence 剥がし+JSON パース（無ければ素の json.loads を使用）
     if not isinstance(data, dict):
         return None
-    name = data.get("tool_name")
-    valid = {t.name for t in tools}
-    if not isinstance(name, str) or name not in valid:
+    tool_name = data.get("tool_name")
+    if not isinstance(tool_name, str) or tool_name not in {t.name for t in tools}:
         return None
     args = data.get("args")
-    return {"tool_name": name, "args": args if isinstance(args, dict) else {}}
-
-
-def _json_schema_preview(tool) -> str:
-    try:
-        return json.dumps(tool.input_schema or {}, ensure_ascii=False)[:300]
-    except (TypeError, ValueError):
-        return "{}"
+    return tool_name, args if isinstance(args, dict) else {}
 
 
 async def _summarize_and_record(
-    ctx: AppContext, engine, persona: str, curiosity: str, tool_name: str, tool_result: dict
+    *,
+    engine: IntrospectionEngine,
+    persona: str,
+    curiosity: str,
+    tool_name: str,
+    result: ...,
 ) -> None:
-    """ツール結果を一人称で要約し、記憶に保存して本体独り言の後の別バブルとして emit。"""
-    result_text = str(tool_result.get("result") or "")[:_EXPLORATION_RESULT_MAX_CHARS] or "(空の結果)"
+    """探索結果を一人称で要約して記憶+独り言として返す。"""
     prompt = (
-        "静かな時間に気になって調べたことを、あなたらしい一人称の独り言にして。\n"
-        f"気になっていたこと: {curiosity}\n"
-        f"使ったツール: {tool_name}\n"
-        f"結果:\n{result_text}\n\n"
-        "わかったことを3文以内で。「調べたら〜だった」の調子で。"
-        "ツール名や「結果」という単語は出さない。"
+        f"あなたは{persona}。内省中に気になった「{curiosity}」を {tool_name} で調べた。\n"
+        f"結果:\n{json.dumps(result, ensure_ascii=False, default=str)[:3000]}\n\n"
+        "この結果から分かったことを一人称で短く（500字以内）感想として書いて。"
+        "探索して何か得られたという事実そのものではなく、調べて見つけた内容の感想として。"
     )
-    try:
-        text, _usage = await engine._call_llm(prompt)
-    except Exception:
-        logger.info("introspection: curiosity summary LLM failed", exc_info=True)
+    text, _ = await engine._call_llm(prompt)
+    summary = text.strip()[:500]
+    if not summary:
         return
-    if not text or not text.strip():
-        return
-    summary = text.strip()[:_EXPLORATION_SUMMARY_MAX_CHARS]
 
-    try:
-        await ctx.memory_service.create_memory(
-            persona=persona,
-            content=summary,
-            importance=0.4,
-            tags=["exploration", "introspection"],
-            source_context="introspection",
-        )
-    except Exception:
-        logger.debug("introspection: exploration memory failed", exc_info=True)
-
-    try:
-        wiring_events.emit(
-            "monologue",
-            meta={
-                "persona": persona,
-                "text": summary,
-                "timestamp": get_now().isoformat(),
-            },
-        )
-    except Exception:
-        logger.debug("introspection: exploration emit failed", exc_info=True)
+    create_memory(
+        persona,
+        summary,
+        importance=0.4,
+        tags=["exploration", "introspection"],
+        source_context="introspection",
+    )
+    wiring_events.emit(
+        "monologue",
+        meta={
+            "persona": persona,
+            "text": summary,
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
 ```
 
-`json` モジュールの import は既存（:1 部分に `import json` が無ければ追加 — ファイル先頭を確認）。
+**注意**:
+- `_call_llm` の実引数形状・`create_memory` の実引数形・`ToolDefinition` の field 名・`MCPClientPool` の実クラス名/コンストラクタは、**実装時に既存コード（introspection.py の `_apply_result` 内、mcp_client/pool.py、memory 関連）を確認して合わせること**。上記は意図を示したスケッチであり、名前違いなら既存に合わせて修正してよい（ただし emit 形式 `{persona, text, timestamp}` と tags/importance は変更しない）
+- emit の meta は既存 `run_spontaneous` 内の monologue emit と完全に同一形式
+- `disabled_tools` が brain config に存在しない場合は `brain.disabled_tools` が AttributeError にならないよう `getattr(brain, "disabled_tools", None) or []` で安全に取得
 
-- [ ] **Step 4: テスト実行で合格確認**
+- [ ] **Step 1: 失敗テストを書く（少なくとも以下をカバー）**
 
-Run: `python -m pytest tests/unit/test_introspection.py -v -k curiosity`
-Expected: PASS（上記 skip4 + null + prompt除外 + hallucinated拒否 + happy + error + crash耐性 = 9テスト）
+```python
+# fake pool / fake tool / fake memory service を使って:
+def test_curiosity_happy_path(): ...          # 選択→call→要約→create_memory→emit 全部通る
+def test_curiosity_skips_when_explorer_disabled(): ...
+def test_curiosity_skips_when_max_tool_calls_zero(): ...
+def test_curiosity_skips_when_no_tools(): ...
+def test_curiosity_tool_error_swallows(): ...  # call_tool が例外でも run_spontaneous 自体は完走
+def test_curiosity_selects_no_tool_when_llm_says_null(): ...
+def test_curiosity_out_of_candidates_rejected(): ...  # LLM が候補外ツール名を返したら拒否
+def test_curiosity_monologue_disabled_skips(): ...
+def test_curiosity_survives_pool_crash(): ...  # pool が例外でも run_spontaneous 自体は完走・既存独り言は不変
+```
 
-- [ ] **Step 5: 既存全テストの Regression 確認**
+- [ ] **Step 2: テストを実行して失敗を確認**
 
-Run: `python -m pytest tests/unit/test_introspection.py tests/unit/test_enrichment_worker.py -q`
-Expected: 全 PASS
+Run: `pytest tests/unit/test_introspection.py -k curiosity -v`
+Expected: FAIL（ImportError 等）
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 3: 実装**
+
+- `run_spontaneous` に hook 挿入（`_apply_result` 直後）
+- 末尾に3関数追加
+
+- [ ] **Step 4: テスト実行して pass を確認**
+
+Run: `pytest tests/unit/test_introspection.py -k curiosity -v`
+Expected: PASS
+
+- [ ] **Step 5: regression**
+
+Run: `pytest tests/unit/test_introspection.py tests/unit/test_enrichment_worker.py -q`
+Expected: 全部 PASS
+
+- [ ] **Step 6: lint**
+
+Run: `ruff check .` && `ruff format --check .`
+Expected: クリーン
+
+- [ ] **Step 7: コミット**
 
 ```bash
 git add nous/application/chat/introspection.py tests/unit/test_introspection.py
@@ -679,54 +380,94 @@ git commit -m "feat(introspection): アイドル時好奇心探索を自発的�
 
 ---
 
-### Task 4: 実機テスト（localhost:26262 MCP）
+### Task 4: 実機テスト
 
 **Files:**
-- 変更なし（検証のみ。問題が出たら Task 1-3 の手直し）
+- Modify: なし（サーバー設定と観測のみ・スクリプト/手順はこのタスク内で実行）
 
 **Interfaces:**
-- Consumes: ユーザーが nous 設定に登録済みの MCP サーバー `http://localhost:26262`、Task 1-3 の全機能
-- Produces: 実機での動作証跡（ログ + 独り言バブル + exploration 記憶）
+- Consumes: Task 1-3 の実装、`scripts/restart-nous.ps1`、`POST /api/chat/herta/config`、`nous.main` サーバー（localhost:26262）
+- Produces: 実機で探索が発火することの確認（ログ+記憶+独り言）
 
-- [ ] **Step 1: MCP サーバーの到達確認**
+**手順（全て直接実行・コミット物なし）**:
 
-```bash
-curl -s -m 5 http://localhost:26262/ -o NUL -w "%{http_code}"
+- [ ] **Step 1: 観測準備**
+
+- herta の config.json に mcp_servers が設定済みか確認（未設定なら POST /api/chat/herta/config で追加: `{"mcp_servers": [{"name": "mcp-hub", "transport": "http", "url": "http://nas:26263/mcp", "headers": {"X-MCP-Hub-Tags": "search"}, "enabled": true}]}`）
+- `brain_monologue_enabled=true`、`brain_spontaneous_enabled=true` を確認
+- `brain_spontaneous_interval_hours` は int 型のみ可（0.01 等の小数は 400 エラー）→ interval ガードを通すには `data/persona/herta/memory.sqlite` の `session_events` テーブル内 `brain.introspection%` の event を過去時刻に巻き戻す（バックデート）
+
+- [ ] **Step 2: サーバー再起動（env 付き）**
+
+```powershell
+$env:NOUS_EXPLORER__ENABLED = "true"
+$env:NOUS_EXPLORER__MAX_TOOL_CALLS = "1"
+.\scripts\restart-nous.ps1
 ```
 
-Expected: 何らかの HTTP 応答（000 以外。MCP streamable http エンドポイントなので GET は 400/405 でも可）。
+- [ ] **Step 3: 発火待ち→観測**
 
-- [ ] **Step 2: 設定有効化**
+- `Get-Content $env:TEMP\opencode\nous_srv16.out.log -Tail 50` で `curiosity exploration` 系ログを確認
+- LLM が curiosity を出した場合: `tool call` ログ+記憶（sqlite: `tags LIKE '%exploration%'`）+ 独り言 emit
+- LLM が curiosity null の場合: `skipped — curiosity is null` ログ（これも正常・観測ログ動作の実証）
+- 発火しない場合: interval ガードの backdate を再実行して待つ
 
-ユーザー環境の nous 起動設定（.env または環境変数）に追加:
+- [ ] **Step 4: 実証結果をレポート**
+
+（コミット物なし・観測ログと記憶実在を証拠に報告）
+
+---
+
+### Task 5: レビュー + GATE
+
+**Files:**
+- Modify: レビュー指摘があれば対応
+- Test: 全テスト・型・lint・カバレッジ
+
+**手順**:
+
+- [ ] **Step 1: #081 レビュー**（実装完了後に diff 全体をレビューしてもらう）
+
+- [ ] **Step 2: 指摘対応**（あれば）
+
+- [ ] **Step 3: GATE 機械条件**
 
 ```
-NOUS_EXPLORER__ENABLED=true
-NOUS_EXPLORER__MAX_TOOL_CALLS=1
+- pytest（全量）: 失敗 0
+- coverage: TOTAL ≥ 60%（introspection.py は実装で下がらないこと）
+- mypy: 新規エラー 0（introspection.py のみ）
+- ruff check / format: 0
+- secrets: 0
 ```
 
-ペルソナ設定（チャット設定 UI）で `brain_spontaneous_enabled` / `brain_monologue_enabled` が ON、MCP サーバー `localhost:26262` が有効・対象ツールが disabled でないことを確認。テスト用に `brain_idle_after_seconds` を短縮（例: 15）して待ち時間を削る。
+Run:
+```powershell
+.venv\Scripts\python.exe -m pytest -q --cov=nous --cov-report=term
+.venv\Scripts\python.exe -m mypy nous/application/chat/introspection.py
+ruff check .
+ruff format --check .
+```
 
-- [ ] **Step 3: アイドル放置 → 観察**
+- [ ] **Step 4: GATE 通過確認後、必要なら指摘対応コミット**
 
-nous サーバーを再起動し、何も話しかけず `brain_idle_after_seconds` 以上待つ。確認:
-1. サーバーログに `introspection spontaneous ok` 系ログが出る
-2. 続けて `introspection: curiosity` 系ログ（select/call/要約）が出る
-3. フロント（chat UI）に独り言バブル → 別バブルの探索ふりかえりが表示される
-4. 記憶一覧に tags=`exploration` の記憶が1件増える
+---
 
-- [ ] **Step 4: 異常系1 — MCP サーバー停止**
+### Task 6: RECORD
 
-localhost:26262 を止めた状態で再度アイドル発火させる。Expected: ログに `curiosity select/call failed` または tool call errored、独り言本体は正常発行、worker は継続。
+**Files:**
+- Modify: なし（nous memory への記録のみ）
 
-- [ ] **Step 5: 異常系2 — explorer 無効化**
+- [ ] **Step 1: nous memory に記録**
 
-`NOUS_EXPLORER__ENABLED=false` に戻して再起動→アイドル発火。Expected: curiosity ログ無し、既存と同一の動作。
+`memory_create` で tags=[project:nous, task_state, session_summary]、importance 0.7、kind=semantic。コミットハッシュ・検証結果・教訓（実機テストでの発見を含む）を含める。
 
-- [ ] **Step 6: 結果記録**
+---
 
-観察結果（ログ断片・スクショ可）を最終応答に含める。問題があれば introspection.py の該当箇所を修正して単体テスト追加→Task 3 Step 4 に戻る。
+### Task 7: 最終報告
 
-- [ ] **Step 7: テスト用短縮設定の戻し**
+- [ ] **Step 1: ユーザーに報告**
 
-`brain_idle_after_seconds` を元の値（120）に戻す。`.env` の explorer 2キーはユーザーの好みに合わせ残置 or 解除（確認を取る）。
+- 実装概要・コミット一覧
+- 実機テスト結果（発火ログ・記憶・独り言）
+- 教訓（Task 4 での発見）
+- 既知の制約（確率的発火、ベクトル索引の既存バグは別課題）
