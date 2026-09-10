@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from nous.domain.persona.emotion_trend import build_emotion_trend_narrative
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now, relative_time_str
 from nous.infrastructure.logging.structured import get_logger
@@ -208,25 +209,13 @@ async def _build_context_section(
         try:
             eh_result = ctx.persona_service.get_emotion_history(state.persona, limit=5)
             if eh_result.is_ok and eh_result.value:
-                recent_emotions = eh_result.value
-                if len(recent_emotions) >= 2:
-                    prev = recent_emotions[-2]
-                    if prev.emotion != state.emotion:
-
-                        def _fmt(emotion: str, context: str | None = None, ts: datetime | None = None) -> str:
-                            base = f"{emotion}({context})" if context else emotion
-                            if ts is None:
-                                return base
-                            # 当日は時刻のみ / 過去日は M/D HH:MM（設計 §4.3）
-                            now = get_now()
-                            if ts.date() == now.date():
-                                return f"{base}（{ts.strftime('%H:%M')}）"
-                            return f"{base}（{ts.month}/{ts.day} {ts.strftime('%H:%M')}）"
-
-                        trend = " → ".join(_fmt(r.emotion, r.context, r.timestamp) for r in recent_emotions[-4:])
-                        last_ctx = recent_emotions[-1].context if recent_emotions else None
-                        trend += f" → {_fmt(state.emotion, last_ctx, get_now())}"
-                        t3.append(f"感情推移: {trend}")
+                narrative = build_emotion_trend_narrative(
+                    eh_result.value,
+                    state.emotion,
+                    float(state.emotion_intensity or 0.0),
+                )
+                if narrative:
+                    t3.append(narrative)
         except Exception as e:
             logger.debug("Failed to build emotion trend: %s", e)
 

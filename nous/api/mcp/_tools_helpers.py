@@ -7,6 +7,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, ParamSpec, TypeVar, cast
 
+from nous.domain.persona.emotion_trend import clean_context
 from nous.domain.shared.time_utils import relative_time_str
 
 if TYPE_CHECKING:
@@ -309,7 +310,8 @@ def _format_lightweight_response(
         if prev_emotion.emotion != state.emotion:
 
             def _fmt(emotion: str, context: str | None = None) -> str:
-                return f"{emotion}({context})" if context else emotion
+                ctx_str = clean_context(context)
+                return f"{emotion}({ctx_str})" if ctx_str else emotion
 
             trend = " → ".join(_fmt(r.emotion, r.context) for r in recent_emotions[-4:])
             # last history record's context applies to current state too

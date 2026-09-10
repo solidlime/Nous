@@ -532,11 +532,8 @@ class TestBuildContextSectionTierContent:
         assert "hidden_goal" not in result
 
 
-class TestEmotionTrendTimestamp:
-    """感情推移行に EmotionRecord.timestamp の時刻が含まれること（設計 §4.3 / P5）。
-
-    形式: 当日 → HH:MM のみ / 過去日 → M/D HH:MM。
-    """
+class TestEmotionTrendNarrative:
+    """感情推移がナラティブ化されること（context_loader → build_emotion_trend_narrative）。"""
 
     def _make_ctx(self, records):
         from unittest.mock import MagicMock
@@ -575,8 +572,7 @@ class TestEmotionTrendTimestamp:
         return state
 
     @pytest.mark.asyncio
-    async def test_emotion_trend_includes_timestamps(self):
-        import re
+    async def test_emotion_trend_transition_narrative(self):
         from datetime import datetime, timedelta
 
         from nous.application.chat.pipeline.prepare import _build_context_section
@@ -587,19 +583,21 @@ class TestEmotionTrendTimestamp:
             EmotionRecord(emotion="好奇心", timestamp=datetime.now() - timedelta(hours=1), context="強"),
         ]
         ctx = self._make_ctx(records)
-        state = self._make_state("喜び")  # prev(好奇心) != 喜び → 推移行が出る
+        state = self._make_state("喜び")  # prev(好奇心) != 喜び → 移行ナラティブ
 
         result = await _build_context_section(ctx, state)
 
-        assert "感情推移:" in result
-        line = [ln for ln in result.splitlines() if "感情推移:" in ln][0]
-        # 各要素に時刻（当日 HH:MM か過去日 M/D HH:MM）が付く
-        stamps = re.findall(r"（(?:\d{1,2}/\d{1,2} )?\d{2}:\d{2}）", line)
-        assert len(stamps) >= 2, f"expected timestamps in trend line: {line}"
+        assert "感情の流れ:" in result
+        line = [ln for ln in result.splitlines() if "感情の流れ:" in ln][0]
+        assert "まず 好奇心（強）を感じ" in line
+        assert "その後 喜びへ移った" in line
+        assert "いまは 喜び（やや強い）が続いている。" in line
+        # 矢印列は廃止
+        assert " → " not in line
 
     @pytest.mark.asyncio
-    async def test_emotion_trend_no_timestamp_without_change(self):
-        """前回と同じ感情なら推移行自体が出ない（既存挙動の維持）。"""
+    async def test_emotion_trend_no_narrative_without_change(self):
+        """前回と同じ感情・同ラベル強度ならナラティブ自体が出ない（既存挙動の維持）。"""
         from datetime import datetime, timedelta
 
         from nous.application.chat.pipeline.prepare import _build_context_section
@@ -613,7 +611,7 @@ class TestEmotionTrendTimestamp:
         state = self._make_state("喜び")
 
         result = await _build_context_section(ctx, state)
-        assert "感情推移:" not in result
+        assert "感情の流れ:" not in result
 
 
 class TestDecayNoteInContextSection:
