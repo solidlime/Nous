@@ -947,6 +947,8 @@ class FakePool:
         return None
 
     def list_all_tools(self):
+        if not self.server_configs:
+            return []
         return [
             FakeTool("srv__search", "web検索する", {"query": {"type": "string"}}),
             FakeTool("srv__disabled", "無効化済みツール", {}),
@@ -986,8 +988,8 @@ def _explorer_ctx(persona="herta", mem=None):
     )
 
 
-def _patch_env(monkeypatch, enabled=True, servers=None):
-    settings = SimpleNamespace(explorer=SimpleNamespace(enabled=enabled, max_tool_calls=1))
+def _patch_env(monkeypatch, enabled=True, servers=None, max_tool_calls=1):
+    settings = SimpleNamespace(explorer=SimpleNamespace(enabled=enabled, max_tool_calls=max_tool_calls))
     monkeypatch.setattr("nous.config.settings.get_settings", lambda: settings)
     monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", FakePool)
     return SimpleNamespace(
@@ -1035,6 +1037,23 @@ def test_curiosity_skips_when_disabled(monkeypatch):
     assert FakePool.instances == []
 
 
+def test_curiosity_skips_when_max_tool_calls_zero(monkeypatch):
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=0)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine([json.dumps({"tool_name": "srv__search", "args": {"query": "x"}})])
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    assert FakePool.instances == []  # プールを開かない
+    assert eng.prompts == []  # 選択 LLM を呼ばない
+    assert mem.created == []
+    assert wiring_events.snapshot_after(0) == []
+
+
 def test_curiosity_skips_when_monologue_disabled(monkeypatch):
     from nous.application.chat.introspection import _run_curiosity_exploration
 
@@ -1057,7 +1076,12 @@ def test_curiosity_skips_when_no_servers(monkeypatch):
     wiring_events.clear()
     import asyncio
 
-    asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), FakeLLMEngine([])))
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine([json.dumps({"tool_name": "srv__search", "args": {}})])
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    assert FakePool.instances  # プールは開いた（cap ガードは通過）
+    assert eng.prompts == []  # ツール空 → 選択 LLM を呼ばず return
+    assert mem.created == []
     assert wiring_events.snapshot_after(0) == []
 
 

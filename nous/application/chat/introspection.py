@@ -765,6 +765,10 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
         explorer = getattr(get_settings(), "explorer", None)
         if explorer is None or not getattr(explorer, "enabled", False):
             return
+        # 契約: MCP 呼出 ≤ max_tool_calls。0 なら探索しない（単一選択設計なので 1 回のみ）。
+        max_calls = int(getattr(explorer, "max_tool_calls", 1) or 0)
+        if max_calls <= 0:
+            return
     except Exception:
         logger.debug("introspection: explorer settings unavailable", exc_info=True)
         return
