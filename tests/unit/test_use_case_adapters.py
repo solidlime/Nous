@@ -488,6 +488,39 @@ class TestAppContextVectorStore:
             assert result is None
             ctx.close()
 
+    def test_search_engine_first_access_sets_persona_on_semantic(self, tmp_path):
+        """worker 経路: search_engine 初回生成時に persona が semantic へ伝播する（404対策）。"""
+        from nous.application.use_cases import AppContext
+        from nous.config.settings import Settings
+
+        settings = Settings(data_root=str(tmp_path))
+        # 背景 preload/warmup と Qdrant 実接続を止め、初回生成をメインスレッドで決定的にする。
+        with (
+            patch("threading.Thread"),
+            patch.object(AppContext, "_init_vector_store", lambda self: None),
+        ):
+            ctx = AppContext(settings, "test_persona")
+            ctx._vector_store = MagicMock()  # semantic あり
+            se = ctx.search_engine
+            assert se._semantic is not None
+            assert se._semantic.persona == "test_persona"
+        ctx.close()
+
+    def test_search_engine_without_semantic_does_not_crash(self, tmp_path):
+        """vector_store が None（semantic なし）でも search_engine 生成が壊れない。"""
+        from nous.application.use_cases import AppContext
+        from nous.config.settings import Settings
+
+        settings = Settings(data_root=str(tmp_path))
+        with (
+            patch("threading.Thread"),
+            patch.object(AppContext, "_init_vector_store", lambda self: None),
+        ):
+            ctx = AppContext(settings, "test_persona")
+            se = ctx.search_engine
+            assert se._semantic is None
+        ctx.close()
+
     @pytest.mark.asyncio
     async def test_search_engine_strength_lookup_fallback_to_default(self, tmp_path):
         """When get_strength fails, strength_lookup defaults to 1.0 (line 197)."""

@@ -491,6 +491,8 @@ class AppContext:
                 entity_service=self.entity_service,
                 link_repo=self.entity_repo,
             )
+            # worker 経路ではハンドラの set_persona が走らないため、生成時に必ず伝播させる
+            self._search_engine.set_persona(self.persona)
             # Wire search engine to memory service for memory evolution
             self.memory_service.set_search_engine(self._search_engine)
         return self._search_engine
