@@ -755,19 +755,23 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
     呼び出し側は try/except 済みだが、内部も全段ベストエフォート。
     """
     if result is None or not getattr(result, "curiosity", None):
+        logger.info("introspection: curiosity exploration skipped — curiosity is null")
         return
     # 本体独り言がオフなら探索もしない（brain_monologue_enabled 尊重・コスト節約）。
     if not getattr(config, "brain_monologue_enabled", False):
+        logger.info("introspection: curiosity exploration skipped — monologue disabled")
         return
     try:
         from nous.config.settings import get_settings
 
         explorer = getattr(get_settings(), "explorer", None)
         if explorer is None or not getattr(explorer, "enabled", False):
+            logger.info("introspection: curiosity exploration skipped — explorer disabled")
             return
         # 契約: MCP 呼出 ≤ max_tool_calls。0 なら探索しない（単一選択設計なので 1 回のみ）。
         max_calls = int(getattr(explorer, "max_tool_calls", 1) or 0)
         if max_calls <= 0:
+            logger.info("introspection: curiosity exploration skipped — max_tool_calls<=0")
             return
     except Exception:
         logger.debug("introspection: explorer settings unavailable", exc_info=True)
