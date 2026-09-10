@@ -87,3 +87,22 @@ describe('N.Core.fmtDateTime', () => {
     expect(result).toMatch(/(0?[0-9]|1[0-9]|2[0-3]):[0-5][0-9]/);
   });
 });
+
+describe('N.Core.fmtStamp', () => {
+  it('returns a fixed-width YYYY/MM/DD HH:MM label (local time)', () => {
+    const result = N.fmtStamp('2026-01-15T12:00:00');
+    expect(result).toMatch(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/);
+    expect(result).toBe(
+      new Date('2026-01-15T12:00:00').getFullYear() + '/01/15 ' +
+      String(new Date('2026-01-15T12:00:00').getHours()).padStart(2, '0') + ':' +
+      String(new Date('2026-01-15T12:00:00').getMinutes()).padStart(2, '0'),
+    );
+  });
+
+  it('returns "" (not "--") for empty and unparseable input', () => {
+    expect(N.fmtStamp('')).toBe('');
+    expect(N.fmtStamp(null)).toBe('');
+    expect(N.fmtStamp(undefined)).toBe('');
+    expect(N.fmtStamp('now')).toBe('');
+  });
+});

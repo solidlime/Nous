@@ -25,4 +25,17 @@ N.Core.fmtDateTime = function fmtDateTime(iso) {
   return new Date(iso).toLocaleString("ja-JP");
 };
 
+// Fixed-width "YYYY/MM/DD HH:MM" (local) — chat time labels. Locale
+// variants shift with the environment; chat labels must not.
+N.Core.fmtStamp = function fmtStamp(iso) {
+  if (!iso) return "";
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  var p = function (n) { return n < 10 ? "0" + n : "" + n; };
+  return (
+    d.getFullYear() + "/" + p(d.getMonth() + 1) + "/" + p(d.getDate()) +
+    " " + p(d.getHours()) + ":" + p(d.getMinutes())
+  );
+};
+
 })(window.Nous);
