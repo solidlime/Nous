@@ -791,6 +791,11 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
             if not call:
                 logger.info("introspection: curiosity — no tool selected")
                 return
+            logger.info(
+                "introspection: curiosity — tool call: %s args=%s",
+                call["tool_name"],
+                call.get("args") or {},
+            )
             tool_result = await pool.call_tool(call["tool_name"], call.get("args") or {})
             if "error" in tool_result or tool_result.get("isError"):
                 logger.info("introspection: curiosity — tool call errored: %s", tool_result)
@@ -801,6 +806,7 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
 
     try:
         await _summarize_and_record(ctx, engine, persona, curiosity, call["tool_name"], tool_result)
+        logger.info("introspection: curiosity exploration done: tool=%s", call["tool_name"])
     except Exception:
         logger.info("introspection: curiosity summarize failed", exc_info=True)
 
