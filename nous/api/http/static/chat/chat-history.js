@@ -7,6 +7,7 @@ var C = N.Core;
 var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var showConfirm = C.showConfirm, showAlert = C.showAlert;
 var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
+var fmtStamp = C.fmtStamp;
 var safeMarkdown = N.Chat.markdown && N.Chat.markdown.render;
 var appendChatMessage = N.Chat.ui && N.Chat.ui.append;
 "use strict";
@@ -260,9 +261,10 @@ function _appendSegmentsToBubble(msg, msgDiv) {
   msgDiv.querySelectorAll(".chat-bubble").forEach(function(b) {
     if (!(b.textContent || "").trim() && !b.querySelector("img,video,audio,canvas")) b.remove();
   });
-  // Set time
+  // Set time — full stamp (YYYY/MM/DD HH:MM) from the ISO `ts` payload;
+  // legacy payloads without ts fall back to the HH:MM label.
   var timeEl = msgDiv.querySelector(".chat-time");
-  if (timeEl && msg.time) timeEl.textContent = msg.time;
+  if (timeEl) timeEl.textContent = fmtStamp(msg.ts) || msg.time || "";
 }
 
 // ------------------------------------------------------------------
@@ -338,12 +340,12 @@ async function rollbackChat(fromId, shouldResend) {
     container.textContent = "";
     const remaining = result.remaining_messages || [];
     for (const msg of remaining) {
-      if (msg.segments) {
-        appendChatMessage(msg.role, "", msg.time, false, msg.id);
-        _appendSegmentsToBubble(msg, container.querySelector(".chat-msg:last-child"));
-      } else {
-        appendChatMessage(msg.role, msg.content, msg.time, msg.role === "assistant", msg.id);
-      }
+    if (msg.segments) {
+      appendChatMessage(msg.role, "", msg.time, false, msg.id, msg.ts);
+      _appendSegmentsToBubble(msg, container.querySelector(".chat-msg:last-child"));
+    } else {
+      appendChatMessage(msg.role, msg.content, msg.time, msg.role === "assistant", msg.id, msg.ts);
+    }
     }
 
     // Restore welcome if no messages left
@@ -528,7 +530,7 @@ function renderMessages(msgs, opts) {
 
     // ── Segments-based rendering (F2: correct interleaving) ──
     if (msg.segments) {
-      appendChatMessage(msg.role, "", msg.time, false, msg.id);
+      appendChatMessage(msg.role, "", msg.time, false, msg.id, msg.ts);
       _appendSegmentsToBubble(msg, container.querySelector(".chat-msg:last-child"));
     } else {
       // ── Legacy: no segments (backward compat) ──
@@ -576,6 +578,7 @@ function renderMessages(msgs, opts) {
           msg.time,
           msg.role === "assistant",
           msg.id,
+          msg.ts,
         );
       }
       if (msg.role !== "assistant" && msg.tool_calls?.length) {
@@ -759,6 +762,11 @@ async function loadOlderMessages() {
     if (typeof data.total === "number" && data.total <= _loadedCount) {
       _historyComplete = true;
     }
+    // 追加ロードで古いメッセージが先頭に来たので、既存の独り言バブルを
+    // 正しい時系列位置へ再挿入（スロット決め直し）
+    if (N.Chat.monologue && typeof N.Chat.monologue.reslot === "function") {
+      N.Chat.monologue.reslot();
+    }
     // 挿入差分ぶんスクロール位置を補正して表示位置を維持
     if (container) {
       container.scrollTop = prevScrollTop + (container.scrollHeight - prevScrollHeight);
@@ -903,12 +911,12 @@ async function deleteChatMessage(msgId) {
     container.textContent = "";
     const remaining = result.remaining_messages || [];
     for (const msg of remaining) {
-      if (msg.segments) {
-        appendChatMessage(msg.role, "", msg.time, false, msg.id);
-        _appendSegmentsToBubble(msg, container.querySelector(".chat-msg:last-child"));
-      } else {
-        appendChatMessage(msg.role, msg.content, msg.time, msg.role === "assistant", msg.id);
-      }
+    if (msg.segments) {
+      appendChatMessage(msg.role, "", msg.time, false, msg.id, msg.ts);
+      _appendSegmentsToBubble(msg, container.querySelector(".chat-msg:last-child"));
+    } else {
+      appendChatMessage(msg.role, msg.content, msg.time, msg.role === "assistant", msg.id, msg.ts);
+    }
     }
 
     if (remaining.length === 0) {
@@ -935,19 +943,20 @@ async function restoreMonologueBubbles() {
   try {
     var data = await api(
       "/api/session-events/" + encodeURIComponent(personaAtRequest) +
-      "?event_type=brain.monologue&limit=20&order=desc",
+      "?event_type=brain.monologue&limit=100&order=desc",
     );
     // A response that lands after the persona moved on is stale — drop it
     if (S.persona !== personaAtRequest) return;
     var events = (data && data.events) || [];
     // API returns newest-first; render chronologically so the whisper
     // trail reads the way it happened. Each whisper slots between the
-    // messages by its timestamp ("HH:MM" from the ISO value).
+    // messages by its full ISO timestamp (epoch comparison inside
+    // monologue.append). limit=100: page load shows only 50 messages,
+    // but whispers older than the visible window still belong on screen.
     for (var i = events.length - 1; i >= 0; i--) {
       var ev = events[i];
       if (ev && ev.summary) {
-        var ts = String(ev.timestamp || "");
-        monologue.append(ev.summary, ts.length >= 16 ? ts.substring(11, 16) : "");
+        monologue.append(ev.summary, String(ev.timestamp || ""));
       }
     }
   } catch (e) {

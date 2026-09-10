@@ -7,6 +7,7 @@ var C = N.Core;
 var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var showConfirm = C.showConfirm, showAlert = C.showAlert;
 var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
+var fmtStamp = C.fmtStamp;
 var safeMarkdown = N.Chat.markdown && N.Chat.markdown.render;
 "use strict";
 var S = window.S;
@@ -24,7 +25,7 @@ function _mem(fn) {
 // ------------------------------------------------------------------
 // Append a chat message to the DOM
 // ------------------------------------------------------------------
-function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
+function appendChatMessage(role, content, timeStr, isMarkdown, msgId, ts) {
   const container = document.getElementById("chat-messages");
   if (!container) return null;
   // Remove welcome message if present
@@ -38,7 +39,8 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
   div.className = "chat-msg " + role;
   div.dataset.msgIndex = msgIndex;
   div.dataset.msgId = msgId || "";
-  div.dataset.time = timeStr || ""; // restore-side chronological anchoring
+  // ISO anchor for monologue chronological slotting (restore + live alike)
+  div.dataset.ts = ts || new Date().toISOString();
   const bubble = document.createElement("div");
   bubble.className = "chat-bubble";
   if (isMarkdown && role === "assistant") {
@@ -54,12 +56,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId) {
   }
   const timeDiv = document.createElement("div");
   timeDiv.className = "chat-time";
-  timeDiv.textContent =
-    timeStr ||
-    new Date().toLocaleTimeString("ja-JP", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  timeDiv.textContent = fmtStamp(div.dataset.ts);
   div.appendChild(bubble);
   div.appendChild(timeDiv);
 
@@ -180,12 +177,10 @@ function _createAssistantDiv() {
   div.className = "chat-msg assistant";
   div.dataset.msgIndex = msgIndex;
   div.dataset.msgId = "";
+  div.dataset.ts = new Date().toISOString();
   const timeDiv = document.createElement("div");
   timeDiv.className = "chat-time";
-  timeDiv.textContent = new Date().toLocaleTimeString("ja-JP", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  timeDiv.textContent = fmtStamp(div.dataset.ts);
   div.appendChild(timeDiv);
   // Action buttons (deferred — content collected from all .chat-bubble text at click time)
   const actions = document.createElement("div");
@@ -920,12 +915,47 @@ var MONOLOGUE_URL = "/api/memory/wiring/stream";
 var _monologuePersona = null;
 var _monologueMaxSeq = 0;
 
-function appendMonologueBubble(text, timeToken) {
+function _tsEpoch(ts) {
+  if (typeof ts !== "string" || !ts) return NaN;
+  var n = Date.parse(ts);
+  return isFinite(n) ? n : NaN;
+}
+
+// First message node strictly newer than the whisper's timestamp —
+// epoch-ms comparison (ISO strings with mixed offsets sort wrong).
+function findMonologueAnchor(container, ts) {
+  var epoch = _tsEpoch(ts);
+  if (isNaN(epoch)) return null;
+  var nodes = container.children;
+  for (var i = 0; i < nodes.length; i++) {
+    var t = _tsEpoch(nodes[i].dataset && nodes[i].dataset.ts);
+    if (!isNaN(t) && t > epoch) return nodes[i];
+  }
+  return null;
+}
+
+// Re-slot every existing whisper after history prepends new older
+// messages (loadOlderMessages): remove-free reorder in place.
+function reslotMonologueBubbles() {
+  var container = findChatLogContainer();
+  if (!container) return;
+  var movable = [];
+  container.querySelectorAll(".chat-monologue-bubble").forEach(function (b) {
+    if (!isNaN(_tsEpoch(b.dataset && b.dataset.ts))) movable.push(b);
+  });
+  movable.sort(function (a, b) { return _tsEpoch(a.dataset.ts) - _tsEpoch(b.dataset.ts); });
+  movable.forEach(function (b) {
+    container.insertBefore(b, findMonologueAnchor(container, b.dataset.ts));
+  });
+}
+
+function appendMonologueBubble(text, ts) {
   if (!text || typeof text !== "string") return;
   var container = findChatLogContainer();
   if (!container) return;
   var bubble = document.createElement("details");
   bubble.className = "chat-monologue-bubble";
+  bubble.dataset.ts = ts || "";
   var summary = document.createElement("summary");
   summary.textContent = "💭 独り言";
   // The canonical reader is the memory modal (keyless preview — no
@@ -943,18 +973,16 @@ function appendMonologueBubble(text, timeToken) {
   body.textContent = text; // CSP-safe: textContent, never parsed as HTML
   bubble.appendChild(summary);
   bubble.appendChild(body);
-  // Restore-time whispers carry their timestamp ("HH:MM") — slot them
-  // between messages in conversation order instead of the tail. Live
-  // whispers (no token) keep append-at-end, which IS their order.
-  var isTime = typeof timeToken === "string" && /^\d{2}:\d{2}$/.test(timeToken);
-  var anchor = null;
-  if (isTime) {
-    var nodes = container.children;
-    for (var i = 0; i < nodes.length; i++) {
-      var t = nodes[i].dataset && nodes[i].dataset.time;
-      if (t && t > timeToken) { anchor = nodes[i]; break; }
-    }
+  if (!isNaN(_tsEpoch(ts))) {
+    var timeDiv = document.createElement("div");
+    timeDiv.className = "chat-time chat-monologue-time";
+    timeDiv.textContent = fmtStamp(ts);
+    bubble.appendChild(timeDiv);
   }
+  // Restored whispers carry their ISO timestamp — slot them between
+  // messages in conversation order instead of the tail. Live whispers
+  // (no parseable timestamp) keep append-at-end, which IS their order.
+  var anchor = findMonologueAnchor(container, ts);
   if (anchor) container.insertBefore(bubble, anchor);
   else container.appendChild(bubble);
   // Follow the stream only while the user is already at the bottom
@@ -978,7 +1006,7 @@ function handleMonologueWiring(data) {
     var meta = evt.meta || {};
     // Stale socket from a previous persona: drop quietly.
     if (meta.persona && window.S && meta.persona !== window.S.persona) return;
-    appendMonologueBubble(meta.text);
+    appendMonologueBubble(meta.text, meta.timestamp);
   } catch (err) {
     console.warn("[monologue wiring parse]:", err.message);
   }
@@ -1031,6 +1059,7 @@ N.Chat.ui = {
 };
 N.Chat.monologue = {
   append: appendMonologueBubble,
+  reslot: reslotMonologueBubbles,
   handle: handleMonologueWiring,
   connect: connectMonologueStream,
 };

@@ -138,6 +138,16 @@ describe('monologue bubble rendering', () => {
     expect(b.querySelector('b')).toBeNull();
     expect(b.textContent).toContain('<img src=x onerror=alert(1)>&<b>太字</b>');
   });
+
+  it('carries the wiring ISO timestamp — dataset.ts + dated time label', () => {
+    N.Chat.monologue.handle(JSON.stringify({
+      kind: 'monologue', source: '', target: '', weight: 0,
+      meta: { persona: 'p1', text: 'ライブの独り言。', timestamp: '2026-09-09T10:30:00' },
+    }));
+    const b = bubbles()[0];
+    expect(b.dataset.ts).toBe('2026-09-09T10:30:00');
+    expect(b.querySelector('.chat-monologue-time').textContent).toMatch(/2026\/09\/09 10:30/);
+  });
 });
 
 describe('monologue is display-only', () => {
@@ -249,11 +259,11 @@ describe('monologue stream wiring', () => {
 });
 
 describe('monologue restore from session events (chat-history.js)', () => {
-  function msgAt(hhmm) {
+  function msgAt(iso) {
     const div = document.createElement('div');
     div.className = 'chat-msg assistant';
-    div.dataset.time = hhmm;
-    div.innerHTML = '<div class="chat-bubble">msg ' + hhmm + '</div>';
+    div.dataset.ts = iso; // ISO anchor — the slotting basis (epoch compare)
+    div.innerHTML = '<div class="chat-bubble">msg ' + iso + '</div>';
     document.getElementById('chat-messages').appendChild(div);
     return div;
   }
@@ -272,8 +282,8 @@ describe('monologue restore from session events (chat-history.js)', () => {
   });
 
   it('inserts restored whispers between messages by timestamp, not at the end', async () => {
-    msgAt('10:00');
-    const later = msgAt('11:00');
+    msgAt('2026-09-09T10:00:00');
+    const later = msgAt('2026-09-09T11:00:00');
     N.Core.api.mockResolvedValueOnce({ events: [
       // API returns newest-first; each event carries an ISO timestamp
       { event_type: 'brain.monologue', summary: '遅い独り言。', timestamp: '2026-09-09T10:45:00+09:00' },
@@ -291,12 +301,51 @@ describe('monologue restore from session events (chat-history.js)', () => {
     expect(texts).toEqual(['早い独り言。', '遅い独り言。']);
   });
 
+  it('slots whispers correctly across a day boundary (HH:MM compare would collapse)', async () => {
+    // 昨日の23:50と今日の08:00の間に今日00:30の独り言 — 昨日の"23:50"ラベルで
+    // HH:MM 比較すると 23>00 で逆順に混入していた跨日バグの回帰テスト。
+    msgAt('2026-09-08T23:50:00');
+    msgAt('2026-09-09T08:00:00');
+    N.Core.api.mockResolvedValueOnce({ events: [
+      { event_type: 'brain.monologue', summary: '夜更かしの独り言。', timestamp: '2026-09-08T23:30:00' },
+      { event_type: 'brain.monologue', summary: '深夜の独り言。', timestamp: '2026-09-09T00:30:00' },
+    ]});
+    await N.Chat.monologue.restore();
+    const container = document.getElementById('chat-messages');
+    const texts = Array.from(container.querySelectorAll('.chat-monologue-text')).map((e) => e.textContent);
+    // epoch order: 23:30(昨日) < 23:50(昨日のmsg) < 00:30(今日) < 08:00(今日のmsg)
+    // — HH:MM 比較なら "23:50" > "00:30" で昨日23:30の独り言が今日の間に混入していた
+    expect(texts).toEqual(['夜更かしの独り言。', '深夜の独り言。']);
+    const order = Array.from(container.children).map((e) => e.className.split(' ')[0]);
+    expect(order).toEqual([
+      'chat-monologue-bubble', 'chat-msg', 'chat-monologue-bubble', 'chat-msg',
+    ]);
+  });
+
+  it('reslot() re-slots whispers after older messages are prepended', async () => {
+    // 最初は11:00のメッセージだけ見えていて、独り言は末尾。
+    msgAt('2026-09-09T11:00:00');
+    N.Core.api.mockResolvedValueOnce({ events: [
+      { event_type: 'brain.monologue', summary: '朝の独り言。', timestamp: '2026-09-09T09:00:00' },
+    ]});
+    await N.Chat.monologue.restore();
+    let container = document.getElementById('chat-messages');
+    expect(container.firstElementChild.className).toBe('chat-monologue-bubble');
+
+    // 過去ロードで 08:00 のメッセージが先頭に prepend された
+    const older = msgAt('2026-09-09T08:00:00');
+    container.insertBefore(older, container.firstChild);
+    N.Chat.monologue.reslot();
+    const order = Array.from(container.children).map((e) => e.className.split(' ')[0]);
+    expect(order).toEqual(['chat-msg', 'chat-monologue-bubble', 'chat-msg']);
+  });
+
   it('re-fetches scoped to the persona and drops stale responses', async () => {
     N.Core.api.mockResolvedValueOnce({ events: [] });
     window.S.persona = 'p2';
     await N.Chat.monologue.restore();
     expect(N.Core.api).toHaveBeenLastCalledWith(
-      '/api/session-events/p2?event_type=brain.monologue&limit=20&order=desc',
+      '/api/session-events/p2?event_type=brain.monologue&limit=100&order=desc',
     );
     // a response that lands after the persona moved on appends nothing
     N.Core.api.mockResolvedValueOnce({ events: [

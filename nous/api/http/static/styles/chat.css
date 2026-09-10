@@ -413,6 +413,10 @@ html.light .chat-thinking-body {
   white-space: pre-wrap;
   word-break: break-word;
 }
+.chat-monologue-time {
+  padding: 0 10px 6px;
+  font-style: normal;
+}
 .chat-typing {
   display: flex;
   gap: 4px;
