@@ -4,8 +4,8 @@ from nous.config.settings import Settings
 
 
 def test_explorer_defaults():
-    s = Settings(explorer={"enabled": False})
-    assert s.explorer.enabled is False
+    s = Settings()
+    assert s.explorer.enabled is True
     assert s.explorer.max_tool_calls == 1
 
 

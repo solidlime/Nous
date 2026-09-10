@@ -256,7 +256,7 @@ class PluginConfig(BaseModel):
 class ExplorerConfig(BaseModel):
     """アイドル時好奇心探索（NOUS_EXPLORER__ENABLED 等）。"""
 
-    enabled: bool = False
+    enabled: bool = True
     max_tool_calls: int = 1
 
 
