@@ -21,7 +21,9 @@ class TurnHub:
         self._queue_size = queue_size
         self._buffers: dict[str, deque[tuple[int, str]]] = {}
         self._seqs: dict[str, int] = {}
-        self._subscribers: dict[str, list[asyncio.Queue]] = {}
+        # (queue, 購読側のイベントループ)。worker スレッド（内省など）から
+        # publish された場合に call_soon_threadsafe で安全に配送するため保持。
+        self._subscribers: dict[str, list[tuple[asyncio.Queue, asyncio.AbstractEventLoop | None]]] = {}
         self._running: set[str] = set()
 
     def begin_turn(self, persona: str) -> str | None:
@@ -44,15 +46,38 @@ class TurnHub:
         self._seqs[persona] = seq
         item = (seq, sse_str)
         self._buffers.setdefault(persona, deque(maxlen=self._buffer_size)).append(item)
-        for q in self._subscribers.get(persona, []):
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        def _put(q: asyncio.Queue, it: tuple[int, str]) -> None:
             if q.full():
                 with contextlib.suppress(asyncio.QueueEmpty):
                     q.get_nowait()
-            q.put_nowait(item)
+            q.put_nowait(it)
+
+        for q, loop in self._subscribers.get(persona, []):
+            if loop is not None and loop is not current_loop:
+                # 別スレッド/別ループから: queue のループへスレッドセーフに委譲
+                with contextlib.suppress(RuntimeError):
+                    loop.call_soon_threadsafe(_put, q, item)
+                continue
+            _put(q, item)
 
     def publish_synthetic(self, persona: str, payload: dict) -> str:
         """{"type": "turn_started", ...} 等を合成発行し sse 文字列を返す。"""
         sse = f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        self.publish(persona, sse)
+        return sse
+
+    def publish_event(self, persona: str, event_name: str, payload: dict) -> str:
+        """名前付き SSE イベント（``event: <name>\\ndata: ...``）を発行する。
+
+        フロントの ``addEventListener(name, ...)``（例: connectChatEvents の
+        ``tool_called``）へ届けるには event 名が必要。戻り値は sse 文字列。
+        """
+        sse = f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
         self.publish(persona, sse)
         return sse
 
@@ -63,10 +88,14 @@ class TurnHub:
     def subscribe(self, persona: str) -> asyncio.Queue:
         """ライブ購読 queue を返す。要素は (seq, sse_str)。"""
         q: asyncio.Queue = asyncio.Queue(maxsize=self._queue_size)
-        self._subscribers.setdefault(persona, []).append(q)
+        try:
+            loop: asyncio.AbstractEventLoop | None = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        self._subscribers.setdefault(persona, []).append((q, loop))
         return q
 
     def unsubscribe(self, persona: str, queue: asyncio.Queue) -> None:
         subs = self._subscribers.get(persona)
         if subs:
-            self._subscribers[persona] = [q for q in subs if q is not queue]
+            self._subscribers[persona] = [pair for pair in subs if pair[0] is not queue]

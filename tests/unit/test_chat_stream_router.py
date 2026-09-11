@@ -176,7 +176,8 @@ class TestChatEventsStream:
         replayed = await asyncio.wait_for(gen.__anext__(), timeout=2)
         assert replayed.startswith("id: 1\n")
         # gen 内部 queue にリプレイ済み seq を再投入（競合の再現）
-        inner = hub._subscribers["test_persona"][-1]
+        # _subscribers は (queue, loop) の tuple（worker スレッド配送対応のため）
+        inner = hub._subscribers["test_persona"][-1][0]
         inner.put_nowait((1, "old"))
         hub.publish("test_persona", "live")  # seq2 — 積んだ重複の後ろに積まれる
         item = await asyncio.wait_for(gen.__anext__(), timeout=2)

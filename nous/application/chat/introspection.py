@@ -897,6 +897,7 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
                     params_summary=json.dumps(call.get("args") or {}, ensure_ascii=False)[:200],
                     error=str(tool_result.get("error") or "") if errored else None,
                     source="introspection",
+                    persona=persona,
                 )
             except Exception:
                 logger.debug("introspection: tool.called publish failed", exc_info=True)

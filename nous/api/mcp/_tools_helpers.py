@@ -87,6 +87,7 @@ async def _emit_tool_called(
     params_summary: str = "",
     error: str | None = None,
     source: str = "direct",
+    persona: str = "",
 ) -> None:
     """Publish a tool.called event (best-effort — never breaks the tool flow)."""
     try:
@@ -100,6 +101,9 @@ async def _emit_tool_called(
             # "introspection" を渡し、フロントが二重表示を排他できるようにする (spec C)。
             "source": source,
         }
+        # persona は渡された時だけ載せる (後方互換: 未指定なら recorder は "unknown")。
+        if persona:
+            data["persona"] = persona
         if error:
             data["error"] = error
         await ctx.event_bus.publish("tool.called", data)

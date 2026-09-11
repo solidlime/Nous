@@ -353,6 +353,14 @@ class AppContext:
             self._session_event_repo = None
             self._session_event_recorder = None
 
+        # tool.called を chat SSE hub へ転送（内省 curiosity チップのライブ表示, spec C）
+        try:
+            self.event_bus.subscribe("tool.called", self._on_tool_called_to_hub)
+        except Exception as e:
+            import logging as _logging
+
+            _logging.getLogger("nous").warning("tool.called→hub bridge init failed: %s", e)
+
     def _init_vector(self) -> None:
         """Initialize embedding model, reranker, and vector store placeholders.
 
@@ -594,6 +602,27 @@ class AppContext:
     async def _on_memory_cache_invalidate(self, event_type: str, data: dict) -> None:
         """Drop cached query results so writes are immediately visible in search."""
         invalidate_query_cache()
+
+    async def _on_tool_called_to_hub(self, event_type: str, data: dict) -> None:
+        """Forward ``tool.called`` to this persona's chat SSE hub (best-effort).
+
+        The chat log listens on ``/api/chat/{persona}/events`` (a TurnHub, fed
+        by turn-scoped events) — event_bus events never reach it. 内省 curiosity
+        探索の tool.called を live 表示するため hub へ名前付きイベントで転送する
+        (spec C)。persona はイベントが持つ値を優先し、無ければこのコンテキストの
+        persona を使う（EventBus は persona 毎に1つ）。
+        """
+        try:
+            persona = data.get("persona") or getattr(self, "persona", None)
+            if not persona:
+                return
+            from nous.application.chat.service import get_turn_hub
+
+            get_turn_hub().publish_event(persona, "tool_called", data)
+        except Exception:
+            import logging as _logging
+
+            _logging.getLogger("nous").debug("tool.called→hub forward failed", exc_info=True)
 
 
 class AppContextRegistry:
