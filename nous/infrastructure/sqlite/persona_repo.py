@@ -325,20 +325,23 @@ class SQLitePersonaRepository(SQLiteRepository):
 
 
 def _resolve_last_conversation_time(db, state_map: dict):
-    """Derive last conversation time from the most recent memory operation.
+    """Return the authoritative last conversation time.
 
-    Falls back to the stored context_state value if no memories exist.
+    The stored context_state value is the single source of truth. Memories are
+    only a legacy fallback for rows predating the stored value — introspection
+    and other background writers create memories without any conversation, so
+    the old max() merge let them reset decay clocks (spec 2026-09-12 A1).
     """
+    stored_time = _parse_or_none(state_map.get("last_conversation_time"))
+    if stored_time is not None:
+        return stored_time
     try:
         row = db.execute("SELECT MAX(COALESCE(updated_at, created_at)) AS last_activity FROM memories").fetchone()
-        if row and row["last_activity"]:
-            memory_time = parse_iso(row["last_activity"])
-            stored_time = _parse_or_none(state_map.get("last_conversation_time"))
-            candidates = [t for t in (memory_time, stored_time) if t is not None]
-            return max(candidates) if candidates else None
+        if row and row[0]:
+            return parse_iso(row[0])
     except Exception:
         pass
-    return _parse_or_none(state_map.get("last_conversation_time"))
+    return None
 
 
 def _safe_float(value: str | None) -> float | None:

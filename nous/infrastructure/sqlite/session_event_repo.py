@@ -10,6 +10,11 @@ if TYPE_CHECKING:
     from nous.infrastructure.sqlite.connection import SQLiteConnection
 
 
+# idle 判定の対象は「対話」のみ (spec A4)。tool.called / brain.* / session.* /
+# events.ingested は内省・ツール実行でも idle タイマーをリセットさせない。
+_IDLE_ACTIVITY_EVENT_TYPES = ("chat.message", "chat.llm_response")
+
+
 class SessionEventRepository:
     """SQLite repository for session_event records."""
 
@@ -116,10 +121,11 @@ class SessionEventRepository:
         return [self._row_to_event(r) for r in rows], total
 
     def last_activity_at(self, persona: str) -> datetime | None:
-        """Most recent session event timestamp for the persona (None if any)."""
+        """Most recent chat turn timestamp for the persona (None if none)."""
+        placeholders = ", ".join("?" for _ in _IDLE_ACTIVITY_EVENT_TYPES)
         row = self._db.execute(
-            "SELECT MAX(timestamp) FROM session_events WHERE persona = ?",
-            (persona,),
+            f"SELECT MAX(timestamp) FROM session_events WHERE persona = ? AND event_type IN ({placeholders})",  # nosec B608: placeholders are bound '?'
+            (persona, *_IDLE_ACTIVITY_EVENT_TYPES),
         ).fetchone()
         if row is None or row[0] is None:
             return None

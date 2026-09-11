@@ -125,10 +125,10 @@ class EnrichmentWorker:
         self._maybe_introspect(drained)
 
     def _maybe_spontaneous(self, idle_seconds: float) -> None:
-        """自発的内省 (spec): idle 達成 + 両内省種別の最新から interval_hours 経過で発火。
+        """自発的内省 (spec): idle 達成 + 前回自発から interval_hours 経過で発火。
 
-        ガードは全て worker 側。種別は brain.introspection と brain.introspection_spontaneous
-        の両方を見る（自発がターン駆動の「前回内省時刻」を上書きしないための分離）。
+        ガードは全て worker 側。種別は brain.introspection_spontaneous のみを見る
+        （ターン駆動内省 brain.introspection が自発のクロックを進めない・spec B）。
         全工程 try/except debug — enrichment 本体は壊さない。
         """
         try:
@@ -139,14 +139,9 @@ class EnrichmentWorker:
             repo = getattr(self.context, "_session_event_repo", None)
             if repo is None:
                 return
-            interval = self._num("brain_spontaneous_interval_hours", 6.0)
-            last: datetime | None = None
-            for etype in ("brain.introspection", "brain.introspection_spontaneous"):
-                events = repo.get_by_persona(self._persona, etype, 1)
-                if events:
-                    ts = events[0].timestamp
-                    if last is None or ts > last:
-                        last = ts
+            interval = self._num("brain_spontaneous_interval_hours", 1.0)
+            events = repo.get_by_persona(self._persona, "brain.introspection_spontaneous", 1)
+            last: datetime | None = events[0].timestamp if events else None
             if last is not None:
                 elapsed = (self._naive(self._now()) - self._naive(last)).total_seconds()
                 if elapsed < interval * 3600.0:

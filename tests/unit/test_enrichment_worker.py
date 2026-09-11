@@ -578,8 +578,8 @@ class TestSpontaneousIntrospection:
     """自発的内省の発火ガード（worker 側）。
 
     条件: brain_spontaneous_enabled AND engine AND idle 達成 AND
-    brain.introspection / brain.introspection_spontaneous の最新タイムスタンプ
-    両者の MAX から interval_hours 以上経過。
+    brain.introspection_spontaneous の最新タイムスタンプから interval_hours 以上経過。
+    ターン駆動 brain.introspection はクロックに算入しない (spec B)。
     """
 
     def _worker(self, ctx: MagicMock, enabled: bool = True, interval_hours: int = 6) -> EnrichmentWorker:
@@ -615,8 +615,8 @@ class TestSpontaneousIntrospection:
         assert args.args[0] is ctx
         assert args.kwargs["idle_seconds"] == 25200.0
 
-    def test_skips_when_recent_turn_introspection(self) -> None:
-        """ターン駆動が最近でも自発が古くても、最新（MAX）が新しい → 発火しない。"""
+    def test_turn_introspection_does_not_block_spontaneous(self) -> None:
+        """ターン駆動が最近でも、自発クロックは spontaneous のみ参照 → 発火する。"""
         ctx = MagicMock()
         worker = self._worker(ctx)
         repo = ctx._session_event_repo
@@ -631,7 +631,7 @@ class TestSpontaneousIntrospection:
         repo.get_by_persona.side_effect = by_persona
         with self._patch_run() as mock_run:
             worker._maybe_spontaneous(600.0)
-        assert not mock_run.called
+        assert mock_run.called
 
     def test_no_history_fires(self) -> None:
         ctx = MagicMock()
