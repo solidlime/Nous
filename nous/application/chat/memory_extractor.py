@@ -7,7 +7,11 @@ import json
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from nous.application.chat.memory_prompts import _MEMORY_LLM_PROMPT, _build_drift_section
+from nous.application.chat.memory_prompts import (
+    _CONTEXT_LLM_PROMPT,
+    _ITEM_LLM_PROMPT,
+    _build_drift_section,
+)
 from nous.domain.language import LanguageResolver
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.result import Success
@@ -90,26 +94,34 @@ class MemoryLLM:
         persona_name: str = "assistant",
         persona_identity: str = "",
         drift: dict | None = None,
+        mode: str = "context",
     ) -> dict:
+        # mode: "context" = facts/goals/promises/context_update, "item" = inventory_update
+        # (spec F で 1 呼び出しを 2 プロンプトに分割。逐次実行は run_memory_llm 側)。
         extract_model = config.extract_model.strip() or config.get_effective_model()
-        api_key = config.get_effective_api_key()
-        if not api_key or not extract_model:
+        if mode == "item" and getattr(config, "item_llm_dedicated", False):
+            model = getattr(config, "item_llm_model", "").strip() or extract_model
+            api_key = getattr(config, "item_llm_api_key", "").strip() or config.get_effective_api_key()
+            base_url = getattr(config, "item_llm_base_url", "").strip() or config.get_effective_base_url()
+            provider_name = getattr(config, "item_llm_provider", "").strip() or config.provider
+        else:
+            model = extract_model
+            api_key = config.get_effective_api_key()
+            base_url = config.get_effective_base_url()
+            provider_name = config.provider
+        if not api_key or not model:
             return {}
 
         try:
-            provider = get_provider(
-                config.provider,
-                api_key,
-                extract_model,
-                config.get_effective_base_url(),
-            )
+            provider = get_provider(provider_name, api_key, model, base_url)
         except Exception as e:
             logger.warning("MemoryLLM: provider init failed: %s", e)
             return {}
 
         language_resolver = LanguageResolver(config)
         lang = language_resolver.resolve(user_message=user_message)
-        prompt = _MEMORY_LLM_PROMPT.format(
+        prompt_template = _ITEM_LLM_PROMPT if mode == "item" else _CONTEXT_LLM_PROMPT
+        prompt = prompt_template.format(
             language=LanguageResolver.display_name(lang),
             persona_name=persona_name,
             persona_identity=persona_identity.strip() or f"あなたは{persona_name}です。",
@@ -118,7 +130,8 @@ class MemoryLLM:
             inventory=inventory.strip() or "(なし)",
             user_message=user_message[:500],
             assistant_response=assistant_response[:500],
-            drift_section=_build_drift_section(drift),
+            # item 抽出に drift 反省は不要。
+            drift_section="" if mode == "item" else _build_drift_section(drift),
         )
 
         from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, TextDeltaEvent
@@ -281,21 +294,35 @@ def _body_delta_state(ctx: AppContext, persona: str, ctx_update: dict, *, skip_b
     return updates
 
 
-def _context_update_skips(tool_calls_log: list[dict] | None) -> tuple[bool, bool]:
-    """メインLLMが今ターン update_context を呼んだフィールド群から (感情skip, 身体skip) を判定する。"""
-    skip_emotion = False
-    skip_body = False
+_STATE_TEXT_KEYS = {"mental_state", "physical_state", "environment"}
+
+
+def _context_update_skips(tool_calls_log: list[dict] | None) -> tuple[bool, bool, bool, bool, bool]:
+    """メインLLMが今ターン直接更新した領域を抽出LLMの適用から除外する (spec F)。
+
+    戻り値: (skip_emotion, skip_body, skip_state_text, skip_user_info, skip_inventory)
+    - update_context: 感情/身体/状態テキスト/user_* をスキップ
+    - item_* (検索除く・item_search は read-only): inventory_update をスキップ
+    """
+    skip_emotion = skip_body = skip_state_text = skip_user_info = skip_inventory = False
     for entry in tool_calls_log or []:
-        if not isinstance(entry, dict) or entry.get("name") != "update_context":
+        if not isinstance(entry, dict):
             continue
-        tool_input = entry.get("input")
-        if not isinstance(tool_input, dict):
-            continue
-        if "emotion" in tool_input or "emotion_intensity" in tool_input:
-            skip_emotion = True
-        if {"body_state", "fatigue", "warmth", "arousal"} & tool_input.keys():
-            skip_body = True
-    return skip_emotion, skip_body
+        name = entry.get("name")
+        raw_input = entry.get("input")
+        tool_input: dict = raw_input if isinstance(raw_input, dict) else {}
+        if name == "update_context":
+            if "emotion" in tool_input or "emotion_intensity" in tool_input:
+                skip_emotion = True
+            if {"body_state", "fatigue", "warmth", "arousal"} & tool_input.keys():
+                skip_body = True
+            if _STATE_TEXT_KEYS & tool_input.keys():
+                skip_state_text = True
+            if any(k.startswith("user_") for k in tool_input):
+                skip_user_info = True
+        elif isinstance(name, str) and name.startswith("item_") and name != "item_search":
+            skip_inventory = True
+    return skip_emotion, skip_body, skip_state_text, skip_user_info, skip_inventory
 
 
 async def run_memory_llm(
@@ -312,20 +339,25 @@ async def run_memory_llm(
         persona_identity = (config.system_prompt or "").strip()
         from nous.application.chat.memory_llm import MemoryLLM as _MemoryLLM
 
-        result = await _MemoryLLM().process(
-            config,
-            user_message,
-            assistant_response,
+        llm = _MemoryLLM()
+        common: dict = dict(
+            user_message=user_message,
+            assistant_response=assistant_response,
             context=context_str,
             commitments=commitments_str,
             inventory=inventory_str,
             persona_name=persona_name,
             persona_identity=persona_identity,
-            drift=payload.get("drift"),
         )
+        result = await llm.process(config, **common, drift=payload.get("drift"), mode="context")
         if not result:
-            logger.warning("MemoryLLM: empty result drift=empty_result persona=%s", persona_name)
-            return {}
+            logger.warning("MemoryLLM: empty context result drift=empty_result persona=%s", persona_name)
+            result = {"facts": [], "goals": [], "promises": [], "context_update": {}}
+        # item 抽出は context の後に逐次実行し inventory_update のみ上書き (spec F・並列化しない)
+        item_result = await llm.process(config, **common, mode="item")
+        result["inventory_update"] = (item_result or {}).get("inventory_update") or {}
+        if not result.get("inventory_update"):
+            logger.info("MemoryLLM: item extractor returned no inventory changes persona=%s", persona_name)
 
         persona = ctx.persona
 
@@ -482,8 +514,14 @@ async def run_memory_llm(
 
         # context_update: 感情・状態を更新
         ctx_update = result.get("context_update", {})
+        (
+            skip_emotion,
+            skip_body,
+            skip_state_text,
+            skip_user_info,
+            skip_inventory,
+        ) = _context_update_skips(tool_calls_log)
         if ctx_update:
-            skip_emotion, skip_body = _context_update_skips(tool_calls_log)
 
             emotion = ctx_update.get("emotion")
             intensity = ctx_update.get("emotion_intensity")
@@ -518,16 +556,20 @@ async def run_memory_llm(
             state_fields: dict[str, object] = {}
             # physical_state/mental_state → persona state（恒久メモリを汚さず
             # state フィールドとして永続化する）。値は SSE に流さない（従来契約）
-            for key in ("physical_state", "mental_state"):
-                val = ctx_update.get(key)
-                if val is not None and str(val).strip():
-                    state_fields[key] = val
-                ctx_update.pop(key, None)
-            env_val = ctx_update.get("environment")
-            if isinstance(env_val, str):
-                state_fields["environment"] = env_val
+            if skip_state_text:
+                for key in ("physical_state", "mental_state", "environment"):
+                    ctx_update.pop(key, None)
             else:
-                ctx_update.pop("environment", None)  # 非 str は適用されない → SSE にも流さない
+                for key in ("physical_state", "mental_state"):
+                    val = ctx_update.get(key)
+                    if val is not None and str(val).strip():
+                        state_fields[key] = val
+                    ctx_update.pop(key, None)
+                env_val = ctx_update.get("environment")
+                if isinstance(env_val, str):
+                    state_fields["environment"] = env_val
+                else:
+                    ctx_update.pop("environment", None)  # 非 str は適用されない → SSE にも流さない
             body_applied = _body_delta_state(ctx, persona, ctx_update, skip_body=skip_body)
             state_fields.update(body_applied)
             # 適用値（delta 変換後）で生の絶対値を置換 — post.py の ContextUpdateSSE が
@@ -546,7 +588,7 @@ async def run_memory_llm(
             for key, val in ctx_update.items():
                 if key.startswith("user_") and val is not None:
                     user_info_map[key.replace("user_", "")] = str(val)
-            if user_info_map:
+            if user_info_map and not skip_user_info:
                 ctx.persona_service.update_user_info(persona, user_info_map)
 
             # context_note → persona_info（session continuity）
@@ -556,6 +598,11 @@ async def run_memory_llm(
 
         # inventory_update: 装備変更 + アイテム追加/削除/更新
         inv_update = result.get("inventory_update", {})
+        if skip_inventory:
+            # メインLLMが item_* を直接呼んだターンは抽出結果を適用しない
+            # (InventoryUpdateSSE にも流さない)。
+            inv_update = {}
+            result["inventory_update"] = {}
         equip_map = inv_update.get("equip", {})
         unequip_list = inv_update.get("unequip", [])
         remove_items = inv_update.get("remove_items", [])

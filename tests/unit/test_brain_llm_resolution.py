@@ -308,10 +308,10 @@ class TestBrainMaxTokensWiring:
 
 
 class TestBrainSpontaneousKeys:
-    def test_default_off_6h(self):
+    def test_default_on_1h(self):
         cfg = ChatConfig()
-        assert cfg.brain_spontaneous_enabled is False
-        assert cfg.brain_spontaneous_interval_hours == 6
+        assert cfg.brain_spontaneous_enabled is True
+        assert cfg.brain_spontaneous_interval_hours == 1
 
     def test_interval_clamped_1_to_72(self):
         from nous.domain.session_config import SessionConfig

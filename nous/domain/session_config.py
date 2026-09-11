@@ -128,8 +128,15 @@ class SessionConfig(BaseModel):
     brain_llm_model: str = ""
     brain_llm_base_url: str = ""
     brain_llm_api_key: str = ""
+    # Dedicated LLM for the item (inventory) extractor — split from the context
+    # extractor (spec F). OFF = reuse extract_model / the chat 4-piece set.
+    item_llm_dedicated: bool = False
+    item_llm_provider: str = ""
+    item_llm_model: str = ""
+    item_llm_base_url: str = ""
+    item_llm_api_key: str = ""
     # REM 独り言 (drain バッチ完走時に LLM 1 call で生成・session_events 保存)
-    brain_monologue_enabled: bool = False
+    brain_monologue_enabled: bool = True
     # 内省エンジン (drain 後の単一 LLM 呼び出し: 独り言＋逸脱判定＋反省＋感情/身体)
     brain_introspection_enabled: bool = True
     # 脳専用 reasoning トグル (chat の reasoning_enabled/effort とは独立)。
@@ -143,8 +150,13 @@ class SessionConfig(BaseModel):
     # 自発的内省: 誰も話しかけてこない静かな時間に記憶と現在状態から独り言を産出。
     # 発火間隔は brain.introspection / brain.introspection_spontaneous 両種別の
     # 最新タイムスタンプから interval_hours 以上経過で判定（worker 側ガード）。
-    brain_spontaneous_enabled: bool = False
-    brain_spontaneous_interval_hours: int = 6
+    brain_spontaneous_enabled: bool = True
+    brain_spontaneous_interval_hours: int = 1
+    # 内省プロンプト上書き (空文字 = コード内デフォルトを使用)。
+    # プレースホルダ: {persona} {current_state} {memory_texts} {persona_identity}
+    #   + ターン駆動のみ {recent_turns}。欠落があるとデフォルトへ自動フォールバック。
+    brain_introspection_prompt: str = ""
+    brain_spontaneous_prompt: str = ""
 
     @field_validator("brain_reasoning_effort")
     @classmethod
@@ -169,7 +181,7 @@ class SessionConfig(BaseModel):
     forgetting_trigger_threshold: int = 100
     forgetting_forget_ratio: float = 0.2
     forgetting_forget_strength: float = 0.5
-    forgetting_decay_interval_seconds: int = 86400  # 24h default
+    forgetting_decay_interval_seconds: int = 3600  # 1h sweep — 減衰は経過時間依存なので sweep は平滑性にのみ影響
     forgetting_min_strength: float = 0.1
 
     @field_validator("voice_emotion_mode")

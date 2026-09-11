@@ -279,7 +279,6 @@ class TestMemoryLLMPromptFormat:
         assert "テストペルソナ" in formatted
         assert "テストユーザー" in formatted
         assert "目標内容" in formatted
-        assert "アイテムA" in formatted
         assert "こんにちは" in formatted
 
     def test_prompt_format_partial_info(self):
@@ -336,7 +335,6 @@ class TestMemoryLLMPromptFormat:
         assert "goals" in formatted
         assert "promises" in formatted
         assert "context_update" in formatted
-        assert "inventory_update" in formatted
         assert "【出力形式】" in formatted
         assert "【注意】" in formatted
 
@@ -350,7 +348,6 @@ class TestMemoryLLMPromptFormat:
             "persona_identity",
             "context",
             "commitments",
-            "inventory",
             "user_message",
             "assistant_response",
             "language",

@@ -73,7 +73,7 @@ class TestDriftForwarding:
             ) as mock_process,
         ):
             await run_memory_llm(ctx, config, {"user": "u", "assistant": "a", "drift": drift})
-        assert mock_process.await_args.kwargs["drift"] == drift
+        assert mock_process.await_args_list[0].kwargs["drift"] == drift
 
     @pytest.mark.asyncio
     async def test_run_memory_llm_no_drift_defaults_none(self):
@@ -89,7 +89,7 @@ class TestDriftForwarding:
             ) as mock_process,
         ):
             await run_memory_llm(ctx, config, {"user": "u", "assistant": "a"})
-        assert mock_process.await_args.kwargs["drift"] is None
+        assert mock_process.await_args_list[0].kwargs["drift"] is None
 
     @pytest.mark.asyncio
     async def test_drift_fact_saved_with_valid_until(self):
