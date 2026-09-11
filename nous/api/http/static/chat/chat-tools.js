@@ -404,10 +404,37 @@ function toggleTool(toolName) {
 }
 
 // ------------------------------------------------------------------
+// Introspection curiosity exploration — a tool.called chip rendered in
+// the chat log (source="introspection" only; direct tool calls already
+// ride the turn stream, so showing them here would double-render).
+// Reuses the restore chip renderer so live and restored look identical.
+// ------------------------------------------------------------------
+function appendIntrospectionCall(d) {
+  if (!d || !d.tool_name) return null;
+  var input = {};
+  try {
+    input = JSON.parse(d.params_summary || "{}");
+  } catch (_e) {
+    input = { params: d.params_summary };
+  }
+  var div = appendToolEvent("tool_call", { name: d.tool_name, input: input, id: "" });
+  if (div) {
+    div.classList.add("chat-tool-call-introspection");
+    var statusEl = div.querySelector(".chat-tool-status");
+    if (statusEl) {
+      safeSetHTML(statusEl, '<i data-lucide="' + (d.success === false ? "alert-triangle" : "check") + '"></i>');
+    }
+    N.Core.refreshIcons();
+  }
+  return div;
+}
+
+// ------------------------------------------------------------------
 // Expose on N.Chat.tools
 // ------------------------------------------------------------------
 N.Chat.tools = {
   append: appendToolEvent,
+  appendIntrospectionCall: appendIntrospectionCall,
   handleFile: handleFileToolCall,
   execCode: execCodeBlock,
   showGenSpinner: showImageGenSpinner,

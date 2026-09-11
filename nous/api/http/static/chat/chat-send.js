@@ -878,6 +878,19 @@ function _handleHubMessage(e) {
   _handleChatEvent(evt);
 }
 
+// tool.called (source="introspection"): 内省 curiosity 探索のツール実行を
+// チャットログに流す (spec C)。メイン対話の tool_call SSE と二重表示しない
+// よう introspection 由来のみ描画する。data は JSON 文字列/オブジェクト両対応。
+function handleToolCalledEvent(data) {
+  try {
+    var d = typeof data === "string" ? JSON.parse(data || "{}") : (data || {});
+    if (d && d.tool_name && d.source === "introspection" &&
+        N.Chat.tools && typeof N.Chat.tools.appendIntrospectionCall === "function") {
+      N.Chat.tools.appendIntrospectionCall(d);
+    }
+  } catch (_e) { /* best-effort */ }
+}
+
 function connectChatEvents(persona) {
   _chatEventsPersona = persona || (window.S && window.S.persona) || null;
   // Persona switch voids any in-flight rendering (the container is
@@ -893,6 +906,7 @@ function connectChatEvents(persona) {
     },
     handlers: {
       message: function (e) { _handleHubMessage(e); },
+      tool_called: function (e) { handleToolCalledEvent(e.data); },
     },
     onOpen: function () {
       // Connect-time snapshot burst (the endpoint replays its whole ring
@@ -949,15 +963,17 @@ function reslotMonologueBubbles() {
   });
 }
 
-function appendMonologueBubble(text, ts) {
+function appendMonologueBubble(text, ts, kind) {
   if (!text || typeof text !== "string") return;
   var container = findChatLogContainer();
   if (!container) return;
+  var isExploration = kind === "exploration";
   var bubble = document.createElement("details");
   bubble.className = "chat-monologue-bubble";
   bubble.dataset.ts = ts || "";
+  if (isExploration) bubble.dataset.kind = "exploration";
   var summary = document.createElement("summary");
-  summary.textContent = "💭 独り言";
+  summary.textContent = isExploration ? "🔍 調べたこと" : "💭 独り言";
   // The canonical reader is the memory modal (keyless preview — no
   // Edit/Delete); suppress the native details toggle so the click does
   // exactly one legible thing. CSP-safe: listener, no inline handler.
@@ -965,7 +981,10 @@ function appendMonologueBubble(text, ts) {
     e.preventDefault();
     if (N.Components && N.Components.memModal &&
         typeof N.Components.memModal.openMemory === "function") {
-      N.Components.memModal.openMemory({ content: text, tags: ["monologue"] });
+      N.Components.memModal.openMemory({
+        content: text,
+        tags: isExploration ? ["monologue", "exploration"] : ["monologue"],
+      });
     }
   });
   // Timestamp rides in the summary, not the details body: the bubble
@@ -1066,6 +1085,9 @@ N.Chat.monologue = {
   handle: handleMonologueWiring,
   connect: connectMonologueStream,
 };
+// tool.called (source=introspection) ハンドラ — connectChatEvents が参照し、
+// テストからも直接検証できるよう公開する。
+N.Chat.introspectionTool = { handle: handleToolCalledEvent };
 
 // ------------------------------------------------------------------
 // Clipboard helper — try modern API, fallback to execCommand

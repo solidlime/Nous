@@ -462,7 +462,7 @@ describe('brain section structure (chat_sidebar_memory.py)', () => {
   it('spontaneous introspection: OFF does not send interval, sends enabled=false', async () => {
     window.Nous.Chat.settings.apply({});
     expect(document.getElementById('chat-brain-spontaneous').checked).toBe(false);
-    expect(document.getElementById('chat-brain-spontaneous-interval').value).toBe('6');
+    expect(document.getElementById('chat-brain-spontaneous-interval').value).toBe('1');
 
     document.getElementById('chat-base-url').value = 'https://api.example.com';
     apiStub.mockResolvedValueOnce({});

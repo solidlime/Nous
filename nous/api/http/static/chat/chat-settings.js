@@ -315,7 +315,7 @@ function applyChatConfig(cfg) {
   setChecked("chat-brain-reasoning", cfg.brain_reasoning_enabled === true);
   set("chat-brain-reasoning-effort", cfg.brain_reasoning_effort || "medium");
   setChecked("chat-brain-spontaneous", cfg.brain_spontaneous_enabled === true);
-  set("chat-brain-spontaneous-interval", cfg.brain_spontaneous_interval_hours ?? 6);
+  set("chat-brain-spontaneous-interval", cfg.brain_spontaneous_interval_hours ?? 1);
   set("chat-brain-max-tokens", cfg.brain_max_tokens ?? 2048);
   set("chat-brain-novelty-sim", cfg.brain_novelty_sim_threshold ?? 0.75);
   set("chat-brain-novelty-importance", cfg.brain_novelty_importance_threshold ?? 0.6);
@@ -345,7 +345,7 @@ function applyChatConfig(cfg) {
   // === Forgetting (moved from Settings) ===
   setChecked("chat-forgetting-enabled", cfg.forgetting_enabled === true);
   set("chat-forgetting-trigger-threshold", cfg.forgetting_trigger_threshold ?? 100);
-  set("chat-forgetting-decay-interval-seconds", cfg.forgetting_decay_interval_seconds ?? 86400);
+  set("chat-forgetting-decay-interval-seconds", cfg.forgetting_decay_interval_seconds ?? 3600);
   set("chat-forgetting-min-strength", cfg.forgetting_min_strength ?? 0.1);
   set("chat-forgetting-forget-ratio", cfg.forgetting_forget_ratio ?? 0.2);
   set("chat-forgetting-forget-strength", cfg.forgetting_forget_strength ?? 0.5);

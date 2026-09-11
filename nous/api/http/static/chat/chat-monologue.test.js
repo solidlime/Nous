@@ -366,3 +366,35 @@ describe('monologue restore from session events (chat-history.js)', () => {
     expect(bubbles().length).toBe(0);
   });
 });
+
+describe('introspection exploration (spec C/G)', () => {
+  it('restores exploration summaries with the investigation label', async () => {
+    N.Core.api.mockResolvedValueOnce({ events: [
+      { event_type: 'brain.monologue', summary: '調べたら雲は500トンだった。', metadata: { kind: 'exploration', tool: 'web_search' } },
+      { event_type: 'brain.monologue', summary: '普通の独り言。' },
+    ]});
+    await N.Chat.monologue.restore();
+    const bubblesArr = bubbles();
+    expect(bubblesArr.length).toBe(2);
+    // newest-first API → chronological render: 普通の独り言 first
+    const exploration = Array.from(bubblesArr).find((b) => b.dataset.kind === 'exploration');
+    expect(exploration).toBeTruthy();
+    expect(exploration.querySelector('summary').textContent).toContain('調べたこと');
+    const normal = Array.from(bubblesArr).find((b) => b.dataset.kind !== 'exploration');
+    expect(normal.querySelector('summary').textContent).toBe('💭 独り言');
+  });
+
+  it('live tool.called handler renders introspection chips only', () => {
+    const append = vi.fn();
+    N.Chat.tools.appendIntrospectionCall = append;
+    const handle = N.Chat.introspectionTool.handle;
+    handle(JSON.stringify({ tool_name: 'web_search', source: 'introspection', success: true }));
+    expect(append).toHaveBeenCalledTimes(1);
+    // direct (main-dialogue) tool calls must not double-render in the chat log
+    handle(JSON.stringify({ tool_name: 'web_search', source: 'direct', success: true }));
+    expect(append).toHaveBeenCalledTimes(1);
+    // legacy events without a source are ignored too
+    handle(JSON.stringify({ tool_name: 'web_search', success: true }));
+    expect(append).toHaveBeenCalledTimes(1);
+  });
+});

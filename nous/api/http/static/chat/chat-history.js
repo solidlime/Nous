@@ -956,7 +956,8 @@ async function restoreMonologueBubbles() {
     for (var i = events.length - 1; i >= 0; i--) {
       var ev = events[i];
       if (ev && ev.summary) {
-        monologue.append(ev.summary, String(ev.timestamp || ""));
+        // metadata.kind="exploration" の探索要約は 🔍 ラベルで復元 (spec C/G)。
+        monologue.append(ev.summary, String(ev.timestamp || ""), ev.metadata && ev.metadata.kind);
       }
     }
   } catch (e) {
