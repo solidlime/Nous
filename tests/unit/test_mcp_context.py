@@ -204,8 +204,8 @@ class TestUpdateContext:
         ctx.persona_service.record_conversation_time.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_update_records_conversation_time(self, registered_tools):
-        """自発的更新（context_note/relationship 等）は最終接触時刻を記録する。"""
+    async def test_update_does_not_record_conversation_time(self, registered_tools):
+        """自発的更新は最終接触時刻を記録しない（ターン終了 post.py が唯一の記録点・spec A2）。"""
         tools, ctx, _ = registered_tools
         ctx.persona_service.update_relationship.return_value = Success(None)
         ctx.persona_service.update_persona_info.return_value = Success(None)
@@ -217,7 +217,7 @@ class TestUpdateContext:
             mock_reg_cls.get.return_value = ctx
             result = await update_context(relationship_status="friends", context_note="会話中")
         assert "relationship=friends" in result
-        ctx.persona_service.record_conversation_time.assert_called_once_with("test_persona")
+        ctx.persona_service.record_conversation_time.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_update_relationship_status(self, registered_tools):

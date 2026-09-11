@@ -30,6 +30,8 @@ _MAX_TURNS = 12
 _MAX_TOTAL_CHARS = 8000
 _MAX_MEMORIES = 5
 _MAX_CHARS_PER_MEMORY = 80
+# persona_identity (system_prompt) の安全弁上限。全文化したため必要。
+_PERSONA_IDENTITY_MAX_CHARS = 12000
 # 独り言生成時に LLM が自ら作れる記憶のハード上限
 _MAX_CREATED_MEMORIES = 3
 
@@ -170,15 +172,18 @@ class IntrospectionEngine:
         recent_turns: list[dict],
         memory_texts: list[str],
         current_state: dict | None = None,
+        prompt_override: str = "",
     ) -> IntrospectionResult | None:
         """直近会話＋記憶＋現在状態から内省結果 JSON を産出する。失敗時 None。"""
         turns_text = "\n".join(f"{t.get('role', '?')}: {t.get('content', '')}" for t in recent_turns) or "(なし)"
-        mems = "\n".join(f"- {t[:_MAX_CHARS_PER_MEMORY]}" for t in memory_texts[:_MAX_MEMORIES]) or "(なし)"
-        user_message = _INTROSPECTION_PROMPT.format(
+        mems = "\n".join(f"- {t}" for t in memory_texts[:_MAX_MEMORIES]) or "(なし)"
+        user_message = _format_prompt(
+            prompt_override,
+            _INTROSPECTION_PROMPT,
             persona=persona,
             recent_turns=turns_text,
             memory_texts=mems,
-            persona_identity=(system_prompt or "")[:2000],
+            persona_identity=(system_prompt or "")[:_PERSONA_IDENTITY_MAX_CHARS],
             current_state=_format_current_state(current_state),
         )
         try:
@@ -196,14 +201,17 @@ class IntrospectionEngine:
         system_prompt: str,
         memory_texts: list[str],
         current_state: dict | None = None,
+        prompt_override: str = "",
     ) -> IntrospectionResult | None:
         """自発的内省: 誰も話しかけてこない静かな時間に記憶＋現在状態から独り言を産出。失敗時 None。"""
-        mems = "\n".join(f"- {t[:_MAX_CHARS_PER_MEMORY]}" for t in memory_texts[:_MAX_MEMORIES]) or "(なし)"
-        user_message = _SPONTANEOUS_PROMPT.format(
+        mems = "\n".join(f"- {t}" for t in memory_texts[:_MAX_MEMORIES]) or "(なし)"
+        user_message = _format_prompt(
+            prompt_override,
+            _SPONTANEOUS_PROMPT,
             persona=persona,
             current_state=_format_current_state(current_state),
             memory_texts=mems,
-            persona_identity=(system_prompt or "")[:2000],
+            persona_identity=(system_prompt or "")[:_PERSONA_IDENTITY_MAX_CHARS],
         )
         try:
             text, _usage = await self._call_llm(user_message)
@@ -271,6 +279,21 @@ def _format_current_state(state: dict | None) -> str:
     body_text = ", ".join(f"{k}={v}" for k, v in body.items()) if body else "不明"
     elapsed = state.get("elapsed") or "不明"
     return f"感情: {emotion}（強度 {intensity}）/ 身体: {body_text} / 前回の内省から {elapsed}"
+
+
+def _format_prompt(override: str, default: str, **fields) -> str:
+    """内省プロンプトの組み立て (spec D)。空文字=デフォルト。
+
+    上書きテンプレートにプレースホルダ欠落等の不備があれば
+    デフォルトにフォールバックする（ユーザー設定で内省を壊さない）。
+    """
+    template = (override or "").strip()
+    if template:
+        try:
+            return template.format(**fields)
+        except (KeyError, IndexError, ValueError) as e:
+            logger.warning("introspection: prompt override invalid (%s) — using default", e)
+    return default.format(**fields)
 
 
 def _format_seconds(seconds: float | None) -> str:
@@ -534,8 +557,17 @@ async def run_introspection(ctx: AppContext, config: ChatConfig | None, engine, 
     current_state = _build_current_state(ctx, persona, elapsed_seconds)
 
     persona_identity = getattr(config, "system_prompt", "") or f"あなたは{persona}です。"
+    # drained は content 文字列のみ（タグ無し）なので一律 80 字 cap を呼び出し側で適用 (spec G)。
+    capped_drained = [str(t)[:_MAX_CHARS_PER_MEMORY] for t in drained_texts]
     try:
-        result = await engine.generate(persona, persona_identity, turns, drained_texts, current_state=current_state)
+        result = await engine.generate(
+            persona,
+            persona_identity,
+            turns,
+            capped_drained,
+            current_state=current_state,
+            prompt_override=getattr(config, "brain_introspection_prompt", ""),
+        )
     except Exception:
         logger.info("introspection: generate failed", exc_info=True)
         result = None
@@ -581,7 +613,7 @@ async def run_spontaneous(
     try:
         recent = ctx.memory_service.get_recent(limit=10)
         items = getattr(recent, "value", None) if getattr(recent, "is_ok", False) else None
-        memory_texts = [str(m.content) for m in items or [] if getattr(m, "content", None)]
+        memory_texts = _cap_memory_texts(items or [])
     except Exception:
         logger.debug("introspection spontaneous: memory fetch failed", exc_info=True)
 
@@ -590,7 +622,13 @@ async def run_spontaneous(
 
     persona_identity = getattr(config, "system_prompt", "") or f"あなたは{persona}です。"
     try:
-        result = await engine.generate_spontaneous(persona, persona_identity, memory_texts, current_state)
+        result = await engine.generate_spontaneous(
+            persona,
+            persona_identity,
+            memory_texts,
+            current_state,
+            prompt_override=getattr(config, "brain_spontaneous_prompt", ""),
+        )
     except Exception:
         logger.info("introspection spontaneous: generate failed", exc_info=True)
         result = None
@@ -613,9 +651,10 @@ async def run_spontaneous(
             len(memory_texts),
         )
 
-    _record_introspection_event(
-        repo, persona, "brain.introspection_spontaneous", result, applied, 0, len(memory_texts), stored
-    )
+    if result is not None:
+        _record_introspection_event(
+            repo, persona, "brain.introspection_spontaneous", result, applied, 0, len(memory_texts), stored
+        )
 
 
 async def _apply_result(
@@ -747,6 +786,51 @@ def _record_introspection_event(
 
 _EXPLORATION_RESULT_MAX_CHARS = 2000
 _EXPLORATION_SUMMARY_MAX_CHARS = 500
+# 探索 (exploration) タグ記憶のみに適用する緩い cap — 80字cap が500字探索要約を
+# 切断して次回の curiosity が前回結果を踏めない問題の修復 (spec G)。
+_EXPLORATION_MEMORY_CAP = 500
+
+_CURIOSITY_MUTATING_PREFIXES = (
+    "update_", "item_", "create_", "delete_", "remove_", "add_", "set_",
+    "memory_create", "memory_update", "memory_delete", "goal_manage",
+)
+
+
+def _curiosity_tool_allowed(tool_name: str) -> bool:
+    """curiosity 探索は read-only カタログに制限する (spec A3)。
+
+    状態変更系 (update_*)・item_*・goal_manage・memory 書き込みを除外。
+    get_context は read-only だが record_conversation_time の副作用があるため除外。
+    """
+    if tool_name == "get_context":
+        return False
+    return not tool_name.startswith(_CURIOSITY_MUTATING_PREFIXES)
+
+
+def _cap_memory_texts(memories: list) -> list[str]:
+    """最近記憶を cap 済み文字列にする。exploration タグのみ緩い cap を適用 (spec G)。"""
+    texts: list[str] = []
+    for m in memories:
+        content = getattr(m, "content", None)
+        if not content:
+            continue
+        tags = set(getattr(m, "tags", None) or [])
+        cap = _EXPLORATION_MEMORY_CAP if "exploration" in tags else _MAX_CHARS_PER_MEMORY
+        texts.append(str(content)[:cap])
+    return texts
+
+
+def _parse_json_object(text: str) -> dict | None:
+    """```json 囲み/素JSON 両対応の dict パース。失敗時 None。"""
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        cleaned = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
 
 
 async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None, persona: str, result, engine) -> None:
@@ -783,7 +867,11 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
 
         async with MCPClientPool(list(getattr(config, "mcp_servers", None) or [])) as pool:
             disabled = set(getattr(config, "disabled_tools", None) or [])
-            tools = [t for t in pool.list_all_tools() if t.name not in disabled]
+            tools = [
+                t
+                for t in pool.list_all_tools()
+                if t.name not in disabled and _curiosity_tool_allowed(t.name)
+            ]
             if not tools:
                 logger.info("introspection: curiosity — no MCP tools available")
                 return
@@ -797,7 +885,22 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
                 call.get("args") or {},
             )
             tool_result = await pool.call_tool(call["tool_name"], call.get("args") or {})
-            if "error" in tool_result or tool_result.get("isError"):
+            errored = "error" in tool_result or tool_result.get("isError")
+            try:
+                from nous.api.mcp._tools_helpers import _emit_tool_called
+
+                await _emit_tool_called(
+                    ctx,
+                    call["tool_name"],
+                    "(空の結果)" if errored else str(tool_result.get("result") or "")[:80],
+                    not errored,
+                    params_summary=json.dumps(call.get("args") or {}, ensure_ascii=False)[:200],
+                    error=str(tool_result.get("error") or "") if errored else None,
+                    source="introspection",
+                )
+            except Exception:
+                logger.debug("introspection: tool.called publish failed", exc_info=True)
+            if errored:
                 logger.info("introspection: curiosity — tool call errored: %s", tool_result)
                 return
     except Exception:
@@ -832,16 +935,9 @@ async def _select_tool(engine, curiosity: str, tools: list) -> dict | None:
         return None
     if not text:
         return None
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        lines = cleaned.splitlines()
-        cleaned = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError:
+    data = _parse_json_object(text)
+    if data is None:
         logger.debug("introspection: tool select parse failed: %s", text[:200])
-        return None
-    if not isinstance(data, dict):
         return None
     name = data.get("tool_name")
     valid = {t.name for t in tools}
@@ -868,17 +964,21 @@ async def _summarize_and_record(
         f"気になっていたこと: {curiosity}\n"
         f"使ったツール: {tool_name}\n"
         f"結果:\n{result_text}\n\n"
-        "わかったことを3文以内で。「調べたら〜だった」の調子で。"
-        "ツール名や「結果」という単語は出さない。"
+        "出力は JSON のみ。\n"
+        '{"summary": "わかったことを3文以内。「調べたら〜だった」の調子で。ツール名や「結果」という単語は出さない", '
+        '"satisfied": true または false, "unresolved": "満たせなかった質問を一人称で一行。なければ null"}'
     )
     try:
         text, _usage = await engine._call_llm(prompt)
     except Exception:
         logger.info("introspection: curiosity summary LLM failed", exc_info=True)
         return
-    if not text or not text.strip():
+    data = _parse_json_object(text or "")
+    if not data:
         return
-    summary = text.strip()[:_EXPLORATION_SUMMARY_MAX_CHARS]
+    summary = str(data.get("summary") or "").strip()[:_EXPLORATION_SUMMARY_MAX_CHARS]
+    if not summary:
+        return
 
     try:
         await ctx.memory_service.create_memory(
@@ -890,6 +990,38 @@ async def _summarize_and_record(
         )
     except Exception:
         logger.debug("introspection: exploration memory failed", exc_info=True)
+
+    # 「見つからなかった」質問を次周期の材料として持ち越す (spec G・絞り込みループは作らない)。
+    unresolved = str(data.get("unresolved") or "").strip().strip('"')
+    if data.get("satisfied") is False and unresolved and unresolved.lower() != "null":
+        try:
+            await ctx.memory_service.create_memory(
+                persona=persona,
+                content=unresolved[:_EXPLORATION_MEMORY_CAP],
+                importance=0.5,
+                tags=["exploration", "unresolved", "introspection"],
+                source_context="introspection",
+            )
+        except Exception:
+            logger.debug("introspection: unresolved question memory failed", exc_info=True)
+
+    # 探索要約を brain.monologue の既存永続パスに乗せる (spec C) —
+    # wiring emit だけだとリロードで消えるため。
+    try:
+        repo = getattr(ctx, "_session_event_repo", None)
+        if repo is not None:
+            repo.insert(
+                SessionEvent(
+                    session_id="unknown",
+                    persona=persona,
+                    event_type="brain.monologue",
+                    summary=summary,
+                    timestamp=get_now(),
+                    metadata={"kind": "exploration", "tool": tool_name},
+                )
+            )
+    except Exception:
+        logger.debug("introspection: exploration monologue persist failed", exc_info=True)
 
     try:
         wiring_events.emit(

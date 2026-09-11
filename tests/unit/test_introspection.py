@@ -104,7 +104,7 @@ def _insert_turns(db, persona: str, role_content: list[tuple[str, str]], base: d
 def _engine_with(result_or_none, ctx) -> MagicMock:
     engine = MagicMock()
 
-    async def fake_generate(persona, system_prompt, recent_turns, memory_texts, current_state=None):
+    async def fake_generate(persona, system_prompt, recent_turns, memory_texts, current_state=None, prompt_override=""):
         assert isinstance(recent_turns, list)
         return result_or_none
 
@@ -670,7 +670,7 @@ class TestStateMaterial:
         _insert_turns(sqlite_conn.get_memory_db(), "test", [("user", "u1")], base)
         captured: dict = {}
 
-        async def fake_generate(persona, system_prompt, recent_turns, memory_texts, current_state=None):
+        async def fake_generate(persona, system_prompt, recent_turns, memory_texts, current_state=None, prompt_override=""):
             captured["current_state"] = current_state
             return _result()
 
@@ -744,7 +744,7 @@ class TestRunSpontaneous:
     def _engine(self, result_or_none, captured: dict | None = None) -> MagicMock:
         engine = MagicMock()
 
-        async def fake_generate_spontaneous(persona, system_prompt, memory_texts, current_state=None):
+        async def fake_generate_spontaneous(persona, system_prompt, memory_texts, current_state=None, prompt_override=""):
             if captured is not None:
                 captured["memory_texts"] = memory_texts
                 captured["current_state"] = current_state
@@ -782,14 +782,15 @@ class TestRunSpontaneous:
         assert captured["current_state"]["emotion"] == "neutral"
         assert captured["current_state"]["elapsed"] == "7時間"
 
-    def test_generate_none_still_records_event(self, ctx) -> None:
+    def test_generate_none_does_not_record_event(self, ctx) -> None:
+        """失敗時は spontaneous イベントを書かずクロックを消費しない (spec A5)。"""
         import asyncio
 
         self._ctx_with_memories(ctx, [])
         engine = self._engine(None)
         asyncio.new_event_loop().run_until_complete(run_spontaneous(ctx, _config(), engine, None))
         repo = ctx._session_event_repo
-        assert len(repo.get_by_persona("test", "brain.introspection_spontaneous", 10)) == 1
+        assert repo.get_by_persona("test", "brain.introspection_spontaneous", 10) == []
         assert repo.get_by_persona("test", "brain.monologue", 10) == []
 
     def test_disabled_config_skips(self, ctx) -> None:
@@ -823,7 +824,7 @@ class TestRunSpontaneous:
         # brain.introspection が無い（自発のみ）→ ターン駆動は last_ts=None 扱いで全ターン対象
         engine = _engine_with(_result(), ctx)
 
-        async def fake_generate(persona, system_prompt, recent_turns, memory_texts, current_state=None):
+        async def fake_generate(persona, system_prompt, recent_turns, memory_texts, current_state=None, prompt_override=""):
             fake_generate.seen_turns = recent_turns
             return _result()
 
@@ -1139,7 +1140,14 @@ def test_curiosity_happy_path(monkeypatch):
     eng = FakeLLMEngine(
         [
             json.dumps({"tool_name": "srv__search", "args": {"query": "雲の重さ"}}),
-            "調べたら、雲は平均500トンくらいあるんだって。ふうん…すごいわね",
+            json.dumps(
+                {
+                    "summary": "調べたら、雲は平均500トンくらいあるんだって。ふうん…すごいわね",
+                    "satisfied": True,
+                    "unresolved": None,
+                },
+                ensure_ascii=False,
+            ),
         ]
     )
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
@@ -1182,7 +1190,7 @@ class FakeSpontEngine(FakeLLMEngine):
         super().__init__(replies)
         self._result = result
 
-    async def generate_spontaneous(self, persona, system_prompt, memory_texts, current_state):
+    async def generate_spontaneous(self, persona, system_prompt, memory_texts, current_state, prompt_override=""):
         return self._result
 
 

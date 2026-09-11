@@ -86,6 +86,7 @@ async def _emit_tool_called(
     success: bool,
     params_summary: str = "",
     error: str | None = None,
+    source: str = "direct",
 ) -> None:
     """Publish a tool.called event (best-effort — never breaks the tool flow)."""
     try:
@@ -95,6 +96,9 @@ async def _emit_tool_called(
             "result_summary": result_summary[:80],
             "success": success,
             "session_id": getattr(ctx, "session_id", None),
+            # 呼び出し元の識別子。通常ツールは "direct"、内省 curiosity は
+            # "introspection" を渡し、フロントが二重表示を排他できるようにする (spec C)。
+            "source": source,
         }
         if error:
             data["error"] = error
