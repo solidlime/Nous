@@ -13,3 +13,9 @@ def test_mutating_tools_excluded():
 def test_readonly_tools_allowed():
     for name in ("memory_search", "memory_read", "memory_stats", "web_search", "fetch_url"):
         assert _curiosity_tool_allowed(name), name
+
+
+def test_future_write_tools_denied():
+    # 正の allowlist: save_*/write_* 等が増えても自動的に除外される
+    for name in ("save_memory", "write_file", "put_state", "post_message", "upload_doc"):
+        assert not _curiosity_tool_allowed(name), name

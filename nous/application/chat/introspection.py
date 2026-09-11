@@ -795,16 +795,32 @@ _CURIOSITY_MUTATING_PREFIXES = (
     "memory_create", "memory_update", "memory_delete", "goal_manage",
 )
 
+# 正の allowlist (spec A3): read-only と分かる動詞のみ許可する。
+# カタログの現行 read-only ツールは読み取り動詞か明示名で通す。allowlist 論理なので
+# 将来 save_*/write_* 等の書き込みツールが増えても自動的に除外される。
+_CURIOSITY_READONLY_TOOLS = frozenset(
+    {"memory_read", "memory_search", "memory_stats", "list_skills", "invoke_skill"}
+)
+_CURIOSITY_READONLY_MARKERS = (
+    "search", "read", "list", "fetch", "stats", "query", "lookup", "inspect", "view", "history",
+)
+
 
 def _curiosity_tool_allowed(tool_name: str) -> bool:
-    """curiosity 探索は read-only カタログに制限する (spec A3)。
+    """curiosity 探索は read-only allowlist に制限する (spec A3)。
 
-    状態変更系 (update_*)・item_*・goal_manage・memory 書き込みを除外。
-    get_context は read-only だが record_conversation_time の副作用があるため除外。
+    変更系 (update_*/item_*/save_*/write_* 等) を除外し、読み取り動詞を含む
+    ツールだけを許可する。get_context は read-only だが record_conversation_time
+    の副作用があるため除外。
     """
     if tool_name == "get_context":
         return False
-    return not tool_name.startswith(_CURIOSITY_MUTATING_PREFIXES)
+    if tool_name.startswith(_CURIOSITY_MUTATING_PREFIXES):
+        return False
+    if tool_name in _CURIOSITY_READONLY_TOOLS:
+        return True
+    lowered = tool_name.lower()
+    return any(marker in lowered for marker in _CURIOSITY_READONLY_MARKERS)
 
 
 def _cap_memory_texts(memories: list) -> list[str]:
@@ -975,8 +991,10 @@ async def _summarize_and_record(
         logger.info("introspection: curiosity summary LLM failed", exc_info=True)
         return
     data = _parse_json_object(text or "")
-    if not data:
-        return
+    if data is None:
+        # 非JSONでも無言廃棄しない: 旧実装同様、生テキストを要約として採用する。
+        logger.debug("introspection: exploration summary was not JSON; using raw text: %s", (text or "")[:200])
+        data = {"summary": (text or "").strip()}
     summary = str(data.get("summary") or "").strip()[:_EXPLORATION_SUMMARY_MAX_CHARS]
     if not summary:
         return
@@ -1031,6 +1049,8 @@ async def _summarize_and_record(
                 "persona": persona,
                 "text": summary,
                 "timestamp": get_now().isoformat(),
+                # reload 側 (restoreMonologueBubbles) と一致する 🔍 ラベルのため
+                "kind": "exploration",
             },
         )
     except Exception:

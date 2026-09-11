@@ -101,9 +101,32 @@ class MemoryLLM:
         extract_model = config.extract_model.strip() or config.get_effective_model()
         if mode == "item" and getattr(config, "item_llm_dedicated", False):
             model = getattr(config, "item_llm_model", "").strip() or extract_model
-            api_key = getattr(config, "item_llm_api_key", "").strip() or config.get_effective_api_key()
-            base_url = getattr(config, "item_llm_base_url", "").strip() or config.get_effective_base_url()
             provider_name = getattr(config, "item_llm_provider", "").strip() or config.provider
+            item_key = getattr(config, "item_llm_api_key", "").strip()
+            item_base = getattr(config, "item_llm_base_url", "").strip()
+            if provider_name != config.provider:
+                # 別 provider: chat の鍵/base_url を混ぜない (no-key-mixing)。
+                # brain_llm_* と同じ規約 — item_llm_* 側で完結できないなら抽出しない。
+                if not item_key:
+                    logger.warning(
+                        "MemoryLLM: item_llm_provider '%s' != chat provider '%s' but no item_llm_api_key; "
+                        "item extraction disabled",
+                        provider_name,
+                        config.provider,
+                    )
+                    return {}
+                if not item_base:
+                    logger.warning(
+                        "MemoryLLM: item_llm_provider '%s' != chat provider '%s' but no item_llm_base_url; "
+                        "item extraction disabled",
+                        provider_name,
+                        config.provider,
+                    )
+                    return {}
+                api_key, base_url = item_key, item_base
+            else:
+                api_key = item_key or config.get_effective_api_key()
+                base_url = item_base or config.get_effective_base_url()
         else:
             model = extract_model
             api_key = config.get_effective_api_key()
@@ -584,11 +607,14 @@ async def run_memory_llm(
                 ctx.persona_service.update_physical_state(persona, **state_fields)
 
             # user_info fields → update_user_info
+            # 不変条件: ctx_update は適用値のみ保持（post.py の ContextUpdateSSE が
+            # そのまま流す）。適用/スキップに関わらず user_* は必ず取り除く。
             user_info_map = {}
-            for key, val in ctx_update.items():
-                if key.startswith("user_") and val is not None:
+            for key in [k for k in ctx_update if k.startswith("user_")]:
+                val = ctx_update.pop(key)
+                if val is not None and not skip_user_info:
                     user_info_map[key.replace("user_", "")] = str(val)
-            if user_info_map and not skip_user_info:
+            if user_info_map:
                 ctx.persona_service.update_user_info(persona, user_info_map)
 
             # context_note → persona_info（session continuity）

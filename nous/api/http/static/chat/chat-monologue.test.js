@@ -384,6 +384,16 @@ describe('introspection exploration (spec C/G)', () => {
     expect(normal.querySelector('summary').textContent).toBe('💭 独り言');
   });
 
+  it('live wiring with kind=exploration renders the investigation label', () => {
+    N.Chat.monologue.handle(JSON.stringify({
+      kind: 'monologue',
+      meta: { persona: 'p1', text: '調べたら500トンだった。', kind: 'exploration' },
+    }));
+    const b = bubbles()[0];
+    expect(b.dataset.kind).toBe('exploration');
+    expect(b.querySelector('summary').textContent).toContain('調べたこと');
+  });
+
   it('live tool.called handler renders introspection chips only', () => {
     const append = vi.fn();
     N.Chat.tools.appendIntrospectionCall = append;

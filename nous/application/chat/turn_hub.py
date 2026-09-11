@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import threading
 import uuid
 from collections import deque
 
@@ -25,6 +26,9 @@ class TurnHub:
         # publish された場合に call_soon_threadsafe で安全に配送するため保持。
         self._subscribers: dict[str, list[tuple[asyncio.Queue, asyncio.AbstractEventLoop | None]]] = {}
         self._running: set[str] = set()
+        # seq の read-modify-write と deque append/反復の競合を防ぐ
+        # (publish は worker スレッドからも呼ばれ得る)。最小ロック。
+        self._lock = threading.Lock()
 
     def begin_turn(self, persona: str) -> str | None:
         """turn_id 発行。実行中なら None（409 用）。"""
@@ -42,10 +46,6 @@ class TurnHub:
 
         queue は put_nowait・満杯なら最古を drop（drop-oldest）。
         """
-        seq = self._seqs.get(persona, 0) + 1
-        self._seqs[persona] = seq
-        item = (seq, sse_str)
-        self._buffers.setdefault(persona, deque(maxlen=self._buffer_size)).append(item)
         try:
             current_loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -57,7 +57,14 @@ class TurnHub:
                     q.get_nowait()
             q.put_nowait(it)
 
-        for q, loop in self._subscribers.get(persona, []):
+        with self._lock:
+            seq = self._seqs.get(persona, 0) + 1
+            self._seqs[persona] = seq
+            item = (seq, sse_str)
+            self._buffers.setdefault(persona, deque(maxlen=self._buffer_size)).append(item)
+            subscribers = list(self._subscribers.get(persona, []))
+
+        for q, loop in subscribers:
             if loop is not None and loop is not current_loop:
                 # 別スレッド/別ループから: queue のループへスレッドセーフに委譲
                 with contextlib.suppress(RuntimeError):
@@ -83,7 +90,9 @@ class TurnHub:
 
     def snapshot_after(self, persona: str, last_seq: int) -> list[tuple[int, str]]:
         """last_seq より新しい (seq, sse) を時系列順で返す。"""
-        return [item for item in self._buffers.get(persona, ()) if item[0] > last_seq]
+        # publish の deque append と反復が競合しないようロック（RuntimeError 回避）。
+        with self._lock:
+            return [item for item in self._buffers.get(persona, ()) if item[0] > last_seq]
 
     def subscribe(self, persona: str) -> asyncio.Queue:
         """ライブ購読 queue を返す。要素は (seq, sse_str)。"""

@@ -107,6 +107,32 @@ class TestSnapshot:
         hub = TurnHub()
         assert hub.snapshot_after("ghost", 0) == []
 
+    def test_concurrent_publish_and_snapshot_are_locked(self):
+        """worker スレッドの publish (deque append) と snapshot_after (反復) が
+        競合して RuntimeError にならないこと。"""
+        import threading
+
+        hub = TurnHub()
+        errors: list[BaseException] = []
+
+        def writer():
+            for i in range(2000):
+                hub.publish("p1", f"e{i}")
+
+        def reader():
+            try:
+                for _ in range(2000):
+                    hub.snapshot_after("p1", 0)
+            except BaseException as e:  # noqa: BLE001 - test captures any race failure
+                errors.append(e)
+
+        threads = [threading.Thread(target=writer), threading.Thread(target=reader)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert errors == []
+
 
 class TestSynthetic:
     @pytest.mark.asyncio

@@ -1028,7 +1028,8 @@ function handleMonologueWiring(data) {
     var meta = evt.meta || {};
     // Stale socket from a previous persona: drop quietly.
     if (meta.persona && window.S && meta.persona !== window.S.persona) return;
-    appendMonologueBubble(meta.text, meta.timestamp);
+    // kind="exploration" は reload (restoreMonologueBubbles) と同じ 🔍 ラベルにする
+    appendMonologueBubble(meta.text, meta.timestamp, meta.kind);
   } catch (err) {
     console.warn("[monologue wiring parse]:", err.message);
   }
