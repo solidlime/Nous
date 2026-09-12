@@ -26,6 +26,7 @@ const DEFAULTS = {
     forgetting_decay_interval_seconds: { default: 3600, help: '間隔', type: 'int', section: 'forgetting' },
     voice_emotion_mode: { default: 'anchor', help: 'モード', type: 'str', section: 'voice' },
     voice_enabled: { default: false, help: '音声', type: 'bool', section: 'voice' },
+    voice_streaming: { default: true, help: '逐次再生', type: 'bool', section: 'voice' },
     mcp_servers: { default: [], help: 'サーバー', type: 'list', section: 'tools' },
   },
 };
@@ -50,6 +51,7 @@ function buildForm() {
         <label class="toggle-switch"><input type="checkbox" id="chat-voice-enabled" /><span></span></label>
       </div>
       <div class="chat-check-row"><input type="checkbox" id="chat-show-timestamps" /><label for="chat-show-timestamps">ts</label></div>
+      <div class="chat-check-row"><input type="checkbox" id="chat-voice-streaming" checked /><label for="chat-voice-streaming">stream</label></div>
       <div><input type="number" id="chat-brain-enrich-interval" value="" /></div>
       <div><input type="number" id="chat-brain-spontaneous-interval" value="" /></div>
       <div><input type="number" id="chat-forgetting-decay-interval-seconds" value="" /></div>
@@ -160,6 +162,20 @@ describe('reset to default', () => {
     el.checked = true;
     window.Nous.Chat.settings.resetField('chat-show-timestamps');
     expect(el.checked).toBe(false);
+  });
+
+  it('voice_streaming: default-on checkbox is not dirty, unchecking is, reset rechecks', async () => {
+    await setup();
+    const el = document.getElementById('chat-voice-streaming');
+    expect(el.checked).toBe(true);
+    expect(btn('chat-voice-streaming').classList.contains('is-dirty')).toBe(false);
+
+    el.checked = false;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(btn('chat-voice-streaming').classList.contains('is-dirty')).toBe(true);
+
+    window.Nous.Chat.settings.resetField('chat-voice-streaming');
+    expect(el.checked).toBe(true);
   });
 
   it('resets a radio group to the default mode', async () => {

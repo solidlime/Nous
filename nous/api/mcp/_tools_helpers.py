@@ -116,6 +116,13 @@ async def _emit_tool_called(
             data["persona"] = persona
         if error:
             data["error"] = error
+        # source は data 直下（front のライブフィルタ用）に加え metadata にも載せる。
+        # recorder は metadata_json しか保存しないため、これで履歴側でも識別可能になる。
+        metadata = data.get("metadata")
+        if isinstance(metadata, dict):
+            metadata.setdefault("source", source)
+        else:
+            data["metadata"] = {"source": source}
         await ctx.event_bus.publish("tool.called", data)
     except Exception:
         logger.warning("tool.called publication failed for %s", tool_name, exc_info=True)

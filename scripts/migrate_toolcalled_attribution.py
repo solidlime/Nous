@@ -8,6 +8,10 @@ so the Activity feed shows them under a meaningful group.
 persona is taken from ``metadata["persona"]`` **only** when the row's persona is
 "unknown"; otherwise the existing persona is kept (never invented).
 
+Note: rows recorded by newer code already carry ``metadata["source"]`` (the
+emitter sets it), so they are identifiable; legacy rows with ``metadata_json``
+NULL remain a no-op (no marker to match).
+
 Usage::
 
     .venv\\Scripts\\python.exe scripts/migrate_toolcalled_attribution.py --dry-run

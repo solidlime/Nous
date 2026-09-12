@@ -83,7 +83,8 @@ function buildForm() {
     + '<input type="password" id="chat-brain-llm-api-key" value="" />'
     + '</div>'
     + '<input type="checkbox" id="chat-top-p-enabled" />'
-    + '<input type="range" id="chat-top-p" min="0" max="1" step="0.05" value="1" disabled />';
+    + '<input type="range" id="chat-top-p" min="0" max="1" step="0.05" value="1" disabled />'
+    + '<input type="checkbox" id="chat-voice-streaming" checked />';
   document.body.innerHTML = `<div>${html}${brains}</div>`;
 }
 
@@ -271,6 +272,25 @@ describe('brain simulation settings', () => {
     await window.Nous.Chat.settings.save();
     const body = JSON.parse(apiStub.mock.calls[0][1].body);
     expect(body.reflection_injection_margin).toBeUndefined();
+  });
+
+  it('voice_streaming: apply reflects it and save round-trips true/false', async () => {
+    window.Nous.Chat.settings.apply({ voice_streaming: false });
+    expect(document.getElementById('chat-voice-streaming').checked).toBe(false);
+    window.Nous.Chat.settings.apply({});
+    expect(document.getElementById('chat-voice-streaming').checked).toBe(true);
+
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    document.getElementById('chat-voice-streaming').checked = true;
+    apiStub.mockResolvedValueOnce({});
+    await window.Nous.Chat.settings.save();
+    expect(JSON.parse(apiStub.mock.calls[0][1].body).voice_streaming).toBe(true);
+
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    document.getElementById('chat-voice-streaming').checked = false;
+    apiStub.mockResolvedValueOnce({});
+    await window.Nous.Chat.settings.save();
+    expect(JSON.parse(apiStub.mock.calls[1][1].body).voice_streaming).toBe(false);
   });
 
   it('top_p: unchecked sends null, checked sends the parsed value', async () => {

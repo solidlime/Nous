@@ -21,6 +21,9 @@ def test_defaults_include_current_values():
     assert fields["api_key"]["type"] == "str"  # Optional[str] は str に正規化
     assert fields["brain_spontaneous_interval_hours"]["section"] == "brain_simulation"
     assert fields["forgetting_decay_interval_seconds"]["section"] == "forgetting"
+    assert fields["voice_streaming"]["default"] is True
+    assert fields["voice_streaming"]["section"] == "voice"
+    assert fields["voice_streaming"]["type"] == "bool"
 
 
 def test_undefined_and_meta_keys_excluded():

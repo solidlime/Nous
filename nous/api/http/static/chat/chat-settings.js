@@ -67,6 +67,7 @@ var RESET_FIELDS = [
   ["chat-voice-url", "voice_url"],
   ["chat-voice-model", "voice_model"],
   ["chat-voice-auto-play", "voice_auto_play"],
+  ["chat-voice-streaming", "voice_streaming"],
   ["chat-voice-volume", "voice_volume"],
   ["chat-voice-speed", "voice_speed"],
   ["chat-voice-emotion-mode", "voice_emotion_mode", "radio"],
@@ -614,6 +615,7 @@ function applyChatConfig(cfg) {
   var llmModelWrap = document.getElementById("chat-irodori-caption-llm-model-wrap");
   if (llmModelWrap) llmModelWrap.style.display = emotionMode === "llm" ? "block" : "none";
   setChecked("chat-voice-auto-play", cfg.voice_auto_play === true);
+  setChecked("chat-voice-streaming", cfg.voice_streaming !== false);
   // Load voice model name (text input now)
   var voiceModelInput = document.getElementById("chat-voice-model");
   if (voiceModelInput) voiceModelInput.value = cfg.voice_model || "";
@@ -991,6 +993,7 @@ async function saveChatConfig() {
     // Voice / TTS settings (TE04)
     voice_url: document.getElementById("chat-voice-url")?.value || "",
     voice_auto_play: getChecked("chat-voice-auto-play"),
+    voice_streaming: getChecked("chat-voice-streaming"),
     voice_emotion_mode: document.querySelector('input[name="chat-voice-emotion-mode"]:checked')?.value || "anchor",
     voice_emotion_link: (document.querySelector('input[name="chat-voice-emotion-mode"]:checked')?.value || "anchor") !== "off",
     voice_model: document.getElementById("chat-voice-model")?.value || "",

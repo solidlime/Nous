@@ -17,3 +17,13 @@ class TestSessionConfig:
         """show_message_timestamps should be settable to True."""
         cfg = SessionConfig(show_message_timestamps=True)
         assert cfg.show_message_timestamps is True
+
+    def test_voice_streaming_defaults_to_true(self):
+        """voice_streaming should default to True (streaming TTS on)."""
+        cfg = SessionConfig()
+        assert cfg.voice_streaming is True
+
+    def test_voice_streaming_can_be_disabled(self):
+        """voice_streaming should be settable to False."""
+        cfg = SessionConfig(voice_streaming=False)
+        assert cfg.voice_streaming is False

@@ -68,6 +68,7 @@ class SessionConfig(BaseModel):
     voice_url: str = Field(default="", description="TTSサーバーのURL。")
     voice_volume: float = Field(default=1.0, description="読み上げの音量（0〜1）。")
     voice_speed: float = Field(default=1.0, description="読み上げの速度（0.25〜4.0）。")
+    voice_streaming: bool = Field(default=True, description="送信中の応答を文単位で逐次読み上げます。")
     # Irodori advanced TTS parameters
     irodori_num_steps: int = Field(default=30, description="音声生成の推論ステップ数。高いほど高品質・低速。")
     irodori_cfg_scale_text: float = Field(default=3.2, description="テキストへの忠実度（CFGスケール）。")

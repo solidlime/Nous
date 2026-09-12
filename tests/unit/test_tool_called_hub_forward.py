@@ -8,10 +8,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import sqlite3
 from types import SimpleNamespace
 
 from nous.api.mcp._tools_helpers import _emit_tool_called
 from nous.application.chat.turn_hub import TurnHub
+from nous.application.event_bus import EventBus
+from nous.application.session_event_recorder import SessionEventRecorder
+from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
 
 
 class _Bus:
@@ -47,6 +52,47 @@ def test_emit_tool_called_session_id_override_and_ellipsis():
     assert data["session_id"] == "introspection"
     assert len(data["result_summary"]) == 80
     assert data["result_summary"].endswith("…")
+
+
+def test_emit_tool_called_sets_metadata_source_for_both_sources():
+    for source in ("direct", "introspection"):
+        ctx = SimpleNamespace(event_bus=_Bus(), session_id="s")
+        asyncio.run(_emit_tool_called(ctx, "t", "r", True, source=source))
+        _t, data = ctx.event_bus.events[0]
+        assert data["source"] == source  # front のライブフィルタ用
+        assert data["metadata"]["source"] == source  # recorder 永続用
+
+
+class _MemConn:
+    def __init__(self) -> None:
+        self._db = sqlite3.connect(":memory:")
+        self._db.execute(
+            "CREATE TABLE session_events (id INTEGER PRIMARY KEY, session_id TEXT, persona TEXT,"
+            " event_type TEXT, timestamp TEXT, summary TEXT, detail TEXT, metadata_json TEXT)"
+        )
+
+    def get_memory_db(self):
+        return self._db
+
+
+def test_recorder_persists_source_in_metadata_json():
+    conn = _MemConn()
+    repo = SessionEventRepository(conn)
+    bus = EventBus()
+    SessionEventRecorder(bus, repo).start()
+    ctx = SimpleNamespace(event_bus=bus, session_id="s1", persona="herta")
+
+    asyncio.run(
+        _emit_tool_called(
+            ctx, "web_search", "r", True, source="introspection", session_id="introspection", persona="herta"
+        )
+    )
+
+    row = conn.get_memory_db().execute("SELECT persona, session_id, metadata_json FROM session_events").fetchone()
+    assert row is not None
+    assert row[0] == "herta"
+    assert row[1] == "introspection"
+    assert json.loads(row[2])["source"] == "introspection"
 
 
 def test_turn_hub_publish_event_emits_named_sse():
