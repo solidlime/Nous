@@ -37,14 +37,18 @@ N.Core.api = async function api(path, opts) {
       throw e;
     }
     var detail = { path: path, message: e.message, error: e };
-    /* Global hook */
-    if (typeof N.Core.api._onError === "function") {
-      N.Core.api._onError(detail);
+    /* Callers may opt out of the global toast for expected failures
+       (e.g. a background lookup of a memory key that no longer exists). */
+    if (!opts.suppressErrorToast) {
+      /* Global hook */
+      if (typeof N.Core.api._onError === "function") {
+        N.Core.api._onError(detail);
+      }
+      /* Dispatch custom event for loose coupling */
+      try {
+        window.dispatchEvent(new CustomEvent("api:error", { detail: detail }));
+      } catch (_) {}
     }
-    /* Dispatch custom event for loose coupling */
-    try {
-      window.dispatchEvent(new CustomEvent("api:error", { detail: detail }));
-    } catch (_) {}
     throw e;
   }
 };

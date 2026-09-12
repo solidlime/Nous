@@ -569,6 +569,9 @@ function _wiringEnsureMemories(events, onDone) {
   Promise.allSettled(missing.map(function (k) {
     var p = api(
       "/api/memories/" + encodeURIComponent(persona) + "/" + encodeURIComponent(k),
+      // Background resolution: a missing key is expected (deleted/consolidated
+      // memory) and cached in _wiringMemFailed — never a user-facing toast.
+      { suppressErrorToast: true },
     )
       .then(function (d) { _wiringRemember(k, d && d.memory); })
       .catch(function () { _wiringMemFailed[k] = true; })

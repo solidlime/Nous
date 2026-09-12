@@ -58,6 +58,23 @@ describe('N.Core.api()', () => {
     N.api._onError = null;
   });
 
+  it('suppresses the global error hook when suppressErrorToast is set', async () => {
+    const onError = vi.fn();
+    N.api._onError = onError;
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      json: () => Promise.resolve({ error: 'Memory not found: opencode.json' }),
+    });
+
+    await expect(N.api('/missing', { suppressErrorToast: true })).rejects.toThrow(
+      'Memory not found: opencode.json',
+    );
+    expect(onError).not.toHaveBeenCalled();
+    N.api._onError = null;
+  });
+
   it('sends custom headers when provided', async () => {
     fetch.mockResolvedValue({
       ok: true,
