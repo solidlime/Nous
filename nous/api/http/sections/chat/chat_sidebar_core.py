@@ -59,12 +59,16 @@ def _render_core_section() -> str:
                                         <input type="range" id="chat-emotion-temperature-scale" class="chat-field-input" min="0" max="1" step="0.05" value="0.2"
                                             data-mirror="chat-emotion-temp-scale-val" data-mirror-format="fixed2" />
                                     </div>
+                                    <div class="chat-check-row">
+                                        <input type="checkbox" id="chat-top-p-enabled" />
+                                        <label for="chat-top-p-enabled">Top P を指定する</label>
+                                    </div>
                                     <div>
                                         <div class="chat-field-label chat-field-label-row">
                                             <span>Top P</span>
                                             <span id="chat-top-p-val" class="chat-field-value">1.00</span>
                                         </div>
-                                        <input type="range" id="chat-top-p" class="chat-field-input" min="0" max="1" step="0.05" value=""
+                                        <input type="range" id="chat-top-p" class="chat-field-input" min="0" max="1" step="0.05" value="1" disabled
                                             data-mirror="chat-top-p-val" data-mirror-format="topP" />
                                     </div>
                                 </div>

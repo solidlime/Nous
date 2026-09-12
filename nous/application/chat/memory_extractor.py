@@ -100,13 +100,22 @@ class MemoryLLM:
         # (spec F で 1 呼び出しを 2 プロンプトに分割。逐次実行は run_memory_llm 側)。
         extract_model = config.extract_model.strip() or config.get_effective_model()
         if mode == "item" and getattr(config, "item_llm_dedicated", False):
-            model = getattr(config, "item_llm_model", "").strip() or extract_model
+            item_model = getattr(config, "item_llm_model", "").strip()
+            model = item_model or extract_model
             provider_name = getattr(config, "item_llm_provider", "").strip() or config.provider
             item_key = getattr(config, "item_llm_api_key", "").strip()
             item_base = getattr(config, "item_llm_base_url", "").strip()
             if provider_name != config.provider:
-                # 別 provider: chat の鍵/base_url を混ぜない (no-key-mixing)。
+                # 別 provider: chat の鍵/base_url/model を混ぜない (no-key-mixing)。
                 # brain_llm_* と同じ規約 — item_llm_* 側で完結できないなら抽出しない。
+                if not item_model:
+                    logger.warning(
+                        "MemoryLLM: item_llm_provider '%s' != chat provider '%s' but no item_llm_model; "
+                        "item extraction disabled",
+                        provider_name,
+                        config.provider,
+                    )
+                    return {}
                 if not item_key:
                     logger.warning(
                         "MemoryLLM: item_llm_provider '%s' != chat provider '%s' but no item_llm_api_key; "

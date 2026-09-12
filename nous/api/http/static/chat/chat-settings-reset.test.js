@@ -38,7 +38,8 @@ function buildForm() {
       <div><input type="range" id="chat-temperature" min="0" max="2" step="0.05" value="0.7" /></div>
       <div><input type="text" id="chat-model" value="" /></div>
       <div><input type="text" id="chat-base-url" value="https://api.example.com" /></div>
-      <div><input type="range" id="chat-top-p" min="0" max="1" step="0.05" value="" /></div>
+      <div><input type="range" id="chat-top-p" min="0" max="1" step="0.05" value="1" disabled /></div>
+      <div class="chat-check-row"><input type="checkbox" id="chat-top-p-enabled" /><label for="chat-top-p-enabled">Top P</label></div>
       <div><input type="number" id="chat-context-max-tokens" value="" /></div>
       <div><input type="range" id="chat-reasoning-effort" min="0" max="3" step="1" value="1" /></div>
       <div><input type="range" id="chat-compression-threshold" min="50" max="100" value="80" /></div>
@@ -202,13 +203,42 @@ describe('reset to default', () => {
     expect(btn('chat-temperature').classList.contains('is-dirty')).toBe(false);
   });
 
-  it('does not treat an unset (null-default) range as divergent', async () => {
+  it('does not treat an unset (null-default) optional field as divergent', async () => {
     await setup();
-    const el = document.getElementById('chat-top-p');
-    el.value = '0.5'; // browser midpoint for the empty/unset range
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    expect(window.Nous.Chat.settings.isFieldDirty(['chat-top-p', 'top_p'])).toBe(false);
+    const cb = document.getElementById('chat-top-p-enabled');
+    const range = document.getElementById('chat-top-p');
+    expect(cb.checked).toBe(false);
+    expect(range.disabled).toBe(true);
     expect(btn('chat-top-p').classList.contains('is-dirty')).toBe(false);
+  });
+
+  it('top_p optional: enabling is divergent, reset unchecks + disables', async () => {
+    await setup();
+    const cb = document.getElementById('chat-top-p-enabled');
+    const range = document.getElementById('chat-top-p');
+    cb.checked = true;
+    range.disabled = false;
+    range.value = '0.9';
+    cb.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(btn('chat-top-p').classList.contains('is-dirty')).toBe(true);
+
+    window.Nous.Chat.settings.resetField('chat-top-p');
+    expect(cb.checked).toBe(false);
+    expect(range.disabled).toBe(true);
+  });
+
+  it('top_p optional: apply wires the enable checkbox from the config', async () => {
+    await setup();
+    const cb = document.getElementById('chat-top-p-enabled');
+    const range = document.getElementById('chat-top-p');
+    window.Nous.Chat.settings.apply({ base_url: 'https://api.example.com', top_p: 0.9 });
+    expect(cb.checked).toBe(true);
+    expect(range.disabled).toBe(false);
+    expect(range.value).toBe('0.9');
+
+    window.Nous.Chat.settings.apply({ base_url: 'https://api.example.com' });
+    expect(cb.checked).toBe(false);
+    expect(range.disabled).toBe(true);
   });
 
   it('resets the MCP JSON editor to the default list', async () => {

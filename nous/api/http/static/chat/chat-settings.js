@@ -26,7 +26,7 @@ var RESET_FIELDS = [
   ["chat-temperature", "temperature"],
   ["chat-dynamic-temperature", "dynamic_temperature"],
   ["chat-emotion-temperature-scale", "emotion_temperature_scale"],
-  ["chat-top-p", "top_p"],
+  ["chat-top-p", "top_p", "optional", "chat-top-p-enabled"],
   ["chat-reasoning-enabled", "reasoning_enabled"],
   ["chat-reasoning-effort", "reasoning_effort", "effort"],
   ["chat-max-tokens", "max_tokens"],
@@ -238,6 +238,18 @@ function _isFieldDirty(entry) {
     );
     return !on || on.value !== (def == null ? "off" : String(def));
   }
+  if (kind === "optional") {
+    // Null default = unset. entry[3] is the enable checkbox; unset ⇒ unchecked.
+    var optCb = document.getElementById(entry[3]);
+    var optOn = optCb ? optCb.checked : true;
+    var isSet = def != null;
+    if (optOn !== isSet) return true;
+    if (!optOn) return false;
+    var oc = parseFloat(el.value);
+    var orf = parseFloat(def);
+    if (!isNaN(oc) && !isNaN(orf)) return Math.abs(oc - orf) > 1e-9;
+    return String(el.value) !== String(def);
+  }
   if (el.type === "checkbox") return el.checked !== !!def;
   if (def == null) {
     if (el.type === "range") return false;
@@ -347,6 +359,17 @@ function _resetField(id) {
     for (var j = 0; j < radios.length; j++) {
       if (radios[j].value === val) radios[j].checked = true;
     }
+  } else if (entry[2] === "optional") {
+    var optCb = document.getElementById(entry[3]);
+    if (def == null) {
+      if (optCb) optCb.checked = false;
+      el.disabled = true;
+      el.value = "1";
+    } else {
+      if (optCb) optCb.checked = true;
+      el.disabled = false;
+      el.value = String(def);
+    }
   } else if (entry[2] === "json") {
     el.value = JSON.stringify(def, null, 2);
   } else {
@@ -416,7 +439,7 @@ function applyChatConfig(cfg) {
     "chat-emotion-temperature-scale",
     cfg.emotion_temperature_scale != null ? cfg.emotion_temperature_scale : 0.2,
   );
-  set("chat-top-p", cfg.top_p != null ? cfg.top_p : "");
+  set("chat-top-p", cfg.top_p != null ? cfg.top_p : 1);
   set("chat-max-tokens", cfg.max_tokens || 8192);
   set("chat-max-tool-calls", cfg.max_tool_calls || 5);
   set("chat-system-prompt", cfg.system_prompt || "");
@@ -447,6 +470,18 @@ function applyChatConfig(cfg) {
   if (topPVal && topPSlider) {
     var v = parseFloat(topPSlider.value);
     topPVal.textContent = isNaN(v) ? "—" : v.toFixed(2);
+  }
+  // Top P is optional: null = unset → disable the slider and send null on save.
+  var topPEnabled = document.getElementById("chat-top-p-enabled");
+  if (topPEnabled) {
+    topPEnabled.checked = cfg.top_p != null;
+    if (topPSlider) topPSlider.disabled = !topPEnabled.checked;
+    topPEnabled.onchange = function () {
+      var s = document.getElementById("chat-top-p");
+      if (!s) return;
+      s.disabled = !this.checked;
+      if (this.checked) s.dispatchEvent(new Event("input", { bubbles: true }));
+    };
   }
   // Reasoning settings (R7/R8)
   const reasoningLabels = ["low", "medium", "high", "max"];
@@ -758,6 +793,8 @@ async function saveChatConfig() {
       document.getElementById("chat-emotion-temperature-scale")?.value || "0.2",
     ),
     top_p: (function () {
+      var enabled = document.getElementById("chat-top-p-enabled");
+      if (enabled && !enabled.checked) return null;
       var v = parseFloat(document.getElementById("chat-top-p")?.value);
       return isNaN(v) ? null : v;
     })(),

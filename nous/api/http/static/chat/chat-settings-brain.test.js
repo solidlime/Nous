@@ -81,7 +81,9 @@ function buildForm() {
     + '<input type="text" id="chat-brain-llm-model" value="" />'
     + '<input type="text" id="chat-brain-llm-base-url" value="" />'
     + '<input type="password" id="chat-brain-llm-api-key" value="" />'
-    + '</div>';
+    + '</div>'
+    + '<input type="checkbox" id="chat-top-p-enabled" />'
+    + '<input type="range" id="chat-top-p" min="0" max="1" step="0.05" value="1" disabled />';
   document.body.innerHTML = `<div>${html}${brains}</div>`;
 }
 
@@ -269,6 +271,27 @@ describe('brain simulation settings', () => {
     await window.Nous.Chat.settings.save();
     const body = JSON.parse(apiStub.mock.calls[0][1].body);
     expect(body.reflection_injection_margin).toBeUndefined();
+  });
+
+  it('top_p: unchecked sends null, checked sends the parsed value', async () => {
+    window.Nous.Chat.settings.apply({});
+    const postBodies = () => apiStub.mock.calls
+      .filter((c) => c[1] && c[1].body)
+      .map((c) => JSON.parse(c[1].body));
+
+    // unset → null
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    apiStub.mockResolvedValueOnce({});
+    await window.Nous.Chat.settings.save();
+    expect(postBodies()[0].top_p).toBeNull();
+
+    // enabled → numeric value (save's apply() reset the form, so re-arm it)
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    document.getElementById('chat-top-p-enabled').checked = true;
+    document.getElementById('chat-top-p').value = '0.9';
+    apiStub.mockResolvedValueOnce({});
+    await window.Nous.Chat.settings.save();
+    expect(postBodies()[1].top_p).toBe(0.9);
   });
 });
 

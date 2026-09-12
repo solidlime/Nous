@@ -253,18 +253,28 @@ class PluginConfig(BaseModel):
     Set ``NOUS_PLUGIN__API_KEY=<strong_key>``."""
 
 
+# 多段 curiosity の予算上限。ExplorerConfig の clamp と introspection のループが
+# この単一ソースを参照する（二重管理防止）。
+MAX_TOOL_CALLS_CAP = 10
+
+
+def clamp_max_tool_calls(v: int) -> int:
+    """ExplorerConfig.max_tool_calls の唯一の正規化 (1..MAX_TOOL_CALLS_CAP)。"""
+    return max(1, min(MAX_TOOL_CALLS_CAP, int(v)))
+
+
 class ExplorerConfig(BaseModel):
     """アイドル時好奇心探索（NOUS_EXPLORER__ENABLED 等）。"""
 
     enabled: bool = True
     # 多段リサーチ（mcp-hub の search_tools→execute_tool 等）で使う 1 探索あたりの
-    # ツールコール予算。1..10 にクランプ（暴走防止）。
+    # ツールコール予算。1..MAX_TOOL_CALLS_CAP にクランプ（暴走防止）。
     max_tool_calls: int = 5
 
     @field_validator("max_tool_calls")
     @classmethod
     def _clamp_max_tool_calls(cls, v: int) -> int:
-        return max(1, min(10, int(v)))
+        return clamp_max_tool_calls(v)
 
 
 class Settings(BaseSettings):

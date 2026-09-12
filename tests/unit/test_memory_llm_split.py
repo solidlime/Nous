@@ -108,6 +108,19 @@ def test_item_llm_provider_mismatch_uses_item_endpoint(monkeypatch):
     assert got == {"provider": "anthropic", "api_key": "item-sk", "model": "item-model", "base_url": "http://item"}
 
 
+def test_item_llm_provider_mismatch_without_item_model_is_disabled(monkeypatch):
+    cfg = _item_cfg(
+        item_llm_provider="anthropic",
+        item_llm_api_key="item-sk",
+        item_llm_base_url="http://item",
+        item_llm_model="",
+    )
+    got = _record_provider(monkeypatch)
+    out = asyncio.run(MemoryLLM().process(cfg, "u", "a", inventory="i", mode="item"))
+    assert out == {}
+    assert got == {}  # chat model 名を別 provider に送らない
+
+
 def test_prompts_are_split():
     from nous.application.chat.memory_prompts import _CONTEXT_LLM_PROMPT, _ITEM_LLM_PROMPT
 

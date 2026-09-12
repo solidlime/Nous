@@ -794,7 +794,6 @@ _EXPLORATION_MEMORY_CAP = 500
 _CURIOSITY_STEP_RESULT_MAX_CHARS = 800
 _CURIOSITY_TOTAL_RESULT_MAX_CHARS = 6000
 _CURIOSITY_MAX_CONSECUTIVE_ERRORS = 2
-_CURIOSITY_MAX_CALLS_CAP = 10
 
 _CURIOSITY_MUTATING_PREFIXES = (
     "update_", "item_", "create_", "delete_", "remove_", "add_", "set_",
@@ -825,8 +824,10 @@ def _curiosity_tool_allowed(tool_name: str) -> bool:
         return False
     if tool_name in _CURIOSITY_READONLY_TOOLS:
         return True
-    lowered = tool_name.lower()
-    return any(marker in lowered for marker in _CURIOSITY_READONLY_MARKERS)
+    # 部分一致だと "spreadsheet_write" の "read"（spREADsheet）等を誤許可するため、
+    # "_" 区切りのトークン完全一致に厳格化する。
+    tokens = set(tool_name.lower().split("_"))
+    return any(marker in tokens for marker in _CURIOSITY_READONLY_MARKERS)
 
 
 def _cap_memory_texts(memories: list) -> list[str]:
@@ -868,7 +869,7 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
         logger.info("introspection: curiosity exploration skipped — monologue disabled")
         return
     try:
-        from nous.config.settings import get_settings
+        from nous.config.settings import MAX_TOOL_CALLS_CAP, get_settings
 
         explorer = getattr(get_settings(), "explorer", None)
         if explorer is None or not getattr(explorer, "enabled", False):
@@ -879,7 +880,7 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
         if max_calls <= 0:
             logger.info("introspection: curiosity exploration skipped — max_tool_calls<=0")
             return
-        max_calls = min(max_calls, _CURIOSITY_MAX_CALLS_CAP)
+        max_calls = min(max_calls, MAX_TOOL_CALLS_CAP)
     except Exception:
         logger.debug("introspection: explorer settings unavailable", exc_info=True)
         return

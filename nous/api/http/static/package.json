@@ -7,8 +7,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint:js": "node scripts/check-js.js",
-    "lint:css": "stylelint '**/*.css' --ignore-pattern 'node_modules/**'",
-    "lint:css:fix": "stylelint '**/*.css' --ignore-pattern 'node_modules/**' --fix"
+    "lint:css": "stylelint \"styles/\"",
+    "lint:css:fix": "stylelint \"styles/\" --fix"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^2.1.0",

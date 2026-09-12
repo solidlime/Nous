@@ -1183,6 +1183,36 @@ def test_curiosity_tool_error_swallows(monkeypatch):
     assert wiring_events.snapshot_after(0) == []
 
 
+def test_curiosity_aborts_after_two_consecutive_errors(monkeypatch):
+    """連続エラー2回で打ち切り、要約へ進む（無制限リトライしない）。"""
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    error_calls: list[tuple] = []
+
+    class ErrPool(FakePool):
+        async def call_tool(self, name, args):
+            error_calls.append((name, args))
+            return {"error": "boom"}
+
+    monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", ErrPool)
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        [
+            json.dumps({"tool_name": "srv__search", "args": {}}),
+            json.dumps({"tool_name": "srv__search", "args": {}}),
+            json.dumps({"summary": "失敗続きだった。", "satisfied": False, "unresolved": None}, ensure_ascii=False),
+        ]
+    )
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    assert len(error_calls) == 2  # 3 回目は実行しない
+    assert len(mem.created) == 1  # 要約へ進む
+
+
 def test_curiosity_multi_step_until_done(monkeypatch):
     """多段: 2 ステップのツール実行 → done で抜け、累積結果が要約に渡る。"""
     from nous.application.chat.introspection import _run_curiosity_exploration
