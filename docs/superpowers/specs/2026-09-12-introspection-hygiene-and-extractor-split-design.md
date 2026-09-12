@@ -114,3 +114,10 @@
 - record_conversation_time 削除後の対話時刻は post.py ターン終了依存。クライアント切断で skip され得るが次ターンで回復（#081 評価: 低リスク）
 - 抽出2分割で入力プロンプト重複 → コスト約2倍（extract_max_tokens 512 の範囲で許容）
 - 実機確認未実施の2点（2h機序の実データ特定、フロント描画）は実装中に必須で実施
+
+## 追記 2026-09-12: G を多段化（ユーザー決定）
+
+- curiosity リサーチをワンショットから**多段ツールコール**へ。ハブ接続ツール（mcp-hub の search_tools→execute_tool 等）は多段活用が必須のため。
+- 予算は既存 `explorer.max_tool_calls` を再利用（新設定なし）。デフォルト 1 → **5**、`max(1, min(10, v))` にクランプ。1時間ごとに多段で1リサーチを完了する。
+- `_run_curiosity_exploration` は最大 max_tool_calls 段ループ。各ステップで `_curiosity_tool_allowed` の許可集合を再検証し、`pool.call_tool` 結果（各800字 cap・累積6000字 cap）を蓄積、`_emit_tool_called(source="introspection")` を発行。
+- 完了判定: `{"done":true}` / 判断不能 / 予算消尽 / 連続エラー2回。累積結果全体を `_summarize_and_record(results)` に渡し、要約・記憶・brain.monologue（kind=exploration）・wiring emit を行う。

@@ -15,7 +15,11 @@ def test_summarize_persists_brain_monologue_event(monkeypatch):
     engine = MagicMock()
     _fake_llm(engine, '{"summary": "調べたら面白かった。", "satisfied": true, "unresolved": null}')
 
-    asyncio.run(mod._summarize_and_record(ctx, engine, "p", "気になること", "web_search", {"result": "データ"}))
+    asyncio.run(
+        mod._summarize_and_record(
+            ctx, engine, "p", "気になること", [{"tool_name": "web_search", "args": {}, "result": "データ"}]
+        )
+    )
     mono = [e for e in events if getattr(e, "event_type", "") == "brain.monologue"]
     assert mono and mono[0].summary.startswith("調べたら")
 
@@ -37,7 +41,11 @@ def test_summarize_falls_back_to_raw_text_on_non_json():
 
     engine = MagicMock()
     _fake_llm(engine, "調べたら雲は500トンだった。")
-    asyncio.run(mod._summarize_and_record(ctx, engine, "p", "気になること", "web_search", {"result": "データ"}))
+    asyncio.run(
+        mod._summarize_and_record(
+            ctx, engine, "p", "気になること", [{"tool_name": "web_search", "args": {}, "result": "データ"}]
+        )
+    )
     assert created and created[0]["content"] == "調べたら雲は500トンだった。"
     assert created[0]["tags"] == ["exploration", "introspection"]
 

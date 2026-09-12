@@ -257,7 +257,14 @@ class ExplorerConfig(BaseModel):
     """アイドル時好奇心探索（NOUS_EXPLORER__ENABLED 等）。"""
 
     enabled: bool = True
-    max_tool_calls: int = 1
+    # 多段リサーチ（mcp-hub の search_tools→execute_tool 等）で使う 1 探索あたりの
+    # ツールコール予算。1..10 にクランプ（暴走防止）。
+    max_tool_calls: int = 5
+
+    @field_validator("max_tool_calls")
+    @classmethod
+    def _clamp_max_tool_calls(cls, v: int) -> int:
+        return max(1, min(10, int(v)))
 
 
 class Settings(BaseSettings):

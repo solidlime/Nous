@@ -1183,6 +1183,108 @@ def test_curiosity_tool_error_swallows(monkeypatch):
     assert wiring_events.snapshot_after(0) == []
 
 
+def test_curiosity_multi_step_until_done(monkeypatch):
+    """多段: 2 ステップのツール実行 → done で抜け、累積結果が要約に渡る。"""
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        [
+            json.dumps({"tool_name": "srv__search", "args": {"query": "雲の重さ"}}),
+            json.dumps({"tool_name": "srv__search", "args": {"query": "雲のできる仕組み"}}),
+            json.dumps({"done": True}),
+            json.dumps(
+                {"summary": "雲は500トンで、でき方もわかった。", "satisfied": True, "unresolved": None},
+                ensure_ascii=False,
+            ),
+        ]
+    )
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    pool = FakePool.instances[0]
+    assert [c[0] for c in pool.calls] == ["srv__search", "srv__search"]
+    assert len(pool.calls) == 2
+    assert len(mem.created) == 1
+    assert "500トン" in mem.created[0]["content"]
+    # 2 ステップ目までの累積が要約プロンプトに載る
+    assert any("雲のできる仕組み" in p for p in eng.prompts)
+    assert len(wiring_events.snapshot_after(0)) == 1
+
+
+def test_curiosity_budget_exhaustion_stops_at_max(monkeypatch):
+    """done を返さなくても予算 max_tool_calls で打ち切り、要約へ進む。"""
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=2)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        [
+            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
+            json.dumps({"tool_name": "srv__search", "args": {"q": "2"}}),
+            json.dumps({"summary": "2段調べた。", "satisfied": True, "unresolved": None}, ensure_ascii=False),
+        ]
+    )
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    assert len(FakePool.instances[0].calls) == 2
+    assert len(mem.created) == 1
+
+
+def test_curiosity_passes_all_results_to_summarize(monkeypatch):
+    from nous.application.chat import introspection as mod
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    captured: dict = {}
+
+    async def fake_summarize(ctx, engine, persona, curiosity, results):
+        captured["results"] = results
+
+    monkeypatch.setattr(mod, "_summarize_and_record", fake_summarize)
+    eng = FakeLLMEngine(
+        [
+            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
+            json.dumps({"tool_name": "srv__search", "args": {"q": "2"}}),
+            json.dumps({"done": True}),
+        ]
+    )
+    asyncio.run(mod._run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
+    assert [r["tool_name"] for r in captured["results"]] == ["srv__search", "srv__search"]
+    assert all("result" in r for r in captured["results"])
+
+
+def test_curiosity_rejects_disallowed_tool_name(monkeypatch):
+    """カタログ外/許可外ツールは実行せず、結果なしなら要約もしない（契約固定）。"""
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        [
+            json.dumps({"tool_name": "srv__save_secret", "args": {}}),
+            json.dumps({"summary": "x", "satisfied": True, "unresolved": None}),
+        ]
+    )
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    assert FakePool.instances[0].calls == []  # 実行しない
+    assert mem.created == []
+    assert wiring_events.snapshot_after(0) == []
+
+
 class FakeSpontEngine(FakeLLMEngine):
     """run_spontaneous 用: generate_spontaneous が固定結果を返り、探索用 _call_llm も持つ。"""
 

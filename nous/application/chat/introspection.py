@@ -789,6 +789,12 @@ _EXPLORATION_SUMMARY_MAX_CHARS = 500
 # 探索 (exploration) タグ記憶のみに適用する緩い cap — 80字cap が500字探索要約を
 # 切断して次回の curiosity が前回結果を踏めない問題の修復 (spec G)。
 _EXPLORATION_MEMORY_CAP = 500
+# 多段 curiosity リサーチ（spec G 追記）: 1 ステップ結果の保持上限、
+# 累積上限（超えたら打ち切り→要約）、連続エラーでの中断しきい値。
+_CURIOSITY_STEP_RESULT_MAX_CHARS = 800
+_CURIOSITY_TOTAL_RESULT_MAX_CHARS = 6000
+_CURIOSITY_MAX_CONSECUTIVE_ERRORS = 2
+_CURIOSITY_MAX_CALLS_CAP = 10
 
 _CURIOSITY_MUTATING_PREFIXES = (
     "update_", "item_", "create_", "delete_", "remove_", "add_", "set_",
@@ -868,11 +874,12 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
         if explorer is None or not getattr(explorer, "enabled", False):
             logger.info("introspection: curiosity exploration skipped — explorer disabled")
             return
-        # 契約: MCP 呼出 ≤ max_tool_calls。0 なら探索しない（単一選択設計なので 1 回のみ）。
-        max_calls = int(getattr(explorer, "max_tool_calls", 1) or 0)
+        # 契約: MCP 呼出 ≤ max_tool_calls（多段）。0 なら探索しない。上限 10 で防御。
+        max_calls = int(getattr(explorer, "max_tool_calls", 0) or 0)
         if max_calls <= 0:
             logger.info("introspection: curiosity exploration skipped — max_tool_calls<=0")
             return
+        max_calls = min(max_calls, _CURIOSITY_MAX_CALLS_CAP)
     except Exception:
         logger.debug("introspection: explorer settings unavailable", exc_info=True)
         return
@@ -891,74 +898,107 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
             if not tools:
                 logger.info("introspection: curiosity — no MCP tools available")
                 return
-            call = await _select_tool(engine, curiosity, tools)
-            if not call:
-                logger.info("introspection: curiosity — no tool selected")
-                return
-            logger.info(
-                "introspection: curiosity — tool call: %s args=%s",
-                call["tool_name"],
-                call.get("args") or {},
-            )
-            tool_result = await pool.call_tool(call["tool_name"], call.get("args") or {})
-            errored = "error" in tool_result or tool_result.get("isError")
-            try:
-                from nous.api.mcp._tools_helpers import _emit_tool_called
+            valid_names = {t.name for t in tools}
+            results: list[dict] = []
+            total_chars = 0
+            consecutive_errors = 0
+            for step in range(max_calls):
+                decision = await _decide_next_step(engine, curiosity, tools, results)
+                if not decision:
+                    logger.info("introspection: curiosity — done at step %d", step)
+                    break
+                tool_name = decision["tool_name"]
+                if tool_name not in valid_names:
+                    # 契約: カタログ外/許可外ツールは実行せずステップ拒否→打ち切り。
+                    logger.warning("introspection: curiosity — rejected disallowed tool: %s", tool_name)
+                    break
+                args = decision.get("args") or {}
+                logger.info("introspection: curiosity — step %d tool=%s args=%s", step, tool_name, args)
+                tool_result = await pool.call_tool(tool_name, args)
+                errored = "error" in tool_result or tool_result.get("isError")
+                try:
+                    from nous.api.mcp._tools_helpers import _emit_tool_called
 
-                await _emit_tool_called(
-                    ctx,
-                    call["tool_name"],
-                    "(空の結果)" if errored else str(tool_result.get("result") or "")[:80],
-                    not errored,
-                    params_summary=json.dumps(call.get("args") or {}, ensure_ascii=False)[:200],
-                    error=str(tool_result.get("error") or "") if errored else None,
-                    source="introspection",
-                    persona=persona,
-                )
-            except Exception:
-                logger.debug("introspection: tool.called publish failed", exc_info=True)
-            if errored:
-                logger.info("introspection: curiosity — tool call errored: %s", tool_result)
-                return
+                    await _emit_tool_called(
+                        ctx,
+                        tool_name,
+                        "(空の結果)" if errored else str(tool_result.get("result") or "")[:80],
+                        not errored,
+                        params_summary=json.dumps(args, ensure_ascii=False)[:200],
+                        error=str(tool_result.get("error") or "") if errored else None,
+                        source="introspection",
+                        persona=persona,
+                    )
+                except Exception:
+                    logger.debug("introspection: tool.called publish failed", exc_info=True)
+                step_text = str(tool_result.get("result") or tool_result.get("error") or "")[
+                    :_CURIOSITY_STEP_RESULT_MAX_CHARS
+                ]
+                results.append({"tool_name": tool_name, "args": args, "result": step_text, "error": bool(errored)})
+                total_chars += len(step_text)
+                consecutive_errors = consecutive_errors + 1 if errored else 0
+                if consecutive_errors >= _CURIOSITY_MAX_CONSECUTIVE_ERRORS:
+                    logger.info("introspection: curiosity — abort after %d consecutive errors", consecutive_errors)
+                    break
+                if total_chars >= _CURIOSITY_TOTAL_RESULT_MAX_CHARS:
+                    logger.info("introspection: curiosity — result budget reached (%d chars)", total_chars)
+                    break
     except Exception:
         logger.info("introspection: curiosity select/call failed", exc_info=True)
         return
 
+    if not results:
+        logger.info("introspection: curiosity — no results collected")
+        return
     try:
-        await _summarize_and_record(ctx, engine, persona, curiosity, call["tool_name"], tool_result)
-        logger.info("introspection: curiosity exploration done: tool=%s", call["tool_name"])
+        await _summarize_and_record(ctx, engine, persona, curiosity, results)
+        logger.info("introspection: curiosity exploration done: steps=%d", len(results))
     except Exception:
         logger.info("introspection: curiosity summarize failed", exc_info=True)
 
 
-async def _select_tool(engine, curiosity: str, tools: list) -> dict | None:
-    """MCP ツール一覧＋curiosity から実行すべきツールを LLM 1回で判断する。
+def _format_curiosity_results(results: list[dict]) -> str:
+    """累積したステップ結果を要約プロンプト用の番号付きテキストにする。"""
+    lines = []
+    for i, r in enumerate(results, 1):
+        args = json.dumps(r.get("args") or {}, ensure_ascii=False)
+        status = "失敗" if r.get("error") else "成功"
+        lines.append(f"{i}. {r.get('tool_name')}({args}) [{status}]: {r.get('result') or '(空)'}")
+    return "\n".join(lines)
 
-    返り値: {"tool_name": str, "args": dict}。適合なし/判断失敗は None。
+
+async def _decide_next_step(engine, curiosity: str, tools: list, results: list[dict]) -> dict | None:
+    """多段リサーチの次の 1 ステップを LLM に判断させる。
+
+    返り値: {"tool_name": str, "args": dict}。完了（done）/判断不能は None。
+    戻り値の tool_name がカタログ内かは呼び出し側で再検証する。
     """
     catalog = "\n".join(f"- {t.name}: {(t.description or '')[:200]} | args: {_json_schema_preview(t)}" for t in tools)
+    history = _format_curiosity_results(results) or "(まだ何も調べていない)"
     prompt = (
-        "あなたは静かな時間に気になったことを、登録済みのMCPツールで自分で調べる。\n"
-        f"気になっていること:\n{curiosity}\n\n"
+        "あなたは静かな時間に気になったことを、登録済みのMCPツールを何段か連ねて自分で調べる。\n"
+        f"調べたいこと:\n{curiosity}\n\n"
+        f"これまでのステップと結果:\n{history}\n\n"
         f"使えるツール:\n{catalog}\n\n"
-        '調べる価値があり実行できるツールがあれば {"tool_name": "<候補の名前>", '
-        '"args": {<input_schemaに沿った引数>}} の JSON を、それ以外は null だけを返せ。'
+        '次に実行するツールがあれば {"tool_name": "<候補の名前>", "args": {<input_schemaに沿った引数>}} を、'
+        '調べ終わった・これ以上実行できるツールが無ければ {"done": true} を返せ。'
         "JSON のみで、前置きは不要。"
     )
     try:
         text, _usage = await engine._call_llm(prompt)
     except Exception:
-        logger.debug("introspection: tool select LLM failed", exc_info=True)
+        logger.debug("introspection: curiosity step LLM failed", exc_info=True)
         return None
     if not text:
         return None
     data = _parse_json_object(text)
     if data is None:
-        logger.debug("introspection: tool select parse failed: %s", text[:200])
+        logger.debug("introspection: curiosity step parse failed: %s", text[:200])
+        return None
+    if data.get("done") is True:
         return None
     name = data.get("tool_name")
-    valid = {t.name for t in tools}
-    if not isinstance(name, str) or name not in valid:
+    if not isinstance(name, str):
         return None
     args = data.get("args")
     return {"tool_name": name, "args": args if isinstance(args, dict) else {}}
@@ -972,15 +1012,15 @@ def _json_schema_preview(tool) -> str:
 
 
 async def _summarize_and_record(
-    ctx: AppContext, engine, persona: str, curiosity: str, tool_name: str, tool_result: dict
+    ctx: AppContext, engine, persona: str, curiosity: str, results: list[dict]
 ) -> None:
-    """ツール結果を一人称で要約し、記憶に保存して本体独り言の後の別バブルとして emit。"""
-    result_text = str(tool_result.get("result") or "")[:_EXPLORATION_RESULT_MAX_CHARS] or "(空の結果)"
+    """多段リサーチの累積結果を一人称で要約し、記憶に保存して独り言バブルを emit。"""
+    steps_text = _format_curiosity_results(results)[:_EXPLORATION_RESULT_MAX_CHARS] or "(空の結果)"
+    tools_used = [r["tool_name"] for r in results if r.get("tool_name")]
     prompt = (
         "静かな時間に気になって調べたことを、あなたらしい一人称の独り言にして。\n"
-        f"気になっていたこと: {curiosity}\n"
-        f"使ったツール: {tool_name}\n"
-        f"結果:\n{result_text}\n\n"
+        f"調べたいこと: {curiosity}\n"
+        f"調べたステップ:\n{steps_text}\n\n"
         "出力は JSON のみ。\n"
         '{"summary": "わかったことを3文以内。「調べたら〜だった」の調子で。ツール名や「結果」という単語は出さない", '
         '"satisfied": true または false, "unresolved": "満たせなかった質問を一人称で一行。なければ null"}'
@@ -1036,7 +1076,7 @@ async def _summarize_and_record(
                     event_type="brain.monologue",
                     summary=summary,
                     timestamp=get_now(),
-                    metadata={"kind": "exploration", "tool": tool_name},
+                    metadata={"kind": "exploration", "tools": tools_used},
                 )
             )
     except Exception:
