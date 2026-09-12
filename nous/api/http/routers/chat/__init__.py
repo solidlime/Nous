@@ -14,6 +14,7 @@ from nous.api.http.routers.chat.chat_management import (  # noqa: F401
     execute_chat_tool,
     get_chat_commitments,
     get_chat_config,
+    get_config_defaults,
     list_mcp_tools,
     memory_image_serve,
     save_chat_config,
@@ -31,6 +32,7 @@ def register_chat_routes(mcp) -> None:
     """HTTP chat routes — thin registration layer."""
     mcp.custom_route("/api/chat/{persona}/config", methods=["GET"])(get_chat_config)
     mcp.custom_route("/api/chat/{persona}/config", methods=["POST"])(save_chat_config)
+    mcp.custom_route("/api/chat/{persona}/config/defaults", methods=["GET"])(get_config_defaults)
     mcp.custom_route("/api/chat/{persona}/mcp-tools", methods=["GET"])(list_mcp_tools)
     mcp.custom_route("/api/chat/{persona}", methods=["POST"])(chat_endpoint)
     mcp.custom_route("/api/chat/{persona}/events", methods=["GET"])(chat_events)

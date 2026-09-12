@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from nous.config.runtime_config import RuntimeConfigManager
 
@@ -45,22 +45,22 @@ REASONING_EFFORTS = frozenset({"low", "medium", "high", "max"})
 class ProviderConfig(BaseModel):
     """LLMプロバイダ接続設定。"""
 
-    provider: str = "anthropic"
-    model: str = ""
-    api_key: str | None = None
-    base_url: str = ""
-    temperature: float = 0.7
-    max_tokens: int = 8192
-    max_tool_calls: int = 5
-    auto_extract: bool = True
-    extract_model: str = ""
-    extract_max_tokens: int = 512
-    tool_result_max_chars: int = 4000
-    dynamic_temperature: bool = True
-    emotion_temperature_scale: float = 0.2
-    top_p: float | None = None
-    reasoning_enabled: bool = False
-    reasoning_effort: str = "medium"
+    provider: str = Field(default="anthropic", description="使用するLLMプロバイダー（anthropic / openai / openrouter など）。")
+    model: str = Field(default="", description="使用するモデル名。空欄ならプロバイダーの既定モデルを使います。")
+    api_key: str | None = Field(default=None, description="LLM APIの認証キー。")
+    base_url: str = Field(default="", description="APIの接続先URL。カスタムエンドポイント利用時に設定します。")
+    temperature: float = Field(default=0.7, description="応答の創造性（0〜2）。高いほど多様、低いほど安定します。")
+    max_tokens: int = Field(default=8192, description="1回の応答で生成する最大トークン数。")
+    max_tool_calls: int = Field(default=5, description="1ターンで実行できるツール呼び出しの最大回数。")
+    auto_extract: bool = Field(default=True, description="会話から重要な記憶を自動抽出します。")
+    extract_model: str = Field(default="", description="記憶抽出に使うモデル。空欄ならメインのモデルを使います。")
+    extract_max_tokens: int = Field(default=512, description="記憶抽出時の最大トークン数。")
+    tool_result_max_chars: int = Field(default=4000, description="ツール実行結果を表示・保持する最大文字数。")
+    dynamic_temperature: bool = Field(default=True, description="感情に応じてTemperatureを動的に調整します。")
+    emotion_temperature_scale: float = Field(default=0.2, description="動的温度調整の強さ（0〜1）。")
+    top_p: float | None = Field(default=None, description="サンプリングの累積確率。空欄で無効。")
+    reasoning_enabled: bool = Field(default=False, description="推論（thinking）を有効にします。")
+    reasoning_effort: str = Field(default="medium", description="推論の深さ（low / medium / high / max）。")
 
     @field_validator("temperature")
     @classmethod

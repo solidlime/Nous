@@ -64,8 +64,8 @@ var HELP_TEXTS = {
     + "モデル名・APIキー・Temperature（創造性の度合い、0〜2）・MaxTokens（最大応答長）・"
     + "Base URL（カスタムエンドポイント）を設定します。ここが正しくないと AI は応答できません。",
   context:
-    "LLM に渡す文脈（コンテキスト）の制御設定です。表示する会話履歴のターン数・"
-    + "内部で保持する最大メッセージ数・同時ツール呼び出し上限・システムプロンプト・"
+    "LLM に渡す文脈（コンテキスト）の制御設定です。内部で保持する最大メッセージ数・"
+    + "同時ツール呼び出し上限・システムプロンプト・"
     + "コンテキスト圧縮の閾値とモードを設定します。長い会話でのメモリ使用量と応答品質の"
     + "バランスを取るために重要です。",
   memory:
@@ -91,12 +91,11 @@ var HELP_TEXTS = {
   weights:
     "記憶検索時の重みバランス設定です。「鮮度（Recency）＝新しい記憶を優先」"
     + "「重要度（Importance）＝重要な記憶を優先」「関連性（Relevance）＝話題に"
-    + "近い記憶を優先」の 3 軸と、RRF（Reciprocal Rank Fusion）の k 値を調整します。"
-    + "合計が 1.0 になる必要はありません。",
+    + "近い記憶を優先」の 3 軸を調整します。合計が 1.0 になる必要はありません。",
   image:
-    "画像生成機能の設定です。有効にすると AI が画像を生成・編集できるようになります。"
-    + "対応プロバイダーとモデルを選択し、生成パラメータを調整してください。"
-    + "画像生成 API が利用可能な環境でのみ動作します。",
+    "画像生成機能の設定です。有効にすると AI が画像を生成できるようになります。"
+    + "ComfyUI の接続先・ワークフロー・解像度プリセット・構図プロンプトを"
+    + "設定してください。ComfyUI が利用可能な環境でのみ動作します。",
   brain_simulation:
     "脳シミュレーション（Brain Simulation）の設定です。睡眠リプレイ相当の記憶強化・"
     + "新規性ゲート（ドーパミンモデル）・感情修飾・検索誘発性忘却・リンク分離・"
@@ -108,7 +107,7 @@ var HELP_TEXTS = {
     + "調整することで、記憶容量と質のバランスを最適化します。",
   other:
     "その他のユーティリティ設定です。デバッグモード（詳細ログの出力）・"
-    + "表示言語（ja / en）・メッセージのタイムスタンプ表示・並列ツール実行の有効化・"
+    + "表示言語（ja / en / zh / ko / auto）・メッセージのタイムスタンプ表示・並列ツール実行の有効化・"
     + "エピソード検索の有効化などを設定します。開発時やトラブルシューティングに便利です。",
   voice:
     "音声合成（Irodori-TTS）の設定です。TTS サーバーの URL・声質（キャラクター名）・"
@@ -124,22 +123,30 @@ var HELP_TEXTS = {
 var _activeTooltipIcon = null;   // currently shown tooltip's icon
 var _pinnedTooltipIcon = null;   // click-pinned icon (null = not pinned)
 var _justClickedOff = false;     // suppress hover re-show after unpin
+var _tooltipEl = null;           // single reused tooltip element
+var _tooltipTimer = null;        // pending fade-out removal timer
 
+// Keep exactly one tooltip node alive. Reusing it removes the whole class of
+// "stale mid-fade tooltip gets queried instead of the live one" bugs.
 function _showTooltip(icon) {
-  _hideTooltip();
+  if (_tooltipTimer) { clearTimeout(_tooltipTimer); _tooltipTimer = null; }
   _activeTooltipIcon = icon;
 
   var category = icon.getAttribute("data-category");
-  var tooltip = document.createElement("div");
-  tooltip.className = "chat-help-tooltip";
+  var tooltip = _tooltipEl;
+  if (!tooltip || !tooltip.isConnected) {
+    tooltip = document.createElement("div");
+    tooltip.className = "chat-help-tooltip";
+    tooltip.setAttribute("role", "tooltip");
+    tooltip.id = "chat-help-tooltip";
+    document.body.appendChild(tooltip);
+    _tooltipEl = tooltip;
+  }
   tooltip.textContent = HELP_TEXTS[category] || "説明はありません。";
-  tooltip.setAttribute("role", "tooltip");
-  tooltip.id = "chat-help-tooltip";
+  tooltip.classList.remove("visible");
 
   var rect = icon.getBoundingClientRect();
   var isMobile = window.innerWidth <= 768;
-
-  document.body.appendChild(tooltip);
 
   if (isMobile) {
     tooltip.style.top = rect.bottom + 8 + "px";
@@ -148,9 +155,11 @@ function _showTooltip(icon) {
   } else {
     tooltip.style.left = rect.right + 10 + "px";
     tooltip.style.top = rect.top - 5 + "px";
+    tooltip.style.transform = "";
   }
 
   requestAnimationFrame(function() {
+    if (!tooltip.isConnected) return;
     tooltip.classList.add("visible");
     var tr = tooltip.getBoundingClientRect();
     if (tr.right > window.innerWidth - 10) {
@@ -165,10 +174,20 @@ function _showTooltip(icon) {
 }
 
 function _hideTooltip() {
-  var tip = document.querySelector(".chat-help-tooltip");
+  var tip = _tooltipEl;
   if (tip) {
     tip.classList.remove("visible");
-    setTimeout(function() { if (tip.parentNode) tip.remove(); }, 200);
+    if (_tooltipTimer) clearTimeout(_tooltipTimer);
+    _tooltipTimer = setTimeout(function() {
+      _tooltipTimer = null;
+      if (tip.parentNode) tip.remove();
+      if (_tooltipEl === tip) _tooltipEl = null;
+    }, 200);
+  }
+  // Defensive: drop any orphaned tooltips (e.g. left by a prior show/hide race).
+  var orphans = document.querySelectorAll(".chat-help-tooltip");
+  for (var i = 0; i < orphans.length; i++) {
+    if (orphans[i] !== tip) orphans[i].remove();
   }
   _activeTooltipIcon = null;
 }
@@ -206,6 +225,14 @@ function _bindHelpIconListeners() {
     if (icon === _pinnedTooltipIcon) return;
     _hideTooltip();
   }, true);
+
+  // --- Focus out (keyboard): hide when the help icon loses focus ---
+  document.addEventListener("focusout", function(e) {
+    var icon = e.target && e.target.nodeType === 1 ? e.target.closest(".chat-help-icon") : null;
+    if (!icon || icon === _pinnedTooltipIcon) return;
+    if (_isMouseStillOnIcon(icon, e.relatedTarget)) return;
+    _hideTooltip();
+  });
 
   // --- Click: toggle pin ---
   document.addEventListener("click", function(e) {

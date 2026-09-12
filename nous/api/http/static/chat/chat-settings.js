@@ -12,14 +12,329 @@ var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
 var S = window.S;
 
 // ------------------------------------------------------------------
+// Defaults API + per-field "reset to default"
+// ------------------------------------------------------------------
+// Only a DOM-id -> config-key BINDING map lives here. The default VALUES
+// come from GET /api/chat/{persona}/config/defaults, so adding a setting
+// on the backend needs no constant duplicated on the frontend.
+// Optional 3rd element: "effort" | "percent" | "radio" | "preset"
+// (4th = preset name for "preset"). Otherwise plain value/checkbox.
+var RESET_FIELDS = [
+  ["chat-model", "model"],
+  ["chat-api-key", "api_key"],
+  ["chat-base-url", "base_url"],
+  ["chat-temperature", "temperature"],
+  ["chat-dynamic-temperature", "dynamic_temperature"],
+  ["chat-emotion-temperature-scale", "emotion_temperature_scale"],
+  ["chat-top-p", "top_p"],
+  ["chat-reasoning-enabled", "reasoning_enabled"],
+  ["chat-reasoning-effort", "reasoning_effort", "effort"],
+  ["chat-max-tokens", "max_tokens"],
+  ["chat-language", "language"],
+  ["chat-show-timestamps", "show_message_timestamps"],
+  ["chat-max-tool-calls", "max_tool_calls"],
+  ["chat-system-prompt", "system_prompt"],
+  ["chat-stored-msgs", "max_stored_messages"],
+  ["chat-context-max-tokens", "context_max_tokens"],
+  ["chat-compression-threshold", "context_compression_threshold", "percent"],
+  ["chat-compression-mode", "context_compression_mode"],
+  ["chat-keep-recent", "context_keep_recent_turns"],
+  ["chat-memory-preload", "memory_preload_count"],
+  ["chat-memory-digest", "memory_digest_count"],
+  ["chat-compress-system", "context_compress_system_prompt"],
+  ["chat-compress-history", "context_compress_history"],
+  ["chat-parallel-tools", "enable_parallel_tools"],
+  ["chat-llm-summary", "context_use_llm_summary"],
+  ["chat-episode-search", "episode_search_enabled"],
+  ["chat-auto-extract", "auto_extract"],
+  ["chat-extract-model", "extract_model"],
+  ["chat-extract-max-tokens", "extract_max_tokens"],
+  ["chat-enable-memory-tools", "enable_memory_tools"],
+  ["chat-reflection-enabled", "reflection_enabled"],
+  ["chat-reflection-threshold", "reflection_threshold"],
+  ["chat-reflection-interval", "reflection_min_interval_hours"],
+  ["chat-session-summarize", "session_summarize"],
+  ["chat-mental-model-enabled", "mental_model_enabled"],
+  ["chat-mental-model-min-samples", "mental_model_min_samples"],
+  ["chat-tool-result-max", "tool_result_max_chars"],
+  ["chat-recency-weight", "retrieval_recency_weight"],
+  ["chat-importance-weight", "retrieval_importance_weight"],
+  ["chat-relevance-weight", "retrieval_relevance_weight"],
+  ["chat-debug-mode", "debug_mode"],
+  ["chat-dynamic-tool-selection", "dynamic_tool_selection"],
+  ["chat-voice-enabled", "voice_enabled"],
+  ["chat-voice-url", "voice_url"],
+  ["chat-voice-model", "voice_model"],
+  ["chat-voice-auto-play", "voice_auto_play"],
+  ["chat-voice-volume", "voice_volume"],
+  ["chat-voice-speed", "voice_speed"],
+  ["chat-voice-emotion-mode", "voice_emotion_mode", "radio"],
+  ["chat-irodori-num-steps", "irodori_num_steps"],
+  ["chat-irodori-cfg-scale-text", "irodori_cfg_scale_text"],
+  ["chat-irodori-cfg-scale-speaker", "irodori_cfg_scale_speaker"],
+  ["chat-irodori-cfg-scale-caption", "irodori_cfg_scale_caption"],
+  ["chat-irodori-chunk-min-chars", "irodori_chunk_min_chars"],
+  ["chat-irodori-seed", "irodori_seed"],
+  ["chat-irodori-caption-llm-model", "irodori_caption_llm_model"],
+  ["chat-image-gen-enabled", "image_gen_enabled"],
+  ["chat-image-gen-comfyui-url", "image_gen_comfyui_url"],
+  ["chat-image-gen-width", "image_gen_comfyui_width"],
+  ["chat-image-gen-height", "image_gen_comfyui_height"],
+  ["chat-image-gen-max-width", "image_gen_max_width"],
+  ["chat-image-gen-max-height", "image_gen_max_height"],
+  ["chat-image-gen-template", "image_gen_comfyui_workflow_template"],
+  ["chat-image-gen-workflow-source", "image_gen_comfyui_workflow_source"],
+  ["chat-image-gen-workflow-name", "image_gen_comfyui_workflow_name"],
+  ["chat-image-gen-default-preset", "image_gen_default_preset"],
+  ["chat-image-gen-self-portrait-prompt", "image_gen_self_portrait_prompt"],
+  ["chat-image-gen-negative-prompt", "image_gen_negative_prompt"],
+  ["chat-image-gen-full-body-prefix", "image_gen_full_body_prefix"],
+  ["chat-image-gen-portrait-prefix", "image_gen_portrait_prefix"],
+  ["chat-image-gen-selfie-prefix", "image_gen_selfie_prefix"],
+  ["chat-image-gen-scene-prefix", "image_gen_scene_prefix"],
+  ["chat-image-gen-preset-portrait_large", "image_gen_presets", "preset", "portrait_large"],
+  ["chat-image-gen-preset-portrait_medium", "image_gen_presets", "preset", "portrait_medium"],
+  ["chat-image-gen-preset-portrait_small", "image_gen_presets", "preset", "portrait_small"],
+  ["chat-image-gen-preset-landscape_large", "image_gen_presets", "preset", "landscape_large"],
+  ["chat-image-gen-preset-landscape_medium", "image_gen_presets", "preset", "landscape_medium"],
+  ["chat-image-gen-preset-landscape_small", "image_gen_presets", "preset", "landscape_small"],
+  ["chat-image-gen-preset-square_large", "image_gen_presets", "preset", "square_large"],
+  ["chat-image-gen-preset-square_medium", "image_gen_presets", "preset", "square_medium"],
+  ["chat-image-gen-preset-square_small", "image_gen_presets", "preset", "square_small"],
+  ["chat-image-caption-enabled", "image_caption_enabled"],
+  ["chat-image-caption-provider", "image_caption_provider"],
+  ["chat-image-caption-model", "image_caption_model"],
+  ["chat-image-caption-api-key", "image_caption_api_key"],
+  ["chat-image-caption-base-url", "image_caption_base_url"],
+  ["chat-memory-enrichment-enabled", "memory_enrichment_enabled"],
+  ["chat-brain-auto-run", "brain_enrich_auto_run"],
+  ["chat-brain-enrich-interval", "brain_enrich_interval_seconds"],
+  ["chat-brain-batch-limit", "brain_enrich_batch_limit"],
+  ["chat-brain-idle-after-seconds", "brain_idle_after_seconds"],
+  ["chat-brain-min-batch-size", "brain_min_batch_size"],
+  ["chat-brain-max-defer-seconds", "brain_max_defer_seconds"],
+  ["chat-brain-monologue", "brain_monologue_enabled"],
+  ["chat-brain-reasoning", "brain_reasoning_enabled"],
+  ["chat-brain-reasoning-effort", "brain_reasoning_effort"],
+  ["chat-brain-spontaneous", "brain_spontaneous_enabled"],
+  ["chat-brain-spontaneous-interval", "brain_spontaneous_interval_hours"],
+  ["chat-brain-max-tokens", "brain_max_tokens"],
+  ["chat-brain-novelty-sim", "brain_novelty_sim_threshold"],
+  ["chat-brain-novelty-importance", "brain_novelty_importance_threshold"],
+  ["chat-brain-novelty-multiplier", "brain_novelty_stability_multiplier"],
+  ["chat-brain-emotion-gain-k", "brain_emotion_gain_k"],
+  ["chat-brain-rif-rho", "brain_rif_suppression_rho"],
+  ["chat-brain-separation-threshold", "brain_link_separation_threshold"],
+  ["chat-brain-reflection-retrieval-penalty", "reflection_retrieval_penalty"],
+  ["chat-brain-reflection-injection-min-similarity", "reflection_injection_min_similarity"],
+  ["chat-brain-reflection-injection-margin", "reflection_injection_margin"],
+  ["chat-brain-graph-flash", "brain_graph_flash_enabled"],
+  ["chat-brain-llm-dedicated", "brain_llm_dedicated"],
+  ["chat-brain-llm-provider", "brain_llm_provider"],
+  ["chat-brain-llm-model", "brain_llm_model"],
+  ["chat-brain-llm-base-url", "brain_llm_base_url"],
+  ["chat-brain-llm-api-key", "brain_llm_api_key"],
+  ["chat-forgetting-enabled", "forgetting_enabled"],
+  ["chat-forgetting-trigger-threshold", "forgetting_trigger_threshold"],
+  ["chat-forgetting-decay-interval-seconds", "forgetting_decay_interval_seconds"],
+  ["chat-forgetting-min-strength", "forgetting_min_strength"],
+  ["chat-forgetting-forget-ratio", "forgetting_forget_ratio"],
+  ["chat-forgetting-forget-strength", "forgetting_forget_strength"],
+  ["chat-emotion-decay-half-life-hours", "emotion_decay_half_life_hours"],
+  ["chat-emotion-decay-threshold", "emotion_decay_threshold"],
+  ["chat-emotion-neutral-threshold", "emotion_neutral_threshold"],
+];
+
+var _defaultsCache = null;
+var _defaultsPersona = null;
+var _resetButtons = {};
+
+async function loadConfigDefaults(force) {
+  if (!S.persona) return null;
+  if (!force && _defaultsCache && _defaultsPersona === S.persona) {
+    return _defaultsCache;
+  }
+  try {
+    var data = await api(
+      "/api/chat/" + encodeURIComponent(S.persona) + "/config/defaults",
+    );
+    _defaultsCache = data && data.fields ? data : { fields: {} };
+  } catch (_) {
+    _defaultsCache = { fields: {} };
+  }
+  _defaultsPersona = S.persona;
+  return _defaultsCache;
+}
+
+function _defaultOf(key) {
+  if (!_defaultsCache || !_defaultsCache.fields) return undefined;
+  var meta = _defaultsCache.fields[key];
+  return meta ? meta.default : undefined;
+}
+
+function _helpOf(key) {
+  if (!_defaultsCache || !_defaultsCache.fields) return "";
+  var meta = _defaultsCache.fields[key];
+  return meta && meta.help ? meta.help : "";
+}
+
+function _defaultToDisplay(def, kind, name) {
+  if (kind === "percent") return String(Math.round((def || 0) * 100));
+  if (kind === "effort") {
+    var i = ["low", "medium", "high", "max"].indexOf(String(def));
+    return String(i < 0 ? 1 : i);
+  }
+  if (kind === "preset") {
+    return String(def && def[name] != null ? def[name] : "");
+  }
+  if (kind === "radio") return def == null ? "off" : String(def);
+  return def == null ? "" : String(def);
+}
+
+function _currentDisplay(el, kind) {
+  if (el.type === "checkbox") return el.checked;
+  if (kind === "radio") {
+    var on = document.querySelector(
+      'input[name="' + el.getAttribute("name") + '"]:checked',
+    );
+    return on ? on.value : "";
+  }
+  return String(el.value);
+}
+
+function _fieldElement(entry) {
+  var el = document.getElementById(entry[0]);
+  if (!el && entry[2] === "radio") {
+    el = document.querySelector('input[name="' + entry[0] + '"]');
+  }
+  return el;
+}
+
+function _isFieldDirty(entry) {
+  var el = _fieldElement(entry);
+  if (!el) return false;
+  var def = _defaultOf(entry[1]);
+  if (def === undefined) return false;
+  return _currentDisplay(el, entry[2]) !== _defaultToDisplay(def, entry[2], entry[3]);
+}
+
+function _injectResetButtons() {
+  for (var i = 0; i < RESET_FIELDS.length; i++) {
+    var entry = RESET_FIELDS[i];
+    var el = _fieldElement(entry);
+    if (!el) continue;
+    if (_resetButtons[entry[0]] && _resetButtons[entry[0]].isConnected) continue;
+    // Field help comes from the defaults API (pydantic descriptions) — the
+    // frontend keeps no per-field help text of its own.
+    var help = _helpOf(entry[1]);
+    if (help && entry[2] !== "radio" && !el.getAttribute("title")) {
+      el.setAttribute("title", help);
+    }
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chat-reset-btn";
+    btn.setAttribute("data-reset-for", entry[0]);
+    btn.setAttribute("title", "デフォルトに戻す");
+    btn.setAttribute("aria-label", "デフォルトに戻す");
+    btn.innerHTML = '<i data-lucide="rotate-ccw"></i>';
+    if (el.type === "checkbox") {
+      var row = el.closest(".chat-check-row") || el.parentElement;
+      if (!row) continue;
+      row.appendChild(btn);
+      btn.classList.add("chat-reset-inline");
+    } else if (entry[2] === "radio") {
+      var holder = el.closest("div") || el.parentElement;
+      if (!holder) continue;
+      holder.classList.add("chat-reset-holder");
+      holder.appendChild(btn);
+      btn.classList.add("chat-reset-corner");
+    } else {
+      var wrap = document.createElement("span");
+      wrap.className = "chat-reset-wrap";
+      if (el.tagName === "SELECT") wrap.classList.add("chat-reset-wrap-select");
+      el.parentNode.insertBefore(wrap, el);
+      wrap.appendChild(el);
+      wrap.appendChild(btn);
+    }
+    _resetButtons[entry[0]] = btn;
+  }
+  _refreshResetButtons();
+  _bindResetListeners();
+  if (N.Core && N.Core.refreshIcons) N.Core.refreshIcons();
+}
+
+function _refreshResetButtons() {
+  for (var i = 0; i < RESET_FIELDS.length; i++) {
+    var btn = _resetButtons[RESET_FIELDS[i][0]];
+    if (!btn) continue;
+    btn.classList.toggle("is-dirty", _isFieldDirty(RESET_FIELDS[i]));
+  }
+}
+
+function _resetField(id) {
+  var entry = null;
+  for (var i = 0; i < RESET_FIELDS.length; i++) {
+    if (RESET_FIELDS[i][0] === id) {
+      entry = RESET_FIELDS[i];
+      break;
+    }
+  }
+  if (!entry) return;
+  var el = _fieldElement(entry);
+  if (!el) return;
+  var def = _defaultOf(entry[1]);
+  if (def === undefined) return;
+  if (el.type === "checkbox") {
+    el.checked = !!def;
+  } else if (entry[2] === "radio") {
+    var val = _defaultToDisplay(def, "radio");
+    var radios = document.querySelectorAll(
+      'input[name="' + el.getAttribute("name") + '"]',
+    );
+    for (var j = 0; j < radios.length; j++) {
+      if (radios[j].value === val) radios[j].checked = true;
+    }
+  } else {
+    el.value = _defaultToDisplay(def, entry[2], entry[3]);
+  }
+  // Reuse the existing delegation for mirror/dependent-token sync. Never saves.
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  if (N.Chat.settings.updateSliderLabels) N.Chat.settings.updateSliderLabels();
+  _refreshResetButtons();
+}
+
+function _bindResetListeners() {
+  if (_bindResetListeners._bound) return;
+  _bindResetListeners._bound = true;
+  document.addEventListener("click", function(e) {
+    var btn =
+      e.target && e.target.closest ? e.target.closest(".chat-reset-btn") : null;
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    _resetField(btn.getAttribute("data-reset-for"));
+  });
+  var onEdit = function() {
+    _refreshResetButtons();
+  };
+  document.addEventListener("input", onEdit);
+  document.addEventListener("change", onEdit);
+}
+
+// ------------------------------------------------------------------
 // Config loading / applying / saving
 // ------------------------------------------------------------------
 async function loadChatConfig() {
+  var defaultsP = loadConfigDefaults();
   try {
     const cfg = await api(
       "/api/chat/" + encodeURIComponent(S.persona) + "/config",
     );
+    await defaultsP;
     applyChatConfig(cfg);
+    _injectResetButtons();
+    _bindResetListeners();
   } catch (e) {
     document.getElementById("chat-config-status").textContent =
       "設定読込失敗: " + e.message;
@@ -306,16 +621,16 @@ function applyChatConfig(cfg) {
   setChecked("chat-memory-enrichment-enabled", cfg.memory_enrichment_enabled === true);
   // === Brain simulation ===
   setChecked("chat-brain-auto-run", cfg.brain_enrich_auto_run === true);
-  set("chat-brain-enrich-interval", cfg.brain_enrich_interval_seconds ?? 60);
+  set("chat-brain-enrich-interval", cfg.brain_enrich_interval_seconds ?? _defaultOf("brain_enrich_interval_seconds") ?? 60);
   set("chat-brain-batch-limit", cfg.brain_enrich_batch_limit ?? 5);
   set("chat-brain-idle-after-seconds", cfg.brain_idle_after_seconds ?? 120);
   set("chat-brain-min-batch-size", cfg.brain_min_batch_size ?? 3);
-  set("chat-brain-max-defer-seconds", cfg.brain_max_defer_seconds ?? 3600);
+  set("chat-brain-max-defer-seconds", cfg.brain_max_defer_seconds ?? _defaultOf("brain_max_defer_seconds") ?? 3600);
   setChecked("chat-brain-monologue", cfg.brain_monologue_enabled === true);
   setChecked("chat-brain-reasoning", cfg.brain_reasoning_enabled === true);
   set("chat-brain-reasoning-effort", cfg.brain_reasoning_effort || "medium");
   setChecked("chat-brain-spontaneous", cfg.brain_spontaneous_enabled === true);
-  set("chat-brain-spontaneous-interval", cfg.brain_spontaneous_interval_hours ?? 1);
+  set("chat-brain-spontaneous-interval", cfg.brain_spontaneous_interval_hours ?? _defaultOf("brain_spontaneous_interval_hours") ?? 1);
   set("chat-brain-max-tokens", cfg.brain_max_tokens ?? 2048);
   set("chat-brain-novelty-sim", cfg.brain_novelty_sim_threshold ?? 0.75);
   set("chat-brain-novelty-importance", cfg.brain_novelty_importance_threshold ?? 0.6);
@@ -344,8 +659,8 @@ function applyChatConfig(cfg) {
   }
   // === Forgetting (moved from Settings) ===
   setChecked("chat-forgetting-enabled", cfg.forgetting_enabled === true);
-  set("chat-forgetting-trigger-threshold", cfg.forgetting_trigger_threshold ?? 100);
-  set("chat-forgetting-decay-interval-seconds", cfg.forgetting_decay_interval_seconds ?? 3600);
+  set("chat-forgetting-trigger-threshold", cfg.forgetting_trigger_threshold ?? _defaultOf("forgetting_trigger_threshold") ?? 100);
+  set("chat-forgetting-decay-interval-seconds", cfg.forgetting_decay_interval_seconds ?? _defaultOf("forgetting_decay_interval_seconds") ?? 3600);
   set("chat-forgetting-min-strength", cfg.forgetting_min_strength ?? 0.1);
   set("chat-forgetting-forget-ratio", cfg.forgetting_forget_ratio ?? 0.2);
   set("chat-forgetting-forget-strength", cfg.forgetting_forget_strength ?? 0.5);
@@ -361,6 +676,7 @@ function applyChatConfig(cfg) {
   if (cfg.image_gen_comfyui_url) {
     N.Chat.settings.checkComfyUI();
   }
+  _refreshResetButtons();
 }
 
 async function saveChatConfig() {
@@ -645,6 +961,11 @@ N.Chat.settings = {
   load: loadChatConfig,
   apply: applyChatConfig,
   save: saveChatConfig,
+  loadDefaults: loadConfigDefaults,
+  injectResetButtons: _injectResetButtons,
+  resetField: _resetField,
+  resetFields: RESET_FIELDS,
+  isFieldDirty: _isFieldDirty,
 };
 
 })(window.Nous);

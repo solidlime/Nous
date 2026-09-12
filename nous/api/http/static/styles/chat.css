@@ -725,6 +725,100 @@ html.light .chat-thinking-body {
   background: var(--bg-primary);
 }
 
+/* Reset-to-default affordance — hidden until hover/focus, only when dirty */
+.chat-reset-wrap {
+  position: relative;
+  display: block;
+}
+
+.chat-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--glass-bg-light);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--duration-fast) var(--ease-apple),
+    transform var(--duration-fast) var(--ease-apple),
+    color var(--duration-fast) var(--ease-apple),
+    background var(--duration-fast) var(--ease-apple);
+}
+
+.chat-reset-wrap > .chat-reset-btn {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  transform: translateY(-50%) scale(0.9);
+  z-index: 2;
+}
+
+/* Keep clear of the native <select> dropdown chevron */
+.chat-reset-wrap-select > .chat-reset-btn {
+  right: 30px;
+}
+
+.chat-reset-btn svg,
+.chat-reset-btn i {
+  width: 12px;
+  height: 12px;
+}
+
+.chat-reset-btn:hover {
+  color: var(--accent-blue);
+  background: rgba(var(--accent-blue-rgb), 0.16);
+}
+
+.chat-reset-btn:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.chat-reset-wrap:hover > .chat-reset-btn.is-dirty,
+.chat-reset-wrap:focus-within > .chat-reset-btn.is-dirty,
+.chat-reset-btn.is-dirty:focus-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%) scale(1);
+}
+
+/* Checkbox rows: sit inline at the row's end */
+.chat-reset-btn.chat-reset-inline {
+  position: static;
+  transform: none;
+  margin-left: auto;
+}
+
+.chat-check-row:hover .chat-reset-btn.chat-reset-inline.is-dirty,
+.chat-check-row:focus-within .chat-reset-btn.chat-reset-inline.is-dirty {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Radio group: top-right corner of the group block */
+.chat-reset-holder {
+  position: relative;
+}
+
+.chat-reset-btn.chat-reset-corner {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.chat-reset-holder:hover > .chat-reset-btn.is-dirty,
+.chat-reset-holder:focus-within > .chat-reset-btn.is-dirty {
+  opacity: 1;
+  visibility: visible;
+}
+
 /* Range slider styling */
 input[type="range"].chat-field-input {
   padding: 4px 0;

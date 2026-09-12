@@ -31,6 +31,88 @@ async def _do_get_chat_config(persona: str, ctx) -> dict:
     return config.to_safe_dict()
 
 
+# ── config defaults (auto-derived from pydantic models) ───────────
+# 「デフォルト値に戻す」ボタン向け。モデルの model_fields から自動取得するため、
+# 設定フィールド追加時にバックエンド側の定数メンテは不要。
+
+# 秘匿項目: 値を返さず常に空文字。
+_SECRET_FIELD_NAMES = frozenset({"api_key"})
+
+
+def _is_secret_field(name: str) -> bool:
+    return name in _SECRET_FIELD_NAMES or name.endswith("_api_key")
+
+
+# 設定パネルのセクション（sections/chat/*.py の data-category）へ prefix で分類。
+# 一致しないフィールドは "core"。追加フィールドも prefix 一致で自然に追従する。
+_SECTION_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("brain_", "brain_simulation"),
+    ("forgetting_", "forgetting"),
+    ("voice_", "voice"),
+    ("irodori_", "voice"),
+    ("image_", "image"),
+    ("memory_", "memory"),
+    ("reflection_", "reflection"),
+    ("mental_", "mental"),
+    ("context_", "context"),
+    ("retrieval_", "weights"),
+    ("emotion_", "weights"),
+)
+_SECTION_EXACT: dict[str, str] = {
+    "mcp_servers": "tools",
+    "disabled_tools": "tools",
+    "enabled_skills": "skills",
+    "enable_parallel_tools": "tools",
+    "dynamic_tool_selection": "tools",
+    "enable_memory_tools": "tools",
+}
+# 設定ではないメタフィールドは除外。
+_META_FIELD_NAMES = frozenset({"persona", "updated_at"})
+
+
+def _field_section(name: str) -> str:
+    if name in _SECTION_EXACT:
+        return _SECTION_EXACT[name]
+    for prefix, section in _SECTION_PREFIXES:
+        if name.startswith(prefix):
+            return section
+    return "core"
+
+
+def _type_label(annotation: object) -> str:
+    """Optional/Union/generics を JS 側で扱いやすい素の型名にする。"""
+    import types as _types
+    import typing as _typing
+
+    origin = _typing.get_origin(annotation)
+    if origin is _types.UnionType or origin is _typing.Union:
+        for arg in _typing.get_args(annotation):
+            if arg is not type(None):
+                return _type_label(arg)
+        return "none"
+    if origin is list:
+        return "list"
+    if origin is dict:
+        return "dict"
+    return getattr(annotation, "__name__", "str")
+
+
+def _do_get_config_defaults() -> dict:
+    """ChatConfig（サブ設定含む）のフラット全フィールドのデフォルトを返す。"""
+    fields: dict[str, dict] = {}
+    for name, info in ChatConfig._all_flat_fields().items():
+        if name in _META_FIELD_NAMES:
+            continue
+        default = "" if _is_secret_field(name) else info.default
+        fields[name] = {
+            "default": default,
+            "help": info.description or "",
+            "type": _type_label(info.annotation),
+            "section": _field_section(name),
+        }
+    return {"fields": fields}
+
+
 async def _do_save_chat_config(persona: str, ctx, body: dict) -> dict:
     """Save and return updated chat config safe dict."""
     repo = ChatConfigFileRepository(get_settings().data_root)
@@ -226,6 +308,14 @@ async def get_chat_config(request: Request) -> JSONResponse:
     if not ctx:
         return JSONResponse({"error": "Persona not found"}, status_code=404)
     return JSONResponse(await _do_get_chat_config(persona, ctx))
+
+
+async def get_config_defaults(request: Request) -> JSONResponse:
+    """GET /api/chat/{persona}/config/defaults — auto-derived field defaults."""
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"error": "Persona not found"}, status_code=404)
+    return JSONResponse(_do_get_config_defaults())
 
 
 async def save_chat_config(request: Request) -> JSONResponse:
