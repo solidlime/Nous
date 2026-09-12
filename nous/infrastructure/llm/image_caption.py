@@ -102,7 +102,8 @@ class ImageCaptioner:
         if not base64_data:
             return ""
 
-        from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, LLMMessage, TextDeltaEvent
+        from nous.infrastructure.llm.base import LLMMessage
+        from nous.infrastructure.llm.text_utils import collect_text
 
         system_prompt = "You are an image captioning assistant. Describe images concisely."
         user_prompt = "Describe this image in 1-2 sentences. Focus on what is visually present."
@@ -123,26 +124,19 @@ class ImageCaptioner:
             LLMMessage(role="user", content=user_prompt, content_parts=content_parts),
         ]
 
-        full_text = ""
         try:
-            async for event in provider.stream(
+            text = await collect_text(
+                provider,
                 messages=messages,
                 system=system_prompt,
                 temperature=0.3,
                 max_tokens=256,
-            ):
-                if isinstance(event, TextDeltaEvent):
-                    full_text += event.content
-                elif isinstance(event, ErrorEvent):
-                    logger.warning("ImageCaptioner: provider error: %s", event.message)
-                    return ""
-                elif isinstance(event, DoneEvent):
-                    break
+            )
         except Exception:
             logger.warning("ImageCaptioner: exception during caption generation", exc_info=True)
             return ""
 
-        return full_text.strip()
+        return (text or "").strip()
 
     async def caption_batch(
         self,

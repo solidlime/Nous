@@ -15,8 +15,10 @@ from typing import TYPE_CHECKING, Any
 from nous.domain.language import LanguageResolver
 from nous.domain.memory.reflection_schema import OUTPUT_FORMAT, REFLECTION_SCHEMA, ReflectionQuestion
 from nous.domain.search.engine import SearchQuery
+from nous.domain.shared.text_utils import strip_code_fence
 from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.factory import get_provider
+from nous.infrastructure.llm.text_utils import collect_text
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -206,26 +208,20 @@ async def maybe_run_reflection(
         logger.warning("ReflectionEngine: provider init failed: %s", e)
         return []
 
-    from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, TextDeltaEvent
-
-    text = ""
     try:
-        async for event in provider.stream(
+        text = await collect_text(
+            provider,
             messages=[LLMMessage(role="user", content=prompt)],
             system="",
             tools=[],
             temperature=0.3,
             max_tokens=512,
-        ):
-            if isinstance(event, TextDeltaEvent):
-                text += event.content
-            elif isinstance(event, (DoneEvent, ErrorEvent)):
-                break
+        )
     except Exception as e:
         logger.warning("ReflectionEngine: LLM call failed: %s", e)
         return []
 
-    insights = _parse_insights(text)
+    insights = _parse_insights(text or "")
     if not insights:
         return []
 
@@ -257,10 +253,7 @@ async def maybe_run_reflection(
 
 def _parse_insights(text: str) -> list[str]:
     """Parse insight list from LLM output."""
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        text = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+    text = strip_code_fence(text)
     try:
         result = json.loads(text)
         if isinstance(result, dict):
@@ -348,27 +341,21 @@ class ReflectionEngine:
             messages = [LLMMessage(role="user", content=system_msg)]
 
         # 3. Call LLM
-        from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, TextDeltaEvent
-
-        text = ""
         try:
-            async for event in llm.stream(
+            text = await collect_text(
+                llm,
                 messages=messages or [LLMMessage(role="user", content=system_msg)],
                 system=effective_system if not messages else "",
                 tools=[],
                 temperature=temperature,
                 max_tokens=max_tokens,
-            ):
-                if isinstance(event, TextDeltaEvent):
-                    text += event.content
-                elif isinstance(event, (DoneEvent, ErrorEvent)):
-                    break
+            )
         except Exception as exc:
             self._logger.warning("ReflectionEngine: LLM call failed: %s", exc)
             return []
 
         # 4. Parse structured output
-        insights = self._parse_insights_json(text)
+        insights = self._parse_insights_json(text or "")
         if not insights:
             return []
 
@@ -442,11 +429,7 @@ class ReflectionEngine:
 
         Handles both raw JSON and code-fenced JSON.
         """
-        text = text.strip()
-        if text.startswith("```"):
-            lines = text.splitlines()
-            text = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
-            text = text.strip()
+        text = strip_code_fence(text)
 
         try:
             result = json.loads(text)

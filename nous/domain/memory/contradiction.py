@@ -7,6 +7,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol
 
 from nous.domain.shared.result import Failure, Result, Success
+from nous.domain.shared.text_utils import strip_code_fence
 
 if TYPE_CHECKING:
     from nous.domain.shared.errors import DomainError, VectorStoreError
@@ -125,16 +126,7 @@ async def classify_contradiction(
 
 def _parse_contradiction_response(text: str) -> ContradictionResult | None:
     """Parse JSON from LLM response into ContradictionResult."""
-    cleaned = text.strip()
-    # Try to extract JSON from markdown code block if present
-    if "```json" in cleaned:
-        start = cleaned.index("```json") + 7
-        end = cleaned.index("```", start) if "```" in cleaned[start:] else len(cleaned)
-        cleaned = cleaned[start:end].strip()
-    elif "```" in cleaned:
-        start = cleaned.index("```") + 3
-        end = cleaned.index("```", start) if "```" in cleaned[start:] else len(cleaned)
-        cleaned = cleaned[start:end].strip()
+    cleaned = strip_code_fence(text)
 
     try:
         data = json.loads(cleaned)

@@ -15,11 +15,13 @@ from nous.application.chat.memory_prompts import (
 from nous.domain.language import LanguageResolver
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.result import Success
+from nous.domain.shared.text_utils import strip_code_fence
 from nous.domain.shared.time_utils import get_now
 from nous.domain.value_objects import normalize_emotion
 from nous.domain.value_objects import normalize_importance as _vo_normalize_importance
 from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.factory import get_provider
+from nous.infrastructure.llm.text_utils import collect_text
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -166,34 +168,25 @@ class MemoryLLM:
             drift_section="" if mode == "item" else _build_drift_section(drift),
         )
 
-        from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, TextDeltaEvent
-
-        text = ""
         try:
-            async for event in provider.stream(
+            text = await collect_text(
+                provider,
                 messages=[LLMMessage(role="user", content=prompt)],
                 system="",
                 tools=[],
                 temperature=0.0,
                 max_tokens=config.extract_max_tokens,
-            ):
-                if isinstance(event, TextDeltaEvent):
-                    text += event.content
-                elif isinstance(event, (DoneEvent, ErrorEvent)):
-                    break
+            )
         except Exception as e:
             logger.warning("MemoryLLM: LLM call failed: %s", e)
             return {}
 
-        return _parse_memory_llm_result(text)
+        return _parse_memory_llm_result(text or "")
 
 
 def _parse_memory_llm_result(text: str) -> dict:
     """MemoryLLM出力のJSONをパースする。"""
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        text = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+    text = strip_code_fence(text)
     try:
         result = json.loads(text)
         if isinstance(result, dict):

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from nous.domain.language import LanguageResolver
 from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.factory import get_provider
+from nous.infrastructure.llm.text_utils import collect_text
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -81,26 +82,20 @@ async def summarize_and_store(
         logger.warning("SessionSummarizer: provider init failed: %s", e)
         return None
 
-    from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, TextDeltaEvent
-
-    text = ""
     try:
-        async for event in provider.stream(
+        text = await collect_text(
+            provider,
             messages=[LLMMessage(role="user", content=prompt)],
             system="",
             tools=[],
             temperature=0.0,
             max_tokens=256,
-        ):
-            if isinstance(event, TextDeltaEvent):
-                text += event.content
-            elif isinstance(event, (DoneEvent, ErrorEvent)):
-                break
+        )
     except Exception as e:
         logger.warning("SessionSummarizer: LLM call failed: %s", e)
         return None
 
-    summary = text.strip()
+    summary = (text or "").strip()
     if not summary:
         return None
 

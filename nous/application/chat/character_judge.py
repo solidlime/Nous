@@ -8,7 +8,10 @@ from __future__ import annotations
 import json
 import logging
 
+from nous.domain.shared.text_utils import strip_code_fence
+from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.factory import get_provider
+from nous.infrastructure.llm.text_utils import collect_text
 
 logger = logging.getLogger(__name__)
 
@@ -48,34 +51,25 @@ async def judge_character(config, persona_identity: str, response: str) -> dict 
         logger.warning("CharacterJudge: provider init failed: %s", e)
         return None
 
-    from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, LLMMessage, TextDeltaEvent
-
     prompt = _JUDGE_PROMPT.format(persona_identity=persona_identity[:2000], response=response[:2000])
-    text = ""
     try:
         # provider.stream は async generator を返す（型宣言通り mypy も正しく解釈する）。
-        async for event in provider.stream(
+        text = await collect_text(
+            provider,
             messages=[LLMMessage(role="user", content=prompt)],
             system="",
             tools=[],
             temperature=0.0,
             max_tokens=200,
-        ):
-            if isinstance(event, TextDeltaEvent):
-                text += event.content
-            elif isinstance(event, (DoneEvent, ErrorEvent)):
-                break
+        )
     except Exception as e:
         logger.warning("CharacterJudge: LLM call failed: %s", e)
         return None
-    return _parse_judgment(text)
+    return _parse_judgment(text or "")
 
 
 def _parse_judgment(text: str) -> dict | None:
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        lines = cleaned.splitlines()
-        cleaned = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+    cleaned = strip_code_fence(text)
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError:

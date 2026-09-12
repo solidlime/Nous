@@ -6,8 +6,10 @@ import json
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from nous.domain.shared.text_utils import strip_code_fence
 from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.factory import get_provider
+from nous.infrastructure.llm.text_utils import collect_text
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -84,12 +86,9 @@ def _parse_models(text: str) -> list[str]:
 
     JSONの他、マークダウンのコードブロックで囲まれた形式にも対応。
     """
-    text = text.strip()
+    text = strip_code_fence(text)
     if not text:
         return []
-    if text.startswith("```"):
-        lines = text.splitlines()
-        text = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
     try:
         result = json.loads(text)
         if isinstance(result, dict):
@@ -166,26 +165,20 @@ async def maybe_run_mental_model(
                 logger.warning("PatternDetector: provider init failed for %s: %s", type_tag, e)
                 continue
 
-            from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, TextDeltaEvent
-
-            text = ""
             try:
-                async for event in provider.stream(
+                text = await collect_text(
+                    provider,
                     messages=[LLMMessage(role="user", content=prompt)],
                     system="",
                     tools=[],
                     temperature=0.3,
                     max_tokens=512,
-                ):
-                    if isinstance(event, TextDeltaEvent):
-                        text += event.content
-                    elif isinstance(event, (DoneEvent, ErrorEvent)):
-                        break
+                )
             except Exception as e:
                 logger.warning("PatternDetector: LLM call failed for %s: %s", type_tag, e)
                 continue
 
-            models = _parse_models(text)
+            models = _parse_models(text or "")
             if not models:
                 logger.debug("PatternDetector: no models parsed for %s", type_tag)
                 continue

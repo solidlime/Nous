@@ -80,8 +80,9 @@ class SummarizerMixin:
             conversation="\n".join(lines),
         )
 
-        from nous.infrastructure.llm.base import DoneEvent, ErrorEvent, LLMMessage, TextDeltaEvent
+        from nous.infrastructure.llm.base import LLMMessage
         from nous.infrastructure.llm.factory import get_provider
+        from nous.infrastructure.llm.text_utils import collect_text
 
         try:
             provider = get_provider(
@@ -94,22 +95,18 @@ class SummarizerMixin:
             logger.warning("CompressStep: Stage 4 — provider init failed")
             return None
 
-        text = ""
         try:
-            async for event in provider.stream(
+            text = await collect_text(
+                provider,
                 messages=[LLMMessage(role="user", content=prompt)],
                 system="",
                 tools=[],
                 temperature=0.0,
                 max_tokens=512,
-            ):
-                if isinstance(event, TextDeltaEvent):
-                    text += event.content
-                elif isinstance(event, (DoneEvent, ErrorEvent)):
-                    break
+            )
         except Exception as e:
             logger.warning("CompressStep: Stage 4 — LLM call failed: %s", e)
             return None
 
-        summary = text.strip()
+        summary = (text or "").strip()
         return summary if summary else None

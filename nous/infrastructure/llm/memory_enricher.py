@@ -8,8 +8,10 @@ from typing import TYPE_CHECKING
 
 from nous.domain.memory.contradiction import ContradictionResult, classify_contradiction
 from nous.domain.memory.enrichment import EnrichmentResult, RelationCandidate
+from nous.domain.shared.text_utils import strip_code_fence
 from nous.domain.value_objects import normalize_importance
 from nous.infrastructure.llm.factory import get_provider
+from nous.infrastructure.llm.text_utils import collect_text_with_usage
 
 if TYPE_CHECKING:
     from nous.infrastructure.llm.base import LLMProvider
@@ -137,44 +139,21 @@ class MemoryEnricher:
 
     async def _call_llm(self, provider: LLMProvider, system: str, user_message: str) -> tuple[str | None, dict | None]:
         """Call the LLM stream and collect the full text response plus token usage."""
-        from nous.infrastructure.llm.base import (
-            DoneEvent,
-            ErrorEvent,
-            LLMMessage,
-            TextDeltaEvent,
-        )
+        from nous.infrastructure.llm.base import LLMMessage
 
-        full_content: list[str] = []
-        usage: dict | None = None
-        async for event in provider.stream(
+        collected = await collect_text_with_usage(
+            provider,
             messages=[LLMMessage(role="user", content=user_message)],
             system=system,
             temperature=0.3,
             max_tokens=self._max_tokens,
             reasoning_effort=self._reasoning_effort,
-        ):
-            if isinstance(event, TextDeltaEvent):
-                full_content.append(event.content)
-            elif isinstance(event, ErrorEvent):
-                logger.warning("LLM stream error: %s", event.message)
-                return None, None
-            elif isinstance(event, DoneEvent):
-                usage = event.usage  # {"prompt_tokens": N, "completion_tokens": M, ...}
-        text = "".join(full_content) if full_content else None
-        return text, usage
+        )
+        return collected.text, collected.usage
 
     def _parse_response(self, text: str) -> EnrichmentResult | None:
         """Parse JSON from LLM response and return EnrichmentResult."""
-        cleaned = text.strip()
-        # Try to extract JSON from markdown code block if present
-        if "```json" in cleaned:
-            start = cleaned.index("```json") + 7
-            end = cleaned.index("```", start) if "```" in cleaned[start:] else len(cleaned)
-            cleaned = cleaned[start:end].strip()
-        elif "```" in cleaned:
-            start = cleaned.index("```") + 3
-            end = cleaned.index("```", start) if "```" in cleaned[start:] else len(cleaned)
-            cleaned = cleaned[start:end].strip()
+        cleaned = strip_code_fence(text)
 
         try:
             data = json.loads(cleaned)

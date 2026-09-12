@@ -14,7 +14,9 @@ from typing import TYPE_CHECKING
 
 from nous.domain.memory import wiring_events
 from nous.domain.memory.session_event import SessionEvent
+from nous.domain.shared.text_utils import strip_code_fence
 from nous.domain.shared.time_utils import get_now
+from nous.infrastructure.llm.text_utils import collect_text_with_usage
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -223,36 +225,20 @@ class IntrospectionEngine:
         return _parse_result(text)
 
     async def _call_llm(self, user_message: str) -> tuple[str | None, dict | None]:
-        """memory_enricher._call_llm と同じ stream 消費パターン (usage は debug ログのみ)。"""
-        from nous.infrastructure.llm.base import (
-            DoneEvent,
-            ErrorEvent,
-            LLMMessage,
-            TextDeltaEvent,
-            ThinkingDeltaEvent,
-        )
+        """memory_enricher._call_llm と同じ stream 消費（usage は debug ログのみ）。"""
+        from nous.infrastructure.llm.base import LLMMessage
 
-        parts: list[str] = []
-        usage: dict | None = None
-        thinking_chars = 0
-        async for event in self._provider.stream(
+        collected = await collect_text_with_usage(
+            self._provider,
             messages=[LLMMessage(role="user", content=user_message)],
             system="",
             temperature=0.7,
             max_tokens=self._max_tokens,
             reasoning_effort=self._reasoning_effort,
-        ):
-            if isinstance(event, TextDeltaEvent):
-                parts.append(event.content)
-            elif isinstance(event, ThinkingDeltaEvent):
-                thinking_chars += len(event.content)
-            elif isinstance(event, ErrorEvent):
-                logger.debug("introspection LLM stream error: %s", event.message)
-                return None, None
-            elif isinstance(event, DoneEvent):
-                usage = event.usage
-                logger.debug("introspection usage: %s", usage)
-        text = "".join(parts) if parts else None
+        )
+        text, usage, thinking_chars = collected
+        if usage is not None:
+            logger.debug("introspection usage: %s", usage)
         if text is None and thinking_chars:
             # reasoning モデルが budget を使い切ったケースを success と区別できるようにする
             logger.info(
@@ -361,21 +347,8 @@ def _clean_optional(value) -> str | None:
     return stripped
 
 
-def _strip_code_fence(text: str) -> str:
-    """先頭の ``` / ```json（"``` json" の空白入り含む）と末尾 ``` を剥がす。"""
-    cleaned = text.strip()
-    if not cleaned.startswith("```"):
-        return cleaned
-    cleaned = cleaned[3:].lstrip()
-    if cleaned[:4].lower() == "json":
-        cleaned = cleaned[4:]
-    if cleaned.endswith("```"):
-        cleaned = cleaned[:-3]
-    return cleaned.strip()
-
-
 def _parse_result(text: str) -> IntrospectionResult | None:
-    cleaned = _strip_code_fence(text)
+    cleaned = strip_code_fence(text)
     try:
         data = json.loads(cleaned)
     except (json.JSONDecodeError, ValueError):
@@ -821,7 +794,7 @@ def _cap_memory_texts(memories: list) -> list[str]:
 
 def _parse_json_object(text: str) -> dict | None:
     """```json 囲み/素JSON 両対応の dict パース。単行フェンスも剥がす。失敗時 None。"""
-    cleaned = _strip_code_fence(text)
+    cleaned = strip_code_fence(text)
     try:
         data = json.loads(cleaned)
     except (json.JSONDecodeError, ValueError):
@@ -914,6 +887,7 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
             pending_feedback: list[str] = []
             consecutive_errors = 0
             consecutive_rejects = 0
+            done_summary: str | None = None
             for step in range(max_calls):
                 decision = await _decide_next_step(engine, curiosity, tools, results, pending_feedback)
                 pending_feedback = []
@@ -922,7 +896,12 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
                     logger.info("introspection: curiosity — no usable step decision at step %d", step)
                     break
                 if decision.get("done"):
-                    logger.info("introspection: curiosity — done at step %d", step)
+                    done_summary = decision.get("summary")
+                    logger.info(
+                        "introspection: curiosity — done at step %d (summary=%s)",
+                        step,
+                        "yes" if done_summary else "no",
+                    )
                     break
                 tool_name = decision["tool_name"]
                 args = decision.get("args") or {}
@@ -1004,7 +983,7 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
         logger.info("introspection: curiosity — no results collected")
         return
     try:
-        await _summarize_and_record(ctx, engine, persona, curiosity, results)
+        await _summarize_and_record(ctx, engine, persona, curiosity, results, summary=done_summary)
         logger.info("introspection: curiosity exploration done: steps=%d", len(results))
     except Exception:
         logger.info("introspection: curiosity summarize failed", exc_info=True)
@@ -1027,7 +1006,7 @@ async def _decide_next_step(
 
     返り値:
       - {"tool_name": str, "args": dict}: 次に実行したいツール
-      - {"done": True}: 調べ終わった
+      - {"done": True, "summary": str | None}: 調べ終わった（summary 同梱、欠落時 None）
       - None: LLM 呼び出し失敗 / 空応答 / JSON パース失敗（done とは区別する）
     戻り値の tool_name がカタログ内かは呼び出し側で再検証する。
     """
@@ -1049,7 +1028,9 @@ async def _decide_next_step(
         "- 同じツールを同じ引数で二度実行しないこと。\n"
         "- done は調べたいことが十分に分かった時だけ返すこと。まだ実行できるツールがあるなら done にしない。\n\n"
         '次に実行するツールがあれば {"tool_name": "<上のカタログの名前>", "args": {<input_schemaに沿った引数>}} を、'
-        '調べ終わったなら {"done": true} を返せ。'
+        "調べ終わったなら "
+        '{"done": true, "summary": "わかったことを3文以内。一人称で。「調べたら〜だった」の調子。'
+        'ツール名や「結果」という単語は出さない"} を返せ。'
         "JSON のみで、前置きは不要。"
     )
     try:
@@ -1064,7 +1045,8 @@ async def _decide_next_step(
         logger.debug("introspection: curiosity step parse failed: %s", text[:200])
         return None
     if data.get("done") is True:
-        return {"done": True}
+        summary = data.get("summary")
+        return {"done": True, "summary": summary.strip() if isinstance(summary, str) and summary.strip() else None}
     name = data.get("tool_name")
     if not isinstance(name, str):
         return None
@@ -1080,30 +1062,40 @@ def _json_schema_preview(tool) -> str:
 
 
 async def _summarize_and_record(
-    ctx: AppContext, engine, persona: str, curiosity: str, results: list[dict]
+    ctx: AppContext, engine, persona: str, curiosity: str, results: list[dict], summary: str | None = None
 ) -> None:
-    """多段リサーチの累積結果を一人称で要約し、記憶に保存して独り言バブルを emit。"""
+    """多段リサーチの累積結果を一人称で要約し、記憶に保存して独り言バブルを emit。
+
+    summary が渡された場合（done 応答が要約を同梱）は要約 LLM 呼び出しをスキップする。
+    """
     steps_text = _format_curiosity_results(results)[:_EXPLORATION_RESULT_MAX_CHARS] or "(空の結果)"
     tools_used = [r["tool_name"] for r in results if r.get("tool_name")]
-    prompt = (
-        "静かな時間に気になって調べたことを、あなたらしい一人称の独り言にして。\n"
-        f"調べたいこと: {curiosity}\n"
-        f"調べたステップ:\n{steps_text}\n\n"
-        "出力は JSON のみ。\n"
-        '{"summary": "わかったことを3文以内。「調べたら〜だった」の調子で。ツール名や「結果」という単語は出さない", '
-        '"satisfied": true または false, "unresolved": "満たせなかった質問を一人称で一行。なければ null"}'
-    )
-    try:
-        text, _usage = await engine._call_llm(prompt)
-    except Exception:
-        logger.info("introspection: curiosity summary LLM failed", exc_info=True)
-        return
-    data = _parse_json_object(text or "")
-    if data is None:
-        # 非JSONでも無言廃棄しない: 旧実装同様、生テキストを要約として採用する。
-        logger.debug("introspection: exploration summary was not JSON; using raw text: %s", (text or "")[:200])
-        data = {"summary": (text or "").strip()}
-    summary = str(data.get("summary") or "").strip()[:_EXPLORATION_SUMMARY_MAX_CHARS]
+    data: dict = {}
+    if summary is not None and summary.strip():
+        summary_text = summary.strip()[:_EXPLORATION_SUMMARY_MAX_CHARS]
+    else:
+        prompt = (
+            "静かな時間に気になって調べたことを、あなたらしい一人称の独り言にして。\n"
+            f"調べたいこと: {curiosity}\n"
+            f"調べたステップ:\n{steps_text}\n\n"
+            "出力は JSON のみ。\n"
+            '{"summary": "わかったことを3文以内。「調べたら〜だった」の調子で。ツール名や「結果」という単語は出さない", '
+            '"satisfied": true または false, "unresolved": "満たせなかった質問を一人称で一行。なければ null"}'
+        )
+        try:
+            text, _usage = await engine._call_llm(prompt)
+        except Exception:
+            logger.info("introspection: curiosity summary LLM failed", exc_info=True)
+            return
+        parsed = _parse_json_object(text or "")
+        if parsed is None:
+            # 非JSONでも無言廃棄しない: 旧実装同様、生テキストを要約として採用する。
+            logger.debug("introspection: exploration summary was not JSON; using raw text: %s", (text or "")[:200])
+            data = {"summary": (text or "").strip()}
+        else:
+            data = parsed
+        summary_text = str(data.get("summary") or "").strip()[:_EXPLORATION_SUMMARY_MAX_CHARS]
+    summary = summary_text
     if not summary:
         return
 

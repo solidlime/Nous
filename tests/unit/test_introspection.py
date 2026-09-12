@@ -1315,6 +1315,57 @@ def test_curiosity_budget_exhaustion_stops_at_max(monkeypatch):
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
     assert len(FakePool.instances[0].calls) == 2
     assert len(mem.created) == 1
+    assert len(eng.prompts) == 3  # 判断2回 + 要約 LLM 1回（done が無いのでフォールバック）
+
+
+def test_curiosity_done_summary_skips_summary_llm(monkeypatch):
+    """done 応答が summary を同梱したら要約 LLM を呼ばず、その summary で記憶・emit する。"""
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        [
+            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
+            json.dumps(
+                {"done": True, "summary": "調べたら、雲は500トンくらいあるんだって。"},
+                ensure_ascii=False,
+            ),
+        ]
+    )
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    assert len(eng.prompts) == 2  # 判断2回のみ。要約 LLM はスキップ
+    assert len(mem.created) == 1
+    assert "500トン" in mem.created[0]["content"]
+    events = wiring_events.snapshot_after(0)
+    assert len(events) == 1
+    assert "500トン" in events[0]["meta"]["text"]
+
+
+def test_curiosity_done_without_summary_falls_back(monkeypatch):
+    """done に summary が無ければ従来どおり要約 LLM 呼び出しにフォールバックする。"""
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        [
+            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
+            json.dumps({"done": True}),
+            json.dumps({"summary": "調べたら分かった。", "satisfied": True, "unresolved": None}, ensure_ascii=False),
+        ]
+    )
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    assert len(eng.prompts) == 3  # 判断2回 + 要約 LLM 1回
+    assert len(mem.created) == 1
 
 
 def test_curiosity_passes_all_results_to_summarize(monkeypatch):
@@ -1327,7 +1378,7 @@ def test_curiosity_passes_all_results_to_summarize(monkeypatch):
 
     captured: dict = {}
 
-    async def fake_summarize(ctx, engine, persona, curiosity, results):
+    async def fake_summarize(ctx, engine, persona, curiosity, results, summary=None):
         captured["results"] = results
 
     monkeypatch.setattr(mod, "_summarize_and_record", fake_summarize)
@@ -1431,7 +1482,7 @@ def test_curiosity_search_result_compacted(monkeypatch):
     monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", SearchPool)
     captured: dict = {}
 
-    async def fake_summarize(ctx, engine, persona, curiosity, results):
+    async def fake_summarize(ctx, engine, persona, curiosity, results, summary=None):
         captured["results"] = results
 
     monkeypatch.setattr(mod, "_summarize_and_record", fake_summarize)
