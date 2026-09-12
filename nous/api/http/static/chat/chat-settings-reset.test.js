@@ -25,6 +25,8 @@ const DEFAULTS = {
     brain_spontaneous_interval_hours: { default: 1, help: '間隔', type: 'int', section: 'brain_simulation' },
     forgetting_decay_interval_seconds: { default: 3600, help: '間隔', type: 'int', section: 'forgetting' },
     voice_emotion_mode: { default: 'anchor', help: 'モード', type: 'str', section: 'voice' },
+    voice_enabled: { default: false, help: '音声', type: 'bool', section: 'voice' },
+    mcp_servers: { default: [], help: 'サーバー', type: 'list', section: 'tools' },
   },
 };
 
@@ -41,6 +43,11 @@ function buildForm() {
       <div><input type="range" id="chat-reasoning-effort" min="0" max="3" step="1" value="1" /></div>
       <div><input type="range" id="chat-compression-threshold" min="50" max="100" value="80" /></div>
       <div id="threshold-display">80%</div>
+      <div><textarea id="chat-mcp-json"></textarea></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span>音声を有効化</span>
+        <label class="toggle-switch"><input type="checkbox" id="chat-voice-enabled" /><span></span></label>
+      </div>
       <div class="chat-check-row"><input type="checkbox" id="chat-show-timestamps" /><label for="chat-show-timestamps">ts</label></div>
       <div><input type="number" id="chat-brain-enrich-interval" value="" /></div>
       <div><input type="number" id="chat-brain-spontaneous-interval" value="" /></div>
@@ -175,5 +182,63 @@ describe('reset to default', () => {
       brain_enrich_interval_seconds: 60,
     });
     expect(btn('chat-model').classList.contains('is-dirty')).toBe(false);
+  });
+
+  it('marks a loaded non-default range dirty from the first render', async () => {
+    await window.Nous.Chat.settings.loadDefaults(true);
+    window.Nous.Chat.settings.apply({
+      base_url: 'https://api.example.com',
+      temperature: 1.4,
+    });
+    window.Nous.Chat.settings.injectResetButtons();
+    expect(btn('chat-temperature').classList.contains('is-dirty')).toBe(true);
+  });
+
+  it('tolerates float representation noise on a numeric field', async () => {
+    await setup();
+    const el = document.getElementById('chat-temperature');
+    el.value = '0.7000000000000001';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(btn('chat-temperature').classList.contains('is-dirty')).toBe(false);
+  });
+
+  it('does not treat an unset (null-default) range as divergent', async () => {
+    await setup();
+    const el = document.getElementById('chat-top-p');
+    el.value = '0.5'; // browser midpoint for the empty/unset range
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(window.Nous.Chat.settings.isFieldDirty(['chat-top-p', 'top_p'])).toBe(false);
+    expect(btn('chat-top-p').classList.contains('is-dirty')).toBe(false);
+  });
+
+  it('resets the MCP JSON editor to the default list', async () => {
+    await setup();
+    const el = document.getElementById('chat-mcp-json');
+    el.value = '[{"name":"x"}]';
+    expect(window.Nous.Chat.settings.isFieldDirty(['chat-mcp-json', 'mcp_servers', 'json'])).toBe(true);
+    window.Nous.Chat.settings.resetField('chat-mcp-json');
+    expect(JSON.parse(el.value)).toEqual([]);
+  });
+
+  it('places the icon per control type so it cannot overlap content', async () => {
+    await setup();
+    // range → icon sits beside the track (outside)
+    expect(
+      document.getElementById('chat-temperature').closest('.chat-reset-wrap')
+        .classList.contains('chat-reset-wrap-outside'),
+    ).toBe(true);
+    // textarea → inner overlay with extra right padding for text + scrollbar
+    expect(
+      document.getElementById('chat-mcp-json').closest('.chat-reset-wrap')
+        .classList.contains('chat-reset-wrap-textarea'),
+    ).toBe(true);
+    // text → plain inner overlay (padding reserves the icon's room)
+    expect(document.getElementById('chat-model').closest('.chat-reset-wrap').className).toBe(
+      'chat-reset-wrap',
+    );
+    // toggle switch → grouped with the switch, keeping the row right-aligned
+    expect(
+      document.getElementById('chat-voice-enabled').closest('.chat-reset-toggle-group'),
+    ).not.toBeNull();
   });
 });

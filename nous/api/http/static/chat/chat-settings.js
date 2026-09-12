@@ -62,6 +62,7 @@ var RESET_FIELDS = [
   ["chat-relevance-weight", "retrieval_relevance_weight"],
   ["chat-debug-mode", "debug_mode"],
   ["chat-dynamic-tool-selection", "dynamic_tool_selection"],
+  ["chat-mcp-json", "mcp_servers", "json"],
   ["chat-voice-enabled", "voice_enabled"],
   ["chat-voice-url", "voice_url"],
   ["chat-voice-model", "voice_model"],
@@ -191,17 +192,6 @@ function _defaultToDisplay(def, kind, name) {
   return def == null ? "" : String(def);
 }
 
-function _currentDisplay(el, kind) {
-  if (el.type === "checkbox") return el.checked;
-  if (kind === "radio") {
-    var on = document.querySelector(
-      'input[name="' + el.getAttribute("name") + '"]:checked',
-    );
-    return on ? on.value : "";
-  }
-  return String(el.value);
-}
-
 function _fieldElement(entry) {
   var el = document.getElementById(entry[0]);
   if (!el && entry[2] === "radio") {
@@ -210,12 +200,53 @@ function _fieldElement(entry) {
   return el;
 }
 
+// Divergence check. Numeric fields compare by parsed value with a tolerance so
+// float representation noise (0.7000000000000001 vs 0.7) never shows the icon.
+// A null default means "unset": empty text/number = not divergent, and an unset
+// range (whose "" is coerced to the midpoint by the browser) is also not divergent.
 function _isFieldDirty(entry) {
   var el = _fieldElement(entry);
   if (!el) return false;
   var def = _defaultOf(entry[1]);
   if (def === undefined) return false;
-  return _currentDisplay(el, entry[2]) !== _defaultToDisplay(def, entry[2], entry[3]);
+  var kind = entry[2];
+
+  if (kind === "percent") {
+    if (def == null) return false;
+    var pct = parseFloat(el.value);
+    return isNaN(pct) || Math.abs(pct - Math.round(def * 100)) >= 0.5;
+  }
+  if (kind === "effort") {
+    var wantIdx = ["low", "medium", "high", "max"].indexOf(String(def));
+    if (wantIdx < 0) wantIdx = 1;
+    return parseFloat(el.value) !== wantIdx;
+  }
+  if (kind === "preset") {
+    var want = def && def[entry[3]] != null ? String(def[entry[3]]) : "";
+    return String(el.value) !== want;
+  }
+  if (kind === "json") {
+    try {
+      return JSON.stringify(JSON.parse(el.value)) !== JSON.stringify(def);
+    } catch (_) {
+      return true; // unparsable editor ≠ default → offer the reset
+    }
+  }
+  if (kind === "radio") {
+    var on = document.querySelector(
+      'input[name="' + el.getAttribute("name") + '"]:checked',
+    );
+    return !on || on.value !== (def == null ? "off" : String(def));
+  }
+  if (el.type === "checkbox") return el.checked !== !!def;
+  if (def == null) {
+    if (el.type === "range") return false;
+    return String(el.value) !== "";
+  }
+  var cur = parseFloat(el.value);
+  var ref = parseFloat(def);
+  if (!isNaN(cur) && !isNaN(ref)) return Math.abs(cur - ref) > 1e-9;
+  return String(el.value) !== String(def);
 }
 
 function _injectResetButtons() {
@@ -238,10 +269,20 @@ function _injectResetButtons() {
     btn.setAttribute("aria-label", "デフォルトに戻す");
     btn.innerHTML = '<i data-lucide="rotate-ccw"></i>';
     if (el.type === "checkbox") {
-      var row = el.closest(".chat-check-row") || el.parentElement;
-      if (!row) continue;
-      row.appendChild(btn);
-      btn.classList.add("chat-reset-inline");
+      var toggle = el.closest(".toggle-switch");
+      if (toggle) {
+        // Keep the switch right-aligned: group the icon just left of it.
+        var grp = document.createElement("span");
+        grp.className = "chat-reset-toggle-group";
+        toggle.parentNode.insertBefore(grp, toggle);
+        grp.appendChild(btn);
+        grp.appendChild(toggle);
+      } else {
+        var row = el.closest(".chat-check-row") || el.parentElement;
+        if (!row) continue;
+        row.appendChild(btn);
+        btn.classList.add("chat-reset-inline");
+      }
     } else if (entry[2] === "radio") {
       var holder = el.closest("div") || el.parentElement;
       if (!holder) continue;
@@ -251,7 +292,19 @@ function _injectResetButtons() {
     } else {
       var wrap = document.createElement("span");
       wrap.className = "chat-reset-wrap";
-      if (el.tagName === "SELECT") wrap.classList.add("chat-reset-wrap-select");
+      if (el.tagName === "SELECT") {
+        wrap.classList.add("chat-reset-wrap-select");
+      } else if (el.tagName === "TEXTAREA") {
+        wrap.classList.add("chat-reset-wrap-textarea");
+      } else if (el.type === "range") {
+        wrap.classList.add("chat-reset-wrap-outside");
+      }
+      // The input may carry inline flex/width sizing; keep it on the wrapper so
+      // moving the input inside does not change the existing layout.
+      if (el.style && el.tagName !== "TEXTAREA" && el.type !== "range") {
+        if (el.style.flex) wrap.style.flex = el.style.flex;
+        if (el.style.width) wrap.style.width = el.style.width;
+      }
       el.parentNode.insertBefore(wrap, el);
       wrap.appendChild(el);
       wrap.appendChild(btn);
@@ -294,6 +347,8 @@ function _resetField(id) {
     for (var j = 0; j < radios.length; j++) {
       if (radios[j].value === val) radios[j].checked = true;
     }
+  } else if (entry[2] === "json") {
+    el.value = JSON.stringify(def, null, 2);
   } else {
     el.value = _defaultToDisplay(def, entry[2], entry[3]);
   }

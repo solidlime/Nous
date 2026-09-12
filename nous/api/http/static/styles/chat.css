@@ -743,6 +743,7 @@ html.light .chat-thinking-body {
   background: var(--glass-bg-light);
   color: var(--text-muted);
   cursor: pointer;
+  flex-shrink: 0;
   opacity: 0;
   visibility: hidden;
   transition:
@@ -752,7 +753,9 @@ html.light .chat-thinking-body {
     background var(--duration-fast) var(--ease-apple);
 }
 
-.chat-reset-wrap > .chat-reset-btn {
+/* Text / number / select: overlay the control, reserving room via padding so
+   the icon never sits on top of text or a native arrow. */
+.chat-reset-wrap:not(.chat-reset-wrap-outside) > .chat-reset-btn {
   position: absolute;
   top: 50%;
   right: 7px;
@@ -760,9 +763,53 @@ html.light .chat-thinking-body {
   z-index: 2;
 }
 
-/* Keep clear of the native <select> dropdown chevron */
-.chat-reset-wrap-select > .chat-reset-btn {
-  right: 30px;
+.chat-reset-wrap:not(.chat-reset-wrap-outside) > .chat-field-input {
+  padding-right: 30px;
+}
+
+/* <select>: clear the native dropdown chevron */
+#settings-panel .chat-reset-wrap-select > .chat-field-input {
+  padding-right: 52px;
+}
+
+#settings-panel .chat-reset-wrap-select > .chat-reset-btn {
+  right: 28px;
+}
+
+/* <input type=number>: clear the native spinner */
+#settings-panel .chat-reset-wrap:not(.chat-reset-wrap-outside) > input[type="number"].chat-field-input {
+  padding-right: 48px;
+}
+
+#settings-panel .chat-reset-wrap:not(.chat-reset-wrap-outside) > input[type="number"] + .chat-reset-btn {
+  right: 24px;
+}
+
+/* Range: place the icon beside the control so it never covers the track/thumb */
+.chat-reset-wrap-outside {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-reset-wrap-outside > .chat-field-input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.chat-reset-wrap-outside > .chat-reset-btn {
+  position: static;
+  transform: none;
+}
+
+/* Textarea: keep the icon clear of both the text and the vertical scrollbar */
+#settings-panel .chat-reset-wrap-textarea > .chat-field-input {
+  padding-right: 44px;
+}
+
+#settings-panel .chat-reset-wrap-textarea > .chat-reset-btn {
+  right: 16px;
 }
 
 .chat-reset-btn svg,
@@ -789,7 +836,15 @@ html.light .chat-thinking-body {
   transform: translateY(-50%) scale(1);
 }
 
-/* Checkbox rows: sit inline at the row's end */
+/* Outside buttons must not pick up the overlay transform */
+.chat-reset-wrap-outside:hover > .chat-reset-btn.is-dirty,
+.chat-reset-wrap-outside:focus-within > .chat-reset-btn.is-dirty {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+
+/* Checkbox rows: inline at the row's end (never over the label) */
 .chat-reset-btn.chat-reset-inline {
   position: static;
   transform: none;
@@ -802,9 +857,28 @@ html.light .chat-thinking-body {
   visibility: visible;
 }
 
-/* Radio group: top-right corner of the group block */
+/* Toggle switches: icon grouped just left of the switch, row stays right-aligned */
+.chat-reset-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-reset-toggle-group > .chat-reset-btn {
+  position: static;
+  transform: none;
+}
+
+.chat-reset-toggle-group:hover > .chat-reset-btn.is-dirty,
+.chat-reset-toggle-group:focus-within > .chat-reset-btn.is-dirty {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Radio group: corner of the group block, with reserved space */
 .chat-reset-holder {
   position: relative;
+  padding-right: 22px;
 }
 
 .chat-reset-btn.chat-reset-corner {
