@@ -12,7 +12,7 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^2.1.0",
-    "jsdom": "^25.0.0",
+    "jsdom": "^30.0.1",
     "stylelint": "^17.14.1",
     "stylelint-config-standard": "^40.0.0",
     "stylelint-declaration-strict-value": "^1.11.1",
