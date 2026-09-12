@@ -46,6 +46,18 @@ describe('N.Core.api()', () => {
     await expect(N.api('/fail')).rejects.toThrow('Network failure');
   });
 
+  it('does not fire the global error hook for aborted requests', async () => {
+    const onError = vi.fn();
+    N.api._onError = onError;
+    const abort = new Error('aborted');
+    abort.name = 'AbortError';
+    fetch.mockRejectedValue(abort);
+
+    await expect(N.api('/slow')).rejects.toThrow('aborted');
+    expect(onError).not.toHaveBeenCalled();
+    N.api._onError = null;
+  });
+
   it('sends custom headers when provided', async () => {
     fetch.mockResolvedValue({
       ok: true,

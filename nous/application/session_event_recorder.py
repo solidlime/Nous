@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -14,6 +15,34 @@ if TYPE_CHECKING:
     from nous.application.event_bus import EventBus
 
 logger = logging.getLogger(__name__)
+
+
+def _ellipsize(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: max(0, limit - 1)] + "…"
+
+
+def _compact_tool_called_result(result: str) -> str:
+    """tool.called の result_summary を短い要約にする。
+
+    「切れた生JSONをそのまま見せる」のを避ける。JSON は件数/キー/エラーに要約し、
+    解析できない切れ端は末尾 … を付けて 1 行に収める。
+    """
+    text = result.strip()
+    if text[:1] in ("{", "["):
+        try:
+            payload = json.loads(text)
+        except ValueError:
+            return _ellipsize(text, 80)
+        if isinstance(payload, dict):
+            if isinstance(payload.get("results"), list):
+                return f"{len(payload['results'])} results"
+            if payload.get("error"):
+                return f"error: {payload['error']}"
+            keys = ", ".join(list(payload)[:6])
+            return keys or "(empty)"
+        if isinstance(payload, list):
+            return f"{len(payload)} items"
+    return _ellipsize(text, 80)
 
 
 class SessionEventRecorder:
@@ -74,7 +103,9 @@ class SessionEventRecorder:
             result = data.get("result_summary", "")
             success = data.get("success", True)
             status = "✓" if success else "✗"
-            return f"{tool_name}: {status} {result[:80]}" if result else f"{tool_name}: {status}"
+            if result:
+                return f"{tool_name}: {status} {_compact_tool_called_result(str(result))}"
+            return f"{tool_name}: {status}"
         elif event_type == "events.ingested":
             count = len(data.get("events", []))
             return f"Plugin ingested {count} events"

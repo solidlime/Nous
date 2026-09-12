@@ -78,6 +78,11 @@ class ToolRegistry:
         tool_input: dict,
     ) -> dict:
         """ツール名に応じて search_tools / built-in / MCP を自動ルーティングして実行する。"""
+        # persona は str の時だけ publish に載せる（未設定/非 str は recorder に
+        # "unknown" を委ねる。非 str は SQLite bind 不能で記録が落ちるため）。
+        persona = getattr(ctx, "persona", None)
+        if not isinstance(persona, str):
+            persona = ""
         try:
             if tool_name == SEARCH_TOOLS_NAME:
                 if self._search_handler is None:
@@ -95,32 +100,32 @@ class ToolRegistry:
             # Invariant: MCP tools publish their own events (all paths) —
             # registry only publishes for builtin/search_tools.
             if hasattr(ctx, "event_bus") and ctx.event_bus is not None and not self.is_mcp_tool(tool_name):
-                await ctx.event_bus.publish(
-                    "tool.called",
-                    {
-                        "tool_name": tool_name,
-                        "params_summary": str(tool_input)[:200],
-                        "success": True,
-                        "session_id": getattr(ctx, "session_id", None),
-                        "timestamp": get_now().isoformat(),
-                    },
-                )
+                payload = {
+                    "tool_name": tool_name,
+                    "params_summary": str(tool_input)[:200],
+                    "success": True,
+                    "session_id": getattr(ctx, "session_id", None),
+                    "timestamp": get_now().isoformat(),
+                }
+                if persona:
+                    payload["persona"] = persona
+                await ctx.event_bus.publish("tool.called", payload)
             return result
         except Exception as e:
             logger.exception("ToolRegistry.execute failed: %s", tool_name)
             # Publish tool.called event on failure (same invariant as above)
             if hasattr(ctx, "event_bus") and ctx.event_bus is not None and not self.is_mcp_tool(tool_name):
-                await ctx.event_bus.publish(
-                    "tool.called",
-                    {
-                        "tool_name": tool_name,
-                        "params_summary": str(tool_input)[:200],
-                        "success": False,
-                        "error": str(e),
-                        "session_id": getattr(ctx, "session_id", None),
-                        "timestamp": get_now().isoformat(),
-                    },
-                )
+                payload = {
+                    "tool_name": tool_name,
+                    "params_summary": str(tool_input)[:200],
+                    "success": False,
+                    "error": str(e),
+                    "session_id": getattr(ctx, "session_id", None),
+                    "timestamp": get_now().isoformat(),
+                }
+                if persona:
+                    payload["persona"] = persona
+                await ctx.event_bus.publish("tool.called", payload)
             return {"status": "error", "message": str(e)}
 
     def truncate_result(self, result: dict, max_chars: int) -> dict:

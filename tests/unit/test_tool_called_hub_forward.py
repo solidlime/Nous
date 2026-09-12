@@ -40,6 +40,15 @@ def test_emit_tool_called_backward_compat_omits_persona():
     assert data["source"] == "direct"
 
 
+def test_emit_tool_called_session_id_override_and_ellipsis():
+    ctx = SimpleNamespace(event_bus=_Bus(), session_id=None)
+    asyncio.run(_emit_tool_called(ctx, "mcp-hub__search_tools", "x" * 200, True, session_id="introspection"))
+    _t, data = ctx.event_bus.events[0]
+    assert data["session_id"] == "introspection"
+    assert len(data["result_summary"]) == 80
+    assert data["result_summary"].endswith("…")
+
+
 def test_turn_hub_publish_event_emits_named_sse():
     async def _run():
         hub = TurnHub()

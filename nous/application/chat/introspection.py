@@ -914,7 +914,12 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
                     break
                 args = decision.get("args") or {}
                 logger.info("introspection: curiosity — step %d tool=%s args=%s", step, tool_name, args)
-                tool_result = await pool.call_tool(tool_name, args)
+                try:
+                    tool_result = await pool.call_tool(tool_name, args)
+                except Exception as exc:
+                    # 例外/タイムアウトも tool.called に残す（失敗が無記録にならないように）。
+                    logger.info("introspection: curiosity — tool call raised: %s", exc)
+                    tool_result = {"error": str(exc)}
                 errored = "error" in tool_result or tool_result.get("isError")
                 try:
                     from nous.api.mcp._tools_helpers import _emit_tool_called
@@ -922,12 +927,13 @@ async def _run_curiosity_exploration(ctx: AppContext, config: ChatConfig | None,
                     await _emit_tool_called(
                         ctx,
                         tool_name,
-                        "(空の結果)" if errored else str(tool_result.get("result") or "")[:80],
+                        "(空の結果)" if errored else str(tool_result.get("result") or ""),
                         not errored,
                         params_summary=json.dumps(args, ensure_ascii=False)[:200],
                         error=str(tool_result.get("error") or "") if errored else None,
                         source="introspection",
                         persona=persona,
+                        session_id="introspection",
                     )
                 except Exception:
                     logger.debug("introspection: tool.called publish failed", exc_info=True)

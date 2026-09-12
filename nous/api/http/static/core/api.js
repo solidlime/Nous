@@ -31,6 +31,11 @@ N.Core.api = async function api(path, opts) {
     return await resp.json();
   } catch (e) {
     console.error("API error:", path, e);
+    /* Cancel/timeout aborts are not user-facing failures — skip the global
+       hook + api:error toast so navigation/timeout races don't flash a toast. */
+    if (e && (e.name === "AbortError" || e.name === "TimeoutError")) {
+      throw e;
+    }
     var detail = { path: path, message: e.message, error: e };
     /* Global hook */
     if (typeof N.Core.api._onError === "function") {

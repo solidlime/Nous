@@ -79,6 +79,12 @@ def _tool_called_result_summary(result: object) -> str:
     return str(result)
 
 
+def _truncate_event_text(value: object, limit: int) -> str:
+    """切る場合は末尾に … を付ける（切れた生JSONをそのまま見せない）。"""
+    text = str(value)
+    return text if len(text) <= limit else text[: max(0, limit - 1)] + "…"
+
+
 async def _emit_tool_called(
     ctx: AppContext,
     tool_name: str,
@@ -88,21 +94,25 @@ async def _emit_tool_called(
     error: str | None = None,
     source: str = "direct",
     persona: str = "",
+    session_id: str = "",
 ) -> None:
     """Publish a tool.called event (best-effort — never breaks the tool flow)."""
     try:
         data: dict = {
             "tool_name": tool_name,
-            "params_summary": params_summary[:200],
-            "result_summary": result_summary[:80],
+            "params_summary": _truncate_event_text(params_summary, 200),
+            "result_summary": _truncate_event_text(result_summary, 80),
             "success": success,
-            "session_id": getattr(ctx, "session_id", None),
+            # session_id は明示指定を優先。内省などセッション外は "introspection" を
+            # 渡し、Activity で "unknown" に混ざらないようにする。
+            "session_id": session_id or getattr(ctx, "session_id", None),
             # 呼び出し元の識別子。通常ツールは "direct"、内省 curiosity は
             # "introspection" を渡し、フロントが二重表示を排他できるようにする (spec C)。
             "source": source,
         }
-        # persona は渡された時だけ載せる (後方互換: 未指定なら recorder は "unknown")。
-        if persona:
+        # persona は str の時だけ載せる (後方互換: 未指定なら recorder は "unknown")。
+        # MagicMock 等の非 str は載せない（SQLite bind 不能で記録落ちするため）。
+        if isinstance(persona, str) and persona:
             data["persona"] = persona
         if error:
             data["error"] = error
@@ -126,11 +136,15 @@ def tool_called_audited(
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             ctx = cast("AppContext", args[0] if args else kwargs["ctx"])
             params_summary = str(kwargs)
+            # persona を付与して recorder が "unknown" 行にしない (Activity 帰属)。
+            persona = getattr(ctx, "persona", "")
+            if not isinstance(persona, str):
+                persona = ""
             try:
                 result = await fn(*args, **kwargs)
             except Exception as e:
                 await _emit_tool_called(
-                    ctx, tool_name, str(e), success=False, params_summary=params_summary, error=str(e)
+                    ctx, tool_name, str(e), success=False, params_summary=params_summary, error=str(e), persona=persona
                 )
                 raise
             await _emit_tool_called(
@@ -139,6 +153,7 @@ def tool_called_audited(
                 _tool_called_result_summary(result),
                 _tool_called_result_success(result),
                 params_summary=params_summary,
+                persona=persona,
             )
             return result
 

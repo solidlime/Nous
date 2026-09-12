@@ -207,6 +207,22 @@ class TestSessionEventRecorder:
         )
         assert summary == "memory_search: ✓"
 
+    def test_build_summary_tool_called_compacts_json(self, recorder):
+        """長い生JSONは件数に要約し、切れ端は … で終端する。"""
+        summary = recorder._build_summary(
+            "tool.called",
+            {"tool_name": "mcp-hub__search_tools", "result_summary": '{"results": [1, 2]}', "success": True},
+        )
+        assert summary == "mcp-hub__search_tools: ✓ 2 results"
+
+        broken = '{"results": [{"server": "Exa", "name": "web_search_exa", "desc": "xxxx…'
+        summary2 = recorder._build_summary(
+            "tool.called",
+            {"tool_name": "mcp-hub__search_tools", "result_summary": broken, "success": True},
+        )
+        assert summary2.endswith("…")
+        assert "\n" not in summary2
+
     def test_build_summary_events_ingested(self, recorder):
         """Verify _build_summary for events.ingested."""
         summary = recorder._build_summary(
