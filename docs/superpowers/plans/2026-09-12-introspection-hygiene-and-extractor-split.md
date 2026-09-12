@@ -130,6 +130,8 @@ git commit -m "fix(a1): 対話時刻resolverをstored正・記憶はfallbackの�
 - Consumes: `pool.list_all_tools()` の `t.name`
 - Produces: `_curiosity_tool_allowed(tool_name: str) -> bool`（Task 8 のテストで再利用）
 
+> **superseded (2026-09-12)**: 本 Task の allowlist（`_curiosity_tool_allowed`）は全廃。カタログ全開放＋ `get_context` の副作用ピンポイント除外、同一 tool+args 重複ガード、検索結果の `server__name` compact 正規化へ変更。以降のコードブロックは履歴。
+
 - [ ] **Step 1: A2 — record_conversation_time を削除**
 
 `nous/api/mcp/_tools_persona.py:246-247` を削除（post.py:141 ターン終了が唯一の記録点になる。L88 get_context 内のものは外部クライアント互換のため**残す**）:

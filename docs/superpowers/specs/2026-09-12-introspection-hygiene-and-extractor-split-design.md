@@ -121,3 +121,5 @@
 - 予算は既存 `explorer.max_tool_calls` を再利用（新設定なし）。デフォルト 1 → **5**、`max(1, min(10, v))` にクランプ。1時間ごとに多段で1リサーチを完了する。
 - `_run_curiosity_exploration` は最大 max_tool_calls 段ループ。各ステップで `_curiosity_tool_allowed` の許可集合を再検証し、`pool.call_tool` 結果（各800字 cap・累積6000字 cap）を蓄積、`_emit_tool_called(source="introspection")` を発行。
 - 完了判定: `{"done":true}` / 判断不能 / 予算消尽 / 連続エラー2回。累積結果全体を `_summarize_and_record(results)` に渡し、要約・記憶・brain.monologue（kind=exploration）・wiring emit を行う。
+
+> **superseded (2026-09-12)**: 本文の allowlist（`_curiosity_tool_allowed`・累積6000字cap）は廃止。カタログは全開放（`disabled_tools` 除外のみ）＋ `get_context` を record_conversation_time 副作用のためピンポイント除外。同一 tool+args 重複ガード（連続2回で打ち切り）・未知ツールのフィードバック・検索結果の `server__name` compact 正規化を追加。

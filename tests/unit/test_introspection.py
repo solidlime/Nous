@@ -952,6 +952,8 @@ class FakePool:
             return []
         return [
             FakeTool("srv__search", "web検索する", {"query": {"type": "string"}}),
+            FakeTool("srv__get_context", "文脈取得（旧 allowlist では除外していた）", {}),
+            FakeTool("srv__update_context", "文脈更新（旧 allowlist では除外していた）", {}),
             FakeTool("srv__disabled", "無効化済みツール", {}),
         ]
 
@@ -1114,7 +1116,8 @@ def test_curiosity_disabled_tool_not_in_prompt(monkeypatch):
     assert "srv__search" in eng.prompts[0]
 
 
-def test_curiosity_select_unknown_tool_is_rejected(monkeypatch):
+def test_curiosity_catalog_excludes_get_context_side_effect(monkeypatch):
+    """全開放方針でも get_context だけは record_conversation_time 副作用のため除外。更新系は載る。"""
     from nous.application.chat.introspection import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True)
@@ -1122,10 +1125,57 @@ def test_curiosity_select_unknown_tool_is_rejected(monkeypatch):
     wiring_events.clear()
     import asyncio
 
-    eng = FakeLLMEngine([json.dumps({"tool_name": "srv__hallucinated", "args": {}})])
+    eng = FakeLLMEngine([json.dumps({"tool_name": None})])
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
-    assert FakePool.instances[0].calls == []
+    catalog = eng.prompts[0]
+    assert "srv__get_context" not in catalog
+    assert "srv__update_context" in catalog
+
+
+def test_curiosity_unknown_tool_feeds_back(monkeypatch):
+    """カタログ外ツールは実行せず、却下フィードバックを次ステップのプロンプトに載せる。"""
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    eng = FakeLLMEngine(
+        [
+            json.dumps({"tool_name": "srv__hallucinated", "args": {}}),
+            json.dumps({"done": True}),
+        ]
+    )
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
+    assert FakePool.instances[0].calls == []  # 実行しない
+    assert len(eng.prompts) == 2  # 却下後も次ステップへ進む
+    assert "srv__hallucinated" in eng.prompts[1]
+    assert "存在しない" in eng.prompts[1]
     assert wiring_events.snapshot_after(0) == []
+
+
+def test_curiosity_aborts_after_repeated_unknown_tools(monkeypatch):
+    """未知ツール提案が連続2回で打ち切り、要約へ進む。"""
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        [
+            json.dumps({"tool_name": "srv__ghost1", "args": {}}),
+            json.dumps({"tool_name": "srv__ghost2", "args": {}}),
+            json.dumps({"summary": "x", "satisfied": True, "unresolved": None}, ensure_ascii=False),
+        ]
+    )
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    assert FakePool.instances[0].calls == []
+    assert len(eng.prompts) == 2  # 3 回目は break
+    assert mem.created == []
 
 
 def test_curiosity_happy_path(monkeypatch):
@@ -1203,8 +1253,8 @@ def test_curiosity_aborts_after_two_consecutive_errors(monkeypatch):
     mem = FakeMemoryService()
     eng = FakeLLMEngine(
         [
-            json.dumps({"tool_name": "srv__search", "args": {}}),
-            json.dumps({"tool_name": "srv__search", "args": {}}),
+            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
+            json.dumps({"tool_name": "srv__search", "args": {"q": "2"}}),
             json.dumps({"summary": "失敗続きだった。", "satisfied": False, "unresolved": None}, ensure_ascii=False),
         ]
     )
@@ -1293,8 +1343,53 @@ def test_curiosity_passes_all_results_to_summarize(monkeypatch):
     assert all("result" in r for r in captured["results"])
 
 
-def test_curiosity_rejects_disallowed_tool_name(monkeypatch):
-    """カタログ外/許可外ツールは実行せず、結果なしなら要約もしない（契約固定）。"""
+def test_curiosity_execute_tool_get_context_rejected(monkeypatch):
+    """hub の execute_tool(args.tool_name=get_context) 経由の get_context 迂回を拒否する。"""
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    class HubPool(FakePool):
+        def list_all_tools(self):
+            return [FakeTool("srv__execute_tool", "hub 実行", {"tool_name": {"type": "string"}})]
+
+    monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", HubPool)
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        [
+            # get_context への迂回 → 拒否
+            json.dumps(
+                {
+                    "tool_name": "srv__execute_tool",
+                    "args": {"server": "nous", "tool_name": "get_context", "arguments": {}},
+                }
+            ),
+            # 別 inner ツール → 通過して実行
+            json.dumps(
+                {
+                    "tool_name": "srv__execute_tool",
+                    "args": {"server": "nous", "tool_name": "memory_search", "arguments": {}},
+                }
+            ),
+            json.dumps({"done": True}),
+            json.dumps({"summary": "調べた。", "satisfied": True, "unresolved": None}, ensure_ascii=False),
+        ]
+    )
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    pool = FakePool.instances[0]
+    # get_context は実行されず、memory_search のみ実行される
+    assert len(pool.calls) == 1
+    assert pool.calls[0][1]["tool_name"] == "memory_search"
+    # 却下フィードバックが次ステップのプロンプトに載る
+    assert "get_context" in eng.prompts[1]
+    assert len(mem.created) == 1
+
+
+def test_curiosity_duplicate_proposal_not_executed(monkeypatch):
+    """同一 tool+args の反復は実行せず、連続2回で打ち切り要約へ進む。"""
     from nous.application.chat.introspection import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
@@ -1305,14 +1400,52 @@ def test_curiosity_rejects_disallowed_tool_name(monkeypatch):
     mem = FakeMemoryService()
     eng = FakeLLMEngine(
         [
-            json.dumps({"tool_name": "srv__save_secret", "args": {}}),
-            json.dumps({"summary": "x", "satisfied": True, "unresolved": None}),
+            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
+            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
+            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
+            json.dumps({"summary": "調べた。", "satisfied": True, "unresolved": None}, ensure_ascii=False),
         ]
     )
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
-    assert FakePool.instances[0].calls == []  # 実行しない
-    assert mem.created == []
-    assert wiring_events.snapshot_after(0) == []
+    # 1 回だけ実行、以降の同一提案はスキップ → 連続2回で打ち切り
+    assert FakePool.instances[0].calls == [("srv__search", {"q": "1"})]
+    assert len(eng.prompts) == 4  # 3 判断 + 1 要約
+    assert len(mem.created) == 1
+
+
+def test_curiosity_search_result_compacted(monkeypatch):
+    """検索系結果は server__name リストに compact 化してから 800 字 cap する。"""
+    from nous.application.chat import introspection as mod
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    class SearchPool(FakePool):
+        async def call_tool(self, name, args):
+            self.calls.append((name, args))
+            big = json.dumps({"results": [{"server": "Exa", "name": f"web_search_exa_{i}"} for i in range(200)]})
+            return {"result": big, "isError": False}
+
+    monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", SearchPool)
+    captured: dict = {}
+
+    async def fake_summarize(ctx, engine, persona, curiosity, results):
+        captured["results"] = results
+
+    monkeypatch.setattr(mod, "_summarize_and_record", fake_summarize)
+    eng = FakeLLMEngine(
+        [
+            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
+            json.dumps({"done": True}),
+        ]
+    )
+    asyncio.run(mod._run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
+    step_result = captured["results"][0]["result"]
+    assert step_result.startswith("Exa__web_search_exa_0")
+    assert not step_result.startswith("{")  # 生 JSON でなく compact 化済み
+    assert len(step_result) <= mod._CURIOSITY_STEP_RESULT_MAX_CHARS
 
 
 class FakeSpontEngine(FakeLLMEngine):
