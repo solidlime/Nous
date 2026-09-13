@@ -98,6 +98,8 @@ class AppContext:
         self.persona = persona
         self._config = config
         self._current_session_id: str | None = None
+        # 内省 curiosity サイクル中フラグ（hub 経由の自サーバー tool.called 抑制用）
+        self._introspection_tool_active = False
         # In-memory Hebbian co-access tracker: keys of memories read/created
         # in this session (rolling window, most recent last).  Volatile by
         # design — Hebbian links rebuild progressively, so nothing is lost.
@@ -361,6 +363,14 @@ class AppContext:
 
             _logging.getLogger("nous").warning("tool.called→hub bridge init failed: %s", e)
 
+        # tool.called をユーザー由来の対話活動として last_conversation_time に記録（内省は除外）
+        try:
+            self.event_bus.subscribe("tool.called", self._on_tool_called_record_conversation)
+        except Exception as e:
+            import logging as _logging
+
+            _logging.getLogger("nous").warning("tool.called→conversation_time bridge init failed: %s", e)
+
     def _init_vector(self) -> None:
         """Initialize embedding model, reranker, and vector store placeholders.
 
@@ -623,6 +633,28 @@ class AppContext:
             import logging as _logging
 
             _logging.getLogger("nous").debug("tool.called→hub forward failed", exc_info=True)
+
+    async def _on_tool_called_record_conversation(self, event_type: str, data: dict) -> None:
+        """tool.called をユーザー由来の対話活動として last_conversation_time に記録する。
+
+        内省由来は除外: (1) _emit_tool_called の source="introspection" タグ、
+        (2) curiosity サイクル中フラグ — hub 経由で自サーバーのツールを叩いた場合は
+        サーバー側 publish に source が付かないためフラグで握り潰す。
+        内省は一人で動くサイクルでユーザーの介入が無い前提の製品方針。
+        """
+        try:
+            if data.get("source") == "introspection":
+                return
+            if getattr(self, "_introspection_tool_active", False):
+                return
+            persona = data.get("persona")
+            if not isinstance(persona, str) or not persona:
+                return
+            self.persona_service.record_conversation_time(persona)
+        except Exception:
+            import logging as _logging
+
+            _logging.getLogger("nous").debug("tool.called→conversation_time record failed", exc_info=True)
 
 
 class AppContextRegistry:

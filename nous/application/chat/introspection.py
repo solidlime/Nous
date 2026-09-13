@@ -945,177 +945,187 @@ async def _run_curiosity_exploration(
     try:
         from nous.infrastructure.mcp_client import MCPClientPool
 
-        async with MCPClientPool(list(getattr(config, "mcp_servers", None) or [])) as pool:
-            disabled = set(getattr(config, "disabled_tools", None) or [])
-            # 方針: 内省で使えるツールは全開放（disabled_tools 除外のみ）。
-            # 例外: get_context は record_conversation_time(persona) の副作用で対話時刻を汚すため除外。
-            tools = [
-                t for t in pool.list_all_tools() if t.name not in disabled and t.name.split("__")[-1] != "get_context"
-            ]
-            if not tools:
-                logger.info("introspection: curiosity — no MCP tools available")
-                return
-            valid_names = {t.name for t in tools}
-            results: list[dict] = []
-            seen: set[tuple[str, str]] = set()
-            consecutive_errors = 0
-            consecutive_rejects = 0
-            done_summary: str | None = None
-            messages: list[LLMMessage] = [LLMMessage(role="user", content=f"調べたいこと:\n{curiosity}")]
-            # 記憶本文・独り言は format() に通さない（本文中の {} で例外にしない）。
-            system_prompt = _CURIOSITY_RESEARCH_SYSTEM.format(persona=persona)
-            research_ctx = _format_research_context(memory_texts, current_state, getattr(result, "monologue", None))
-            if research_ctx:
-                system_prompt += "\n\n" + research_ctx
-            # 防御のため for 反復上限も残す（1 反復 = 1 LLM 呼び出し）。実質は results < max_calls。
-            for step in range(max_calls):
-                turn = await engine.research_step(messages, tools, system=system_prompt)
-                if turn is None:
-                    # LLM エラー/例外。done とは混同せず別ログ。
-                    logger.info("introspection: curiosity — no usable step at step %d", step)
-                    break
-                if not turn.tool_calls:
-                    # ツール非呼び出し = 最終回答（done 相当）。FC 非対応で無言 no-op もここに来る。
-                    if turn.text and turn.text.strip():
-                        done_summary = turn.text.strip()
-                    # text=None は ErrorEvent 由来の空 turn（警告は collector 側で出力済み）。done と混同しない。
-                    label = "provider error" if turn.text is None else "done"
-                    logger.info(
-                        "introspection: curiosity — %s at step %d (summary=%s)",
-                        label,
-                        step,
-                        "yes" if done_summary else "no",
-                    )
-                    break
-                # assistant の tool_calls を先に履歴へ追記。全 tool_call_id に応答を返すまでが契約。
-                messages.append(
-                    LLMMessage(
-                        role="assistant",
-                        content=turn.text or "",
-                        tool_calls=[
-                            {"id": tc.tool_use_id, "name": tc.tool_name, "input": tc.tool_input}
-                            for tc in turn.tool_calls
-                        ],
-                    )
-                )
-                aborted = False
-                for tc in turn.tool_calls:
-                    if aborted:
-                        # 打ち切り決定済みでも未応答 tool_call_id を作らないための空応答。
-                        messages.append(
-                            LLMMessage(
-                                role="tool",
-                                content="（この呼び出しは実行されなかった）",
-                                tool_call_id=tc.tool_use_id,
-                            )
+        # 内省サイクル中フラグ: hub 経由の自サーバー tool.called が
+        # source 無し("direct")で届くため、サイクル全体で対話時刻更新を抑制する。
+        ctx._introspection_tool_active = True
+        try:
+            async with MCPClientPool(list(getattr(config, "mcp_servers", None) or [])) as pool:
+                disabled = set(getattr(config, "disabled_tools", None) or [])
+                # 方針: 内省で使えるツールは全開放（disabled_tools 除外のみ）。
+                # 例外: get_context は record_conversation_time(persona) の副作用で対話時刻を汚すため除外。
+                tools = [
+                    t
+                    for t in pool.list_all_tools()
+                    if t.name not in disabled and t.name.split("__")[-1] != "get_context"
+                ]
+                if not tools:
+                    logger.info("introspection: curiosity — no MCP tools available")
+                    return
+                valid_names = {t.name for t in tools}
+                results: list[dict] = []
+                seen: set[tuple[str, str]] = set()
+                consecutive_errors = 0
+                consecutive_rejects = 0
+                done_summary: str | None = None
+                messages: list[LLMMessage] = [LLMMessage(role="user", content=f"調べたいこと:\n{curiosity}")]
+                # 記憶本文・独り言は format() に通さない（本文中の {} で例外にしない）。
+                system_prompt = _CURIOSITY_RESEARCH_SYSTEM.format(persona=persona)
+                research_ctx = _format_research_context(memory_texts, current_state, getattr(result, "monologue", None))
+                if research_ctx:
+                    system_prompt += "\n\n" + research_ctx
+                # 防御のため for 反復上限も残す（1 反復 = 1 LLM 呼び出し）。実質は results < max_calls。
+                for step in range(max_calls):
+                    turn = await engine.research_step(messages, tools, system=system_prompt)
+                    if turn is None:
+                        # LLM エラー/例外。done とは混同せず別ログ。
+                        logger.info("introspection: curiosity — no usable step at step %d", step)
+                        break
+                    if not turn.tool_calls:
+                        # ツール非呼び出し = 最終回答（done 相当）。FC 非対応で無言 no-op もここに来る。
+                        if turn.text and turn.text.strip():
+                            done_summary = turn.text.strip()
+                        # text=None は ErrorEvent 由来の空 turn（警告は collector 側で出力済み）。done と混同しない。
+                        label = "provider error" if turn.text is None else "done"
+                        logger.info(
+                            "introspection: curiosity — %s at step %d (summary=%s)",
+                            label,
+                            step,
+                            "yes" if done_summary else "no",
                         )
-                        continue
-                    if len(results) >= max_calls:
-                        messages.append(
-                            LLMMessage(
-                                role="tool",
-                                content="これ以上は調べられない（予算上限）。調べた結果をまとめて結論を書くこと。",
-                                tool_call_id=tc.tool_use_id,
-                            )
-                        )
-                        logger.info("introspection: curiosity — budget exhausted, stopping")
-                        aborted = True
-                        continue
-                    if tc.tool_name not in valid_names:
-                        # 未知/一覧外ツールは実行せず、拒否を tool 応答で返して次ステップへ。
-                        consecutive_rejects += 1
-                        messages.append(
-                            LLMMessage(
-                                role="tool",
-                                content=f"ツール {tc.tool_name} は存在しない。必ず渡されたツール一覧の中から選ぶこと。",
-                                tool_call_id=tc.tool_use_id,
-                            )
-                        )
-                        logger.warning("introspection: curiosity — rejected unknown tool: %s", tc.tool_name)
-                        if consecutive_rejects >= _CURIOSITY_MAX_CONSECUTIVE_REJECTS:
-                            logger.info("introspection: curiosity — abort after repeated invalid proposals")
-                            aborted = True
-                        continue
-                    args = tc.tool_input if isinstance(tc.tool_input, dict) else {}
-                    # 副作用ガード: hub の execute_tool(args.tool_name=get_context) 経由の迂回も拒否。
-                    inner = args.get("tool_name")
-                    if isinstance(inner, str) and inner.split("__")[-1] == "get_context":
-                        consecutive_rejects += 1
-                        messages.append(
-                            LLMMessage(
-                                role="tool",
-                                content=(
-                                    "get_context は実行できない。対話時刻を記録する副作用があるため"
-                                    "内省では使えない。別のツールを選ぶこと。"
-                                ),
-                                tool_call_id=tc.tool_use_id,
-                            )
-                        )
-                        logger.warning("introspection: curiosity — rejected get_context via execute_tool args")
-                        if consecutive_rejects >= _CURIOSITY_MAX_CONSECUTIVE_REJECTS:
-                            logger.info("introspection: curiosity — abort after repeated invalid proposals")
-                            aborted = True
-                        continue
-                    key = (tc.tool_name, json.dumps(args, sort_keys=True, ensure_ascii=False))
-                    if key in seen:
-                        # 同一 tool+args の反復は実行せず拒否。連続2回で打ち切り。
-                        consecutive_rejects += 1
-                        messages.append(
-                            LLMMessage(
-                                role="tool",
-                                content=(
-                                    f"同じツール {tc.tool_name} を同じ引数で既に実行済み。"
-                                    "別の引数か別のツールにするか、目的を満たしたならツールを呼ばずに結論を書くこと。"
-                                ),
-                                tool_call_id=tc.tool_use_id,
-                            )
-                        )
-                        logger.info("introspection: curiosity — duplicate proposal skipped: %s", tc.tool_name)
-                        if consecutive_rejects >= _CURIOSITY_MAX_CONSECUTIVE_REJECTS:
-                            logger.info("introspection: curiosity — abort after repeated duplicate proposals")
-                            aborted = True
-                        continue
-                    seen.add(key)
-                    consecutive_rejects = 0
-                    logger.info("introspection: curiosity — step %d tool=%s args=%s", step, tc.tool_name, args)
-                    try:
-                        tool_result = await pool.call_tool(tc.tool_name, args)
-                    except Exception as exc:
-                        # 例外/タイムアウトも tool.called に残す（失敗が無記録にならないように）。
-                        logger.info("introspection: curiosity — tool call raised: %s", exc)
-                        tool_result = {"error": str(exc)}
-                    errored = "error" in tool_result or tool_result.get("isError")
-                    try:
-                        from nous.api.mcp._tools_helpers import _emit_tool_called
-
-                        await _emit_tool_called(
-                            ctx,
-                            tc.tool_name,
-                            "(空の結果)" if errored else str(tool_result.get("result") or ""),
-                            not errored,
-                            params_summary=json.dumps(args, ensure_ascii=False)[:200],
-                            error=str(tool_result.get("error") or "") if errored else None,
-                            source="introspection",
-                            persona=persona,
-                            session_id="introspection",
-                        )
-                    except Exception:
-                        logger.debug("introspection: tool.called publish failed", exc_info=True)
-                    raw_text = str(tool_result.get("result") or tool_result.get("error") or "")
-                    # 検索系結果は候補名を消さないよう server__name リストに compact 化してから cap。
-                    step_text = _compact_search_result(raw_text)[:_CURIOSITY_STEP_RESULT_MAX_CHARS]
-                    results.append(
-                        {"tool_name": tc.tool_name, "args": args, "result": step_text, "error": bool(errored)}
-                    )
+                        break
+                    # assistant の tool_calls を先に履歴へ追記。全 tool_call_id に応答を返すまでが契約。
                     messages.append(
-                        LLMMessage(role="tool", content=step_text or "(空の結果)", tool_call_id=tc.tool_use_id)
+                        LLMMessage(
+                            role="assistant",
+                            content=turn.text or "",
+                            tool_calls=[
+                                {"id": tc.tool_use_id, "name": tc.tool_name, "input": tc.tool_input}
+                                for tc in turn.tool_calls
+                            ],
+                        )
                     )
-                    consecutive_errors = consecutive_errors + 1 if errored else 0
-                    if consecutive_errors >= _CURIOSITY_MAX_CONSECUTIVE_ERRORS:
-                        logger.info("introspection: curiosity — abort after %d consecutive errors", consecutive_errors)
-                        aborted = True
-                if aborted:
-                    break
+                    aborted = False
+                    for tc in turn.tool_calls:
+                        if aborted:
+                            # 打ち切り決定済みでも未応答 tool_call_id を作らないための空応答。
+                            messages.append(
+                                LLMMessage(
+                                    role="tool",
+                                    content="（この呼び出しは実行されなかった）",
+                                    tool_call_id=tc.tool_use_id,
+                                )
+                            )
+                            continue
+                        if len(results) >= max_calls:
+                            messages.append(
+                                LLMMessage(
+                                    role="tool",
+                                    content="これ以上は調べられない（予算上限）。調べた結果をまとめて結論を書くこと。",
+                                    tool_call_id=tc.tool_use_id,
+                                )
+                            )
+                            logger.info("introspection: curiosity — budget exhausted, stopping")
+                            aborted = True
+                            continue
+                        if tc.tool_name not in valid_names:
+                            # 未知/一覧外ツールは実行せず、拒否を tool 応答で返して次ステップへ。
+                            consecutive_rejects += 1
+                            messages.append(
+                                LLMMessage(
+                                    role="tool",
+                                    content=f"ツール {tc.tool_name} は存在しない。必ず渡されたツール一覧の中から選ぶこと。",
+                                    tool_call_id=tc.tool_use_id,
+                                )
+                            )
+                            logger.warning("introspection: curiosity — rejected unknown tool: %s", tc.tool_name)
+                            if consecutive_rejects >= _CURIOSITY_MAX_CONSECUTIVE_REJECTS:
+                                logger.info("introspection: curiosity — abort after repeated invalid proposals")
+                                aborted = True
+                            continue
+                        args = tc.tool_input if isinstance(tc.tool_input, dict) else {}
+                        # 副作用ガード: hub の execute_tool(args.tool_name=get_context) 経由の迂回も拒否。
+                        inner = args.get("tool_name")
+                        if isinstance(inner, str) and inner.split("__")[-1] == "get_context":
+                            consecutive_rejects += 1
+                            messages.append(
+                                LLMMessage(
+                                    role="tool",
+                                    content=(
+                                        "get_context は実行できない。対話時刻を記録する副作用があるため"
+                                        "内省では使えない。別のツールを選ぶこと。"
+                                    ),
+                                    tool_call_id=tc.tool_use_id,
+                                )
+                            )
+                            logger.warning("introspection: curiosity — rejected get_context via execute_tool args")
+                            if consecutive_rejects >= _CURIOSITY_MAX_CONSECUTIVE_REJECTS:
+                                logger.info("introspection: curiosity — abort after repeated invalid proposals")
+                                aborted = True
+                            continue
+                        key = (tc.tool_name, json.dumps(args, sort_keys=True, ensure_ascii=False))
+                        if key in seen:
+                            # 同一 tool+args の反復は実行せず拒否。連続2回で打ち切り。
+                            consecutive_rejects += 1
+                            messages.append(
+                                LLMMessage(
+                                    role="tool",
+                                    content=(
+                                        f"同じツール {tc.tool_name} を同じ引数で既に実行済み。"
+                                        "別の引数か別のツールにするか、目的を満たしたならツールを呼ばずに結論を書くこと。"
+                                    ),
+                                    tool_call_id=tc.tool_use_id,
+                                )
+                            )
+                            logger.info("introspection: curiosity — duplicate proposal skipped: %s", tc.tool_name)
+                            if consecutive_rejects >= _CURIOSITY_MAX_CONSECUTIVE_REJECTS:
+                                logger.info("introspection: curiosity — abort after repeated duplicate proposals")
+                                aborted = True
+                            continue
+                        seen.add(key)
+                        consecutive_rejects = 0
+                        logger.info("introspection: curiosity — step %d tool=%s args=%s", step, tc.tool_name, args)
+                        try:
+                            tool_result = await pool.call_tool(tc.tool_name, args)
+                        except Exception as exc:
+                            # 例外/タイムアウトも tool.called に残す（失敗が無記録にならないように）。
+                            logger.info("introspection: curiosity — tool call raised: %s", exc)
+                            tool_result = {"error": str(exc)}
+                        errored = "error" in tool_result or tool_result.get("isError")
+                        try:
+                            from nous.api.mcp._tools_helpers import _emit_tool_called
+
+                            await _emit_tool_called(
+                                ctx,
+                                tc.tool_name,
+                                "(空の結果)" if errored else str(tool_result.get("result") or ""),
+                                not errored,
+                                params_summary=json.dumps(args, ensure_ascii=False)[:200],
+                                error=str(tool_result.get("error") or "") if errored else None,
+                                source="introspection",
+                                persona=persona,
+                                session_id="introspection",
+                            )
+                        except Exception:
+                            logger.debug("introspection: tool.called publish failed", exc_info=True)
+                        raw_text = str(tool_result.get("result") or tool_result.get("error") or "")
+                        # 検索系結果は候補名を消さないよう server__name リストに compact 化してから cap。
+                        step_text = _compact_search_result(raw_text)[:_CURIOSITY_STEP_RESULT_MAX_CHARS]
+                        results.append(
+                            {"tool_name": tc.tool_name, "args": args, "result": step_text, "error": bool(errored)}
+                        )
+                        messages.append(
+                            LLMMessage(role="tool", content=step_text or "(空の結果)", tool_call_id=tc.tool_use_id)
+                        )
+                        consecutive_errors = consecutive_errors + 1 if errored else 0
+                        if consecutive_errors >= _CURIOSITY_MAX_CONSECUTIVE_ERRORS:
+                            logger.info(
+                                "introspection: curiosity — abort after %d consecutive errors", consecutive_errors
+                            )
+                            aborted = True
+                    if aborted:
+                        break
+        finally:
+            ctx._introspection_tool_active = False
     except Exception:
         logger.info("introspection: curiosity select/call failed", exc_info=True)
         return
