@@ -5,6 +5,7 @@ fetch フィルタ / JSON パース / state 適用 / 新規ターン0 skip / 反
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -670,7 +671,9 @@ class TestStateMaterial:
         _insert_turns(sqlite_conn.get_memory_db(), "test", [("user", "u1")], base)
         captured: dict = {}
 
-        async def fake_generate(persona, system_prompt, recent_turns, memory_texts, current_state=None, prompt_override=""):
+        async def fake_generate(
+            persona, system_prompt, recent_turns, memory_texts, current_state=None, prompt_override=""
+        ):
             captured["current_state"] = current_state
             return _result()
 
@@ -744,7 +747,9 @@ class TestRunSpontaneous:
     def _engine(self, result_or_none, captured: dict | None = None) -> MagicMock:
         engine = MagicMock()
 
-        async def fake_generate_spontaneous(persona, system_prompt, memory_texts, current_state=None, prompt_override=""):
+        async def fake_generate_spontaneous(
+            persona, system_prompt, memory_texts, current_state=None, prompt_override=""
+        ):
             if captured is not None:
                 captured["memory_texts"] = memory_texts
                 captured["current_state"] = current_state
@@ -824,7 +829,9 @@ class TestRunSpontaneous:
         # brain.introspection が無い（自発のみ）→ ターン駆動は last_ts=None 扱いで全ターン対象
         engine = _engine_with(_result(), ctx)
 
-        async def fake_generate(persona, system_prompt, recent_turns, memory_texts, current_state=None, prompt_override=""):
+        async def fake_generate(
+            persona, system_prompt, recent_turns, memory_texts, current_state=None, prompt_override=""
+        ):
             fake_generate.seen_turns = recent_turns
             return _result()
 
@@ -963,15 +970,51 @@ class FakePool:
 
 
 class FakeLLMEngine:
-    """_call_llm に台本どおりの返答を返す。"""
+    """research_step（native FC）に台本どおりの CollectedTurn を返す。
 
-    def __init__(self, replies):
-        self._replies = list(replies)
+    messages は参照のまま保持し、後から追記された tool 応答を検証できるようにする。
+    _call_llm は done summary 欠落時の要約フォールバック用。
+    """
+
+    def __init__(self, turns=None, replies=None):
+        self._turns = list(turns or [])
+        self._replies = list(replies or [])
+        self.calls: list[dict] = []
+        self.messages_refs: list[list] = []
         self.prompts: list[str] = []
+
+    async def research_step(self, messages, tools, system=""):
+        self.calls.append({"tools": tools, "system": system})
+        self.messages_refs.append(messages)
+        return self._turns.pop(0) if self._turns else None
 
     async def _call_llm(self, prompt):
         self.prompts.append(prompt)
         return (self._replies.pop(0) if self._replies else None), None
+
+
+def _collected(text=None, tool_calls=None):
+    from nous.infrastructure.llm.text_utils import CollectedTurn
+
+    return CollectedTurn(text, list(tool_calls or []), None, 0)
+
+
+def _tool_call(name, args=None, call_id=None, n=0):
+    from nous.infrastructure.llm.base import ToolCallEvent
+
+    return ToolCallEvent(tool_name=name, tool_input=args or {}, tool_use_id=call_id or f"call_{name}_{n}")
+
+
+def _unanswered_tool_ids(messages) -> list[str]:
+    """assistant の tool_calls id のうち role=tool 応答が無いものを返す（400 回帰検知）。"""
+    answered = {m.tool_call_id for m in messages if getattr(m, "role", None) == "tool"}
+    missing: list[str] = []
+    for m in messages:
+        if getattr(m, "role", None) == "assistant" and m.tool_calls:
+            for tc in m.tool_calls:
+                if tc.get("id") not in answered:
+                    missing.append(tc.get("id"))
+    return missing
 
 
 class FakeMemoryService:
@@ -1088,21 +1131,114 @@ def test_curiosity_skips_when_no_servers(monkeypatch):
     assert wiring_events.snapshot_after(0) == []
 
 
-def test_curiosity_llm_returns_null(monkeypatch):
+class TestResearchStep:
+    """IntrospectionEngine.research_step（native FC）の透過とイベント回収。"""
+
+    def test_passes_tools_system_and_params_to_stream(self) -> None:
+        captured: dict = {}
+
+        async def stream(messages, system, temperature, max_tokens, tools=None, reasoning_effort=None):
+            captured.update(system=system, max_tokens=max_tokens, reasoning_effort=reasoning_effort, tools=tools)
+            from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+
+            yield TextDeltaEvent(content="ok")
+            yield DoneEvent(full_content="ok", tool_calls=[])
+
+        provider = MagicMock()
+        provider.stream = stream
+        engine = IntrospectionEngine(provider, reasoning_effort="high", max_tokens=4096)
+        from nous.infrastructure.llm.base import LLMMessage, ToolDefinition
+
+        tools = [ToolDefinition(name="srv__search", description="d", input_schema={"type": "object"})]
+        turn = asyncio.new_event_loop().run_until_complete(
+            engine.research_step([LLMMessage(role="user", content="q")], tools, system="SYS")
+        )
+        assert captured["system"] == "SYS"
+        assert captured["max_tokens"] == 4096
+        assert captured["reasoning_effort"] == "high"
+        assert captured["tools"] == tools
+        assert turn is not None
+        assert turn.text == "ok"
+        assert turn.tool_calls == []
+
+    def test_collects_tool_calls_from_stream(self) -> None:
+        from nous.infrastructure.llm.base import DoneEvent, ToolCallEvent
+
+        async def stream(messages, system, temperature, max_tokens, tools=None, reasoning_effort=None):
+            yield ToolCallEvent(tool_name="srv__search", tool_input={"q": "x"}, tool_use_id="c1")
+            yield DoneEvent(full_content="", tool_calls=[])
+
+        provider = MagicMock()
+        provider.stream = stream
+        engine = IntrospectionEngine(provider)
+        from nous.infrastructure.llm.base import LLMMessage, ToolDefinition
+
+        turn = asyncio.new_event_loop().run_until_complete(
+            engine.research_step([LLMMessage(role="user", content="q")], [ToolDefinition("t", "d", {})])
+        )
+        assert turn is not None
+        assert turn.text is None
+        assert [tc.tool_use_id for tc in turn.tool_calls] == ["c1"]
+
+    def test_error_event_returns_empty_turn(self) -> None:
+        from nous.infrastructure.llm.base import ErrorEvent
+
+        async def stream(messages, system, temperature, max_tokens, tools=None, reasoning_effort=None):
+            yield ErrorEvent(message="boom")
+
+        provider = MagicMock()
+        provider.stream = stream
+        engine = IntrospectionEngine(provider)
+        from nous.infrastructure.llm.base import LLMMessage, ToolDefinition
+
+        turn = asyncio.new_event_loop().run_until_complete(
+            engine.research_step([LLMMessage(role="user", content="q")], [ToolDefinition("t", "d", {})])
+        )
+        assert turn is not None
+        assert turn.text is None
+        assert turn.tool_calls == []
+
+
+def test_curiosity_research_step_none_noop(monkeypatch, caplog):
+    """research_step が None（LLM エラー/例外）なら no-op で静かに終わる。"""
     from nous.application.chat.introspection import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True)
     FakePool.instances.clear()
     wiring_events.clear()
     import asyncio
+    import logging
 
-    eng = FakeLLMEngine([json.dumps({"tool_name": None})])
-    asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
+    eng = FakeLLMEngine([None])
+    with caplog.at_level(logging.INFO, logger="nous.application.chat.introspection"):
+        asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
     assert FakePool.instances[0].calls == []
+    assert len(eng.calls) == 1
     assert wiring_events.snapshot_after(0) == []
+    assert "no results collected" in " ".join(r.message for r in caplog.records)
 
 
-def test_curiosity_disabled_tool_not_in_prompt(monkeypatch):
+def test_curiosity_fc_unsupported_noop_logs(monkeypatch, caplog):
+    """FC 非対応（tool_calls が出ない台本）は無言 no-op にせず INFO ログで検知できる。"""
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+    import logging
+
+    eng = FakeLLMEngine([_collected(None, [])])
+    with caplog.at_level(logging.INFO, logger="nous.application.chat.introspection"):
+        asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
+    assert FakePool.instances[0].calls == []
+    assert len(eng.calls) == 1
+    assert wiring_events.snapshot_after(0) == []
+    assert "no results collected" in " ".join(r.message for r in caplog.records)
+
+
+def test_curiosity_tool_array_excludes_disabled(monkeypatch):
+    """tools は tool 配列として渡す。disabled_tools は配列から除外。"""
     from nous.application.chat.introspection import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True)
@@ -1110,13 +1246,14 @@ def test_curiosity_disabled_tool_not_in_prompt(monkeypatch):
     wiring_events.clear()
     import asyncio
 
-    eng = FakeLLMEngine([json.dumps({"tool_name": None})])
+    eng = FakeLLMEngine([None])
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
-    assert eng.prompts and "srv__disabled" not in eng.prompts[0]
-    assert "srv__search" in eng.prompts[0]
+    names = [t.name for t in eng.calls[0]["tools"]]
+    assert "srv__disabled" not in names
+    assert "srv__search" in names
 
 
-def test_curiosity_catalog_excludes_get_context_side_effect(monkeypatch):
+def test_curiosity_tool_array_excludes_get_context(monkeypatch):
     """全開放方針でも get_context だけは record_conversation_time 副作用のため除外。更新系は載る。"""
     from nous.application.chat.introspection import _run_curiosity_exploration
 
@@ -1125,15 +1262,15 @@ def test_curiosity_catalog_excludes_get_context_side_effect(monkeypatch):
     wiring_events.clear()
     import asyncio
 
-    eng = FakeLLMEngine([json.dumps({"tool_name": None})])
+    eng = FakeLLMEngine([None])
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
-    catalog = eng.prompts[0]
-    assert "srv__get_context" not in catalog
-    assert "srv__update_context" in catalog
+    names = [t.name for t in eng.calls[0]["tools"]]
+    assert "srv__get_context" not in names
+    assert "srv__update_context" in names
 
 
 def test_curiosity_unknown_tool_feeds_back(monkeypatch):
-    """カタログ外ツールは実行せず、却下フィードバックを次ステップのプロンプトに載せる。"""
+    """一覧外ツールは実行せず、拒否を tool 応答で返して次ステップへ進む。"""
     from nous.application.chat.introspection import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
@@ -1143,15 +1280,17 @@ def test_curiosity_unknown_tool_feeds_back(monkeypatch):
 
     eng = FakeLLMEngine(
         [
-            json.dumps({"tool_name": "srv__hallucinated", "args": {}}),
-            json.dumps({"done": True}),
+            _collected(None, [_tool_call("srv__hallucinated", {"query": "x"})]),
+            _collected("調べ終わった。"),
         ]
     )
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
     assert FakePool.instances[0].calls == []  # 実行しない
-    assert len(eng.prompts) == 2  # 却下後も次ステップへ進む
-    assert "srv__hallucinated" in eng.prompts[1]
-    assert "存在しない" in eng.prompts[1]
+    assert len(eng.calls) == 2  # 却下後も次ステップへ進む
+    # 拒否が role=tool 応答として履歴に載る（次リクエスト 400 防止）
+    reject = [m for m in eng.messages_refs[1] if m.role == "tool"]
+    assert reject and "存在しない" in reject[0].content
+    assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
     assert wiring_events.snapshot_after(0) == []
 
 
@@ -1167,21 +1306,22 @@ def test_curiosity_aborts_after_repeated_unknown_tools(monkeypatch):
     mem = FakeMemoryService()
     eng = FakeLLMEngine(
         [
-            json.dumps({"tool_name": "srv__ghost1", "args": {}}),
-            json.dumps({"tool_name": "srv__ghost2", "args": {}}),
-            json.dumps({"summary": "x", "satisfied": True, "unresolved": None}, ensure_ascii=False),
+            _collected(None, [_tool_call("srv__ghost1")]),
+            _collected(None, [_tool_call("srv__ghost2")]),
+            _collected("x"),
         ]
     )
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
     assert FakePool.instances[0].calls == []
-    assert len(eng.prompts) == 2  # 3 回目は break
+    assert len(eng.calls) == 2  # 3 回目は break
     assert mem.created == []
+    assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
 
 
 def test_curiosity_happy_path(monkeypatch):
     from nous.application.chat.introspection import _run_curiosity_exploration
 
-    config = _patch_env(monkeypatch, enabled=True)
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
     wiring_events.clear()
     import asyncio
@@ -1189,15 +1329,8 @@ def test_curiosity_happy_path(monkeypatch):
     mem = FakeMemoryService()
     eng = FakeLLMEngine(
         [
-            json.dumps({"tool_name": "srv__search", "args": {"query": "雲の重さ"}}),
-            json.dumps(
-                {
-                    "summary": "調べたら、雲は平均500トンくらいあるんだって。ふうん…すごいわね",
-                    "satisfied": True,
-                    "unresolved": None,
-                },
-                ensure_ascii=False,
-            ),
+            _collected(None, [_tool_call("srv__search", {"query": "雲の重さ"})]),
+            _collected("調べたら、雲は平均500トンくらいあるんだって。ふうん…すごいわね"),
         ]
     )
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
@@ -1206,6 +1339,8 @@ def test_curiosity_happy_path(monkeypatch):
     assert len(mem.created) == 1
     assert "exploration" in mem.created[0]["tags"]
     assert mem.created[0]["importance"] == 0.4
+    # assistant の tool_calls が履歴に載り、全 tool_call_id に応答が返る
+    assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
     events = wiring_events.snapshot_after(0)
     assert len(events) == 1
     assert events[0]["kind"] == "monologue"
@@ -1227,10 +1362,11 @@ def test_curiosity_tool_error_swallows(monkeypatch):
 
     monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", ErrPool)
     mem = FakeMemoryService()
-    eng = FakeLLMEngine([json.dumps({"tool_name": "srv__search", "args": {"query": "x"}})])
+    eng = FakeLLMEngine([_collected(None, [_tool_call("srv__search", {"query": "x"})])])
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
     assert mem.created == []
     assert wiring_events.snapshot_after(0) == []
+    assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
 
 
 def test_curiosity_aborts_after_two_consecutive_errors(monkeypatch):
@@ -1252,19 +1388,22 @@ def test_curiosity_aborts_after_two_consecutive_errors(monkeypatch):
     monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", ErrPool)
     mem = FakeMemoryService()
     eng = FakeLLMEngine(
-        [
-            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
-            json.dumps({"tool_name": "srv__search", "args": {"q": "2"}}),
-            json.dumps({"summary": "失敗続きだった。", "satisfied": False, "unresolved": None}, ensure_ascii=False),
-        ]
+        turns=[
+            _collected(None, [_tool_call("srv__search", {"q": "1"})]),
+            _collected(None, [_tool_call("srv__search", {"q": "2"})]),
+        ],
+        replies=[
+            json.dumps({"summary": "失敗続きだった。", "satisfied": False, "unresolved": None}, ensure_ascii=False)
+        ],
     )
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
     assert len(error_calls) == 2  # 3 回目は実行しない
     assert len(mem.created) == 1  # 要約へ進む
+    assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
 
 
 def test_curiosity_multi_step_until_done(monkeypatch):
-    """多段: 2 ステップのツール実行 → done で抜け、累積結果が要約に渡る。"""
+    """多段: 2 ステップのツール実行 → 最終回答で抜ける。"""
     from nous.application.chat.introspection import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
@@ -1275,28 +1414,24 @@ def test_curiosity_multi_step_until_done(monkeypatch):
     mem = FakeMemoryService()
     eng = FakeLLMEngine(
         [
-            json.dumps({"tool_name": "srv__search", "args": {"query": "雲の重さ"}}),
-            json.dumps({"tool_name": "srv__search", "args": {"query": "雲のできる仕組み"}}),
-            json.dumps({"done": True}),
-            json.dumps(
-                {"summary": "雲は500トンで、でき方もわかった。", "satisfied": True, "unresolved": None},
-                ensure_ascii=False,
-            ),
+            _collected(None, [_tool_call("srv__search", {"query": "雲の重さ"})]),
+            _collected(None, [_tool_call("srv__search", {"query": "雲のできる仕組み"})]),
+            _collected("雲は500トンで、でき方もわかった。"),
         ]
     )
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
     pool = FakePool.instances[0]
     assert [c[0] for c in pool.calls] == ["srv__search", "srv__search"]
     assert len(pool.calls) == 2
+    assert len(eng.calls) == 3
     assert len(mem.created) == 1
     assert "500トン" in mem.created[0]["content"]
-    # 2 ステップ目までの累積が要約プロンプトに載る
-    assert any("雲のできる仕組み" in p for p in eng.prompts)
+    assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
     assert len(wiring_events.snapshot_after(0)) == 1
 
 
 def test_curiosity_budget_exhaustion_stops_at_max(monkeypatch):
-    """done を返さなくても予算 max_tool_calls で打ち切り、要約へ進む。"""
+    """最終回答が無くても予算 max_tool_calls で打ち切り、要約へフォールバックする。"""
     from nous.application.chat.introspection import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=2)
@@ -1306,20 +1441,21 @@ def test_curiosity_budget_exhaustion_stops_at_max(monkeypatch):
 
     mem = FakeMemoryService()
     eng = FakeLLMEngine(
-        [
-            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
-            json.dumps({"tool_name": "srv__search", "args": {"q": "2"}}),
-            json.dumps({"summary": "2段調べた。", "satisfied": True, "unresolved": None}, ensure_ascii=False),
-        ]
+        turns=[
+            _collected(None, [_tool_call("srv__search", {"q": "1"})]),
+            _collected(None, [_tool_call("srv__search", {"q": "2"})]),
+        ],
+        replies=[json.dumps({"summary": "2段調べた。", "satisfied": True, "unresolved": None}, ensure_ascii=False)],
     )
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
     assert len(FakePool.instances[0].calls) == 2
+    assert len(eng.calls) == 2
     assert len(mem.created) == 1
-    assert len(eng.prompts) == 3  # 判断2回 + 要約 LLM 1回（done が無いのでフォールバック）
+    assert len(eng.prompts) == 1  # done が無いので要約 LLM 1回（フォールバック）
 
 
 def test_curiosity_done_summary_skips_summary_llm(monkeypatch):
-    """done 応答が summary を同梱したら要約 LLM を呼ばず、その summary で記憶・emit する。"""
+    """最終回答テキストを同梱したら要約 LLM を呼ばず、その summary で記憶・emit する。"""
     from nous.application.chat.introspection import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
@@ -1330,15 +1466,13 @@ def test_curiosity_done_summary_skips_summary_llm(monkeypatch):
     mem = FakeMemoryService()
     eng = FakeLLMEngine(
         [
-            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
-            json.dumps(
-                {"done": True, "summary": "調べたら、雲は500トンくらいあるんだって。"},
-                ensure_ascii=False,
-            ),
+            _collected(None, [_tool_call("srv__search", {"q": "1"})]),
+            _collected("調べたら、雲は500トンくらいあるんだって。"),
         ]
     )
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
-    assert len(eng.prompts) == 2  # 判断2回のみ。要約 LLM はスキップ
+    assert len(eng.calls) == 2  # 判断2回のみ。要約 LLM はスキップ
+    assert eng.prompts == []
     assert len(mem.created) == 1
     assert "500トン" in mem.created[0]["content"]
     events = wiring_events.snapshot_after(0)
@@ -1347,7 +1481,7 @@ def test_curiosity_done_summary_skips_summary_llm(monkeypatch):
 
 
 def test_curiosity_done_without_summary_falls_back(monkeypatch):
-    """done に summary が無ければ従来どおり要約 LLM 呼び出しにフォールバックする。"""
+    """最終回答テキストが無ければ従来どおり要約 LLM 呼び出しにフォールバックする。"""
     from nous.application.chat.introspection import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
@@ -1357,14 +1491,17 @@ def test_curiosity_done_without_summary_falls_back(monkeypatch):
 
     mem = FakeMemoryService()
     eng = FakeLLMEngine(
-        [
-            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
-            json.dumps({"done": True}),
-            json.dumps({"summary": "調べたら分かった。", "satisfied": True, "unresolved": None}, ensure_ascii=False),
-        ]
+        turns=[
+            _collected(None, [_tool_call("srv__search", {"q": "1"})]),
+            _collected(None, []),
+        ],
+        replies=[
+            json.dumps({"summary": "調べたら分かった。", "satisfied": True, "unresolved": None}, ensure_ascii=False)
+        ],
     )
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
-    assert len(eng.prompts) == 3  # 判断2回 + 要約 LLM 1回
+    assert len(eng.calls) == 2  # 判断2回
+    assert len(eng.prompts) == 1  # 要約 LLM 1回
     assert len(mem.created) == 1
 
 
@@ -1384,9 +1521,9 @@ def test_curiosity_passes_all_results_to_summarize(monkeypatch):
     monkeypatch.setattr(mod, "_summarize_and_record", fake_summarize)
     eng = FakeLLMEngine(
         [
-            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
-            json.dumps({"tool_name": "srv__search", "args": {"q": "2"}}),
-            json.dumps({"done": True}),
+            _collected(None, [_tool_call("srv__search", {"q": "1"})]),
+            _collected(None, [_tool_call("srv__search", {"q": "2"})]),
+            _collected("調べ終わった。"),
         ]
     )
     asyncio.run(mod._run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
@@ -1412,21 +1549,28 @@ def test_curiosity_execute_tool_get_context_rejected(monkeypatch):
     eng = FakeLLMEngine(
         [
             # get_context への迂回 → 拒否
-            json.dumps(
-                {
-                    "tool_name": "srv__execute_tool",
-                    "args": {"server": "nous", "tool_name": "get_context", "arguments": {}},
-                }
+            _collected(
+                None,
+                [
+                    _tool_call(
+                        "srv__execute_tool",
+                        {"server": "nous", "tool_name": "get_context", "arguments": {}},
+                        n=1,
+                    )
+                ],
             ),
             # 別 inner ツール → 通過して実行
-            json.dumps(
-                {
-                    "tool_name": "srv__execute_tool",
-                    "args": {"server": "nous", "tool_name": "memory_search", "arguments": {}},
-                }
+            _collected(
+                None,
+                [
+                    _tool_call(
+                        "srv__execute_tool",
+                        {"server": "nous", "tool_name": "memory_search", "arguments": {}},
+                        n=2,
+                    )
+                ],
             ),
-            json.dumps({"done": True}),
-            json.dumps({"summary": "調べた。", "satisfied": True, "unresolved": None}, ensure_ascii=False),
+            _collected("調べた。"),
         ]
     )
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
@@ -1434,8 +1578,10 @@ def test_curiosity_execute_tool_get_context_rejected(monkeypatch):
     # get_context は実行されず、memory_search のみ実行される
     assert len(pool.calls) == 1
     assert pool.calls[0][1]["tool_name"] == "memory_search"
-    # 却下フィードバックが次ステップのプロンプトに載る
-    assert "get_context" in eng.prompts[1]
+    # 拒否が tool 応答として履歴に載る
+    rejects = [m for m in eng.messages_refs[-1] if m.role == "tool" and "get_context" in (m.content or "")]
+    assert rejects
+    assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
     assert len(mem.created) == 1
 
 
@@ -1450,17 +1596,104 @@ def test_curiosity_duplicate_proposal_not_executed(monkeypatch):
 
     mem = FakeMemoryService()
     eng = FakeLLMEngine(
-        [
-            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
-            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
-            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
-            json.dumps({"summary": "調べた。", "satisfied": True, "unresolved": None}, ensure_ascii=False),
-        ]
+        turns=[
+            _collected(None, [_tool_call("srv__search", {"q": "1"}, n=1)]),
+            _collected(None, [_tool_call("srv__search", {"q": "1"}, n=2)]),
+            _collected(None, [_tool_call("srv__search", {"q": "1"}, n=3)]),
+        ],
+        replies=[json.dumps({"summary": "調べた。", "satisfied": True, "unresolved": None}, ensure_ascii=False)],
     )
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
     # 1 回だけ実行、以降の同一提案はスキップ → 連続2回で打ち切り
     assert FakePool.instances[0].calls == [("srv__search", {"q": "1"})]
-    assert len(eng.prompts) == 4  # 3 判断 + 1 要約
+    assert len(eng.calls) == 3
+    assert len(eng.prompts) == 1  # 要約 LLM 1回（done が無いのでフォールバック）
+    assert len(mem.created) == 1
+    assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
+
+
+def test_curiosity_reject_and_valid_same_batch_all_answered(monkeypatch):
+    """同一バッチに却下と実行が混在しても全 tool_call_id に tool 応答が返る（400 回帰防止）。"""
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        [
+            _collected(
+                None,
+                [
+                    _tool_call("srv__ghost", {"x": "1"}, call_id="rej-1"),
+                    _tool_call("srv__search", {"q": "1"}, call_id="ok-1"),
+                ],
+            ),
+            _collected("調べ終わった。"),
+        ]
+    )
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    assert FakePool.instances[0].calls == [("srv__search", {"q": "1"})]
+    assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
+    assert len(mem.created) == 1
+
+
+def test_curiosity_duplicate_same_batch_all_answered(monkeypatch):
+    """同一バッチ内の重複提案を拒否しても全 tool_call_id に tool 応答が返る（400 回帰防止）。"""
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        [
+            _collected(
+                None,
+                [
+                    _tool_call("srv__search", {"q": "1"}, call_id="d-1"),
+                    _tool_call("srv__search", {"q": "1"}, call_id="d-2"),
+                ],
+            ),
+            _collected("調べ終わった。"),
+        ]
+    )
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    assert FakePool.instances[0].calls == [("srv__search", {"q": "1"})]
+    assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
+    assert len(mem.created) == 1
+
+
+def test_curiosity_budget_exceeded_same_batch_all_answered(monkeypatch):
+    """予算超過で打ち切っても同一バッチの残り tool_call_id に応答が返る（400 回帰防止）。"""
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=1)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        turns=[
+            _collected(
+                None,
+                [
+                    _tool_call("srv__search", {"q": "1"}, call_id="b-1"),
+                    _tool_call("srv__search", {"q": "2"}, call_id="b-2"),
+                    _tool_call("srv__search", {"q": "3"}, call_id="b-3"),
+                ],
+            )
+        ],
+        replies=[json.dumps({"summary": "調べた。", "satisfied": True, "unresolved": None}, ensure_ascii=False)],
+    )
+    asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    assert FakePool.instances[0].calls == [("srv__search", {"q": "1"})]  # 予算内の 1 回だけ実行
+    assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
     assert len(mem.created) == 1
 
 
@@ -1488,8 +1721,8 @@ def test_curiosity_search_result_compacted(monkeypatch):
     monkeypatch.setattr(mod, "_summarize_and_record", fake_summarize)
     eng = FakeLLMEngine(
         [
-            json.dumps({"tool_name": "srv__search", "args": {"q": "1"}}),
-            json.dumps({"done": True}),
+            _collected(None, [_tool_call("srv__search", {"q": "1"})]),
+            _collected("調べ終わった。"),
         ]
     )
     asyncio.run(mod._run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
@@ -1500,10 +1733,10 @@ def test_curiosity_search_result_compacted(monkeypatch):
 
 
 class FakeSpontEngine(FakeLLMEngine):
-    """run_spontaneous 用: generate_spontaneous が固定結果を返り、探索用 _call_llm も持つ。"""
+    """run_spontaneous 用: generate_spontaneous が固定結果を返す。"""
 
-    def __init__(self, result, replies):
-        super().__init__(replies)
+    def __init__(self, result, turns=None, replies=None):
+        super().__init__(turns, replies)
         self._result = result
 
     async def generate_spontaneous(self, persona, system_prompt, memory_texts, current_state, prompt_override=""):

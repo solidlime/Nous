@@ -16,6 +16,7 @@ from nous.infrastructure.llm.base import (
     LLMProvider,
     TextDeltaEvent,
     ThinkingDeltaEvent,
+    ToolCallEvent,
     ToolDefinition,
 )
 from nous.infrastructure.logging.structured import get_logger
@@ -118,3 +119,62 @@ async def collect_text_with_usage(
         elif isinstance(event, DoneEvent):
             usage = event.usage
     return CollectedText("".join(parts) if parts else None, usage, thinking_chars)
+
+
+class CollectedTurn(NamedTuple):
+    text: str | None
+    tool_calls: list[ToolCallEvent]
+    usage: dict | None
+    thinking_chars: int
+
+
+async def collect_with_tools(
+    provider: LLMProvider,
+    *,
+    messages: list[LLMMessage],
+    system: str = "",
+    tools: list[ToolDefinition] | None = None,
+    temperature: float = 0.7,
+    max_tokens: int = 2048,
+    reasoning_effort: str | None = None,
+) -> CollectedTurn:
+    """native function calling 用に text と ToolCallEvent を蓄積して返す。
+
+    collect_text_with_usage と同じイベント処理構造。text は parts が空なら None。
+    ErrorEvent で CollectedTurn(None, [], None, 0)、usage は DoneEvent で回収。
+    例外は呼び出し側へ伝播する。
+    """
+    parts: list[str] = []
+    tool_calls: list[ToolCallEvent] = []
+    usage: dict | None = None
+    thinking_chars = 0
+    if tools is None:
+        stream = provider.stream(
+            messages=messages,
+            system=system,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            reasoning_effort=reasoning_effort,
+        )
+    else:
+        stream = provider.stream(
+            messages=messages,
+            system=system,
+            tools=tools,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            reasoning_effort=reasoning_effort,
+        )
+    async for event in stream:
+        if isinstance(event, TextDeltaEvent):
+            parts.append(event.content)
+        elif isinstance(event, ThinkingDeltaEvent):
+            thinking_chars += len(event.content)
+        elif isinstance(event, ToolCallEvent):
+            tool_calls.append(event)
+        elif isinstance(event, ErrorEvent):
+            logger.warning("LLM stream error: %s", event.message)
+            return CollectedTurn(None, [], None, 0)
+        elif isinstance(event, DoneEvent):
+            usage = event.usage
+    return CollectedTurn("".join(parts) if parts else None, tool_calls, usage, thinking_chars)
