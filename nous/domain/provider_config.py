@@ -41,6 +41,11 @@ _DEFAULT_BASE_URLS: dict[str, str] = {
 # Allowed reasoning effort levels (shared across providers, converted per provider)
 REASONING_EFFORTS = frozenset({"low", "medium", "high", "max"})
 
+# effort → thinking budget_tokens。openai_compat / session_config で共有（単一定義）。
+# Anthropic 互換 API の thinking.enabled は budget_tokens 必須のため、max_tokens は
+# max(max_tokens, budget + 1024) に嵩上げする。
+REASONING_BUDGETS: dict[str, int] = {"low": 2048, "medium": 4096, "high": 8192, "max": 16384}
+
 
 class ProviderConfig(BaseModel):
     """LLMプロバイダ接続設定。"""

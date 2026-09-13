@@ -6,6 +6,8 @@ import re
 import uuid
 from typing import TYPE_CHECKING
 
+from nous.domain.provider_config import REASONING_BUDGETS
+
 from .base import (
     ChatEvent,
     DoneEvent,
@@ -33,7 +35,8 @@ _PROCESS_GO_SESSION = uuid.uuid4().hex
 
 # 旧 AnthropicProvider (anthropic.py:24) と同じ effort→budget 変換。
 # Anthropic の thinking.enabled は budget_tokens 必須 (無しで 400) のため互換分岐で使う。
-_EFFORT_BUDGET_MAP = {"low": 2048, "medium": 4096, "high": 8192, "max": 16384}
+# 定義は nous.domain.provider_config に一本化（session_config の嵩上げ式と共有）。
+_EFFORT_BUDGET_MAP = REASONING_BUDGETS
 
 
 _VISION_MODEL_PREFIXES = (

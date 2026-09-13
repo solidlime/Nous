@@ -1,7 +1,7 @@
 """curiosity 探索の補助ヘルパーテスト（全開放方針に伴い allowlist テストを置換）。
 
 - `_parse_json_object`: 単行/複数行フェンス剥ぎ。
-- `_compact_search_result`: 検索系結果の server__name 候補リスト化。
+- `_compact_search_result`: ツールカタログ形状の証拠がある時だけ server__name 候補リスト化（汎用検索は原文）。
 """
 
 from __future__ import annotations
@@ -50,9 +50,10 @@ class TestCompactSearchResult:
         )
         assert _compact_search_result(raw) == "Exa__web_search_exa, mcp-hub__execute_tool"
 
-    def test_results_key_name_only(self):
+    def test_results_key_name_only_passthrough(self):
+        # name のみは形状証拠なし → 原文（汎用検索データを壊さない安全側）。
         raw = json.dumps({"results": [{"name": "memory_read"}, {"name": "memory_search"}]})
-        assert _compact_search_result(raw) == "memory_read, memory_search"
+        assert _compact_search_result(raw) == raw
 
     def test_tools_dict_form(self):
         raw = json.dumps(
@@ -65,8 +66,10 @@ class TestCompactSearchResult:
         )
         assert _compact_search_result(raw) == "mcp-hub__search_tools, nous__memory_search"
 
-    def test_plain_string_items(self):
-        assert _compact_search_result(json.dumps({"tools": ["a", "b"]})) == "a, b"
+    def test_plain_string_items_passthrough(self):
+        # 文字列項目は形状証拠なし → 原文。
+        raw = json.dumps({"tools": ["a", "b"]})
+        assert _compact_search_result(raw) == raw
 
     def test_bare_list_passthrough(self):
         # 裸リストは対応しない（N3: tools/results キー限定）。

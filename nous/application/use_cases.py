@@ -223,9 +223,9 @@ class AppContext:
                 brain_effort = None
                 if cfg is not None and getattr(cfg, "brain_reasoning_enabled", False):
                     brain_effort = str(getattr(cfg, "brain_reasoning_effort", "medium") or "medium")
-                # brain_max_tokens は両者共通の上限値。cfg あり → cfg 値 (デフォルト 2048)。
-                # cfg なし → 各 ctor デフォルト (enricher 512 / introspection 2048) を維持。
-                brain_max_tokens = int(getattr(cfg, "brain_max_tokens", 2048) or 2048) if cfg is not None else None
+                # brain_max_tokens は両者共通の上限値。cfg あり → cfg 値 (デフォルト 4096)。
+                # cfg なし → 各 ctor デフォルト (enricher 512 / introspection 4096) を維持。
+                brain_max_tokens = int(getattr(cfg, "brain_max_tokens", 4096) or 4096) if cfg is not None else None
 
                 # OpenCode Go 用の脳側安定セッションID (persona ベース)。persona 未設定なら None
                 # (provider 生成側のプロセス既定にフォールバック)。

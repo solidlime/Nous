@@ -576,7 +576,7 @@ class TestBrainMaxTokens:
         asyncio_run_generate(engine)
         assert captured["max_tokens"] == 4096
 
-    def test_engine_default_max_tokens_2048(self) -> None:
+    def test_engine_default_max_tokens_4096(self) -> None:
         captured: dict = {}
 
         async def stream(messages, system, temperature, max_tokens, reasoning_effort=None):
@@ -589,7 +589,7 @@ class TestBrainMaxTokens:
         provider.stream = stream
         engine = IntrospectionEngine(provider)
         asyncio_run_generate(engine)
-        assert captured["max_tokens"] == 2048
+        assert captured["max_tokens"] == 4096
 
     def test_from_config_resolves_brain_max_tokens(self) -> None:
         provider_cfg = MagicMock()
@@ -1779,3 +1779,185 @@ def test_spontaneous_monologue_survives_pool_crash(monkeypatch):
     events = wiring_events.snapshot_after(0)
     assert len(events) == 1  # 本体独り言のみ。探索は BoomPool で静かに死ぬ
     assert "静かね" in events[0]["meta"]["text"]
+
+
+class TestCompactSearchResultShapeGate:
+    """汎用検索データを壊さない: ツールカタログ形状の証拠がある時だけ compact する。"""
+
+    def test_hub_shape_compacted(self):
+        from nous.application.chat.introspection import _compact_search_result
+
+        text = json.dumps({"results": [{"server": "Exa", "name": "web_search_exa"}]})
+        assert _compact_search_result(text) == "Exa__web_search_exa"
+
+    def test_tool_name_shape_compacted(self):
+        from nous.application.chat.introspection import _compact_search_result
+
+        text = json.dumps({"tools": [{"tool_name": "search_tools"}, {"tool_name": "execute_tool"}]})
+        assert _compact_search_result(text) == "search_tools, execute_tool"
+
+    def test_generic_name_only_untouched(self):
+        from nous.application.chat.introspection import _compact_search_result
+
+        text = json.dumps({"results": [{"name": "some_web_result", "url": "https://x"}]})
+        assert _compact_search_result(text) == text
+
+    def test_mixed_evidence_untouched(self):
+        from nous.application.chat.introspection import _compact_search_result
+
+        text = json.dumps({"results": [{"server": "Exa", "name": "a"}, {"name": "b"}]})
+        assert _compact_search_result(text) == text
+
+    def test_empty_items_untouched(self):
+        from nous.application.chat.introspection import _compact_search_result
+
+        text = json.dumps({"results": []})
+        assert _compact_search_result(text) == text
+
+    def test_non_json_untouched(self):
+        from nous.application.chat.introspection import _compact_search_result
+
+        assert _compact_search_result("plain text") == "plain text"
+
+
+def test_curiosity_step_result_capped_and_invariant(monkeypatch):
+    from nous.application.chat import introspection as mod
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    long_text = "あ" * 3000
+
+    class LongPool(FakePool):
+        async def call_tool(self, name, args):
+            self.calls.append((name, args))
+            return {"result": long_text, "isError": False}
+
+    monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", LongPool)
+    captured: dict = {}
+
+    async def fake_summarize(ctx, engine, persona, curiosity, results, summary=None):
+        captured["results"] = results
+
+    monkeypatch.setattr(mod, "_summarize_and_record", fake_summarize)
+    eng = FakeLLMEngine([_collected(None, [_tool_call("srv__search", {"q": "1"})]), _collected("done")])
+    asyncio.run(mod._run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
+    assert len(captured["results"][0]["result"]) <= mod._CURIOSITY_STEP_RESULT_MAX_CHARS
+    assert mod._CURIOSITY_STEP_RESULT_MAX_CHARS == 2000
+    assert mod._EXPLORATION_RESULT_MAX_CHARS >= 2 * mod._CURIOSITY_STEP_RESULT_MAX_CHARS
+
+
+def test_curiosity_summary_prompt_includes_multiple_steps(monkeypatch):
+    from nous.application.chat import introspection as mod
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        turns=[
+            _collected(None, [_tool_call("srv__search", {"q": "AAA"})]),
+            _collected(None, [_tool_call("srv__search", {"q": "BBB"})]),
+            _collected(None),  # 最終回答なし → 要約フォールバック
+        ],
+        replies=[json.dumps({"summary": "まとめ", "satisfied": True, "unresolved": None}, ensure_ascii=False)],
+    )
+    asyncio.run(mod._run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    assert len(eng.calls) == 3
+    assert len(eng.prompts) == 1
+    prompt = eng.prompts[0]
+    assert "AAA" in prompt and "BBB" in prompt  # 複数ステップが要約プロンプトに載る
+    assert len(mem.created) == 1
+
+
+class TestFormatResearchContext:
+    """curiosity system に添える文脈ブロック（純関数）。"""
+
+    def test_empty_inputs_returns_empty(self):
+        from nous.application.chat.introspection import _format_research_context
+
+        assert _format_research_context(None, None, None) == ""
+        assert _format_research_context([], {}, "") == ""
+
+    def test_monologue_capped_at_500(self):
+        from nous.application.chat.introspection import _format_research_context
+
+        out = _format_research_context(None, None, "m" * 600)
+        assert out.startswith("【さっきの独り言】")
+        body = out.split("\n", 1)[1]
+        assert len(body) == 500
+
+    def test_memory_top5_only(self):
+        from nous.application.chat.introspection import _format_research_context
+
+        mems = [f"m{i}" for i in range(7)]
+        out = _format_research_context(mems, None, None)
+        assert "- m4" in out  # 5件目まで載る
+        assert "m5" not in out  # 6件目は落ちる
+
+    def test_memory_block_capped_at_1200(self):
+        from nous.application.chat.introspection import _format_research_context
+
+        out = _format_research_context(["y" * 800, "z" * 800], None, None)
+        block = out.split("\n", 1)[1]
+        assert len(block) <= 1200
+
+    def test_braces_in_memory_do_not_crash(self):
+        from nous.application.chat.introspection import _format_research_context
+
+        out = _format_research_context(["brace {x} and {y}"], None, None)
+        assert "brace {x} and {y}" in out
+
+    def test_section_order(self):
+        from nous.application.chat.introspection import _format_research_context
+
+        out = _format_research_context(["mem"], {"emotion": "calm"}, "mono")
+        assert out.index("【さっきの独り言】") < out.index("【最近の記憶】") < out.index("【今の気分】")
+        assert "感情: calm" in out
+
+
+def test_curiosity_system_includes_context_without_format_crash(monkeypatch):
+    """system は base.format(persona) の後に文脈を連結する（本文の {} で落ちない）。"""
+    from nous.application.chat import introspection as mod
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    eng = FakeLLMEngine([_collected(None, [])])
+    asyncio.run(
+        mod._run_curiosity_exploration(
+            _explorer_ctx(),
+            config,
+            "herta",
+            _spont_result(),
+            eng,
+            memory_texts=["記憶A {brace}", "記憶B"],
+            current_state={"emotion": "calm", "emotion_intensity": 0.3, "body_state": {"fatigue": 1}, "elapsed": "5分"},
+        )
+    )
+    system = eng.calls[0]["system"]
+    assert "あなたは herta です" in system  # base は format 済み
+    assert "【さっきの独り言】" in system and "静かね" in system
+    assert "【最近の記憶】" in system and "記憶A {brace}" in system
+    assert "【今の気分】" in system and "感情: calm" in system
+
+
+def test_curiosity_system_omits_context_when_not_passed(monkeypatch):
+    from nous.application.chat import introspection as mod
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import asyncio
+
+    eng = FakeLLMEngine([_collected(None, [])])
+    asyncio.run(mod._run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
+    system = eng.calls[0]["system"]
+    assert "【最近の記憶】" not in system
+    assert "【今の気分】" not in system

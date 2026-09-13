@@ -6,9 +6,13 @@ ChatConfig から分割された、セッション管理・リフレクション
 
 from __future__ import annotations
 
+import logging
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from nous.domain.value_objects import normalize_importance
+
+logger = logging.getLogger(__name__)
 
 VOICE_EMOTION_MODES = ("off", "anchor", "llm")
 
@@ -148,9 +152,9 @@ class SessionConfig(BaseModel):
     # (openai_compat が openrouter + effort=None で reasoning を無効化する)。
     brain_reasoning_enabled: bool = Field(default=False, description="脳シミュレーションの呼び出しで推論を使います。")
     brain_reasoning_effort: str = Field(default="medium", description="脳シミュレーションの推論の深さ。")
-    # 脳側呼び出しの共通 max_tokens（下限の意味: reasoning ON 時は openai_compat が
-    # max(max_tokens, budget+1024) に引き上げる）。enricher / introspection で共有。
-    brain_max_tokens: int = Field(default=2048, description="脳シミュレーション呼び出しの最大トークン数。")
+    # 脳側呼び出しの共通 max_tokens（reasoning ON 時は model_validator が
+    # max(max_tokens, max(4096, budget+1024)) に嵩上げ。openai_compat の式と同一）。enricher / introspection で共有。
+    brain_max_tokens: int = Field(default=4096, description="脳シミュレーション呼び出しの最大トークン数。")
     # 自発的内省: 誰も話しかけてこない静かな時間に記憶と現在状態から独り言を産出。
     # 発火間隔は brain.introspection / brain.introspection_spontaneous 両種別の
     # 最新タイムスタンプから interval_hours 以上経過で判定（worker 側ガード）。
@@ -174,6 +178,29 @@ class SessionConfig(BaseModel):
     def _clamp_brain_max_tokens(cls, v: int) -> int:
         # 下限 256: interpretation エラー防止の実用下限（provider 側 1..32768 と同型）
         return max(256, min(32768, v))
+
+    @model_validator(mode="after")
+    def _lift_brain_max_tokens_for_reasoning(self):
+        """reasoning ON 時は thinking budget を賄うよう max_tokens を嵩上げる（ロード時の実効値。UI保存経路では実効値がそのまま永続されうる）。
+
+        openai_compat の Anthropic 互換分岐 max(max_tokens, budget+1024) と同一の式。
+        effort が未定義値なら floor 4096 のみ適用。field_validator(clamp) の後に走る。
+        """
+        if not self.brain_reasoning_enabled:
+            return self
+        from nous.domain.provider_config import REASONING_BUDGETS
+
+        budget = REASONING_BUDGETS.get(self.brain_reasoning_effort)
+        floor = max(4096, (budget + 1024) if budget is not None else 4096)
+        if self.brain_max_tokens < floor:
+            logger.info(
+                "brain_max_tokens lifted for reasoning: %d -> %d (effort=%s)",
+                self.brain_max_tokens,
+                floor,
+                self.brain_reasoning_effort,
+            )
+            self.brain_max_tokens = floor
+        return self
 
     @field_validator("brain_spontaneous_interval_hours")
     @classmethod

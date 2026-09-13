@@ -253,9 +253,9 @@ class TestBrainReasoningWiring:
 
 
 class TestBrainMaxTokensKeys:
-    def test_default_2048(self):
+    def test_default_4096(self):
         cfg = ChatConfig()
-        assert cfg.brain_max_tokens == 2048
+        assert cfg.brain_max_tokens == 4096
 
     def test_clamped_256_to_32768(self):
         from nous.domain.session_config import SessionConfig
@@ -273,13 +273,75 @@ class TestBrainMaxTokensKeys:
         assert repo.get("p1").brain_max_tokens == 4096
 
 
+class TestBrainMaxTokensReasoningLift:
+    """reasoning ON 時の自動嵩上げ: max(max_tokens, max(4096, budget+1024))。"""
+
+    def _session(self, **kw):
+        from nous.domain.session_config import SessionConfig
+
+        return SessionConfig(**kw)
+
+    def test_on_2048_medium_lifts_to_5120(self):
+        assert (
+            self._session(
+                brain_max_tokens=2048, brain_reasoning_enabled=True, brain_reasoning_effort="medium"
+            ).brain_max_tokens
+            == 5120
+        )
+
+    def test_on_2048_high_lifts_to_9216(self):
+        assert (
+            self._session(
+                brain_max_tokens=2048, brain_reasoning_enabled=True, brain_reasoning_effort="high"
+            ).brain_max_tokens
+            == 9216
+        )
+
+    def test_on_2048_low_lifts_to_4096(self):
+        assert (
+            self._session(
+                brain_max_tokens=2048, brain_reasoning_enabled=True, brain_reasoning_effort="low"
+            ).brain_max_tokens
+            == 4096
+        )
+
+    def test_on_2048_max_lifts_to_17408(self):
+        assert (
+            self._session(
+                brain_max_tokens=2048, brain_reasoning_enabled=True, brain_reasoning_effort="max"
+            ).brain_max_tokens
+            == 17408
+        )
+
+    def test_off_2048_unchanged(self):
+        assert self._session(brain_max_tokens=2048, brain_reasoning_enabled=False).brain_max_tokens == 2048
+
+    def test_on_explicit_large_unchanged(self):
+        # 明示 8192 は引き下げない
+        assert (
+            self._session(
+                brain_max_tokens=8192, brain_reasoning_enabled=True, brain_reasoning_effort="medium"
+            ).brain_max_tokens
+            == 8192
+        )
+
+    def test_on_100_clamped_then_lifted(self):
+        # 既存 clamp(256) の後に floor 適用
+        assert (
+            self._session(
+                brain_max_tokens=100, brain_reasoning_enabled=True, brain_reasoning_effort="medium"
+            ).brain_max_tokens
+            == 5120
+        )
+
+
 class TestBrainMaxTokensWiring:
     """brain_max_tokens は両者共通の上限値。
 
-    - cfg あり → enricher / introspection ともに cfg.brain_max_tokens（デフォルト 2048 含む）
-    - cfg なし → 各 ctor デフォルト（enricher 512 / introspection 2048）を維持
-    - reasoning ON 時は openai_compat が max(max_tokens, budget+1024) をするため
-      ここで渡す値は「下限」の意味。
+    - cfg あり → enricher / introspection ともに cfg.brain_max_tokens（デフォルト 4096 含む）
+    - cfg なし → 各 ctor デフォルト（enricher 512 / introspection 4096）を維持
+    - reasoning ON 時は SessionConfig の model_validator が嵩上げし、openai_compat も
+      max(max_tokens, budget+1024) をするため、ここで渡す値は「下限」の意味。
     """
 
     def test_cfg_present_passes_explicit_value_to_both(self):
@@ -290,13 +352,13 @@ class TestBrainMaxTokensWiring:
         assert ctx.introspection_engine is not None
         assert ctx.introspection_engine._max_tokens == 4096
 
-    def test_cfg_present_default_2048_shared(self):
+    def test_cfg_present_default_4096_shared(self):
         ctx = _ctx(_cfg())
         ctx._init_enricher()
         assert ctx._enricher is not None
-        assert ctx._enricher._max_tokens == 2048
+        assert ctx._enricher._max_tokens == 4096
         assert ctx.introspection_engine is not None
-        assert ctx.introspection_engine._max_tokens == 2048
+        assert ctx.introspection_engine._max_tokens == 4096
 
     def test_cfg_none_uses_ctor_defaults(self):
         ctx = _ctx(None)
@@ -304,7 +366,7 @@ class TestBrainMaxTokensWiring:
         assert ctx._enricher is not None
         assert ctx._enricher._max_tokens == 512
         assert ctx.introspection_engine is not None
-        assert ctx.introspection_engine._max_tokens == 2048
+        assert ctx.introspection_engine._max_tokens == 4096
 
 
 class TestBrainSpontaneousKeys:
