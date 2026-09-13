@@ -346,6 +346,8 @@ async def chat_events(persona: str, request: Request, last_seq: int = 0):
 - Modify: `nous/api/http/static/base.js`（persona 切替の connectSSE wrap funnel に "chat-events" 再スコープ追加 — monologue wrap パターン踏襲）
 - Test: `nous/api/http/static/chat/chat-send.test.js`（202 解析/SSE 購読/turn_started 描画/409 toast/reconnect last_seq）
 
+> **superseded (2026-09-13, 0b1304dd)**: 「409 toast」は廃止 — ターン実行中の送信はフロント `_pending` キューで保留し、終端イベントで自動再送。409 は無音処理（spec 2026-09-07 同項の注記参照）。
+
 - [ ] Commit `feat(webui): chat send rides the server-side turn hub stream`
 
 ### Task C6: E4 軽微修正

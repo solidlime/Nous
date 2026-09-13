@@ -56,6 +56,7 @@ POST → StreamingResponse → `ChatService.chat` generator が**応答配信と
   - `GET /api/chat/{persona}/events?last_seq=N`（新規SSE）→ 接続時バッファリプレイ → ライブ push。keepalive 15s、`is_disconnected()`（既存パターン events.py:126）。
   - ハブは `turn_started {user_message, user_msg_id}` を合成発行（他クライアントが即座に user バブル表示できる）。
 - **フロント**（chat-send.js）: fetch-stream 読み取り → ハブSSE購読に置換。既存イベントハンドラ（text_delta/tool_call/done/debug 等）は**流用**、供給源が変わるだけ。送信は POST→202→SSE 購読確認。409 はトースト。再接続時 last_seq 送り delta 再構築（欠落大なら done の full_response で一括再構築）。
+  > **superseded (2026-09-13, 0b1304dd)**: 「409 はトースト」は廃止。ターン実行中の送信はフロント側 `_pending` キューに入り（info トースト1回のみ）、ターン終端イベントで自動再送（backoff 2→4→8→15s・最大10回）。409 は無音処理でエラートーストを出さない。
 - **複数クライアント**: 全クライアントが同一ハブ購読 → delta・ツール・done が同時表示。done で履歴再読込トリガー。
 - **設定同期**: `chat_management.save_chat_config` 成功時 `EventBus.publish("config.updated", {persona})`。フロント sse.js ハンドラ＝設定パネルが開いていれば debounced 再読込。
 - **注記**: TTS 字幕 kickoff（chat_stream.py:125）はタスク側に残る。セッション TTL 7日削除（session_manager.py:28）は本件スコープ外（別途棚卸し）。
