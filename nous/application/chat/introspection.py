@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from nous.domain.memory import wiring_events
 from nous.domain.memory.session_event import SessionEvent
@@ -28,6 +28,10 @@ if TYPE_CHECKING:
     from nous.infrastructure.llm.base import LLMProvider
 
 logger = get_logger(__name__)
+
+# 「未指定」を表すセンチネル。None は「推論なし」の意味を持つため research_step の
+# reasoning_effort では区別する（None 明示渡し → 推論なしで確定）。
+_UNSET = object()
 
 _MAX_TURNS = 12
 _MAX_TOTAL_CHARS = 8000
@@ -251,18 +255,31 @@ class IntrospectionEngine:
         return text, usage
 
     async def research_step(
-        self, messages: list[LLMMessage], tools: list[ToolDefinition], system: str = ""
+        self,
+        messages: list[LLMMessage],
+        tools: list[ToolDefinition],
+        system: str = "",
+        *,
+        max_tokens: int | None = None,
+        temperature: float = 0.7,
+        reasoning_effort: str | None | object = _UNSET,
     ) -> CollectedTurn | None:
         """native function calling による 1 リサーチステップ。エラー/例外は None（_call_llm と同じ生存則）。"""
+        # _UNSET は mypy が narrowing できないため cast で str | None へ落とす。
+        if max_tokens is None:
+            max_tokens = self._max_tokens
+        if reasoning_effort is _UNSET:
+            reasoning_effort = self._reasoning_effort
+        effort = cast("str | None", reasoning_effort)
         try:
             return await collect_with_tools(
                 self._provider,
                 messages=messages,
                 system=system,
                 tools=tools,
-                temperature=0.7,
-                max_tokens=self._max_tokens,
-                reasoning_effort=self._reasoning_effort,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                reasoning_effort=effort,
             )
         except Exception:
             logger.debug("introspection: research step failed", exc_info=True)
@@ -1023,7 +1040,18 @@ async def _run_curiosity_exploration(
                     system_prompt += "\n\n" + research_ctx
                 # 防御のため for 反復上限も残す（1 反復 = 1 LLM 呼び出し）。実質は results < max_calls。
                 for step in range(max_calls):
-                    turn = await engine.research_step(messages, tools, system=system_prompt)
+                    turn = await engine.research_step(
+                        messages,
+                        tools,
+                        system=system_prompt,
+                        max_tokens=getattr(config, "max_tokens", None),
+                        temperature=getattr(config, "temperature", 0.7),
+                        reasoning_effort=(
+                            getattr(config, "reasoning_effort", None)
+                            if getattr(config, "reasoning_enabled", False)
+                            else None
+                        ),
+                    )
                     if turn is None:
                         # LLM エラー/例外。done とは混同せず別ログ。
                         logger.info("introspection: curiosity — no usable step at step %d", step)
@@ -1035,11 +1063,18 @@ async def _run_curiosity_exploration(
                         # text=None は ErrorEvent 由来の空 turn（警告は collector 側で出力済み）。done と混同しない。
                         label = "provider error" if turn.text is None else "done"
                         logger.info(
-                            "introspection: curiosity — %s at step %d (summary=%s)",
+                            "introspection: curiosity — %s at step %d (summary=%s, finish=%s)",
                             label,
                             step,
                             "yes" if done_summary else "no",
+                            turn.finish_reason or "unknown",
                         )
+                        if turn.finish_reason == "length":
+                            logger.warning(
+                                "introspection: curiosity — completion truncated (finish=length) "
+                                "at step %d — raise max_tokens",
+                                step,
+                            )
                         break
                     # assistant の tool_calls を先に履歴へ追記。全 tool_call_id に応答を返すまでが契約。
                     messages.append(
@@ -1131,7 +1166,13 @@ async def _run_curiosity_exploration(
                             continue
                         seen.add(key)
                         consecutive_rejects = 0
-                        logger.info("introspection: curiosity — step %d tool=%s args=%s", step, tc.tool_name, args)
+                        logger.info(
+                            "introspection: curiosity — step %d tool=%s args=%s finish=%s",
+                            step,
+                            tc.tool_name,
+                            args,
+                            turn.finish_reason or "unknown",
+                        )
                         try:
                             tool_result = await pool.call_tool(tc.tool_name, args)
                         except Exception as exc:

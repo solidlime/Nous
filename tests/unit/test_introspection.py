@@ -1012,8 +1012,8 @@ class FakeLLMEngine:
         self.messages_refs: list[list] = []
         self.prompts: list[str] = []
 
-    async def research_step(self, messages, tools, system=""):
-        self.calls.append({"tools": tools, "system": system})
+    async def research_step(self, messages, tools, system="", **kwargs):
+        self.calls.append({"tools": tools, "system": system, "kwargs": kwargs})
         self.messages_refs.append(messages)
         return self._turns.pop(0) if self._turns else None
 
@@ -1226,6 +1226,86 @@ class TestResearchStep:
         assert turn is not None
         assert turn.text is None
         assert turn.tool_calls == []
+
+    def test_collects_finish_reason_from_done(self) -> None:
+        from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+
+        async def stream(messages, system, temperature, max_tokens, tools=None, reasoning_effort=None):
+            yield TextDeltaEvent(content="途中で切れた")
+            yield DoneEvent(full_content="途中で切れた", tool_calls=[], finish_reason="length")
+
+        provider = MagicMock()
+        provider.stream = stream
+        engine = IntrospectionEngine(provider)
+        from nous.infrastructure.llm.base import LLMMessage, ToolDefinition
+
+        turn = asyncio.new_event_loop().run_until_complete(
+            engine.research_step([LLMMessage(role="user", content="q")], [ToolDefinition("t", "d", {})])
+        )
+        assert turn is not None
+        assert turn.finish_reason == "length"
+
+    def test_forwards_override_params_to_stream(self) -> None:
+        captured: dict = {}
+        from nous.infrastructure.llm.base import DoneEvent
+
+        async def stream(messages, system, temperature, max_tokens, tools=None, reasoning_effort=None):
+            captured.update(temperature=temperature, max_tokens=max_tokens, reasoning_effort=reasoning_effort)
+            yield DoneEvent(full_content="", tool_calls=[])
+
+        provider = MagicMock()
+        provider.stream = stream
+        engine = IntrospectionEngine(provider, reasoning_effort="high", max_tokens=4096)
+        from nous.infrastructure.llm.base import LLMMessage, ToolDefinition
+
+        loop = asyncio.new_event_loop()
+        # 上書き指定 → 渡した値がそのまま provider へ。
+        loop.run_until_complete(
+            engine.research_step(
+                [LLMMessage(role="user", content="q")],
+                [ToolDefinition("t", "d", {})],
+                max_tokens=8192,
+                temperature=0.3,
+                reasoning_effort="low",
+            )
+        )
+        assert captured == {"temperature": 0.3, "max_tokens": 8192, "reasoning_effort": "low"}
+        # 未指定 → 従来どおり self._max_tokens / self._reasoning_effort。
+        loop.run_until_complete(
+            engine.research_step([LLMMessage(role="user", content="q")], [ToolDefinition("t", "d", {})])
+        )
+        assert captured == {"temperature": 0.7, "max_tokens": 4096, "reasoning_effort": "high"}
+        # reasoning_effort=None 明示渡し → engine 既定 ("high") ではなく None が優先。
+        loop.run_until_complete(
+            engine.research_step(
+                [LLMMessage(role="user", content="q")], [ToolDefinition("t", "d", {})], reasoning_effort=None
+            )
+        )
+        assert captured == {"temperature": 0.7, "max_tokens": 4096, "reasoning_effort": None}
+        loop.close()
+
+
+def test_curiosity_tool_calls_with_length_finish_executes_normally(monkeypatch, caplog):
+    """tool_calls 非空 + finish_reason=length のターンも通常実行する（切断は openai_compat が引数JSONで棄てる）。
+
+    length 信号は step 実行ログ (finish=) と break パスの warning で観測可能にする。
+    """
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    mem = FakeMemoryService()
+    turn = _collected(None, [_tool_call("srv__search", {"q": "x"})])
+    # finish_reason 付きに差し替え（NamedTuple._replace）
+    turn = turn._replace(finish_reason="length")
+    eng = FakeLLMEngine([turn])
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="nous.application.chat.introspection"):
+        asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
+    assert FakePool.instances[0].calls == [("srv__search", {"q": "x"})]
+    assert any("finish=length" in r.message for r in caplog.records)
 
 
 def test_curiosity_research_step_none_noop(monkeypatch, caplog):

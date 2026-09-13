@@ -130,6 +130,7 @@ class CollectedTurn(NamedTuple):
     tool_calls: list[ToolCallEvent]
     usage: dict | None
     thinking_chars: int
+    finish_reason: str = ""
 
 
 async def collect_with_tools(
@@ -145,13 +146,14 @@ async def collect_with_tools(
     """native function calling 用に text と ToolCallEvent を蓄積して返す。
 
     collect_text_with_usage と同じイベント処理構造。text は parts が空なら None。
-    ErrorEvent で CollectedTurn(None, [], None, 0)、usage は DoneEvent で回収。
+    ErrorEvent で CollectedTurn(None, [], None, 0)、usage / finish_reason は DoneEvent で回収。
     例外は呼び出し側へ伝播する。
     """
     parts: list[str] = []
     tool_calls: list[ToolCallEvent] = []
     usage: dict | None = None
     thinking_chars = 0
+    finish_reason = ""
     if tools is None:
         stream = provider.stream(
             messages=messages,
@@ -181,4 +183,5 @@ async def collect_with_tools(
             return CollectedTurn(None, [], None, 0)
         elif isinstance(event, DoneEvent):
             usage = event.usage
-    return CollectedTurn("".join(parts) if parts else None, tool_calls, usage, thinking_chars)
+            finish_reason = event.finish_reason
+    return CollectedTurn("".join(parts) if parts else None, tool_calls, usage, thinking_chars, finish_reason)
