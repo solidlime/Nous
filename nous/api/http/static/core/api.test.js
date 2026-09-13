@@ -41,6 +41,24 @@ describe('N.Core.api()', () => {
     await expect(N.api('/missing')).rejects.toThrow('Not Found');
   });
 
+  it('tags the thrown error with the HTTP status', async () => {
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 409,
+      statusText: 'Conflict',
+      json: () => Promise.resolve({ detail: 'turn already running' }),
+    });
+
+    let caught = null;
+    try {
+      await N.api('/api/chat/p1', { method: 'POST', suppressErrorToast: true });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeTruthy();
+    expect(caught.status).toBe(409);
+  });
+
   it('throws on network error', async () => {
     fetch.mockRejectedValue(new Error('Network failure'));
     await expect(N.api('/fail')).rejects.toThrow('Network failure');

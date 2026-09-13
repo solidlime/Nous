@@ -13,6 +13,10 @@ function raf() {
   return new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
+function tick() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 function bubbles() {
   return document.querySelectorAll('#chat-messages .chat-bubble:not(.chat-typing)');
 }
@@ -138,14 +142,109 @@ describe('chat hub — send flow', () => {
     expect(N.Chat.history.restore).not.toHaveBeenCalled();
   });
 
-  it('409 turns into the existing error toast path', async () => {
+  it('409 holds the message, shows one info toast, and retries after the backoff', async () => {
+    vi.useFakeTimers();
     chatStream();
-    N.Core.api.mockRejectedValueOnce(new Error('Conflict'));
+    const conflict = new Error('Conflict');
+    conflict.status = 409;
+    N.Core.api.mockRejectedValueOnce(conflict);
     document.getElementById('chat-input').value = '二重送信';
     await N.Chat.send();
-    expect(N.Core.toast.mock.calls.some((c) => String(c[0]).indexOf('送信失敗') !== -1)).toBe(true);
+    // no error toast and no stranded user bubble — a calm info toast only
+    expect(N.Core.toast.mock.calls.some((c) => String(c[0]).indexOf('送信失敗') !== -1)).toBe(false);
+    expect(N.Core.toast.mock.calls.some((c) => String(c[0]).indexOf('処理が終わってから') !== -1)).toBe(true);
     expect(N.Chat.state.streaming).toBe(false);
     expect(document.getElementById('chat-send-btn').style.display).toBe('');
+    expect(document.getElementById('chat-input').value).toBe('二重送信');
+    expect(userBubbles().length).toBe(0);
+    // the backoff retry fires and registers the turn
+    N.Core.api.mockResolvedValueOnce({ turn_id: 't2' });
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(N.Core.api).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('holds a send made while a turn is streaming and flushes it on done', async () => {
+    const es = chatStream();
+    document.getElementById('chat-input').value = 'ひとつめ';
+    N.Core.api.mockResolvedValueOnce({ turn_id: 't1' });
+    await N.Chat.send();
+    expect(N.Chat.state.streaming).toBe(true);
+    // second message while the turn is live → held, not dropped
+    document.getElementById('chat-input').value = 'ふたつめ';
+    await N.Chat.send();
+    expect(N.Core.api).toHaveBeenCalledTimes(1);
+    expect(userBubbles().length).toBe(1);
+    // the turn ends → the held message goes out
+    N.Core.api.mockResolvedValueOnce({ turn_id: 't2' });
+    es.emit('message', JSON.stringify({ type: 'done', message: 'completed', user_msg_id: 'u1', assistant_msg_id: 'a1' }), '1');
+    expect(N.Core.api).toHaveBeenCalledTimes(2);
+    const body = JSON.parse(N.Core.api.mock.calls[1][1].body);
+    expect(body.message).toBe('ふたつめ');
+  });
+
+  it('clears a held message when draining fails with a non-409 error (no silent resend)', async () => {
+    const es = chatStream();
+    document.getElementById('chat-input').value = 'ひとつめ';
+    N.Core.api.mockResolvedValueOnce({ turn_id: 't1' });
+    await N.Chat.send();
+    document.getElementById('chat-input').value = 'ふたつめ';
+    await N.Chat.send(); // held while streaming
+    expect(N.Core.api).toHaveBeenCalledTimes(1);
+    // the turn ends → the held send drains and fails with 500
+    const boom = new Error('Server Error');
+    boom.status = 500;
+    N.Core.api.mockRejectedValueOnce(boom);
+    es.emit('message', JSON.stringify({ type: 'done', message: 'completed', user_msg_id: 'u1', assistant_msg_id: 'a1' }), '1');
+    await tick();
+    // the failure is visible, no stranded bubble, input restored
+    expect(N.Core.toast.mock.calls.some((c) => String(c[0]).indexOf('送信失敗') !== -1)).toBe(true);
+    expect(document.getElementById('chat-input').value).toBe('ふたつめ');
+    expect(userBubbles().length).toBe(1); // only 'ひとつめ'
+    // a later terminal event must NOT silently resend it
+    N.Core.api.mockResolvedValueOnce({ turn_id: 't9' });
+    es.emit('message', JSON.stringify({ type: 'done', message: 'completed' }), '2');
+    await tick();
+    expect(N.Core.api).toHaveBeenCalledTimes(2);
+  });
+
+  it('recovers a turn stuck >60s and sends instead of re-queueing forever', async () => {
+    chatStream();
+    document.getElementById('chat-input').value = 'ひとつめ';
+    N.Core.api.mockResolvedValueOnce({ turn_id: 't1' });
+    await N.Chat.send();
+    expect(N.Chat.state.streaming).toBe(true);
+    // simulate a stuck turn: no terminal event for >60s
+    N.Chat.state._streamingSince = Date.now() - 61000;
+    document.getElementById('chat-input').value = 'ふたつめ';
+    N.Core.api.mockResolvedValueOnce({ turn_id: 't2' });
+    await N.Chat.send();
+    expect(N.Core.api).toHaveBeenCalledTimes(2);
+    const body = JSON.parse(N.Core.api.mock.calls[1][1].body);
+    expect(body.message).toBe('ふたつめ');
+  });
+
+  it('attachment-only send queued while streaming keeps a mid-wait draft', async () => {
+    const es = chatStream();
+    document.getElementById('chat-input').value = 'ひとつめ';
+    N.Core.api.mockResolvedValueOnce({ turn_id: 't1' });
+    await N.Chat.send();
+    // attachment-only second send while the turn is live
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ text: () => Promise.resolve('hello') }));
+    N.Chat.state.attachments = [
+      { filename: 'a.txt', url: '/a.txt', workspace_path: 'a.txt', mime_type: 'text/plain' },
+    ];
+    await N.Chat.send();
+    // user types while waiting
+    document.getElementById('chat-input').value = '下書き';
+    // the turn ends → the held attachment-only message goes out
+    N.Core.api.mockResolvedValueOnce({ turn_id: 't2' });
+    es.emit('message', JSON.stringify({ type: 'done', message: 'completed', user_msg_id: 'u1', assistant_msg_id: 'a1' }), '1');
+    expect(N.Core.api).toHaveBeenCalledTimes(2);
+    const body = JSON.parse(N.Core.api.mock.calls[1][1].body);
+    expect(body.message).toContain('--- 添付: a.txt ---');
+    // the mid-wait draft survives
+    expect(document.getElementById('chat-input').value).toBe('下書き');
   });
 
   it('replays missed events on reconnect via last_seq', async () => {

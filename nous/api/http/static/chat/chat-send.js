@@ -257,24 +257,150 @@ function chatCancel() {
 }
 
 // ------------------------------------------------------------------
-// Main send function — sends a message to the server and streams response
+// Pending send — the server is still finishing a turn (HTTP 409
+// "turn already running", or this tab is streaming): hold the message
+// and auto-send once the turn ends instead of failing. Single slot,
+// latest message wins. Driven by the existing turn hub terminal
+// events, with a bounded backoff as fallback for a stale lock.
+// ------------------------------------------------------------------
+var PENDING_BACKOFF = [2000, 4000, 8000, 15000];
+var PENDING_MAX = 10;
+var _pending = null;        // {message, images, rawInput, display}
+var _pendingTimer = null;
+var _pendingAttempts = 0;
+
+function _clearPending() {
+  _pending = null;
+  _pendingAttempts = 0;
+  if (_pendingTimer) { clearTimeout(_pendingTimer); _pendingTimer = null; }
+}
+
+// A turn session can go stale (no terminal event ever arrives) if the
+// stream drops — recover it once it's been open >60s so a held send can
+// proceed instead of re-queueing forever.
+function _resetStaleTurn() {
+  if ((_turn || CHAT.streaming) && CHAT._streamingSince &&
+      Date.now() - CHAT._streamingSince > 60000) {
+    console.warn("[chat] turn session stuck for >60s, force-resetting");
+    removeTypingIndicator();
+    _endTurnSession();
+    return true;
+  }
+  return false;
+}
+
+function _queuePending(payload) {
+  _pending = payload; // single slot — a newer message replaces the old one
+  if (_pendingAttempts === 0) {
+    toast("応答の処理が終わってから送信します", "info");
+  }
+  _armPending();
+}
+
+function _armPending() {
+  if (_pendingTimer) clearTimeout(_pendingTimer);
+  if (_pendingAttempts >= PENDING_MAX) {
+    _clearPending();
+    toast("送信できませんでした。もう一度お試しください", "error");
+    return;
+  }
+  var delay = PENDING_BACKOFF[Math.min(_pendingAttempts, PENDING_BACKOFF.length - 1)];
+  _pendingTimer = setTimeout(function () {
+    _pendingTimer = null;
+    if (!_pending) return;
+    if (CHAT.streaming || _turn) {
+      if (!_resetStaleTurn()) { _armPending(); return; } // still busy — wait again
+    }
+    _pendingAttempts += 1;
+    _attemptSend(_pending);
+  }, delay);
+}
+
+// Turn-end flush: the hub reported the busy turn finished — send now
+// instead of waiting out the backoff.
+function _flushPending() {
+  if (!_pending) return;
+  if (CHAT.streaming || _turn) {
+    if (!_resetStaleTurn()) return; // genuinely mid-turn — wait for its end
+  }
+  if (_pendingTimer) { clearTimeout(_pendingTimer); _pendingTimer = null; }
+  if (_pendingAttempts >= PENDING_MAX) {
+    _clearPending();
+    toast("送信できませんでした。もう一度お試しください", "error");
+    return;
+  }
+  _pendingAttempts += 1;
+  _attemptSend(_pending);
+}
+
+// POST one payload: render the optimistic user bubble, register the
+// turn, and on 409 hold the payload for the next free turn.
+function _attemptSend(payload) {
+  var inputEl = document.getElementById("chat-input");
+  // Only clear the input when it still holds the message we're sending —
+  // a queued send must not wipe text the user typed while waiting.
+  if (inputEl && inputEl.value.trim() === (payload.rawInput || "").trim()) {
+    inputEl.value = "";
+    inputEl.style.height = "auto";
+  }
+  CHAT.attachments = [];
+  var attArea = document.getElementById("chat-attachments");
+  if (attArea) attArea.textContent = "";
+  appendChatMessage("user", payload.display, new Date().toLocaleTimeString("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }));
+  showTypingIndicator();
+  _beginTurnSession(payload.message);
+  var sessionId = N.Chat.history.getSessionId();
+  return api(
+    "/api/chat/" + encodeURIComponent(S.persona),
+    {
+      method: "POST",
+      // 409 is expected while a turn finishes — handled here, not by the
+      // global api:error toast.
+      suppressErrorToast: true,
+      body: JSON.stringify({
+        message: payload.message,
+        session_id: sessionId,
+        images: payload.images && payload.images.length > 0 ? payload.images : undefined,
+        debug: document.getElementById("chat-debug-mode")?.checked || false,
+      }),
+    },
+  ).then(function (resp) {
+    if (!resp || !resp.turn_id) throw new Error("no turn_id in 202 response");
+    _clearPending();
+  }).catch(function (e) {
+    removeTypingIndicator();
+    // Roll back the optimistic user bubble — the message is not lost; it
+    // is queued below (or the input is restored).
+    var users = document.querySelectorAll(".chat-msg.user");
+    if (users.length) users[users.length - 1].remove();
+    var els = _els();
+    if (els.statusEl) els.statusEl.textContent = "";
+    _endTurnSession();
+    if (e && e.status === 409) {
+      if (inputEl && !inputEl.value.trim()) inputEl.value = payload.rawInput || "";
+      _queuePending(payload);
+      return;
+    }
+    // A real failure — surface it once and drop the held message so a
+    // later terminal event can't silently resend it.
+    _clearPending();
+    if (inputEl && !inputEl.value.trim()) inputEl.value = payload.rawInput || "";
+    toast("送信失敗: " + e.message, "error");
+  });
+}
+
+// ------------------------------------------------------------------
+// Main send function — builds the payload and hands it to _attemptSend
+// (or the pending queue when the server is mid-turn).
 // ------------------------------------------------------------------
 async function chatSend(retry) {
   if (!S.persona) {
     toast("ペルソナを選択してください", "error");
     return;
   }
-  if (CHAT.streaming) {
-    // Safety net: if streaming flag has been set for > 60 seconds, force-reset
-    if (CHAT._streamingSince && Date.now() - CHAT._streamingSince > 60000) {
-      console.warn("[chatSend] streaming flag stuck for >60s, force-resetting");
-      CHAT.streaming = false;
-      CHAT._streamingSince = null;
-    } else {
-      return;
-    }
-  }
-
   const inputEl = document.getElementById("chat-input");
   let rawInput;
   if (retry) {
@@ -291,10 +417,6 @@ async function chatSend(retry) {
   let message = rawInput;
   if (!message && CHAT.attachments.length === 0) return;
   if (!message) message = "";
-
-  const sendBtn = document.getElementById("chat-send-btn");
-  const cancelBtn = document.getElementById("chat-cancel-btn");
-  const statusEl = document.getElementById("chat-status");
 
   // Base64エンコードされた画像を収集
   const images = [];
@@ -367,93 +489,35 @@ async function chatSend(retry) {
     }
   }
 
-  inputEl.value = "";
-  inputEl.style.height = "auto";
   // Save attachment info before clearing
   const attNames = CHAT.attachments.map((a) => a.filename);
-  CHAT.attachments = [];
-  const attArea = document.getElementById("chat-attachments");
-  if (attArea) attArea.textContent = "";
-
-  // Show user message with filename display
   const displayMsg =
     rawInput ||
     (attNames.length > 0
       ? '<i data-lucide="paperclip"></i> ' + attNames.join(", ")
       : "");
-  const timeStr = new Date().toLocaleTimeString("ja-JP", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  appendChatMessage("user", displayMsg, timeStr);
-  showTypingIndicator();
+  const payload = {
+    message: message,
+    images: images,
+    rawInput: rawInput,
+    display: displayMsg,
+  };
 
-  const sessionId = N.Chat.history.getSessionId();
-  // F3: content_parts-based rendering — tracks interleaved text/tool_call/tool_result
-  // (state lives in the module-level _turn session, fed by the hub stream)
-  let contentParts = [];       // [{type:"text"|"tool_call"|"tool_result", ...}]
-  let assistantDiv = null;
-  let currentTextBubble = null;  // DOM element currently being streamed to
-  let currentTextContent = "";   // raw text accumulated for current text part
-  // CoT display (R6): managed independently of text streaming.
-  // Deliberately NOT pushed to contentParts and NOT .chat-bubble —
-  // structural TTS/copy exclusion (TTS manual/copy collect .chat-bubble,
-  // TTS auto-play collects contentParts text only).
-  let thinkingDetails = null;   // <details class="chat-thinking-bubble">
-  let thinkingContent = "";     // accumulated thinking text
+  // A fresh send supersedes anything queued (single slot, latest wins).
+  _clearPending();
 
-  // F3: close the active text bubble before the next content part (tool
-  // call / result) takes over. The rAF batch reads currentTextBubble at
-  // fire time, so a bubble closed before its frame was never written —
-  // it sat as an empty white bubble while the tool ran. Flush pending
-  // text into the bubble synchronously; drop whitespace-only bubbles
-  // (they render empty) so nothing lingers under the tool chip.
-  function _closeTextBubble() {
-    if (!currentTextBubble) return;
-    if ((currentTextContent || "").trim()) {
-      currentTextBubble.textContent = currentTextContent;
-    } else {
-      currentTextBubble.remove();
-      // Drop the trailing whitespace-only part so the next text_delta
-      // starts a fresh bubble instead of writing into the removed one.
-      const last = contentParts[contentParts.length - 1];
-      if (last && last.type === "text" && last.bubble === currentTextBubble) {
-        contentParts.pop();
-      }
-    }
-    currentTextBubble = null;
-    currentTextContent = "";
-  }
+  // Safety net: a turn session stuck >60s with no terminal event is
+  // force-reset (_turn + streaming + UI) so the send proceeds instead of
+  // queueing forever.
+  _resetStaleTurn();
 
-  // Turn session + persistent hub subscription: the POST only REGISTERS
-  // the turn (202 + turn_id); every event — turn_started → … → done —
-  // arrives on the chat-events SSE stream. The session is created
-  // BEFORE the POST so the turn_started race (the hub publishes it
-  // before the 202 lands) dedupes against the local user bubble.
-  _beginTurnSession(message);
-
-  try {
-    const resp = await api(
-      "/api/chat/" + encodeURIComponent(S.persona),
-      {
-        method: "POST",
-        body: JSON.stringify({
-          message: message,
-          session_id: sessionId,
-          images: images.length > 0 ? images : undefined,
-          debug: document.getElementById("chat-debug-mode")?.checked || false,
-        }),
-      },
-    );
-    if (!resp || !resp.turn_id) throw new Error("no turn_id in 202 response");
-  } catch (e) {
-    removeTypingIndicator();
-    toast("送信失敗: " + e.message, "error");
-    var els = _els();
-    if (els.statusEl) els.statusEl.textContent = "";
-    _endTurnSession();
+  // Server mid-turn (this tab streaming, or another client's turn): hold
+  // the message instead of dropping it; the turn-end flush sends it.
+  if (CHAT.streaming || _turn) {
+    _queuePending(payload);
     return;
   }
+  return _attemptSend(payload);
 }
 // ------------------------------------------------------------------
 // Turn hub engine — event supply switched from the fetch-stream loop
@@ -567,6 +631,8 @@ function _syncAfterForeignDone() {
   if (N.Chat.history && typeof N.Chat.history.restore === "function") {
     N.Chat.history.restore(false);
   }
+  // A foreign turn ended — a held (409) message can go now.
+  _flushPending();
 }
 
 // Per-event rendering — bodies carried over from the fetch-stream loop.
@@ -719,6 +785,7 @@ function _handleChatEvent(evt) {
     toast("エラー: " + evt.message, "error");
     if (els.statusEl) els.statusEl.textContent = "";
     _endTurnSession();
+    _flushPending();
     return;
   } else if (evt.type === "done") {
     _finalizeTurn(evt);
@@ -817,6 +884,8 @@ function _finalizeTurn(evt) {
   if (wasRemote && N.Chat.history && typeof N.Chat.history.restore === "function") {
     N.Chat.history.restore(false);
   }
+  // A held message (409) waits for this turn to end — send it now.
+  _flushPending();
 }
 
 // Hub message: seq dedupe (EventSource id:) → turn_started lifecycle →
@@ -897,6 +966,8 @@ function connectChatEvents(persona) {
   // wiped by the history restore that follows) and restarts the seq
   // baseline — the fresh snapshot is swallowed by the idle rules.
   _endTurnSession();
+  // A queued send belongs to the previous persona — drop it on switch.
+  _clearPending();
   _chatLastSeq = 0;
   N.Core.connectStream("chat-events", {
     url: function () {

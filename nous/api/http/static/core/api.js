@@ -19,7 +19,11 @@ N.Core.api = async function api(path, opts) {
     });
     if (!resp.ok) {
       var err = await resp.json().catch(function() { return { error: resp.statusText }; });
-      throw new Error(err.error || resp.statusText);
+      var httpErr = new Error(err.error || resp.statusText);
+      /* Tag the HTTP status so callers can special-case expected states
+         (e.g. 409 turn-already-running) without parsing the message. */
+      httpErr.status = resp.status;
+      throw httpErr;
     }
     /* JSON guard: only parse as JSON when the server says it is JSON */
     var ctype = "";
