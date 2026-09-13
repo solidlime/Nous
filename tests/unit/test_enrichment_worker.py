@@ -464,6 +464,50 @@ class TestSessionEventRepoLastActivity:
         assert repo.last_activity_at("nobody") is None
 
 
+class TestSecondsSinceLastActivity:
+    """idle 推定は chat イベントと last_conversation_time の新しい方を採る (MCP 対話凍結修正)。"""
+
+    def _worker(self, ctx) -> EnrichmentWorker:
+        return EnrichmentWorker(ctx, _config())
+
+    def test_takes_newer_of_two_sources(self) -> None:
+        ctx = _ctx()
+        ctx._session_event_repo = MagicMock()
+        ctx._session_event_repo.last_activity_at.return_value = get_now() - timedelta(hours=1)
+        state = SimpleNamespace(
+            is_ok=True, value=SimpleNamespace(last_conversation_time=get_now() - timedelta(minutes=2))
+        )
+        ctx.persona_service.get_context.return_value = state
+        idle = self._worker(ctx)._seconds_since_last_activity(get_now())
+        assert idle is not None
+        assert idle < 300  # LCT 側（新しい方）を採用
+
+    def test_uses_lct_when_chat_events_absent(self) -> None:
+        """Web チャット不在の MCP 経路: LCT のみで idle が計算される。"""
+        ctx = _ctx()
+        ctx._session_event_repo = MagicMock()
+        ctx._session_event_repo.last_activity_at.return_value = None
+        state = SimpleNamespace(
+            is_ok=True, value=SimpleNamespace(last_conversation_time=get_now() - timedelta(minutes=5))
+        )
+        ctx.persona_service.get_context.return_value = state
+        idle = self._worker(ctx)._seconds_since_last_activity(get_now())
+        assert idle is not None
+        assert 240 < idle < 600
+
+    def test_ignores_non_datetime_lct(self) -> None:
+        """LCT が datetime でない（モック等）場合は chat イベントのみで計算。"""
+        ctx = _ctx()
+        ctx._session_event_repo = MagicMock()
+        ctx._session_event_repo.last_activity_at.return_value = get_now() - timedelta(hours=1)
+        ctx.persona_service.get_context.return_value = SimpleNamespace(
+            is_ok=True, value=SimpleNamespace(last_conversation_time="not-a-datetime")
+        )
+        idle = self._worker(ctx)._seconds_since_last_activity(get_now())
+        assert idle is not None
+        assert 3500 < idle < 3700  # chat イベント側の約1時間
+
+
 class TestRegistryWiring:
     """use_cases.py 起動経路: enrichment 有効時に EnrichmentWorker を起動。"""
 

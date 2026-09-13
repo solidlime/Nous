@@ -285,7 +285,8 @@ def _format_current_state(state: dict | None) -> str:
     body = state.get("body_state") or {}
     body_text = ", ".join(f"{k}={v}" for k, v in body.items()) if body else "不明"
     elapsed = state.get("elapsed") or "不明"
-    return f"感情: {emotion}（強度 {intensity}）/ 身体: {body_text} / 前回の内省から {elapsed}"
+    label = state.get("elapsed_label") or "前回の内省から"
+    return f"感情: {emotion}（強度 {intensity}）/ 身体: {body_text} / {label} {elapsed}"
 
 
 def _format_prompt(override: str, default: str, **fields) -> str:
@@ -317,8 +318,14 @@ def _format_seconds(seconds: float | None) -> str:
     return f"{hours}時間{minutes % 60}分" if minutes % 60 else f"{hours}時間"
 
 
-def _build_current_state(ctx: AppContext, persona: str, elapsed_seconds: float | None) -> dict | None:
-    """get_state_snapshot → current_state dict。失敗時 None（材料はベストエフォート）。"""
+def _build_current_state(
+    ctx: AppContext, persona: str, elapsed_seconds: float | None, elapsed_label: str = "前回の内省から"
+) -> dict | None:
+    """get_state_snapshot → current_state dict。失敗時 None（材料はベストエフォート）。
+
+    elapsed_label: 経過時間の意味論を示すラベル。turn 経路は前回内省からの経過、
+    spontaneous 経路は対話なし時間なので、渡し側で分岐させる。
+    """
     try:
         emotion, intensity, body_state, _snap = ctx.persona_service.get_state_snapshot(persona)
         return {
@@ -326,6 +333,7 @@ def _build_current_state(ctx: AppContext, persona: str, elapsed_seconds: float |
             "emotion_intensity": intensity,
             "body_state": body_state,
             "elapsed": _format_seconds(elapsed_seconds),
+            "elapsed_label": elapsed_label,
         }
     except Exception:
         logger.debug("introspection: state snapshot failed", exc_info=True)
@@ -648,7 +656,7 @@ async def run_spontaneous(
         logger.debug("introspection spontaneous: memory fetch failed", exc_info=True)
 
     # 材料: 現在状態＋アイドル経過時間
-    current_state = _build_current_state(ctx, persona, idle_seconds)
+    current_state = _build_current_state(ctx, persona, idle_seconds, elapsed_label="誰も話しかけてこない時間")
 
     persona_identity = getattr(config, "system_prompt", "") or f"あなたは{persona}です。"
     try:

@@ -735,6 +735,23 @@ class TestGenerateSpontaneous:
         assert "7時間" in msg
         assert "monologue は必ず書くこと" in msg
 
+    def test_elapsed_label_override(self) -> None:
+        """elapsed_label がある state はラベルを差し替える（spontaneous 経路: 対話なし時間）。"""
+        import asyncio
+
+        captured: dict = {}
+        engine = self._engine(captured)
+        state = {
+            "emotion": "calm",
+            "emotion_intensity": 0.3,
+            "body_state": None,
+            "elapsed": "7時間",
+            "elapsed_label": "誰も話しかけてこない時間",
+        }
+        asyncio.new_event_loop().run_until_complete(engine.generate_spontaneous("test", "sp", [], state))
+        assert "誰も話しかけてこない時間 7時間" in captured["user_message"]
+        assert "前回の内省から" not in captured["user_message"]
+
     def test_broken_json_returns_none(self) -> None:
         import asyncio
 

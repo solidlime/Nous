@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from nous.domain.memory import wiring_events
@@ -10,8 +11,6 @@ from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from nous.application.use_cases import AppContext
     from nous.domain.chat_config import ChatConfig
     from nous.domain.memory.entities import Memory
@@ -184,17 +183,36 @@ class EnrichmentWorker:
         return get_now()
 
     def _seconds_since_last_activity(self, now: datetime) -> float | None:
+        """対話なし時間の推定。chat イベントと last_conversation_time の新しい方を採る。
+
+        last_conversation_time は get_context（MCP 会話経路）と Web チャットが書くため、
+        MCP 経由の対話でも idle が凍結しない。spec A4 は「書き手の排除」で保証:
+        内省は get_context を呼べない（ツール一覧除外＋execute_tool 迂回拒否の二重ガード）ため、
+        内省自身の活動でこの源は進まない。
+        """
         repo = getattr(self.context, "_session_event_repo", None)
         if repo is None:
             return None
+        candidates: list[float] = []
         try:
             last = repo.last_activity_at(self._persona)
         except Exception:
             logger.debug("EnrichmentWorker: last_activity_at failed", exc_info=True)
-            return None
-        if last is None:
-            return None
-        return (self._naive(now) - self._naive(last)).total_seconds()
+            last = None
+        if last is not None:
+            candidates.append((self._naive(now) - self._naive(last)).total_seconds())
+        # ponytail: get_context 呼び出しを会話とみなす近似（セッション単位の粒度）。
+        # ターン単位の対話信号が必要になったら mcp.conversation イベント種別に上げる。
+        try:
+            state = self.context.persona_service.get_context(self._persona)
+            if getattr(state, "is_ok", False):
+                value = getattr(state, "value", None)
+                lct = getattr(value, "last_conversation_time", None)
+                if isinstance(lct, datetime):
+                    candidates.append((self._naive(now) - self._naive(lct)).total_seconds())
+        except Exception:
+            logger.debug("EnrichmentWorker: last_conversation_time fetch failed", exc_info=True)
+        return min(candidates) if candidates else None
 
     def _enrich_one(self, memory_key: str) -> str | None:
         """Enrich one memory. Returns its content when processed (monologue input)."""
