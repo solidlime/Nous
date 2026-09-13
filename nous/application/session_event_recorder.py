@@ -31,7 +31,7 @@ def _compact_tool_called_result(result: str) -> str:
     if text[:1] in ("{", "["):
         try:
             payload = json.loads(text)
-        except ValueError:
+        except (json.JSONDecodeError, ValueError):
             return _ellipsize(text, 80)
         if isinstance(payload, dict):
             if isinstance(payload.get("results"), list):

@@ -15,6 +15,10 @@ var S = window.S;
 var CHAT = N.Chat.state;
 var _memoryActivityTimer = null;
 
+// Marker for an attachment-only user bubble. appendChatMessage detects this
+// prefix and renders the icon as a real element — filenames stay text.
+var PAPERCLIP_PREFIX = '<i data-lucide="paperclip"></i> ';
+
 // memoryPanel is registered by chat-memory-panel.js; noop when absent
 // (e.g. panel script failed to load) so streaming never crashes on it.
 function _mem(fn) {
@@ -51,6 +55,16 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId, ts) {
         "max-width:100%;border-radius:8px;cursor:pointer;margin:8px 0;";
       img.addEventListener("click", () => N.Chat.attachments.openViewer(img.src, "image"));
     });
+  } else if (role === "user" && typeof content === "string" &&
+             content.indexOf(PAPERCLIP_PREFIX) === 0) {
+    // Attachment-only bubble: build the icon as an element and keep the
+    // filenames as plain text — content is never parsed as HTML.
+    const icon = document.createElement("i");
+    icon.setAttribute("data-lucide", "paperclip");
+    bubble.appendChild(icon);
+    bubble.appendChild(
+      document.createTextNode(" " + content.slice(PAPERCLIP_PREFIX.length)),
+    );
   } else {
     bubble.textContent = content;
   }
@@ -494,7 +508,7 @@ async function chatSend(retry) {
   const displayMsg =
     rawInput ||
     (attNames.length > 0
-      ? '<i data-lucide="paperclip"></i> ' + attNames.join(", ")
+      ? PAPERCLIP_PREFIX + attNames.join(", ")
       : "");
   const payload = {
     message: message,

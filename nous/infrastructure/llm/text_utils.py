@@ -3,6 +3,10 @@
 各呼び出し元の temperature/max_tokens/messages/system/reasoning_effort/tools は
 そのまま渡す（挙動不変）。tools=None のときは元コード同様 tools を渡さない。
 on ErrorEvent は None を返し、例外は呼び出し側へ伝播する。
+
+- collect_text / collect_text_with_usage: テキストのみ（+usage/thinking_chars）。
+- collect_with_tools / CollectedTurn: native function calling 用に text と
+  ToolCallEvent を蓄積して返す。
 """
 
 from __future__ import annotations

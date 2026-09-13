@@ -423,7 +423,7 @@ def _parse_memories(raw) -> list[dict]:
 def _naive(value: datetime | None) -> datetime | None:
     if value is None:
         return None
-    return value.replace(tzinfo=None) if value.tzinfo is not None else value
+    return value.replace(tzinfo=None) if value.tzinfo else value
 
 
 def fetch_recent_turns(ctx: AppContext, since: datetime | None = None) -> list[dict]:
@@ -456,6 +456,12 @@ def fetch_recent_turns(ctx: AppContext, since: datetime | None = None) -> list[d
                 _append_entry(entries, node.get("role"), node.get("content"), node.get("created_at"))
         elif isinstance(data, list):
             timestamps_raw = json.loads(row[1] if not hasattr(row, "keys") else row["timestamps"])
+            if len(data) != len(timestamps_raw):
+                logger.warning(
+                    "fetch_recent_turns: messages/timestamps length mismatch (%d vs %d) — zipping shortest",
+                    len(data),
+                    len(timestamps_raw),
+                )
             for msg, ts_str in zip(data, timestamps_raw, strict=False):
                 _append_entry(entries, msg.get("role"), msg.get("content"), ts_str)
     except Exception:

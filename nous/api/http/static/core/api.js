@@ -11,8 +11,16 @@ N.Core.api = async function api(path, opts) {
     try { signal = AbortSignal.timeout(30000); } catch (_) { signal = undefined; }
   }
   try {
+    var method = (opts.method || "GET").toUpperCase();
+    var headers = Object.assign({}, opts.headers || {});
+    /* GET/HEAD carry no body — a JSON Content-Type is meaningless there and
+       can trip strict CORS preflight / proxy handling. */
+    if (method !== "GET" && method !== "HEAD" &&
+        !headers["Content-Type"] && !headers["content-type"]) {
+      headers["Content-Type"] = "application/json";
+    }
     var resp = await fetch(path, {
-      headers: Object.assign({ "Content-Type": "application/json" }, opts.headers || {}),
+      headers: headers,
       method: opts.method,
       body: opts.body,
       signal: signal,

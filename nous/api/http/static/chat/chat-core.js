@@ -6,8 +6,6 @@
 var C = N.Core;
 var api = C.api, esc = C.esc, toast = C.toast;
 function hideCommandPopup() { return N.Chat.commands.hide(); }
-var showConfirm = C.showConfirm, showAlert = C.showAlert;
-var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
 "use strict";
 var S = window.S;
 

@@ -25,6 +25,20 @@ describe('N.Core.api()', () => {
 
     const result = await N.api('/test');
     expect(result).toEqual(mockData);
+    // GET carries no body — no Content-Type header
+    expect(fetch).toHaveBeenCalledWith('/test', expect.objectContaining({
+      headers: {},
+    }));
+  });
+
+  it('adds Content-Type: application/json to body-carrying (POST) requests', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+    });
+
+    await N.api('/test', { method: 'POST', body: '{}' });
     expect(fetch).toHaveBeenCalledWith('/test', expect.objectContaining({
       headers: { 'Content-Type': 'application/json' },
     }));
@@ -102,7 +116,6 @@ describe('N.Core.api()', () => {
     await N.api('/test', { headers: { Authorization: 'Bearer token' } });
     expect(fetch).toHaveBeenCalledWith('/test', expect.objectContaining({
       headers: {
-        'Content-Type': 'application/json',
         Authorization: 'Bearer token',
       },
     }));

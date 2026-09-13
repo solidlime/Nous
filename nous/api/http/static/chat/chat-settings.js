@@ -461,9 +461,12 @@ function applyChatConfig(cfg) {
   );
   if (dynTempCb && emotionScaleEl) {
     emotionScaleEl.disabled = !dynTempCb.checked;
-    dynTempCb.onchange = function () {
-      emotionScaleEl.disabled = !this.checked;
-    };
+    if (!dynTempCb._bound) {
+      dynTempCb._bound = true;
+      dynTempCb.onchange = function () {
+        emotionScaleEl.disabled = !this.checked;
+      };
+    }
   }
   // Top P display sync
   const topPVal = document.getElementById("chat-top-p-val");
@@ -945,7 +948,7 @@ async function saveChatConfig() {
       return v ? parseInt(v) : undefined;
     })(),
     forgetting_trigger_threshold: parseInt(document.getElementById("chat-forgetting-trigger-threshold")?.value || "100"),
-    forgetting_decay_interval_seconds: parseInt(document.getElementById("chat-forgetting-decay-interval-seconds")?.value || "86400"),
+    forgetting_decay_interval_seconds: parseInt(document.getElementById("chat-forgetting-decay-interval-seconds")?.value || "3600"),
     forgetting_min_strength: parseFloat(document.getElementById("chat-forgetting-min-strength")?.value || "0.1"),
     forgetting_forget_ratio: parseFloat(document.getElementById("chat-forgetting-forget-ratio")?.value || "0.2"),
     forgetting_forget_strength: parseFloat(document.getElementById("chat-forgetting-forget-strength")?.value || "0.5"),
