@@ -425,6 +425,18 @@ class TestRunIntrospection:
         # ライブ配信に ISO timestamp を同梱（フロントの時系列スロット用）
         datetime.fromisoformat(meta["timestamp"])
 
+    def test_record_event_uses_provided_timestamp(self, ctx) -> None:
+        """探索前の時刻を timestamp で渡すと、その時刻で記録される（ターン喪失防止）。"""
+        from nous.application.chat.introspection import _record_introspection_event
+
+        ts = datetime.now() - timedelta(hours=1)
+        _record_introspection_event(
+            ctx._session_event_repo, "test", "brain.introspection", None, [], 0, 0, 0, timestamp=ts
+        )
+        events = ctx._session_event_repo.get_by_persona("test", "brain.introspection", 1)
+        assert len(events) == 1
+        assert events[0].timestamp == ts
+
     def test_skips_when_no_new_turns(self, ctx) -> None:
         engine = _engine_with(_result(), ctx)
 
@@ -1794,7 +1806,7 @@ class TestCompactSearchResultShapeGate:
         from nous.application.chat.introspection import _compact_search_result
 
         text = json.dumps({"tools": [{"tool_name": "search_tools"}, {"tool_name": "execute_tool"}]})
-        assert _compact_search_result(text) == "search_tools, execute_tool"
+        assert _compact_search_result(text) == "search_tools\nexecute_tool"
 
     def test_generic_name_only_untouched(self):
         from nous.application.chat.introspection import _compact_search_result

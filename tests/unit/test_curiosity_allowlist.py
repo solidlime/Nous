@@ -39,7 +39,7 @@ class TestParseJsonObjectFence:
 
 class TestCompactSearchResult:
     def test_results_key_real_shape(self):
-        # 実ログの search_tools 返り値形状。server + name → server__name。
+        # 実ログの search_tools 返り値形状。server + name → server__name（改行区切り、説明付きは添える）。
         raw = json.dumps(
             {
                 "results": [
@@ -48,7 +48,7 @@ class TestCompactSearchResult:
                 ]
             }
         )
-        assert _compact_search_result(raw) == "Exa__web_search_exa, mcp-hub__execute_tool"
+        assert _compact_search_result(raw) == "Exa__web_search_exa — ...\nmcp-hub__execute_tool"
 
     def test_results_key_name_only_passthrough(self):
         # name のみは形状証拠なし → 原文（汎用検索データを壊さない安全側）。
@@ -64,7 +64,23 @@ class TestCompactSearchResult:
                 ]
             }
         )
-        assert _compact_search_result(raw) == "mcp-hub__search_tools, nous__memory_search"
+        assert _compact_search_result(raw) == "mcp-hub__search_tools\nnous__memory_search"
+
+    def test_description_retained_and_capped(self):
+        # 説明は「server__name — 先頭60字」で保持。説明なしなら名前のみ。
+        long_desc = "あ" * 100
+        raw = json.dumps(
+            {
+                "results": [
+                    {"server": "Exa", "name": "web_search_exa", "description": long_desc},
+                    {"server": "mcp-hub", "name": "execute_tool"},
+                ]
+            }
+        )
+        out = _compact_search_result(raw)
+        first, second = out.split("\n")
+        assert first == f"Exa__web_search_exa — {'あ' * 60}"
+        assert second == "mcp-hub__execute_tool"
 
     def test_plain_string_items_passthrough(self):
         # 文字列項目は形状証拠なし → 原文。
