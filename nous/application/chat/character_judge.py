@@ -60,7 +60,9 @@ async def judge_character(config, persona_identity: str, response: str) -> dict 
             system="",
             tools=[],
             temperature=0.0,
-            max_tokens=200,
+            # reasoning モデル（openrouter/free 等）は推論トークンで小さな上限を
+            # 使い切って content が空になるため余裕を持たせる。
+            max_tokens=512,
         )
     except Exception as e:
         logger.warning("CharacterJudge: LLM call failed: %s", e)
@@ -70,6 +72,11 @@ async def judge_character(config, persona_identity: str, response: str) -> dict 
 
 def _parse_judgment(text: str) -> dict | None:
     cleaned = strip_code_fence(text)
+    # モデルが JSON 前後に説明文や思考を混ぜても最初の {...} を拾う。
+    if "{" in cleaned:
+        start, end = cleaned.find("{"), cleaned.rfind("}")
+        if start < end:
+            cleaned = cleaned[start : end + 1]
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError:
