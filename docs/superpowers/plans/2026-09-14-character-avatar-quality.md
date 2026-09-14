@@ -218,6 +218,33 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 - `node --check nous/api/http/static/chat/avatar/avatar.js` 通過
 - プロシージャル fallback 経路も残すこと（`motion:'procedural'` を強制する手段を設ける）
 
+## 目標レビュー後の追加修正と最終検証（2026-09-14 深夜・すべて実測）
+
+### ログ/キャラ領域の重なり修正
+
+- 実測: `#chat-main` 234..544（h 310）/ `#chat-input-area` 446..544（h **98px**, `position:absolute; z-index:12`）/ 30% 設定時の `#chat-messages` は 353..451。入力エリア上端 446 と **5px 重なり**、かつ `getBoundingClientRect().height` が指定 93px ではなく 120px になっていた。
+- 真因: `#chat-messages` の `padding-bottom: 104px` が `box-sizing: content-box` のまま境界ボックスを膨らませていた（93 + 104 = 197 → `max-height` 212 でクランプ、という不整合）。
+- 修正（`avatar.css`）: `#chat-messages` の `padding-bottom` を 0 にし、余白は `#chat-messages::after` のスペーサ要素へ移動。`--chat-input-h: 98px`（入力エリアの実測高）を `#chat-main` に置き、`bottom: var(--chat-input-h)` と `max-height: min(var(--chat-log-h), calc(100% - var(--chat-input-h)))` で入力エリアを避ける。
+- 修正（`chat-mode.js`）: 入力エリアの実測高から `--chat-input-h` を更新する。
+
+### 最終検証（実ブラウザ http://127.0.0.1:26262/ の実測値）
+
+| スライダー | log top..bottom | log 高 | 入力上端 | 重なり | 最終発言可視 |
+|---|---|---|---|---|---|
+| 15%（下限） | 399..446 | 47px | 446 | 0 | true |
+| 30%（既定） | 353..446 | 93px | 446 | 0 | true |
+| 55% | 275..446 | 171px | 446 | 0 | true |
+| 70%（上限） | 234..446 | 212px | 446 | 0 | true |
+
+- キャラステージ UI（`#chat-avatar-stage-ui`）は全設定で 93px を維持。横スクロールなし。
+- 永続化: リロード後も localStorage `nous.chat.logRatio` から値・`--chat-log-h`・ラベルが復元される。
+- 通常モード（アバター層なし）は入力欄・ログ正常で非回帰。
+- `python -m pytest -q` → **2636 passed, 1 skipped**。
+
+### 削除したもの
+
+- 目標レビュー後に試作した CSP 回避用テクスチャ再バインド（`avatar.js` 186 行）は削除。真因は所有者のコミット `5d9cd70a`（CSP に `blob:`/`data:` を追加）で解消済みで、実測でも全 58 マテリアルが `map` 付き・再バインド発火 0 件であり、不活性デッドコードと確認したため。
+
 **禁止**: `herta.vrm` の変更、コミット、既存 `vendor/three-vrm.module.js` の破壊的書き換え、ファイルサイズが 10MB を超えるアセットの取得。
 
 ## Task 5: 総合検証

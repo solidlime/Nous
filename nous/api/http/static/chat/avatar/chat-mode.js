@@ -45,6 +45,7 @@ async function applyCharacterMode(on) {
     layer.hidden = false;
     ensureStageUi();
     applyLogRatio(readLogRatio(), false);
+    syncInputAreaHeight();
     if (!avatarHandle) {
       try {
         const mod = await import('./avatar.js?v=20260914b');
@@ -251,6 +252,21 @@ function applyLogRatio(percent, save = true) {
   if (label) label.textContent = v + '%';
   if (save) localStorage.setItem(LOG_RATIO_KEY, String(v));
   return v;
+}
+
+/* 入力エリアの高さを CSS 変数で供給する。ログはこの分だけ上に配置され、
+   入力エリアがログの最終行を覆わない。高さは DOM 実測（ウィンドウ幅で行数が変わるため）。 */
+let inputAreaObserver = null;
+function syncInputAreaHeight() {
+  const main = document.getElementById('chat-main');
+  const area = document.getElementById('chat-input-area');
+  if (!main || !area) return;
+  const apply = () => main.style.setProperty('--chat-input-h', Math.round(area.getBoundingClientRect().height) + 'px');
+  apply();
+  if (!inputAreaObserver && typeof ResizeObserver !== 'undefined') {
+    inputAreaObserver = new ResizeObserver(apply);
+    inputAreaObserver.observe(area);
+  }
 }
 
 function ensureStageUi() {

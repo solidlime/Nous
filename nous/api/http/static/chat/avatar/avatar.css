@@ -6,7 +6,9 @@
 #chat-avatar-layer {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  /* z-index を付けるとスタッキングコンテキストを作ってしまい、子のステージ UI を
+     ログ（z-index 10）より前面に出せない。auto のままで子を親の文脈に参加させる。
+     canvas は非配置要素なのでログ・入力エリアより下に描画される。 */
   pointer-events: none; /* コンテナ自体は透過、canvas と UI のみ操作可 */
 }
 
@@ -102,13 +104,15 @@
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0;
   height: var(--chat-log-h, 30%);
-  max-height: var(--chat-log-h, 30%);
+  /* 入力エリア分を引いた高さを超えない（70% 要求時に入力エリアへはみ出さない） */
+  max-height: min(var(--chat-log-h, 30%), calc(100% - var(--chat-input-h, 104px)));
   overflow-y: auto;
-  /* 絶対配置の #chat-input-area（z-index 12）がログ下端に重なるため、
-     最終行が隠れないよう入力エリア分の下余白を確保する */
-  padding-bottom: 104px;
+  /* 絶対配置の #chat-input-area（z-index 12）は下端に重なるため、ログはその上に置く。
+     高さは chat-mode.js が --chat-input-h に DOM 実測値を供給する。
+     bottom: 0 だと入力エリアがログの最終行を覆い、既定 30%（≒93px）では
+     ログの箱全体が入力エリアの真後ろに隠れて読めなくなる（実測）。 */
+  bottom: var(--chat-input-h, 104px);
   background: rgba(10, 8, 20, 0.55);
   backdrop-filter: blur(6px);
   border-radius: 12px 12px 0 0;
@@ -135,10 +139,13 @@
 
 /* ── ステージ左下 UI パネル（chat-mode.js が DOM 注入）────────────── */
 
+/* ログの高さが変わるとログ上端も動くので、常に「ログの上・入力エリアの上」に追従させる。
+   高さ 93px を確保できない比率（高比率側）では上端で止め（clamp）、z-index で
+   ログより前面に出す：でなければスライダー自身がログに隠れて操作不能になる。 */
 #chat-avatar-stage-ui {
   position: absolute;
   left: 8px;
-  bottom: calc(var(--chat-log-h, 30%) + 8px);
+  bottom: clamp(8px, calc(var(--chat-input-h, 104px) + var(--chat-log-h, 30%) + 8px), calc(100% - 101px));
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -148,7 +155,7 @@
   border-radius: 10px;
   padding: 8px 10px;
   backdrop-filter: blur(8px);
-  z-index: 6;
+  z-index: 11;
 }
 
 #chat-avatar-stage-ui .chat-stage-row {
