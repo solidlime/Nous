@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -36,6 +38,39 @@ def mock_get_provider():
         mock_provider = MagicMock()
         mock.return_value = mock_provider
         yield mock_provider, mock
+
+
+class TestTemperature:
+    """脳側解決済み temperature を collect に渡す（デフォルト 0.3、明示値を尊重）。"""
+
+    _RESPONSE = '{"importance": 0.8, "relations": []}'
+
+    def _run(self, enricher: MemoryEnricher) -> AsyncMock:
+        collect_mock = AsyncMock(return_value=SimpleNamespace(text=self._RESPONSE, usage=None))
+        with patch("nous.infrastructure.llm.memory_enricher.collect_text_with_usage", new=collect_mock):
+            result = asyncio.run(
+                enricher.enrich_async(
+                    content="This is a long enough memory content for enrichment.",
+                    type_tags=[],
+                    entities=[],
+                )
+            )
+        assert result is not None
+        return collect_mock
+
+    def test_default_temperature_is_0_3(self, enricher: MemoryEnricher):
+        assert self._run(enricher).call_args.kwargs["temperature"] == 0.3
+
+    def test_explicit_temperature_reaches_collect(self):
+        enricher = MemoryEnricher(
+            provider="openrouter",
+            api_key="test-key",
+            model="test-model",
+            base_url="https://test.url/v1",
+            min_chars=10,
+            temperature=0.55,
+        )
+        assert self._run(enricher).call_args.kwargs["temperature"] == 0.55
 
 
 def _run_enrich(enricher: MemoryEnricher, **kwargs):

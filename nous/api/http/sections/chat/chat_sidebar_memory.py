@@ -145,8 +145,8 @@ _BRAIN_HELP = {
     "min_batch": "REM を起こすのに必要な未処理記憶の最少件数。わずかな揺らぎで眠らないための起床閾値です。",
     "max_defer": "未処理記憶が残っていても、REM の開始を最大ここまで遅らせます。深い睡眠を妨げないための上限です。",
     "monologue": "REM 処理（drain）の後に、処理した記憶をもとに一人称の独り言を生成して保存します。再会時に自然に触れるための記録です。",
-    "brain_reasoning": "脳側の呼び出し（内省・記憶強化）で推論（reasoning）を有効化します。chat 側の reasoning 設定とは独立。OFF では OpenRouter 経由のとき推論を無効化します（推論だけで予算を使い切る事故対策）。",
-    "brain_max_tokens": "脳側呼び出し（内省・記憶強化）の共通トークン上限。reasoning を有効化した場合は推論分を賄うため自動で嵩上げされます（low 4096 / medium 5120 / high 9216 / max 17408）。手動でそれ以上に設定した場合は引き下げません（256〜32768）。",
+    "brain_reasoning": "脳側の呼び出し（内省・記憶強化）で推論（reasoning）を有効化します。OFF でも未設定（null）なら解決済みLLM設定に従います（専用OFFなら会話用LLMの設定。設定ファイル直接編集時のみ null を指定できます）。ON で brain_reasoning_effort を強制使用、OFF（明示の false）で推論なし。OpenRouter 経由で推論だけが予算を使い切る事故対策として、明示 OFF では推論を無効化します。",
+    "brain_max_tokens": "脳側呼び出し（内省・記憶強化）のトークン上限。0 で解決済みLLM設定に従います（専用OFFなら会話用の値、ONなら脳側既定）。明示設定時（256〜32768）は全モードで上書きし、reasoning を有効化した場合は推論分を賄うため自動で嵩上げされます（low 4096 / medium 5120 / high 9216 / max 17408）。reasoning 有効時、保存時に実効値へ引き上げる場合があります（0 のまま保存した場合は実行時に解決されます）。手動でそれ以上に設定した場合は引き下げません。",
     "spontaneous": "誰も話しかけてこない静かな時間に、最近の記憶と現在の状態から一人称の独り言を自発的に生成します。間隔は前回の内省（会話駆動・自発とも）からの経過時間で判定されます。",
     "novelty_sim": "海馬-VTA ループのドーパミンゲート。既存記憶との類似がこの値より低いほど「新規」と判定され、長期記憶への定着が強まります。",
     "novelty_importance": "新規性判定の対象になる重要度のしきい値。重要な記憶だけを新規性ゲートに通します。",
@@ -254,7 +254,7 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                         </div>
                                         <div>
                                             <div class="chat-field-label">脳側 max tokens {help_("brain_max_tokens")}</div>
-                                            <input type="number" id="chat-brain-max-tokens" class="chat-field-input" min="256" max="32768" step="256" value="2048" />
+                                            <input type="number" id="chat-brain-max-tokens" class="chat-field-input" min="0" max="32768" step="256" placeholder="0 = 継承" value="0" />
                                         </div>
                                         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
                                             <span class="chat-field-label" style="margin:0;">脳シミュレーター専用 LLM を使う {help_("llm_dedicated")}</span>

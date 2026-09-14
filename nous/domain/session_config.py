@@ -148,13 +148,22 @@ class SessionConfig(BaseModel):
     # 内省エンジン (drain 後の単一 LLM 呼び出し: 独り言＋逸脱判定＋反省＋感情/身体)
     brain_introspection_enabled: bool = Field(default=True, description="独り言・反省・感情をまとめて内省する機能を有効にします。")
     # 脳専用 reasoning トグル (chat の reasoning_enabled/effort とは独立)。
-    # ON で脳側呼び出し (内省・記憶強化) に reasoning_effort を渡す。OFF は None
-    # (openai_compat が openrouter + effort=None で reasoning を無効化する)。
-    brain_reasoning_enabled: bool = Field(default=False, description="脳シミュレーションの呼び出しで推論を使います。")
-    brain_reasoning_effort: str = Field(default="medium", description="脳シミュレーションの推論の深さ。")
-    # 脳側呼び出しの共通 max_tokens（reasoning ON 時は model_validator が
-    # max(max_tokens, max(4096, budget+1024)) に嵩上げ。openai_compat の式と同一）。enricher / introspection で共有。
-    brain_max_tokens: int = Field(default=4096, description="脳シミュレーション呼び出しの最大トークン数。")
+    # None で解決済みLLM設定に従う（専用OFFなら会話用）。True で brain_reasoning_effort を
+    # 強制使用、False で推論なし (openai_compat が openrouter + effort=None で reasoning を無効化する)。
+    brain_reasoning_enabled: bool | None = Field(
+        default=None,
+        description="脳側呼び出しの推論。None で解決済みLLM設定に従う（専用OFFなら会話用）。True で brain_reasoning_effort を強制使用、False で推論なし。",
+    )
+    brain_reasoning_effort: str = Field(
+        default="medium", description="brain_reasoning_enabled=True 時に使用。脳シミュレーションの推論の深さ。"
+    )
+    # 脳側呼び出しの共通 max_tokens。0 = 継承（専用OFFなら会話用の値、ONなら脳側既定）。
+    # reasoning 有効時（明示 True かつ明示 max_tokens>0）は model_validator が
+    # max(max_tokens, max(4096, budget+1024)) に嵩上げ。openai_compat の式と同一。enricher / introspection で共有。
+    brain_max_tokens: int = Field(
+        default=0,
+        description="脳側呼び出しの最大トークン数。0 で解決済みLLM設定に従う（専用OFFなら会話用の値、ONなら脳側既定）。明示値（256〜32768）は全モードで上書き。",
+    )
     # 自発的内省: 誰も話しかけてこない静かな時間に記憶と現在状態から独り言を産出。
     # 発火間隔は brain.introspection / brain.introspection_spontaneous 両種別の
     # 最新タイムスタンプから interval_hours 以上経過で判定（worker 側ガード）。
@@ -176,17 +185,26 @@ class SessionConfig(BaseModel):
     @field_validator("brain_max_tokens")
     @classmethod
     def _clamp_brain_max_tokens(cls, v: int) -> int:
-        # 下限 256: interpretation エラー防止の実用下限（provider 側 1..32768 と同型）
-        return max(256, min(32768, v))
+        # 0 は「継承」のセンチネルとして素通し。下限 256: interpretation エラー防止の
+        # 実用下限（provider 側 1..32768 と同型）
+        return v if v == 0 else max(256, min(32768, v))
 
     @model_validator(mode="after")
     def _lift_brain_max_tokens_for_reasoning(self):
-        """reasoning ON 時は thinking budget を賄うよう max_tokens を嵩上げる（ロード時の実効値。UI保存経路では実効値がそのまま永続されうる）。
+        """reasoning ON（明示 True）時は thinking budget を賄うよう max_tokens を嵩上げる。
 
+        明示値（>0）は検証時に実効値（floor）へ昇格され、UI 保存時は実効値のまま
+        永続化される（保存された実効値は次回ロード時も既に floor 以上なので再昇格は発生しない）。
+        0（継承）はセンチネルのまま生の値で保存され、実行時 floor は
+        introspection._resolve_brain_llm_params（resolver 集約）が reasoning 有効時に適用する。
         openai_compat の Anthropic 互換分岐 max(max_tokens, budget+1024) と同一の式。
         effort が未定義値なら floor 4096 のみ適用。field_validator(clamp) の後に走る。
         """
         if not self.brain_reasoning_enabled:
+            return self  # None（継承）/ False（推論なし）は嵩上げ対象外
+        if self.brain_max_tokens == 0:
+            # 0 = 継承センチネル。保存値は生のまま保ち、実行時 floor は
+            # resolver（introspection._resolve_brain_llm_params）が適用する。
             return self
         from nous.domain.provider_config import REASONING_BUDGETS
 

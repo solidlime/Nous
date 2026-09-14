@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 
+from nous.application.chat.introspection import _resolve_brain_llm_params
 from nous.application.use_cases import AppContext
 from nous.domain.chat_config import ChatConfig
 from nous.domain.provider_config import ProviderConfig
@@ -205,9 +206,9 @@ class TestReloadEnricher:
 
 
 class TestBrainReasoningKeys:
-    def test_default_off_medium(self):
+    def test_default_none_medium(self):
         cfg = ChatConfig()
-        assert cfg.brain_reasoning_enabled is False
+        assert cfg.brain_reasoning_enabled is None  # None = 解決済みLLM設定に従う
         assert cfg.brain_reasoning_effort == "medium"
 
     def test_effort_clamped(self):
@@ -253,9 +254,9 @@ class TestBrainReasoningWiring:
 
 
 class TestBrainMaxTokensKeys:
-    def test_default_4096(self):
+    def test_default_0_inherit(self):
         cfg = ChatConfig()
-        assert cfg.brain_max_tokens == 4096
+        assert cfg.brain_max_tokens == 0  # 0 = 継承センチネル
 
     def test_clamped_256_to_32768(self):
         from nous.domain.session_config import SessionConfig
@@ -316,6 +317,64 @@ class TestBrainMaxTokensReasoningLift:
     def test_off_2048_unchanged(self):
         assert self._session(brain_max_tokens=2048, brain_reasoning_enabled=False).brain_max_tokens == 2048
 
+    def test_zero_0_sentinel_raw_storage_runtime_floor(self):
+        # 新契約: 0 = 継承センチネル。SessionConfig（保存層）は clamp も嵩上げもせず
+        # 生の 0 を保つ（保存値は生のまま）一方、実行時の resolver が reasoning 有効なら
+        # floor を適用する（専用LLM ON × brain_max_tokens=0 × reasoning ON → floor）。
+        assert self._session(brain_max_tokens=0).brain_max_tokens == 0
+        assert (
+            self._session(
+                brain_max_tokens=0, brain_reasoning_enabled=True, brain_reasoning_effort="max"
+            ).brain_max_tokens
+            == 0
+        )
+        # 実行時: reasoning ON → floor 適用（medium 5120 / max 17408）
+        from nous.application.chat.introspection import _resolve_brain_llm_params
+
+        p = _resolve_brain_llm_params(
+            _rich_cfg(
+                brain_llm_dedicated=True,
+                brain_max_tokens=0,
+                brain_reasoning_enabled=True,
+                brain_reasoning_effort="medium",
+            )
+        )
+        assert p.max_tokens == 5120
+        p = _resolve_brain_llm_params(
+            _rich_cfg(
+                brain_llm_dedicated=True,
+                brain_max_tokens=0,
+                brain_reasoning_enabled=True,
+                brain_reasoning_effort="max",
+            )
+        )
+        assert p.max_tokens == 17408
+        # 実行時: reasoning OFF/None の 0 は素通し（floor なし）
+        p = _resolve_brain_llm_params(
+            _rich_cfg(brain_llm_dedicated=True, brain_max_tokens=0, brain_reasoning_enabled=False)
+        )
+        assert p.max_tokens is None
+        p = _resolve_brain_llm_params(_rich_cfg(brain_llm_dedicated=True, brain_max_tokens=0))
+        assert p.max_tokens is None
+
+    def test_reasoning_none_not_lifted(self):
+        # brain_reasoning_enabled=None（継承）は嵩上げ対象外
+        assert (
+            self._session(
+                brain_max_tokens=2048, brain_reasoning_enabled=None, brain_reasoning_effort="max"
+            ).brain_max_tokens
+            == 2048
+        )
+
+    def test_reasoning_true_explicit_4096_lifted(self):
+        # 明示 True + 明示 4096 は medium floor 5120 に嵩上げ
+        assert (
+            self._session(
+                brain_max_tokens=4096, brain_reasoning_enabled=True, brain_reasoning_effort="medium"
+            ).brain_max_tokens
+            == 5120
+        )
+
     def test_on_explicit_large_unchanged(self):
         # 明示 8192 は引き下げない
         assert (
@@ -340,8 +399,9 @@ class TestBrainMaxTokensWiring:
 
     - cfg あり → enricher / introspection ともに cfg.brain_max_tokens（デフォルト 4096 含む）
     - cfg なし → 各 ctor デフォルト（enricher 512 / introspection 4096）を維持
-    - reasoning ON 時は SessionConfig の model_validator が嵩上げし、openai_compat も
-      max(max_tokens, budget+1024) をするため、ここで渡す値は「下限」の意味。
+    - reasoning ON 時は SessionConfig の model_validator が嵩上げし、resolver
+      （_resolve_brain_llm_params）も同一式で floor を適用するため、
+      ここで渡す値は「下限」の意味。openai_compat の非Anthropic互換経路も resolver 経由で守られる。
     """
 
     def test_cfg_present_passes_explicit_value_to_both(self):
@@ -352,13 +412,14 @@ class TestBrainMaxTokensWiring:
         assert ctx.introspection_engine is not None
         assert ctx.introspection_engine._max_tokens == 4096
 
-    def test_cfg_present_default_4096_shared(self):
+    def test_cfg_present_default_inherits_chat(self):
+        """cfg あり・明示なし（brain_max_tokens=0）→ 会話用 provider_config に従う。"""
         ctx = _ctx(_cfg())
         ctx._init_enricher()
         assert ctx._enricher is not None
-        assert ctx._enricher._max_tokens == 4096
+        assert ctx._enricher._max_tokens == 8192  # ProviderConfig.max_tokens 既定
         assert ctx.introspection_engine is not None
-        assert ctx.introspection_engine._max_tokens == 4096
+        assert ctx.introspection_engine._max_tokens == 8192
 
     def test_cfg_none_uses_ctor_defaults(self):
         ctx = _ctx(None)
@@ -367,6 +428,95 @@ class TestBrainMaxTokensWiring:
         assert ctx._enricher._max_tokens == 512
         assert ctx.introspection_engine is not None
         assert ctx.introspection_engine._max_tokens == 4096
+
+
+def _rich_provider_config() -> ProviderConfig:
+    """resolver テスト用: max_tokens 8192 / temperature 0.9 / reasoning ON high。"""
+    return ProviderConfig(
+        provider="anthropic",
+        model="chat-model",
+        api_key="chat-key",
+        base_url="https://chat.url/v1",
+        max_tokens=8192,
+        temperature=0.9,
+        reasoning_enabled=True,
+        reasoning_effort="high",
+    )
+
+
+def _rich_cfg(**session_overrides) -> ChatConfig:
+    data = {"memory_enrichment_enabled": True, "provider_config": _rich_provider_config()}
+    data.update(session_overrides)
+    return ChatConfig(**data)
+
+
+class TestBrainLLMParamsResolver:
+    """_resolve_brain_llm_params（脳側LLMパラメータの単一解決点）。
+
+    None は「呼び出し先の既定を使え」の意味。
+    """
+
+    def test_cfg_none_all_none(self):
+        p = _resolve_brain_llm_params(None)
+        assert p.max_tokens is None and p.temperature is None and p.reasoning_effort is None
+
+    def test_dedicated_off_inherits_chat(self):
+        # chat reasoning ON (high) → reasoning floor（9216）が適用される（resolver 集約）
+        p = _resolve_brain_llm_params(_rich_cfg())
+        assert p.max_tokens == 9216
+        assert p.temperature == 0.9
+        assert p.reasoning_effort == "high"
+
+    def test_dedicated_off_chat_reasoning_off_effort_none(self):
+        cfg = _rich_cfg()
+        cfg.provider_config.reasoning_enabled = False
+        assert _resolve_brain_llm_params(cfg).reasoning_effort is None
+
+    def test_dedicated_on_unspecified_all_none(self):
+        """ON（脳専用LLM）+ brain_* 未設定 → 呼び出し先既定（全 None）。"""
+        cfg = _rich_cfg(brain_llm_dedicated=True)
+        p = _resolve_brain_llm_params(cfg)
+        assert p.max_tokens is None and p.temperature is None and p.reasoning_effort is None
+
+    def test_explicit_max_tokens_overrides_only_tokens(self):
+        # 明示 2048 は上書きする。ただし reasoning ON (high) なら floor 9216 まで嵩上げ
+        cfg = _rich_cfg(brain_max_tokens=2048)
+        p = _resolve_brain_llm_params(cfg)
+        assert p.max_tokens == 9216
+        assert p.temperature == 0.9
+        assert p.reasoning_effort == "high"
+
+    def test_temperature_zero_preserved(self):
+        """会話側の明示 temperature=0.0 が 0.7 に化けない（falsy チェック除去の検証）。"""
+        cfg = _rich_cfg()
+        cfg.provider_config.temperature = 0.0
+        p = _resolve_brain_llm_params(cfg)
+        assert p.temperature == 0.0
+
+    def test_brain_reasoning_true_forces_effort_even_off_mode(self):
+        cfg = _rich_cfg(brain_reasoning_enabled=True, brain_reasoning_effort="medium")
+        assert _resolve_brain_llm_params(cfg).reasoning_effort == "medium"
+
+    def test_brain_reasoning_false_wins_over_chat_reasoning(self):
+        cfg = _rich_cfg(brain_reasoning_enabled=False)  # chat reasoning は ON (high)
+        assert _resolve_brain_llm_params(cfg).reasoning_effort is None
+
+    def test_temperature_wiring_off_mode(self):
+        """OFF モードで会話用 temperature が enricher / introspection の双方に渡る。"""
+        ctx = _ctx(_cfg())
+        ctx._init_enricher()
+        assert ctx._enricher is not None
+        assert ctx._enricher._temperature == 0.7
+        assert ctx.introspection_engine is not None
+        assert ctx.introspection_engine._temperature == 0.7
+
+    def test_temperature_wiring_cfg_none_uses_ctor_defaults(self):
+        ctx = _ctx(None)
+        ctx._init_enricher()
+        assert ctx._enricher is not None
+        assert ctx._enricher._temperature == 0.3
+        assert ctx.introspection_engine is not None
+        assert ctx.introspection_engine._temperature == 0.7
 
 
 class TestBrainSpontaneousKeys:

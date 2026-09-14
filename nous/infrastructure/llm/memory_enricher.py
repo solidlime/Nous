@@ -68,6 +68,7 @@ class MemoryEnricher:
         min_chars: int = 10,
         reasoning_effort: str | None = None,
         max_tokens: int = 512,
+        temperature: float = 0.3,
         session_id: str | None = None,
     ) -> None:
         self._provider_name = provider
@@ -78,8 +79,10 @@ class MemoryEnricher:
         # 脳専用 reasoning トグル (chat の reasoning とは独立)。None なら effort を渡さない。
         self._reasoning_effort = reasoning_effort
         # max_tokens はデフォルト 512 (relations JSON 専用で小さくてよい)。
-        # cfg.brain_max_tokens があれば両者共通の値を受け取る（下限の意味）。
+        # 脳側解決 (_resolve_brain_llm_params) が None を返した時はこの既定を使う
+        # （brain_max_tokens が 0 / 継承の場合は会話用の値か、この既定が渡ってくる）。
         self._max_tokens = max_tokens
+        self._temperature = temperature
         # OpenCode Go 用の安定セッションID (persona ベース、例: nous-brain-<persona>)
         self._session_id = session_id
 
@@ -145,7 +148,7 @@ class MemoryEnricher:
             provider,
             messages=[LLMMessage(role="user", content=user_message)],
             system=system,
-            temperature=0.3,
+            temperature=self._temperature,
             max_tokens=self._max_tokens,
             reasoning_effort=self._reasoning_effort,
         )

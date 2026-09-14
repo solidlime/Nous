@@ -604,19 +604,76 @@ class TestBrainMaxTokens:
         assert captured["max_tokens"] == 4096
 
     def test_from_config_resolves_brain_max_tokens(self) -> None:
-        provider_cfg = MagicMock()
-        provider_cfg.provider = "openai"
-        provider_cfg.get_effective_api_key.return_value = "key"
-        provider_cfg.get_effective_model.return_value = "model-x"
-        provider_cfg.get_effective_base_url.return_value = "https://x/v1"
-        cfg = MagicMock()
-        cfg.provider_config = provider_cfg
-        cfg.brain_llm_dedicated = False
-        cfg.brain_max_tokens = 3072
+        """real ChatConfig 使用: 明示 brain_max_tokens が engine に渡る（新センチネル契約）。
 
+        MagicMock cfg は brain_reasoning_enabled が truthy になり resolver の True 分岐を
+        誤通過するため使わない。real ChatConfig では None（継承）/ 0（未設定）センチネルが
+        正しく固定される。
+        """
+        from nous.domain.chat_config import ChatConfig
+        from nous.domain.provider_config import ProviderConfig
+
+        cfg = ChatConfig(
+            memory_enrichment_enabled=True,
+            provider_config=ProviderConfig(
+                provider="openai",
+                model="chat-model",
+                api_key="key",
+                base_url="https://x/v1",
+                max_tokens=512,
+            ),
+            brain_max_tokens=3072,
+        )
         engine = IntrospectionEngine.from_config(cfg)
         assert engine is not None
         assert engine._max_tokens == 3072
+
+    def test_from_config_sentinel_zero_inherits_chat(self) -> None:
+        """新センチネル契約: brain_max_tokens=0（未設定）は会話側 max_tokens を継承する。"""
+        from nous.domain.chat_config import ChatConfig
+        from nous.domain.provider_config import ProviderConfig
+
+        cfg = ChatConfig(
+            memory_enrichment_enabled=True,
+            provider_config=ProviderConfig(
+                provider="openai",
+                model="chat-model",
+                api_key="key",
+                base_url="https://x/v1",
+                max_tokens=4096,
+            ),
+        )
+        engine = IntrospectionEngine.from_config(cfg)
+        assert engine is not None
+        assert engine._max_tokens == 4096  # brain_max_tokens=0 → 会話側値
+
+    def test_from_config_off_mode_inherits_chat_params(self) -> None:
+        """専用OFF + 明示なし → 会話用 provider_config の max_tokens/temperature/reasoning に従う。
+
+        会話側 reasoning ON (high) を effort 継承するため、推論分を賄う resolver floor
+        （max(8192, high budget 8192+1024) = 9216）が適用される。
+        """
+        from nous.domain.chat_config import ChatConfig
+        from nous.domain.provider_config import ProviderConfig
+
+        cfg = ChatConfig(
+            memory_enrichment_enabled=True,
+            provider_config=ProviderConfig(
+                provider="openai",
+                model="chat-model",
+                api_key="key",
+                base_url="https://x/v1",
+                max_tokens=8192,
+                temperature=0.9,
+                reasoning_enabled=True,
+                reasoning_effort="high",
+            ),
+        )
+        engine = IntrospectionEngine.from_config(cfg)
+        assert engine is not None
+        assert engine._max_tokens == 9216  # reasoning high floor
+        assert engine._temperature == 0.9
+        assert engine._reasoning_effort == "high"
 
 
 class TestStateMaterial:
@@ -1167,7 +1224,13 @@ class TestResearchStep:
         captured: dict = {}
 
         async def stream(messages, system, temperature, max_tokens, tools=None, reasoning_effort=None):
-            captured.update(system=system, max_tokens=max_tokens, reasoning_effort=reasoning_effort, tools=tools)
+            captured.update(
+                system=system,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                reasoning_effort=reasoning_effort,
+                tools=tools,
+            )
             from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
 
             yield TextDeltaEvent(content="ok")
@@ -1185,10 +1248,52 @@ class TestResearchStep:
         assert captured["system"] == "SYS"
         assert captured["max_tokens"] == 4096
         assert captured["reasoning_effort"] == "high"
+        assert captured["temperature"] == 0.7  # ctor 既定
         assert captured["tools"] == tools
         assert turn is not None
         assert turn.text == "ok"
         assert turn.tool_calls == []
+
+    def test_uses_engine_resolved_temperature(self) -> None:
+        """curiosity 経路は config 由来の上書きを渡さず、エンジン解決済み temperature を使う。"""
+        captured: dict = {}
+
+        async def stream(messages, system, temperature, max_tokens, tools=None, reasoning_effort=None):
+            captured["temperature"] = temperature
+            from nous.infrastructure.llm.base import DoneEvent
+
+            yield DoneEvent(full_content="", tool_calls=[])
+
+        provider = MagicMock()
+        provider.stream = stream
+        engine = IntrospectionEngine(provider, temperature=0.55)
+        from nous.infrastructure.llm.base import LLMMessage, ToolDefinition
+
+        asyncio.new_event_loop().run_until_complete(
+            engine.research_step([LLMMessage(role="user", content="q")], [ToolDefinition("t", "d", {})])
+        )
+        assert captured["temperature"] == 0.55
+
+    def test_explicit_temperature_overrides_engine_default(self) -> None:
+        captured: dict = {}
+
+        async def stream(messages, system, temperature, max_tokens, tools=None, reasoning_effort=None):
+            captured["temperature"] = temperature
+            from nous.infrastructure.llm.base import DoneEvent
+
+            yield DoneEvent(full_content="", tool_calls=[])
+
+        provider = MagicMock()
+        provider.stream = stream
+        engine = IntrospectionEngine(provider, temperature=0.55)
+        from nous.infrastructure.llm.base import LLMMessage, ToolDefinition
+
+        asyncio.new_event_loop().run_until_complete(
+            engine.research_step(
+                [LLMMessage(role="user", content="q")], [ToolDefinition("t", "d", {})], temperature=0.2
+            )
+        )
+        assert captured["temperature"] == 0.2
 
     def test_collects_tool_calls_from_stream(self) -> None:
         from nous.infrastructure.llm.base import DoneEvent, ToolCallEvent

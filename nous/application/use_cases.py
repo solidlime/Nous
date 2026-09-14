@@ -218,35 +218,39 @@ class AppContext:
                 if not api_key:
                     logger.debug("brain LLM: no api_key for provider '%s'; enrichment disabled", provider)
             if api_key:
+                from nous.application.chat.introspection import (
+                    IntrospectionEngine,
+                    _resolve_brain_llm_params,
+                )
+                from nous.infrastructure.llm.factory import get_provider
                 from nous.infrastructure.llm.memory_enricher import MemoryEnricher
 
-                # 脳専用 reasoning トグル (chat の reasoning とは独立)。cfg None → None
-                # (settings 鎖に脳用キーは足さない — per-persona 設定の一元維持)。
-                brain_effort = None
-                if cfg is not None and getattr(cfg, "brain_reasoning_enabled", False):
-                    brain_effort = str(getattr(cfg, "brain_reasoning_effort", "medium") or "medium")
-                # brain_max_tokens は両者共通の上限値。cfg あり → cfg 値 (デフォルト 4096)。
-                # cfg なし → 各 ctor デフォルト (enricher 512 / introspection 4096) を維持。
-                brain_max_tokens = int(getattr(cfg, "brain_max_tokens", 4096) or 4096) if cfg is not None else None
+                # params は脳側LLMパラメータ（max_tokens/temperature/reasoning_effort）の
+                # 単一解決点（introspection._resolve_brain_llm_params）。None = 呼び出し先既定。
+                params = _resolve_brain_llm_params(cfg)
 
                 # OpenCode Go 用の脳側安定セッションID (persona ベース)。persona 未設定なら None
                 # (provider 生成側のプロセス既定にフォールバック)。
                 brain_session = f"nous-brain-{self.persona}" if getattr(self, "persona", "") else None
 
+                # mypy は **spread の有無から型を窄められない（同一式内の2 spread でも最初の
+                # int が無視される）。ponytail: 素直に kwargs 辞書を1つだけ作って渡す。
+                brain_kwargs: dict[str, int | float] = {}
+                if params.max_tokens is not None:
+                    brain_kwargs["max_tokens"] = params.max_tokens
+                if params.temperature is not None:
+                    brain_kwargs["temperature"] = params.temperature
                 enricher = MemoryEnricher(
                     provider=provider,
                     api_key=api_key,
                     model=model,
                     base_url=base_url,
                     min_chars=min_chars,
-                    reasoning_effort=brain_effort,
-                    **({"max_tokens": brain_max_tokens} if brain_max_tokens is not None else {}),
+                    reasoning_effort=params.reasoning_effort,
+                    **brain_kwargs,  # type: ignore[arg-type]
                     session_id=brain_session,
                 )
                 # IntrospectionEngine shares the SAME resolved provider chain.
-                from nous.application.chat.introspection import IntrospectionEngine
-                from nous.infrastructure.llm.factory import get_provider
-
                 introspection_engine = IntrospectionEngine(
                     get_provider(
                         provider=provider,
@@ -255,8 +259,8 @@ class AppContext:
                         base_url=base_url,
                         session_id=brain_session,
                     ),
-                    reasoning_effort=brain_effort,
-                    **({"max_tokens": brain_max_tokens} if brain_max_tokens is not None else {}),
+                    reasoning_effort=params.reasoning_effort,
+                    **brain_kwargs,  # type: ignore[arg-type]
                     session_id=brain_session,
                 )
         self._enricher = enricher

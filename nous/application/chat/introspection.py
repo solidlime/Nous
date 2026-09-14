@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, cast
 
 from nous.domain.memory import wiring_events
 from nous.domain.memory.session_event import SessionEvent
+from nous.domain.provider_config import REASONING_BUDGETS
 from nous.domain.shared.text_utils import strip_code_fence
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.llm.base import LLMMessage, ToolDefinition
@@ -44,7 +45,7 @@ _MAX_CREATED_MEMORIES = 3
 
 # openrouter free alias は reasoning モデル（CoT が数百〜千トークン消費）。
 # 512 だと推論だけで budget を使い切り content が空になる（2026-09-08 実機確認）。
-# デフォルト値 — cfg.brain_max_tokens で上書き可能（256..32768 に clamp 済み）。
+# デフォルト値 — 脳側解決 (_resolve_brain_llm_params) が None を返した時のフォールバック。
 # ponytail: reasoning > 予算超え → INFO ログで検知、retry は要る時だけ足す。
 _DEFAULT_MAX_TOKENS = 4096
 
@@ -137,13 +138,15 @@ class IntrospectionEngine:
         provider: LLMProvider,
         reasoning_effort: str | None = None,
         max_tokens: int = _DEFAULT_MAX_TOKENS,
+        temperature: float = 0.7,
         session_id: str | None = None,
     ) -> None:
         self._provider = provider
-        # 脳専用 reasoning トグル (chat の reasoning とは独立)。None なら effort を渡さず
+        # 脳側解決済み reasoning effort。None なら effort を渡さず
         # openai_compat 側の openrouter reasoning 無効化が効く。
         self._reasoning_effort = reasoning_effort
         self._max_tokens = max_tokens
+        self._temperature = temperature
         # OpenCode Go 用の脳側安定セッションID (例: nous-brain-<persona>)
         self._session_id = session_id
 
@@ -168,10 +171,12 @@ class IntrospectionEngine:
         except Exception:
             logger.debug("introspection provider init failed", exc_info=True)
             return None
+        params = _resolve_brain_llm_params(config)
         return cls(
             provider,
-            reasoning_effort=_brain_reasoning_effort(config),
-            max_tokens=_resolve_brain_max_tokens(config),
+            reasoning_effort=params.reasoning_effort,
+            max_tokens=params.max_tokens if params.max_tokens is not None else _DEFAULT_MAX_TOKENS,
+            temperature=params.temperature if params.temperature is not None else 0.7,
         )
 
     async def generate(
@@ -239,7 +244,7 @@ class IntrospectionEngine:
             self._provider,
             messages=[LLMMessage(role="user", content=user_message)],
             system="",
-            temperature=0.7,
+            temperature=self._temperature,
             max_tokens=self._max_tokens,
             reasoning_effort=self._reasoning_effort,
         )
@@ -261,13 +266,15 @@ class IntrospectionEngine:
         system: str = "",
         *,
         max_tokens: int | None = None,
-        temperature: float = 0.7,
+        temperature: float | None = None,
         reasoning_effort: str | None | object = _UNSET,
     ) -> CollectedTurn | None:
         """native function calling による 1 リサーチステップ。エラー/例外は None（_call_llm と同じ生存則）。"""
         # _UNSET は mypy が narrowing できないため cast で str | None へ落とす。
         if max_tokens is None:
             max_tokens = self._max_tokens
+        if temperature is None:
+            temperature = self._temperature
         if reasoning_effort is _UNSET:
             reasoning_effort = self._reasoning_effort
         effort = cast("str | None", reasoning_effort)
@@ -284,13 +291,6 @@ class IntrospectionEngine:
         except Exception:
             logger.debug("introspection: research step failed", exc_info=True)
             return None
-
-
-def _brain_reasoning_effort(config: ChatConfig | None) -> str | None:
-    """脳専用 reasoning トグル → stream に渡す effort。OFF/未設定は None。"""
-    if config is None or not getattr(config, "brain_reasoning_enabled", False):
-        return None
-    return str(getattr(config, "brain_reasoning_effort", "medium") or "medium")
 
 
 def _format_current_state(state: dict | None) -> str:
@@ -357,12 +357,71 @@ def _build_current_state(
         return None
 
 
-def _resolve_brain_max_tokens(config: ChatConfig | None) -> int:
-    """cfg.brain_max_tokens を解決。cfg None / 未設定 / 不正値はデフォルト 4096 (_DEFAULT_MAX_TOKENS)。"""
+@dataclass(frozen=True)
+class BrainLLMParams:
+    """脳側LLM呼び出しパラメータ。None は「呼び出し先の既定を使え」の意味。"""
+
+    max_tokens: int | None
+    temperature: float | None
+    reasoning_effort: str | None
+
+
+def _as_int(value, default: int = 0) -> int:
+    """LLM 設定値の安全な int 化。不正値は default（_resolve_brain_llm_params 専用の防御）。"""
     try:
-        return int(getattr(config, "brain_max_tokens", 0) or _DEFAULT_MAX_TOKENS)
+        return int(value or 0)
     except (TypeError, ValueError):
-        return _DEFAULT_MAX_TOKENS
+        return default
+
+
+def _resolve_brain_llm_params(config: ChatConfig | None) -> BrainLLMParams:
+    """脳側 LLM 呼び出しパラメータの単一解決点。
+
+    - brain_max_tokens > 0 は全モードで明示上書き
+    - brain_llm_dedicated OFF → 会話用 provider_config に従う（max_tokens/temperature/reasoning）
+    - ON / cfg None → 呼び出し先既定（introspection 4096・0.7 / enricher 512・0.3）
+    - brain_reasoning_enabled: None=解決済みLLM設定に従う / True=brain_reasoning_effort 強制 / False=推論なし
+    - reasoning 有効（effort 非None）時は max_tokens を floor=max(4096, budget+1024) まで嵩上げ。
+      session_config の保存時昇格と同一式で、openai_compat の非Anthropic互換経路（嵩上げなし）も守る。
+    """
+    if config is None:
+        return BrainLLMParams(max_tokens=None, temperature=None, reasoning_effort=None)
+    p = config.provider_config
+    explicit_tokens = _as_int(getattr(config, "brain_max_tokens", 0))
+    dedicated = bool(getattr(config, "brain_llm_dedicated", False))
+    max_tokens: int | None
+    if explicit_tokens > 0:
+        max_tokens = explicit_tokens
+    elif dedicated:
+        max_tokens = None
+    else:
+        max_tokens = _as_int(getattr(p, "max_tokens", 0)) or None
+    temperature: float | None = None
+    if not dedicated:
+        try:
+            # falsy チェックを外す: 会話側の明示 temperature=0.0 を 0.7 に化けさせない。
+            # 不正値（None / 非数値文字列）は TypeError/ValueError で 0.7 へ落ちる。
+            temperature = float(getattr(p, "temperature", 0.7))
+        except (TypeError, ValueError):
+            temperature = 0.7
+    r_flag = getattr(config, "brain_reasoning_enabled", None)
+    if r_flag is None:
+        # None（継承）: 専用OFFなら会話用 reasoning 設定に従う、ON なら脳側既定（なし）。
+        follow_chat = not dedicated and getattr(p, "reasoning_enabled", False)
+        effort: str | None = str(getattr(p, "reasoning_effort", "medium") or "medium") if follow_chat else None
+    elif r_flag:
+        effort = str(getattr(config, "brain_reasoning_effort", "medium") or "medium")
+    else:
+        effort = None  # False（推論なし）強制
+    if effort is not None:
+        # 推論が実際に有効なら、推論分（budget）を賄える max_tokens 下限を保証する。
+        # 専用LLM ON × brain_max_tokens=0（継承）が enricher ctor 既定 512 に落ちて
+        # 推論だけで budget を食い潰す穴を塞ぐ（session_config は 0 を生で保存するため
+        # 保存時昇格では補えない）。budget 不明の effort は floor 4096 のみ。
+        budget = REASONING_BUDGETS.get(effort)
+        floor = max(4096, budget + 1024) if budget is not None else 4096
+        max_tokens = max(max_tokens or 0, floor)
+    return BrainLLMParams(max_tokens=max_tokens, temperature=temperature, reasoning_effort=effort)
 
 
 def _resolve_llm_config(config: ChatConfig | None, settings) -> tuple[str, str, str, str]:
@@ -1040,18 +1099,8 @@ async def _run_curiosity_exploration(
                     system_prompt += "\n\n" + research_ctx
                 # 防御のため for 反復上限も残す（1 反復 = 1 LLM 呼び出し）。実質は results < max_calls。
                 for step in range(max_calls):
-                    turn = await engine.research_step(
-                        messages,
-                        tools,
-                        system=system_prompt,
-                        max_tokens=getattr(config, "max_tokens", None),
-                        temperature=getattr(config, "temperature", 0.7),
-                        reasoning_effort=(
-                            getattr(config, "reasoning_effort", None)
-                            if getattr(config, "reasoning_enabled", False)
-                            else None
-                        ),
-                    )
+                    # パラメータはエンジン自身が脳側解決済み（_resolve_brain_llm_params）を持つため渡さない。
+                    turn = await engine.research_step(messages, tools, system=system_prompt)
                     if turn is None:
                         # LLM エラー/例外。done とは混同せず別ログ。
                         logger.info("introspection: curiosity — no usable step at step %d", step)

@@ -476,9 +476,9 @@ describe('brain section structure (chat_sidebar_memory.py)', () => {
     expect(document.getElementById('chat-brain-reasoning-effort').value).toBe('high');
   });
 
-  it('brain max tokens: load applies contract default 2048 and save sends the number', async () => {
+  it('brain max tokens: load applies contract default 0 (inherit) and save sends the number', async () => {
     window.Nous.Chat.settings.apply({});
-    expect(document.getElementById('chat-brain-max-tokens').value).toBe('2048');
+    expect(document.getElementById('chat-brain-max-tokens').value).toBe('0');
 
     document.getElementById('chat-base-url').value = 'https://api.example.com';
     document.getElementById('chat-brain-max-tokens').value = '4096';
