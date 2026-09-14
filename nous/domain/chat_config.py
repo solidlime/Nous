@@ -76,6 +76,9 @@ class ChatConfig(BaseModel):
     persona: str | None = None
     updated_at: str | None = None
     character_judge_enabled: bool = Field(default=True, description="キャラクターの一貫性を判定する機能を有効にします。")  # キャラ一貫性判定器（Task 8・非破壊フラグ）
+    character_repair_max_attempts: int = Field(
+        default=2, ge=0, description="キャラ一貫性違反を検出した際の応答再生成（修復）の最大試行回数。0で修復を無効化。"
+    )
     provider_config: ProviderConfig = Field(default_factory=ProviderConfig)
     session_config: SessionConfig = Field(default_factory=SessionConfig)
     compression_config: CompressionConfig = Field(default_factory=CompressionConfig)

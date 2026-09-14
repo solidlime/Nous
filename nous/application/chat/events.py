@@ -151,6 +151,21 @@ class CharacterFlagSSE:
 
 
 @dataclass
+class ResponseReplacedSSE:
+    """キャラ修復 (RepairStep) により応答本文が再生成・置換されたことを通知。"""
+
+    content: str
+    violation: str = "none"  # "tone" | "compliance" | "character" | "none"
+    detail: str = ""
+
+    def to_sse(self) -> str:
+        return _sse_encode(
+            "response_replaced",
+            {"content": self.content, "violation": self.violation, "detail": self.detail},
+        )
+
+
+@dataclass
 class ContextCompressedSSE:
     """Notification when context compression occurs."""
 

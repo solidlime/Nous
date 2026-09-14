@@ -32,6 +32,7 @@ def render_chat_layout_prefix(persona: str = "") -> str:
             <div style="position:relative; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
                 <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><img id="chat-persona-avatar" src="{avatar_url}" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0;"/><span style="font-size:1.4rem;"><i data-lucide="message-circle"></i></span> Chat</h2>
                 <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                    <button class="chat-sidebar-toggle" id="chat-mode-toggle-btn" title="キャラチャットモードに切替" aria-label="キャラチャットモードの切替"><i data-lucide="person-standing"></i></button>
                     <button class="mem-panel-toggle" id="memory-panel-toggle-btn" data-action="chat-toggle-memory" title="記憶パネルを開閉" aria-label="記憶パネルの表示切替"><i data-lucide="brain"></i></button>
                     <button class="chat-sidebar-toggle" data-action="chat-toggle-settings" id="chat-sidebar-toggle-btn" title="設定パネルを開閉" aria-label="設定パネルの表示切替"><i data-lucide="settings"></i></button>
                 </div>
@@ -48,6 +49,14 @@ def render_chat_main() -> str:
 
                 <!-- Chat area -->
                 <div id="chat-main">
+                    <div id="chat-avatar-layer" hidden>
+                        <div id="chat-avatar-canvas-container"></div>
+                        <div id="chat-avatar-model-ui">
+                            <select id="chat-avatar-model-select" title="VRMモデルを選択" aria-label="VRMモデルの選択"></select>
+                            <button id="chat-avatar-upload-btn" title="VRMモデルをアップロード" aria-label="VRMモデルをアップロード"><i data-lucide="upload"></i> VRM</button>
+                            <input type="file" id="chat-avatar-upload" accept=".vrm" hidden />
+                        </div>
+                    </div>
                     <div id="chat-messages">
                         <div class="chat-welcome" id="chat-welcome">
                             <div class="chat-welcome-icon"><i data-lucide="message-circle"></i></div>
@@ -85,6 +94,9 @@ def render_chat_layout_suffix() -> str:
             <!-- highlight.js for syntax highlighting in chat bubbles -->
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
             <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" crossorigin="anonymous"></script>
+            <!-- Character chat mode (VRM avatar). vendor 依存は絶対URL import（avatar.js 先頭コメント参照）なので importmap は不要 -->
+            <link rel="stylesheet" href="/static/chat/avatar/avatar.css">
+            <script type="module" src="/static/chat/avatar/chat-mode.js"></script>
             <!-- Media viewer overlay moved to base.py render_layout_shell (global layer:
                  shared by Chat attachments and Overview Generated Images; must not
                  live inside a tab panel or it leaks / hides across tab switches). -->

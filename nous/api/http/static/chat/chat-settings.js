@@ -62,6 +62,8 @@
     ["chat-session-summarize", "session_summarize"],
     ["chat-mental-model-enabled", "mental_model_enabled"],
     ["chat-mental-model-min-samples", "mental_model_min_samples"],
+    ["chat-character-judge-enabled", "character_judge_enabled"],
+    ["chat-character-repair-max-attempts", "character_repair_max_attempts"],
     ["chat-tool-result-max", "tool_result_max_chars"],
     ["chat-recency-weight", "retrieval_recency_weight"],
     ["chat-importance-weight", "retrieval_importance_weight"],
@@ -602,6 +604,12 @@
       "chat-mental-model-min-samples",
       cfg.mental_model_min_samples == null ? 3 : cfg.mental_model_min_samples,
     );
+    // Character judge / repair settings
+    setChecked("chat-character-judge-enabled", cfg.character_judge_enabled !== false);
+    set(
+      "chat-character-repair-max-attempts",
+      cfg.character_repair_max_attempts == null ? 2 : cfg.character_repair_max_attempts,
+    );
     // Retrieval weights
     const setSlider = (id, valId, v) => {
       const el = document.getElementById(id);
@@ -1117,6 +1125,10 @@
       mental_model_enabled: getChecked("chat-mental-model-enabled"),
       mental_model_min_samples: parseInt(
         document.getElementById("chat-mental-model-min-samples")?.value || "3",
+      ),
+      character_judge_enabled: getChecked("chat-character-judge-enabled"),
+      character_repair_max_attempts: parseInt(
+        document.getElementById("chat-character-repair-max-attempts")?.value || "2",
       ),
       debug_mode: getChecked("chat-debug-mode"),
 

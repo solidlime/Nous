@@ -204,6 +204,38 @@ async def _build_context_section(
     except Exception as e:
         logger.debug("Failed to fetch goals: %s", e)
 
+    # 前からの約束（promise タグの記憶、直近5件）— light モードではスキップ
+    if not _is_light:
+        try:
+            promise_result = ctx.memory_service.get_by_tags(["promise"])
+            if isinstance(promise_result, Success) and promise_result.value:
+                promises = [m for m in promise_result.value[:5] if m.content]
+                if promises:
+                    sanitized = [
+                        _sanitize_text(m.content[:200] + "..." if len(m.content) > 200 else m.content) for m in promises
+                    ]
+                    sanitized = [p for p in sanitized if p]
+                    if sanitized:
+                        t3.append("前からの約束:\n" + "\n".join(f"  🤝 {p}" for p in sanitized))
+        except Exception as e:
+            logger.debug("Failed to fetch promises: %s", e)
+
+    # 重要な記憶（importance 上位）— アイデンティティ中核のため light モードでも3件に減らして残す
+    try:
+        top_n = 3 if _is_light else 5
+        top_result = ctx.memory_service.get_top_by_importance(top_n)
+        if isinstance(top_result, Success) and top_result.value:
+            tops = [m for m in top_result.value[:top_n] if m.content]
+            if tops:
+                sanitized = [
+                    _sanitize_text(m.content[:200] + "..." if len(m.content) > 200 else m.content) for m in tops
+                ]
+                sanitized = [p for p in sanitized if p]
+                if sanitized:
+                    t3.append("重要な記憶:\n" + "\n".join(f"  📖 {p}" for p in sanitized))
+    except Exception as e:
+        logger.debug("Failed to fetch top memories: %s", e)
+
     # Emotion trend — skip in light mode
     if not _is_light:
         try:

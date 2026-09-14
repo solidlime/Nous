@@ -649,11 +649,23 @@ function _syncAfterForeignDone() {
   _flushPending();
 }
 
+// nous:chat-sse CustomEvent — 外部連携（拡張/デバッグUI）向けのイベント横流し。
+// 最低限 text_delta / done / error / response_replaced を通知する。
+// CustomEvent 未対応環境でも壊さないよう try/catch で囲む。
+function _emitChatSSE(evt) {
+  var relayed = { text_delta: 1, done: 1, error: 1, response_replaced: 1 };
+  if (!evt || !relayed[evt.type]) return;
+  try {
+    document.dispatchEvent(new CustomEvent("nous:chat-sse", { detail: { type: evt.type, data: evt } }));
+  } catch (_e) { /* best-effort */ }
+}
+
 // Per-event rendering — bodies carried over from the fetch-stream loop.
 function _handleChatEvent(evt) {
   var t = _turn;
   var els = _els();
   var chatMessages = t ? t.chatMessages : null;
+  _emitChatSSE(evt);
 
   if (evt.type === "text_delta") {
     if (!evt.content) return;
@@ -783,6 +795,26 @@ function _handleChatEvent(evt) {
     } catch (_e) { console.warn("[context_update] handle failed:", _e); }
   } else if (evt.type === "character_flag") {
     N.Chat.showCharacterFlag(t.assistantDiv, evt.violation, evt.detail);
+  } else if (evt.type === "response_replaced") {
+    // RepairStep: 応答がキャラ修復で再生成・置換された — 最後のテキストバブルを
+    // data.content で差し替え、safeMarkdown で再描画する（_finalizeTurn と同じ描画）。
+    try {
+      if (!t.assistantDiv) t.assistantDiv = _createAssistantDiv();
+      var lastText = null;
+      for (var _i = t.contentParts.length - 1; _i >= 0; _i--) {
+        if (t.contentParts[_i].type === "text" && t.contentParts[_i].bubble) {
+          lastText = t.contentParts[_i];
+          break;
+        }
+      }
+      if (!lastText) {
+        lastText = { type: "text", bubble: _createTextBubble(t.assistantDiv), content: "" };
+        t.contentParts.push(lastText);
+      }
+      lastText.content = evt.content || "";
+      if (t.contentParts[t.contentParts.length - 1] === lastText) t.currentTextContent = lastText.content;
+      if (lastText.bubble) safeSetHTML(lastText.bubble, safeMarkdown(lastText.content));
+    } catch (_e) { console.warn("[response_replaced] handle failed:", _e); }
   } else if (evt.type === "session_summarized") {
     _mem("sessionSummarized")(evt.summary);
   } else if (evt.type === "context_compressed") {

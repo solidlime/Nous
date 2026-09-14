@@ -8,6 +8,11 @@ Split into 3 sub-modules:
 
 from __future__ import annotations
 
+from nous.api.http.routers.chat.avatar_models import (  # noqa: F401
+    list_avatar_models,
+    serve_avatar_model,
+    upload_avatar_model,
+)
 from nous.api.http.routers.chat.chat_management import (  # noqa: F401
     attachment_serve,
     attachment_upload,
@@ -47,3 +52,6 @@ def register_chat_routes(mcp) -> None:
     mcp.custom_route("/api/chat/{persona}/attachment/{filename}", methods=["GET"])(attachment_serve)
     mcp.custom_route("/api/chat/{persona}/persona/images/{filename}", methods=["GET"])(memory_image_serve)
     mcp.custom_route("/api/chat/{persona}/tool", methods=["POST"])(execute_chat_tool)
+    mcp.custom_route("/api/chat/{persona}/avatar/models", methods=["GET"])(list_avatar_models)
+    mcp.custom_route("/api/chat/{persona}/avatar/model", methods=["GET"])(serve_avatar_model)
+    mcp.custom_route("/api/chat/{persona}/avatar/model", methods=["POST"])(upload_avatar_model)

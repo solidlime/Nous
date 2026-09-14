@@ -11,6 +11,7 @@ from nous.application.chat.pipeline.inference import InferenceStep
 from nous.application.chat.pipeline.post import PostProcessStep
 from nous.application.chat.pipeline.prepare import PrepareStep
 from nous.application.chat.pipeline.prompt import PromptBuildStep
+from nous.application.chat.pipeline.repair import RepairStep
 from nous.application.chat.pipeline.trimmer import TrimmerMixin
 from nous.application.chat.session_store import SessionManager
 from nous.application.chat.tools.definitions import get_filtered_tools
@@ -330,6 +331,13 @@ class ChatService:
 
                     if isinstance(event, TextDeltaSSE):
                         full_response += event.content
+
+                # RepairStep: 毎ターンキャラ判定 + 違反時の応答再生成（E: RepairStep）。
+                # 置換が起きた場合 turn_ctx.full_response が正となる。
+                async for ev in RepairStep().run(ctx, config, messages, turn_ctx):
+                    yield ev.to_sse()
+                if turn_ctx.full_response:
+                    full_response = turn_ctx.full_response
 
                 # Save assistant response BEFORE PostProcessStep
                 if full_response or turn_ctx.tool_calls_log:

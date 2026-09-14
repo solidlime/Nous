@@ -11,14 +11,20 @@ import textwrap
 
 
 class TestPerTurnJudgeRemoved:
-    """毎ターンキャラ判定は idle 内省 (introspection) に移行 (spec §2)。"""
+    """毎ターンキャラ判定は PostProcessStep から repair.py (RepairStep) に移管された。"""
 
     def test_run_does_not_call_judge_character(self):
         from nous.application.chat.pipeline.post import PostProcessStep
 
         source = inspect.getsource(PostProcessStep.run)
-        assert "judge_character" not in source, "per-turn judge must be removed from PostProcessStep"
+        assert "judge_character" not in source, "per-turn judge must live in RepairStep, not PostProcessStep"
         assert "_with_drift" not in source
+
+    def test_repair_step_owns_judge_character(self):
+        from nous.application.chat.pipeline import repair
+
+        source = inspect.getsource(repair)
+        assert "judge_character" in source, "RepairStep must reuse judge_character for per-turn judgment"
 
     def test_memory_llm_still_called(self):
         from nous.application.chat.pipeline.post import PostProcessStep

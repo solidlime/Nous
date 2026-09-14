@@ -88,6 +88,18 @@ def _render_core_section() -> str:
                                             data-mirror="chat-reasoning-effort-val" data-mirror-format="effort" />
                                     </div>
                                 </div>
+                                <div class="chat-sub-block">
+                                    <h4><i data-lucide="shield-check"></i> キャラ一貫性</h4>
+                                    <div class="chat-check-row">
+                                        <input type="checkbox" id="chat-character-judge-enabled" checked />
+                                        <label for="chat-character-judge-enabled">キャラ一貫性の毎ターン判定</label>
+                                    </div>
+                                    <div>
+                                        <div class="chat-field-label">違反時の再生成回数</div>
+                                        <input type="number" id="chat-character-repair-max-attempts" class="chat-field-input"
+                                            min="0" max="10" step="1" value="2" />
+                                    </div>
+                                </div>
                                 <div>
                                     <div class="chat-field-label">Max Tokens</div>
                                     <input type="number" id="chat-max-tokens" class="chat-field-input" min="1" max="131072" value="8192" />
