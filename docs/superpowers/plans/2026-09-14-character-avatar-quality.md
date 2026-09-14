@@ -523,3 +523,15 @@ gl_FragColor = vec4( diffuseColor.rgb * tone + rimColor * rim, diffuseColor.a );
 6. **元指摘の全文復元**（指摘 6）。`docs/superpowers/sessions/` には `2026-09-06-csp-avalanche.md` のみで、第5輪指摘の全文はリポジトリから復元できない（受領した文面は (1) の途中で切れている）。未対応項目がある可能性は残存リスクとして明記する。
 7. **サーバ再起動後の実測**（指摘 7）。旧 PID 49224 を停止し再起動（PID 85508、ログ `%TEMP%\nous-server.out.log` / `.err.log`）。レンダリング済み HTML が `chat-mode.js?v=20260914c` を返すようになり、ブラウザ側の実測で `document.scripts` の src が `?v=20260914c` であること・`fallback:false` / `motion:"vrma"` / `vrmaBones:21` / `armDropDeg` 73.9°, 70.4° / `cel {installed:35, patched:35, missed:0, rim:{strength:0.35,power:3}}` / フォールバック画像 **DOM に存在せず** を確認。証跡 `docs/evidence/character-avatar-2026-09-14/r5-02-restart-new-v-reload.png`。
 8. **テスト**。`npx vitest run` → **272 passed / 0 failed**（新規 2 件: OFF→ON 再初期化、登録口の一致）。
+
+### 追加検証（第2回レビューの残存懸念 4 点に対する実測）
+
+1. **「loadChat 先行・ペルソナ未確定」という第三の順序は発生し得ない**（コード上の根拠）:
+   - `nous/api/http/static/base.js:89` — `if (!S.persona && tab !== "settings" && tab !== "personas") return;`。チャットタブの activate（`base.js:83` の `N.Chat.core.loadChat()`）は **ペルソナ未設定では早期 return する**。`S.persona` の代入は `base.js:180`（`/api/personas` の応答後）。したがって loadChat がペルソナ未確定のまま走る経路は無い。
+   - 直接呼ばれた場合も `nous/api/http/static/chat/chat-core.js:278` の `if (!S.persona) return;` が同じく防ぐ（`syncCharacterMode()` 呼び出しはその直後の L281）。
+2. **サーバアクセスログでの確認**（`%TEMP%\nous-server.out.log`、再起動後 42 行全体）: `GET /api/chat//` は **0 件**、`404` 応答も **0 件**。アバター関連は `chat-mode.js?v=20260914c` 200（×2）/ `avatar.js?v=20260914c` 200 / **`GET /api/chat/herta/avatar/models` 200**（旧不具合では空ペルソナで 404 していた経路）。
+3. **OFF→ON の実ブラウザ実測**（単体テストだけでなく実経路）: トグル OFF で `nous.chatMode=normal` / `character-mode` クラス解除 / `#chat-avatar-layer` hidden / `window.__avatarDebug` = null（dispose 済み）、ON で **`/avatar/model` リクエスト数 1→2**・`__avatarDebug` オブジェクトが**別インスタンスに差し替わり**（`replaced:true`）・`fallback:false` / `motion:"vrma"` / `vrmaBones:21` / `armDropDeg` 74.3°, 69.6° / `cel {installed:35, patched:35, missed:0}`、フォールバック画像は DOM に存在せず。＝ `disposeAvatar()` が `avatarPersona` を戻し、実モデルが再取得されている。証跡 `docs/evidence/character-avatar-2026-09-14/r5-03-off-on-reinit.png`。
+4. **追加テストの assert 対象**（記録用）:
+   - `re-inits the same persona after the mode is toggled off and on` — `initAvatar` 呼び出し回数 1→2、2 回目の URL が `/api/chat/herta/avatar/model`、OFF で `localStorage.nous.chatMode === 'normal'` かつ `character-mode` クラスが外れること。
+   - `exposes syncCharacterMode as window.Nous.Chat.mode.syncCharacterMode` — `window.Nous.Chat.mode.syncCharacterMode === (await import('./avatar/chat-mode.js')).syncCharacterMode`。
+5. **未追跡の `docs/superpowers/sessions/` について**: 中身は `2026-09-06-csp-avalanche.md`（別セッションの成果物・本タスクでは作成していない）だけで、意図的にコミットしていない。第5輪の指摘全文はこのファイルには含まれず、**リポジトリからは復元できない**（受領した文面は (1) の途中で切れている）。(2) 以降が存在する場合はユーザーからの再送が必要。
