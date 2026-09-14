@@ -309,6 +309,7 @@ async function _doInit(container, modelUrl) {
   let motion = "procedural",
     vrmaMixer = null,
     vrmaAction = null,
+    vrmaClip = null,
     vrmaBones = new Set();
   if (container.dataset.avatarVrma !== "off") {
     try {
@@ -322,6 +323,7 @@ async function _doInit(container, modelUrl) {
         animGltf.userData.vrmAnimation ?? animGltf.userData.vrmAnimations?.[0];
       if (vrma) {
         const clip = createVRMAnimationClip(vrma, vrm);
+        vrmaClip = clip;
         // クリップが実際にトラックを持つボーンの集合（トラック名は <ノード名>.quaternion 等の規約）
         vrmaBones = new Set();
         // トラック名は正規化ノード名（例 "Normalized_head.quaternion"）。mixer の書込み先も正規化ノードなので、正規化ノードで照合する
@@ -403,14 +405,24 @@ async function _doInit(container, modelUrl) {
   const CEL_TONES = [0.62, 0.84, 1.0]; // 影 / 中間 / 光（線形）
   const CEL_THRESHOLDS = [0.1, 0.32]; // 輝度しきい値（線形。sRGB 目安 0.35 / 0.6）
   const CEL_EDGE = 0.03; // 階調境界の柔らかさ（硬い閾値は顔のぼかしを帯状にしやすい）
+  // リムは最終クランプの「前」に加算する（クランプが白飛びを吸収する。加算後の clamp で 1.0 上限）
   const f4 = (n) => n.toFixed(4);
   const CEL_GLSL = [
+    "uniform float uRimStrength;",
+    "uniform float uRimPower;",
+    "uniform vec3 uRimColor;",
     "vec3 nousCel( vec3 c ) {",
     "  float l = dot( c, vec3( 0.2126, 0.7152, 0.0722 ) );",
     `  float s1 = smoothstep( ${f4(CEL_THRESHOLDS[0] - CEL_EDGE)}, ${f4(CEL_THRESHOLDS[0] + CEL_EDGE)}, l );`,
     `  float s2 = smoothstep( ${f4(CEL_THRESHOLDS[1] - CEL_EDGE)}, ${f4(CEL_THRESHOLDS[1] + CEL_EDGE)}, l );`,
     `  float tone = mix( mix( ${f4(CEL_TONES[0])}, ${f4(CEL_TONES[1])}, s1 ), ${f4(CEL_TONES[2])}, s2 );`,
-    "  return clamp( c * tone, 0.0, 1.0 );",
+    "  vec3 col = clamp( c * tone, 0.0, 1.0 );",
+    // フレネルリム: view space（vViewPosition = カメラ方向ベクトル, vNormal = 法線）。法線マップは使わない
+    "  vec3 viewDir = normalize( vViewPosition );",
+    "  vec3 n = normalize( vNormal );",
+    "  float fres = pow( clamp( 1.0 - dot( viewDir, n ), 0.0, 1.0 ), uRimPower );",
+    "  col += uRimColor * fres * uRimStrength;",
+    "  return clamp( col, 0.0, 1.0 );",
     "}",
     "",
   ].join("\n");
@@ -418,13 +430,34 @@ async function _doInit(container, modelUrl) {
   const CEL_DST =
     "gl_FragColor = vec4( nousCel( diffuseColor.rgb ), diffuseColor.a );";
   const MAIN_SRC = "void main() {";
-  const cel = {
-    installed: 0, // パッチを仕込んだ材質数
-    patched: 0, // 実際に置換できた材質数（コンパイル時に確定）
-    missed: 0, // 文字列不一致で不発だった材質数
-    tones: CEL_TONES,
-    thresholds: CEL_THRESHOLDS,
-  };
+  // リム（フレネル）設定。cel({ rim, rimPower }) で実行時変更可（rim=0 で完全無効化）。
+  // cel は「呼べる状態オブジェクト」: cel() で現在値を取得、cel.installed 等の既存キーも維持。
+  const rim = { strength: 0.35, power: 3.0 }; // 既定: strength=0.35 / power=3.0
+  const rimUniforms = []; // パッチ済み shader.uniforms の退避（実行時変更用）
+  function cel(opts) {
+    if (opts && typeof opts === "object") {
+      if (typeof opts.rim === "number") rim.strength = opts.rim;
+      if (typeof opts.rimPower === "number") rim.power = opts.rimPower;
+      for (const u of rimUniforms) {
+        u.uRimStrength.value = rim.strength;
+        u.uRimPower.value = rim.power;
+      }
+    }
+    return {
+      installed: cel.installed,
+      patched: cel.patched,
+      missed: cel.missed,
+      tones: CEL_TONES,
+      thresholds: CEL_THRESHOLDS,
+      rim: { strength: rim.strength, power: rim.power },
+    };
+  }
+  cel.installed = 0; // パッチを仕込んだ材質数
+  cel.patched = 0; // 実際に置換できた材質数（コンパイル時に確定）
+  cel.missed = 0; // 文字列不一致で不発だった材質数
+  cel.tones = CEL_TONES;
+  cel.thresholds = CEL_THRESHOLDS;
+  cel.rim = rim;
   // MToon は環境光だけでは反射項が立たず素の col が黒になる（実測: 頭部が真黒）。
   // パッチが不発に終わった場合だけ従来構成のライトを足し、黒落ちを避ける。
   let fallbackLit = false;
@@ -459,6 +492,13 @@ async function _doInit(container, modelUrl) {
         MAIN_SRC,
         CEL_GLSL + MAIN_SRC,
       );
+      // リム: 材質のリム色をユニフォームへ（VRM0.x 旧名 rimColorFactor のみの版にも対応）
+      shader.uniforms.uRimStrength = { value: rim.strength };
+      shader.uniforms.uRimPower = { value: rim.power };
+      shader.uniforms.uRimColor = {
+        value: m.parametricRimColorFactor ?? m.rimColorFactor ?? new THREE.Color(0xc4b8da),
+      };
+      rimUniforms.push(shader.uniforms);
       cel.patched++;
     };
     m.needsUpdate = true;
@@ -803,6 +843,38 @@ async function _doInit(container, modelUrl) {
     em?.setValue("aa", tri * TALK_AA_PEAK);
   }
 
+  // --- VRMA 平滑化: 24fps キーフレームの線形補間が生む速度ステップ（C1 不連続）が
+  // スプリング鎖（髪/スカート）を加振し続けるため、「今フレームでノードに書く最終値」を
+  // ローパスしてからノードへ書き戻す。時間定数ベースなので dt に依存しない。
+  const SMOOTH_TAU = 0.12; // 秒 — ローパス時定数（大きいほど強い）
+  const DT_CLAMP = 1 / 30; // 秒 — dt スパイクのクランプ（mixer / スプリング両方で同じ値を使う）
+  let smoothQ = null; // node -> 平滑化状態（THREE.Quaternion）。初回フレームで現在値をシード
+  let smoothHips = null; // hips position の平滑化状態（position トラックがある時だけ使う）
+  function smoothVrma(dt) {
+    // mixer 停止中（ポーズモード等）は何もしない — プロシージャル経路の挙動を変えない
+    if (!vrmaAction || vrmaAction.paused) return;
+    if (!smoothQ) {
+      smoothQ = new Map();
+      for (const node of vrmaBones) smoothQ.set(node, node.quaternion.clone());
+      const hips = nBone("hips");
+      if (
+        hips &&
+        vrmaClip &&
+        vrmaClip.tracks.some((t) => t.name === `${hips.name}.position`)
+      )
+        smoothHips = hips.position.clone();
+    }
+    const k = 1 - Math.exp(-dt / SMOOTH_TAU);
+    for (const [node, s] of smoothQ) {
+      s.slerp(node.quaternion, k);
+      node.quaternion.copy(s);
+    }
+    if (smoothHips && hipsNode) {
+      smoothHips.lerp(hipsNode.position, k);
+      hipsNode.position.copy(smoothHips);
+    }
+  }
+
   // --- メインループ ---
   let disposed = false;
   const clock = new THREE.Clock();
@@ -811,12 +883,13 @@ async function _doInit(container, modelUrl) {
   function loop() {
     if (disposed) return;
     requestAnimationFrame(loop);
-    const dt = clock.getDelta();
+    const dt = Math.min(clock.getDelta(), DT_CLAMP);
     updateBlink();
     updateExpression(dt);
     updateTalking(dt);
     if (vrmaMixer) vrmaMixer.update(dt); // 1. VRMA 先行（プロシージャル層の前にボーンを動かす）
     updatePose(dt, clock.elapsedTime); // 2. 呼吸/体重移動/頭の微動を上書き合成
+    smoothVrma(dt); // 2.5 平滑化（ミキサー＋追加層の最終値をローパスしてからノードへ書き戻す）
     vrm.update(dt); // 3. スキン＋揺れ物
     renderer.render(scene, camera);
   }
@@ -827,6 +900,7 @@ async function _doInit(container, modelUrl) {
     if (node) node.rotation.set(r.x, r.y, r.z);
   }
   vrm.update(0);
+  vrm.springBoneManager?.reset?.(); // ロード時の過渡振動を消す（最初の姿勢適用後に 1 回だけ）
   fitCamera();
   loop();
 
@@ -886,12 +960,21 @@ async function _doInit(container, modelUrl) {
       pose: pose.name,
       idle,
       expressions,
+      cel: {
+        installed: cel.installed,
+        patched: cel.patched,
+        missed: cel.missed,
+        rim: { strength: rim.strength, power: rim.power },
+      },
     };
   }
 
   function dispose() {
     if (disposed) return;
     disposed = true;
+    smoothQ?.clear(); // 平滑化状態の破棄（リーク防止）
+    smoothQ = null;
+    smoothHips = null;
     try {
       ro?.disconnect();
     } catch {

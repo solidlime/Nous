@@ -38,6 +38,11 @@ Thumbs.db
 # Model cache
 .cache/
 
+# Local avatar models placed at the repo root by the operator
+# (served through the avatar-models router; too large to track)
+/herta.vrm
+/sample.vrm
+
 # Generated output
 output/
 

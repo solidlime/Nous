@@ -227,10 +227,10 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 - 修正（`avatar.css`）: `#chat-messages` の `padding-bottom` を 0 にし、余白は `#chat-messages::after` のスペーサ要素へ移動。`--chat-input-h: 98px`（入力エリアの実測高）を `#chat-main` に置き、`bottom: var(--chat-input-h)` と `max-height: min(var(--chat-log-h), calc(100% - var(--chat-input-h)))` で入力エリアを避ける。
 - 修正（`chat-mode.js`）: 入力エリアの実測高から `--chat-input-h` を更新する。
 
-### 最終検証（実ブラウザ http://127.0.0.1:26262/ の実測値）
+### 最終検証（実ブラウザ <http://127.0.0.1:26262/> の実測値）
 
 | スライダー | log top..bottom | log 高 | 入力上端 | 重なり | 最終発言可視 |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | 15%（下限） | 399..446 | 47px | 446 | 0 | true |
 | 30%（既定） | 353..446 | 93px | 446 | 0 | true |
 | 55% | 275..446 | 171px | 446 | 0 | true |
@@ -247,7 +247,7 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 
 **禁止**: `herta.vrm` の変更、コミット、既存 `vendor/three-vrm.module.js` の破壊的書き換え、ファイルサイズが 10MB を超えるアセットの取得。
 
-## Task 5: 総合検証（2026-09-15 実測・全て実ブラウザ http://127.0.0.1:26262/ と実ファイルから再取得）
+## Task 5: 総合検証（2026-09-15 実測・全て実ブラウザ <http://127.0.0.1:26262/> と実ファイルから再取得）
 
 - [x] 実ブラウザでのスクリーンショット取得 → 証跡は `docs/evidence/character-avatar-2026-09-14/` に**同梱**（untracked のまま放置しない）
 - [x] `python -m pytest -q` → **2636 passed, 1 skipped**
@@ -261,7 +261,7 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 実ブラウザで `window.__avatarDebug.__vrm.scene` を走査した実測（キャラモード ON 直後）:
 
 | 項目 | 実測値 |
-|---|---|
+| --- | --- |
 | mesh 数 / material 数 | 35 / 58 |
 | ベースカラーテクスチャ（`material.map`）が bind されている材質 | **58 / 58（未 bind 0 件）** |
 | テクスチャ解像度の内訳 | 2048×2048 ×4, 2048×1024 ×42, 1024×1024 ×10, 512×512 ×1, 300×300 ×1 |
@@ -282,7 +282,7 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 計測は同梱の `pixdiff.py`（`python docs/evidence/character-avatar-2026-09-14/pixdiff.py`）。定義: 非背景 = 背景色 #1c1c1e との最大チャネル差 > 6 / 変化 = 2 画像間の最大チャネル差 > 16（255 中）/ 暗色 = 変化画素のうち輝度(BT.601) < 100。
 
 | 比較 | 変化画素 | 非背景 165,876px 比 | 暗画素率 | bbox |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 幅 0 → 0.012 | 1,338 | 0.81% | **1.000** | (545,243)-(618,413) |
 | **幅 0.012 → 0.012（対照）** | **0** | 0.00% | – | – |
 | 幅 0 → 0.03 | 4,336 | 2.61% | **1.000** | (543,241)-(621,448) |
@@ -300,7 +300,7 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 - ヘルタ/idle 専用 VRMA の探索実測（検索 3 クエリのヒット内容）:
 
 | クエリ | 結果 |
-|---|---|
+| --- | --- |
 | `Herta Honkai Star Rail VRMA animation file download .vrma` | Sketchfab の静的3Dモデル / VRoid 公式の**汎用 .vrma 7 種**（BOOTH 無料配布）/ 汎用 VRMA ビューアのみ。**ヘルタ専用 VRMA は存在しない** |
 | `崩壊スターレイル ヘルタ VRMA 待機モーション 配布` | YouTube・TikTok（ゲーム内動画）、Pixiv（イラスト）、MMD モーション（ニコニコ sm35733821 = VMD 形式）のみ |
 | `VRMA idle animation library free download` | [VRM Animation 仕様](https://vrm.dev/en/vrma/)「**同じ VRMA は任意の VRM に使える**」＝ VRMA は設計上モデル非依存で、公式配布も汎用のみ |
@@ -308,13 +308,13 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 - モーション実測（`probe()` を 1.5 秒間隔で取得）:
 
 | 時点 | motion | vrmaBones | fallback | framing.fits | armDrop L/R | idle.breath | idle.sway | pose |
-|---|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 初期 | vrma | 21 | false | true | 68.40 / 70.74 | 0.0297 | 0.0155 | neutral |
 | bow 選択後 | vrma | 21 | false | true | 59.70 / 55.71 | 0.0491 | 0.0194 | **bow** |
 | wave 選択後 | vrma | 21 | false | true | 54.62 / 12.50 | 0.0497 | 0.0200 | **wave** |
 | neutral に戻した直後 | vrma | 21 | false | true | 70.44 / 19.02 | 0.0428 | 0.0200 | **neutral**（右腕は wave ジェスチャ減衰途中の値） |
 
-- idle が動いていることの画素実測（同 `pixdiff.py`）: 1.5 秒間隔の 2 フレームで **2,787px（非背景 171,172px の 1.63%）が変化**し、変化画素は 100% 暗色。一方、シーンを凍結した対照 2 枚は **0px（完全一致）** → 変化はノイズではなく実モーション。
+- idle が動いていることの画素実測（同 `pixdiff.py`）: 1.5 秒間隔の 2 フレームで **2,787px（非背景 171,172px の 1.63%）が変化**。［訂正: 当時の「変化画素は 100% 暗色」は計測器の `int16` 乗算オーバーフローによる誤表示（下の「計測器のバグ修正」参照）。修正後の同ペアの `dark_ratio` は **0.410**（定義: 変化画素のうち輝度 < 26。しきい値と `--box` に依存するため単一の「正解値」ではない）］。シーンを凍結した対照 2 枚は **0px（完全一致）** だが、これは**凍結中は再描画が止まること**を示すだけで、照明非依存の根拠にはならない（下の「第3輪」の訂正を参照）。
 - 自作フォールバック（`animations/idle_loop.vrma` を一時退避して実測）: `motion: "procedural"`, `vrmaBones: 0`, `idle.breath` 0.0665→0.0612（動作中）, `armDropDeg` 63.0/61.9→62.8/62.8, `framing.fits: true` → **VRMA 不在でも呼吸・重心移動・腕の揺れ・瞬きのみで自然に動作**。実測後にファイルは復帰済み（サイズ一致）。
 
 ![idle フレーム0](../../evidence/character-avatar-2026-09-14/08-idle-frame-0.png)
@@ -327,7 +327,7 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 ネット上のヘルタ用モーフ探索実測:
 
 | URL | 実測 |
-|---|---|
+| --- | --- |
 | `https://hub.vroid.com/en/characters/3518989922670313006/models/7770913782248937025` | HTTP 200（375KB 取得）だが**閲覧専用でダウンロード導線なし**（HTML に `downloadable`/`ダウンロード` の文字列が存在しない） |
 | `https://hub.vroid.com/api/models/7770913782248937025` | HTTP 200 + `COMMON_MISSING_API_VERSION`。同一オリジンから `X-Api-Version: 11` を付けて再取得 → **HTTP 404 `COMMON_NOT_FOUND`** |
 | `https://hub.vroid.com/en/search?q=Herta` | HTTP 200（検索結果あり） |
@@ -358,17 +358,18 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 
 ### 実装（`nous/api/http/static/chat/avatar/avatar.js`）
 
-- `applyCel()`: MToon フラグメントの `#include <output_fragment>` を丸ごと `gl_FragColor` へ置換し、**最終画素 = アルベド × 輝度3段トーン**（`CEL_TONES = [0.62, 0.84, 1.00]`、`CEL_THRESHOLDS = [0.10, 0.32]`、境界は `CEL_EDGE = 0.03` の `smoothstep`）。法線・ライト・リム・スペキュラは一切寄与しない。輪郭材質（`isOutline`）は除外し、3次元の輪郭線は維持。
-- ライトはアバター `scene` へ移し**背景専用**に（アバターには 1 灯も加算されない）。リム発光・specular・sheen は 0 に。
+- `applyCel()`: MToon フラグメントの `#include <output_fragment>` を丸ごと `gl_FragColor` へ置換し、**最終画素 = アルベド × 輝度3段トーン**（`CEL_TONES = [0.62, 0.84, 1.00]`、`CEL_THRESHOLDS = [0.10, 0.32]`、境界は `CEL_EDGE = 0.03` の `smoothstep`）。ライト・スペキュラは一切寄与しない。輪郭材質（`isOutline`）は除外し、3次元の輪郭線は維持。
+- **リムは 2026-09-15 の第3輪で復活**（`nousCel` 内のフレネル項。`rimStrength = 0.35` / `rimPower = 3.0`）。したがって現行の最終画素は「アルベド × トーン + フレネルリム」であり、法線はリム項のみに寄与する。詳細は下の「第3輪レビュー対応」を参照。
+- ライトはアバター `scene` へ移し**背景専用**に（アバターには 1 灯も加算されない）。MToon 側の `parametricRim` / specular / sheen は 0（リムは `nousCel` 内で実装）。
 - 35/35 材質へ適用（`probe` 実測 `cel: {installed:35, patched:35, missed:0}`）。しきい値はモデルとカメラごとに要較正（実測で確認した唯一のモデル: herta.vrm VRM0 / 全身 camY 0.95）。
 
-### 検証（実サーバー http://127.0.0.1:26262/ — 計測は `pixdiff.py` の同一定義）
+### 検証（実サーバー <http://127.0.0.1:26262/> — 計測は `pixdiff.py` の同一定義）
 
 | 項目 | 実測値 |
 | --- | --- |
 | シェーダコンパイル | 修正前 `Shader Error 1282` × 35 材質 → 修正後 **0 件**（console 実測） |
-| 照明の寄与（決定的） | 時計凍結（`performance.now` 固定 = 1234.5ms）で ambient **2.827 と 0** の 2 枚が **md5 完全一致（changed=0px / 169,730 非背景px）** |
-| 同（非凍結・参考） | 2,136px（1.26%）差 = 呼吸・瞬きのアニメ差（純アニメ基準「idle フレーム0→1」2,787px と同水準） |
+| 照明の寄与（旧記載・撤回） | 時計凍結（`performance.now` 固定 = 1234.5ms）で ambient **2.827 と 0** の 2 枚が md5 完全一致したのは、**凍結中は再描画が止まり新しいフレームが出ない**ため。凍結後に CSS を書き換えてもキャプチャが md5 一致のまま更新されないことを実測（`_rimA.png` / `_rimB.png` = 同一ハッシュ）。よってこの装置は**照明非依存の証明に使えない**（非凍結の 2,136px = 1.26% 差は光差とアニメ差を分離できない）。 |
+| 照明の寄与（現行の証明） | **GPU 上の実シェーダソースを直読**して確定。パッチ後のフラグメントは `gl_FragColor = vec4( diffuseColor.rgb * tone + rimColor * rim, diffuseColor.a );` のみで、`col`（MToon のライト済み出力）を参照しない（逐語は次節）。 |
 | 白飛び（アバター領域の輝度≥240） | リム有り **4.5%** → セル **3.2%**（`--box=317,233,863,450`。UI オーバーレイの白を含むため差 1.3pt がキャラ分） |
 | 黒潰れ（同領域の輝度<26） | シェーダ故障時 **70.6%**（うちパネル背景 52pt は定数）→ 修正後 **54.6%** |
 | 表情 | `setExpression('happy',0.8)` → 1200ms 後 `probe().expressions.happy = 0.8` |
@@ -384,3 +385,46 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 
 `13-before-rim-on-amb-2.827.png` / `14-before-rim-off.png` / `15,16-clobbered-onbeforecompile-amb-2.827,0.png` / `17,18-cel-fixed-amb-2.827,0.png` / `19,20-cel-frozen-amb-2.827,0.png`（19 と 20 は md5 一致）を同ディレクトリへ追加した。
 
+## 第3輪レビュー対応（2026-09-15）
+
+### (1) リムライトの復活
+
+`avatar.js` の `applyCel()` にフレネルリム項を追加した。スプライスする `gl_FragColor` 行は:
+
+```glsl
+float rim = rimStrength * pow( 1.0 - abs( dot( normalize( vNormal ), normalize( vViewPosition ) ) ), rimPower );
+gl_FragColor = vec4( diffuseColor.rgb * tone + rimColor * rim, diffuseColor.a );
+```
+
+- 既定 `rimStrength = 0.35` / `rimPower = 3.0`（`uRim` / `uRimPow`）。`rimStrength = 0` で従来のフラットセルに戻る。
+- 実行時調整: `window.__avatarDebug.cel({ rim: 0.35 })`。`{ rim: null }` で MToon 標準の `parametricRim`（`#c4b8da` / fresnel 2.2 / mix 0.3）に戻す。
+- 旧実装は `parametricRimColorFactor` を 0 に落としていたため、リム項は `nousCel` 内に持たせて**ライト非依存のまま**視線依存の輪郭光を出す。
+- GPU 実測（`gl.getShaderSource` 直読、`cel: {installed:35, patched:35, missed:0}`、`uRim` 既定 0.35 / `uRimPow` 3.0 が `uniform1f` で送信されることを `drawElements` フックで確認）。
+
+### (2) 証跡の整合（本節がその同期）
+
+- 「照明過剰」の節は本ファイルの「追加修正（2026-09-15）」にある（`pixdiff.py` の docstring が指す節名と一致）。
+- 「変化画素は 100% 暗色」の記述は上で訂正済み（`int16` オーバーフロー）。正しい測り方と値は本節と `pixdiff.py` の `compare()` を参照。`dark_ratio` はしきい値・`--box` 依存なので、レビュー実測の 0.704 と本ファイルの 0.410 は**別ペア/別条件の値**であり、どちらもその条件での真値。
+- 凍結ペアを照明非依存の証明に使った記述は撤回（凍結中は再描画が止まる）。
+
+### (3) プロシージャル fallback の証拠（画像 → 数値へ）
+
+この環境の `agent_browser` スクリーンショットは **WebGL キャンバスを写さない**（キャンバス領域が背景の暗いグラデーションのみ = `mean RGB [37,38,44]`, `spread 7.3`）。`12-no-vrma-procedural-fallback.png`（撮り直しも同じ結果だったため証跡には残していない）はこの制約下の取得で、**アバター描画の証拠として不成立**（レビュー指摘 3 は妥当）。
+
+代替の数値証拠: `animations/idle_loop.vrma` を一時退避した状態で `probe()` が `motion: "procedural"` / `vrmaBones: 0` を返し、髪の局所クォータニオンは 2 秒窓で **1.6°**（VRMA 使用時の 1.1〜1.7° と同水準、凍結ではない）。`framing.fits: true`。実測後にファイルは復帰済み。
+
+### (4) cel カウンタ実測
+
+`probe().cel` = `{ installed: 35, patched: 35, missed: 0 }`（実サーバー <http://127.0.0.1:26262/> の実ブラウザ、`window.__avatarDebug.probe()`）。`installed` は `onBeforeCompile` を張った材質数、`patched` はそのうち `#include <output_fragment>` のスプライスに成功した数、`missed` は失敗数。0 件 = cel 非適用材質なし。ambient 2.827 vs 0 の 2,136px 差は光依存ではなく**アニメ位相差**（凍結対照が更新されないため画像では分離不能、切り分けはシェーダソースで行った）。
+
+### (5) idle の「ぐにゃぐにゃ」修正（ユーザー報告）
+
+真因は VRMA ではなく **spring bone の共振**: 元の `update(delta)` は 60fps 相当の固定ステップ前提で、`delta` が大きいフレームで髪・スカートが発振していた（髪の局所クォータニオンが 2 秒窓で最大 **85°**、8〜10 秒窓で **120°** の持続回転）。
+
+修正: サブステップ化（`MAX_SUBSTEP = 1/60 s`、1 フレーム最大 5 ステップ）＋ステップ毎の減衰クランプ（`Math.pow(0.72, dt*60)`、ヨー ±90°/ピッチ ±70°/ロール ±80°）。実測: 髪 **85° → 1.1°**、スカート **120° → 9°**（スカートの 9° は布の揺れとして正常域、VRMA を外したプロシージャル時は 1.6°）。
+
+### 撮像系の制約（再掲・重要）
+
+- WebGL キャンバスはこの環境のキャプチャに写らない（上記）。
+- `performance.now` 凍結中は再描画が止まる（キャプチャは md5 完全一致のまま）。
+- したがって**見た目の最終確認はユーザーの実ブラウザで行う**。本計画のキャラ見た目に関する画像証跡は「キャンバスが写らない」制約の下にあることを明記しておく。
