@@ -28,11 +28,6 @@ import {
   VRMAnimationLoaderPlugin,
   createVRMAnimationClip,
 } from "/static/chat/avatar/vendor/three-vrm-animation.module.js";
-import {
-  lookupPlan,
-  resolveBaseColorPlan,
-} from "./avatar-texture-plan.js";
-
 const FADE = 0.4; // seconds — expression cross-fade
 const BLINK_HALF = 0.1; // seconds each way (closed→open)
 const TALK_AA_PEAK = 0.8;
@@ -123,7 +118,6 @@ function noopHandle() {
       fallback: true,
       motion: "procedural",
       vrmaBones: 0,
-      texturesBound: 0,
       bones: {},
       armDropDeg: { left: 0, right: 0 },
       framing: { visibleH: 0, visibleW: 0, modelH: 0, modelW: 0, fits: false },
@@ -394,192 +388,6 @@ async function _doInit(container, modelUrl) {
     return THREE.MathUtils.radToDeg(Math.atan2(-dy, Math.hypot(dx, dz)));
   }
 
-  // --- base color texture の貼り直し（「ほぼ真っ白」の実測済み症状への回避策） ---
-  // 上流（three.js 本体がなぜ画像依存の解決に失敗するか）は未確定。確定しているのは
-  // 「texture 依存解決が例外を出さず空を返す」という症状と、bufferView 経路が健全なことだけ。
-  // 実測（実ブラウザ）: 読み込み後の材質は isMToonMaterial=true / color=#ffffff /
-  // shadeColorFactor=#797979 / map=null、uniforms 71 個にテクスチャは 1 つも無い。
-  // 一方 parser.json 側は textures 15 / images 15 が揃い、材質は
-  // pbrMetallicRoughness.baseColorTexture.index(0/3/7/9) → textures[i].source →
-  // images[i].bufferView まで正しく繋がっている。欠けているのは画像の実体取得だけで、
-  // parser.getDependency('texture', i) は例外を出さず null を返し（実測）、
-  // parser.associations にもテクスチャが 1 件も登録されない。
-  // 同じ parser の bufferView 経路はメッシュ属性で実績があり健全なので、そこから画像を
-  // デコードして張る。テクスチャが無いと baseColor(白) だけが残り面が白飛びする。
-  // KHR_texture_transform は herta.vrm では offset[0,0]/scale[1,1] の恒等なので適用不要（実測）。
-  // どの画像をどの材質に張るかの決定は純ロジック側（avatar-texture-plan.js）に置き、
-  // ここでは取得と代入だけを行う。KHR_texture_transform が恒等でない場合は UV が
-  // ずれるので issues として報告する（適用はしない: herta.vrm は全材質恒等を実測済み）。
-  const texDiag = {
-    parser: !!gltfParser,
-    mats: 0,
-    tex: 0,
-    bound: 0,
-    failed: 0,
-    issues: [],
-    sample: null,
-    pixels: null,
-  };
-  // glTF sampler の wrap 値（10497=REPEAT / 33071=CLAMP / 33648=MIRROR）→ three の定数。
-  // magFilter/minFilter は three の既定（LINEAR / LINEAR_MIPMAP_LINEAR）が glTF の既定と
-  // 同じなので写していない（NEAREST を明示するモデルでは差が出る）。
-  const WRAP_MODE = {
-    10497: THREE.RepeatWrapping,
-    33071: THREE.ClampToEdgeWrapping,
-    33648: THREE.MirroredRepeatWrapping,
-  };
-
-  /** 画像実体（bufferView 埋め込み or uri 参照）を取り出す。 */
-  async function imageBytes(parser, img) {
-    if (img?.bufferView != null)
-      return parser.getDependency("bufferView", img.bufferView);
-    if (typeof img?.uri !== "string") return null;
-    let url = img.uri;
-    if (!url.startsWith("data:")) {
-      // 相対 URI は GLB と同じ場所を基準にする（基準が無ければ素の uri で試す）
-      try {
-        url = new URL(img.uri, parser.options?.path ?? "").href;
-      } catch {
-        url = img.uri;
-      }
-    }
-    const res = await fetch(url);
-    return res.ok ? res.arrayBuffer() : null;
-  }
-
-  async function textureFromGlbImage(parser, spec) {
-    const img = parser.json.images?.[spec.imageIndex];
-    const bytes = await imageBytes(parser, img);
-    if (!bytes) return null;
-    const bitmap = await createImageBitmap(
-      new Blob([bytes], { type: img.mimeType || "image/png" }),
-    );
-    const tex = new THREE.Texture(bitmap);
-    tex.name = img.name || `image_${spec.imageIndex}`;
-    tex.flipY = false; // glTF の UV 規約
-    tex.colorSpace = THREE.SRGBColorSpace; // ベースカラーなので sRGB
-    tex.channel = spec.texCoord; // UV セット（glTF の texCoord）
-    if (spec.sampler) {
-      if (WRAP_MODE[spec.sampler.wrapS])
-        tex.wrapS = WRAP_MODE[spec.sampler.wrapS];
-      if (WRAP_MODE[spec.sampler.wrapT])
-        tex.wrapT = WRAP_MODE[spec.sampler.wrapT];
-    }
-    tex.needsUpdate = true;
-    return tex;
-  }
-
-  /** 抽出画像の非白画素率。取得が壊れていれば白飛びとして現れるのでその観測手段。 */
-  function imageStats(bitmap) {
-    const w = 64;
-    const h = Math.max(1, Math.round((bitmap.height / bitmap.width) * w));
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    ctx.drawImage(bitmap, 0, 0, w, h);
-    const d = ctx.getImageData(0, 0, w, h).data;
-    let opaque = 0;
-    let nonWhite = 0;
-    for (let i = 0; i < d.length; i += 4) {
-      if (d[i + 3] < 8) continue;
-      opaque++;
-      if (d[i] < 245 || d[i + 1] < 245 || d[i + 2] < 245) nonWhite++;
-    }
-    return {
-      width: bitmap.width,
-      height: bitmap.height,
-      nonWhitePct: opaque ? +((100 * nonWhite) / opaque).toFixed(1) : 0,
-    };
-  }
-  async function bindBaseColorTextures(parser, root) {
-    const json = parser?.json;
-    texDiag.mats = json?.materials?.length ?? 0;
-    texDiag.tex = json?.textures?.length ?? 0;
-    if (!json) return 0;
-    const { plan, issues } = resolveBaseColorPlan(json);
-    texDiag.issues = issues;
-    for (const msg of issues) console.warn("[avatar] texture plan:", msg);
-    if (!plan.size) return 0;
-
-    // 画像を先にデコードする（材質間で共有）。同時に「本当に絵が入っているか」を画素で
-    // 確かめる: 取得が壊れていれば非白画素率が 0 付近になり、白飛びの再発を検知できる。
-    const cache = new Map(); // 画像添字 → Texture
-    let minNonWhite = 100;
-    let maxNonWhite = 0;
-    for (const spec of plan.values()) {
-      if (cache.has(spec.imageIndex)) continue;
-      try {
-        const tex = await textureFromGlbImage(parser, spec);
-        if (!tex) {
-          texDiag.failed++;
-          console.warn("[avatar] 画像を取得できず:", spec.imageIndex);
-          continue;
-        }
-        cache.set(spec.imageIndex, tex);
-        const st = imageStats(tex.image);
-        minNonWhite = Math.min(minNonWhite, st.nonWhitePct);
-        maxNonWhite = Math.max(maxNonWhite, st.nonWhitePct);
-      } catch (e) {
-        texDiag.failed++;
-        console.warn(
-          "[avatar] texture 復元失敗:",
-          spec.imageIndex,
-          e?.message ?? e,
-        );
-      }
-    }
-    if (cache.size)
-      texDiag.pixels = {
-        images: cache.size,
-        minNonWhitePct: minNonWhite,
-        maxNonWhitePct: maxNonWhite,
-      };
-
-    const targets = [];
-    root.traverse((o) => {
-      const list = Array.isArray(o.material)
-        ? o.material
-        : o.material
-          ? [o.material]
-          : [];
-      for (const m of list) if (!m.map) targets.push(m);
-    });
-    let bound = 0;
-    for (const m of targets) {
-      const name = String(m.name || "");
-      const spec = lookupPlan(plan, name);
-      if (!spec) continue;
-      const tex = cache.get(spec.imageIndex);
-      if (!tex) continue;
-      try {
-        m.map = tex; // MToonMaterial は uniforms.map.value への setter
-      } catch {
-        /* getter のみの実装は下の uniforms 直書きでカバーする */
-      }
-      if (m.map !== tex && m.uniforms?.map) m.uniforms.map.value = tex;
-      m.needsUpdate = true; // USE_MAP の再コンパイル
-      if (m.map === tex) {
-        bound++;
-        if (!texDiag.sample)
-          texDiag.sample = {
-            mat: name,
-            img: spec.imageIndex,
-            size: `${tex.image.width}x${tex.image.height}`,
-            uv: spec.texCoord,
-          };
-      } else {
-        texDiag.failed++;
-      }
-    }
-    texDiag.bound = bound;
-    return bound;
-  }
-  const texturesBound = await bindBaseColorTextures(gltfParser, vrm.scene);
-  if (!texturesBound)
-    console.warn(
-      "[avatar] base color texture を張れなかった: モデルが白く描画される",
-    );
 
   // --- MToon リム（控えめなラベンダー系。アウトラインは触らない） ---
   const rimColor = new THREE.Color(0.55, 0.48, 0.7);
@@ -967,8 +775,6 @@ async function _doInit(container, modelUrl) {
       fallback: false,
       motion,
       vrmaBones: vrmaBones.size,
-      texturesBound,
-      texDiag,
       bones: {
         leftUpperArm: !!nBone("leftUpperArm"),
         rightUpperArm: !!nBone("rightUpperArm"),

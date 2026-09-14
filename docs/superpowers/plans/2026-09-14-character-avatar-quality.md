@@ -7,7 +7,7 @@
 全 Task 実装済み。検証は 2026-09-14 に実ブラウザ＋pytest で実施。**下の `- [ ]` は実装当時の指示書のまま残す**（未検証項目を完了扱いしないため、完了判定はこのブロックを正とする）。
 
 | Task | 状態 | 根拠（実測） |
-|---|---|---|
+| --- | --- | --- |
 | 1 ログ比率スライダー＋永続化 | 完了 | 実ブラウザで操作し `--chat-log-h` が追従、リロード後も復元。`_task1_default_30pct.png` / `_task1_max_70pct.png` |
 | 2 休息姿勢・待機・フレーミング | 完了 | `probe()`: `fallback:false` / `framing.fits:true`（visibleH 2.025 ≥ modelH 1.875）/ `armDropDeg` left 73.8° right 70.6° |
 | 3 表情 UI | 完了 | `#chat-avatar-stage-ui` に表情セレクト＋強度スライダーが実表示（`_qa_vrma_final.png`） |
@@ -19,9 +19,9 @@
 
 1. **`#chat-avatar-stage-ui` が本番 HTML に存在しなかった** — dev harness (`_dev_probe_avatar.html`) にだけ手で置いていたため、本番ではログ高さスライダーと表情 UI が一切生成されなかった。`nous/api/http/sections/chat/chat_layout.py` の `render_chat_main()` に追加（`#chat-avatar-layer` の内側＝通常モードでは `display:none` で非表示）。増幅要因は「本番マークアップのテストが存在しないこと」だったため `tests/unit/test_chat_layout_markup.py` で要素の実在とネスト位置を固定した。
 2. **VRMA のプロシージャル層が死んでいた** — `vrmaBones` を `vrm.humanoid.humanBones[].node`（**生の**ノード）で照合していたが、`createVRMAnimationClip` のトラック名は**正規化**ノード名（`Normalized_head.quaternion`）で、`AnimationMixer` の書込み先も正規化ノード。そのため集合が空になり乗算分岐が一度も実行されず、姿勢が VRMA の素の出力（腕を上げたまま）になっていた。正規化ノードを返す `nBone(name)` で照合するよう修正し、`probe().vrmaBones`（マッチ数）を追加してこの沈黙故障を可観測にした。
-3. **base color texture が 1 枚も張られていなかった（「ほぼ真っ白」の真因）** — 実ブラウザ実測で、読み込み後の 35 材質すべてが `isMToonMaterial=true` / `color=#ffffff` / `shadeColorFactor=#797979` / `map=null`、`uniforms` 71 個にテクスチャが 1 つも無く、`parser.associations` にもテクスチャが 1 件も登録されていなかった。VRM 0.x の `_MainTex`(0/3/7/9) と glTF `pbrMetallicRoughness.baseColorTexture.index` は一致しており、`textures[15]` → `images[15]`（全て `image/png`、衣 2.0MB・髪 3.8MB 等）→ `bufferView` まで JSON 上は正しく繋がっている。**はっきりしているのは症状（`texture` 依存の解決が例外を出さず空を返す）と、同 parser の `bufferView` 経路が健全なことだけ**で、上流（three.js 本体／vendored `GLTFLoader`）がなぜ画像依存だけ解決に失敗するかは**未確定**。そこで `avatar.js` に `textureFromGlbImage()` を追加し、`bufferView`／`uri` から `createImageBitmap` でデコードして `material.map` に張る方式に切り替えた（`flipY=false` / `colorSpace=sRGB` / `texCoord` / sampler の wrapS・wrapT を反映。`KHR_texture_transform` が恒等でない場合は UV がずれるため**適用せず** `texDiag.issues` に記録する — herta.vrm は全材質 offset[0,0]・scale[1,1] の恒等を実測済み）。結果 `texDiag.bound=58, failed=0`、`texDiag.pixels={images:8, minNonWhitePct:82.7, maxNonWhitePct:100}` で、**白飛びが消えて衣装・帽子・髪・杖が正しい色で描画される**（`_qa_v2_textures.png`）。
+3. **base color texture が 1 枚も張られていなかった（「ほぼ真っ白」の症状）** — 実ブラウザ実測で、読み込み後の材質は `isMToonMaterial=true` / `color=#ffffff` / `shadeColorFactor=#797979` / `map=null`、`uniforms` にテクスチャが 1 つも無く、`parser.associations` にもテクスチャが 1 件も登録されていなかった。**真因は CSP**（`nous/api/http/middleware.py` の `connect-src` に `blob:` が無く、vendored `GLTFLoader` が埋め込み画像を `blob:` URL 経由で読む経路がブロックされていた。`parser.getDependency("texture", i)` は例外を出さずに空を返していた）。**修正は所有者のコミット `5d9cd70a`「fix(security): allow blob:/data: in CSP connect-src (VRM textures were blocked)」で取り込み済み** — 現在の CSP は `connect-src 'self' blob: data: https://fonts.googleapis.com https://fonts.gstatic.com`。修正後の実測: 材質 58 件すべてが `map != null`（`map == null` は 0 件）で、ネイティブローダが全材質を正しく張る。回帰は `tests/unit/test_security_headers.py` が CSP 文字列を完全一致で assert しているため CI が守る。
 
-**どの画像をどの材質へ張るかの決定は純ロジック側 `nous/api/http/static/chat/avatar/avatar-texture-plan.js` に分離した**（`avatar.js` 側は取得と代入のみ）。当初は材質名の文字列一致だけに依存しており、同名の複数材質・画像を持たない材質・既存 `map` 付き材質で誤結合し得た（さらに「その画像はどの材質も使っていない」という判定が手書き JSON を読む DOM 非依存テストとして書けなかった）。いまは材質ごとに `(画像添字, texCoord, sampler)` を確定し、同名が複数ある場合は**画像を持ち `map` がまだ null の材質だけ**に張る（herta.vrm は ` (Outline)` を除けば材質名が一意なので全件が同名解決でカバーされ、位置ベースのフォールバックは実行されない）。診断も実態に合わせて改名・追加した（`imageCount` = 画像あり材質数、`targets` = `map` が null で張り得る材質数、`bound` = 実際に張れた数、`sample.uv` = 使った UV セット、`issues` = 非恒等 transform 等の警告）。判定は `avatar-texture-plan.check.mjs`（`node` で実行・14 アサーション、`node:test` 非依存の自作 `assert` ハーネス）で固定した。
+   （経緯）真因が判明する前に、症状への回避策として `avatar.js` に `bufferView` から `createImageBitmap` でデコードして `material.map` へ張り直す経路を実装していた（`texDiag` / `textureFromGlbImage` / `bindBaseColorTextures` と、 張り先決定の純ロジック `avatar-texture-plan.js` + `avatar-texture-plan.check.mjs`）。CSP 修正後は**1 件も張らない不活性コード**（実測 `bound=0` / `sample=null`）となり、読み込みごとに画像デコードだけを無駄に走らせていたため**削除した**。UV・`KHR_texture_transform` の取り扱いも vendored `GLTFLoader` に委ねる（`extensionsUsed` に含まれており、本体が処理する）。診断は `probe()` からも消えた（`texDiag` / `texturesBound`）。
 
 ### 累積バグの再発否定（実測・60fps）
 
@@ -44,9 +44,9 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 
 - 通常チャットモード（キャラモード OFF）のスクショは Task 1 検証時に取得済み（`_task1_normal_mode.png`）。ただし最終差分での再取得および**ピクセル差分による機械比較は未実施**（`#chat-avatar-layer[hidden] { display: none }` と `tests/unit/test_chat_layout_markup.py` のネスト検証で構造的に担保）。
 - VRMA クリップの動作量（spine 最大 43°）はアセット固有。見た目は自然だが、より静かな idle が好みなら `animations/idle_loop.vrma` の差し替えのみで済む。
-- **`KHR_texture_transform` が恒等でないモデルではベースカラーの UV がずれる**（本実装は適用せず `texDiag.issues` に記録するのみ）。`herta.vrm` は全材質が恒等なので実害は無い。
-- `sampler.magFilter` / `minFilter` は写していない（three の既定が glTF の既定と一致するため）。`NEAREST` を明示するモデルでは見た目が変わり得る。
-- `avatar-texture-plan.js` のテスト（`avatar-texture-plan.check.mjs`）は **JS 側のみで、CI からは実行されない**（手動 `node` 実行）。Python 側のテストと同じゲートには乗っていない。
+- ~~`KHR_texture_transform` が恒等でないモデルではベースカラーの UV がずれる~~ — 自前の張り直しを削除し vendored `GLTFLoader` に委ねたため、このリスクは消滅した。
+- ~~`sampler.magFilter` / `minFilter` は写していない~~ — 自前の張り直しを削除し vendored `GLTFLoader` に委ねたため、この懸念も消滅した（本体が sampler を読む）。
+- ~~`avatar-texture-plan.js` のテストは CI から実行されない~~ — 当該モジュールごと削除した。テクスチャ経路の回帰は `tests/unit/test_security_headers.py`（CSP 完全一致）が CI でカバーする。
 - `herta.vrm` / `sample.vrm` は untracked のまま（再配布ライセンス未確認。Global Constraints の通り git に追加しない）。
 
 **Goal:** キャラチャットモードの VRM アバターを「実用に耐える」水準へ引き上げる。具体的には (1) ログ/キャラの高さ比率をスライダーで変更＋永続化、(2) 待機モーション（呼吸・体重移動・腕の追従）と自然な休息姿勢（Y ポーズ脱却）、(3) VRM 内蔵の表情を選択できる UI、(4) カメラの自動フレーミングとトゥーン調リム表現。
@@ -63,7 +63,7 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 - `avatar.js` — idle は `off.spine.z += D(1.5*sin(...)*0.1)` ≒ 0.15°、`head.x ≒ 0.8°`。**実質静止**で「待機モーションが無い」状態。
 - `avatar.js` — `EMOTIONS = ['happy','surprised','sad','angry','relaxed','neutral']`。herta.vrm の expressionManager は VRM0 の 18 個（`neutral/aa/ih/ou/ee/oh/blink/happy/angry/sad/relaxed/lookUp/Down/Left/Right/blinkLeft/blinkRight/Toggle WP`）で **`surprised` は存在しない**。
 - `avatar_models.py` — 一覧 API が空を返すため UI は `sample.vrm (default)` と表示するが、実際に配信されるのは `herta.vrm`。**表示と実体が乖離**。
-- ~~モデルは正常に描画される（`_herta_shot_before.png` でテクスチャ・MToon とも正常）~~ → **誤り（2026-09-14 の実ブラウザ実測で否定）**。実ページでは 35 材質すべてで base color texture が未バインドで、モデルはほぼ白く描画されていた（詳細は上の「重大不具合 3」）。`_avatar_dev_1.png`(3.3KB 全白, 20:34:17) も同じ根因の症状だった。
+- ~~モデルは正常に描画される（`_herta_shot_before.png` でテクスチャ・MToon とも正常）~~ → **誤り（2026-09-14 の実ブラウザ実測で否定）**。実ページでは材質の base color texture が 1 枚もバインドされず（重複排除後 58 材質すべて `map=null`）、モデルはほぼ白く描画されていた。**真因は CSP で、所有者の `5d9cd70a` により修正済み**（詳細は上の「重大不具合 3」）。`_avatar_dev_1.png`(3.3KB 全白, 20:34:17) も同じ根因の症状だった。
 
 ## Global Constraints
 
@@ -184,26 +184,32 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 **背景**: ユーザーから「VRMA を実装してほしい。ローカルで動かすだけの個人的なプロジェクトだし」と明示指示があった（m00257）。当初はライセンス帰属不明を理由に見送る計画だったが、個人ローカル利用かつリポジトリへコミットしない前提のため導入する。
 
 **ファイル**:
+
 - 変更: `nous/api/http/static/chat/avatar/avatar.js`
 - 新規: `nous/api/http/static/chat/avatar/animations/idle_loop.vrma`（入手元は Task 6 手順 1）
 - 新規: `nous/api/http/static/chat/avatar/vendor/three-vrm-animation.module.js`（npm 未インストールのため vendor 化。ただし**バンドラ無しで動く形に限る** — 下の「実装方式の制約」参照）
 
 **手順**:
+
 1. idle ループを取得する。第1候補 `https://raw.githubusercontent.com/ZaberKo/vrm-studio/main/public/animations/idle_loop.vrma`（157,664 bytes / HTTP 200 実測済）。失敗時は `collection2/Relax.vrma`（118,448 bytes）。`curl -sSL -o <path>` で取得し、**取得後にファイルサイズと先頭 4 バイトが `glTF` であることを検証する**（HTML の 404 ページを掴む事故を防ぐ）。
 2. `@pixiv/three-vrm-animation` は**まず vendor せずに済む方法を探す**。`import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation'` は bare specifier なので、既存 vendor `three-vrm.module.js` の中に該当シンボルが含まれていないか確認する。含まれない場合のみ `three-vrm-animation` の ESM ビルドを取得し、**その内部 import も全て既存 vendor の相対パスに書き換える**（前回 `three-vrm.module.js` をバンドルするのに使ったのと同じ手法）。
 3. 読み込み: `GLTFLoader` + `loader.register((parser) => new VRMAnimationLoaderPlugin(parser))` → `vrm.scene.add(...)` ではなく `vrm.humanoid` に `AnimationMixer(vrm.scene)` でクリップを適用（`createVRMAnimationClip(vrmAnimation, vrm)`）。
 
 **実装方式の制約（重要・ここを外すと壊れる）**:
+
 - 既存のポーズ書き込みは「絶対角を毎フレーム新規に再構成する」方式（累積加算なし）。VRMA の `AnimationMixer` がボーンを直接書き換えるため、**更新順を明示的に固定する必須**: `mixer.update(dt)` を**先に**実行し、その後でプロシージャル層（呼吸・体重移動）を**低速の追加層**として上書き合成する。プロシージャル層は VRMA 再生中は振幅を **半減**（例: 呼吸 3.0° → 1.5°）させ、VRMA と喧嘩しないようにする。
+
   ```
   mixer.update(dt);        // 1. VRMA が骨盤・背骨・胴体を動かす
   applyIdleLayer(ramp);   // 2. 呼吸/体重移動/頭の微動を加算的に上書き（振幅 ×0.5）
   vrm.humanoid.update();   // 3. スキン＋揺れ物
   ```
+
 - VRMA 再生中は「休息姿勢の固定角」を適用しない（VRMA が腕の下げを担う）。`pose` が `neutral` 以外（wave/think/bow）のときのみ VRMA を一時停止し固定ポーズを優先する。
 - VRMA が読み込めなかった場合は**必ずプロシージャル idle にフォールバック**し、`probe().motion` に `'procedural'` / `'vrma'` を入れ、`idle.breath` は VRMA 経路でも数値が動くこと。
 
 **完了条件（機械判定・`probe()` 経由）**:
+
 - `motion === 'vrma'`（VRMA 読み込み成功を意味する）
 - `idle.breath > 0.01`
 - `armDropDeg.left` と `right` が 50〜80°
