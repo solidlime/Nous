@@ -202,4 +202,51 @@ describe('reload path: avatar init waits for the persona', () => {
       '/api/chat/other/avatar/model',
     ]);
   });
+
+  /* モデル差し替え・アップロード経路は `disposeAvatar(); applyCharacterMode(true)` の順で
+     呼ぶため、disposeAvatar() が avatarPersona を null に戻さないと「同じペルソナ」判定で
+     早期 return し、差し替えたモデルが反映されない。 */
+  it('re-inits the same persona after the mode is toggled off and on', async () => {
+    vi.resetModules();
+    localStorage.clear();
+    localStorage.setItem('nous.chatMode', 'character');
+    document.body.innerHTML = `
+      <div id="chat-main">
+        <div id="chat-avatar-layer" hidden>
+          <div id="chat-avatar-canvas-container"></div>
+        </div>
+        <div id="chat-messages"></div>
+      </div>
+      <button id="chat-mode-toggle-btn"></button>
+      <select id="chat-avatar-model-select"></select>
+    `;
+    window.S = { persona: 'herta' };
+    const { initAvatar } = await import('./avatar/avatar.js');
+    initAvatar.mockClear();
+    const mode = await import('./avatar/chat-mode.js');
+
+    await mode.syncCharacterMode();
+    expect(initAvatar).toHaveBeenCalledTimes(1);
+
+    // OFF → disposeAvatar() → avatarPersona がリセットされる
+    await mode.toggleCharacterMode();
+    expect(localStorage.getItem('nous.chatMode')).toBe('normal');
+    expect(document.getElementById('chat-main').classList.contains('character-mode')).toBe(false);
+
+    // ON → ペルソナが同じでも作り直される
+    await mode.toggleCharacterMode();
+    expect(initAvatar).toHaveBeenCalledTimes(2);
+    expect(initAvatar.mock.calls[1][1]).toBe('/api/chat/herta/avatar/model');
+  });
+});
+
+describe('loadChat integration point', () => {
+  it('exposes syncCharacterMode as window.Nous.Chat.mode.syncCharacterMode', async () => {
+    vi.resetModules();
+    localStorage.clear();
+    localStorage.setItem('nous.chatMode', 'normal');
+    const mode = await import('./avatar/chat-mode.js');
+    // chat-core.js の loadChat() は N.Chat.mode.syncCharacterMode 経由で呼ぶ
+    expect(window.Nous.Chat.mode.syncCharacterMode).toBe(mode.syncCharacterMode);
+  });
 });

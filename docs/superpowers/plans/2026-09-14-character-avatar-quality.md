@@ -508,4 +508,18 @@ gl_FragColor = vec4( diffuseColor.rgb * tone + rimColor * rim, diffuseColor.a );
 
 - 確認手順（再現用）: `sessionMode: fresh` で起動 → `--session <name>` を明示 → `?cachebust=<任意>` でページを開く（HTML のキャッシュ回避）→ キャラチャットモードを ON（`nous.chatMode=character` を保存）→ 同 URL を新しい cachebust で開き直す（＝リロード）→ 計測。
 - 注意（環境の事実）: 起動中のサーバ（`python -m nous.main`・PID 49224・`--reload` なし）は**レンダリング済み HTML の `?v=` を古いまま返す**。静的 JS 自体はディスクから配信されるため修正は既に有効（`curl .../chat-mode.js?v=20260914b` の内容に `syncCharacterMode` が含まれることを確認済み）。`?v=` の更新はサーバ再起動後に効く。
-- 併せて `python -m pytest tests/ -q -k "avatar or chat_layout or csp or markup"` → 24 passed、`npx vitest run`（`nous/api/http/static`）→ 270 passed。
+- 併せて `python -m pytest tests/ -q -k "avatar or chat_layout or csp or markup"` → 24 passed、`npx vitest run`（`nous/api/http/static`）→ 272 passed。
+
+### 独立レビュー（Advisor）の指摘への回答
+
+1. **モジュール登録順序の保証**（指摘 2）。`chat-mode.js` はモジュール評価時に `_N.Chat.mode = { syncCharacterMode }` を登録し（L444-447）、自身の初期化は `document.readyState==='loading' ? DOMContentLoaded : 即時` で `initChatMode()` を呼ぶ（L449-452）。ES モジュールは DOMContentLoaded より前に評価されるので、**登録は必ず loadChat より先**。さらに両順序とも安全に倒してある:
+   - chat-mode.js が先 → loadChat の `syncCharacterMode()` が初期化する。
+   - loadChat が先（ペルソナ確定済み）→ そのあとの `initChatMode()` の `if (isCharacterMode()) applyCharacterMode(true)` がペルソナを見て初期化する。
+   - `if (N.Chat.mode && N.Chat.mode.syncCharacterMode)` のガードは、万一 mode が未登録でも落ちないための安全弁。
+2. **await していない理由**（指摘 3）。`initAvatarForPersona()` は内部で try/catch しており（L71-78）**reject しない**ため unhandled rejection にはならない。また `loadChat()` の L281 以降（`settings.load` / `history.restore` / `loadChatCommitments`）はアバターに依存しない。順序依存が無いので、チャット UI を待たせないため fire-and-forget が正しい。
+3. **`disposeAvatar()` の状態リセット**（指摘 4）。`chat-mode.js:92` で `avatarPersona = null;` を実行している。モデル差し替え・アップロード経路（`disposeAvatar(); await applyCharacterMode(true)`）はこれに依存するので、リグレッションテストで固定した（OFF→ON で同一ペルソナでも `initAvatar` が再呼び出しされる）。
+4. **統合点の証跡**（指摘 5）。単体テストに加え、**実ブラウザでの読込経路そのもの**を計測している: `performance.getEntriesByType('resource')` で空ペルソナの URL（`/api/chat//`）は **0 件**、avatar 系 API は `/api/chat/herta/avatar/model` と `idle_loop.vrma` のみ。登録口が在ることは `window.Nous.Chat.mode.syncCharacterMode === mode.syncCharacterMode` のテストで固定。
+5. **`herta.vrm` の扱い**（指摘 8）。`.gitignore:43:/herta.vrm` で**意図的に**無視している（`git check-ignore -v` で確認）。ドラフトの「untracked」という表現が不正確でした。
+6. **元指摘の全文復元**（指摘 6）。`docs/superpowers/sessions/` には `2026-09-06-csp-avalanche.md` のみで、第5輪指摘の全文はリポジトリから復元できない（受領した文面は (1) の途中で切れている）。未対応項目がある可能性は残存リスクとして明記する。
+7. **サーバ再起動後の実測**（指摘 7）。旧 PID 49224 を停止し再起動（PID 85508、ログ `%TEMP%\nous-server.out.log` / `.err.log`）。レンダリング済み HTML が `chat-mode.js?v=20260914c` を返すようになり、ブラウザ側の実測で `document.scripts` の src が `?v=20260914c` であること・`fallback:false` / `motion:"vrma"` / `vrmaBones:21` / `armDropDeg` 73.9°, 70.4° / `cel {installed:35, patched:35, missed:0, rim:{strength:0.35,power:3}}` / フォールバック画像 **DOM に存在せず** を確認。証跡 `docs/evidence/character-avatar-2026-09-14/r5-02-restart-new-v-reload.png`。
+8. **テスト**。`npx vitest run` → **272 passed / 0 failed**（新規 2 件: OFF→ON 再初期化、登録口の一致）。
