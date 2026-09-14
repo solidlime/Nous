@@ -1668,6 +1668,81 @@ def test_curiosity_budget_exhaustion_stops_at_max(monkeypatch):
     assert len(eng.prompts) == 1  # done が無いので要約 LLM 1回（フォールバック）
 
 
+class FakeResumeRepo:
+    """last_activity_at の返値を呼び出し回数で切り替える偽リポジトリ（チャット再検知テスト用）。
+
+    最初の switch_after 回は before を返し（= baseline 取得＋最初のループチェック）、
+    以降は after を返す（= チャット再開を検知させる）。before == after なら再開なし。
+    """
+
+    def __init__(self, before, after, switch_after=2):
+        self.before = before
+        self.after = after
+        self.switch_after = switch_after
+        self.calls = 0
+
+    def last_activity_at(self, persona):
+        self.calls += 1
+        return self.before if self.calls <= self.switch_after else self.after
+
+
+def test_curiosity_aborts_when_chat_resumed(monkeypatch, caplog):
+    """探索中にチャット再開（chat イベントが baseline より新しくなった）したら打ち切り。
+
+    2ステップ目の research_step を呼ばず、要約・記憶・emit も行わない。
+    """
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+    import logging
+
+    base = datetime(2026, 1, 1, 12, 0, 0)
+    repo = FakeResumeRepo(before=base, after=base + timedelta(minutes=5))
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        [
+            _collected(None, [_tool_call("srv__search", {"q": "1"})]),
+            _collected(None, [_tool_call("srv__search", {"q": "2"})]),
+        ]
+    )
+    c = _explorer_ctx(mem=mem)
+    c._session_event_repo = repo
+    with caplog.at_level(logging.INFO, logger="nous.application.chat.introspection"):
+        asyncio.run(_run_curiosity_exploration(c, config, "herta", _spont_result(), eng))
+    assert len(eng.calls) == 1  # 2ステップ目の research_step は呼ばない
+    assert "chat resumed" in " ".join(r.message for r in caplog.records)
+    assert mem.created == []  # 要約・記憶保存をスキップ
+    assert wiring_events.snapshot_after(0) == []  # emit もしない
+    assert _unanswered_tool_ids(eng.messages_refs[-1]) == []  # 未応答 tool_call_id を残さない
+
+
+def test_curiosity_chat_not_resumed_completes(monkeypatch):
+    """chat イベントが baseline から動かなければ従来どおり完走（要約・emit まで進む）。"""
+    from nous.application.chat.introspection import _run_curiosity_exploration
+
+    config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
+    FakePool.instances.clear()
+    wiring_events.clear()
+
+    base = datetime(2026, 1, 1, 12, 0, 0)
+    repo = FakeResumeRepo(before=base, after=base)  # 常に同じ時刻 = 再開なし
+    mem = FakeMemoryService()
+    eng = FakeLLMEngine(
+        [
+            _collected(None, [_tool_call("srv__search", {"q": "1"})]),
+            _collected("調べたら、雲は500トンくらいあるんだって。"),
+        ]
+    )
+    c = _explorer_ctx(mem=mem)
+    c._session_event_repo = repo
+    asyncio.run(_run_curiosity_exploration(c, config, "herta", _spont_result(), eng))
+    assert len(eng.calls) == 2  # 打ち切りされず完走
+    assert len(mem.created) == 1
+    assert len(wiring_events.snapshot_after(0)) == 1
+
+
 def test_curiosity_done_summary_skips_summary_llm(monkeypatch):
     """最終回答テキストを同梱したら要約 LLM を呼ばず、その summary で記憶・emit する。"""
     from nous.application.chat.introspection import _run_curiosity_exploration
@@ -2132,6 +2207,45 @@ class TestFormatResearchContext:
         out = _format_research_context(["mem"], {"emotion": "calm"}, "mono")
         assert out.index("【さっきの独り言】") < out.index("【最近の記憶】") < out.index("【今の気分】")
         assert "感情: calm" in out
+
+    def test_recent_turns_section_first(self):
+        from nous.application.chat.introspection import _format_research_context
+
+        turns = [{"role": "user", "content": "雲の重さは？"}, {"role": "assistant", "content": "調べてみるわ"}]
+        out = _format_research_context(["mem"], {"emotion": "calm"}, "mono", recent_turns=turns)
+        assert out.startswith("【最近の会話】")
+        assert "user: 雲の重さは？" in out
+        assert "assistant: 調べてみるわ" in out
+        assert (
+            out.index("【最近の会話】")
+            < out.index("【さっきの独り言】")
+            < out.index("【最近の記憶】")
+            < out.index("【今の気分】")
+        )
+
+    def test_recent_turns_capped_at_four_and_roles_filtered(self):
+        from nous.application.chat.introspection import _format_research_context
+
+        turns = [{"role": "user", "content": f"u{i}"} for i in range(5)]
+        turns.insert(2, {"role": "system", "content": "sys-turn"})
+        out = _format_research_context(None, None, None, recent_turns=turns)
+        assert "sys-turn" not in out  # user/assistant 以外は除外
+        assert "u0" not in out  # 直近4件に丸められ、最古の1件は落ちる
+        assert "u1" in out and "u4" in out
+
+    def test_recent_turns_content_capped_at_200(self):
+        from nous.application.chat.introspection import _format_research_context
+
+        out = _format_research_context(None, None, None, recent_turns=[{"role": "user", "content": "x" * 300}])
+        assert "x" * 200 in out
+        assert "x" * 201 not in out
+
+    def test_recent_turns_none_omits_section(self):
+        from nous.application.chat.introspection import _format_research_context
+
+        out = _format_research_context(["mem"], None, "mono", recent_turns=None)
+        assert "【最近の会話】" not in out
+        assert out.startswith("【さっきの独り言】")
 
 
 def test_curiosity_system_includes_context_without_format_crash(monkeypatch):
