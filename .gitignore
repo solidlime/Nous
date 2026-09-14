@@ -92,3 +92,6 @@ CHANGELOG.md
 .worktrees/
 data/hub.db
 .codegraph/
+
+.pi/
+.playwright-mcp/
