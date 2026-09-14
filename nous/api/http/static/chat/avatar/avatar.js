@@ -220,10 +220,12 @@ async function _doInit(container, modelUrl) {
   }
   resize();
 
-  const dirLight = new THREE.DirectionalLight(0xffffff, Math.PI * 0.8);
-  dirLight.position.set(1.5, 3, 2);
-  scene.add(dirLight);
-  scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x40382f, Math.PI * 0.55));
+  // 法線に依存しないフラットなセルシェーディング。指向性ライトを置かず環境光のみにすると
+  // MToon の直接光項が消え、法線由来のハイライト／段差グラデーションが出ない（＝白飛びしない）。
+  // 陰影はテクスチャに描き込まれた階調がそのまま出る。
+  // 強度は実測較正: 従来構成（Directional π×0.8 + Hemisphere π×0.55）の平均輝度 117.8 に対し
+  // π では 132.1 と明る過ぎたため、線形な環境光項を ×0.9 して同輝度（≒119）に合わせる。
+  scene.add(new THREE.AmbientLight(0xffffff, Math.PI * 0.9));
 
   // --- ポインタドラッグ: 水平回転 / ホイール: ズーム（自動距離 × 倍率） ---
   let dragging = false,
@@ -408,6 +410,24 @@ async function _doInit(container, modelUrl) {
       m.parametricRimColorFactor?.copy(rimColor);
       setFactor(m, "parametricRimFresnelPowerFactor", 2.5);
       setFactor(m, "rimLightingMixFactor", 0.3);
+    }
+  });
+
+  // --- アウトライン: VRM の outlineWidthFactor は既定 0.00065m。この描画倍率では 1px ≒ 0.0074m
+  // （身長 1.6m / 表示 215px）なので実質不可視（約 0.09px）。可視幅まで引き上げて線を出す。
+  // 色は VRM 側の指定（outlineColorFactor）をそのまま使う。
+  const OUTLINE_WIDTH = 0.012; // 実測: 層内 3.8% の画素が変わり、2px 弱の線が出る
+  vrm.scene.traverse((o) => {
+    const mats = Array.isArray(o.material)
+      ? o.material
+      : o.material
+        ? [o.material]
+        : [];
+    for (const m of mats) {
+      if (!m.isMToonMaterial) continue;
+      if ((m.outlineWidthFactor ?? 0) < OUTLINE_WIDTH) {
+        setFactor(m, "outlineWidthFactor", OUTLINE_WIDTH);
+      }
     }
   });
 

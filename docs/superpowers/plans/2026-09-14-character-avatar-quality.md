@@ -247,8 +247,100 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 
 **禁止**: `herta.vrm` の変更、コミット、既存 `vendor/three-vrm.module.js` の破壊的書き換え、ファイルサイズが 10MB を超えるアセットの取得。
 
-## Task 5: 総合検証
+## Task 5: 総合検証（2026-09-15 実測・全て実ブラウザ http://127.0.0.1:26262/ と実ファイルから再取得）
 
-- [ ] dev harness（port 18100）で before/after スクショを取得
-- [ ] `.venv\Scripts\python -m pytest nous/ -q` と `ruff check .` が緑
-- [ ] 通常チャットモード（キャラモード OFF）のレイアウトが一切変わっていないことをスクショで確認
+- [x] 実ブラウザでのスクリーンショット取得 → 証跡は `docs/evidence/character-avatar-2026-09-14/` に**同梱**（untracked のまま放置しない）
+- [x] `python -m pytest -q` → **2636 passed, 1 skipped**
+- [x] `ruff check .` → **28 errors（着手前 baseline と同数、変更ファイルに新規エラー 0）**
+- [x] 通常チャットモード（キャラモード OFF）非回帰（アバター層なし・入力欄・ログ正常）
+
+### (4) テクスチャ: 根因と実測
+
+真因は CSP（`connect-src` に `blob:`/`data:` が無い）で three.js の画像ローダが失敗し、全材質の `map` が未設定になっていたこと（`5d9cd70a` で解消）。
+
+実ブラウザで `window.__avatarDebug.__vrm.scene` を走査した実測（キャラモード ON 直後）:
+
+| 項目 | 実測値 |
+|---|---|
+| mesh 数 / material 数 | 35 / 58 |
+| ベースカラーテクスチャ（`material.map`）が bind されている材質 | **58 / 58（未 bind 0 件）** |
+| テクスチャ解像度の内訳 | 2048×2048 ×4, 2048×1024 ×42, 1024×1024 ×10, 512×512 ×1, 300×300 ×1 |
+| VRM メタ | metaVersion `0` / title `THE Herta` |
+
+トゥーン調は `AmbientLight(0xffffff, Math.PI * 0.9)` のみ（指向性ライトを置かず法線依存の直接光項を消す）→ 陰影はテクスチャに描き込まれた階調がそのまま出る。キャラ領域（x 540-634, y 238-450）の平均輝度は **58.1/255（≈23%）・白飛び（輝度≥0.94）0.34%**（画面全体が白く飛ぶ状態ではない）。
+
+![既定状態（テクスチャ＋トゥーン＋アウトライン）](../../evidence/character-avatar-2026-09-14/01-default-toon-outline.png)
+
+### (3) アウトライン（レビュー指摘 3）
+
+- GLB 直読（`herta.vrm` の JSON チャンク）: 全 35 材質が `outlineWidthMode: 0`（輪郭 OFF）・`outlineWidthFactor: 0` → **モデルは輪郭データを一切持っていない**。
+- それでも three-vrm はアウトライン材質を生成する（実測 `isOutline: true` = **23 材質** / MToon 58 材質）。既定幅 0.00065m は本描画倍率（1px ≒ 0.0074m、身長1.6mを215px表示）で**約 0.09px ＝ 不可視**。
+- 実装: 初期化時に `OUTLINE_WIDTH = 0.012` を全 MToon 材質の `outlineWidthFactor` へ適用（色は VRM 指定の `outlineColorFactor` をそのまま使用）。
+- ランタイム実測: `widthHist = {"0.012": 58}`（**58/58 材質が 0.012**）、アウトライン色 = VRM 自身の指定（`000000`, `604a44`, `32282a`, `604a45` の 4 種）。
+- 描画有無の画素実測（`performance.now()` と rAF を凍結して**同一シーンのまま幅だけを変える**装置を使用）:
+
+| 比較 | 変化画素 | 非背景比 | 暗画素率 | bbox |
+|---|---|---|---|---|
+| 幅 0 → 0.012 | 3,261 | 1.97% | 0.832 | (544,243)-(619,446) |
+| **幅 0.012 → 0.012（対照）** | **2** | 0.00% | – | 3×31px |
+| 幅 0 → 0.03 | 5,809 | 3.50% | 0.920 | (543,241)-(626,448) |
+
+→ 同一条件の再描画は **2px**（＝ノイズ床）しか変わらない一方、幅 0→0.012 でシルエット帯の 3,261px が変化し、その 83% が暗色（アウトライン色）= **輪郭は実際に描画されている**。幅 0.03 では変化量・暗色率が増える（＝太くなる）。
+
+![幅0](../../evidence/character-avatar-2026-09-14/04-outline-w-0.png)
+![幅0.012](../../evidence/character-avatar-2026-09-14/05-outline-w-0.012-default.png)
+![幅0.012 対照](../../evidence/character-avatar-2026-09-14/06-outline-w-0.012-control.png)
+![幅0.03](../../evidence/character-avatar-2026-09-14/07-outline-w-0.03.png)
+
+### (2) 待機モーション（VRMA）と自作フォールバック
+
+- 出所（`animations/README.md` に明記）: <https://github.com/ZaberKo/vrm-studio> の `public/animations/idle_loop.vrma` / MIT / `VRMC_vrm_animation` specVersion 1.0 / 長さ 10.375 秒 / humanoid 22 骨（実測 retarget 成立 21 骨）。
+- ヘルタ/idle 専用 VRMA の探索実測（検索 3 クエリのヒット内容）:
+
+| クエリ | 結果 |
+|---|---|
+| `Herta Honkai Star Rail VRMA animation file download .vrma` | Sketchfab の静的3Dモデル / VRoid 公式の**汎用 .vrma 7 種**（BOOTH 無料配布）/ 汎用 VRMA ビューアのみ。**ヘルタ専用 VRMA は存在しない** |
+| `崩壊スターレイル ヘルタ VRMA 待機モーション 配布` | YouTube・TikTok（ゲーム内動画）、Pixiv（イラスト）、MMD モーション（ニコニコ sm35733821 = VMD 形式）のみ |
+| `VRMA idle animation library free download` | [VRM Animation 仕様](https://vrm.dev/en/vrma/)「**同じ VRMA は任意の VRM に使える**」＝ VRMA は設計上モデル非依存で、公式配布も汎用のみ |
+
+- モーション実測（`probe()` を 1.5 秒間隔で取得）:
+
+| 時点 | motion | vrmaBones | fallback | framing.fits | armDrop L/R | idle.breath | idle.sway | pose |
+|---|---|---|---|---|---|---|---|---|
+| 初期 | vrma | 21 | false | true | 68.40 / 70.74 | 0.0297 | 0.0155 | neutral |
+| bow 選択後 | vrma | 21 | false | true | 59.70 / 55.71 | 0.0491 | 0.0194 | **bow** |
+| wave 選択後 | vrma | 21 | false | true | 54.62 / 12.50 | 0.0497 | 0.0200 | **wave** |
+| neutral に戻した直後 | vrma | 21 | false | true | 70.44 / 19.02 | 0.0428 | 0.0200 | **neutral**（右腕は wave ジェスチャ減衰途中の値） |
+
+- idle が動いていることの画素実測: 1.5 秒間隔の 2 フレームで **3,737px（非背景比 2.18%）が変化**。一方、シーンを凍結した対照 2 枚は **0px（完全一致）** → 変化はノイズではなく実モーション。
+- 自作フォールバック（`animations/idle_loop.vrma` を一時退避して実測）: `motion: "procedural"`, `vrmaBones: 0`, `idle.breath` 0.0665→0.0612（動作中）, `armDropDeg` 63.0/61.9→62.8/62.8, `framing.fits: true` → **VRMA 不在でも呼吸・重心移動・腕の揺れ・瞬きのみで自然に動作**。実測後にファイルは復帰済み（サイズ一致）。
+
+![idle フレーム0](../../evidence/character-avatar-2026-09-14/08-idle-frame-0.png)
+![idle フレーム1](../../evidence/character-avatar-2026-09-14/09-idle-frame-1.png)
+![凍結対照](../../evidence/character-avatar-2026-09-14/10-idle-frozen-control-a.png)
+![VRMAなし](../../evidence/character-avatar-2026-09-14/12-no-vrma-procedural-fallback.png)
+
+### (3) 表情・モーフ・ポーズ
+
+ネット上のヘルタ用モーフ探索実測:
+
+| URL | 実測 |
+|---|---|
+| `https://hub.vroid.com/en/characters/3518989922670313006/models/7770913782248937025` | HTTP 200（375KB 取得）だが**閲覧専用でダウンロード導線なし**（HTML に `downloadable`/`ダウンロード` の文字列が存在しない） |
+| `https://hub.vroid.com/api/models/7770913782248937025` | HTTP 200 + `COMMON_MISSING_API_VERSION`。同一オリジンから `X-Api-Version: 11` を付けて再取得 → **HTTP 404 `COMMON_NOT_FOUND`** |
+| `https://hub.vroid.com/en/search?q=Herta` | HTTP 200（検索結果あり） |
+| 3 クエリ検索（Herta VRM morph / ヘルタ VRM モーフ / VRM expression morph JSON） | VRoid Hub の閲覧専用モデル・Sketchfab 静的モデル・MMD/PMX・VRoid 用表情パック（別メッシュ用）・VRM 仕様書のみ |
+
+**入手不可の根拠（原理）**: VRM の expression は `morphTargetBinds`（そのモデル固有メッシュのブレンドシェイプ名 + 重み）で定義される（[VRM 仕様](https://github.com/vrm-c/vrm-specification/blob/master/specification/VRMC_vrm-1.0/expressions.md)）ため、**別モデルの expression JSON を herta.vrm に「取り込む」ことはバインド先が存在せず不可能**。取り込むにはモデル本体（メッシュ）の差し替えが必要。
+
+代替として、herta.vrm が内蔵するモーフを UI の選択肢として全露出（実測 `listExpressions()`）: emotions 5（neutral/happy/angry/sad/relaxed）+ mouths 5（aa/ih/ou/ee/oh）+ other 1（**`Toggle WP`** ← モデル固有のカスタムモーフ）+ 自動 7（blink/lookUp/lookDown/lookLeft/lookRight/blinkLeft/blinkRight）。UI のドロップダウン実測値は **11 項目**。
+
+ポーズ選択 UI（レビュー指摘 2）: `#chat-avatar-stage-ui` に `ポーズ` セレクト（`#chat-avatar-pose`、4 択: 立ち/手を振る/考え中/お辞儀）を追加（`chat-mode.js`）。選択 → `avatarHandle.setPose()`（wave は `playGesture('wave')` を重ねる）。**`probe().pose` への反映は上表のとおり実ブラウザで実測済み**。
+
+![ポーズ選択=お辞儀](../../evidence/character-avatar-2026-09-14/02-pose-select-bow.png)
+![ポーズ選択=手を振る](../../evidence/character-avatar-2026-09-14/03-pose-select-wave.png)
+
+### 証跡ファイル
+
+`docs/evidence/character-avatar-2026-09-14/` に 12 枚を本コミットへ同梱（`_final_char_mode_30.png` 等の untracked 放置をやめ、参照可能な場所へ移動した）。差分解析は「背景色 #1c1c1e から 6 以上異なる画素」を非背景画素とした比率で、実行スクリプトは使い捨て（検証後に削除）。
+

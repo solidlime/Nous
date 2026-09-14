@@ -63,7 +63,7 @@ async function applyCharacterMode(on) {
   } else {
     main.classList.remove('character-mode');
     layer.hidden = true;
-    resetStageUiExpression();
+    resetStageUiControls();
     if (avatarHandle) {
       try { avatarHandle.dispose(); } catch (e) { console.warn('[chat-mode] dispose failed:', e); }
       avatarHandle = null;
@@ -303,15 +303,30 @@ function ensureStageUi() {
   weightSlider.max = '1';
   weightSlider.step = '0.05';
   weightSlider.value = '1';
+  const poseSelect = document.createElement('select');
+  poseSelect.id = 'chat-avatar-pose';
+  for (const [value, label] of [
+    ['neutral', '立ち'],
+    ['wave', '手を振る'],
+    ['think', '考え中'],
+    ['bow', 'お辞儀'],
+  ]) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    poseSelect.appendChild(opt);
+  }
   stage.appendChild(row('ログ高さ', logSlider));
   stage.querySelector('.chat-stage-row').appendChild(logLabel);
   stage.appendChild(row('表情', exprSelect));
   stage.appendChild(row('強さ', weightSlider));
+  stage.appendChild(row('ポーズ', poseSelect));
   logSlider.addEventListener('input', () => {
     applyLogRatio(Number(logSlider.value));
   });
   exprSelect.addEventListener('change', onExpressionChange);
   weightSlider.addEventListener('input', onExpressionChange);
+  poseSelect.addEventListener('change', onPoseChange);
 }
 
 function onExpressionChange() {
@@ -319,6 +334,14 @@ function onExpressionChange() {
   const weight = document.getElementById('chat-avatar-expression-weight');
   if (!select || !weight || !avatarHandle) return;
   avatarHandle.setExpression(select.value || 'neutral', Number(weight.value));
+}
+
+function onPoseChange() {
+  const select = document.getElementById('chat-avatar-pose');
+  if (!select || !avatarHandle) return;
+  const name = select.value || 'neutral';
+  avatarHandle.setPose(name);
+  if (name === 'wave') avatarHandle.playGesture('wave'); // 腕を振る動きを重ねる
 }
 
 function populateExpressionSelect() {
@@ -354,11 +377,13 @@ function populateExpressionSelect() {
   }
 }
 
-function resetStageUiExpression() {
+function resetStageUiControls() {
   const select = document.getElementById('chat-avatar-expression');
   const weight = document.getElementById('chat-avatar-expression-weight');
+  const pose = document.getElementById('chat-avatar-pose');
   if (select) select.value = 'neutral';
   if (weight) weight.value = '1';
+  if (pose) pose.value = 'neutral';
 }
 
 /* ── DOM wiring ──────────────────────────────────────────────── */
