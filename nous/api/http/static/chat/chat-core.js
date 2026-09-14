@@ -276,6 +276,9 @@ function _bindHelpIconListeners() {
 // ------------------------------------------------------------------
 async function loadChat() {
   if (!S.persona) return;
+  // アバター（キャラチャットモード）はペルソナ確定後に初期化する。
+  // 読込直後に applyCharacterMode() を走らせても S.persona が空で 404 になるため、ここが唯一の開始点。
+  if (N.Chat.mode && N.Chat.mode.syncCharacterMode) N.Chat.mode.syncCharacterMode();
   // Reset state to prevent cross-persona data leakage (BUG 2)
   CHAT.mcpServers = [];
   CHAT.mcpTools = [];

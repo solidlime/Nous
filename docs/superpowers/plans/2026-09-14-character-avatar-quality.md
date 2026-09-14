@@ -472,3 +472,40 @@ gl_FragColor = vec4( diffuseColor.rgb * tone + rimColor * rim, diffuseColor.a );
 
 - `docs/evidence/character-avatar-2026-09-14/` には**画像が残っている**（`01`〜`20` の 20 枚 + `22-avatar-fresh-textured.png` + 第4輪の `r4-01`〜`r4-05` の 5 枚 = 計 26 枚）と計測器 `pixdiff.py`。
 - 削除したのは**リポジトリ直下の旧一時ファイル（`_*.png` / `_pixstat.py`）だけ**で、証跡画像を削除したわけではない。
+
+## 第5輪レビュー対応（2026-09-15）: リロード経路の 404 → fallback
+
+### 真因
+
+`nous/api/http/static/chat/avatar/chat-mode.js` はモジュール読込時に `if (isCharacterMode()) applyCharacterMode(true)` を実行し、そこで**無条件にアバターを初期化**していた。しかしページ読込直後は `base.js` が `/api/personas` の応答を待っているため `window.S.persona` が空で、`modelUrlFor()` が `/api/chat//avatar/model` を、`refreshModelList()` が `/api/chat//avatar/models` を取得して 404 → `IMG.chat-avatar-fallback-img`（`fallback:true, motion:"static"`）になっていた。ペルソナ確定は `chat-core.js` の `loadChat()` だが、そこからアバターの初期化は呼ばれていなかった。
+
+### 修正（`chat-mode.js` / `chat-core.js`）
+
+- アバター初期化を `initAvatarForPersona()` に集約し、**`persona()` が空なら何もせず false を返す**。ペルソナが変わった場合だけ作り直す（`avatarPersona` で一致判定）。
+- `applyCharacterMode(on)` は ON のとき `await initAvatarForPersona()` を呼ぶ（起動時はペルソナ未確定なので no-op になる）。
+- `export function syncCharacterMode()` を追加し、**`chat-core.js` の `loadChat()` 冒頭（`if (!S.persona) return;` の直後）から呼ぶ**。これがペルソナ確定後の唯一の初期化タイミングになる。
+- `disposeAvatar()` を追加し、モデル選択・アップロード・モード OFF の 3 か所で使っていた重複 dispose を統合。
+- キャッシュ破棄のため `chat-mode.js?v=20260914c` へ更新（`chat_layout.py` と動的 import の 2 か所）。
+
+### リグレッションテスト（`chat/chat-mode.test.js`、赤→緑で確認）
+
+- 追加: `reload path: avatar init waits for the persona` の 2 件。
+  - `S.persona = ''` でモジュールを読み込むと `initAvatar` が**呼ばれない**こと → `S.persona = 'herta'` 後に `syncCharacterMode()` で 1 回だけ呼ばれ、URL が `/api/chat/herta/avatar/model` であること → 再呼び出しでは作り直さないこと。
+  - ペルソナ変更時に `herta` → `other` と作り直すこと。
+- **赤の実測**: `git stash` で修正前の `chat-mode.js` に戻すと、期待どおり失敗する — `expected "spy" to not be called at all, but actually been called 1 times … [<div id="chat-avatar-canvas-container">, "/api/chat//avatar/model"]`（＝報告された 404 そのもの）。復元後は全 270 件 PASS。
+- テストハーネスの drive-by 修正: Node 25 の実験的グローバル `localStorage` が vitest(jsdom) の Storage を覆い隠し、`localStorage.clear is not a function` で**既存 11 件が全滅**していた。`vitest.setup.js` を追加し、`clear` が無い場合のみインメモリ Storage を差し込む（動く環境では何もしない）。
+
+### 実ブラウザ実測（fresh セッション・`?cachebust=r5-fixed` でリロード）
+
+| 計測 | 修正前（レビュー報告） | 修正後（実測） |
+| --- | --- | --- |
+| アバターのモデル取得 | `/api/chat//avatar/model` → 404 | **`/api/chat/herta/avatar/model` の 1 件のみ** |
+| `/api/chat//` を含むリクエスト | あり | **0 件**（`performance.getEntriesByType('resource')` で確認） |
+| `probe()` | `fallback:true, motion:"static"` | **`fallback:false, motion:"vrma"`, `vrmaBones:21`** |
+| フォールバック画像 | 表示 | **DOM に存在しない** |
+| cel / コンテキスト | — | `{installed:35, patched:35, missed:0}` / `contextLost:false` / `armDropDeg` 73.8°, 69.7° |
+| 証跡 | — | `docs/evidence/character-avatar-2026-09-14/r5-01-reload-fixed-no-404.png` |
+
+- 確認手順（再現用）: `sessionMode: fresh` で起動 → `--session <name>` を明示 → `?cachebust=<任意>` でページを開く（HTML のキャッシュ回避）→ キャラチャットモードを ON（`nous.chatMode=character` を保存）→ 同 URL を新しい cachebust で開き直す（＝リロード）→ 計測。
+- 注意（環境の事実）: 起動中のサーバ（`python -m nous.main`・PID 49224・`--reload` なし）は**レンダリング済み HTML の `?v=` を古いまま返す**。静的 JS 自体はディスクから配信されるため修正は既に有効（`curl .../chat-mode.js?v=20260914b` の内容に `syncCharacterMode` が含まれることを確認済み）。`?v=` の更新はサーバ再起動後に効く。
+- 併せて `python -m pytest tests/ -q -k "avatar or chat_layout or csp or markup"` → 24 passed、`npx vitest run`（`nous/api/http/static`）→ 270 passed。

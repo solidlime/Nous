@@ -14,6 +14,7 @@ const LOG_RATIO_MAX = 70;
 const LOG_RATIO_DEFAULT = 30;
 
 let avatarHandle = null;      // { setExpression, setTalking, setPose, playGesture, dispose } | null
+let avatarPersona = null;     // avatarHandle を初期化したときのペルソナ（不一致なら作り直す）
 let talkIdleTimer = null;
 let emotionSeenThisTurn = false;
 
@@ -46,29 +47,59 @@ async function applyCharacterMode(on) {
     ensureStageUi();
     applyLogRatio(readLogRatio(), false);
     syncInputAreaHeight();
-    if (!avatarHandle) {
-      try {
-        const mod = await import('./avatar.js?v=20260914b');
-        const container = document.getElementById('chat-avatar-canvas-container');
-        const saved = localStorage.getItem(MODEL_KEY) || '';
-        avatarHandle = await mod.initAvatar(container, modelUrlFor(saved));
-        // 検証・デバッグ用フック（本番動作には影響なし）
-        window.__avatarDebug = avatarHandle;
-        refreshModelList();
-        populateExpressionSelect();
-      } catch (e) {
-        console.warn('[chat-mode] avatar init failed:', e);
-      }
-    }
+    await initAvatarForPersona();
   } else {
     main.classList.remove('character-mode');
     layer.hidden = true;
     resetStageUiControls();
-    if (avatarHandle) {
-      try { avatarHandle.dispose(); } catch (e) { console.warn('[chat-mode] dispose failed:', e); }
-      avatarHandle = null;
-    }
+    disposeAvatar();
   }
+}
+
+/* アバターを「今のペルソナ」で初期化する。ペルソナが未確定なら何もしない（false を返す）。
+
+   ページ読込直後は base.js が /api/personas の応答を待っているため S.persona が空で、
+   そのまま URL を組み立てると `/api/chat//avatar/model` を叩いて 404 → fallback 画像になる
+   （ペルソナ部分が空のままモデル一覧 `/avatar/models` も同じく 404 する）。
+   ペルソナが確定してからは chat-core.js の loadChat() が syncCharacterMode() を呼ぶので、
+   そこが唯一の初期化タイミングになる。ペルソナが変わった場合もここで作り直す。 */
+async function initAvatarForPersona() {
+  const p = persona();
+  if (!p) return false;
+  if (avatarHandle && avatarPersona === p) return true;
+  disposeAvatar();
+  try {
+    const mod = await import('./avatar.js?v=20260914c');
+    const container = document.getElementById('chat-avatar-canvas-container');
+    const saved = localStorage.getItem(MODEL_KEY) || '';
+    avatarHandle = await mod.initAvatar(container, modelUrlFor(saved));
+    avatarPersona = p;
+    // 検証・デバッグ用フック（本番動作には影響なし）
+    window.__avatarDebug = avatarHandle;
+    refreshModelList();
+    populateExpressionSelect();
+    return true;
+  } catch (e) {
+    console.warn('[chat-mode] avatar init failed:', e);
+    return false;
+  }
+}
+
+function disposeAvatar() {
+  if (!avatarHandle) return;
+  try { avatarHandle.dispose(); } catch (e) { console.warn('[chat-mode] dispose failed:', e); }
+  avatarHandle = null;
+  avatarPersona = null;
+  window.__avatarDebug = null;
+}
+
+/* ペルソナ確定後・ペルソナ切替後に呼ぶ（chat-core.js の loadChat から）。
+   キャラモード OFF なら何もしない。ペルソナが変わっていればアバターを作り直す。 */
+export function syncCharacterMode() {
+  if (!isCharacterMode()) return Promise.resolve(false);
+  const main = document.getElementById('chat-main');
+  if (main && !main.classList.contains('character-mode')) return applyCharacterMode(true);
+  return initAvatarForPersona();
 }
 
 export function toggleCharacterMode() {
@@ -190,10 +221,7 @@ async function onModelSelected() {
   if (name) localStorage.setItem(MODEL_KEY, name);
   else localStorage.removeItem(MODEL_KEY);
   // アバター再ロード
-  if (avatarHandle) {
-    try { avatarHandle.dispose(); } catch { /* noop */ }
-    avatarHandle = null;
-  }
+  disposeAvatar();
   await applyCharacterMode(true);
 }
 
@@ -218,10 +246,7 @@ async function onUpload(file) {
     const select = document.getElementById('chat-avatar-model-select');
     if (select) select.value = json.filename;
     // アップロードしたモデルへ切替
-    if (avatarHandle) {
-      try { avatarHandle.dispose(); } catch { /* noop */ }
-      avatarHandle = null;
-    }
+    disposeAvatar();
     await applyCharacterMode(true);
   } catch (e) {
     console.warn('[chat-mode] upload failed:', e);
@@ -415,6 +440,11 @@ export function initChatMode() {
   // 初期状態の復元
   if (isCharacterMode()) applyCharacterMode(true);
 }
+
+// ペルソナ確定後に chat-core.js（loadChat）から呼べるように登録する
+const _N = (window.Nous = window.Nous || {});
+_N.Chat = _N.Chat || {};
+_N.Chat.mode = { syncCharacterMode };
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initChatMode);

@@ -132,3 +132,74 @@ describe('nous:chat-sse CustomEvent consumption', () => {
     expect(() => document.dispatchEvent(new CustomEvent('nous:chat-sse', { detail: {} }))).not.toThrow();
   });
 });
+
+/* リロード経路のリグレッション: ページ読込時点では S.persona が未設定（base.js が
+   /api/personas の応答を待っている）。この間にアバターを初期化すると
+   `/api/chat//avatar/model` を取得して 404 → fallback 画像になっていた。 */
+describe('reload path: avatar init waits for the persona', () => {
+  it('does not init while S.persona is empty, then inits once the persona is known', async () => {
+    vi.resetModules();
+    localStorage.clear();
+    localStorage.setItem('nous.chatMode', 'character');
+    document.body.innerHTML = `
+      <div id="chat-main">
+        <div id="chat-avatar-layer" hidden>
+          <div id="chat-avatar-canvas-container"></div>
+        </div>
+        <div id="chat-messages"></div>
+      </div>
+      <button id="chat-mode-toggle-btn"></button>
+      <select id="chat-avatar-model-select"></select>
+    `;
+    window.S = { persona: '' };
+    const { initAvatar } = await import('./avatar/avatar.js');
+    initAvatar.mockClear();
+
+    const mode = await import('./avatar/chat-mode.js');
+    // 起動時の applyCharacterMode(true) は走るが、アバターは初期化されない
+    expect(document.getElementById('chat-main').classList.contains('character-mode')).toBe(true);
+    expect(initAvatar).not.toHaveBeenCalled();
+
+    // ペルソナ確定後（chat-core.js の loadChat 経由）に初期化され、URL も正しい
+    window.S.persona = 'herta';
+    await mode.syncCharacterMode();
+    expect(initAvatar).toHaveBeenCalledTimes(1);
+    expect(initAvatar.mock.calls[0][1]).toBe('/api/chat/herta/avatar/model');
+
+    // 同じペルソナでの再呼び出しは作り直さない（loadChat の多重呼び出し対策）
+    await mode.syncCharacterMode();
+    expect(initAvatar).toHaveBeenCalledTimes(1);
+  });
+
+  it('rebuilds the avatar when the persona changes', async () => {
+    vi.resetModules();
+    localStorage.clear();
+    localStorage.setItem('nous.chatMode', 'character');
+    document.body.innerHTML = `
+      <div id="chat-main">
+        <div id="chat-avatar-layer" hidden>
+          <div id="chat-avatar-canvas-container"></div>
+        </div>
+        <div id="chat-messages"></div>
+      </div>
+      <button id="chat-mode-toggle-btn"></button>
+      <select id="chat-avatar-model-select"></select>
+    `;
+    window.S = { persona: 'herta' };
+    const { initAvatar } = await import('./avatar/avatar.js');
+    initAvatar.mockClear();
+    const mode = await import('./avatar/chat-mode.js');
+
+    // 起動時にペルソナが確定していれば初期化される
+    await mode.syncCharacterMode();
+    expect(initAvatar.mock.calls.map((c) => c[1])).toEqual(['/api/chat/herta/avatar/model']);
+
+    // ペルソナが変わったら作り直す
+    window.S.persona = 'other';
+    await mode.syncCharacterMode();
+    expect(initAvatar.mock.calls.map((c) => c[1])).toEqual([
+      '/api/chat/herta/avatar/model',
+      '/api/chat/other/avatar/model',
+    ]);
+  });
+});
