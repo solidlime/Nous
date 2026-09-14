@@ -56,6 +56,7 @@ def render_chat_main() -> str:
                             <button id="chat-avatar-upload-btn" title="VRMモデルをアップロード" aria-label="VRMモデルをアップロード"><i data-lucide="upload"></i> VRM</button>
                             <input type="file" id="chat-avatar-upload" accept=".vrm" hidden />
                         </div>
+                        <div id="chat-avatar-stage-ui"><!-- ログ高さスライダー / 表情UIの注入先 --></div>
                     </div>
                     <div id="chat-messages">
                         <div class="chat-welcome" id="chat-welcome">

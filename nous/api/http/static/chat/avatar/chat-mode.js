@@ -8,6 +8,10 @@
 const MODE_KEY = 'nous.chatMode';
 const MODEL_KEY = 'nous.avatarModel';
 const TALK_IDLE_MS = 2000;
+const LOG_RATIO_KEY = 'nous.chat.logRatio';
+const LOG_RATIO_MIN = 15;
+const LOG_RATIO_MAX = 70;
+const LOG_RATIO_DEFAULT = 30;
 
 let avatarHandle = null;      // { setExpression, setTalking, setPose, playGesture, dispose } | null
 let talkIdleTimer = null;
@@ -39,6 +43,8 @@ async function applyCharacterMode(on) {
   if (on) {
     main.classList.add('character-mode');
     layer.hidden = false;
+    ensureStageUi();
+    applyLogRatio(readLogRatio(), false);
     if (!avatarHandle) {
       try {
         const mod = await import('./avatar.js');
@@ -48,6 +54,7 @@ async function applyCharacterMode(on) {
         // 検証・デバッグ用フック（本番動作には影響なし）
         window.__avatarDebug = avatarHandle;
         refreshModelList();
+        populateExpressionSelect();
       } catch (e) {
         console.warn('[chat-mode] avatar init failed:', e);
       }
@@ -55,6 +62,7 @@ async function applyCharacterMode(on) {
   } else {
     main.classList.remove('character-mode');
     layer.hidden = true;
+    resetStageUiExpression();
     if (avatarHandle) {
       try { avatarHandle.dispose(); } catch (e) { console.warn('[chat-mode] dispose failed:', e); }
       avatarHandle = null;
@@ -155,10 +163,11 @@ async function refreshModelList() {
     if (!res.ok) return;
     const json = await res.json();
     const models = Array.isArray(json.models) ? json.models : [];
+    const defaultName = (json && json.default) || 'sample.vrm';
     select.innerHTML = '';
     const optDefault = document.createElement('option');
     optDefault.value = '';
-    optDefault.textContent = 'sample.vrm (default)';
+    optDefault.textContent = `${defaultName} (default)`;
     select.appendChild(optDefault);
     for (const name of models) {
       const opt = document.createElement('option');
@@ -216,6 +225,124 @@ async function onUpload(file) {
   } catch (e) {
     console.warn('[chat-mode] upload failed:', e);
   }
+}
+
+/* ── stage UI: log ratio slider + expression picker（DOM 注入）── */
+
+function clampLogRatio(v) {
+  return Math.min(LOG_RATIO_MAX, Math.max(LOG_RATIO_MIN, v));
+}
+
+function readLogRatio() {
+  const raw = localStorage.getItem(LOG_RATIO_KEY);
+  if (raw === null) return LOG_RATIO_DEFAULT;
+  const v = Number(raw);
+  if (!Number.isFinite(v)) return LOG_RATIO_DEFAULT;
+  return clampLogRatio(v);
+}
+
+function applyLogRatio(percent, save = true) {
+  const v = clampLogRatio(Number(percent));
+  const main = document.getElementById('chat-main');
+  if (main) main.style.setProperty('--chat-log-h', v + '%');
+  const slider = document.getElementById('chat-log-ratio');
+  const label = document.getElementById('chat-log-ratio-value');
+  if (slider) slider.value = String(v);
+  if (label) label.textContent = v + '%';
+  if (save) localStorage.setItem(LOG_RATIO_KEY, String(v));
+  return v;
+}
+
+function ensureStageUi() {
+  const stage = document.getElementById('chat-avatar-stage-ui');
+  if (!stage) return;
+  if (document.getElementById('chat-log-ratio')) return; // 既に注入済み
+  const row = (labelText, el) => {
+    const div = document.createElement('div');
+    div.className = 'chat-stage-row';
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    label.htmlFor = el.id;
+    div.appendChild(label);
+    div.appendChild(el);
+    return div;
+  };
+  const logSlider = document.createElement('input');
+  logSlider.type = 'range';
+  logSlider.id = 'chat-log-ratio';
+  logSlider.min = String(LOG_RATIO_MIN);
+  logSlider.max = String(LOG_RATIO_MAX);
+  logSlider.step = '1';
+  logSlider.value = String(LOG_RATIO_DEFAULT);
+  const logLabel = document.createElement('span');
+  logLabel.id = 'chat-log-ratio-value';
+  logLabel.textContent = LOG_RATIO_DEFAULT + '%';
+  const exprSelect = document.createElement('select');
+  exprSelect.id = 'chat-avatar-expression';
+  exprSelect.disabled = true;
+  const weightSlider = document.createElement('input');
+  weightSlider.type = 'range';
+  weightSlider.id = 'chat-avatar-expression-weight';
+  weightSlider.min = '0';
+  weightSlider.max = '1';
+  weightSlider.step = '0.05';
+  weightSlider.value = '1';
+  stage.appendChild(row('ログ高さ', logSlider));
+  stage.querySelector('.chat-stage-row').appendChild(logLabel);
+  stage.appendChild(row('表情', exprSelect));
+  stage.appendChild(row('強さ', weightSlider));
+  logSlider.addEventListener('input', () => {
+    applyLogRatio(Number(logSlider.value));
+  });
+  exprSelect.addEventListener('change', onExpressionChange);
+  weightSlider.addEventListener('input', onExpressionChange);
+}
+
+function onExpressionChange() {
+  const select = document.getElementById('chat-avatar-expression');
+  const weight = document.getElementById('chat-avatar-expression-weight');
+  if (!select || !weight || !avatarHandle) return;
+  avatarHandle.setExpression(select.value || 'neutral', Number(weight.value));
+}
+
+function populateExpressionSelect() {
+  const select = document.getElementById('chat-avatar-expression');
+  if (!select) return;
+  select.innerHTML = '';
+  const none = document.createElement('option');
+  none.value = 'neutral';
+  none.textContent = 'なし';
+  select.appendChild(none);
+  select.disabled = true;
+  if (!avatarHandle || typeof avatarHandle.listExpressions !== 'function') return;
+  try {
+    const groups = avatarHandle.listExpressions();
+    const defs = [['emotions', '表情'], ['mouths', '口'], ['other', 'その他']];
+    for (const [key, label] of defs) {
+      const names = Array.isArray(groups && groups[key]) ? groups[key] : [];
+      const items = names.filter((n) => n && n !== 'neutral');
+      if (!items.length) continue;
+      const og = document.createElement('optgroup');
+      og.label = label;
+      for (const n of items) {
+        const opt = document.createElement('option');
+        opt.value = n;
+        opt.textContent = n;
+        og.appendChild(opt);
+      }
+      select.appendChild(og);
+    }
+    select.disabled = false;
+  } catch (e) {
+    console.warn('[chat-mode] listExpressions failed:', e);
+  }
+}
+
+function resetStageUiExpression() {
+  const select = document.getElementById('chat-avatar-expression');
+  const weight = document.getElementById('chat-avatar-expression-weight');
+  if (select) select.value = 'neutral';
+  if (weight) weight.value = '1';
 }
 
 /* ── DOM wiring ──────────────────────────────────────────────── */

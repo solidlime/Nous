@@ -16,7 +16,8 @@
 
 #chat-avatar-canvas-container {
   position: absolute;
-  inset: 0;
+  /* ログ領域（--chat-log-h）を除いた上側のみ。ログと重ならない */
+  inset: 0 0 var(--chat-log-h, 30%) 0;
   pointer-events: auto;
 }
 
@@ -88,20 +89,26 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
-/* キャラモード中のみ #chat-main を position 祖先にする（レイヤーのはみ出し防止） */
+/* キャラモード中のみ #chat-main を position 祖先にする（レイヤーのはみ出し防止）。
+   --chat-log-h: 下段ログ領域の高さ。スライダー（chat-mode.js）が % で更新する */
 #chat-main.character-mode {
   position: relative;
+
+  --chat-log-h: 30%;
 }
 
-/* キャラチャットモード: メッセージ欄を下寄せ半透明オーバーレイに */
+/* キャラチャットモード: メッセージ欄を下段 fixed-height パネルに（キャラ領域と上下分割） */
 #chat-main.character-mode #chat-messages {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  top: auto;
-  max-height: 55%;
+  height: var(--chat-log-h, 30%);
+  max-height: var(--chat-log-h, 30%);
   overflow-y: auto;
+  /* 絶対配置の #chat-input-area（z-index 12）がログ下端に重なるため、
+     最終行が隠れないよう入力エリア分の下余白を確保する */
+  padding-bottom: 104px;
   background: rgba(10, 8, 20, 0.55);
   backdrop-filter: blur(6px);
   border-radius: 12px 12px 0 0;
@@ -125,3 +132,53 @@
 }
 
 /* 入力エリアはそのまま（通常時と同じレイアウト） */
+
+/* ── ステージ左下 UI パネル（chat-mode.js が DOM 注入）────────────── */
+
+#chat-avatar-stage-ui {
+  position: absolute;
+  left: 8px;
+  bottom: calc(var(--chat-log-h, 30%) + 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: auto;
+  background: var(--glass-bg, rgba(20, 16, 36, 0.55));
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
+  border-radius: 10px;
+  padding: 8px 10px;
+  backdrop-filter: blur(8px);
+  z-index: 6;
+}
+
+#chat-avatar-stage-ui .chat-stage-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-primary, #eee);
+}
+
+#chat-avatar-stage-ui label {
+  white-space: nowrap;
+}
+
+#chat-log-ratio,
+#chat-avatar-expression-weight {
+  width: 110px;
+}
+
+#chat-log-ratio-value {
+  min-width: 3.5ch;
+  font-variant-numeric: tabular-nums;
+}
+
+#chat-avatar-expression {
+  max-width: 150px;
+  font-size: 0.8rem;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
+  background: var(--glass-bg, rgba(20, 16, 36, 0.7));
+  color: var(--text-primary, #eee);
+}

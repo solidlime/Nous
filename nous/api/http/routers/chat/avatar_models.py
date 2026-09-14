@@ -38,6 +38,19 @@ def _sample_model_path() -> Path:
     return Path(__file__).resolve().parents[5] / "prototype" / "vrm-avatar" / "models" / "sample.vrm"
 
 
+def _herta_model_path() -> Path:
+    """Path to the repo-root herta.vrm (preferred default; untracked, may not exist)."""
+    return Path(__file__).resolve().parents[5] / "herta.vrm"
+
+
+def _uploaded_models(persona: str) -> list[str]:
+    """Sorted *.vrm filenames uploaded for a persona (empty if missing)."""
+    avatar_dir = _avatar_dir(persona)
+    if not avatar_dir.is_dir():
+        return []
+    return sorted(p.name for p in avatar_dir.glob("*.vrm") if p.is_file())
+
+
 def _safe_model_name(name: str) -> str:
     """basename のみ受け、安全な文字（英数字/._-）以外を除去する。"""
     base = os.path.basename(name).replace("..", "").strip()
@@ -47,13 +60,38 @@ def _safe_model_name(name: str) -> str:
 # ── pure logic layer (_do_*) ───────────────────────────────────────
 
 
+def _do_resolve_default_model(persona: str, warn: bool = True) -> dict:
+    """Resolve the default model actually served when no explicit name is given.
+
+    Resolution order: repo-root herta.vrm → uploaded persona models → sample.vrm.
+    """
+    herta = _herta_model_path()
+    if herta.is_file():
+        return {"file_path": str(herta), "filename": herta.name}
+    models = _uploaded_models(persona)
+    if models:
+        if warn:
+            logger.warning(
+                "avatar default model: repo-root herta.vrm not found (%s); serving uploaded %s",
+                herta,
+                models[0],
+            )
+        return {"file_path": str(_avatar_dir(persona) / models[0]), "filename": models[0]}
+    if warn:
+        logger.warning(
+            "avatar default model: no repo-root herta.vrm and no uploaded models for persona=%s; serving sample.vrm",
+            persona,
+        )
+    return {"file_path": str(_sample_model_path()), "filename": "sample.vrm"}
+
+
 def _do_list_models(persona: str) -> dict:
-    """List *.vrm files in the persona avatar dir (empty if missing)."""
-    avatar_dir = _avatar_dir(persona)
-    if not avatar_dir.is_dir():
-        return {"models": [], "current": None}
-    models = sorted(p.name for p in avatar_dir.glob("*.vrm") if p.is_file())
-    return {"models": models, "current": None}
+    """List uploaded *.vrm files plus the default model actually served."""
+    return {
+        "models": _uploaded_models(persona),
+        "current": None,
+        "default": _do_resolve_default_model(persona, warn=False)["filename"],
+    }
 
 
 def _do_resolve_model(persona: str, name: str) -> dict | None:
@@ -93,7 +131,8 @@ async def list_avatar_models(request: Request) -> JSONResponse:
 async def serve_avatar_model(request: Request) -> Response:
     """GET /api/chat/{persona}/avatar/model?name=<filename> — serve a VRM model.
 
-    name 未指定 or 該当ファイル無し → 同梱 sample.vrm を配信（初期フォールバック）。
+    name 未指定 → 既定モデル解決順（リポジトリ直下 herta.vrm → アップロード済み → sample.vrm）。
+    name 指定かつ該当ファイル無し → 従来どおり sample.vrm を配信。
     """
     from starlette.responses import FileResponse
 
@@ -103,11 +142,20 @@ async def serve_avatar_model(request: Request) -> Response:
 
     name = request.query_params.get("name", "")
     resolved = _do_resolve_model(persona, name)
-    if resolved is None:
+    if resolved is None and name:
+        # 明示指定の名前が見つからない場合は従来どおり同梱 sample.vrm へフォールバック
+        logger.warning("avatar model %r not found for persona=%s; serving sample.vrm", name, persona)
         path = _sample_model_path()
         if not path.is_file():
             return JSONResponse({"error": "No model available"}, status_code=404)
         return FileResponse(str(path), media_type="model/gltf-binary", filename="sample.vrm")
+    if resolved is None:
+        # name 未指定 → 既定モデル解決順（herta.vrm → アップロード済み → sample.vrm）
+        default = _do_resolve_default_model(persona, warn=True)
+        path = Path(default["file_path"])
+        if not path.is_file():
+            return JSONResponse({"error": "No model available"}, status_code=404)
+        return FileResponse(str(path), media_type="model/gltf-binary", filename=default["filename"])
     return FileResponse(resolved["file_path"], media_type="model/gltf-binary", filename=resolved["filename"])
 
 

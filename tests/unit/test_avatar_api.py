@@ -30,6 +30,8 @@ def avatar_env(tmp_path, monkeypatch):
 
     monkeypatch.setattr(settings_mod, "get_settings", lambda: SimpleNamespace(data_root=str(tmp_path)))
     monkeypatch.setattr(avatar_mod, "get_settings", lambda: SimpleNamespace(data_root=str(tmp_path)))
+    # リポジトリ直下 herta.vrm は実環境依存なので、テストでは常に「存在しない」ことにする
+    monkeypatch.setattr(avatar_mod, "_herta_model_path", lambda: tmp_path / "__no_herta__.vrm")
     ctx = MagicMock()
     with (
         patch("nous.api.http.routers.chat.avatar_models._resolve_request", return_value=(PERSONA, ctx)),
@@ -65,7 +67,7 @@ class TestListModels:
     async def test_empty_when_dir_missing(self, avatar_env):
         resp = await list_avatar_models(MagicMock())
         assert resp.status_code == 200
-        assert resp.body == b'{"models":[],"current":null}'
+        assert resp.body == b'{"models":[],"current":null,"default":"sample.vrm"}'
 
     @pytest.mark.asyncio
     async def test_lists_vrm_files_sorted(self, avatar_env):
@@ -75,7 +77,7 @@ class TestListModels:
         (avatar_env / "note.txt").write_bytes(b"x")  # VRM以外は除外
         resp = await list_avatar_models(MagicMock())
         assert resp.status_code == 200
-        assert resp.body == b'{"models":["a.vrm","b.vrm"],"current":null}'
+        assert resp.body == b'{"models":["a.vrm","b.vrm"],"current":null,"default":"a.vrm"}'
 
     @pytest.mark.asyncio
     async def test_404_for_unknown_persona(self):
@@ -94,7 +96,7 @@ class TestServeModel:
             req = MagicMock()
             req.query_params = {"name": bad}
             resp = await serve_avatar_model(req)
-            # トラバーサル名はすべて拒否され sample.vrm フォールバックへ
+            # トラバーサル名はすべて拒否され同梱 sample.vrm へフォールバック
             assert resp.status_code == 200, f"name={bad!r}"
             assert isinstance(resp, FileResponse)
             assert os.path.basename(resp.path) == "sample.vrm", f"name={bad!r}"
@@ -115,7 +117,8 @@ class TestServeModel:
     @pytest.mark.asyncio
     async def test_missing_file_falls_back_to_sample(self, avatar_env):
         req = MagicMock()
-        req.query_params = {"name": "nonexistent.vrm"}
+        req.query_params = {"name": "nonexistent.vrm"}  # 既定解決: アップロード無し → sample
+
         resp = await serve_avatar_model(req)
         assert resp.status_code == 200
         assert isinstance(resp, FileResponse)
