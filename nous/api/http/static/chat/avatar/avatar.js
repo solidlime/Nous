@@ -220,11 +220,10 @@ async function _doInit(container, modelUrl) {
   }
   resize();
 
-  // 法線に依存しないフラットなセルシェーディング。指向性ライトを置かず環境光のみにすると
-  // MToon の直接光項が消え、法線由来のハイライト／段差グラデーションが出ない（＝白飛びしない）。
-  // 陰影はテクスチャに描き込まれた階調がそのまま出る。
-  // 強度は実測較正: 従来構成（Directional π×0.8 + Hemisphere π×0.55）の平均輝度 117.8 に対し
-  // π では 132.1 と明る過ぎたため、線形な環境光項を ×0.9 して同輝度（≒119）に合わせる。
+  // ライトはアウトライン材質にのみ作用する（本体はセルシェーディングパッチが出力をテクスチャ
+  // 原色へ置き換えるため、強度を変えても本体の画素は変わらない。時計を凍結した ambient 2.827
+  // vs 0 の比較で changed=0px / md5 一致を実測）。環境光のみを残すのは、パッチ不発時に黒画面へ
+  // 落ちないための保険も兼ねる。
   scene.add(new THREE.AmbientLight(0xffffff, Math.PI * 0.9));
 
   // --- ポインタドラッグ: 水平回転 / ホイール: ズーム（自動距離 × 倍率） ---
@@ -391,8 +390,79 @@ async function _doInit(container, modelUrl) {
   }
 
 
-  // --- MToon リム（控えめなラベンダー系。アウトラインは触らない） ---
-  const rimColor = new THREE.Color(0.55, 0.48, 0.7);
+  // --- セルシェーディング（法線処理なし） ---
+  // MToon の最終出力は reflectedLight（ライト×法線の反射項）なので、ライト構成をいくら調整しても
+  // 法線由来の陰影と飽和が残る。そこで出力自体を「テクスチャ原色（litFactor × map）」＋輝度3階調に
+  // 置き換える。
+  //   - 法線もライトも参照しない（法線由来のハイライト／段差が出ない）
+  //   - 階調は 1.0 が上限の乗算なので原理的に白飛びしない（clamp 済み）
+  //   - パッチ不発（ベンダ版差）でもライトが残るため黒画面にはならない
+  // ベンダ実測: three-vrm.module.min.js のフラグメントシェーダ末尾は
+  //   gl_FragColor = vec4( col, diffuseColor.a );  postCorrection();
+  // で、postCorrection() が tonemapping → colorspace 変換を行う。よって出力は線形空間。
+  const CEL_TONES = [0.62, 0.84, 1.0]; // 影 / 中間 / 光（線形）
+  const CEL_THRESHOLDS = [0.1, 0.32]; // 輝度しきい値（線形。sRGB 目安 0.35 / 0.6）
+  const CEL_EDGE = 0.03; // 階調境界の柔らかさ（硬い閾値は顔のぼかしを帯状にしやすい）
+  const f4 = (n) => n.toFixed(4);
+  const CEL_GLSL = [
+    "vec3 nousCel( vec3 c ) {",
+    "  float l = dot( c, vec3( 0.2126, 0.7152, 0.0722 ) );",
+    `  float s1 = smoothstep( ${f4(CEL_THRESHOLDS[0] - CEL_EDGE)}, ${f4(CEL_THRESHOLDS[0] + CEL_EDGE)}, l );`,
+    `  float s2 = smoothstep( ${f4(CEL_THRESHOLDS[1] - CEL_EDGE)}, ${f4(CEL_THRESHOLDS[1] + CEL_EDGE)}, l );`,
+    `  float tone = mix( mix( ${f4(CEL_TONES[0])}, ${f4(CEL_TONES[1])}, s1 ), ${f4(CEL_TONES[2])}, s2 );`,
+    "  return clamp( c * tone, 0.0, 1.0 );",
+    "}",
+    "",
+  ].join("\n");
+  const CEL_SRC = "gl_FragColor = vec4( col, diffuseColor.a );";
+  const CEL_DST =
+    "gl_FragColor = vec4( nousCel( diffuseColor.rgb ), diffuseColor.a );";
+  const MAIN_SRC = "void main() {";
+  const cel = {
+    installed: 0, // パッチを仕込んだ材質数
+    patched: 0, // 実際に置換できた材質数（コンパイル時に確定）
+    missed: 0, // 文字列不一致で不発だった材質数
+    tones: CEL_TONES,
+    thresholds: CEL_THRESHOLDS,
+  };
+  // MToon は環境光だけでは反射項が立たず素の col が黒になる（実測: 頭部が真黒）。
+  // パッチが不発に終わった場合だけ従来構成のライトを足し、黒落ちを避ける。
+  let fallbackLit = false;
+  function ensureFallbackLight() {
+    if (fallbackLit) return;
+    fallbackLit = true;
+    const key = new THREE.DirectionalLight(0xffffff, Math.PI * 0.8);
+    key.position.set(1, 1.6, 1.2);
+    scene.add(key);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x444455, Math.PI * 0.55));
+  }
+  function applyCel(m) {
+    cel.installed++;
+    // three-vrm は onBeforeCompile に THREE_VRM_THREE_REVISION 等の define 注入を仕込んでいる。
+    // 上書きすると vertex shader が未定義マクロでコンパイル失敗し全材質が黒くなる（実測で踏んだ）。
+    // 必ず元のフックを先に呼んでから置換する。
+    const prev = m.onBeforeCompile;
+    m.onBeforeCompile = (shader, renderer) => {
+      if (typeof prev === "function") prev.call(m, shader, renderer);
+      const src = shader.fragmentShader;
+      // 同一行が DEBUG_LITSHADERATE 分岐（デッドコード）にも先に現れるため、単純な replace は
+      // そちらを書き換えて実出力を素通しにする。実出力は必ず末尾側にあるので lastIndexOf で取る。
+      const at = src.lastIndexOf(CEL_SRC);
+      const tailOk = at >= 0 && at > src.length - 400;
+      if (!tailOk || !src.includes(MAIN_SRC)) {
+        cel.missed++;
+        setTimeout(ensureFallbackLight, 0);
+        return;
+      }
+      const patched = `${src.slice(0, at)}${CEL_DST}${src.slice(at + CEL_SRC.length)}`;
+      shader.fragmentShader = patched.replace(
+        MAIN_SRC,
+        CEL_GLSL + MAIN_SRC,
+      );
+      cel.patched++;
+    };
+    m.needsUpdate = true;
+  }
   // three-vrm v3 の正準名は *Factor。旧名エイリアスのみの版もあり得るので両方に入れる
   const setFactor = (m, name, value) => {
     if (name in m) m[name] = value;
@@ -406,10 +476,9 @@ async function _doInit(container, modelUrl) {
         ? [o.material]
         : [];
     for (const m of mats) {
+      // アウトラインは同一シェーダを #if defined(OUTLINE) で分岐する別材質なので除外する
       if (!m.isMToonMaterial || m.isOutline) continue;
-      m.parametricRimColorFactor?.copy(rimColor);
-      setFactor(m, "parametricRimFresnelPowerFactor", 2.5);
-      setFactor(m, "rimLightingMixFactor", 0.3);
+      applyCel(m);
     }
   });
 
@@ -852,6 +921,7 @@ async function _doInit(container, modelUrl) {
     listExpressions,
     probe,
     dispose,
+    cel,
     __vrm: vrm,
     __parser: gltfParser,
   };

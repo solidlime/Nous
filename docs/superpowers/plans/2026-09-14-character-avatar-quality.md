@@ -346,3 +346,41 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 
 `docs/evidence/character-avatar-2026-09-14/` に画像 12 枚と計測器 `pixdiff.py` を本コミットへ同梱（`_final_char_mode_30.png` 等の untracked 放置をやめ、参照可能な場所へ移動した）。ルート直下の旧検証用一時ファイル（`_*.png`, `_pixstat.py`）は削除し、証跡を `docs/evidence/` に一本化した。計測器の依存は numpy と Pillow、再現は上記 1 コマンドで可能。
 
+## 追加修正（2026-09-15）: 照明過剰・白飛び → 法線非依存セルシェーディング
+
+ユーザー指摘: 「まだライティングが過剰で白飛びしてるなあ。法線処理なしのセルシェーディングでおねがい。」
+
+### 真因 3 件（すべて実ブラウザ実測・推測なし）
+
+1. **リム発光が本体を白く潰していた** — `avatar.js` が VRM 標準の `parametricRimColorFactor`（薄紫 #c4b8da / FresnelPower 2.2 / rimMix 0.3）を有効化していた。リム on→off の差は **3,104px（非背景の 1.82%）**。
+2. **three-vrm の `onBeforeCompile` を上書きして全材質のシェーダを壊した（自作バグ・最初の実装）** — `m.onBeforeCompile = ...` と**代入**したため、three-vrm が仕込む前方宣言（`#define THREE_VRM_THREE_REVISION`）が消え、**全 35 材質**が `THREE.WebGLProgram: Shader Error 1282` で vertex コンパイル失敗 → 体と頭が黒く潰れた（アバター領域の輝度<26 = **70.6%**）。**修正は元フックを先に呼ぶ連結方式**: `const prev = m.onBeforeCompile; m.onBeforeCompile = (s, r) => { if (typeof prev === "function") prev.call(m, s, r); ... }`。修正後は **Shader Error 0 件**。
+3. **ライトが本体に加算されていた** — 前段で「照明は既に本体に効かない」と報告したが、**あれはシェーダが壊れた状態での測定だった（誤り）**。当時の実装は t=0 で `new AmbientLight(0xffffff, Math.PI*0.9)` を main scene へ追加しており（`AmbientLight(":2.827")`）、MToon の法線ライティングに寄与していた。
+
+### 実装（`nous/api/http/static/chat/avatar/avatar.js`）
+
+- `applyCel()`: MToon フラグメントの `#include <output_fragment>` を丸ごと `gl_FragColor` へ置換し、**最終画素 = アルベド × 輝度3段トーン**（`CEL_TONES = [0.62, 0.84, 1.00]`、`CEL_THRESHOLDS = [0.10, 0.32]`、境界は `CEL_EDGE = 0.03` の `smoothstep`）。法線・ライト・リム・スペキュラは一切寄与しない。輪郭材質（`isOutline`）は除外し、3次元の輪郭線は維持。
+- ライトはアバター `scene` へ移し**背景専用**に（アバターには 1 灯も加算されない）。リム発光・specular・sheen は 0 に。
+- 35/35 材質へ適用（`probe` 実測 `cel: {installed:35, patched:35, missed:0}`）。しきい値はモデルとカメラごとに要較正（実測で確認した唯一のモデル: herta.vrm VRM0 / 全身 camY 0.95）。
+
+### 検証（実サーバー http://127.0.0.1:26262/ — 計測は `pixdiff.py` の同一定義）
+
+| 項目 | 実測値 |
+| --- | --- |
+| シェーダコンパイル | 修正前 `Shader Error 1282` × 35 材質 → 修正後 **0 件**（console 実測） |
+| 照明の寄与（決定的） | 時計凍結（`performance.now` 固定 = 1234.5ms）で ambient **2.827 と 0** の 2 枚が **md5 完全一致（changed=0px / 169,730 非背景px）** |
+| 同（非凍結・参考） | 2,136px（1.26%）差 = 呼吸・瞬きのアニメ差（純アニメ基準「idle フレーム0→1」2,787px と同水準） |
+| 白飛び（アバター領域の輝度≥240） | リム有り **4.5%** → セル **3.2%**（`--box=317,233,863,450`。UI オーバーレイの白を含むため差 1.3pt がキャラ分） |
+| 黒潰れ（同領域の輝度<26） | シェーダ故障時 **70.6%**（うちパネル背景 52pt は定数）→ 修正後 **54.6%** |
+| 表情 | `setExpression('happy',0.8)` → 1200ms 後 `probe().expressions.happy = 0.8` |
+| 輪郭（非回帰） | `outlineWidthFactor = 0.012` 維持 / `normalScale = [1,-1]` 維持 |
+| pytest | `tests/unit/test_chat_layout_markup.py` + `test_avatar_model_resolution.py` = **9 passed** |
+| ruff | `pixdiff.py` All checks passed（変更前後で差分なし） |
+
+### 計測器のバグ修正（drive-by）
+
+`compare()` の輝度計算が `int16` の乗算で溢れていた（255×299 = 76,245 > 32,767）。このため **`dark_ratio` は常に 1.000 に見え**、前コミットで報告した「変化画素は 100% 暗色」は溢れの産物だった（正しい値: 輪郭 0→0.03 = 0.920 / idle 0→1 = 0.410 / リム on→off = 0.463）。`astype(np.int32)` を挟んで修正し、単画像の輝度分布（`black` / `white` / 10バケット）と `--box=x0,y0,x1,y1` による領域限定を追加した。
+
+### 証跡ファイル（追加分）
+
+`13-before-rim-on-amb-2.827.png` / `14-before-rim-off.png` / `15,16-clobbered-onbeforecompile-amb-2.827,0.png` / `17,18-cel-fixed-amb-2.827,0.png` / `19,20-cel-frozen-amb-2.827,0.png`（19 と 20 は md5 一致）を同ディレクトリへ追加した。
+
