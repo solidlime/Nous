@@ -47,7 +47,7 @@ async function applyCharacterMode(on) {
     applyLogRatio(readLogRatio(), false);
     if (!avatarHandle) {
       try {
-        const mod = await import('./avatar.js');
+        const mod = await import('./avatar.js?v=20260914b');
         const container = document.getElementById('chat-avatar-canvas-container');
         const saved = localStorage.getItem(MODEL_KEY) || '';
         avatarHandle = await mod.initAvatar(container, modelUrlFor(saved));

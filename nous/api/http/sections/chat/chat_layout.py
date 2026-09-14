@@ -97,7 +97,7 @@ def render_chat_layout_suffix() -> str:
             <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" crossorigin="anonymous"></script>
             <!-- Character chat mode (VRM avatar). vendor 依存は絶対URL import（avatar.js 先頭コメント参照）なので importmap は不要 -->
             <link rel="stylesheet" href="/static/chat/avatar/avatar.css">
-            <script type="module" src="/static/chat/avatar/chat-mode.js"></script>
+            <script type="module" src="/static/chat/avatar/chat-mode.js?v=20260914b"></script>
             <!-- Media viewer overlay moved to base.py render_layout_shell (global layer:
                  shared by Chat attachments and Overview Generated Images; must not
                  live inside a tab panel or it leaks / hides across tab switches). -->
