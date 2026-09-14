@@ -392,29 +392,32 @@ async function _doInit(container, modelUrl) {
   }
 
 
-  // --- セルシェーディング（法線処理なし） ---
+  // --- セルシェーディング（法線で向きを作るトゥーン） ---
   // MToon の最終出力は reflectedLight（ライト×法線の反射項）なので、ライト構成をいくら調整しても
-  // 法線由来の陰影と飽和が残る。そこで出力自体を「テクスチャ原色（litFactor × map）」＋輝度3階調に
-  // 置き換える。
-  //   - 法線もライトも参照しない（法線由来のハイライト／段差が出ない）
-  //   - 階調は 1.0 が上限の乗算なので原理的に白飛びしない（clamp 済み）
+  // 法線由来の陰影と飽和が残る。そこで出力自体を「テクスチャ原色 × N·L の段階トーン」に置き換える。
+  //   - 階調は半ランバート N·L（view space の uToneDir）で作る。albedo の明暗だけで段を作ると
+  //     光の当たる側と影側の差が消えてのっぺりする
+  //   - MToon の reflectedLight は使わない。階調は 1.0 上限の乗算なので原理的に白飛びしない
   //   - パッチ不発（ベンダ版差）でもライトが残るため黒画面にはならない
   // ベンダ実測: three-vrm.module.min.js のフラグメントシェーダ末尾は
   //   gl_FragColor = vec4( col, diffuseColor.a );  postCorrection();
   // で、postCorrection() が tonemapping → colorspace 変換を行う。よって出力は線形空間。
-  const CEL_TONES = [0.62, 0.84, 1.0]; // 影 / 中間 / 光（線形）
-  const CEL_THRESHOLDS = [0.1, 0.32]; // 輝度しきい値（線形。sRGB 目安 0.35 / 0.6）
-  const CEL_EDGE = 0.03; // 階調境界の柔らかさ（硬い閾値は顔のぼかしを帯状にしやすい）
+  const CEL_TONES = [0.58, 0.82, 1.0]; // 影 / 中間 / 光（線形）
+  // しきい値は半ランバート（N·L を 0..1 に写した値）のもの。0.52/0.72 で
+  // 「ライト側はほぼ光、逆側に 1 段、境界にもう 1 段」＝スターレイル寄りの高キーなセルになる
+  const CEL_THRESHOLDS = [0.52, 0.72];
+  const CEL_EDGE = 0.06; // 階調境界の柔らかさ（硬い閾値は顔のぼかしを帯状にしやすい）
   // リムは最終クランプの「前」に加算する（クランプが白飛びを吸収する。加算後の clamp で 1.0 上限）
   const f4 = (n) => n.toFixed(4);
   const CEL_GLSL = [
     "uniform float uRimStrength;",
     "uniform float uRimPower;",
     "uniform vec3 uRimColor;",
+    "uniform vec3 uToneDir;", // view space。表面→ライトの向き（カメラが回れば影の向きも追従する）
     "vec3 nousCel( vec3 c ) {",
-    "  float l = dot( c, vec3( 0.2126, 0.7152, 0.0722 ) );",
-    `  float s1 = smoothstep( ${f4(CEL_THRESHOLDS[0] - CEL_EDGE)}, ${f4(CEL_THRESHOLDS[0] + CEL_EDGE)}, l );`,
-    `  float s2 = smoothstep( ${f4(CEL_THRESHOLDS[1] - CEL_EDGE)}, ${f4(CEL_THRESHOLDS[1] + CEL_EDGE)}, l );`,
+    "  float nl = dot( normalize( vNormal ), normalize( uToneDir ) ) * 0.5 + 0.5;", // 半ランバート
+    `  float s1 = smoothstep( ${f4(CEL_THRESHOLDS[0] - CEL_EDGE)}, ${f4(CEL_THRESHOLDS[0] + CEL_EDGE)}, nl );`,
+    `  float s2 = smoothstep( ${f4(CEL_THRESHOLDS[1] - CEL_EDGE)}, ${f4(CEL_THRESHOLDS[1] + CEL_EDGE)}, nl );`,
     `  float tone = mix( mix( ${f4(CEL_TONES[0])}, ${f4(CEL_TONES[1])}, s1 ), ${f4(CEL_TONES[2])}, s2 );`,
     "  vec3 col = clamp( c * tone, 0.0, 1.0 );",
     // フレネルリム: view space（vViewPosition = カメラ方向ベクトル, vNormal = 法線）。法線マップは使わない
@@ -430,14 +433,20 @@ async function _doInit(container, modelUrl) {
   const CEL_DST =
     "gl_FragColor = vec4( nousCel( diffuseColor.rgb ), diffuseColor.a );";
   const MAIN_SRC = "void main() {";
-  // リム（フレネル）設定。cel({ rim, rimPower }) で実行時変更可（rim=0 で完全無効化）。
+  // リム（フレネル）/ トゥーン方向の設定。cel({ rim, rimPower, lightDir }) で実行時変更可。
   // cel は「呼べる状態オブジェクト」: cel() で現在値を取得、cel.installed 等の既存キーも維持。
   const rim = { strength: 0.35, power: 3.0 }; // 既定: strength=0.35 / power=3.0
+  // キーライトの向き（world space, 表面→ライト）。手前やや左上から。
+  const KEY_LIGHT_DIR = new THREE.Vector3(-0.45, 0.6, 0.66).normalize();
+  const toneDirView = new THREE.Vector3(); // 毎フレーム camera.matrixWorldInverse で view space へ
   const rimUniforms = []; // パッチ済み shader.uniforms の退避（実行時変更用）
   function cel(opts) {
     if (opts && typeof opts === "object") {
       if (typeof opts.rim === "number") rim.strength = opts.rim;
       if (typeof opts.rimPower === "number") rim.power = opts.rimPower;
+      if (Array.isArray(opts.lightDir) && opts.lightDir.length === 3) {
+        KEY_LIGHT_DIR.set(...opts.lightDir).normalize();
+      }
       for (const u of rimUniforms) {
         u.uRimStrength.value = rim.strength;
         u.uRimPower.value = rim.power;
@@ -449,6 +458,9 @@ async function _doInit(container, modelUrl) {
       missed: cel.missed,
       tones: CEL_TONES,
       thresholds: CEL_THRESHOLDS,
+      tone: "half-lambert(vNormal dot uToneDir)",
+      lightDirWorld: [KEY_LIGHT_DIR.x, KEY_LIGHT_DIR.y, KEY_LIGHT_DIR.z],
+      lightDirView: [toneDirView.x, toneDirView.y, toneDirView.z],
       rim: { strength: rim.strength, power: rim.power },
     };
   }
@@ -498,6 +510,8 @@ async function _doInit(container, modelUrl) {
       shader.uniforms.uRimColor = {
         value: m.parametricRimColorFactor ?? m.rimColorFactor ?? new THREE.Color(0xc4b8da),
       };
+      // トゥーンのライト方向は全材質で同じ Vector3 を共有して毎フレーム書き換える
+      shader.uniforms.uToneDir = { value: toneDirView };
       rimUniforms.push(shader.uniforms);
       cel.patched++;
     };
@@ -890,6 +904,8 @@ async function _doInit(container, modelUrl) {
     if (vrmaMixer) vrmaMixer.update(dt); // 1. VRMA 先行（プロシージャル層の前にボーンを動かす）
     updatePose(dt, clock.elapsedTime); // 2. 呼吸/体重移動/頭の微動を上書き合成
     smoothVrma(dt); // 2.5 平滑化（ミキサー＋追加層の最終値をローパスしてからノードへ書き戻す）
+    // トゥーンのライト方向を view space へ（カメラが回れば影の側も動く）
+    toneDirView.copy(KEY_LIGHT_DIR).transformDirection(camera.matrixWorldInverse);
     vrm.update(dt); // 3. スキン＋揺れ物
     renderer.render(scene, camera);
   }

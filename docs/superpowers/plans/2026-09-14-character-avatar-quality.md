@@ -358,7 +358,8 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 
 ### 実装（`nous/api/http/static/chat/avatar/avatar.js`）
 
-- `applyCel()`: MToon フラグメントの `#include <output_fragment>` を丸ごと `gl_FragColor` へ置換し、**最終画素 = アルベド × 輝度3段トーン**（`CEL_TONES = [0.62, 0.84, 1.00]`、`CEL_THRESHOLDS = [0.10, 0.32]`、境界は `CEL_EDGE = 0.03` の `smoothstep`）。ライト・スペキュラは一切寄与しない。輪郭材質（`isOutline`）は除外し、3次元の輪郭線は維持。
+- `applyCel()`: MToon フラグメントの `#include <output_fragment>` を丸ごと `gl_FragColor` へ置換し、**最終画素 = アルベド × 3段トーン**。ライト（MToon の `reflectedLight`）・スペキュラは一切寄与しない。輪郭材質（`isOutline`）は除外し、3次元の輪郭線は維持。
+  - **第4輪で階調の作り方を変更した**（本節の当初値は albedo 輝度ベース）。現行は **半ランバート `N·L`**（view space の `uToneDir`）で段を作る。`CEL_TONES = [0.58, 0.82, 1.00]` / `CEL_THRESHOLDS = [0.52, 0.72]`（半ランバート値）/ `CEL_EDGE = 0.06`。理由は「albedo 輝度だけでは光の当たる側と影側の差が出ず、のっぺりする」ため（レビュー指摘）。詳細は下の「第4輪レビュー対応」節。
 - **リムは 2026-09-15 の第3輪で復活**（`nousCel` 内のフレネル項。`rimStrength = 0.35` / `rimPower = 3.0`）。したがって現行の最終画素は「アルベド × トーン + フレネルリム」であり、法線はリム項のみに寄与する。詳細は下の「第3輪レビュー対応」を参照。
 - ライトはアバター `scene` へ移し**背景専用**に（アバターには 1 灯も加算されない）。MToon 側の `parametricRim` / specular / sheen は 0（リムは `nousCel` 内で実装）。
 - 35/35 材質へ適用（`probe` 実測 `cel: {installed:35, patched:35, missed:0}`）。しきい値はモデルとカメラごとに要較正（実測で確認した唯一のモデル: herta.vrm VRM0 / 全身 camY 0.95）。
@@ -409,7 +410,7 @@ gl_FragColor = vec4( diffuseColor.rgb * tone + rimColor * rim, diffuseColor.a );
 
 ### (3) プロシージャル fallback の証拠（画像 → 数値へ）
 
-この環境の `agent_browser` スクリーンショットは **WebGL キャンバスを写さない**（キャンバス領域が背景の暗いグラデーションのみ = `mean RGB [37,38,44]`, `spread 7.3`）。`12-no-vrma-procedural-fallback.png`（撮り直しも同じ結果だったため証跡には残していない）はこの制約下の取得で、**アバター描画の証拠として不成立**（レビュー指摘 3 は妥当）。
+**[第4輪で訂正 — この記述は誤りだった]** 「この環境の `agent_browser` スクリーンショットは WebGL キャンバスを写さない」は撮像系の制約ではなく、**セッション固有の 2 つの異常**が原因だった: (a) 共有ブラウザセッションが WebGL コンテキストロストに落ちていた（実測 `isContextLost() === true` / `cel.patched === 0`）、(b) `chat` タブが非アクティブでステージが 0×0 だった。**fresh セッションではキャンバスは写る**（実測: キャンバス領域 mean lum 37.9 / 描画バッファの白飛び 0% / 人物像を返す）。したがって `12-no-vrma-procedural-fallback.png` を「撮像不能の証拠」として扱ったのは誤りで、本節の数値証拠（`motion: "procedural"` / `vrmaBones: 0` / 髪の局所クォータニオン 1.6°）が引き続き根拠となる。
 
 代替の数値証拠: `animations/idle_loop.vrma` を一時退避した状態で `probe()` が `motion: "procedural"` / `vrmaBones: 0` を返し、髪の局所クォータニオンは 2 秒窓で **1.6°**（VRMA 使用時の 1.1〜1.7° と同水準、凍結ではない）。`framing.fits: true`。実測後にファイルは復帰済み。
 
@@ -423,8 +424,51 @@ gl_FragColor = vec4( diffuseColor.rgb * tone + rimColor * rim, diffuseColor.a );
 
 修正: サブステップ化（`MAX_SUBSTEP = 1/60 s`、1 フレーム最大 5 ステップ）＋ステップ毎の減衰クランプ（`Math.pow(0.72, dt*60)`、ヨー ±90°/ピッチ ±70°/ロール ±80°）。実測: 髪 **85° → 1.1°**、スカート **120° → 9°**（スカートの 9° は布の揺れとして正常域、VRMA を外したプロシージャル時は 1.6°）。
 
-### 撮像系の制約（再掲・重要）
+### 撮像系の制約（第4輪で訂正）
 
-- WebGL キャンバスはこの環境のキャプチャに写らない（上記）。
-- `performance.now` 凍結中は再描画が止まる（キャプチャは md5 完全一致のまま）。
-- したがって**見た目の最終確認はユーザーの実ブラウザで行う**。本計画のキャラ見た目に関する画像証跡は「キャンバスが写らない」制約の下にあることを明記しておく。
+- ~~WebGL キャンバスはこの環境のキャプチャに写らない~~ → **誤り**。写る（fresh セッション実測）。前輪の観測はコンテキストロストしたセッションと `chat` タブ非アクティブ（ステージ 0×0）によるものだった。
+- `performance.now` 凍結中は再描画が止まる（キャプチャは md5 完全一致のまま）。これは第3輪の実測どおり有効。
+- 見た目の最終確認はユーザーの実ブラウザでも行う（変わらない）。ただし**スクリーンショットによる検証は可能**であり、本計画の見た目の証跡は実画像で担保する。
+
+## 第4輪レビュー対応（2026-09-15）
+
+### (1) 撮像の真因と fresh セッションでの証跡（レビュー指摘 1）
+
+- 真因: 共有セッションの **WebGL コンテキストロスト**（`isContextLost() === true` / cel パッチ 0 件）と **`chat` タブ非アクティブによるステージ 0×0**。撮像系の制約ではなかった。
+- 手順（再現用）: `agent_browser` を `sessionMode: fresh` で起動 → **以降の全呼び出しで `--session <name>` を明示**（fresh は名前を返すだけで、次の呼び出しが同じセッションに乗るわけではない）→ `[data-tab="chat"]` をクリックして `#tab-chat` を `display:block` にする（**これをしないとレイアウトが 0×0 になり、キャラも UI も写らない**）→ VRM ロードを約 8 秒待つ。
+- 実測（fresh）: `fallback:false` / `motion:"vrma"` / `vrmaBones:21` / `framing.fits:true` / `cel:{installed:35,patched:35,missed:0}` / 材質 58 件すべて `map != null` / キャンバス 546×217・コンテキストロストなし / `armDropDeg` left 74.4° right 70.2°。
+- 画素実測（描画バッファを `gl.readPixels`）: 人物 bbox **99×200 px**（546×217 のうち）/ 人物画素のうち輝度 ≥ 250 は **0.0%**（白飛びなし）/ 人物平均輝度 104〜107。/ 体を横切るスキャンラインの輝度は **65 → 98 → 171 → 231** の段（＝階調が出ている）。
+- 追加した証跡（すべて fresh セッション・HEAD の実ページ <http://127.0.0.1:26262/>）:
+  - `r4-01-chat-mode-avatar.png` — ブラウザ全体。チャットタブ・キャラモード ON、ログ高さ 30%、表情・ポーズ UI とアバターが同時に見える。
+  - `r4-02-avatar-render.png` — `#chat-avatar-canvas-container` 要素のみ（546×217, UI オーバーレイなし）。
+  - `r4-03-avatar-closeup.png` — 上記の人物部分を 4× 拡大（560×868）。
+  - `r4-04-slider-55pct-immediate.png` / `r4-05-slider-55pct-after-reload.png` — (3) の永続化実測。
+- 視覚検証（独立したマルチモーダルレビューによる記述）: 帽子・銀ラベンダーの髪・黒紫のコルセット＋白スカートが判別でき、**白飛びなし・全パーツに質感あり**、**セル調の明暗段差あり**、**帽子つば/髪/裾にアウトラインあり**、**リムは右側に控えめ**、**両腕は体側に自然に下垂（T/Y ポーズなし）**、テクスチャ欠落・黒潰れ・形状破綻なし → 判定 PASS。
+
+### (2) cel を方向性シェーディングへ（レビュー指摘 2）
+
+- 変更: `CEL_GLSL` の階調を albedo 輝度から **半ランバート `dot(normalize(vNormal), normalize(uToneDir)) * 0.5 + 0.5`** に変更。`uToneDir` は view space で、毎フレーム `camera.matrixWorldInverse` で更新する（カメラを回すと影の側も追従）。既定キーライトは world `(-0.45, 0.6, 0.66)` 正規化＝手前やや左上。
+- 実行時変更: `window.__avatarDebug.cel({ rim, rimPower, lightDir: [x,y,z] })`。`probe().cel.tone` = `"half-lambert(vNormal dot uToneDir)"`、`cel.lightDirWorld` / `cel.lightDirView` を返す。
+- 実測: GPU から `gl.getShaderSource` を直読し、パッチ後のフラグメントが `gl_FragColor = vec4( nousCel( diffuseColor.rgb ), diffuseColor.a );` のみであること、`uToneDir` uniform が送信されていることを確認。`cel: {installed:35, patched:35, missed:0}`。
+- **平坦さの解消**は上記スキャンラインの段（65/98/171/231）と 4× 拡大画像の段差で確認した。リム（フレネル 0.35 / power 3.0）とアウトライン（`outlineWidthFactor 0.012`）は第3輪の実装・実測のまま維持。
+
+### (3) ログ/キャラ高さ比率スライダーの即時反映と永続化（再実測）
+
+| 操作 | `--chat-log-h` | ラベル | localStorage | アバター領域の高さ |
+| --- | --- | --- | --- | --- |
+| 既定 | 30% | 30% | （未設定） | 217px |
+| 55% へ変更（`input` 1 回） | **55%** | **55%** | **"55"** | **140px**（同時に追従） |
+| リロード後 | 55% | 55% | "55" | 140px（復元） |
+
+- 変更は 1 イベントで CSS 変数・ラベル・保存値・レイアウトのすべてに同時反映される（`chat-mode.js` の `input` ハンドラ）。リロード後は `nous.chat.logRatio` から復元。
+
+### (4) ヘルタ用モーフ（目標 3）の結論 — 第2輪から変更なし
+
+- ネット上のヘルタ用モーフは**入手不可**。根拠（実測）: VRoid Hub の該当モデルページは HTTP 200 だが配布導線なし（HTML に `downloadable` / `ダウンロード` が存在しない）/ 同 API は HTTP 200 + `COMMON_MISSING_API_VERSION`、`X-Api-Version: 11` を付けても **HTTP 404 `COMMON_NOT_FOUND`** / 検索 3 クエリとも VRoid 公式の**汎用 .vrma**・Sketchfab 静的モデル・MMD/PMX・別メッシュ用の表情パックのみ。
+- 原理的な理由: VRM の expression は `morphTargetBinds`（モデル固有メッシュのブレンドシェイプ名＋重み）で定義されるため、**別モデルの expression JSON を herta.vrm へ「取り込む」ことはバインド先が無く不可能**。
+- 代替（実装済み）: herta.vrm が内蔵するモーフを UI へ全露出。`listExpressions()` 実測 = emotions 5 + mouths 5 + other 1（`Toggle WP`）+ 自動 7 で、UI のドロップダウンは **11 項目**。ポーズは 4 択（立ち/手を振る/考え中/お辞儀）。
+
+### (5) 証跡の現状（事実の記載）
+
+- `docs/evidence/character-avatar-2026-09-14/` には**画像が残っている**（`01`〜`20` の 20 枚 + `22-avatar-fresh-textured.png` + 第4輪の `r4-01`〜`r4-05` の 5 枚 = 計 26 枚）と計測器 `pixdiff.py`。
+- 削除したのは**リポジトリ直下の旧一時ファイル（`_*.png` / `_pixstat.py`）だけ**で、証跡画像を削除したわけではない。
