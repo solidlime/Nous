@@ -85,7 +85,7 @@ async def _do_save_model(persona: str, filename: str, file_bytes: bytes) -> dict
 async def list_avatar_models(request: Request) -> JSONResponse:
     """GET /api/chat/{persona}/avatar/models — list uploaded VRM models."""
     persona, ctx = _resolve_request(request)
-    if not ctx:
+    if not ctx or not _PERSONA_PATTERN.match(persona):
         return JSONResponse({"error": "Persona not found"}, status_code=404)
     return JSONResponse(_do_list_models(persona))
 
@@ -116,7 +116,7 @@ async def upload_avatar_model(request: Request) -> JSONResponse:
     from starlette.datastructures import UploadFile  # noqa: TC002
 
     persona, ctx = _resolve_request(request)
-    if not ctx:
+    if not ctx or not _PERSONA_PATTERN.match(persona):
         return JSONResponse({"error": "Persona not found"}, status_code=404)
 
     form = await request.form()

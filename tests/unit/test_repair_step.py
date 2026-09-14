@@ -18,6 +18,7 @@ class _Config:
     provider = "test"
     temperature = 0.7
     max_tokens = 512
+    extract_model = ""
 
     def get_effective_api_key(self) -> str:
         return "key"
@@ -182,3 +183,24 @@ async def test_attempts_exhausted_adopts_last_candidate(monkeypatch) -> None:
     assert isinstance(events[0], ResponseReplacedSSE)
     assert events[0].violation == "character"
     assert events[0].detail == "d2"
+
+
+async def test_judge_malformed_output_keeps_original(monkeypatch) -> None:
+    """judge が不正 JSON / 不正 violation を返したら判定なし扱いで修復しない。"""
+    calls = _patch(monkeypatch, judgments=[None])  # judge_character が None を返すケース（内部で JSON パース失敗済み想定）
+    turn_ctx = _turn_ctx(response="違反の可能性がある応答")
+    events = [ev async for ev in RepairStep().run(None, _Config(), _messages(), turn_ctx)]
+    assert events == []
+    assert calls["collect"] == 0
+    assert turn_ctx.full_response == "違反の可能性がある応答"
+
+
+async def test_judge_invalid_json_returns_none(monkeypatch) -> None:
+    """judge_character は不正 JSON / 不正 violation を None に落とす（非破壊）。"""
+    from nous.application.chat import character_judge
+
+    async def _fake_collect(provider: Any, *, messages: list[LLMMessage], **kwargs: Any) -> str:
+        return "ぜんぜんJSONじゃない出力"
+
+    monkeypatch.setattr(character_judge, "collect_text", _fake_collect)
+    assert await character_judge.judge_character(_Config(), "アイデンティティ", "応答テキスト") is None
