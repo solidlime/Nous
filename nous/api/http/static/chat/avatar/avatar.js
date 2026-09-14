@@ -18,7 +18,21 @@ const FADE = 0.4;      // seconds — expression cross-fade
 const BLINK_HALF = 0.1; // seconds each way (closed→open)
 const TALK_AA_PEAK = 0.8;
 const TALK_AA_PERIOD = 0.35; // seconds per mouth open/close cycle
+const POSE_LERP = 6;   // 1/s — pose transition damping
 const easeInOut = (t) => t * t * (3 - 2 * t);
+
+// ポーズプリセット: 正規化ボーンの目標オイラー角（度）。未指定ボーンは NEUTRAL へ戻る。
+const D = THREE.MathUtils.degToRad;
+const A_POSE = { leftUpperArm: { z: -70 }, rightUpperArm: { z: 70 } };
+const POSES = {
+  neutral: {},
+  // 右手を上げて左右に振る（ジェスチャー再生中は lowerArm を揺らす）
+  wave: { rightUpperArm: { z: -55 }, rightLowerArm: { z: -25, y: -15 } },
+  // 右手を顎へ（考え中）
+  think: { rightUpperArm: { x: -35, z: 45 }, rightLowerArm: { z: -95 }, head: { x: -8, y: 10 } },
+  // お辞儀
+  bow: { spine: { x: 28 }, head: { x: 15 }, leftUpperArm: { z: -55 }, rightUpperArm: { z: 55 } },
+};
 
 function checkWebGL() {
   try {
@@ -50,7 +64,7 @@ function showFallback(container) {
 /** No-op handle served when WebGL / model load fails. */
 function noopHandle() {
   const nop = () => {};
-  return { setExpression: nop, setTalking: nop, dispose: nop, __fallback: true };
+  return { setExpression: nop, setTalking: nop, setPose: nop, playGesture: nop, dispose: nop, __fallback: true };
 }
 
 export function initAvatar(container, modelUrl) {
@@ -159,17 +173,16 @@ async function _doInit(container, modelUrl) {
       loader.load(modelUrl, resolve, undefined, reject);
     });
     vrm = gltf.userData.vrm;
-    VRMUtils.removeUnnecessaryVertices(gltf.scene);
-    VRMUtils.combineSkeletons(gltf.scene);
+    // VRM 0.x は-Z面向き → 180°回してカメラ(+Z)を向かせる（VRM1はno-op）
+    VRMUtils.rotateVRM0(vrm);
+    // ponytail: スプリングボーン（髪/リボン等）がヘッドレス環境・負荷時 dt スパイクで
+    // 爆発して崩壊描画になる case がある。物理無効化フラグは data-attr で上書き可。
+    if (container.dataset.avatarSpringbone === 'off') {
+      vrm.springBoneManager = null;
+    }
     scene.add(vrm.scene);
     vrm.lookAt.target = lookAtTarget;
     vrm.springBoneManager?.reset();
-
-    // A ポーズ: 上腕を下ろす
-    const lArm = vrm.humanoid.getNormalizedBoneNode('leftUpperArm');
-    const rArm = vrm.humanoid.getNormalizedBoneNode('rightUpperArm');
-    if (lArm) lArm.rotation.z = THREE.MathUtils.degToRad(-70);
-    if (rArm) rArm.rotation.z = THREE.MathUtils.degToRad(70);
   } catch (e) {
     console.warn('[avatar] VRM load failed:', e?.message ?? e);
     try { ro?.disconnect(); } catch { /* noop */ }
@@ -196,6 +209,89 @@ async function _doInit(container, modelUrl) {
       }
     }
     vrm.expressionManager.setValue('blink', blink.w);
+  }
+
+  // --- ポーズ: ボーン回転の目標へ減速補間 ---
+  // Aポーズ（腕下ろし）を基準に含め、プリセットを上乗せ。
+  const pose = {
+    name: 'neutral',
+    target: {}, // bone -> {x,y,z} rad（Aポーズ込み）
+    cur: {},    // bone -> {x,y,z} rad（減速補間中の基準値）
+  };
+  function poseTargets(name) {
+    const t = {};
+    for (const [b, r] of Object.entries(A_POSE)) t[b] = { x: 0, y: 0, ...r };
+    for (const [b, r] of Object.entries(POSES[name] || {})) {
+      t[b] = { ...(t[b] || { x: 0, y: 0, z: 0 }), ...r };
+    }
+    return t;
+  }
+  function setPose(name) {
+    if (!POSES[name]) name = 'neutral';
+    pose.name = name;
+    pose.target = poseTargets(name);
+    for (const b of Object.keys(pose.target)) {
+      if (!pose.cur[b]) pose.cur[b] = { x: 0, y: 0, z: 0 };
+    }
+  }
+  setPose('neutral');
+
+  // ジェスチャー: 指定時間だけ再生するオフセットモーション（純関数・加算代入なし）
+  const gestures = [];
+  function playGesture(name) {
+    if (name === 'nod') gestures.push({ kind: 'nod', t: 0, dur: 1.2 });
+    else if (name === 'wave') gestures.push({ kind: 'wave', t: 0, dur: 1.8 });
+    else if (name === 'bounce') gestures.push({ kind: 'bounce', t: 0, dur: 0.9 });
+    else if (name === 'shake') gestures.push({ kind: 'shake', t: 0, dur: 1.0 });
+  }
+  function gestureOffset(g, p, off) {
+    if (g.kind === 'nod') off.head.x += D(10 * Math.sin(p * Math.PI * 2) * (1 - p));
+    else if (g.kind === 'wave') off.rightLowerArm.y += D(30 * Math.sin(p * Math.PI * 5) * Math.min(p * 3, 1));
+    else if (g.kind === 'bounce') off.spine.x += D(-4 * Math.sin(p * Math.PI * 2) * (1 - p));
+    else if (g.kind === 'shake') off.head.y += D(14 * Math.sin(p * Math.PI * 3) * (1 - p));
+  }
+
+  // 毎フレーム「基準姿勢(lerp) + 時間依存オフセット」を再構成して代入する。
+  // 加算代入（+=）は使わない —— 復元力がなく無限累積するため（レビュー指摘対応）。
+  function updatePose(dt, elapsed) {
+    if (!pose.target) return;
+    const k = Math.min(1, POSE_LERP * dt);
+    const off = {
+      spine: { x: 0, y: 0, z: 0 },
+      head: { x: 0, y: 0, z: 0 },
+    };
+    // 呼吸/idle 揺れ
+    off.spine.z += D(1.5 * Math.sin((elapsed * Math.PI * 2) / 4) * 0.1);
+    off.head.x += D(0.8 * Math.sin(elapsed * 0.6));
+    off.head.y += D(1.2 * Math.sin(elapsed * 0.4 + 1.7));
+    // 感情の身体挙動（定数・振動ともにオフセットとして毎フレーム再計算）
+    if (fade.name === 'angry') off.spine.x += D(3); // 前傾
+    if (fade.name === 'happy') off.spine.x += D(-3 * Math.abs(Math.sin(elapsed * 2.2))); // 弾む
+    if (fade.name === 'sad') off.head.x += D(6); // うつむき
+    // 会話中の小さなうなずき
+    if (talking) off.head.x += D(2.5 * Math.sin((elapsed * Math.PI * 2) / 0.9));
+    // ジェスチャー
+    for (const g of gestures) {
+      g.t += dt;
+      const p = g.t / g.dur;
+      if (p < 1) gestureOffset(g, p, off);
+    }
+    for (let i = gestures.length - 1; i >= 0; i--) {
+      if (gestures[i].t >= gestures[i].dur) gestures.splice(i, 1);
+    }
+    // 書き込み: 基準姿勢のボーン ∪ オフセット対象ボーン
+    const bones = new Set([...Object.keys(pose.cur), ...Object.keys(off)]);
+    for (const b of bones) {
+      const node = vrm.humanoid.getNormalizedBoneNode(b);
+      if (!node) continue;
+      const tgt = pose.target[b] || { x: 0, y: 0, z: 0 };
+      const c = pose.cur[b] || (pose.cur[b] = { x: 0, y: 0, z: 0 });
+      c.x += (tgt.x - c.x) * k;
+      c.y += (tgt.y - c.y) * k;
+      c.z += (tgt.z - c.z) * k;
+      const o = off[b] || { x: 0, y: 0, z: 0 };
+      node.rotation.set(c.x + o.x, c.y + o.y, c.z + o.z);
+    }
   }
 
   // --- 表情: setExpression 指定のみ（0.4s fade） ---
@@ -237,16 +333,7 @@ async function _doInit(container, modelUrl) {
     vrm.expressionManager.setValue('aa', tri * TALK_AA_PEAK);
   }
 
-  // --- 呼吸 + idle 揺れ ---
-  function updateIdle(elapsed) {
-    const spine = vrm.humanoid.getNormalizedBoneNode('spine');
-    if (spine) spine.rotation.z = THREE.MathUtils.degToRad(1.5 * Math.sin((elapsed * Math.PI * 2) / 4));
-    const head = vrm.humanoid.getNormalizedBoneNode('head');
-    if (head) {
-      head.rotation.x = THREE.MathUtils.degToRad(0.8 * Math.sin(elapsed * 0.6));
-      head.rotation.y = THREE.MathUtils.degToRad(1.2 * Math.sin(elapsed * 0.4 + 1.7));
-    }
-  }
+  // （呼吸/idle/感情の身体挙動/ジェスチャーは updatePose に統合済み）
 
   // --- メインループ ---
   let disposed = false;
@@ -258,7 +345,7 @@ async function _doInit(container, modelUrl) {
     updateBlink();
     updateExpression(dt);
     updateTalking(dt);
-    updateIdle(clock.elapsedTime);
+    updatePose(dt, clock.elapsedTime);
     vrm.update(dt);
     renderer.render(scene, camera);
   }
@@ -282,5 +369,5 @@ async function _doInit(container, modelUrl) {
     delete container.__avatarHandle;
   }
 
-  return { setExpression, setTalking, dispose };
+  return { setExpression, setTalking, setPose, playGesture, dispose, __vrm: vrm };
 }

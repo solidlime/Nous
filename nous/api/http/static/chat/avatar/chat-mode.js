@@ -9,8 +9,9 @@ const MODE_KEY = 'nous.chatMode';
 const MODEL_KEY = 'nous.avatarModel';
 const TALK_IDLE_MS = 2000;
 
-let avatarHandle = null;      // { setExpression, setTalking, dispose } | null
+let avatarHandle = null;      // { setExpression, setTalking, setPose, playGesture, dispose } | null
 let talkIdleTimer = null;
+let emotionSeenThisTurn = false;
 
 function persona() {
   return (window.S && window.S.persona) || '';
@@ -44,6 +45,8 @@ async function applyCharacterMode(on) {
         const container = document.getElementById('chat-avatar-canvas-container');
         const saved = localStorage.getItem(MODEL_KEY) || '';
         avatarHandle = await mod.initAvatar(container, modelUrlFor(saved));
+        // 検証・デバッグ用フック（本番動作には影響なし）
+        window.__avatarDebug = avatarHandle;
         refreshModelList();
       } catch (e) {
         console.warn('[chat-mode] avatar init failed:', e);
@@ -70,22 +73,57 @@ export function toggleCharacterMode() {
 const EMOTION_MAP = {
   joy: 'happy',
   love: 'happy',
+  happiness: 'happy',
   sadness: 'sad',
   anger: 'angry',
+  angry: 'angry',
   surprise: 'surprised',
+  surprised: 'surprised',
   fear: 'surprised',
+  relaxed: 'relaxed',
+  calm: 'relaxed',
+  neutral: 'neutral',
 };
 
-export function handleChatSse(type /* , data */) {
+// 感情→ジェスチャー（応答完了時に一度きり再生）
+const EMOTION_GESTURE = {
+  happy: 'bounce',
+  surprised: 'shake',
+  sad: 'nod',
+};
+
+function applyEmotion(raw, weight) {
+  const mapped = EMOTION_MAP[String(raw || '').toLowerCase()] || 'neutral';
+  if (avatarHandle) avatarHandle.setExpression(mapped, weight);
+  return mapped;
+}
+
+export function handleChatSse(type, data) {
   if (!avatarHandle) return;
-  if (type === 'text_delta') {
+  if (type === 'turn_started') {
+    emotionSeenThisTurn = false;
+    avatarHandle.playGesture('wave'); // 挨拶
+  } else if (type === 'text_delta') {
     avatarHandle.setTalking(true);
     clearTimeout(talkIdleTimer);
     talkIdleTimer = setTimeout(() => avatarHandle && avatarHandle.setTalking(false), TALK_IDLE_MS);
+  } else if (type === 'context_update') {
+    // ペルソナ状態更新のライブ通知（update.emotion）を表情へ反映
+    const emotion = data && data.update && data.update.emotion;
+    if (emotion) {
+      emotionSeenThisTurn = true;
+      const mapped = applyEmotion(emotion, 0.7);
+      const g = EMOTION_GESTURE[mapped];
+      if (g) avatarHandle.playGesture(g);
+    }
+  } else if (type === 'response_replaced') {
+    // 修復が走った → 驚きの表情で反応（次の context_update で上書き）
+    avatarHandle.setExpression('surprised', 0.6);
+    avatarHandle.playGesture('shake');
   } else if (type === 'done') {
     clearTimeout(talkIdleTimer);
     avatarHandle.setTalking(false);
-    fetchEmotionAndApply();
+    if (!emotionSeenThisTurn) fetchEmotionAndApply(); // フォールバック
   } else if (type === 'error') {
     clearTimeout(talkIdleTimer);
     avatarHandle.setTalking(false);
@@ -99,9 +137,8 @@ async function fetchEmotionAndApply() {
     const res = await fetch(`/api/dashboard/${p}`);
     if (!res.ok) return;
     const json = await res.json();
-    const raw = String((json.context && json.context.emotion) || 'neutral').toLowerCase();
-    const mapped = EMOTION_MAP[raw] || 'neutral';
-    avatarHandle && avatarHandle.setExpression(mapped, 0.7);
+    const raw = String((json.context && json.context.emotion) || 'neutral');
+    applyEmotion(raw, 0.7);
   } catch (e) {
     console.debug('[chat-mode] emotion fetch skipped:', e);
   }
