@@ -1555,11 +1555,8 @@ def test_curiosity_happy_path(monkeypatch):
     assert mem.created[0]["importance"] == 0.4
     # assistant の tool_calls が履歴に載り、全 tool_call_id に応答が返る
     assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
-    events = wiring_events.snapshot_after(0)
-    assert len(events) == 1
-    assert events[0]["kind"] == "monologue"
-    assert events[0]["meta"]["persona"] == "herta"
-    assert "500トン" in events[0]["meta"]["text"]
+    # 🔍 bubble 生成は廃止済み — monologue emit は行わない
+    assert wiring_events.snapshot_after(0) == []
 
 
 def test_curiosity_tool_error_swallows(monkeypatch):
@@ -1612,9 +1609,8 @@ def test_curiosity_aborts_after_two_consecutive_errors(monkeypatch):
     )
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
     assert len(error_calls) == 2  # 3 回目は実行しない
-    # 空振り (satisfied=False) は要約記憶を保存しない。要約パスに到達したことは monologue emit で確認。
+    # 空振り (satisfied=False) は要約記憶も bubble も何も残さない。
     assert len(mem.created) == 0
-    assert any(e["meta"]["kind"] == "exploration" for e in wiring_events.snapshot_after(0) if e["kind"] == "monologue")
     assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
 
 
@@ -1643,7 +1639,8 @@ def test_curiosity_multi_step_until_done(monkeypatch):
     assert len(mem.created) == 1
     assert "500トン" in mem.created[0]["content"]
     assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
-    assert len(wiring_events.snapshot_after(0)) == 1
+    # 🔍 bubble 生成は廃止済み — monologue emit は行わない
+    assert len(wiring_events.snapshot_after(0)) == 0
 
 
 def test_curiosity_budget_exhaustion_stops_at_max(monkeypatch):
@@ -1742,7 +1739,7 @@ def test_curiosity_chat_not_resumed_completes(monkeypatch):
     asyncio.run(_run_curiosity_exploration(c, config, "herta", _spont_result(), eng))
     assert len(eng.calls) == 2  # 打ち切りされず完走
     assert len(mem.created) == 1
-    assert len(wiring_events.snapshot_after(0)) == 1
+    assert len(wiring_events.snapshot_after(0)) == 0  # bubble 廃止済み
 
 
 def test_curiosity_done_summary_skips_summary_llm(monkeypatch):
@@ -1766,9 +1763,8 @@ def test_curiosity_done_summary_skips_summary_llm(monkeypatch):
     assert eng.prompts == []
     assert len(mem.created) == 1
     assert "500トン" in mem.created[0]["content"]
-    events = wiring_events.snapshot_after(0)
-    assert len(events) == 1
-    assert "500トン" in events[0]["meta"]["text"]
+    # 🔍 bubble 生成は廃止済み — monologue emit は行わない
+    assert wiring_events.snapshot_after(0) == []
 
 
 def test_curiosity_done_without_summary_falls_back(monkeypatch):

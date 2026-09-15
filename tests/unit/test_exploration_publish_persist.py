@@ -2,13 +2,20 @@ import asyncio
 from unittest.mock import MagicMock
 
 
-def test_summarize_persists_brain_monologue_event(monkeypatch):
+def test_summarize_does_not_persist_monologue_event(monkeypatch):
+    """探索要約の 🔍 bubble 生成は廃止済み。brain.monologue persist / emit は行わない。"""
     from nous.application.chat import introspection as mod
 
     ctx = MagicMock()
     ctx._session_event_repo = MagicMock()
     ctx.memory_service = MagicMock()
-    ctx.memory_service.create_memory = _async_ok()
+    created = []
+
+    async def _create(**kwargs):
+        created.append(kwargs)
+        return MagicMock()
+
+    ctx.memory_service.create_memory = _create
     events = []
     ctx._session_event_repo.insert = lambda ev: events.append(ev)
 
@@ -21,7 +28,9 @@ def test_summarize_persists_brain_monologue_event(monkeypatch):
         )
     )
     mono = [e for e in events if getattr(e, "event_type", "") == "brain.monologue"]
-    assert mono and mono[0].summary.startswith("調べたら")
+    assert not mono
+    assert len(created) == 1
+    assert created[0]["tags"] == ["exploration", "introspection"]
 
 
 def test_summarize_falls_back_to_raw_text_on_non_json():

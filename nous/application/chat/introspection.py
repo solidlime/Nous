@@ -1359,12 +1359,14 @@ def _format_curiosity_results(results: list[dict]) -> str:
 async def _summarize_and_record(
     ctx: AppContext, engine, persona: str, curiosity: str, results: list[dict], summary: str | None = None
 ) -> None:
-    """多段リサーチの累積結果を一人称で要約し、記憶に保存して独り言バブルを emit。
+    """多段リサーチの累積結果を一人称で要約し、記憶に保存する。
+
+    チャットログへの 🔍 bubble (brain.monologue persist / monologue emit) は廃止 —
+    調査結果は記憶 (exploration / unresolved) 経由でのみ回想される。
 
     summary が渡された場合（done 応答が要約を同梱）は要約 LLM 呼び出しをスキップする。
     """
     steps_text = _format_curiosity_results(results)[:_EXPLORATION_RESULT_MAX_CHARS] or "(空の結果)"
-    tools_used = [r["tool_name"] for r in results if r.get("tool_name")]
     data: dict = {}
     if summary is not None and summary.strip():
         summary_text = summary.strip()[:_EXPLORATION_SUMMARY_MAX_CHARS]
@@ -1421,35 +1423,3 @@ async def _summarize_and_record(
             )
         except Exception:
             logger.debug("introspection: unresolved question memory failed", exc_info=True)
-
-    # 探索要約を brain.monologue の既存永続パスに乗せる (spec C) —
-    # wiring emit だけだとリロードで消えるため。
-    try:
-        repo = getattr(ctx, "_session_event_repo", None)
-        if repo is not None:
-            repo.insert(
-                SessionEvent(
-                    session_id="unknown",
-                    persona=persona,
-                    event_type="brain.monologue",
-                    summary=summary,
-                    timestamp=get_now(),
-                    metadata={"kind": "exploration", "tools": tools_used},
-                )
-            )
-    except Exception:
-        logger.debug("introspection: exploration monologue persist failed", exc_info=True)
-
-    try:
-        wiring_events.emit(
-            "monologue",
-            meta={
-                "persona": persona,
-                "text": summary,
-                "timestamp": get_now().isoformat(),
-                # reload 側 (restoreMonologueBubbles) と一致する 🔍 ラベルのため
-                "kind": "exploration",
-            },
-        )
-    except Exception:
-        logger.debug("introspection: exploration emit failed", exc_info=True)
