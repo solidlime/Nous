@@ -1612,7 +1612,9 @@ def test_curiosity_aborts_after_two_consecutive_errors(monkeypatch):
     )
     asyncio.run(_run_curiosity_exploration(_explorer_ctx(mem=mem), config, "herta", _spont_result(), eng))
     assert len(error_calls) == 2  # 3 回目は実行しない
-    assert len(mem.created) == 1  # 要約へ進む
+    # 空振り (satisfied=False) は要約記憶を保存しない。要約パスに到達したことは monologue emit で確認。
+    assert len(mem.created) == 0
+    assert any(e["meta"]["kind"] == "exploration" for e in wiring_events.snapshot_after(0) if e["kind"] == "monologue")
     assert _unanswered_tool_ids(eng.messages_refs[-1]) == []
 
 

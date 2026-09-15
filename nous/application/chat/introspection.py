@@ -1394,16 +1394,19 @@ async def _summarize_and_record(
     if not summary:
         return
 
-    try:
-        await ctx.memory_service.create_memory(
-            persona=persona,
-            content=summary,
-            importance=0.4,
-            tags=["exploration", "introspection"],
-            source_context="introspection",
-        )
-    except Exception:
-        logger.debug("introspection: exploration memory failed", exc_info=True)
+    # 空振り (satisfied=False) のときは未解決記憶が持ち越し役を兼ねるため、
+    # 同義の要約記憶は保存しない (Recent Memories の重複防止)。
+    if data.get("satisfied") is not False:
+        try:
+            await ctx.memory_service.create_memory(
+                persona=persona,
+                content=summary,
+                importance=0.4,
+                tags=["exploration", "introspection"],
+                source_context="introspection",
+            )
+        except Exception:
+            logger.debug("introspection: exploration memory failed", exc_info=True)
 
     # 「見つからなかった」質問を次周期の材料として持ち越す (spec G・絞り込みループは作らない)。
     unresolved = str(data.get("unresolved") or "").strip().strip('"')
