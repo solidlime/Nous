@@ -5,6 +5,8 @@ Each test uses tmp_path to create isolated SQLite databases.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
 from nous.domain.equipment.entities import Item
@@ -100,6 +102,41 @@ class TestSQLiteMemoryRepo:
         result = memory_repo.find_recent(limit=3)
         assert result.is_ok
         assert len(result.value) == 3
+
+    def test_find_recent_orders_by_created_at(self, memory_repo: SQLiteMemoryRepository):
+        """直近順は created_at 基準（作成の新しい順）。"""
+        now = get_now()
+        old = self._make_memory("memory_old", "old")
+        old.created_at = now - timedelta(days=365)
+        new = self._make_memory("memory_new", "new")
+        memory_repo.save(old)
+        memory_repo.save(new)
+        result = memory_repo.find_recent(limit=2)
+        assert result.is_ok
+        assert [m.key for m in result.value] == ["memory_new", "memory_old"]
+
+    def test_find_recent_ignores_updated_at_refresh(self, memory_repo: SQLiteMemoryRepository):
+        """回帰: 古い記憶を update（エンリッチ等）しても「直近」に浮上しない。
+
+        updated_at は最終変更時刻として更新されるが、find_recent の順序は
+        created_at 基準のため、年単位に古い記憶が直近扱いされることはない。
+        """
+        now = get_now()
+        year_old = self._make_memory("memory_year_old", "year old content")
+        year_old.created_at = now - timedelta(days=365)
+        fresh = self._make_memory("memory_fresh", "fresh content")
+        memory_repo.save(year_old)
+        memory_repo.save(fresh)
+
+        # 古い記憶を今日更新（エンリッチ編集相当）→ updated_at は若返る
+        update_result = memory_repo.update("memory_year_old", content="year old content (enriched)")
+        assert update_result.is_ok
+        assert update_result.value.updated_at > update_result.value.created_at
+
+        result = memory_repo.find_recent(limit=2)
+        assert result.is_ok
+        # 更新された古い記憶は直近の新規記憶を押し出さない
+        assert [m.key for m in result.value] == ["memory_fresh", "memory_year_old"]
 
     def test_find_all(self, memory_repo: SQLiteMemoryRepository):
         for i in range(3):

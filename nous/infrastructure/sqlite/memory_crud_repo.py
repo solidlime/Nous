@@ -149,9 +149,15 @@ class MemoryCrudMixin:
         return Success(self._row_to_memory(row))
 
     def find_recent(self, limit: int = 10, offset: int = 0) -> Result[list[Memory], RepositoryError]:
-        """Return the most recently updated memories with optional pagination offset."""
+        """Return the most recently *created* memories with optional pagination offset.
+
+        Ordered by created_at (not updated_at): enrichment/quality edits refresh
+        updated_at, and ordering by it would resurface old memories as "recent"
+        — the "old memory treated as latest" bug. "Recent" means recently
+        experienced, i.e. created.
+        """
         rows = self._db.execute(
-            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY updated_at DESC LIMIT ? OFFSET ?",  # values bound via sqlite params; identifiers from internal constants  # nosec B608
+            f"SELECT * FROM memories WHERE {self._active_where()} ORDER BY created_at DESC LIMIT ? OFFSET ?",  # values bound via sqlite params; identifiers from internal constants  # nosec B608
             (limit, offset),
         ).fetchall()
         return Success([self._row_to_memory(r) for r in rows])
