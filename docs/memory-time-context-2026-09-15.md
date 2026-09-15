@@ -2,6 +2,7 @@
 
 - 日付: 2026-09-15
 - コミット: c7301d5f feat(memory): 時間文脈の明示と recency 既定値で「過去記憶が直近扱い」問題を緩和
+- 続報コミット: dde821ef fix(memory): find_recent を created_at 降順に変更（残存課題①を解消）
 
 ## 調査で確定した原因（4箇所）
 
@@ -26,5 +27,5 @@
 
 ## 残存課題
 
-- `updated_at` が `update()` のたび現在時刻に上書きされる問題（`nous/infrastructure/sqlite/memory_crud_repo.py:181` 付近）は未修正。find_recent（updated_at 降順）が古い記憶を「直近」に浮上させる経路が残る。次タスク候補: find_recent を created_at 降順に変更、またはエンリッチ系更新で updated_at を touch しない
+- ~~`updated_at` が `update()` のたび現在時刻に上書きされる問題~~ → **解消 (dde821ef)**: `find_recent` を `created_at DESC` 順に変更。`updated_at` は「最終変更時刻」の意味論のまま、順序基準を作成時刻へ。回帰テスト2件追加（created_at 順序、update 後も古い記憶が浮上しない）。unit 2465 pass、mypy 352（同値）。
 - recency_weight 0.05 の実運用での体感検証
