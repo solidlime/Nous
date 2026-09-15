@@ -33,6 +33,7 @@ from nous.api.mcp._tools_item import (  # noqa: E402, F401
     _tool_item_search,
 )
 from nous.api.mcp._tools_memory import (  # noqa: E402, F401
+    MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT,
     _tool_memory_create,
     _tool_memory_delete,
     _tool_memory_read,
@@ -214,7 +215,7 @@ def register_tools(mcp: MCPServer) -> None:
         min_importance: float | None = None,
         emotion: str | None = None,
         importance_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0,
-        recency_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0,
+        recency_weight: Annotated[float, Field(ge=0.0, le=1.0)] = MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT,
         vector_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0,
         keyword_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 0.5,
         kind: str | None = None,

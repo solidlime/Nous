@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Any
 
 from nous.domain.language import LanguageResolver
 from nous.domain.memory.reflection_schema import OUTPUT_FORMAT, REFLECTION_SCHEMA, ReflectionQuestion
-from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.text_utils import strip_code_fence
+from nous.domain.shared.time_utils import relative_time_str
 from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.factory import get_provider
 from nous.infrastructure.llm.text_utils import collect_text
@@ -66,6 +66,17 @@ def _is_duplicate_insight(content: str, existing_contents: list[str], threshold:
     return any(_cosine_similarity(content, existing) > threshold for existing in existing_contents)
 
 
+def _memory_time_suffix(memory: Any) -> str:
+    """Relative-time suffix for a memory line, anchored on created_at.
+
+    Returns " (3mo ago)"-style text, or "" when no created_at is available.
+    """
+    created_at = getattr(memory, "created_at", None)
+    if not created_at:
+        return ""
+    return f" ({relative_time_str(created_at)})"
+
+
 def _reflection_contents(memory_service: MemoryService) -> list[str]:
     """Contents of recent reflection-tagged memories (cheapest dedup source).
 
@@ -91,6 +102,7 @@ Write in {language}.
 From these memories, derive the 3 most important high-level insights.
 Each insight should represent a pattern, tendency, or essential understanding — not a mere repetition of individual facts.
 Write each insight in first person as {persona} (そのキャラクター自身の一人称で書くこと。キャラ名呼びの三人称は禁止)。
+各記憶の括弧内の時刻を考慮し、古い記憶と直近の出来事を混同しないこと。
 
 [Output format]
 JSON only. No commentary.
@@ -176,26 +188,32 @@ async def maybe_run_reflection(
     if not api_key or not extract_model:
         return []
 
-    # Fetch up to 20 memories from the last 24 hours
+    # Fetch up to 50 candidates and keep ONLY memories created within the last
+    # 24h (created_at >= cutoff). get_recent orders by updated_at, which
+    # enrichment edits refresh, so filtering must be created_at-based and
+    # strict: an empty 24h window means skip — no fallback to older memories.
     cutoff = now - timedelta(hours=24)
-    recent_result = ctx.memory_service.get_recent(limit=20)
-    if not recent_result.is_ok or not recent_result.value:
-        # Fallback: use smart search to get recent memories
-        search_result = await ctx.search_engine.search(SearchQuery(text="記憶 事実 出来事", top_k=20, mode="hybrid"))
-        memories = []
-        if search_result.is_ok:
-            for item in search_result.value:
-                mem = item[0] if isinstance(item, tuple) else item
-                memories.append(mem)
-    else:
-        memories = [m for m in recent_result.value if m.created_at >= cutoff] or recent_result.value[:10]
+    recent_result = ctx.memory_service.get_recent(limit=50)
+    candidates: list[Memory] = recent_result.value if recent_result.is_ok else []
+    memories = [m for m in candidates if m.created_at >= cutoff]
 
     if not memories:
+        # Behavioral note: the pre-2026-09 fallback (older memories / hybrid
+        # search) was removed — an empty 24h window now means silent skip.
+        # Logged at info so operators can see reflection going quiet.
+        logger.info(
+            "Reflection skipped: no memories created within the last 24h "
+            "(cutoff=%s, recent_candidates=%d)",
+            cutoff.isoformat(),
+            len(candidates),
+        )
         return []
 
     language_resolver = LanguageResolver(config)
     lang = language_resolver.resolve()
-    memory_lines = "\n".join(f"- [{m.importance:.1f}] {m.content[:120]}" for m in memories[:20])
+    memory_lines = "\n".join(
+        f"- [{m.importance:.1f}] {m.content[:120]} ({relative_time_str(m.created_at)})" for m in memories[:20]
+    )
     prompt = _REFLECTION_PROMPT.format(
         memories=memory_lines,
         language=LanguageResolver.display_name(lang),
@@ -403,7 +421,7 @@ class ReflectionEngine:
             [{"id": q.id, "intent": q.intent, "output": q.output_key} for q in self._schema],
             ensure_ascii=False,
         )
-        memory_lines = "\n".join(f"- {getattr(m, 'content', str(m))}" for m in memories[-30:])
+        memory_lines = "\n".join(f"- {getattr(m, 'content', str(m))}{_memory_time_suffix(m)}" for m in memories[-30:])
 
         if self._config is not None:
             resolver = LanguageResolver(self._config)
@@ -420,7 +438,9 @@ class ReflectionEngine:
             f"Generate insights in {language_name}. "
             "Write each insight in first person as that character (そのキャラクター自身の一人称で書くこと。キャラ名呼びの三人称は禁止). "
             "The reflection should reveal patterns, traits, or implications "
-            "that are NOT explicitly stated in individual memories."
+            "that are NOT explicitly stated in individual memories. "
+            "Consider the time shown in parentheses for each memory; do not conflate old memories with recent events "
+            "(各記憶の括弧内の時刻を考慮し、古い記憶と直近の出来事を混同しないこと)。"
         )
 
     @staticmethod

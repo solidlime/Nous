@@ -275,3 +275,170 @@ class TestMaybeRunReflectionPersona:
         assert result == ["Fresh insight."]
         insight_kwargs = mock_ctx.memory_service.create_memory.call_args_list[0].kwargs
         assert insight_kwargs["related_keys"] == ["mem_001"]
+
+
+class TestMaybeRunReflectionStrict24hWindow:
+    """maybe_run_reflection の 24h ウィンドウ厳格適用（年単位フォールバック廃止）。"""
+
+    @pytest.fixture
+    def fresh_ctx(self):
+        """get_recent が 1時間前 created_at の記憶を返すコンテキスト（既存テストと同等）。"""
+        ctx = MagicMock()
+        ctx.persona = "test_char"
+        ctx.memory_service = MagicMock()
+        recent_result = MagicMock()
+        recent_result.is_ok = True
+        mem = MagicMock()
+        mem.content = "A sample memory."
+        mem.importance = 0.8
+        mem.created_at = datetime.now().astimezone() - timedelta(hours=1)
+        mem.key = "mem_001"
+        recent_result.value = [mem]
+        ctx.memory_service.get_recent.return_value = recent_result
+        ctx.memory_service.create_memory = AsyncMock()
+        tags_result = MagicMock()
+        tags_result.is_ok = True
+        tags_result.value = []
+        ctx.memory_service.get_by_tags.return_value = tags_result
+        ctx.search_engine = AsyncMock()
+        return ctx
+
+    @pytest.fixture
+    def fresh_config(self):
+        config = MagicMock()
+        config.reflection_threshold = 0.1
+        config.reflection_min_interval_hours = 0.0
+        config.provider = "test_provider"
+        config.extract_model = "test_model"
+        config.get_effective_api_key.return_value = "sk-test"
+        config.get_effective_model.return_value = "test-model"
+        config.get_effective_base_url.return_value = None
+        return config
+
+    @pytest.fixture
+    def old_only_ctx(self):
+        """get_recent が created_at 30日前の記憶しか返さないコンテキスト。"""
+        ctx = MagicMock()
+        ctx.persona = "test_char"
+        ctx.memory_service = MagicMock()
+        recent_result = MagicMock()
+        recent_result.is_ok = True
+        old = MagicMock()
+        old.content = "an old memory"
+        old.importance = 0.8
+        old.created_at = datetime.now().astimezone() - timedelta(days=30)
+        old.updated_at = datetime.now().astimezone() - timedelta(days=1)  # エンリッチで若返った想定
+        old.key = "old_001"
+        recent_result.value = [old]
+        ctx.memory_service.get_recent.return_value = recent_result
+        ctx.memory_service.create_memory = AsyncMock()
+        tags_result = MagicMock()
+        tags_result.is_ok = True
+        tags_result.value = []
+        ctx.memory_service.get_by_tags.return_value = tags_result
+        ctx.search_engine = AsyncMock()
+        return ctx
+
+    @pytest.fixture
+    def strict_config(self):
+        config = MagicMock()
+        config.reflection_threshold = 0.1
+        config.reflection_min_interval_hours = 0.0
+        config.provider = "test_provider"
+        config.extract_model = "test_model"
+        config.get_effective_api_key.return_value = "sk-test"
+        config.get_effective_model.return_value = "test-model"
+        config.get_effective_base_url.return_value = None
+        return config
+
+    @pytest.mark.asyncio
+    async def test_skips_when_zero_memories_created_within_24h(self, old_only_ctx, strict_config):
+        """24h 以内 created_at の記憶がゼロなら LLM に触れず skip する。
+
+        旧実装は `or recent_result.value[:10]` のフォールバックで updated_at が
+        新しい古い記憶を拾っていたが、廃止された。
+        """
+        with patch(
+            "nous.application.chat.reflection.get_provider",
+        ) as mock_get_provider:
+            result = await maybe_run_reflection(old_only_ctx, strict_config, recent_importance_sum=5.0)
+
+        assert result == []
+        mock_get_provider.assert_not_called()  # LLM 呼び出しなし
+        old_only_ctx.memory_service.create_memory.assert_not_called()
+        old_only_ctx.search_engine.search.assert_not_called()  # 検索フォールバックも廃止
+
+    @pytest.mark.asyncio
+    async def test_mixed_old_and_new_keeps_only_24h_created(self, fresh_ctx, fresh_config):
+        """24h 内 created_at の記憶だけがプロンプトに使われる（updated_at 基準にならない）。"""
+        now = datetime.now().astimezone()
+        old_but_fresh_updated = MagicMock()
+        old_but_fresh_updated.content = "old content refreshed by enrichment"
+        old_but_fresh_updated.importance = 0.8
+        old_but_fresh_updated.created_at = now - timedelta(days=400)
+        old_but_fresh_updated.updated_at = now - timedelta(hours=1)
+        old_but_fresh_updated.key = "old_refreshed"
+        fresh = MagicMock()
+        fresh.content = "fresh content"
+        fresh.importance = 0.9
+        fresh.created_at = now - timedelta(hours=2)
+        fresh.updated_at = now - timedelta(hours=2)
+        fresh.key = "fresh_001"
+        recent_result = MagicMock()
+        recent_result.is_ok = True
+        recent_result.value = [old_but_fresh_updated, fresh]
+        fresh_ctx.memory_service.get_recent.return_value = recent_result
+
+        fake_provider = AsyncMock()
+        captured: dict = {}
+
+        async def fake_stream(**kwargs):
+            from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
+
+            captured["messages"] = kwargs.get("messages") or []
+            yield TextDeltaEvent(content=json.dumps({"insights": ["Insight."]}))
+            yield DoneEvent(full_content=json.dumps({"insights": ["Insight."]}))
+
+        fake_provider.stream = fake_stream
+        with patch("nous.application.chat.reflection.get_provider", return_value=fake_provider):
+            result = await maybe_run_reflection(fresh_ctx, fresh_config, recent_importance_sum=5.0)
+
+        assert result == ["Insight."]
+        # created_at が 24h 内の記憶だけがプロンプトに出る（updated_at 基準で拾われた古い記憶は除外）
+        evidence_keys = fresh_ctx.memory_service.create_memory.call_args_list[0].kwargs["related_keys"]
+        assert evidence_keys == ["fresh_001"]
+        # プロンプト: fresh には "2h ago" が付き、400日前の記憶は現れない
+        prompt = "".join(m.content or "" for m in captured["messages"] if hasattr(m, "content"))
+        assert "fresh content (2h ago)" in prompt
+        assert "old content refreshed by enrichment" not in prompt
+
+
+class TestBuildSystemMessageRelativeTime:
+    """ReflectionEngine._build_system_message の記憶行に相対時刻が付く。"""
+
+    def test_memory_lines_include_relative_time(self):
+        from datetime import UTC
+
+        from nous.application.chat.reflection import ReflectionEngine
+        from nous.domain.memory.entities import Memory
+
+        now = datetime.now(UTC)
+        memories = [
+            Memory(
+                key="k1",
+                content="recent event",
+                created_at=now - timedelta(hours=1),
+                updated_at=now - timedelta(hours=1),
+            ),
+            Memory(
+                key="k2",
+                content="old fact",
+                created_at=now - timedelta(days=366),
+                updated_at=now - timedelta(days=366),
+            ),
+        ]
+        msg = ReflectionEngine()._build_system_message("test_persona", memories)
+        assert "recent event (1h ago)" in msg
+        assert "old fact (1y ago)" in msg
+        # プロンプト指示行（古い記憶と直近の出来事を混同しない）も追加されている
+        assert "混同しないこと" in msg

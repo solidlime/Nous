@@ -382,7 +382,10 @@ def _format_lightweight_response(
             snippet = m.content.replace("\n", " ")
             if len(snippet) > 100:
                 snippet = snippet[:97] + "..."
-            line = f"- {snippet}{tag_part}"
+            # 各記憶の created_at 基準の相対時刻（updated_at はエンリッチで若返るため錨にしない）
+            ts = relative_time_str(m.created_at) if getattr(m, "created_at", None) else ""
+            ts_part = f" ({ts})" if ts else ""
+            line = f"- {snippet}{tag_part}{ts_part}"
             if used + len(line) > char_budget:
                 lines.append(f"  ... ({len(top_memories) - shown} more)")
                 break
@@ -391,23 +394,30 @@ def _format_lightweight_response(
 
     # ── Insights: reflection + mental model ──
     if reflections:
-        insights = [r.content for r in reflections[:2] if r.content]
-        if insights:
-            lines.append("\n--- Recent Insights ---")
-            for i in insights:
-                lines.append(f"💡 {i}")
+        # リフレクションの各行末に created_at 基準の相対時刻を付与
+        lines.append("\n--- Recent Insights ---")
+        for r in reflections[:2]:
+            if not r.content:
+                continue
+            ts = relative_time_str(r.created_at) if getattr(r, "created_at", None) else ""
+            ts_part = f" ({ts})" if ts else ""
+            lines.append(f"💡 {r.content}{ts_part}")
     if mental_models:
         patterns = [m.content for m in mental_models[:2] if m.content]
         if patterns:
             lines.append("\n--- Behavior Patterns ---")
             for p in patterns:
+                # 集約概念に単一時刻を与えると誤った時間性を持たせるため、時刻は付けない
                 lines.append(f"🧩 {p}")
     if session_summaries:
-        summaries = [s.content for s in (session_summaries or [])[:2] if s.content]
-        if summaries:
-            lines.append("\n--- Recent Summaries ---")
-            for s in summaries:
-                lines.append(f"📝 {s}")
+        # サマリーの各行末に created_at 基準の相対時刻を付与
+        lines.append("\n--- Recent Summaries ---")
+        for s in (session_summaries or [])[:2]:
+            if not s.content:
+                continue
+            ts = relative_time_str(s.created_at) if getattr(s, "created_at", None) else ""
+            ts_part = f" ({ts})" if ts else ""
+            lines.append(f"📝 {s.content}{ts_part}")
 
     lines.append("\n💡 Use memory_search() for deeper context on specific topics.")
     return "\n".join(lines)

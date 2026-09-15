@@ -10,7 +10,15 @@ from nous.api.mcp._tools_helpers import tool_called_audited
 from nous.domain.search.engine import SearchQuery, SearchResult
 from nous.domain.shared.errors import DuplicateMemoryError
 from nous.domain.shared.result import Success
+from nous.domain.shared.time_utils import format_iso, relative_time_str
 from nous.domain.value_objects import _VALID_EMOTIONS, normalize_importance
+
+# Default recency boost for memory_search (RRF recency bonus multiplier).
+# Single source of truth — tools.py schema default references this.
+# 0.05: recent-but-weak memories must not displace clearly-more-relevant
+# older ones (the 1/(1+age_days) bonus decays to ~0.03 at 30 days, so
+# larger defaults invert rankings — see test_memory_time_context.py).
+MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT = 0.05
 
 logger = logging.getLogger(__name__)
 
@@ -339,7 +347,7 @@ async def _tool_memory_search(
     min_importance: float | None = None,
     emotion: str | None = None,
     importance_weight: float = 0.0,
-    recency_weight: float = 0.0,
+    recency_weight: float = MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT,
     vector_weight: float = 1.0,
     keyword_weight: float = 0.5,
     kind: str | None = None,
@@ -432,6 +440,12 @@ async def _tool_memory_search(
             "tags": m.tags,
             "emotion": m.emotion,
             "score": (sr.score / max_score) if max_score > 0 else sr.score,
+            "created_at": format_iso(m.created_at) if getattr(m, "created_at", None) else None,
+            # updated_at = last edit/enrichment time (refreshes without content
+            # being new). Freshness questions should use created_at / age.
+            "updated_at": format_iso(m.updated_at) if getattr(m, "updated_at", None) else None,
+            # age is anchored on created_at (updated_at refreshes on enrichment edits)
+            "age": relative_time_str(m.created_at) if getattr(m, "created_at", None) else None,
         }
         if sr.similarity_flag:
             entry["similarity_flag"] = True

@@ -81,7 +81,7 @@ nous/
 | `read_pdf(path)` | PDF解析（テキスト・テーブル・画像抽出） |
 | `list_skills()` | 登録スキル一覧 |
 
-`memory_search()` の weight パラメータ: `vector_weight`（意味検索）/ `keyword_weight`（キーワード検索）/ `importance_weight` / `recency_weight` — 全て 0.0-1.0。
+`memory_search()` の weight パラメータ: `vector_weight`（意味検索）/ `keyword_weight`（キーワード検索）/ `importance_weight` / `recency_weight` — 全て 0.0-1.0。`recency_weight` の既定値は 0.05（`1/(1+age_days)` の recency ボーナス、created_at 基準）。結果エントリには `created_at` / `updated_at` / `age`（created_at 基準の相対時刻）が含まれる。
 
 ### Goals & Promises の管理
 
