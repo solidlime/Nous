@@ -78,15 +78,13 @@ make-project スキルを読み、手順1以降を自動実行する（make-proj
 
 ## ステップ3: プロジェクト記憶の復元
 タグが無い（通常会話）場合は本ステップ全体をスキップする。
-タグが取得できた場合、以下を実行してプロジェクトの状態を復元する（原則 `project:<slug>` タグで絞り込む。5は除く）:
+タグが取得できた場合、以下を実行してプロジェクトの状態を復元する（原則 `project:<slug>` タグで絞り込む。3は除く）:
 
-1. `memory_search(query="", tags=["project:<slug>", "session_summary"], top_k=1, sort="updated_at")` — このプロジェクトの最新セッション要約（セッション終了フックが生成したサマリ。引継の代替）
-2. `memory_search(query="", tags=["project:<slug>", "task_state"], top_k=5, sort="updated_at")` — このプロジェクトの最新の作業状態
-3. `memory_search(query="", tags=["project:<slug>", "decision"], top_k=5, sort="updated_at")` — このプロジェクトの重要な決定
-4. `memory_search(query="", tags=["project:<slug>", "goal", "active"], top_k=5, sort="updated_at")` — このプロジェクトのアクティブな目標（goal は memory で管理: `tags=["goal", "active", "project:<slug>"]` で作成する）
-5. `memory_search(query="", tags=["promise"], top_k=5, sort="updated_at")` — 未完了の約束の先出し用（開始時想起。projectタグとのANDにしないこと——書込側はprojectタグ無しで書くため）
+1. `get_context(project="<slug>")` — プロジェクト記憶の一括復元。PROJECT MEMORIES 節に `project:<slug>` タグ付き記憶（最新セッション要約・作業状態・決定を含む。updated_at 降順・重複除去・最大5件）が表示される。前回の状態把握はこれ1発で足りる
+2. `memory_search(query="", tags=["project:<slug>", "goal", "active"], top_k=5, sort="updated_at")` — このプロジェクトのアクティブな目標。get_context の ACTIVE COMMITMENTS は persona 全体の goal を表示するため、プロジェクト固有の goal はここで取得する（goal は memory で管理: `tags=["goal", "active", "project:<slug>"]` で作成する）
+3. `memory_search(query="", tags=["promise"], top_k=5, sort="updated_at")` — 未完了の約束の先出し用（開始時想起。projectタグとのANDにしないこと——書込側はprojectタグ無しで書くため）
 
-（注: タグ検索は `query=""` で行うこと。非空クエリは content 全文一致が前提で、タグは検索結果の絞り込みにしか使われない。get_context の ACTIVE COMMITMENTS は persona 全体の goal を表示するため、プロジェクト固有の goal はここで取得する）
+（注: タグ検索は `query=""` で行うこと。非空クエリは content 全文一致が前提で、タグは検索結果の絞り込みにしか使われない。get_context の PROJECT MEMORIES 節は最大5件のため、作業状態・決定の網羅が必要になったら `tags=["project:<slug>", "task_state"]` / `tags=["project:<slug>", "decision"]` で追加検索する）
 
 **検索が空の場合**: task_state / decision の結果が空でも慌てないこと。作業状態は session_summary タグに統合されて記録される運用が一般的（例: tags=["project:nous", "session_summary", "task_state", "decision"]）。空の場合は session_summary の直近結果と get_context の Recent Memories で状態を補完する。
 
