@@ -98,11 +98,12 @@ def register_tools(mcp: MCPServer) -> None:
 
     # get_context
     @_tool("get_context")
-    async def get_context() -> str:
+    async def get_context(project: str | None = None) -> str:
         """Get persona state and memory overview. Call FIRST at session start.
-        Lightweight: active commitments + essential story + body/emotion state (~500-800 tokens)."""
+        Lightweight: active commitments + essential story + body/emotion state (~500-800 tokens).
+        project: 任意。project:<slug> タグ付き記憶を PROJECT MEMORIES 節で表示する。"""
         p = _resolve_persona()
-        r = await _tool_get_context(AppContextRegistry.get(p), p)
+        r = await _tool_get_context(AppContextRegistry.get(p), p, project=project)
         if r.get("ok"):
             return r.get("result", "")
         return f"Error: {r.get('error', 'unknown')}"

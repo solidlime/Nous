@@ -186,3 +186,30 @@ def test_behavior_patterns_carry_no_relative_time():
     assert "pattern one" in patterns and "pattern two" in patterns
     assert not _REL_TIME_RE.search(patterns), f"Behavior Patterns に時刻が付いた: {patterns}"
     assert "1y ago" not in patterns
+
+
+def test_normalize_content_datetime_anchor_contract():
+    """_normalize_content の先頭日時アンカー契約。
+
+    - 先頭のブラケット付き/ISO-T/空白区切り日時は除去される
+    - 裸の日時のみの内容は fallback で元の stripped 文字列を返す
+    - 本文中の日時・スコアは保持される（正当な差異）
+    - 先頭の意味を持つ日付も除去される（設計上の許容、docstring 参照）
+    """
+    from nous.api.mcp._tools_helpers import _normalize_content
+
+    # 先頭アンカー: ブラケット付き
+    assert _normalize_content("[2025-01-01] 再起動した。") == "再起動した。"
+    # 先頭アンカー: ISO-T 接続（大文字 T — lower() 前でも後でも落とす）
+    assert _normalize_content("2025-01-01T10:30 再起動した。") == "再起動した。"
+    # 先頭アンカー: 空白区切り
+    assert _normalize_content("2025-01-01 10:30 再起動した。") == "再起動した。"
+    # 先頭アンカー: 全角（NFKC 後にアンカーされる）
+    assert _normalize_content("２０２５-０１-０１ 再起動した。") == "再起動した。"
+    # 裸の日時のみ → fallback で元の stripped 文字列
+    assert _normalize_content("2025-01-01 10:30") == "2025-01-01 10:30"
+    # 本文中の日時・スコアは保持（正当な差異）
+    assert _normalize_content("スコアは 3:2 だった") == "スコアは 3:2 だった"
+    assert _normalize_content("定例は 14:00 から") == "定例は 14:00 から"
+    # 先頭の意味を持つ日付も除去される（許容設計）
+    assert _normalize_content("2026-09-30 にリリースする予定") == "にリリースする予定"

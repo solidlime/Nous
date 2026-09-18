@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import difflib
 import functools
 import json
 import logging
+import re
+import unicodedata
 from typing import TYPE_CHECKING, ParamSpec, TypeVar, cast
 
 from nous.domain.persona.emotion_trend import clean_context
@@ -29,6 +32,14 @@ _DEFAULT_METRIC_LABELS = {
     "heart_rate": "heart",
     "pain": "pain",
 }
+
+# 近傍重複（paraphrase）の表示側threshold。保守的に 0.85 を維持する:
+# 実測 fixture（chezmoi 5連）の最強ペア 3-5=0.8589 だけが落ち、次点 2-3=0.3626 とは
+# 明確な余白がある。文字列類似 (difflib) は意味的同一性を測る道具ではないため、
+# 閾値を下げて「意味的同一」を偽装するのは将来の誤圧縮リスクが高い。
+# 近傍重複の根本対策は書き込み側 duplicate check（memory_create の skip_duplicate_check 運用）であり、
+# 表示側は文字列レベルで明らかな重複の除去までを担当する。
+_NEAR_DUP_THRESHOLD = 0.85
 
 
 # ── tool.called self-publication (F3 invariant) ──
@@ -247,6 +258,59 @@ def _parse_days_from_relative(time_since: str) -> int:
     return 0
 
 
+def _normalize_content(text: str) -> str:
+    """内容ベース dedupe 用の正規化。NFKC → 空白列圧縮 → lowercase → 先頭の日時トークン除去 → strip。
+    本文中の日時・スコア（3:2 等）は正当な差異なので保持する。
+    ただし内容先頭の意味を持つ日付（例: 「2026-09-30 にリリースする予定」）も除去される——
+    ログ接頭辞タイムスタンプの除去を優先した設計上の許容。"""
+    t = unicodedata.normalize("NFKC", str(text))
+    t = re.sub(r"\s+", " ", t)
+    t = t.lower()
+    mid = t.strip()
+    # 内容先頭の日付（+時間）トークンのみ除去。本文中の日時は消さない。
+    # [ tT]: lower() 済みだが T 接続（ISO 8601）も確実にアンカーするため大文字も許容
+    t = re.sub(r"^\s*\[?\d{4}-\d{2}-\d{2}([ tT]\d{1,2}:\d{2})?\]?\s*", "", mid)
+    t = t.strip()
+    # 内容が裸の日時のみで正規化が空になった場合は、日時除去前の文字列に fallback
+    return t if t else mid
+
+
+def _dedupe_memories(memories: list, seen_normalized: set[str]) -> list:
+    """正規化内容の完全一致で重複を排除。通過した分を seen_normalized に追加（破壊的更新で節間共有）。"""
+    out: list = []
+    for m in memories:
+        norm = _normalize_content(m.content)
+        if norm in seen_normalized:
+            continue
+        seen_normalized.add(norm)
+        out.append(m)
+    return out
+
+
+def _collapse_near_duplicates(
+    memories: list,
+    threshold: float = _NEAR_DUP_THRESHOLD,
+    seen_normalized: set[str] | None = None,
+) -> list:
+    """同一リスト内で SequenceMatcher ratio >= threshold の組は前方（古い方）を残し後方を落とす。
+    O(n²)（n<=20程度の想定）。落とした項目の正規化済み内容も seen_normalized に登録し、
+    後続節の完全一致 dedupe が素通りしないようにする。"""
+    kept_norm: list[str] = []
+    out: list = []
+    for m in memories:
+        norm = _normalize_content(m.content)
+        if any(difflib.SequenceMatcher(None, n, norm).ratio() >= threshold for n in kept_norm):
+            # 落とした項目の norm を seen に登録し、後続節の完全一致が素通りしないようにする。
+            # ただし kept 内と完全一致する norm は、残った前方項目が dedupe 側で seen に登録するので
+            # ここで登録すると前方項目まで消えてしまう（同一 norm は重複登録しない）。
+            if seen_normalized is not None and norm and norm not in kept_norm:
+                seen_normalized.add(norm)
+            continue
+        kept_norm.append(norm)
+        out.append(m)
+    return out
+
+
 def _build_time_comment(time_since: str, relationship_status: str | None) -> str | None:
     days = _parse_days_from_relative(time_since)
     if days <= 0:
@@ -272,9 +336,15 @@ def _format_lightweight_response(
     current_time: str = "",
     decay_note: str = "",
     one_shot_context: dict[str, str] | None = None,
+    project_memories: list | None = None,
+    project_name: str | None = None,
 ) -> str:
     """Lightweight context (~700-900 tokens): persona + conversation continuity + body state."""
     lines: list[str] = []
+
+    # 節跨ぎ dedupe 用の正規化済み seen set。節の構築順（active goals → recent →
+    # essential story → insights/patterns → summaries → project）で共有する。
+    seen: set[str] = set()
 
     # ── Self-referential header: "YOU ARE this persona RIGHT NOW" ──
     lines.append(f"=== YOU ARE: {state.persona} (right now) ===")
@@ -354,6 +424,8 @@ def _format_lightweight_response(
     # Active commitments (compact)
     active_goals = [g for g in goals if "active" in (g.tags or [])]
     if active_goals:
+        active_goals = _dedupe_memories(active_goals, seen)
+    if active_goals:
         lines.append("\n⚠️ YOUR ACTIVE COMMITMENTS:")
         for g in active_goals:
             ts = relative_time_str(g.created_at) if getattr(g, "created_at", None) else ""
@@ -361,6 +433,9 @@ def _format_lightweight_response(
             lines.append(f"  🎯 {g.content[:100]}{ts_str}")
 
     # Recent memories — conversation continuity across sessions
+    if recent:
+        recent = _collapse_near_duplicates(list(recent), seen_normalized=seen)
+        recent = _dedupe_memories(recent, seen)
     if recent:
         lines.append("\n--- Your Recent Memories ---")
         for m in recent[:5]:
@@ -372,6 +447,9 @@ def _format_lightweight_response(
             lines.append(f"- {snippet}{ts_str}")
 
     # Essential Story
+    if top_memories:
+        top_memories = _collapse_near_duplicates(list(top_memories), seen_normalized=seen)
+        top_memories = _dedupe_memories(top_memories, seen)
     if top_memories:
         lines.append("\n## YOUR ESSENTIAL STORY")
         char_budget = 1500
@@ -394,6 +472,8 @@ def _format_lightweight_response(
 
     # ── Insights: reflection + mental model ──
     if reflections:
+        reflections = _dedupe_memories(list(reflections), seen)
+    if reflections:
         # リフレクションの各行末に created_at 基準の相対時刻を付与
         lines.append("\n--- Recent Insights ---")
         for r in reflections[:2]:
@@ -403,6 +483,7 @@ def _format_lightweight_response(
             ts_part = f" ({ts})" if ts else ""
             lines.append(f"💡 {r.content}{ts_part}")
     if mental_models:
+        mental_models = _dedupe_memories(list(mental_models), seen)
         patterns = [m.content for m in mental_models[:2] if m.content]
         if patterns:
             lines.append("\n--- Behavior Patterns ---")
@@ -410,14 +491,31 @@ def _format_lightweight_response(
                 # 集約概念に単一時刻を与えると誤った時間性を持たせるため、時刻は付けない
                 lines.append(f"🧩 {p}")
     if session_summaries:
+        # collapse は上限つきスライスに限定（全件 collapse は履歴蓄積で非有界になるため）
+        session_summaries = _collapse_near_duplicates(list(session_summaries[:20]), seen_normalized=seen)
+        session_summaries = _dedupe_memories(session_summaries, seen)
+    if session_summaries:
         # サマリーの各行末に created_at 基準の相対時刻を付与
         lines.append("\n--- Recent Summaries ---")
-        for s in (session_summaries or [])[:2]:
+        for s in session_summaries[:2]:
             if not s.content:
                 continue
             ts = relative_time_str(s.created_at) if getattr(s, "created_at", None) else ""
             ts_part = f" ({ts})" if ts else ""
             lines.append(f"📝 {s.content}{ts_part}")
+
+    # ── Project memories（project:<slug> タグ付きの直近記憶）──
+    project_memories = _dedupe_memories(project_memories or [], seen)
+    if project_memories:
+        slug = project_name or ""
+        lines.append(f"\n--- PROJECT MEMORIES (project:{slug}) ---")
+        for m in project_memories:
+            snippet = m.content.replace("\n", " ")
+            if len(snippet) > 400:
+                snippet = snippet[:400].rstrip() + "… (full via memory_read: " + m.key + ")"
+            ts = relative_time_str(m.created_at) if getattr(m, "created_at", None) else ""
+            ts_str = f" ({ts})" if ts else ""
+            lines.append(f"- {snippet}{ts_str}")
 
     lines.append("\n💡 Use memory_search() for deeper context on specific topics.")
     return "\n".join(lines)

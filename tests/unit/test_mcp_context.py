@@ -324,6 +324,58 @@ class TestGetContext:
             result = await get_context()
         assert "Finish project" in result
 
+    @pytest.mark.asyncio
+    async def test_get_context_default_no_project_section(self, registered_tools):
+        """project 引数なし → 従来通り動作し PROJECT MEMORIES 節が出ない（後方互換）。"""
+        tools, ctx, _ = registered_tools
+        state = PersonaState(persona="test_persona")
+        ctx.persona_service.get_context.return_value = Success(state)
+        ctx.memory_service.get_top_by_importance.return_value = Success([])
+        ctx.memory_service.get_by_tags.return_value = Success([])
+        ctx.memory_service.get_recent.return_value = Success([])
+        ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+        ctx.memory_service.get_equipment.return_value = Success({})
+        ctx.persona_service.get_emotion_history.return_value = Success([])
+        ctx.persona_service.record_conversation_time.return_value = Success(None)
+        get_context = tools["get_context"]
+        with (
+            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
+            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
+        ):
+            mock_reg_cls.get.return_value = ctx
+            result = await get_context()
+        assert "test_persona" in result
+        assert "PROJECT MEMORIES" not in result
+
+    @pytest.mark.asyncio
+    async def test_get_context_with_project_memories(self, registered_tools):
+        """project 指定時: project:<slug> タグ付き記憶が PROJECT MEMORIES 節に渡される。"""
+        tools, ctx, _ = registered_tools
+        state = PersonaState(persona="test_persona")
+        proj_mem = _mem("proj_1", "PROJECT_FOCUS_CONTENT")
+        proj_mem.tags = ["project:testslug"]
+        ctx.persona_service.get_context.return_value = Success(state)
+        ctx.memory_service.get_top_by_importance.return_value = Success([])
+        ctx.memory_service.get_by_tags.side_effect = lambda tags: (
+            Success([proj_mem]) if tags == ["project:testslug"] else Success([])
+        )
+        ctx.memory_service.get_recent.return_value = Success([])
+        ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+        ctx.memory_service.get_equipment.return_value = Success({})
+        ctx.persona_service.get_emotion_history.return_value = Success([])
+        ctx.persona_service.record_conversation_time.return_value = Success(None)
+        get_context = tools["get_context"]
+        with (
+            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
+            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
+        ):
+            mock_reg_cls.get.return_value = ctx
+            result = await get_context(project="testslug")
+        assert "--- PROJECT MEMORIES (project:testslug) ---" in result
+        assert "PROJECT_FOCUS_CONTENT" in result
+        # project:<slug> タグで問い合わせている
+        assert (["project:testslug"],) in [c.args for c in ctx.memory_service.get_by_tags.call_args_list]
+
     # ------------------------------------------------------------------
     # Emotion decay notification
     # ------------------------------------------------------------------

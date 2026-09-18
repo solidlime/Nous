@@ -6,6 +6,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now, relative_time_str
 
 logger = logging.getLogger(__name__)
@@ -17,14 +18,16 @@ if TYPE_CHECKING:
 from nous.api.mcp._tools_helpers import (  # noqa: E402
     _apply_body_decay,
     _apply_emotion_decay,
+    _dedupe_memories,
     _format_lightweight_response,
     tool_called_audited,
 )
 
 
-async def _tool_get_context(ctx: AppContext, persona: str) -> dict:
+async def _tool_get_context(ctx: AppContext, persona: str, project: str | None = None) -> dict:
     """Get persona state and memory overview. Call FIRST at session start.
-    Lightweight: active commitments + essential story + body/emotion state (~500-800 tokens)."""
+    Lightweight: active commitments + essential story + body/emotion state (~500-800 tokens).
+    project: 指定時は project:<slug> タグ付き記憶を PROJECT MEMORIES 節で表示（最大5件）。"""
     state_result = ctx.persona_service.get_context(persona)
     if not state_result.is_ok:
         await ctx.event_bus.publish(
@@ -33,7 +36,7 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> dict:
                 "persona": persona,
                 "session_id": getattr(ctx, "session_id", None),
                 "tool_name": "get_context",
-                "params_summary": f"persona={persona}",
+                "params_summary": f"persona={persona}, project={project}",
                 "result_summary": str(state_result.error),
                 "success": False,
             },
@@ -81,6 +84,29 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> dict:
     recent = recent_result.value if recent_result.is_ok else []
     # top_memories と重複する recent は除外（重要度表示側を優先）
     recent = [m for m in recent if not any(m.key == t.key for t in top_memories)]
+
+    # Project memories — project:<slug> タグ付き記憶を updated_at 降順・内容 dedupe・上位5件で表示
+    project_memories: list | None = None
+    if project:
+        pm_result = ctx.memory_service.get_by_tags([f"project:{project}"])
+        # is_ok は bool プロパティで narrow 不能のため isinstance で分岐（union-attr 回避）
+        if isinstance(pm_result, Success):
+            project_memories = pm_result.value
+        else:
+            logger.warning(
+                "_tool_get_context: get_by_tags failed for project '%s': %s",
+                project,
+                pm_result.error,
+            )
+            project_memories = []
+        project_memories = sorted(
+            project_memories,
+            key=lambda m: m.updated_at or m.created_at or get_now(),
+            reverse=True,
+        )
+        project_memories = _dedupe_memories(list(project_memories), set())[:5]
+        if not project_memories:
+            project_memories = None
     time_since = ""
     if state.last_conversation_time:
         time_since = relative_time_str(state.last_conversation_time)
@@ -113,6 +139,8 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> dict:
         current_time,
         decay_note=decay_note,
         one_shot_context=one_shot_context or None,
+        project_memories=project_memories,
+        project_name=project or None,
     )
     await ctx.event_bus.publish(
         "tool.called",
@@ -120,7 +148,7 @@ async def _tool_get_context(ctx: AppContext, persona: str) -> dict:
             "persona": persona,
             "session_id": getattr(ctx, "session_id", None),
             "tool_name": "get_context",
-            "params_summary": f"persona={persona}",
+            "params_summary": f"persona={persona}, project={project}",
             "result_summary": f"Context formatted ({len(top_memories)} memories, {len(goals)} goals)",
             "success": True,
         },
