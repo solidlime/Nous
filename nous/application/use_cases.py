@@ -723,6 +723,7 @@ class AppContextRegistry:
 
             forgetting_enabled = config.forgetting_enabled if config else cls._settings.forgetting.enabled
             if forgetting_enabled:
+                from nous.application.chat.reflection import ReflectionEngine
                 from nous.application.workers.decay_worker import DecayWorker
 
                 decay_interval = (
@@ -730,7 +731,20 @@ class AppContextRegistry:
                     if config
                     else cls._settings.forgetting.decay_interval_seconds
                 )
-                decay_worker = DecayWorker(ctx, decay_interval, config=config)
+                # Periodic reflection (Park et al. 2023): engine + brain LLM provider.
+                # brain LLM は enrichment/introspection と同じ解決鎖で解決済み。
+                # LLM 無し環境でも AppContext 生成は失敗しない — introspection_engine
+                # が無い/持てない場合は getattr が None を返し、DecayWorker 側で no-op
+                # フォールバックする（reflection は silent skip）。
+                reflection_engine = ReflectionEngine(config=config)
+                brain_llm = getattr(getattr(ctx, "introspection_engine", None), "_provider", None)
+                decay_worker = DecayWorker(
+                    ctx,
+                    decay_interval,
+                    reflection_engine=reflection_engine,
+                    llm_provider=brain_llm,
+                    config=config,
+                )
                 decay_worker.start()
                 cls._decay_workers[persona] = decay_worker
 

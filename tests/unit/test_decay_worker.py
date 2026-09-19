@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -188,6 +188,102 @@ class TestDecayWorkerBrain:
         assert len(fires) == 1
         assert fires[0]["source"] == "promo"
         assert fires[0]["weight"] == pytest.approx(strength.strength)
+
+
+class TestDecayWorkerReflection:
+    """案件2: periodic ReflectionEngine の DecayWorker 配線。"""
+
+    @staticmethod
+    def _worker(engine, ctx, llm_provider):
+        return DecayWorker(
+            ctx,
+            interval_seconds=3600,
+            reflection_engine=engine,
+            llm_provider=llm_provider,
+        )
+
+    def test_reflect_runs_at_interval_boundary(self) -> None:
+        """REFLECTION_INTERVAL 到達時に reflect が呼ばれ、それまでは呼ばれない。"""
+        engine = MagicMock()
+        engine.reflect = AsyncMock(return_value=[])
+        ctx = _make_ctx([_make_strength("mem_001")])
+        ctx.persona = "test_char"
+        worker = self._worker(engine, ctx, llm_provider=MagicMock())
+
+        for _ in range(DecayWorker.REFLECTION_INTERVAL - 1):
+            worker._run_cycle()
+        engine.reflect.assert_not_called()
+
+        worker._run_cycle()  # interval 到達 → reflect 呼び出し
+        engine.reflect.assert_called_once()
+        kwargs = engine.reflect.call_args.kwargs
+        assert kwargs["persona"] == "test_char"
+        assert kwargs["memory_service"] is ctx.memory_service
+        assert kwargs["llm"] is not None
+
+        # 次の interval でも再度呼ばれる
+        for _ in range(DecayWorker.REFLECTION_INTERVAL):
+            worker._run_cycle()
+        assert engine.reflect.call_count == 2
+
+    def test_reflect_interval_from_config(self) -> None:
+        """config.reflection_interval_cycles が実行間隔を上書きする（既定 24）。"""
+        engine = MagicMock()
+        engine.reflect = AsyncMock(return_value=[])
+        ctx = _make_ctx([_make_strength("mem_001")])
+        ctx.persona = "test_char"
+        cfg = MagicMock()
+        cfg.reflection_interval_cycles = 2
+        cfg.forgetting_min_strength = 0.01
+        worker = DecayWorker(
+            ctx,
+            interval_seconds=3600,
+            reflection_engine=engine,
+            llm_provider=MagicMock(),
+            config=cfg,
+        )
+
+        worker._run_cycle()
+        engine.reflect.assert_not_called()
+        worker._run_cycle()  # 2サイクル目 → interval=2 で発火
+        engine.reflect.assert_called_once()
+
+    def test_llm_none_is_noop(self) -> None:
+        """llm_provider=None なら reflect を呼ばず例外も出さない。"""
+        engine = MagicMock()
+        engine.reflect = AsyncMock(return_value=[])
+        ctx = _make_ctx([])
+        ctx.persona = "test_char"
+        worker = self._worker(engine, ctx, llm_provider=None)
+
+        worker._maybe_run_reflection()
+        engine.reflect.assert_not_called()
+
+    def test_engine_none_is_noop(self) -> None:
+        """reflection_engine=None でも例外を出さない。"""
+        ctx = _make_ctx([])
+        ctx.persona = "test_char"
+        worker = self._worker(None, ctx, llm_provider=MagicMock())
+
+        worker._maybe_run_reflection()  # no-op
+
+    def test_reflection_event_recorded_on_success(self) -> None:
+        """洞察生成成功時は session_events に brain.reflection を記録する。"""
+        engine = MagicMock()
+        engine.reflect = AsyncMock(return_value=[{"insight": "i", "evidence_keys": [], "confidence": 0.8}])
+        ctx = _make_ctx([_make_strength("mem_001")])
+        ctx.persona = "test_char"
+        repo = MagicMock()
+        ctx._session_event_repo = repo
+        worker = self._worker(engine, ctx, llm_provider=MagicMock())
+
+        worker._maybe_run_reflection()
+
+        repo.insert.assert_called_once()
+        event = repo.insert.call_args.args[0]
+        assert event.event_type == "brain.reflection"
+        assert event.persona == "test_char"
+        assert event.metadata == {"insights": 1}
 
 
 class TestConsolidationWorkerEventStop:

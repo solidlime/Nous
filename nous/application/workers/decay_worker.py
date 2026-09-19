@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from nous.domain.memory import wiring_events
 from nous.domain.memory.entities import importance_scaled_exponent
+from nous.domain.memory.session_event import SessionEvent
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
@@ -42,12 +43,21 @@ class DecayWorker:
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._cycle_count = 0
+        # 周期リフレクション間隔（DecayWorker サイクル数）。config の
+        # reflection_interval_cycles が設定されていればそれに従い、
+        # 無ければクラス定数 (24) にフォールバック。
+        raw_interval = getattr(self._config, "reflection_interval_cycles", None) if self._config is not None else None
+        if isinstance(raw_interval, int) and not isinstance(raw_interval, bool) and raw_interval >= 1:
+            self._reflection_interval = raw_interval
+        else:
+            self._reflection_interval = self.REFLECTION_INTERVAL
 
     def start(self) -> None:
         self._stop_event.clear()
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+        logger.info("DecayWorker started (interval=%ss)", self.interval)
 
     def stop(self, timeout: float = 5.0) -> None:
         self._running = False
@@ -65,7 +75,7 @@ class DecayWorker:
         self._decay_cycle()
         self._cycle_count += 1
 
-        if self._cycle_count % self.REFLECTION_INTERVAL == 0:
+        if self._cycle_count % self._reflection_interval == 0:
             self._maybe_run_reflection()
 
     def _batch_memory_info(self) -> tuple[dict[str, float], dict[str, float], set[str]]:
@@ -264,5 +274,30 @@ class DecayWorker:
                     len(results),
                     persona,
                 )
+                self._record_reflection_event(persona, results)
         except Exception as exc:
             logger.warning("DecayWorker: reflection failed: %s", exc)
+
+    def _record_reflection_event(self, persona: str, results: list[dict[str, Any]]) -> None:
+        """Record a ``brain.reflection`` session event for a successful periodic run.
+
+        Trigger 時刻の保存先は legacy のメタ記憶（``_reflection_meta``）から session_events
+        へ移行した。実行間隔の制御は REFLECTION_INTERVAL サイクルカウントが担い、
+        ここは実行事実の記録のみ（brain.monologue / brain.introspection と同型）。
+        """
+        repo = getattr(self.context, "_session_event_repo", None)
+        if repo is None:
+            return
+        try:
+            repo.insert(
+                SessionEvent(
+                    session_id="unknown",
+                    persona=persona,
+                    event_type="brain.reflection",
+                    summary=f"定期リフレクション: {len(results)} insights",
+                    timestamp=get_now(),
+                    metadata={"insights": len(results)},
+                )
+            )
+        except Exception:
+            logger.debug("DecayWorker: reflection event insert failed", exc_info=True)

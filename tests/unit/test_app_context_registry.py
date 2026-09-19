@@ -113,6 +113,47 @@ class TestAppContextRegistry:
             assert mock_worker.start.call_count == 1
 
 
+class TestAppContextRegistryReflectionWiring:
+    """案件2: DecayWorker への periodic ReflectionEngine 配線（LLM 無しでも起動継続）。"""
+
+    @staticmethod
+    def _get_with_ctx(persona_root, persona: str, mock_ctx):
+        settings = _mock_settings(persona_root, forgetting_enabled=True)
+        AppContextRegistry.configure(settings)
+        _ensure_persona(persona_root, persona)
+        with (
+            patch("nous.application.use_cases.AppContext") as mock_app_ctx,
+            patch("nous.application.workers.decay_worker.DecayWorker") as mock_worker_cls,
+        ):
+            mock_app_ctx.return_value = mock_ctx
+            mock_worker = MagicMock()
+            mock_worker_cls.return_value = mock_worker
+            AppContextRegistry.get(persona)
+            return mock_worker_cls
+
+    def test_decay_worker_receives_engine_without_llm(self, persona_root):
+        """LLM 無し環境（introspection_engine 非保持）でも ReflectionEngine を渡し llm=None。"""
+        mock_ctx = MagicMock()
+        del mock_ctx.introspection_engine  # LLM 無し: 属性が無い状態を再現（getattr → None）
+
+        mock_worker_cls = self._get_with_ctx(persona_root, "alice", mock_ctx)
+
+        _, kwargs = mock_worker_cls.call_args
+        assert kwargs["reflection_engine"] is not None
+        assert kwargs["llm_provider"] is None
+
+    def test_decay_worker_gets_brain_llm_provider(self, persona_root):
+        """introspection_engine が brain LLM を保持していれば llm_provider に渡る。"""
+        mock_ctx = MagicMock()
+        mock_ctx.introspection_engine._provider = "fake-brain-llm"
+
+        mock_worker_cls = self._get_with_ctx(persona_root, "bob", mock_ctx)
+
+        _, kwargs = mock_worker_cls.call_args
+        assert kwargs["reflection_engine"] is not None
+        assert kwargs["llm_provider"] == "fake-brain-llm"
+
+
 class TestAppContextRegistrySecurity:
     """存在しないペルソナでの無検証コンテキスト生成（メモリDoS）対策。"""
 

@@ -231,6 +231,39 @@ def _migrate_mot_thoughts_v8(
     logger.info("Created mot_thoughts table (migration v8)")
 
 
+def _migrate_delete_reflection_meta_v9(
+    db_conn: sqlite3.Connection,
+    persona: str,  # noqa: ARG001
+) -> None:
+    """Delete legacy per-turn reflection meta-memories (tag ``_reflection_meta``).
+
+    The legacy ``maybe_run_reflection`` stored its last-trigger timestamp as a
+    meta-memory tagged ``_reflection_meta`` (importance 0.1).  Periodic
+    reflection replaced that per-turn path entirely, so these records are
+    obsolete.  Tags are stored as JSON arrays; the LIKE pattern matches the
+    ``get_by_tags`` / one-shot migration convention (quoted tag inside).
+    Strength records are removed first (memory_crud_repo.delete convention).
+    Idempotent — safe to run repeatedly.
+    """
+    columns = {row[1] for row in db_conn.execute("PRAGMA table_info(memories)").fetchall()}
+    if "tags" not in columns:
+        # Minimal/legacy table without a tags column cannot hold
+        # _reflection_meta rows; skip (best-effort, same as other vN guards).
+        return
+    strengths = db_conn.execute(
+        "DELETE FROM memory_strength WHERE memory_key IN (SELECT key FROM memories WHERE tags LIKE ?)",
+        ('%"_reflection_meta"%',),
+    ).rowcount
+    cursor = db_conn.execute("DELETE FROM memories WHERE tags LIKE ?", ('%"_reflection_meta"%',))
+    memories = cursor.rowcount
+    db_conn.commit()
+    logger.info(
+        "Migration v9: deleted %d reflection_meta memories (%d strength records)",
+        memories,
+        strengths,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Migration registry  (ordered by version)
 # ---------------------------------------------------------------------------
@@ -246,4 +279,5 @@ MIGRATIONS = [
     (6, "Replace kind='chat' with 'semantic'", _migrate_remove_chat_kind_v6),
     (7, "Add superseded_by column to memories", _migrate_add_superseded_by_v7),
     (8, "Create mot_thoughts table", _migrate_mot_thoughts_v8),
+    (9, "Delete legacy reflection_meta memories", _migrate_delete_reflection_meta_v9),
 ]

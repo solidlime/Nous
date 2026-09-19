@@ -1,7 +1,9 @@
 """ReflectionEngine: Park et al. 2023 reflection pipeline — language-agnostic.
 
-Provides both the legacy maybe_run_reflection (Japanese-prompt, AppContext-based)
-and the new language-agnostic ReflectionEngine class.
+Periodic structured reflection, wired into DecayWorker (every
+``DecayWorker.REFLECTION_INTERVAL`` decay cycles).  The legacy per-turn
+``maybe_run_reflection`` (meta-memory timestamp tracking) was removed — the
+periodic engine covers both low- and high-frequency conversations.
 """
 
 from __future__ import annotations
@@ -9,7 +11,6 @@ from __future__ import annotations
 import json
 import math
 from collections import Counter
-from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from nous.domain.language import LanguageResolver
@@ -17,22 +18,16 @@ from nous.domain.memory.reflection_schema import OUTPUT_FORMAT, REFLECTION_SCHEM
 from nous.domain.shared.text_utils import strip_code_fence
 from nous.domain.shared.time_utils import relative_time_str
 from nous.infrastructure.llm.base import LLMMessage
-from nous.infrastructure.llm.factory import get_provider
 from nous.infrastructure.llm.text_utils import collect_text
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
-    from nous.application.use_cases import AppContext
     from nous.domain.chat_config import ChatConfig
     from nous.domain.memory.entities import Memory
     from nous.domain.memory.service import MemoryService
     from nous.infrastructure.llm.base import LLMProvider
 
 logger = get_logger(__name__)
-
-_REFLECTION_META_TAG = "_reflection_meta"
-_REFLECTION_THRESHOLD_DEFAULT = 3.0
-_REFLECTION_MIN_INTERVAL_HOURS_DEFAULT = 1.0
 
 # Dedup: skip insights too similar to existing reflection memories
 # (same pattern as memory_extractor.py fact dedup, threshold 0.85).
@@ -94,205 +89,6 @@ def _reflection_contents(memory_service: MemoryService) -> list[str]:
     if result.is_ok and isinstance(values, list):
         return [str(m.content) for m in values[-_DEDUP_SCAN_LIMIT:]]
     return []
-
-
-_REFLECTION_PROMPT = """\
-Below is a list of recently recorded memories and facts.
-
-{memories}
-
-[Instruction]
-Write in {language}.
-From these memories, derive the 3 most important high-level insights.
-Each insight should represent a pattern, tendency, or essential understanding — not a mere repetition of individual facts.
-Write each insight in first person as {persona} (そのキャラクター自身の一人称で書くこと。キャラ名呼びの三人称は禁止)。
-各記憶の括弧内の時刻を考慮し、古い記憶と直近の出来事を混同しないこと。
-
-[Output format]
-JSON only. No commentary.
-{{"insights": ["insight1", "insight2", "insight3"]}}
-"""
-
-# -----------------------------------------------------------
-# Legacy functions (keep for backward compatibility)
-# -----------------------------------------------------------
-
-
-def _get_last_reflection_at(ctx: AppContext) -> datetime | None:
-    """Get the last reflection timestamp from meta-memory."""
-    result = ctx.memory_service.get_by_tags([_REFLECTION_META_TAG])
-    if not result.is_ok or not result.value:
-        return None
-    for mem in result.value:
-        if mem.content.startswith("last_reflection_at:"):
-            ts_str = mem.content.split(":", 1)[1].strip()
-            try:
-                return datetime.fromisoformat(ts_str)
-            except ValueError:
-                pass
-    return None
-
-
-async def _store_last_reflection_at(ctx: AppContext, ts: datetime) -> None:
-    """Store reflection timestamp as meta-memory (delete old and replace)."""
-    existing = ctx.memory_service.get_by_tags([_REFLECTION_META_TAG])
-    if existing.is_ok and existing.value:
-        for mem in existing.value:
-            if mem.content.startswith("last_reflection_at:"):
-                ctx.memory_service.delete_memory(mem.key)
-
-    await ctx.memory_service.create_memory(
-        content=f"last_reflection_at: {ts.isoformat()}",
-        importance=0.1,
-        tags=[_REFLECTION_META_TAG],
-        emotion="neutral",
-        persona=ctx.persona,
-    )
-
-
-# Per-turn reflection (⑪): 毎ターンの会話から即時的な洞察を抽出する。
-# 低レイテンシ・高頻度で動作し、会話の流れに即した気づきを生成する。
-# ⑫（DecayWorker経由の定期リフレクション）と併用。
-async def maybe_run_reflection(
-    ctx: AppContext,
-    config: ChatConfig,
-    recent_importance_sum: float,
-) -> list[str]:
-    """Run reflection when conditions are met.
-
-    Args:
-        ctx: AppContext
-        config: ChatConfig
-        recent_importance_sum: Sum of importance values from recently extracted facts
-
-    Returns:
-        List of generated insight strings. Empty list if reflection was skipped.
-    """
-    threshold: float = getattr(config, "reflection_threshold", _REFLECTION_THRESHOLD_DEFAULT)
-    min_interval_hours: float = getattr(config, "reflection_min_interval_hours", _REFLECTION_MIN_INTERVAL_HOURS_DEFAULT)
-
-    if recent_importance_sum < threshold:
-        return []
-
-    # Check that enough time has passed since the last reflection
-    now = datetime.now().astimezone()
-    last_at = _get_last_reflection_at(ctx)
-    if last_at is not None:
-        elapsed = (now - last_at).total_seconds() / 3600.0
-        if elapsed < min_interval_hours:
-            logger.debug(
-                "Reflection skipped: last=%.1fh ago, min_interval=%.1fh",
-                elapsed,
-                min_interval_hours,
-            )
-            return []
-
-    api_key = config.get_effective_api_key()
-    extract_model = config.extract_model.strip() or config.get_effective_model()
-    if not api_key or not extract_model:
-        return []
-
-    # Fetch up to 50 candidates and keep ONLY memories created within the last
-    # 24h (created_at >= cutoff). get_recent orders by updated_at, which
-    # enrichment edits refresh, so filtering must be created_at-based and
-    # strict: an empty 24h window means skip — no fallback to older memories.
-    cutoff = now - timedelta(hours=24)
-    recent_result = ctx.memory_service.get_recent(limit=50)
-    candidates: list[Memory] = recent_result.value if recent_result.is_ok else []
-    memories = [m for m in candidates if m.created_at >= cutoff]
-
-    if not memories:
-        # Behavioral note: the pre-2026-09 fallback (older memories / hybrid
-        # search) was removed — an empty 24h window now means silent skip.
-        # Logged at info so operators can see reflection going quiet.
-        logger.info(
-            "Reflection skipped: no memories created within the last 24h "
-            "(cutoff=%s, recent_candidates=%d)",
-            cutoff.isoformat(),
-            len(candidates),
-        )
-        return []
-
-    language_resolver = LanguageResolver(config)
-    lang = language_resolver.resolve()
-    memory_lines = "\n".join(
-        f"- [{m.importance:.1f}] {m.content[:120]} ({relative_time_str(m.created_at)})" for m in memories[:20]
-    )
-    prompt = _REFLECTION_PROMPT.format(
-        memories=memory_lines,
-        language=LanguageResolver.display_name(lang),
-        persona=ctx.persona,
-    )
-
-    try:
-        provider = get_provider(config.provider, api_key, extract_model, config.get_effective_base_url())
-    except Exception as e:
-        logger.warning("ReflectionEngine: provider init failed: %s", e)
-        return []
-
-    try:
-        text = await collect_text(
-            provider,
-            messages=[LLMMessage(role="user", content=prompt)],
-            system="",
-            tools=[],
-            temperature=0.3,
-            max_tokens=512,
-        )
-    except Exception as e:
-        logger.warning("ReflectionEngine: LLM call failed: %s", e)
-        return []
-
-    insights = _parse_insights(text or "")
-    if not insights:
-        return []
-
-    existing_contents = _reflection_contents(ctx.memory_service)
-    evidence_keys = [str(k) for m in memories[:20] if (k := getattr(m, "key", None))]
-    stored: list[str] = []
-    for insight in insights:
-        if _is_duplicate_insight(insight, existing_contents):
-            logger.info("Reflection: duplicate insight skipped: %s", insight[:60])
-            continue
-        await ctx.memory_service.create_memory(
-            content=insight,
-            importance=0.9,
-            tags=["reflection"],
-            emotion="neutral",
-            persona=ctx.persona,
-            related_keys=evidence_keys,
-        )
-        existing_contents.append(insight)
-        stored.append(insight)
-
-    if not stored:
-        return []
-
-    await _store_last_reflection_at(ctx, now)
-    logger.info("ReflectionEngine: stored %d insights for persona=%s", len(stored), ctx.persona)
-    return stored
-
-
-def _parse_insights(text: str) -> list[str]:
-    """Parse insight list from LLM output."""
-    text = strip_code_fence(text)
-    try:
-        result = json.loads(text)
-        if isinstance(result, dict):
-            insights = result.get("insights", [])
-            return [s for s in insights if isinstance(s, str) and s.strip()]
-    except Exception:
-        logger.debug("ReflectionEngine: failed to parse insights from LLM output", exc_info=True)
-    return []
-
-
-# -----------------------------------------------------------
-# New language-agnostic ReflectionEngine (Park et al. 2023)
-# -----------------------------------------------------------
-
-# Periodic reflection (⑫): 24時間周期で全記憶を対象に深い洞察を抽出する。
-# 高レイテンシ・低頻度で動作し、長期的なパターンや変化を捉える。
-# ⑪（ターンごとの即時リフレクション）と併用。
 
 
 class ReflectionEngine:

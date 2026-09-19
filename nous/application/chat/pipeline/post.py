@@ -1,4 +1,4 @@
-"""PostProcessStep: MemoryLLM await実行 + Reflection SSE + セッション更新 + DebugInfo SSE。"""
+"""PostProcessStep: MemoryLLM await実行 + セッション更新 + DebugInfo SSE。"""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from nous.application.chat.events import (
 )
 from nous.application.chat.memory_llm import run_memory_llm
 from nous.application.chat.pattern_detector import maybe_run_mental_model
-from nous.application.chat.reflection import maybe_run_reflection
 from nous.application.chat.response_validator import validate_response
 from nous.application.chat.summarizer import summarize_and_store
 from nous.infrastructure.logging.structured import get_logger
@@ -64,29 +63,6 @@ async def _do_summarize(ctx: AppContext, config: ChatConfig, turns: list[dict]) 
         return None
 
 
-async def _safe_reflection(
-    ctx: AppContext,
-    config: ChatConfig,
-    memory_result: dict,
-    turn_ctx: ChatTurnContext,
-) -> None:
-    """Background task: run reflection after DoneSSE."""
-    if not config.reflection_enabled:
-        return
-    importance_sum = (
-        sum(float(f.get("importance", 0.6)) for f in memory_result.get("facts", []))
-        + len(turn_ctx.tool_calls_log) * 0.1
-    )
-    threshold = config.reflection_threshold
-    if importance_sum < threshold:
-        return
-    try:
-        insights = await maybe_run_reflection(ctx, config, importance_sum)
-        logger.info("background reflection completed: %d insights", len(insights or []))
-    except Exception:
-        logger.warning("background reflection failed", exc_info=True)
-
-
 async def _safe_mental_model(ctx: AppContext, config: ChatConfig) -> None:
     """Background task: run mental model after DoneSSE."""
     if not config.mental_model_enabled:
@@ -99,7 +75,7 @@ async def _safe_mental_model(ctx: AppContext, config: ChatConfig) -> None:
 
 
 class PostProcessStep:
-    """MemoryLLM await実行 + Reflection SSE + セッション更新 + debug_info/done SSEの送出。
+    """MemoryLLM await実行 + セッション更新 + debug_info/done SSEの送出。
 
     Validation gaps (2026-07-26):
     - No character consistency / tone verification exists
@@ -279,6 +255,5 @@ class PostProcessStep:
         # DoneSSE は run_memory_llm の前に移動済み（L175）
 
         # Fire-and-forget: DoneSSE後に後処理を非同期タスクとして実行
-        _track_background(asyncio.create_task(_safe_reflection(ctx, config, memory_result, turn_ctx)))
         _track_background(asyncio.create_task(_safe_mental_model(ctx, config)))
         return

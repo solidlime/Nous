@@ -3,7 +3,7 @@
 「過去の記憶が直近の記憶のように扱われる」問題の対策:
 - memory_search が age/created_at/updated_at を返すこと（LLM が古さを知り得る）
 - recency_weight 既定値で新しさが順位に効くこと
-- リフレクションが 24h ウィンドウ外の記憶を拾わないこと（フォールバック廃止）
+- 定期 ReflectionEngine のプロンプトに相対時刻が付くこと（per-turn 24h 窓は廃止）
 """
 
 from __future__ import annotations
@@ -175,91 +175,6 @@ class TestRRFRecencyOrdering:
         ]
         ranked = ranker.rank(results, _query(importance_weight=0.3, recency_weight=0.2))
         assert ranked[0].memory.key == "fresh_weak"
-
-
-# ---------------------------------------------------------------------------
-# 3. リフレクションの 24h ウィンドウ（フォールバック廃止）
-# ---------------------------------------------------------------------------
-
-
-def _reflection_ctx(memories: list[Memory]):
-    ctx = MagicMock()
-    ctx.persona = "test_char"
-    ctx.memory_service = MagicMock()
-    recent_result = MagicMock()
-    recent_result.is_ok = True
-    recent_result.value = memories
-    ctx.memory_service.get_recent.return_value = recent_result
-    tags_result = MagicMock()
-    tags_result.is_ok = True
-    tags_result.value = []
-    ctx.memory_service.get_by_tags.return_value = tags_result
-    ctx.search_engine = AsyncMock()
-    return ctx
-
-
-def _reflection_config():
-    config = MagicMock()
-    config.reflection_threshold = 0.1
-    config.reflection_min_interval_hours = 0.0
-    config.provider = "test_provider"
-    config.extract_model = "test_model"
-    config.get_effective_api_key.return_value = "sk-test"
-    config.get_effective_model.return_value = "test-model"
-    config.get_effective_base_url.return_value = None
-    return config
-
-
-class TestReflection24hWindow:
-    @pytest.mark.asyncio
-    async def test_skips_when_no_memory_within_24h(self):
-        """24h 内の記憶ゼロなら、古い記憶にフォールバックせず skip する。"""
-        from nous.application.chat.reflection import maybe_run_reflection
-
-        old_memories = [
-            _mem("old_1", created_days_ago=30),
-            _mem("old_2", created_days_ago=365),
-        ]
-        ctx = _reflection_ctx(old_memories)
-
-        def _no_provider(*args, **kwargs):
-            raise AssertionError("get_provider must not be called when the 24h window is empty")
-
-        with patch("nous.application.chat.reflection.get_provider", side_effect=_no_provider):
-            result = await maybe_run_reflection(ctx, _reflection_config(), recent_importance_sum=5.0)
-
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_prompt_lines_include_relative_time(self):
-        """24h 内の記憶があるとき、リフレクション プロンプトの記憶行に相対時刻が付く。"""
-        from nous.application.chat.reflection import maybe_run_reflection
-        from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
-
-        mem = _mem("mem_now", content="A fresh fact.", created_days_ago=1 / 24)
-        ctx = _reflection_ctx([mem])
-
-        captured: dict = {}
-
-        async def fake_stream(**kwargs):
-            messages = kwargs.get("messages") or []
-            captured["prompt"] = messages[0].content if messages else ""
-            insight = json.dumps({"insights": ["Time-aware insight."]})
-            yield TextDeltaEvent(content=insight)
-            yield DoneEvent(full_content=insight)
-
-        fake_provider = AsyncMock()
-        fake_provider.stream = fake_stream
-        create_result = MagicMock()
-        create_result.is_ok = True
-        ctx.memory_service.create_memory = AsyncMock(return_value=create_result)
-
-        with patch("nous.application.chat.reflection.get_provider", return_value=fake_provider):
-            result = await maybe_run_reflection(ctx, _reflection_config(), recent_importance_sum=5.0)
-
-        assert result == ["Time-aware insight."]
-        assert "A fresh fact." in captured["prompt"]
-        assert "h ago" in captured["prompt"]
 
 
 # ---------------------------------------------------------------------------

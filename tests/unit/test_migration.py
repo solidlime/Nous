@@ -108,6 +108,75 @@ class TestMigrationV5:
         assert row["persona"] == "test_persona"
 
 
+class TestMigrationV9:
+    """v9 migration: legacy per-turn reflection のメタ記憶 (_reflection_meta) 削除。"""
+
+    @staticmethod
+    def _insert_memory(db: sqlite3.Connection, key: str, tags: str, content: str = "x") -> None:
+        db.execute(
+            "INSERT INTO memories (key, content, created_at, updated_at, tags, importance) VALUES (?, ?, ?, ?, ?, ?)",
+            (key, content, "2026-01-01T00:00:00", "2026-01-01T00:00:00", tags, 0.1),
+        )
+
+    def test_v9_deletes_reflection_meta_memories(self, tmp_db: sqlite3.Connection) -> None:
+        """_reflection_meta タグ付きメタ記憶とその strength だけが消え、正規記憶は残る。"""
+        from nous.infrastructure.sqlite.migrations import _migrate_delete_reflection_meta_v9
+
+        tmp_db.executescript(_MEMORY_SCHEMA)
+        self._insert_memory(
+            tmp_db, "meta_1", '["_reflection_meta"]', content="last_reflection_at: 2026-01-01T00:00:00+00:00"
+        )
+        self._insert_memory(tmp_db, "meta_2", '["other", "_reflection_meta"]')
+        self._insert_memory(tmp_db, "keep_1", '["reflection"]')  # 正規の洞察は残す
+        self._insert_memory(tmp_db, "keep_2", '["auto_extract"]')
+        tmp_db.execute(
+            "INSERT INTO memory_strength (memory_key, strength, last_decay) VALUES (?, ?, ?)",
+            ("meta_1", 0.5, "2026-01-01T00:00:00"),
+        )
+        tmp_db.execute(
+            "INSERT INTO memory_strength (memory_key, strength, last_decay) VALUES (?, ?, ?)",
+            ("keep_1", 0.5, "2026-01-01T00:00:00"),
+        )
+        tmp_db.commit()
+
+        _migrate_delete_reflection_meta_v9(tmp_db, "test_persona")
+
+        keys = [r["key"] for r in tmp_db.execute("SELECT key FROM memories ORDER BY key").fetchall()]
+        assert keys == ["keep_1", "keep_2"]
+        strength_keys = [
+            r["memory_key"]
+            for r in tmp_db.execute("SELECT memory_key FROM memory_strength ORDER BY memory_key").fetchall()
+        ]
+        assert strength_keys == ["keep_1"]
+
+    def test_v9_idempotent(self, tmp_db: sqlite3.Connection) -> None:
+        """v9 は二重実行でもエラーにならない（冪等性）。"""
+        from nous.infrastructure.sqlite.migrations import _migrate_delete_reflection_meta_v9
+
+        tmp_db.executescript(_MEMORY_SCHEMA)
+        self._insert_memory(tmp_db, "meta_1", '["_reflection_meta"]')
+        tmp_db.commit()
+
+        _migrate_delete_reflection_meta_v9(tmp_db, "test_persona")
+        _migrate_delete_reflection_meta_v9(tmp_db, "test_persona")  # 二度目
+
+        remaining = tmp_db.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        assert remaining == 0
+
+    def test_v9_without_meta_rows_keeps_normal_memories(self, tmp_db: sqlite3.Connection) -> None:
+        """メタ記憶が無い DB でも正規記憶は消えない。"""
+        from nous.infrastructure.sqlite.migrations import _migrate_delete_reflection_meta_v9
+
+        tmp_db.executescript(_MEMORY_SCHEMA)
+        self._insert_memory(tmp_db, "keep_1", '["reflection"]')
+        tmp_db.commit()
+
+        _migrate_delete_reflection_meta_v9(tmp_db, "test_persona")
+
+        keys = [r["key"] for r in tmp_db.execute("SELECT key FROM memories").fetchall()]
+        assert keys == ["keep_1"]
+
+
 def _create_legacy_memories(conn: sqlite3.Connection) -> None:
     """Create a pre-v7 memories table: current schema minus the superseded_by column."""
     legacy_ddl = _MEMORY_SCHEMA.split("CREATE TABLE IF NOT EXISTS memory_strength")[0]

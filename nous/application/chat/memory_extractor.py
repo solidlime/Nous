@@ -394,9 +394,6 @@ async def run_memory_llm(
         # inventory_update: 装備変更 + アイテム追加/削除/更新
         await _apply_inventory_update(ctx, result, skip_inventory)
 
-        # Optional reflection trigger: run reflection when 3+ facts extracted
-        await _maybe_run_reflection(ctx, config, facts)
-
         return result
 
     except Exception as e:
@@ -435,9 +432,7 @@ async def _run_memory_llm_calls(
     return result
 
 
-async def _save_extracted_facts(
-    ctx: AppContext, persona: str, facts: list, drift_violation: str
-) -> None:
+async def _save_extracted_facts(ctx: AppContext, persona: str, facts: list, drift_violation: str) -> None:
     """facts をスマートアップサート（類似度 > 0.85 ならスキップ）で保存する。"""
     for fact in facts:
         content = fact.get("content", "")
@@ -542,9 +537,7 @@ async def _process_promise_actions(ctx: AppContext, persona: str, promises: list
         memory_key = promise.get("memory_key", "")
 
         if action in ("fulfill", "achieve") and memory_key:
-            upd = ctx.memory_service.update_memory(
-                memory_key, tags=["goal", "achieved", "archived", "interpersonal"]
-            )
+            upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "achieved", "archived", "interpersonal"])
             logger.info("MemoryLLM: interpersonal goal achieved key=%s", memory_key)
             if not upd.is_ok:
                 logger.warning("MemoryLLM: interpersonal goal achieve failed key=%s: %s", memory_key, upd.error)
@@ -552,9 +545,7 @@ async def _process_promise_actions(ctx: AppContext, persona: str, promises: list
             else:
                 promise["_saved"] = True
         elif action == "cancel" and memory_key:
-            upd = ctx.memory_service.update_memory(
-                memory_key, tags=["goal", "cancelled", "archived", "interpersonal"]
-            )
+            upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "cancelled", "archived", "interpersonal"])
             logger.info("MemoryLLM: interpersonal goal cancelled key=%s", memory_key)
             if not upd.is_ok:
                 logger.warning("MemoryLLM: interpersonal goal cancel failed key=%s: %s", memory_key, upd.error)
@@ -720,16 +711,3 @@ async def _apply_inventory_update(ctx: AppContext, result: dict, skip_inventory:
     if unequip_list and isinstance(unequip_list, list):
         for slot in unequip_list:
             ctx.equipment_service.unequip([slot])
-
-
-async def _maybe_run_reflection(ctx: AppContext, config: ChatConfig, facts: list) -> None:
-    """Optional reflection trigger: run reflection when 3+ facts extracted"""
-    if len(facts) < 3:
-        return
-    try:
-        importance_sum = sum(normalize_importance(f.get("importance")) for f in facts)
-        from nous.application.chat.reflection import maybe_run_reflection
-
-        await maybe_run_reflection(ctx, config, importance_sum)
-    except Exception as ref_exc:
-        logger.debug("run_memory_llm: reflection trigger skipped: %s", ref_exc)
