@@ -101,3 +101,4 @@ data/hub.db
 .pi/
 .playwright-mcp/
 tmp/
+.vitest/
