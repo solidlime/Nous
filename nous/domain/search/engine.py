@@ -538,80 +538,103 @@ class SearchEngine:
                 seen[r.memory.key] = r
         deduped = sorted(seen.values(), key=lambda x: x.score, reverse=True)
 
-        # 5.5 Entity matching boost
-        if self._entity_service is not None:
-            # Extract entities from query text using the extractor
-            query_entity_ids: set[str] = set()
-            try:
-                extracted = self._entity_service.extractor.extract(query.text)
-                for name, _ in extracted:
-                    eid = name.lower().strip()
-                    if eid:
-                        query_entity_ids.add(eid)
-            except Exception:
-                logger.debug("entity extraction failed for query: %s", query.text, exc_info=True)
+        # 5.5 Entity matching boost — audit H6: skipped when rank_policy is
+        # set, because _apply_rank_policy recomputes scores from
+        # recency+importance+relevance and discards these adjustments.
+        if query.rank_policy is None:
+            self._apply_entity_boost(query, deduped)
 
-            if query_entity_ids:
-                # Find all memory keys linked to these entities
-                entity_linked_keys: set[str] = set()
-                for eid in query_entity_ids:
-                    mem_keys_result = self._entity_service.find_related_memories(eid, limit=20)
-                    if isinstance(mem_keys_result, Success):
-                        entity_linked_keys.update(mem_keys_result.value)
+        # 5. Rerank step: cross-encoder refinement (if available and loaded) —
+        # audit H6: also skipped on the rank_policy path (same reason).
+        if query.rank_policy is None:
+            self._apply_reranker(query, deduped)
 
-                # Boost results that match entity-linked memories
-                if entity_linked_keys:
-                    for r in deduped:
-                        if r.memory.key in entity_linked_keys:
-                            r.score += 0.1
-                    deduped.sort(key=lambda x: x.score, reverse=True)
-
-        # 5. Rerank step: cross-encoder refinement (if available and loaded)
-        if self._reranker is not None and self._reranker.enabled:
-            if self._reranker.is_loaded:
-                pairs = [(r.memory.key, r.score) for r in deduped]
-                contents = {r.memory.key: r.memory.content for r in deduped if r.memory.content}
-                if contents:
-                    try:
-                        reranked = self._reranker.rerank(
-                            query.text,
-                            pairs,
-                            contents,
-                            top_k=min(len(pairs), 20),
-                        )
-                        score_map = dict(reranked)
-                        for r in deduped:
-                            new_score = score_map.get(r.memory.key)
-                            if new_score is not None:
-                                r.score = new_score
-                        deduped.sort(key=lambda x: x.score, reverse=True)
-                    except Exception:
-                        logger.warning("Reranker step failed, using pre-rerank scores")
-            elif not self._reranker_unloaded_warned:
-                self._reranker_unloaded_warned = True
-                logger.warning("Reranker not loaded; skipping rerank step")
-
-        # 6. Spreading Activation through memory links
-        if self._link_repo and deduped:
-            try:
-                seed_keys = [r.memory.key for r in deduped[:5]]
-                all_links = self._link_repo.get_links_for_keys(seed_keys)
-                if all_links:
-                    from nous.domain.search.spreading_activation import SpreadingActivation
-
-                    # Seeds come from F2-filtered results (tombstone/validity already applied)
-                    sa = SpreadingActivation(hops=2, reset_prob=0.15)
-                    activations = sa.propagate(seed_keys, all_links, persona=getattr(self._semantic, "persona", None))
-                    for r in deduped:
-                        if r.memory.key in activations:
-                            # Cap absolute boost to prevent accumulation on hub nodes
-                            r.score += min(activations[r.memory.key] * 0.2, 0.1)
-                    deduped.sort(key=lambda x: x.score, reverse=True)
-            except Exception:
-                logger.warning("Spreading activation step failed, using pre-SA scores")
+        # 6. Spreading Activation through memory links — audit H6: same skip.
+        if query.rank_policy is None:
+            self._apply_spreading_activation(deduped)
 
         # truncation しない: 件数は _finalize（post-filter → top_k）で決まる
         return Success(deduped)
+
+    def _apply_entity_boost(self, query: SearchQuery, deduped: list[SearchResult]) -> None:
+        """Boost results whose memory keys are linked to entities in the query text."""
+        if self._entity_service is None:
+            return
+        # Extract entities from query text using the extractor
+        query_entity_ids: set[str] = set()
+        try:
+            extracted = self._entity_service.extractor.extract(query.text)
+            for name, _ in extracted:
+                eid = name.lower().strip()
+                if eid:
+                    query_entity_ids.add(eid)
+        except Exception:
+            logger.debug("entity extraction failed for query: %s", query.text, exc_info=True)
+            return
+
+        if not query_entity_ids:
+            return
+        # Find all memory keys linked to these entities
+        entity_linked_keys: set[str] = set()
+        for eid in query_entity_ids:
+            mem_keys_result = self._entity_service.find_related_memories(eid, limit=20)
+            if isinstance(mem_keys_result, Success):
+                entity_linked_keys.update(mem_keys_result.value)
+
+        # Boost results that match entity-linked memories
+        if entity_linked_keys:
+            for r in deduped:
+                if r.memory.key in entity_linked_keys:
+                    r.score += 0.1
+            deduped.sort(key=lambda x: x.score, reverse=True)
+
+    def _apply_reranker(self, query: SearchQuery, deduped: list[SearchResult]) -> None:
+        """Cross-encoder rerank refinement (no-op when unavailable/unloaded)."""
+        if self._reranker is None or not self._reranker.enabled:
+            return
+        if self._reranker.is_loaded:
+            pairs = [(r.memory.key, r.score) for r in deduped]
+            contents = {r.memory.key: r.memory.content for r in deduped if r.memory.content}
+            if contents:
+                try:
+                    reranked = self._reranker.rerank(
+                        query.text,
+                        pairs,
+                        contents,
+                        top_k=min(len(pairs), 20),
+                    )
+                    score_map = dict(reranked)
+                    for r in deduped:
+                        new_score = score_map.get(r.memory.key)
+                        if new_score is not None:
+                            r.score = new_score
+                    deduped.sort(key=lambda x: x.score, reverse=True)
+                except Exception:
+                    logger.warning("Reranker step failed, using pre-rerank scores")
+        elif not self._reranker_unloaded_warned:
+            self._reranker_unloaded_warned = True
+            logger.warning("Reranker not loaded; skipping rerank step")
+
+    def _apply_spreading_activation(self, deduped: list[SearchResult]) -> None:
+        """Propagate activation through memory links; small capped score boost."""
+        if not self._link_repo or not deduped:
+            return
+        try:
+            seed_keys = [r.memory.key for r in deduped[:5]]
+            all_links = self._link_repo.get_links_for_keys(seed_keys)
+            if all_links:
+                from nous.domain.search.spreading_activation import SpreadingActivation
+
+                # Seeds come from F2-filtered results (tombstone/validity already applied)
+                sa = SpreadingActivation(hops=2, reset_prob=0.15)
+                activations = sa.propagate(seed_keys, all_links, persona=getattr(self._semantic, "persona", None))
+                for r in deduped:
+                    if r.memory.key in activations:
+                        # Cap absolute boost to prevent accumulation on hub nodes
+                        r.score += min(activations[r.memory.key] * 0.2, 0.1)
+                deduped.sort(key=lambda x: x.score, reverse=True)
+        except Exception:
+            logger.warning("Spreading activation step failed, using pre-SA scores")
 
     def set_persona(self, persona: str) -> None:
         """Set the persona for semantic search."""
