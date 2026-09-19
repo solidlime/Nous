@@ -15,8 +15,6 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from nous.api.mcp._tools_item import _tool_item_add
 from nous.api.mcp._tools_memory import _tool_memory_create, _tool_memory_delete
 from nous.domain.shared.result import Success
@@ -49,11 +47,6 @@ async def test_memory_delete_by_query_requires_similarity_threshold(mock_app_con
     assert ctx.memory_service.delete_memory.call_count == 0, "deleted a memory with similarity 0.05"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="audit:M7 — memory_create declares content without a required schema; empty content "
-    "currently returns a plain-text error instead of a structured VALIDATION_ERROR envelope",
-)
 async def test_memory_create_empty_content_returns_validation_envelope(mock_app_context):
     ctx = mock_app_context
     ctx.persona_service.get_state_snapshot = MagicMock(return_value=("neutral", 0.0, {}, None))

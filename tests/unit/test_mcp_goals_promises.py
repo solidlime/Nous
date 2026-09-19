@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
@@ -168,7 +169,7 @@ class TestGoalManage:
         goal_manage = tools["goal_manage"]
         result = await goal_manage(operation="create", content="test", scope="self")
 
-        assert "Error" in result
+        assert json.loads(result)["ok"] is False
 
     # -- Achieve ----------------------------------------------------------------
 
@@ -240,7 +241,7 @@ class TestGoalManage:
         goal_manage = tools["goal_manage"]
         result = await goal_manage(operation="achieve", memory_key="goal_001", scope="self")
 
-        assert "Error" in result
+        assert json.loads(result)["ok"] is False
         assert "not an active goal" in result
 
     @pytest.mark.asyncio
@@ -251,7 +252,7 @@ class TestGoalManage:
         goal_manage = tools["goal_manage"]
         result = await goal_manage(operation="achieve", memory_key="missing", scope="self")
 
-        assert "Error" in result
+        assert json.loads(result)["ok"] is False
 
     @pytest.mark.asyncio
     async def test_achieve_goal_no_match_by_content(self, registered_tools):
@@ -263,7 +264,7 @@ class TestGoalManage:
         goal_manage = tools["goal_manage"]
         result = await goal_manage(operation="achieve", content="nonexistent", scope="self")
 
-        assert "Error" in result
+        assert json.loads(result)["ok"] is False
         assert "No active goal matching" in result
 
     @pytest.mark.asyncio
@@ -276,7 +277,7 @@ class TestGoalManage:
         goal_manage = tools["goal_manage"]
         result = await goal_manage(operation="achieve", memory_key="goal_001", scope="self")
 
-        assert "Error" in result
+        assert json.loads(result)["ok"] is False
 
     # -- Cancel -----------------------------------------------------------------
 
@@ -467,5 +468,5 @@ class TestGoalManage:
         goal_manage = tools["goal_manage"]
         result = await goal_manage(operation="invalid", scope="self")
 
-        assert "Error" in result
+        assert json.loads(result)["ok"] is False
         assert "Unknown operation" in result

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -147,7 +148,7 @@ class TestUpdateContext:
         ):
             mock_reg_cls.get.return_value = ctx
             result = await update_context(emotion="joy", valence="high", arousal=0.3)
-        assert "Error" in result
+        assert json.loads(result)["ok"] is False
         ctx.persona_service.update_emotion.assert_not_called()
 
     @pytest.mark.asyncio
@@ -160,7 +161,7 @@ class TestUpdateContext:
         ):
             mock_reg_cls.get.return_value = ctx
             result = await update_context(emotion="joy", valence=0.5)
-        assert "Error" in result
+        assert json.loads(result)["ok"] is False
         ctx.persona_service.update_emotion.assert_not_called()
 
     @pytest.mark.asyncio
@@ -173,7 +174,7 @@ class TestUpdateContext:
         ):
             mock_reg_cls.get.return_value = ctx
             result = await update_context(valence=0.5, arousal=0.5)
-        assert "Error" in result
+        assert json.loads(result)["ok"] is False
         ctx.persona_service.update_emotion.assert_not_called()
 
     @pytest.mark.asyncio
@@ -299,7 +300,7 @@ class TestGetContext:
         ):
             mock_reg_cls.get.return_value = ctx
             result = await get_context()
-        assert "Error" in result
+        assert json.loads(result)["ok"] is False
 
     @pytest.mark.asyncio
     async def test_get_context_shows_active_goals(self, registered_tools):

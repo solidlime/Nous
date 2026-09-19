@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import Annotated, Any
 
@@ -7,10 +8,36 @@ from mcp.server.mcpserver import MCPServer  # noqa: TC002
 from mcp.shared.exceptions import MCPError
 from pydantic import Field
 
+from nous.api.mcp._envelope import ToolErrorCode, parse_envelope, tool_error, tool_ok
 from nous.api.mcp.middleware import PersonaRequiredError, get_current_persona
 from nous.application.use_cases import AppContextRegistry
 
 logger = logging.getLogger(__name__)
+
+
+def _envelope_wrap(result: object) -> str:
+    """Convert legacy plain-text tool results into the common envelope (audit C1).
+
+    Single funnel for the MCP surface: every tool return passes through here,
+    so no plain text escapes unwrapped and the success signal is structural.
+    """
+    if parse_envelope(result) is not None:
+        return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
+    if isinstance(result, str):
+        if result.startswith("No memory"):
+            return tool_error(ToolErrorCode.NOT_FOUND, result)
+        if result.startswith("Ambiguous match"):
+            return tool_error(ToolErrorCode.AMBIGUOUS_MATCH, result)
+        if result.startswith("Error:"):
+            return tool_error(ToolErrorCode.INTERNAL, result.removeprefix("Error: ").strip())
+        return tool_ok(result)
+    if isinstance(result, dict):
+        # Legacy {"ok": bool, ...} dicts (get_context / update_context / goal_manage).
+        extra = {k: v for k, v in result.items() if k not in ("ok", "result", "error")}
+        if result.get("ok"):
+            return tool_ok(result.get("result", ""), **extra)
+        return tool_error(ToolErrorCode.INTERNAL, str(result.get("error", "unknown")), **extra)
+    return tool_ok(str(result))
 
 
 # =============================================================================
@@ -104,9 +131,7 @@ def register_tools(mcp: MCPServer) -> None:
         project: 任意。project:<slug> タグ付き記憶を PROJECT MEMORIES 節で表示する。"""
         p = _resolve_persona()
         r = await _tool_get_context(AppContextRegistry.get(p), p, project=project)
-        if r.get("ok"):
-            return r.get("result", "")
-        return f"Error: {r.get('error', 'unknown')}"
+        return _envelope_wrap(r)
 
     # memory_create
     @_tool("memory_create")
@@ -118,14 +143,14 @@ def register_tools(mcp: MCPServer) -> None:
         source_context: str | None = None,
         kind: str = "semantic",
         defer_vector: bool = False,
-        skip_duplicate_check: bool = True,
+        skip_duplicate_check: bool = False,
     ) -> str:
         """記憶を作成する。あなたやユーザーに関する重要な事実・好み・出来事を記録せよ。
-        importance は None かつエンリッチメント有効時に LLM が自動評価。
+        content は必須（空文字列は拒否される）。importance は None かつエンリッチメント有効時に LLM が自動評価。
         tags: 分類タグ。kind: 記憶の種類 — episodic（具体的な出来事）、
         semantic（一般的事実）、procedural（手順・パターン）、prospective（将来の予定・意図）。
         defer_vector: 即時ベクターインデックスをスキップ。
-        skip_duplicate_check: 意味的重複チェックをスキップ。
+        skip_duplicate_check: 意味的重複チェックをスキップ（既定 False = 重複チェック有効、監査 M5）。
 
         **Important**: Call context_update/update_context *before* memory_create
         if your emotional or physical state has changed. The system automatically
@@ -134,17 +159,19 @@ def register_tools(mcp: MCPServer) -> None:
         When emotion is omitted, the current persona emotion is automatically attached
         (indicated by auto_emotion: true in response)."""
         p = _resolve_persona()
-        return await _tool_memory_create(
-            AppContextRegistry.get(p),
-            p,
-            content=content,
-            importance=importance,
-            tags=tags,
-            privacy_level=privacy_level,
-            source_context=source_context,
-            kind=kind,
-            defer_vector=defer_vector,
-            skip_duplicate_check=skip_duplicate_check,
+        return _envelope_wrap(
+            await _tool_memory_create(
+                AppContextRegistry.get(p),
+                p,
+                content=content,
+                importance=importance,
+                tags=tags,
+                privacy_level=privacy_level,
+                source_context=source_context,
+                kind=kind,
+                defer_vector=defer_vector,
+                skip_duplicate_check=skip_duplicate_check,
+            )
         )
 
     # memory_read
@@ -160,7 +187,9 @@ def register_tools(mcp: MCPServer) -> None:
         if key and not memory_key:
             memory_key = key
         p = _resolve_persona()
-        return await _tool_memory_read(AppContextRegistry.get(p), p, memory_key=memory_key, limit=limit, offset=offset)
+        return _envelope_wrap(
+            await _tool_memory_read(AppContextRegistry.get(p), p, memory_key=memory_key, limit=limit, offset=offset)
+        )
 
     # memory_update
     @_tool("memory_update")
@@ -180,16 +209,18 @@ def register_tools(mcp: MCPServer) -> None:
         if key and not memory_key:
             memory_key = key
         p = _resolve_persona()
-        return await _tool_memory_update(
-            AppContextRegistry.get(p),
-            p,
-            memory_key=memory_key,
-            content=content,
-            importance=importance,
-            emotion=emotion,
-            emotion_intensity=emotion_intensity,
-            tags=tags,
-            privacy_level=privacy_level,
+        return _envelope_wrap(
+            await _tool_memory_update(
+                AppContextRegistry.get(p),
+                p,
+                memory_key=memory_key,
+                content=content,
+                importance=importance,
+                emotion=emotion,
+                emotion_intensity=emotion_intensity,
+                tags=tags,
+                privacy_level=privacy_level,
+            )
         )
 
     # memory_delete
@@ -204,7 +235,9 @@ def register_tools(mcp: MCPServer) -> None:
         if key and not memory_key:
             memory_key = key
         p = _resolve_persona()
-        return await _tool_memory_delete(AppContextRegistry.get(p), p, memory_key=memory_key, query=query)
+        return _envelope_wrap(
+            await _tool_memory_delete(AppContextRegistry.get(p), p, memory_key=memory_key, query=query)
+        )
 
     # memory_search
     @_tool("memory_search")
@@ -215,6 +248,7 @@ def register_tools(mcp: MCPServer) -> None:
         date_range: str | None = None,
         min_importance: float | None = None,
         emotion: str | None = None,
+        profile: str | None = None,
         importance_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0,
         recency_weight: Annotated[float, Field(ge=0.0, le=1.0)] = MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT,
         vector_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0,
@@ -224,26 +258,30 @@ def register_tools(mcp: MCPServer) -> None:
     ) -> str:
         """ハイブリッド検索で記憶を検索。会話が過去の出来事に言及したとき、またはあなたやユーザーについての文脈が必要なときに使用せよ。
         date_range: "7d","30d","昨日"。
-        importance_weight/recency_weight: RRF スコアリングのブースト値 (0.0-1.0)。
+        profile: 重みプリセット — "recent"（最新優先）/ "deep"（関連度優先）。指定時は個別重みを上書き（監査 M7）。
+        importance_weight/recency_weight: RRF スコアリングのブースト値 (0.0-1.0)。通常は指定せず profile を使え。
         vector_weight/keyword_weight: セマンティック/キーワード信号の RRF ソース重み。
         kind: 記憶の種類でフィルタ — episodic（具体的な出来事）/ semantic（一般的事実）/ procedural（手順・パターン）/ prospective（将来の予定・意図）。
         sort: "updated_at" 指定で更新日時降順（最新優先）。"""
         p = _resolve_persona()
-        return await _tool_memory_search(
-            AppContextRegistry.get(p),
-            p,
-            query=query,
-            top_k=top_k,
-            tags=tags,
-            date_range=date_range,
-            min_importance=min_importance,
-            emotion=emotion,
-            importance_weight=importance_weight,
-            recency_weight=recency_weight,
-            vector_weight=vector_weight,
-            keyword_weight=keyword_weight,
-            kind=kind,
-            sort=sort,
+        return _envelope_wrap(
+            await _tool_memory_search(
+                AppContextRegistry.get(p),
+                p,
+                query=query,
+                top_k=top_k,
+                tags=tags,
+                date_range=date_range,
+                min_importance=min_importance,
+                emotion=emotion,
+                profile=profile,
+                importance_weight=importance_weight,
+                recency_weight=recency_weight,
+                vector_weight=vector_weight,
+                keyword_weight=keyword_weight,
+                kind=kind,
+                sort=sort,
+            )
         )
 
     # memory_stats
@@ -251,7 +289,7 @@ def register_tools(mcp: MCPServer) -> None:
     async def memory_stats(top_n: int = 20) -> str:
         """Get memory statistics: total count, tag/emotion distributions (top_n entries each)."""
         p = _resolve_persona()
-        return await _tool_memory_stats(AppContextRegistry.get(p), p, top_n=top_n)
+        return _envelope_wrap(await _tool_memory_stats(AppContextRegistry.get(p), p, top_n=top_n))
 
     # update_context
     @_tool("update_context")
@@ -301,9 +339,7 @@ def register_tools(mcp: MCPServer) -> None:
             relationship_type=relationship_type,
             appearance=appearance,
         )
-        if r.get("ok"):
-            return r.get("result", "")
-        return f"Error: {r.get('error', 'unknown')}"
+        return _envelope_wrap(r)
 
     # ── Item tools (split from unified item) ──
 
@@ -317,27 +353,31 @@ def register_tools(mcp: MCPServer) -> None:
     ) -> str:
         """アイテムをインベントリに追加。item_name必須。category/description/quantity/tags指定可。"""
         p = _resolve_persona()
-        return await _tool_item_add(
-            AppContextRegistry.get(p),
-            p,
-            item_name=item_name,
-            category=category,
-            description=description,
-            quantity=quantity,
-            tags=tags,
+        return _envelope_wrap(
+            await _tool_item_add(
+                AppContextRegistry.get(p),
+                p,
+                item_name=item_name,
+                category=category,
+                description=description,
+                quantity=quantity,
+                tags=tags,
+            )
         )
 
     @_tool("item_equip")
     async def item_equip(equipment: dict | None = None, auto_add: bool = True) -> str:
         """装備スロットにアイテムをセット。equipment: {"top": "白いドレス"} など。auto_addで未登録アイテムを自動追加。"""
         p = _resolve_persona()
-        return await _tool_item_equip(AppContextRegistry.get(p), p, equipment=equipment, auto_add=auto_add)
+        return _envelope_wrap(
+            await _tool_item_equip(AppContextRegistry.get(p), p, equipment=equipment, auto_add=auto_add)
+        )
 
     @_tool("item_search")
     async def item_search(query: str | None = None, category: str | None = None) -> str:
         """インベントリを検索。query（部分一致）またはcategoryで絞り込み。"""
         p = _resolve_persona()
-        return await _tool_item_search(AppContextRegistry.get(p), p, query=query, category=category)
+        return _envelope_wrap(await _tool_item_search(AppContextRegistry.get(p), p, query=query, category=category))
 
     # goal_manage
     @_tool("goal_manage")
@@ -369,13 +409,13 @@ def register_tools(mcp: MCPServer) -> None:
         )
         if r.get("ok"):
             if "key" in r:
-                return f"Goal created: {r['key']}"
+                return _envelope_wrap(f"Goal created: {r['key']}")
             if "status" in r:
-                return f"Goal {r['status']}: {r['content']}"
+                return _envelope_wrap(f"Goal {r['status']}: {r['content']}")
             if "result" in r:
-                return r["result"]
-            return "Goal done"
-        return f"Error: {r.get('error', 'unknown')}"
+                return _envelope_wrap(r["result"])
+            return _envelope_wrap("Goal done")
+        return _envelope_wrap(r)
 
 
 def _resolve_persona() -> str:

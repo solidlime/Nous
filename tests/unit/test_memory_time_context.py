@@ -115,7 +115,7 @@ class TestMemorySearchTimeFields:
         result = await memory_search(query="test")
         data = json.loads(result)
         assert data["ok"] is True
-        entry = data["memories"][0]
+        entry = data["data"]["memories"][0]
         assert entry["key"] == "mem_old"
         assert entry["created_at"] is not None
         assert entry["updated_at"] is not None

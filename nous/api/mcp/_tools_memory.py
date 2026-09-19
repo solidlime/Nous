@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
+from nous.api.mcp._envelope import ToolErrorCode, tool_error, tool_ok
 from nous.api.mcp._tools_helpers import tool_called_audited
 from nous.domain.search.engine import SearchQuery, SearchResult
 from nous.domain.shared.errors import DuplicateMemoryError
@@ -30,13 +30,13 @@ logger = logging.getLogger(__name__)
 
 
 def _ok(payload: dict) -> str:
-    """Success wrapper: dict → JSON str (Q4: all tools return str)."""
-    return json.dumps(payload, ensure_ascii=False)
+    """Success wrapper: dict → common envelope JSON (audit C1)."""
+    return tool_ok(payload)
 
 
 def _err(msg: str) -> str:
-    """Error wrapper: message → JSON str with {success: False} shape."""
-    return json.dumps({"success": False, "data": None, "result_summary": msg}, ensure_ascii=False)
+    """Error wrapper: message → common envelope JSON, VALIDATION_ERROR (audit C1)."""
+    return tool_error(ToolErrorCode.VALIDATION_ERROR, msg)
 
 
 if TYPE_CHECKING:
@@ -54,7 +54,7 @@ async def _tool_memory_create(
     source_context: str | None = None,
     kind: str = "semantic",
     defer_vector: bool = False,
-    skip_duplicate_check: bool = True,
+    skip_duplicate_check: bool = False,
 ) -> str:
     """Create a memory. Current persona state (emotion, body_state) is automatically
     snapshotted at creation time. Always call context_update/update_context *before*
@@ -96,17 +96,17 @@ async def _tool_memory_create(
                 "importance": importance,
             },
         )
-        return json.dumps({"ok": True, "key": m.key, "auto_emotion": True}, ensure_ascii=False)
+        return tool_ok({"key": m.key, "auto_emotion": True})
 
     # Handle duplicate errors with the same response format as before
     if isinstance(result.error, DuplicateMemoryError):
         dup = result.error
-        response: dict = {"ok": True, "status": "duplicate", "message": str(dup)}
+        response: dict = {"status": "duplicate", "message": str(dup)}
         if dup.similar_to:
             response["similar_to"] = dup.similar_to
         if dup.duplicate_key:
             response["duplicate_of"] = dup.duplicate_key
-        return json.dumps(response, ensure_ascii=False)
+        return tool_ok(response)
 
     return _err(str(result.error))
 
@@ -165,16 +165,18 @@ async def _tool_memory_read(
                 "success": False,
             },
         )
-        return f"Error: {result.error}"
+        return tool_error(
+            ToolErrorCode.INTERNAL,
+            str(result.error),
+        )
     else:
         memories_result = ctx.memory_service.get_recent(limit=limit + offset)
         if memories_result.is_ok:
             items = memories_result.value[offset : offset + limit]
             count_result = ctx.memory_service.count_memories()
             total_count = count_result.value if count_result.is_ok else len(items)
-            return json.dumps(
+            return tool_ok(
                 {
-                    "ok": True,
                     "memories": [
                         {
                             "key": m.key,
@@ -187,8 +189,7 @@ async def _tool_memory_read(
                         for m in items
                     ],
                     "total_count": total_count,
-                },
-                ensure_ascii=False,
+                }
             )
         await ctx.event_bus.publish(
             "tool.called",
@@ -302,7 +303,7 @@ async def _tool_memory_update(
                 "changes": list(updates.keys()),
             },
         )
-        return json.dumps({"ok": True, "key": memory_key}, ensure_ascii=False)
+        return tool_ok({"key": memory_key})
     return _err(str(result.error))
 
 
@@ -320,16 +321,17 @@ async def _tool_memory_delete(
     if not key and query:
         search_result = await ctx.search_engine.search(SearchQuery(text=query, top_k=3))
         if not search_result.is_ok or not search_result.value:
-            return f"No memory found for query: {query}"
+            return tool_error(ToolErrorCode.NOT_FOUND, f"No memory found for query: {query}")
         top = search_result.value[0]
         score = getattr(top, "score", None)
         if not isinstance(score, (int, float)) or score < QUERY_RESOLVE_MIN_SCORE:
             candidates = "\n".join(
                 f"- {r.memory.key}: 「{r.memory.content[:60]}」 (score={r.score:.2f})" for r in search_result.value
             )
-            return (
+            return tool_error(
+                ToolErrorCode.AMBIGUOUS_MATCH,
                 f"Ambiguous match: top score {score} is below {QUERY_RESOLVE_MIN_SCORE}. "
-                f"Nothing deleted. Use the exact memory_key, or pick one of:\n{candidates}"
+                f"Nothing deleted. Use the exact memory_key, or pick one of:\n{candidates}",
             )
         m = top.memory
         key = m.key
@@ -367,6 +369,7 @@ async def _tool_memory_search(
     date_range: str | None = None,
     min_importance: float | None = None,
     emotion: str | None = None,
+    profile: str | None = None,
     importance_weight: float = 0.0,
     recency_weight: float = MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT,
     vector_weight: float = 1.0,
@@ -378,6 +381,29 @@ async def _tool_memory_search(
     if top_k is not None and (top_k < 1 or top_k > 200):
         return _err("top_k must be between 1 and 200")
     top_k = min(top_k or 5, 200)
+    # audit:M7 — weight presets replace hand-tuned per-call weights
+    if profile is not None:
+        presets: dict[str, dict[str, float]] = {
+            "recent": {
+                "importance_weight": 0.0,
+                "recency_weight": 0.4,
+                "vector_weight": 0.8,
+                "keyword_weight": 0.3,
+            },
+            "deep": {
+                "importance_weight": 0.3,
+                "recency_weight": MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT,
+                "vector_weight": 1.0,
+                "keyword_weight": 0.5,
+            },
+        }
+        preset = presets.get(profile)
+        if preset is None:
+            return _err(f"Unknown profile: {profile}. Use 'recent' or 'deep'")
+        importance_weight = preset["importance_weight"]
+        recency_weight = preset["recency_weight"]
+        vector_weight = preset["vector_weight"]
+        keyword_weight = preset["keyword_weight"]
     # Clamp RRF weights to [0.0, 1.0]
     importance_weight = max(0.0, min(1.0, importance_weight))
     recency_weight = max(0.0, min(1.0, recency_weight))
@@ -426,7 +452,7 @@ async def _tool_memory_search(
         )
         count_result = ctx.memory_service.count_memories()
         total_count = count_result.value if count_result.is_ok else 0
-        return json.dumps({"ok": True, "memories": [], "total_count": total_count}, ensure_ascii=False)
+        return tool_ok({"memories": [], "total_count": total_count})
     ctx.memory_service.log_search(query, "hybrid", len(result.value))
 
     # Boost the top hits (cap 10) and record co-access (cap 3 — don't churn
@@ -484,14 +510,14 @@ async def _tool_memory_search(
     )
     count_result = ctx.memory_service.count_memories()
     total_count = count_result.value if count_result.is_ok else len(result.value)
-    return json.dumps({"ok": True, "memories": memories, "total_count": total_count}, ensure_ascii=False)
+    return tool_ok({"memories": memories, "total_count": total_count})
 
 
 async def _tool_memory_stats(ctx: AppContext, persona: str, top_n: int = 20) -> str:
     """Get memory statistics."""
     result = ctx.memory_service.get_stats(top_n=top_n)
     if result.is_ok:
-        result_text = str(result.value)
+        result_text = tool_ok(result.value)
         await ctx.event_bus.publish(
             "tool.called",
             {

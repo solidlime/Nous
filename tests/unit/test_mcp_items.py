@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -130,7 +131,7 @@ class TestItemTools:
         ):
             mock_reg_cls.get.return_value = ctx
             result = await item_tool(equipment={"top": "red dress"})
-        assert "Error" in result
+        assert json.loads(result)["ok"] is False
         ctx.persona_service.update_state.assert_not_called()
 
     @pytest.mark.asyncio
@@ -160,4 +161,4 @@ class TestItemTools:
         ):
             mock_reg_cls.get.return_value = ctx
             result = await item_tool(item_name="")
-        assert "Error" in result
+        assert json.loads(result)["ok"] is False

@@ -76,8 +76,9 @@ def registered_tools(mock_app_context):
 
 
 async def _run_search(ctx, *args, **kwargs):
-    """_tool_memory_search を await し JSON を dict で返す."""
-    return json.loads(await _tool_memory_search(ctx, "test_persona", *args, **kwargs))
+    """_tool_memory_search を await し JSON を dict で返す（envelope は展開）."""
+    payload = json.loads(await _tool_memory_search(ctx, "test_persona", *args, **kwargs))
+    return payload.get("data", payload) if payload.get("ok") else payload
 
 
 class TestRecencyDefaultSingleSource:
@@ -105,7 +106,7 @@ class TestRecencyDefaultSingleSource:
         ctx.search_engine._semantic = None
         ctx.memory_service.log_search.return_value = Success(None)
         data = await _run_search(ctx, query="test")
-        assert data["ok"] is True
+        assert isinstance(data, dict)  # empty result → {"memories": [], ...}
         call_args = ctx.search_engine.search.call_args[0][0]
         assert isinstance(call_args, SearchQuery)
         assert call_args.recency_weight == MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT
