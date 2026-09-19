@@ -6,7 +6,7 @@ from datetime import datetime
 
 VALID_KINDS = frozenset(["episodic", "semantic", "procedural", "prospective"])
 VALID_SOURCE_TYPES = frozenset(
-    ["user_stated", "user_implied", "llm_inferred", "tool_output", "consolidated", "reflected"]
+    ["user_stated", "user_implied", "llm_inferred", "tool_output", "consolidated", "reflected", "system"]
 )
 
 

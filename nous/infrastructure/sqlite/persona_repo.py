@@ -156,10 +156,11 @@ class SQLitePersonaRepository(SQLiteRepository):
             rows = self._db.execute(
                 """
                 SELECT * FROM emotion_history
+                WHERE persona = ?
                 ORDER BY timestamp DESC
                 LIMIT ?
                 """,
-                (limit,),
+                (persona, limit),
             ).fetchall()
             return Success([self._row_to_emotion_record(r) for r in rows])
         except Exception as e:
@@ -175,10 +176,10 @@ class SQLitePersonaRepository(SQLiteRepository):
             rows = self._db.execute(
                 """
                 SELECT * FROM emotion_history
-                WHERE timestamp >= ?
+                WHERE persona = ? AND timestamp >= ?
                 ORDER BY timestamp ASC
                 """,
-                (cutoff.isoformat(),),
+                (persona, cutoff.isoformat()),
             ).fetchall()
             return Success([self._row_to_emotion_record(r) for r in rows])
         except Exception as e:
