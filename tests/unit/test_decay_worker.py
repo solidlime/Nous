@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -54,11 +54,11 @@ class TestDecayWorker:
         assert ctx.memory_repo.save_strength.call_count == 2
 
     def test_decay_cycle_skips_below_min_strength(self) -> None:
-        """compute_recall が min_strength 未満の場合はスキップする"""
-        # use_old_decay=True: last_decay=2020-01-01 → elapsed ≈ 50000+ hours
-        # FSRS: (1 + 19*50000/24)^(-0.5) ≈ 0.005 < min_strength=0.01 → skip
-        strengths = [_make_strength("mem_001", use_old_decay=True)]
-        ctx = _make_ctx(strengths, min_strength=0.01)
+        """recall × strength が min_strength 未満の場合はスキップする"""
+        # use_old_decay=True: last_decay=2020-01-01 → elapsed ≈ 58000+ hours
+        # FSRS recall ≈ 0.018 → 0.3 × 0.018 ≈ 0.005 < min_strength=0.01 → skip
+        s = _make_strength("mem_001", strength=0.3, use_old_decay=True)
+        ctx = _make_ctx([s], min_strength=0.01)
 
         worker = DecayWorker(ctx, interval_seconds=3600)
         worker._decay_cycle()
@@ -115,8 +115,10 @@ def _make_memory(
 class TestDecayWorkerBrain:
     def test_stability_replay_fire(self) -> None:
         """decay 保存成功後に stability 型 replay_fire が発火する（weight=更新後 strength）。"""
-        strengths = [_make_strength("mem_001")]
-        ctx = _make_ctx(strengths)
+        # 3 日前の last_decay → recall ≈ 0.13 → strength 0.8→0.10 (delta > 0.05)
+        s = _make_strength("mem_001")
+        s.last_decay = get_now() - timedelta(days=3)
+        ctx = _make_ctx([s])
 
         worker = DecayWorker(ctx, interval_seconds=3600)
         worker._decay_cycle()
@@ -124,7 +126,7 @@ class TestDecayWorkerBrain:
         fires = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "replay_fire"]
         assert len(fires) == 1
         assert fires[0]["source"] == "mem_001"
-        assert fires[0]["weight"] == pytest.approx(strengths[0].strength)
+        assert fires[0]["weight"] == pytest.approx(s.strength)
 
     def test_gist_resists_decay(self) -> None:
         """consolidated semantic（gist ノード）は減衰対象から除外される。"""

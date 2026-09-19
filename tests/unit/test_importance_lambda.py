@@ -70,7 +70,7 @@ class TestImportanceLambda:
         assert saved["hi"] > saved["lo"]
 
     def test_k_zero_matches_baseline(self) -> None:
-        """k=0 → λ_eff == base（現行動作と一致）"""
+        """k=0 → λ_eff == base（importance に依存しない減衰）"""
         assert importance_scaled_exponent(BASE_STM, 0.9, k=0.0) == BASE_STM
         assert importance_scaled_exponent(0.3, 0.1, k=0.0) == 0.3
 
@@ -80,10 +80,10 @@ class TestImportanceLambda:
         ctx = _ctx([_strength("hi"), _strength("lo")], [_memory("hi", 0.9), _memory("lo", 0.1)])
         DecayWorker(ctx, interval_seconds=3600, config=cfg)._decay_cycle()
         saved = _saved_strengths(ctx)
-        score_hi = MemoryStrength(memory_key="h").compute_strength_score(importance=0.9)
-        score_lo = MemoryStrength(memory_key="h").compute_strength_score(importance=0.1)
-        # recall 因子が両者で等しい（= base 指数の R）
-        assert saved["hi"] / score_hi == pytest.approx(saved["lo"] / score_lo)
+        # v4.0 (audit M10): new_strength = recall × strength — recall が唯一の
+        # 時間依存因子で、k=0 では両行で同一になる。
+        initial = _strength("x").strength
+        assert saved["hi"] / initial == pytest.approx(saved["lo"] / initial)
 
     def test_lambda_eff_non_negative(self) -> None:
         """λ_eff は clamp で非負・上は base 止まり"""

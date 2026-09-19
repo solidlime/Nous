@@ -89,6 +89,11 @@ class McpSecurityConfig(BaseModel):
 class ForgettingConfig(BaseModel):
     """FSRS v6 forgetting curve configuration."""
 
+    h5_stability_clamp_enabled: bool = Field(
+        default=False,
+        description="監査 H5 マイグレーション: 感情増幅で膨張した stability を 1 回だけ 1.0 に clamp する。v4.0 移行スクリプトが有効化する。",
+    )
+
     enabled: bool = True
     decay_interval_seconds: int = 3600
     min_strength: float = 0.005

@@ -135,7 +135,10 @@ class DecayWorker:
     # production; unit tests seed stability directly and must not be clamped.
     def _h5_stability_clamp_once(self) -> None:
         """Clamp legacy emotion-inflated stability once (audit H5 migration)."""
-        if getattr(self._config, "h5_stability_clamp_enabled", False) is not True:
+        cfg_flag = getattr(self._config, "h5_stability_clamp_enabled", False)
+        settings_flag = getattr(self.context.settings.forgetting, "h5_stability_clamp_enabled", False)
+        if cfg_flag is not True and settings_flag is not True:
+            return
             return
         try:
             result = self.context.memory_repo.get_all_strengths()
@@ -190,8 +193,12 @@ class DecayWorker:
             base_exp = 0.3 if strength.is_ltm else 0.5
             decay_exp = importance_scaled_exponent(base_exp, importance, k=lambda_k)
             recall = strength.compute_recall(elapsed, decay_exponent=decay_exp)
-            score = strength.compute_strength_score(importance=importance)
-            new_strength_val = recall * score
+            # audit M10 (v4.0): time decay applies ONLY here, via the FSRS
+            # recall curve, to the raw strength. The old formula multiplied
+            # by compute_strength_score() whose recency factor double-decayed
+            # every memory. The composite score is a ranking signal, not a
+            # decay input.
+            new_strength_val = recall * strength.strength
 
             # Emotion eases decay (McGaugh 2004): decay amount is scaled by
             # 1/(1 + 0.5 * emotion_intensity) — factor range 1.0–0.5, fixed
