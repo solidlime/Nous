@@ -15,6 +15,13 @@ from nous.domain.value_objects import normalize_importance
 
 logger = logging.getLogger(__name__)
 
+# audit C4 — confidence dynamics. Confidence is *not* a ranking weight: it exists
+# so that contradicted facts and re-confirmed (corroborated) facts can be told
+# apart later. Nothing in the search path reads it.
+CONTRADICTED_CONFIDENCE_FACTOR = 0.5
+CORROBORATION_SIMILARITY_MIN = 0.9
+CORROBORATION_CONFIDENCE_DELTA = 0.1
+
 
 class MemoryEvolutionService:
     """Handles memory evolution, contradiction detection, and background tasks."""
@@ -111,6 +118,10 @@ class MemoryEvolutionService:
                             result.existing_memory_key,
                         )
                     elif result is not None and result.existing_memory_key:
+                        matched_similarity = next(
+                            (float(c["similarity"]) for c in candidates if c["key"] == result.existing_memory_key),
+                            0.0,
+                        )
                         if result.type == ContradictionType.EXTENDABLE:
                             updates = dict(result.updated_fields or {})
                             # Double guard: never overwrite tags/content from
@@ -141,8 +152,20 @@ class MemoryEvolutionService:
                                         change_type="update",
                                     )
                                 self._repo.update(result.existing_memory_key, **updates)
+                            # audit C4 — corroboration: the same fact is stated
+                            # again at high similarity → raise confidence (cap 1.0).
+                            if matched_similarity >= CORROBORATION_SIMILARITY_MIN:
+                                self._adjust_confidence(
+                                    result.existing_memory_key,
+                                    delta=CORROBORATION_CONFIDENCE_DELTA,
+                                )
                         elif result.type == ContradictionType.CONTRADICTORY:
                             self._close_superseded_memory(result.existing_memory_key, new_memory_key)
+                            # audit C4 — a contradicted fact loses half its confidence.
+                            self._adjust_confidence(
+                                result.existing_memory_key,
+                                factor=CONTRADICTED_CONFIDENCE_FACTOR,
+                            )
                             invalidated_keys.add(result.existing_memory_key)
                         # INDEPENDENT: do nothing, both coexist
 
@@ -173,6 +196,20 @@ class MemoryEvolutionService:
         except Exception:
             # Evolution is best-effort, never blocks the main flow
             logger.debug("Memory evolution failed", exc_info=True)
+
+    def _adjust_confidence(self, memory_key: str, factor: float = 1.0, delta: float = 0.0) -> None:
+        """Best-effort confidence adjustment (audit C4): ``confidence*factor + delta``,
+        clamped to [0, 1]. Never blocks the caller and never feeds ranking."""
+        try:
+            res = self._repo.find_by_key(memory_key)
+            if not res.is_ok or res.value is None:  # type: ignore[union-attr]
+                return
+            current = res.value.confidence  # type: ignore[union-attr]
+            new_value = min(1.0, max(0.0, current * factor + delta))
+            if new_value != current:
+                self._repo.update(memory_key, confidence=new_value)
+        except Exception:
+            logger.debug("Confidence adjustment failed for %s", memory_key, exc_info=True)
 
     def _close_superseded_memory(self, old_key: str, new_key: str) -> None:
         """Close the old memory's validity window and chain it to the new memory.

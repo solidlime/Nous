@@ -9,6 +9,20 @@ VALID_SOURCE_TYPES = frozenset(
     ["user_stated", "user_implied", "llm_inferred", "tool_output", "consolidated", "reflected", "system"]
 )
 
+# audit C4 — provenance modality. ``source_type`` is the single stored source of
+# truth for provenance; modality is *derived* from it so the two can never drift
+# apart (a second stored column would duplicate the same dimension).
+VALID_MODALITIES = frozenset(["observed", "inferred", "llm_summary", "reflection"])
+MODALITY_BY_SOURCE_TYPE: dict[str, str] = {
+    "user_stated": "observed",
+    "tool_output": "observed",
+    "system": "observed",
+    "user_implied": "inferred",
+    "llm_inferred": "inferred",
+    "consolidated": "llm_summary",
+    "reflected": "reflection",
+}
+
 
 @dataclass
 class Memory:
@@ -59,6 +73,11 @@ class Memory:
             raise ValueError(f"Invalid kind: {self.kind}. Must be one of {VALID_KINDS}")
         if self.source_type not in VALID_SOURCE_TYPES:
             raise ValueError(f"Invalid source_type: {self.source_type}")
+
+    @property
+    def modality(self) -> str:
+        """Provenance modality (audit C4): observed / inferred / llm_summary / reflection."""
+        return MODALITY_BY_SOURCE_TYPE.get(self.source_type, "inferred")
 
 
 def importance_scaled_exponent(

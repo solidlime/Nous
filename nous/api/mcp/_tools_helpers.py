@@ -482,6 +482,16 @@ def _format_lightweight_response(
             lines.append(line)
             used += len(line)
 
+    # ── Provenance (audit C4): one line, derived from source_type ──
+    if top_memories:
+        modality_counts: dict[str, int] = {}
+        for m in top_memories:
+            mod = getattr(m, "modality", None)
+            if isinstance(mod, str) and mod:
+                modality_counts[mod] = modality_counts.get(mod, 0) + 1
+        if modality_counts:
+            lines.append("Provenance: " + ", ".join(f"{k}={v}" for k, v in sorted(modality_counts.items())))
+
     # ── Insights: reflection + mental model ──
     if reflections:
         reflections = _dedupe_memories(list(reflections), seen)
