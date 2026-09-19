@@ -1,20 +1,36 @@
+"""SearchEngine: strategy orchestration, RRF fusion, and final recall scoring.
+
+本モジュールの責務: 各 strategy（keyword / semantic / FTS）の結果を取得し、
+RRF/減衰段（ranker）で融合・ランク付けする。
+
+``SearchQuery.rank_policy`` の指定時のみ、真の recall 経路（chat pipeline の
+memory retrieval）向け最終スコア段として複合スコア
+（recency + importance + relevance（絶対コサイン）+ reflection penalty）を
+post-filter 後に適用する。``rank_policy=None`` の経路（exploration / dup_check /
+reflection / admin 検索など）は従来の RRF/減衰段で完結し、policy は一切作用しない。
+"""
+
 from __future__ import annotations
 
 import re
 import threading
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from nous.domain.memory.query_service import resolve_brain_config
 from nous.domain.shared.result import Failure, Result, Success
-from nous.domain.shared.time_utils import get_now, parse_date_range
+from nous.domain.shared.time_utils import compute_recency_decay, get_now, parse_date_range
 from nous.domain.value_objects import normalize_emotion
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from datetime import datetime
 
+    import numpy as np
+
     from nous.domain.memory.entities import Memory
+    from nous.domain.search.policy import RankPolicy
     from nous.domain.search.ranker import ResultRanker
     from nous.domain.search.strategies import (
         KeywordSearchStrategy,
@@ -22,6 +38,11 @@ if TYPE_CHECKING:
     )
     from nous.domain.shared.errors import SearchError
     from nous.infrastructure.sqlite.mot_thoughts import MotThought
+
+    class ContentEncoder(Protocol):
+        """ランクポリシー段が使う埋め込み器の最小契約（EmbeddingModel と構造互換）。"""
+
+        async def async_encode_batch(self, texts: list[str], *, is_query: bool = False) -> np.ndarray: ...
 
 
 from nous.infrastructure.logging.structured import get_logger
@@ -90,6 +111,9 @@ class SearchQuery:
     # path (chat pipeline memory retrieval consumed by the LLM) sets True.
     # Exploration / dup_check / reflection / admin searches stay False.
     apply_rif: bool = False
+    # 真の recall 経路（chat）専用の最終スコア段。None なら従来の RRF/減衰段で完結。
+    # frozen で hashable な RankPolicy をそのままキャッシュキー要素に使う。
+    rank_policy: RankPolicy | None = None
 
 
 @dataclass
@@ -100,6 +124,7 @@ class SearchResult:
     score: float
     source: str  # "semantic" | "keyword" | "fts" | "hybrid"
     similarity_flag: bool = False  # True when cosine_similarity >= threshold
+    cosine: float | None = None  # rank_policy 適用時の生コサイン（clamp なし）
 
 
 class SearchEngine:
@@ -114,6 +139,7 @@ class SearchEngine:
         reranker=None,
         link_repo=None,
         entity_service=None,
+        embedding_provider: Callable[[], ContentEncoder | None] | None = None,
     ) -> None:
         self._keyword = keyword_search
         self._semantic = semantic_search
@@ -122,6 +148,7 @@ class SearchEngine:
         self._reranker = reranker
         self._link_repo = link_repo
         self._entity_service = entity_service
+        self._embedding_provider = embedding_provider
         self._reranker_unloaded_warned = False
 
     def _post_filter(self, results: list[SearchResult], query: SearchQuery) -> list[SearchResult]:
@@ -167,6 +194,7 @@ class SearchEngine:
             query.sort,
             query.lifecycle_status,
             query.valid_at,
+            query.rank_policy,
         )
 
     async def search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
@@ -188,7 +216,9 @@ class SearchEngine:
         if cache_key is not None:
             cached = _cache_get(cache_key)
             if cached is not None:
-                return Success(self._post_filter(cached, query))
+                # cache は strategy 出力（finalize 前）を保持し、policy / post-filter
+                # はリクエスト毎に適用（policy は cache key に含まれる）。
+                return Success(await self._finalize(cached, query))
 
         if mode == "keyword":
             result = self._keyword_search(query, date_from, date_to)
@@ -205,9 +235,87 @@ class SearchEngine:
         # loaded yet) would otherwise poison the cache for the full TTL.
         if cache_key is not None and result.value:
             _cache_put(cache_key, result.value)
-        filtered = self._post_filter(result.value, query)
-        self._apply_rif(result.value, filtered, query)
-        return Success(filtered)
+        recalled = await self._finalize(result.value, query)
+        # RIF 競合選抜は現行契約どおり「engine 順の上位 top_k」を維持
+        # （rank_policy 段は順位付けのみで競合 membership を変えない）。
+        self._apply_rif(result.value[: query.top_k], recalled, query)
+        return Success(recalled)
+
+    async def _finalize(
+        self,
+        candidates: list[SearchResult],
+        query: SearchQuery,
+    ) -> list[SearchResult]:
+        """Post-filter →（rank_policy 指定時）複合スコア段 → top_k で切る。
+
+        「フィルタ後に切る」を唯一の切り口とする。cache hit / fresh 双方で
+        同一の最終加工を保証する。
+        """
+        filtered = self._post_filter(candidates, query)
+        if query.rank_policy is not None:
+            filtered = await self._apply_rank_policy(filtered, query)
+        return filtered[: query.top_k]
+
+    async def _apply_rank_policy(
+        self,
+        candidates: list[SearchResult],
+        query: SearchQuery,
+    ) -> list[SearchResult]:
+        """RankPolicy に基づく複合スコアで candidate を再順位付けする。
+
+        composite = recency_weight * recency_decay + importance_weight * importance
+                  + relevance_weight * 絶対コサイン（clamp なし）
+        reflection タグ & penalty != 1.0 のとき composite *= penalty。
+
+        fail-open: embedding provider 無し・エンコード失敗時は relevance=0.0 で
+        rec/imp のみのスコアで継続する。
+        """
+        policy = query.rank_policy
+        assert policy is not None
+        import numpy as np
+
+        encoder = self._embedding_provider() if self._embedding_provider is not None else None
+        rel_by_index: dict[int, float] = {}
+        if encoder is not None:
+            try:
+                qvec = (await encoder.async_encode_batch([query.text], is_query=True))[0]
+            except Exception:
+                logger.debug("rank_policy: query embedding failed; relevance=0.0 continues", exc_info=True)
+                qvec = None
+            if qvec is not None:
+                named = [(i, r) for i, r in enumerate(candidates) if r.memory.content]
+                if named:
+                    try:
+                        dvecs = await encoder.async_encode_batch([r.memory.content for _, r in named], is_query=False)
+                        for (i, _r), dvec in zip(named, dvecs, strict=False):
+                            try:
+                                rel_by_index[i] = float(np.dot(qvec, dvec))
+                            except Exception:
+                                logger.debug("rank_policy: dot product failed for candidate %s", i, exc_info=True)
+                                rel_by_index[i] = 0.0
+                    except Exception:
+                        logger.debug("rank_policy: batch encode failed; relevance=0.0 continues", exc_info=True)
+
+        ranked: list[SearchResult] = []
+        for i, orig in enumerate(candidates):
+            rel = rel_by_index.get(i, 0.0)
+            base = policy.recency_weight * compute_recency_decay(orig.memory.created_at) + policy.importance_weight * float(
+                getattr(orig.memory, "importance", 0.5)
+            )
+            composite = base + policy.relevance_weight * rel
+            if policy.reflection_penalty != 1.0 and "reflection" in (orig.memory.tags or []):
+                composite *= policy.reflection_penalty
+            ranked.append(
+                SearchResult(
+                    memory=orig.memory,
+                    score=composite,
+                    source=orig.source,
+                    similarity_flag=orig.similarity_flag,
+                    cosine=rel,
+                )
+            )
+        ranked.sort(key=lambda r: r.score, reverse=True)
+        return ranked
 
     def _apply_rif(self, candidates: list[SearchResult], recalled: list[SearchResult], query: SearchQuery) -> None:
         """Retrieval-induced forgetting: suppress top-K non-recalled competitors.
@@ -370,16 +478,24 @@ class SearchEngine:
     async def _hybrid_search(
         self, query: SearchQuery, date_from=None, date_to=None
     ) -> Result[list[SearchResult], SearchError]:
-        """Execute hybrid search combining FTS5, plain keyword, and semantic results with RRF fusion."""
+        """Execute hybrid search combining FTS5, plain keyword, and semantic results with RRF fusion.
+
+        rank_policy 指定時のみ取得プールを拡大する
+        （``fetch_k = min(max(top_k * 3, 15), 60)``、keyword/semantic は limit=fetch_k、
+        FTS は top_k=2*fetch_k）。truncation は廃止し、deduped された全候補を返す
+        （件数は ``_finalize`` の post-filter → top_k で決まる）。
+        """
         # Empty query + tags: keyword/FTS return nothing, so fall back to tag-only retrieval
         if not query.text.strip() and query.tags and self._memory_repo is not None:
             return self._keyword_search(query, date_from, date_to)
+
+        fetch_k = min(max(query.top_k * 3, 15), 60) if query.rank_policy is not None else query.top_k
 
         all_results: list[SearchResult] = []
 
         # 1. Plain LIKE keyword search (existing)
         kw_result = self._keyword.search(
-            query.text, limit=query.top_k, date_from=date_from, date_to=date_to, tags=query.tags
+            query.text, limit=fetch_k, date_from=date_from, date_to=date_to, tags=query.tags
         )
         if isinstance(kw_result, Success):
             all_results.extend(self._to_search_results(kw_result.value, "keyword"))
@@ -387,7 +503,7 @@ class SearchEngine:
         # 2. FTS5 full-text search (BM25 ranked)
         if self._memory_repo is not None and hasattr(self._memory_repo, "search_fts"):
             fts_result = self._memory_repo.search_fts(
-                query.text, top_k=query.top_k * 2, date_from=date_from, date_to=date_to, tags=query.tags
+                query.text, top_k=fetch_k * 2, date_from=date_from, date_to=date_to, tags=query.tags
             )
             if isinstance(fts_result, Success):
                 all_results.extend(self._to_search_results(fts_result.value, "fts"))
@@ -395,7 +511,7 @@ class SearchEngine:
         # 3. Semantic vector search (Qdrant)
         if self._semantic is not None:
             sem_result = await self._semantic.search(
-                query.text, limit=query.top_k, date_from=date_from, date_to=date_to
+                query.text, limit=fetch_k, date_from=date_from, date_to=date_to
             )
             if isinstance(sem_result, Success):
                 sem_results = self._to_search_results(sem_result.value, "semantic")
@@ -494,7 +610,8 @@ class SearchEngine:
             except Exception:
                 logger.warning("Spreading activation step failed, using pre-SA scores")
 
-        return Success(deduped[: query.top_k])
+        # truncation しない: 件数は _finalize（post-filter → top_k）で決まる
+        return Success(deduped)
 
     def set_persona(self, persona: str) -> None:
         """Set the persona for semantic search."""
@@ -548,6 +665,7 @@ class SearchEngine:
                 vector_weight=query.vector_weight,
                 keyword_weight=query.keyword_weight,
                 kind=query.kind,
+                rank_policy=query.rank_policy,
             )
             result = await self._hybrid_search(sub)
             if isinstance(result, Success):
@@ -568,7 +686,8 @@ class SearchEngine:
             if r.memory.key not in seen or r.score > seen[r.memory.key].score:
                 seen[r.memory.key] = r
         deduped = sorted(seen.values(), key=lambda x: x.score, reverse=True)
-        return Success(deduped[: query.top_k])
+        # truncation しない: 件数は _finalize（post-filter → top_k）で決まる
+        return Success(deduped)
 
 
 def _expand_query(text: str) -> list[str]:
