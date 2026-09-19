@@ -11,7 +11,8 @@ from nous.api.http.deps import (
     _safe_get_context,
 )
 from nous.api.http.routers._error_handlers import error_from_result
-from nous.domain.equipment.service import apply_appearance
+
+# audit C2: appearance recomputation now lives in EquipmentService.recompute_appearance
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -94,7 +95,7 @@ def register_item_routes(mcp) -> None:
             if not result.is_ok:
                 return error_from_result(result)
             # audit:C2 — appearance parity: HTTP equip must update persona state like MCP
-            apply_appearance(ctx.equipment_service, ctx.persona_service, persona, body)
+            ctx.equipment_service.recompute_appearance(ctx.persona_service, persona)
             return JSONResponse({"status": "ok", "equipped": body})
         # 最終防衛線
         except Exception as exc:
@@ -120,6 +121,8 @@ def register_item_routes(mcp) -> None:
             result = ctx.equipment_service.unequip(slots)
             if not result.is_ok:
                 return error_from_result(result)
+            # audit:C2 — unequip must recompute appearance (was equip-only)
+            ctx.equipment_service.recompute_appearance(ctx.persona_service, persona)
             return JSONResponse({"status": "ok", "unequipped": slots})
         # 最終防衛線
         except Exception as exc:

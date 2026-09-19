@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from nous.domain.equipment.service import apply_appearance
+from nous.domain.shared.result import Failure
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,8 @@ async def _tool_item_equip(ctx: AppContext, persona: str, equipment: dict | None
     result = ctx.equipment_service.equip(equipment, auto_add)
     if result.is_ok:
         # 装備スロットから appearance を自動合成して persona state に反映する
-        apply_appearance(ctx.equipment_service, ctx.persona_service, persona, equipment)
+        # (audit C2: 再計算は Service 層の単一経路に集約)
+        ctx.equipment_service.recompute_appearance(ctx.persona_service, persona)
         await ctx.event_bus.publish(
             "tool.called",
             {
@@ -87,6 +88,41 @@ async def _tool_item_equip(ctx: AppContext, persona: str, equipment: dict | None
         },
     )
     return f"Error: {result.error}"
+
+
+async def _tool_item_unequip(ctx: AppContext, persona: str, slots: list[str] | str = "") -> str:
+    """Unequip one or more slots (audit L4: HTTP-only capability moved to MCP)."""
+    if not slots:
+        return "Error: slots required (e.g. ['top'] or 'top')"
+    result = ctx.equipment_service.unequip(slots)
+    slot_list = [slots] if isinstance(slots, str) else list(slots)
+    if isinstance(result, Failure):
+        await ctx.event_bus.publish(
+            "tool.called",
+            {
+                "persona": persona,
+                "session_id": getattr(ctx, "session_id", None),
+                "tool_name": "item_unequip",
+                "params_summary": f"slots={slot_list}",
+                "result_summary": str(result.error),
+                "success": False,
+            },
+        )
+        return f"Error: {result.error}"
+    # Rebuild appearance from the remaining equipment (audit C2: single path)
+    ctx.equipment_service.recompute_appearance(ctx.persona_service, persona)
+    await ctx.event_bus.publish(
+        "tool.called",
+        {
+            "persona": persona,
+            "session_id": getattr(ctx, "session_id", None),
+            "tool_name": "item_unequip",
+            "params_summary": f"slots={slot_list}",
+            "result_summary": f"Unequipped: {slot_list}",
+            "success": True,
+        },
+    )
+    return f"Unequipped: {slot_list}"
 
 
 async def _tool_item_search(

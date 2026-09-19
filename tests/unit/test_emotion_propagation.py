@@ -112,12 +112,18 @@ def service(repo: InMemoryPersonaRepository, mem_service: FakeMemoryService) -> 
 
 
 class TestEmotionPropagation:
-    def test_propagates_to_recent_memory(
+    """audit H5 (v4.0): emotion propagation to recent memories was REMOVED.
+
+    Memories keep the emotion captured at creation time; the persona's
+    current emotion lives in PersonaState only.
+    """
+
+    def test_does_not_propagate_to_recent_memory(
         self,
         service: PersonaService,
         mem_service: FakeMemoryService,
     ):
-        """Memory created within propagation window gets emotion update."""
+        """Emotion change must NOT overwrite memory emotion fields."""
         now = get_now()
         mem_service.memories = [
             Memory(
@@ -130,18 +136,15 @@ class TestEmotionPropagation:
 
         service.update_emotion(PERSONA, "joy", 0.8)
 
-        assert len(mem_service.updated) == 1
-        key, updates = mem_service.updated[0]
-        assert key == "mem_recent"
-        assert updates["emotion"] == "joy"
-        assert updates["emotion_intensity"] == 0.8
+        assert mem_service.updated == []
+        assert mem_service.memories[0].emotion != "joy"
 
-    def test_skips_old_memories(
+    def test_skips_all_memories(
         self,
         service: PersonaService,
         mem_service: FakeMemoryService,
     ):
-        """Memories older than propagation window are not updated."""
+        """No memory — old or recent — is ever touched by emotion updates."""
         now = get_now()
         old = Memory(
             key="mem_old",
@@ -159,10 +162,7 @@ class TestEmotionPropagation:
 
         service.update_emotion(PERSONA, "sadness", 0.6)
 
-        # Only recent memory should be updated
-        assert len(mem_service.updated) == 1
-        key, _ = mem_service.updated[0]
-        assert key == "mem_recent"
+        assert mem_service.updated == []
 
     def test_no_memory_no_error(
         self,

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from nous.domain.persona.body_state import extract_body_metrics
@@ -98,8 +97,11 @@ class PersonaService:
                     "context": context,
                 },
             )
-            # Propagate emotion to recent memories
-            self._propagate_emotion_to_memories(persona, normalized_name, clamped)
+            # audit H5 (v4.0): emotion propagation to recent memories was
+            # removed. It used to overwrite the emotion field of memories
+            # created in the last 30 minutes, destroying the creation-time
+            # snapshot. Memories keep the emotion captured at creation;
+            # the persona's current emotion lives in PersonaState only.
         return result
 
     def update_physical_state(
@@ -289,31 +291,13 @@ class PersonaService:
         intensity: float,
         recent_minutes: int = 30,
     ) -> None:
-        """Update emotion field on memories created/accessed recently.
+        """Deprecated no-op (audit H5, v4.0).
 
-        Best-effort: failures are silently swallowed.
+        Emotion propagation to recent memories was removed: memories must
+        keep the emotion captured at creation time. Kept as a no-op for
+        external callers; will be deleted in v5.
         """
-        if self._memory_service is None:
-            return
-
-        now = get_now()
-        cutoff = now - timedelta(minutes=recent_minutes)
-
-        try:
-            recent = self._memory_service.get_recent(limit=20)
-            if not recent.is_ok or not recent.value:
-                return
-
-            for mem in recent.value:
-                if not mem.created_at or mem.created_at < cutoff:
-                    continue
-                self._memory_service.update_memory(
-                    mem.key,
-                    emotion=emotion,
-                    emotion_intensity=intensity,
-                )
-        except Exception:
-            _logger.warning("Failed to propagate emotion to memories", exc_info=True)
+        return
 
     @staticmethod
     def build_body_state_dict(state: PersonaState) -> dict[str, float | None]:

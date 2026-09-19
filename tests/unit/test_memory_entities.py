@@ -80,20 +80,21 @@ class TestMemoryStrength:
         assert s.compute_recall(1.0) == 0.0
 
     def test_boost_on_recall(self):
+        """audit H5: boost_on_recall は stability を変えない（recall メタのみ更新）."""
         s = MemoryStrength(memory_key="k", stability=1.0, recall_count=0)
         s.boost_on_recall()
         assert s.recall_count == 1
-        assert s.stability == 1.5
+        assert s.stability == 1.0  # unchanged (v4.0: emotion/recall no longer inflates stability)
         assert s.strength == 1.0
 
-    def test_boost_caps_stability(self):
+    def test_boost_stability_stable_across_recalls(self):
         s = MemoryStrength(memory_key="k", stability=300.0)
         s.boost_on_recall()
-        assert s.stability == min(300.0 * 1.5, 365.0)
+        assert s.stability == 300.0
 
     def test_multiple_boosts(self):
         s = MemoryStrength(memory_key="k", stability=1.0)
         for _ in range(5):
             s.boost_on_recall()
         assert s.recall_count == 5
-        assert s.stability == pytest.approx(1.0 * 1.5**5, rel=1e-5)
+        assert s.stability == 1.0

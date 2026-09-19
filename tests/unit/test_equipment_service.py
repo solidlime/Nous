@@ -301,3 +301,38 @@ class TestAccessorySlots:
         result = service.equip({"accessories": "指輪"})
         assert not result.is_ok
         assert "Invalid slot" in str(result.error)
+
+
+class _FakePersonaService:
+    def __init__(self):
+        self.state: dict[str, object] = {}
+
+    def update_state(self, persona: str, key: str, value: object) -> None:
+        self.state[key] = value
+
+
+class TestRecomputeAppearance:
+    """equip/unequip/HTTP 共通の appearance 再計算経路 (audit C2)."""
+
+    def test_recompute_from_stored_slots(self, service: EquipmentService):
+        persona_service = _FakePersonaService()
+        service.equip({"top": "白いドレス", "shoes": "黒い靴"}, auto_add=True)
+
+        appearance = service.recompute_appearance(persona_service, "p")
+
+        assert appearance == "白いドレス, 黒い靴"
+        assert persona_service.state["appearance"] == "白いドレス, 黒い靴"
+
+    def test_recompute_empty_equipment_leaves_state_untouched(self, service: EquipmentService):
+        persona_service = _FakePersonaService()
+
+        assert service.recompute_appearance(persona_service, "p") is None
+        assert "appearance" not in persona_service.state
+
+    def test_recompute_after_unequip_reflects_removal(self, service: EquipmentService):
+        persona_service = _FakePersonaService()
+        service.equip({"top": "白いドレス", "shoes": "黒い靴"}, auto_add=True)
+        service.unequip(["shoes"])
+
+        assert service.recompute_appearance(persona_service, "p") == "白いドレス"
+        assert persona_service.state["appearance"] == "白いドレス"

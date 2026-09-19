@@ -101,10 +101,9 @@ class TestItemTools:
 
     @pytest.mark.asyncio
     async def test_item_equip_syncs_appearance_to_persona_state(self, registered_tools):
-        """equip 成功時、装備スロットから appearance を合成して persona state に保存する."""
+        """equip 成功時、appearance 再計算を Service 層の単一経路に委譲する (audit C2)."""
         tools, ctx, _ = registered_tools
         ctx.equipment_service.equip.return_value = Success({"top": "red dress"})
-        ctx.equipment_service.build_appearance.return_value = "red dress"
         item_tool = tools["item_equip"]
         with (
             patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
@@ -113,8 +112,22 @@ class TestItemTools:
             mock_reg_cls.get.return_value = ctx
             result = await item_tool(equipment={"top": "red dress"})
         assert "Equipped" in result
-        ctx.equipment_service.build_appearance.assert_called_once_with({"top": "red dress"})
-        ctx.persona_service.update_state.assert_called_once_with("test_persona", "appearance", "red dress")
+        ctx.equipment_service.recompute_appearance.assert_called_once_with(ctx.persona_service, "test_persona")
+
+    @pytest.mark.asyncio
+    async def test_item_unequip_syncs_appearance_to_persona_state(self, registered_tools):
+        """unequip 成功時も appearance を再計算する (audit C2/L4)."""
+        tools, ctx, _ = registered_tools
+        ctx.equipment_service.unequip.return_value = Success(None)
+        item_tool = tools["item_unequip"]
+        with (
+            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
+            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
+        ):
+            mock_reg_cls.get.return_value = ctx
+            result = await item_tool(slots=["top"])
+        assert "Unequipped" in result
+        ctx.equipment_service.recompute_appearance.assert_called_once_with(ctx.persona_service, "test_persona")
 
     @pytest.mark.asyncio
     async def test_item_equip_skips_appearance_sync_on_failure(self, registered_tools):

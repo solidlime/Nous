@@ -24,10 +24,15 @@ from nous.api.mcp._tools_helpers import (  # noqa: E402
 )
 
 
-async def _tool_get_context(ctx: AppContext, persona: str, project: str | None = None) -> dict:
+async def _tool_get_context(
+    ctx: AppContext, persona: str, project: str | None = None, session_effects: bool = True
+) -> dict:
     """Get persona state and memory overview. Call FIRST at session start.
     Lightweight: active commitments + essential story + body/emotion state (~500-800 tokens).
-    project: 指定時は project:<slug> タグ付き記憶を PROJECT MEMORIES 節で表示（最大5件）。"""
+    project: 指定時は project:<slug> タグ付き記憶を PROJECT MEMORIES 節で表示（最大5件）。
+    session_effects: 読取副作用（会話時刻の記録・one-shot 状態メモリの消費）を
+    実行するか。監査 M8（v4.0）により正規入口は session_begin で、get_context は
+    v4.x 互換のためデフォルトで副作用を維持しつつ非推奨警告を出す。"""
     state_result = ctx.persona_service.get_context(persona)
     if not state_result.is_ok:
         await ctx.event_bus.publish(
@@ -115,19 +120,22 @@ async def _tool_get_context(ctx: AppContext, persona: str, project: str | None =
     if state.last_conversation_time:
         time_since = relative_time_str(state.last_conversation_time)
     current_time = get_now().strftime("%Y-%m-%d %H:%M")
-    ctx.persona_service.record_conversation_time(persona)
+    if session_effects:
+        logger.info("DEPRECATED: get_context performs session side effects; use session_begin instead (audit M8)")
+        ctx.persona_service.record_conversation_time(persona)
 
     # Read one-shot state memories (physical_state/mental_state) via service
     one_shot_context: dict[str, str] = {}
-    for tag_name, label in [
-        ("physical_state", "💪 身体状態"),
-        ("mental_state", "🧠 精神状態"),
-    ]:
-        mems_result = ctx.memory_service.get_and_consume_one_shot(tag_name)
-        if mems_result.is_ok and mems_result.value:
-            latest = mems_result.value[0]
-            cleaned = latest.content.replace(f"{tag_name}: ", "", 1)
-            one_shot_context[label] = cleaned
+    if session_effects:
+        for tag_name, label in [
+            ("physical_state", "💪 身体状態"),
+            ("mental_state", "🧠 精神状態"),
+        ]:
+            mems_result = ctx.memory_service.get_and_consume_one_shot(tag_name)
+            if mems_result.is_ok and mems_result.value:
+                latest = mems_result.value[0]
+                cleaned = latest.content.replace(f"{tag_name}: ", "", 1)
+                one_shot_context[label] = cleaned
 
     result_text = _format_lightweight_response(
         state,
@@ -158,6 +166,14 @@ async def _tool_get_context(ctx: AppContext, persona: str, project: str | None =
         },
     )
     return {"ok": True, "result": result_text}
+
+
+async def _tool_session_begin(ctx: AppContext, persona: str, project: str | None = None) -> dict:
+    """Canonical session-start entry (audit M8): returns the same context as
+    get_context AND owns the session side effects (conversation-time record,
+    one-shot state consumption). get_context retains those effects for v4.x
+    compatibility only."""
+    return await _tool_get_context(ctx, persona, project=project, session_effects=True)
 
 
 @tool_called_audited("update_context")

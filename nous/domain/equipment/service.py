@@ -234,6 +234,19 @@ class EquipmentService:
 
         return Success(None)
 
+    def recompute_appearance(self, persona_service: object, persona: str) -> str | None:
+        """Rebuild and persist persona appearance from the CURRENT equipment
+        (audit C2: appearance recomputation has a single home — this one).
+
+        Reads stored slots (not the caller's request) so equip/unequip/HTTP
+        paths all synthesize appearance from the same source of truth.
+        """
+        result = self.get_equipment()
+        if not isinstance(result, Success):
+            return None
+        equipment = {k: v for k, v in result.value.items() if v is not None}
+        return apply_appearance(self, persona_service, persona, equipment)
+
     def search_items(
         self,
         query: str | None = None,

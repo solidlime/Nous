@@ -58,6 +58,7 @@ from nous.api.mcp._tools_item import (  # noqa: E402, F401
     _tool_item_add,
     _tool_item_equip,
     _tool_item_search,
+    _tool_item_unequip,
 )
 from nous.api.mcp._tools_memory import (  # noqa: E402, F401
     MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT,
@@ -68,7 +69,11 @@ from nous.api.mcp._tools_memory import (  # noqa: E402, F401
     _tool_memory_stats,
     _tool_memory_update,
 )
-from nous.api.mcp._tools_persona import _tool_get_context, _tool_update_context  # noqa: E402, F401
+from nous.api.mcp._tools_persona import (  # noqa: E402, F401
+    _tool_get_context,
+    _tool_session_begin,
+    _tool_update_context,
+)
 
 # =============================================================================
 # Dispatch table — maps tool name → (core_function, docstring)
@@ -76,6 +81,7 @@ from nous.api.mcp._tools_persona import _tool_get_context, _tool_update_context 
 
 TOOL_DISPATCH: dict[str, Any] = {
     "get_context": _tool_get_context,
+    "session_begin": _tool_session_begin,
     "memory_create": _tool_memory_create,
     "memory_read": _tool_memory_read,
     "memory_update": _tool_memory_update,
@@ -86,6 +92,7 @@ TOOL_DISPATCH: dict[str, Any] = {
     "item_add": _tool_item_add,
     "item_equip": _tool_item_equip,
     "item_search": _tool_item_search,
+    "item_unequip": _tool_item_unequip,
     "goal_manage": _tool_goal_manage,
 }
 
@@ -123,14 +130,24 @@ def register_tools(mcp: MCPServer) -> None:
             return mcp.tool(description=desc)
         return mcp.tool()
 
-    # get_context
+    # get_context (v4.x compat — deprecated in favor of session_begin, audit M8)
     @_tool("get_context")
     async def get_context(project: str | None = None) -> str:
-        """Get persona state and memory overview. Call FIRST at session start.
-        Lightweight: active commitments + essential story + body/emotion state (~500-800 tokens).
+        """Get persona state and memory overview. Lightweight: active commitments + essential story + body/emotion state (~500-800 tokens).
+        DEPRECATED: performs session side effects (conversation-time record, one-shot consumption) for v4.x compat — prefer session_begin.
         project: 任意。project:<slug> タグ付き記憶を PROJECT MEMORIES 節で表示する。"""
         p = _resolve_persona()
         r = await _tool_get_context(AppContextRegistry.get(p), p, project=project)
+        return _envelope_wrap(r)
+
+    # session_begin (audit M8: canonical session-start entry, owns side effects)
+    @_tool("session_begin")
+    async def session_begin(project: str | None = None) -> str:
+        """Call FIRST at session start. Returns persona state + memory overview (~500-800 tokens)
+        and records session side effects: conversation time and one-shot body/mental state consumption.
+        project: 任意。project:<slug> タグ付き記憶を PROJECT MEMORIES 節で表示する。"""
+        p = _resolve_persona()
+        r = await _tool_session_begin(AppContextRegistry.get(p), p, project=project)
         return _envelope_wrap(r)
 
     # memory_create
@@ -378,6 +395,14 @@ def register_tools(mcp: MCPServer) -> None:
         """インベントリを検索。query（部分一致）またはcategoryで絞り込み。"""
         p = _resolve_persona()
         return _envelope_wrap(await _tool_item_search(AppContextRegistry.get(p), p, query=query, category=category))
+
+    # item_unequip (audit L4: HTTP-only capability exposed on the MCP surface)
+    @_tool("item_unequip")
+    async def item_unequip(slots: list[str]) -> str:
+        """Unequip one or more equipment slots (e.g. ["top"] or ["top", "shoes"]).
+        Valid slots match the equipment system; appearance is rebuilt automatically."""
+        p = _resolve_persona()
+        return _envelope_wrap(await _tool_item_unequip(AppContextRegistry.get(p), p, slots=slots))
 
     # goal_manage
     @_tool("goal_manage")

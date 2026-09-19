@@ -12,8 +12,8 @@ from nous.application.chat.memory_prompts import (
     _ITEM_LLM_PROMPT,
     _build_drift_section,
 )
-from nous.domain.equipment.service import apply_appearance
 from nous.domain.language import LanguageResolver
+from nous.domain.memory.entities import VALID_KINDS
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.result import Success
 from nous.domain.shared.text_utils import strip_code_fence
@@ -457,6 +457,10 @@ async def _save_extracted_facts(ctx: AppContext, persona: str, facts: list, drif
         _normalize_drift_fact(fact, drift_violation)
         tags = normalize_tags(fact.get("tags"))
         save_kwargs: dict = {}
+        # audit L3: honor the extractor's kind instead of always defaulting to semantic
+        raw_kind = str(fact.get("kind") or "").strip().lower()
+        if raw_kind in VALID_KINDS:
+            save_kwargs["kind"] = raw_kind
         if "character_drift" in tags:
             save_kwargs["valid_until"] = get_now() + timedelta(days=DRIFT_VALID_DAYS)
         mem_result = await ctx.memory_service.create_memory(
@@ -711,7 +715,9 @@ async def _apply_inventory_update(ctx: AppContext, persona: str, result: dict, s
         equip_result = ctx.equipment_service.equip(equip_map)
         if isinstance(equip_result, Success):
             # audit:C2 — appearance parity: chat extractor equip must update persona state
-            apply_appearance(ctx.equipment_service, ctx.persona_service, persona, equip_map)
+            ctx.equipment_service.recompute_appearance(ctx.persona_service, persona)
     if unequip_list and isinstance(unequip_list, list):
         for slot in unequip_list:
             ctx.equipment_service.unequip([slot])
+        # audit:C2 — unequip must recompute appearance too (was equip-only)
+        ctx.equipment_service.recompute_appearance(ctx.persona_service, persona)

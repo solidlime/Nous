@@ -41,7 +41,7 @@ _CONTEXT_LLM_PROMPT = """\
 JSONのみ。コメント不要。不要なフィールドは省略可。
 {{
   "facts": [
-    {{"content": "記憶すべき事実", "importance": 0.7, "tags": ["preference"], "emotion": "neutral"}}
+    {{"content": "記憶すべき事実", "importance": 0.7, "tags": ["preference"], "emotion": "neutral", "kind": "semantic"}}
   ],
   "goals": [
     {{"action": "create", "content": "新規目標"}},
@@ -65,6 +65,11 @@ JSONのみ。コメント不要。不要なフィールドは省略可。
 【注意】
 - facts: ユーザーの好み・個人情報・重要な出来事のみ。一時的な発言は不要。
 - facts は{persona_name}自身の一人称視点で記録する（主語を明確にすること）。
+- facts の kind（監査 L3）: 記憶の種類を必ず下の 3 分類から選ぶ。
+    - episodic: 特定の日時・場所で起きた具体的な出来事（「〜した」「〜があった」）
+    - semantic: 時点に依存しない一般的な事実・好み・人物情報（「〜が好き」「〜は〜である」）
+    - procedural: 手順・やり方・パターン（「〜するときは〜する」）
+  - kind を省略した場合、および不正な値は semantic として保存される。
 - drift: 上に【キャラ一貫性監査の指摘】がある場合のみ、反省文をfactsに1件だけ作る。
   - contentは{persona_name}自身の一人称独白の反省文とすること。
   - tagsは ["character_drift", 指摘の種別]、importanceは0.8-0.9。
