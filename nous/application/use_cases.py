@@ -512,6 +512,9 @@ class AppContext:
                 reranker=self._reranker,
                 entity_service=self.entity_service,
                 link_repo=self.entity_repo,
+                # embedding_model property は呼ばない（cold load 防止）:
+                # rank_policy 段が要求した時点で lazy に解決する。
+                embedding_provider=lambda: getattr(self, "_embedding", None),
             )
             # worker 経路ではハンドラの set_persona が走らないため、生成時に必ず伝播させる
             self._search_engine.set_persona(self.persona)
