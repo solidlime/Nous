@@ -4,6 +4,7 @@
    MCP → chat-settings-mcp.js, Image → chat-settings-image.js
    ================================================================= */
 ((N) => {
+  "use strict";
   var C = N.Core;
   var api = C.api,
     esc = C.esc,
@@ -14,7 +15,6 @@
   var truncate = C.truncate,
     relativeTime = C.relativeTime,
     fmtDate = C.fmtDate;
-  ("use strict");
   var S = window.S;
 
   // ------------------------------------------------------------------

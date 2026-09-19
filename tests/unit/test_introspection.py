@@ -1143,7 +1143,7 @@ def _spont_result(curiosity="雲ってどのくらい重いのかな"):
 
 
 def test_curiosity_skips_when_curiosity_none(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True)
     FakePool.instances.clear()
@@ -1158,7 +1158,7 @@ def test_curiosity_skips_when_curiosity_none(monkeypatch):
 
 
 def test_curiosity_skips_when_disabled(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=False)
     FakePool.instances.clear()
@@ -1170,7 +1170,7 @@ def test_curiosity_skips_when_disabled(monkeypatch):
 
 
 def test_curiosity_skips_when_max_tool_calls_zero(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=0)
     FakePool.instances.clear()
@@ -1187,7 +1187,7 @@ def test_curiosity_skips_when_max_tool_calls_zero(monkeypatch):
 
 
 def test_curiosity_skips_when_monologue_disabled(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True)
     config.brain_monologue_enabled = False
@@ -1201,7 +1201,7 @@ def test_curiosity_skips_when_monologue_disabled(monkeypatch):
 
 
 def test_curiosity_skips_when_no_servers(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, servers=[])
     FakePool.instances.clear()
@@ -1395,7 +1395,7 @@ def test_curiosity_tool_calls_with_length_finish_executes_normally(monkeypatch, 
 
     length 信号は step 実行ログ (finish=) と break パスの warning で観測可能にする。
     """
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
@@ -1415,7 +1415,7 @@ def test_curiosity_tool_calls_with_length_finish_executes_normally(monkeypatch, 
 
 def test_curiosity_research_step_none_noop(monkeypatch, caplog):
     """research_step が None（LLM エラー/例外）なら no-op で静かに終わる。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True)
     FakePool.instances.clear()
@@ -1434,7 +1434,7 @@ def test_curiosity_research_step_none_noop(monkeypatch, caplog):
 
 def test_curiosity_fc_unsupported_noop_logs(monkeypatch, caplog):
     """FC 非対応（tool_calls が出ない台本）は無言 no-op にせず INFO ログで検知できる。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True)
     FakePool.instances.clear()
@@ -1453,7 +1453,7 @@ def test_curiosity_fc_unsupported_noop_logs(monkeypatch, caplog):
 
 def test_curiosity_tool_array_excludes_disabled(monkeypatch):
     """tools は tool 配列として渡す。disabled_tools は配列から除外。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True)
     FakePool.instances.clear()
@@ -1469,7 +1469,7 @@ def test_curiosity_tool_array_excludes_disabled(monkeypatch):
 
 def test_curiosity_tool_array_excludes_get_context(monkeypatch):
     """全開放方針でも get_context だけは record_conversation_time 副作用のため除外。更新系は載る。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True)
     FakePool.instances.clear()
@@ -1485,7 +1485,7 @@ def test_curiosity_tool_array_excludes_get_context(monkeypatch):
 
 def test_curiosity_unknown_tool_feeds_back(monkeypatch):
     """一覧外ツールは実行せず、拒否を tool 応答で返して次ステップへ進む。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
@@ -1510,7 +1510,7 @@ def test_curiosity_unknown_tool_feeds_back(monkeypatch):
 
 def test_curiosity_aborts_after_repeated_unknown_tools(monkeypatch):
     """未知ツール提案が連続2回で打ち切り、要約へ進む。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
@@ -1533,7 +1533,7 @@ def test_curiosity_aborts_after_repeated_unknown_tools(monkeypatch):
 
 
 def test_curiosity_happy_path(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
@@ -1560,7 +1560,7 @@ def test_curiosity_happy_path(monkeypatch):
 
 
 def test_curiosity_tool_error_swallows(monkeypatch):
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True)
     FakePool.instances.clear()
@@ -1582,7 +1582,7 @@ def test_curiosity_tool_error_swallows(monkeypatch):
 
 def test_curiosity_aborts_after_two_consecutive_errors(monkeypatch):
     """連続エラー2回で打ち切り、要約へ進む（無制限リトライしない）。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
@@ -1616,7 +1616,7 @@ def test_curiosity_aborts_after_two_consecutive_errors(monkeypatch):
 
 def test_curiosity_multi_step_until_done(monkeypatch):
     """多段: 2 ステップのツール実行 → 最終回答で抜ける。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
@@ -1645,7 +1645,7 @@ def test_curiosity_multi_step_until_done(monkeypatch):
 
 def test_curiosity_budget_exhaustion_stops_at_max(monkeypatch):
     """最終回答が無くても予算 max_tool_calls で打ち切り、要約へフォールバックする。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=2)
     FakePool.instances.clear()
@@ -1690,7 +1690,7 @@ def test_curiosity_aborts_when_chat_resumed(monkeypatch, caplog):
 
     2ステップ目の research_step を呼ばず、要約・記憶・emit も行わない。
     """
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
@@ -1719,7 +1719,7 @@ def test_curiosity_aborts_when_chat_resumed(monkeypatch, caplog):
 
 def test_curiosity_chat_not_resumed_completes(monkeypatch):
     """chat イベントが baseline から動かなければ従来どおり完走（要約・emit まで進む）。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
@@ -1744,7 +1744,7 @@ def test_curiosity_chat_not_resumed_completes(monkeypatch):
 
 def test_curiosity_done_summary_skips_summary_llm(monkeypatch):
     """最終回答テキストを同梱したら要約 LLM を呼ばず、その summary で記憶・emit する。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
@@ -1769,7 +1769,7 @@ def test_curiosity_done_summary_skips_summary_llm(monkeypatch):
 
 def test_curiosity_done_without_summary_falls_back(monkeypatch):
     """最終回答テキストが無ければ従来どおり要約 LLM 呼び出しにフォールバックする。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
@@ -1805,7 +1805,8 @@ def test_curiosity_passes_all_results_to_summarize(monkeypatch):
     async def fake_summarize(ctx, engine, persona, curiosity, results, summary=None):
         captured["results"] = results
 
-    monkeypatch.setattr(mod, "_summarize_and_record", fake_summarize)
+    from nous.application.chat import curiosity as _curiosity_mod
+    monkeypatch.setattr(_curiosity_mod, "_summarize_and_record", fake_summarize)
     eng = FakeLLMEngine(
         [
             _collected(None, [_tool_call("srv__search", {"q": "1"})]),
@@ -1820,7 +1821,7 @@ def test_curiosity_passes_all_results_to_summarize(monkeypatch):
 
 def test_curiosity_execute_tool_get_context_rejected(monkeypatch):
     """hub の execute_tool(args.tool_name=get_context) 経由の get_context 迂回を拒否する。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
@@ -1874,7 +1875,7 @@ def test_curiosity_execute_tool_get_context_rejected(monkeypatch):
 
 def test_curiosity_duplicate_proposal_not_executed(monkeypatch):
     """同一 tool+args の反復は実行せず、連続2回で打ち切り要約へ進む。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
@@ -1901,7 +1902,7 @@ def test_curiosity_duplicate_proposal_not_executed(monkeypatch):
 
 def test_curiosity_reject_and_valid_same_batch_all_answered(monkeypatch):
     """同一バッチに却下と実行が混在しても全 tool_call_id に tool 応答が返る（400 回帰防止）。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
@@ -1929,7 +1930,7 @@ def test_curiosity_reject_and_valid_same_batch_all_answered(monkeypatch):
 
 def test_curiosity_duplicate_same_batch_all_answered(monkeypatch):
     """同一バッチ内の重複提案を拒否しても全 tool_call_id に tool 応答が返る（400 回帰防止）。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=5)
     FakePool.instances.clear()
@@ -1957,7 +1958,7 @@ def test_curiosity_duplicate_same_batch_all_answered(monkeypatch):
 
 def test_curiosity_budget_exceeded_same_batch_all_answered(monkeypatch):
     """予算超過で打ち切っても同一バッチの残り tool_call_id に応答が返る（400 回帰防止）。"""
-    from nous.application.chat.introspection import _run_curiosity_exploration
+    from nous.application.chat.curiosity import _run_curiosity_exploration
 
     config = _patch_env(monkeypatch, enabled=True, max_tool_calls=1)
     FakePool.instances.clear()
@@ -2005,7 +2006,8 @@ def test_curiosity_search_result_compacted(monkeypatch):
     async def fake_summarize(ctx, engine, persona, curiosity, results, summary=None):
         captured["results"] = results
 
-    monkeypatch.setattr(mod, "_summarize_and_record", fake_summarize)
+    from nous.application.chat import curiosity as _curiosity_mod
+    monkeypatch.setattr(_curiosity_mod, "_summarize_and_record", fake_summarize)
     eng = FakeLLMEngine(
         [
             _collected(None, [_tool_call("srv__search", {"q": "1"})]),
@@ -2016,7 +2018,7 @@ def test_curiosity_search_result_compacted(monkeypatch):
     step_result = captured["results"][0]["result"]
     assert step_result.startswith("Exa__web_search_exa_0")
     assert not step_result.startswith("{")  # 生 JSON でなく compact 化済み
-    assert len(step_result) <= mod._CURIOSITY_STEP_RESULT_MAX_CHARS
+    assert len(step_result) <= _curiosity_mod._CURIOSITY_STEP_RESULT_MAX_CHARS
 
 
 class FakeSpontEngine(FakeLLMEngine):
@@ -2072,37 +2074,37 @@ class TestCompactSearchResultShapeGate:
     """汎用検索データを壊さない: ツールカタログ形状の証拠がある時だけ compact する。"""
 
     def test_hub_shape_compacted(self):
-        from nous.application.chat.introspection import _compact_search_result
+        from nous.application.chat.curiosity import _compact_search_result
 
         text = json.dumps({"results": [{"server": "Exa", "name": "web_search_exa"}]})
         assert _compact_search_result(text) == "Exa__web_search_exa"
 
     def test_tool_name_shape_compacted(self):
-        from nous.application.chat.introspection import _compact_search_result
+        from nous.application.chat.curiosity import _compact_search_result
 
         text = json.dumps({"tools": [{"tool_name": "search_tools"}, {"tool_name": "execute_tool"}]})
         assert _compact_search_result(text) == "search_tools\nexecute_tool"
 
     def test_generic_name_only_untouched(self):
-        from nous.application.chat.introspection import _compact_search_result
+        from nous.application.chat.curiosity import _compact_search_result
 
         text = json.dumps({"results": [{"name": "some_web_result", "url": "https://x"}]})
         assert _compact_search_result(text) == text
 
     def test_mixed_evidence_untouched(self):
-        from nous.application.chat.introspection import _compact_search_result
+        from nous.application.chat.curiosity import _compact_search_result
 
         text = json.dumps({"results": [{"server": "Exa", "name": "a"}, {"name": "b"}]})
         assert _compact_search_result(text) == text
 
     def test_empty_items_untouched(self):
-        from nous.application.chat.introspection import _compact_search_result
+        from nous.application.chat.curiosity import _compact_search_result
 
         text = json.dumps({"results": []})
         assert _compact_search_result(text) == text
 
     def test_non_json_untouched(self):
-        from nous.application.chat.introspection import _compact_search_result
+        from nous.application.chat.curiosity import _compact_search_result
 
         assert _compact_search_result("plain text") == "plain text"
 
@@ -2128,12 +2130,13 @@ def test_curiosity_step_result_capped_and_invariant(monkeypatch):
     async def fake_summarize(ctx, engine, persona, curiosity, results, summary=None):
         captured["results"] = results
 
-    monkeypatch.setattr(mod, "_summarize_and_record", fake_summarize)
+    from nous.application.chat import curiosity as _curiosity_mod
+    monkeypatch.setattr(_curiosity_mod, "_summarize_and_record", fake_summarize)
     eng = FakeLLMEngine([_collected(None, [_tool_call("srv__search", {"q": "1"})]), _collected("done")])
     asyncio.run(mod._run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))
-    assert len(captured["results"][0]["result"]) <= mod._CURIOSITY_STEP_RESULT_MAX_CHARS
-    assert mod._CURIOSITY_STEP_RESULT_MAX_CHARS == 2000
-    assert mod._EXPLORATION_RESULT_MAX_CHARS >= 2 * mod._CURIOSITY_STEP_RESULT_MAX_CHARS
+    assert len(captured["results"][0]["result"]) <= _curiosity_mod._CURIOSITY_STEP_RESULT_MAX_CHARS
+    assert _curiosity_mod._CURIOSITY_STEP_RESULT_MAX_CHARS == 2000
+    assert _curiosity_mod._EXPLORATION_RESULT_MAX_CHARS >= 2 * _curiosity_mod._CURIOSITY_STEP_RESULT_MAX_CHARS
 
 
 def test_curiosity_summary_prompt_includes_multiple_steps(monkeypatch):
@@ -2165,13 +2168,13 @@ class TestFormatResearchContext:
     """curiosity system に添える文脈ブロック（純関数）。"""
 
     def test_empty_inputs_returns_empty(self):
-        from nous.application.chat.introspection import _format_research_context
+        from nous.application.chat.curiosity import _format_research_context
 
         assert _format_research_context(None, None, None) == ""
         assert _format_research_context([], {}, "") == ""
 
     def test_monologue_capped_at_500(self):
-        from nous.application.chat.introspection import _format_research_context
+        from nous.application.chat.curiosity import _format_research_context
 
         out = _format_research_context(None, None, "m" * 600)
         assert out.startswith("【さっきの独り言】")
@@ -2179,7 +2182,7 @@ class TestFormatResearchContext:
         assert len(body) == 500
 
     def test_memory_top5_only(self):
-        from nous.application.chat.introspection import _format_research_context
+        from nous.application.chat.curiosity import _format_research_context
 
         mems = [f"m{i}" for i in range(7)]
         out = _format_research_context(mems, None, None)
@@ -2187,27 +2190,27 @@ class TestFormatResearchContext:
         assert "m5" not in out  # 6件目は落ちる
 
     def test_memory_block_capped_at_1200(self):
-        from nous.application.chat.introspection import _format_research_context
+        from nous.application.chat.curiosity import _format_research_context
 
         out = _format_research_context(["y" * 800, "z" * 800], None, None)
         block = out.split("\n", 1)[1]
         assert len(block) <= 1200
 
     def test_braces_in_memory_do_not_crash(self):
-        from nous.application.chat.introspection import _format_research_context
+        from nous.application.chat.curiosity import _format_research_context
 
         out = _format_research_context(["brace {x} and {y}"], None, None)
         assert "brace {x} and {y}" in out
 
     def test_section_order(self):
-        from nous.application.chat.introspection import _format_research_context
+        from nous.application.chat.curiosity import _format_research_context
 
         out = _format_research_context(["mem"], {"emotion": "calm"}, "mono")
         assert out.index("【さっきの独り言】") < out.index("【最近の記憶】") < out.index("【今の気分】")
         assert "感情: calm" in out
 
     def test_recent_turns_section_first(self):
-        from nous.application.chat.introspection import _format_research_context
+        from nous.application.chat.curiosity import _format_research_context
 
         turns = [{"role": "user", "content": "雲の重さは？"}, {"role": "assistant", "content": "調べてみるわ"}]
         out = _format_research_context(["mem"], {"emotion": "calm"}, "mono", recent_turns=turns)
@@ -2222,7 +2225,7 @@ class TestFormatResearchContext:
         )
 
     def test_recent_turns_capped_at_four_and_roles_filtered(self):
-        from nous.application.chat.introspection import _format_research_context
+        from nous.application.chat.curiosity import _format_research_context
 
         turns = [{"role": "user", "content": f"u{i}"} for i in range(5)]
         turns.insert(2, {"role": "system", "content": "sys-turn"})
@@ -2232,14 +2235,14 @@ class TestFormatResearchContext:
         assert "u1" in out and "u4" in out
 
     def test_recent_turns_content_capped_at_200(self):
-        from nous.application.chat.introspection import _format_research_context
+        from nous.application.chat.curiosity import _format_research_context
 
         out = _format_research_context(None, None, None, recent_turns=[{"role": "user", "content": "x" * 300}])
         assert "x" * 200 in out
         assert "x" * 201 not in out
 
     def test_recent_turns_none_omits_section(self):
-        from nous.application.chat.introspection import _format_research_context
+        from nous.application.chat.curiosity import _format_research_context
 
         out = _format_research_context(["mem"], None, "mono", recent_turns=None)
         assert "【最近の会話】" not in out

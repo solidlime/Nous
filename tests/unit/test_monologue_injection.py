@@ -13,6 +13,18 @@ from nous.application.chat.pipeline.context import ChatTurnContext
 from nous.application.chat.pipeline.context_loader import _fetch_monologue_entries
 from nous.application.chat.pipeline.prompt import PromptBuildStep
 from nous.domain.memory.session_event import SessionEvent
+from nous.domain.shared.time_utils import get_now
+
+
+def _naive_now() -> datetime:
+    """settings.timezone 基準の naive な現在時刻。
+
+    _fetch_monologue_entries は settings.timezone の aware now と、
+    naive 時刻に settings.timezone を付与した lct を比較する。
+    テスト側も同じ基準で naive 時刻を作らないと UTC 環境で
+    (naive=UTC) + (tzinfo=Asia/Tokyo) の 9 時間ずれが起きる。
+    """
+    return get_now().replace(tzinfo=None)
 
 
 def _event(ts: datetime, summary: str) -> SessionEvent:
@@ -67,7 +79,7 @@ def _build_prompt(monologue_entries: list[str]) -> str:
 
 
 def test_injection_when_gap_over_900s_and_entries_exist():
-    lct = datetime.now() - timedelta(hours=2)
+    lct = _naive_now() - timedelta(hours=2)
     old = _event(lct - timedelta(hours=1), "ギャップ前の独り言")
     gap1 = _event(lct + timedelta(minutes=10), "この間、夢の話を考えていた")
     gap2 = _event(lct + timedelta(minutes=30), "次は資料を整理しよう")
@@ -88,7 +100,7 @@ def test_injection_when_gap_over_900s_and_entries_exist():
 
 
 def test_no_injection_when_gap_under_900s():
-    lct = datetime.now() - timedelta(minutes=5)
+    lct = _naive_now() - timedelta(minutes=5)
     gap = _event(lct + timedelta(minutes=1), "短いギャップ中の独り言")
     entries = _fetch(_ctx(_fake_repo([gap])), _state(lct))
 
@@ -97,7 +109,7 @@ def test_no_injection_when_gap_under_900s():
 
 
 def test_no_injection_when_all_entries_older_than_gap():
-    lct = datetime.now() - timedelta(hours=2)
+    lct = _naive_now() - timedelta(hours=2)
     old = _event(lct - timedelta(hours=1), "古い独り言")
     entries = _fetch(_ctx(_fake_repo([old])), _state(lct))
 
@@ -105,22 +117,22 @@ def test_no_injection_when_all_entries_older_than_gap():
 
 
 def test_no_injection_when_disabled():
-    lct = datetime.now() - timedelta(hours=2)
-    gap = _event(datetime.now() - timedelta(minutes=30), "独り言")
+    lct = _naive_now() - timedelta(hours=2)
+    gap = _event(_naive_now() - timedelta(minutes=30), "独り言")
     entries = _fetch(_ctx(_fake_repo([gap])), _state(lct), brain_monologue_enabled=False)
 
     assert entries == []
 
 
 def test_no_injection_when_repo_none():
-    lct = datetime.now() - timedelta(hours=2)
+    lct = _naive_now() - timedelta(hours=2)
     entries = _fetch(_ctx(None), _state(lct))
 
     assert entries == []
 
 
 def test_no_injection_when_last_conversation_time_none():
-    gap = _event(datetime.now(), "独り言")
+    gap = _event(_naive_now(), "独り言")
     entries = _fetch(_ctx(_fake_repo([gap])), _state(None))
 
     assert entries == []

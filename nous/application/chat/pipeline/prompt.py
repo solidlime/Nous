@@ -150,7 +150,11 @@ class PromptBuildStep:
                             for ps in persona_skills:
                                 skill_map[ps.name] = ps
                     except OSError:
-                        pass
+                        logger.warning(
+                            "PromptBuildStep: persona skills dir load failed for '%s'",
+                            persona_skills_dir,
+                            exc_info=True,
+                        )
 
                 skills = [skill_map[n] for n in config.enabled_skills if n in skill_map]
 

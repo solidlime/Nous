@@ -54,7 +54,9 @@ async def _do_delete_chat_session(persona: str, ctx, session_id: str) -> dict:
 
     db = ctx.connection.get_memory_db()
     SessionManager.delete_session(db, persona, session_id)
-    db.execute("DELETE FROM session_events WHERE persona=? AND session_id=?", (persona, session_id))
+    from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
+
+    SessionEventRepository(ctx.connection).delete_by_session(persona, session_id)
     db.commit()
     _session_manager.clear(persona, session_id)
     return {"deleted": True, "session_id": session_id}

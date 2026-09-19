@@ -359,30 +359,7 @@ async def run_memory_llm(
     if not user_message and not assistant_response:
         return {}
     try:
-        context_str, commitments_str, inventory_str = await _build_memory_llm_context(ctx)
-        persona_name = ctx.persona or "assistant"
-        persona_identity = (config.system_prompt or "").strip()
-        from nous.application.chat.memory_llm import MemoryLLM as _MemoryLLM
-
-        llm = _MemoryLLM()
-        common: dict = dict(
-            user_message=user_message,
-            assistant_response=assistant_response,
-            context=context_str,
-            commitments=commitments_str,
-            inventory=inventory_str,
-            persona_name=persona_name,
-            persona_identity=persona_identity,
-        )
-        result = await llm.process(config, **common, drift=payload.get("drift"), mode="context")
-        if not result:
-            logger.warning("MemoryLLM: empty context result drift=empty_result persona=%s", persona_name)
-            result = {"facts": [], "goals": [], "promises": [], "context_update": {}}
-        # item 抽出は context の後に逐次実行し inventory_update のみ上書き (spec F・並列化しない)
-        item_result = await llm.process(config, **common, mode="item")
-        result["inventory_update"] = (item_result or {}).get("inventory_update") or {}
-        if not result.get("inventory_update"):
-            logger.info("MemoryLLM: item extractor returned no inventory changes persona=%s", persona_name)
+        result = await _run_memory_llm_calls(ctx, config, payload, user_message, assistant_response)
 
         persona = ctx.persona
 
@@ -390,152 +367,15 @@ async def run_memory_llm(
         drift = payload.get("drift")
         drift_violation = str(drift.get("violation", "") or "") if isinstance(drift, dict) else ""
         facts = result.get("facts", [])
-        for fact in facts:
-            content = fact.get("content", "")
-            if not content:
-                logger.warning("MemoryLLM: skipping empty fact drift=empty_fact_skip persona=%s", persona)
-                fact["_saved"] = False
-                continue
-            dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
-            if dup_check.is_ok and dup_check.value:
-                top_hit = dup_check.value[0]
-                hit_score = top_hit.score if hasattr(top_hit, "score") else 0.0
-                if hit_score > 0.85:
-                    logger.warning(
-                        "MemoryLLM: skipping duplicate fact drift=duplicate_skip score=%.2f persona=%s: %s",
-                        hit_score,
-                        persona,
-                        content[:60],
-                    )
-                    fact["_saved"] = False
-                    continue
-            _normalize_drift_fact(fact, drift_violation)
-            tags = normalize_tags(fact.get("tags"))
-            save_kwargs: dict = {}
-            if "character_drift" in tags:
-                save_kwargs["valid_until"] = get_now() + timedelta(days=DRIFT_VALID_DAYS)
-            mem_result = await ctx.memory_service.create_memory(
-                content=content,
-                importance=normalize_importance(fact.get("importance")),
-                tags=tags,
-                emotion=fact.get("emotion", "neutral"),
-                **save_kwargs,
-            )
-            if mem_result.is_ok and ctx.vector_store is not None:
-                with contextlib.suppress(Exception):
-                    await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
-            if mem_result.is_ok:
-                fact["memory_key"] = mem_result.value.key
-                fact["_saved"] = True
-            else:
-                logger.warning("MemoryLLM: fact save failed drift=save_failed persona=%s: %s", persona, content[:60])
-                fact["_saved"] = False
-        if facts:
-            logger.info("MemoryLLM: processed %d facts for persona=%s", len(facts), persona)
+        await _save_extracted_facts(ctx, persona, facts, drift_violation)
 
         # goals: action ベース処理（create / achieve / cancel）
         goals = result.get("goals", [])
-        for goal in goals:
-            action = goal.get("action", "create")
-            content = goal.get("content", "")
-            memory_key = goal.get("memory_key", "")
-
-            if action == "achieve" and memory_key:
-                upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "achieved"])
-                logger.info("MemoryLLM: goal achieved key=%s", memory_key)
-                if not upd.is_ok:
-                    logger.warning("MemoryLLM: goal achieve failed key=%s: %s", memory_key, upd.error)
-                    goal["_saved"] = False
-                else:
-                    goal["_saved"] = True
-            elif action == "cancel" and memory_key:
-                upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "cancelled"])
-                logger.info("MemoryLLM: goal cancelled key=%s", memory_key)
-                if not upd.is_ok:
-                    logger.warning("MemoryLLM: goal cancel failed key=%s: %s", memory_key, upd.error)
-                    goal["_saved"] = False
-                else:
-                    goal["_saved"] = True
-            elif action == "create" and content:
-                dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
-                if dup_check.is_ok and dup_check.value:
-                    top_hit = dup_check.value[0]
-                    if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
-                        logger.debug("MemoryLLM: skipping duplicate goal: %s", content[:60])
-                        goal["_saved"] = False
-                        continue
-                mem_result = await ctx.memory_service.create_memory(
-                    content=content,
-                    importance=0.75,
-                    tags=["goal", "active"],
-                    emotion="neutral",
-                )
-                if mem_result.is_ok and ctx.vector_store is not None:
-                    with contextlib.suppress(Exception):
-                        await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
-                if mem_result.is_ok:
-                    goal["memory_key"] = mem_result.value.key
-                    goal["_saved"] = True
-                else:
-                    goal["_saved"] = False
-            else:
-                goal["_saved"] = False
-        if goals:
-            logger.info("MemoryLLM: processed %d goals for persona=%s", len(goals), persona)
+        await _process_goal_actions(ctx, persona, goals)
 
         # promises → goals with scope=interpersonal (unified with goals)
         promises = result.get("promises", [])
-        for promise in promises:
-            action = promise.get("action", "create")
-            content = promise.get("content", "")
-            memory_key = promise.get("memory_key", "")
-
-            if action in ("fulfill", "achieve") and memory_key:
-                upd = ctx.memory_service.update_memory(
-                    memory_key, tags=["goal", "achieved", "archived", "interpersonal"]
-                )
-                logger.info("MemoryLLM: interpersonal goal achieved key=%s", memory_key)
-                if not upd.is_ok:
-                    logger.warning("MemoryLLM: interpersonal goal achieve failed key=%s: %s", memory_key, upd.error)
-                    promise["_saved"] = False
-                else:
-                    promise["_saved"] = True
-            elif action == "cancel" and memory_key:
-                upd = ctx.memory_service.update_memory(
-                    memory_key, tags=["goal", "cancelled", "archived", "interpersonal"]
-                )
-                logger.info("MemoryLLM: interpersonal goal cancelled key=%s", memory_key)
-                if not upd.is_ok:
-                    logger.warning("MemoryLLM: interpersonal goal cancel failed key=%s: %s", memory_key, upd.error)
-                    promise["_saved"] = False
-                else:
-                    promise["_saved"] = True
-            elif action == "create" and content:
-                dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
-                if dup_check.is_ok and dup_check.value:
-                    top_hit = dup_check.value[0]
-                    if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
-                        logger.debug("MemoryLLM: skipping duplicate interpersonal goal: %s", content[:60])
-                        promise["_saved"] = False
-                        continue
-                mem_result = await ctx.memory_service.create_memory(
-                    content=content,
-                    importance=0.8,
-                    tags=["goal", "active", "interpersonal"],
-                    emotion="neutral",
-                )
-                if isinstance(mem_result, Success) and ctx.vector_store is not None:
-                    with contextlib.suppress(Exception):
-                        await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
-                if isinstance(mem_result, Success):
-                    promise["memory_key"] = mem_result.value.key
-                    promise["_saved"] = True
-                else:
-                    promise["_saved"] = False
-            else:
-                promise["_saved"] = False
-        if promises:
-            logger.info("MemoryLLM: processed %d interpersonal goals for persona=%s", len(promises), persona)
+        await _process_promise_actions(ctx, persona, promises)
 
         # context_update: 感情・状態を更新
         ctx_update = result.get("context_update", {})
@@ -547,139 +387,349 @@ async def run_memory_llm(
             skip_inventory,
         ) = _context_update_skips(tool_calls_log)
         if ctx_update:
-
-            emotion = ctx_update.get("emotion")
-            intensity = ctx_update.get("emotion_intensity")
-            # 不変条件: ctx_update は「適用された値」のみを保持する。
-            # post.py がこの dict を ContextUpdateSSE にそのまま流すため、
-            # 適用しなかった感情フィールドは捨てる（非正典ラベルが捨てられ、
-            # メインLLMが書いた感情と二重書きになるのを防ぐ）。
-            normalized = normalize_emotion(str(emotion).strip()) if emotion else ""
-            if normalized and normalized != "neutral" and not skip_emotion:
-                ctx_update["emotion"] = normalized
-                # f2: 非数値・範囲外を境界で正規化、失敗時は欠損扱い
-                try:
-                    _norm_int = _vo_normalize_importance(float(intensity) if intensity is not None else None)
-                except (TypeError, ValueError):
-                    _norm_int = 0.5
-                    ctx_update.pop("emotion_intensity", None)
-                else:
-                    if intensity is not None:
-                        ctx_update["emotion_intensity"] = _norm_int
-                ctx.persona_service.update_emotion(
-                    persona,
-                    normalized,
-                    _norm_int,
-                    context="llm_suggested",
-                )
-            else:
-                if emotion:
-                    logger.debug("MemoryLLM: not applying emotion label: %r", emotion)
-                ctx_update.pop("emotion", None)
-                ctx_update.pop("emotion_intensity", None)
-
-            state_fields: dict[str, object] = {}
-            # physical_state/mental_state → persona state（恒久メモリを汚さず
-            # state フィールドとして永続化する）。値は SSE に流さない（従来契約）
-            if skip_state_text:
-                for key in ("physical_state", "mental_state", "environment"):
-                    ctx_update.pop(key, None)
-            else:
-                for key in ("physical_state", "mental_state"):
-                    val = ctx_update.get(key)
-                    if val is not None and str(val).strip():
-                        state_fields[key] = val
-                    ctx_update.pop(key, None)
-                env_val = ctx_update.get("environment")
-                if isinstance(env_val, str):
-                    state_fields["environment"] = env_val
-                else:
-                    ctx_update.pop("environment", None)  # 非 str は適用されない → SSE にも流さない
-            body_applied = _body_delta_state(ctx, persona, ctx_update, skip_body=skip_body)
-            state_fields.update(body_applied)
-            # 適用値（delta 変換後）で生の絶対値を置換 — post.py の ContextUpdateSSE が
-            # state 実値と一致するようにする（5.2 がそのまま流れる事故を防ぐ）
-            for key in ("fatigue", "warmth", "arousal"):
-                if ctx_update.get(key) is not None:
-                    if key in body_applied:
-                        ctx_update[key] = body_applied[key]
-                    else:
-                        ctx_update.pop(key, None)
-            if state_fields:
-                ctx.persona_service.update_physical_state(persona, **state_fields)
-
-            # user_info fields → update_user_info
-            # 不変条件: ctx_update は適用値のみ保持（post.py の ContextUpdateSSE が
-            # そのまま流す）。適用/スキップに関わらず user_* は必ず取り除く。
-            user_info_map = {}
-            for key in [k for k in ctx_update if k.startswith("user_")]:
-                val = ctx_update.pop(key)
-                if val is not None and not skip_user_info:
-                    user_info_map[key.replace("user_", "")] = str(val)
-            if user_info_map:
-                ctx.persona_service.update_user_info(persona, user_info_map)
-
-            # context_note → persona_info（session continuity）
-            context_note = ctx_update.get("context_note")
-            if context_note:
-                ctx.persona_service.update_persona_info(persona, {"context_note": context_note})
+            await _apply_context_update(
+                ctx, persona, ctx_update, skip_emotion, skip_body, skip_state_text, skip_user_info
+            )
 
         # inventory_update: 装備変更 + アイテム追加/削除/更新
-        inv_update = result.get("inventory_update", {})
-        if skip_inventory:
-            # メインLLMが item_* を直接呼んだターンは抽出結果を適用しない
-            # (InventoryUpdateSSE にも流さない)。
-            inv_update = {}
-            result["inventory_update"] = {}
-        equip_map = inv_update.get("equip", {})
-        unequip_list = inv_update.get("unequip", [])
-        remove_items = inv_update.get("remove_items", [])
-        add_items = inv_update.get("add_items", [])
-        update_items = inv_update.get("update_items", [])
-
-        for item_name in remove_items:
-            if isinstance(item_name, str) and item_name.strip():
-                ctx.equipment_service.remove_item(item_name.strip())
-
-        for item_data in add_items:
-            if isinstance(item_data, dict):
-                name = item_data.get("name", "").strip()
-                if name:
-                    ctx.equipment_service.add_item(
-                        name,
-                        category=item_data.get("category"),
-                        description=item_data.get("description"),
-                    )
-
-        for item_data in update_items:
-            if isinstance(item_data, dict):
-                name = item_data.get("name", "").strip()
-                if name:
-                    # Allowlist LLM-provided keys: they become SQL column names
-                    # downstream (equipment_repo UPDATE SET clause).
-                    allowed = {"item_name", "category", "description", "visual_desc", "quantity", "tags"}
-                    updates = {k: v for k, v in item_data.items() if k in allowed and v is not None}
-                    if updates:
-                        ctx.equipment_service.update_item(name, **updates)
-
-        if equip_map and isinstance(equip_map, dict):
-            ctx.equipment_service.equip(equip_map)
-        if unequip_list and isinstance(unequip_list, list):
-            for slot in unequip_list:
-                ctx.equipment_service.unequip([slot])
+        await _apply_inventory_update(ctx, result, skip_inventory)
 
         # Optional reflection trigger: run reflection when 3+ facts extracted
-        if len(facts) >= 3:
-            try:
-                importance_sum = sum(normalize_importance(f.get("importance")) for f in facts)
-                from nous.application.chat.reflection import maybe_run_reflection
-
-                await maybe_run_reflection(ctx, config, importance_sum)
-            except Exception as ref_exc:
-                logger.debug("run_memory_llm: reflection trigger skipped: %s", ref_exc)
+        await _maybe_run_reflection(ctx, config, facts)
 
         return result
 
     except Exception as e:
         logger.warning("run_memory_llm failed: %s", e)
         return {}
+
+
+async def _run_memory_llm_calls(
+    ctx: AppContext, config: ChatConfig, payload: dict, user_message: str, assistant_response: str
+) -> dict:
+    """MemoryLLM を context → item の順に実行し、抽出結果 dict を返す。"""
+    context_str, commitments_str, inventory_str = await _build_memory_llm_context(ctx)
+    persona_name = ctx.persona or "assistant"
+    persona_identity = (config.system_prompt or "").strip()
+    from nous.application.chat.memory_llm import MemoryLLM as _MemoryLLM
+
+    llm = _MemoryLLM()
+    common: dict = dict(
+        user_message=user_message,
+        assistant_response=assistant_response,
+        context=context_str,
+        commitments=commitments_str,
+        inventory=inventory_str,
+        persona_name=persona_name,
+        persona_identity=persona_identity,
+    )
+    result = await llm.process(config, **common, drift=payload.get("drift"), mode="context")
+    if not result:
+        logger.warning("MemoryLLM: empty context result drift=empty_result persona=%s", persona_name)
+        result = {"facts": [], "goals": [], "promises": [], "context_update": {}}
+    # item 抽出は context の後に逐次実行し inventory_update のみ上書き (spec F・並列化しない)
+    item_result = await llm.process(config, **common, mode="item")
+    result["inventory_update"] = (item_result or {}).get("inventory_update") or {}
+    if not result.get("inventory_update"):
+        logger.info("MemoryLLM: item extractor returned no inventory changes persona=%s", persona_name)
+    return result
+
+
+async def _save_extracted_facts(
+    ctx: AppContext, persona: str, facts: list, drift_violation: str
+) -> None:
+    """facts をスマートアップサート（類似度 > 0.85 ならスキップ）で保存する。"""
+    for fact in facts:
+        content = fact.get("content", "")
+        if not content:
+            logger.warning("MemoryLLM: skipping empty fact drift=empty_fact_skip persona=%s", persona)
+            fact["_saved"] = False
+            continue
+        dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
+        if dup_check.is_ok and dup_check.value:
+            top_hit = dup_check.value[0]
+            hit_score = top_hit.score if hasattr(top_hit, "score") else 0.0
+            if hit_score > 0.85:
+                logger.warning(
+                    "MemoryLLM: skipping duplicate fact drift=duplicate_skip score=%.2f persona=%s: %s",
+                    hit_score,
+                    persona,
+                    content[:60],
+                )
+                fact["_saved"] = False
+                continue
+        _normalize_drift_fact(fact, drift_violation)
+        tags = normalize_tags(fact.get("tags"))
+        save_kwargs: dict = {}
+        if "character_drift" in tags:
+            save_kwargs["valid_until"] = get_now() + timedelta(days=DRIFT_VALID_DAYS)
+        mem_result = await ctx.memory_service.create_memory(
+            content=content,
+            importance=normalize_importance(fact.get("importance")),
+            tags=tags,
+            emotion=fact.get("emotion", "neutral"),
+            **save_kwargs,
+        )
+        if mem_result.is_ok and ctx.vector_store is not None:
+            with contextlib.suppress(Exception):
+                await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
+        if mem_result.is_ok:
+            fact["memory_key"] = mem_result.value.key
+            fact["_saved"] = True
+        else:
+            logger.warning("MemoryLLM: fact save failed drift=save_failed persona=%s: %s", persona, content[:60])
+            fact["_saved"] = False
+    if facts:
+        logger.info("MemoryLLM: processed %d facts for persona=%s", len(facts), persona)
+
+
+async def _process_goal_actions(ctx: AppContext, persona: str, goals: list) -> None:
+    """goals を action ベースで処理する（create / achieve / cancel）。"""
+    for goal in goals:
+        action = goal.get("action", "create")
+        content = goal.get("content", "")
+        memory_key = goal.get("memory_key", "")
+
+        if action == "achieve" and memory_key:
+            upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "achieved"])
+            logger.info("MemoryLLM: goal achieved key=%s", memory_key)
+            if not upd.is_ok:
+                logger.warning("MemoryLLM: goal achieve failed key=%s: %s", memory_key, upd.error)
+                goal["_saved"] = False
+            else:
+                goal["_saved"] = True
+        elif action == "cancel" and memory_key:
+            upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "cancelled"])
+            logger.info("MemoryLLM: goal cancelled key=%s", memory_key)
+            if not upd.is_ok:
+                logger.warning("MemoryLLM: goal cancel failed key=%s: %s", memory_key, upd.error)
+                goal["_saved"] = False
+            else:
+                goal["_saved"] = True
+        elif action == "create" and content:
+            dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
+            if dup_check.is_ok and dup_check.value:
+                top_hit = dup_check.value[0]
+                if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
+                    logger.debug("MemoryLLM: skipping duplicate goal: %s", content[:60])
+                    goal["_saved"] = False
+                    continue
+            mem_result = await ctx.memory_service.create_memory(
+                content=content,
+                importance=0.75,
+                tags=["goal", "active"],
+                emotion="neutral",
+            )
+            if mem_result.is_ok and ctx.vector_store is not None:
+                with contextlib.suppress(Exception):
+                    await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
+            if mem_result.is_ok:
+                goal["memory_key"] = mem_result.value.key
+                goal["_saved"] = True
+            else:
+                goal["_saved"] = False
+        else:
+            goal["_saved"] = False
+    if goals:
+        logger.info("MemoryLLM: processed %d goals for persona=%s", len(goals), persona)
+
+
+async def _process_promise_actions(ctx: AppContext, persona: str, promises: list) -> None:
+    """promises を goals with scope=interpersonal として処理する（goals と統一）。"""
+    for promise in promises:
+        action = promise.get("action", "create")
+        content = promise.get("content", "")
+        memory_key = promise.get("memory_key", "")
+
+        if action in ("fulfill", "achieve") and memory_key:
+            upd = ctx.memory_service.update_memory(
+                memory_key, tags=["goal", "achieved", "archived", "interpersonal"]
+            )
+            logger.info("MemoryLLM: interpersonal goal achieved key=%s", memory_key)
+            if not upd.is_ok:
+                logger.warning("MemoryLLM: interpersonal goal achieve failed key=%s: %s", memory_key, upd.error)
+                promise["_saved"] = False
+            else:
+                promise["_saved"] = True
+        elif action == "cancel" and memory_key:
+            upd = ctx.memory_service.update_memory(
+                memory_key, tags=["goal", "cancelled", "archived", "interpersonal"]
+            )
+            logger.info("MemoryLLM: interpersonal goal cancelled key=%s", memory_key)
+            if not upd.is_ok:
+                logger.warning("MemoryLLM: interpersonal goal cancel failed key=%s: %s", memory_key, upd.error)
+                promise["_saved"] = False
+            else:
+                promise["_saved"] = True
+        elif action == "create" and content:
+            dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
+            if dup_check.is_ok and dup_check.value:
+                top_hit = dup_check.value[0]
+                if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
+                    logger.debug("MemoryLLM: skipping duplicate interpersonal goal: %s", content[:60])
+                    promise["_saved"] = False
+                    continue
+            mem_result = await ctx.memory_service.create_memory(
+                content=content,
+                importance=0.8,
+                tags=["goal", "active", "interpersonal"],
+                emotion="neutral",
+            )
+            if isinstance(mem_result, Success) and ctx.vector_store is not None:
+                with contextlib.suppress(Exception):
+                    await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
+            if isinstance(mem_result, Success):
+                promise["memory_key"] = mem_result.value.key
+                promise["_saved"] = True
+            else:
+                promise["_saved"] = False
+        else:
+            promise["_saved"] = False
+    if promises:
+        logger.info("MemoryLLM: processed %d interpersonal goals for persona=%s", len(promises), persona)
+
+
+async def _apply_context_update(
+    ctx: AppContext,
+    persona: str,
+    ctx_update: dict,
+    skip_emotion: bool,
+    skip_body: bool,
+    skip_state_text: bool,
+    skip_user_info: bool,
+) -> None:
+    """context_update の感情・状態・user_info・context_note を適用する。"""
+    emotion = ctx_update.get("emotion")
+    intensity = ctx_update.get("emotion_intensity")
+    # 不変条件: ctx_update は「適用された値」のみを保持する。
+    # post.py がこの dict を ContextUpdateSSE にそのまま流すため、
+    # 適用しなかった感情フィールドは捨てる（非正典ラベルが捨てられ、
+    # メインLLMが書いた感情と二重書きになるのを防ぐ）。
+    normalized = normalize_emotion(str(emotion).strip()) if emotion else ""
+    if normalized and normalized != "neutral" and not skip_emotion:
+        ctx_update["emotion"] = normalized
+        # f2: 非数値・範囲外を境界で正規化、失敗時は欠損扱い
+        try:
+            _norm_int = _vo_normalize_importance(float(intensity) if intensity is not None else None)
+        except (TypeError, ValueError):
+            _norm_int = 0.5
+            ctx_update.pop("emotion_intensity", None)
+        else:
+            if intensity is not None:
+                ctx_update["emotion_intensity"] = _norm_int
+        ctx.persona_service.update_emotion(
+            persona,
+            normalized,
+            _norm_int,
+            context="llm_suggested",
+        )
+    else:
+        if emotion:
+            logger.debug("MemoryLLM: not applying emotion label: %r", emotion)
+        ctx_update.pop("emotion", None)
+        ctx_update.pop("emotion_intensity", None)
+
+    state_fields: dict[str, object] = {}
+    # physical_state/mental_state → persona state（恒久メモリを汚さず
+    # state フィールドとして永続化する）。値は SSE に流さない（従来契約）
+    if skip_state_text:
+        for key in ("physical_state", "mental_state", "environment"):
+            ctx_update.pop(key, None)
+    else:
+        for key in ("physical_state", "mental_state"):
+            val = ctx_update.get(key)
+            if val is not None and str(val).strip():
+                state_fields[key] = val
+            ctx_update.pop(key, None)
+        env_val = ctx_update.get("environment")
+        if isinstance(env_val, str):
+            state_fields["environment"] = env_val
+        else:
+            ctx_update.pop("environment", None)  # 非 str は適用されない → SSE にも流さない
+    body_applied = _body_delta_state(ctx, persona, ctx_update, skip_body=skip_body)
+    state_fields.update(body_applied)
+    # 適用値（delta 変換後）で生の絶対値を置換 — post.py の ContextUpdateSSE が
+    # state 実値と一致するようにする（5.2 がそのまま流れる事故を防ぐ）
+    for key in ("fatigue", "warmth", "arousal"):
+        if ctx_update.get(key) is not None:
+            if key in body_applied:
+                ctx_update[key] = body_applied[key]
+            else:
+                ctx_update.pop(key, None)
+    if state_fields:
+        ctx.persona_service.update_physical_state(persona, **state_fields)
+
+    # user_info fields → update_user_info
+    # 不変条件: ctx_update は適用値のみ保持（post.py の ContextUpdateSSE が
+    # そのまま流す）。適用/スキップに関わらず user_* は必ず取り除く。
+    user_info_map = {}
+    for key in [k for k in ctx_update if k.startswith("user_")]:
+        val = ctx_update.pop(key)
+        if val is not None and not skip_user_info:
+            user_info_map[key.replace("user_", "")] = str(val)
+    if user_info_map:
+        ctx.persona_service.update_user_info(persona, user_info_map)
+
+    # context_note → persona_info（session continuity）
+    context_note = ctx_update.get("context_note")
+    if context_note:
+        ctx.persona_service.update_persona_info(persona, {"context_note": context_note})
+
+
+async def _apply_inventory_update(ctx: AppContext, result: dict, skip_inventory: bool) -> None:
+    """inventory_update（装備変更 + アイテム追加/削除/更新）を適用する。"""
+    inv_update = result.get("inventory_update", {})
+    if skip_inventory:
+        # メインLLMが item_* を直接呼んだターンは抽出結果を適用しない
+        # (InventoryUpdateSSE にも流さない)。
+        inv_update = {}
+        result["inventory_update"] = {}
+    equip_map = inv_update.get("equip", {})
+    unequip_list = inv_update.get("unequip", [])
+    remove_items = inv_update.get("remove_items", [])
+    add_items = inv_update.get("add_items", [])
+    update_items = inv_update.get("update_items", [])
+
+    for item_name in remove_items:
+        if isinstance(item_name, str) and item_name.strip():
+            ctx.equipment_service.remove_item(item_name.strip())
+
+    for item_data in add_items:
+        if isinstance(item_data, dict):
+            name = item_data.get("name", "").strip()
+            if name:
+                ctx.equipment_service.add_item(
+                    name,
+                    category=item_data.get("category"),
+                    description=item_data.get("description"),
+                )
+
+    for item_data in update_items:
+        if isinstance(item_data, dict):
+            name = item_data.get("name", "").strip()
+            if name:
+                # Allowlist LLM-provided keys: they become SQL column names
+                # downstream (equipment_repo UPDATE SET clause).
+                allowed = {"item_name", "category", "description", "visual_desc", "quantity", "tags"}
+                updates = {k: v for k, v in item_data.items() if k in allowed and v is not None}
+                if updates:
+                    ctx.equipment_service.update_item(name, **updates)
+
+    if equip_map and isinstance(equip_map, dict):
+        ctx.equipment_service.equip(equip_map)
+    if unequip_list and isinstance(unequip_list, list):
+        for slot in unequip_list:
+            ctx.equipment_service.unequip([slot])
+
+
+async def _maybe_run_reflection(ctx: AppContext, config: ChatConfig, facts: list) -> None:
+    """Optional reflection trigger: run reflection when 3+ facts extracted"""
+    if len(facts) < 3:
+        return
+    try:
+        importance_sum = sum(normalize_importance(f.get("importance")) for f in facts)
+        from nous.application.chat.reflection import maybe_run_reflection
+
+        await maybe_run_reflection(ctx, config, importance_sum)
+    except Exception as ref_exc:
+        logger.debug("run_memory_llm: reflection trigger skipped: %s", ref_exc)

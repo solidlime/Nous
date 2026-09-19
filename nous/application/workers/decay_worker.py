@@ -96,6 +96,10 @@ class DecayWorker:
                     continue
             return importance, emotions, gist
         except Exception:
+            logger.warning(
+                "_batch_memory_info: memory_repo.find_all failed, skipping decay batch",
+                exc_info=True,
+            )
             return {}, {}, set()
 
     def _resolve_lambda_k(self) -> float:
@@ -255,14 +259,10 @@ class DecayWorker:
                 )
             )
             if results:
-                from nous.infrastructure.logging.structured import get_logger
-
-                get_logger(__name__).info(
+                logger.info(
                     "DecayWorker: reflection produced %d insights for %s",
                     len(results),
                     persona,
                 )
         except Exception as exc:
-            from nous.infrastructure.logging.structured import get_logger
-
-            get_logger(__name__).warning("DecayWorker: reflection failed: %s", exc)
+            logger.warning("DecayWorker: reflection failed: %s", exc)

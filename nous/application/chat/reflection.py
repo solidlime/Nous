@@ -85,6 +85,10 @@ def _reflection_contents(memory_service: MemoryService) -> list[str]:
     try:
         result = memory_service.get_by_tags(["reflection"])
     except Exception:
+        logger.warning(
+            "_reflection_contents: get_by_tags(reflection) failed, skipping dedup scan",
+            exc_info=True,
+        )
         return []
     values = getattr(result, "value", None)
     if result.is_ok and isinstance(values, list):
@@ -278,7 +282,7 @@ def _parse_insights(text: str) -> list[str]:
             insights = result.get("insights", [])
             return [s for s in insights if isinstance(s, str) and s.strip()]
     except Exception:
-        pass
+        logger.debug("ReflectionEngine: failed to parse insights from LLM output", exc_info=True)
     return []
 
 

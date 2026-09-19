@@ -207,6 +207,11 @@ async def _search_keyword_fast(
             result = await ctx.search_engine.search(SearchQuery(text=q, top_k=top_k, mode="keyword"))
             return result.value if result.is_ok else []
         except Exception:
+            logger.warning(
+                "_run: keyword search failed for query %r, returning empty results",
+                q[:80],
+                exc_info=True,
+            )
             return []
 
     results = await asyncio.gather(*[_run(q) for q in queries])

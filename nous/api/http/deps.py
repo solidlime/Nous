@@ -65,7 +65,12 @@ def _safe_get_context(persona: str):
     try:
         return AppContextRegistry.get(persona)
     except Exception as exc:
-        logger.warning("Failed to get context for persona '%s': %s", persona, exc)
+        logger.warning(
+            "_safe_get_context: AppContextRegistry.get failed for persona '%s': %s",
+            persona,
+            exc,
+            exc_info=True,
+        )
         return None
 
 

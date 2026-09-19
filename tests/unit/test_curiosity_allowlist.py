@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from nous.application.chat.introspection import _compact_search_result, _parse_json_object
+from nous.application.chat.curiosity import _compact_search_result, _parse_json_object
 
 
 class TestParseJsonObjectFence:

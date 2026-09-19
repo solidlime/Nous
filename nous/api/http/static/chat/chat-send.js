@@ -136,7 +136,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId, ts) {
   div.appendChild(actions);
 
   container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
+  _autoScroll(container);
   N.Core.refreshIcons();
   CHAT.messages.push(div);
   return div;
@@ -153,7 +153,7 @@ function showTypingIndicator() {
   safeSetHTML(typing,
     '<div class="chat-bubble chat-typing"><span></span><span></span><span></span></div>');
   container.appendChild(typing);
-  container.scrollTop = container.scrollHeight;
+  _autoScroll(container);
 }
 
 function removeTypingIndicator() {
@@ -175,6 +175,16 @@ function findChatLogContainer() {
 function scrollToBottom(container) {
   if (!container) return;
   container.scrollTop = container.scrollHeight;
+}
+
+// Intent-aware auto-scroll: follow the stream unless the user scrolled up
+// to read history (turn scroll listener sets CHAT._userScrolledUp).
+function _autoScroll(container) {
+  if (!container) return;
+  var isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+  if (isAtBottom || !CHAT._userScrolledUp) {
+    container.scrollTop = container.scrollHeight;
+  }
 }
 
 // ------------------------------------------------------------------
@@ -697,12 +707,7 @@ function _handleChatEvent(evt) {
           t.currentTextBubble.textContent = t.currentTextContent;
         }
         // Auto-scroll with user intent detection
-        if (chatMessages) {
-          var isAtBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 80;
-          if (isAtBottom || !CHAT._userScrolledUp) {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-          }
-        }
+        _autoScroll(chatMessages);
       });
     }
   } else if (evt.type === "thinking_delta") {
@@ -743,12 +748,7 @@ function _handleChatEvent(evt) {
       requestAnimationFrame(function() {
         t.thinkingRafPending = false;
         if (thinkBody) thinkBody.textContent = t.thinkingContent;
-        if (chatMessages) {
-          var isAtBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 80;
-          if (isAtBottom || !CHAT._userScrolledUp) {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-          }
-        }
+        _autoScroll(chatMessages);
       });
     }
   } else if (evt.type === "tool_call") {

@@ -30,6 +30,10 @@ class IrodoriEngine(VoiceEngine):
         self._timeout = httpx.Timeout(config.timeout_seconds)
         self._advanced = config.advanced
 
+    def set_voice(self, voice: str) -> None:
+        """リクエスト単位のボイス上書き。設定ファイルには書き戻さない。"""
+        self._voice = voice
+
     # ── synthesize ────────────────────────────────────────────
 
     def _build_payload(self, text, emotion, caption, speed, *, stream: bool = False) -> dict:

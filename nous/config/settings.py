@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import logging
 import os
 from pathlib import Path
 from typing import Self
@@ -13,6 +14,8 @@ from pydantic import (
     model_validator,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingConfig(BaseModel):
@@ -61,7 +64,7 @@ def _parse_str_list(v: object) -> list[str]:
                 if isinstance(parsed, list):
                     return [str(x).strip() for x in parsed if str(x).strip()]
             except json.JSONDecodeError:
-                pass
+                logger.debug("settings: JSON list parse failed, falling back to comma-split: %r", s)
         return [p.strip() for p in s.split(",") if p.strip()]
     return []
 
@@ -218,7 +221,7 @@ class CorsConfig(BaseModel):
             try:
                 return json.loads(v)
             except json.JSONDecodeError:
-                pass
+                logger.debug("settings: allowed_origins JSON parse failed, falling back to comma-split: %r", v)
             # Fallback: comma-separated
             return [s.strip() for s in v.split(",") if s.strip()]
         return v

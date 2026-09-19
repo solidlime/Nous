@@ -148,10 +148,6 @@ def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str) -> str:
         "<!DOCTYPE html>\n"
         '<html lang="ja" class="dark">\n' + render_head() + "\n<body>\n"
         '    <a href="#main-content" class="skip-link">メインコンテンツにスキップ</a>\n'
-        "    <!-- Background Orbs -->\n"
-        '    <div class="orb orb-1"></div>\n'
-        '    <div class="orb orb-2"></div>\n'
-        '    <div class="orb orb-3"></div>\n'
         "\n"
         "    <!-- ============================================================\n"
         "         HEADER\n"

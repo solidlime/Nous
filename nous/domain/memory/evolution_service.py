@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from nous.domain.search.engine import SearchEngine
 
 from nous.domain.memory.contradiction import ContradictionType
-from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.time_utils import get_now
 from nous.domain.value_objects import normalize_importance
 
@@ -68,6 +67,8 @@ class MemoryEvolutionService:
             return
 
         try:
+            from nous.domain.search.engine import SearchQuery
+
             # Semantically search for similar existing memories
             similar = await self._search_engine.search(
                 SearchQuery(

@@ -146,7 +146,7 @@ def _migrate_context_state_to_memories(db_conn: sqlite3.Connection, persona: str
             db_conn.commit()
             logger.info("One-shot migration: %d state records -> memories", migrated)
     except Exception:  # noqa: S110
-        pass
+        logger.debug("one-shot migration to memories skipped/failed", exc_info=True)
 
 
 def _migrate_cleanup_orphan_strengths_v4(
@@ -179,7 +179,7 @@ def _migrate_add_persona_to_emotion_history_v5(
         db_conn.execute("CREATE INDEX IF NOT EXISTS idx_emotion_history_timestamp ON emotion_history(timestamp DESC)")
         db_conn.commit()
     except sqlite3.OperationalError:
-        pass
+        logger.debug("emotion_history index rebuild skipped (already applied)", exc_info=True)
 
 
 def _migrate_remove_chat_kind_v6(
@@ -216,7 +216,7 @@ def _migrate_add_superseded_by_v7(
         db_conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_superseded_by ON memories(superseded_by)")
         db_conn.commit()
     except sqlite3.OperationalError:
-        pass
+        logger.debug("superseded_by index creation skipped (already applied)", exc_info=True)
 
 
 def _migrate_mot_thoughts_v8(

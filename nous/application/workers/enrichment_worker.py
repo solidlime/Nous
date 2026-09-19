@@ -20,6 +20,11 @@ logger = get_logger(__name__)
 _NOVELTY_SEARCH_LIMIT = 10  # same breadth as ContradictionDetector.find_potential_contradictions
 
 
+def _naive(value: datetime) -> datetime:
+    """TZ-aware datetime を naive 化。introspection._naive の非 None 特化版（引数は常に非None）。"""
+    return value.replace(tzinfo=None) if value.tzinfo else value
+
+
 class EnrichmentWorker:
     """REM-equivalent background worker: idle-gated drain of the enrichment queue.
 
@@ -90,8 +95,7 @@ class EnrichmentWorker:
             return
 
         defer_exceeded = any(
-            (self._naive(now) - self._naive(item.enqueued_at)).total_seconds()
-            >= self._num("brain_max_defer_seconds", 3600)
+            (_naive(now) - _naive(item.enqueued_at)).total_seconds() >= self._num("brain_max_defer_seconds", 3600)
             for item in pending
         )
         if not defer_exceeded:
@@ -142,7 +146,7 @@ class EnrichmentWorker:
             events = repo.get_by_persona(self._persona, "brain.introspection_spontaneous", 1)
             last: datetime | None = events[0].timestamp if events else None
             if last is not None:
-                elapsed = (self._naive(self._now()) - self._naive(last)).total_seconds()
+                elapsed = (_naive(self._now()) - _naive(last)).total_seconds()
                 if elapsed < interval * 3600.0:
                     return
             from nous.application.chat.introspection import run_spontaneous
@@ -200,7 +204,7 @@ class EnrichmentWorker:
             logger.debug("EnrichmentWorker: last_activity_at failed", exc_info=True)
             last = None
         if last is not None:
-            candidates.append((self._naive(now) - self._naive(last)).total_seconds())
+            candidates.append((_naive(now) - _naive(last)).total_seconds())
         # ponytail: get_context 呼び出しを会話とみなす近似（セッション単位の粒度）。
         # ターン単位の対話信号が必要になったら mcp.conversation イベント種別に上げる。
         try:
@@ -209,7 +213,7 @@ class EnrichmentWorker:
                 value = getattr(state, "value", None)
                 lct = getattr(value, "last_conversation_time", None)
                 if isinstance(lct, datetime):
-                    candidates.append((self._naive(now) - self._naive(lct)).total_seconds())
+                    candidates.append((_naive(now) - _naive(lct)).total_seconds())
         except Exception:
             logger.debug("EnrichmentWorker: last_conversation_time fetch failed", exc_info=True)
         return min(candidates) if candidates else None
@@ -231,10 +235,6 @@ class EnrichmentWorker:
         content = getattr(memory, "content", "")
         return content if isinstance(content, str) and content else None
 
-    @staticmethod
-    def _naive(value: datetime) -> datetime:
-        return value.replace(tzinfo=None) if value.tzinfo is not None else value
-
     # ------------------------------------------------------------------
     # Novelty gate (vector search only — no LLM)
     # ------------------------------------------------------------------
@@ -247,6 +247,9 @@ class EnrichmentWorker:
         threshold, stability is multiplied once by
         ``brain_novelty_stability_multiplier`` and a ``novelty_gate`` pulse
         is emitted. The cursor contract guarantees once-per-memory.
+
+        ponytail: stability ×2（1回限り）は海馬-VTA ループの単純化で、
+        効果は未検証。ablation が整備されるまで演出扱い。
         """
         try:
             importance = float(getattr(memory, "importance", 0.5))
@@ -296,6 +299,11 @@ class EnrichmentWorker:
         try:
             result = self._run_async(store.search(self.context.persona, memory.content, limit=_NOVELTY_SEARCH_LIMIT))
         except Exception:
+            logger.warning(
+                "_max_cosine: vector store search failed for memory '%s', treating novelty as 0.0",
+                memory.key,
+                exc_info=True,
+            )
             return 0.0
         if not getattr(result, "is_ok", False):
             return 0.0

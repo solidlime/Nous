@@ -593,5 +593,9 @@ async def _apply_body_decay(ctx: AppContext, persona: str, state: PersonaState) 
         if state_result.is_ok and state_result.value:
             state = state_result.value
     except Exception:
-        pass  # best-effort, don't break caller
+        logger.warning(
+            "_apply_body_decay: body decay failed for persona '%s', returning un-decayed state",
+            persona,
+            exc_info=True,
+        )  # best-effort, don't break caller
     return state

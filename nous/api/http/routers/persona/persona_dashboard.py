@@ -125,11 +125,9 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
     try:
         total_count = stats.get("total_count", 0)
         if total_count > 0:
-            linked_row = ctx.entity_repo._db.execute(
-                "SELECT COUNT(DISTINCT memory_key) AS cnt FROM memory_entities WHERE memory_key != ''"
-            ).fetchone()
-            linked_count = linked_row["cnt"] if linked_row else 0
-            stats["linked_ratio"] = min(linked_count / total_count, 1.0)
+            linked_result = ctx.entity_repo.count_linked_memory_keys()
+            if linked_result.is_ok:
+                stats["linked_ratio"] = min(linked_result.value / total_count, 1.0)
     except Exception:
         logger.exception("dashboard_data: linked_ratio calculation failed")
         # 非致命的、ダッシュボードはリンク比率なしで表示継続

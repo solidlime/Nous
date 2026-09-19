@@ -50,6 +50,14 @@ class SessionEventRepository:
         return self._db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     # ------------------------------------------------------------------
+    # Delete
+    # ------------------------------------------------------------------
+
+    def delete_by_session(self, persona: str, session_id: str) -> None:
+        """Delete all session events for one persona's session."""
+        self._db.execute("DELETE FROM session_events WHERE persona=? AND session_id=?", (persona, session_id))
+
+    # ------------------------------------------------------------------
     # Query
     # ------------------------------------------------------------------
 

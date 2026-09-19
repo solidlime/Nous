@@ -121,7 +121,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
     }
-    .orb { display: none; }
     .tab-panel.active { animation: none; }
     .skeleton { animation: none; }
     .sse-connecting,

@@ -105,10 +105,7 @@ def kickoff_caption_task(persona: str, ctx, user_message: str) -> None:
     if prev is not None and not prev.done():
         prev.cancel()
     try:
-        from nous.config.settings import get_settings
-        from nous.domain.chat_config import ChatConfigFileRepository
-
-        chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
+        chat_config = _load_chat_config(persona)
         if _resolve_emotion_mode(chat_config) != "llm":
             return
 
@@ -157,7 +154,8 @@ def _body_str(body: object, key: str) -> str:
 
 
 def _resolve_emotion_mode(chat_config) -> str:
-    """感情反映モード解決の正典。SessionConfig._derive_emotion_modeと同じ条件順。字幕解決・kickoff共用。"""
+    """感情反映モード解決。正本は SessionConfig._derive_emotion_mode（nous/domain/session_config.py）。
+    ここはその条件順をオブジェクト属性向けにミラーしたもの。字幕解決・kickoff共用。"""
     mode = getattr(chat_config, "voice_emotion_mode", "") or ""
     if mode:
         return mode
@@ -456,330 +454,373 @@ async def _relay_tts_stream(engine, *, text, emotion, caption, speed_arg, cache_
     yield f"data: {json.dumps({'type': 'tts_done', 'audio_url': audio_url}, separators=(',', ':'))}\n\n"
 
 
+# ── request handling layer (_do_*) ──────────────────────────────────
+
+
+def _load_chat_config(persona: str):
+    """personaのchat設定を読み込む。TTS各EP共用。"""
+    from nous.config.settings import get_settings
+    from nous.domain.chat_config import ChatConfigFileRepository
+
+    return ChatConfigFileRepository(get_settings().data_root).get(persona)
+
+
+async def _parse_json_body(request) -> dict:
+    """POST bodyのJSON解析。壊れている/非dictは空dictに倒す。"""
+    try:
+        body = await request.json()
+    except (json.JSONDecodeError, TypeError):
+        body = {}
+    return body if isinstance(body, dict) else {}
+
+
+async def _ensure_voice_engine_ready(engine) -> str | None:
+    """TTSエンジンの起動確認。正常なら None、問題ならエラーメッセージ。"""
+    try:
+        if await engine.health_check():
+            return None
+        return "Voice engine health check failed"
+    except Exception:
+        # TTSエンジン未起動は期待された503経路。スタックは不要。
+        logger.warning("voice engine unreachable during TTS request")
+        return "Voice engine unreachable"
+
+
+def _apply_voice_override(engine, voice_override: str | None) -> None:
+    """voice上書き (body > chat_config.voice_model)。リクエスト単位でengineへ反映。"""
+    if not voice_override:
+        return
+    from nous.infrastructure.voice.irodori import IrodoriEngine
+
+    if isinstance(engine, IrodoriEngine):
+        engine.set_voice(voice_override)
+
+
+def _tts_voice_speed(chat_config) -> float:
+    """voice_speed の取得。0/欠落は1.0扱い。"""
+    return float(getattr(chat_config, "voice_speed", 1.0) or 1.0)
+
+
+def _tts_cache_dir(persona: str) -> Path:
+    """personaのTTSキャッシュディレクトリ（無ければ作成）。"""
+    from nous.config.settings import get_settings
+
+    cache_dir = Path(get_settings().data_root) / "persona" / persona / "tts_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def _tts_cache_key_for(
+    *,
+    text: str,
+    emotion: str,
+    caption: str | None,
+    voice_speed: float,
+    voice_override: str | None,
+    voice_resolved: str,
+    irodori_config: IrodoriConfig,
+) -> str:
+    """irodori_config 込みのキャッシュキー。synthesize/stream共用。"""
+    adv = irodori_config.advanced
+    return _tts_cache_key(
+        text=text,
+        emotion=emotion,
+        caption=caption,
+        voice_speed=voice_speed,
+        voice_override=voice_override,
+        voice_resolved=voice_resolved,
+        model=irodori_config.model,
+        seed=adv.seed,
+        num_steps=adv.num_steps,
+        cfg_text=adv.cfg_scale_text,
+        cfg_speaker=adv.cfg_scale_speaker,
+        cfg_caption=adv.cfg_scale_caption,
+        chunk_min_chars=adv.chunk_min_chars,
+    )
+
+
+def _tts_audio_payload(audio_bytes: bytes, audio_url: str, emotion: str, caption: str | None) -> dict:
+    """キャッシュHIT/MISS共通の200レスポンス。"""
+    return {
+        "ok": True,
+        "audio_base64": base64.b64encode(audio_bytes).decode("ascii"),
+        "audio_url": audio_url,
+        "format": "wav",
+        "emotion": emotion,
+        "caption": caption,
+    }
+
+
+async def _do_synthesize_tts(persona: str, ctx, body: dict) -> tuple[dict, int]:
+    """POST /api/tts/{persona} の本体。戻り値は (payload, status_code)。"""
+    chat_config = _load_chat_config(persona)
+    irodori_config = _get_irodori_config(ctx, chat_config)
+    engine = get_voice_engine(irodori_config)
+
+    engine_error = await _ensure_voice_engine_ready(engine)
+    if engine_error:
+        return {"ok": False, "error": engine_error}, 503
+
+    text = _body_text_required(body, "text")
+    if not text:
+        return {"ok": False, "error": "text is required"}, 400
+
+    # Optional voice override (body > chat_config.voice_model > global)
+    voice_override = _body_str(body, "voice") or (chat_config.voice_model or None)
+    _apply_voice_override(engine, voice_override)
+
+    # get persona state for emotion + build caption
+    ov_emo, ov_cap, use_override = _resolve_tts_override(body)
+    override_emotion, override_caption = (ov_emo if use_override else "", ov_cap if use_override else None)
+    caption_res = await _resolve_caption(
+        persona,
+        ctx,
+        chat_config,
+        ref_text=text,
+        override_emotion=override_emotion,
+        override_caption=override_caption,
+    )
+    emotion, caption = caption_res.emotion, caption_res.caption
+
+    # ---- TTS audio cache ----
+    voice_speed = _tts_voice_speed(chat_config)
+    # 1.0近傍は感情速度に委譲（厳密な==ではなく許容誤差で判定）
+    speed_arg = None if abs(voice_speed - 1.0) < 1e-9 else voice_speed
+    voice_resolved = voice_override or chat_config.voice_model or ctx.settings.irodori.voice
+    cache_key = _tts_cache_key_for(
+        text=text,
+        emotion=emotion,
+        caption=caption,
+        voice_speed=voice_speed,
+        voice_override=voice_override,
+        voice_resolved=voice_resolved,
+        irodori_config=irodori_config,
+    )
+    cache_dir = _tts_cache_dir(persona)
+    new_cache_path = cache_dir / f"{cache_key}.wav"
+    found_path, audio_url_filename = _find_cache_file(cache_dir, cache_key)
+    audio_url = f"/api/tts/{persona}/cache/{audio_url_filename}"
+
+    if found_path:
+        logger.debug("TTS cache HIT: %s", found_path)
+        return _tts_audio_payload(found_path.read_bytes(), audio_url, emotion, caption), 200
+
+    try:
+        audio_bytes = await engine.synthesize(
+            text=text,
+            emotion=emotion,
+            caption=caption,
+            speed=speed_arg,
+        )
+    except Exception:
+        logger.warning("TTS synthesis failed for persona '%s'", persona, exc_info=True)
+        return {"ok": False, "error": "Voice synthesis failed"}, 500
+    new_cache_path.write_bytes(audio_bytes)
+    logger.debug("TTS cache MISS: %s", new_cache_path)
+    return _tts_audio_payload(audio_bytes, audio_url, emotion, caption), 200
+
+
+async def _do_resolve_stream_caption(persona: str, ctx, chat_config, body: dict, *, ref_text: str):
+    """stream EPの字幕解決。body override → 並列タスク回収（不一致/失敗時は直列後退）。"""
+    ov_emo, ov_cap, use_override = _resolve_tts_override(body)
+    override_emotion, override_caption = (ov_emo if use_override else "", ov_cap if use_override else None)
+    caption_res = await _resolve_caption(
+        persona,
+        ctx,
+        chat_config,
+        ref_text=ref_text,
+        override_emotion=override_emotion,
+        override_caption=override_caption,
+    )
+    task = take_caption_task(persona)
+    if task is not None and _resolve_emotion_mode(chat_config) == "llm":
+        try:
+            parallel = await asyncio.wait_for(task, timeout=20.0)
+            st = ctx.persona_service.get_context(persona)
+            if st.is_ok and st.value:
+                now_emo = (getattr(st.value, "emotion", "") or "").strip() or "neutral"
+                now_bucket = _emotion_bucket(float(getattr(st.value, "emotion_intensity", 0.0) or 0.0))
+                if now_emo == parallel.snapshot.emotion and now_bucket == parallel.snapshot.bucket:
+                    caption_res = parallel
+                    logger.debug("TTS caption parallel hit")
+        except Exception:
+            logger.exception("caption parallel consume failed")
+    return caption_res
+
+
+async def _do_stream_tts(persona: str, ctx, body: dict) -> Response:
+    """POST /api/tts/{persona}/stream の本体。SSE応答を返す（起動エラーはJSON）。"""
+    chat_config = _load_chat_config(persona)
+    irodori_config = _get_irodori_config(ctx, chat_config)
+    engine = get_voice_engine(irodori_config)
+
+    engine_error = await _ensure_voice_engine_ready(engine)
+    if engine_error:
+        return JSONResponse({"ok": False, "error": engine_error}, status_code=503)
+
+    text = _body_text_required(body, "text")
+    if not text:
+        return JSONResponse({"ok": False, "error": "text is required"}, status_code=400)
+
+    # Optional voice override (body > chat_config.voice_model > global)
+    voice_override = _body_str(body, "voice") or (chat_config.voice_model or None)
+    _apply_voice_override(engine, voice_override)
+
+    voice_speed = _tts_voice_speed(chat_config)
+    speed_arg = None if abs(voice_speed - 1.0) < 1e-9 else voice_speed
+    voice_resolved = voice_override or chat_config.voice_model or ctx.settings.irodori.voice
+
+    caption_res = await _do_resolve_stream_caption(persona, ctx, chat_config, body, ref_text=text)
+    emotion, caption = caption_res.emotion, caption_res.caption
+
+    # ---- TTS audio cache ----
+    cache_dir = _tts_cache_dir(persona)
+    cache_key = _tts_cache_key_for(
+        text=text,
+        emotion=emotion,
+        caption=caption,
+        voice_speed=voice_speed,
+        voice_override=voice_override,
+        voice_resolved=voice_resolved,
+        irodori_config=irodori_config,
+    )
+    new_cache_path = cache_dir / f"{cache_key}.wav"
+    found_path, audio_url_filename = _find_cache_file(cache_dir, cache_key)
+    audio_url = f"/api/tts/{persona}/cache/{audio_url_filename}"
+
+    if found_path:
+        blob = found_path.read_bytes()
+
+        async def _hit_stream():
+            chunk = {"type": "tts_chunk", "seq": 0, "audio_base64": base64.b64encode(blob).decode("ascii")}
+            yield f"data: {json.dumps(chunk, separators=(',', ':'))}\n\n"
+            done = {"type": "tts_done", "audio_url": audio_url}
+            yield f"data: {json.dumps(done, separators=(',', ':'))}\n\n"
+
+        return StreamingResponse(_hit_stream(), media_type="text/event-stream; charset=utf-8")
+
+    return StreamingResponse(
+        _relay_tts_stream(
+            engine,
+            text=text,
+            emotion=emotion,
+            caption=caption,
+            speed_arg=speed_arg,
+            cache_path=new_cache_path,
+            audio_url=audio_url,
+        ),
+        media_type="text/event-stream; charset=utf-8",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+async def _do_tts_health(persona: str, ctx) -> dict:
+    """GET /api/tts/{persona}/health の本体。irodori /v1/models を見て接続状態を返す。"""
+    chat_config = _load_chat_config(persona)
+    base_url = _get_irodori_config(ctx, chat_config).url.rstrip("/")
+
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+            resp = await client.get(f"{base_url}/v1/models")
+            models_data = resp.json() if resp.status_code == 200 else None
+            models = []
+            if models_data and isinstance(models_data, dict) and "data" in models_data:
+                for item in models_data["data"]:
+                    mid = item.get("id", "")
+                    if mid:
+                        models.append({"id": mid, "name": mid})
+            return {"ok": True, "connected": True, "url": base_url, "models": models}
+    except Exception:
+        return {"ok": True, "connected": False, "url": base_url, "error": "Connection check failed"}
+
+
+def _sanitize_cache_filename(filename: object) -> str | None:
+    """cache filenameのサニタイズ（serve/delete共用15行重複の統合）。
+    basename化＋".."除去。空・wav以外は None。"""
+    import os
+
+    safe_name = os.path.basename(str(filename)).replace("..", "").strip()
+    if not safe_name or not safe_name.lower().endswith(".wav"):
+        return None
+    return safe_name
+
+
+def _do_serve_tts_cache(persona: str, safe_name: str) -> dict | None:
+    """cacheファイルの解決。不在は None（応答組み立ては呼び出し側）。"""
+    file_path = _tts_cache_dir(persona) / safe_name
+    if not file_path.exists():
+        return None
+    import mimetypes
+
+    mime_type, _ = mimetypes.guess_type(safe_name)
+    return {"file_path": str(file_path), "mime_type": mime_type or "audio/wav"}
+
+
+def _do_delete_tts_cache(persona: str, safe_name: str) -> bool:
+    """cacheファイルの削除。冪等 — 不在は False。"""
+    file_path = _tts_cache_dir(persona) / safe_name
+    if not file_path.exists():
+        return False
+    file_path.unlink()
+    return True
+
+
 def register_tts_routes(mcp) -> None:
     @mcp.custom_route("/api/tts/{persona}", methods=["POST"])
     async def synthesize_tts(request: Request) -> JSONResponse:
+        """POST /api/tts/{persona} — synthesize TTS audio."""
         persona = _resolve_persona_from_request(request)
         ctx = _safe_get_context(persona)
         if not ctx:
             return JSONResponse({"ok": False, "error": "Persona not found"}, status_code=404)
-
-        from nous.config.settings import get_settings
-        from nous.domain.chat_config import ChatConfigFileRepository
-
-        chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
-        irodori_config = _get_irodori_config(ctx, chat_config)
-        engine = get_voice_engine(irodori_config)
-
-        # health check
-        try:
-            ok = await engine.health_check()
-            if not ok:
-                return JSONResponse({"ok": False, "error": "Voice engine health check failed"}, status_code=503)
-        # TTSエンジン未起動時の早期リターン
-        except Exception:
-            return JSONResponse({"ok": False, "error": "Voice engine unreachable"}, status_code=503)
-
-        # parse request body
-        try:
-            body = await request.json()
-        except (json.JSONDecodeError, TypeError):
-            body = {}
-        if not isinstance(body, dict):
-            body = {}
-        text = _body_text_required(body, "text")
-        if not text:
-            return JSONResponse({"ok": False, "error": "text is required"}, status_code=400)
-
-        # Optional voice override (body > chat_config.voice_model > global)
-        voice_override = _body_str(body, "voice") or (chat_config.voice_model or None)
-        if voice_override:
-            from nous.infrastructure.voice.irodori import IrodoriEngine
-
-            if isinstance(engine, IrodoriEngine):
-                engine._voice = voice_override  # noqa: SLF001
-
-        # get persona state for emotion + build caption
-        ov_emo, ov_cap, use_override = _resolve_tts_override(body)
-        caption_res = await _resolve_caption(
-            persona,
-            ctx,
-            chat_config,
-            ref_text=text,
-            override_emotion=ov_emo if use_override else "",
-            override_caption=ov_cap if use_override else None,
-        )
-        emotion, caption = caption_res.emotion, caption_res.caption
-
-        # ---- TTS audio cache ----
-        voice_speed = float(getattr(chat_config, "voice_speed", 1.0) or 1.0)
-        # 1.0近傍は感情速度に委譲（厳密な==ではなく許容誤差で判定）
-        speed_arg = None if abs(voice_speed - 1.0) < 1e-9 else voice_speed
-        from nous.config.settings import get_settings
-
-        settings = get_settings()
-        cache_dir = Path(settings.data_root) / "persona" / persona / "tts_cache"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        voice_resolved = voice_override or chat_config.voice_model or ctx.settings.irodori.voice
-        cache_key = _tts_cache_key(
-            text=text,
-            emotion=emotion,
-            caption=caption,
-            voice_speed=voice_speed,
-            voice_override=voice_override,
-            voice_resolved=voice_resolved,
-            model=irodori_config.model,
-            seed=irodori_config.advanced.seed,
-            num_steps=irodori_config.advanced.num_steps,
-            cfg_text=irodori_config.advanced.cfg_scale_text,
-            cfg_speaker=irodori_config.advanced.cfg_scale_speaker,
-            cfg_caption=irodori_config.advanced.cfg_scale_caption,
-            chunk_min_chars=irodori_config.advanced.chunk_min_chars,
-        )
-        new_filename = f"{cache_key}.wav"
-        new_cache_path = cache_dir / new_filename
-        found_path, audio_url_filename = _find_cache_file(cache_dir, cache_key)
-        audio_url = f"/api/tts/{persona}/cache/{audio_url_filename}"
-
-        if found_path:
-            audio_bytes = found_path.read_bytes()
-            logger.debug("TTS cache HIT: %s", found_path)
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "audio_base64": base64.b64encode(audio_bytes).decode("ascii"),
-                    "audio_url": audio_url,
-                    "format": "wav",
-                    "emotion": emotion,
-                    "caption": caption,
-                }
-            )
-
-        try:
-            audio_bytes = await engine.synthesize(
-                text=text,
-                emotion=emotion,
-                caption=caption,
-                speed=speed_arg,
-            )
-            new_cache_path.write_bytes(audio_bytes)
-            logger.debug("TTS cache MISS: %s", new_cache_path)
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "audio_base64": base64.b64encode(audio_bytes).decode("ascii"),
-                    "audio_url": audio_url,
-                    "format": "wav",
-                    "emotion": emotion,
-                    "caption": caption,
-                }
-            )
-        except Exception:
-            return JSONResponse({"ok": False, "error": "Voice synthesis failed"}, status_code=500)
+        payload, status = await _do_synthesize_tts(persona, ctx, await _parse_json_body(request))
+        return JSONResponse(payload, status_code=status)
 
     @mcp.custom_route("/api/tts/{persona}/stream", methods=["POST"])
     async def stream_tts(request: Request) -> Response:
+        """POST /api/tts/{persona}/stream — stream TTS audio via SSE."""
         persona = _resolve_persona_from_request(request)
         ctx = _safe_get_context(persona)
         if not ctx:
             return JSONResponse({"ok": False, "error": "Persona not found"}, status_code=404)
-
-        from nous.config.settings import get_settings
-        from nous.domain.chat_config import ChatConfigFileRepository
-
-        chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
-        irodori_config = _get_irodori_config(ctx, chat_config)
-        engine = get_voice_engine(irodori_config)
-
-        try:
-            ok = await engine.health_check()
-            if not ok:
-                return JSONResponse({"ok": False, "error": "Voice engine health check failed"}, status_code=503)
-        except Exception:
-            return JSONResponse({"ok": False, "error": "Voice engine unreachable"}, status_code=503)
-
-        try:
-            body = await request.json()
-        except (json.JSONDecodeError, TypeError):
-            body = {}
-        if not isinstance(body, dict):
-            body = {}
-        text = _body_text_required(body, "text")
-        if not text:
-            return JSONResponse({"ok": False, "error": "text is required"}, status_code=400)
-
-        voice_override = _body_str(body, "voice") or (chat_config.voice_model or None)
-        if voice_override:
-            from nous.infrastructure.voice.irodori import IrodoriEngine
-
-            if isinstance(engine, IrodoriEngine):
-                engine._voice = voice_override  # noqa: SLF001
-
-        voice_speed = float(getattr(chat_config, "voice_speed", 1.0) or 1.0)
-        speed_arg = None if abs(voice_speed - 1.0) < 1e-9 else voice_speed
-        voice_resolved = voice_override or chat_config.voice_model or ctx.settings.irodori.voice
-
-        # 字幕：並列タスク回収 → 不一致/失敗時は直列後退
-        ov_emo, ov_cap, use_override = _resolve_tts_override(body)
-        caption_res = await _resolve_caption(
-            persona,
-            ctx,
-            chat_config,
-            ref_text=text,
-            override_emotion=ov_emo if use_override else "",
-            override_caption=ov_cap if use_override else None,
-        )
-        task = take_caption_task(persona)
-        if task is not None and _resolve_emotion_mode(chat_config) == "llm":
-            try:
-                parallel = await asyncio.wait_for(task, timeout=20.0)
-                st = ctx.persona_service.get_context(persona)
-                if st.is_ok and st.value:
-                    now_emo = (getattr(st.value, "emotion", "") or "").strip() or "neutral"
-                    now_bucket = _emotion_bucket(float(getattr(st.value, "emotion_intensity", 0.0) or 0.0))
-                    if now_emo == parallel.snapshot.emotion and now_bucket == parallel.snapshot.bucket:
-                        caption_res = parallel
-                        logger.debug("TTS caption parallel hit")
-            except Exception:
-                logger.exception("caption parallel consume failed")
-        emotion, caption = caption_res.emotion, caption_res.caption
-
-        settings = get_settings()
-        cache_dir = Path(settings.data_root) / "persona" / persona / "tts_cache"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_key = _tts_cache_key(
-            text=text,
-            emotion=emotion,
-            caption=caption,
-            voice_speed=voice_speed,
-            voice_override=voice_override,
-            voice_resolved=voice_resolved,
-            model=irodori_config.model,
-            seed=irodori_config.advanced.seed,
-            num_steps=irodori_config.advanced.num_steps,
-            cfg_text=irodori_config.advanced.cfg_scale_text,
-            cfg_speaker=irodori_config.advanced.cfg_scale_speaker,
-            cfg_caption=irodori_config.advanced.cfg_scale_caption,
-            chunk_min_chars=irodori_config.advanced.chunk_min_chars,
-        )
-        new_cache_path = cache_dir / f"{cache_key}.wav"
-        found_path, audio_url_filename = _find_cache_file(cache_dir, cache_key)
-        audio_url = f"/api/tts/{persona}/cache/{audio_url_filename}"
-
-        if found_path:
-            blob = found_path.read_bytes()
-
-            async def _hit():
-                yield f"data: {json.dumps({'type': 'tts_chunk', 'seq': 0, 'audio_base64': base64.b64encode(blob).decode('ascii')}, separators=(',', ':'))}\n\n"
-                yield f"data: {json.dumps({'type': 'tts_done', 'audio_url': audio_url}, separators=(',', ':'))}\n\n"
-
-            return StreamingResponse(_hit(), media_type="text/event-stream; charset=utf-8")
-
-        return StreamingResponse(
-            _relay_tts_stream(
-                engine,
-                text=text,
-                emotion=emotion,
-                caption=caption,
-                speed_arg=speed_arg,
-                cache_path=new_cache_path,
-                audio_url=audio_url,
-            ),
-            media_type="text/event-stream; charset=utf-8",
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-        )
+        return await _do_stream_tts(persona, ctx, await _parse_json_body(request))
 
     # d4: GET /api/tts/{persona}/voices 削除（内部使用ゼロ。docs言及のみ）
     # d4残り1EP候補（health/cache）はchat-tts.js:198・audio_url・chat-history.jsで使用中のため残す。
 
     @mcp.custom_route("/api/tts/{persona}/health", methods=["GET"])
     async def health_check_tts(request: Request) -> JSONResponse:
+        """GET /api/tts/{persona}/health — check irodori connectivity."""
         persona = _resolve_persona_from_request(request)
         ctx = _safe_get_context(persona)
         if not ctx:
             return JSONResponse({"ok": True, "connected": False, "error": "Persona not found"}, status_code=404)
-
-        from nous.config.settings import get_settings
-        from nous.domain.chat_config import ChatConfigFileRepository
-
-        chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
-        irodori_config = _get_irodori_config(ctx, chat_config)
-        base_url = irodori_config.url.rstrip("/")
-
-        import httpx
-
-        try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
-                resp = await client.get(f"{base_url}/v1/models")
-                models_data = resp.json() if resp.status_code == 200 else None
-                models = []
-                if models_data and isinstance(models_data, dict) and "data" in models_data:
-                    for item in models_data["data"]:
-                        mid = item.get("id", "")
-                        if mid:
-                            models.append({"id": mid, "name": mid})
-                return JSONResponse(
-                    {
-                        "ok": True,
-                        "connected": True,
-                        "url": base_url,
-                        "models": models,
-                    }
-                )
-        except Exception:
-            return JSONResponse(
-                {
-                    "ok": True,
-                    "connected": False,
-                    "url": base_url,
-                    "error": "Connection check failed",
-                }
-            )
+        return JSONResponse(await _do_tts_health(persona, ctx))
 
     @mcp.custom_route("/api/tts/{persona}/cache/{filename}", methods=["GET"])
     async def serve_tts_cache(request: Request) -> Response:
-        """Serve cached TTS audio from memory storage."""
-        import mimetypes
-        import os
-
+        """GET /api/tts/{persona}/cache/{filename} — serve cached TTS audio."""
         persona = _resolve_persona_from_request(request)
         if not _PERSONA_PATTERN.match(persona):
             return JSONResponse({"error": "File not found"}, status_code=404)
-        filename = request.path_params.get("filename", "")
-        safe_name = os.path.basename(filename).replace("..", "").strip()
-        if not safe_name or not safe_name.lower().endswith(".wav"):
+        safe_name = _sanitize_cache_filename(request.path_params.get("filename", ""))
+        if not safe_name:
             return JSONResponse({"error": "Invalid filename"}, status_code=400)
-
-        from nous.config.settings import get_settings
-
-        settings = get_settings()
-        file_path = Path(settings.data_root) / "persona" / persona / "tts_cache" / safe_name
-        if not file_path.exists():
+        result = _do_serve_tts_cache(persona, safe_name)
+        if result is None:
             return JSONResponse({"error": "File not found"}, status_code=404)
-
-        mime_type, _ = mimetypes.guess_type(safe_name)
-        mime_type = mime_type or "audio/wav"
-        return FileResponse(str(file_path), media_type=mime_type)
+        return FileResponse(result["file_path"], media_type=result["mime_type"])
 
     @mcp.custom_route("/api/tts/{persona}/cache/{filename}", methods=["DELETE"])
     async def delete_tts_cache(request: Request) -> JSONResponse:
-        """Delete a cached TTS audio file. Idempotent — returns deleted:false if not found."""
-        import os
-
+        """DELETE /api/tts/{persona}/cache/{filename} — delete a cached TTS audio file. Idempotent."""
         persona = _resolve_persona_from_request(request)
         if not _PERSONA_PATTERN.match(persona):
             return JSONResponse({"ok": False, "error": "File not found"}, status_code=404)
-        filename = request.path_params.get("filename", "")
-        safe_name = os.path.basename(filename).replace("..", "").strip()
-        if not safe_name or not safe_name.lower().endswith(".wav"):
+        safe_name = _sanitize_cache_filename(request.path_params.get("filename", ""))
+        if not safe_name:
             return JSONResponse({"ok": False, "error": "Invalid filename"}, status_code=400)
+        return JSONResponse({"ok": True, "deleted": _do_delete_tts_cache(persona, safe_name)})
 
-        from nous.config.settings import get_settings
-
-        settings = get_settings()
-        file_path = Path(settings.data_root) / "persona" / persona / "tts_cache" / safe_name
-        if not file_path.exists():
-            return JSONResponse({"ok": True, "deleted": False})
-
-        file_path.unlink()
-        return JSONResponse({"ok": True, "deleted": True})

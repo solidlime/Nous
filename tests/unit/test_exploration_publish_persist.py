@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 def test_summarize_does_not_persist_monologue_event(monkeypatch):
     """探索要約の 🔍 bubble 生成は廃止済み。brain.monologue persist / emit は行わない。"""
-    from nous.application.chat import introspection as mod
+    from nous.application.chat import curiosity as mod
 
     ctx = MagicMock()
     ctx._session_event_repo = MagicMock()
@@ -35,7 +35,7 @@ def test_summarize_does_not_persist_monologue_event(monkeypatch):
 
 def test_summarize_falls_back_to_raw_text_on_non_json():
     """非JSON応答は無言廃棄せず生テキストを要約として採用する (旧実装の挙動復活)。"""
-    from nous.application.chat import introspection as mod
+    from nous.application.chat import curiosity as mod
 
     ctx = MagicMock()
     ctx._session_event_repo = None

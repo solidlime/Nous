@@ -1,8 +1,5 @@
-from nous.application.chat.introspection import (
-    _MAX_CHARS_PER_MEMORY,
-    _cap_memory_texts,
-    _parse_json_object,
-)
+from nous.application.chat.curiosity import _parse_json_object
+from nous.application.chat.introspection import _MAX_CHARS_PER_MEMORY, _cap_memory_texts
 
 
 class _M:

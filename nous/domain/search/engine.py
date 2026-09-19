@@ -239,6 +239,8 @@ class SearchEngine:
                 break
         if not competitors:
             return
+        # ponytail: ρ=0.05 は文献上の根拠のない arbitrary 値（RIF 機構自体は Anderson 1994）。
+        # ablation テスト（RIF ON/OFF で検索精度が変わるか）が整備されるまで演出扱い。
         rho = resolve_brain_config(repo)["brain_rif_suppression_rho"]
         if rho <= 0:
             return
@@ -431,7 +433,7 @@ class SearchEngine:
                     if eid:
                         query_entity_ids.add(eid)
             except Exception:
-                pass
+                logger.debug("entity extraction failed for query: %s", query.text, exc_info=True)
 
             if query_entity_ids:
                 # Find all memory keys linked to these entities

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextvars
+import logging
 import os
 import re
 import secrets
@@ -8,6 +9,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from starlette.types import ASGIApp, Receive, Scope, Send
+
+logger = logging.getLogger(__name__)
 
 # Per-request persona resolved from HTTP headers.
 _persona_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("_persona_var", default=None)
@@ -41,6 +44,10 @@ def _resolve_api_key(api_key: str | None) -> str:
 
         value, _ = RuntimeConfigManager().get_effective_value("general", "api_key")
     except Exception:
+        logger.warning(
+            "_resolve_api_key: runtime config lookup failed, falling back to NOUS_API_KEY env",
+            exc_info=True,
+        )
         value = None
     if value is None:
         return (os.environ.get("NOUS_API_KEY") or "").strip()

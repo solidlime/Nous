@@ -10,7 +10,6 @@ if TYPE_CHECKING:
     from nous.domain.search.engine import SearchEngine
 
 from nous.domain.memory.entities import Memory
-from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.errors import DuplicateMemoryError, MemoryValidationError
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import generate_memory_key, get_now
@@ -40,6 +39,8 @@ class MemoryWriteService:
         # 1. Semantic similarity check (async)
         if self._search_engine is not None:
             try:
+                from nous.domain.search.engine import SearchQuery
+
                 search_result = await self._search_engine.search(SearchQuery(text=content, top_k=3))
                 if isinstance(search_result, Success) and search_result.value:
                     duplicates = [

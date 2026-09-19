@@ -9,6 +9,7 @@ reflection タグ付き記憶は主題不定の抽象文 (importance 高め) で
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import numpy as np
@@ -20,13 +21,23 @@ from nous.domain.search.engine import SearchResult
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now
 
+if TYPE_CHECKING:
+    from datetime import datetime
 
-def _mem(key: str, content: str, tags: list[str] | None = None, importance: float = 0.9) -> Memory:
+
+def _mem(
+    key: str,
+    content: str,
+    tags: list[str] | None = None,
+    importance: float = 0.9,
+    created_at: datetime | None = None,
+) -> Memory:
+    now = created_at if created_at is not None else get_now()
     return Memory(
         key=key,
         content=content,
-        created_at=get_now(),
-        updated_at=get_now(),
+        created_at=now,
+        updated_at=now,
         importance=importance,
         tags=tags or [],
     )
@@ -100,9 +111,12 @@ class TestReflectionRetrievalPenalty:
         """同スコアの通常記憶より reflection が降格すること（デフォルト penalty=0.5）。"""
         from nous.application.chat.pipeline.memory_retriever import _search_memories
 
-        plain = _mem("m1", "よく使う道具の話")
-        refl = _mem("m2", "私は最近の振る舞いを反省している", tags=["reflection"])
+        # 同一 created_at で recency を完全同点にし、順位差を penalty に限定する
+        fixed = get_now()
+        plain = _mem("m1", "よく使う道具の話", created_at=fixed)
+        refl = _mem("m2", "私は最近の振る舞いを反省している", tags=["reflection"], created_at=fixed)
         ctx = _ctx_with([_result(refl), _result(plain)])
+        ctx._embedding = None
         _f, debug, mems = await _search_memories(ctx, "クエリ", None, ChatConfig())
         assert debug["results"][0]["content"] == "よく使う道具の話"
         assert mems[0] is plain
@@ -112,9 +126,12 @@ class TestReflectionRetrievalPenalty:
         """penalty=1.0 → 無効化: RRF 順のまま（reflection 先頭）。"""
         from nous.application.chat.pipeline.memory_retriever import _search_memories
 
-        refl = _mem("m2", "reflection文です", tags=["reflection"])
-        plain = _mem("m1", "普通の記憶")
+        # 同一 created_at で全スコアを同点にし、順位差を penalty に限定する
+        fixed = get_now()
+        refl = _mem("m2", "reflection文です", tags=["reflection"], created_at=fixed)
+        plain = _mem("m1", "普通の記憶", created_at=fixed)
         ctx = _ctx_with([_result(refl), _result(plain)])
+        ctx._embedding = None
         config = ChatConfig(reflection_retrieval_penalty=1.0)
         _f, debug, _m = await _search_memories(ctx, "q", None, config)
         assert debug["results"][0]["content"] == "reflection文です"

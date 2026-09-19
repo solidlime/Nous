@@ -3,9 +3,10 @@ import types
 
 import pytest
 
-pytestmark = pytest.mark.unit
 from nous.api.http.routers import tts as tts_mod
 from nous.api.http.routers.tts import _resolve_tts_override
+
+pytestmark = pytest.mark.unit
 
 
 def _routes():
@@ -121,7 +122,7 @@ def test_resolve_override_coerces_non_string():
 def test_endpoints_share_override_and_mode_helpers():
     import inspect
 
-    src = inspect.getsource(tts_mod.register_tts_routes)
+    src = inspect.getsource(tts_mod._do_synthesize_tts) + inspect.getsource(tts_mod._do_resolve_stream_caption)
     assert src.count("_resolve_tts_override(body)") == 2
     # synthesize/streamは抽出後の _resolve_caption 経由で解決する（直書き導出の再発防止）。
     # 直接呼出しは両EPの各1件のみ（同一形に統一）。
@@ -168,6 +169,9 @@ def _voice_recording_engine(monkeypatch):
 
     class _FakeIrodori:
         _voice = None
+
+        def set_voice(self, voice: str) -> None:
+            self._voice = str(voice)
 
         async def health_check(self):
             return True

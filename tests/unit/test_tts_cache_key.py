@@ -63,7 +63,7 @@ def test_legacy_prefix_only_is_miss(tmp_path):
 def test_synthesize_lookup_uses_full_stem_match():
     import inspect
 
-    src = inspect.getsource(tts_mod.register_tts_routes)
+    src = inspect.getsource(tts_mod._do_synthesize_tts)
     assert "_find_cache_file(cache_dir, cache_key)" in src
 
 

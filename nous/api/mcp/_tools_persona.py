@@ -59,7 +59,11 @@ async def _tool_get_context(ctx: AppContext, persona: str, project: str | None =
         if eh_result.is_ok:
             emotion_history = eh_result.value
     except Exception:
-        pass
+        logger.warning(
+            "_tool_get_context: get_emotion_history failed for persona '%s'",
+            persona,
+            exc_info=True,
+        )
 
     # Lightweight: essentials for seamless persona + conversation restoration
     goals_result = ctx.memory_service.get_by_tags(["goal"])

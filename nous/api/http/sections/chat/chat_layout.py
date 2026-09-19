@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def _latest_self_portrait_url(persona: str) -> str:
@@ -19,7 +22,11 @@ def _latest_self_portrait_url(persona: str) -> str:
                 latest = self_files[-1]  # sorted alphabetically = chronological
                 return f"/api/chat/{persona}/persona/images/{latest.name}"
     except Exception:
-        pass
+        logger.warning(
+            "_latest_self_portrait_url: avatar lookup failed for persona '%s', rendering without avatar",
+            persona,
+            exc_info=True,
+        )
     return ""
 
 

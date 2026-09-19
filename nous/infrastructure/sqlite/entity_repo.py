@@ -251,6 +251,8 @@ class SQLiteEntityRepository(SQLiteRepository):
         cutoff_iso: str,
         rate: float = 0.005,
         floor: float = 0.5,
+        # ponytail: floor 0.5 も arbitrary（Hebbian 減衰の下限として慣用的）。
+        # 根拠文献はなし、 tuning knob として設定可能にしてある。
     ) -> Result[int, RepositoryError]:
         """Decay weights of links idle since *cutoff_iso* (single UPDATE, no N+1).
 
@@ -318,6 +320,17 @@ class SQLiteEntityRepository(SQLiteRepository):
         except Exception as e:
             logger.error("Failed to get links for %d keys: %s", len(keys), e)
             return []
+
+    def count_linked_memory_keys(self) -> Result[int, RepositoryError]:
+        """memory_entities に紐づく DISTINCT memory_key 数を返す（linked_ratio算出用）。"""
+        try:
+            row = self._db.execute(
+                "SELECT COUNT(DISTINCT memory_key) AS cnt FROM memory_entities WHERE memory_key != ''"
+            ).fetchone()
+            return Success(int(row["cnt"]) if row else 0)
+        except Exception as e:
+            logger.error("Failed to count linked memory keys: %s", e)
+            return Failure(RepositoryError(str(e)))
 
     def get_entities_for_memories(self, memory_keys: list[str], limit: int = 50) -> list[dict]:
         """Return entities mentioned in the given memories, ordered by mention_count desc.

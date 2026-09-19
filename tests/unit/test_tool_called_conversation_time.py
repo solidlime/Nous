@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from nous.application.chat.introspection import _run_curiosity_exploration
+from nous.application.chat.curiosity import _run_curiosity_exploration
 from nous.application.use_cases import AppContext
 
 # bound でない実メソッド。fake_self を第一引数に渡して呼ぶ。
