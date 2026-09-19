@@ -270,6 +270,32 @@ def _migrate_delete_reflection_meta_v9(
 # Defined at module level so ``run_migrations`` can reference it.  All helper
 # functions are already defined above by this point.
 
+
+def _migrate_fts_sudachi_retokenize(
+    db_conn: sqlite3.Connection,
+    persona: str,  # noqa: ARG001
+) -> None:
+    """Re-tokenize the FTS5 index with Sudachi morphemes (v10).
+
+    Pre-v10 index rows hold raw text; ``unicode61`` treats a CJK run as ONE
+    token, so morpheme-level Japanese queries never match. Rewrite every row
+    with the segmented form (see ``fts_tokenize``). No-op on empty indexes.
+    """
+    # local import: keeps migrations import-light when the step is unused
+    from nous.infrastructure.sqlite.fts_tokenize import tokenize_for_fts
+
+    rows = db_conn.execute("SELECT rowid, content FROM memories_fts").fetchall()
+    if not rows:
+        return
+    for row in rows:
+        db_conn.execute(
+            "UPDATE memories_fts SET content = ? WHERE rowid = ?",
+            (tokenize_for_fts(row["content"]), row["rowid"]),
+        )
+    db_conn.commit()
+    logger.info("FTS index re-tokenized with Sudachi: %d documents", len(rows))
+
+
 MIGRATIONS = [
     (1, "Add last_consumed_at column to memories", _migrate_add_last_consumed_at),
     (2, "Backfill FTS5 index", _migrate_fts_backfill),
@@ -280,4 +306,5 @@ MIGRATIONS = [
     (7, "Add superseded_by column to memories", _migrate_add_superseded_by_v7),
     (8, "Create mot_thoughts table", _migrate_mot_thoughts_v8),
     (9, "Delete legacy reflection_meta memories", _migrate_delete_reflection_meta_v9),
+    (10, "Re-tokenize FTS index with Sudachi morphemes", _migrate_fts_sudachi_retokenize),
 ]

@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from nous.domain.shared.result import Result, Success
 from nous.infrastructure.logging.structured import get_logger
+from nous.infrastructure.sqlite import fts_tokenize
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -97,19 +98,25 @@ class MemorySearchMixin:
     def _sanitize_fts_query(query: str) -> str:
         """Convert a plain-text query to safe FTS5 MATCH syntax (AND logic).
 
-        Splits on whitespace, double-quotes each term, and joins with ``AND``
-        to ensure all terms must match. This protects against FTS5 special
-        characters (``OR``, ``NOT``, ``*``, ``(...)``) while preserving
-        Unicode text including Japanese.
+        Each whitespace term is first segmented into Sudachi morphemes so that
+        CJK-concatenated queries (e.g. ``量子テレポーテーション実験``) match the
+        morpheme-segmented index (see ``fts_tokenize``). Falls back to the raw
+        term when tokenization is unavailable. Terms are quoted and joined with
+        ``AND`` — this also protects against FTS5 special characters
+        (``OR``, ``NOT``, ``*``, ``(...)``).
         """
         terms = query.strip().split()
         if not terms:
             return ""
         escaped = []
-        for t in terms:
-            # Escape embedded double-quotes by doubling them (FTS5 convention)
-            t = t.replace('"', '""')
-            escaped.append(f'"{t}"')
+        for term in terms:
+            tokens = [t for t in fts_tokenize.tokenize_for_fts(term).split() if t]
+            if not tokens:
+                tokens = [term]
+            for t in tokens:
+                # Escape embedded double-quotes by doubling them (FTS5 convention)
+                t = t.replace('"', '""')
+                escaped.append(f'"{t}"')
         return " AND ".join(escaped)
 
     def search_keyword(

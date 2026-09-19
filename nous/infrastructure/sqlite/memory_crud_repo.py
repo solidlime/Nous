@@ -8,6 +8,7 @@ from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import format_iso, get_now
 from nous.infrastructure.logging.structured import get_logger
+from nous.infrastructure.sqlite import fts_tokenize
 from nous.infrastructure.sqlite._utils import _parse_json_list
 
 logger = get_logger(__name__)
@@ -124,6 +125,7 @@ class MemoryCrudMixin:
                 (memory.key,),
             )
             self._db.commit()
+            self._fts_retokenize(memory.key, memory.content)
             logger.info("Memory saved: %s", memory.key)
             return Success(memory.key)
         except Exception as e:
@@ -195,12 +197,30 @@ class MemoryCrudMixin:
 
             updated_row = self._db.execute("SELECT * FROM memories WHERE key = ?", (key,)).fetchone()
             self._db.commit()
+            if "content" in updates:
+                self._fts_retokenize(key, str(updates["content"]))
             logger.info("Memory updated: %s", key)
             return Success(self._row_to_memory(updated_row))
         except Exception as e:
             self._db.rollback()
             logger.error("Failed to update memory %s: %s", key, e)
             return Failure(RepositoryError(str(e)))
+
+    def _fts_retokenize(self, key: str, content: str) -> None:
+        """Replace the trigger-inserted raw FTS content with Sudachi tokens.
+
+        The FTS sync triggers copy raw text; morpheme-level Japanese queries
+        need the segmented form (see ``fts_tokenize``). Best-effort: on failure
+        the raw row stays, degrading to the pre-tokenizer behavior.
+        """
+        try:
+            self._db.execute(  # type: ignore[attr-defined]  # mixin accessor (baseline)
+                "UPDATE memories_fts SET content = ? WHERE memories_key = ?",
+                (fts_tokenize.tokenize_for_fts(content), key),
+            )
+            self._db.commit()  # type: ignore[attr-defined]  # mixin accessor (baseline)
+        except Exception as e:
+            logger.debug("FTS retokenize skipped for %s: %s", key, e)
 
     def delete(self, key: str) -> Result[None, RepositoryError]:
         """Delete a memory and its strength record."""
