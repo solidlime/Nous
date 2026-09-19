@@ -125,8 +125,37 @@ class DecayWorker:
                 return float(c)
         return 0.5
 
+    # audit H5 (v4.0) one-shot migration: legacy rows whose stability was
+    # inflated by the removed emotion gain (×1.5 per emotional recall) are
+    # clamped to the emotion-free init default (1.0) when enabled. The clamp
+    # is idempotent; LTM rows are exempt (their stability comes from
+    # promotion, not emotion). Gated behind
+    # SessionConfig.h5_stability_clamp_enabled (default False) — the v4.0
+    # migration script (scripts/migrate_h5_clamp.py) enables/runs it once in
+    # production; unit tests seed stability directly and must not be clamped.
+    def _h5_stability_clamp_once(self) -> None:
+        """Clamp legacy emotion-inflated stability once (audit H5 migration)."""
+        if getattr(self._config, "h5_stability_clamp_enabled", False) is not True:
+            return
+        try:
+            result = self.context.memory_repo.get_all_strengths()
+            if not result.is_ok:
+                return
+            clamped = 0
+            for strength in result.value:
+                if strength.is_ltm or strength.stability <= 1.0:
+                    continue
+                strength.stability = 1.0
+                self.context.memory_repo.save_strength(strength)
+                clamped += 1
+            if clamped:
+                logger.info("H5 migration: clamped emotion-inflated stability on %d rows", clamped)
+        except Exception:
+            logger.warning("H5 stability clamp failed", exc_info=True)
+
     def _decay_cycle(self) -> None:
         """Run one decay cycle: update all memory strengths."""
+        self._h5_stability_clamp_once()
         result = self.context.memory_repo.get_all_strengths()
         if not result.is_ok:
             return

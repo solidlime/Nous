@@ -357,7 +357,7 @@ class TestBoostRecall:
         assert result.is_ok
         strength = result.value
         assert strength.recall_count == 1
-        assert strength.stability == 1.5
+        assert strength.stability == 1.0  # v4.0 (audit H5): recall no longer inflates stability
 
     async def test_boost_increments(self, service: MemoryService, repo: InMemoryMemoryRepository):
         created = (await service.create_memory(content="recall")).value

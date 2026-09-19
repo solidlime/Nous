@@ -131,19 +131,19 @@ class TestChainEmotionBoost:
         assert boosted.compute_strength_score(now=now) > base.compute_strength_score(now=now)
 
     def test_emotion_boost_increases_score(self):
-        """emotion_peak=0.8 → score > emotion_peak=0.0（他条件同一）."""
+        """valence=0.8 → score > valence=0.0（他条件同一・audit H5: salience は valence 経由）."""
         now = datetime(2026, 6, 29, 12, 0, 0)
         base = MemoryStrength(
             memory_key="a",
             link_count=0,
-            emotion_peak=0.0,
+            valence=0.0,
             recall_count=5,
             last_recall=now,
         )
         boosted = MemoryStrength(
             memory_key="b",
             link_count=0,
-            emotion_peak=0.8,
+            valence=0.8,
             recall_count=5,
             last_recall=now,
         )
@@ -208,37 +208,47 @@ class TestChainEmotionBoost:
 
 
 class TestEmotionGainCap:
-    """感情修飾 recall gain（脳シミュレーション拡張）.
+    """audit H5 (v4.0): 感情は永続 stability を変えない。
 
-    gain = min(1 + gain_k * emotion_intensity, 1.5)（cap 必須）.
-    注: 計画書の「emotion_intensity=0 で従来どおり 1.5 倍上限に一致」は起草時の
-    誤記（無引数呼び出しの誤り）と記録済み——無引数（emotion_intensity=None,
-    レガシー呼び出し側）は従来どおり 1.5 倍を維持し、明示的な感情強度は式に従う。
+    旧仕様（gain = min(1 + gain_k * intensity, 1.5) による stability 増幅）は
+    削除済み。感情は valence（ランキング時 salience）にのみ効く。
     """
 
-    def test_emotion_gain_capped(self):
-        """i=1.0 で cap 1.5 に一致、i=0.5 は式どおり、明示 i=0.0 は gain 1.0."""
+    def test_emotion_does_not_change_stability(self):
+        """いかなる感情強度でも stability は不変（H5 の核心契約）。"""
         full = MemoryStrength(memory_key="full", stability=2.0)
         full.boost_on_recall(emotion_intensity=1.0)
-        assert full.stability == pytest.approx(2.0 * 1.5)
+        assert full.stability == pytest.approx(2.0)
 
-        # 単調性: 弱い感情は cap 未満の gain（1 + 0.5 * 0.5 = 1.25）
         mid = MemoryStrength(memory_key="mid", stability=2.0)
         mid.boost_on_recall(emotion_intensity=0.5)
-        assert mid.stability == pytest.approx(2.0 * 1.25)
-        assert mid.stability < full.stability
+        assert mid.stability == pytest.approx(2.0)
 
-        # 明示的な中立（0.0）は式どおり gain 1.0
         neutral = MemoryStrength(memory_key="neutral", stability=2.0)
         neutral.boost_on_recall(emotion_intensity=0.0)
-        assert neutral.stability == pytest.approx(2.0 * 1.0)
+        assert neutral.stability == pytest.approx(2.0)
 
-        # 無引数（レガシー呼び出し）は従来どおり 1.5 倍
         legacy = MemoryStrength(memory_key="legacy", stability=2.0)
         legacy.boost_on_recall()
-        assert legacy.stability == pytest.approx(2.0 * 1.5)
+        assert legacy.stability == pytest.approx(2.0)
 
-        # cap: stability は 365 を超えない
-        big = MemoryStrength(memory_key="big", stability=300.0)
-        big.boost_on_recall(emotion_intensity=1.0)
-        assert big.stability == pytest.approx(min(300.0 * 1.5, 365.0))
+    def test_recall_metadata_still_updated(self):
+        """recall_count / strength / last_recall は従来どおり更新される。"""
+        s = MemoryStrength(memory_key="s", stability=2.0)
+        s.boost_on_recall(emotion_intensity=0.8)
+        assert s.recall_count == 1
+        assert s.strength == 1.0
+        assert s.last_recall is not None
+        assert s.valence == 0.0  # valence は query_service 側で記録される
+
+    def test_valence_feeds_score_not_stability(self):
+        """valence（想起時の感情強度）はスコアの salience 因子にのみ効く。"""
+        base = MemoryStrength(memory_key="a")
+        base.valence = 0.0
+        plain = base.compute_strength_score(importance=0.5)
+        emo = MemoryStrength(memory_key="b")
+        emo.valence = 1.0
+        boosted = emo.compute_strength_score(importance=0.5)
+        assert boosted > plain
+        # cap: max +0.10
+        assert boosted - plain <= 0.10 + 1e-9

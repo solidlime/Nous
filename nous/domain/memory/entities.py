@@ -117,16 +117,17 @@ class MemoryStrength:
         importance: float = 0.5,
         now: datetime | None = None,
     ) -> float:
-        """7-factor composite strength score (0.0-1.0).
+        """6-factor composite strength score (0.0-1.0).
 
-        Factors:
-        - recency: 0.20 * exp(-age_days / 7)
+        Factors (audit M10, v4.0 — time decay is handled ONLY by the FSRS
+        recall curve in the decay worker, which multiplies this score; the
+        old independent recency factor double-decayed every memory):
         - frequency: 0.15 * min(1.0, log(1+recall_count)/log(10))
         - importance: 0.25 * importance
         - utility: 0.20 * exp(-utility_age_days / 3) if last_utility else 0.0
         - interference: -0.05 * min(1.0, interference_count / 5)  (penalty)
         - chain: +0.02 * link_count (max +0.10, linked memories decay slower)
-        - emotion: +0.20 * emotion_peak (max +0.10, emotional salience)
+        - emotion: +0.20 * valence (max +0.10, ranking-time salience)
 
         ponytail: 旧 9-factor の novelty (0.05*0.5) / confidence (0.10*0.8)
         は全記憶に毎回加算される定数バイアス（順位に影響せず絶対値のみ
@@ -138,12 +139,7 @@ class MemoryStrength:
         # Normalize timezones: DB round-trips store aware datetimes (format_iso),
         # while in-memory defaults are naive. Strip tzinfo to keep subtraction valid.
         now = now.replace(tzinfo=None)
-        last_recall = self.last_recall.replace(tzinfo=None) if self.last_recall is not None else None
         last_utility = self.last_utility.replace(tzinfo=None) if self.last_utility is not None else None
-
-        # Recency: 7-day half-life
-        age_days = (now - last_recall).total_seconds() / 86400 if last_recall is not None else 365.0
-        recency = 0.20 * math.exp(-age_days / 7.0)
 
         # Frequency: log-scaled recall count
         frequency = 0.15 * min(1.0, math.log(1 + self.recall_count) / math.log(10))
@@ -166,26 +162,28 @@ class MemoryStrength:
         if self.link_count > 0:
             chain = min(0.10, 0.02 * self.link_count)  # max +0.10 (5+ links)
 
-        # Emotion boost: emotional memories are stronger
+        # Emotion salience (audit H5): ranking-time signal only — reads the
+        # intensity observed at the most recent recall (``valence``), NOT a
+        # permanent multiplier. Legacy ``emotion_peak`` is retained in the
+        # schema for compat but no longer fed (see boost_on_recall).
         emotion = 0.0
-        if self.emotion_peak > 0.0:
-            emotion = min(0.10, 0.20 * self.emotion_peak)  # max +0.10 (intensity >= 0.5)
+        if self.valence > 0.0:
+            emotion = min(0.10, 0.20 * self.valence)  # max +0.10 (intensity >= 0.5)
 
-        score = recency + frequency + importance_score + utility + interference + chain + emotion
+        score = frequency + importance_score + utility + interference + chain + emotion
         return max(0.0, min(1.0, score))
 
     def boost_on_recall(self, emotion_intensity: float | None = None, gain_k: float = 0.5) -> None:
-        """Increase stability on successful recall + update emotion peak.
+        """Update recall metadata; emotion no longer boosts stability (audit H5).
 
-        Gain is emotion-modulated (brain-sim design §3.2, McGaugh 2004):
-        ``gain = min(1 + gain_k * emotion_intensity, 1.5)`` — cap mandatory.
-        ``emotion_intensity=None`` (legacy no-arg callers) keeps the legacy
-        1.5x boost unchanged; explicit intensity 0.0 (neutral) yields gain 1.0
-        (intentional growth stop — #081 arbitration 1, conditional approval).
+        v4.0: emotional flashbulb-style stability inflation was removed —
+        emotional memories keep vividness/confidence but their factual
+        accuracy decays (Talarico & Rubin 2003), so emotion must not
+        permanently raise FSRS stability. Emotion remains a *ranking-time*
+        salience signal via ``valence`` (fed by callers) + the score factor.
+        ``gain_k``/``emotion_intensity`` are accepted for signature compat
+        and ignored.
         """
         self.recall_count += 1
-        gain = 1.5 if emotion_intensity is None else min(1.0 + gain_k * max(0.0, emotion_intensity), 1.5)
-        self.stability = min(self.stability * gain, 365.0)
         self.strength = 1.0
         self.last_recall = datetime.now()
-        self.emotion_peak = max(self.emotion_peak, emotion_intensity or 0.0)

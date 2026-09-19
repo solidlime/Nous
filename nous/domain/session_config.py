@@ -258,6 +258,10 @@ class SessionConfig(BaseModel):
         default=3600, description="重要度を減衰させる処理の実行間隔（秒）。"
     )  # 1h sweep — 減衰は経過時間依存なので sweep は平滑性にのみ影響
     forgetting_min_strength: float = Field(default=0.1, description="これを下回った記憶を忘却対象にします。")
+    h5_stability_clamp_enabled: bool = Field(
+        default=False,
+        description="監査 H5 マイグレーション: 感情増幅で膨張した stability を 1 回だけ 1.0 に clamp する。v4.0 移行スクリプトが有効化する。",
+    )
 
     @field_validator("voice_emotion_mode")
     @classmethod
