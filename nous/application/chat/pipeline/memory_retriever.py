@@ -6,15 +6,16 @@ import asyncio
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from nous.application.chat.pipeline.emotion_decay import _compute_recency_decay
 from nous.domain.memory.recall_annotator import RecallAnnotator
-from nous.domain.search.engine import SearchQuery
+from nous.domain.search.engine import SearchQuery, SearchResult
+from nous.domain.search.policy import RankPolicy
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
     from nous.domain.chat_config import ChatConfig
+    from nous.domain.memory.entities import Memory
 
 logger = get_logger(__name__)
 
@@ -53,7 +54,7 @@ async def _search_memories(
     config: ChatConfig,
     top_k: int = 8,
 ) -> tuple[str, dict, list]:
-    """2クエリ並行検索 + 複合スコアリングマージ。
+    """2クエリ並行検索 + engine 側 RankPolicy 複合スコアリングのマージ。
 
     Returns:
         (formatted_str, debug_info, memories_list)
@@ -64,15 +65,22 @@ async def _search_memories(
     # リフレクション記憶の降格係数 (主題不定の抽象文が通常検索に混入するのを防ぐ)。
     # 1.0 で無効。
     reflection_penalty = float(getattr(config, "reflection_retrieval_penalty", 0.5))
+    # 複合スコアは SearchEngine の最終段（rank_policy）で適用する。
+    policy = RankPolicy(
+        recency_weight=recency_w,
+        importance_weight=importance_w,
+        relevance_weight=relevance_w,
+        reflection_penalty=reflection_penalty,
+    )
 
     queries = [user_message]
     if last_assistant:
         queries.append(last_assistant[:200])
 
-    async def _run(q: str) -> list:
+    async def _run(q: str) -> list[SearchResult]:
         try:
             result = await ctx.search_engine.search(
-                SearchQuery(text=q, top_k=top_k, valid_at=get_now(), apply_rif=True)
+                SearchQuery(text=q, top_k=top_k, valid_at=get_now(), apply_rif=True, rank_policy=policy)
             )
             return result.value if result.is_ok else []
         except Exception as e:
@@ -81,78 +89,32 @@ async def _search_memories(
 
     results = await asyncio.gather(*[_run(q) for q in queries])
 
-    # Collect unique candidates by content
-    seen: set[str] = set()
-    mem_by_content: dict[str, object] = {}
+    # Merge: memory.key で dedupe し max score を採用 → 降順 → top_k。
+    # 複合スコア（recency+importance+relevance+reflection penalty）は engine 側で
+    # 計算済み（SearchResult.score / cosine）。
+    best: dict[str, SearchResult] = {}
     for result_list in results:
         for item in result_list:
-            if isinstance(item, tuple):
-                mem = item[0]
-            elif hasattr(item, "memory"):
-                mem = item.memory
-            else:
-                mem = item
-            content = getattr(mem, "content", str(mem))
-            if content not in seen:
-                seen.add(content)
-                mem_by_content[content] = mem
-
-    # relevance = 絶対コサイン類似度 (旧RRFは新鮮記憶支配を招くため廃止)。
-    # 2クエリ間は max で統合 (コサイン値域 [0,1] を超えない)。
-    # 候補過多時は rec+imp 部分で事前ランキングし上位のみエンコード。
-    # 埋め込み取得不能時は relevance=0.0 で継続 (fail-open)。
-    pre: list[tuple[float, str, object]] = []
-    for content, mem in mem_by_content.items():
-        importance = float(getattr(mem, "importance", 0.5))
-        created_at = getattr(mem, "created_at", None)
-        recency = _compute_recency_decay(created_at)
-        pre.append((recency_w * recency + importance_w * importance, content, mem))
-    if len(pre) > 30:
-        pre.sort(key=lambda x: x[0], reverse=True)
-        pre = pre[:30]
-
-    cos_scores: dict[str, float] = {content: 0.0 for _, content, _ in pre}
-    embedding = getattr(ctx, "_embedding", None)
-    if embedding is not None and pre:
-        try:
-            import numpy as np
-
-            qvecs = [embedding.encode(q, is_query=True) for q in queries]
-            for _, content, _ in pre:
-                d = embedding.encode(content)
-                cos_scores[content] = max(float(np.dot(qv, d)) for qv in qvecs)
-        except Exception as e:
-            logger.debug("memory relevance cosine failed: %s", e)
-
-    # Compute composite score for each unique memory
-    scored: list[tuple[float, object]] = []
-    for base, content, mem in pre:
-        relevance = cos_scores[content]
-        composite = base + relevance_w * relevance
-        if "reflection" in (getattr(mem, "tags", None) or []):
-            composite *= reflection_penalty
-        scored.append((composite, mem))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    top = scored[:top_k]
+            if item.memory.key not in best or item.score > best[item.memory.key].score:
+                best[item.memory.key] = item
+    top = sorted(best.values(), key=lambda r: r.score, reverse=True)[:top_k]
 
     if not top:
         return "", {"queries": queries, "results": []}, []
 
-    cos_values = list(cos_scores.values())
     logger.debug(
-        "cosine relevance: min=%.4f, max=%.4f, top_%d_composite_range=[%.4f, %.4f]",
-        min(cos_values),
-        max(cos_values),
+        "cosine relevance: top_%d_composite_range=[%.4f, %.4f]",
         len(top),
-        top[-1][0],
-        top[0][0],
+        top[-1].score,
+        top[0].score,
     )
 
     annotator = RecallAnnotator()
     now = datetime.now(tz=UTC)
     lines: list[str] = []
-    for _, m in top:
+    memories_list: list[Memory] = []
+    for r in top:
+        m = r.memory
         created_at = getattr(m, "created_at", None)
         if created_at is not None:
             if created_at.tzinfo is None:
@@ -168,21 +130,21 @@ async def _search_memories(
         )
         if not ann.should_mention:
             continue
+        memories_list.append(m)
         hint = _format_memory_hint(ann)
         content = getattr(m, "content", str(m))
         if hint:
             lines.append(f"{hint} {content}")
         else:
             lines.append(content)
-    memories_list: list[object] = [m for _, m in top]
     debug_results = [
         {
-            "content": getattr(m, "content", str(m)),
-            "importance": round(float(getattr(m, "importance", 0.5)), 2),
-            "score": round(score, 4),
-            "cosine": round(cos_scores.get(getattr(m, "content", str(m)), 0.0), 4),
+            "content": getattr(r.memory, "content", str(r.memory)),
+            "importance": round(float(getattr(r.memory, "importance", 0.5)), 2),
+            "score": round(r.score, 4),
+            "cosine": round(float(getattr(r, "cosine", 0.0) or 0.0), 4),
         }
-        for score, m in top
+        for r in top
     ]
     return "\n".join(lines), {"queries": queries, "results": debug_results}, memories_list
 
