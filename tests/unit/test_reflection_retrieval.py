@@ -2,14 +2,15 @@
 
 reflection タグ付き記憶は主題不定の抽象文 (importance 高め) で、通常検索に
 無選別混入する。MemGPT archival 分離相当の対処:
-① 検索複合スコアにペナルティ係数 (relevance は絶対コサイン) ② 無条件注入に
-相対閾値フィルタ (max_sim - margin AND floor)。
+① 複合スコアの reflection ペナルティ係数——適用は SearchEngine の RankPolicy 段
+   （真の recall 経路）に移設: ``tests/unit/test_search_rank_policy.py``。
+   caller（memory_retriever）は config 値から RankPolicy を組み立てて渡すだけ。
+② 無条件注入に相対閾値フィルタ (max_sim - margin AND floor)。
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import numpy as np
@@ -21,16 +22,13 @@ from nous.domain.search.engine import SearchResult
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now
 
-if TYPE_CHECKING:
-    from datetime import datetime
-
 
 def _mem(
     key: str,
     content: str,
     tags: list[str] | None = None,
     importance: float = 0.9,
-    created_at: datetime | None = None,
+    created_at=None,
 ) -> Memory:
     now = created_at if created_at is not None else get_now()
     return Memory(
@@ -41,16 +39,6 @@ def _mem(
         importance=importance,
         tags=tags or [],
     )
-
-
-def _result(mem: Memory) -> SearchResult:
-    return SearchResult(memory=mem, score=0.9, source="semantic")
-
-
-def _ctx_with(results: list[SearchResult]) -> MagicMock:
-    ctx = MagicMock()
-    ctx.search_engine.search = AsyncMock(return_value=Success(results))
-    return ctx
 
 
 def _state() -> SimpleNamespace:
@@ -105,36 +93,42 @@ class TestReflectionPenaltyConfig:
         assert SessionConfig().reflection_injection_margin == 0.08
 
 
-class TestReflectionRetrievalPenalty:
-    @pytest.mark.asyncio
-    async def test_reflection_ranked_below_equal_memory(self):
-        """同スコアの通常記憶より reflection が降格すること（デフォルト penalty=0.5）。"""
-        from nous.application.chat.pipeline.memory_retriever import _search_memories
+class TestRetrieverPassesRankPolicy:
+    """caller（memory_retriever）は config 値で RankPolicy を組み立てて渡す。
 
-        # 同一 created_at で recency を完全同点にし、順位差を penalty に限定する
-        fixed = get_now()
-        plain = _mem("m1", "よく使う道具の話", created_at=fixed)
-        refl = _mem("m2", "私は最近の振る舞いを反省している", tags=["reflection"], created_at=fixed)
-        ctx = _ctx_with([_result(refl), _result(plain)])
-        ctx._embedding = None
-        _f, debug, mems = await _search_memories(ctx, "クエリ", None, ChatConfig())
-        assert debug["results"][0]["content"] == "よく使う道具の話"
-        assert mems[0] is plain
+    複合スコア計算本体は engine 側（test_search_rank_policy.py）に移設済み。
+    """
 
     @pytest.mark.asyncio
-    async def test_penalty_1_is_noop(self):
-        """penalty=1.0 → 無効化: RRF 順のまま（reflection 先頭）。"""
+    async def test_config_values_build_and_pass_rank_policy(self):
+        """config の retrieval_* 重みと penalty が SearchQuery.rank_policy に載る。"""
         from nous.application.chat.pipeline.memory_retriever import _search_memories
 
-        # 同一 created_at で全スコアを同点にし、順位差を penalty に限定する
-        fixed = get_now()
-        refl = _mem("m2", "reflection文です", tags=["reflection"], created_at=fixed)
-        plain = _mem("m1", "普通の記憶", created_at=fixed)
-        ctx = _ctx_with([_result(refl), _result(plain)])
-        ctx._embedding = None
-        config = ChatConfig(reflection_retrieval_penalty=1.0)
-        _f, debug, _m = await _search_memories(ctx, "q", None, config)
-        assert debug["results"][0]["content"] == "reflection文です"
+        captured: list = []
+
+        async def _search(q, *a, **kw):
+            captured.append(q)
+            return Success([])
+
+        ctx = MagicMock()
+        ctx.search_engine.search = AsyncMock(side_effect=_search)
+        config = ChatConfig(
+            retrieval_recency_weight=0.2,
+            retrieval_importance_weight=0.3,
+            retrieval_relevance_weight=0.5,
+            reflection_retrieval_penalty=0.7,
+        )
+        _f, debug, mems = await _search_memories(ctx, "クエリ", None, config)
+        assert captured
+        q = captured[0]
+        assert q.rank_policy is not None
+        assert q.rank_policy.recency_weight == pytest.approx(0.2)
+        assert q.rank_policy.importance_weight == pytest.approx(0.3)
+        assert q.rank_policy.relevance_weight == pytest.approx(0.5)
+        assert q.rank_policy.reflection_penalty == pytest.approx(0.7)
+        # 真の recall 経路の契約は維持（RIF + valid_at）
+        assert q.apply_rif is True
+        assert q.valid_at is not None
 
 
 class TestReflectionInjectionSimilarity:
@@ -238,64 +232,28 @@ class TestReflectionInjectionMargin:
 
 
 class TestCosineRelevance:
-    """memory_retriever の relevance: RRF → 絶対コサイン類似度。
+    """caller 側のマージ: 2クエリ結果を memory.key で dedupe し max score を採用。
 
-    旧 RRF (上限≈0.13) では importance+recency 支配で新鮮な無関係事実が
-    常時首位だった。絶対コサインで relevance_w が実質的に効く。
+    relevance（絶対コサイン）の計算と複合スコアは engine の RankPolicy 段に
+    移設済み（test_search_rank_policy.py）。
     """
-
-    @staticmethod
-    def _cos_ctx(results: list[SearchResult], content_vecs: dict[str, object]) -> MagicMock:
-        ctx = _ctx_with(results)
-        ctx._embedding = MagicMock()
-
-        def _encode(text: str, is_query: bool = False):
-            if is_query:
-                return np.array([1.0, 0.0])
-            return content_vecs[text]
-
-        ctx._embedding.encode = MagicMock(side_effect=_encode)
-        return ctx
-
-    @pytest.mark.asyncio
-    async def test_cosine_beats_fresh_importance(self):
-        """関連度高×低importance が 無関係×高importance・新鮮 を上回る。"""
-        from nous.application.chat.pipeline.memory_retriever import _search_memories
-
-        fresh_unrelated = _mem("m1", "無関係トピックの話", importance=1.0)
-        relevant = _mem("m2", "関連する記憶", importance=0.1)
-        ctx = self._cos_ctx(
-            [_result(fresh_unrelated), _result(relevant)],
-            {"無関係トピックの話": np.array([0.0, 1.0]), "関連する記憶": np.array([0.9, 0.1])},
-        )
-        _f, debug, mems = await _search_memories(ctx, "クエリ", None, ChatConfig())
-        # rel: 0.3*1.0 + 0.3*0.1 + 0.4*0.9 = 0.69 > unrelated: 0.3*1.0 + 0.3*1.0 + 0 = 0.6
-        assert mems[0] is relevant
-        assert debug["results"][0]["content"] == "関連する記憶"
-        assert debug["results"][0]["cosine"] == pytest.approx(0.9, abs=1e-3)
-
-    @pytest.mark.asyncio
-    async def test_no_embedding_relevance_zero_fail_open(self):
-        """埋め込み無し → relevance 0.0 で継続（fail-open、rec+imp のみでランク）。"""
-        from nous.application.chat.pipeline.memory_retriever import _search_memories
-
-        mem1 = _mem("m1", "記憶その1", importance=0.9)
-        mem2 = _mem("m2", "記憶その2", importance=0.2)
-        ctx = _ctx_with([_result(mem2), _result(mem1)])
-        ctx._embedding = None
-        _f, debug, mems = await _search_memories(ctx, "クエリ", None, ChatConfig())
-        assert mems[0] is mem1
-        assert debug["results"][0]["cosine"] == 0.0
 
     @pytest.mark.asyncio
     async def test_two_query_merge_takes_max(self):
-        """2クエリの relevance は max 統合（加算しない）。"""
+        """2クエリ（user_message / last_assistant）のスコアは max 統合（加算しない）。"""
         from nous.application.chat.pipeline.memory_retriever import _search_memories
 
         mem = _mem("m1", "関連する記憶")
-        ctx = _ctx_with([_result(mem)])
-        ctx._embedding = MagicMock()
-        ctx._embedding.encode = MagicMock(side_effect=lambda text, is_query=False: np.array([1.0, 0.0]))
-        # user_message と last_assistant の両方で cos 0.9 → max 0.9 (0.9+0.9 ではない)
-        _f, debug, _m = await _search_memories(ctx, "クエリ", "前回の応答", ChatConfig())
+
+        async def _search(q, *a, **kw):
+            if q.text == "クエリ":
+                return Success([SearchResult(memory=mem, score=1.4, source="hybrid", cosine=1.0)])
+            return Success([SearchResult(memory=mem, score=0.9, source="hybrid", cosine=0.5)])
+
+        ctx = MagicMock()
+        ctx.search_engine.search = AsyncMock(side_effect=_search)
+        _f, debug, mems = await _search_memories(ctx, "クエリ", "前回の応答", ChatConfig())
+        # max score 側（cos 1.0）が採用され、cos 0.5 と加算されたりしない
+        assert debug["results"][0]["score"] == pytest.approx(1.4, abs=1e-3)
         assert debug["results"][0]["cosine"] == pytest.approx(1.0, abs=1e-3)
+        assert mems[0] is mem

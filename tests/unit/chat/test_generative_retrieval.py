@@ -1,4 +1,9 @@
-"""Unit tests for composite-scoring retrieval logic in PrepareStep."""
+"""Unit tests for recency-decay helpers re-exported via PrepareStep.
+
+複合スコア（recency + importance + relevance + reflection penalty）の検証は
+engine 側 RankPolicy に移設: ``tests/unit/test_search_rank_policy.py`` の
+``TestCompositeScoreFormulaEngine`` を参照。
+"""
 
 from __future__ import annotations
 
@@ -7,6 +12,8 @@ from datetime import UTC, datetime, timedelta
 
 # ---------------------------------------------------------------------------
 # Import the helpers directly (no server / embedding model needed)
+# emotion_decay は time_utils への re-export になったが、prepare 経由の
+# 既存 import はそのまま動作する（TestComputeRecencyDecay 存続）。
 # ---------------------------------------------------------------------------
 from nous.application.chat.pipeline.prepare import (
     _RECENCY_LAMBDA,
@@ -56,42 +63,3 @@ class TestComputeRecencyDecay:
         scores = [_compute_recency_decay(now - timedelta(days=d)) for d in [0, 1, 3, 7, 14]]
         for i in range(len(scores) - 1):
             assert scores[i] > scores[i + 1]
-
-
-class TestCompositeScoreFormula:
-    """Tests for the composite scoring formula used in _search_memories."""
-
-    @staticmethod
-    def composite(
-        recency: float, importance: float, rrf: float, rw: float = 0.3, iw: float = 0.3, relw: float = 0.4
-    ) -> float:
-        return rw * recency + iw * importance + relw * rrf
-
-    def test_weights_sum_to_correct_total(self):
-        """Equal inputs with default weights should produce weighted average."""
-        score = self.composite(1.0, 1.0, 1.0)
-        assert abs(score - 1.0) < 1e-9
-
-    def test_relevance_dominates_with_high_weight(self):
-        """High relevance weight should make relevance dominate."""
-        score_high_rel = self.composite(0.1, 0.1, 0.9, rw=0.1, iw=0.1, relw=0.8)
-        score_low_rel = self.composite(0.9, 0.9, 0.1, rw=0.1, iw=0.1, relw=0.8)
-        assert score_high_rel > score_low_rel
-
-    def test_recency_dominates_with_high_weight(self):
-        """High recency weight should make fresh memories rank higher."""
-        score_fresh = self.composite(0.9, 0.1, 0.1, rw=0.8, iw=0.1, relw=0.1)
-        score_old = self.composite(0.1, 0.9, 0.9, rw=0.8, iw=0.1, relw=0.1)
-        assert score_fresh > score_old
-
-    def test_zero_scores_give_zero(self):
-        score = self.composite(0.0, 0.0, 0.0)
-        assert score == 0.0
-
-    def test_custom_weight_precision(self):
-        """Score with known inputs should match manual calculation."""
-        recency, importance, rrf = 0.8, 0.5, 0.6
-        rw, iw, relw = 0.3, 0.3, 0.4
-        expected = 0.3 * 0.8 + 0.3 * 0.5 + 0.4 * 0.6
-        result = self.composite(recency, importance, rrf, rw, iw, relw)
-        assert abs(result - expected) < 1e-9

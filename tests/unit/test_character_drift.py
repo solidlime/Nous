@@ -262,6 +262,8 @@ class TestDriftRecall:
         query = ctx.search_engine.search.await_args[0][0]
         assert isinstance(query, SearchQuery)
         assert query.valid_at is not None
+        # true recall 経路の最終スコア段（rank_policy）も必ず渡される
+        assert query.rank_policy is not None
 
     @pytest.mark.asyncio
     async def test_injection_includes_valid_drift(self):
