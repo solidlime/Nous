@@ -117,18 +117,20 @@ class MemoryStrength:
         importance: float = 0.5,
         now: datetime | None = None,
     ) -> float:
-        """9-factor composite strength score (0.0-1.0).
+        """7-factor composite strength score (0.0-1.0).
 
         Factors:
         - recency: 0.20 * exp(-age_days / 7)
         - frequency: 0.15 * min(1.0, log(1+recall_count)/log(10))
         - importance: 0.25 * importance
         - utility: 0.20 * exp(-utility_age_days / 3) if last_utility else 0.0
-        - novelty: 0.05 * 0.5  (stub)
-        - confidence: 0.10 * 0.8  (stub)
         - interference: -0.05 * min(1.0, interference_count / 5)  (penalty)
         - chain: +0.02 * link_count (max +0.10, linked memories decay slower)
         - emotion: +0.20 * emotion_peak (max +0.10, emotional salience)
+
+        ponytail: 旧 9-factor の novelty (0.05*0.5) / confidence (0.10*0.8)
+        は全記憶に毎回加算される定数バイアス（順位に影響せず絶対値のみ
+        +0.105 ずらす死に因子）として 2026-09-19 レビューで除去。
         """
         if now is None:
             now = datetime.now()
@@ -156,12 +158,6 @@ class MemoryStrength:
         else:
             utility = 0.0
 
-        # Novelty: stub (0.5 = average novelty)
-        novelty = 0.05 * 0.5
-
-        # Confidence: stub (0.8 = default confidence)
-        confidence = 0.10 * 0.8
-
         # Interference: penalty
         interference = -0.05 * min(1.0, self.interference_count / 5.0)
 
@@ -175,7 +171,7 @@ class MemoryStrength:
         if self.emotion_peak > 0.0:
             emotion = min(0.10, 0.20 * self.emotion_peak)  # max +0.10 (intensity >= 0.5)
 
-        score = recency + frequency + importance_score + utility + novelty + confidence + interference + chain + emotion
+        score = recency + frequency + importance_score + utility + interference + chain + emotion
         return max(0.0, min(1.0, score))
 
     def boost_on_recall(self, emotion_intensity: float | None = None, gain_k: float = 0.5) -> None:

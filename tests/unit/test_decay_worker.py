@@ -158,7 +158,8 @@ class TestDecayWorkerBrain:
 
     def test_subtle_decay_does_not_fire(self) -> None:
         """微細な減衰（delta ≤ 0.05）では replay_fire を発火しない。"""
-        strength = _make_strength("subtle", strength=0.26)
+        strength = _make_strength("subtle", strength=0.36)
+        strength.last_recall = get_now()  # recency を効かせて score を固定（delta≈0.035）
         ctx = _make_ctx([strength])
 
         worker = DecayWorker(ctx, interval_seconds=3600)
