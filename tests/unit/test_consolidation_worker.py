@@ -79,7 +79,9 @@ def _consolidate(tmp_path, broken_link: bool = False):
             repo.save(_mem(f"src{i}"))
         # 全記憶が共有エンティティ e1 を持つ（クラスタリング成立条件）
         db = conn.get_memory_db()
-        db.execute("INSERT OR IGNORE INTO entities (id, entity_type, first_seen, last_seen) VALUES ('e1', 'test', '', '')")
+        db.execute(
+            "INSERT OR IGNORE INTO entities (id, entity_type, first_seen, last_seen) VALUES ('e1', 'test', '', '')"
+        )
         db.executemany(
             "INSERT OR IGNORE INTO memory_entities (memory_key, entity_id, role) VALUES (?, 'e1', 'mentioned')",
             [(f"src{i}",) for i in range(3)],
@@ -114,12 +116,12 @@ class TestSummarizesRelation:
         try:
             assert len(service.calls) == 1
             gist_key = service.calls[0] and "gist_1"
-            rows = conn.get_memory_db().execute(
-                "SELECT source_key, target_key FROM memory_links WHERE link_type = 'summarizes'"
-            ).fetchall()
-            assert {(r["source_key"], r["target_key"]) for r in rows} == {
-                (f"src{i}", gist_key) for i in range(3)
-            }
+            rows = (
+                conn.get_memory_db()
+                .execute("SELECT source_key, target_key FROM memory_links WHERE link_type = 'summarizes'")
+                .fetchall()
+            )
+            assert {(r["source_key"], r["target_key"]) for r in rows} == {(f"src{i}", gist_key) for i in range(3)}
         finally:
             conn.close()
 

@@ -4,6 +4,15 @@
 
 **ステータス凡例**: ✅修正済み（本レビューで実装・検証済み）/ 🔧対処方針（実装済みの対処の説明）/ 📌意図的保持（根拠を明記して保持）/ ⏳後日対応
 
+**修正ラウンド**: 本レビューは 3 ラウンドで完結している。
+
+| ラウンド | 内容 | 主要コミット |
+|---|---|---|
+| 1 | 静的解析ベースの全数レビュー+修正（本書 §1-§3, M1-M5） | — |
+| 2 | 脳シミュレーション配線の実機検証 → RankPolicy 統合・reflection 統合・スタブ因子除去・互換バグ修正 | `6d755496` `e7d39f4f` `a151c16a` `0631d8bc` `a3f2c470` |
+| 3 | フロントエンド JS 巨大ファイル分割・AppContext 分割・全残課題（format/lint/TZ）解消・実機機能検証 | `e67bf9fd` `ad97b20b` `00383e4b` |
+| 4 | memory_search の CJK 連結クエリ空ヒット修正（FTS Sudachi 形態素化） | 本ラウンド |
+
 ---
 
 ## 1. 本レビューで解消した回帰・バグ
@@ -54,14 +63,20 @@
 
 | # | 指摘 | 対処 | ステータス |
 |---|------|------|-----------|
-| B13 | `application/use_cases.py`（567行の AppContext + registry） | DI コンテナだが、persona 毎の状態管理と実質結合している。分割は interconnect が太く、本レビューでは実施せず構造問題として記録 | ⏳ |
+| B13 | `application/use_cases.py`（567行の AppContext + registry） | ラウンド 3 で実施: 状態遷移/ベクトルスタック/イベント配線を `nous/application/context/{lifecycle,vector_stack,event_handlers}.py` ミックスインに分離（-337 行、use_cases.py は 487 行に）。`AppContext` の公開 API は不変（MCP/WebUI 両経路の互換維持） | ✅（`00383e4b`） |
 | B14 | memory_stats_mixin / memory_version_mixin / memory_aux_repo の Mixin3層 | 1実装だが sqlite repository の巨大化を避ける意図。統合すると1ファイル800行超 | 📌 |
 
 ### 2.6 巨大ファイル（500行超）
 
-`introspection.py` ~700行（内省+自発+好奇心）・`use_cases.py` ~780行・`entity_repo.py` ~480行・`domain/search/engine.py` ~580行・`memory_extractor.py` ~730行。
+`introspection.py` ~700行（内省+自発+好奇心）は Phase 2 分割（curiosity.py 抽出）で解消済み。`use_cases.py` は B13 で解消済み。残る巨大ファイル: `domain/search/engine.py` ~580行（検索パイプライン単機能で凝集度高・分割はインターフェース増Only）と `memory_extractor.py` ~730行（抽出プロンプト群の塊）は 📌 保持。
 
-→ 関心単位の分割（好奇心探索の完全分離等）は Phase 2 分割（curiosity.py 抽出）で着手済み。残りは ⏳。
+### 2.7 検証で判明した互換バグ（ラウンド 2）
+
+| # | 事象 | 対処 | ステータス |
+|---|------|------|----------|
+| B15 | `VALID_SOURCE_TYPES` に `system` が無く、システム生成記憶（reflected 等）の書込が `ValueError` で落ちる | `domain/memory/entities.py` に `"system"` を追加 | ✅（`0631d8bc`） |
+| B16 | `persona_repo.get_emotion_history()` / `get_emotion_history_by_days()` に `WHERE persona = ?` が無く、全ペルソナの感情履歴が混在する | 両メソッドに persona フィルタ追加 | ✅（`0631d8bc`） |
+| B17 | `memory_search` で助詞なし CJK 連結クエリ（例: 「量子テレポーテーション実験」）が空ヒット — FTS5 `unicode61` が CJK 連続を 1 トークン扱いするため形態素単位のクエリが raw インデックスと絶対に一致しない | ラウンド 4 で実施: インデックス側（`memory_crud_repo` 保存/更新後に `memories_fts` を再トークン化）とクエリ側（`_sanitize_fts_query` で形態素 AND 展開）の両面を Sudachi 表層トークンで統一（`fts_tokenize.py` 新設、辞書欠落時は raw フォールバック）。既存 DB は v10 マイグレーションで再トークン化。実機: 連結/分かち書き/単語クエリ全て HIT を確認 | ✅ |
 
 ---
 
@@ -76,8 +91,8 @@
 | F5 | `chat-history.js:512 cleanup()`・`:95 getChatSessionId()` 未参照 | 検証の結果どちらも生存（`getChatSessionId()` は同7箇所+`core/sse.js:177`+export で使用、`cleanup()` はメッセージ編集クロージャ内で使用）。削除対象ではなく探索レポートの誤検知 | 📌（誤検知として記録） |
 | F6 | highlight.js が全タブでロード（`chat_layout.py:103-107`） | 本 SPA は dashboard.py が全タブ HTML をサーバ側で結合し、タブ切替は CSS `.active` のみ。レンダリング時点でアクティブタブという概念が存在しないため条件ロードは不可能。遅延ロードは JS 側改修が必要 | 📌（構造上の制約として記録） |
 | F7 | `chat-core.js` の setupChatInputHandler と ...WithObserver が2経路（Observer は5秒 body ポーリング） | 分割の中間生成物。統合は入力ハンドリングの回帰リスクが高い | 📌 |
-| F8 | `chat-settings.js ~1440行`・`chat-send.js ~1244行` 等の巨大 JS | 段階分割を ⏳ | ⏳ |
-| F9 | `routers/tts.py ~828行`（キャプション LLM + relay + cache がルーター直埋め） | サービス層抽出を ⏳ | ⏳ |
+| F8 | `chat-settings.js ~1846行`・`chat-send.js ~1532行`・`chat-history.js ~1025行`・`chat-memory-panel.js ~1133行` の巨大 JS | ラウンド 3 で実施: 4 ファイルを 17 チャンク（全て ≤500 行）のサブモジュールに分割し、ファサード 4 本（11-12 行）で既存参照経路を維持。内部共有は `N.Chat._send` / `N.Chat._history` / `memoryPanel._wiring` 名前空間テーブル。挙動同等修正は `clearWiring()` の配列参照維持のみ。vitest+jsdom（277 テスト）を同時導入 | ✅（`e67bf9fd` `ad97b20b`） |
+| F9 | `routers/tts.py ~825行`（キャプション LLM + relay + cache がルーター直埋め） | 📌 保持。根拠: (1) テスト契約が遅延バインディング — `test_tts_stream_endpoint.py:84-86` が `monkeypatch.setattr(tts_mod, "_safe_get_context"/"get_voice_engine"/"take_caption_task", ...)` で tts モジュール属性を差し替え、ハンドラ内部がそれをモジュールグローバル解決するため、分割すると循環 import 回避の遅延経路が必要になる (2) 機能は単一（5 エンドポイント+キャプション 2 モード+キャッシュ）で凝集度高 (3) 挙動変化ゼロの割に 9 テストファイルにまたがる回帰リスク。分割する場合は純粋関数群（caption 構築・cache key 生成）から段階的に | 📌 |
 
 ---
 
@@ -103,21 +118,23 @@
 
 | # | 指摘 | 対処 | ステータス |
 |---|------|------|-----------|
-| M1 | 二重ランキング（engine 再ランク vs `_search_memories` composite） | recency/importance は RRFRanker にも存在。統合は検索品質の回帰リスクが高く、評価スイート無しでは安全に実施不能 | ⏳（ablation テストの整備が先決） |
-| M2 | `compute_strength_score` のスタブ定数因子（novelty, confidence） | 除去候補だが全記憶スコアに定数バイアスとして乗っているため、除去は順位に影響。評価スイート後に実施 | ⏳ |
-| M3 | reflection 二重実装（`maybe_run_reflection` legacy + `ReflectionEngine` periodic） | 廃止統合候補。トリガ条件が異なる（1h間隔+24h窓 vs 24h毎+MIN_MEMORIES=10）ため、利用中の挙動差を確認してから統合 | ⏳ |
-| M4 | `_REFLECTION_META_TAG` メタ記憶（タイムスタンプ保存に実記憶を使用） | 検索・統計を汚染。メタ保存先の変更は schema 変更を伴う | ⏳ |
+| M1 | 二重ランキング（engine 再ランク vs `_search_memories` composite） | ラウンド 2 で実施: 複合スコアリング（recency+importance+relevance+reflection penalty）を `SearchEngine` 最終段の RankPolicy に一本化。`application/chat/pipeline/memory_retriever.py:50` は 2 クエリ並列検索+key dedupe（max score 採用）のみに縮退。単体 15 件+統合テストでスコアリング契約を固定 | ✅（`6d755496` `e7d39f4f`） |
+| M2 | `compute_strength_score` のスタブ定数因子（novelty, confidence） | ラウンド 2 で除去。実機で同記憶の再検索による強化（0.572→0.707）を確認（§8.1） | ✅（ラウンド 2） |
+| M3 | reflection 二重実装（`maybe_run_reflection` legacy + `ReflectionEngine` periodic） | ラウンド 2 で統合: legacy per-turn 経路を廃止し periodic のみに。`application/chat/reflection.py` は移転注記のみ、実行経路は `decay_worker.py:244 _maybe_run_reflection` に一本化。UI から `reflection_interval_cycles`（`a151c16a`）で周期調整可 | ✅（`a3f2c470`） |
+| M4 | `_REFLECTION_META_TAG` メタ記憶（タイムスタンプ保存に実記憶を使用） | M3 統合で廃止。`_REFLECTION_META_TAG` のコード内参照は消滅（grep で確認済み） | ✅（`a3f2c470`） |
 | M5 | RIF（ρ=0.05）・novelty stability ×2・リンク floor 0.5 の根拠薄弱パラメータ | ponytail 注記（ceiling 明記）をコードに追加: `engine.py` `_apply_rif`、`enrichment_worker.py` `_novelty_gate` docstring、`entity_repo.py` upsert_link floor 引数 | ✅（本レビューで実施） |
 
 ---
 
-## 5. 検証結果
+## 5. 検証結果（最終）
 
-- unit + integration テスト: **2645 passed**（本レビュー修正後）
-- mypy: 352 errors — 変更前後で同数（本レビューで新規ゼロ、全て既存の厳格モード債務）
-- ruff: 触ったファイルに新規 violation なし
+- unit テスト: **2477 passed** / integration: **167 passed**（計 2644、失敗 0）
+- mypy: **339 errors** — HEAD ベースラインと同数（本レビュー全ラウンドで新規ゼロ）
+- ruff check: **0 violations**（全ツリー）/ ruff format: **449 ファイル全て準拠**（ラウンド 3 で既存ドリフト 30 ファイルを整形）
+- vitest+jsdom: **277 passed**（TZ 未指定環境で実施 — テスト内 ISO タイムスタンプに明示オフセット `+09:00` を付与し TZ 独立化。`chat-monologue.test.js`）
 - `nous.api.http.sections` のパッケージ import が staged 削除と不整合で壊れていたのを修復（§3 F1）
 - 探索レポートの誤検知 2件を検証で捕捉（F3 toast-container はメディアクエリ差分、F5 chat-history.js は生存）
+- 実機検証（§8）: テストサーバー :26262 で全 MCP ツール・WebUI 全タブを操作し期待どおり
 
 ---
 

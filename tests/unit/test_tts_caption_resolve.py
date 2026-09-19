@@ -3,8 +3,9 @@ import types
 
 import pytest
 
-pytestmark = pytest.mark.unit
 from nous.api.http.routers.tts import CaptionResult, _resolve_caption
+
+pytestmark = pytest.mark.unit
 
 
 def _chat_cfg(mode):
@@ -51,8 +52,14 @@ def test_off_mode_returns_neutral_without_llm(fake_ctx, fake_chat_config_off):
 def test_override_passthrough_skips_state(fake_ctx, fake_chat_config_llm):
     # use_override相当: state参照があっても呼ばれない（ FakeCtx.get_contextにbombを仕込む ）
     res = asyncio.run(
-        _resolve_caption("herta", fake_ctx, fake_chat_config_llm,
-                         ref_text="本文", override_emotion="joy", override_caption="明るく話す。")
+        _resolve_caption(
+            "herta",
+            fake_ctx,
+            fake_chat_config_llm,
+            ref_text="本文",
+            override_emotion="joy",
+            override_caption="明るく話す。",
+        )
     )
     assert res.emotion == "joy"
     assert res.caption == "明るく話す。"

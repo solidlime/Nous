@@ -1,6 +1,7 @@
 """リフレクション記憶の last_consumed_at / valid_until を確認。
 使い方: python scripts/check-consumed.py
 """
+
 import sqlite3
 
 c = sqlite3.connect(r"D:\Code\Nous\data\persona\herta\memory.sqlite")

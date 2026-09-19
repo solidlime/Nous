@@ -33,7 +33,5 @@ def test_brain_and_tool_events_do_not_count():
 
 
 def test_chat_turn_events_count():
-    repo = _repo_with_events(
-        [("2026-01-01T10:00:00", "chat.message"), ("2026-01-01T10:05:00", "chat.llm_response")]
-    )
+    repo = _repo_with_events([("2026-01-01T10:00:00", "chat.message"), ("2026-01-01T10:05:00", "chat.llm_response")])
     assert repo.last_activity_at("p").isoformat().startswith("2026-01-01T10:05:00")

@@ -6,8 +6,9 @@ import wave
 
 import pytest
 
-pytestmark = pytest.mark.unit
 from nous.api.http.routers import tts as tts_mod
+
+pytestmark = pytest.mark.unit
 
 
 def _routes():

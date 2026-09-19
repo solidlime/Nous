@@ -50,7 +50,9 @@ REASONING_BUDGETS: dict[str, int] = {"low": 2048, "medium": 4096, "high": 8192, 
 class ProviderConfig(BaseModel):
     """LLMプロバイダ接続設定。"""
 
-    provider: str = Field(default="anthropic", description="使用するLLMプロバイダー（anthropic / openai / openrouter など）。")
+    provider: str = Field(
+        default="anthropic", description="使用するLLMプロバイダー（anthropic / openai / openrouter など）。"
+    )
     model: str = Field(default="", description="使用するモデル名。空欄ならプロバイダーの既定モデルを使います。")
     api_key: str | None = Field(default=None, description="LLM APIの認証キー。")
     base_url: str = Field(default="", description="APIの接続先URL。カスタムエンドポイント利用時に設定します。")

@@ -187,7 +187,9 @@ async def test_attempts_exhausted_adopts_last_candidate(monkeypatch) -> None:
 
 async def test_judge_malformed_output_keeps_original(monkeypatch) -> None:
     """judge が不正 JSON / 不正 violation を返したら判定なし扱いで修復しない。"""
-    calls = _patch(monkeypatch, judgments=[None])  # judge_character が None を返すケース（内部で JSON パース失敗済み想定）
+    calls = _patch(
+        monkeypatch, judgments=[None]
+    )  # judge_character が None を返すケース（内部で JSON パース失敗済み想定）
     turn_ctx = _turn_ctx(response="違反の可能性がある応答")
     events = [ev async for ev in RepairStep().run(None, _Config(), _messages(), turn_ctx)]
     assert events == []

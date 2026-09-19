@@ -33,9 +33,7 @@ def _worker(repo, now, interval_hours=1):
     w = EnrichmentWorker.__new__(EnrichmentWorker)
     w._persona = "p"
     w.context = SimpleNamespace(introspection_engine=object(), _session_event_repo=repo)
-    w._config = SimpleNamespace(
-        brain_spontaneous_enabled=True, brain_spontaneous_interval_hours=interval_hours
-    )
+    w._config = SimpleNamespace(brain_spontaneous_enabled=True, brain_spontaneous_interval_hours=interval_hours)
     w._now = lambda: now
     return w
 

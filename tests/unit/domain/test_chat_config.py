@@ -201,5 +201,6 @@ class TestSqliteMigration:
 
 def test_voice_speed_clamped():
     from nous.domain.session_config import SessionConfig
+
     assert SessionConfig(voice_speed=99.0).voice_speed == 4.0
     assert SessionConfig(voice_speed=-1.0).voice_speed == 0.25

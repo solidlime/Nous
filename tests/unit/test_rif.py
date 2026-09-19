@@ -127,9 +127,7 @@ class TestRifSuppression:
         """memory_repo なしでも検索は壊れない。"""
         pairs = [(_mem("a"), 0.9), (_mem("b"), 0.5)]
         engine = _make_engine(pairs, repo=None)
-        result = await engine.search(
-            SearchQuery(text="rif-norepo", mode="keyword", top_k=2, apply_rif=True)
-        )
+        result = await engine.search(SearchQuery(text="rif-norepo", mode="keyword", top_k=2, apply_rif=True))
         assert result.is_ok
         assert len(result.value) == 2
 
@@ -150,9 +148,7 @@ class TestRifGate:
 
         # dup_check 型: フラグなし検索を繰り返しても strength は不変
         for _ in range(3):
-            result = await engine.search(
-                SearchQuery(text="dup-check-q", mode="keyword", emotion="joy", top_k=3)
-            )
+            result = await engine.search(SearchQuery(text="dup-check-q", mode="keyword", emotion="joy", top_k=3))
             assert result.is_ok
 
         assert repo.strengths["r1"].strength == pytest.approx(0.8)
@@ -173,9 +169,7 @@ class TestRifGate:
         # フラグなし → 不変
         off_repo = fresh_repo()
         engine_off = _make_engine(pairs, off_repo)
-        result = await engine_off.search(
-            SearchQuery(text="gate-q", mode="keyword", emotion="joy", top_k=2)
-        )
+        result = await engine_off.search(SearchQuery(text="gate-q", mode="keyword", emotion="joy", top_k=2))
         assert result.is_ok
         assert off_repo.strengths["c1"].strength == pytest.approx(0.8)
 

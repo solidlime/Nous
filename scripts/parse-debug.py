@@ -2,8 +2,10 @@
 debug_info はフラット構造: {"type": "debug_info", "memories_raw": [...], ...}
 使い方: python scripts/parse-debug.py %TEMP%\\opencode\\probe1.events
 """
+
 import json
 import sys
+
 
 def main():
     path = sys.argv[1]
@@ -35,6 +37,7 @@ def main():
     if cs:
         print("--- context_summary (first 400):", cs[:400].replace("\n", " | "))
     print("=== assistant (first 200):", (data.get("assistant_response") or "")[:200].replace("\n", " "))
+
 
 if __name__ == "__main__":
     main()

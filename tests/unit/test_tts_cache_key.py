@@ -34,8 +34,37 @@ def test_same_voice_same_key():
 
 def test_full_hash_filename_and_resolved_voice():
     from nous.api.http.routers.tts import _tts_cache_key
-    k1 = _tts_cache_key(text="a", emotion="neutral", caption=None, voice_speed=1.0, voice_override=None, voice_resolved="v1", model="irodori-tts", seed=0, num_steps=30, cfg_text=3.2, cfg_speaker=5.0, cfg_caption=4.2, chunk_min_chars=85)
-    k2 = _tts_cache_key(text="a", emotion="neutral", caption=None, voice_speed=1.0, voice_override=None, voice_resolved="v2", model="irodori-tts", seed=0, num_steps=30, cfg_text=3.2, cfg_speaker=5.0, cfg_caption=4.2, chunk_min_chars=85)
+
+    k1 = _tts_cache_key(
+        text="a",
+        emotion="neutral",
+        caption=None,
+        voice_speed=1.0,
+        voice_override=None,
+        voice_resolved="v1",
+        model="irodori-tts",
+        seed=0,
+        num_steps=30,
+        cfg_text=3.2,
+        cfg_speaker=5.0,
+        cfg_caption=4.2,
+        chunk_min_chars=85,
+    )
+    k2 = _tts_cache_key(
+        text="a",
+        emotion="neutral",
+        caption=None,
+        voice_speed=1.0,
+        voice_override=None,
+        voice_resolved="v2",
+        model="irodori-tts",
+        seed=0,
+        num_steps=30,
+        cfg_text=3.2,
+        cfg_speaker=5.0,
+        cfg_caption=4.2,
+        chunk_min_chars=85,
+    )
     assert len(k1) == 64
     assert k1 != k2
 
@@ -93,13 +122,26 @@ def test_cache_key_ignores_chunking_params():
     from nous.api.http.routers.tts import _tts_cache_key
 
     def _call():
-        return _tts_cache_key(text="あ", emotion="neutral", caption=None, voice_speed=1.0,
-                    voice_override=None, voice_resolved="v", model="irodori-tts",
-                    seed=0, num_steps=30, cfg_text=3.2, cfg_speaker=5.0,
-                    cfg_caption=4.2, chunk_min_chars=85)
+        return _tts_cache_key(
+            text="あ",
+            emotion="neutral",
+            caption=None,
+            voice_speed=1.0,
+            voice_override=None,
+            voice_resolved="v",
+            model="irodori-tts",
+            seed=0,
+            num_steps=30,
+            cfg_text=3.2,
+            cfg_speaker=5.0,
+            cfg_caption=4.2,
+            chunk_min_chars=85,
+        )
+
     k1 = _call()
     k2 = _call()
     assert k1 == k2 and len(k1) == 64
     # _tts_cache_keyの引数に first_sentence_chunk_min_chars が存在しないこと（キー外のlock-in）
     import inspect
+
     assert "first_sentence" not in inspect.signature(_tts_cache_key).parameters

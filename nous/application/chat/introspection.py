@@ -944,4 +944,3 @@ def _cap_memory_texts(memories: list) -> list[str]:
         cap = _EXPLORATION_MEMORY_CAP if "exploration" in tags else _MAX_CHARS_PER_MEMORY
         texts.append(str(content)[:cap])
     return texts
-

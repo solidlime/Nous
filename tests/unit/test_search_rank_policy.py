@@ -299,7 +299,10 @@ class TestReflectionPenaltyEngine:
         refl = _mem("r1", "私は最近の振る舞いを反省している", tags=["reflection"], importance=0.9, created_at=fixed)
         engine = _engine_with_encoder(
             [(refl, 0.9), (plain, 0.9)],
-            content_vecs={"よく使う道具の話": np.array([1.0, 0.0]), "私は最近の振る舞いを反省している": np.array([1.0, 0.0])},
+            content_vecs={
+                "よく使う道具の話": np.array([1.0, 0.0]),
+                "私は最近の振る舞いを反省している": np.array([1.0, 0.0]),
+            },
         )
         result = await engine.search(SearchQuery(text="q", top_k=5, rank_policy=RankPolicy(reflection_penalty=0.5)))
         assert result.is_ok
@@ -453,9 +456,7 @@ class TestCompositeScoreFormulaEngine:
             [(hi_rel, 0.5), (lo_rel, 0.9)],
             content_vecs={"ドンピシャ": np.array([1.0, 0.0]), "関係薄い": np.array([0.1, 0.9])},
         )
-        result = await engine.search(
-            SearchQuery(text="q", top_k=5, rank_policy=RankPolicy(0.1, 0.1, 0.8))
-        )
+        result = await engine.search(SearchQuery(text="q", top_k=5, rank_policy=RankPolicy(0.1, 0.1, 0.8)))
         assert result.is_ok
         assert result.value[0].memory.key == "m1"
 
@@ -468,9 +469,7 @@ class TestCompositeScoreFormulaEngine:
             [(fresh, 0.5), (old, 0.9)],
             content_vecs={"ついさっき": np.array([0.0, 1.0]), "昔の話": np.array([0.0, 1.0])},
         )
-        result = await engine.search(
-            SearchQuery(text="q", top_k=5, rank_policy=RankPolicy(0.8, 0.1, 0.1))
-        )
+        result = await engine.search(SearchQuery(text="q", top_k=5, rank_policy=RankPolicy(0.8, 0.1, 0.1)))
         assert result.is_ok
         assert result.value[0].memory.key == "m1"
 

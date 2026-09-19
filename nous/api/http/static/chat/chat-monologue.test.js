@@ -293,8 +293,9 @@ describe('monologue restore from session events (chat-history.js)', () => {
   });
 
   it('inserts restored whispers between messages by timestamp, not at the end', async () => {
-    msgAt('2026-09-09T10:00:00');
-    const later = msgAt('2026-09-09T11:00:00');
+    // 全タイムスタンプにオフセットを明示 — Date.parse が環境 TZ に依存しない
+    msgAt('2026-09-09T10:00:00+09:00');
+    const later = msgAt('2026-09-09T11:00:00+09:00');
     N.Core.api.mockResolvedValueOnce({ events: [
       // API returns newest-first; each event carries an ISO timestamp
       { event_type: 'brain.monologue', summary: '遅い独り言。', timestamp: '2026-09-09T10:45:00+09:00' },
@@ -315,11 +316,11 @@ describe('monologue restore from session events (chat-history.js)', () => {
   it('slots whispers correctly across a day boundary (HH:MM compare would collapse)', async () => {
     // 昨日の23:50と今日の08:00の間に今日00:30の独り言 — 昨日の"23:50"ラベルで
     // HH:MM 比較すると 23>00 で逆順に混入していた跨日バグの回帰テスト。
-    msgAt('2026-09-08T23:50:00');
-    msgAt('2026-09-09T08:00:00');
+    msgAt('2026-09-08T23:50:00+09:00');
+    msgAt('2026-09-09T08:00:00+09:00');
     N.Core.api.mockResolvedValueOnce({ events: [
-      { event_type: 'brain.monologue', summary: '夜更かしの独り言。', timestamp: '2026-09-08T23:30:00' },
-      { event_type: 'brain.monologue', summary: '深夜の独り言。', timestamp: '2026-09-09T00:30:00' },
+      { event_type: 'brain.monologue', summary: '夜更かしの独り言。', timestamp: '2026-09-08T23:30:00+09:00' },
+      { event_type: 'brain.monologue', summary: '深夜の独り言。', timestamp: '2026-09-09T00:30:00+09:00' },
     ]});
     await N.Chat.monologue.restore();
     const container = document.getElementById('chat-messages');
@@ -335,16 +336,16 @@ describe('monologue restore from session events (chat-history.js)', () => {
 
   it('reslot() re-slots whispers after older messages are prepended', async () => {
     // 最初は11:00のメッセージだけ見えていて、独り言は末尾。
-    msgAt('2026-09-09T11:00:00');
+    msgAt('2026-09-09T11:00:00+09:00');
     N.Core.api.mockResolvedValueOnce({ events: [
-      { event_type: 'brain.monologue', summary: '朝の独り言。', timestamp: '2026-09-09T09:00:00' },
+      { event_type: 'brain.monologue', summary: '朝の独り言。', timestamp: '2026-09-09T09:00:00+09:00' },
     ]});
     await N.Chat.monologue.restore();
     let container = document.getElementById('chat-messages');
     expect(container.firstElementChild.className).toBe('chat-monologue-bubble');
 
     // 過去ロードで 08:00 のメッセージが先頭に prepend された
-    const older = msgAt('2026-09-09T08:00:00');
+    const older = msgAt('2026-09-09T08:00:00+09:00');
     container.insertBefore(older, container.firstChild);
     N.Chat.monologue.reslot();
     const order = Array.from(container.children).map((e) => e.className.split(' ')[0]);

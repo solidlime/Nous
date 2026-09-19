@@ -72,9 +72,7 @@ def _tool_results_text(tool_calls_log: list[dict] | None) -> str:
     return "\n".join(lines) if lines else "（なし）"
 
 
-def _build_repair_messages(
-    session_messages: list[LLMMessage], instruction: str
-) -> list[LLMMessage]:
+def _build_repair_messages(session_messages: list[LLMMessage], instruction: str) -> list[LLMMessage]:
     """元の会話を壊さないようコピーし、末尾に修復指示の user メッセージを追加する。"""
     return [*session_messages, LLMMessage(role="user", content=instruction)]
 
@@ -122,11 +120,7 @@ class RepairStep:
         registry: object | None = None,  # noqa: ARG002 — 修復ではツールを呼ばない
     ) -> AsyncIterator[ResponseReplacedSSE]:
         # ガード: 判定無効 / 空応答 / 修復無効 は何もせず即 return
-        if (
-            not config.character_judge_enabled
-            or not turn_ctx.full_response
-            or config.character_repair_max_attempts < 1
-        ):
+        if not config.character_judge_enabled or not turn_ctx.full_response or config.character_repair_max_attempts < 1:
             return
 
         # 修復ループ内で判定結果を受け渡すための一時属性（dataclass に無いので動的に保持）

@@ -317,11 +317,7 @@ class InferenceStep:
                 _f.write(f"\n[{_i}] {role}: {content}\n")
             _f.write(f"\n\n=== TOOLS ({len(visible_tools)} total) ===\n")
             for _t in visible_tools:
-                name = (
-                    _t.get("function", {}).get("name", "?")
-                    if isinstance(_t, dict)
-                    else getattr(_t, "name", "?")
-                )
+                name = _t.get("function", {}).get("name", "?") if isinstance(_t, dict) else getattr(_t, "name", "?")
                 _f.write(f"  - {name}\n")
         logger.info("Debug prompt saved: %s", _path)
 

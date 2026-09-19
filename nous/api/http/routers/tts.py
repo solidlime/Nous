@@ -823,4 +823,3 @@ def register_tts_routes(mcp) -> None:
         if not safe_name:
             return JSONResponse({"ok": False, "error": "Invalid filename"}, status_code=400)
         return JSONResponse({"ok": True, "deleted": _do_delete_tts_cache(persona, safe_name)})
-

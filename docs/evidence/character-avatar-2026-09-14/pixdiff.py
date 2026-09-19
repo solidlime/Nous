@@ -72,7 +72,18 @@ PAIRS: list[tuple[str, str, str]] = [
     ),
 ]
 
-BUCKETS = [(0, 26), (26, 51), (51, 76), (76, 102), (102, 128), (128, 153), (153, 178), (178, 204), (204, 230), (230, 256)]
+BUCKETS = [
+    (0, 26),
+    (26, 51),
+    (51, 76),
+    (76, 102),
+    (102, 128),
+    (128, 153),
+    (153, 178),
+    (178, 204),
+    (204, 230),
+    (230, 256),
+]
 
 
 def load(path: str | Path) -> np.ndarray:
@@ -86,7 +97,7 @@ def compare(a: np.ndarray, b: np.ndarray) -> dict[str, object]:
     chan = np.abs(b - a).max(axis=2)
     changed = chan > DIFF_TOL
     total = int(changed.sum())
-    lum = luminance(b)   # int32 に広げてから輝度を取る（int16 は乗算で溢れる）
+    lum = luminance(b)  # int32 に広げてから輝度を取る（int16 は乗算で溢れる）
     dark = int((changed & (lum < DARK_CUT)).sum())
     ys, xs = np.nonzero(changed)
     bbox = None if total == 0 else (int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max()))

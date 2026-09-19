@@ -167,9 +167,7 @@ class TestSearchResultTimeFields:
         no_dt_mem.emotion = "neutral"
         no_dt_mem.created_at = None
         no_dt_mem.updated_at = None
-        ctx.search_engine.search.return_value = Success(
-            [SearchResult(memory=no_dt_mem, score=0.9, source="keyword")]
-        )
+        ctx.search_engine.search.return_value = Success([SearchResult(memory=no_dt_mem, score=0.9, source="keyword")])
         ctx.search_engine._semantic = None
         ctx.memory_service.log_search.return_value = Success(None)
 

@@ -1806,6 +1806,7 @@ def test_curiosity_passes_all_results_to_summarize(monkeypatch):
         captured["results"] = results
 
     from nous.application.chat import curiosity as _curiosity_mod
+
     monkeypatch.setattr(_curiosity_mod, "_summarize_and_record", fake_summarize)
     eng = FakeLLMEngine(
         [
@@ -2007,6 +2008,7 @@ def test_curiosity_search_result_compacted(monkeypatch):
         captured["results"] = results
 
     from nous.application.chat import curiosity as _curiosity_mod
+
     monkeypatch.setattr(_curiosity_mod, "_summarize_and_record", fake_summarize)
     eng = FakeLLMEngine(
         [
@@ -2131,6 +2133,7 @@ def test_curiosity_step_result_capped_and_invariant(monkeypatch):
         captured["results"] = results
 
     from nous.application.chat import curiosity as _curiosity_mod
+
     monkeypatch.setattr(_curiosity_mod, "_summarize_and_record", fake_summarize)
     eng = FakeLLMEngine([_collected(None, [_tool_call("srv__search", {"q": "1"})]), _collected("done")])
     asyncio.run(mod._run_curiosity_exploration(_explorer_ctx(), config, "herta", _spont_result(), eng))

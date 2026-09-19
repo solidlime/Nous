@@ -21,18 +21,26 @@ class SessionConfig(BaseModel):
     """セッション管理・メモリ設定。"""
 
     # 基本設定
-    system_prompt: str = Field(default="", description="LLMに常に与えるシステムプロンプト。空欄でペルソナ既定を使います。")
+    system_prompt: str = Field(
+        default="", description="LLMに常に与えるシステムプロンプト。空欄でペルソナ既定を使います。"
+    )
     language: str = Field(default="ja", description="応答の表示言語。")  # "ja" | "en" | "zh" | "ko" | "auto"
     debug_mode: bool = Field(default=False, description="詳細ログを出力するデバッグモード。")
-    show_message_timestamps: bool = Field(default=False, description="チャットメッセージにタイムスタンプを表示します。")  # チャットメッセージにタイムスタンプを表示
+    show_message_timestamps: bool = Field(
+        default=False, description="チャットメッセージにタイムスタンプを表示します。"
+    )  # チャットメッセージにタイムスタンプを表示
     session_summarize: bool = Field(default=True, description="セッション終了時に会話を要約して保存します。")
     episode_search_enabled: bool = Field(default=True, description="過去の会話エピソードも検索対象に含めます。")
 
     # Generative Agents-style reflection
     reflection_enabled: bool = Field(default=True, description="会話を振り返り、気づきや傾向を自動抽出します。")
-    reflection_threshold: float = Field(default=1.0, description="リフレクションを発火する重要度の合計しきい値。")  # sum of importance scores to trigger reflection
+    reflection_threshold: float = Field(
+        default=1.0, description="リフレクションを発火する重要度の合計しきい値。"
+    )  # sum of importance scores to trigger reflection
     reflection_min_interval_hours: float = Field(default=1.0, description="リフレクションを実行する最小間隔（時間）。")
-    reflection_interval_cycles: int = Field(default=24, ge=1, description="周期リフレクションの実行間隔（DecayWorker サイクル数）。")
+    reflection_interval_cycles: int = Field(
+        default=24, ge=1, description="周期リフレクションの実行間隔（DecayWorker サイクル数）。"
+    )
 
     # Mental Model abstraction
     mental_model_enabled: bool = Field(default=True, description="ユーザーの性格・好みのモデルを自動構築します。")
@@ -44,8 +52,12 @@ class SessionConfig(BaseModel):
     retrieval_relevance_weight: float = Field(default=0.4, description="記憶検索で関連性を重視する重み。")
     # リフレクション記憶の無関係想起対策 (MemGPT archival 分離相当):
     # 検索複合スコアの降格係数 (1.0 で無効) と無条件注入のベクトル類似閾値 (0.0 で無効)
-    reflection_retrieval_penalty: float = Field(default=0.5, description="リフレクション記憶を通常想起で降格する係数（1.0で無効）。")
-    reflection_injection_min_similarity: float = Field(default=0.45, description="リフレクションを無条件注入する最低類似度。")
+    reflection_retrieval_penalty: float = Field(
+        default=0.5, description="リフレクション記憶を通常想起で降格する係数（1.0で無効）。"
+    )
+    reflection_injection_min_similarity: float = Field(
+        default=0.45, description="リフレクションを無条件注入する最低類似度。"
+    )
     # 注入候補の相対閾値マージン: sim >= (max_sim - margin) AND sim >= floor
     # (絶対閾値では関連/無関内省のコサイン分布が重なるため、集合内の相対選択で分離)
     reflection_injection_margin: float = Field(default=0.08, description="注入候補を選ぶ相対マージン。")
@@ -83,7 +95,9 @@ class SessionConfig(BaseModel):
     irodori_seed: int = Field(default=0, description="音声生成の乱数シード。0でランダム。")
     # Irodori LLM emotion caption
     irodori_caption_llm_enabled: bool = Field(default=False, description="感情キャプション生成にLLMを使います。")
-    irodori_caption_llm_model: str = Field(default="", description="感情キャプション生成に使うモデル。空欄でメインのモデル。")  # empty = use persona's configured model
+    irodori_caption_llm_model: str = Field(
+        default="", description="感情キャプション生成に使うモデル。空欄でメインのモデル。"
+    )  # empty = use persona's configured model
     # 感情の声への反映モード: "off" | "anchor" | "llm"。
     # 旧2ブール値 (voice_emotion_link / irodori_caption_llm_enabled) の上位概念。
     # 旧設定ファイルには本キーが無いので before-validator で旧値から導出する。
@@ -96,21 +110,21 @@ class SessionConfig(BaseModel):
     memory_enrichment_model: str = Field(default="", description="記憶強化に使うモデル。空欄でメインのモデル。")
     memory_enrichment_prompt_template: str = Field(
         default=(
-        "あなたは記憶分析アシスタントです。与えられた記憶テキストを分析し、以下の2つをJSON形式で出力してください：\n\n"
-        "1. **importance**: この記憶の重要度を0.0（全く重要でない）〜1.0（極めて重要）の浮動小数点数で評価してください。\n"
-        "   - 0.0-0.3: 日常的な些事、一時的な感情\n"
-        "   - 0.4-0.6: 通常の出来事、一般的な情報\n"
-        "   - 0.7-0.8: 重要な出来事、強い感情を伴う体験\n"
-        "   - 0.9-1.0: 人生を変える出来事、核となる記憶\n\n"
-        "2. **relations**: テキスト内のエンティティ（人名、場所、概念など）間の関係性を抽出してください。\n"
-        "   各関係は以下の形式です：\n"
-        "   - source: 関係の主体（エンティティ名）\n"
-        "   - target: 関係の対象（エンティティ名）\n"
-        "   - type: 関係タイプ（knows, works_with, manages, created, located_in, part_of, related_to, summarizes のいずれか）\n"
-        "   - confidence: 抽出の確信度（0.0〜1.0）\n\n"
-        "出力は必ず以下のJSON形式に従ってください：\n"
-        '{"importance": 0.5, "relations": [{"source": "entity1", "target": "entity2", "type": "knows", "confidence": 0.9}]}\n\n'
-        "関係が見つからない場合は relations を空配列にしてください。"
+            "あなたは記憶分析アシスタントです。与えられた記憶テキストを分析し、以下の2つをJSON形式で出力してください：\n\n"
+            "1. **importance**: この記憶の重要度を0.0（全く重要でない）〜1.0（極めて重要）の浮動小数点数で評価してください。\n"
+            "   - 0.0-0.3: 日常的な些事、一時的な感情\n"
+            "   - 0.4-0.6: 通常の出来事、一般的な情報\n"
+            "   - 0.7-0.8: 重要な出来事、強い感情を伴う体験\n"
+            "   - 0.9-1.0: 人生を変える出来事、核となる記憶\n\n"
+            "2. **relations**: テキスト内のエンティティ（人名、場所、概念など）間の関係性を抽出してください。\n"
+            "   各関係は以下の形式です：\n"
+            "   - source: 関係の主体（エンティティ名）\n"
+            "   - target: 関係の対象（エンティティ名）\n"
+            "   - type: 関係タイプ（knows, works_with, manages, created, located_in, part_of, related_to, summarizes のいずれか）\n"
+            "   - confidence: 抽出の確信度（0.0〜1.0）\n\n"
+            "出力は必ず以下のJSON形式に従ってください：\n"
+            '{"importance": 0.5, "relations": [{"source": "entity1", "target": "entity2", "type": "knows", "confidence": 0.9}]}\n\n'
+            "関係が見つからない場合は relations を空配列にしてください。"
         ),
         description="記憶強化に使うプロンプトのテンプレート。",
     )
@@ -147,7 +161,9 @@ class SessionConfig(BaseModel):
     # REM 独り言 (drain バッチ完走時に LLM 1 call で生成・session_events 保存)
     brain_monologue_enabled: bool = Field(default=True, description="記憶強化の完了時に独り言を生成します。")
     # 内省エンジン (drain 後の単一 LLM 呼び出し: 独り言＋逸脱判定＋反省＋感情/身体)
-    brain_introspection_enabled: bool = Field(default=True, description="独り言・反省・感情をまとめて内省する機能を有効にします。")
+    brain_introspection_enabled: bool = Field(
+        default=True, description="独り言・反省・感情をまとめて内省する機能を有効にします。"
+    )
     # 脳専用 reasoning トグル (chat の reasoning_enabled/effort とは独立)。
     # None で解決済みLLM設定に従う（専用OFFなら会話用）。True で brain_reasoning_effort を
     # 強制使用、False で推論なし (openai_compat が openrouter + effort=None で reasoning を無効化する)。
@@ -168,13 +184,17 @@ class SessionConfig(BaseModel):
     # 自発的内省: 誰も話しかけてこない静かな時間に記憶と現在状態から独り言を産出。
     # 発火間隔は brain.introspection / brain.introspection_spontaneous 両種別の
     # 最新タイムスタンプから interval_hours 以上経過で判定（worker 側ガード）。
-    brain_spontaneous_enabled: bool = Field(default=True, description="誰も話しかけない時間に自発的な内省を生成します。")
+    brain_spontaneous_enabled: bool = Field(
+        default=True, description="誰も話しかけない時間に自発的な内省を生成します。"
+    )
     brain_spontaneous_interval_hours: int = Field(default=1, description="自発的内省を実行する間隔（時間）。")
     # 内省プロンプト上書き (空文字 = コード内デフォルトを使用)。
     # プレースホルダ: {persona} {current_state} {memory_texts} {persona_identity}
     #   + ターン駆動のみ {recent_turns}。欠落があるとデフォルトへ自動フォールバック。
     brain_introspection_prompt: str = Field(default="", description="内省プロンプトの上書き。空欄で既定を使います。")
-    brain_spontaneous_prompt: str = Field(default="", description="自発的内省プロンプトの上書き。空欄で既定を使います。")
+    brain_spontaneous_prompt: str = Field(
+        default="", description="自発的内省プロンプトの上書き。空欄で既定を使います。"
+    )
 
     @field_validator("brain_reasoning_effort")
     @classmethod
@@ -227,11 +247,16 @@ class SessionConfig(BaseModel):
         return max(1, min(72, v))
 
     # Forgetting
-    forgetting_enabled: bool = Field(default=True, description="重要度の低い記憶を時間経過で減衰・削除します。FSRS 忘却曲線・STM→LTM 昇格・archive を含む SWS 相当のワーカーを起動します。")
+    forgetting_enabled: bool = Field(
+        default=True,
+        description="重要度の低い記憶を時間経過で減衰・削除します。FSRS 忘却曲線・STM→LTM 昇格・archive を含む SWS 相当のワーカーを起動します。",
+    )
     forgetting_trigger_threshold: int = Field(default=100, description="忘却処理を開始する記憶数のしきい値。")
     forgetting_forget_ratio: float = Field(default=0.2, description="1回の忘却で対象にする記憶の割合。")
     forgetting_forget_strength: float = Field(default=0.5, description="忘却時に低下させる重要度の量。")
-    forgetting_decay_interval_seconds: int = Field(default=3600, description="重要度を減衰させる処理の実行間隔（秒）。")  # 1h sweep — 減衰は経過時間依存なので sweep は平滑性にのみ影響
+    forgetting_decay_interval_seconds: int = Field(
+        default=3600, description="重要度を減衰させる処理の実行間隔（秒）。"
+    )  # 1h sweep — 減衰は経過時間依存なので sweep は平滑性にのみ影響
     forgetting_min_strength: float = Field(default=0.1, description="これを下回った記憶を忘却対象にします。")
 
     @field_validator("voice_emotion_mode")

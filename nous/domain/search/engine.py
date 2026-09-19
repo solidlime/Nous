@@ -299,9 +299,9 @@ class SearchEngine:
         ranked: list[SearchResult] = []
         for i, orig in enumerate(candidates):
             rel = rel_by_index.get(i, 0.0)
-            base = policy.recency_weight * compute_recency_decay(orig.memory.created_at) + policy.importance_weight * float(
-                getattr(orig.memory, "importance", 0.5)
-            )
+            base = policy.recency_weight * compute_recency_decay(
+                orig.memory.created_at
+            ) + policy.importance_weight * float(getattr(orig.memory, "importance", 0.5))
             composite = base + policy.relevance_weight * rel
             if policy.reflection_penalty != 1.0 and "reflection" in (orig.memory.tags or []):
                 composite *= policy.reflection_penalty
@@ -355,7 +355,9 @@ class SearchEngine:
         for key in competitors:
             try:
                 strength_result = repo.get_strength(key)
-                strength = strength_result.value if strength_result.is_ok and strength_result.value is not None else None
+                strength = (
+                    strength_result.value if strength_result.is_ok and strength_result.value is not None else None
+                )
                 if strength is None:
                     continue
                 strength.strength = max(_STRENGTH_FLOOR, strength.strength * (1.0 - rho))
@@ -510,9 +512,7 @@ class SearchEngine:
 
         # 3. Semantic vector search (Qdrant)
         if self._semantic is not None:
-            sem_result = await self._semantic.search(
-                query.text, limit=fetch_k, date_from=date_from, date_to=date_to
-            )
+            sem_result = await self._semantic.search(query.text, limit=fetch_k, date_from=date_from, date_to=date_to)
             if isinstance(sem_result, Success):
                 sem_results = self._to_search_results(sem_result.value, "semantic")
                 # Apply similarity_flag for high-confidence matches

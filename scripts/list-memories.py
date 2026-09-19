@@ -1,4 +1,5 @@
 """herta 記憶のタグ検索（デバッグ用）。使い方: python scripts/list-memories.py [tag] [limit]"""
+
 import sqlite3
 import sys
 
