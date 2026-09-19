@@ -19,6 +19,24 @@ if TYPE_CHECKING:
     from nous.domain.equipment.repository import EquipmentRepository
 
 
+def apply_appearance(
+    equipment_service: EquipmentService,
+    persona_service: object,
+    persona: str,
+    equipment: dict[str, str],
+) -> str | None:
+    """Synthesize appearance from equipped slots and persist it to persona state.
+
+    Single place for all three write paths (MCP / HTTP / chat extractor).
+    Returns the synthesized appearance string (None if empty).
+    """
+    appearance = equipment_service.build_appearance(equipment)
+    if appearance:
+        persona_service.update_state(persona, "appearance", appearance)  # type: ignore[attr-defined]
+        return appearance
+    return None
+
+
 class EquipmentService:
     """Domain service for equipment management."""
 

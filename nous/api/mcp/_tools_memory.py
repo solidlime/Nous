@@ -20,6 +20,12 @@ from nous.domain.value_objects import _VALID_EMOTIONS, normalize_importance
 # larger defaults invert rankings — see test_memory_time_context.py).
 MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT = 0.05
 
+# Minimum similarity for query-based destructive resolution (memory_delete /
+# memory_update by query) and goal resolution. Single source — audit:M6:
+# an unrelated query must never resolve to a delete/update target.
+# 0.3 matches the goal-resolution threshold previously used in _tools_goal.py.
+QUERY_RESOLVE_MIN_SCORE = 0.3
+
 logger = logging.getLogger(__name__)
 
 
@@ -215,13 +221,19 @@ async def _tool_memory_update(
     """Update a memory. Only provided fields are changed.
     importance must be 0.0-1.0. Invalid emotion returns error.
     query: search query to resolve memory_key (alternative to direct memory_key)."""
-    # query から key を解決（builtin互換）
+    # query から key を解決（builtin互換・audit:M6: threshold-guarded）
     if query and not memory_key:
         search_result = await ctx.search_engine.search(SearchQuery(text=query, top_k=1))
         if not search_result.is_ok or not search_result.value:
             return _err(f"No memory found for query: {query}")
         item = search_result.value[0]
         mem = item[0] if isinstance(item, tuple) else item
+        score = getattr(item, "score", None) if not isinstance(item, tuple) else None
+        if not isinstance(score, (int, float)) or score < QUERY_RESOLVE_MIN_SCORE:
+            return _err(
+                f"Ambiguous match: top score {score} is below {QUERY_RESOLVE_MIN_SCORE}. "
+                "Nothing updated. Use the exact memory_key."
+            )
         memory_key = getattr(mem, "key", "")
         if not memory_key:
             return _err("memory key not found")
@@ -302,18 +314,27 @@ async def _tool_memory_delete(
     if not memory_key and not query:
         return "Error: memory_key or query required"
 
-    # If query provided without key, search first
+    # If query provided without key, search first (audit:M6: threshold-guarded)
     key = memory_key
     content_preview = "..."
     if not key and query:
-        search_result = await ctx.search_engine.search(SearchQuery(text=query, top_k=1))
-        if search_result.is_ok and search_result.value:
-            m = search_result.value[0].memory
-            key = m.key
-            content_preview = m.content[:100]
-            snippet = f"\nContent: 「{m.content[:80]}{'...' if len(m.content) > 80 else ''}」"
-        else:
+        search_result = await ctx.search_engine.search(SearchQuery(text=query, top_k=3))
+        if not search_result.is_ok or not search_result.value:
             return f"No memory found for query: {query}"
+        top = search_result.value[0]
+        score = getattr(top, "score", None)
+        if not isinstance(score, (int, float)) or score < QUERY_RESOLVE_MIN_SCORE:
+            candidates = "\n".join(
+                f"- {r.memory.key}: 「{r.memory.content[:60]}」 (score={r.score:.2f})" for r in search_result.value
+            )
+            return (
+                f"Ambiguous match: top score {score} is below {QUERY_RESOLVE_MIN_SCORE}. "
+                f"Nothing deleted. Use the exact memory_key, or pick one of:\n{candidates}"
+            )
+        m = top.memory
+        key = m.key
+        content_preview = m.content[:100]
+        snippet = f"\nContent: 「{m.content[:80]}{'...' if len(m.content) > 80 else ''}」"
     else:
         snippet = ""
         pre_fetch = ctx.memory_service.get_memory(key)

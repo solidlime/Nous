@@ -12,6 +12,7 @@ from nous.application.chat.memory_prompts import (
     _ITEM_LLM_PROMPT,
     _build_drift_section,
 )
+from nous.domain.equipment.service import apply_appearance
 from nous.domain.language import LanguageResolver
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.result import Success
@@ -392,7 +393,7 @@ async def run_memory_llm(
             )
 
         # inventory_update: 装備変更 + アイテム追加/削除/更新
-        await _apply_inventory_update(ctx, result, skip_inventory)
+        await _apply_inventory_update(ctx, persona, result, skip_inventory)
 
         return result
 
@@ -667,7 +668,7 @@ async def _apply_context_update(
         ctx.persona_service.update_persona_info(persona, {"context_note": context_note})
 
 
-async def _apply_inventory_update(ctx: AppContext, result: dict, skip_inventory: bool) -> None:
+async def _apply_inventory_update(ctx: AppContext, persona: str, result: dict, skip_inventory: bool) -> None:
     """inventory_update（装備変更 + アイテム追加/削除/更新）を適用する。"""
     inv_update = result.get("inventory_update", {})
     if skip_inventory:
@@ -707,7 +708,10 @@ async def _apply_inventory_update(ctx: AppContext, result: dict, skip_inventory:
                     ctx.equipment_service.update_item(name, **updates)
 
     if equip_map and isinstance(equip_map, dict):
-        ctx.equipment_service.equip(equip_map)
+        equip_result = ctx.equipment_service.equip(equip_map)
+        if isinstance(equip_result, Success):
+            # audit:C2 — appearance parity: chat extractor equip must update persona state
+            apply_appearance(ctx.equipment_service, ctx.persona_service, persona, equip_map)
     if unequip_list and isinstance(unequip_list, list):
         for slot in unequip_list:
             ctx.equipment_service.unequip([slot])

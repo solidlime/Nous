@@ -24,7 +24,6 @@ from unittest.mock import patch
 
 from nous.config.settings import Settings
 
-
 # ── Section markers emitted by _format_lightweight_response (in build order) ──
 # (marker-substring, canonical section name)
 SECTION_MARKERS: list[tuple[str, str]] = [
@@ -83,7 +82,7 @@ def _noop_init_enricher(self) -> None:  # noqa: ANN001
     self.introspection_engine = None
 
 
-async def build_context(data_root: str) -> "object":
+async def build_context(data_root: str) -> object:
     """Real AppContext over a temp DB; background/LLM pieces no-oped."""
     from nous.application.use_cases import AppContext
 
@@ -163,8 +162,7 @@ async def seed_case_c(ctx: object, persona: str) -> None:
     for i in range(5):
         content = (
             f"project:demo のメモ {i}: アーキテクチャ案の検討を進めている。"
-            f"主要なトレードオフは応答速度と拡張性のバランスで、次回までに採否を決める。"
-            + str(i) * 300
+            f"主要なトレードオフは応答速度と拡張性のバランスで、次回までに採否を決める。" + str(i) * 300
         )[:400].ljust(400, "記")
         assert len(content) == 400, f"project mem {i} len={len(content)}"
         await ctx.memory_service.create_memory(
@@ -194,7 +192,7 @@ async def seed_case_c(ctx: object, persona: str) -> None:
 
 async def measure(
     label: str,
-    seed: "object | None",
+    seed: object | None,
     project: str | None = None,
 ) -> dict:
     from nous.api.mcp._tools_persona import _tool_get_context

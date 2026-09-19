@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from nous.domain.equipment.service import apply_appearance
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -22,7 +24,11 @@ async def _tool_item_add(
 ) -> str:
     if not item_name:
         return "Error: item_name required"
-    result = ctx.equipment_service.add_item(item_name, category, description, quantity, tags)
+    # audit:C2 fix — must be keyword args: add_item's 4th positional param is visual_desc,
+    # not quantity (passing positionally landed quantity in visual_desc, tags in quantity).
+    result = ctx.equipment_service.add_item(
+        item_name, category=category, description=description, quantity=quantity, tags=tags
+    )
     if result.is_ok:
         await ctx.event_bus.publish(
             "tool.called",
@@ -56,9 +62,7 @@ async def _tool_item_equip(ctx: AppContext, persona: str, equipment: dict | None
     result = ctx.equipment_service.equip(equipment, auto_add)
     if result.is_ok:
         # 装備スロットから appearance を自動合成して persona state に反映する
-        appearance = ctx.equipment_service.build_appearance(equipment)
-        if appearance:
-            ctx.persona_service.update_state(persona, "appearance", appearance)
+        apply_appearance(ctx.equipment_service, ctx.persona_service, persona, equipment)
         await ctx.event_bus.publish(
             "tool.called",
             {

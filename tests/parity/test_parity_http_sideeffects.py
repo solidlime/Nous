@@ -21,7 +21,6 @@ import pytest
 
 from nous.api.http.routers import memory as memory_router
 from nous.domain.shared.result import Success
-
 from tests.parity.conftest import make_memory
 
 if TYPE_CHECKING:
@@ -103,9 +102,7 @@ async def test_http_create_memory_response_schema(mock_app_context, monkeypatch)
     handler = mcp.routes[("/api/memories/{persona}", "POST")]
 
     ctx = mock_app_context
-    ctx.memory_service.create_memory = AsyncMock(
-        return_value=Success(make_memory("mem_h3b", content="x"))
-    )
+    ctx.memory_service.create_memory = AsyncMock(return_value=Success(make_memory("mem_h3b", content="x")))
     ctx.vector_store = None
     monkeypatch.setattr(memory_router, "_safe_get_context", lambda persona: ctx)
 

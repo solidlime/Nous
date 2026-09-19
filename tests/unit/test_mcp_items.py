@@ -81,7 +81,9 @@ class TestItemTools:
             mock_reg_cls.get.return_value = ctx
             result = await item_tool(item_name="red shoes", category="shoes")
         assert "added" in result.lower()
-        ctx.equipment_service.add_item.assert_called_once_with("red shoes", "shoes", None, 1, None)
+        ctx.equipment_service.add_item.assert_called_once_with(
+            "red shoes", category="shoes", description=None, quantity=1, tags=None
+        )
 
     @pytest.mark.asyncio
     async def test_item_equip(self, registered_tools):

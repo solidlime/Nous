@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from nous.api.mcp._tools_memory import QUERY_RESOLVE_MIN_SCORE
 from nous.domain.search.engine import SearchQuery
 from nous.domain.value_objects import importance_to_label
 
@@ -156,7 +157,7 @@ async def _tool_goal_manage(
             match = None
             if search_result.is_ok and search_result.value:
                 top = search_result.value[0]
-                if isinstance(top.score, (int, float)) and top.score > 0.3:
+                if isinstance(top.score, (int, float)) and top.score > QUERY_RESOLVE_MIN_SCORE:
                     match = top.memory
 
             # Fallback: exact match by tags + content

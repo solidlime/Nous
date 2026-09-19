@@ -11,6 +11,7 @@ from nous.api.http.deps import (
     _safe_get_context,
 )
 from nous.api.http.routers._error_handlers import error_from_result
+from nous.domain.equipment.service import apply_appearance
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -92,6 +93,8 @@ def register_item_routes(mcp) -> None:
             result = ctx.equipment_service.equip(body, auto_add)
             if not result.is_ok:
                 return error_from_result(result)
+            # audit:C2 — appearance parity: HTTP equip must update persona state like MCP
+            apply_appearance(ctx.equipment_service, ctx.persona_service, persona, body)
             return JSONResponse({"status": "ok", "equipped": body})
         # 最終防衛線
         except Exception as exc:

@@ -28,9 +28,7 @@ from nous.domain.shared.result import Success
 async def test_memory_delete_missing_key_returns_envelope(mock_app_context):
     """Delete by query with no hits must return a structured envelope."""
     mock_app_context.search_engine.search = AsyncMock(return_value=Success([]))
-    result = await _tools_memory._tool_memory_delete(
-        mock_app_context, "p", query="no such memory anywhere"
-    )
+    result = await _tools_memory._tool_memory_delete(mock_app_context, "p", query="no such memory anywhere")
     # Production returns plain "No memory found for query: ..." — json.loads raises.
     payload = json.loads(result)
     assert {"ok", "data", "error"} <= set(payload)
@@ -53,7 +51,7 @@ async def test_memory_stats_returns_envelope(mock_app_context):
 
 @pytest.mark.xfail(
     strict=True,
-    reason="audit:C1 — success classifier is a startswith(\"Error\") string heuristic",
+    reason='audit:C1 — success classifier is a startswith("Error") string heuristic',
 )
 def test_success_classification_is_structural():
     """A plain-text failure message that does not start with 'Error'/'No memory'
