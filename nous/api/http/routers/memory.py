@@ -264,8 +264,28 @@ def register_memory_routes(mcp) -> None:
             if ctx.vector_store is not None:
                 with contextlib.suppress(Exception):
                     await ctx.vector_store.upsert(persona, mem.key, mem.content)
+            # audit H3 (P3): MCP parity — publish memory.created so the
+            # AppContext subscriptions (vector upsert + query-cache
+            # invalidation) fire for HTTP writes too, then drop the cache.
+            try:
+                await ctx.event_bus.publish(
+                    "memory.created",
+                    {
+                        "key": mem.key,
+                        "persona": persona,
+                        "content_preview": body.content[:100],
+                        "tags": body.tags or [],
+                        "importance": body.importance,
+                    },
+                )
+            except Exception:
+                logger.warning("memory.created publish failed for %s", mem.key, exc_info=True)
+            from nous.domain.search.engine import invalidate_query_cache as _invalidate
+
+            with contextlib.suppress(Exception):
+                _invalidate()
             return JSONResponse(
-                {"status": "ok", "memory": _memory_to_dict(mem)},
+                {"status": "ok", "memory": _memory_to_dict(mem), "cache_invalidated": True},
                 status_code=201,
             )
         # 最終防衛線

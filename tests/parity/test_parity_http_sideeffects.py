@@ -63,10 +63,7 @@ class _FakeRequest:
         return self._body
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="audit:H3 — HTTP create_memory does not publish memory.created / invalidate query cache",
-)
+@pytest.mark.filterwarnings("ignore::DeprecationWarning:datetime")
 async def test_http_create_memory_side_effects(mock_app_context, monkeypatch):
     mcp = _FakeMCP()
     memory_router.register_memory_routes(mcp)
