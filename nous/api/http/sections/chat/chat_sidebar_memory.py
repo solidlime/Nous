@@ -68,9 +68,9 @@ def _render_reflection_section() -> str:
                                                     min="0.1" max="100" step="0.1" value="1.0" />
                                             </div>
                                             <div>
-                                                <div class="chat-field-label">最小間隔 (時間)</div>
+                                                <div class="chat-field-label">実行間隔 (サイクル)</div>
                                                 <input type="number" id="chat-reflection-interval" class="chat-field-input"
-                                                    min="0" max="168" step="0.5" value="1.0" />
+                                                    min="1" max="168" step="1" value="24" />
                                             </div>
                                         </div>
                                         <div class="chat-check-row">

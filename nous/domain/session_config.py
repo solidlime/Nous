@@ -32,6 +32,7 @@ class SessionConfig(BaseModel):
     reflection_enabled: bool = Field(default=True, description="会話を振り返り、気づきや傾向を自動抽出します。")
     reflection_threshold: float = Field(default=1.0, description="リフレクションを発火する重要度の合計しきい値。")  # sum of importance scores to trigger reflection
     reflection_min_interval_hours: float = Field(default=1.0, description="リフレクションを実行する最小間隔（時間）。")
+    reflection_interval_cycles: int = Field(default=24, ge=1, description="周期リフレクションの実行間隔（DecayWorker サイクル数）。")
 
     # Mental Model abstraction
     mental_model_enabled: bool = Field(default=True, description="ユーザーの性格・好みのモデルを自動構築します。")
@@ -226,7 +227,7 @@ class SessionConfig(BaseModel):
         return max(1, min(72, v))
 
     # Forgetting
-    forgetting_enabled: bool = Field(default=False, description="重要度の低い記憶を時間経過で減衰・削除します。")
+    forgetting_enabled: bool = Field(default=True, description="重要度の低い記憶を時間経過で減衰・削除します。FSRS 忘却曲線・STM→LTM 昇格・archive を含む SWS 相当のワーカーを起動します。")
     forgetting_trigger_threshold: int = Field(default=100, description="忘却処理を開始する記憶数のしきい値。")
     forgetting_forget_ratio: float = Field(default=0.2, description="1回の忘却で対象にする記憶の割合。")
     forgetting_forget_strength: float = Field(default=0.5, description="忘却時に低下させる重要度の量。")
