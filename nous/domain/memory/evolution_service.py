@@ -226,30 +226,17 @@ class MemoryEvolutionService:
         persona: str,
         valid_from: datetime,
     ) -> None:
-        """Find existing memories that contradict the new content and close
-        their validity windows (set ``valid_until = valid_from``).
-
-        This is the core bi-temporal invalidation: old facts don't disappear,
-        they just become "no longer valid" from the new fact's timestamp.
-        The old memory remains queryable with ``valid_at`` filters.
+        """Close validity windows of memories the LLM classifier marked
+        CONTRADICTORY (audit H2: single classification path — the vector
+        threshold path was removed; ``ContradictionDetector`` remains the
+        bitemporal applier but no longer re-detects candidates itself).
         """
-        if self._contradiction_detector is None:
-            return
-        try:
-            report = await self._contradiction_detector.find_potential_contradictions(
-                content=new_content,
-                persona=persona,
-                exclude_key=new_memory_key,
-            )
-            if not report.is_ok or not report.value.candidates:
-                return
-
-            threshold = report.value.threshold
-            for candidate in report.value.candidates:
-                if candidate.similarity >= threshold:
-                    self._close_superseded_memory(candidate.memory_key, new_memory_key)
-        except Exception:
-            logger.debug("Contradiction invalidation failed", exc_info=True)
+        # audit:H2 — 3-op LLM classification (in _evolve_related_memories) is
+        # the only contradiction detector. This method is kept for external
+        # callers but no longer duplicates detection; the vector-threshold
+        # ContradictionDetector path was removed (supersede is applied via
+        # _close_superseded_memory from the classifier result instead).
+        return
 
     async def _run_background_evolution(
         self,
@@ -258,27 +245,18 @@ class MemoryEvolutionService:
         persona: str,
         valid_from,
     ) -> None:
-        """Run memory evolution and contradiction detection in background TaskGroup."""
+        """Run memory evolution in background (audit H2: single task — the
+        contradiction detector ran a second semantic search + LLM pass that
+        duplicated the classifier's work; supersede now flows only through
+        the 3-op classifier in _evolve_related_memories)."""
         try:
-            async with asyncio.TaskGroup() as tg:
-                if self._search_engine is not None:
-                    tg.create_task(
-                        self._evolve_related_memories(
-                            content=content,
-                            new_memory_key=memory_key,
-                        )
-                    )
-                if self._contradiction_detector is not None and self._contradiction_detector.available:
-                    tg.create_task(
-                        self._invalidate_contradicted_memory(
-                            new_content=content.strip(),
-                            new_memory_key=memory_key,
-                            persona=persona,
-                            valid_from=valid_from,
-                        )
-                    )
+            if self._search_engine is not None:
+                await self._evolve_related_memories(
+                    content=content,
+                    new_memory_key=memory_key,
+                )
         except Exception:
             import logging
 
             _log = logging.getLogger(__name__)
-            _log.exception("Background memory evolution/contradiction detection failed")
+            _log.exception("Background memory evolution failed")

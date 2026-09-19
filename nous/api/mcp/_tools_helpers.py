@@ -51,7 +51,17 @@ _NEAR_DUP_THRESHOLD = 0.85
 
 
 def _tool_called_result_success(result: object) -> bool:
-    """Classify a tool return value as success/failure."""
+    """Classify a tool return value as success/failure (audit C1: structural).
+
+    Envelope payloads (``{ok, data, error}``) are the primary contract — the
+    ``ok`` field is the signal. Legacy plain-text strings keep prefix
+    heuristics for pre-envelope results emitted inside core functions.
+    """
+    from nous.api.mcp._envelope import parse_envelope
+
+    envelope = parse_envelope(result)
+    if envelope is not None:
+        return bool(envelope.get("ok"))
     if isinstance(result, dict):
         if "success" in result:
             return bool(result["success"])
@@ -67,7 +77,9 @@ def _tool_called_result_success(result: object) -> bool:
             payload = None
         if isinstance(payload, dict):
             return _tool_called_result_success(payload)
-        return not (result.startswith("Error") or result.startswith("No memory"))
+        return not (
+            result.startswith("Error") or result.startswith("No memory") or result.startswith("Ambiguous match")
+        )
     return True
 
 
