@@ -1,11 +1,31 @@
 from __future__ import annotations
 
+import math
 import re
 import secrets
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 _DEFAULT_TZ = "Asia/Tokyo"
+
+# Recency decay の減衰率（exp(-λ * days)、半減期 ≈ 1.4 日）。
+# 旧所在地: nous/application/chat/pipeline/emotion_decay.py（re-export に置換）。
+RECENCY_LAMBDA = 0.5
+
+
+def compute_recency_decay(created_at: datetime | None) -> float:
+    """Compute recency decay: exp(-λ * days_elapsed) with λ=0.5.
+
+    ``None`` は安全側の 0.5 を返す。naive datetime は UTC とみなして補完する。
+    """
+    if created_at is None:
+        return 0.5
+    now = datetime.now(tz=UTC)
+    # Ensure tz-aware comparison
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    days_elapsed = max(0.0, (now - created_at).total_seconds() / 86400.0)
+    return math.exp(-RECENCY_LAMBDA * days_elapsed)
 
 
 def get_now(tz: str = _DEFAULT_TZ) -> datetime:
