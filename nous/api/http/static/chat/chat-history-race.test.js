@@ -30,7 +30,11 @@ beforeAll(() => {
   };
   // Controllable API stub — chat-history.js captures C.api at load time.
   window.Nous.Core.api = (...args) => apiImpl(...args);
-  loadFile('../chat/chat-history.js');
+  // chat-history.js split into history/*.js — load chunks in order
+  // (reader path only; test logic unchanged).
+  for (const f of ['history/render.js', 'history/session.js', 'history/restore.js']) {
+    loadFile('../chat/' + f);
+  }
 });
 
 beforeEach(() => {

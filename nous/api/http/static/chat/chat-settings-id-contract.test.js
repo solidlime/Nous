@@ -17,7 +17,11 @@ const STATIC_DIR = resolve(__dirname, '..');
 // sections/ sits next to static/ under nous/api/http/
 const SECTIONS_DIR = resolve(STATIC_DIR, '../sections/chat');
 
-const settingsSrc = readFileSync(resolve(__dirname, 'chat-settings.js'), 'utf-8');
+// chat-settings.js split into settings/*.js — the contract test reads the
+// concatenated chunk sources (reader path only; logic unchanged).
+const settingsSrc = ['settings/reset.js', 'settings/apply.js', 'settings/apply-groups.js', 'settings/save.js']
+  .map((f) => readFileSync(resolve(__dirname, f), 'utf-8'))
+  .join('\n');
 
 function collectPythonAttrs() {
   const ids = new Set();

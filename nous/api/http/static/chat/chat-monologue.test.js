@@ -32,14 +32,22 @@ beforeAll(() => {
   N.Chat = N.Chat || {};
   N.Chat.state = { messages: [], streaming: false };
   N.Chat.markdown = { render: (s) => s };
-  loadFile('../chat/chat-send.js');
+  // chat-send.js split into send/*.js — load chunks in order
+  // (reader path only; test logic unchanged).
+  for (const f of ['send/render.js', 'send/turn.js', 'send/pending.js', 'send/turn-events.js', 'send/monologue.js']) {
+    loadFile('../chat/' + f);
+  }
   N.Chat.tools = {
     label: (n) => (n === 'memory_search' ? '記憶をたどってる…' : '作業してる…'),
     icon: (n) => (n === 'memory_search' ? 'brain' : 'wrench'),
   };
-  // api is captured at module load — stub before chat-history.js loads
+  // api is captured at module load — stub before history chunks load
   N.Core.api = vi.fn();
-  loadFile('../chat/chat-history.js');
+  // chat-history.js split into history/*.js — load chunks in order
+  // (reader path only; test logic unchanged).
+  for (const f of ['history/render.js', 'history/session.js', 'history/restore.js']) {
+    loadFile('../chat/' + f);
+  }
 });
 
 beforeEach(() => {

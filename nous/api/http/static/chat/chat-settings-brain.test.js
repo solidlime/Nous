@@ -95,8 +95,12 @@ beforeAll(() => {
   apiStub = vi.fn();
   window.Nous.Core.api = apiStub;
   window.Nous.Core.toast = window.Nous.Core.toast || (() => {});
-  const code = readFileSync(resolve(__dirname, 'chat-settings.js'), 'utf-8');
-  new Function(code)();
+  // chat-settings.js split into settings/*.js — load chunks in order
+  // (reader path only; test logic unchanged).
+  for (const f of ['settings/reset.js', 'settings/apply.js', 'settings/apply-groups.js', 'settings/save.js']) {
+    const code = readFileSync(resolve(__dirname, f), 'utf-8');
+    new Function(code)();
+  }
   S = window.S;
   const ST = window.Nous.Chat.settings;
   ST.renderMcpJson = () => {};

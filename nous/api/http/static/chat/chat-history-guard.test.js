@@ -40,7 +40,11 @@ beforeAll(() => {
     ],
     total: 2,
   });
-  loadFile('../chat/chat-history.js');
+  // chat-history.js split into history/*.js — load chunks in order
+  // (reader path only; test logic unchanged).
+  for (const f of ['history/render.js', 'history/session.js', 'history/restore.js']) {
+    loadFile('../chat/' + f);
+  }
 });
 
 beforeEach(() => {

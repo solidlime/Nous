@@ -59,7 +59,11 @@ beforeAll(() => {
     attachments: { openViewer: vi.fn() },
     showCharacterFlag: vi.fn(),
   };
-  loadFile('../chat/chat-send.js');
+  // chat-send.js split into send/*.js — load chunks in order
+  // (reader path only; test logic unchanged).
+  for (const f of ['send/render.js', 'send/turn.js', 'send/pending.js', 'send/turn-events.js', 'send/monologue.js']) {
+    loadFile('../chat/' + f);
+  }
 });
 
 beforeEach(() => {

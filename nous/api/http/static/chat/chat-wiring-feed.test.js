@@ -15,6 +15,19 @@ function loadChat(file) {
   new Function(code)();
 }
 
+// chat-memory-panel.js split into memory-panel/*.js — load chunks in
+// order (reader path only; test logic unchanged).
+const MEMORY_PANEL_CHUNKS = [
+  'memory-panel/panel.js',
+  'memory-panel/wiring.js',
+  'memory-panel/wiring-stream.js',
+  'memory-panel/wiring-detail.js',
+  'memory-panel/detail.js',
+];
+function loadMemoryPanel() {
+  for (const f of MEMORY_PANEL_CHUNKS) loadChat(f);
+}
+
 const instances = [];
 let N;
 let MP;
@@ -52,7 +65,7 @@ beforeAll(() => {
   N.Features = N.Features || {};
   N.Features.Memories = N.Features.Memories || {};
   N.Features.Memories.tagChipHtml = (t) => '<span class="mem-tag-chip">' + t + '</span>';
-  loadChat('chat-memory-panel.js');
+  loadMemoryPanel();
   loadFile('delegation.js'); // row clicks / Escape / Enter now route here
   MP = N.Chat.memoryPanel;
 });

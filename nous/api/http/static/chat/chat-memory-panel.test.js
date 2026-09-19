@@ -16,9 +16,22 @@ function loadChat(file) {
   new Function(code)();
 }
 
+// chat-memory-panel.js split into memory-panel/*.js — load chunks in
+// order (reader path only; test logic unchanged).
+const MEMORY_PANEL_CHUNKS = [
+  'memory-panel/panel.js',
+  'memory-panel/wiring.js',
+  'memory-panel/wiring-stream.js',
+  'memory-panel/wiring-detail.js',
+  'memory-panel/detail.js',
+];
+function loadMemoryPanel() {
+  for (const f of MEMORY_PANEL_CHUNKS) loadChat(f);
+}
+
 function ensurePanel() {
   if (!window.Nous.Chat.memoryPanel || typeof window.Nous.Chat.memoryPanel.update !== 'function') {
-    loadChat('chat-memory-panel.js');
+    loadMemoryPanel();
   }
 }
 
@@ -52,7 +65,7 @@ beforeEach(() => {
 describe('chat-memory-panel registration', () => {
   it('registers on first load when N.Chat.memoryPanel starts undefined (no _delegated crash)', () => {
     expect(N.Chat.memoryPanel).toBeUndefined();
-    expect(() => loadChat('chat-memory-panel.js')).not.toThrow();
+    expect(() => loadMemoryPanel()).not.toThrow();
     for (const fn of ['update', 'updateReflection', 'sessionSummarized', 'contextCompressed', 'deleteCard', 'completeGoal']) {
       expect(typeof N.Chat.memoryPanel[fn]).toBe('function');
     }
@@ -71,8 +84,8 @@ describe('chat-memory-panel registration', () => {
 
   it('delegation routes delete/complete clicks, single-bound on double-load', () => {
     ensurePanel();
-    loadChat('chat-memory-panel.js');
-    loadChat('chat-memory-panel.js'); // double-load must not double-bind
+    loadMemoryPanel();
+    loadMemoryPanel(); // double-load must not double-bind
     const del = vi.fn();
     const done = vi.fn();
     N.Chat.memoryPanel.deleteCard = del;

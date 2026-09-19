@@ -5,15 +5,21 @@
    ================================================================= */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const fakeAvatar = {
-  setExpression: vi.fn(),
-  setTalking: vi.fn(),
-  dispose: vi.fn(),
-};
+// chat-mode.js が動的 import するのはキャッシュバスタ付き ID、テスト本体が
+// モックを取り出すのは素の ID — 同一インスタンスを共有させるため vi.hoisted で
+// 生成した fn を両モックから返す。
+const avatarMocks = vi.hoisted(() => {
+  const fakeAvatar = {
+    setExpression: vi.fn(),
+    setTalking: vi.fn(),
+    dispose: vi.fn(),
+  };
+  return { fakeAvatar, initAvatar: vi.fn(() => Promise.resolve(fakeAvatar)) };
+});
+const fakeAvatar = avatarMocks.fakeAvatar;
 
-vi.mock('./avatar/avatar.js', () => ({
-  initAvatar: vi.fn(() => Promise.resolve(fakeAvatar)),
-}));
+vi.mock('./avatar/avatar.js?v=20260914c', () => ({ initAvatar: avatarMocks.initAvatar }));
+vi.mock('./avatar/avatar.js', () => ({ initAvatar: avatarMocks.initAvatar }));
 
 let chatMode;
 

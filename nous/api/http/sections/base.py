@@ -57,13 +57,34 @@ def render_head() -> str:
     <script src="/static/base.js" defer></script>
     <!-- Chat modules (Phase 3) -->
     <script src="/static/chat/chat-core.js" defer></script>
+    <!-- Chat modules (Phase 3) — chat-settings.js / chat-send.js /
+         chat-history.js / chat-memory-panel.js are thin facades; the
+         split implementations load as sub-chunks below (script order
+         = dependency order). -->
     <script src="/static/chat/chat-settings.js" defer></script>
+    <script src="/static/chat/settings/reset.js" defer></script>
+    <script src="/static/chat/settings/apply.js" defer></script>
+    <script src="/static/chat/settings/apply-groups.js" defer></script>
+    <script src="/static/chat/settings/save.js" defer></script>
     <script src="/static/chat/chat-settings-mcp.js" defer></script>
     <script src="/static/chat/chat-settings-image.js" defer></script>
     <script src="/static/chat/chat-markdown.js" defer></script>
     <script src="/static/chat/chat-send.js" defer></script>
+    <script src="/static/chat/send/render.js" defer></script>
+    <script src="/static/chat/send/turn.js" defer></script>
+    <script src="/static/chat/send/pending.js" defer></script>
+    <script src="/static/chat/send/turn-events.js" defer></script>
+    <script src="/static/chat/send/monologue.js" defer></script>
     <script src="/static/chat/chat-history.js" defer></script>
+    <script src="/static/chat/history/render.js" defer></script>
+    <script src="/static/chat/history/session.js" defer></script>
+    <script src="/static/chat/history/restore.js" defer></script>
     <script src="/static/chat/chat-memory-panel.js" defer></script>
+    <script src="/static/chat/memory-panel/panel.js" defer></script>
+    <script src="/static/chat/memory-panel/wiring.js" defer></script>
+    <script src="/static/chat/memory-panel/wiring-stream.js" defer></script>
+    <script src="/static/chat/memory-panel/wiring-detail.js" defer></script>
+    <script src="/static/chat/memory-panel/detail.js" defer></script>
     <script src="/static/chat/chat-tools.js" defer></script>
     <script src="/static/chat/chat-equipment.js" defer></script>
     <script src="/static/chat/chat-commands.js" defer></script>

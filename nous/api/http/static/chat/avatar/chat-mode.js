@@ -17,6 +17,8 @@ let avatarHandle = null;      // { setExpression, setTalking, setPose, playGestu
 let avatarPersona = null;     // avatarHandle を初期化したときのペルソナ（不一致なら作り直す）
 let talkIdleTimer = null;
 let emotionSeenThisTurn = false;
+let initInFlight = null;      // 進行中の initAvatarForPersona() の promise（二重初期化防止）
+let initInFlightPersona = null;
 
 function persona() {
   return (window.S && window.S.persona) || '';
@@ -67,22 +69,31 @@ async function initAvatarForPersona() {
   const p = persona();
   if (!p) return false;
   if (avatarHandle && avatarPersona === p) return true;
+  // top-level 自動復元と syncCharacterMode が競合すると同一ペルソナで二重初期化される
+  if (initInFlight && initInFlightPersona === p) return initInFlight;
   disposeAvatar();
-  try {
-    const mod = await import('./avatar.js?v=20260914c');
-    const container = document.getElementById('chat-avatar-canvas-container');
-    const saved = localStorage.getItem(MODEL_KEY) || '';
-    avatarHandle = await mod.initAvatar(container, modelUrlFor(saved));
-    avatarPersona = p;
-    // 検証・デバッグ用フック（本番動作には影響なし）
-    window.__avatarDebug = avatarHandle;
-    refreshModelList();
-    populateExpressionSelect();
-    return true;
-  } catch (e) {
-    console.warn('[chat-mode] avatar init failed:', e);
-    return false;
-  }
+  initInFlightPersona = p;
+  initInFlight = (async () => {
+    try {
+      const mod = await import('./avatar.js?v=20260914c');
+      const container = document.getElementById('chat-avatar-canvas-container');
+      const saved = localStorage.getItem(MODEL_KEY) || '';
+      avatarHandle = await mod.initAvatar(container, modelUrlFor(saved));
+      avatarPersona = p;
+      // 検証・デバッグ用フック（本番動作には影響なし）
+      window.__avatarDebug = avatarHandle;
+      refreshModelList();
+      populateExpressionSelect();
+      return true;
+    } catch (e) {
+      console.warn('[chat-mode] avatar init failed:', e);
+      return false;
+    } finally {
+      initInFlight = null;
+      initInFlightPersona = null;
+    }
+  })();
+  return initInFlight;
 }
 
 function disposeAvatar() {
