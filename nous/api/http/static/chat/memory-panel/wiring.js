@@ -124,15 +124,11 @@ function ensureWiringFeed() {
 // listener is bound with addEventListener, never an inline handler).
 function ensureFireLimitSetting() {
   if (document.getElementById("chat-wiring-fire-limit")) return;
-  var anchor = document.getElementById("chat-reflection-threshold");
-  var host = anchor && anchor.closest
-    ? anchor.closest(".details-body")
-    : null;
-  if (!host) {
-    host = document.querySelector(
-      'details[data-category="reflection"] .details-body',
-    );
-  }
+  // Host: the reflection settings block (its threshold input was removed in
+  // v4.0, so resolve the block directly instead of via a control anchor).
+  var host = document.querySelector(
+    'details[data-category="reflection"] .details-body',
+  );
   if (!host) return;
   var row = document.createElement("div");
   var label = document.createElement("div");

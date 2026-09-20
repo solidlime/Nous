@@ -375,7 +375,10 @@ def _get_irodori_config(ctx, chat_config) -> IrodoriConfig:
         cfg_scale_text=getattr(chat_config, "irodori_cfg_scale_text", 3.2),
         cfg_scale_speaker=getattr(chat_config, "irodori_cfg_scale_speaker", 5.0),
         cfg_scale_caption=getattr(chat_config, "irodori_cfg_scale_caption", 4.2),
-        chunk_min_chars=getattr(chat_config, "irodori_chunk_min_chars", 40),
+        # v4.0 (audit L5): fallback は chat 層の既定と同じ 85（単一の正）。bare な
+        # 40 は「engine 層の既定が 40」だった頃の名残で、実際の chat TTS 経路は
+        # 常に persona 設定値（既定 85）を使うため値が食い違っていた。
+        chunk_min_chars=getattr(chat_config, "irodori_chunk_min_chars", 85),
         first_sentence_chunk_min_chars=getattr(chat_config, "irodori_first_sentence_chunk_min_chars", 1),
         seed=getattr(chat_config, "irodori_seed", None),
     )

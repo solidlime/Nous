@@ -64,7 +64,7 @@ async def test_stream_speech_yields_chunks_and_sends_sse_params(config):
         sent_json = call_args[1]["json"]
         assert sent_json["stream_format"] == "sse"
         assert sent_json["irodori"]["first_sentence_chunk_min_chars"] == 1
-        assert sent_json["irodori"]["chunk_min_chars"] == 40
+        assert sent_json["irodori"]["chunk_min_chars"] == 85  # v4.0: 単一の正（audit L5）
 
 
 @pytest.mark.asyncio

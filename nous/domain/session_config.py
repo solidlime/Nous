@@ -34,9 +34,6 @@ class SessionConfig(BaseModel):
 
     # Generative Agents-style reflection
     reflection_enabled: bool = Field(default=True, description="会話を振り返り、気づきや傾向を自動抽出します。")
-    reflection_threshold: float = Field(
-        default=1.0, description="リフレクションを発火する重要度の合計しきい値。"
-    )  # sum of importance scores to trigger reflection
     reflection_min_interval_hours: float = Field(default=1.0, description="リフレクションを実行する最小間隔（時間）。")
     reflection_interval_cycles: int = Field(
         default=24, ge=1, description="周期リフレクションの実行間隔（DecayWorker サイクル数）。"
@@ -105,29 +102,6 @@ class SessionConfig(BaseModel):
 
     # Memory enrichment
     memory_enrichment_enabled: bool = Field(default=False, description="記憶の重要度・関係性を自動で強化します。")
-    memory_enrichment_auto_run: bool = Field(default=False, description="記憶強化を自動実行します。")
-    memory_enrichment_interval: int = Field(default=60, description="記憶強化を実行する間隔（秒）。")
-    memory_enrichment_model: str = Field(default="", description="記憶強化に使うモデル。空欄でメインのモデル。")
-    memory_enrichment_prompt_template: str = Field(
-        default=(
-            "あなたは記憶分析アシスタントです。与えられた記憶テキストを分析し、以下の2つをJSON形式で出力してください：\n\n"
-            "1. **importance**: この記憶の重要度を0.0（全く重要でない）〜1.0（極めて重要）の浮動小数点数で評価してください。\n"
-            "   - 0.0-0.3: 日常的な些事、一時的な感情\n"
-            "   - 0.4-0.6: 通常の出来事、一般的な情報\n"
-            "   - 0.7-0.8: 重要な出来事、強い感情を伴う体験\n"
-            "   - 0.9-1.0: 人生を変える出来事、核となる記憶\n\n"
-            "2. **relations**: テキスト内のエンティティ（人名、場所、概念など）間の関係性を抽出してください。\n"
-            "   各関係は以下の形式です：\n"
-            "   - source: 関係の主体（エンティティ名）\n"
-            "   - target: 関係の対象（エンティティ名）\n"
-            "   - type: 関係タイプ（knows, works_with, manages, created, located_in, part_of, related_to, summarizes のいずれか）\n"
-            "   - confidence: 抽出の確信度（0.0〜1.0）\n\n"
-            "出力は必ず以下のJSON形式に従ってください：\n"
-            '{"importance": 0.5, "relations": [{"source": "entity1", "target": "entity2", "type": "knows", "confidence": 0.9}]}\n\n'
-            "関係が見つからない場合は relations を空配列にしてください。"
-        ),
-        description="記憶強化に使うプロンプトのテンプレート。",
-    )
 
     # Brain simulation (cross-lane contract: key names / defaults are fixed —
     # lane3 UI consumes them verbatim; see docs/superpowers/plans/2026-09-06-brain-simulation.md)
@@ -251,9 +225,6 @@ class SessionConfig(BaseModel):
         default=True,
         description="重要度の低い記憶を時間経過で減衰・削除します。FSRS 忘却曲線・STM→LTM 昇格・archive を含む SWS 相当のワーカーを起動します。",
     )
-    forgetting_trigger_threshold: int = Field(default=100, description="忘却処理を開始する記憶数のしきい値。")
-    forgetting_forget_ratio: float = Field(default=0.2, description="1回の忘却で対象にする記憶の割合。")
-    forgetting_forget_strength: float = Field(default=0.5, description="忘却時に低下させる重要度の量。")
     forgetting_decay_interval_seconds: int = Field(
         default=3600, description="重要度を減衰させる処理の実行間隔（秒）。"
     )  # 1h sweep — 減衰は経過時間依存なので sweep は平滑性にのみ影響
@@ -297,11 +268,6 @@ class SessionConfig(BaseModel):
         if math.isnan(f) or math.isinf(f):
             return 1.0
         return max(0.25, min(4.0, f))
-
-    @field_validator("reflection_threshold")
-    @classmethod
-    def _clamp_reflection_threshold(cls, v: float) -> float:
-        return max(0.1, min(100.0, v))
 
     @field_validator("reflection_min_interval_hours")
     @classmethod

@@ -24,14 +24,24 @@
   // Config loading / applying (chunk 2/4)
   // ------------------------------------------------------------------
   async function loadChatConfig() {
-    var defaultsP = loadConfigDefaults();
+    // loadConfigDefaults は reset.js の IIFE ローカル関数なので、ここから bare 名で
+    // 呼ぶと ReferenceError（"loadConfigDefaults is not defined"）になり設定パネルの
+    // 読み込みが全滅する。公開されている N.Chat.settings.loadDefaults 経由で呼ぶ。
+    // 併せて try の外にあったため失敗が chat-config-status にすら出なかったのを内側へ。
     try {
+      var defaultsP = N.Chat.settings.loadDefaults();
       const cfg = await api(
         "/api/chat/" + encodeURIComponent(S.persona) + "/config",
       );
       await defaultsP;
       N.Chat.settings.apply(cfg);
       N.Chat.settings.injectResetButtons();
+      // 3-tier visibility hook (expert layer default-hidden). Single entry
+      // point on the init path — reset buttons are already injected so the
+      // rows to hide are complete.
+      if (N.Chat.settings.applyFieldTiers) {
+        N.Chat.settings.applyFieldTiers();
+      }
 
     } catch (e) {
       document.getElementById("chat-config-status").textContent =
@@ -143,10 +153,6 @@
     N.Chat.state.disabledTools = new Set(cfg.disabled_tools || []);
     // Reflection settings
     setChecked("chat-reflection-enabled", cfg.reflection_enabled !== false);
-    set(
-      "chat-reflection-threshold",
-      cfg.reflection_threshold == null ? 1.0 : cfg.reflection_threshold,
-    );
     set(
       "chat-reflection-interval",
       cfg.reflection_min_interval_hours == null

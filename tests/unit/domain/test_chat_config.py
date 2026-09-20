@@ -36,7 +36,6 @@ class TestSqliteMigration:
                 mcp_servers TEXT DEFAULT '[]',
                 enabled_skills TEXT DEFAULT '[]',
                 reflection_enabled INTEGER DEFAULT 1,
-                reflection_threshold REAL DEFAULT 1.0,
                 reflection_min_interval_hours REAL DEFAULT 1.0,
                 session_summarize INTEGER DEFAULT 1,
                 retrieval_recency_weight REAL DEFAULT 0.3,

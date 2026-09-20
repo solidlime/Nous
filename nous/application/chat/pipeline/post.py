@@ -68,7 +68,7 @@ async def _safe_mental_model(ctx: AppContext, config: ChatConfig) -> None:
     if not config.mental_model_enabled:
         return
     try:
-        await maybe_run_mental_model(ctx, config)
+        await maybe_run_mental_model(ctx, config, min_samples=config.mental_model_min_samples)
         logger.info("background mental model completed")
     except Exception:
         logger.warning("background mental model failed", exc_info=True)

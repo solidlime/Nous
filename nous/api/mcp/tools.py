@@ -120,7 +120,7 @@ def _parse_description_overrides() -> dict[str, str]:
 
 
 def register_tools(mcp: MCPServer) -> None:
-    """Register flat-named MCP tools (20+ tools)."""
+    """Register flat-named MCP tools."""
     _desc_overrides = _parse_description_overrides()
 
     def _tool(name: str):

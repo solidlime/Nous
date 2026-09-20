@@ -2002,6 +2002,33 @@ input[type="range"].chat-field-input:focus {
   display: none !important;
 }
 
+/* 3-tier settings (basic / advanced / expert): the expert layer stays hidden
+   until the チャット設定 header toggle is ON. Missing/unknown tier ⇒ expert. */
+.chat-tier-hidden {
+  display: none !important;
+}
+
+/* Header toggle that reveals the expert layer (localStorage-persisted) */
+.chat-expert-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  margin-right: 16px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.chat-expert-toggle input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--accent-blue);
+  cursor: pointer;
+}
+
 /* ============================================================
    CHAT-STYLE ELEMENTS (moved from base.css) — Apple HIG Style
    ============================================================ */

@@ -226,6 +226,54 @@ class TestMaybeRunMentalModel:
         result = await maybe_run_mental_model(ctx, config)
         assert result == []
 
+    async def test_min_samples_is_read_from_config(self):
+        """config.mental_model_min_samples がハードコード 3 を置換する (v4.0 wiring).
+
+        3 件の decision 記憶は既定 3 なら発火するが、config が 5 を要求するので skip。
+        """
+        ctx = _make_mock_ctx()
+        config = _make_mock_config(mental_model_min_samples=5)
+        now = datetime.now()
+        mapping: dict[str, list[Memory]] = {"_meta": []}
+        for tag in _TYPE_TAGS:
+            mapping[tag] = [
+                _make_memory(f"{tag}_{i}", f"{tag} content {i}", tags=[tag], created_at=now - timedelta(hours=i))
+                for i in range(3)
+            ]
+        _set_get_by_tags(ctx, mapping)
+
+        with patch("nous.application.chat.pattern_detector.get_provider") as get_provider:
+            result = await maybe_run_mental_model(ctx, config)
+
+        assert result == []
+        get_provider.assert_not_called()
+
+    async def test_min_samples_below_default_triggers(self):
+        """config が 2 を指定すれば既定 3 未満でも抽象化する。"""
+        ctx = _make_mock_ctx()
+        config = _make_mock_config(mental_model_min_samples=2)
+        now = datetime.now()
+        mapping: dict[str, list[Memory]] = {"_meta": []}
+        for tag in _TYPE_TAGS:
+            mapping[tag] = []
+        mapping["decision"] = [
+            _make_memory(f"dec_{i}", f"decision content {i}", tags=["decision"], created_at=now - timedelta(hours=i))
+            for i in range(2)
+        ]
+        _set_get_by_tags(ctx, mapping)
+
+        mock_provider = AsyncMock()
+
+        async def mock_stream(**kwargs):
+            yield TextDeltaEvent(content='{"models": ["pattern1"]}')
+            yield DoneEvent()
+
+        mock_provider.stream = mock_stream
+        with patch("nous.application.chat.pattern_detector.get_provider", return_value=mock_provider):
+            result = await maybe_run_mental_model(ctx, config)
+
+        assert result == ["pattern1"]
+
     async def test_empty_when_llm_not_configured(self):
         """No API key → returns []."""
         ctx = _make_mock_ctx()

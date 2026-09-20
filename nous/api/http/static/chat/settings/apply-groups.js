@@ -95,11 +95,17 @@ function applyVoiceSection(cfg, set, setChecked) {
     var irodoriChunkMin = document.getElementById(
       "chat-irodori-chunk-min-chars",
     );
-    if (irodoriChunkMin)
-      irodoriChunkMin.value = cfg.irodori_chunk_min_chars ?? 85;
-    if (irodoriChunkMin)
-      document.getElementById("chat-irodori-chunk-min-val").textContent =
-        cfg.irodori_chunk_min_chars ?? 85;
+    if (irodoriChunkMin) {
+      // 既定値の単一の正は session_config.ChatConfig.irodori_chunk_min_chars
+      // （defaults API の fields.irodori_chunk_min_chars.default）。API 応答が
+      // 無い場合のみ従来値 85 にフォールバックする。
+      var chunkMinDefault =
+        N.Chat.settings._defaultOf("irodori_chunk_min_chars") ?? 85;
+      var chunkMin = cfg.irodori_chunk_min_chars ?? chunkMinDefault;
+      irodoriChunkMin.value = chunkMin;
+      var chunkMinVal = document.getElementById("chat-irodori-chunk-min-val");
+      if (chunkMinVal) chunkMinVal.textContent = chunkMin;
+    }
     var irodoriSeed = document.getElementById("chat-irodori-seed");
     if (irodoriSeed) irodoriSeed.value = cfg.irodori_seed ?? 0;
     var irodoriCaptionLLMModel = document.getElementById(
@@ -317,23 +323,12 @@ function applyBrainForgettingSection(cfg, set, setChecked) {
     // === Forgetting (moved from Settings) ===
     setChecked("chat-forgetting-enabled", cfg.forgetting_enabled === true);
     set(
-      "chat-forgetting-trigger-threshold",
-      cfg.forgetting_trigger_threshold ??
-        N.Chat.settings._defaultOf("forgetting_trigger_threshold") ??
-        100,
-    );
-    set(
       "chat-forgetting-decay-interval-seconds",
       cfg.forgetting_decay_interval_seconds ??
         N.Chat.settings._defaultOf("forgetting_decay_interval_seconds") ??
         3600,
     );
     set("chat-forgetting-min-strength", cfg.forgetting_min_strength ?? 0.1);
-    set("chat-forgetting-forget-ratio", cfg.forgetting_forget_ratio ?? 0.2);
-    set(
-      "chat-forgetting-forget-strength",
-      cfg.forgetting_forget_strength ?? 0.5,
-    );
     // Sync min-strength display
     var fs = document.getElementById("chat-forgetting-min-strength");
     if (fs)

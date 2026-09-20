@@ -44,7 +44,8 @@ def test_every_field_has_contract_shape():
     fields = _do_get_config_defaults()["fields"]
     assert fields  # non-empty
     for name, meta in fields.items():
-        assert set(meta) == {"default", "help", "type", "section"}, name
+        assert set(meta) == {"default", "help", "type", "section", "tier"}, name
+        assert meta["tier"] in {"basic", "advanced", "expert"}, name
 
 
 def test_endpoint_returns_fields(monkeypatch):
@@ -52,3 +53,41 @@ def test_endpoint_returns_fields(monkeypatch):
     resp = asyncio.run(get_config_defaults(object()))
     body = json.loads(resp.body)
     assert body["fields"]["brain_spontaneous_interval_hours"]["default"] == 1
+
+
+def test_irodori_chunk_min_chars_is_single_valued():
+    """v4.0 (audit L5) — chunk_min_chars は 1 つの値だけを持つ。
+
+    このノブは以前 3 箇所に別々の既定値を持っていた（engine 層の
+    ``IrodoriAdvancedParams.chunk_min_chars`` = 40、chat 層の
+    ``ChatConfig.irodori_chunk_min_chars`` = 85、``_get_irodori_config`` の
+    bare な getattr fallback = 40）。実際の chat TTS は常に chat 層の値を使う
+    ため、engine 層と fallback の 40 は「UI には 85 と出るのに実装のどこかでは
+    40」という説明不能な差を生んでいた。ここでは両層と fallback が同じ 85 で
+    あることを機械的に固定する（値変更時はこのテストが赤くなり、UI 表示・
+    session_config ・engine 層を同時に動かすことを強制する）。
+    """
+    from nous.api.http.routers.tts import _get_irodori_config
+    from nous.config.settings import IrodoriAdvancedParams
+    from nous.domain.session_config import SessionConfig
+
+    engine_default = IrodoriAdvancedParams.model_fields["chunk_min_chars"].default
+    chat_default = SessionConfig.model_fields["irodori_chunk_min_chars"].default
+    assert engine_default == chat_default == 85
+
+    # fallback も同じ値でなければならない（chat_config に属性が無い異常時のみ発動）。
+    class _Bare:
+        voice_url = None
+        voice_model = None
+
+    cfg = _get_irodori_config(type("Ctx", (), {"settings": _SettingsStub()})(), _Bare())
+    assert cfg.advanced.chunk_min_chars == 85
+
+
+class _SettingsStub:
+    """_get_irodori_config が参照する global settings の最小スタブ。"""
+
+    def __init__(self) -> None:
+        from nous.config.settings import IrodoriConfig
+
+        self.irodori = IrodoriConfig(url="http://irodori:8088", voice="kiritan")

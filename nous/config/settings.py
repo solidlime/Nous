@@ -186,8 +186,24 @@ class IrodoriAdvancedParams(BaseModel):
     cfg_scale_caption: float = 4.2
     """Emotion/style strength. Range: 1.0-8.0."""
 
-    chunk_min_chars: int = 40
-    """Min chars per chunk for long text. Range: 30-200."""
+    chunk_min_chars: int = 85
+    """Min chars per chunk for long text. Range: 30-200 (default 85).
+
+    v4.0 (audit L5): このノブは 3 箇所に現れていた（engine 層の既定・chat 層の
+    既定 session_config.ChatConfig.irodori_chunk_min_chars・tts.py の getattr
+    fallback）。現在は **85 が単一の正** であり、engine 層の既定も同じ 85 に統一
+    している（tests/unit/test_config_defaults.py の lock-in テストで固定）。
+
+    優先順位（"設定優先順位表" の 1 行）: persona の chat 設定（UI スライダー）
+    > chat 層の既定 85 > この engine 層の既定 85。環境変数
+    NOUS_IRODORI__CHUNK_MIN_CHARS は engine 層（直接 IrodoriConfig を組む経路）
+    にのみ作用し、chat TTS は persona 設定値を使う。
+
+    参考: 40（改行の間を保つための小さめチャンク）は SSE ストリーミング
+    （docs/superpowers/specs/2026-09-05-tts-sse-unification-design.md）で
+    検討された値だが、既定として採用はしていない。変更する場合は chat 層・
+    engine 層・UI 表示を同時に動かすこと。
+    """
 
     first_sentence_chunk_min_chars: int = 1
     """First-sentence fast-path chunk threshold for SSE. Range: 1-200."""

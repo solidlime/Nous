@@ -102,7 +102,7 @@ def _parse_models(text: str) -> list[str]:
 async def maybe_run_mental_model(
     ctx: AppContext,
     config: ChatConfig,
-    min_samples: int = 3,
+    min_samples: int | None = None,
 ) -> list[str]:
     """Check if any type-tagged memory group has accumulated >= min_samples.
     If so, call LLM to abstract patterns and store as mental model memories.
@@ -110,11 +110,20 @@ async def maybe_run_mental_model(
     Args:
         ctx: AppContext
         config: ChatConfig (for LLM settings)
-        min_samples: Minimum memories of same type to trigger abstraction
+        min_samples: Minimum memories of same type to trigger abstraction.
+            ``None`` resolves ``config.mental_model_min_samples`` (v4.0 wiring);
+            a missing/non-positive value falls back to the legacy hard-coded 3.
 
     Returns:
         List of generated mental model strings.
     """
+    # Resolve the sample threshold: explicit arg > config > legacy default 3.
+    if min_samples is None:
+        configured = getattr(config, "mental_model_min_samples", None)
+        if isinstance(configured, int) and not isinstance(configured, bool) and configured >= 1:
+            min_samples = configured
+        else:
+            min_samples = 3
     # Check if mental model abstraction is enabled
     enabled = getattr(config, "mental_model_enabled", True)
     if not enabled:

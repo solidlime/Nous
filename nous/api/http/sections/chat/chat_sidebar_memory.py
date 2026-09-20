@@ -61,17 +61,10 @@ def _render_reflection_section() -> str:
                                             <input type="checkbox" id="chat-reflection-enabled" checked />
                                             <label for="chat-reflection-enabled">リフレクション有効</label>
                                         </div>
-                                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                                            <div>
-                                                <div class="chat-field-label">閾値</div>
-                                                <input type="number" id="chat-reflection-threshold" class="chat-field-input"
-                                                    min="0.1" max="100" step="0.1" value="1.0" />
-                                            </div>
-                                            <div>
-                                                <div class="chat-field-label">実行間隔 (サイクル)</div>
-                                                <input type="number" id="chat-reflection-interval" class="chat-field-input"
-                                                    min="1" max="168" step="1" value="24" />
-                                            </div>
+                                        <div>
+                                            <div class="chat-field-label">実行間隔 (サイクル)</div>
+                                            <input type="number" id="chat-reflection-interval" class="chat-field-input"
+                                                min="1" max="168" step="1" value="24" />
                                         </div>
                                         <div class="chat-check-row">
                                             <input type="checkbox" id="chat-session-summarize" checked />
@@ -362,10 +355,6 @@ def _render_forgetting_section() -> str:
                                             <label for="chat-forgetting-enabled">忘却機構を有効化</label>
                                         </div>
                                         <div>
-                                            <div class="chat-field-label">忘却トリガー閾値</div>
-                                            <input type="number" id="chat-forgetting-trigger-threshold" class="chat-field-input" min="1" step="1" value="100" />
-                                        </div>
-                                        <div>
                                             <div class="chat-field-label">減衰間隔（秒）</div>
                                             <input type="number" id="chat-forgetting-decay-interval-seconds" class="chat-field-input" min="60" step="1" value="86400" />
                                         </div>
@@ -376,22 +365,6 @@ def _render_forgetting_section() -> str:
                                             </div>
                                             <input type="range" id="chat-forgetting-min-strength" class="chat-field-input" min="0" max="1" step="0.05" value="0.1"
                                                 data-mirror="chat-forgetting-min-strength-val" data-mirror-format="fixed2" />
-                                        </div>
-                                        <div>
-                                            <div class="chat-field-label chat-field-label-row">
-                                                <span>忘却対象率</span>
-                                                <span id="chat-forgetting-forget-ratio-val" class="chat-field-value">0.20</span>
-                                            </div>
-                                            <input type="range" id="chat-forgetting-forget-ratio" class="chat-field-input" min="0" max="1" step="0.05" value="0.2"
-                                                data-mirror="chat-forgetting-forget-ratio-val" data-mirror-format="fixed2" />
-                                        </div>
-                                        <div>
-                                            <div class="chat-field-label chat-field-label-row">
-                                                <span>忘却強度</span>
-                                                <span id="chat-forgetting-forget-strength-val" class="chat-field-value">0.50</span>
-                                            </div>
-                                            <input type="range" id="chat-forgetting-forget-strength" class="chat-field-input" min="0" max="1" step="0.05" value="0.5"
-                                                data-mirror="chat-forgetting-forget-strength-val" data-mirror-format="fixed2" />
                                         </div>
                                     </div>
                                 </details>"""

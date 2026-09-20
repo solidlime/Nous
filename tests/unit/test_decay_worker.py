@@ -8,6 +8,7 @@ import pytest
 from nous.application.workers.decay_worker import DecayWorker
 from nous.domain.memory import wiring_events
 from nous.domain.memory.entities import Memory, MemoryStrength
+from nous.domain.session_config import SessionConfig
 from nous.domain.shared.time_utils import get_now
 
 
@@ -249,6 +250,47 @@ class TestDecayWorkerReflection:
         engine.reflect.assert_not_called()
         worker._run_cycle()  # 2サイクル目 → interval=2 で発火
         engine.reflect.assert_called_once()
+
+    def test_reflection_disabled_skips(self) -> None:
+        """config.reflection_enabled=False なら reflect を呼ばない。"""
+        engine = MagicMock()
+        engine.reflect = AsyncMock(return_value=[])
+        ctx = _make_ctx([])
+        ctx.persona = "test_char"
+        cfg = SessionConfig(reflection_enabled=False)
+        worker = DecayWorker(ctx, interval_seconds=3600, reflection_engine=engine, llm_provider=MagicMock(), config=cfg)
+
+        worker._maybe_run_reflection()
+
+        engine.reflect.assert_not_called()
+
+    def test_reflection_min_interval_gate_skips_second_run(self) -> None:
+        """reflection_min_interval_hours 未満の再実行はスキップ（二重ゲート）。"""
+        engine = MagicMock()
+        engine.reflect = AsyncMock(return_value=[])
+        ctx = _make_ctx([])
+        ctx.persona = "test_char"
+        cfg = SessionConfig(reflection_min_interval_hours=5.0)
+        worker = DecayWorker(ctx, interval_seconds=3600, reflection_engine=engine, llm_provider=MagicMock(), config=cfg)
+
+        worker._maybe_run_reflection()  # 初回は実行
+        engine.reflect.assert_called_once()
+        worker._maybe_run_reflection()  # 経過 ≈ 0h < 5h → skip
+        engine.reflect.assert_called_once()
+
+    def test_reflection_min_interval_zero_disables_gate(self) -> None:
+        """reflection_min_interval_hours が 0 以下ならゲートなし（現行挙動）。"""
+        engine = MagicMock()
+        engine.reflect = AsyncMock(return_value=[])
+        ctx = _make_ctx([])
+        ctx.persona = "test_char"
+        cfg = SessionConfig(reflection_min_interval_hours=0.0)
+        worker = DecayWorker(ctx, interval_seconds=3600, reflection_engine=engine, llm_provider=MagicMock(), config=cfg)
+
+        worker._maybe_run_reflection()
+        worker._maybe_run_reflection()
+
+        assert engine.reflect.call_count == 2
 
     def test_llm_none_is_noop(self) -> None:
         """llm_provider=None なら reflect を呼ばず例外も出さない。"""

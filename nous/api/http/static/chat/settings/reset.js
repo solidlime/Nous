@@ -1,5 +1,6 @@
 /* =================================================================
    CHAT SETTINGS RESET — defaults API + per-field reset-to-default
+   + 3-tier (basic/advanced/expert) visibility gating
    Chunk 1/4 of chat-settings.js (split: reset.js / apply.js /
    apply-groups.js / save.js). Namespace: N.Chat.settings.*
    ================================================================= */
@@ -57,7 +58,6 @@
     ["chat-extract-max-tokens", "extract_max_tokens"],
     ["chat-enable-memory-tools", "enable_memory_tools"],
     ["chat-reflection-enabled", "reflection_enabled"],
-    ["chat-reflection-threshold", "reflection_threshold"],
     ["chat-reflection-interval", "reflection_min_interval_hours"],
     ["chat-session-summarize", "session_summarize"],
     ["chat-mental-model-enabled", "mental_model_enabled"],
@@ -193,17 +193,22 @@
     ["chat-brain-llm-base-url", "brain_llm_base_url"],
     ["chat-brain-llm-api-key", "brain_llm_api_key"],
     ["chat-forgetting-enabled", "forgetting_enabled"],
-    ["chat-forgetting-trigger-threshold", "forgetting_trigger_threshold"],
     [
       "chat-forgetting-decay-interval-seconds",
       "forgetting_decay_interval_seconds",
     ],
     ["chat-forgetting-min-strength", "forgetting_min_strength"],
-    ["chat-forgetting-forget-ratio", "forgetting_forget_ratio"],
-    ["chat-forgetting-forget-strength", "forgetting_forget_strength"],
     ["chat-emotion-decay-half-life-hours", "emotion_decay_half_life_hours"],
     ["chat-emotion-decay-threshold", "emotion_decay_threshold"],
     ["chat-emotion-neutral-threshold", "emotion_neutral_threshold"],
+
+    // --- Not resettable per field (audit L5 coverage note) ---
+    // enabled_skills / disabled_tools: set-valued and edited through the
+    //   skills + tools pickers (N.Chat.state), not through a value control;
+    //   there is no scalar default to restore on a single field.
+    // voice_emotion_link / irodori_caption_llm_enabled: legacy bool aliases
+    //   that are derived from the chat-voice-emotion-mode radio, whose entry
+    //   above already restores them (see apply-groups.js legacy fallback).
   ];
 
   var _defaultsCache = null;
@@ -465,11 +470,158 @@
   }
 
   // ------------------------------------------------------------------
+  // 3-tier visibility (basic / advanced / expert)
+  // ------------------------------------------------------------------
+  // GET /api/chat/{persona}/config/defaults carries fields[name].tier.
+  // A missing or unknown tier is treated as "expert": the fail-safe side is
+  // to hide a knob, never to expose an expert setting by accident.
+  var EXPERT_STORAGE_KEY = "nous.chat.settings.showExpert";
+  var TIER_HIDDEN_CLASS = "chat-tier-hidden";
+
+  function _tierOf(key) {
+    var meta =
+      _defaultsCache && _defaultsCache.fields
+        ? _defaultsCache.fields[key]
+        : null;
+    var tier = meta ? meta.tier : undefined;
+    return tier === "basic" || tier === "advanced" ? tier : "expert";
+  }
+
+  function _expertShown() {
+    try {
+      return window.localStorage.getItem(EXPERT_STORAGE_KEY) === "1";
+    } catch (_) {
+      return false; // storage unavailable (private mode) ⇒ keep expert hidden
+    }
+  }
+
+  function _setExpertShown(on) {
+    try {
+      window.localStorage.setItem(EXPERT_STORAGE_KEY, on ? "1" : "0");
+    } catch (_) {
+      /* storage unavailable — this session still honours the toggle */
+    }
+  }
+
+  // The row that owns a control (label + input + ?-tip) so hiding takes the
+  // whole line away, not just the input. Shared containers (preset grid, the
+  // context block) return null — there the control alone is hidden.
+  function _tierRow(el) {
+    var node = el;
+    while (
+      node.parentElement &&
+      (node.parentElement.classList.contains("chat-reset-wrap") ||
+        node.parentElement.classList.contains("chat-reset-toggle-group"))
+    ) {
+      node = node.parentElement;
+    }
+    var parent = node.parentElement;
+    if (!parent || parent === document.body) return null;
+    if (parent.classList.contains("chat-check-row")) return parent;
+    var hasLabel = false;
+    var otherFields = 0;
+    for (var i = 0; i < parent.children.length; i++) {
+      var ch = parent.children[i];
+      if (ch === node || ch.contains(node)) continue;
+      if (ch.classList.contains("chat-field-label")) hasLabel = true;
+      else if (ch.querySelector && ch.querySelector("input, select, textarea"))
+        otherFields++;
+    }
+    return hasLabel && otherFields === 0 ? parent : null;
+  }
+
+  // DOM nodes to hide for one expert entry ([] when the control is absent).
+  function _tierTargets(entry) {
+    var el = _fieldElement(entry);
+    if (!el) return [];
+    if (entry[2] === "radio") {
+      // radio group: hide the whole option block including its label
+      var lab = el.closest ? el.closest("label") : null;
+      var options = lab ? lab.parentElement : el.parentElement;
+      return [options && options.parentElement ? options.parentElement : el];
+    }
+    var row = _tierRow(el);
+    if (row) return [row];
+    // No single-field row: hide the control plus its sibling label/hint.
+    var nodes = [el];
+    var prev = el.previousElementSibling;
+    if (prev && prev.classList.contains("chat-field-label")) nodes.push(prev);
+    var next = el.nextElementSibling;
+    if (
+      next &&
+      (next.classList.contains("chat-field-hint") ||
+        next.classList.contains("setting-hint"))
+    ) {
+      nodes.push(next);
+    }
+    return nodes;
+  }
+
+  // 「効く条件」の1行説明を defaults API の help から title に載せる
+  // (help が空なら title 無しのまま)。
+  function _applyHelpTitles() {
+    for (var i = 0; i < RESET_FIELDS.length; i++) {
+      var entry = RESET_FIELDS[i];
+      var help = _helpOf(entry[1]);
+      if (!help) continue;
+      if (entry[2] === "radio") {
+        var radios = document.querySelectorAll(
+          'input[name="' + entry[0] + '"]',
+        );
+        for (var j = 0; j < radios.length; j++) {
+          if (!radios[j].getAttribute("title"))
+            radios[j].setAttribute("title", help);
+        }
+        continue;
+      }
+      var el = _fieldElement(entry);
+      if (el && !el.getAttribute("title")) el.setAttribute("title", help);
+    }
+  }
+
+  function _hideTierNodes(nodes, hidden) {
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].classList.toggle(TIER_HIDDEN_CLASS, hidden);
+    }
+  }
+
+  // Called once from the settings init path (settings/apply.js loadChatConfig).
+  function _applyFieldTiers() {
+    _applyHelpTitles();
+    var show = _expertShown();
+    var toggle = document.getElementById("chat-settings-show-expert");
+    if (toggle) {
+      toggle.checked = show;
+      if (!toggle._tierBound) {
+        toggle._tierBound = true;
+        toggle.addEventListener("change", function () {
+          _setExpertShown(this.checked);
+          _applyFieldTiers();
+        });
+      }
+    }
+    for (var i = 0; i < RESET_FIELDS.length; i++) {
+      var entry = RESET_FIELDS[i];
+      if (_tierOf(entry[1]) !== "expert") continue;
+      _hideTierNodes(_tierTargets(entry), !show);
+      // "optional" entry: its enable checkbox shares the field's tier
+      if (entry[2] === "optional" && entry[3]) {
+        var cb = document.getElementById(entry[3]);
+        if (!cb) continue;
+        var cbRow = _tierRow(cb);
+        _hideTierNodes(cbRow ? [cbRow] : [cb], !show);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------
   // Register namespace (chunk 1/4 — defaults/reset API)
   // ------------------------------------------------------------------
   N.Chat.settings = N.Chat.settings || {};
   N.Chat.settings.loadDefaults = loadConfigDefaults;
   N.Chat.settings.injectResetButtons = _injectResetButtons;
+  N.Chat.settings.applyFieldTiers = _applyFieldTiers;
+  N.Chat.settings.tierOf = _tierOf;
   N.Chat.settings.resetField = _resetField;
   N.Chat.settings.resetFields = RESET_FIELDS;
   N.Chat.settings.isFieldDirty = _isFieldDirty;

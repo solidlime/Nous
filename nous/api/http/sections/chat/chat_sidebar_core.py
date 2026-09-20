@@ -12,6 +12,11 @@ def _render_sidebar_header() -> str:
                         <div style="position:sticky;top:0;z-index:10;background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);font-size:0.9rem;font-weight:600;color:var(--text-primary);padding:12px 0 8px;margin:0 -16px 8px;border-bottom:1px solid var(--glass-border);display:flex;align-items:center;gap:8px;">
                             <span style="font-size:1.1rem;margin-left:16px;"><i data-lucide="settings"></i></span>
                             <span>チャット設定</span>
+                            <!-- 3層化: expert 層は既定で非表示。ON で表示（localStorage に永続） -->
+                            <label class="chat-expert-toggle" for="chat-settings-show-expert" title="expert 層の設定を表示します（通常は変更不要）">
+                                <input type="checkbox" id="chat-settings-show-expert" />
+                                <span>詳細設定を表示</span>
+                            </label>
                         </div>"""
 
 

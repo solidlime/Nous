@@ -119,9 +119,6 @@
       ),
       disabled_tools: Array.from(N.Chat.state.disabledTools || []),
       reflection_enabled: getChecked("chat-reflection-enabled"),
-      reflection_threshold: parseFloat(
-        document.getElementById("chat-reflection-threshold")?.value || "1.0",
-      ),
       reflection_min_interval_hours: parseFloat(
         document.getElementById("chat-reflection-interval")?.value || "1.0",
       ),
@@ -241,23 +238,12 @@
         ).trim();
         return v ? parseInt(v) : undefined;
       })(),
-      forgetting_trigger_threshold: parseInt(
-        document.getElementById("chat-forgetting-trigger-threshold")?.value ||
-          "100",
-      ),
       forgetting_decay_interval_seconds: parseInt(
         document.getElementById("chat-forgetting-decay-interval-seconds")
           ?.value || "3600",
       ),
       forgetting_min_strength: parseFloat(
         document.getElementById("chat-forgetting-min-strength")?.value || "0.1",
-      ),
-      forgetting_forget_ratio: parseFloat(
-        document.getElementById("chat-forgetting-forget-ratio")?.value || "0.2",
-      ),
-      forgetting_forget_strength: parseFloat(
-        document.getElementById("chat-forgetting-forget-strength")?.value ||
-          "0.5",
       ),
       // Emotion decay
       // 空欄なら null を送り保存値を解除 (カテゴリテーブル有効化)
@@ -378,7 +364,11 @@
       irodori_chunk_min_chars:
         parseInt(
           document.getElementById("chat-irodori-chunk-min-chars")?.value,
-        ) || 85,
+        ) ||
+        // 既定値の単一の正は session_config の 85。defaults API の
+        // fields.irodori_chunk_min_chars.default を優先し、応答が無い場合のみ 85。
+        N.Chat.settings._defaultOf("irodori_chunk_min_chars") ||
+        85,
       irodori_seed:
         parseInt(document.getElementById("chat-irodori-seed")?.value) || 0,
       irodori_caption_llm_enabled:

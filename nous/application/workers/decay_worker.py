@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import threading
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from nous.domain.memory import wiring_events
@@ -44,6 +45,9 @@ class DecayWorker:
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._cycle_count = 0
+        # 直近の reflection 実行時刻（reflection_min_interval_hours ゲート用）。
+        # None = 未実行。成功した reflect 呼び出し後に更新する。
+        self._last_reflection_at: datetime | None = None
         # 周期リフレクション間隔（DecayWorker サイクル数）。config の
         # reflection_interval_cycles が設定されていればそれに従い、
         # 無ければクラス定数 (24) にフォールバック。
@@ -327,9 +331,44 @@ class DecayWorker:
 
         Uses the language-agnostic ReflectionEngine when available;
         falls back to no-op if not configured.
+
+        Double gate (v4.0):
+          1. ``reflection_interval_cycles`` — cycle count (see ``_run_cycle``).
+          2. ``reflection_min_interval_hours`` — wall-clock elapsed since the
+             last successful run, tracked here in ``_last_reflection_at``.
+        The cycle gate decides *when* we get a chance; this method's gates
+        decide whether to actually spend an LLM call. ``reflection_enabled``
+        is the master off-switch (config absent → current behaviour kept:
+        run).
         """
         if self._reflection_engine is None or self._llm_provider is None:
             return
+
+        # Master switch: config present and explicitly False → skip.
+        if self._config is not None and getattr(self._config, "reflection_enabled", True) is False:
+            logger.debug("DecayWorker: reflection disabled via config")
+            return
+
+        # Wall-clock minimum interval gate. Non-numeric/None/<=0 config → no gate.
+        # 型をここで float に確定させる（mypy が gate_active 経由で絞り込めないため）。
+        min_interval_hours = 0.0
+        raw_interval_hours = getattr(self._config, "reflection_min_interval_hours", None)
+        if (
+            isinstance(raw_interval_hours, (int, float))
+            and not isinstance(raw_interval_hours, bool)
+            and raw_interval_hours > 0
+        ):
+            min_interval_hours = float(raw_interval_hours)
+        now = get_now()
+        if min_interval_hours > 0 and self._last_reflection_at is not None:
+            elapsed = now - self._last_reflection_at
+            if elapsed < timedelta(hours=min_interval_hours):
+                logger.debug(
+                    "DecayWorker: reflection skipped (elapsed %.2fh < min_interval_hours=%s)",
+                    elapsed.total_seconds() / 3600.0,
+                    min_interval_hours,
+                )
+                return
 
         persona = getattr(self.context, "persona", None) or self.context.__class__.__name__
         try:
@@ -356,6 +395,8 @@ class DecayWorker:
                     persona,
                 )
                 self._record_reflection_event(persona, results)
+            # 実行成功（insights 0 件でも）時点をゲート基準として記録。
+            self._last_reflection_at = now
         except Exception as exc:
             logger.warning("DecayWorker: reflection failed: %s", exc)
 

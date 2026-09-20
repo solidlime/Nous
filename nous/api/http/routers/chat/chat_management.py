@@ -43,6 +43,23 @@ def _is_secret_field(name: str) -> bool:
     return name in _SECRET_FIELD_NAMES or name.endswith("_api_key")
 
 
+# v4.0 で削除された死にノブ。旧クライアント/旧 config.json が送ってきても
+# 値は無視する（_all_flat_fields フィルタで既に落ちる）。保存時に 1 回だけ
+# warning を出し、消えたキー名を可視化する。
+_REMOVED_CONFIG_KEYS_V4: frozenset[str] = frozenset(
+    {
+        "forgetting_trigger_threshold",
+        "forgetting_forget_ratio",
+        "forgetting_forget_strength",
+        "reflection_threshold",
+        "memory_enrichment_auto_run",
+        "memory_enrichment_interval",
+        "memory_enrichment_model",
+        "memory_enrichment_prompt_template",
+    }
+)
+
+
 # 設定パネルのセクション（sections/chat/*.py の data-category）へ prefix で分類。
 # 一致しないフィールドは "core"。追加フィールドも prefix 一致で自然に追従する。
 _SECTION_PREFIXES: tuple[tuple[str, str], ...] = (
@@ -79,6 +96,104 @@ def _field_section(name: str) -> str:
     return "core"
 
 
+# ── 3層化 (v4.0): basic / advanced / expert ────────────────────────
+# 設定パネル表示階層。_field_section と同じく prefix ではなく明示マップ。
+# 取りこぼし（明示マップに無いキー）は危険側 = 非表示側の "expert" に倒す。
+_TIER_BASIC: frozenset[str] = frozenset(
+    {
+        # 音声 ON/OFF・音量・TTS モデル/URL
+        "voice_enabled",
+        "voice_auto_play",
+        "voice_volume",
+        "voice_speed",
+        "voice_model",
+        "voice_url",
+        "voice_streaming",
+        # 表示系・セッション要約・記憶検索
+        "show_message_timestamps",
+        "language",
+        "session_summarize",
+        "episode_search_enabled",
+        # メモリ検索重み
+        "retrieval_recency_weight",
+        "retrieval_importance_weight",
+        "retrieval_relevance_weight",
+        # 忘却 / 記憶強化 ON/OFF・応答トークン上限
+        "forgetting_enabled",
+        "memory_enrichment_enabled",
+        "max_tokens",
+    }
+)
+_TIER_ADVANCED: frozenset[str] = frozenset(
+    {
+        # LLM プロバイダ/モデル/サンプリング
+        "provider",
+        "model",
+        "temperature",
+        "top_p",
+        "reasoning_enabled",
+        "reasoning_effort",
+        "dynamic_temperature",
+        # ペルソナ/表示/キャラ判定
+        "system_prompt",
+        "debug_mode",
+        "character_judge_enabled",
+        # ツール / スキル / MCP
+        "mcp_servers",
+        "disabled_tools",
+        "enabled_skills",
+        "enable_parallel_tools",
+        "dynamic_tool_selection",
+        "enable_memory_tools",
+        # 抽出
+        "auto_extract",
+        "extract_model",
+        "max_tool_calls",
+        # 画像生成
+        "image_gen_enabled",
+        "image_gen_provider",
+        "image_gen_presets",
+        "image_gen_default_preset",
+        "image_gen_negative_prompt",
+        "image_gen_self_portrait_prompt",
+        "image_gen_full_body_prefix",
+        "image_gen_portrait_prefix",
+        "image_gen_selfie_prefix",
+        "image_gen_scene_prefix",
+        # リフレクション / メンタルモデル
+        "reflection_enabled",
+        "mental_model_enabled",
+        # brain 系主要 ON/OFF とアイドル秒数
+        "brain_enrich_auto_run",
+        "brain_graph_flash_enabled",
+        "brain_monologue_enabled",
+        "brain_introspection_enabled",
+        "brain_reasoning_enabled",
+        "brain_spontaneous_enabled",
+        "brain_llm_dedicated",
+        "brain_idle_after_seconds",
+        "brain_introspection_prompt",
+        "brain_spontaneous_prompt",
+        # 音声感情モード / アイテム抽出専用 LLM / 圧縮モード
+        "voice_emotion_mode",
+        "item_llm_dedicated",
+        "item_llm_provider",
+        "item_llm_model",
+        "context_compression_mode",
+        "context_use_llm_summary",
+    }
+)
+
+
+def _field_tier(name: str) -> str:
+    """basic / advanced / expert の表示階層を返す（fallback は expert）。"""
+    if name in _TIER_BASIC:
+        return "basic"
+    if name in _TIER_ADVANCED:
+        return "advanced"
+    return "expert"
+
+
 def _type_label(annotation: object) -> str:
     """Optional/Union/generics を JS 側で扱いやすい素の型名にする。"""
     import types as _types
@@ -109,12 +224,21 @@ def _do_get_config_defaults() -> dict:
             "help": info.description or "",
             "type": _type_label(info.annotation),
             "section": _field_section(name),
+            "tier": _field_tier(name),
         }
     return {"fields": fields}
 
 
 async def _do_save_chat_config(persona: str, ctx, body: dict) -> dict:
     """Save and return updated chat config safe dict."""
+    # v4.0: 削除済みキーは無視する。送られてきた場合のみ 1 リクエスト 1 回 warning。
+    removed_present = sorted(k for k in body if k in _REMOVED_CONFIG_KEYS_V4)
+    if removed_present:
+        logger.warning(
+            "save_chat_config: ignoring removed v4 config keys: %s",
+            ", ".join(removed_present),
+        )
+
     repo = ChatConfigFileRepository(get_settings().data_root)
     current = repo.get(persona)
 
