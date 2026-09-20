@@ -42,6 +42,22 @@ _DEFAULT_METRIC_LABELS = {
 _NEAR_DUP_THRESHOLD = 0.85
 
 
+# ── get_context 予算（audit C3）──
+# P0 実測（docs/reviews/2026-09-19-parity-baseline.md §2, est tokens = chars/2.5）では
+# ケース B = 2,873 字 / 1,149 tok、ケース C = 3,078 字 / 1,231 tok と、docstring の
+# 「~500-800 tok」を大きく上回っていた。以下を節ごとの件数+文字数上限として固定し、
+# 最悪ケースを ≤ 800 tok（≤ 2,000 字）へ引き戻す。
+_MAX_TOTAL_CHARS = 2000
+_MAX_COMMITMENTS = 5
+_MAX_COMMITMENT_CHARS = 80
+_MAX_INSIGHTS = 2
+_MAX_INSIGHT_CHARS = 120
+_MAX_SUMMARIES = 2
+_MAX_SUMMARY_CHARS = 120
+_MAX_PROJECT_MEMORIES = 5
+_MAX_PROJECT_CHARS = 160
+
+
 # ── tool.called self-publication (F3 invariant) ──
 # Invariant: MCP tools publish their own tool.called events on ALL paths;
 # ToolRegistry skips MCP tools.  Tools that already publish inline
@@ -334,6 +350,29 @@ def _build_time_comment(time_since: str, relationship_status: str | None) -> str
     return None
 
 
+def _truncate_snippet(text: str, limit: int, key: str = "") -> str:
+    """本文を指定字数以内に切り詰め、切れたことが分かる表記を付ける。
+
+    PROJECT 節の既存「… (full via memory_read: key)」形式を全節に踏襲する
+    （audit C3）。key が無い記憶は単なる「…」に落とす。戻り値は limit 以内。
+    """
+    text = text.replace("\n", " ")
+    if len(text) <= limit:
+        return text
+    marker = f"… (full via memory_read: {key})" if key else "…"
+    keep = max(0, limit - len(marker))
+    return text[:keep].rstrip() + marker
+
+
+def _enforce_total_budget(body: str, trailer: str) -> str:
+    """全体を _MAX_TOTAL_CHARS 以内に保つ（trailer は常に保持する安全弁）。"""
+    budget = _MAX_TOTAL_CHARS - len(trailer) - 1
+    if len(body) <= budget:
+        return body + "\n" + trailer
+    marker = "\n… (context truncated — use memory_search for more)"
+    return body[: max(0, budget - len(marker))].rstrip() + marker + "\n" + trailer
+
+
 def _format_lightweight_response(
     state: PersonaState,
     top_memories: list,
@@ -352,7 +391,11 @@ def _format_lightweight_response(
     project_name: str | None = None,
     due_labels: dict[str, str] | None = None,
 ) -> str:
-    """Lightweight context (~700-900 tokens): persona + conversation continuity + body state."""
+    """Lightweight context: persona + conversation continuity + body state.
+
+    audit C3: 節ごとの件数+文字数上限（_MAX_* 定数）と合計上限 _MAX_TOTAL_CHARS で
+    最悪ケース ≤ 800 tok（≤ 2,000 字）に強制する。
+    """
     lines: list[str] = []
 
     # 節跨ぎ dedupe 用の正規化済み seen set。節の構築順（active goals → recent →
@@ -440,13 +483,14 @@ def _format_lightweight_response(
         active_goals = _dedupe_memories(active_goals, seen)
     if active_goals:
         lines.append("\n⚠️ YOUR ACTIVE COMMITMENTS:")
-        for g in active_goals:
+        for g in active_goals[:_MAX_COMMITMENTS]:
             ts = relative_time_str(g.created_at) if getattr(g, "created_at", None) else ""
             ts_str = f" ({ts})" if ts else ""
             # audit M2 — prospective cue: the deadline this commitment fired on
             due = (due_labels or {}).get(getattr(g, "key", ""), "")
             due_str = f" ⏰ {due}" if due else ""
-            lines.append(f"  🎯 {g.content[:100]}{ts_str}{due_str}")
+            snippet = _truncate_snippet(g.content, _MAX_COMMITMENT_CHARS, getattr(g, "key", ""))
+            lines.append(f"  🎯 {snippet}{ts_str}{due_str}")
 
     # Recent memories — conversation continuity across sessions
     if recent:
@@ -502,12 +546,13 @@ def _format_lightweight_response(
     if reflections:
         # リフレクションの各行末に created_at 基準の相対時刻を付与
         lines.append("\n--- Recent Insights ---")
-        for r in reflections[:2]:
+        for r in reflections[:_MAX_INSIGHTS]:
             if not r.content:
                 continue
             ts = relative_time_str(r.created_at) if getattr(r, "created_at", None) else ""
             ts_part = f" ({ts})" if ts else ""
-            lines.append(f"💡 {r.content}{ts_part}")
+            snippet = _truncate_snippet(r.content, _MAX_INSIGHT_CHARS, getattr(r, "key", ""))
+            lines.append(f"💡 {snippet}{ts_part}")
     if mental_models:
         mental_models = _dedupe_memories(list(mental_models), seen)
         patterns = [m.content for m in mental_models[:2] if m.content]
@@ -523,28 +568,27 @@ def _format_lightweight_response(
     if session_summaries:
         # サマリーの各行末に created_at 基準の相対時刻を付与
         lines.append("\n--- Recent Summaries ---")
-        for s in session_summaries[:2]:
+        for s in session_summaries[:_MAX_SUMMARIES]:
             if not s.content:
                 continue
             ts = relative_time_str(s.created_at) if getattr(s, "created_at", None) else ""
             ts_part = f" ({ts})" if ts else ""
-            lines.append(f"📝 {s.content}{ts_part}")
+            snippet = _truncate_snippet(s.content, _MAX_SUMMARY_CHARS, getattr(s, "key", ""))
+            lines.append(f"📝 {snippet}{ts_part}")
 
     # ── Project memories（project:<slug> タグ付きの直近記憶）──
     project_memories = _dedupe_memories(project_memories or [], seen)
     if project_memories:
         slug = project_name or ""
         lines.append(f"\n--- PROJECT MEMORIES (project:{slug}) ---")
-        for m in project_memories:
-            snippet = m.content.replace("\n", " ")
-            if len(snippet) > 400:
-                snippet = snippet[:400].rstrip() + "… (full via memory_read: " + m.key + ")"
+        for m in project_memories[:_MAX_PROJECT_MEMORIES]:
+            snippet = _truncate_snippet(m.content, _MAX_PROJECT_CHARS, m.key)
             ts = relative_time_str(m.created_at) if getattr(m, "created_at", None) else ""
             ts_str = f" ({ts})" if ts else ""
             lines.append(f"- {snippet}{ts_str}")
 
-    lines.append("\n💡 Use memory_search() for deeper context on specific topics.")
-    return "\n".join(lines)
+    trailer = "💡 Use memory_search() for deeper context on specific topics."
+    return _enforce_total_budget("\n".join(lines), trailer)
 
 
 async def _apply_emotion_decay(ctx: AppContext, persona: str, state: PersonaState) -> tuple[PersonaState, str]:

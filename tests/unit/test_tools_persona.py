@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from nous.api.mcp._tools_helpers import _MAX_PROJECT_CHARS
 from nous.domain.memory.entities import Memory
 from nous.domain.shared.result import Success
 
@@ -217,8 +218,8 @@ def _project_memories(keys_and_ts: list[tuple[str, datetime, str]]) -> list:
 
 @pytest.mark.asyncio
 async def test_get_context_with_project_memories(mock_ctx):
-    """project 指定時: project:<slug> タグ付き記憶が updated_at 降順・最大5件・400字キャップで
-    PROJECT MEMORIES 節に表示される。"""
+    """project 指定時: project:<slug> タグ付き記憶が updated_at 降順・最大5件・
+    _MAX_PROJECT_CHARS 字キャップで PROJECT MEMORIES 節に表示される。"""
     from nous.api.mcp._tools_persona import _tool_get_context
     from nous.domain.persona.entities import PersonaState
 
@@ -263,12 +264,12 @@ async def test_get_context_with_project_memories(mock_ctx):
     # 古い2件（proj_1, proj_2）は落ちる
     assert "PROJECT_MEM_1" not in r
     assert "PROJECT_MEM_2" not in r
-    # 400字キャップ: 長文は 400字 + "… (full via memory_read: <key>)"
+    # 文字数キャップ（_MAX_PROJECT_CHARS）: 長文は "… (full via memory_read: <key>)" 付きで切り詰め
     assert "(full via memory_read: proj_7)" in r
     assert "… (full via memory_read:" in r
     assert "メモ" * 300 not in r  # 全文は表示されない
-    # 実効キャップ: 400字（"メモ"×200）で切り詰められ、それ以降の文字は表示されない
-    assert r.count("メモ") == 200
+    # 実効キャップ: _MAX_PROJECT_CHARS 字で切り詰められ、それ以降の文字は表示されない
+    assert r.count("メモ") <= _MAX_PROJECT_CHARS // len("メモ")
     # get_by_tags は project:testslug タグで呼ばれる
     assert (["project:testslug"],) in [c.args for c in mock_ctx.memory_service.get_by_tags.call_args_list]
 
