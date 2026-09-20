@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from nous.domain.memory.cue import due_cues, event_cued_memories
 from nous.domain.persona.emotion_trend import build_emotion_trend_narrative
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now, relative_time_str
@@ -186,6 +187,7 @@ async def _build_context_section(
         t2.append(f"ペルソナ情報:\n{pi_lines}")
 
     # === Tier 3: 参照情報 ===
+    query_text = (getattr(turn_ctx, "user_message", "") or "") if turn_ctx else ""
     try:
         goals_result = ctx.memory_service.get_by_tags(["goal"])
         goals = goals_result.value if goals_result.is_ok else []
@@ -201,6 +203,21 @@ async def _build_context_section(
                 ts_str = f" ({ts})" if ts else ""
                 commit_lines.append(f"  🎯 [Goal] {g.content}{ts_str}")
             t3.append("いまの約束:\n" + "\n".join(commit_lines))
+
+        # audit M2 — 先見的記憶: 「今この瞬間」が cue になるコミットメントだけを前面に出す。
+        # 時間 cue（期限が窓内）とイベント cue（今回の発話にエンティティが登場）の 2 種類。
+        if active_goals:
+            cue_lines: list[str] = []
+            cued_keys: set[str] = set()
+            for mem, label in due_cues(active_goals, get_now()):
+                cued_keys.add(mem.key)
+                cue_lines.append(f"  ⏰ [期限] {mem.content[:120]} ({label})")
+            for mem in event_cued_memories(active_goals, query_text):
+                if mem.key in cued_keys:
+                    continue
+                cue_lines.append(f"  ⚡ [言及] {mem.content[:120]}")
+            if cue_lines:
+                t3.append("いま思い出すべき約束:\n" + "\n".join(cue_lines))
     except Exception as e:
         logger.debug("Failed to fetch goals: %s", e)
 
@@ -256,7 +273,6 @@ async def _build_context_section(
         try:
             reflection_result = ctx.memory_service.get_by_tags(["reflection"])
             if reflection_result.is_ok and reflection_result.value:
-                query_text = (getattr(turn_ctx, "user_message", "") or "") if turn_ctx else ""
                 # get_by_tags は無 LIMIT・updated_at DESC。全件 encode はレイテンシが単調増加するため直近のみ。
                 # 相対閾値の比較基準もこの「直近N件の候補集合」内で完結する。
                 contents = [r.content for r in reflection_result.value if r.content][:20]

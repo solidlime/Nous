@@ -6,6 +6,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from nous.domain.memory.cue import DUE_REMINDER_TAG, due_cues
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now, relative_time_str
 
@@ -124,12 +125,18 @@ async def _tool_get_context(
         logger.info("DEPRECATED: get_context performs session side effects; use session_begin instead (audit M8)")
         ctx.persona_service.record_conversation_time(persona)
 
+    # audit M2 — prospective memory: commitments whose deadline is inside the
+    # window are marked ⏰ on their line (and reminded by the hourly sweep).
+    due_labels = {m.key: label for m, label in due_cues(goals or [], get_now()) if getattr(m, "key", None)}
+
     # Read one-shot state memories (physical_state/mental_state) via service
     one_shot_context: dict[str, str] = {}
     if session_effects:
         for tag_name, label in [
             ("physical_state", "💪 身体状態"),
             ("mental_state", "🧠 精神状態"),
+            # audit M2 — the hourly cue sweep leaves due commitments here
+            (DUE_REMINDER_TAG, "⏰ 期限が近い約束"),
         ]:
             mems_result = ctx.memory_service.get_and_consume_one_shot(tag_name)
             if mems_result.is_ok and mems_result.value:
@@ -153,6 +160,7 @@ async def _tool_get_context(
         one_shot_context=one_shot_context or None,
         project_memories=project_memories,
         project_name=project or None,
+        due_labels=due_labels or None,
     )
     await ctx.event_bus.publish(
         "tool.called",

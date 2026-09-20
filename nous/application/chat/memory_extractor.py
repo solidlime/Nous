@@ -13,6 +13,7 @@ from nous.application.chat.memory_prompts import (
     _build_drift_section,
 )
 from nous.domain.language import LanguageResolver
+from nous.domain.memory.cue import cue_tags as build_cue_tags
 from nous.domain.memory.entities import VALID_KINDS
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.result import Success
@@ -167,6 +168,8 @@ class MemoryLLM:
             assistant_response=assistant_response[:500],
             # item 抽出に drift 反省は不要。
             drift_section="" if mode == "item" else _build_drift_section(drift),
+            # audit M2 — cue_time の相対表現（「明日」等）を絶対日時に解決させる基準時刻
+            current_time=get_now().strftime("%Y-%m-%dT%H:%M"),
         )
 
         try:
@@ -517,7 +520,7 @@ async def _process_goal_actions(ctx: AppContext, persona: str, goals: list) -> N
             mem_result = await ctx.memory_service.create_memory(
                 content=content,
                 importance=0.75,
-                tags=["goal", "active"],
+                tags=["goal", "active", *build_cue_tags(goal.get("cue_time"), goal.get("cue_event"))],
                 emotion="neutral",
             )
             if mem_result.is_ok and ctx.vector_store is not None:
@@ -568,7 +571,12 @@ async def _process_promise_actions(ctx: AppContext, persona: str, promises: list
             mem_result = await ctx.memory_service.create_memory(
                 content=content,
                 importance=0.8,
-                tags=["goal", "active", "interpersonal"],
+                tags=[
+                    "goal",
+                    "active",
+                    "interpersonal",
+                    *build_cue_tags(promise.get("cue_time"), promise.get("cue_event")),
+                ],
                 emotion="neutral",
             )
             if isinstance(mem_result, Success) and ctx.vector_store is not None:

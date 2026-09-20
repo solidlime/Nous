@@ -57,6 +57,31 @@ def _build_recall_query(session, current_user_message: str) -> str:
     return combined[-800:] if len(combined) > 800 else combined
 
 
+def _task_context_terms(ctx) -> str:
+    """audit L2 — 現在のタスク文脈の語で検索クエリを拡張する（環境復元型はしない）。
+
+    active task_state 記憶が持つタグ（project slug 等）は「今何をしているか」を
+    表す最小の語彙なので、それを想起クエリに足す。
+    発話履歴だけでは「今の作業」が手がかりから抜け落ちる。
+    """
+    try:
+        res = ctx.memory_service.get_by_tags(["task_state"])
+        if not getattr(res, "is_ok", False) or not getattr(res, "value", None):
+            return ""
+        tags = [t for t in (getattr(res.value[0], "tags", None) or []) if t != "task_state"]
+        return " ".join(tags[:10])
+    except Exception as e:
+        logger.debug("task context terms failed: %s", e)
+        return ""
+
+
+def _recall_query_with_task_context(ctx, session, current_user_message: str) -> str:
+    """audit L2 — 発話履歴の想起クエリに現在のタスク文脈語を付加する。"""
+    recall_query = _build_recall_query(session, current_user_message)
+    terms = _task_context_terms(ctx)
+    return f"{recall_query} {terms}" if terms else recall_query
+
+
 def _build_digest(ctx, config) -> str:
     """§1 Recency digest: 直近記憶を updated_at 降順で N 件（クエリ一致不要・consumed 済みも含む）。"""
     n = int(getattr(config, "memory_digest_count", 5) or 0)
@@ -196,7 +221,7 @@ class PrepareStep:
             memory_task = asyncio.create_task(
                 _search_memories(
                     ctx,
-                    _build_recall_query(session, turn_ctx.user_message),
+                    _recall_query_with_task_context(ctx, session, turn_ctx.user_message),
                     None,
                     config,
                     top_k=max(preload_count, 1) if preload_count > 0 else 100,
@@ -246,7 +271,7 @@ class PrepareStep:
                 preload_count = getattr(config, "memory_preload_count", 5)
                 turn_ctx.related_memories, debug, memories_list = await _search_memories(
                     ctx,
-                    _build_recall_query(session, turn_ctx.user_message),
+                    _recall_query_with_task_context(ctx, session, turn_ctx.user_message),
                     None,
                     config,
                     top_k=max(preload_count, 1) if preload_count > 0 else 100,

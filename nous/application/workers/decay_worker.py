@@ -5,7 +5,8 @@ import threading
 from typing import TYPE_CHECKING, Any
 
 from nous.domain.memory import wiring_events
-from nous.domain.memory.entities import importance_scaled_exponent
+from nous.domain.memory.cue import DUE_REMINDER_TAG, due_cues
+from nous.domain.memory.entities import Memory, importance_scaled_exponent
 from nous.domain.memory.session_event import SessionEvent
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
@@ -71,12 +72,56 @@ class DecayWorker:
             self._stop_event.wait(self.interval)
 
     def _run_cycle(self) -> None:
-        """Run one full cycle: decay + optional reflection."""
+        """Run one full cycle: decay + prospective cue sweep + optional reflection."""
         self._decay_cycle()
+        self._due_cue_cycle()
         self._cycle_count += 1
 
         if self._cycle_count % self._reflection_interval == 0:
             self._maybe_run_reflection()
+
+    def _due_cue_cycle(self) -> None:
+        """audit M2 — prospective memory sweep (runs on the existing hourly cycle).
+
+        Goals/promises whose time cue is inside the window become a one-shot
+        ``due_reminder`` memory, which get_context/session_begin consume on the
+        next read. Without this a commitment due in an hour is never raised on
+        its own — it just sits in the goal list.
+
+        No separate worker: this needs a periodic tick, not a thread of its own.
+        """
+        try:
+            goals_result = self.context.memory_service.get_by_tags(["goal", "active"])
+            if not getattr(goals_result, "is_ok", False):
+                return
+            goals = getattr(goals_result, "value", None) or []
+            due = due_cues(goals, get_now())
+            if not due:
+                return
+            now = get_now()
+            content = "due_reminder: " + "; ".join(f"{m.content[:120]} ({label})" for m, label in due)
+            # Don't restack a reminder nobody has consumed yet.
+            existing = self.context.memory_service.get_by_tags([DUE_REMINDER_TAG])
+            if getattr(existing, "is_ok", False) and any(
+                getattr(m, "content", None) == content for m in (getattr(existing, "value", None) or [])
+            ):
+                return
+            persona = getattr(self.context, "persona", None) or "unknown"
+            reminder = Memory(
+                key=f"due_reminder_{persona}_{now.strftime('%Y%m%d%H')}",
+                content=content,
+                created_at=now,
+                updated_at=now,
+                importance=0.9,
+                tags=[DUE_REMINDER_TAG],
+                kind="prospective",
+                source_type="llm_inferred",
+            )
+            saved = self.context.memory_repo.save(reminder)
+            if getattr(saved, "is_ok", False):
+                logger.info("DecayWorker: queued due reminder for %d commitment(s)", len(due))
+        except Exception:
+            logger.warning("DecayWorker: due cue cycle failed", exc_info=True)
 
     def _batch_memory_info(self) -> tuple[dict[str, float], dict[str, float], set[str]]:
         """One-query batch (no N+1): memory_key → importance / emotion_intensity,

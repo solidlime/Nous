@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from nous.domain.search.engine import SearchEngine
 
 from nous.domain.memory.contradiction import ContradictionType
+from nous.domain.memory.entities import Memory
 from nous.domain.shared.time_utils import get_now
 from nous.domain.value_objects import normalize_importance
 
@@ -21,6 +22,16 @@ logger = logging.getLogger(__name__)
 CONTRADICTED_CONFIDENCE_FACTOR = 0.5
 CORROBORATION_SIMILARITY_MIN = 0.9
 CORROBORATION_CONFIDENCE_DELTA = 0.1
+
+# audit M1 — interference. A new memory that is *similar* to a stored one but
+# not the same fact makes that stored one harder to pull back out (retrieval
+# interference, Anderson & Neely 1996). The band sits just below the
+# contradiction threshold: below it the pair is unrelated, above it the fact is
+# replaced rather than interfered with.
+INTERFERENCE_SIM_MIN = 0.85
+INTERFERENCE_SIM_MAX = 0.95
+INTERFERENCE_REVIEW_THRESHOLD = 3
+INTERFERENCE_REVIEW_TAG = "interference_review"
 
 
 class MemoryEvolutionService:
@@ -89,6 +100,12 @@ class MemoryEvolutionService:
 
             # --- HiMem-style 3-op contradiction classification ---
             invalidated_keys: set[str] = set()
+
+            # audit M1 — interference: register near-duplicate neighbours before any
+            # classification, so the counter also works with no LLM configured.
+            for r in similar.value:
+                if r.memory.key != new_memory_key:
+                    self._register_interference(r.memory.key, new_memory_key, r.score)
 
             if self._enricher is not None:
                 candidates = [
@@ -210,6 +227,54 @@ class MemoryEvolutionService:
                 self._repo.update(memory_key, confidence=new_value)
         except Exception:
             logger.debug("Confidence adjustment failed for %s", memory_key, exc_info=True)
+
+    def _register_interference(self, memory_key: str, new_memory_key: str, similarity: float) -> None:
+        """audit M1 — bump the interference counter of a similar-but-not-same neighbour.
+
+        Best-effort: a missing strength row or a save failure is not worth
+        interrupting a write for.
+        """
+        try:
+            if not (INTERFERENCE_SIM_MIN <= float(similarity) < INTERFERENCE_SIM_MAX):
+                return
+            res = self._repo.get_strength(memory_key)
+            if not res.is_ok or res.value is None:  # type: ignore[union-attr]
+                return
+            strength = res.value  # type: ignore[union-attr]
+            strength.interference_count += 1
+            self._repo.save_strength(strength)
+            if strength.interference_count >= INTERFERENCE_REVIEW_THRESHOLD:
+                self._queue_interference_review(memory_key, new_memory_key, strength.interference_count)
+        except Exception:
+            logger.debug("Interference registration failed for %s", memory_key, exc_info=True)
+
+    def _queue_interference_review(self, key: str, other_key: str, count: int) -> None:
+        """Pair hit the merge-review threshold → queue it once (idempotent key).
+
+        The marker is an ordinary memory tagged ``interference_review``, so it is
+        findable with the existing tag search — no new table, no new index.
+        """
+        try:
+            name = f"interference_review_{key}_{other_key}"
+            existing = self._repo.find_by_key(name)
+            if existing.is_ok and existing.value is not None:  # type: ignore[union-attr]
+                return
+            now = get_now()
+            self._repo.save(
+                Memory(
+                    key=name,
+                    content=f"Merge review candidate: {key} ↔ {other_key} (interference={count})",
+                    created_at=now,
+                    updated_at=now,
+                    importance=0.4,
+                    tags=[INTERFERENCE_REVIEW_TAG],
+                    kind="semantic",
+                    source_type="tool_output",
+                )
+            )
+            logger.info("Queued interference merge review for %s ↔ %s", key, other_key)
+        except Exception:
+            logger.debug("Interference review queueing failed for %s", key, exc_info=True)
 
     def _close_superseded_memory(self, old_key: str, new_key: str) -> None:
         """Close the old memory's validity window and chain it to the new memory.

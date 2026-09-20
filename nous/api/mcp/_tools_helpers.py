@@ -350,6 +350,7 @@ def _format_lightweight_response(
     one_shot_context: dict[str, str] | None = None,
     project_memories: list | None = None,
     project_name: str | None = None,
+    due_labels: dict[str, str] | None = None,
 ) -> str:
     """Lightweight context (~700-900 tokens): persona + conversation continuity + body state."""
     lines: list[str] = []
@@ -442,7 +443,10 @@ def _format_lightweight_response(
         for g in active_goals:
             ts = relative_time_str(g.created_at) if getattr(g, "created_at", None) else ""
             ts_str = f" ({ts})" if ts else ""
-            lines.append(f"  🎯 {g.content[:100]}{ts_str}")
+            # audit M2 — prospective cue: the deadline this commitment fired on
+            due = (due_labels or {}).get(getattr(g, "key", ""), "")
+            due_str = f" ⏰ {due}" if due else ""
+            lines.append(f"  🎯 {g.content[:100]}{ts_str}{due_str}")
 
     # Recent memories — conversation continuity across sessions
     if recent:
