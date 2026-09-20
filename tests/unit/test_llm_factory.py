@@ -1,5 +1,6 @@
 """Tests for LLM factory: 全 provider 名を OpenAICompatProvider に統一."""
 
+from nous import __version__
 from nous.infrastructure.llm.factory import get_provider
 from nous.infrastructure.llm.openai_compat import OpenAICompatProvider
 
@@ -72,4 +73,4 @@ class TestOpenCodeGoSessionHeaders:
         p2 = get_provider("opencode_go", api_key="k", model="m")
         h1, h2 = p1._client.default_headers, p2._client.default_headers
         assert h1["x-opencode-session"] == h2["x-opencode-session"]
-        assert h1["User-Agent"] == "nous/3.5.0"
+        assert h1["User-Agent"] == f"nous/{__version__}"

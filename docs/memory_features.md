@@ -83,62 +83,26 @@ When `update_context(user_info={"name": "..."})` is called, the current record i
 
 ## Named Memory Blocks
 
-Inspired by [Letta (MemGPT)](https://letta.com/), memory blocks are structured segments that are **always included in `get_context()` output** — unlike regular memories which require a search query.
+Inspired by [Letta (MemGPT)](https://letta.com/), memory blocks are structured segments
+stored in the `memory_blocks` table (`block_name` 主キー / `content` / `block_type` /
+`max_tokens` / `priority` / `metadata`)。
 
-Think of them as "RAM" for the AI: a small set of key facts always in working memory.
+**⚠️ v4.0 での位置づけ**: ブロックは**HTTP API とダッシュボード専用**の機能で、
+LLM のツール面（14 個の MCP ツール）には公開されていない。`session_begin()` /
+`get_context()` の出力にも自動注入されない。旧 `memory(operation="block_write" ...)`
+構文は存在しない（`memory(operation=...)` ディスパッチャ自体が廃止済み）。
 
-### Standard block names
+| 操作 | 経路 |
+|---|---|
+| 一覧 | `GET /api/blocks/{persona}` → `{"persona": ..., "blocks": [...]}` |
+| 書き込み / 更新 | `POST /api/blocks/{persona}`（`block_name` + `content` 必須。`block_type` / `max_tokens` / `priority` 任意）→ `{"ok": true, "block_name": ...}` |
+| 削除 | `DELETE /api/blocks/{persona}/{block_name}` → `{"ok": true}` |
+| 閲覧（UI） | ペルソナダッシュボード（`nous/api/http/routers/persona/persona_dashboard.py` が `blocks` を同梱） |
+| 内部 API | `memory_service.list_blocks() / write_block() / delete_block()`（`memory_blocks` テーブル、`priority` 降順） |
 
-| Name | Purpose |
-|------|---------|
-| `persona_state` | The persona's current internal state, mood, ongoing goals |
-| `user_model` | What the persona knows/infers about the user |
-| `active_context` | Current session focus, open questions, ongoing topics |
-
-Custom block names are also allowed.
-
-### Operations via `memory()` tool
-
-```python
-# Write a block
-memory(operation="block_write", block_name="user_model",
-        content="らうらうはNousを開発中。Python好き。")
-
-# Read a specific block
-memory(operation="block_read", block_name="user_model")
-
-# List all block names
-memory(operation="block_list")
-
-# Delete a block
-memory(operation="block_delete", block_name="user_model")
-```
-
-### Schema
-
-```sql
-CREATE TABLE memory_blocks (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    persona     TEXT NOT NULL,
-    name        TEXT NOT NULL,
-    content     TEXT NOT NULL,
-    description TEXT DEFAULT NULL,
-    updated_at  TEXT NOT NULL,
-    UNIQUE(persona, name)
-);
-```
-
-### HTTP API でのアクセス
-
-Block memory は MCP ツール経由に加え、HTTP API 経由でも操作できる。
-
-| メソッド | パス | 説明 |
-|---|---|---|
-| `GET` | `/api/blocks/{persona}` | ブロック一覧を取得 |
-| `POST` | `/api/blocks/{persona}` | ブロックを書き込み（`block_name` + `content` 必須） |
-| `DELETE` | `/api/blocks/{persona}/{block_name}` | ブロックを削除 |
-
-詳細は [HTTP API Reference — Core Memory Blocks](./http_api_reference.md#core-memory-blocks) を参照。
+LLM が使うペルソナ状態は `update_context()`（bi-temporal な履歴付き）と
+`session_begin()` の出力であり、ブロックとは別系統。エージェント向けのツール一覧は
+[LLM Usage Guide](./llm_usage_guide.md) を参照。
 
 ---
 

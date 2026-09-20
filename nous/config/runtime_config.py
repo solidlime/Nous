@@ -59,7 +59,6 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
             "description": "HTTP Bearer credential (empty = dev pass-through, restart not required)",
         },
         "contradiction_threshold": {"hot_reload": True, "description": "Contradiction detection threshold"},
-        "duplicate_threshold": {"hot_reload": True, "description": "Duplicate detection threshold"},
     },
 }
 

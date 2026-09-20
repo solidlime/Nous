@@ -23,7 +23,6 @@ function validateField(cat, key, value, meta) {
         if (key === 'min_strength' && (num < 0 || num > 1)) return { valid: false, error: 'Must be 0-1' };
         if (key === 'min_importance' && (num < 0 || num > 1)) return { valid: false, error: 'Must be 0-1' };
         if (key === 'contradiction_threshold' && (num < 0 || num > 1)) return { valid: false, error: 'Must be 0-1' };
-        if (key === 'duplicate_threshold' && (num < 0 || num > 1)) return { valid: false, error: 'Must be 0-1' };
         if (key.includes('interval') && num < 0) return { valid: false, error: 'Must be >= 0' };
         if (key === 'llm_max_tokens' && num < 1) return { valid: false, error: 'Must be >= 1' };
     }

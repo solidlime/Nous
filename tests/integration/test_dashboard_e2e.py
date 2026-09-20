@@ -1,4 +1,4 @@
-"""E2E dogfooding tests for the Nous v3 dashboard.
+"""E2E dogfooding tests for the Nous v4 dashboard.
 
 Tests all HTTP endpoints registered via ``register_http_routes`` against a
 real (temporary) SQLite backend and mocked/absent Qdrant vector store.
@@ -16,6 +16,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+from nous import __version__
 from nous.application.use_cases import AppContext, AppContextRegistry
 from nous.config.runtime_config import RuntimeConfigManager
 from nous.domain.shared.time_utils import format_iso, get_now
@@ -235,7 +236,7 @@ async def test_health_endpoint(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
-    assert data["version"] == "3.5.0"
+    assert data["version"] == __version__
     assert data["qdrant"] in ("connected", "unavailable")
 
 

@@ -77,7 +77,9 @@ class TestSettings:
         assert s.default_persona is None
         assert s.server.port == 26262
         assert s.contradiction_threshold == 0.85
-        assert s.duplicate_threshold == 0.90
+        assert not hasattr(s, "duplicate_threshold"), (
+            "duplicate_threshold は v4.0 で削除済み（実効値は write_service の 0.75）"
+        )
         assert s.skills_dir == "./data/skills", "skills_dir must be under data_root"
 
     def test_env_override_simple(self, monkeypatch):

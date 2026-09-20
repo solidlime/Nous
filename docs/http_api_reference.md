@@ -51,7 +51,7 @@ Health check with Qdrant connectivity status.
 ```json
 {
   "status": "ok",
-  "version": "3.5.0",
+  "version": "4.0.0",
   "qdrant": "connected"
 }
 ```
@@ -110,38 +110,39 @@ Paginated list of memories, sorted chronologically.
 **Query params:**
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
-| `page` | int | 1 | Page number (1-based) |
-| `per_page` | int | 20 | Items per page (max 100) |
+| `page` | int | 1 | Page number (1-based, max 10000) |
+| `per_page` | int | 20 | Items per page (max 1000) |
 | `sort` | str | `desc` | `desc` = newest first, `asc` = oldest first |
 | `tag` | str | — | Filter by tag |
 | `q` | str | — | Keyword search in content |
+| `mode` | str | — | `recent` の時は `per_page` 件を新しい順で返す別モード（`memories` のみ） |
 
 **Response:**
 ```json
 {
-  "success": true,
-  "total": 142,
+  "persona": "herta",
   "page": 1,
   "per_page": 20,
+  "total_count": 142,
   "total_pages": 8,
-  "items": [
+  "memories": [
     {
       "key": "memory_20250101_120000",
-      "content_preview": "First 300 chars...",
-      "emotion_type": "joy",
+      "content": "Full memory body...",
+      "emotion": "joy",
       "emotion_intensity": 0.8,
       "importance": 0.9,
       "tags": ["coding", "milestone"],
-      "context_tags": ["promise"],
-      "created_at": "2025-01-01T12:00:00",
-      "updated_at": "2025-01-01T12:00:00",
       "privacy_level": "internal",
-      "action_tag": "achievement",
-      "environment": "home"
+      "environment": "home",
+      "created_at": "2025-01-01T12:00:00",
+      "updated_at": "2025-01-01T12:00:00"
     }
   ]
 }
 ```
+
+`memories[]` は Memory レコード全体（`content` はプレビューではなく本文）。
 
 ### `GET /api/recent/{persona}`
 Get the most recent memories for a persona.
@@ -175,21 +176,27 @@ Create a new memory directly via HTTP.
   "emotion_type": "neutral",
   "emotion_intensity": 0.0,
   "tags": ["preferences"],
-  "privacy_level": "internal"
+  "privacy_level": "internal",
+  "source_context": null,
+  "defer_vector": false
 }
 ```
 
-**Response:** `{ "success": true, "key": "memory_20250715_103000" }`
+`emotion_type` は `emotion` のエイリアス（どちらでも可）。
+
+**Response (201):** `{ "status": "ok", "memory": { ...Memory レコード... }, "cache_invalidated": true }`
 
 ### `PUT /api/memories/{persona}/{key}`
 Update an existing memory by key.
 
-**Request body:** Same fields as POST (all optional).
+**Request body:** Same fields as POST (all optional; 空ボディは 400）。
+
+**Response:** `{ "status": "ok", "memory": { ...Memory レコード... } }`
 
 ### `DELETE /api/memories/{persona}/{key}`
 Delete a memory by key.
 
-**Response:** `{ "success": true }`
+**Response:** `{ "status": "ok", "deleted": "memory_20250715_103000" }`
 
 ---
 
@@ -269,8 +276,10 @@ The chat view swaps the persona avatar image to `url` on receipt.
 
 ## Core Memory Blocks
 
-Blocks are named segments always injected into `get_context()` output — high-priority working memory for the AI agent.
-No dedicated MCP tool — manage via HTTP API only.
+Named Memory Blocks（`memory_blocks` テーブル、`block_name` 主キー）を操作する。
+**v4.0 では LLM のツール面（MCP）には公開されておらず、`get_context()` / `session_begin()` の
+出力にも自動注入されない** — HTTP API（この節）とペルソナダッシュボード専用の機能。
+LLM が扱うペルソナ状態は `update_context()` を使う。
 
 ### `GET /api/blocks/{persona}`
 List all Core Memory Blocks for a persona.
@@ -281,16 +290,20 @@ List all Core Memory Blocks for a persona.
   "persona": "herta",
   "blocks": [
     {
-      "name": "user_model",
+      "block_name": "user_model",
       "content": "Pythonエンジニア。簡潔な説明を好む。FastAPIプロジェクト進行中。",
-      "description": null,
-      "updated_at": "2025-07-15T12:00:00"
+      "block_type": "custom",
+      "max_tokens": 500,
+      "priority": 0,
+      "created_at": "2025-07-15T12:00:00",
+      "updated_at": "2025-07-15T12:00:00",
+      "metadata": {}
     }
   ]
 }
 ```
 
-**Standard block names:**
+一覧は `priority` の降順で返る。**慣例的なブロック名**（自由な名前も可）:
 
 | Name | Purpose |
 |------|---------|
@@ -307,13 +320,16 @@ Write (create or overwrite) a Core Memory Block.
 ```json
 {
   "block_name": "user_model",
-  "content": "Pythonエンジニア。簡潔な説明を好む。FastAPIプロジェクト進行中。"
+  "content": "Pythonエンジニア。簡潔な説明を好む。FastAPIプロジェクト進行中。",
+  "block_type": "custom",
+  "max_tokens": 500,
+  "priority": 0
 }
 ```
 
-Both `block_name` and `content` are required.
+`block_name` と `content` は必須（無いと 400）。`block_type` / `max_tokens` / `priority` は任意。
 
-**Response:** `{ "ok": true }`
+**Response:** `{ "ok": true, "block_name": "user_model" }`
 
 ### `DELETE /api/blocks/{persona}/{block_name}`
 Delete a Core Memory Block by name.

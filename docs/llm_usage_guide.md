@@ -6,12 +6,13 @@
 
 ## Overview / 概要
 
-Memory MCP exposes **12 MCP tools** that give AI agents persistent, searchable long-term memory.
+Memory MCP exposes **14 MCP tools** that give AI agents persistent, searchable long-term memory.
 Call these tools proactively — do not wait for the user to ask.
 
 | Tool | Purpose |
 |------|---------|
-| `get_context()` | Load persona state, recent memories, and stats at session start |
+| `session_begin()` | Load persona state, recent memories, and stats at session start (v4.0 の正式入口) |
+| `session_begin()` | Deprecated — `session_begin()` の別名（v4.x 互換。セッション副作用を持つ） |
 | `memory_create(content, ...)` | Create a new memory |
 | `memory_read(memory_key, ...)` | Read a memory by key or list recent |
 | `memory_update(memory_key, ...)` | Update existing memory |
@@ -19,20 +20,25 @@ Call these tools proactively — do not wait for the user to ask.
 | `memory_search(query, ...)` | Semantic / keyword / hybrid memory search. `sort="updated_at"` で更新日時降順（最新優先） |
 | `memory_stats(top_n)` | Memory statistics and distributions |
 | `update_context(...)` | Update emotion, physical state, user info in real time |
-| `item_add / item_equip / item_search` | Manage physical inventory and equipment (3 tools) |
+| `item_add / item_equip / item_unequip / item_search` | Manage physical inventory and equipment (4 tools) |
 | `goal_manage(operation, ..., tags)` | Create / list / achieve / cancel goals（tags で追加タグ付与・絞り込み） |
-| `search(query, ...)` | Web search via SearXNG |
-| `read_pdf(path)` | Parse PDF files |
+
+上記 14 は Nous 本体が提供する MCP ツール。次の 2 つは **外部 MCP サーバー**（`mcp_servers` 設定）経由で生える別サーバーのツールで、Nous の `TOOL_DISPATCH` には含まれない（設定しない限り使えない）:
+
+| Tool | Purpose |
+|------|---------|
+| `search(query, ...)` | Web search via SearXNG（外部サーバー） |
+| `read_pdf(path)` | Parse PDF files（外部サーバー） |
 
 ---
 
 ## 1. Session Start Routine / セッション開始ルーティン
 
-**Always call `get_context()` first** — before responding to the user's first message.
+**Always call `session_begin()` first** — before responding to the user's first message.
 
 ```python
 # ✅ DO: Call at every session start
-result = get_context()
+result = session_begin()
 # Returns: persona state, emotion, equipment, recent memories, promises, goals, memory stats
 ```
 
@@ -106,7 +112,7 @@ memory(
 
 ```python
 # When creating many memories at once, skip immediate vectorization
-memory(operation="create", content="...", defer_vector=True)
+memory_create(content="...", defer_vector=True)
 # Vectors are built lazily on next search
 ```
 
@@ -114,7 +120,7 @@ memory(operation="create", content="...", defer_vector=True)
 
 ## 3. Searching Memories / 記憶の検索
 
-Use `search_memory()` to retrieve relevant memories **before answering questions about the user**.
+Use `memory_search()` to retrieve relevant memories **before answering questions about the user**.
 
 ### When to search
 
@@ -127,38 +133,38 @@ Use `search_memory()` to retrieve relevant memories **before answering questions
 
 ```python
 # Default mode — combines keyword + semantic
-results = search_memory(query="coffee morning routine", mode="hybrid", top_k=5)
+results = memory_search(query="coffee morning routine", top_k=5)
 ```
 
 ### Search by mode
 
 ```python
 # Semantic: fuzzy meaning match — best for vague or abstract queries
-search_memory(query="things that make user happy", mode="semantic")
+memory_search(query="things that make user happy", vector_weight=1.0, keyword_weight=0.0)
 
 # Keyword: exact match — best for names, IDs, specific terms
-search_memory(query="田中 project", mode="keyword")
+memory_search(query="田中 project", vector_weight=0.0, keyword_weight=1.0)
 
 # Smart: hybrid + automatic query expansion
-search_memory(query="how user feels about work", mode="smart")
+memory_search(query="how user feels about work")  # 既定のハイブリッド検索
 ```
 
 ### Search with filters
 
 ```python
 # Filter by tag
-search_memory(query="", tags=["promise"], top_k=10)
+memory_search(query="", tags=["promise"], top_k=10)
 
 # Filter by date range (natural language)
-search_memory(query="achievements", date_range="先週")
-search_memory(query="mood", date_range="今日")
-search_memory(query="goals", date_range="今月")
+memory_search(query="achievements", date_range="先週")
+memory_search(query="mood", date_range="今日")
+memory_search(query="goals", date_range="今月")
 
 # Boost recent results
-search_memory(query="current projects", recency_weight=0.5)
+memory_search(query="current projects", recency_weight=0.5)
 
 # Boost by importance
-search_memory(query="user info", importance_weight=0.3, min_importance=0.6)
+memory_search(query="user info", importance_weight=0.3, min_importance=0.6)
 ```
 
 **Date range expressions**: `今日`, `昨日`, `一昨日`, `先週`, `先月`, `今月`, `今年`, `7d`, `30d`, `2025-01-01~2025-06-01`
@@ -226,10 +232,10 @@ update_context(user_info={"name": "Taro", "preferred_address": "Taro-san"})
 ## 5. Promises & Goals / 約束・目標の管理
 
 Goals and Promises are stored as **regular memories with type+status tags** — not as persona state.
-They appear in the **ACTIVE COMMITMENTS** section of `get_context()` output.
+They appear in the **ACTIVE COMMITMENTS** section of `session_begin()` output.
 
 > **⚠️ Removed**: `update_context(append_goals/append_promises/remove_goals/remove_promises)` is no longer supported.
-> Use `memory(operation="create/update", tags=[...])` directly. See lifecycle example below.
+> Use `memory_create(content="...", tags=[...])` / `memory_update(memory_key="...", tags=[...])` directly. See lifecycle example below.
 > Also do **not** use `context_tags=["promise"]` / `context_tags=["goal"]` — these have no effect.
 
 > **Note**: `goal_manage` は状態遷移（create/achieve/cancel）とタグ付与のために使える。
@@ -252,133 +258,110 @@ They appear in the **ACTIVE COMMITMENTS** section of `get_context()` output.
 
 ```python
 # Register a goal
-memory(operation="create", content="Complete the project by March",
+memory_create(content="Complete the project by March",
        tags=["goal", "active"], importance=0.8)
 
 # Register a promise
-memory(operation="create", content="Send report by Friday",
+memory_create(content="Send report by Friday",
        tags=["promise", "active"], importance=0.8)
 
 # Mark goal as achieved
-memory(operation="update", memory_key="<key>", tags=["goal", "achieved"])
+memory_update(memory_key="<key>", tags=["goal", "achieved"])
 
 # Fulfill a promise
-memory(operation="update", memory_key="<key>", tags=["promise", "fulfilled"])
+memory_update(memory_key="<key>", tags=["promise", "fulfilled"])
 
 # Cancel a goal
-memory(operation="update", memory_key="<key>", tags=["goal", "cancelled"])
+memory_update(memory_key="<key>", tags=["goal", "cancelled"])
 
 # Search active goals
-search_memory(query="goals", tags=["goal", "active"])
+memory_search(query="goals", tags=["goal", "active"])
 
 # Search active promises
-search_memory(query="promises", tags=["promise", "active"])
+memory_search(query="promises", tags=["promise", "active"])
 
 # Check all goals including history
-search_memory(query="goals", tags=["goal"])
+memory_search(query="goals", tags=["goal"])
 ```
 
 ### Finding memory_key for a goal/promise
 
 ```python
 # Find the memory_key of a specific goal/promise
-search_memory(query="<goal text>", tags=["goal"])
-search_memory(query="<promise text>", tags=["promise"])
+memory_search(query="<goal text>", tags=["goal"])
+memory_search(query="<promise text>", tags=["promise"])
 ```
 
 ### Checking active commitments
 
 ```python
 # Returns the ACTIVE COMMITMENTS section listing all current goals and promises
-get_context()
+session_begin()
 ```
 
 ---
 
-## 6. Named Memory Blocks / 名前付きメモリブロック
+## 6. Persona / User State / ペルソナ状態
 
-Blocks are structured notes that are **always included in `get_context()` output** — like working RAM.
+ペルソナ / ユーザーの永続状態は `update_context()` で更新し、`session_begin()` の出力
+（人となり・感情・ACTIVE COMMITMENTS・Insights など）として受け取る。
 
 ```python
-# Write a persona state block
-memory(
-    operation="block_write",
-    block_name="user_model",
-    content="User is a Python developer, prefers concise explanations, "
-            "working on a FastAPI backend project. Dislikes verbose answers."
-)
+# Persona / user state（bi-temporal: 上書きではなく履歴が残る）
+update_context(emotion="anxiety", emotion_intensity=0.7)
+update_context(user_info={"name": "Taro", "preferred_address": "Taro-san"})
 
-# Read a block
-memory(operation="block_read", block_name="user_model")
-
-# List all blocks
-memory(operation="block_list")
-
-# Delete a block
-memory(operation="block_delete", block_name="user_model")
+# セッション開始時にこれらが出力へ載る
+session_begin()
 ```
 
-**Standard block names**:
-
-| Block | Purpose |
-|-------|---------|
-| `persona_state` | Persona's current internal state, ongoing goals |
-| `user_model` | What the agent knows about the user |
-| `active_context` | Current session focus, open questions |
+> **⚠️ `memory(operation="block_write" / "block_read" / "block_list" / "block_delete")` は
+> どの MCP ツールにも存在しない**（`memory(operation=...)` というディスパッチャ自体が無い）。
+> Named Memory Blocks は v4.0 でも実在するが、**HTTP API とダッシュボード専用**で、
+> LLM のツール面（14 個の MCP ツール）には公開されておらず、`session_begin()` の出力にも
+> 自動注入されない。詳細は [Memory Features — Named Memory Blocks](./memory_features.md)
+> と [HTTP API Reference — Core Memory Blocks](./http_api_reference.md) を参照。
 
 ---
 
 ## 7. Inventory Management / インベントリ管理
 
-Use `item()` for managing **the LLM/persona's own physical items** (clothing, accessories, etc.).
+Use the `item_*` tools for managing **the LLM/persona's own physical items** (clothing, accessories, etc.).
 This tool tracks what **the assistant itself** wears and carries — not the user's belongings.
 
 ```python
 # Add item to inventory
-item(operation="add", item_name="blue linen shirt", category="clothing")
+item_add(item_name="blue linen shirt", category="clothing")
 
-# Equip items (auto-creates if not in inventory)
-item(operation="equip", equipment={
+# Equip items — v4.0: 未登録アイテムは自動生成されない（item_add で先に登録するか auto_add=True）
+item_equip(equipment={
     "top": "blue linen shirt",
     "bottom": "white trousers",
     "shoes": "canvas sneakers"
 })
 
 # Unequip specific slots
-item(operation="unequip", slots=["outer", "accessories"])
+item_unequip(slots=["outer", "accessories"])
 
 # Search inventory
-item(operation="search", category="clothing")
-item(operation="search", query="hat")
+item_search(category="clothing")
+item_search(query="hat")
 
-# View equipment history
-item(operation="history", days=7)
+# 装備の履歴を参照するツールは無い（装備変更は event_bus の tool.called として記録され、
+# 現在の装備は item_search() と session_begin() の EQUIPMENT 欄で確認する）
 ```
 
 **Valid equipment slots**: `top`, `bottom`, `shoes`, `outer`, `accessories`, `head`
 
 ---
 
-## 8. Entity Graph / エンティティグラフ
+## 8. Entity Graph（MCP 非公開の内部機能） / エンティティグラフ
 
-Track relationships between people, places, and concepts.
-
-```python
-# Search for entities
-memory(operation="entity_search", query="田中")
-memory(operation="entity_search", entity_type="person")
-
-# Get relationship graph for an entity
-memory(operation="entity_graph", entity_id="user_tanaka", depth=2)
-
-# Add a relationship
-memory(
-    operation="entity_add_relation",
-    source_entity="user_tanaka",
-    target_entity="company_acme",
-    relation_type="works_at"
-)
-```
+**⚠️ LLM からは使えない**: `entity_search` / `entity_graph` / `entity_add_relation` という
+ツールは存在しない。エンティティグラフは Nous 内部のドメイン API
+（`nous/domain/memory/graph.py` + `nous/infrastructure/sqlite/entity_repo.py`）で、
+記憶の想起（related memories の引き寄せ）に内部利用されるだけ。関係性は LLM が
+`memory_create(content="...")` に文章として書けば、抽出器がエンティティを拾う。
 
 ---
 
@@ -389,25 +372,25 @@ Copy and paste this at the start of your system prompt to enable autonomous memo
 ```
 You have persistent memory via MCP tools. Use them autonomously — never wait to be asked.
 
-**Every session:** call `get_context()` first, no exceptions.
+**Every session:** call `session_begin()` first, no exceptions.
 
 **Record** when user shares preferences/decisions/emotions/achievements:
-→ `memory(operation="create", content="...", importance=0.7, tags=[...], emotion_type="joy")`
-→ Goal: `memory(operation="create", content="...", tags=["goal","active"], importance=0.8)`
-→ Promise: `memory(operation="create", content="...", tags=["promise","active"], importance=0.8)`
-→ Mark done: `memory(operation="update", memory_key="...", tags=["goal","achieved"])` / `tags=["promise","fulfilled"]`
-→ Cancel: `memory(operation="update", memory_key="...", tags=["goal","cancelled"])`
+→ `memory_create(content="...", importance=0.7, tags=[...])`
+→ Goal: `memory_create(content="...", tags=["goal","active"], importance=0.8)`
+→ Promise: `memory_create(content="...", tags=["promise","active"], importance=0.8)`
+→ Mark done: `memory_update(memory_key="...", tags=["goal","achieved"])` / `tags=["promise","fulfilled"]`
+→ Cancel: `memory_update(memory_key="...", tags=["goal","cancelled"])`
 
 **Search** before answering anything about past/preferences:
-→ `search_memory(query="...", mode="hybrid", top_k=5)`
+→ `memory_search(query="...", top_k=5)`
 
 **Update live** on mood/name change:
 → `update_context(emotion="anxiety", emotion_intensity=0.7)`
 → `update_context(user_info={"preferred_address": "..."})`
 
 **Track persona items** (the assistant's own equipment):
-→ `item(operation="equip", equipment={"top": "...", "accessories": "..."})`
-→ `item(operation="add", item_name="...", category="clothing")`
+→ `item_equip(equipment={"top": "...", "accessories": "..."})`
+→ `item_add(item_name="...", category="clothing")`
 
 Importance: 0.9+ life events · 0.7 preferences · 0.5 context · 0.2 trivia
 Emotions: joy sadness anger fear surprise disgust love neutral anticipation trust anxiety excitement frustration nostalgia pride shame guilt loneliness contentment curiosity awe relief
@@ -420,26 +403,26 @@ Never ask "should I remember this?" — just do it.
 ```
 あなたはMCPツールで永続的な記憶を持っています。自律的に使ってください — 指示を待つ必要はありません。
 
-**毎セッション開始時:** 例外なく最初に `get_context()` を呼ぶ。
+**毎セッション開始時:** 例外なく最初に `session_begin()` を呼ぶ。
 
 **記録する** — ユーザーが以下を伝えたとき:
-→ 好み・意見・個人情報 → `memory(operation="create", content="...", importance=0.7, tags=[...])`
-→ 決断・達成・感情的な出来事 → `importance=0.8+`、感情は `emotion_type="joy"` で指定
-→ 目標 → `memory(operation="create", content="...", tags=["goal","active"], importance=0.8)`
-→ 約束 → `memory(operation="create", content="...", tags=["promise","active"], importance=0.8)`
-→ 達成 → `memory(operation="update", memory_key="...", tags=["goal","achieved"])` / `tags=["promise","fulfilled"]`
-→ 中止 → `memory(operation="update", memory_key="...", tags=["goal","cancelled"])`
+→ 好み・意見・個人情報 → `memory_create(content="...", importance=0.7, tags=[...])`
+→ 決断・達成・感情的な出来事 → `importance=0.8+`（感情は `update_context(emotion=...)` で指定）
+→ 目標 → `memory_create(content="...", tags=["goal","active"], importance=0.8)`
+→ 約束 → `memory_create(content="...", tags=["promise","active"], importance=0.8)`
+→ 達成 → `memory_update(memory_key="...", tags=["goal","achieved"])` / `tags=["promise","fulfilled"]`
+→ 中止 → `memory_update(memory_key="...", tags=["goal","cancelled"])`
 
 **検索する** — 過去・好み・文脈に関する質問に答える前に:
-→ `search_memory(query="...", mode="hybrid", top_k=5)`
+→ `memory_search(query="...", top_k=5)`
 
 **リアルタイム更新** — 感情変化・名前変更があったとき:
 → `update_context(emotion="anxiety", emotion_intensity=0.7)`
 → `update_context(user_info={"preferred_address": "..."})`
 
 **所持品・装備を記録** — 自分の持ち物・着ているものが変わったとき:
-→ `item(operation="equip", equipment={"top": "...", "accessories": "..."})`
-→ `item(operation="add", item_name="...", category="clothing")`
+→ `item_equip(equipment={"top": "...", "accessories": "..."})`
+→ `item_add(item_name="...", category="clothing")`
 
 重要度: 0.9+ 人生の出来事 · 0.7 好み · 0.5 文脈 · 0.2 雑談
 感情: joy sadness anger fear surprise disgust love neutral anticipation trust anxiety excitement frustration nostalgia pride shame guilt loneliness contentment curiosity awe relief
@@ -671,10 +654,10 @@ opensandbox (port 8090)
 
 ```python
 # Session start
-get_context()
+session_begin()
 
 # Create memory
-memory_create(content="...", importance=0.7, tags=["..."], emotion_type="joy")
+memory_create(content="...", importance=0.7, tags=["..."])
 
 # Search memory
 memory_search(query="...", top_k=5)
@@ -691,7 +674,7 @@ goal_manage(operation="create", content="...", scope="self", importance=0.8)    
 goal_manage(operation="list", scope="self")                                         # list goals
 goal_manage(operation="achieve", memory_key="...")                                  # mark done
 goal_manage(operation="cancel", memory_key="...")                                   # cancel goal
-# → appears in get_context() ACTIVE COMMITMENTS section
+# → appears in session_begin() ACTIVE COMMITMENTS section
 
 # Items
 item_equip(equipment={"top": "...", "accessories": "..."})

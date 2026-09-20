@@ -367,7 +367,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     default_persona: str | None = None
     contradiction_threshold: float = 0.85
-    duplicate_threshold: float = 0.90
+
+    # NOTE: 重複検知の閾値は ``MemoryWriteService._check_duplicate`` の内部定数（0.75）が
+    # 唯一の実効値。設定ノブは存在しない（v4.0 で未配線の duplicate_threshold を削除）。
 
     # Flat CORS origins env var (supports comma-separated; nested var
     # NOUS_CORS__ALLOWED_ORIGINS requires JSON array).  Parsed into
@@ -402,7 +404,7 @@ class Settings(BaseSettings):
             raise ValueError(f"Invalid timezone: '{v}'. Use a valid IANA timezone (e.g., 'Asia/Tokyo').")
         return v
 
-    @field_validator("contradiction_threshold", "duplicate_threshold")
+    @field_validator("contradiction_threshold")
     @classmethod
     def validate_threshold(cls, v: float) -> float:
         if not (0.0 <= v <= 1.0):

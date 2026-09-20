@@ -16,12 +16,12 @@ const BUILTIN_PROFILES = {
         server: { host: '0.0.0.0', port: 26262 },
         embedding: { model: 'onnx-community/ruri-v3-30m-ONNX', device: 'cpu' },
         reranker: { model: 'hotchpotch/japanese-reranker-xsmall-v2', enabled: true },
-        general: { log_level: 'DEBUG', contradiction_threshold: 0.85, duplicate_threshold: 0.90 }
+        general: { log_level: 'DEBUG', contradiction_threshold: 0.85 }
     },
     'Production': {
         embedding: { model: 'onnx-community/ruri-v3-30m-ONNX', device: 'auto' },
         reranker: { model: 'hotchpotch/japanese-reranker-xsmall-v2', enabled: true },
-        general: { log_level: 'WARNING', contradiction_threshold: 0.85, duplicate_threshold: 0.90 }
+        general: { log_level: 'WARNING', contradiction_threshold: 0.85 }
     }
 };
 

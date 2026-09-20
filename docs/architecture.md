@@ -156,7 +156,7 @@ nous/
 | | `memory_delete` | 論理削除（tombstone） |
 | | `memory_search` | ハイブリッド検索（ベクトル+キーワード+RRFスコアリング） |
 | | `memory_stats` | 統計（総数/タグ分布/感情分布） |
-| **コンテキスト** | `get_context` | ペルソナ状態＋記憶概要（セッション開始時に第一呼出推奨） |
+| **コンテキスト** | `session_begin` | ペルソナ状態＋記憶概要（セッション開始時に第一呼出推奨。`get_context` は v4.0 で互換別名） |
 | | `update_context` | 感情・体調・環境・関係性を更新 |
 | **アイテム** | `item_add` | インベントリに物理アイテムを追加 |
 | | `item_equip` | 装備スロットにセット |

@@ -1,5 +1,12 @@
 # Memory Operation Flowchart
 
+> **⚠️ この文書は廃止された v2 世代の `memory(operation=...)` ディスパッチャを説明している。**
+> 現行 Nous v4 では `memory_create` / `memory_read` / `memory_update` / `memory_delete` /
+> `memory_search` / `memory_stats` と `update_context` / `session_begin` / `goal_manage` /
+> `item_*` の 14 個の独立した MCP ツールに分割されている。`entity_search` や
+> `block_*` の操作は存在しない。実際の使い方は [LLM Usage Guide](./llm_usage_guide.md) を参照。
+> 以下は当時の設計フローの記録として残している。
+
 ## memory() 関数の全体フロー図
 
 ```mermaid
