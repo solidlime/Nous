@@ -36,6 +36,13 @@ from mcp.server.mcpserver.exceptions import ToolError  # noqa: E402
 
 
 async def _patched_tool_run(self, arguments, context=None, convert_result=False):
+    # TODO(drive-by): a plain domain exception still escapes as an opaque
+    # "Error executing tool <name>" instead of the C1 envelope.
+    # Observed: `X-Persona: <unknown>` → AppContextRegistry.get() raises
+    # ValueError("Persona '<x>' not found") → the client gets no error.code
+    # (NOT_FOUND) and no message. Fix: convert PersonaNotFound to
+    # ToolError/envelope at the registry boundary. Found during the v4.0.0
+    # release verification; tracked for v4.0.1 (see nous memory 2026-09-20).
     try:
         return await _original_tool_run(self, arguments, context, convert_result)
     except ToolError as e:
@@ -188,7 +195,9 @@ def create_app() -> MemoryFastMCP:
 
     # HF_HOME is already set at module level — no need to set again
 
-    mcp = MemoryFastMCP("Nous")
+    # version=__version__ so MCP clients see which build they are talking to in
+    # the initialize handshake (the SDK default is an empty string).
+    mcp = MemoryFastMCP("Nous", version=__version__)
 
     # Auto-import on startup
     if settings.import_dir:

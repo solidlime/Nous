@@ -25,6 +25,21 @@ def _make_server() -> MemoryFastMCP:
     return MemoryFastMCP("test")
 
 
+class TestServerInfo:
+    """MCP clients must be able to see which build they are talking to.
+
+    Regression: create_app() built the server without version=, so the
+    initialize handshake reported an empty serverInfo.version.
+    """
+
+    def test_production_app_reports_package_version(self):
+        import nous
+        from nous.main import mcp
+
+        assert getattr(mcp, "version", None) == nous.__version__
+        assert nous.__version__  # never empty
+
+
 class TestRunnerCompat:
     def test_streamable_http_app_accepts_runner_kwargs(self):
         """Runner kwargs must not TypeError, and override middleware must apply."""
