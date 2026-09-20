@@ -147,6 +147,30 @@ class MemoryEnrichmentConfig(BaseModel):
         return os.environ.get(env_var, "")
 
 
+class ConsolidationConfig(BaseModel):
+    """SWS (sleep-time) consolidation — gist generation settings (audit H1).
+
+    The gist is an LLM integration/generalization of the semantic layer, not a
+    concatenation. Cost is bounded per cycle: at most ``llm_gist_max_per_cycle``
+    LLM calls, identical clusters reuse a cached gist, and any LLM failure falls
+    back to the previous concatenation behaviour (never more expensive than v3.9).
+    Provider/key/model default to ``memory_enrichment`` unless overridden here.
+    """
+
+    llm_gist_enabled: bool = Field(
+        default=True, description="LLM による gist 統合を有効化（False なら従来の連結 gist）"
+    )
+    llm_gist_max_per_cycle: int = Field(default=5, ge=0, description="1 サイクルあたりの LLM 呼出上限（クラスタ数）")
+    llm_gist_max_tokens: int = Field(default=512, ge=64, description="gist 生成の max_tokens")
+    llm_gist_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    llm_gist_max_chars: int = Field(default=4000, ge=200, description="プロンプトに載せる元記憶の総文字数上限")
+    llm_gist_min_memories: int = Field(default=2, ge=2, description="LLM gist を試みる最小クラスタサイズ")
+    provider: str = Field(default="", description="空なら memory_enrichment.provider")
+    api_key: str | None = None
+    model: str = Field(default="", description="空なら memory_enrichment.model")
+    base_url: str = Field(default="", description="空なら memory_enrichment.base_url")
+
+
 class IrodoriAdvancedParams(BaseModel):
     """Irodori-TTS top-level irodori options (num_steps / cfg_* / chunking / caption / seed)."""
 
@@ -318,6 +342,7 @@ class Settings(BaseSettings):
     qdrant: QdrantConfig = QdrantConfig()
     forgetting: ForgettingConfig = ForgettingConfig()
     memory_enrichment: MemoryEnrichmentConfig = MemoryEnrichmentConfig()
+    consolidation: ConsolidationConfig = ConsolidationConfig()
     explorer: ExplorerConfig = Field(default_factory=ExplorerConfig)
     cors: CorsConfig = CorsConfig()
     irodori: IrodoriConfig = Field(default_factory=IrodoriConfig)

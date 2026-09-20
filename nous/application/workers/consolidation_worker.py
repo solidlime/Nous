@@ -22,9 +22,11 @@ Philosophy: "Memories don't disappear — they consolidate."
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import json
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.sqlite.mot_thoughts import MOT_CONFIDENCE_THRESHOLD
@@ -33,6 +35,128 @@ if TYPE_CHECKING:
     from nous.config.settings import Settings
 
 logger = get_logger(__name__)
+
+#: audit H1 — default cap on LLM calls per consolidation cycle.
+DEFAULT_LLM_GIST_MAX_PER_CYCLE = 5
+
+_GIST_PROMPT = """あなたは記憶の統合器です。以下は同じ話題についての複数の記憶です。
+
+{memories}
+
+指示:
+- 個々の出来事の列挙ではなく、そこから抽出できる一般化された知識・規則性・教訓を述べる
+- 元の記憶に無い事実を創作しない（幻覚禁止）
+- 日本語で 1〜5 行、各行は "- " で始める
+- 見出し行は不要。要約本文のみを出力する"""
+
+
+def _cfg_value(config: Any, name: str, default: Any) -> Any:
+    """Read a consolidation knob defensively.
+
+    Settings may be a plain mock in tests; only scalar values are accepted so a
+    missing/mocked attribute cannot silently enable LLM calls.
+    """
+    if config is None:
+        return default
+    value = getattr(config, name, default)
+    if isinstance(value, (bool, int, float, str)):
+        return value
+    return default
+
+
+def _cfg_number(config: Any, name: str, default: Any, cast: Any) -> Any:
+    """Read a numeric consolidation knob, ignoring malformed values."""
+    try:
+        return cast(_cfg_value(config, name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _resolve_gist_llm(settings: Any) -> tuple[str, str, str, str] | None:
+    """Resolve (provider, api_key, model, base_url) for gist generation.
+
+    Explicit ``consolidation.*`` values win; otherwise the memory-enrichment LLM
+    settings are reused (same provider/key conventions). Returns None when no
+    usable credential exists — the caller then keeps the concatenation fallback.
+    """
+    cfg = getattr(settings, "consolidation", None)
+    enrichment = getattr(settings, "memory_enrichment", None)
+
+    provider = str(_cfg_value(cfg, "provider", "") or _cfg_value(enrichment, "provider", "openrouter"))
+    model = str(_cfg_value(cfg, "model", "") or _cfg_value(enrichment, "model", ""))
+    base_url = str(_cfg_value(cfg, "base_url", "") or _cfg_value(enrichment, "base_url", ""))
+    api_key = str(_cfg_value(cfg, "api_key", "") or "")
+    if not api_key and enrichment is not None:
+        resolver = getattr(enrichment, "get_effective_api_key", None)
+        if callable(resolver):
+            try:
+                api_key = str(resolver(settings) or "")
+            except Exception:
+                logger.debug("gist LLM key resolution failed", exc_info=True)
+                api_key = ""
+    if not api_key or not model:
+        return None
+    return provider, api_key, model, base_url
+
+
+def _gist_prompt(memories: list, max_chars: int) -> str:
+    """Render the gist prompt, bounding the source text (cost control)."""
+    lines: list[str] = []
+    budget = max_chars
+    for mem in memories:
+        content = (getattr(mem, "content", "") or "").strip()
+        if not content:
+            continue
+        entry = f"- {content[:500]}"
+        if len(entry) > budget:
+            entry = entry[:budget]
+        if not entry:
+            break
+        lines.append(entry)
+        budget -= len(entry)
+        if budget <= 0:
+            break
+    return _GIST_PROMPT.format(memories="\n".join(lines))
+
+
+async def _generate_gist_async(settings: Any, memories: list) -> str | None:
+    """Call the LLM once and return the generalized gist, or None on failure."""
+    resolved = _resolve_gist_llm(settings)
+    if resolved is None:
+        logger.debug("ConsolidationWorker: no gist LLM credentials; using concatenation fallback")
+        return None
+    provider_name, api_key, model, base_url = resolved
+    cfg = getattr(settings, "consolidation", None)
+    max_chars = _cfg_number(cfg, "llm_gist_max_chars", 4000, int)
+    max_tokens = _cfg_number(cfg, "llm_gist_max_tokens", 512, int)
+    temperature = _cfg_number(cfg, "llm_gist_temperature", 0.0, float)
+
+    from nous.infrastructure.llm.base import LLMMessage
+    from nous.infrastructure.llm.factory import get_provider
+    from nous.infrastructure.llm.text_utils import collect_text
+
+    provider = get_provider(provider_name, api_key, model, base_url)
+    text = await collect_text(
+        provider,
+        messages=[LLMMessage(role="user", content=_gist_prompt(memories, max_chars))],
+        system="",
+        tools=[],
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    gist = (text or "").strip()
+    return gist or None
+
+
+def default_gist_llm(settings: Any, memories: list) -> str | None:
+    """Sync wrapper used by the worker thread (same pattern as _save_consolidated)."""
+    if len(memories) < 2:
+        return None
+    try:
+        return asyncio.run(_generate_gist_async(settings, memories))
+    except Exception:
+        logger.warning("ConsolidationWorker: LLM gist failed; falling back to concatenation", exc_info=True)
+        return None
 
 
 def _memory_entity_map(entity_repo, memory_keys: list[str]) -> dict[str, set[str]]:
@@ -72,7 +196,7 @@ def _semantic_layer(memories: list) -> list:
 class ConsolidationWorker:
     """Periodically consolidates archived memories into merged summaries."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, gist_llm: Any = None) -> None:
         self._settings = settings
         self._running = False
         self._thread: threading.Thread | None = None
@@ -80,6 +204,15 @@ class ConsolidationWorker:
         self.interval_seconds = 86400  # 24 hours
         self.min_memories_per_group = 3
         self.max_consolidated = 10
+        # audit H1 — LLM gist generation (integration/generalization) with a
+        # per-cycle call cap and content-hash reuse of identical clusters.
+        self._gist_llm = gist_llm if gist_llm is not None else default_gist_llm
+        cfg = getattr(settings, "consolidation", None)
+        self.gist_llm_enabled = bool(_cfg_value(cfg, "llm_gist_enabled", True))
+        self.gist_llm_max_per_cycle = _cfg_number(cfg, "llm_gist_max_per_cycle", DEFAULT_LLM_GIST_MAX_PER_CYCLE, int)
+        self.gist_llm_min_memories = _cfg_number(cfg, "llm_gist_min_memories", 2, int)
+        self._gist_cache: dict[str, str] = {}
+        self._llm_calls_this_cycle = 0
 
     def start(self) -> None:
         """Start the background consolidation thread."""
@@ -112,6 +245,9 @@ class ConsolidationWorker:
         """Run consolidation for all active personas."""
         from nous.application.use_cases import AppContextRegistry
 
+        # audit H1 — cost control: the LLM gist budget is per cycle, not per persona.
+        self._llm_calls_this_cycle = 0
+
         try:
             personas = list(AppContextRegistry._contexts.keys())
         except Exception:
@@ -124,6 +260,17 @@ class ConsolidationWorker:
                 self._consolidate_persona(ctx, persona)
             except Exception:
                 logger.exception("ConsolidationWorker: error for persona=%s", persona)
+
+    @staticmethod
+    def _cluster_digest(memories: list) -> str:
+        """Content hash of a cluster — identical clusters reuse the cached gist."""
+        hasher = hashlib.sha256()
+        for mem in sorted(memories, key=lambda m: str(getattr(m, "key", ""))):
+            hasher.update(str(getattr(mem, "key", "")).encode("utf-8"))
+            hasher.update(b"|")
+            hasher.update(str(getattr(mem, "content", "")).encode("utf-8"))
+            hasher.update(b"\n")
+        return hasher.hexdigest()[:32]
 
     def _consolidate_persona(self, ctx, persona: str) -> None:
         """Consolidate archived memories for a single persona."""
@@ -163,7 +310,11 @@ class ConsolidationWorker:
 
             content = self._build_consolidated(memories)
             if content:
-                self._save_consolidated(ctx, content, memories, entity_key)
+                # audit H1 — provenance: episodic members of the cluster are the
+                # episodes the gist was generalized from; they are recorded as
+                # contextual links (never merged, per the CLS two-layer ADR).
+                context_keys = [m.key for m in memories if getattr(m, "kind", "semantic") != "semantic"]
+                self._save_consolidated(ctx, content, memories, entity_key, context_keys=context_keys)
                 consolidated_count += 1
 
         logger.info(
@@ -223,10 +374,44 @@ class ConsolidationWorker:
         return self._build_gist(semantic)
 
     def _build_gist(self, memories: list) -> str | None:
-        """Build an extractive gist from semantic memories.
+        """Build a gist from semantic memories (audit H1).
 
-        Concatenation-based (LLM-ready for future enhancement).
+        Order: cached gist (content hash) → LLM integration/generalization →
+        concatenation fallback. The LLM path is capped per cycle
+        (``llm_gist_max_per_cycle``) and skipped when disabled or when no
+        credentials resolve, so cost never exceeds the v3.9 behaviour.
         """
+        if not memories:
+            return None
+
+        digest = self._cluster_digest(memories)
+        cached = self._gist_cache.get(digest)
+        if cached:
+            return cached
+
+        text: str | None = None
+        if (
+            self.gist_llm_enabled
+            and len(memories) >= self.gist_llm_min_memories
+            and self._llm_calls_this_cycle < self.gist_llm_max_per_cycle
+        ):
+            # Count the attempt: a failed call still consumed the budget.
+            self._llm_calls_this_cycle += 1
+            try:
+                text = self._gist_llm(self._settings, memories)
+            except Exception:
+                logger.warning("ConsolidationWorker: gist LLM raised; falling back", exc_info=True)
+                text = None
+
+        if isinstance(text, str) and text.strip():
+            gist = text.strip()
+            self._gist_cache[digest] = gist
+            return gist
+
+        return self._concat_gist(memories)
+
+    def _concat_gist(self, memories: list) -> str | None:
+        """Extractive concatenation — the pre-v4.0 gist and the LLM fallback."""
         if not memories:
             return None
 
@@ -270,12 +455,30 @@ class ConsolidationWorker:
             except Exception:
                 logger.debug("summarizes link failed for %s -> %s", key, gist_key, exc_info=True)
 
+    def _link_contextual(self, ctx, gist_key: str | None, context_keys: list[str] | None) -> None:
+        """Link episodic context memories → gist node (link_type='contextual').
+
+        audit H1 provenance: the gist loses detail (fuzzy trace), so the episodes
+        it was generalized from stay reachable from the gist. Best-effort.
+        """
+        if not gist_key or not context_keys:
+            return
+        upsert = getattr(ctx.entity_repo, "upsert_link", None)
+        if upsert is None:
+            return
+        for key in context_keys:
+            try:
+                upsert(key, gist_key, link_type="contextual")
+            except Exception:
+                logger.debug("contextual link failed for %s -> %s", key, gist_key, exc_info=True)
+
     def _save_consolidated(
         self,
         ctx,
         content: str,
         sources: list,
         entity_key: str,
+        context_keys: list[str] | None = None,
     ) -> None:
         """Save the gist memory and link it to semantic sources.
 
@@ -288,10 +491,11 @@ class ConsolidationWorker:
             return
         avg_importance = sum(m.importance for m in sources) / len(sources) if sources else 0.5
         source_keys = [m.key for m in sources]
+        # audit H1 — provenance is mandatory for new gists (no NULL derived_from).
+        if not source_keys:
+            return
 
-        import asyncio as _asyncio
-
-        result = _asyncio.run(
+        result = asyncio.run(
             ctx.memory_service.create_memory(
                 content=content,
                 importance=avg_importance,
@@ -310,6 +514,7 @@ class ConsolidationWorker:
         if result.is_ok:
             gist_key = getattr(result.value, "key", None)
             self._link_summarizes(ctx, gist_key, source_keys)
+            self._link_contextual(ctx, gist_key, context_keys)
             logger.info(
                 "Consolidated %d memories into key=%s (entity=%s)",
                 len(sources),
