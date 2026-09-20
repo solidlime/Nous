@@ -11,7 +11,7 @@ from nous.application.context.vector_stack import VectorStackMixin
 from nous.domain.equipment.service import EquipmentService
 from nous.domain.memory.service import MemoryService
 from nous.domain.persona.service import PersonaService
-from nous.domain.shared.errors import SearchError
+from nous.domain.shared.errors import PersonaNotFoundError, PersonaValidationError, SearchError
 from nous.domain.shared.result import Failure, Success
 from nous.infrastructure.qdrant.adapter import QdrantVectorStore as QdrantVectorStore  # noqa: TC001
 
@@ -392,11 +392,11 @@ class AppContextRegistry:
 
             # パス分離子・親参照を含む persona はディレクトリ存在確認をすり抜けるため拒否
             if not persona or "/" in persona or "\\" in persona or persona in (".", ".."):
-                raise ValueError(f"Invalid persona name: '{persona}'")
+                raise PersonaValidationError(f"Invalid persona name: '{persona}'")
 
             persona_root = Path(cls._settings.persona_dir) / persona
             if not persona_root.is_dir():
-                raise ValueError(f"Persona '{persona}' not found")
+                raise PersonaNotFoundError(f"Persona '{persona}' not found")
 
             # config 無し (HTTP 共有依存等が chat より先に ctx を作るケース) →
             # persona の永続 config.json を best-effort で読む。ファイルが無い

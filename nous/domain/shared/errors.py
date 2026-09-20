@@ -13,12 +13,16 @@ class MemoryValidationError(DomainError):
     """Memory validation failed."""
 
 
-class PersonaNotFoundError(DomainError):
-    """Persona not found."""
+class PersonaNotFoundError(DomainError, ValueError):
+    """Persona not found.
+
+    Also a ``ValueError``: ``AppContextRegistry.get()`` raised a bare ValueError
+    for this before the typed errors existed, and callers still catch that.
+    """
 
 
-class PersonaValidationError(DomainError):
-    """Persona validation failed."""
+class PersonaValidationError(DomainError, ValueError):
+    """Persona validation failed (invalid name or structure). Also a ValueError, see above."""
 
 
 class ItemNotFoundError(DomainError):

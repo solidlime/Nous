@@ -29,26 +29,53 @@ os.environ.setdefault("HF_HOME", str(Path(_data_root) / "cache" / "huggingface")
 # ── Monkey-patch Tool.run() to re-raise MCPError (preserves JSON-RPC error codes) ──
 # MCPServer's Tool.run() wraps all exceptions in ToolError, but MCPError must
 # propagate unwrapped so the low-level MCP server can convert it to a proper
-# JSON-RPC error response (e.g. -32000 PERSONA_REQUIRED).
+# JSON-RPC error response (e.g. -32000 PERSONA_REQUIRED). Persona *resolution*
+# failures are translated to the common tool envelope instead (audit C1), so
+# `X-Persona: <unknown>` yields error.code=NOT_FOUND rather than ToolError's
+# opaque "Error executing tool <name>" text (v4.0.1).
 _original_tool_run = Tool.run
 
 from mcp.server.mcpserver.exceptions import ToolError  # noqa: E402
 
+from nous.api.mcp._envelope import ToolErrorCode, tool_error  # noqa: E402
+from nous.domain.shared.errors import PersonaNotFoundError, PersonaValidationError  # noqa: E402
+
+_PERSONA_ERROR_CODES: dict[type[BaseException], ToolErrorCode] = {
+    PersonaNotFoundError: ToolErrorCode.NOT_FOUND,
+    PersonaValidationError: ToolErrorCode.VALIDATION_ERROR,
+}
+
+
+def _persona_error_envelope(exc: BaseException) -> str | None:
+    """Return the C1 envelope for a persona resolution failure, else None.
+
+    Tool.run() re-wraps what the tool body raised and chains the original with
+    ``raise ... from exc`` (``__cause__``), so the *explicit* chain is walked —
+    ``__context__`` is deliberately not followed: it can hold an already-handled
+    persona error raised while a different failure was being reported.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        code = _PERSONA_ERROR_CODES.get(type(current))
+        if code is not None:
+            return tool_error(code, str(current))
+        current = current.__cause__
+    return None
+
 
 async def _patched_tool_run(self, arguments, context=None, convert_result=False):
-    # TODO(drive-by): a plain domain exception still escapes as an opaque
-    # "Error executing tool <name>" instead of the C1 envelope.
-    # Observed: `X-Persona: <unknown>` → AppContextRegistry.get() raises
-    # ValueError("Persona '<x>' not found") → the client gets no error.code
-    # (NOT_FOUND) and no message. Fix: convert PersonaNotFound to
-    # ToolError/envelope at the registry boundary. Found during the v4.0.0
-    # release verification; tracked for v4.0.1 (see nous memory 2026-09-20).
     try:
         return await _original_tool_run(self, arguments, context, convert_result)
     except ToolError as e:
         cause = e.__cause__ or e.__context__
         if isinstance(cause, MCPError):
             raise cause from None
+        envelope = _persona_error_envelope(e)
+        if envelope is not None:
+            # Persona resolution sits below every tool, so no tool body can wrap it.
+            return self.fn_metadata.convert_result(envelope) if convert_result else envelope
         raise
     except MCPError:
         raise
