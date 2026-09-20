@@ -382,9 +382,11 @@ def register_tools(mcp: MCPServer) -> None:
             )
         )
 
+    # item_equip (audit M9-b: auto_add 既定 false（v4.0 変更）— LLM が明示的に true を渡した時だけ自動生成)
     @_tool("item_equip")
-    async def item_equip(equipment: dict | None = None, auto_add: bool = True) -> str:
-        """装備スロットにアイテムをセット。equipment: {"top": "白いドレス"} など。auto_addで未登録アイテムを自動追加。"""
+    async def item_equip(equipment: dict | None = None, auto_add: bool = False) -> str:
+        """装備スロットにアイテムをセット。equipment: {"top": "白いドレス"} など。
+        auto_add 既定 false（v4.0 変更）: 未登録アイテムは自動追加しない。必要なら auto_add=true を明示せよ。"""
         p = _resolve_persona()
         return _envelope_wrap(
             await _tool_item_equip(AppContextRegistry.get(p), p, equipment=equipment, auto_add=auto_add)

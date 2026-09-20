@@ -13,7 +13,7 @@ from nous.application.chat.events import (
     MemoryActivitySSE,
     SessionSummarizedSSE,
 )
-from nous.application.chat.memory_llm import run_memory_llm
+from nous.application.chat.memory_llm import item_tools_used, run_memory_llm
 from nous.application.chat.pattern_detector import maybe_run_mental_model
 from nous.application.chat.response_validator import validate_response
 from nous.application.chat.summarizer import summarize_and_store
@@ -137,7 +137,14 @@ class PostProcessStep:
             payload = {"user": turn_ctx.user_message, "assistant": turn_ctx.full_response}
             if config.auto_extract:
                 try:
-                    memory_result = await run_memory_llm(ctx, config, payload, tool_calls_log=turn_ctx.tool_calls_log)
+                    # audit M9-c: item 抽出 LLM は item_* ツール呼出の無いターン（会話由来の装備変更）のみ。
+                    memory_result = await run_memory_llm(
+                        ctx,
+                        config,
+                        payload,
+                        tool_calls_log=turn_ctx.tool_calls_log,
+                        item_tools_used=item_tools_used(turn_ctx.tool_calls_log),
+                    )
                 except Exception as e:
                     logger.warning("PostProcessStep: run_memory_llm failed: %s", e)
 

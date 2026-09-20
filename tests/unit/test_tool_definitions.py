@@ -115,6 +115,25 @@ def test_scope_enum_values():
 
 
 # ---------------------------------------------------------------------------
+# v4.0 audit M5 / M9-b — LLM-facing schema defaults
+# ---------------------------------------------------------------------------
+
+
+def test_memory_create_duplicate_check_enabled_by_default():
+    """audit M5: chat 組込ツールの default は重複チェック実施（False）。"""
+    td = next(td for td in MEMORY_TOOLS if td.name == "memory_create")
+    prop = td.input_schema["properties"]["skip_duplicate_check"]
+    assert prop["default"] is False, "memory_create は既定で重複チェックを実施する（v4.0 変更）"
+
+
+def test_item_equip_auto_add_disabled_by_default():
+    """audit M9-b: chat 組込ツールの auto_add 既定は False（幻アイテム生成防止）。"""
+    td = next(td for td in MEMORY_TOOLS if td.name == "item_equip")
+    prop = td.input_schema["properties"]["auto_add"]
+    assert prop["default"] is False, "item_equip.auto_add は既定 false（v4.0 変更）"
+
+
+# ---------------------------------------------------------------------------
 # JSON Schema type validity
 # ---------------------------------------------------------------------------
 

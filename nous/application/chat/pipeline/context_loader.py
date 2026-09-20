@@ -341,11 +341,12 @@ async def _build_context_section(
         equip_result = ctx.equipment_service.get_equipment()
         if equip_result.is_ok:
             equipment = equip_result.value
-            if equipment:
-                # 未装着スロットも明示する（裸の自覚が装備行動の前提）
-                equip_lines = "\n".join(
-                    f"  {slot}: {item}" if item else f"  {slot}: 未装着" for slot, item in equipment.items()
-                )
+            # audit M9-a: 装着済みスロットのみ注入する。未装着行は毎ターンの
+            # 固定費（8 行）で情報価値が無いため列挙しない。装着が 1 つも
+            # 無ければブロック自体を出さない。
+            equipped = {slot: item for slot, item in (equipment or {}).items() if item}
+            if equipped:
+                equip_lines = "\n".join(f"  {slot}: {item}" for slot, item in equipped.items())
                 t3.append(f"あなたの現在の装備:\n{equip_lines}")
     except Exception as e:
         logger.debug("Failed to fetch equipment: %s", e)

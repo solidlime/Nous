@@ -10,6 +10,7 @@ from nous.application.chat.memory_llm import (
     _MEMORY_LLM_PROMPT,
     _build_memory_llm_context,
     _parse_memory_llm_result,
+    item_tools_used,
     run_memory_llm,
 )
 from nous.domain.shared.result import Failure, Success
@@ -1129,3 +1130,134 @@ class TestRunMemoryLLM:
             context="llm_suggested",
         )
         mock_ctx.persona_service.update_physical_state.assert_not_called()
+
+    # -- audit M9-c: item 抽出 LLM のゲーティング ----------------------------
+
+    @pytest.mark.asyncio
+    async def test_item_llm_skipped_on_item_tool_turn(self, mock_ctx, mock_config):
+        """item_* ツール呼出のあるターンは item LLM を呼ばず inventory_update を空で返す。"""
+        payload = {"user": "服を着た", "assistant": "似合うね"}
+        context_result = {"facts": [], "goals": [], "promises": [], "context_update": {}}
+        item_result = {"inventory_update": {"equip": {"top": "ドレス"}}}
+
+        async def _process(config, **kwargs):
+            return item_result if kwargs.get("mode") == "item" else context_result
+
+        log = [{"name": "item_equip", "input": {"top": "ドレス"}}]
+        assert item_tools_used(log) is True
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(side_effect=_process)
+            result = await run_memory_llm(
+                mock_ctx, mock_config, payload, tool_calls_log=log, item_tools_used=item_tools_used(log)
+            )
+            modes = [call.kwargs.get("mode") for call in mock_llm.return_value.process.await_args_list]
+
+        assert modes == ["context"]
+        assert result["inventory_update"] == {}
+        mock_ctx.equipment_service.equip.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_item_llm_runs_without_item_tool(self, mock_ctx, mock_config):
+        """item_* ツール呼出の無いターンに item LLM を実行する (audit M9-c 反転)。"""
+        payload = {"user": "こんにちは", "assistant": "やあ"}
+        context_result = {"facts": [], "goals": [], "promises": [], "context_update": {}}
+        item_result = {"inventory_update": {"add_items": [{"name": "幻の剣"}]}}
+
+        async def _process(config, **kwargs):
+            return item_result if kwargs.get("mode") == "item" else context_result
+
+        log = [{"name": "memory_search", "input": {"query": "x"}}]
+        assert item_tools_used(log) is False
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(side_effect=_process)
+            result = await run_memory_llm(
+                mock_ctx, mock_config, payload, tool_calls_log=log, item_tools_used=item_tools_used(log)
+            )
+            modes = [call.kwargs.get("mode") for call in mock_llm.return_value.process.await_args_list]
+
+        assert modes == ["context", "item"]
+        assert result["inventory_update"] == item_result["inventory_update"]
+        mock_ctx.equipment_service.add_item.assert_called_once_with("幻の剣", category=None, description=None)
+
+    @pytest.mark.asyncio
+    async def test_item_mode_llm_not_called_when_item_tools_used(self, mock_ctx, mock_config):
+        """(a) item_tools_used=True のとき item mode の LLM は呼ばれず inventory_update は空。"""
+        payload = {"user": "剣を装備した", "assistant": "了解"}
+        context_result = {"facts": [], "goals": [], "promises": [], "context_update": {}}
+        item_result = {"inventory_update": {"equip": {"weapon": "魔剣"}}}
+
+        async def _process(config, **kwargs):
+            return item_result if kwargs.get("mode") == "item" else context_result
+
+        log = [{"name": "item_equip", "input": {"weapon": "魔剣"}}]
+        assert item_tools_used(log) is True
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(side_effect=_process)
+            result = await run_memory_llm(mock_ctx, mock_config, payload, tool_calls_log=log, item_tools_used=True)
+
+        item_calls = [
+            call for call in mock_llm.return_value.process.await_args_list if call.kwargs.get("mode") == "item"
+        ]
+        assert item_calls == []
+        assert result["inventory_update"] == {}
+
+    @pytest.mark.asyncio
+    async def test_item_llm_inventory_update_applied_without_item_tool(self, mock_ctx, mock_config):
+        """(b) item_tools_used=False のとき item LLM の inventory_update が捨てられず適用される。"""
+        payload = {"user": "白いドレスに着替えるよ", "assistant": "いいね"}
+        context_result = {"facts": [], "goals": [], "promises": [], "context_update": {}}
+        item_result = {"inventory_update": {"equip": {"top": "白いドレス"}}}
+
+        async def _process(config, **kwargs):
+            return item_result if kwargs.get("mode") == "item" else context_result
+
+        log = [{"name": "memory_search", "input": {"query": "服装"}}]
+        assert item_tools_used(log) is False
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(side_effect=_process)
+            result = await run_memory_llm(mock_ctx, mock_config, payload, tool_calls_log=log, item_tools_used=False)
+
+        item_calls = [
+            call for call in mock_llm.return_value.process.await_args_list if call.kwargs.get("mode") == "item"
+        ]
+        assert len(item_calls) == 1
+        # 捨てられていないこと（LLM の返り値がそのまま残る）
+        assert result["inventory_update"] == {"equip": {"top": "白いドレス"}}
+        # _apply_inventory_update 経由で inventory に反映されること
+        # audit M9 — auto_add は明示（抽出経路は会話由来の未登録装備を許容する）
+        mock_ctx.equipment_service.equip.assert_called_once_with({"top": "白いドレス"}, auto_add=True)
+
+    @pytest.mark.asyncio
+    async def test_context_update_applies_on_item_tool_turn(self, mock_ctx, mock_config):
+        """(c) ツール使用ターンでも context_update（facts/goals/promises）は従来どおり適用される。"""
+        payload = {"user": "剣を装備して気分がいい", "assistant": "頼もしい"}
+        context_result = {
+            "facts": [{"content": "ユーザーは剣を装備した", "importance": 0.6, "tags": []}],
+            "goals": [],
+            "promises": [],
+            "context_update": {"emotion": "joy", "emotion_intensity": 0.8},
+        }
+
+        async def _process(config, **kwargs):
+            return context_result
+
+        log = [{"name": "item_equip", "input": {"weapon": "剣"}}]
+        assert item_tools_used(log) is True
+
+        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
+            mock_llm.return_value.process = AsyncMock(side_effect=_process)
+            await run_memory_llm(mock_ctx, mock_config, payload, tool_calls_log=log, item_tools_used=True)
+
+        # item mode は呼ばれない
+        item_calls = [
+            call for call in mock_llm.return_value.process.await_args_list if call.kwargs.get("mode") == "item"
+        ]
+        assert item_calls == []
+        mock_ctx.persona_service.update_emotion.assert_called_once_with(
+            "test_persona", "joy", 0.8, context="llm_suggested"
+        )
+        mock_ctx.memory_service.create_memory.assert_called_once()

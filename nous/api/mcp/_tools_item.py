@@ -56,7 +56,14 @@ async def _tool_item_add(
     return f"Error: {result.error}"
 
 
-async def _tool_item_equip(ctx: AppContext, persona: str, equipment: dict | None = None, auto_add: bool = True) -> str:
+async def _tool_item_equip(ctx: AppContext, persona: str, equipment: dict | None = None, auto_add: bool = False) -> str:
+    """Equip items to slots.
+
+    audit M9-b (v4.0): ``auto_add`` defaults to False on the LLM-facing surfaces
+    (MCP tool + chat built-in tool), so an unregistered item is *not* silently
+    created. The LLM must pass ``auto_add=true`` explicitly to opt in (the HTTP
+    route keeps the legacy True default for external-client compatibility).
+    """
     if not equipment:
         return 'Error: equipment dict required (e.g. {"top": "白いドレス"})'
     result = ctx.equipment_service.equip(equipment, auto_add)

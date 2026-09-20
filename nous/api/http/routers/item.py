@@ -87,6 +87,9 @@ def register_item_routes(mcp) -> None:
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         if not isinstance(body, dict) or not body:
             return JSONResponse({"error": "Body must be a non-empty dict of {slot: item_name}"}, status_code=400)
+        # auto_add stays True here for backward compatibility with existing
+        # external HTTP clients (audit M9-b only flips the LLM-facing surfaces
+        # — MCP tool + chat built-in tool — to False).
         auto_add = body.pop("auto_add", True)
         if not body:
             return JSONResponse({"error": "No equipment slots provided"}, status_code=400)

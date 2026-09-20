@@ -40,8 +40,8 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 "tags": {"type": "array", "items": {"type": "string"}, "description": "タグリスト"},
                 "skip_duplicate_check": {
                     "type": "boolean",
-                    "description": "重複チェックをスキップする（デフォルト: True。応答を速くするため）。重複防止が必要な場合は false を明示的に指定。",
-                    "default": True,
+                    "description": "重複チェックをスキップする（既定 False = 重複チェック実施・v4.0 変更）。",
+                    "default": False,
                 },
             },
             "required": ["content"],
@@ -197,12 +197,16 @@ MEMORY_TOOLS: list[ToolDefinition] = [
     ToolDefinition(
         name="item_equip",
         defer_loading=False,
-        description="インベントリ内のアイテムを装備スロットにセットする。ペルソナが服を着る・アクセサリを付ける・武器を持つ時に使え。抽象的な概念や非物理的な状態を装備するな。equipment が必須（{slot: item_name} 形式）。auto_add=true で未登録アイテムの自動追加が可能。",
+        description="インベントリ内のアイテムを装備スロットにセットする。ペルソナが服を着る・アクセサリを付ける・武器を持つ時に使え。抽象的な概念や非物理的な状態を装備するな。equipment が必須（{slot: item_name} 形式）。未登録アイテムを自動追加する場合は auto_add=true を明示せよ（既定 false・v4.0 変更）。",
         input_schema={
             "type": "object",
             "properties": {
                 "equipment": {"type": "object", "description": "装備するアイテム {slot: item_name}"},
-                "auto_add": {"type": "boolean", "description": "未登録アイテムを自動追加", "default": True},
+                "auto_add": {
+                    "type": "boolean",
+                    "description": "未登録アイテムを自動追加（既定 false・v4.0 変更）",
+                    "default": False,
+                },
             },
             "required": ["equipment"],
         },

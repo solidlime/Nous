@@ -285,7 +285,11 @@ class TestDriftRecall:
 
 
 class TestEquipmentContext:
-    """装備コンテキスト: 未装着スロットも注入する（裸の自覚が装備行動の前提）。"""
+    """装備コンテキスト: 装着済みスロットのみを注入する (audit M9-a)。
+
+    未装着行は毎ターンの固定費で情報価値が無いため列挙しない。装着が 1 つも
+    無ければブロック自体を出さない。
+    """
 
     def _ctx_with_equipment(self, equipment: dict):
         ctx = _make_drift_ctx([])
@@ -293,32 +297,33 @@ class TestEquipmentContext:
         return ctx
 
     @pytest.mark.asyncio
-    async def test_unequipped_slots_shown_as_not_worn(self):
+    async def test_only_equipped_slots_shown(self):
         from nous.domain.equipment.entities import VALID_SLOTS
 
         equipment = {s: None for s in VALID_SLOTS}
         equipment["top"] = "パーカー"
         section = await _build_context_section(self._ctx_with_equipment(equipment), _make_state())
         assert "top: パーカー" in section
-        assert "bottom: 未装着" in section
-        # 全8スロット中、装備済み1 + 未装着7
-        assert section.count("未装着") == 7
+        assert "未装着" not in section
+        assert section.count("bottom:") == 0
 
     @pytest.mark.asyncio
-    async def test_all_empty_still_lists_slots(self):
+    async def test_empty_equipment_omits_block(self):
         from nous.domain.equipment.entities import VALID_SLOTS
 
         section = await _build_context_section(self._ctx_with_equipment({s: None for s in VALID_SLOTS}), _make_state())
-        assert "あなたの現在の装備" in section
-        assert section.count("未装着") == len(VALID_SLOTS)
+        assert "あなたの現在の装備" not in section
+        assert "未装着" not in section
 
     @pytest.mark.asyncio
-    async def test_every_slot_listed_exactly_once(self):
+    async def test_every_equipped_slot_listed_exactly_once(self):
         from nous.domain.equipment.entities import VALID_SLOTS
 
         equipment = {s: ("テスト服" if s == "shoes" else None) for s in VALID_SLOTS}
         section = await _build_context_section(self._ctx_with_equipment(equipment), _make_state())
-        for slot in VALID_SLOTS:
-            assert slot in section
+        assert "shoes: テスト服" in section
         assert section.count("shoes:") == 1
-        assert section.count("top:") == 1
+        # 未装着スロットは列挙しない
+        for slot in VALID_SLOTS:
+            if slot != "shoes":
+                assert f"{slot}:" not in section

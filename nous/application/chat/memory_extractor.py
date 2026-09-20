@@ -354,16 +354,46 @@ def _context_update_skips(tool_calls_log: list[dict] | None) -> tuple[bool, bool
     return skip_emotion, skip_body, skip_state_text, skip_user_info, skip_inventory
 
 
+def item_tools_used(tool_calls_log: list[dict] | None) -> bool:
+    """そのターンに inventory を変化させる item_* ツールが呼ばれたか（audit M9-c）。
+
+    item_search は read-only なので除外する。True のターンは inventory がツールに
+    よって決定的に更新済み（skip_inventory で LLM 出力は適用されない）なので、
+    呼出元 (post.py) は item 抽出 LLM をスキップする判定に使う。
+    """
+    for entry in tool_calls_log or []:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        if isinstance(name, str) and name.startswith("item_") and name != "item_search":
+            return True
+    return False
+
+
 async def run_memory_llm(
-    ctx: AppContext, config: ChatConfig, payload: dict, tool_calls_log: list[dict] | None = None
+    ctx: AppContext,
+    config: ChatConfig,
+    payload: dict,
+    tool_calls_log: list[dict] | None = None,
+    item_tools_used: bool = True,
 ) -> dict:
-    """T35: 遅延MemoryLLM処理。facts保存 + context/inventory更新を行う。結果dictを返す。"""
+    """T35: 遅延MemoryLLM処理。facts保存 + context/inventory更新を行う。結果dictを返す。
+
+    item_tools_used: audit M9-c。True のとき（inventory を変化させる item_* ツール
+    呼出があり inventory が決定的に更新済みのターン）item 抽出 LLM を呼ばず
+    ``inventory_update`` を空 dict で返す。False のときは item 抽出 LLM を実行し
+    会話由来の装備変更を拾う。既定 True は後方互換用（既存テスト・直接呼出しの
+    意味を変えない）。呼出元 post.py は同一ターンの tool_calls_log から判定した値
+    を明示的に渡す。
+    """
     user_message = payload.get("user", "")
     assistant_response = payload.get("assistant", "")
     if not user_message and not assistant_response:
         return {}
     try:
-        result = await _run_memory_llm_calls(ctx, config, payload, user_message, assistant_response)
+        result = await _run_memory_llm_calls(
+            ctx, config, payload, user_message, assistant_response, item_tools_used=item_tools_used
+        )
 
         persona = ctx.persona
 
@@ -406,9 +436,20 @@ async def run_memory_llm(
 
 
 async def _run_memory_llm_calls(
-    ctx: AppContext, config: ChatConfig, payload: dict, user_message: str, assistant_response: str
+    ctx: AppContext,
+    config: ChatConfig,
+    payload: dict,
+    user_message: str,
+    assistant_response: str,
+    item_tools_used: bool = True,
 ) -> dict:
-    """MemoryLLM を context → item の順に実行し、抽出結果 dict を返す。"""
+    """MemoryLLM を context → item の順に実行し、抽出結果 dict を返す。
+
+    item_tools_used は「そのターンに inventory を変化させる item_* ツールが
+    呼ばれ inventory が決定的に更新済みか」を表す。True なら item 抽出 LLM を
+    呼ばず ``inventory_update`` を空 dict にし、False なら item 抽出 LLM を
+    実行して会話由来の装備変更を拾う（audit M9-c）。
+    """
     context_str, commitments_str, inventory_str = await _build_memory_llm_context(ctx)
     persona_name = ctx.persona or "assistant"
     persona_identity = (config.system_prompt or "").strip()
@@ -429,10 +470,17 @@ async def _run_memory_llm_calls(
         logger.warning("MemoryLLM: empty context result drift=empty_result persona=%s", persona_name)
         result = {"facts": [], "goals": [], "promises": [], "context_update": {}}
     # item 抽出は context の後に逐次実行し inventory_update のみ上書き (spec F・並列化しない)
-    item_result = await llm.process(config, **common, mode="item")
-    result["inventory_update"] = (item_result or {}).get("inventory_update") or {}
-    if not result.get("inventory_update"):
-        logger.info("MemoryLLM: item extractor returned no inventory changes persona=%s", persona_name)
+    # audit M9-c: inventory を変化させる item_* ツールが呼ばれたターンは、
+    # ツールが既に inventory を決定的に更新しており skip_inventory により LLM 出力も
+    # 適用されない（＝呼べば純粋な無駄）。LLM 抽出は会話由来の装備変更を拾える唯一の
+    # 経路なので、ツール未使用ターンにのみ実行する。
+    if item_tools_used:
+        result["inventory_update"] = {}
+    else:
+        item_result = await llm.process(config, **common, mode="item")
+        result["inventory_update"] = (item_result or {}).get("inventory_update") or {}
+        if not result.get("inventory_update"):
+            logger.info("MemoryLLM: item extractor returned no inventory changes persona=%s", persona_name)
     return result
 
 
@@ -720,7 +768,14 @@ async def _apply_inventory_update(ctx: AppContext, persona: str, result: dict, s
                     ctx.equipment_service.update_item(name, **updates)
 
     if equip_map and isinstance(equip_map, dict):
-        equip_result = ctx.equipment_service.equip(equip_map)
+        # audit M9 — auto_add is explicit here, and deliberately True: the extraction
+        # path runs on free-form conversation, so the persona may mention wearing
+        # something that has no inventory row yet. ``EquipmentService.equip`` does not
+        # validate item existence, so ``auto_add=False`` would leave a dangling
+        # equipment_slots row instead of a usable item — the *tool* path
+        # (``item_equip``) stays at False and is therefore the one that must not
+        # invent items.
+        equip_result = ctx.equipment_service.equip(equip_map, auto_add=True)
         if isinstance(equip_result, Success):
             # audit:C2 — appearance parity: chat extractor equip must update persona state
             ctx.equipment_service.recompute_appearance(ctx.persona_service, persona)

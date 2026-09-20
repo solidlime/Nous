@@ -190,6 +190,18 @@ class TestMemoryCreate:
         assert data["data"]["key"] == "mem_new"
         ctx.memory_service.create_memory.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_create_memory_duplicate_check_enabled_by_default(self, registered_tools):
+        """audit M5: LLM 面（MCP）の既定は重複チェック実施（skip_duplicate_check=False）。"""
+        tools, ctx, _ = registered_tools
+        ctx.persona_service.get_state_snapshot.return_value = ("neutral", 0.0, {}, None)
+        ctx.memory_service.create_memory.return_value = Success(_mem("mem_new"))
+        memory_create = tools["memory_create"]
+        await memory_create(content="unique content")
+
+        _, kwargs = ctx.memory_service.create_memory.call_args
+        assert kwargs["skip_duplicate_check"] is False
+
     # ── Duplicate via service (replaces old DB exact-match detection) ──
 
     @pytest.mark.asyncio

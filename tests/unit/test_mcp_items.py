@@ -98,6 +98,23 @@ class TestItemTools:
             mock_reg_cls.get.return_value = ctx
             result = await item_tool(equipment={"top": "red dress"})
         assert "Equipped" in result
+        # audit M9-b: LLM 面の auto_add 既定は False（幻アイテムを生成しない）
+        ctx.equipment_service.equip.assert_called_once_with({"top": "red dress"}, False)
+
+    @pytest.mark.asyncio
+    async def test_item_equip_explicit_auto_add_true(self, registered_tools):
+        """LLM が auto_add=true を明示した時だけ自動追加を許可する (audit M9-b)。"""
+        tools, ctx, _ = registered_tools
+        ctx.equipment_service.equip.return_value = Success(None)
+        item_tool = tools["item_equip"]
+        with (
+            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
+            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
+        ):
+            mock_reg_cls.get.return_value = ctx
+            result = await item_tool(equipment={"top": "red dress"}, auto_add=True)
+        assert "Equipped" in result
+        ctx.equipment_service.equip.assert_called_once_with({"top": "red dress"}, True)
 
     @pytest.mark.asyncio
     async def test_item_equip_syncs_appearance_to_persona_state(self, registered_tools):
