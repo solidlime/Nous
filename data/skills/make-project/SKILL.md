@@ -12,7 +12,7 @@ description: "session-start スキルから自動起動されるプロジェク�
 - **判定・slug 決定・重複確認は自動で行う。変異（記憶記録・ファイル生成）の直前に、手順3でタグ確定の確認を1問だけ取る。承認後は自動で実行し、結果を事後報告する**（git 操作は別途、手順 4.7 の承認が必須）
 
 ## ツール解決（環境差対応）
-- `get_context` / `memory_search` / `memory_create` / `memory_delete` が直接利用可能なら、そのまま使う
+- `session_begin` / `memory_search` / `memory_create` / `memory_delete` が直接利用可能なら、そのまま使う
 - 見つからない場合、MCP ハブ等の仲介経由で「nous」サーバーのツールを探して実行する
   - mcp-hub 例: `mcp-hub_list_upstream_tools` → nous サーバーを特定 → `mcp-hub_execute_tool(server="nous", tool_name="memory_search", arguments={...})`
   - 他の MCP クライアントでも同様に「nous」サーバーのツールを検索して実行すること
@@ -130,7 +130,7 @@ memory_create(
 
 ## セッション開始時（必須）
 セッション開始時、ユーザーへの最初の応答の前に session-start スキルを実行し、nous 記憶から状態を復元する:
-- `get_context` でペルソナ状態・直近サマリを取得
+- `session_begin` でペルソナ状態・直近サマリを取得
 - `## プロジェクト識別` 節から `project: <slug>` タグを取得
 - `memory_search(tags=["project:<slug>", "task_state"], top_k=3)` 等で作業状態を復元
 - `memory_search(tags=["session_summary"], top_k=1, sort="updated_at")` で前回の内容を把握

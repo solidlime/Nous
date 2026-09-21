@@ -7,13 +7,13 @@ description: "セッション開始時の必須ルーティン。セッション
 最初のユーザー応答より前に、必ず以下の手順を実行すること。
 
 ## 完了ゲート（最優先・スキップ禁止）
-`get_context` を実行し、その結果を最初の応答に含めるまで先へ進まない。ツール一覧の取得は完了ではない。他の依頼が先に来ていても本ルーティンを先に完遂する。
+`session_begin` を実行し、その結果を最初の応答に含めるまで先へ進まない。ツール一覧の取得は完了ではない。他の依頼が先に来ていても本ルーティンを先に完遂する。
 
 ## ツール解決（環境差対応）
-`get_context` / `memory_search` が直接使えるならそのまま使う。無ければ MCP ハブ経由で「nous」サーバーの同ツールを探して実行する（例: `mcp-hub_list_upstream_tools` → `mcp-hub_execute_tool(server="nous", tool_name="get_context", arguments={})`）。実行手段が違っても以降の手順は変わらない。
+`session_begin` / `memory_search` が直接使えるならそのまま使う。無ければ MCP ハブ経由で「nous」サーバーの同ツールを探して実行する（例: `mcp-hub_list_upstream_tools` → `mcp-hub_execute_tool(server="nous", tool_name="session_begin", arguments={})`）。実行手段が違っても以降の手順は変わらない。
 
 ## ステップ1: 自身の状況復元
-`get_context` を呼び、自分の状態・アクティブなコミットメント・記憶概要を把握する。
+`session_begin` を呼び、自分の状態・アクティブなコミットメント・記憶概要を把握する。
 
 ## ステップ2: プロジェクト識別タグの解決
 判定表・slug 決定・重複確認・タグ確定は**全て make-project スキルが所有する**（ここは起動判断とタグの採用だけを行う）。判定材料は「cwd のファイル一覧 ＋ 会話の開発意図」の2つで、片方だけでは判定しない。
@@ -31,11 +31,11 @@ description: "セッション開始時の必須ルーティン。セッション
 ## ステップ3: プロジェクト記憶の復元
 タグが無い（通常会話）場合は本ステップ全体をスキップする。タグが取得できた場合、以下を実行する:
 
-1. `get_context(project="<slug>")` — プロジェクト記憶の一括復元。PROJECT MEMORIES 節に `project:<slug>` タグ付き記憶（最新サマリ・作業状態・決定。updated_at 降順・重複除去・最大5件）が表示される。前回の状態把握はこれ1発で足りる
-2. `memory_search(query="", tags=["project:<slug>", "goal", "active"], top_k=5, sort="updated_at")` — プロジェクト固有のアクティブ目標（get_context の ACTIVE COMMITMENTS は persona 全体の goal）
+1. `session_begin(project="<slug>")` — プロジェクト記憶の一括復元。PROJECT MEMORIES 節に `project:<slug>` タグ付き記憶（最新サマリ・作業状態・決定。updated_at 降順・重複除去・最大5件）が表示される。前回の状態把握はこれ1発で足りる
+2. `memory_search(query="", tags=["project:<slug>", "goal", "active"], top_k=5, sort="updated_at")` — プロジェクト固有のアクティブ目標（session_begin の ACTIVE COMMITMENTS は persona 全体の goal）
 3. `memory_search(query="", tags=["promise"], top_k=5, sort="updated_at")` — 未完了の約束の先出し用（project タグと AND にしない。書込側は project タグ無しで書くため）
 
-タグ検索は必ず `query=""` で行う（非空クエリは content 全文一致が前提で、タグは絞り込みにしか効かない）。get_context の PROJECT MEMORIES は最大5件なので、作業状態・決定の網羅が必要なら `tags=["project:<slug>", "task_state"]` / `tags=["project:<slug>", "decision"]` で追加検索する。task_state / decision が空でも作業状態は session_summary に統合されている運用が一般的なので、session_summary の直近結果と get_context の Recent Memories で補完する。
+タグ検索は必ず `query=""` で行う（非空クエリは content 全文一致が前提で、タグは絞り込みにしか効かない）。session_begin の PROJECT MEMORIES は最大5件なので、作業状態・決定の網羅が必要なら `tags=["project:<slug>", "task_state"]` / `tags=["project:<slug>", "decision"]` で追加検索する。task_state / decision が空でも作業状態は session_summary に統合されている運用が一般的なので、session_summary の直近結果と session_begin の Recent Memories で補完する。
 
 復元内容を要約し、実行時点の応答で報告する: 「前回の状態: <要約>。続きは <次のアクション> から」
 

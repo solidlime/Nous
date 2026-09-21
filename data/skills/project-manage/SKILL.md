@@ -28,7 +28,7 @@ description: "プロジェクトの目標管理（goal_manage）と作業状態�
 - ユーザーが明らかに話を避けている雰囲気
 
 ## 事前準備（進行確認時）
-1. `get_context` で現在の状態を把握
+1. `session_begin` で現在の状態を把握
 2. プロジェクトの slug を確認（AGENTS.md の `## プロジェクト識別` 節、または既存記憶のタグ）
 3. `goal_manage(operation="list", scope="self")` と `goal_manage(operation="list", scope="interpersonal")` で目標一覧を確認。アクティブな目標がなければ何もしなくてよい
 4. `memory_search(query="直近の作業状態", tags=["project:<slug>"], top_k=5)` で最新状態を取得
