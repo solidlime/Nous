@@ -74,12 +74,23 @@ def _engine(
 ) -> SearchEngine:
     strat = MagicMock()
     strat.search.return_value = Success(pairs)
+    retriever = None
+    content_vecs = getattr(encoder, "content_vecs", None) if encoder is not None else None
+    if content_vecs:
+        # 候補 re-encode は廃止済み — encoder の content_vecs を key→vec フェイクに変換
+        key_vecs = {m.key: content_vecs[m.content] for m, _ in pairs if m.content in content_vecs}
+
+        async def _retrieve(keys: list[str]) -> dict[str, np.ndarray]:
+            return {k: key_vecs[k] for k in keys if k in key_vecs}
+
+        retriever = _retrieve
     return SearchEngine(
         keyword_search=strat,
         entity_service=entity_service,
         link_repo=link_repo,
         reranker=reranker,
         embedding_provider=(lambda: encoder) if encoder is not None else (lambda: None),
+        vector_retriever=retriever,
     )
 
 
@@ -111,7 +122,7 @@ class TestGraphBoostWeightZeroRegression:
         )
         engine = _engine([(m1, 0.9), (m2, 0.8)], entity_service=entity_service, link_repo=link_repo, encoder=encoder)
         result = await engine.search(
-            SearchQuery(text="alice の話", top_k=5, rank_policy=RankPolicy(graph_boost_weight=0.0))
+            SearchQuery(text="alice の話", top_k=5, rank_policy=RankPolicy(graph_boost_weight=0.0, lexical_weight=0.0))
         )
         assert result.is_ok
         # weight=0 では graph 信号を計算しない（無駄な SQL/PPR を払わない）
@@ -146,7 +157,7 @@ class TestEntityMatchIntegration:
         )
         engine = _engine([(m1, 0.9), (m2, 0.8)], entity_service=entity_service, link_repo=link_repo, encoder=encoder)
         result = await engine.search(
-            SearchQuery(text="alice の話", top_k=5, rank_policy=RankPolicy(graph_boost_weight=0.1))
+            SearchQuery(text="alice の話", top_k=5, rank_policy=RankPolicy(graph_boost_weight=0.1, lexical_weight=0.0))
         )
         assert result.is_ok
         entity_service.extractor.extract.assert_called_once()
@@ -220,7 +231,7 @@ class TestReflectionPenaltyWithGraph:
             SearchQuery(
                 text="alice の話",
                 top_k=5,
-                rank_policy=RankPolicy(graph_boost_weight=0.1, reflection_penalty=0.5),
+                rank_policy=RankPolicy(graph_boost_weight=0.1, reflection_penalty=0.5, lexical_weight=0.0),
             )
         )
         assert result.is_ok
@@ -245,7 +256,9 @@ class TestGraphFailOpen:
         m1 = _mem("m1", "内容1", importance=0.5, created_at=fixed)
         encoder = _VecEncoder(np.array([1.0, 0.0]), {"内容1": np.array([1.0, 0.0])})
         engine = _engine([(m1, 0.9)], encoder=encoder)
-        result = await engine.search(SearchQuery(text="q", top_k=5, rank_policy=RankPolicy(graph_boost_weight=0.1)))
+        result = await engine.search(
+            SearchQuery(text="q", top_k=5, rank_policy=RankPolicy(graph_boost_weight=0.1, lexical_weight=0.0))
+        )
         assert result.is_ok
         assert result.value[0].graph_boost == 0.0
         assert result.value[0].score == pytest.approx(0.3 * decay + 0.3 * 0.5 + 0.4 * 1.0, abs=1e-6)

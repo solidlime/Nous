@@ -91,7 +91,9 @@ def mcp_search(
             "jsonrpc": "2.0",
             "id": 1,
             "method": "tools/call",
-            "params": {"name": "memory_search", "arguments": {"query": q, "limit": limit}},
+            # memory_search の引数名は top_k（"limit" は pydantic に extra ignore され
+            # 暗黙で top_k=5 になっていた過去バグを修正）。
+            "params": {"name": "memory_search", "arguments": {"query": q, "top_k": limit}},
         }
     ).encode()
     headers = {
@@ -167,6 +169,15 @@ def analyze(query: dict, results: list[dict], docs: dict[str, str]) -> dict:
     m["precision@5"] = sum(1 for r in results[:5] if r["key"] in gold_any) / max(1, min(5, n))
     m["precision@10"] = sum(1 for r in results[:10] if r["key"] in gold_any) / max(1, min(10, n))
     m["hit@5"] = 1.0 if any(r["key"] in gold_any for r in results[:5]) else 0.0
+    m["hit@10"] = 1.0 if any(r["key"] in gold_any for r in results[:10]) else 0.0
+    # 広い gold（any-term）の MRR / precision@5（全クエリを対象にできる主要指標）。
+    # gold_any が空なら評価不能 = None。p5_any は既存 precision@5 と同値（後方互換のため別名で併記）。
+    if gold_any:
+        m["mrr_any"] = 1.0 / ranks_any[0] if ranks_any else 0.0
+        m["p5_any"] = m["precision@5"]
+    else:
+        m["mrr_any"] = None
+        m["p5_any"] = None
     # 狭い gold（all-term）: 網羅系（gold 空なら評価不能 = None）
     if gold_all:
         m["recall@5"] = len([r for r in ranks_all if r <= 5]) / len(gold_all)
@@ -221,6 +232,7 @@ def run_eval(
         },
         "rows": rows,
         "summary": summarize(rows),
+        "metric_definitions": metric_definitions(),
     }
 
 
@@ -233,7 +245,8 @@ def summarize(rows: list[dict]) -> dict:
     ok = [m for m in rows if "error" not in m]
     zero_result = [m for m in ok if m.get("returned", 0) == 0]
     errors = [m for m in rows if "error" in m]
-    rec_ok = [m for m in ok if m.get("recall@5") is not None]
+    rec_ok = [m for m in ok if m.get("recall@5") is not None]  # AT: all-term gold あり
+    any_ok = [m for m in ok if m.get("gold_count", 0) >= 1]  # ALL: any-term gold あり
 
     s = {
         "num_queries": len(rows),
@@ -241,6 +254,7 @@ def summarize(rows: list[dict]) -> dict:
         "zero_result_count": len(zero_result),
         "zero_result_ids": [m["id"] for m in zero_result],
         "num_evaluable_all_term": len(rec_ok),
+        "num_evaluable_any_term": len(any_ok),
     }
     if ok:
         s["hit@5_mean"] = round(statistics.mean(m.get("hit@5", 0.0) for m in ok), 4)
@@ -253,7 +267,75 @@ def summarize(rows: list[dict]) -> dict:
         s["recall@5_mean"] = round(statistics.mean(m["recall@5"] for m in rec_ok), 4)
         s["recall@10_mean"] = round(statistics.mean(m["recall@10"] for m in rec_ok), 4)
         s["mrr_mean"] = round(statistics.mean(m["mrr"] for m in rec_ok), 4)
+
+    # --- 部分集合別サマリ（どの集合の指標かを構造的に明示）-------------------
+    # ALL = any-term gold（gold_any>=1 の全クエリ）/ AT = all-term gold ありクエリ。
+    if any_ok:
+        any_term_summary = {
+            "n": len(any_ok),
+            "hit@5_mean": round(statistics.mean(m["hit@5"] for m in any_ok), 4),
+            "hit@10_mean": round(statistics.mean(m["hit@10"] for m in any_ok), 4),
+            "mrr_mean": round(statistics.mean(m["mrr_any"] for m in any_ok), 4),
+            "p5_mean": round(statistics.mean(m["p5_any"] for m in any_ok), 4),
+        }
+    else:
+        any_term_summary = {"n": 0}
+    s["any_term"] = any_term_summary
+    if rec_ok:
+        s["all_term"] = {
+            "n": len(rec_ok),
+            "mrr_mean": s["mrr_mean"],
+            "recall@5_mean": s["recall@5_mean"],
+            "recall@10_mean": s["recall@10_mean"],
+        }
+    else:
+        s["all_term"] = {"n": 0}
+    s["totals"] = {
+        "n_queries": len(rows),
+        "n_with_any_gold": len(any_ok),
+        "n_with_all_gold": len(rec_ok),
+        "zero_result_count": len(zero_result),
+        "error_count": len(errors),
+    }
+    # 既存キーの別名（後方互換: 旧キーは削除しない）
+    for src, dst in (
+        ("mrr_mean", "any_term_mrr_mean"),
+        ("hit@5_mean", "any_term_hit@5_mean"),
+        ("hit@10_mean", "any_term_hit@10_mean"),
+        ("p5_mean", "any_term_p5_mean"),
+    ):
+        if src in any_term_summary:
+            s[dst] = any_term_summary[src]
+    if rec_ok:
+        s["all_term_mrr_mean"] = s["mrr_mean"]
+        s["all_term_recall@5_mean"] = s["recall@5_mean"]
+        s["all_term_recall@10_mean"] = s["recall@10_mean"]
     return s
+
+
+def metric_definitions() -> dict:
+    """出力 JSON の各指標キーが「どのクエリ集合を対象に何を意味するか」を説明する辞書（docs 用）。"""
+    return {
+        "hit@5_mean": "全クエリ（エラー除く）の hit@5 平均。any-term gold で上位5件に関連が1件以上ある割合",
+        "precision@5_mean": "全クエリ（エラー除く）の precision@5 平均。any-term gold での上位5件の適合率",
+        "recall@5_mean": "AT（all-term gold あり）クエリのみの recall@5 平均",
+        "recall@10_mean": "AT（all-term gold あり）クエリのみの recall@10 平均",
+        "mrr_mean": "AT（all-term gold あり）クエリのみの MRR 平均（後方互換キー）",
+        "all_term_mrr_mean": "mrr_mean の別名（AT=all-term gold ありクエリのみの MRR 平均）",
+        "all_term_recall@5_mean": "recall@5_mean の別名（AT）",
+        "all_term_recall@10_mean": "recall@10_mean の別名（AT）",
+        "any_term_mrr_mean": "ALL（gold_any>=1 の全クエリ）の MRR 平均。全クエリを対象とする主要指標",
+        "any_term_hit@5_mean": "ALL（gold_any>=1 の全クエリ）の hit@5 平均",
+        "any_term_hit@10_mean": "ALL（gold_any>=1 の全クエリ）の hit@10 平均",
+        "any_term_p5_mean": "ALL（gold_any>=1 の全クエリ）の precision@5 平均",
+        "any_term.n": "ALL の対象クエリ数（gold_any>=1）",
+        "all_term.n": "AT の対象クエリ数（all-term gold あり）",
+        "totals.n_queries": "クエリ総数",
+        "totals.n_with_any_gold": "any-term gold (gold_any>=1) を持つクエリ数（ALL）",
+        "totals.n_with_all_gold": "all-term gold を持つクエリ数（AT）",
+        "totals.zero_result_count": "検索結果が0件だったクエリ数",
+        "totals.error_count": "エラーになったクエリ数",
+    }
 
 
 def format_markdown(result: dict, out: str) -> str:
@@ -261,34 +343,50 @@ def format_markdown(result: dict, out: str) -> str:
     rows = result["rows"]
     cfg = result["config"]
     s = result["summary"]
+    al = s.get("any_term", {})
+    at = s.get("all_term", {})
+
+    def fmt(v: float | None, spec: str = ".2f") -> str:
+        return "-" if v is None else format(v, spec)
+
     lines = [
         f"# nous 検索評価 {out}",
         "",
         f"- persona: {cfg['persona']}, limit: {cfg['limit']}",
         f"- 実行時刻: {time.strftime('%Y-%m-%d %H:%M:%S')}",
         "",
-        "| id | cat | query | gold_any | gold_all | ret | P@5 | hit@5 | MRR | R@5 | R@10 | lat(s) |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "## 部分集合別サマリ",
+        "",
+        "| subset | 対象クエリ集合 | n | hit@5 | hit@10 | MRR | P@5 | R@5 | R@10 |",
+        "|---|---|---|---|---|---|---|---|---|",
+        f"| ALL (any-term) | gold_any>=1 の全クエリ | {al.get('n', 0)} | {fmt(al.get('hit@5_mean'), '.3f')} | "
+        f"{fmt(al.get('hit@10_mean'), '.3f')} | {fmt(al.get('mrr_mean'), '.3f')} | {fmt(al.get('p5_mean'), '.3f')} | - | - |",
+        f"| AT (all-term) | all-term gold あり | {at.get('n', 0)} | - | - | {fmt(at.get('mrr_mean'), '.3f')} | "
+        f"- | {fmt(at.get('recall@5_mean'), '.3f')} | {fmt(at.get('recall@10_mean'), '.3f')} |",
+        "",
+        "## クエリ別",
+        "",
+        "| id | cat | query | gold_any | gold_all | ret | P@5 | hit@5 | hit@10 | MRR(AT) | MRR_any(ALL) | R@5 | R@10 | lat(s) |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for m in rows:
         if "error" in m:
-            lines.append(f"| {m['id']} | {m['cat']} | {m['q']} | - | - | - | - | - | - | - | - | ERR |")
+            lines.append(f"| {m['id']} | {m['cat']} | {m['q']} | - | - | - | - | - | - | - | - | - | - | ERR |")
             continue
-
-        def fmt(v: float | None, spec: str = ".2f") -> str:
-            return "-" if v is None else format(v, spec)
 
         lines.append(
             f"| {m['id']} | {m['cat']} | {m['q']} | {m['gold_count']} | {m['gold_all_count']} | "
-            f"{m['returned']} | {m['precision@5']:.2f} | {m['hit@5']:.0f} | "
-            f"{fmt(m.get('mrr'), '.3f')} | {fmt(m.get('recall@5'))} | {fmt(m.get('recall@10'))} | {m['latency_s']} |"
+            f"{m['returned']} | {m['precision@5']:.2f} | {m['hit@5']:.0f} | {m['hit@10']:.0f} | "
+            f"{fmt(m.get('mrr'), '.3f')} | {fmt(m.get('mrr_any'), '.3f')} | "
+            f"{fmt(m.get('recall@5'))} | {fmt(m.get('recall@10'))} | {m['latency_s']} |"
         )
     lines += [
         "",
         "## 集計",
         f"- hit@5 平均: {s.get('hit@5_mean', 0):.3f}（上位5件に関連が1件以上ある割合）",
         f"- precision@5 平均: {s.get('precision@5_mean', 0):.3f}（広い gold）",
-        f"- MRR 平均: {s.get('mrr_mean', 0):.3f}（狭い gold、{s.get('num_evaluable_all_term', 0)} クエリ）",
+        f"- MRR 平均 (ALL/any-term): {fmt(al.get('mrr_mean'), '.3f')}（gold_any>=1 の {al.get('n', 0)} クエリ）",
+        f"- MRR 平均 (AT/all-term): {fmt(at.get('mrr_mean'), '.3f')}（all-term gold ありの {at.get('n', 0)} クエリ）",
         f"- recall@5 平均: {s.get('recall@5_mean', 0):.3f}（狭い gold）",
         f"- recall@10 平均: {s.get('recall@10_mean', 0):.3f}（狭い gold）",
         f"- 遅延 中央値: {s.get('latency_median_s', 0):.3f}s / p95: {s.get('latency_p95_s', 0):.3f}s / 最大: {s.get('latency_max_s', 0):.3f}s",
@@ -325,15 +423,17 @@ def main() -> None:
         if "error" in m:
             continue
         mrr = m.get("mrr")
+        mrr_any = m.get("mrr_any")
         r5 = m.get("recall@5")
         r10 = m.get("recall@10")
         mrr_s = "  -  " if mrr is None else f"{mrr:.3f}"
+        mrr_any_s = "  -  " if mrr_any is None else f"{mrr_any:.3f}"
         r5_s = "  - " if r5 is None else f"{r5:.2f}"
         r10_s = "  - " if r10 is None else f"{r10:.2f}"
         print(
             f"{m['id']:16} gold={m['gold_count']:4}/{m['gold_all_count']:<3} ret={m['returned']:3} "
             f"P@5={m['precision@5']:.2f} hit={m['hit@5']:.0f} "
-            f"mrr={mrr_s} r@5={r5_s} r@10={r10_s} lat={m['latency_s']}s"
+            f"mrr={mrr_s} mrr_any={mrr_any_s} r@5={r5_s} r@10={r10_s} lat={m['latency_s']}s"
         )
 
     with open(f"{args.out}.json", "w", encoding="utf-8") as f:

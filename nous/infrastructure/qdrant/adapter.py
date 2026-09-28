@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+
+import numpy as np
 
 from nous.domain.shared.errors import VectorStoreError
 from nous.domain.shared.result import Failure, Result, Success
@@ -181,6 +183,36 @@ class QdrantVectorStore:
             return Success(total)
         except Exception as e:
             logger.error("Failed to batch upsert for '%s': %s", persona, e)
+            return Failure(VectorStoreError(str(e)))
+
+    async def retrieve_vectors(self, persona: str, keys: list[str]) -> Result[dict[str, np.ndarray], VectorStoreError]:
+        """Fetch stored vectors by memory keys in ONE batch (no re-encode).
+
+        Returns ``{memory_key: vector}`` for points that exist in Qdrant.
+        Keys without a point are simply absent from the mapping — callers
+        treat them as cosine-less (SQLite-only memories).
+        """
+        if not keys:
+            return Success({})
+        try:
+            client = await self.client_manager.get_client()
+            ids = [self._key_to_id(k) for k in keys]
+            records = await client.retrieve(
+                collection_name=self.collection_name(persona),
+                ids=ids,
+                with_payload=True,
+                with_vectors=True,
+            )
+            vectors: dict[str, np.ndarray] = {}
+            for rec in records:
+                key = (rec.payload or {}).get("key", "")
+                # qdrant の型定義上 vector は宽い union だが、upsert は list[float] のみ書く
+                vec = cast("list[float]", rec.vector)
+                if key and vec is not None:
+                    vectors[key] = np.asarray(vec, dtype=float)
+            return Success(vectors)
+        except Exception as e:
+            logger.error("Failed to retrieve vectors for '%s' (%d keys): %s", persona, len(keys), e)
             return Failure(VectorStoreError(str(e)))
 
     async def delete(self, persona: str, key: str) -> Result[None, VectorStoreError]:

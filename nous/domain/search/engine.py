@@ -24,7 +24,7 @@ from nous.domain.shared.time_utils import compute_recency_decay, get_now, parse_
 from nous.domain.value_objects import normalize_emotion
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
     from datetime import datetime
 
     import numpy as np
@@ -152,6 +152,25 @@ class SearchResult:
     similarity_flag: bool = False  # True when cosine_similarity >= threshold
     cosine: float | None = None  # rank_policy 適用時の生コサイン（clamp なし）
     graph_boost: float | None = None  # rank_policy 適用時の graph 寄与（entity + PPR/SA、debug 可視性）
+    lexical_score: float | None = None  # rank_policy 適用時に使う 0-1 の語一致スコア。keyword/fts 由来のみ非 None
+
+
+def _dedupe_keep_best(results: list[SearchResult]) -> list[SearchResult]:
+    """key で dedup し高スコアを残す（スコア降順）。
+
+    keyword と fts が同一 key を別 SearchResult として持ち得るため、
+    生き残り（高スコア側）の ``lexical_score`` は両者の最大値を統合して保持する。
+    """
+    seen: dict[str, SearchResult] = {}
+    for r in results:
+        prev = seen.get(r.memory.key)
+        if prev is None:
+            seen[r.memory.key] = r
+            continue
+        keep = r if r.score > prev.score else prev
+        if prev.lexical_score is not None or r.lexical_score is not None:
+            keep.lexical_score = max(prev.lexical_score or 0.0, r.lexical_score or 0.0)
+    return sorted(seen.values(), key=lambda x: x.score, reverse=True)
 
 
 class SearchEngine:
@@ -167,6 +186,7 @@ class SearchEngine:
         link_repo=None,
         entity_service=None,
         embedding_provider: Callable[[], ContentEncoder | None] | None = None,
+        vector_retriever: Callable[[list[str]], Awaitable[dict[str, np.ndarray]]] | None = None,
         rerank_enabled: bool = False,
     ) -> None:
         self._keyword = keyword_search
@@ -177,6 +197,9 @@ class SearchEngine:
         self._link_repo = link_repo
         self._entity_service = entity_service
         self._embedding_provider = embedding_provider
+        # Qdrant から key 指定で stored vector を取る口（候选 re-encode の排除用）。
+        # None のとき cosine を持たない候補は relevance 0.0 で fail-open（re-encode しない）。
+        self._vector_retriever = vector_retriever
         # 既定 False: cross-encoder rerank 段は明示的に有効化されたときのみ走る
         # （値は Settings.search.rerank_enabled / NOUS_SEARCH__RERANK_ENABLED から配線）。
         self._rerank_enabled = rerank_enabled
@@ -300,8 +323,13 @@ class SearchEngine:
         reflection タグ & penalty != 1.0 のとき composite *= penalty（全体に global 掛け）。
 
         relevance は semantic 検索が carry した qdrant cosine を再利用し、cosine を
-        持たない候補（keyword/fts 由来）のみ再 encode する（変更B）。
-        fail-open: embedding provider 無し・エンコード失敗時は relevance=0.0 で
+        持たない候補（keyword/fts 由来）は Qdrant から key 指定で stored vector を
+        1 バッチ取得し、query vector との内積で relevance を計算する（候補の
+        re-encode は完全排除 — J4125 で数秒/クエリ消費していた箇所）。
+        Qdrant に存在しない key（SQLite のみの記憶）は cosine なし
+        （relevance=0.0、rec/imp/lexical のみで評価）。encode へのフォールバックは
+        レイテンシ再発のため設けない。
+        fail-open: embedding provider 無し・取得失敗時は relevance=0.0 で
         rec/imp のみのスコアで継続する。
         """
         policy = query.rank_policy
@@ -311,25 +339,32 @@ class SearchEngine:
         # 変更B: qdrant semantic 検索の score は cosine そのものなので
         # SearchResult.cosine に carry 済み。それを持つ候補は再 encode を省く。
         rel_by_index: dict[int, float] = {i: float(r.cosine) for i, r in enumerate(candidates) if r.cosine is not None}
-        need_encode = [(i, r) for i, r in enumerate(candidates) if r.memory.content and r.cosine is None]
-        encoder = self._embedding_provider() if self._embedding_provider is not None else None
-        if encoder is not None and need_encode:
-            try:
-                qvec = (await encoder.async_encode_batch([query.text], is_query=True))[0]
-            except Exception:
-                logger.debug("rank_policy: query embedding failed; relevance=0.0 continues", exc_info=True)
-                qvec = None
+        need_vec = [(i, r) for i, r in enumerate(candidates) if r.memory.content and r.cosine is None]
+        if need_vec and self._vector_retriever is not None:
+            encoder = self._embedding_provider() if self._embedding_provider is not None else None
+            qvec = None
+            if encoder is not None:
+                try:
+                    # query 側の encode は 1 件のみ（候補側は encode しない）
+                    qvec = (await encoder.async_encode_batch([query.text], is_query=True))[0]
+                except Exception:
+                    logger.debug("rank_policy: query embedding failed; relevance=0.0 continues", exc_info=True)
             if qvec is not None:
                 try:
-                    dvecs = await encoder.async_encode_batch([r.memory.content for _, r in need_encode], is_query=False)
-                    for (i, _r), dvec in zip(need_encode, dvecs, strict=False):
-                        try:
-                            rel_by_index[i] = float(np.dot(qvec, dvec))
-                        except Exception:
-                            logger.debug("rank_policy: dot product failed for candidate %s", i, exc_info=True)
-                            rel_by_index[i] = 0.0
+                    stored = await self._vector_retriever([r.memory.key for _, r in need_vec]) or {}
                 except Exception:
-                    logger.debug("rank_policy: batch encode failed; relevance=0.0 continues", exc_info=True)
+                    logger.debug("rank_policy: stored vector retrieve failed; relevance=0.0 continues", exc_info=True)
+                    stored = {}
+                for i, r in need_vec:
+                    vec = stored.get(r.memory.key)
+                    if vec is None:
+                        # Qdrant に無い key（SQLite のみ）→ cosine なし。encode に戻さない
+                        continue
+                    try:
+                        rel_by_index[i] = float(np.dot(qvec, vec))
+                    except Exception:
+                        logger.debug("rank_policy: dot product failed for candidate %s", i, exc_info=True)
+                        rel_by_index[i] = 0.0
 
         # H6 案B: graph 信号（entity match + PPR/SA）を 1 回だけ計算して composite に統合。
         # graph_boost_weight=0 のときは計算自体を skip（現行 composite と完全一致）。
@@ -344,7 +379,12 @@ class SearchEngine:
                 orig.memory.created_at
             ) + policy.importance_weight * float(getattr(orig.memory, "importance", 0.5))
             graph_boost = policy.graph_boost_weight * graph_signal.get(orig.memory.key, 0.0)
-            composite = base + policy.relevance_weight * rel + graph_boost
+            composite = (
+                base
+                + policy.relevance_weight * rel
+                + graph_boost
+                + policy.lexical_weight * float(orig.lexical_score or 0.0)
+            )
             if policy.reflection_penalty != 1.0 and "reflection" in (orig.memory.tags or []):
                 composite *= policy.reflection_penalty
             ranked.append(
@@ -355,6 +395,9 @@ class SearchEngine:
                     similarity_flag=orig.similarity_flag,
                     cosine=rel,
                     graph_boost=graph_boost,
+                    # F1 fix: lexical_score も生存させる。落とすと policy 段を
+                    # 2 回通る経路（cache hit 後の再適用等）で語一致信号が消える。
+                    lexical_score=orig.lexical_score,
                 )
             )
         ranked.sort(key=lambda r: r.score, reverse=True)
@@ -486,7 +529,14 @@ class SearchEngine:
         ``cosine`` に carry して rank_policy 段の再 encode を省略する。
         """
         return [
-            SearchResult(memory=m, score=s, source=source, cosine=s if source == "semantic" else None) for m, s in pairs
+            SearchResult(
+                memory=m,
+                score=s,
+                source=source,
+                cosine=s if source == "semantic" else None,
+                lexical_score=s if source in ("keyword", "fts") else None,
+            )
+            for m, s in pairs
         ]
 
     def _keyword_search(
@@ -599,12 +649,8 @@ class SearchEngine:
         else:
             all_results.sort(key=lambda x: x.score, reverse=True)
 
-        # Deduplicate by memory key, keeping highest score
-        seen: dict[str, SearchResult] = {}
-        for r in all_results:
-            if r.memory.key not in seen or r.score > seen[r.memory.key].score:
-                seen[r.memory.key] = r
-        deduped = sorted(seen.values(), key=lambda x: x.score, reverse=True)
+        # Deduplicate by memory key, keeping highest score (lexical_score は max 統合)
+        deduped = _dedupe_keep_best(all_results)
 
         # 5.5 Entity matching boost — H6: rank_policy 経路では score 加算しない。
         # entity 信号は _apply_rank_policy が graph_signal として composite に統合する。
@@ -824,12 +870,8 @@ class SearchEngine:
         else:
             all_results.sort(key=lambda x: x.score, reverse=True)
 
-        # Deduplicate by memory key, keeping highest score
-        seen: dict[str, SearchResult] = {}
-        for r in all_results:
-            if r.memory.key not in seen or r.score > seen[r.memory.key].score:
-                seen[r.memory.key] = r
-        deduped = sorted(seen.values(), key=lambda x: x.score, reverse=True)
+        # Deduplicate by memory key, keeping highest score (lexical_score は max 統合)
+        deduped = _dedupe_keep_best(all_results)
         # truncation しない: 件数は _finalize（post-filter → top_k）で決まる
         return Success(deduped)
 

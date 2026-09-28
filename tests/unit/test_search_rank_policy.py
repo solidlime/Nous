@@ -7,6 +7,9 @@
 ① policy による composite 順 ② RRF 下位 → policy 上位の回帰 ③ 取得プール拡大
 ④ provider=None fail-open ⑤ reflection penalty（0.5 適用 / 1.0 noop）
 ⑥ cache キーへの policy 包含と cache hit 時の policy 適用 ⑦ encoder 例外 fail-open
+
+relevance の候補側は Qdrant stored vector（vector_retriever フェイク）から取得し、
+候補の re-encode は行わない（p95 改善: 候補 re-encode 完全排除）。
 """
 
 from __future__ import annotations
@@ -71,11 +74,21 @@ class _RaisingEncoder:
 def _make_engine(
     pairs: list[tuple[Memory, float]],
     encoder: object | None = None,
+    key_vecs: dict[str, np.ndarray] | None = None,
 ) -> SearchEngine:
+    """keyword-only engine。key_vecs があれば Qdrant retrieve のフェイクを配線する。"""
     strat = MagicMock()
     strat.search.return_value = Success(pairs)
     provider = (lambda: encoder) if encoder is not None else (lambda: None)
-    return SearchEngine(keyword_search=strat, embedding_provider=provider)
+
+    async def _retrieve(keys: list[str]) -> dict[str, np.ndarray]:
+        return {k: key_vecs[k] for k in keys if key_vecs and k in key_vecs}
+
+    return SearchEngine(
+        keyword_search=strat,
+        embedding_provider=provider,
+        vector_retriever=_retrieve if key_vecs is not None else None,
+    )
 
 
 def _engine_with_encoder(
@@ -83,8 +96,11 @@ def _engine_with_encoder(
     query_vec: np.ndarray | None = None,
     content_vecs: dict[str, np.ndarray] | None = None,
 ) -> SearchEngine:
+    """content_vecs（content→vec）を key→vec に変換して retriever に渡す。"""
     qv = query_vec if query_vec is not None else np.array([1.0, 0.0])
-    return _make_engine(pairs, _VecEncoder(qv, content_vecs or {}))
+    cv = content_vecs or {}
+    key_vecs = {m.key: cv[m.content] for m, _ in pairs if m.content in cv}
+    return _make_engine(pairs, _VecEncoder(qv, cv), key_vecs=key_vecs)
 
 
 def _cos(result: SearchResult) -> float:
@@ -113,7 +129,7 @@ class TestPolicyCompositeOrder:
                 "ドンピシャ関連": np.array([1.0, 0.0]),
             },
         )
-        result = await engine.search(SearchQuery(text="クエリ", top_k=3, rank_policy=RankPolicy()))
+        result = await engine.search(SearchQuery(text="クエリ", top_k=3, rank_policy=RankPolicy(lexical_weight=0.0)))
         assert result.is_ok
         keys = [r.memory.key for r in result.value]
         assert keys == ["m3", "m2", "m1"]
@@ -135,7 +151,7 @@ class TestPolicyCompositeOrder:
             [(mem, 0.7)],
             content_vecs={"逆方向の内容": np.array([-1.0, 0.0])},
         )
-        result = await engine.search(SearchQuery(text="クエリ", top_k=3, rank_policy=RankPolicy()))
+        result = await engine.search(SearchQuery(text="クエリ", top_k=3, rank_policy=RankPolicy(lexical_weight=0.0)))
         assert result.is_ok
         assert _cos(result.value[0]) == pytest.approx(-1.0, abs=1e-6)
         assert result.value[0].score == pytest.approx(0.3 * decay + 0.15 + 0.4 * -1.0, abs=1e-6)
@@ -277,7 +293,7 @@ class TestFailOpenNoProvider:
         m_hi = _mem("m1", "高重要", importance=0.9, created_at=fixed)
         m_lo = _mem("m2", "低重要", importance=0.2, created_at=fixed)
         engine = _make_engine([(m_lo, 0.9), (m_hi, 0.5)], encoder=None)
-        result = await engine.search(SearchQuery(text="q", top_k=5, rank_policy=RankPolicy()))
+        result = await engine.search(SearchQuery(text="q", top_k=5, rank_policy=RankPolicy(lexical_weight=0.0)))
         assert result.is_ok
         assert [r.memory.key for r in result.value] == ["m1", "m2"]
         for r in result.value:
@@ -354,7 +370,16 @@ class TestPolicyCache:
         strat = MagicMock()
         strat.search.return_value = Success(pairs)
         encoder = _VecEncoder(np.array([1.0, 0.0]), content_vecs)
-        engine = SearchEngine(keyword_search=strat, embedding_provider=lambda: encoder)
+        key_vecs = {m.key: content_vecs[m.content] for m, _ in pairs if m.content in content_vecs}
+
+        async def _retrieve(keys: list[str]) -> dict[str, np.ndarray]:
+            return {k: key_vecs[k] for k in keys if k in key_vecs}
+
+        engine = SearchEngine(
+            keyword_search=strat,
+            embedding_provider=lambda: encoder,
+            vector_retriever=_retrieve,
+        )
         q = SearchQuery(text="cache me", mode="hybrid", top_k=5, rank_policy=RankPolicy())
 
         r1 = await engine.search(q)
@@ -435,14 +460,14 @@ class TestCompositeScoreFormulaEngine:
 
     @pytest.mark.asyncio
     async def test_weights_sum_to_correct_total(self):
-        """既定重みで recency≈1, importance=1, rel=1 → composite ≈ 1.0。"""
+        """rec/imp/rel の既定重み合計（lexical 無効）で recency≈1, importance=1, rel=1 → composite ≈ 1.0。"""
         fixed = get_now()
         mem = _mem("m1", "全要素最高", importance=1.0, created_at=fixed)
         engine = _engine_with_encoder(
             [(mem, 0.5)],
             content_vecs={"全要素最高": np.array([1.0, 0.0])},
         )
-        result = await engine.search(SearchQuery(text="q", top_k=5, rank_policy=RankPolicy()))
+        result = await engine.search(SearchQuery(text="q", top_k=5, rank_policy=RankPolicy(lexical_weight=0.0)))
         assert result.is_ok
         assert result.value[0].score == pytest.approx(1.0, abs=1e-3)
 
@@ -481,13 +506,13 @@ class TestCompositeScoreFormulaEngine:
             [(mem, 0.5)],
             content_vecs={"無関係な古い記憶": np.array([0.0, 1.0])},
         )
-        result = await engine.search(SearchQuery(text="q", top_k=5, rank_policy=RankPolicy()))
+        result = await engine.search(SearchQuery(text="q", top_k=5, rank_policy=RankPolicy(lexical_weight=0.0)))
         assert result.is_ok
         assert result.value[0].score < 0.01
 
     @pytest.mark.asyncio
     async def test_custom_weight_precision(self):
-        """既知入力の composite が手計算と一致（rw=0.3, iw=0.3, relw=0.4）。"""
+        """既知入力の composite が手計算と一致（rw=0.3, iw=0.3, relw=0.4、lexical 無効）。"""
         fixed = get_now() - timedelta(days=5)
         decay = compute_recency_decay(fixed)
         mem = _mem("m1", "既知内容", importance=0.5, created_at=fixed)
@@ -495,7 +520,7 @@ class TestCompositeScoreFormulaEngine:
             [(mem, 0.5)],
             content_vecs={"既知内容": np.array([0.8, 0.2])},
         )
-        result = await engine.search(SearchQuery(text="q", top_k=5, rank_policy=RankPolicy()))
+        result = await engine.search(SearchQuery(text="q", top_k=5, rank_policy=RankPolicy(lexical_weight=0.0)))
         assert result.is_ok
         expected = 0.3 * decay + 0.3 * 0.5 + 0.4 * 0.8
         assert result.value[0].score == pytest.approx(expected, abs=1e-6)

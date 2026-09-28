@@ -27,6 +27,8 @@ from nous.domain.shared.result import Failure, Success
 from nous.infrastructure.embedding.model import EmbeddingModel
 
 if TYPE_CHECKING:
+    import numpy as np
+
     from nous.config.settings import Settings
     from nous.domain.memory.graph import EntityService
     from nous.domain.memory.service import MemoryService
@@ -196,6 +198,13 @@ class VectorStackMixin:
             keyword = SQLiteKeywordSearch(self.memory_repo)
             semantic = QdrantSemanticSearch(vector_store, self.memory_repo) if vector_store else None
 
+            async def _retrieve_candidate_vectors(keys: list[str]) -> dict[str, np.ndarray]:
+                """key 指定で Qdrant から stored vector を 1 バッチ取得（候选 re-encode 排除用）。"""
+                if vector_store is None:
+                    return {}
+                result = await vector_store.retrieve_vectors(getattr(semantic, "persona", ""), keys)
+                return result.value if isinstance(result, Success) else {}
+
             def _strength_lookup(key: str) -> tuple[float, float] | None:
                 result = self.memory_repo.get_strength(key)
                 if isinstance(result, Success) and result.value is not None:
@@ -221,6 +230,7 @@ class VectorStackMixin:
                 embedding_provider=lambda: getattr(self, "_embedding", None),
                 # cross-encoder rerank 段は既定無効（NOUS_SEARCH__RERANK_ENABLED=true で復帰）。
                 rerank_enabled=self.settings.search.rerank_enabled,
+                vector_retriever=_retrieve_candidate_vectors,
             )
             # worker 経路ではハンドラの set_persona が走らないため、生成時に必ず伝播させる
             search_engine.set_persona(self.persona)

@@ -35,7 +35,7 @@
 
 > **計測時の注意**: HTTP API の `q` に生の日本語を渡すと h11 が request line を拒否する（`Invalid HTTP request received.`）。`curl --get --data-urlencode 'q=...'` を使う。
 
-## 実装（修正1〜6）
+## 実装（修正1〜10）
 
 | # | 内容 | 主なファイル |
 |---|---|---|
@@ -45,25 +45,55 @@
 | 修正4 | MCP/chat の `keyword_weight` 既定を 1.0 に統一 | `mcp/tools.py`, `_tools_memory.py`, `definitions.py`, `ranker.py` |
 | 修正5 | recency 既定値の統一（暫定 0.0） | 同上 |
 | 修正6 | **recency を相対（乗数）方式のタイブレークに変更**。`adjusted = rrf_score * multiplier`（`multiplier` は 1.0 起点で importance/recency をスケール）。既定 0.05 を HTTP/MCP で統一 | `ranker.py`, `settings.py`, `engine.py` |
+| 修正7 | **F1: RRF 統合時に勝者候補の付加フィールド（`cosine` / `lexical_score` / `similarity_flag`）を引き継ぐ**。これを落とすと rank_policy 段の relevance/lexical 項が構造的に 0 になり composite がデッドコード化する | `ranker.py` |
+| 修正8 | MCP `memory_search` と REST `/api/search/{persona}` に **RankPolicy（composite ランキング）を配線**（従来は chat 経路のみで、両 API 経路は RRF 順位のままだった） | `_tools_memory.py`, `search.py`, `engine.py` |
+| 修正9 | 候補の**再 encode を排除**（ベクトル再利用。semantic 候補の cosine を RRF 統合後もそのまま使う） | `engine.py`, `vector_stack.py` |
+| 修正10 | REST/MCP の重みを `RankPolicy.from_weight_args` で**統一**（REST はクラス既定 0.25 → MCP と同じ 1.0 に）。両経路の順位が完全一致することをテストで保証 | `policy.py`, `search.py`, `_tools_memory.py` |
 
 全て追加的・後方互換（DB スキーマ無変更、MCP スキーマ互換）。
 
 ## ベンチ結果（before/after）
 
-評価ハーネス: `tests/benchmark/` + `scripts/eval_search_quality.py`（12 クエリ、gold は all-term 定義、計測可能 9 件）
+評価ハーネス: `tests/benchmark/` + `scripts/eval_search_quality.py`（12 クエリ）。
 
-| 実行 | 状態 | zero-result | recall@5 | MRR | p95 latency |
-|---|---|---|---|---|---|
-| baseline_v1 | 本番（semantic 死） | 1 | 0.5556 | 0.7284 | — |
-| verify_v1 | 修正1 | 0 | 0.9259 | 0.8704 | 8.4s（rerank） |
-| verify_v2 | 修正1+2 | 0 | 0.9259 | 0.8704 | 8.4s（rerank） |
-| eval_v3_warm | 修正1〜4 | 0 | **0.9815** | 0.8704 | **0.097s** |
-| **最終（fixer#6）** | **修正1〜6** | **0** | **0.9815** | **1.0000** | **0.093s** |
+| 実行 | 状態 | zero-result | recall@5 | MRR (ALL 12) | MRR (AT 9) | p95 latency | artifact |
+|---|---|---|---|---|---|---|---|
+| baseline_v1 | 本番（semantic 死） | 3 | 0.5556 | **0.8182** | 1.0000 | — | `research/nous-search-eval-20260928/baseline_v1.json` |
+| verify_v1 | 修正1 | 0 | 0.9259 | 0.8704 | 0.8889 | 8.4s（rerank 有効） | `verify_v1.json` |
+| eval_v3_warm | 修正1〜4 | 0 | **0.9815** | 0.8611 | 1.0000 | **0.097s** | `eval_v3_warm.json.json` |
+| final_v3_mcp_verify_warm2 | 修正1〜6（MCP, 暗黙 top_k=5） | 0 | **0.9815** | 0.8611 | 1.0000 | 0.238s | `final_v3_mcp_verify_warm2.json.json` |
+| **final_v5_mcp_quiet** | **＋重み統一（MCP, top_k=20, 無負荷）** | **0** | **0.9815** | **1.0000** | **1.0000** | **0.366s** | `final_v5_mcp_quiet.json.json` |
+
+**指標定義**: `MRR (AT)` = all-term gold（全語を含む記憶。9 クエリで計測可）。`MRR (ALL)` = any-term gold（いずれかを含む記憶。全 12 クエリ）。**合格ライン（案C）の MRR 判定は ALL（全 12 クエリ）で行う**。
 
 - **recall@5: 0.5556 → 0.9815**（+77%）
-- **MRR: 0.7284 → 1.0000**（AT 9 クエリ全て top1 正解）
-- **p95: 8.4s → 0.093s**（rerank 既定無効化）
-- 合格ライン（案C）: zero-result 0 / recall@5 ≥ 0.75 / MRR ≥ 0.80 / p95 ≤ 1.5s → **全達成**
+- **MRR (ALL): 0.8182 → 1.0000**（全 12 クエリで gold が top1）
+- **p95: 8.4s（rerank 有効時）→ 0.366s**
+- 合格ライン（案C、**ALL 基準**）: **zero-result 0 ✅ / recall@5 0.9815 ≥ 0.75 ✅ / MRR 1.0000 ≥ 0.80 ✅ / p95 0.366s ≤ 1.5s ✅**
+
+### 実クエリ 130 件（search_log 頻度順、検証環境 nous-verify2）
+
+| 実行 | 経路 | zero-result | MRR | p5 | artifact |
+|---|---|---|---|---|---|
+| 修正前（本番） | REST | 0 | 0.9324 | — | `lexical_ab_analysis.md`（測定2） |
+| 配線直後（lexical 0.25） | REST | 0 | 0.9056 | 0.7776 | （§監査指摘への対応参照） |
+| **重み統一後** | **MCP** | **0** | **0.9577** | **0.8144** | `artifacts/real130_after_mcp.json` |
+| **重み統一後** | **REST** | **0** | **0.9577** | **0.8144** | （MCP と summary 完全一致） |
+
+- 注1: `p95 8.9s` の測定値が一時記録されたが、これは並行実行した mypy/pytest との **CPU 競合**（Celeron 4 コア環境）が原因。無負荷の再測定では 0.366s。
+- 注2: ハーネス `mcp_search` が `"limit"` を送っていた過去バグ（正しい引数は `"top_k"`、pydantic が黙って無視）のため、MCP 経由の過去測定は常に暗黙 top_k=5 だった。修正後は明示 top_k が効く。
+
+### 監査指摘への対応状況（2026-09-28 再実測）
+
+**指摘1（合格ラインのメトリクス切り替え）**: 合格ラインの MRR 判定を **ALL（any-term 全 12 クエリ）** に統一して再評価。上表の通り **ALL MRR 1.0000**（≥ 0.80）を達成。AT 値（1.0000）も併記しており、狭い方の指標のみでの主張はしない。
+
+**指摘2（再現可能な artifact）**: 上表の artifact 列の通り、各実行の JSON を `research/nous-search-eval-20260928/` に保存。実クエリ 130 件も `artifacts/real130_after_mcp.json` として保存済み。
+
+**指摘3（`VRM 照明` の top1 主張）**: 2026-09-28 に再実測（top_k=5、MCP 経由）:
+- **本番（旧コード、RankPolicy 配線前）**: top1 = `memory_20260928131831_782616_3b7207a8`（task-5 の自己記録）、元 gold `memory_20260915014126_130820_0140fb35` は **2 位**
+- **検証（重み統一後、配線済み）**: top1 = **元 gold**（2 位 = 別の照明関連記憶 `memory_20260915020641_093119_91c26cd7`）
+
+task-4 時点の「gold top1」はその時点では正しかったが、task-5 で自己記録記憶が追加されたことで本番では 2 位に変化した（自己記録の内容が「nous 検索精度改善」でありクエリ語と強く重なるため）。**本番でも配線後のコードでは元 gold が top1 になる**ことを検証環境で確認済み。デプロイ後に本番で再実測し本節を確定する。
 
 ## デプロイ手順（再現用）
 
@@ -112,7 +142,7 @@ python3 run_eval.py --base-url http://nas:26262 --persona herta \
 
 ## 残存課題
 
-- **any-term 3 クエリ（日本語 OR・一般語）の MRR が低い**（baseline 0.0 → 修正後 0.144）。all-term gold が存在しないクエリの正解判定が難しく、計測方法の改善も含めて継続課題
+- **一般語・抽象語の複合クエリ（日本語 OR 含む）**: 実クエリ 130 件で gold を top5 に入れられないのは 3 件（`睡眠時 記憶統合 深眠 タグ整理` MRR 0.000 / `機能確認テスト` 0.125 / `queued 処理` 0.250）。残り 5 件は MRR 0.333〜0.5（gold が 2〜4 位）で実用上は許容。修正前は低 MRR 17 件だったので大幅に改善しているが、語彙の重なりが弱い一般語クエリは継続課題
 - sudachipy 0.7.x 対応（辞書の新形式移行 or 読み込み対応）
 - rerank を有効化したい場合の高速化（ONNX 量子化等）
 - グラフ信号（H6）の寄与の継続観測

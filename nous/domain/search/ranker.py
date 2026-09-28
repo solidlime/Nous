@@ -83,11 +83,19 @@ class RRFRanker:
                 multiplier += query.recency_weight * recency_bonus
 
             adjusted_score = rrf_score * multiplier
+            # F1 fix: 勝者候補の付加フィールド（cosine / lexical_score /
+            # similarity_flag）を引き継ぐ。これを落とすと rank_policy 段の
+            # relevance（semantic cosine の re-encode 省略）と lexical（語一致）
+            # 項が構造的に 0 になり、engine 側 composite がデッドコード化する
+            # （oracle BLOCK F1）。
             merged.append(
                 SearchResult(
                     memory=original.memory,
                     score=adjusted_score,
                     source="hybrid",
+                    similarity_flag=original.similarity_flag,
+                    cosine=original.cosine,
+                    lexical_score=original.lexical_score,
                 )
             )
 
@@ -138,6 +146,8 @@ class ForgettingCurveRanker:
                         score=new_score,
                         source=r.source,
                         similarity_flag=r.similarity_flag,
+                        cosine=r.cosine,
+                        lexical_score=r.lexical_score,
                     )
                 )
             else:
@@ -187,6 +197,9 @@ class TopicAffinityRanker:
                     memory=r.memory,
                     score=r.score + bonus,
                     source=r.source,
+                    similarity_flag=r.similarity_flag,
+                    cosine=r.cosine,
+                    lexical_score=r.lexical_score,
                 )
             )
         adjusted.sort(key=lambda x: x.score, reverse=True)
@@ -236,6 +249,9 @@ class EmotionRecallBiasRanker:
                     memory=r.memory,
                     score=r.score * boost,
                     source=r.source,
+                    similarity_flag=r.similarity_flag,
+                    cosine=r.cosine,
+                    lexical_score=r.lexical_score,
                 )
             )
         adjusted.sort(key=lambda x: x.score, reverse=True)

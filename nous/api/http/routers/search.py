@@ -122,7 +122,9 @@ def register_search_routes(mcp) -> None:
         if ctx is None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
+            from nous.api.mcp._tools_memory import MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT
             from nous.domain.search.engine import SearchQuery
+            from nous.domain.search.policy import RankPolicy
 
             query_kwargs: dict = {"text": q, "mode": mode, "top_k": limit}
             if date_range:
@@ -132,6 +134,16 @@ def register_search_routes(mcp) -> None:
                     query_kwargs["min_importance"] = float(min_importance_str)
             if emotion:
                 query_kwargs["emotion"] = emotion
+            # oracle BLOCK F3 + 重み統一: REST 経路にも RankPolicy（複合スコア段）を
+            # 配線する。重みは MCP memory_search の既定と同一（from_weight_args 経由）。
+            # 実利用経路は MCP であり実クエリで高い実績を持つため統一先は MCP 既定。
+            # 引数・戻り値の形式は不変（変わるのは順位のみ）。
+            query_kwargs["rank_policy"] = RankPolicy.from_weight_args(
+                importance_weight=0.0,
+                recency_weight=MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT,
+                vector_weight=1.0,
+                keyword_weight=1.0,
+            )
             query = SearchQuery(**query_kwargs)
             if hasattr(ctx.search_engine, "_semantic") and ctx.search_engine._semantic is not None:
                 ctx.search_engine._semantic.persona = persona  # noqa: SLF001

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from nous.api.mcp._envelope import ToolErrorCode, tool_error, tool_ok
 from nous.api.mcp._tools_helpers import tool_called_audited
 from nous.domain.search.engine import SearchQuery, SearchResult
+from nous.domain.search.policy import RankPolicy
 from nous.domain.shared.errors import DuplicateMemoryError
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import format_iso, get_now, relative_time_str
@@ -413,6 +414,17 @@ async def _tool_memory_search(
     recency_weight = max(0.0, min(1.0, recency_weight))
     vector_weight = max(0.0, min(1.0, vector_weight))
     keyword_weight = max(0.0, min(1.0, keyword_weight))
+    # oracle BLOCK F2: MCP 実利用経路にも RankPolicy（複合スコア段）を配線する。
+    # tool 引数 → policy 重みのマップは RankPolicy.from_weight_args（共通ヘルパー）に
+    # 一元化。REST /api/search も同一ヘルパー＋同一既定重みを使う（経路間不一致防止）。
+    # RRF 段の SearchQuery.vector_weight / keyword_weight には従来値をそのまま渡し
+    # （融合段の挙動不変）、policy 側のみ語一致・cosine を考慮した再順位付けを行う。
+    rank_policy = RankPolicy.from_weight_args(
+        importance_weight=importance_weight,
+        recency_weight=recency_weight,
+        vector_weight=vector_weight,
+        keyword_weight=keyword_weight,
+    )
     search_query = SearchQuery(
         text=query,
         top_k=top_k,
@@ -426,6 +438,7 @@ async def _tool_memory_search(
         keyword_weight=keyword_weight,
         kind=kind,
         sort=sort,
+        rank_policy=rank_policy,
     )
     ctx.search_engine.set_persona(persona)
     result = await ctx.search_engine.search(search_query)
