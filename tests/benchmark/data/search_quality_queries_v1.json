@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "persona": "herta",
+  "note": "らうらうの症状実例ベース。正解集合は herta_corpus.json の content から any-term 一致で自動生成（generic カテゴリは precision 計測）。",
+  "queries": [
+    {"id": "ja_or_001", "cat": "ja_or", "q": "焼肉 寿司", "note": "らうらう実例: 金沢どか食い調査"},
+    {"id": "ja_or_002", "cat": "ja_or", "q": "ピソリーノ 閉店", "note": "らうらう実例: 金沢food調査の一部"},
+    {"id": "ja_or_003", "cat": "ja_or", "q": "金沢 食べ放題", "note": "症状元ネタの中心トピック"},
+    {"id": "ja_or_004", "cat": "ja_or", "q": "TTS 感情", "note": "any=23/all=1: AND結合の弱点が露呈するはず"},
+    {"id": "ja_or_005", "cat": "ja_or", "q": "VRM 照明", "note": "any=23/all=2"},
+    {"id": "ja_or_006", "cat": "ja_or", "q": "queued 処理", "note": "any=21/all=0: ANDではkeyword経路0件"},
+    {"id": "ja_single", "cat": "ja_single", "q": "ピソリーノ", "note": "単一日本語固有名詞"},
+    {"id": "proper_001", "cat": "proper", "q": "orcarouter", "note": "英語固有名詞 1件正解"},
+    {"id": "proper_002", "cat": "proper", "q": "x-keeper", "note": "ハイフン入り固有名詞 6件"},
+    {"id": "en_001", "cat": "en", "q": "TTS emotion", "note": "英語複数語"},
+    {"id": "en_002", "cat": "en", "q": "queued job", "note": "英語複数語 all=0"},
+    {"id": "generic_np_001", "cat": "generic_np", "q": "確認 お願い", "note": "汎用語ノイズ耐性: precision重視"}
+  ]
+}

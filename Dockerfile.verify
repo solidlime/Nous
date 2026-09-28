@@ -1,0 +1,23 @@
+# 本番反映用 派生イメージ（task-4）
+# 設計: task3_verify_stack_design.md §7.1
+#
+# 目的: 本番イメージ（digest 固定）に修正済みソースのみを重ねる。
+#       FROM で継承するため pip が走らず、依存は本番と完全に同一になる
+#       （フルビルドだと requirements のレンジ指定により依存が再解決され、
+#         検証で見ていない環境が本番に入る）。
+#
+# ビルド（NAS ホストで実行、1〜3分）:
+#   cd /volume1/docker/pi/root/workspace/Nous
+#   docker build -f Dockerfile.verify -t ghcr.io/solidlime/nous:4.0.1-<shortsha> .
+#   docker push ghcr.io/solidlime/nous:4.0.1-<shortsha>
+#   docker image inspect ghcr.io/solidlime/nous:4.0.1-<shortsha> \
+#     --format '{{index .RepoDigests 0}}'
+#
+# 注意: ビルド前に検証スタック（nous-verify）と同じソース状態であることを確認すること。
+#       cd /root/workspace/Nous && git rev-parse HEAD && git diff | sha256sum
+
+FROM ghcr.io/solidlime/nous@sha256:fc80d4e4e8a6872c2af2aade1573754bedd0186102c4dd15a6589f35fd7778ed
+
+# 修正済みソースを丸ごと重ねる。本番イメージ＝HEAD なので、
+# この COPY の差分は「未コミット変更」そのものになる
+COPY nous/ /app/nous/
