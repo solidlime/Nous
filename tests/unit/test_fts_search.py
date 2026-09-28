@@ -247,7 +247,8 @@ class TestSearchQueryNewFields:
         """New fields should have backward-compatible defaults."""
         q = SearchQuery(text="test")
         assert q.vector_weight == 1.0
-        assert q.keyword_weight == 0.5
+        # 欠陥B 修正で 0.5→1.0（keyword 候補が semantic に押し負けるため）
+        assert q.keyword_weight == 1.0
         assert q.similarity_threshold == 0.85
 
     def test_new_fields_positional_construction(self):

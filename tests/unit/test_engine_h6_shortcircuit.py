@@ -1,7 +1,8 @@
-"""audit H6: rank_policy 指定時は下流段（entity boost / reranker / spreading
-activation）のスコア調整が _apply_rank_policy で破棄されるため、これらの段を
-スキップする short-circuit の検証。rank_policy=None の従来経路では従来どおり
-実行されることも併せて担保する。"""
+"""H6 修正（案B）: rank_policy 指定時、entity boost / spreading activation は
+score 加算を止め（composite で復活するため）、graph 信号の計算（entity_service /
+link_repo）だけは _apply_rank_policy 内で行われる。reranker は score 置換型のため
+rank_policy 経路では引き続き skip される。rank_policy=None の従来経路では
+従来どおり 3 段全部が実行されることも併せて担保する。"""
 
 from __future__ import annotations
 
@@ -42,6 +43,7 @@ def _engine_with_adjusters() -> tuple[SearchEngine, MagicMock, MagicMock, MagicM
         keyword_search=strat,
         entity_service=entity_service,
         reranker=reranker,
+        rerank_enabled=True,
         link_repo=link_repo,
         embedding_provider=lambda: None,
     )
@@ -49,14 +51,18 @@ def _engine_with_adjusters() -> tuple[SearchEngine, MagicMock, MagicMock, MagicM
 
 
 @pytest.mark.asyncio
-async def test_rank_policy_path_skips_adjuster_steps():
+async def test_rank_policy_path_uses_graph_signal_and_skips_reranker():
+    """rank_policy 経路: entity/PPR は graph 信号の計算に使われ（called）、
+    置換型の reranker のみ skip される。"""
     engine, entity_service, reranker, link_repo = _engine_with_adjusters()
     result = await engine.search(SearchQuery(text="alice の話", top_k=5, rank_policy=RankPolicy()))
     assert result.is_ok
-    # 全 adjuster 段が呼ばれない（composite 再計算で捨てられる計算を省略）
-    entity_service.extractor.extract.assert_not_called()
+    # graph 信号（entity match + PPR）は composite 統合のため計算される
+    entity_service.extractor.extract.assert_called_once()
+    entity_service.find_related_memories.assert_called_once()
+    link_repo.get_links_for_keys.assert_called_once()
+    # reranker は score 置換型のため rank_policy 経路では skip 継続
     reranker.rerank.assert_not_called()
-    link_repo.get_links_for_keys.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -65,12 +65,15 @@ async def _search_memories(
     # リフレクション記憶の降格係数 (主題不定の抽象文が通常検索に混入するのを防ぐ)。
     # 1.0 で無効。
     reflection_penalty = float(getattr(config, "reflection_retrieval_penalty", 0.5))
+    # graph 信号（entity match + PPR/SA）の composite 加算重み。0 で H6 修正を無効化。
+    graph_boost_w: float = float(getattr(config, "retrieval_graph_boost_weight", 0.1))
     # 複合スコアは SearchEngine の最終段（rank_policy）で適用する。
     policy = RankPolicy(
         recency_weight=recency_w,
         importance_weight=importance_w,
         relevance_weight=relevance_w,
         reflection_penalty=reflection_penalty,
+        graph_boost_weight=graph_boost_w,
     )
 
     queries = [user_message]

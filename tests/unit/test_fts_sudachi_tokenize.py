@@ -101,6 +101,30 @@ class TestFTSMorphemeSearch:
         assert hit == ["m3"]
 
 
+class TestFTSScoreMonotonicity:
+    def test_score_is_monotonic_in_relevance(self, repo):
+        """関連度が高い記憶ほど大きい score を返す（RRF の rank 順と一致）。
+
+        回帰: 以前は ``1/(1+|bm25|)`` で逆転しており、ORDER BY rank の 1 位
+        （最も関連度が高い）記憶が最小 score になっていた。
+        """
+        # filler を入れて "確" / "認" の idf を正にし、bm25 差を有意にする
+        for i in range(6):
+            repo.save(_mem(f"filler{i}", "ダミー残タスク"))
+        repo.save(_mem("m_low", "確認"))
+        repo.save(_mem("m_high", "確認 確認 確認 確認 確認 確認"))
+
+        result = repo.search_fts("確認", top_k=5)
+        assert result.is_ok
+        scored = result.value
+        assert len(scored) == 2
+        scores = [s for _, s in scored]
+        assert scores[0] > scores[-1], f"relevance order inverted: {scores}"
+        assert all(a >= b for a, b in zip(scores, scores[1:], strict=False))
+        assert scored[0][0].key == "m_high"
+        assert all(0.0 <= s <= 1.0 for s in scores)
+
+
 class TestTokenizeFallback:
     def test_tokenize_for_fts_returns_input_when_load_fails(self, monkeypatch):
         monkeypatch.setattr(fts_tokenize, "_tokenizer", None)

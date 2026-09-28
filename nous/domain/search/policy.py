@@ -22,10 +22,16 @@ class RankPolicy:
     composite = recency_weight * recency_decay(created_at)
               + importance_weight * importance
               + relevance_weight * raw_cosine(rel)
+              + graph_boost_weight * graph_signal
     （reflection タグあり & reflection_penalty != 1.0 のとき composite *= penalty）
+
+    ``graph_signal`` は entity match（1.0）と PPR/spreading activation
+    （min(act * 2.0, 1.0)）の合算（engine 側で計算）。``graph_boost_weight=0``
+    で graph 寄与を完全に無効化でき、H6 修正前の composite と一致する。
     """
 
     recency_weight: float = 0.3
     importance_weight: float = 0.3
     relevance_weight: float = 0.4
     reflection_penalty: float = 1.0
+    graph_boost_weight: float = 0.1  # entity/PPR graph 信号の composite 加算上限

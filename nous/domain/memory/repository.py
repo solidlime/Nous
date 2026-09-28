@@ -143,4 +143,6 @@ class MemoryAuxiliaryRepository(Protocol):
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         valid_at: datetime | None = None,
+        tags: list[str] | None = None,
+        match_mode: str = "and",
     ) -> Result[list[tuple[Memory, float]], RepositoryError]: ...

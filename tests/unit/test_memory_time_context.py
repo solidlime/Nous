@@ -2,7 +2,7 @@
 
 「過去の記憶が直近の記憶のように扱われる」問題の対策:
 - memory_search が age/created_at/updated_at を返すこと（LLM が古さを知り得る）
-- recency_weight 既定値で新しさが順位に効くこと
+- recency_weight 既定値（0.05）は相対乗数のタイブレークで順位を壊さないこと
 - 定期 ReflectionEngine のプロンプトに相対時刻が付くこと（per-turn 24h 窓は廃止）
 """
 
@@ -123,7 +123,7 @@ class TestMemorySearchTimeFields:
 
     @pytest.mark.asyncio
     async def test_recency_weight_default_is_applied(self, registered_tools):
-        """MCP スキーマ既定の recency_weight（0.05）が SearchQuery に渡る。"""
+        """MCP スキーマ既定の recency_weight が SearchQuery に渡る。"""
         tools, ctx = registered_tools
         sr = SearchResult(memory=_mem("mem_x"), score=0.8, source="keyword")
         ctx.search_engine.search.return_value = Success([sr])
@@ -164,9 +164,8 @@ class TestRRFRecencyOrdering:
     def test_heavier_recency_weight_inverts_clear_relevance_gap(self):
         """境界記録: recency_weight=0.2 では 0.9/30日前 vs 0.5/1時間前 が逆転する。
 
-        1/(1+age_days) は30日で ~0.032 に減衰するため、重み 0.2 のボーナス差
-        (~0.19) が importance 差 (0.3*0.4=0.12) を上回る。既定値 0.05 は
-        この逆転を避けるために選ばれた（上のテストが通る上限側）。
+        相対乗数化後も、重み 0.2 では recency の乗数差（~0.19）が importance 差
+        （0.3*0.4=0.12）を上回る。既定 0.05 はこの逆転を避ける上限側。
         """
         ranker = RRFRanker()
         results = [
@@ -175,6 +174,38 @@ class TestRRFRecencyOrdering:
         ]
         ranked = ranker.rank(results, _query(importance_weight=0.3, recency_weight=0.2))
         assert ranked[0].memory.key == "fresh_weak"
+
+    def test_recent_profile_tiebreaks_equal_relevance_toward_newer(self):
+        """profile="recent"（recency_weight=0.4）: 関連度が同程度なら新しい方が上。
+
+        相対乗数なので新しさの寄与は最大 1.4 倍に収まり、RRF のスコア差が
+        大きい候補は乗っ取られない（次のテストで検証）。
+        """
+        ranker = RRFRanker()
+        results = [
+            _sr("old", 0.7, created_days_ago=180, importance=0.5),
+            _sr("new", 0.7, created_days_ago=1 / 24, importance=0.5),
+        ]
+        ranked = ranker.rank(results, _query(recency_weight=0.4))
+        assert ranked[0].memory.key == "new"
+
+    def test_recent_profile_keeps_clearly_more_relevant_old_top(self):
+        """profile="recent"（recency_weight=0.4）でも、複数ソースで関連度が明確に
+        高い古い記憶は top1 を維持する（ja_or_005 の gold 保護の最小再現）。
+
+        gold は semantic+keyword の両方にヒットして RRF≈2/61、fresh_weak は
+        keyword 単独で RRF≈1/62。相対乗数（≤1.4）ではこの 2 倍差を覆せない。
+        """
+        ranker = RRFRanker()
+        gold = _sr("relevant_old", 0.9, created_days_ago=30, importance=0.9)
+        weak = _sr("fresh_weak", 0.5, created_days_ago=1 / 24, importance=0.5)
+        results = [
+            SearchResult(memory=gold.memory, score=gold.score, source="semantic"),
+            SearchResult(memory=gold.memory, score=gold.score, source="keyword"),
+            SearchResult(memory=weak.memory, score=weak.score, source="keyword"),
+        ]
+        ranked = ranker.rank(results, _query(importance_weight=0.3, recency_weight=0.4))
+        assert ranked[0].memory.key == "relevant_old"
 
 
 # ---------------------------------------------------------------------------

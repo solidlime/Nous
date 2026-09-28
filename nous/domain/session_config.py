@@ -47,6 +47,11 @@ class SessionConfig(BaseModel):
     retrieval_recency_weight: float = Field(default=0.3, description="記憶検索で新しさを重視する重み。")
     retrieval_importance_weight: float = Field(default=0.3, description="記憶検索で重要度を重視する重み。")
     retrieval_relevance_weight: float = Field(default=0.4, description="記憶検索で関連性を重視する重み。")
+    # graph 信号（entity match + PPR spreading activation）の複合スコア加算上限。
+    # 0 で無効化（H6 修正のロールバック）。
+    retrieval_graph_boost_weight: float = Field(
+        default=0.1, description="記憶検索で graph 信号（entity/PPR）を加算する重み（0で無効）。"
+    )
     # リフレクション記憶の無関係想起対策 (MemGPT archival 分離相当):
     # 検索複合スコアの降格係数 (1.0 で無効) と無条件注入のベクトル類似閾値 (0.0 で無効)
     reflection_retrieval_penalty: float = Field(
@@ -274,7 +279,12 @@ class SessionConfig(BaseModel):
     def _clamp_reflection_interval(cls, v: float) -> float:
         return max(0.0, min(168.0, v))
 
-    @field_validator("retrieval_recency_weight", "retrieval_importance_weight", "retrieval_relevance_weight")
+    @field_validator(
+        "retrieval_recency_weight",
+        "retrieval_importance_weight",
+        "retrieval_relevance_weight",
+        "retrieval_graph_boost_weight",
+    )
     @classmethod
     def _clamp_retrieval_weights(cls, v: float) -> float:
         return normalize_importance(v)

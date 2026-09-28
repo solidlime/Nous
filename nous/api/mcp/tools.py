@@ -269,7 +269,7 @@ def register_tools(mcp: MCPServer) -> None:
         importance_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0,
         recency_weight: Annotated[float, Field(ge=0.0, le=1.0)] = MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT,
         vector_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0,
-        keyword_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 0.5,
+        keyword_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0,
         kind: str | None = None,
         sort: str | None = None,
     ) -> str:

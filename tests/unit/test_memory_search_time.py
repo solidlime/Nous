@@ -100,7 +100,7 @@ class TestRecencyDefaultSingleSource:
 
     @pytest.mark.asyncio
     async def test_default_recency_flows_into_search_query(self, mock_app_context):
-        """引数なし呼び出しで recency_weight=0.2 が SearchQuery に渡る。"""
+        """引数なし呼び出しで recency_weight 既定値が SearchQuery に渡る。"""
         ctx = mock_app_context
         ctx.search_engine.search.return_value = Success([])
         ctx.search_engine._semantic = None
@@ -109,6 +109,19 @@ class TestRecencyDefaultSingleSource:
         assert isinstance(data, dict)  # empty result → {"memories": [], ...}
         call_args = ctx.search_engine.search.call_args[0][0]
         assert isinstance(call_args, SearchQuery)
+        assert call_args.recency_weight == MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT
+
+    @pytest.mark.asyncio
+    async def test_deep_profile_weights_are_unified_with_defaults(self, mock_app_context):
+        """profile="deep" の keyword_weight が既定 1.0 と統一されている（0.5 の取り残し防止）。"""
+        ctx = mock_app_context
+        ctx.search_engine.search.return_value = Success([])
+        ctx.search_engine._semantic = None
+        ctx.memory_service.log_search.return_value = Success(None)
+        await _run_search(ctx, query="test", profile="deep")
+        call_args = ctx.search_engine.search.call_args[0][0]
+        assert call_args.keyword_weight == 1.0
+        assert call_args.vector_weight == 1.0
         assert call_args.recency_weight == MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT
 
 
@@ -179,7 +192,7 @@ class TestSearchResultTimeFields:
 
 
 class TestRankingRecencyBehavior:
-    """RRF ランカーの recency 挙動（ranker は変更しない前提で挙動を固定）。"""
+    """RRF ランカーの recency 挙動（相対乗数のタイブレーク方式を固定）。"""
 
     def test_clear_relevance_gap_keeps_relevant_first_without_recency(self):
         """recency_weight=0では関連度0.9（1年前）が1位を維持し、recencyが順位を乗っ取らない。"""
@@ -214,8 +227,13 @@ class TestRankingRecencyBehavior:
         # 既定の recency_weight がエンジンに渡っている（順位はエンジンが決定）
         assert ctx.search_engine.search.call_args[0][0].recency_weight == MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT
 
-    def test_equal_relevance_with_default_recency_prefers_newer(self):
-        """関連度が同等なら既定 recency_weight=0.2 で新しい記憶（1時間前）が上位。"""
+    def test_default_recency_weight_tiebreaks_equal_relevance_toward_newer(self):
+        """既定 recency_weight=0.05 は、関連度が同等の候補を相対乗数（最大 +5%）で
+        新しさタイブレークする（絶対加算ではなく RRF スコアへの乗算）。
+
+        ja_or_005 回帰の真因だった「RRF ~0.016 への 0.05 絶対加算」を乗数化で解消。
+        関連度が同程度なら新しさが順位を決め、明確な関連度差は維持される。
+        """
         old = _mem("old", created_ago_seconds=ONE_YEAR_SECONDS)
         new = _mem("new", created_ago_seconds=3600)
         results = [
@@ -224,20 +242,18 @@ class TestRankingRecencyBehavior:
         ]
         ranked = RRFRanker().rank(
             results,
-            SearchQuery(text="t", recency_weight=MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT, keyword_weight=0.5),
+            SearchQuery(text="t", recency_weight=MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT, keyword_weight=1.0),
         )
+        # 同等の関連度 → 相対乗数の差で新しい方が上に来る。
         assert [r.memory.key for r in ranked] == ["new", "old"]
 
-    def test_semantic_relevance_edge_still_favors_new_for_equivalent_scores(self):
-        """semantic ソースでも同等スコアなら新しい記憶が上位（0.2 既定）。"""
+    def test_explicit_recency_weight_still_favors_newer(self):
+        """明示指定（0.2）なら従来どおり新しい記憶が上位 — 既定変更は recency 機構を壊さない。"""
         old = _mem("old", created_ago_seconds=ONE_YEAR_SECONDS)
         new = _mem("new", created_ago_seconds=3600)
         results = [
-            SearchResult(memory=old, score=0.8, source="semantic"),
-            SearchResult(memory=new, score=0.8, source="semantic"),
+            SearchResult(memory=old, score=0.7, source="keyword"),
+            SearchResult(memory=new, score=0.7, source="keyword"),
         ]
-        ranked = RRFRanker().rank(
-            results,
-            SearchQuery(text="t", recency_weight=MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT, vector_weight=1.0),
-        )
+        ranked = RRFRanker().rank(results, SearchQuery(text="t", recency_weight=0.2, keyword_weight=1.0))
         assert [r.memory.key for r in ranked] == ["new", "old"]

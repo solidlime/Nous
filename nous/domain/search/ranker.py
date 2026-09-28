@@ -32,7 +32,7 @@ class RRFRanker:
         if source == "semantic":
             return query.vector_weight if hasattr(query, "vector_weight") else 1.0
         # "keyword" or "fts" → keyword_weight
-        return query.keyword_weight if hasattr(query, "keyword_weight") else 0.5
+        return query.keyword_weight if hasattr(query, "keyword_weight") else 1.0
 
     def rank(self, results: list[SearchResult], query: SearchQuery) -> list[SearchResult]:
         """Rank results using weighted RRF formula: score = sum(weight / (k + rank_i))."""
@@ -58,26 +58,31 @@ class RRFRanker:
                 if key not in result_map or r.score > result_map[key].score:
                     result_map[key] = r
 
-        # Apply importance and recency weight adjustments
+        # Apply importance and recency as a RELATIVE (multiplicative) tiebreak.
+        # RRF relevance dominates; the multiplier starts at 1.0 and only *scales*
+        # each candidate's own RRF score in 1.0..(1.0+weight). Candidates with
+        # near-equal relevance (small RRF gap) are thus reordered by recency/
+        # importance, while a clearly more relevant candidate keeps its lead
+        # (absolute add of ~0.016-scale RRF scores used to let recency dominate;
+        # see ja_or_005 “VRM 照明” gold regression).
         merged: list[SearchResult] = []
         for key, rrf_score in scores.items():
             original = result_map[key]
-            adjusted_score = rrf_score
+            multiplier = 1.0
 
             if query.importance_weight > 0:
-                adjusted_score += query.importance_weight * original.memory.importance
+                multiplier += query.importance_weight * original.memory.importance
 
             if query.recency_weight > 0 and original.memory.created_at:
-                from datetime import datetime
-
                 now = datetime.now(UTC)
                 created = original.memory.created_at
                 if created.tzinfo is None:
                     created = created.replace(tzinfo=UTC)
                 age_days = (now - created).total_seconds() / 86400
                 recency_bonus = 1.0 / (1.0 + age_days)
-                adjusted_score += query.recency_weight * recency_bonus
+                multiplier += query.recency_weight * recency_bonus
 
+            adjusted_score = rrf_score * multiplier
             merged.append(
                 SearchResult(
                     memory=original.memory,

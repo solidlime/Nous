@@ -132,7 +132,7 @@ class TestSearchEngineRerankerIntegration:
         kw = MagicMock()
         kw.search.return_value = Success([(_make_mem("key_a"), 0.5), (_make_mem("key_b"), 0.8)])
 
-        engine = SearchEngine(keyword_search=kw, reranker=mock_reranker)
+        engine = SearchEngine(keyword_search=kw, reranker=mock_reranker, rerank_enabled=True)
         result = await engine.search(SearchQuery(text="test", mode="hybrid", top_k=5))
         assert result.is_ok
 
@@ -153,7 +153,7 @@ class TestSearchEngineRerankerIntegration:
         mem_b = _make_mem("key_b", content="bbb")
         kw.search.return_value = Success([(mem_a, 0.5), (mem_b, 0.8)])
 
-        engine = SearchEngine(keyword_search=kw, reranker=mock_reranker)
+        engine = SearchEngine(keyword_search=kw, reranker=mock_reranker, rerank_enabled=True)
         result = await engine.search(SearchQuery(text="test", mode="hybrid", top_k=5))
         assert result.is_ok
         assert len(result.value) >= 2
@@ -183,7 +183,7 @@ class TestSearchEngineRerankerIntegration:
         kw = MagicMock()
         kw.search.return_value = Success([(_make_mem("key_a"), 0.5)])
 
-        engine = SearchEngine(keyword_search=kw, reranker=mock_reranker)
+        engine = SearchEngine(keyword_search=kw, reranker=mock_reranker, rerank_enabled=True)
         result = await engine.search(SearchQuery(text="test", mode="hybrid", top_k=5))
         assert result.is_ok
         mock_reranker.rerank.assert_not_called()
@@ -199,7 +199,7 @@ class TestSearchEngineRerankerIntegration:
         kw = MagicMock()
         kw.search.return_value = Success([(_make_mem("key_a"), 0.5)])
 
-        engine = SearchEngine(keyword_search=kw, reranker=mock_reranker)
+        engine = SearchEngine(keyword_search=kw, reranker=mock_reranker, rerank_enabled=True)
         result = await engine.search(SearchQuery(text="test", mode="hybrid", top_k=5))
         assert result.is_ok
         mock_reranker.rerank.assert_not_called()
@@ -215,7 +215,7 @@ class TestSearchEngineRerankerIntegration:
         kw = MagicMock()
         kw.search.return_value = Success([(_make_mem("key_a"), 0.5)])
 
-        engine = SearchEngine(keyword_search=kw, reranker=mock_reranker)
+        engine = SearchEngine(keyword_search=kw, reranker=mock_reranker, rerank_enabled=True)
         with caplog.at_level("WARNING"):
             for i in range(3):
                 result = await engine.search(SearchQuery(text=f"test {i}", mode="hybrid", top_k=5))

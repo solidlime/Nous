@@ -69,7 +69,7 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 "keyword_weight": {
                     "type": "number",
                     "description": "RRFキーワード検索の重み（0.0-1.0）",
-                    "default": 0.5,
+                    "default": 1.0,
                     "minimum": 0,
                     "maximum": 1.0,
                 },

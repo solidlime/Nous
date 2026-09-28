@@ -33,6 +33,16 @@ class RerankerConfig(BaseModel):
     enabled: bool = True
 
 
+class SearchConfig(BaseModel):
+    """検索パイプライン設定（env: NOUS_SEARCH__RERANK_ENABLED 等）。"""
+
+    # Cross-encoder rerank 段の有効化。既定 False。
+    # 部分 rerank（上位 _RERANK_CANDIDATES 件のみ）は cross-encoder スコアと未 rerank の
+    # RRF スコアを同一キーで再ソートするため順位を壊す（実測: all-term MRR 1.0→0.8704）。
+    # 無効化しても reranker のロード経路（reranker.enabled）は壊さない。
+    rerank_enabled: bool = False
+
+
 class QdrantConfig(BaseModel):
     """Qdrant vector store configuration."""
 
@@ -355,6 +365,7 @@ class Settings(BaseSettings):
 
     embedding: EmbeddingConfig = EmbeddingConfig()
     reranker: RerankerConfig = RerankerConfig()
+    search: SearchConfig = Field(default_factory=SearchConfig)
     qdrant: QdrantConfig = QdrantConfig()
     forgetting: ForgettingConfig = ForgettingConfig()
     memory_enrichment: MemoryEnrichmentConfig = MemoryEnrichmentConfig()

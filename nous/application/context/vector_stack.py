@@ -3,7 +3,7 @@
 AppContext（composition root の facade）が継承する mixin。
 初期化・プロパティ・ベクトル同期イベント購読の実装本体を担う。
 
-状態属性（_vector_store, _embedding, _reranker, _search_engine,
+状態属性（_vector_store, _embedding, _reranker, _search_engine, _search_engine_lock,
 _vector_store_lock/_ready/_init_started）は AppContext のインスタンス上に
 保持される（テストが直接代入する互換属性でもある）。
 """
@@ -56,6 +56,7 @@ class VectorStackMixin:
         _embedding: EmbeddingModel | None
         _reranker: RerankerModel | None
         _search_engine: SearchEngine | None
+        _search_engine_lock: threading.Lock
 
     # ------------------------------------------------------------------
     # 初期化（旧 _init_vector / _preload_background の本体）
@@ -75,6 +76,7 @@ class VectorStackMixin:
         self._embedding: EmbeddingModel | None = None
         self._reranker: RerankerModel | None = None
         self._search_engine: SearchEngine | None = None
+        self._search_engine_lock = threading.Lock()
 
         # Instantiate reranker model
         from nous.infrastructure.embedding.reranker import RerankerModel
@@ -179,11 +181,19 @@ class VectorStackMixin:
 
     @property
     def search_engine(self) -> SearchEngine:
-        if self._search_engine is None:
+        # 生フィールド (_vector_store) ではなく lazy-init 付きプロパティを参照する。
+        # 起動時の warmup thread はこれで vector store の初期化完了を待ってから
+        # build する（以前は初期化中に semantic=None の engine を永久キャッシュしていた）。
+        vector_store = self.vector_store
+        if self._search_engine is not None and (vector_store is None or self._search_engine._semantic is not None):
+            return self._search_engine
+        with self._search_engine_lock:
+            # 二重 build 防止（並行アクセス時）。
+            if self._search_engine is not None and (vector_store is None or self._search_engine._semantic is not None):
+                return self._search_engine
             from nous.application.use_cases import QdrantSemanticSearch, SQLiteKeywordSearch
 
             keyword = SQLiteKeywordSearch(self.memory_repo)
-            vector_store = self._vector_store
             semantic = QdrantSemanticSearch(vector_store, self.memory_repo) if vector_store else None
 
             def _strength_lookup(key: str) -> tuple[float, float] | None:
@@ -209,12 +219,18 @@ class VectorStackMixin:
                 # embedding_model property は呼ばない（cold load 防止）:
                 # rank_policy 段が要求した時点で lazy に解決する。
                 embedding_provider=lambda: getattr(self, "_embedding", None),
+                # cross-encoder rerank 段は既定無効（NOUS_SEARCH__RERANK_ENABLED=true で復帰）。
+                rerank_enabled=self.settings.search.rerank_enabled,
             )
             # worker 経路ではハンドラの set_persona が走らないため、生成時に必ず伝播させる
             search_engine.set_persona(self.persona)
             # Wire search engine to memory service for memory evolution
             self.memory_service.set_search_engine(search_engine)
             self._search_engine = search_engine
+            # rebuild 時（初回 build 含む）に query cache を無効化する。旧
+            # semantic-less engine が keyword-only 結果を cache していると、
+            # rebuild 後も TTL(30s) の間 stale を返すため（module-level cache）。
+            invalidate_query_cache()
         return self._search_engine
 
     # ------------------------------------------------------------------

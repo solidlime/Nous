@@ -16,9 +16,12 @@ from nous.domain.value_objects import _VALID_EMOTIONS, normalize_importance
 
 # Default recency boost for memory_search (RRF recency bonus multiplier).
 # Single source of truth — tools.py schema default references this.
-# 0.05: recent-but-weak memories must not displace clearly-more-relevant
-# older ones (the 1/(1+age_days) bonus decays to ~0.03 at 30 days, so
-# larger defaults invert rankings — see test_memory_time_context.py).
+# 0.05 は ranker の**相対乗数**（タイブレーク方式）の重み。RRFRanker は関連度が
+# 近い候補間でのみ順位を決める（multiplier ∈ 1.0..1.0+weight, 最大 +5%）ので、
+# recency_weight=0.05 でも関連度上位の古い記憶を押し負けさせない（ja_or_005
+# 「VRM 照明」で gold が top1 を維持）。旧・絶対加算方式では 0.05 が RRF スコア
+# （~0.016）を支配していたため 0.0 に落としていた回帰を、乗数化で 0.05 に復帰。
+# SearchQuery.recency_weight の既定と同一値に統一する。
 MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT = 0.05
 
 # Minimum similarity for query-based destructive resolution (memory_delete /
@@ -374,7 +377,7 @@ async def _tool_memory_search(
     importance_weight: float = 0.0,
     recency_weight: float = MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT,
     vector_weight: float = 1.0,
-    keyword_weight: float = 0.5,
+    keyword_weight: float = 1.0,
     kind: str | None = None,
     sort: str | None = None,
 ) -> str:
@@ -395,7 +398,7 @@ async def _tool_memory_search(
                 "importance_weight": 0.3,
                 "recency_weight": MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT,
                 "vector_weight": 1.0,
-                "keyword_weight": 0.5,
+                "keyword_weight": 1.0,
             },
         }
         preset = presets.get(profile)

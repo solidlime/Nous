@@ -26,16 +26,22 @@ class MemorySearchMixin:
         date_to: datetime | None = None,
         valid_at: datetime | None = None,
         tags: list[str] | None = None,
+        match_mode: str = "and",
     ) -> Result[list[tuple[Memory, float]], RepositoryError]:
         """FTS5 full-text search using BM25 ranking.
 
+        ``match_mode`` selects how the query terms are joined: ``"and"``
+        (default, all terms required) or ``"or"`` (any term).
+
         Returns [(Memory, normalized_bm25_score), ...] sorted by relevance.
-        Score normalized to 0-1 range via ``1 / (1 + |bm25|)``.
+        Score normalized to 0-1 range via ``|bm25| / (1 + |bm25|)`` —
+        monotonically increasing with relevance, so that a plain
+        score-descending sort (e.g. RRFRanker) keeps the BM25 order.
 
         When ``valid_at`` is specified, only memories whose validity window
         covers that timestamp are returned (bi-temporal filtering).
         """
-        fts_query = self._sanitize_fts_query(query)
+        fts_query = self._sanitize_fts_query(query, match_mode)
         if not fts_query:
             return Success([])
 
@@ -88,22 +94,24 @@ class MemorySearchMixin:
         for row in rows:
             memory = self._row_to_memory(row)
             bm25 = row["rank"]
-            # BM25: lower = more relevant (usually -5 to 5)
-            # Normalize to 0-1: 1/(1+|bm25|)
-            score = 1.0 / (1.0 + abs(bm25))
+            # BM25: more relevant = larger |bm25| (FTS5 rank is negative).
+            # Normalize to 0-1 without inverting the relevance order:
+            # |bm25| / (1 + |bm25|)
+            score = abs(bm25) / (1.0 + abs(bm25))
             scored.append((memory, score))
         return Success(scored)
 
     @staticmethod
-    def _sanitize_fts_query(query: str) -> str:
-        """Convert a plain-text query to safe FTS5 MATCH syntax (AND logic).
+    def _sanitize_fts_query(query: str, match_mode: str = "and") -> str:
+        """Convert a plain-text query to safe FTS5 MATCH syntax (AND/OR join).
 
         Each whitespace term is first segmented into Sudachi morphemes so that
         CJK-concatenated queries (e.g. ``量子テレポーテーション実験``) match the
         morpheme-segmented index (see ``fts_tokenize``). Falls back to the raw
         term when tokenization is unavailable. Terms are quoted and joined with
-        ``AND`` — this also protects against FTS5 special characters
-        (``OR``, ``NOT``, ``*``, ``(...)``).
+        ``match_mode == "or"`` → ``OR``, otherwise ``AND`` — quoting also
+        protects against FTS5 special characters (``OR``, ``NOT``, ``*``,
+        ``(...)``), so a raw ``'OR'`` term can never be injected as an operator.
         """
         terms = query.strip().split()
         if not terms:
@@ -117,7 +125,7 @@ class MemorySearchMixin:
                 # Escape embedded double-quotes by doubling them (FTS5 convention)
                 t = t.replace('"', '""')
                 escaped.append(f'"{t}"')
-        return " AND ".join(escaped)
+        return (" OR " if match_mode == "or" else " AND ").join(escaped)
 
     def search_keyword(
         self,
