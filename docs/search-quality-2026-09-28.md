@@ -33,6 +33,8 @@
 6. **rerank の 10 秒レイテンシ**（CPU: Celeron J4125）
    - cross-encoder を 20 件に適用すると 10 秒/クエリ。合格ライン（p95 ≤ 1.5s）に不適合
 
+> **計測時の注意**: HTTP API の `q` に生の日本語を渡すと h11 が request line を拒否する（`Invalid HTTP request received.`）。`curl --get --data-urlencode 'q=...'` を使う。
+
 ## 実装（修正1〜6）
 
 | # | 内容 | 主なファイル |
@@ -79,7 +81,8 @@
    - `curl http://nas:26262/health` → `{"status":"ok","version":"4.0.1","qdrant":"connected"}`
    - 新コンテナ ID を `/proc/1/cgroup` で確認（旧 ID と変わる）
    - コード検証: `grep -n 'recency_weight' /app/nous/domain/search/engine.py`（既定 0.05）、`ranker.py` の `multiplier`
-   - 実検索: `curl 'http://nas:26262/api/search/herta?q=VRM%20照明&limit=5'` → gold が top1
+   - 実検索: `curl --get --data-urlencode 'q=VRM 照明' --data 'limit=5' http://nas:26262/api/search/herta` → 正解記憶が上位に返る
+     - **注意**: URL に生の日本語を入れると h11 が `Invalid HTTP request received.` で拒否する。`--data-urlencode` かパーセントエンコード（`q=VRM%20%E7%85%A7%E6%98%8E`）を使うこと
 
 ## 評価ハーネスの使い方（再現）
 
