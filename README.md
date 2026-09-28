@@ -162,6 +162,8 @@ DATA_ROOT=./data
 | [HTTP API リファレンス](docs/http_api_reference.md) | REST API の詳細 |
 | [記憶機能](docs/memory_features.md) | 忘却曲線・検索・エンリッチメントの詳細 |
 | [サンドボックス](docs/sandbox.md) | Docker コード実行の設定とアーキテクチャ |
+| [検索品質の改善記録](docs/search-quality-2026-09-28.md) | 日本語 OR 検索・semantic 死亡・recency 逆転の修正とベンチ before/after |
+| [ADR-003](docs/decisions/ADR-003-recency-tiebreak-ranking.md) | 検索スコア統合の recency/importance 相対（乗数）方式 |
 
 ---
 
