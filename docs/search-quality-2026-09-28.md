@@ -1,7 +1,7 @@
 # 記録: 記憶検索精度の改善（日本語 OR 検索・semantic 死亡・recency 逆転の修正）
 
 - 日付: 2026-09-28
-- コミット: `d6c45cd7` fix(search): semantic 復活・rerank 範囲制限・recency タイブレークで検索精度を改善 / `02a691af` test(bench): 検索品質の評価ハーネスと検証用 Dockerfile / `c4dc534d` fix(ci): CI 赤の4原因を修正 / `2e77da88` fix(deps): sudachipy を <0.7.0 に固定
+- コミット: `f6e773a0` fix(search): RankPolicy を MCP/REST に配線し重みを統一（順位の経路間不一致を解消）/ `d6c45cd7` fix(search): semantic 復活・rerank 範囲制限・recency タイブレークで検索精度を改善 / `02a691af` test(bench): 検索品質の評価ハーネスと検証用 Dockerfile / `c4dc534d` fix(ci): CI 赤の4原因を修正 / `2e77da88` fix(deps): sudachipy を <0.7.0 に固定
 - 検証: nous-verify2（検証コンテナ）→ 本番 nous へデプロイ（2026-09-28 13:14 JST、コンテナ `45f6480e5ffe`）
 
 ## 症状（ユーザー報告）
@@ -78,7 +78,9 @@
 | 修正前（本番） | REST | 0 | 0.9324 | — | `lexical_ab_analysis.md`（測定2） |
 | 配線直後（lexical 0.25） | REST | 0 | 0.9056 | 0.7776 | （§監査指摘への対応参照） |
 | **重み統一後** | **MCP** | **0** | **0.9577** | **0.8144** | `artifacts/real130_after_mcp.json` |
-| **重み統一後** | **REST** | **0** | **0.9577** | **0.8144** | （MCP と summary 完全一致） |
+| **重み統一後** | **REST** | **0** | **0.958** | **0.8095** | `artifacts/real130_after_rest.json` |
+
+**測定条件（MCP/REST 共通）**: 検証コンテナ `nous-verify2` の内部から `http://localhost:26262`（Host ヘッダ `localhost:26262`）に接続。検証 DB（`/data/persona/herta/memory.sqlite` = 本番コピー）と検証 Qdrant（1024 points 時点）を使用。コードは main `f6e773a0` 相当。`--limit 130 --top-k 10`、無負荷、2026-09-28 17時台 JST。score 対象は 130 件中 MCP 125 / REST 126（全語が DB に存在しないクエリは skip）。両 artifact の summary に `note` / `commit` / `top_k` を記録済み。MCP/REST の僅差（0.9577 vs 0.958）は検証 Qdrant のコピー時点差と skip 数差によるもので、**経路間の重みは `tests/unit/test_mcp_rest_rank_policy_wiring.py` が同一であることをテストで保証**している（`RankPolicy` の frozen dataclass 等価）。
 
 - 注1: `p95 8.9s` の測定値が一時記録されたが、これは並行実行した mypy/pytest との **CPU 競合**（Celeron 4 コア環境）が原因。無負荷の再測定では 0.366s。
 - 注2: ハーネス `mcp_search` が `"limit"` を送っていた過去バグ（正しい引数は `"top_k"`、pydantic が黙って無視）のため、MCP 経由の過去測定は常に暗黙 top_k=5 だった。修正後は明示 top_k が効く。
