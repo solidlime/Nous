@@ -54,22 +54,27 @@
 
 ## ベンチ結果（before/after）
 
-評価ハーネス: `tests/benchmark/` + `scripts/eval_search_quality.py`（12 クエリ）。
+評価ハーネス: `tests/benchmark/` + `scripts/eval_search_quality.py`（12 クエリ）。**表中の値は全て実 artifact の JSON から転記**しており、各行の出典を artifact 列に明記する。
 
-| 実行 | 状態 | zero-result | recall@5 | MRR (ALL 12) | MRR (AT 9) | p95 latency | artifact |
+| 実行 | 状態 | zero-result | recall@5 (AT 9件) | MRR (ALL 12件) | MRR (AT 9件) | p95 latency | artifact |
 |---|---|---|---|---|---|---|---|
-| baseline_v1 | 本番（semantic 死） | 3 | 0.5556 | **0.8182** | 1.0000 | — | `research/nous-search-eval-20260928/baseline_v1.json` |
-| verify_v1 | 修正1 | 0 | 0.9259 | 0.8704 | 0.8889 | 8.4s（rerank 有効） | `verify_v1.json` |
-| eval_v3_warm | 修正1〜4 | 0 | **0.9815** | 0.8611 | 1.0000 | **0.097s** | `eval_v3_warm.json.json` |
+| baseline_v1 | 本番（semantic 死、top_k=20） | 3 | 0.668※ | **0.750** | 1.0000 | —（中央値 0.677s） | `baseline_v1.json` + `baseline_v1.md` |
+| verify_v1 | 修正1（rerank 有効） | 0 | 0.555 | —（any-term 未計測） | 0.8312 | 8.4s（rerank 有効） | `verify_v1.json` |
+| verify_v2 | 修正1〜2 | 0 | 0.9259 | —（any-term 未計測） | 0.8704 | — | `verify_v2.json` |
+| eval_v3_warm | 修正1〜4 | 0 | **0.9815** | —（any-term 未計測） | 0.8704 | **0.097s** | `eval_v3_warm.json.json` |
 | final_v3_mcp_verify_warm2 | 修正1〜6（MCP, 暗黙 top_k=5） | 0 | **0.9815** | 0.8611 | 1.0000 | 0.238s | `final_v3_mcp_verify_warm2.json.json` |
 | **final_v5_mcp_quiet** | **＋重み統一（MCP, top_k=20, 無負荷）** | **0** | **0.9815** | **1.0000** | **1.0000** | **0.366s** | `final_v5_mcp_quiet.json.json` |
+| **prod_final_v1** | **本番デプロイ後（commit 96307d17）** | **0** | **0.9815** | **0.8611** | **1.0000** | **0.174s（REST）/ 0.310s（MCP）** | `prod_final_v1.json.json`（REST）/ `prod_final_v1_mcp.json.json`（MCP） |
 
-**指標定義**: `MRR (AT)` = all-term gold（全語を含む記憶。9 クエリで計測可）。`MRR (ALL)` = any-term gold（いずれかを含む記憶。全 12 クエリ）。**合格ライン（案C）の MRR 判定は ALL（全 12 クエリ）で行う**。
+**指標定義**: `recall@5 (AT)` と `MRR (AT)` = all-term gold（全語を含む記憶。9 クエリで計測可）。`MRR (ALL)` = any-term gold（いずれかを含む記憶。全 12 クエリ）。**合格ライン（案C）の MRR 判定は ALL（全 12 クエリ）で行う**。「—（any-term 未計測）」はハーネスに any-term 指標を追加する前の測定 artifact であることを示す。
 
-- **recall@5: 0.5556 → 0.9815**（+77%）
-- **MRR (ALL): 0.8182 → 1.0000**（全 12 クエリで gold が top1）
-- **p95: 8.4s（rerank 有効時）→ 0.366s**
-- 合格ライン（案C、**ALL 基準**）: **zero-result 0 ✅ / recall@5 0.9815 ≥ 0.75 ✅ / MRR 1.0000 ≥ 0.80 ✅ / p95 0.366s ≤ 1.5s ✅**
+**※ baseline_v1 の基準について**: この artifact はハーネスに AT/any-term 別指標を追加する前の測定であり、`recall@5` は **any-term gold に対する値**（9 件で 0.668、12 件で 0.501）。`baseline_v1.md` の集計（r@5 0.547 / MRR 0.818）は **generic_np を除く 11 件** の値で、rows から再計算した値（MRR 0.8182 / r@5 0.546）と一致する。**以降の行の `recall@5 (AT)` とは基準が異なる**ため、before/after の同一基準比較は **verify_v2 以降の行同士**で行うこと。
+
+- **recall@5: 0.501（baseline 全 12 件）→ 0.9815**（AT 9 クエリ、新ハーネス）※ 基準が異なるため参考値
+- **MRR (ALL): 0.750 → 本番 0.8611**（12 クエリ全件。検証環境の最良値は 1.0000）
+- **MRR (AT): 1.0000 → 1.0000**（baseline 時点で既に top1 は取れていた = MRR の弱点は any-term 側だった）
+- **p95: 8.4s（rerank 有効時）→ 本番 0.174s（REST）**
+- 合格ライン（案C、**ALL 基準**）: **zero-result 0 ✅ / recall@5 0.9815 ≥ 0.75 ✅ / MRR 0.8611 ≥ 0.80 ✅ / p95 0.174s ≤ 1.5s ✅**（本番実測値。詳細は「本番デプロイ後の合格ライン判定」節）
 
 ### 実クエリ 130 件（search_log 頻度順、検証環境 nous-verify2）
 
