@@ -306,7 +306,9 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=20)
     ap.add_argument("--out", default="eval_result")
     ap.add_argument("--host-header", default=None, help="Host ヘッダ上書き（検証コンテナ用、例: localhost:26264）")
-    ap.add_argument("--transport", choices=["http", "mcp"], default="http", help="検索経路（http=REST / mcp=MCP tools/call）")
+    ap.add_argument(
+        "--transport", choices=["http", "mcp"], default="http", help="検索経路（http=REST / mcp=MCP tools/call）"
+    )
     args = ap.parse_args()
 
     result = run_eval(

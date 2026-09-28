@@ -293,7 +293,6 @@ nous/api/mcp/_tools_memory.py:0: error: Item "Failure[DomainError]" of "Success[
 nous/api/mcp/_tools_memory.py:0: error: Item "Failure[DomainError]" of "Success[dict[Any, Any]] | Failure[DomainError]" has no attribute "value"  [union-attr]
 nous/api/mcp/_tools_memory.py:0: error: Item "Success[dict[Any, Any]]" of "Success[dict[Any, Any]] | Failure[DomainError]" has no attribute "error"  [union-attr]
 nous/api/mcp/_tools_memory.py:0: error: Item "Success[dict[Any, Any]]" of "Success[dict[Any, Any]] | Failure[DomainError]" has no attribute "error"  [union-attr]
-nous/infrastructure/llm/openai_compat.py:0: error: Argument "http_client" to "AsyncOpenAI" has incompatible type "httpx._client.AsyncClient"; expected "httpx2._client.AsyncClient | None"  [arg-type]
 nous/domain/chat_config.py:0: error: Returning Any from function declared to return "type"  [no-any-return]
 nous/domain/chat_config.py:0: error: Incompatible return value type (got "object", expected "type")  [return-value]
 nous/domain/chat_config.py:0: error: Argument 1 to "_config_path" of "ChatConfigFileRepository" has incompatible type "str | None"; expected "str"  [arg-type]

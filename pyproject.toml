@@ -25,6 +25,11 @@ contract = [
     "requests>=2.31.0",
 ]
 
+[tool.setuptools]
+# flat-layout auto-discovery が data/ と prototype/ を拾って
+# `pip install ".[contract]"` が失敗するため、配布パッケージを明示する
+packages = ["nous"]
+
 [tool.ruff]
 target-version = "py312"
 line-length = 120
