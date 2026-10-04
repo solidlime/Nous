@@ -42,6 +42,9 @@ class TreeSessionWindow:
         self._version: int = 0
         self.pending_memory_task: asyncio.Task | None = None
         self.evict_callback: Callable[[list[dict]], None] | None = None
+        # 同一セッションで既にプロンプトへ注入した記憶 key（ASIST memoryIds 方式）。
+        # memory_retriever._search_memories が参照・追記する。
+        self._injected_memory_keys: set[str] = set()
 
     def attach_db(self, db: sqlite3.Connection, persona: str, session_id: str) -> None:
         """SQLite接続とセッション識別子を紐付ける。"""

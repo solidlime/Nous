@@ -53,8 +53,14 @@ async def _search_memories(
     last_assistant: str | None,
     config: ChatConfig,
     top_k: int = 8,
+    injected_keys: set[str] | None = None,
 ) -> tuple[str, dict, list]:
     """2クエリ並行検索 + engine 側 RankPolicy 複合スコアリングのマージ。
+
+    injected_keys: 同一セッションで既に注入した memory key の集合（ASIST memoryIds 方式）。
+        指定時は dedupe 後・top_k 切り詰め前に除外し、注入が決まった key を追記する。
+        順位は変えずに上位から未注入のみを選ぶので MRR は悪化しない。
+        None（既存呼び出し）なら従来通り全件を返す。
 
     Returns:
         (formatted_str, debug_info, memories_list)
@@ -100,7 +106,11 @@ async def _search_memories(
         for item in result_list:
             if item.memory.key not in best or item.score > best[item.memory.key].score:
                 best[item.memory.key] = item
-    top = sorted(best.values(), key=lambda r: r.score, reverse=True)[:top_k]
+    ordered = sorted(best.values(), key=lambda r: r.score, reverse=True)
+    # 注入済み key を除外してから top_k を切る（補充のための2巡検索はしない — 減件でよい）。
+    if injected_keys is not None:
+        ordered = [r for r in ordered if r.memory.key not in injected_keys]
+    top = ordered[:top_k]
 
     if not top:
         return "", {"queries": queries, "results": []}, []
@@ -134,6 +144,8 @@ async def _search_memories(
         if not ann.should_mention:
             continue
         memories_list.append(m)
+        if injected_keys is not None:
+            injected_keys.add(m.key)
         hint = _format_memory_hint(ann)
         content = getattr(m, "content", str(m))
         if hint:
