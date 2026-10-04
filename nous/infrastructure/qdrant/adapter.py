@@ -34,6 +34,14 @@ class QdrantVectorStore:
         """Get the collection name for a persona."""
         return f"{self.collection_prefix}{persona}"
 
+    def embedding_fingerprint(self, content: str) -> str:
+        """sha256(model_name + content) — 再 encode 要否の判定に使う。
+
+        モデル名を混ぜることでモデル変更→全再計算、テキスト変更→差分再計算になる。
+        """
+        model_name = getattr(getattr(self.embedding, "config", None), "model", "") or ""
+        return hashlib.sha256(f"{model_name}\x1f{content}".encode()).hexdigest()
+
     # ------------------------------------------------------------------
     # Async API (all methods are async, using AsyncQdrantClient)
     # ------------------------------------------------------------------
@@ -80,14 +88,42 @@ class QdrantVectorStore:
         metadata: dict | None = None,
         lifecycle_status: str = "active",
     ) -> Result[None, VectorStoreError]:
-        """Embed and upsert a memory into the vector store."""
+        """Embed and upsert a memory into the vector store.
+
+        fingerprint が同一の既存 point は再 encode しない（ASIST fingerprint 方式）。
+        旧 point（fingerprint 無し）は同一内容なら encode 済みとみなし、payload に
+        fingerprint を付けるだけにする。判定に使う retrieve が失敗した場合は
+        fail-open（再 encode）で従来挙動に落ちる。
+        """
         try:
             from qdrant_client.models import PointStruct
+
+            client = await self.client_manager.get_client()
+            name = self.collection_name(persona)
+            point_id = self._key_to_id(key)
+            fingerprint = self.embedding_fingerprint(content)
+
+            existing = await self._fetch_payload(client, name, point_id)
+            if existing is not None and existing.get("content") == content:
+                prev = existing.get("embedding_fingerprint")
+                if prev is None:
+                    # 旧 point: 既に embed 済みなので payload だけ更新（再 encode しない）。
+                    await client.set_payload(
+                        collection_name=name,
+                        payload={"embedding_fingerprint": fingerprint},
+                        points=[point_id],
+                    )
+                    logger.info("Backfilled embedding_fingerprint for key: %s", key)
+                    return Success(None)
+                if prev == fingerprint:
+                    logger.debug("Skipped re-encode (fingerprint unchanged): %s", key)
+                    return Success(None)
 
             vector = await self.embedding.async_encode(content, is_query=False)
             payload: dict = {
                 "key": key,
                 "content": content,
+                "embedding_fingerprint": fingerprint,
                 "lifecycle_status": lifecycle_status,
                 "created_at": datetime.now(UTC).isoformat(),
             }
@@ -95,12 +131,12 @@ class QdrantVectorStore:
                 payload.update(metadata)
 
             point = PointStruct(
-                id=self._key_to_id(key),
+                id=point_id,
                 vector=vector.tolist(),
                 payload=payload,
             )
-            await (await self.client_manager.get_client()).upsert(
-                collection_name=self.collection_name(persona),
+            await client.upsert(
+                collection_name=name,
                 points=[point],
             )
             logger.info("Upserted vector for key: %s", key)
@@ -108,6 +144,20 @@ class QdrantVectorStore:
         except Exception as e:
             logger.error("Failed to upsert vector for %s: %s", key, e)
             return Failure(VectorStoreError(str(e)))
+
+    async def _fetch_payload(self, client, collection: str, point_id: str) -> dict | None:
+        """既存 point の payload を取る（無し = 空 dict、取得失敗 = None）。"""
+        try:
+            records = await client.retrieve(
+                collection_name=collection,
+                ids=[point_id],
+                with_payload=True,
+                with_vectors=False,
+            )
+            return dict(records[0].payload or {}) if records else {}
+        except Exception as e:
+            logger.debug("Fingerprint lookup failed for %s (re-encode): %s", point_id, e)
+            return None
 
     async def search(
         self,
@@ -167,7 +217,11 @@ class QdrantVectorStore:
                         PointStruct(
                             id=self._key_to_id(key),
                             vector=vec.tolist(),
-                            payload={"key": key, "content": content},
+                            payload={
+                                "key": key,
+                                "content": content,
+                                "embedding_fingerprint": self.embedding_fingerprint(content),
+                            },
                         )
                     )
                 await client.upsert(
