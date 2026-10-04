@@ -363,6 +363,41 @@ class TestBacklogLimit:
             conn.close()
 
 
+class TestTranscript:
+    def test_line_truncated_at_500_chars(self, tmp_path) -> None:
+        """1 行は 500 字でトランケートされ、超過分はプロンプトに載らない。"""
+        conn, repo, service, ctx, worker, calls = _make_env(tmp_path, with_speech=False, llm_text=_valid_llm_text())
+        try:
+            db = conn.get_memory_db()
+            day = get_now().date() - timedelta(days=1)
+            payload = {
+                "root_id": "y0",
+                "active_leaf_id": "y0",
+                "version": 1,
+                "nodes": [
+                    {
+                        "id": "y0",
+                        "parent_id": None,
+                        "role": "user",
+                        "content": "あ" * 600,
+                        "created_at": f"{day.isoformat()}T12:00:00+09:00",
+                    }
+                ],
+            }
+            db.execute(
+                "INSERT OR REPLACE INTO chat_sessions (persona, session_id, messages, timestamps, updated_at)"
+                " VALUES (?, 'main', ?, '[]', ?)",
+                (PERSONA, json.dumps(payload, ensure_ascii=False), get_now().isoformat()),
+            )
+            db.commit()
+            worker._curate_persona(ctx, PERSONA)
+            assert calls
+            assert "あ" * 500 in calls[0]
+            assert "あ" * 501 not in calls[0]
+        finally:
+            conn.close()
+
+
 @pytest.mark.parametrize("decision_name", ["run", "skip_today", "skip_zero_speech", "halted"])
 def test_decision_enum_surface(decision_name: str) -> None:
     assert CurationDecision(decision_name) == getattr(CurationDecision, decision_name.upper())
