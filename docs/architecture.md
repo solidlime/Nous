@@ -199,3 +199,22 @@ nous/
 | `NOUS_FORGETTING__ENABLED` | `true` | Ebbinghaus 忘却曲線 |
 
 全設定項目は WebUI の**設定画面**から確認・変更できます（WebUI からの変更は `docker-compose.yml` の環境変数より優先されます）。
+
+## 検索品質（ASIST 反映、2026-10-04）
+
+### 検索パイプラインの現状
+- ハイブリッド検索 = semantic（Qdrant）+ keyword（SQLite FTS5）+ OR-fallback、RRF スコアリング。
+- **dominantTokenKind 別 bm25 バー**（item 5）: OR-fallback 候補にのみ bm25 バーを適用。
+  - 閾値 `INJECTION_MAX_BM25 = { bigram: -2.5, word: -5.0 }`（正規化スコア `bar/(1+bar)` で比較）
+  - classify: `nous/domain/search/token_kind_gate.py`（cjk/lat トークン数で bigram/word/mixed 判定、mixed は gate 無効・fail-open）
+  - 設定: `Settings.search.injection_max_bm25` / env `NOUS_SEARCH__INJECTION_MAX_BM25`
+  - all-term exact マッチは boost 1.0 でバーを必ず通過
+- **注入済み記憶排除**（item 1）: チャット経路で同一 turn 内に注入済みの記憶を検索結果から除外。
+- **再 encode 排除（fingerprint）**（item 6）: Qdrant アダプタが embedding fingerprint を payload に記録し、同一 fingerprint の upsert は再 encode をスキップ。
+- **常載プロフィールドキュメント**（item 3）: `profile_update` ツールで persona_blocks に常載ブロックを登録、検索とは別に毎ターン注入。
+- **日次 curation**（item 4）: CurationWorker が日次で transcript 圧縮→journal 化（FSRS 強度更新）→内省統合。
+
+### 評価ハーネス
+- `scripts/eval_search_quality.py`（gold コーパス: `tests/benchmark/data/verify_corpus_v1.json`）
+- `scripts/eval_real_queries.py`（実クエリ A/B）
+- 合格ライン（案C）: zero-result 0 / recall@5 ≥ 0.75 / MRR ≥ 0.80 / p95 ≤ 1.5s

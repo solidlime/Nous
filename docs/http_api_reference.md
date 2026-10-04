@@ -371,3 +371,17 @@ Memories have a `privacy_level` field that controls dashboard visibility:
 | `internal` | 1 | Default — shown in dashboard |
 | `private` | 2 | Hidden from dashboard |
 | `secret` | 3 | Hidden from all read APIs |
+
+---
+
+## Search quality parameters (ASIST items, 2026-10-04)
+
+`GET /api/search/{persona}` と `memory_search` ツールは以下の検索品質パラメータを共有する:
+
+| 項目 | 説明 |
+|------|------|
+| dominantTokenKind 別 bm25 バー | OR-fallback 候補のみ適用。`NOUS_SEARCH__INJECTION_MAX_BM25`（default `{bigram: -2.5, word: -5.0}`、正規化スコア）で上書き可 |
+| 注入済み記憶排除 | チャット経路で同 turn 注入済みの記憶を結果から除外 |
+| all-term exact 保護 | 全語 exact マッチ候補は bm25 バーを必ず通過（boost 1.0） |
+
+mixed クエリ（Sudachi 辞書なし等）では gate は fail-open（無効）。
