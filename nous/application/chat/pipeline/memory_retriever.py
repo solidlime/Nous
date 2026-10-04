@@ -91,10 +91,19 @@ async def _search_memories(
             result = await ctx.search_engine.search(
                 SearchQuery(text=q, top_k=top_k, valid_at=get_now(), apply_rif=True, rank_policy=policy)
             )
-            return result.value if result.is_ok else []
+            hits = result.value if result.is_ok else []
         except Exception as e:
             logger.warning("search_memory failed (query=%s): %s", q[:40], e)
             return []
+        # チャット経路の実クエリを search_log に残す（MCP memory_search と同じ形）。
+        # best-effort — 記録失敗で検索を落とさない。
+        try:
+            service = getattr(ctx, "memory_service", None)
+            if service is not None:
+                service.log_search(q, "hybrid", len(hits))
+        except Exception as e:
+            logger.debug("log_search failed (query=%s): %s", q[:40], e)
+        return hits
 
     results = await asyncio.gather(*[_run(q) for q in queries])
 
