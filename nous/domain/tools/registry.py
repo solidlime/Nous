@@ -434,6 +434,25 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
         },
         divergence="MCP 面のみ valence / arousal / appearance を持つ（v3.x 互換フィールド）。",
     ),
+    "profile_update": ToolSpec(
+        name="profile_update",
+        summary="自己像/ユーザー像プロフィールブロックを全体リライトする（B-5）",
+        surfaces=frozenset({MCP, BUILTIN, HTTP}),
+        params={
+            MCP: (
+                ToolParam("target", "string", required=True),
+                ToolParam("content", "string", required=True),
+            ),
+            BUILTIN: (
+                ToolParam("target", "string", required=True),
+                ToolParam("content", "string", required=True),
+            ),
+            HTTP: (
+                ToolParam("target", "string", required=True),
+                ToolParam("content", "string", required=True),
+            ),
+        },
+    ),
 }
 
 

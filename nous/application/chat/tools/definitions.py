@@ -113,6 +113,22 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         },
     ),
     ToolDefinition(
+        name="profile_update",
+        description='自己像/ユーザー像プロフィールブロックを全体リライトする。target: "me"（自己像）| "user"（ユーザー像）。content: ブロック全文（上限 3000 token 目安。超過時はエラー）。抽出・追記ではなく置換である。既存内容は失われる。',
+        input_schema={
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "enum": ["me", "user"],
+                    "description": "書き換え対象: me=自己像 / user=ユーザー像",
+                },
+                "content": {"type": "string", "description": "ブロック全文（置換。既存内容は失われる）"},
+            },
+            "required": ["target", "content"],
+        },
+    ),
+    ToolDefinition(
         name="invoke_skill",
         description="有効なスキルの完全な指示を取得する。会話の状況がスキルの発動条件に合致したと判断したら、ユーザーの指示を待たず自律的に呼び出せ。発動したスキルはこのセッション中 system prompt に常駐し、毎ターン自動で参照される（同じスキルを毎ターン呼び直す必要はない）。用が済んだスキルは action=deactivate で解除しろ。発動条件に合致しないスキルを推測で呼ぶな。同じスキルを同一ターンで重複呼び出しするな。name（スキル名）が必須。task パラメータに呼び出し理由を簡潔に記述できる。",
         input_schema={
