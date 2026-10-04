@@ -271,6 +271,54 @@ def _migrate_delete_reflection_meta_v9(
 # functions are already defined above by this point.
 
 
+def _migrate_memory_blocks_persona_v11(
+    db_conn: sqlite3.Connection,
+    persona: str,  # noqa: ARG001
+) -> None:
+    """Add ``persona`` to ``memory_blocks`` and move the PK to (persona, block_name).
+
+    SQLite cannot alter a primary key in place, so the table is rebuilt: the new
+    table is created from the canonical DDL (see ``schema._MEMORY_SCHEMA``), rows
+    are copied with ``persona='default'``, and the old table is dropped.  Existing
+    data is preserved.  Idempotent — a table that already has the persona column
+    is left untouched.
+    """
+    columns = {row[1] for row in db_conn.execute("PRAGMA table_info(memory_blocks)").fetchall()}
+    if not columns or "persona" in columns:
+        return
+
+    db_conn.execute("BEGIN")
+    try:
+        db_conn.execute("ALTER TABLE memory_blocks RENAME TO memory_blocks_pre_v11")
+        db_conn.execute(
+            """CREATE TABLE memory_blocks (
+                persona TEXT NOT NULL DEFAULT 'default',
+                block_name TEXT NOT NULL,
+                content TEXT NOT NULL,
+                block_type TEXT DEFAULT 'custom',
+                max_tokens INTEGER DEFAULT 500,
+                priority INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata TEXT DEFAULT '{}',
+                PRIMARY KEY (persona, block_name)
+            )"""
+        )
+        db_conn.execute(
+            "INSERT INTO memory_blocks "
+            "(persona, block_name, content, block_type, max_tokens, priority, created_at, updated_at, metadata) "
+            "SELECT 'default', block_name, content, block_type, max_tokens, priority, created_at, updated_at, "
+            "COALESCE(metadata, '{}') FROM memory_blocks_pre_v11"
+        )
+        migrated = db_conn.execute("SELECT COUNT(*) FROM memory_blocks").fetchone()[0]
+        db_conn.execute("DROP TABLE memory_blocks_pre_v11")
+        db_conn.execute("COMMIT")
+    except Exception:
+        db_conn.rollback()
+        raise
+    logger.info("Migration v11: memory_blocks rebuilt with persona PK (%d rows)", migrated)
+
+
 def _migrate_fts_sudachi_retokenize(
     db_conn: sqlite3.Connection,
     persona: str,  # noqa: ARG001
@@ -307,4 +355,5 @@ MIGRATIONS = [
     (8, "Create mot_thoughts table", _migrate_mot_thoughts_v8),
     (9, "Delete legacy reflection_meta memories", _migrate_delete_reflection_meta_v9),
     (10, "Re-tokenize FTS index with Sudachi morphemes", _migrate_fts_sudachi_retokenize),
+    (11, "Add persona to memory_blocks and rebuild PK", _migrate_memory_blocks_persona_v11),
 ]

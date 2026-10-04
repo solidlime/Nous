@@ -60,14 +60,16 @@ CREATE TABLE IF NOT EXISTS memory_strength (
 );
 
 CREATE TABLE IF NOT EXISTS memory_blocks (
-    block_name TEXT PRIMARY KEY,
+    persona TEXT NOT NULL DEFAULT 'default',
+    block_name TEXT NOT NULL,
     content TEXT NOT NULL,
     block_type TEXT DEFAULT 'custom',
     max_tokens INTEGER DEFAULT 500,
     priority INTEGER DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    metadata TEXT DEFAULT '{}'
+    metadata TEXT DEFAULT '{}',
+    PRIMARY KEY (persona, block_name)
 );
 
 CREATE TABLE IF NOT EXISTS context_state (
