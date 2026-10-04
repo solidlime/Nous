@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from nous.domain.shared.result import Success
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -122,6 +123,22 @@ class PromptBuildStep:
 
         # --- 動的パート（ターンごとに変化）---
         dynamic_parts: list[str] = []
+
+        # --- 常載プロフィールブロック（B-4: 自己像→ユーザー像の固定順、欠落は省略）---
+        try:
+            profile_result = ctx.memory_service.get_profile_blocks(persona)
+            if isinstance(profile_result, Success):
+                blocks = profile_result.value
+                profile_parts = [
+                    f"\n【{label}】\n{blocks[name]['content']}"
+                    for name, label in (("me", "自己像"), ("user", "ユーザー像"))
+                    if blocks.get(name, {}).get("content")
+                ]
+                if profile_parts:
+                    dynamic_parts.append("".join(profile_parts))
+        except Exception:
+            # プロフィール取得失敗でチャットを落とさない
+            logger.warning("PromptBuildStep: profile blocks load failed", exc_info=True)
 
         # --- スキル読み込み ---
         skills_raw: list[dict] = []
