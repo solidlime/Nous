@@ -344,6 +344,34 @@ def _migrate_fts_sudachi_retokenize(
     logger.info("FTS index re-tokenized with Sudachi: %d documents", len(rows))
 
 
+def _migrate_curation_runs_v12(
+    db_conn: sqlite3.Connection,
+    persona: str,  # noqa: ARG001
+) -> None:
+    """Create ``curation_runs`` table + index (daily curation state machine, B-6).
+
+    One row per curation attempt: ``status`` is ``done`` or ``failed``.
+    ``started_at``/``finished_at`` are wall-clock timestamps of the attempt.
+    The worker reads the latest rows to decide whether it is due and to count
+    consecutive failures (7 → halted until manual reset).
+    """
+    db_conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS curation_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            persona TEXT NOT NULL,
+            status TEXT NOT NULL,
+            error TEXT,
+            started_at TEXT,
+            finished_at TEXT
+        )
+        """
+    )
+    db_conn.execute("CREATE INDEX IF NOT EXISTS idx_curation_runs_persona ON curation_runs(persona, started_at)")
+    db_conn.commit()
+    logger.info("Created curation_runs table (migration v12)")
+
+
 MIGRATIONS = [
     (1, "Add last_consumed_at column to memories", _migrate_add_last_consumed_at),
     (2, "Backfill FTS5 index", _migrate_fts_backfill),
@@ -356,4 +384,5 @@ MIGRATIONS = [
     (9, "Delete legacy reflection_meta memories", _migrate_delete_reflection_meta_v9),
     (10, "Re-tokenize FTS index with Sudachi morphemes", _migrate_fts_sudachi_retokenize),
     (11, "Add persona to memory_blocks and rebuild PK", _migrate_memory_blocks_persona_v11),
+    (12, "Create curation_runs table", _migrate_curation_runs_v12),
 ]
