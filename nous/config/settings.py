@@ -181,6 +181,27 @@ class ConsolidationConfig(BaseModel):
     base_url: str = Field(default="", description="空なら memory_enrichment.base_url")
 
 
+class CurationConfig(BaseModel):
+    """日次 curation 設定（B-6/B-7、設計書 §2-1）.
+
+    provider/key/model は空なら ``memory_enrichment`` を再利用する。
+    既定無効。有効化は ``NOUS_CURATION__ENABLED=true``。
+    """
+
+    enabled: bool = Field(default=False, description="日次 curation worker を起動する")
+    check_interval_seconds: int = Field(default=60, ge=5, description="due 判定ポーリング間隔")
+    max_backlog_days: int = Field(default=7, ge=1, description="追いかける未整理日の上限（超過分は放棄）")
+    max_consecutive_failures: int = Field(default=7, ge=1, description="連続失敗で halted")
+    journal_max_tokens: int = Field(default=1500, ge=100, description="journal 全文の推定トークン上限")
+    profile_max_tokens: int = Field(default=3000, ge=100, description="profile ブロックの推定トークン上限")
+    llm_max_tokens: int = Field(default=4096, ge=256, description="curation LLM の max_tokens")
+    llm_temperature: float = Field(default=0.3, ge=0.0, le=2.0)
+    provider: str = Field(default="", description="空なら memory_enrichment.provider")
+    api_key: str | None = None
+    model: str = Field(default="", description="空なら memory_enrichment.model")
+    base_url: str = Field(default="", description="空なら memory_enrichment.base_url")
+
+
 class IrodoriAdvancedParams(BaseModel):
     """Irodori-TTS top-level irodori options (num_steps / cfg_* / chunking / caption / seed)."""
 
@@ -370,6 +391,7 @@ class Settings(BaseSettings):
     forgetting: ForgettingConfig = ForgettingConfig()
     memory_enrichment: MemoryEnrichmentConfig = MemoryEnrichmentConfig()
     consolidation: ConsolidationConfig = ConsolidationConfig()
+    curation: CurationConfig = Field(default_factory=CurationConfig)
     explorer: ExplorerConfig = Field(default_factory=ExplorerConfig)
     cors: CorsConfig = CorsConfig()
     irodori: IrodoriConfig = Field(default_factory=IrodoriConfig)

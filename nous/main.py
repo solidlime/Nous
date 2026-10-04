@@ -280,6 +280,16 @@ def create_app() -> MemoryFastMCP:
     consolidation_worker.start()
     _workers.append(consolidation_worker)
 
+    # B-6/B-7 日次 curation（既定無効。NOUS_CURATION__ENABLED=true で有効化）
+    if settings.curation.enabled:
+        from nous.application.workers.curation_worker import CurationWorker
+
+        curation_worker = CurationWorker(settings)
+        curation_worker.start()
+        _workers.append(curation_worker)
+    else:
+        logger.info("CurationWorker disabled (NOUS_CURATION__ENABLED=false)")
+
     return mcp
 
 
