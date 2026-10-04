@@ -230,6 +230,8 @@ class VectorStackMixin:
                 embedding_provider=lambda: getattr(self, "_embedding", None),
                 # cross-encoder rerank 段は既定無効（NOUS_SEARCH__RERANK_ENABLED=true で復帰）。
                 rerank_enabled=self.settings.search.rerank_enabled,
+                # item 5: OR-fallback に渡す bm25 バー（NOUS_SEARCH__INJECTION_MAX_BM25）。
+                injection_max_bm25=self.settings.search.injection_max_bm25,
                 vector_retriever=_retrieve_candidate_vectors,
             )
             # worker 経路ではハンドラの set_persona が走らないため、生成時に必ず伝播させる

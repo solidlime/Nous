@@ -36,6 +36,12 @@ class RerankerConfig(BaseModel):
 class SearchConfig(BaseModel):
     """検索パイプライン設定（env: NOUS_SEARCH__RERANK_ENABLED 等）。"""
 
+    # item 5: FTS OR-fallback に渡す bm25 バー（dominantTokenKind 別、正の大きさ）。
+    # 候補は bm25 rank（負値）<= -bar のとき通過する。実測推奨は bigram=2.0 / word=2.0
+    # （research/nous-search-eval-20260928/item5_threshold_design.md）。
+    # env: NOUS_SEARCH__INJECTION_MAX_BM25='{"bigram": 2.5, "word": 2.5}'（JSON）。
+    injection_max_bm25: dict[str, float] = Field(default_factory=lambda: {"bigram": 2.0, "word": 2.0})
+
     # Cross-encoder rerank 段の有効化。既定 False。
     # 部分 rerank（上位 _RERANK_CANDIDATES 件のみ）は cross-encoder スコアと未 rerank の
     # RRF スコアを同一キーで再ソートするため順位を壊す（実測: all-term MRR 1.0→0.8704）。

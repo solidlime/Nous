@@ -19,6 +19,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from nous.domain.memory.query_service import resolve_brain_config
+from nous.domain.search.token_kind_gate import (
+    DEFAULT_INJECTION_MAX_BM25,
+    bar_for_tokens,
+    passes_bm25_bar,
+)
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import compute_recency_decay, get_now, parse_date_range
 from nous.domain.value_objects import normalize_emotion
@@ -188,6 +193,7 @@ class SearchEngine:
         embedding_provider: Callable[[], ContentEncoder | None] | None = None,
         vector_retriever: Callable[[list[str]], Awaitable[dict[str, np.ndarray]]] | None = None,
         rerank_enabled: bool = False,
+        injection_max_bm25: dict[str, float] | None = None,
     ) -> None:
         self._keyword = keyword_search
         self._semantic = semantic_search
@@ -204,6 +210,11 @@ class SearchEngine:
         # （値は Settings.search.rerank_enabled / NOUS_SEARCH__RERANK_ENABLED から配線）。
         self._rerank_enabled = rerank_enabled
         self._reranker_unloaded_warned = False
+        # item 5: FTS OR-fallback 候補の bm25 バー（dominantTokenKind 別、正の大きさ）。
+        # 配線元: Settings.search.injection_max_bm25 / NOUS_SEARCH__INJECTION_MAX_BM25。
+        self._injection_max_bm25 = dict(
+            DEFAULT_INJECTION_MAX_BM25 if injection_max_bm25 is None else injection_max_bm25
+        )
 
     def _post_filter(self, results: list[SearchResult], query: SearchQuery) -> list[SearchResult]:
         """Apply per-request filters/sort outside the query cache.
@@ -623,7 +634,14 @@ class SearchEngine:
                     match_mode="or",
                 )
                 if isinstance(or_result, Success):
+                    # item 5: OR-fallback 候補のみ bm25 バーで静かに間引く（バー以下は選外）。
+                    # AND 経路は対象外（実測: AND の noise は事実上ゼロ）。all-term exact
+                    # 一致（raw content に全語）は 1.0 に boost されてからバーを見るので
+                    # 実質常に通過する。
                     boosted = [(m, 1.0 if all(t in m.content for t in raw_terms) else s) for (m, s) in or_result.value]
+                    bar = self._or_fallback_bm25_bar(query.text)
+                    if bar is not None:
+                        boosted = [(m, s) for (m, s) in boosted if passes_bm25_bar(s, bar)]
                     fts_pairs = _merge_fts_groups(fts_pairs, boosted)
 
             all_results.extend(self._to_search_results(fts_pairs, "fts"))
@@ -669,6 +687,15 @@ class SearchEngine:
 
         # truncation しない: 件数は _finalize（post-filter → top_k）で決まる
         return Success(deduped)
+
+    def _or_fallback_bm25_bar(self, query_text: str) -> float | None:
+        """OR-fallback に適用する bm25 バー（正の大きさ）。mixed/未設定は None。"""
+        if not self._injection_max_bm25:
+            return None
+        from nous.infrastructure.sqlite import fts_tokenize  # noqa: PLC0415 — Sudachi は lazy
+
+        tokens = [t for t in fts_tokenize.tokenize_for_fts(query_text).split() if t]
+        return bar_for_tokens(tokens, self._injection_max_bm25)
 
     def _entity_linked_memory_keys(self, query: SearchQuery) -> set[str]:
         """query text の entity に紐づく memory key 集合（entity boost の共有部品）。

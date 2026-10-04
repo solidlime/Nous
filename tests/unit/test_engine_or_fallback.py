@@ -96,13 +96,15 @@ def test_merge_fts_groups_dedups_and_keeps_max():
 async def test_all_terms_bonus_boosts_to_one():
     repo = _FtsRepo(
         and_pairs=[],
-        or_pairs=[(_mem("miss", "確認のみ"), 0.6), (_mem("hit", "確認をお願いします"), 0.1)],
+        # 部分一致側の score は item 5 の OR-fallback bm25 バー（bigram 2.0）を
+        # 通過する値にする（本テストは boost の検証であり、ゲートの検証ではない）。
+        or_pairs=[(_mem("miss", "確認のみ"), 0.9), (_mem("hit", "確認をお願いします"), 0.1)],
     )
     result = await _engine(repo).search(SearchQuery(text="確認 お願い", top_k=5))
     assert result.is_ok
     scores = {r.memory.key: r.score for r in result.value}
     assert scores["hit"] == 1.0  # 全語一致 → 正規化上限
-    assert scores["miss"] == 0.6  # 部分一致は BM25 スコアのまま
+    assert scores["miss"] == 0.9  # 部分一致は BM25 スコアのまま
     assert result.value[0].memory.key == "hit"  # boost で先頭
 
 
