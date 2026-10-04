@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from nous.domain.profile.tokens import (
     DEFAULT_PROFILE_MAX_TOKENS,
     TOKEN_WEIGHTS,
