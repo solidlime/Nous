@@ -7,8 +7,10 @@ import logging
 from typing import TYPE_CHECKING
 
 from nous.domain.memory.cue import DUE_REMINDER_TAG, due_cues
+from nous.domain.profile.tokens import DEFAULT_PROFILE_MAX_TOKENS, estimate_tokens
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now, relative_time_str
+from nous.infrastructure.sqlite.block_repo import PROFILE_BLOCK_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -312,4 +314,42 @@ async def _tool_update_context(
     return {"ok": True, "result": f"Context updated: {', '.join(updated)}"}
 
 
-# --- Item tools ---
+# --- Profile tools (B-5) ---
+
+
+def _sanitize_profile_content(text: str) -> str:
+    """context_loader._sanitize_text と同じ流儀で異常 Unicode を除去する。"""
+    if not text:
+        return text
+    # 遅延 import: モジュールレベルだと chat.service 経由の循環 import になる
+    from nous.application.chat.pipeline.context_loader import _is_suspicious_cp
+
+    suspicious = [ch for ch in text if _is_suspicious_cp(ord(ch))]
+    if not suspicious:
+        return text
+    ratio = len(suspicious) / len(text)
+    if ratio > 0.1:
+        logger.warning("profile_update: discarding content with %.0f%% suspicious chars", ratio * 100)
+        return ""
+    logger.info("profile_update: removed %d suspicious chars (%.0f%%)", len(suspicious), ratio * 100)
+    return "".join(ch for ch in text if not _is_suspicious_cp(ord(ch)))
+
+
+@tool_called_audited("profile_update")
+async def _tool_profile_update(ctx: AppContext, persona: str, target: str, content: str) -> dict:
+    """Rewrite a profile block whole (target: "me" | "user"). Max ~3000 tokens."""
+    if target not in PROFILE_BLOCK_NAMES:
+        return {"ok": False, "error": f"Invalid target: {target} (must be 'me' or 'user')"}
+    content = _sanitize_profile_content(content)
+    if not content:
+        return {"ok": False, "error": "content must not be empty"}
+    tokens = estimate_tokens(content)
+    if tokens > DEFAULT_PROFILE_MAX_TOKENS:
+        return {
+            "ok": False,
+            "error": f"content too large: ~{tokens} tokens exceeds the limit of {DEFAULT_PROFILE_MAX_TOKENS}",
+        }
+    result = ctx.memory_service.upsert_profile_block(persona, target, content)
+    if not isinstance(result, Success):
+        return {"ok": False, "error": str(result.error)}
+    return {"ok": True, "result": f"Profile block '{target}' updated (~{tokens} tokens)"}

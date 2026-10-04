@@ -71,6 +71,7 @@ from nous.api.mcp._tools_memory import (  # noqa: E402, F401
 )
 from nous.api.mcp._tools_persona import (  # noqa: E402, F401
     _tool_get_context,
+    _tool_profile_update,
     _tool_session_begin,
     _tool_update_context,
 )
@@ -89,6 +90,7 @@ TOOL_DISPATCH: dict[str, Any] = {
     "memory_search": _tool_memory_search,
     "memory_stats": _tool_memory_stats,
     "update_context": _tool_update_context,
+    "profile_update": _tool_profile_update,
     "item_add": _tool_item_add,
     "item_equip": _tool_item_equip,
     "item_search": _tool_item_search,
@@ -357,6 +359,16 @@ def register_tools(mcp: MCPServer) -> None:
             appearance=appearance,
         )
         return _envelope_wrap(r)
+
+    # profile_update (B-5)
+    @_tool("profile_update")
+    async def profile_update(target: str, content: str) -> str:
+        """自己像/ユーザー像プロフィールブロックを全体リライトする。
+        target: "me"（自己像）| "user"（ユーザー像）。
+        content: ブロック全文（上限 3000 token 目安。超過時はエラー）。
+        抽出・追記ではなく置換である。既存内容は失われる。"""
+        p = _resolve_persona()
+        return _envelope_wrap(await _tool_profile_update(AppContextRegistry.get(p), p, target=target, content=content))
 
     # ── Item tools (split from unified item) ──
 
