@@ -117,7 +117,7 @@ class InMemoryMemoryRepository:
     ) -> Result[list[MemoryStrength], RepositoryError]:
         return Success(list(self._strengths.values()))
 
-    def get_block(self, block_name: str) -> Result[dict | None, RepositoryError]:
+    def get_block(self, block_name: str, persona: str = "default") -> Result[dict | None, RepositoryError]:
         return Success(self._blocks.get(block_name))
 
     def save_block(
@@ -128,6 +128,7 @@ class InMemoryMemoryRepository:
         max_tokens: int = 500,
         priority: int = 0,
         metadata: dict | None = None,
+        persona: str = "default",
     ) -> Result[None, RepositoryError]:
         self._blocks[block_name] = {
             "block_name": block_name,
@@ -139,10 +140,10 @@ class InMemoryMemoryRepository:
         }
         return Success(None)
 
-    def list_blocks(self) -> Result[list[dict], RepositoryError]:
+    def list_blocks(self, persona: str = "default") -> Result[list[dict], RepositoryError]:
         return Success(list(self._blocks.values()))
 
-    def delete_block(self, block_name: str) -> Result[None, RepositoryError]:
+    def delete_block(self, block_name: str, persona: str = "default") -> Result[None, RepositoryError]:
         self._blocks.pop(block_name, None)
         return Success(None)
 
