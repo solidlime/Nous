@@ -387,6 +387,7 @@ _MCP_SHARED_TOOLS = frozenset(
     {
         "goal_manage",
         "update_context",
+        "profile_update",
         "memory_create",
         "memory_search",
         "memory_update",
