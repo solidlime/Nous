@@ -10,18 +10,20 @@ description: "セッション開始時のルーティン。記憶の復元は拡
 
 注入される識別情報（毎ターン、システムプロンプトに `nous-session-core` として固定される）: 話し相手の名前・関係性・装備。現在時刻は `[NOUS CLOCK]` として毎ターン与えられる。
 
+注入文に `(FAILED` が含まれる場合のみ、復元に失敗している。そのときだけフォールバックとして `session_begin` を1回呼び、結果を最初の応答に反映する（成功していれば呼んではならない）。
+
 ## ステップ1: プロジェクト判定（注入文に「プロジェクト未判定」があるときだけ）
 注入文に `プロジェクト未判定（make-project スキルの判定が必要）` が含まれる場合のみ、make-project スキルを読み、**手順0 の判定表**に従って判定する（判定材料は cwd のファイル一覧＋会話の開発意図）。
 - 「プロジェクト」と確定したら手順1以降を自動実行する（確認はタグ確定の1問のみ）
 - 「プロジェクト（予備）」「通常会話」「判定不能」なら以降を自動実行せず、タグもファイルも作らず通常会話として続ける（報告不要）
-- プロジェクト記憶の復元が必要なら `session_begin(project="<slug>")` を1回だけ呼ぶ
+- プロジェクト記憶が必要なら `memory_search(query="", tags=["project:<slug>"])` で取る。**`session_begin` は再呼び出ししない**（`session_effects` として one-shot 状態を再消費するだけで、初回で枯渇済みのため得るものがない）
 
 注入文に `プロジェクト未判定` が含まれない場合（＝AGENTS.md から slug を解決済み）はこのステップを丸ごとスキップする。`session_begin` は既にプロジェクト付きで呼ばれており、PROJECT MEMORIES に前回の状態・決定が入っている。網羅が必要なときだけ `project:<slug>` タグで追加検索する（`tags=["project:<slug>","task_state"]` / `["project:<slug>","decision"]`）。
 
 `memory_search` は必ず `query=""` のタグ検索で行う（非空クエリは content 全文一致が前提で、タグは絞り込みにしか効かない）。
 
 ### ツール解決（環境差対応）
-`session_begin` / `memory_search` が直接使えるならそのまま使う。無ければ MCP ハブ経由で「nous」サーバーの同ツールを探して実行する（例: `search_tools(query="session begin", server="nous")` → `execute_tool(server="nous", tool_name="session_begin", arguments={...})`）。
+`memory_search` が直接使えるならそのまま使う。無ければ MCP ハブ経由で「nous」サーバーの同ツールを探して実行する（例: `search_tools(query="memory search", server="nous")` → `execute_tool(server="nous", tool_name="memory_search", arguments={...})`）。
 
 ## ステップ2: 前セッションからの自然な引き継ぎ
 復元済みの情報（前回の状況・感情・関係性・進行中の話題・最後の行動）を踏まえ、機械的な復元報告ではなく前回の続きとして自然に会話と状態をつなげる。`--- open promises ---` に未完了の約束があれば、その時点の応答で先出しする。セッションサマリが無い場合（初回など）は通常のセッション開始として自然に始める。
