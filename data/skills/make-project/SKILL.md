@@ -14,7 +14,7 @@ description: "session-start スキルから自動起動されるプロジェク�
 ## ツール解決（環境差対応）
 - `session_begin` / `memory_search` / `memory_create` / `memory_delete` が直接利用可能なら、そのまま使う
 - 見つからない場合、MCP ハブ等の仲介経由で「nous」サーバーのツールを探して実行する
-  - mcp-hub 例: `mcp-hub_list_upstream_tools` → nous サーバーを特定 → `mcp-hub_execute_tool(server="nous", tool_name="memory_search", arguments={...})`
+  - mcp-hub 例: `search_tools(query="memory search", server="nous")` → nous サーバーを特定 → `execute_tool(server="nous", tool_name="memory_search", arguments={...})
   - 他の MCP クライアントでも同様に「nous」サーバーのツールを検索して実行すること
 - 実行手段が違うだけで、以降の手順は変わらない
 

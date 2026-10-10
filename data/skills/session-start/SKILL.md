@@ -10,7 +10,7 @@ description: "セッション開始時の必須ルーティン。セッション
 `session_begin` を実行し、その結果を最初の応答に含めるまで先へ進まない。ツール一覧の取得は完了ではない。他の依頼が先に来ていても本ルーティンを先に完遂する。
 
 ## ツール解決（環境差対応）
-`session_begin` / `memory_search` が直接使えるならそのまま使う。無ければ MCP ハブ経由で「nous」サーバーの同ツールを探して実行する（例: `mcp-hub_list_upstream_tools` → `mcp-hub_execute_tool(server="nous", tool_name="session_begin", arguments={})`）。実行手段が違っても以降の手順は変わらない。
+`session_begin` / `memory_search` が直接使えるならそのまま使う。無ければ MCP ハブ経由で「nous」サーバーの同ツールを探して実行する（例: `search_tools(query="session begin", server="nous")` → `execute_tool(server="nous", tool_name="session_begin", arguments={})`）。実行手段が違っても以降の手順は変わらない。
 
 ## ステップ1: 自身の状況復元
 `session_begin` を呼び、自分の状態・アクティブなコミットメント・記憶概要を把握する。
