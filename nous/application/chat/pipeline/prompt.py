@@ -99,6 +99,39 @@ CHARACTER_ADHERENCE_BLOCK = """
 </character_adherence>"""
 
 
+def _emit_prompt_inject(ctx: AppContext, turn_ctx: ChatTurnContext) -> None:
+    """今ターンのプロンプトに実際に挿入された記憶 1 件につき ``prompt_inject`` を emit する。
+
+    確定できるのは ``<related_memories>`` への**挿入**まで。LLM が実際にその記憶を
+    使って応答したかは観測不能（挿入の確定であって使用の証明ではない）。
+    ``request_id`` は意図的に載せない（挿入は 2 クエリ + episode fallback の合成結果で
+    単一 request_id に還元できない）。emit 失敗で会話を壊さない。
+    """
+    try:
+        from nous.domain.memory import wiring_events
+
+        persona = ctx.persona
+        turn_id = getattr(turn_ctx, "turn_id", "") or ""
+        session_id = getattr(turn_ctx, "session_id", "") or ""
+        entries: list[tuple[str, str]] = []
+        for m in getattr(turn_ctx, "memories_objects", None) or []:
+            key = getattr(m, "key", "")
+            if isinstance(key, str) and key:
+                entries.append((key, "note"))
+        for e in getattr(turn_ctx, "episodes_objects", None) or []:
+            key = e.get("key") if isinstance(e, dict) else ""
+            if isinstance(key, str) and key:
+                entries.append((key, "episode"))
+        for key, origin in entries:
+            wiring_events.emit(
+                "prompt_inject",
+                source=key,
+                meta={"persona": persona, "turn_id": turn_id, "session_id": session_id, "origin": origin},
+            )
+    except Exception:
+        logger.debug("PromptBuildStep: prompt_inject emit failed", exc_info=True)
+
+
 class PromptBuildStep:
     """systemプロンプトを組み立てる。"""
 
@@ -219,6 +252,8 @@ class PromptBuildStep:
             dynamic_parts.append(
                 f"\n<retrieved_data>\n{RETRIEVED_DATA_GUARD}\n" + "\n".join(retrieved_inner) + "\n</retrieved_data>"
             )
+            # 挿入確定点: ここで実際に入った記憶だけを prompt_inject として流す。
+            _emit_prompt_inject(ctx, turn_ctx)
 
         # --- 再会時独り言コンテキスト (spec §4.3: 兄弟タグ・生の < は本文に入れない) ---
         if turn_ctx.monologue_entries:

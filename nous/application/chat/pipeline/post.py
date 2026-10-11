@@ -74,6 +74,49 @@ async def _safe_mental_model(ctx: AppContext, config: ChatConfig) -> None:
         logger.warning("background mental model failed", exc_info=True)
 
 
+def _inserted_retrieved(turn_ctx: ChatTurnContext) -> list[dict]:
+    """SSE ``retrieved`` = 実際にプロンプトへ挿入された記憶のみ（非挿入の top を含めない）。
+
+    旧実装は ``memories_raw``（= ``should_mention`` フィルタ前の top）をそのまま
+    流しており、挿入されなかった記憶を「取得した」と嘘を描く可能性があった。
+    Note 側は ``memories_objects``（挿入集合）を ``memories_raw``（score 等を持つ
+    debug 行）と content で突合して既存 shape を保つ。episodes は fallback 挿入分。
+    """
+    raw = list(getattr(turn_ctx, "memories_raw", None) or [])
+    by_content: dict[str, dict] = {}
+    for d in raw:
+        if isinstance(d, dict) and "content" in d:
+            by_content.setdefault(str(d["content"]), d)
+    out: list[dict] = []
+    for m in getattr(turn_ctx, "memories_objects", None) or []:
+        content = getattr(m, "content", str(m))
+        existing = by_content.get(str(content))
+        if existing is not None:
+            out.append(existing)
+        else:
+            out.append(
+                {
+                    "content": content,
+                    "importance": round(float(getattr(m, "importance", 0.5)), 2),
+                    "score": 0.0,
+                    "cosine": 0.0,
+                }
+            )
+    for e in getattr(turn_ctx, "episodes_objects", None) or []:
+        if not isinstance(e, dict):
+            continue
+        out.append(
+            {
+                "content": e.get("summary", ""),
+                "importance": 0.5,
+                "score": 0.0,
+                "cosine": 0.0,
+                "key": e.get("key", ""),
+            }
+        )
+    return out[:5]
+
+
 class PostProcessStep:
     """MemoryLLM await実行 + セッション更新 + debug_info/done SSEの送出。
 
@@ -149,7 +192,8 @@ class PostProcessStep:
                     logger.warning("PostProcessStep: run_memory_llm failed: %s", e)
 
         # MemoryActivitySSE: 取得された記憶と保存された記憶・goals・promises を通知
-        retrieved_for_sse = turn_ctx.memories_raw[:5]
+        # retrieved は「実際にプロンプトへ挿入された記憶」に揃える（嘘を描かない）。
+        retrieved_for_sse = _inserted_retrieved(turn_ctx)
 
         def _ensure_str(val: object, default: str = "") -> str:
             if isinstance(val, str):

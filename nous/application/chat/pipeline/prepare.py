@@ -245,6 +245,7 @@ class PrepareStep:
                 turn_ctx.memory_debug = {}
                 turn_ctx.memories_raw = []
                 turn_ctx.memories_objects = []
+                turn_ctx.episodes_objects = []
             else:
                 turn_ctx.related_memories, debug, memories_list = memory_result
                 turn_ctx.memory_debug = debug
@@ -261,9 +262,22 @@ class PrepareStep:
                         ep_results = await _search_episodes(ctx, turn_ctx.user_message, top_k=3)
                         if ep_results:
                             ep_lines = ["\n[Recent Episodes]"]
+                            episode_objects: list[dict] = []
                             for ep in ep_results:
                                 ep_lines.append(f"  [{ep.get('topic', 'episode')}] {ep.get('summary', '')[:80]}")
+                                topic = ep.get("topic", "episode")
+                                episode_objects.append(
+                                    {
+                                        "key": f"episode:{ep.get('episode_id') or topic}",
+                                        "topic": topic,
+                                        "summary": ep.get("summary", ""),
+                                        "episode_id": ep.get("episode_id", ""),
+                                    }
+                                )
                             turn_ctx.related_memories += "\n" + "\n".join(ep_lines)
+                            # 文字列（related_memories）と構造化記録を 1:1 で一致させる。
+                            # ここを落とすと prompt_inject / SSE retrieved から episodes が漏れる。
+                            turn_ctx.episodes_objects = episode_objects
                     except Exception:
                         logger.warning("PrepareStep: episode search fallback failed", exc_info=True)
         else:

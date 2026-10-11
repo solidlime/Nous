@@ -25,6 +25,11 @@ class ChatTurnContext:
     state_raw: dict = field(default_factory=dict)
     memories_raw: list[dict] = field(default_factory=list)
     memories_objects: list = field(default_factory=list)
+    # PrepareStep の Episode fallback が挿入した episode の構造化記録
+    # （[{"key": "episode:<id>", "topic", "summary", "episode_id"}]）。
+    # related_memories（文字列）と 1:1 で対応し、prompt_inject / SSE retrieved の
+    # 「実際に挿入した集合」を memories_objects と合わせて与える。
+    episodes_objects: list[dict] = field(default_factory=list)
     memory_debug: dict = field(default_factory=dict)
     # PromptBuildStep が埋める
     system_prompt: str = ""
