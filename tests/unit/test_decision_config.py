@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from nous.api.http.routers.chat.chat_management import _field_section, _field_tier
-from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository
+from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository, resolve_persona_chat_config
 from nous.domain.memory.query_service import resolve_decision_config
 
 
@@ -69,6 +69,18 @@ def test_resolve_reads_config(tmp_path):
         brain_decision_max_hops=4,
     )
     assert resolve_decision_config(repo) == {"enabled": True, "model": "m", "threshold": 0.8, "max_hops": 4}
+
+
+def test_resolve_persona_chat_config_without_conn():
+    assert resolve_persona_chat_config(object()) is None
+
+
+def test_resolve_persona_chat_config_reads_config(tmp_path):
+    repo = _repo(tmp_path, brain_decision_enabled=True, brain_decision_model="m")
+    cfg = resolve_persona_chat_config(repo)
+    assert isinstance(cfg, ChatConfig)
+    assert cfg.brain_decision_enabled is True
+    assert cfg.brain_decision_model == "m"
 
 
 def test_tier_and_section():

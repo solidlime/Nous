@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, TypedDict
 if TYPE_CHECKING:
     from nous.domain.memory.repository import MemoryRepository
 
+from nous.domain.chat_config import resolve_persona_chat_config
 from nous.domain.memory.entities import Memory, MemoryStrength
 from nous.domain.shared.errors import DomainError, MemoryNotFoundError
 from nous.domain.shared.result import Failure, Result, Success
@@ -32,10 +33,9 @@ def resolve_brain_config(repo: object) -> dict[str, float]:
     """
     values = dict(_BRAIN_DEFAULTS)
     try:
-        from nous.domain.chat_config import ChatConfigFileRepository
-
-        conn = getattr(repo, "_conn", None)
-        cfg = ChatConfigFileRepository(conn.data_dir).get(conn.persona)
+        cfg = resolve_persona_chat_config(repo)
+        if cfg is None:
+            return values
         for key in values:
             values[key] = float(getattr(cfg, key, values[key]))
     except Exception:
@@ -60,12 +60,9 @@ def resolve_decision_config(repo: object) -> DecisionConfig:
     """
     values = DecisionConfig(enabled=False, model="", threshold=0.55, max_hops=1)
     try:
-        from nous.domain.chat_config import ChatConfigFileRepository
-
-        conn = getattr(repo, "_conn", None)
-        if conn is None:
+        cfg = resolve_persona_chat_config(repo)
+        if cfg is None:
             return values
-        cfg = ChatConfigFileRepository(conn.data_dir).get(conn.persona)
         values["enabled"] = bool(getattr(cfg, "brain_decision_enabled", values["enabled"]))
         values["model"] = str(getattr(cfg, "brain_decision_model", values["model"]) or "")
         with contextlib.suppress(TypeError, ValueError):

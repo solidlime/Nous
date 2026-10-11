@@ -308,6 +308,18 @@ class ChatConfigFileRepository:
         os.replace(tmp_path, path)
 
 
+def resolve_persona_chat_config(repo: object) -> ChatConfig | None:
+    """repo._conn から per-persona の ChatConfig を取得する。
+
+    _conn が無ければ None。ChatConfigFileRepository.get() は不在・破損時に
+    デフォルトを返すため通常は None にならない。例外は呼び出し側が握る。
+    """
+    conn = getattr(repo, "_conn", None)
+    if conn is None:
+        return None
+    return ChatConfigFileRepository(conn.data_dir).get(conn.persona)
+
+
 # ──────────────────────────────────────────────
 # ImageAttachment (チャットに添付された画像)
 # ──────────────────────────────────────────────
