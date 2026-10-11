@@ -300,10 +300,52 @@ class VectorStackMixin:
                         result.error,
                     )
                     return None
+                self._start_embedding_migration(vs)
                 return vs
         except Exception as _e:
             logger.debug("VectorStore async init failed (Qdrant unavailable?): %s", _e)
         return None
+
+    def _start_embedding_migration(self, vector_store: QdrantVectorStore) -> None:
+        """Launch stale-embedding re-encode in a daemon thread (non-blocking, fail-open).
+
+        モデル/次元変更後の全 point 再エンコードは実測 ~0.7s/件（1160件で ~14分）かかる
+        ため、起動経路をブロックしない。fingerprint 一致 point は触らないので中断しても
+        各部分適用は有効なベクトルを持ち、次回起動で残りが再開される（既存の
+        `_preload_background` と同じ「専用 daemon thread + asyncio.run」方式に揃える）。
+
+        共有 client_manager は別イベントループから触ると client を再生成し合って
+        thrash するため、このスレッド専用の QdrantClientManager を張る。
+        """
+        persona = self.persona
+        url = self.settings.qdrant.url
+        api_key = self.settings.qdrant.api_key
+        prefix = self.settings.qdrant.collection_prefix
+        embedding = vector_store.embedding  # ロード済みモデルを共有（ONNX は thread-safe）
+
+        def _run() -> None:
+            from nous.application import use_cases
+
+            async def _migrate() -> None:
+                mgr = use_cases.QdrantClientManager(url, api_key)
+                try:
+                    await mgr.connect()
+                    if not await mgr.health_check():
+                        logger.warning("Embedding migration skipped for '%s': Qdrant unhealthy", persona)
+                        return
+                    store = use_cases.QdrantVectorStore(mgr, embedding, prefix)
+                    result = await store.reencode_stale(persona, batch_size=embedding.config.batch_size)
+                    if isinstance(result, Failure):
+                        logger.warning("Embedding migration failed for '%s': %s", persona, result.error)
+                finally:
+                    await mgr.close()
+
+            try:
+                asyncio.run(_migrate())
+            except Exception:
+                logger.warning("Embedding migration thread failed (search unaffected)", exc_info=True)
+
+        threading.Thread(target=_run, name=f"embedding-migration-{persona}", daemon=True).start()
 
     # ------------------------------------------------------------------
     # Vector store sync event handlers（旧 AppContext のハンドラ本体）

@@ -34,22 +34,27 @@ class _FakeClient:
         self.payloads.append(payload)
 
 
-def _store(existing: dict | None, model: str = "onnx-community/ruri-v3-30m-ONNX"):
+def _store(existing: dict | None, model: str = "onnx-community/ruri-v3-30m-ONNX", dimensions: int | None = None):
     client = _FakeClient(existing)
     mgr = MagicMock()
     mgr.get_client = AsyncMock(return_value=client)
     embedding = MagicMock()
-    embedding.config = SimpleNamespace(model=model)
+    embedding.config = SimpleNamespace(model=model, dimensions=dimensions)
     embedding.async_encode = AsyncMock(return_value=np.array([0.1, 0.2]))
     return QdrantVectorStore(mgr, embedding, "memory_"), client, embedding
 
 
-def _payload(content: str, fingerprint: str | None, model: str = "onnx-community/ruri-v3-30m-ONNX") -> dict:
+def _payload(
+    content: str,
+    fingerprint: str | None,
+    model: str = "onnx-community/ruri-v3-30m-ONNX",
+    dimensions: int | None = None,
+) -> dict:
     import hashlib
 
     p = {"key": "k1", "content": content}
     if fingerprint == "<match>":
-        p["embedding_fingerprint"] = hashlib.sha256(f"{model}\x1f{content}".encode()).hexdigest()
+        p["embedding_fingerprint"] = hashlib.sha256(f"{model}\x1f{dimensions}\x1f{content}".encode()).hexdigest()
     elif fingerprint is not None:
         p["embedding_fingerprint"] = fingerprint
     return p

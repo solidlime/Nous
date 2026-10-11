@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 
@@ -35,12 +36,15 @@ class QdrantVectorStore:
         return f"{self.collection_prefix}{persona}"
 
     def embedding_fingerprint(self, content: str) -> str:
-        """sha256(model_name + content) — 再 encode 要否の判定に使う。
+        """sha256(model_name + dimensions + content) — 再 encode 要否の判定に使う。
 
-        モデル名を混ぜることでモデル変更→全再計算、テキスト変更→差分再計算になる。
+        モデル名と MRL 切り詰め次元の両方を混ぜることで、モデル変更でも次元変更でも
+        全再計算になる（同一モデルで dimensions だけ変えた場合の取りこぼしを防ぐ）。
         """
-        model_name = getattr(getattr(self.embedding, "config", None), "model", "") or ""
-        return hashlib.sha256(f"{model_name}\x1f{content}".encode()).hexdigest()
+        config = getattr(self.embedding, "config", None)
+        model_name = getattr(config, "model", "") or ""
+        dimensions = getattr(config, "dimensions", None)
+        return hashlib.sha256(f"{model_name}\x1f{dimensions}\x1f{content}".encode()).hexdigest()
 
     # ------------------------------------------------------------------
     # Async API (all methods are async, using AsyncQdrantClient)
@@ -54,16 +58,17 @@ class QdrantVectorStore:
 
             client = await self.client_manager.get_client()
             collections = (await client.get_collections()).collections
-            if not any(c.name == name for c in collections):
-                dim = await self.embedding.async_dimension()
-                await client.create_collection(
-                    collection_name=name,
-                    vectors_config=VectorParams(
-                        size=dim,
-                        distance=Distance.COSINE,
-                    ),
-                )
-                logger.info("Created Qdrant collection: %s", name)
+            if any(c.name == name for c in collections):
+                return await self._validate_collection_dimension(client, name, persona)
+            dim = await self.embedding.async_dimension()
+            await client.create_collection(
+                collection_name=name,
+                vectors_config=VectorParams(
+                    size=dim,
+                    distance=Distance.COSINE,
+                ),
+            )
+            logger.info("Created Qdrant collection: %s", name)
             return Success(None)
         except Exception as e:
             err_str = str(e)
@@ -79,6 +84,35 @@ class QdrantVectorStore:
             else:
                 logger.error("Failed to ensure collection %s: %s", name, e)
             return Failure(VectorStoreError(str(e)))
+
+    async def _validate_collection_dimension(
+        self,
+        client,
+        name: str,
+        persona: str,
+    ) -> Result[None, VectorStoreError]:
+        """Reject an existing collection whose vector size != embedding.dimension.
+
+        モデル/次元変更後に旧次元のコレクションをそのまま使うと検索が無言で
+        壊れるため、明示的に失敗させて再構築を促す。
+        """
+        expected = await self.embedding.async_dimension()
+        info = await client.get_collection(collection_name=name)
+        vectors_config = getattr(getattr(getattr(info, "config", None), "params", None), "vectors", None)
+        if isinstance(vectors_config, dict):
+            vectors_config = next(iter(vectors_config.values()), None)
+        actual = getattr(vectors_config, "size", None)
+        if actual is not None and actual != expected:
+            model = getattr(getattr(self.embedding, "config", None), "model", "?")
+            message = (
+                f"Qdrant collection '{name}' has vector size {actual}, but embedding "
+                f"model '{model}' produces {expected}-dim vectors. Vector search would be "
+                f"meaningless. Rebuild the collection: delete '{name}' and restart, or call "
+                f"rebuild_collection('{persona}') to re-index all memories."
+            )
+            logger.error("Embedding dimension mismatch: %s", message)
+            return Failure(VectorStoreError(message))
+        return Success(None)
 
     async def upsert(
         self,
@@ -238,6 +272,92 @@ class QdrantVectorStore:
         except Exception as e:
             logger.error("Failed to batch upsert for '%s': %s", persona, e)
             return Failure(VectorStoreError(str(e)))
+
+    async def reencode_stale(
+        self,
+        persona: str,
+        batch_size: int = 32,
+    ) -> Result[int, VectorStoreError]:
+        """Re-encode points whose embedding_fingerprint is stale.
+
+        モデルまたは MRL 次元の変更後、旧空間のベクトルを持つ point を新しい空間で
+        再エンコードして上書きする。fingerprint が一致する point は触らないため
+        再実行可能（中断しても各部分適用は新旧どちらかの有効なベクトルを持つ）。
+        戻り値は再エンコードした件数。
+        """
+        name = self.collection_name(persona)
+        started = time.monotonic()
+        try:
+            client = await self.client_manager.get_client()
+            info = await client.get_collection(collection_name=name)
+            total = info.points_count or 0
+            logger.info("Embedding migration: scanning %d points in %s", total, name)
+            scanned = 0
+            reencoded = 0
+            offset = None
+            pending: list[tuple] = []
+            while True:
+                records, offset = await client.scroll(
+                    collection_name=name,
+                    limit=batch_size,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                if not records:
+                    break
+                for rec in records:
+                    scanned += 1
+                    payload = dict(rec.payload or {})
+                    content = payload.get("content", "")
+                    if not content:
+                        continue
+                    if payload.get("embedding_fingerprint") == self.embedding_fingerprint(content):
+                        continue
+                    pending.append((rec.id, payload))
+                    if len(pending) >= batch_size:
+                        reencoded += await self._reencode_points(client, name, pending)
+                        pending.clear()
+                        logger.info(
+                            "Embedding migration: %d re-encoded (%d/%d scanned) in %s",
+                            reencoded,
+                            scanned,
+                            total,
+                            name,
+                        )
+                if offset is None:
+                    break
+            if pending:
+                reencoded += await self._reencode_points(client, name, pending)
+            logger.info(
+                "Embedding migration complete for %s: %d re-encoded / %d scanned in %.1fs",
+                name,
+                reencoded,
+                scanned,
+                time.monotonic() - started,
+            )
+            return Success(reencoded)
+        except Exception as e:
+            logger.error(
+                "Embedding migration failed for %s (partial results are valid; re-run to resume): %s",
+                name,
+                e,
+            )
+            return Failure(VectorStoreError(str(e)))
+
+    async def _reencode_points(self, client, name: str, pending: list[tuple]) -> int:
+        """Re-encode and upsert one batch of stale points (payload preserved)."""
+        from qdrant_client.models import PointStruct
+
+        contents = [payload.get("content", "") for _, payload in pending]
+        vectors = await self.embedding.async_encode_batch(contents, is_query=False)
+        points = []
+        for (point_id, payload), content, vec in zip(pending, contents, vectors, strict=True):
+            new_payload = dict(payload)
+            new_payload["embedding_fingerprint"] = self.embedding_fingerprint(content)
+            points.append(PointStruct(id=point_id, vector=vec.tolist(), payload=new_payload))
+        await client.upsert(collection_name=name, points=points)
+        return len(points)
 
     async def retrieve_vectors(self, persona: str, keys: list[str]) -> Result[dict[str, np.ndarray], VectorStoreError]:
         """Fetch stored vectors by memory keys in ONE batch (no re-encode).
