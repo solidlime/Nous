@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Protocol
 
@@ -68,6 +69,9 @@ logger = get_logger(__name__)
 # Query result cache: key -> (monotonic timestamp, results). TTL-only invalidation.
 _CACHE_TTL_S = 30.0
 _CACHE_MAX = 256
+
+# decision_bypass の warn 集約で覚えておく相関 ID の上限（LRU）。
+_BYPASS_WARN_MAX = 256
 # Retrieval-induced forgetting (Anderson 1994, brain-sim design §3.4):
 # suppress the top-K candidates excluded from the final recall result.
 _RIF_TOP_K = 5
@@ -253,6 +257,13 @@ class SearchEngine:
         )
         # Jev 型判定ゲート用の judge（None のとき decision gate は完全 no-op）。
         self._decision_judge = decision_judge
+        # decision_bypass の warn は chat 経路で gate を on にすると、1 ターンに
+        # user/last_assistant の並行 2 クエリ分だけ出る。相関 ID（turn_id、無ければ
+        # request_id）単位で初回のみ warning し、以降は debug に降格する。回数・理由は
+        # decision_bypass emit の bypass_count で追える（可観測性は emit 側が担う）。
+        # LRU で上限を切る（request_id を渡す ad-hoc 経路で無限に増やさない）。
+        self._bypass_warned: OrderedDict[str, int] = OrderedDict()
+        self._bypass_warn_lock = threading.Lock()
 
     def _post_filter(self, results: list[SearchResult], query: SearchQuery) -> list[SearchResult]:
         """Apply per-request filters/sort outside the query cache.
@@ -430,8 +441,24 @@ class SearchEngine:
         return kept, verdict.sufficiency
 
     def _emit_decision_bypass(self, reason: str, query: SearchQuery, hop: int) -> None:
-        """fail-open で judge を通さなかった事実を残す（沈黙する事故の防止）。"""
-        logger.warning("decision gate bypassed (%s): %s", reason, query.text[:80])
+        """fail-open で judge を通さなかった事実を残す（沈黙する事故の防止）。
+
+        warn は相関 ID 単位で初回のみ。並行 2 クエリ（同一 turn）の 2 本目以降は
+        debug に降格する。相関 ID が無い ad-hoc 経路は従来どおり毎回 warning する。
+        """
+        correlation = query.turn_id or query.request_id
+        count = 0
+        if correlation:
+            with self._bypass_warn_lock:
+                count = self._bypass_warned.get(correlation, 0) + 1
+                self._bypass_warned[correlation] = count
+                self._bypass_warned.move_to_end(correlation)
+                while len(self._bypass_warned) > _BYPASS_WARN_MAX:
+                    self._bypass_warned.popitem(last=False)
+        if count <= 1:
+            logger.warning("decision gate bypassed (%s): %s", reason, query.text[:80])
+        else:
+            logger.debug("decision gate bypassed (%s, count=%d): %s", reason, count, query.text[:80])
         try:
             wiring_events.emit(
                 "decision_bypass",
@@ -441,6 +468,7 @@ class SearchEngine:
                     "hop": hop,
                     "request_id": query.request_id,
                     "turn_id": query.turn_id,
+                    "bypass_count": count,
                 },
             )
         except Exception:

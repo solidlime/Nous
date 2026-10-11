@@ -7,6 +7,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from nous.domain.memory.query_service import resolve_decision_config
 from nous.domain.memory.recall_annotator import RecallAnnotator
 from nous.domain.search.engine import SearchQuery, SearchResult
 from nous.domain.search.policy import RankPolicy
@@ -84,6 +85,22 @@ async def _search_memories(
         graph_boost_weight=graph_boost_w,
     )
 
+    # Jev 判定ゲート（Phase 14）: brain_decision_* を per-persona ChatConfig から
+    # 既存の解決経路（resolve_decision_config → resolve_persona_chat_config）で引く。
+    # 既定 off のときは SearchQuery に一切載せないため、現行挙動と完全に同一。
+    decision_cfg = resolve_decision_config(getattr(ctx, "memory_repo", None))
+    decision_kwargs: dict = {}
+    if decision_cfg["enabled"]:
+        decision_kwargs = {
+            "decision_enabled": True,
+            # model="" は「会話用モデルを使う」の意味 → None で judge 既定に委ねる。
+            "decision_model": decision_cfg["model"] or None,
+            "decision_threshold": decision_cfg["threshold"],
+            # 既定 1。ユーザーが明示的に上げたときのみ engine の multi-hop 経路に入る。
+            "max_hops": decision_cfg["max_hops"],
+            "decision_time_weight": decision_cfg["time_weight"],
+        }
+
     queries = [user_message]
     if last_assistant:
         queries.append(last_assistant[:200])
@@ -101,6 +118,7 @@ async def _search_memories(
                     rank_policy=policy,
                     request_id=request_id,
                     turn_id=turn_id,
+                    **decision_kwargs,
                 )
             )
             hits = result.value if result.is_ok else []
