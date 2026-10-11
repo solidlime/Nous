@@ -88,13 +88,16 @@ class DecisionJudge:
         try:
             from nous.infrastructure.llm.base import LLMMessage
 
-            provider = self._provider()
+            provider = self._provider(model)
+            # 候補数に比例させる: 1候補 ≈ 8〜12 トークンだが余裕を見て 24、上限 8192。
+            # 512 固定だと 50 件超で JSON が切れ、パース不能 → fail-open でゲートが黙って無効化される。
+            max_tokens = min(max(self._max_tokens, len(candidates) * 24 + 128), 8192)
             collected = await collect_text_with_usage(
                 provider,
                 messages=[LLMMessage(role="user", content=self._build_user_message(query_text, candidates))],
                 system=_SYSTEM_PROMPT,
                 temperature=self._temperature,
-                max_tokens=self._max_tokens,
+                max_tokens=max_tokens,
             )
             if not collected.text:
                 return None

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -36,6 +37,25 @@ def _mem(key: str, content: str = "content", tags: list[str] | None = None) -> M
 
 def _result(key: str, score: float, content: str = "content", tags: list[str] | None = None) -> SearchResult:
     return SearchResult(memory=_mem(key, content=content, tags=tags), score=score, source="keyword")
+
+
+class _StreamingProvider:
+    """stream で固定テキストを 1 度だけ流すフェイク provider。"""
+
+    def __init__(self, text: str) -> None:
+        self._text = text
+
+    def stream(self, **kwargs):
+        async def _gen():
+            yield TextDeltaEvent(content=self._text)
+            yield DoneEvent()
+
+        return _gen()
+
+
+async def _collected(text: str) -> SimpleNamespace:
+    """collect_text_with_usage の await 可能な戻り値スタブ。"""
+    return SimpleNamespace(text=text, usage=None, thinking_chars=0)
 
 
 def _make_keyword_strategy(pairs_by_text=None):
@@ -271,6 +291,52 @@ class TestDecisionJudgeParse:
         verdict = await judge.judge("q", [{"key": "a", "content": "hello"}])
         assert verdict is not None
         assert verdict.verdicts == {"a": 0.8}
+
+    @pytest.mark.asyncio
+    async def test_judge_model_reaches_provider_factory(self):
+        judge = DecisionJudge("openai", "key", "default-model")
+        fake = MagicMock()
+        with (
+            patch("nous.infrastructure.llm.decision_judge.get_provider", return_value=fake) as gp,
+            patch(
+                "nous.infrastructure.llm.decision_judge.collect_text_with_usage",
+                new=MagicMock(
+                    side_effect=lambda *a, **kw: _collected('{"decisions": [{"index": 0, "probability": 0.8}]}')
+                ),
+            ),
+        ):
+            await judge.judge("q", [{"key": "a", "content": "x"}], model="override-model")
+        assert gp.call_args.kwargs["model"] == "override-model"
+
+    @pytest.mark.asyncio
+    async def test_judge_scales_max_tokens_with_candidate_count(self):
+        judge = DecisionJudge("openai", "key", "m")
+        collected = MagicMock(
+            side_effect=lambda *a, **kw: _collected('{"decisions": [{"index": 0, "probability": 0.8}]}')
+        )
+        with (
+            patch("nous.infrastructure.llm.decision_judge.get_provider", return_value=MagicMock()),
+            patch("nous.infrastructure.llm.decision_judge.collect_text_with_usage", new=collected),
+        ):
+            candidates = [{"key": f"k{i}", "content": "x"} for i in range(100)]
+            await judge.judge("q", candidates)
+        max_tokens = collected.call_args.kwargs["max_tokens"]
+        assert max_tokens > 512
+        assert max_tokens <= 8192
+
+    @pytest.mark.asyncio
+    async def test_truncated_output_fails_open_all_kept(self):
+        # 出力が途中で切れてパース不能 → judge は None → engine は全候補採用（fail-open）。
+        truncated = '{"decisions": [{"index": 0, "probability": 0.9}, {"index": 1, "pro'
+        judge = DecisionJudge("openai", "key", "m")
+        judge._provider = lambda model=None: _StreamingProvider(truncated)  # type: ignore[method-assign]
+        kw = _make_keyword_strategy({"hello": [(_mem("k1"), 0.9), (_mem("k2"), 0.5)]})
+        engine = SearchEngine(keyword_search=kw, decision_judge=judge)
+        result = await engine.search(
+            SearchQuery(text="hello", mode="keyword", decision_enabled=True, decision_threshold=0.99)
+        )
+        assert result.is_ok
+        assert [r.memory.key for r in result.value] == ["k1", "k2"]
 
     @pytest.mark.asyncio
     async def test_judge_empty_inputs_returns_none(self):
