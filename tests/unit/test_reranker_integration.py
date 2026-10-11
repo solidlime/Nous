@@ -246,6 +246,10 @@ class TestAppContextRerankerInstantiation:
         ]
         if patch_thread:
             patchers.append(patch("threading.Thread"))
+        else:
+            # 実モデル preload の daemon thread を止める。patch_thread 側は Thread
+            # 自体を mock するため不要。残すと shutdown 時に SIGABRT する。
+            patchers.append(patch.object(AppContext, "_preload_background", lambda self: None))
 
         mocks = [p.start() for p in patchers]
         self.mock_reranker_cls = mocks[1]

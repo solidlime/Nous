@@ -13,6 +13,19 @@ from nous.domain.shared.result import Failure, Success
 from nous.domain.shared.time_utils import get_now
 
 
+@pytest.fixture(autouse=True)
+def _disable_model_preload(monkeypatch):
+    """AppContext.__init__ は実モデルの preload を daemon thread で起動する。
+
+    テストに不要な HuggingFace download / ONNX session 生成が interpreter
+    shutdown まで残り、SIGABRT（_enter_buffered_busy）で pytest ごと落ちる。
+    tests/integration/conftest.py と同じ理由でこのモジュールでは止める。
+    """
+    from nous.application.use_cases import AppContext
+
+    monkeypatch.setattr(AppContext, "_preload_background", lambda self: None)
+
+
 def _make_memory(key="mem_001", content="test", created_at=None):
     now = created_at or get_now()
     return Memory(key=key, content=content, created_at=now, updated_at=now)
