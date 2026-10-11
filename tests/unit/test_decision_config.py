@@ -71,6 +71,31 @@ def test_resolve_reads_config(tmp_path):
     assert resolve_decision_config(repo) == {"enabled": True, "model": "m", "threshold": 0.8, "max_hops": 4}
 
 
+def test_rest_save_persists_and_resolves_max_hops_clamped(tmp_path, monkeypatch):
+    """REST 保存 → JSON ファイル → resolve_decision_config の経路でも hops を 1..5 に clamp (#011)。"""
+    import asyncio
+    import types
+
+    from nous.api.http.routers.chat import chat_management as cm
+
+    monkeypatch.setattr(cm, "get_settings", lambda: types.SimpleNamespace(data_root=str(tmp_path)))
+    result = asyncio.run(
+        cm._do_save_chat_config("p", None, {"brain_decision_enabled": True, "brain_decision_max_hops": 99})
+    )
+    assert result["brain_decision_max_hops"] == 5
+
+    class _Conn:
+        data_dir = str(tmp_path)
+        persona = "p"
+
+    class _Repo:
+        _conn = _Conn()
+
+    resolved = resolve_decision_config(_Repo())
+    assert resolved["enabled"] is True
+    assert resolved["max_hops"] == 5
+
+
 def test_resolve_persona_chat_config_without_conn():
     assert resolve_persona_chat_config(object()) is None
 
