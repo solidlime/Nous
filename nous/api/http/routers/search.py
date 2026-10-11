@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
@@ -27,12 +28,32 @@ def _parse_decision_flag(value: str | None) -> bool:
     return (value or "").strip().lower() in _TRUTHY_VALUES
 
 
+def _entity_typed_by(row: dict) -> str | None:
+    """Return ``entities.metadata.typed_by`` (the typing provenance) or None.
+
+    The color map only paints an entity when its type came from a trusted
+    typing path; entities written by the regex extractor have no ``typed_by``
+    yet, so they stay unpainted (grey) until the LLM typist backfills them.
+    """
+    raw = row.get("metadata")
+    if not raw:
+        return None
+    try:
+        meta = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(meta, dict):
+        return None
+    typed_by = meta.get("typed_by")
+    return typed_by if isinstance(typed_by, str) and typed_by else None
+
+
 def _merge_entity_layer(ctx, memories: list, nodes: list, edges: list, edge_set: set) -> None:
     """Append entity nodes and mentions/relation edges to the graph (display-only superset).
 
     Repo contract (implemented on the repository side by Lane B):
         get_entities_for_memories(memory_keys, limit=50)
-            -> [{id, label, type, mention_count, memory_key}]
+            -> [{id, label, type, mention_count, metadata, memory_key}]
         get_relations_between_entities(entity_ids)
             -> [{source_id, target_id, relation, confidence}]
 
@@ -67,6 +88,7 @@ def _merge_entity_layer(ctx, memories: list, nodes: list, edges: list, edge_set:
                 "kind": "entity",
                 "label": row.get("label") or row["id"],
                 "entity_type": row.get("type"),
+                "typed_by": _entity_typed_by(row),
                 "mention_count": row.get("mention_count", 0),
             }
         )

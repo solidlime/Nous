@@ -20,10 +20,13 @@ let graphNodeLimit = 100;
 
 /* ---- Helpers ---- */
 
+/* 動作系 relation（紫=どうする）。それ以外は状態系として既定エッジ色。 */
+var ACTION_RELATIONS = { created: true, manages: true };
+
 function _graphFontColor() {
     return document.documentElement.classList.contains('light') ? '#1e1b4b' : '#f1f5f9';
 }
-function _graphEdgeColor(type) {
+function _graphEdgeColor(type, relation) {
     var isLight = document.documentElement.classList.contains('light');
     if (type === 'related') {
         return {
@@ -32,7 +35,9 @@ function _graphEdgeColor(type) {
             hover:     isLight ? '#0051d5' : '#60a5fa'
         };
     }
-    if (type === 'relation') {
+    /* 動作系 relation だけ紫（=どうする）。状態系（knows / located_in 等）
+       は「動作」ではないので既定のエッジ色へ落とす。 */
+    if (type === 'relation' && ACTION_RELATIONS[relation]) {
         return {
             color:     isLight ? 'rgba(124,58,237,0.75)' : 'rgba(167,139,250,0.85)',
             highlight: isLight ? '#6d28d9' : '#c4b5fd',
@@ -45,6 +50,40 @@ function _graphEdgeColor(type) {
         hover:     isLight ? '#475569' : '#94a3b8'
     };
 }
+
+/* 「記憶の構成要素」4色マッピング（新規フィールド/backfill なし、表示時に
+   API 既存値から導出）。
+   4色は entity_type の上位概念ではなく【表示層のバケット】として定義し、
+   中間語彙(entity_type) → 色バケット の写像をここ1箇所に集約する。
+   語彙が増えても色設計は壊れない（未知語彙は自動的に既定グレー）。
+   バケット: who=誰が(緑) / what=なにを(黄) / how=どうする(紫, relation 側) /
+             feel=きもち(ピンク, memory 枠 側)。
+   person|agent が緑（agent は将来の LLM typist 用の受け口、今は到来しない）。
+   place / concept / event / organization は現状バケット無し → 灰。 */
+var ENTITY_TYPE_BUCKET = {
+    person: 'who',
+    agent:  'who',
+    thing:  'what'
+};
+var BUCKET_FILL = {
+    who:  '#30d158',   /* 緑 = 誰が */
+    what: '#ffd60a'    /* 黄 = なにを */
+};
+var ENTITY_FILL_DEFAULT = '#94a3b8';
+
+/* 型付け経路が信頼できるものだけ着色する。typed_by が無い/未知なら無色。
+   regex 抽出はカタカナを person と断定できない（entity として保存される）
+   ため、typist（LLM 型付け）実装前は全 entity が灰のまま = 正しい状態。
+   typist が metadata.typed_by を書けば自動的に点灯する。 */
+var TRUSTED_TYPED_BY = { llm: true, sudachi: true, regex: true };
+function entityFillColor(entityType, typedBy) {
+    if (!TRUSTED_TYPED_BY[typedBy]) return ENTITY_FILL_DEFAULT;
+    var bucket = ENTITY_TYPE_BUCKET[entityType];
+    return (bucket && BUCKET_FILL[bucket]) || ENTITY_FILL_DEFAULT;
+}
+
+/* memory のピンク枠（=きもち）。neutral は感情なしなので枠は塗り同色。 */
+var EMOTION_BORDER_COLOR = '#ff375f';
 
 /* ---- Wiring flash (brain simulation visualization) ---- */
 
@@ -249,7 +288,7 @@ function buildVisData(nodes, edges) {
     var visNodes = nodes.map(function(n) {
         /* Entity node: fixed-color dot sized by mention count */
         if (n.kind === 'entity') {
-            var entColor = '#a78bfa';
+            var entColor = entityFillColor(n.entity_type, n.typed_by);
             return {
                 id: n.key,
                 label: truncate(n.label, 20) || n.key,
@@ -271,6 +310,9 @@ function buildVisData(nodes, edges) {
         var emoColor = N.Core.EMOTION_COLORS[n.emotion] || '#94a3b8';
         var sz = 10 + (n.importance || 0.5) * 30;
         var nodeLabel = truncate(n.content, 20) || n.key || 'Unknown';
+        /* 塗りは従来どおり emotion 色。neutral 以外は枠をピンクにして
+           「きもち」を表現する（枠/塗りは別チャネル。発火後もこの色へ復帰） */
+        var borderColor = (n.emotion && n.emotion !== 'neutral') ? EMOTION_BORDER_COLOR : emoColor;
         return {
             id: n.key,
             label: nodeLabel,
@@ -278,7 +320,7 @@ function buildVisData(nodes, edges) {
             size: sz,
             color: {
                 background: emoColor,
-                border: emoColor,
+                border: borderColor,
                 highlight: { background: emoColor, border: '#fff' },
                 hover:     { background: emoColor, border: '#fff' }
             },
@@ -299,7 +341,7 @@ function buildVisData(nodes, edges) {
             to: e.target,
             dashes: isMentions ? [2, 4] : !isRelated,
             width: isRelated ? 2.5 : (isRelation ? 2 : 1),
-            color: _graphEdgeColor(e.type),
+            color: _graphEdgeColor(e.type, e.relation),
             smooth: { type: 'continuous' },
             _type: e.type,
             _tag:  e.tag || '',

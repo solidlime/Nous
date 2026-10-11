@@ -2,7 +2,7 @@
 
 Repo contract (implemented by Lane B) is mocked here:
     get_entities_for_memories(memory_keys, limit=50)
-        -> [{id, label, type, mention_count, memory_key}]
+        -> [{id, label, type, mention_count, metadata, memory_key}]
     get_relations_between_entities(entity_ids)
         -> [{source_id, target_id, relation, confidence}]
 """
@@ -120,6 +120,31 @@ async def test_entity_nodes_and_mentions_edges(graph_handler, monkeypatch):
 
     mentions = [e for e in data["edges"] if e["type"] == "mentions"]
     assert {("m1", "ent:ヘルタ"), ("m2", "ent:ヘルタ")} == {(e["source"], e["target"]) for e in mentions}
+
+
+async def test_entity_typed_by_derived_from_metadata(graph_handler, monkeypatch):
+    """typed_by は entities.metadata から導出。無い / 壊れた値は None（表示層で無色）。"""
+    import json
+
+    entities = [
+        {
+            "id": "p1",
+            "label": "P",
+            "type": "person",
+            "mention_count": 2,
+            "memory_key": "m1",
+            "metadata": json.dumps({"typed_by": "llm"}),
+        },
+        {"id": "p2", "label": "Q", "type": "person", "mention_count": 1, "memory_key": "m1", "metadata": "{}"},
+        {"id": "p3", "label": "R", "type": "thing", "mention_count": 1, "memory_key": "m1"},
+        {"id": "p4", "label": "S", "type": "person", "mention_count": 1, "memory_key": "m1", "metadata": "not-json"},
+    ]
+    data = await _json(graph_handler, monkeypatch, [_mem("m1")], _entity_repo(entities))
+    by_id = {n["key"]: n for n in data["nodes"] if n.get("kind") == "entity"}
+    assert by_id["ent:p1"]["typed_by"] == "llm"
+    assert by_id["ent:p2"]["typed_by"] is None
+    assert by_id["ent:p3"]["typed_by"] is None
+    assert by_id["ent:p4"]["typed_by"] is None
 
 
 async def test_cap_50_by_mention_count(graph_handler, monkeypatch):

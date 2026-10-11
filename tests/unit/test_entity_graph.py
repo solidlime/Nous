@@ -36,14 +36,21 @@ def entity_service(entity_repo, extractor):
 
 class TestSimpleEntityExtractor:
     def test_extract_katakana_names(self, extractor: SimpleEntityExtractor):
-        """カタカナ名が人名として抽出される"""
+        """カタカナ語は名前として抽出されるが、型は断定せず entity になる
+        （「プリン」のような一般名詞まで person と誤タイプしないため）"""
         results = extractor.extract("ヘルタとニィロウが話した")
         names = {name for name, _ in results}
         assert "ヘルタ" in names
         assert "ニィロウ" in names
         for name, etype in results:
             if name in ("ヘルタ", "ニィロウ"):
-                assert etype == "person"
+                assert etype == "entity"
+
+    def test_katakana_generic_noun_not_person(self, extractor: SimpleEntityExtractor):
+        """カタカナ一般名詞が person と誤タイプされない（回帰）"""
+        results = extractor.extract("プリンとクッキーを買った")
+        assert all(etype != "person" for _, etype in results)
+        assert ("プリン", "entity") in results
 
     def test_extract_places(self, extractor: SimpleEntityExtractor):
         """場所サフィックスが場所として抽出される"""
@@ -71,11 +78,11 @@ class TestSimpleEntityExtractor:
         assert "データ" not in names
         assert "テスト" not in names
 
-    def test_mixed_places_and_persons(self, extractor: SimpleEntityExtractor):
-        """場所と人名が正しく分類される"""
+    def test_mixed_places_and_untyped(self, extractor: SimpleEntityExtractor):
+        """場所は place、カタカナ名は型なし entity に分類される"""
         results = extractor.extract("カフカが東京タワーを訪れた")
         type_map = {name: etype for name, etype in results}
-        assert type_map.get("カフカ") == "person"
+        assert type_map.get("カフカ") == "entity"
         assert type_map.get("東京タワー") == "place"
 
     def test_single_char_katakana_excluded(self, extractor: SimpleEntityExtractor):

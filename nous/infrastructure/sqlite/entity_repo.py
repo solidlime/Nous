@@ -357,7 +357,7 @@ class SQLiteEntityRepository(SQLiteRepository):
             # Stage 2: fetch memory_key-bearing rows for the visible set.
             id_placeholders = ", ".join("?" for _ in ids)
             rows = self._db.execute(
-                "SELECT e.id, e.id AS label, e.entity_type AS type, e.mention_count, me.memory_key "  # nosec B608 -- IN-list is "?" placeholders; values bound via sqlite params
+                "SELECT e.id, e.id AS label, e.entity_type AS type, e.mention_count, e.metadata, me.memory_key "  # nosec B608 -- IN-list is "?" placeholders; values bound via sqlite params
                 "FROM memory_entities me "
                 "JOIN entities e ON e.id = me.entity_id "
                 f"WHERE me.entity_id IN ({id_placeholders}) "

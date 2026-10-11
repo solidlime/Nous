@@ -12,7 +12,9 @@ class SimpleEntityExtractor:
     list of ``(entity_name, entity_type)`` tuples.
     """
 
-    # Katakana sequences (≥2 chars) — likely person / thing names
+    # Katakana sequences (≥2 chars) — likely person / thing names.
+    # Type is unknowable from surface form alone, so such candidates are
+    # stored as ``entity`` (untyped), never asserted as ``person``.
     KATAKANA_NAME = re.compile(r"[\u30A0-\u30FF]{2,}")
 
     # Place suffixes (CJK / Katakana prefix + known suffix)
@@ -107,7 +109,7 @@ class SimpleEntityExtractor:
     def extract(self, text: str) -> list[tuple[str, str]]:
         """Return ``[(entity_name, entity_type), ...]`` from *text*.
 
-        Entity types: ``person``, ``place``.
+        Entity types: ``person``, ``place``, ``entity`` (untyped candidate).
         """
         if not text:
             return []
@@ -121,11 +123,12 @@ class SimpleEntityExtractor:
             place_texts.add(name)
             entities.append((name, "place"))
 
-        # 2. Katakana names (likely persons, excluding places & stopwords)
+        # 2. Katakana names (person OR thing — surface form can't tell them
+        #    apart, so keep the type unclassified as "entity")
         for match in self.KATAKANA_NAME.finditer(text):
             name = match.group()
             if name not in place_texts and name not in self._STOPWORDS and len(name) >= 2:
-                entities.append((name, "person"))
+                entities.append((name, "entity"))
 
         # 3. Japanese names with honorifics (敬称付き漢字人名)
         for match in self.JAPANESE_NAME.finditer(text):
