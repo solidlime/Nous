@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from typing import TYPE_CHECKING
 
 from nous.application.chat.pipeline.compress import CompressStep
@@ -154,7 +155,9 @@ class ChatService:
 
         async def _consume() -> None:
             try:
-                async for evt in self.chat(ctx, config, session_id, message, debug=debug, images=images or []):
+                async for evt in self.chat(
+                    ctx, config, session_id, message, debug=debug, images=images or [], turn_id=turn_id
+                ):
                     _turn_hub.publish(ctx.persona, evt)
             except Exception:
                 _turn_hub.publish_synthetic(ctx.persona, {"type": "error", "message": "internal error"})
@@ -173,6 +176,7 @@ class ChatService:
         user_message: str,
         debug: bool = False,
         images: list[dict] | None = None,
+        turn_id: str | None = None,
     ) -> AsyncIterator[str]:
         try:
             persona = ctx.persona
@@ -185,7 +189,12 @@ class ChatService:
             # Hebbian co-activation linking via MemoryLinkService.
             ctx.session_id = session_id
 
-            turn_ctx = ChatTurnContext(session_id=session_id, user_message=user_message, images=images or [])
+            turn_ctx = ChatTurnContext(
+                session_id=session_id,
+                user_message=user_message,
+                images=images or [],
+                turn_id=turn_id or uuid.uuid4().hex,
+            )
 
             # Publish chat.message event for server-side history
             await ctx.event_bus.publish(

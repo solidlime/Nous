@@ -179,6 +179,7 @@ _TIER_ADVANCED: frozenset[str] = frozenset(
         "brain_decision_model",
         "brain_decision_threshold",
         "brain_decision_max_hops",
+        "brain_decision_time_weight",
         # 音声感情モード / アイテム抽出専用 LLM / 圧縮モード
         "voice_emotion_mode",
         "item_llm_dedicated",

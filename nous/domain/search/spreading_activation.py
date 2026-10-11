@@ -60,8 +60,14 @@ class SpreadingActivation:
         seed_keys: list[str],
         links: list[MemoryLink],
         persona: str | None = None,
+        request_id: str | None = None,
     ) -> dict[str, float]:
-        """Run PPR diffusion and return {target_key: activation_score}."""
+        """Run PPR diffusion and return {target_key: activation_score}.
+
+        ``request_id`` は ppr_hit イベントの相関用（発火モードの消費者は
+        ``meta.request_id`` 不一致のイベントを捨てるので、無いと seed 点灯が
+        実機で死ぬ）。無相関経路では None のまま（キーを付けない）。
+        """
         seeds = list(dict.fromkeys(seed_keys))
         if self.llm_seed_filter and self.seed_filter is not None:
             seeds = list(dict.fromkeys(self.seed_filter(seeds)))
@@ -108,6 +114,8 @@ class SpreadingActivation:
                 meta: dict = {"rank": rank}
                 if persona is not None:
                     meta["persona"] = persona
+                if request_id is not None:
+                    meta["request_id"] = request_id
                 _wiring_emit("ppr_hit", source=seed_key, weight=score, meta=meta)
         except Exception:
             import logging

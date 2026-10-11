@@ -1,7 +1,8 @@
 /* =================================================================
    chat-wiring-feed tests — live synapse fire feed in the memory panel
    Covers: client top-N trim, limit 0 hides, single-flight reconnect,
-   empty stream, invalid-kind drop, XSS escaping, panel visibility.
+   empty stream, unknown-kind fallback rendering, XSS escaping, panel
+   visibility.
    ================================================================= */
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
@@ -186,8 +187,22 @@ describe('wiring feed trim + render', () => {
     expect(item.querySelector('.wiring-kind-badge').textContent).toBe('新規性');
   });
 
-  it('drops unknown kinds, dedupes replayed seqs, escapes XSS', () => {
-    expect(MP.pushWiringEvent(fire(1, 'nope', 'a', 'b', 1))).toBe(false);
+  it('renders decision_bypass with its own label and a non-PPR bar color (fail-open)', () => {
+    // fail-open = 「判定を適用しなかった」事実（却下ではない）。
+    // フォールバックの青は ppr_hit の色なので、そのままだと PPR と混同する。
+    expect(MP.pushWiringEvent(fire(1, 'decision_bypass', 'm1', '', 0.4))).toBe(true);
+    const item = wiringList().querySelector('.wiring-fire-item');
+    expect(item.classList.contains('wiring-kind-decision_bypass')).toBe(true);
+    expect(item.querySelector('.wiring-kind-badge').textContent).toBe('判定不通過');
+    const fill = item.querySelector('.mem-bar-fill');
+    expect(fill.getAttribute('data-color')).toContain('#4b5563');
+    expect(fill.getAttribute('data-color')).not.toContain('accent-blue');
+  });
+
+  it('draws unknown kinds with the fallback, dedupes replayed seqs, escapes XSS', () => {
+    // 未知 kind は黙殺しない — ラベル = kind 文字列 / 色 = ppr_hit で描く
+    // （明示除外リスト WIRING_EXCLUDE は monologue のみ）。
+    expect(MP.pushWiringEvent(fire(1, 'nope', 'a', 'b', 1))).toBe(true);
     expect(MP.pushWiringEvent(null)).toBe(false);
     MP.pushWiringEvent(fire(7, 'ppr_hit', 'k1', 'k2', 0.77));
     expect(MP.pushWiringEvent(fire(7, 'ppr_hit', 'k1', 'k2', 0.77))).toBe(false); // ring replay
@@ -197,7 +212,7 @@ describe('wiring feed trim + render', () => {
     expect(list.querySelector('[onerror]')).toBeNull();
     // content-first rows: unresolved target key falls back to the raw key
     expect(list.textContent).toContain('b&c');
-    expect(list.querySelectorAll('.wiring-fire-item').length).toBe(2);
+    expect(list.querySelectorAll('.wiring-fire-item').length).toBe(3);
     // the hostile source key never parses into live elements — it shows
     // up escaped in the detail modal's Edge row
     MP.openWiringDetail('b&c');

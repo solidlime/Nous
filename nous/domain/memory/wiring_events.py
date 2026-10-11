@@ -6,9 +6,31 @@ Kinds: ``link_fire`` (Hebbian co-activation), ``recall_boost``
 stability update), ``novelty_gate`` (novelty-gated stability boost from
 the EnrichmentWorker), ``decision_pass`` / ``decision_reject`` (Jev 型判定
 ゲートの per-candidate 判定), ``hop_start`` / ``hop_stop`` (multi-hop 検索の
-hop 境界。meta 契約: ``{persona, hop, request_id}``、decision 系は更に
-``threshold``、hop_stop は ``reason``)。``decision_bypass`` は fail-open で
-judge を適用しなかった事実（meta 契約: ``{persona, reason, request_id, hop}``）。
+hop 境界)、``propagate`` / ``converge`` (multi-hop の拡散 / 収束)。
+``decision_bypass`` は fail-open で judge を適用しなかった事実。
+
+meta 契約（暗黙にしない）:
+
+- ``{persona, hop, request_id, turn_id}`` が hop / decision 系の共通形。
+  decision 系は更に ``threshold``（+ 生値 ``cosine`` / ``jev`` /
+  ``time_weight``）、``hop_stop`` と ``converge`` は ``reason``
+  （``sufficiency`` / ``max_hops`` / ``no_progress`` / ``no_candidates``）。
+- ``decision_bypass``: ``{persona, reason, request_id, hop, turn_id}``。
+  ``reason`` は ``no_candidates`` / ``judge_unavailable`` / ``parse_failed`` /
+  ``no_api_key``。
+- ``propagate``: ``source`` = 手がかり記憶キー、``target`` = 新規獲得キー、
+  ``meta`` = ``{persona, hop, request_id, turn_id, via}``。エッジ遍歴ではなく
+  **クエリ媒介の拡散**（hop N の採用記憶を手がかりに hop N+1 が新規記憶を獲得）。
+  1 hop につき新規キー 1 件 = 1 イベント（ペア全数 emit はしない）。
+- ``converge``: ``source`` = 最終出力のキー、``target`` = 出力の主座 (top-1)。
+  発火点は終端 2 箇所のみ（hop ループ脱出点と単発経路の ``_finalize``）。
+- ``request_id`` は **省くと沈黙する**: 発火モードの消費側は
+  ``meta.request_id`` が自分の UUID と一致しないイベントを捨てる。相関 ID を
+  持つ経路（REST ``/api/search`` / MCP ``memory_search`` / chat recall）では
+  必須。``turn_id`` は発話単位の相関（連鎖の境界は kind ではなくこの変わり目）。
+- ``hop_start`` に ``seeds`` は**無い**（契約に存在しない）: hop_start は
+  retrieve **前** に emit されるため engine は seed を知り得ない。seed 点灯は
+  ``ppr_hit`` と ``propagate`` が担う。
 
 Emitters must never break main flows: wrap :func:`emit` in try/except
 at call sites (debug log, always continue).
@@ -40,9 +62,15 @@ WIRING_KINDS = frozenset(
         "decision_bypass",
         "hop_start",
         "hop_stop",
+        "propagate",
+        "converge",
     ]
 )
-WIRING_BUFFER_SIZE = 200
+# 1 リクエストの消費量（実測見積）: decision_pass/reject が候補数 × hops で発火する
+# （5 hop × 30 候補 = 150 件）うえ、enrich_service の replay_fire / novelty_gate が
+# 同一 deque に常時流入する。200 では 1 リクエストで連鎖の頭が消える。
+# TODO(drive-by): 根本対策は per-candidate → per-hop サマリへの集約（契約変更を伴う別件）。
+WIRING_BUFFER_SIZE = 1024
 
 
 @dataclass(frozen=True)

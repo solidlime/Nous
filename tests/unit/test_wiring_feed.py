@@ -1,6 +1,6 @@
 """Wiring fire event feed backend (synapse viz) tests.
 
-- emit → ring buffer (3 kinds, cap 200)
+- emit → ring buffer (4 kinds, cap WIRING_BUFFER_SIZE)
 - 3 hooks fire without breaking main flows
 - SSE initial flush at function + router level (no real HTTP)
 """
@@ -65,11 +65,13 @@ class TestEmitBuffer:
         assert wiring_events.emit("nope") is False
         assert wiring_events.snapshot_after(0) == []
 
-    def test_ring_caps_at_200(self) -> None:
-        for i in range(210):
+    def test_ring_caps_at_buffer_size(self) -> None:
+        # cap は WIRING_BUFFER_SIZE（実測見積で 200 では 1 リクエストで枯れる）。
+        cap = wiring_events.WIRING_BUFFER_SIZE
+        for i in range(cap + 10):
             wiring_events.emit("link_fire", source=f"s{i}")
         events = wiring_events.snapshot_after(0)
-        assert len(events) == 200
+        assert len(events) == cap
         assert events[0]["source"] == "s10"
 
 

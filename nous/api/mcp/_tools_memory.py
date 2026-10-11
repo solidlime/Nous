@@ -458,6 +458,7 @@ async def _tool_memory_search(
         search_query.decision_model = str(decision_cfg["model"]) or None
         search_query.decision_threshold = float(decision_cfg["threshold"])
         search_query.max_hops = max_hops
+        search_query.decision_time_weight = float(decision_cfg["time_weight"])
     ctx.search_engine.set_persona(persona)
     result = await ctx.search_engine.search(search_query)
     if not result.is_ok:

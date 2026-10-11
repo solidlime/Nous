@@ -1028,7 +1028,7 @@ class TestChatTurn:
         try:
             service = ChatService()
 
-            async def fake_chat(self, ctx, config, session_id, user_message, debug=False, images=None):
+            async def fake_chat(self, ctx, config, session_id, user_message, debug=False, images=None, turn_id=None):
                 yield 'data: {"type": "text_delta", "content": "hi"}\n\n'
                 yield 'data: {"type": "done", "message": ""}\n\n'
 
@@ -1076,7 +1076,7 @@ class TestChatTurn:
         hub = get_turn_hub()
         service = ChatService()
 
-        async def fake_chat(self, ctx, config, session_id, user_message, debug=False, images=None):
+        async def fake_chat(self, ctx, config, session_id, user_message, debug=False, images=None, turn_id=None):
             yield 'data: {"type": "text_delta", "content": "x"}\n\n'
             raise RuntimeError("boom")
 
@@ -1104,7 +1104,7 @@ class TestChatTurn:
         hub = get_turn_hub()
         service = ChatService()
 
-        async def fake_chat(self, ctx, config, session_id, user_message, debug=False, images=None):
+        async def fake_chat(self, ctx, config, session_id, user_message, debug=False, images=None, turn_id=None):
             yield 'data: {"type": "done", "message": ""}\n\n'
 
         ctx = self._make_ctx()

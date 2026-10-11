@@ -161,6 +161,7 @@ def register_search_routes(mcp) -> None:
                 query_kwargs["decision_model"] = str(decision_cfg["model"]) or None
                 query_kwargs["decision_threshold"] = float(decision_cfg["threshold"])
                 query_kwargs["max_hops"] = max_hops
+                query_kwargs["decision_time_weight"] = float(decision_cfg["time_weight"])
             # oracle BLOCK F3 + 重み統一: REST 経路にも RankPolicy（複合スコア段）を
             # 配線する。重みは MCP memory_search の既定と同一（from_weight_args 経由）。
             # 実利用経路は MCP であり実クエリで高い実績を持つため統一先は MCP 既定。

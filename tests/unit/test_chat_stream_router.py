@@ -41,7 +41,7 @@ def _patch_resolver(persona: str = "test_persona", ctx=None):
 
 
 def _fake_chat(events: list[str]):
-    async def fake_chat(self, ctx, config, session_id, user_message, debug=False, images=None):
+    async def fake_chat(self, ctx, config, session_id, user_message, debug=False, images=None, turn_id=None):
         for e in events:
             yield e
 

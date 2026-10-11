@@ -188,7 +188,7 @@ class TestSpreadingActivationCap:
             def __init__(self, **kwargs) -> None:
                 pass
 
-            def propagate(self, seeds, links, persona=None):
+            def propagate(self, seeds, links, persona=None, request_id=None):
                 return {"m2": 10.0}  # 異常に大きい activation でも cap される
 
         monkeypatch.setattr("nous.domain.search.spreading_activation.SpreadingActivation", _FakeSpreadingActivation)

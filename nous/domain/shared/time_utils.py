@@ -28,6 +28,29 @@ def compute_recency_decay(created_at: datetime | None) -> float:
     return math.exp(-RECENCY_LAMBDA * days_elapsed)
 
 
+# 判定ゲート後の順位付け専用の緩やかな減衰率（exp(-λ*days)、λ≈0.019/day = 19日で 0.70）。
+# RECENCY_LAMBDA（λ=0.5/day = 19日で 0.00007）とは曲線が別物なので、
+# compute_recency_decay を流用してはならない（流用すると UI に「時間 x0.0000」と出る）。
+DECISION_TIME_LAMBDA = 0.019
+
+
+def compute_decision_time_decay(created_at: datetime | None) -> float:
+    """判定ゲート**後**の順位付け専用の緩やかな時間減衰 exp(-λ*days)、λ≈0.019。
+
+    用途は順序付けのみ。採否（jev >= threshold）には混ぜない — 混ぜると実効閾値が
+    ``threshold ÷ 時間重み`` になり、古記憶は不可能水準、新記憶は無制限に通る。
+    ``compute_recency_decay``（rank_policy の recency 項）は別用途なので触らない。
+    ``None`` は 1.0（減衰なし = 中立）を返す。
+    """
+    if created_at is None:
+        return 1.0
+    now = datetime.now(tz=UTC)
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    days_elapsed = max(0.0, (now - created_at).total_seconds() / 86400.0)
+    return math.exp(-DECISION_TIME_LAMBDA * days_elapsed)
+
+
 def get_now(tz: str = _DEFAULT_TZ) -> datetime:
     """Return current time in the given timezone."""
     return datetime.now(ZoneInfo(tz))

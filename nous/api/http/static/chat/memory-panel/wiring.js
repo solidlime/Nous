@@ -30,9 +30,18 @@ var WIRING_KINDS = {
   ppr_hit: "PPR",
   replay_fire: "リプレイ",
   novelty_gate: "新規性",
-  // monologue は意図的にフィードから除外 — 独り言はチャット側の
-  // 💭バブル（chat-send.js）で受ける表示専用イベントなので、
-  // pushWiringEvent の未知 kind 落としに乗る。
+  // fail-open で「判定を適用しなかった」事実（却下ではない）。
+  // Graph タブの発火モードではステータス注記、通常タブではこの行が出る。
+  decision_bypass: "判定不通過",
+};
+// フィードに出さない kind の明示除外リスト（理由必須）。未知 kind は
+// 落とさず _renderWiringItem のフォールバック（ラベル = kind 文字列 /
+// 色 = ppr_hit）で描く — kind を足してもフィードが黙らない。
+// features/graph.js の FLASH_KIND_EXCLUDE と対。
+var WIRING_EXCLUDE = {
+  // monologue はチャット側の 💭 バブル（chat-send.js）で受ける表示専用
+  // イベントなので、フィードには出さない。
+  monologue: true,
 };
 var WIRING_BAR_COLORS = {
   link_fire: "linear-gradient(90deg,var(--accent-purple),var(--accent-pink))",
@@ -40,6 +49,9 @@ var WIRING_BAR_COLORS = {
   ppr_hit: "linear-gradient(90deg,var(--accent-blue),var(--accent-teal))",
   replay_fire: "linear-gradient(90deg,var(--accent-blue),var(--accent-purple))",
   novelty_gate: "linear-gradient(90deg,var(--accent-yellow),var(--accent-orange))",
+  // フォールバックの青（ppr_hit）は PPR の色なので誤伝達する。判定不通過は
+  // 無彩色寄り（グレー）で「光っていない」ことを視覚的に区別する。
+  decision_bypass: "linear-gradient(90deg,#4b5563,#9ca3af)",
 };
 var _wiringEvents = []; // newest-first
 var _wiringMaxSeq = 0;
@@ -350,7 +362,7 @@ function renderWiringFeed() {
 // Reconnect replays the ring buffer, so dedupe by seq (monotonic).
 function pushWiringEvent(ev) {
   if (!ev || typeof ev !== "object") return false;
-  if (!WIRING_KINDS[ev.kind]) return false;
+  if (WIRING_EXCLUDE[ev.kind]) return false;
   var seq = Number(ev.seq);
   if (!isFinite(seq)) seq = 0;
   if (seq > 0) {

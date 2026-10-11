@@ -49,6 +49,7 @@ class DecisionConfig(TypedDict):
     model: str
     threshold: float
     max_hops: int
+    time_weight: float
 
 
 def resolve_decision_config(repo: object) -> DecisionConfig:
@@ -58,7 +59,7 @@ def resolve_decision_config(repo: object) -> DecisionConfig:
     解決する。参照不能なら ``_DECISION_DEFAULTS``。threshold は 0-1、max_hops は
     1-5 に clamp する（entrypoint の最小妥当性検証と同一契約）。
     """
-    values = DecisionConfig(enabled=False, model="", threshold=0.55, max_hops=1)
+    values = DecisionConfig(enabled=False, model="", threshold=0.55, max_hops=1, time_weight=0.0)
     try:
         cfg = resolve_persona_chat_config(repo)
         if cfg is None:
@@ -69,6 +70,8 @@ def resolve_decision_config(repo: object) -> DecisionConfig:
             values["threshold"] = max(0.0, min(1.0, float(getattr(cfg, "brain_decision_threshold", 0.55))))
         with contextlib.suppress(TypeError, ValueError):
             values["max_hops"] = max(1, min(5, int(getattr(cfg, "brain_decision_max_hops", 1))))
+        with contextlib.suppress(TypeError, ValueError):
+            values["time_weight"] = max(0.0, min(1.0, float(getattr(cfg, "brain_decision_time_weight", 0.0))))
     except Exception:
         pass
     return values

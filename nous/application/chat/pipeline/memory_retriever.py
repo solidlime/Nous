@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -54,6 +55,7 @@ async def _search_memories(
     config: ChatConfig,
     top_k: int = 8,
     injected_keys: set[str] | None = None,
+    turn_id: str | None = None,
 ) -> tuple[str, dict, list]:
     """2クエリ並行検索 + engine 側 RankPolicy 複合スコアリングのマージ。
 
@@ -87,9 +89,19 @@ async def _search_memories(
         queries.append(last_assistant[:200])
 
     async def _run(q: str) -> list[SearchResult]:
+        # 検索実行 1 回 = request_id 1 個。turn_id は発話単位（wiring の連鎖境界）。
+        request_id = uuid.uuid4().hex
         try:
             result = await ctx.search_engine.search(
-                SearchQuery(text=q, top_k=top_k, valid_at=get_now(), apply_rif=True, rank_policy=policy)
+                SearchQuery(
+                    text=q,
+                    top_k=top_k,
+                    valid_at=get_now(),
+                    apply_rif=True,
+                    rank_policy=policy,
+                    request_id=request_id,
+                    turn_id=turn_id,
+                )
             )
             hits = result.value if result.is_ok else []
         except Exception as e:

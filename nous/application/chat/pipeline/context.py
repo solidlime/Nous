@@ -14,6 +14,8 @@ class ChatTurnContext:
     session_id: str
     user_message: str
     images: list[dict] = field(default_factory=list)
+    # 発話単位の相関 ID（wiring イベントの連鎖境界）。service.chat が採番する。
+    turn_id: str = ""
     # PrepareStep が埋める
     context_section: str = ""
     time_context: str = ""  # ★ <TIME_CONTEXT> ブロック（システムプロンプト先頭に注入）

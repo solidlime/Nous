@@ -266,6 +266,26 @@ class TestDriftRecall:
         assert query.rank_policy is not None
 
     @pytest.mark.asyncio
+    async def test_retriever_passes_correlation_ids(self):
+        """Q2: chat recall 経路も request_id（検索実行単位）と turn_id（発話単位）を載せる。
+
+        載らないと発火モードの request_id フィルタでイベントが全部捨てられる。
+        """
+        ctx = MagicMock()
+        ctx.search_engine.search = AsyncMock(return_value=MagicMock(is_ok=False))
+        config = MagicMock()
+        config.retrieval_recency_weight = 0.3
+        config.retrieval_importance_weight = 0.3
+        config.retrieval_relevance_weight = 0.4
+        await _search_memories(ctx, "こんにちは", "はい", config, turn_id="t1")
+        queries = [c[0][0] for c in ctx.search_engine.search.await_args_list]
+        assert len(queries) == 2
+        assert all(q.turn_id == "t1" for q in queries)
+        # 検索実行ごとに別 ID（turn_id + request_id + hop で連鎖が一意に定まる）
+        assert all(q.request_id for q in queries)
+        assert len({q.request_id for q in queries}) == 2
+
+    @pytest.mark.asyncio
     async def test_injection_includes_valid_drift(self):
         drift = SimpleNamespace(content="私は一人称を誤った", valid_until=get_now() + timedelta(days=1))
         section = await _build_context_section(_make_drift_ctx([drift]), _make_state())

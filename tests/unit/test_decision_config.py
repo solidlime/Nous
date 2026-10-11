@@ -30,6 +30,7 @@ def test_round_trip(tmp_path):
             brain_decision_model="gpt-x",
             brain_decision_threshold=0.7,
             brain_decision_max_hops=3,
+            brain_decision_time_weight=0.7,
         )
     )
     loaded = repo.get("p")
@@ -37,6 +38,7 @@ def test_round_trip(tmp_path):
     assert loaded.brain_decision_model == "gpt-x"
     assert loaded.brain_decision_threshold == 0.7
     assert loaded.brain_decision_max_hops == 3
+    assert loaded.brain_decision_time_weight == 0.7
 
 
 def test_defaults():
@@ -45,6 +47,7 @@ def test_defaults():
     assert cfg.brain_decision_model == ""
     assert cfg.brain_decision_threshold == 0.55
     assert cfg.brain_decision_max_hops == 1
+    assert cfg.brain_decision_time_weight == 0.0  # 0.0 = 無効 (opt-in、既存挙動と一致)
 
 
 def test_clamp_validators():
@@ -54,10 +57,20 @@ def test_clamp_validators():
     cfg2 = ChatConfig(persona="p", brain_decision_threshold=-1.0, brain_decision_max_hops=0)
     assert cfg2.brain_decision_threshold == 0.0
     assert cfg2.brain_decision_max_hops == 1
+    cfg3 = ChatConfig(persona="p", brain_decision_time_weight=2.0)
+    assert cfg3.brain_decision_time_weight == 1.0
+    cfg4 = ChatConfig(persona="p", brain_decision_time_weight=-1.0)
+    assert cfg4.brain_decision_time_weight == 0.0
 
 
 def test_resolve_defaults_without_conn():
-    assert resolve_decision_config(object()) == {"enabled": False, "model": "", "threshold": 0.55, "max_hops": 1}
+    assert resolve_decision_config(object()) == {
+        "enabled": False,
+        "model": "",
+        "threshold": 0.55,
+        "max_hops": 1,
+        "time_weight": 0.0,
+    }
 
 
 def test_resolve_reads_config(tmp_path):
@@ -67,8 +80,15 @@ def test_resolve_reads_config(tmp_path):
         brain_decision_model="m",
         brain_decision_threshold=0.8,
         brain_decision_max_hops=4,
+        brain_decision_time_weight=0.6,
     )
-    assert resolve_decision_config(repo) == {"enabled": True, "model": "m", "threshold": 0.8, "max_hops": 4}
+    assert resolve_decision_config(repo) == {
+        "enabled": True,
+        "model": "m",
+        "threshold": 0.8,
+        "max_hops": 4,
+        "time_weight": 0.6,
+    }
 
 
 def test_rest_save_persists_and_resolves_max_hops_clamped(tmp_path, monkeypatch):
@@ -114,6 +134,7 @@ def test_tier_and_section():
         "brain_decision_model",
         "brain_decision_threshold",
         "brain_decision_max_hops",
+        "brain_decision_time_weight",
     ):
         assert _field_tier(key) == "advanced"
         assert _field_section(key) == "brain_simulation"

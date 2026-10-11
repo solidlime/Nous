@@ -226,6 +226,7 @@ class PrepareStep:
                     config,
                     top_k=max(preload_count, 1) if preload_count > 0 else 100,
                     injected_keys=getattr(session, "_injected_memory_keys", None),
+                    turn_id=getattr(turn_ctx, "turn_id", None) or None,
                 )
             )
             results = await asyncio.gather(context_task, memory_task, return_exceptions=True)
@@ -277,6 +278,7 @@ class PrepareStep:
                     config,
                     top_k=max(preload_count, 1) if preload_count > 0 else 100,
                     injected_keys=getattr(session, "_injected_memory_keys", None),
+                    turn_id=getattr(turn_ctx, "turn_id", None) or None,
                 )
                 turn_ctx.memory_debug = debug
                 turn_ctx.memories_raw = debug.get("results", [])

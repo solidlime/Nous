@@ -26,7 +26,12 @@ from nous.domain.search.token_kind_gate import (
     passes_bm25_bar,
 )
 from nous.domain.shared.result import Failure, Result, Success
-from nous.domain.shared.time_utils import compute_recency_decay, get_now, parse_date_range
+from nous.domain.shared.time_utils import (
+    compute_decision_time_decay,
+    compute_recency_decay,
+    get_now,
+    parse_date_range,
+)
 from nous.domain.value_objects import normalize_emotion
 
 if TYPE_CHECKING:
@@ -63,6 +68,9 @@ _CACHE_MAX = 256
 # suppress the top-K candidates excluded from the final recall result.
 _RIF_TOP_K = 5
 _STRENGTH_FLOOR = 0.005  # min_strength（nous/infrastructure/config/settings.py:91）
+# 判定ゲート**通過後**の時間減衰に持たせる下限。順位付けにだけ効かせるので、
+# 古い記憶が並べ替えだけで top_k から落ちる事故を防ぐ（最大 1/_DECISION_TIME_FLOOR 倍までしか沈めない）。
+_DECISION_TIME_FLOOR = 0.5
 # FTS OR fallback（設計書 or_fallback_design.md §2d）: AND プールがこの件数未満なら
 # OR で 1 回だけ追加探する。config 化は YAGNI。
 FTS_OR_FALLBACK_MIN = 3
@@ -155,6 +163,12 @@ class SearchQuery:
     decision_threshold: float = 0.55
     max_hops: int = 1
     request_id: str | None = None
+    # 発話単位の相関 ID（連鎖の境界は kind ではなくこの変わり目）。request_id と同じく
+    # イベント相関専用でキャッシュキーには含めない。
+    turn_id: str | None = None
+    # 判定ゲート通過後の並べ替えに掛ける時間減衰の重み（0.0 = 無効 = 既存挙動と完全一致）。
+    # 採否（jev >= threshold）には混ぜない — 順位付けのみ。
+    decision_time_weight: float = 0.0
 
 
 @dataclass
@@ -168,6 +182,8 @@ class SearchResult:
     cosine: float | None = None  # rank_policy 適用時の生コサイン（clamp なし）
     graph_boost: float | None = None  # rank_policy 適用時の graph 寄与（entity + PPR/SA、debug 可視性）
     lexical_score: float | None = None  # rank_policy 適用時に使う 0-1 の語一致スコア。keyword/fts 由来のみ非 None
+    jev: float | None = None  # 判定ゲートが使った judge 確率（生値併記用。ゲート前に参照したら None）
+    time_weight: float | None = None  # gate 後ソートに使った時間重み（floor 適用後。無効時は None）
 
 
 def _dedupe_keep_best(results: list[SearchResult]) -> list[SearchResult]:
@@ -340,6 +356,8 @@ class SearchEngine:
         同一の最終加工を保証する。
         """
         final, _ = await self._finalize_with_meta(candidates, query)
+        # 単発経路は hop ループに入らないので、終端理由は hop 上限と同義。
+        self._emit_converge(final, query, hop=1, reason="max_hops")
         return final
 
     async def _finalize_with_meta(
@@ -359,6 +377,13 @@ class SearchEngine:
         sufficiency = 1.0
         if query.decision_enabled:
             filtered, sufficiency = await self._apply_decision_gate(filtered, query, hop)
+            # 時間減衰は gate **後**の並べ替えにのみ効かせる。採否（jev >= threshold）にも
+            # 停止条件（sufficiency >= threshold）にも混ぜない — 混ぜると実効閾値が
+            # threshold ÷ 時間重みになり、閾値の意味が二重化する。
+            if query.decision_time_weight > 0.0 and filtered:
+                for r in filtered:
+                    r.time_weight = max(_DECISION_TIME_FLOOR, compute_decision_time_decay(r.memory.created_at))
+                filtered.sort(key=lambda r: r.score * (r.time_weight or 1.0), reverse=True)
         return filtered[: query.top_k], sufficiency
 
     async def _apply_decision_gate(
@@ -386,7 +411,8 @@ class SearchEngine:
         kept: list[SearchResult] = []
         for r in candidates:
             prob = verdict.probability(r.memory.key)
-            self._emit_decision(prob >= query.decision_threshold, r.memory.key, prob, query, hop)
+            r.jev = prob  # 生値併記用（表示のみ。採否は prob >= threshold で決まる）
+            self._emit_decision(prob >= query.decision_threshold, r.memory.key, prob, query, hop, result=r)
             if prob >= query.decision_threshold:
                 kept.append(r)
         return kept, verdict.sufficiency
@@ -402,23 +428,42 @@ class SearchEngine:
                     "reason": reason,
                     "hop": hop,
                     "request_id": query.request_id,
+                    "turn_id": query.turn_id,
                 },
             )
         except Exception:
             logger.debug("wiring decision bypass emit failed", exc_info=True)
 
-    def _emit_decision(self, passed: bool, key: str, prob: float, query: SearchQuery, hop: int) -> None:
+    def _emit_decision(
+        self,
+        passed: bool,
+        key: str,
+        prob: float,
+        query: SearchQuery,
+        hop: int,
+        result: SearchResult | None = None,
+    ) -> None:
         try:
+            meta: dict[str, object] = {
+                "persona": self._persona_name(),
+                "hop": hop,
+                "request_id": query.request_id,
+                "turn_id": query.turn_id,
+                "threshold": query.decision_threshold,
+                # 生値併記: 積だけでは「なぜ差が出たか」を復元できない。
+                "jev": prob,
+            }
+            if result is not None:
+                # keyword/fts 由来の cosine は None（未計測）。0 と混同させない。
+                meta["cosine"] = result.cosine
+                if query.decision_time_weight > 0.0:
+                    # sort は floor を掛けるが、表示は生の減衰値を出す。
+                    meta["time_weight"] = compute_decision_time_decay(result.memory.created_at)
             wiring_events.emit(
                 "decision_pass" if passed else "decision_reject",
                 source=key,
                 weight=prob,
-                meta={
-                    "persona": self._persona_name(),
-                    "hop": hop,
-                    "request_id": query.request_id,
-                    "threshold": query.decision_threshold,
-                },
+                meta=meta,
             )
         except Exception:
             logger.debug("wiring decision emit failed", exc_info=True)
@@ -431,12 +476,84 @@ class SearchEngine:
                 "persona": self._persona_name(),
                 "hop": hop,
                 "request_id": query.request_id,
+                "turn_id": query.turn_id,
             }
             if reason is not None:
                 meta["reason"] = reason
             wiring_events.emit(kind, weight=weight, meta=meta)
         except Exception:
             logger.debug("wiring hop emit failed", exc_info=True)
+
+    def _emit_propagate(
+        self,
+        new_keys: list[str],
+        accumulated: dict[str, SearchResult],
+        clues: list[SearchResult],
+        query: SearchQuery,
+        hop: int,
+    ) -> None:
+        """リンク伝搬ではなくクエリ媒介の拡散: 前 hop の採用記憶を手がかりにした新規獲得。
+
+        新規キー 1 件につき 1 件だけ emit（ペア全数は出さない）。source は
+        手がかり記憶（タグ重複最大、同点なら top-1）、根拠を via に残す。
+        """
+        if not clues:
+            return
+        top = clues[0].memory.key
+        for key in new_keys:
+            target = accumulated.get(key)
+            if target is None:
+                continue
+            tags = set(target.memory.tags or [])
+            source = top
+            best_overlap = -1
+            for clue in clues:
+                overlap = len(tags & set(clue.memory.tags or []))
+                if overlap > best_overlap:
+                    best_overlap = overlap
+                    source = clue.memory.key
+            try:
+                wiring_events.emit(
+                    "propagate",
+                    source=source,
+                    target=key,
+                    weight=target.score,
+                    meta={
+                        "persona": self._persona_name(),
+                        "hop": hop,
+                        "request_id": query.request_id,
+                        "turn_id": query.turn_id,
+                        "via": [source],
+                    },
+                )
+            except Exception:
+                logger.debug("wiring propagate emit failed", exc_info=True)
+
+    def _emit_converge(self, final: list[SearchResult], query: SearchQuery, *, hop: int, reason: str) -> None:
+        """探索の終端で「出力への確定」を 1 件ずつ emit（source = 各出力キー、target = 主座）。
+
+        reason は hop_stop と同じ語彙（sufficiency / max_hops / no_progress / no_candidates）。
+        """
+        if not final:
+            return
+        hub = final[0].memory.key
+        for r in final:
+            try:
+                wiring_events.emit(
+                    "converge",
+                    source=r.memory.key,
+                    target=hub,
+                    weight=r.score,
+                    meta={
+                        "persona": self._persona_name(),
+                        "hop": hop,
+                        "request_id": query.request_id,
+                        "turn_id": query.turn_id,
+                        "reason": reason,
+                    },
+                )
+            except Exception:
+                logger.debug("wiring converge emit failed", exc_info=True)
 
     def _persona_name(self) -> str:
         return self._semantic.persona if self._semantic is not None else "default"
@@ -507,6 +624,7 @@ class SearchEngine:
                 reason = "no_candidates"
                 break
             before = len(accumulated)
+            before_keys = set(accumulated)
             for r in result.value or []:
                 accumulated.setdefault(r.memory.key, r)
             if not accumulated:
@@ -516,6 +634,11 @@ class SearchEngine:
             if len(accumulated) == before:
                 reason = "no_progress"
                 break
+            # hop 1 の獲得は seed であって波及ではないので emit しない（手がかりが無い）。
+            if hop > 1:
+                self._emit_propagate(
+                    [k for k in accumulated if k not in before_keys], accumulated, finalized, query, hop
+                )
             finalized, sufficiency = await self._finalize_with_meta(list(accumulated.values()), query, hop)
             if sufficiency >= query.decision_threshold:
                 reason = "sufficiency"
@@ -529,6 +652,7 @@ class SearchEngine:
             current = replace(query, text=self._synth_next_query(query, finalized))
             hop += 1
         self._emit_hop("hop_stop", hop, query, reason=reason, weight=sufficiency)
+        self._emit_converge(finalized, query, hop=hop, reason=reason)
         return Success(finalized)
 
     async def _apply_rank_policy(
@@ -899,7 +1023,7 @@ class SearchEngine:
         # 6. Spreading Activation through memory links — H6: rank_policy 経路では
         # score 加算しない（_apply_rank_policy が graph_signal に統合、計算は 1 回）。
         if query.rank_policy is None:
-            self._apply_spreading_activation(deduped)
+            self._apply_spreading_activation(deduped, query.request_id)
 
         # truncation しない: 件数は _finalize（post-filter → top_k）で決まる
         return Success(deduped)
@@ -952,8 +1076,11 @@ class SearchEngine:
                     r.score += 0.1
             deduped.sort(key=lambda x: x.score, reverse=True)
 
-    def _spreading_activation_scores(self, seed_keys: list[str]) -> dict[str, float]:
-        """seed から PPR/SA を伝播した activation 分布（spreading activation の共有部品）。"""
+    def _spreading_activation_scores(self, seed_keys: list[str], request_id: str | None = None) -> dict[str, float]:
+        """seed から PPR/SA を伝播した activation 分布（spreading activation の共有部品）。
+
+        ``request_id`` は ppr_hit の相関用（無いと発火モードのフィルタで seed 点灯が死ぬ）。
+        """
         if not self._link_repo or not seed_keys:
             return {}
         try:
@@ -963,7 +1090,12 @@ class SearchEngine:
 
                 # Seeds come from F2-filtered results (tombstone/validity already applied)
                 sa = SpreadingActivation(hops=2, reset_prob=0.15)
-                return sa.propagate(seed_keys, all_links, persona=getattr(self._semantic, "persona", None))
+                return sa.propagate(
+                    seed_keys,
+                    all_links,
+                    persona=getattr(self._semantic, "persona", None),
+                    request_id=request_id,
+                )
         except Exception:
             logger.warning("Spreading activation step failed, using pre-SA scores")
         return {}
@@ -980,7 +1112,7 @@ class SearchEngine:
             signal[key] = signal.get(key, 0.0) + 1.0
         if self._link_repo and candidates:
             seed_keys = [r.memory.key for r in candidates[:5]]
-            for key, act in self._spreading_activation_scores(seed_keys).items():
+            for key, act in self._spreading_activation_scores(seed_keys, query.request_id).items():
                 signal[key] = signal.get(key, 0.0) + min(act * 2.0, 1.0)
         return signal
 
@@ -1033,12 +1165,12 @@ class SearchEngine:
             self._reranker_unloaded_warned = True
             logger.warning("Reranker not loaded; skipping rerank step")
 
-    def _apply_spreading_activation(self, deduped: list[SearchResult]) -> None:
+    def _apply_spreading_activation(self, deduped: list[SearchResult], request_id: str | None = None) -> None:
         """Propagate activation through memory links; small capped score boost."""
         if not self._link_repo or not deduped:
             return
         seed_keys = [r.memory.key for r in deduped[:5]]
-        activations = self._spreading_activation_scores(seed_keys)
+        activations = self._spreading_activation_scores(seed_keys, request_id)
         if activations:
             for r in deduped:
                 if r.memory.key in activations:

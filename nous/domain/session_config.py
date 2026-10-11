@@ -125,6 +125,10 @@ class SessionConfig(BaseModel):
     brain_decision_model: str = Field(default="", description="判定に使うモデル。空欄で会話用モデルを使います。")
     brain_decision_threshold: float = Field(default=0.55, description="判定の採択しきい値（0〜1）。")
     brain_decision_max_hops: int = Field(default=1, description="multi-hop 検索の最大ホップ数（1〜5）。")
+    brain_decision_time_weight: float = Field(
+        default=0.0,
+        description="判定ゲート通過後の並べ替えに時間減衰を掛ける重み（0〜1）。0 で無効（採否は変えない）。",
+    )
     brain_link_separation_threshold: float = Field(default=0.75, description="記憶リンクを分離する類似度しきい値。")
     brain_graph_flash_enabled: bool = Field(default=True, description="記憶グラフのシナプス発火を可視化します。")
     # Idle-gated REM drain (persistent enrichment queue)
@@ -205,6 +209,11 @@ class SessionConfig(BaseModel):
     @classmethod
     def _clamp_brain_decision_max_hops(cls, v: int) -> int:
         return max(1, min(5, v))
+
+    @field_validator("brain_decision_time_weight")
+    @classmethod
+    def _clamp_brain_decision_time_weight(cls, v: float) -> float:
+        return max(0.0, min(1.0, v))
 
     @model_validator(mode="after")
     def _lift_brain_max_tokens_for_reasoning(self):

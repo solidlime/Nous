@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -440,3 +440,177 @@ class TestResolveDecisionJudge:
             assert resolve_decision_judge(repo) is None
         bypass = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "decision_bypass"]
         assert [e["meta"]["reason"] for e in bypass] == ["no_api_key"]
+
+
+# ---------------------------------------------------------------------------
+# 時間重み (Phase 7 Q1): 順位付けのみ。採否は jev 単独
+# ---------------------------------------------------------------------------
+
+
+def _mem_days_ago(key: str, days: float, tags: list[str] | None = None) -> Memory:
+    created = datetime.now(UTC) - timedelta(days=days)
+    return Memory(
+        key=key,
+        content=f"content {key}",
+        created_at=created,
+        updated_at=created,
+        importance=0.5,
+        emotion="neutral",
+        tags=tags or [],
+    )
+
+
+class TestDecisionTimeWeight:
+    @pytest.mark.asyncio
+    async def test_default_zero_keeps_score_order(self):
+        # 既定（time_weight=0.0）は完全 opt-in: 既存の score 順のまま。
+        kw = _make_keyword_strategy({"hello": [(_mem_days_ago("old", 400), 0.9), (_mem_days_ago("new", 0), 0.6)]})
+        judge = _StubJudge(JudgeVerdict(verdicts={"old": 0.9, "new": 0.9}, sufficiency=0.1))
+        engine = SearchEngine(keyword_search=kw, decision_judge=judge)
+        result = await engine.search(SearchQuery(text="hello", mode="keyword", decision_enabled=True))
+        assert result.is_ok
+        assert [r.memory.key for r in result.value] == ["old", "new"]
+        assert all(r.time_weight is None for r in result.value)
+
+    @pytest.mark.asyncio
+    async def test_old_memory_is_demoted_and_never_dropped(self):
+        # 0.9 × floor(0.5) = 0.45 < 0.6 × decay(≈1.0)。順序だけが変わり集合は不変。
+        kw = _make_keyword_strategy({"hello": [(_mem_days_ago("old", 400), 0.9), (_mem_days_ago("new", 0), 0.6)]})
+        judge = _StubJudge(JudgeVerdict(verdicts={"old": 0.9, "new": 0.9}, sufficiency=0.1))
+        engine = SearchEngine(keyword_search=kw, decision_judge=judge)
+        result = await engine.search(
+            SearchQuery(text="hello", mode="keyword", decision_enabled=True, decision_time_weight=1.0)
+        )
+        assert result.is_ok
+        assert [r.memory.key for r in result.value] == ["new", "old"]
+        by_key = {r.memory.key: r for r in result.value}
+        # floor: 400日の実減衰は 0.0005 だが 2 倍までしか沈めない。
+        assert by_key["old"].time_weight == 0.5
+        assert by_key["new"].time_weight == pytest.approx(1.0, abs=0.01)
+
+    @pytest.mark.asyncio
+    async def test_gate_decision_is_unchanged_by_time_weight(self):
+        # 採否は jev 単独: 新しい記憶でも閾値未満なら落ちる。時間重みで救われない。
+        kw = _make_keyword_strategy({"hello": [(_mem_days_ago("old", 400), 0.9), (_mem_days_ago("new", 0), 0.6)]})
+        judge = _StubJudge(JudgeVerdict(verdicts={"old": 0.9, "new": 0.1}, sufficiency=0.1))
+        engine = SearchEngine(keyword_search=kw, decision_judge=judge)
+        result = await engine.search(
+            SearchQuery(text="hello", mode="keyword", decision_enabled=True, decision_time_weight=1.0)
+        )
+        assert result.is_ok
+        assert [r.memory.key for r in result.value] == ["old"]
+        kinds = [(e["kind"], e["source"]) for e in wiring_events.snapshot_after(0)]
+        assert ("decision_reject", "new") in kinds
+
+
+class TestDecisionRawValueMeta:
+    """Q3: 積だけでは差の理由を復元できないので生値を併記する。"""
+
+    @pytest.mark.asyncio
+    async def test_decision_meta_carries_jev_turn_id_and_time_weight(self):
+        kw = _make_keyword_strategy({"hello": [(_mem_days_ago("k1", 0), 0.9)]})
+        judge = _StubJudge(JudgeVerdict(verdicts={"k1": 0.7}, sufficiency=0.3))
+        engine = SearchEngine(keyword_search=kw, decision_judge=judge)
+        await engine.search(
+            SearchQuery(
+                text="hello",
+                mode="keyword",
+                decision_enabled=True,
+                decision_time_weight=1.0,
+                request_id="r1",
+                turn_id="t1",
+            )
+        )
+        ev = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "decision_pass"][0]
+        assert ev["meta"]["jev"] == 0.7
+        assert ev["meta"]["request_id"] == "r1"
+        assert ev["meta"]["turn_id"] == "t1"
+        assert ev["meta"]["time_weight"] == pytest.approx(1.0, abs=0.01)
+        # keyword 由来は cosine 未計測 = None（0 と混同させない契約）。
+        assert ev["meta"]["cosine"] is None
+
+    @pytest.mark.asyncio
+    async def test_hop_meta_carries_turn_id(self):
+        kw = _make_keyword_strategy({"start": [(_mem("k1", "a"), 0.9)]})
+        judge = _StubJudge(JudgeVerdict(verdicts={"k1": 1.0}, sufficiency=0.9))
+        engine = SearchEngine(keyword_search=kw, decision_judge=judge)
+        await engine.search(
+            SearchQuery(text="start", mode="keyword", decision_enabled=True, max_hops=3, request_id="r1", turn_id="t1")
+        )
+        events = wiring_events.snapshot_after(0)
+        assert events, "イベントが 1 件も出ていない"
+        assert all(e["meta"].get("turn_id") == "t1" for e in events)
+        assert all(e["meta"].get("request_id") == "r1" for e in events)
+
+
+# ---------------------------------------------------------------------------
+# propagate / converge (Phase 8b): 発火連鎖の実体はクエリ媒介の拡散
+# ---------------------------------------------------------------------------
+
+
+class TestPropagateConverge:
+    @staticmethod
+    def _multihop_engine():
+        strat = MagicMock()
+        strat.search.side_effect = lambda text, **kw: Success(
+            [(_mem("k1", "a", tags=["t1"]), 0.9)]
+            if text == "start"
+            else [(_mem("k1", "a", tags=["t1"]), 0.9), (_mem("k2", "b", tags=["t1"]), 0.8)]
+        )
+        judge = _StubJudge(JudgeVerdict(verdicts={"k1": 1.0, "k2": 1.0}, sufficiency=0.1))
+        return SearchEngine(keyword_search=strat, decision_judge=judge)
+
+    @pytest.mark.asyncio
+    async def test_propagate_emits_new_keys_only_with_evidence(self):
+        engine = self._multihop_engine()
+        await engine.search(
+            SearchQuery(text="start", mode="keyword", decision_enabled=True, max_hops=2, request_id="r1", turn_id="t1")
+        )
+        props = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "propagate"]
+        # hop 1 の獲得は seed（波及ではない）ので 0 件。hop 2 の新規 1 件のみ。
+        assert [(e["source"], e["target"]) for e in props] == [("k1", "k2")]
+        assert props[0]["meta"]["hop"] == 2
+        assert props[0]["meta"]["request_id"] == "r1"
+        assert props[0]["meta"]["turn_id"] == "t1"
+        # 手がかりはタグ重複で選び、根拠を via に残す。
+        assert props[0]["meta"]["via"] == ["k1"]
+
+    @pytest.mark.asyncio
+    async def test_sufficiency_at_hop1_emits_no_propagate(self):
+        kw = _make_keyword_strategy({"start": [(_mem("k1", "a"), 0.9)]})
+        judge = _StubJudge(JudgeVerdict(verdicts={"k1": 1.0}, sufficiency=0.9))
+        engine = SearchEngine(keyword_search=kw, decision_judge=judge)
+        await engine.search(SearchQuery(text="start", mode="keyword", decision_enabled=True, max_hops=3))
+        assert [e for e in wiring_events.snapshot_after(0) if e["kind"] == "propagate"] == []
+
+    @pytest.mark.asyncio
+    async def test_converge_emits_at_multihop_exit(self):
+        engine = self._multihop_engine()
+        await engine.search(
+            SearchQuery(text="start", mode="keyword", decision_enabled=True, max_hops=2, request_id="r1")
+        )
+        conv = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "converge"]
+        assert {e["source"] for e in conv} == {"k1", "k2"}
+        assert {e["target"] for e in conv} == {"k1"}  # 主座 = top-1
+        assert all(e["meta"]["reason"] == "max_hops" for e in conv)
+        assert all(e["meta"]["request_id"] == "r1" for e in conv)
+
+    @pytest.mark.asyncio
+    async def test_converge_emits_on_single_shot_path(self):
+        kw = _make_keyword_strategy({"hello": [(_mem("k1", "a"), 0.9), (_mem("k2", "b"), 0.5)]})
+        judge = _StubJudge(JudgeVerdict(verdicts={"k1": 1.0, "k2": 1.0}, sufficiency=0.1))
+        engine = SearchEngine(keyword_search=kw, decision_judge=judge)
+        result = await engine.search(SearchQuery(text="hello", mode="keyword", decision_enabled=True))
+        assert result.is_ok
+        conv = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "converge"]
+        assert [e["source"] for e in conv] == ["k1", "k2"]
+        assert {e["target"] for e in conv} == {"k1"}
+        assert all(e["meta"]["reason"] == "max_hops" for e in conv)
+
+    @pytest.mark.asyncio
+    async def test_converge_is_silent_when_nothing_was_found(self):
+        kw = _make_keyword_strategy()
+        judge = _StubJudge(JudgeVerdict(verdicts={}, sufficiency=0.0))
+        engine = SearchEngine(keyword_search=kw, decision_judge=judge)
+        await engine.search(SearchQuery(text="hello", mode="keyword", decision_enabled=True))
+        assert [e for e in wiring_events.snapshot_after(0) if e["kind"] == "converge"] == []
