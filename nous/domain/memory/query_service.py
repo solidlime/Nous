@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
     from nous.domain.memory.repository import MemoryRepository
@@ -44,26 +44,27 @@ def resolve_brain_config(repo: object) -> dict[str, float]:
 
 
 # brain_decision_* 設定のデフォルト（session_config.py の Field 既定と同期）。
-_DECISION_DEFAULTS: dict[str, object] = {
-    "enabled": False,
-    "model": "",
-    "threshold": 0.55,
-    "max_hops": 1,
-}
+class DecisionConfig(TypedDict):
+    enabled: bool
+    model: str
+    threshold: float
+    max_hops: int
 
 
-def resolve_decision_config(repo: object) -> dict[str, object]:
+def resolve_decision_config(repo: object) -> DecisionConfig:
     """brain_decision_* 設定の getattr 安全参照（REST/MCP 共通の既定値解決）。
 
     ``resolve_brain_config`` と同じ ``repo._conn`` 経路で per-persona ChatConfig を
     解決する。参照不能なら ``_DECISION_DEFAULTS``。threshold は 0-1、max_hops は
     1-5 に clamp する（entrypoint の最小妥当性検証と同一契約）。
     """
-    values: dict[str, object] = dict(_DECISION_DEFAULTS)
+    values = DecisionConfig(enabled=False, model="", threshold=0.55, max_hops=1)
     try:
         from nous.domain.chat_config import ChatConfigFileRepository
 
         conn = getattr(repo, "_conn", None)
+        if conn is None:
+            return values
         cfg = ChatConfigFileRepository(conn.data_dir).get(conn.persona)
         values["enabled"] = bool(getattr(cfg, "brain_decision_enabled", values["enabled"]))
         values["model"] = str(getattr(cfg, "brain_decision_model", values["model"]) or "")

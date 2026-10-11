@@ -272,11 +272,12 @@ class SearchEngine:
             query.sort,
             query.lifecycle_status,
             query.valid_at,
-            query.rank_policy,
             query.decision_enabled,
             query.decision_model,
             query.decision_threshold,
             query.max_hops,
+            # rank_policy は既存契約（cache key 末尾）を保つため最後に置く。
+            query.rank_policy,
         )
 
     async def search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
