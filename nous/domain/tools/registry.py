@@ -300,6 +300,9 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
                 ToolParam("keyword_weight", "number", required=False),
                 ToolParam("kind", "string|null", required=False),
                 ToolParam("sort", "string|null", required=False),
+                ToolParam("decision", "boolean|null", required=False),
+                ToolParam("hops", "integer|null", required=False),
+                ToolParam("request_id", "string|null", required=False),
             ),
             BUILTIN: (
                 ToolParam("query", "string", required=True),
@@ -324,7 +327,7 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
                 ToolParam("sort", "string", required=False),
             ),
         },
-        divergence="MCP 面のみ importance_weight / recency_weight / profile / kind を持つ（検索スコア調整は API 利用者向けで、組込 LLM には露出させない）。",
+        divergence="MCP 面のみ importance_weight / recency_weight / profile / kind / decision / hops / request_id を持つ（検索スコア調整と Jev 判定ゲートの制御は API 利用者向けで、組込 LLM には露出させない）。",
     ),
     "memory_stats": ToolSpec(
         name="memory_stats",
