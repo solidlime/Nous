@@ -156,6 +156,10 @@ _BRAIN_HELP = {
     "llm_model": "専用 LLM のモデル名。空欄なら従来の記憶強化設定を引き継ぎます。",
     "llm_base_url": "専用 LLM の API エンドポイント。空欄なら従来の記憶強化設定を引き継ぎます。",
     "llm_api_key": "専用 LLM の API キー。空欄でプロバイダがチャットと一致する場合はチャットのキーをフォールバックに使います。",
+    "decision_enabled": "検索候補を LLM に一括判定させ、閾値未満の候補を除外します（Jev 型判定ゲート）。OFF のときは現行どおり候補をそのまま返します。",
+    "decision_model": "判定に使うモデル名。空欄なら脳シミュレーターのデフォルト LLM を使います。",
+    "decision_threshold": "候補を採用する確率のしきい値。値が高いほど厳しく絞り込まれます。",
+    "decision_max_hops": "1 で単発検索。2 以上で採用候補からクエリを合成して再検索します（multi-hop）。",
 }
 
 
@@ -322,6 +326,37 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                         <div>
                                             <div class="chat-field-label">リフレクション注入 相対マージン {help_("reflection_injection_margin")}</div>
                                             <input type="number" id="chat-brain-reflection-injection-margin" class="chat-field-input" min="0" max="1" step="0.01" value="0.08" />
+                                        </div>
+                                    </div>
+                                </details>
+                                <details class="chat-subsection">
+                                    <summary>判定ゲート（Jev型）</summary>
+                                    <div style="padding-top:6px;">
+                                        <div class="chat-check-row">
+                                            <input type="checkbox" id="chat-brain-decision-enabled" />
+                                            <label for="chat-brain-decision-enabled">判定ゲートを有効 {help_("decision_enabled")}</label>
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">判定モデル {help_("decision_model")}</div>
+                                            <input type="text" id="chat-brain-decision-model" class="chat-field-input" placeholder="空 = デフォルト" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label chat-field-label-row">
+                                                <span>採用しきい値 {help_("decision_threshold")}</span>
+                                                <span id="chat-brain-decision-threshold-val" class="chat-field-value">0.55</span>
+                                            </div>
+                                            <input type="range" id="chat-brain-decision-threshold" class="chat-field-input" min="0" max="1" step="0.05" value="0.55"
+                                                data-mirror="chat-brain-decision-threshold-val" data-mirror-format="fixed2" />
+                                        </div>
+                                        <div>
+                                            <div class="chat-field-label">最大ホップ数 {help_("decision_max_hops")}</div>
+                                            <select id="chat-brain-decision-max-hops" class="chat-field-input">
+                                                <option value="1" selected>1</option>
+                                                <option value="2">2</option>
+                                                <option value="3">3</option>
+                                                <option value="4">4</option>
+                                                <option value="5">5</option>
+                                            </select>
                                         </div>
                                     </div>
                                 </details>

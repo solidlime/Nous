@@ -76,6 +76,13 @@ function buildForm() {
     + '<option value="high">high</option><option value="max">max</option>'
     + '</select>'
     + '<input type="number" id="chat-brain-max-tokens" value="" />'
+    + '<input type="checkbox" id="chat-brain-decision-enabled" />'
+    + '<input type="text" id="chat-brain-decision-model" value="" />'
+    + '<input type="range" id="chat-brain-decision-threshold" min="0" max="1" step="0.05" value="0.55" />'
+    + '<select id="chat-brain-decision-max-hops">'
+    + '<option value="1">1</option><option value="2">2</option>'
+    + '<option value="3">3</option><option value="4">4</option>'
+    + '<option value="5">5</option></select>'
     + '<div id="chat-brain-llm-fields" class="settings-body-hidden">'
     + '<input type="text" id="chat-brain-llm-provider" value="" />'
     + '<input type="text" id="chat-brain-llm-model" value="" />'
@@ -278,6 +285,35 @@ describe('brain simulation settings', () => {
     expect(body.reflection_injection_margin).toBeUndefined();
   });
 
+  it('decision gate: load applies contract defaults and save round-trips the 4 keys', async () => {
+    window.Nous.Chat.settings.apply({});
+    expect(document.getElementById('chat-brain-decision-enabled').checked).toBe(false);
+    expect(document.getElementById('chat-brain-decision-model').value).toBe('');
+    expect(document.getElementById('chat-brain-decision-threshold').value).toBe('0.55');
+    expect(document.getElementById('chat-brain-decision-max-hops').value).toBe('1');
+
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    document.getElementById('chat-brain-decision-enabled').checked = true;
+    document.getElementById('chat-brain-decision-model').value = 'gpt-x';
+    document.getElementById('chat-brain-decision-threshold').value = '0.7';
+    document.getElementById('chat-brain-decision-max-hops').value = '3';
+    const savedCfg = { brain_decision_enabled: true, brain_decision_model: 'gpt-x',
+      brain_decision_threshold: 0.7, brain_decision_max_hops: 3 };
+    apiStub.mockResolvedValueOnce(savedCfg);
+    await window.Nous.Chat.settings.save();
+    const body = JSON.parse(apiStub.mock.calls[0][1].body);
+    expect(body.brain_decision_enabled).toBe(true);
+    expect(body.brain_decision_model).toBe('gpt-x');
+    expect(body.brain_decision_threshold).toBe(0.7);
+    expect(body.brain_decision_max_hops).toBe(3);
+
+    window.Nous.Chat.settings.apply(savedCfg);
+    expect(document.getElementById('chat-brain-decision-enabled').checked).toBe(true);
+    expect(document.getElementById('chat-brain-decision-model').value).toBe('gpt-x');
+    expect(document.getElementById('chat-brain-decision-threshold').value).toBe('0.7');
+    expect(document.getElementById('chat-brain-decision-max-hops').value).toBe('3');
+  });
+
   it('voice_streaming: apply reflects it and save round-trips true/false', async () => {
     window.Nous.Chat.settings.apply({ voice_streaming: false });
     expect(document.getElementById('chat-voice-streaming').checked).toBe(false);
@@ -355,6 +391,10 @@ const BRAIN_IDS = [
   'chat-brain-reflection-injection-min-similarity',
   'chat-brain-reflection-injection-margin',
   'chat-brain-graph-flash',
+  'chat-brain-decision-enabled',
+  'chat-brain-decision-model',
+  'chat-brain-decision-threshold',
+  'chat-brain-decision-max-hops',
 ];
 
 const BRAIN_SUBSECTION_ORDER = [
@@ -363,6 +403,7 @@ const BRAIN_SUBSECTION_ORDER = [
   'LLM',
   '学習ゲート',
   '想起と忘却',
+  '判定ゲート（Jev型）',
   '可視化',
 ];
 

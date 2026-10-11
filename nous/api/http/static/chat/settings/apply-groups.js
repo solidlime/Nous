@@ -302,6 +302,17 @@ function applyBrainForgettingSection(cfg, set, setChecked) {
       "chat-brain-graph-flash",
       cfg.brain_graph_flash_enabled !== false,
     );
+    // === Jev decision gate / multi-hop ===
+    setChecked(
+      "chat-brain-decision-enabled",
+      cfg.brain_decision_enabled === true,
+    );
+    set("chat-brain-decision-model", cfg.brain_decision_model || "");
+    set(
+      "chat-brain-decision-threshold",
+      cfg.brain_decision_threshold ?? 0.55,
+    );
+    set("chat-brain-decision-max-hops", cfg.brain_decision_max_hops ?? 1);
     // === Brain dedicated LLM (fields show/hide tracks the toggle; the
     //     change-side wiring lives in core/delegation.js brain-llm-toggle) ===
     setChecked("chat-brain-llm-dedicated", cfg.brain_llm_dedicated === true);

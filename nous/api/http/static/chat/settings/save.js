@@ -226,6 +226,18 @@
       })(),
       // brain_link_separation_threshold is dormant (similarity source not wired) — not collected
       brain_graph_flash_enabled: getChecked("chat-brain-graph-flash"),
+      // === Jev decision gate / multi-hop ===
+      brain_decision_enabled: getChecked("chat-brain-decision-enabled"),
+      brain_decision_model: (
+        document.getElementById("chat-brain-decision-model")?.value || ""
+      ).trim(),
+      brain_decision_threshold: parseFloat(
+        document.getElementById("chat-brain-decision-threshold")?.value ||
+          "0.55",
+      ),
+      brain_decision_max_hops: parseInt(
+        document.getElementById("chat-brain-decision-max-hops")?.value || "1",
+      ),
       // === Brain dedicated LLM: toggle is always sent; dedicated fields
       //     only when ON (OFF = reuse chat LLM, keep stored values) ===
       brain_llm_dedicated: getChecked("chat-brain-llm-dedicated"),
