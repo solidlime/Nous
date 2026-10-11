@@ -18,6 +18,14 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# decision クエリパラメータ（0/1/true/false）の真値集合（最小パース）。
+_TRUTHY_VALUES = frozenset({"1", "true", "on", "yes"})
+
+
+def _parse_decision_flag(value: str | None) -> bool:
+    """decision query param を bool 化する（未知値は False）。"""
+    return (value or "").strip().lower() in _TRUTHY_VALUES
+
 
 def _merge_entity_layer(ctx, memories: list, nodes: list, edges: list, edge_set: set) -> None:
     """Append entity nodes and mentions/relation edges to the graph (display-only superset).
@@ -115,7 +123,6 @@ def register_search_routes(mcp) -> None:
         date_range = request.query_params.get("date_range")
         min_importance_str = request.query_params.get("min_importance")
         emotion = request.query_params.get("emotion")
-        # mode parameter accepted for backwards compatibility; always uses hybrid internally
         if not q:
             return JSONResponse({"error": "Query parameter 'q' is required"}, status_code=400)
         ctx = _safe_get_context(persona)
@@ -134,6 +141,26 @@ def register_search_routes(mcp) -> None:
                     query_kwargs["min_importance"] = float(min_importance_str)
             if emotion:
                 query_kwargs["emotion"] = emotion
+            # Jev 型判定ゲート / multi-hop (#011): 既定は persona の ChatConfig、
+            # query param で上書き（decision / hops / request_id）。
+            from nous.domain.memory.query_service import resolve_decision_config
+
+            decision_cfg = resolve_decision_config(getattr(ctx, "memory_repo", None))
+            decision_raw = request.query_params.get("decision")
+            decision_enabled = (
+                _parse_decision_flag(decision_raw) if decision_raw is not None else bool(decision_cfg["enabled"])
+            )
+            max_hops = int(decision_cfg["max_hops"])
+            hops_raw = request.query_params.get("hops")
+            if hops_raw is not None:
+                with __import__("contextlib").suppress(ValueError):
+                    max_hops = max(1, min(5, int(hops_raw)))
+            query_kwargs["request_id"] = request.query_params.get("request_id") or None
+            if decision_enabled:
+                query_kwargs["decision_enabled"] = True
+                query_kwargs["decision_model"] = str(decision_cfg["model"]) or None
+                query_kwargs["decision_threshold"] = float(decision_cfg["threshold"])
+                query_kwargs["max_hops"] = max_hops
             # oracle BLOCK F3 + 重み統一: REST 経路にも RankPolicy（複合スコア段）を
             # 配線する。重みは MCP memory_search の既定と同一（from_weight_args 経由）。
             # 実利用経路は MCP であり実クエリで高い実績を持つため統一先は MCP 既定。

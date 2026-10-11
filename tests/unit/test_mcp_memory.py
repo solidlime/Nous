@@ -738,3 +738,32 @@ class TestMemorySearch:
         assert call_args.emotion == "joy"
         assert call_args.importance_weight == 0.5
         assert call_args.recency_weight == 0.3
+
+
+class TestMemorySearchDecision:
+    """Jev 型判定ゲート / multi-hop 引数の SearchQuery 注入 (#011)."""
+
+    @pytest.mark.asyncio
+    async def test_decision_injected_from_args(self, registered_tools):
+        tools, ctx, _ = registered_tools
+        ctx.search_engine.search.return_value = Success([])
+        ctx.search_engine._semantic = None
+        ctx.memory_service.count_memories.return_value = Success(0)
+        memory_search = tools["memory_search"]
+        await memory_search(query="test", decision=True, hops=3, request_id="r1")
+        q = ctx.search_engine.search.call_args[0][0]
+        assert q.decision_enabled is True
+        assert q.max_hops == 3
+        assert q.request_id == "r1"
+
+    @pytest.mark.asyncio
+    async def test_decision_default_off(self, registered_tools):
+        tools, ctx, _ = registered_tools
+        ctx.search_engine.search.return_value = Success([])
+        ctx.search_engine._semantic = None
+        ctx.memory_service.count_memories.return_value = Success(0)
+        memory_search = tools["memory_search"]
+        await memory_search(query="test")
+        q = ctx.search_engine.search.call_args[0][0]
+        assert q.decision_enabled is False
+        assert q.max_hops == 1

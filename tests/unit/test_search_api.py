@@ -91,3 +91,43 @@ async def test_search_limit_clamped(client):
     r = await client.get("/api/search/search_api_test?q=x&limit=9999")
     assert r.status_code == 200
     assert r.json()["limit"] <= 100
+
+
+async def test_search_decision_params(client, monkeypatch):
+    """decision / hops / request_id query params → SearchQuery に流れる (#011)."""
+    from nous.domain.search.engine import SearchEngine
+    from nous.domain.shared.result import Success
+
+    captured: dict = {}
+
+    async def _fake_search(self, query):
+        captured["query"] = query
+        return Success([])
+
+    monkeypatch.setattr(SearchEngine, "search", _fake_search)
+    r = await client.get("/api/search/search_api_test?q=x&decision=1&hops=3&request_id=abc")
+    assert r.status_code == 200
+    q = captured["query"]
+    assert q.decision_enabled is True
+    assert q.max_hops == 3
+    assert q.request_id == "abc"
+    assert q.decision_threshold == 0.55
+
+
+async def test_search_decision_default_off(client, monkeypatch):
+    from nous.domain.search.engine import SearchEngine
+    from nous.domain.shared.result import Success
+
+    captured: dict = {}
+
+    async def _fake_search(self, query):
+        captured["query"] = query
+        return Success([])
+
+    monkeypatch.setattr(SearchEngine, "search", _fake_search)
+    r = await client.get("/api/search/search_api_test?q=x")
+    assert r.status_code == 200
+    q = captured["query"]
+    assert q.decision_enabled is False
+    assert q.max_hops == 1
+    assert q.request_id is None

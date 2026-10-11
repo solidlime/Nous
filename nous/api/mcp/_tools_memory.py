@@ -381,6 +381,9 @@ async def _tool_memory_search(
     keyword_weight: float = 1.0,
     kind: str | None = None,
     sort: str | None = None,
+    decision: bool | None = None,
+    hops: int | None = None,
+    request_id: str | None = None,
 ) -> str:
     """Search memories with hybrid retrieval. sort: "updated_at" 指定で更新日時降順（最新優先）"""
     if top_k is not None and (top_k < 1 or top_k > 200):
@@ -425,6 +428,15 @@ async def _tool_memory_search(
         vector_weight=vector_weight,
         keyword_weight=keyword_weight,
     )
+    # Jev 型判定ゲート / multi-hop (#011): 既定は persona の ChatConfig、
+    # tool 引数 decision / hops で上書き。threshold/model は ChatConfig 準拠。
+    from nous.domain.memory.query_service import resolve_decision_config
+
+    decision_cfg = resolve_decision_config(getattr(ctx, "memory_repo", None))
+    decision_enabled = bool(decision) if decision is not None else bool(decision_cfg["enabled"])
+    max_hops = int(decision_cfg["max_hops"])
+    if hops is not None:
+        max_hops = max(1, min(5, int(hops)))
     search_query = SearchQuery(
         text=query,
         top_k=top_k,
@@ -439,7 +451,13 @@ async def _tool_memory_search(
         kind=kind,
         sort=sort,
         rank_policy=rank_policy,
+        request_id=request_id,
     )
+    if decision_enabled:
+        search_query.decision_enabled = True
+        search_query.decision_model = str(decision_cfg["model"]) or None
+        search_query.decision_threshold = float(decision_cfg["threshold"])
+        search_query.max_hops = max_hops
     ctx.search_engine.set_persona(persona)
     result = await ctx.search_engine.search(search_query)
     if not result.is_ok:

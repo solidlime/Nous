@@ -174,6 +174,11 @@ _TIER_ADVANCED: frozenset[str] = frozenset(
         "brain_idle_after_seconds",
         "brain_introspection_prompt",
         "brain_spontaneous_prompt",
+        # Jev 型判定ゲート / multi-hop 検索 (#011)
+        "brain_decision_enabled",
+        "brain_decision_model",
+        "brain_decision_threshold",
+        "brain_decision_max_hops",
         # 音声感情モード / アイテム抽出専用 LLM / 圧縮モード
         "voice_emotion_mode",
         "item_llm_dedicated",

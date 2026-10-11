@@ -43,6 +43,39 @@ def resolve_brain_config(repo: object) -> dict[str, float]:
     return values
 
 
+# brain_decision_* 設定のデフォルト（session_config.py の Field 既定と同期）。
+_DECISION_DEFAULTS: dict[str, object] = {
+    "enabled": False,
+    "model": "",
+    "threshold": 0.55,
+    "max_hops": 1,
+}
+
+
+def resolve_decision_config(repo: object) -> dict[str, object]:
+    """brain_decision_* 設定の getattr 安全参照（REST/MCP 共通の既定値解決）。
+
+    ``resolve_brain_config`` と同じ ``repo._conn`` 経路で per-persona ChatConfig を
+    解決する。参照不能なら ``_DECISION_DEFAULTS``。threshold は 0-1、max_hops は
+    1-5 に clamp する（entrypoint の最小妥当性検証と同一契約）。
+    """
+    values: dict[str, object] = dict(_DECISION_DEFAULTS)
+    try:
+        from nous.domain.chat_config import ChatConfigFileRepository
+
+        conn = getattr(repo, "_conn", None)
+        cfg = ChatConfigFileRepository(conn.data_dir).get(conn.persona)
+        values["enabled"] = bool(getattr(cfg, "brain_decision_enabled", values["enabled"]))
+        values["model"] = str(getattr(cfg, "brain_decision_model", values["model"]) or "")
+        with contextlib.suppress(TypeError, ValueError):
+            values["threshold"] = max(0.0, min(1.0, float(getattr(cfg, "brain_decision_threshold", 0.55))))
+        with contextlib.suppress(TypeError, ValueError):
+            values["max_hops"] = max(1, min(5, int(getattr(cfg, "brain_decision_max_hops", 1))))
+    except Exception:
+        pass
+    return values
+
+
 class MemoryQueryService:
     """Handles read operations, statistics, and recall boosting."""
 

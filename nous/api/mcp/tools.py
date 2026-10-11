@@ -274,6 +274,9 @@ def register_tools(mcp: MCPServer) -> None:
         keyword_weight: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0,
         kind: str | None = None,
         sort: str | None = None,
+        decision: bool | None = None,
+        hops: int | None = None,
+        request_id: str | None = None,
     ) -> str:
         """ハイブリッド検索で記憶を検索。会話が過去の出来事に言及したとき、またはあなたやユーザーについての文脈が必要なときに使用せよ。
         date_range: "7d","30d","昨日"。
@@ -281,7 +284,8 @@ def register_tools(mcp: MCPServer) -> None:
         importance_weight/recency_weight: RRF スコアリングのブースト値 (0.0-1.0)。通常は指定せず profile を使え。
         vector_weight/keyword_weight: セマンティック/キーワード信号の RRF ソース重み。
         kind: 記憶の種類でフィルタ — episodic（具体的な出来事）/ semantic（一般的事実）/ procedural（手順・パターン）/ prospective（将来の予定・意図）。
-        sort: "updated_at" 指定で更新日時降順（最新優先）。"""
+        sort: "updated_at" 指定で更新日時降順（最新優先）。
+        decision: Jev 型判定ゲートの ON/OFF（未指定なら persona 設定）。hops: multi-hop 最大ホップ数（1-5）。request_id: 可視化イベント相関用ID。"""
         p = _resolve_persona()
         return _envelope_wrap(
             await _tool_memory_search(
@@ -300,6 +304,9 @@ def register_tools(mcp: MCPServer) -> None:
                 keyword_weight=keyword_weight,
                 kind=kind,
                 sort=sort,
+                decision=decision,
+                hops=hops,
+                request_id=request_id,
             )
         )
 

@@ -118,6 +118,13 @@ class SessionConfig(BaseModel):
     brain_novelty_stability_multiplier: float = Field(default=2.0, description="新規記憶の安定度に掛ける倍率。")
     brain_emotion_gain_k: float = Field(default=0.5, description="感情による記憶強化の利得係数。")
     brain_rif_suppression_rho: float = Field(default=0.05, description="検索誘発性忘却の抑制率。")
+    # Jev 型判定ゲート / multi-hop 検索 (#011)。REST/MCP 両経路の per-persona 既定値。
+    brain_decision_enabled: bool = Field(
+        default=False, description="検索結果を LLM で判定し、しきい値未満の候補を除きます。"
+    )
+    brain_decision_model: str = Field(default="", description="判定に使うモデル。空欄で会話用モデルを使います。")
+    brain_decision_threshold: float = Field(default=0.55, description="判定の採択しきい値（0〜1）。")
+    brain_decision_max_hops: int = Field(default=1, description="multi-hop 検索の最大ホップ数（1〜5）。")
     brain_link_separation_threshold: float = Field(default=0.75, description="記憶リンクを分離する類似度しきい値。")
     brain_graph_flash_enabled: bool = Field(default=True, description="記憶グラフのシナプス発火を可視化します。")
     # Idle-gated REM drain (persistent enrichment queue)
@@ -188,6 +195,16 @@ class SessionConfig(BaseModel):
         # 0 は「継承」のセンチネルとして素通し。下限 256: interpretation エラー防止の
         # 実用下限（provider 側 1..32768 と同型）
         return v if v == 0 else max(256, min(32768, v))
+
+    @field_validator("brain_decision_threshold")
+    @classmethod
+    def _clamp_brain_decision_threshold(cls, v: float) -> float:
+        return max(0.0, min(1.0, v))
+
+    @field_validator("brain_decision_max_hops")
+    @classmethod
+    def _clamp_brain_decision_max_hops(cls, v: int) -> int:
+        return max(1, min(5, v))
 
     @model_validator(mode="after")
     def _lift_brain_max_tokens_for_reasoning(self):
