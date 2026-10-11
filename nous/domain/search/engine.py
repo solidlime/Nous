@@ -15,9 +15,10 @@ from __future__ import annotations
 import re
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Protocol
 
+from nous.domain.memory import wiring_events
 from nous.domain.memory.query_service import resolve_brain_config
 from nous.domain.search.token_kind_gate import (
     DEFAULT_INJECTION_MAX_BM25,
@@ -42,6 +43,7 @@ if TYPE_CHECKING:
         SemanticSearchStrategy,
     )
     from nous.domain.shared.errors import SearchError
+    from nous.infrastructure.llm.decision_judge import DecisionJudge
     from nous.infrastructure.sqlite.mot_thoughts import MotThought
 
     class ContentEncoder(Protocol):
@@ -145,6 +147,14 @@ class SearchQuery:
     # 真の recall 経路（chat）専用の最終スコア段。None なら従来の RRF/減衰段で完結。
     # frozen で hashable な RankPolicy をそのままキャッシュキー要素に使う。
     rank_policy: RankPolicy | None = None
+    # Jev 型判定ゲート / multi-hop 検索 (#011)。decision_enabled=False のとき gate は
+    # 完全 no-op（現行挙動を変えない）。rank_policy 同様 cache キー要素。request_id は
+    # イベント相関専用でキャッシュキーには含めない。
+    decision_enabled: bool = False
+    decision_model: str | None = None
+    decision_threshold: float = 0.55
+    max_hops: int = 1
+    request_id: str | None = None
 
 
 @dataclass
@@ -194,6 +204,7 @@ class SearchEngine:
         vector_retriever: Callable[[list[str]], Awaitable[dict[str, np.ndarray]]] | None = None,
         rerank_enabled: bool = False,
         injection_max_bm25: dict[str, float] | None = None,
+        decision_judge: DecisionJudge | None = None,
     ) -> None:
         self._keyword = keyword_search
         self._semantic = semantic_search
@@ -215,6 +226,8 @@ class SearchEngine:
         self._injection_max_bm25 = dict(
             DEFAULT_INJECTION_MAX_BM25 if injection_max_bm25 is None else injection_max_bm25
         )
+        # Jev 型判定ゲート用の judge（None のとき decision gate は完全 no-op）。
+        self._decision_judge = decision_judge
 
     def _post_filter(self, results: list[SearchResult], query: SearchQuery) -> list[SearchResult]:
         """Apply per-request filters/sort outside the query cache.
@@ -260,6 +273,10 @@ class SearchEngine:
             query.lifecycle_status,
             query.valid_at,
             query.rank_policy,
+            query.decision_enabled,
+            query.decision_model,
+            query.decision_threshold,
+            query.max_hops,
         )
 
     async def search(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
@@ -273,6 +290,11 @@ class SearchEngine:
             - ``smart``: Query expansion + multi-pass hybrid search merged with RRF.
             - Any other value: falls back to hybrid.
         """
+        # decision gate + multi-hop (#011): max_hops>1 の decision 経路のみ別ルート。
+        # max_hops==1 / decision_enabled=False は現行経路と完全一致（hop ループなし）。
+        if query.decision_enabled and query.max_hops > 1:
+            return await self._search_with_hops(query)
+
         # Parse date_range once for all strategies
         date_from, date_to = parse_date_range(query.date_range)
 
@@ -316,10 +338,170 @@ class SearchEngine:
         「フィルタ後に切る」を唯一の切り口とする。cache hit / fresh 双方で
         同一の最終加工を保証する。
         """
+        final, _ = await self._finalize_with_meta(candidates, query)
+        return final
+
+    async def _finalize_with_meta(
+        self,
+        candidates: list[SearchResult],
+        query: SearchQuery,
+        hop: int = 1,
+    ) -> tuple[list[SearchResult], float]:
+        """Post-filter → rank_policy → decision gate → top_k。
+
+        戻り値は ``(kept, sufficiency)``。``decision_enabled=False`` のとき
+        gate は no-op で sufficiency は常に 1.0（現行と完全一致）。
+        """
         filtered = self._post_filter(candidates, query)
         if query.rank_policy is not None:
             filtered = await self._apply_rank_policy(filtered, query)
-        return filtered[: query.top_k]
+        sufficiency = 1.0
+        if query.decision_enabled:
+            filtered, sufficiency = await self._apply_decision_gate(filtered, query, hop)
+        return filtered[: query.top_k], sufficiency
+
+    async def _apply_decision_gate(
+        self,
+        candidates: list[SearchResult],
+        query: SearchQuery,
+        hop: int = 1,
+    ) -> tuple[list[SearchResult], float]:
+        """Jev 型判定ゲート: judge の確率 >= threshold の候補のみ残す。
+
+        judge 不在 / 失敗（None）は全採用で続行（fail-open、never blocks the
+        caller）。decision_pass / decision_reject を emit（try/except 折り）。
+        """
+        if not candidates or self._decision_judge is None:
+            return candidates, 1.0
+        payload = [{"key": r.memory.key, "content": r.memory.content or ""} for r in candidates]
+        verdict = await self._decision_judge.judge(query.text, payload, model=query.decision_model)
+        if verdict is None:
+            return candidates, 1.0
+        kept: list[SearchResult] = []
+        for r in candidates:
+            prob = verdict.probability(r.memory.key)
+            self._emit_decision(prob >= query.decision_threshold, r.memory.key, prob, query, hop)
+            if prob >= query.decision_threshold:
+                kept.append(r)
+        return kept, verdict.sufficiency
+
+    def _emit_decision(self, passed: bool, key: str, prob: float, query: SearchQuery, hop: int) -> None:
+        try:
+            wiring_events.emit(
+                "decision_pass" if passed else "decision_reject",
+                source=key,
+                weight=prob,
+                meta={
+                    "persona": self._persona_name(),
+                    "hop": hop,
+                    "request_id": query.request_id,
+                    "threshold": query.decision_threshold,
+                },
+            )
+        except Exception:
+            logger.debug("wiring decision emit failed", exc_info=True)
+
+    def _emit_hop(
+        self, kind: str, hop: int, query: SearchQuery, *, reason: str | None = None, weight: float = 0.0
+    ) -> None:
+        try:
+            meta: dict[str, object] = {
+                "persona": self._persona_name(),
+                "hop": hop,
+                "request_id": query.request_id,
+            }
+            if reason is not None:
+                meta["reason"] = reason
+            wiring_events.emit(kind, weight=weight, meta=meta)
+        except Exception:
+            logger.debug("wiring hop emit failed", exc_info=True)
+
+    def _persona_name(self) -> str:
+        return self._semantic.persona if self._semantic is not None else "default"
+
+    @staticmethod
+    def _synth_next_query(query: SearchQuery, kept: list[SearchResult]) -> str:
+        """採用候補（上位3件）の tags + content 抜粋から次 hop のクエリを合成する。
+
+        追加の LLM 呼び出しはしない（Jev 方式の multi-hop 近似）。
+        """
+        fragments = [query.text]
+        for r in kept[:3]:
+            if r.memory.content:
+                fragments.append(r.memory.content[:100])
+            if r.memory.tags:
+                fragments.append(" ".join(r.memory.tags[:5]))
+        return "\n".join(f for f in fragments if f.strip())
+
+    async def _retrieve_candidates(
+        self,
+        query: SearchQuery,
+        mode: str,
+        date_from: datetime | None,
+        date_to: datetime | None,
+    ) -> Result[list[SearchResult], SearchError]:
+        """hop 用 retrieval（cache get/put 込み。post-filter/finalize は呼ばない）。"""
+        cache_key = self._query_cache_key(query, mode)
+        if cache_key is not None:
+            cached = _cache_get(cache_key)
+            if cached is not None:
+                return Success(cached)
+        if mode == "keyword":
+            result = self._keyword_search(query, date_from, date_to)
+        elif mode == "semantic":
+            result = await self._semantic_search(query, date_from, date_to)
+        elif mode == "smart":
+            result = await self._smart_search(query)
+        else:
+            result = await self._hybrid_search(query, date_from, date_to)
+        if isinstance(result, Failure):
+            return result
+        if cache_key is not None and result.value:
+            _cache_put(cache_key, result.value)
+        return result
+
+    async def _search_with_hops(self, query: SearchQuery) -> Result[list[SearchResult], SearchError]:
+        """decision gate + multi-hop 検索（``decision_enabled and max_hops > 1`` 専用）。
+
+        hop 毎に採用候補を累積し、sufficiency >= threshold / max_hops 到達 /
+        候補ゼロで停止する。キー重複は排除。RIF は適用しない（新経路のため）。
+        hop_start を各 hop 開始時、hop_stop を停止時に reason 付きで emit。
+        """
+        date_from, date_to = parse_date_range(query.date_range)
+        mode = query.mode or "hybrid"
+        accumulated: dict[str, SearchResult] = {}
+        finalized: list[SearchResult] = []
+        sufficiency = 0.0
+        reason = "no_candidates"
+        current = query
+        hop = 1
+        while True:
+            self._emit_hop("hop_start", hop, query)
+            result = await self._retrieve_candidates(current, mode, date_from, date_to)
+            if isinstance(result, Failure):
+                if hop == 1:
+                    return result
+                reason = "no_candidates"
+                break
+            for r in result.value or []:
+                accumulated.setdefault(r.memory.key, r)
+            if not accumulated:
+                reason = "no_candidates"
+                break
+            finalized, sufficiency = await self._finalize_with_meta(list(accumulated.values()), query, hop)
+            if sufficiency >= query.decision_threshold:
+                reason = "sufficiency"
+                break
+            if hop >= query.max_hops:
+                reason = "max_hops"
+                break
+            if not finalized:
+                reason = "no_candidates"
+                break
+            current = replace(query, text=self._synth_next_query(query, finalized))
+            hop += 1
+        self._emit_hop("hop_stop", hop, query, reason=reason, weight=sufficiency)
+        return Success(finalized)
 
     async def _apply_rank_policy(
         self,
@@ -601,7 +783,13 @@ class SearchEngine:
         if not query.text.strip() and query.tags and self._memory_repo is not None:
             return self._keyword_search(query, date_from, date_to)
 
-        fetch_k = min(max(query.top_k * 3, 15), 60) if query.rank_policy is not None else query.top_k
+        if query.decision_enabled and query.max_hops > 1:
+            # decision + multi-hop は「広げてから判定」: 除かれる対象も候補に含める。
+            fetch_k = min(max(query.top_k * 6, 30), 120)
+        elif query.rank_policy is not None:
+            fetch_k = min(max(query.top_k * 3, 15), 60)
+        else:
+            fetch_k = query.top_k
 
         all_results: list[SearchResult] = []
 

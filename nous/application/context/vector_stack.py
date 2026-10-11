@@ -211,6 +211,12 @@ class VectorStackMixin:
                     return (result.value.strength, result.value.stability)
                 return None
 
+            def _resolve_decision_judge():
+                """per-persona ChatConfig から Jev 型判定ゲート用 judge を生成（未設定時 None）。"""
+                from nous.infrastructure.llm.decision_judge import resolve_decision_judge
+
+                return resolve_decision_judge(self.memory_repo)
+
             ranker = ChainedRanker(
                 RRFRanker(),
                 ForgettingCurveRanker(_strength_lookup),
@@ -233,6 +239,7 @@ class VectorStackMixin:
                 # item 5: OR-fallback に渡す bm25 バー（NOUS_SEARCH__INJECTION_MAX_BM25）。
                 injection_max_bm25=self.settings.search.injection_max_bm25,
                 vector_retriever=_retrieve_candidate_vectors,
+                decision_judge=_resolve_decision_judge(),
             )
             # worker 経路ではハンドラの set_persona が走らないため、生成時に必ず伝播させる
             search_engine.set_persona(self.persona)

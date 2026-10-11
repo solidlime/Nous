@@ -4,7 +4,10 @@ Kinds: ``link_fire`` (Hebbian co-activation), ``recall_boost``
 (strength boost on recall), ``ppr_hit`` (PPR top seeds with scores),
 ``replay_fire`` (offline reactivation / memory enrichment / decay-cycle
 stability update), ``novelty_gate`` (novelty-gated stability boost from
-the EnrichmentWorker).
+the EnrichmentWorker), ``decision_pass`` / ``decision_reject`` (Jev 型判定
+ゲートの per-candidate 判定), ``hop_start`` / ``hop_stop`` (multi-hop 検索の
+hop 境界。meta 契約: ``{persona, hop, request_id}``、decision 系は更に
+``threshold``、hop_stop は ``reason``)。
 
 Emitters must never break main flows: wrap :func:`emit` in try/except
 at call sites (debug log, always continue).
@@ -23,7 +26,20 @@ from nous.domain.shared.time_utils import format_iso, get_now
 
 logger = logging.getLogger(__name__)
 
-WIRING_KINDS = frozenset(["link_fire", "recall_boost", "ppr_hit", "replay_fire", "novelty_gate", "monologue"])
+WIRING_KINDS = frozenset(
+    [
+        "link_fire",
+        "recall_boost",
+        "ppr_hit",
+        "replay_fire",
+        "novelty_gate",
+        "monologue",
+        "decision_pass",
+        "decision_reject",
+        "hop_start",
+        "hop_stop",
+    ]
+)
 WIRING_BUFFER_SIZE = 200
 
 
