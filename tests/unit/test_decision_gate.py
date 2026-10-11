@@ -530,6 +530,42 @@ class TestDecisionRawValueMeta:
         assert ev["meta"]["cosine"] is None
 
     @pytest.mark.asyncio
+    async def test_jev_carry_is_pinned_on_result(self):
+        # gate 内の観測 carry は裁定で許容（10b）。消えると生値併記が死ぬので固定する。
+        kw = _make_keyword_strategy({"hello": [(_mem_days_ago("k1", 0), 0.9)]})
+        judge = _StubJudge(JudgeVerdict(verdicts={"k1": 0.7}, sufficiency=0.3))
+        engine = SearchEngine(keyword_search=kw, decision_judge=judge)
+        result = await engine.search(SearchQuery(text="hello", mode="keyword", decision_enabled=True))
+        assert result.is_ok
+        assert result.value[0].jev == 0.7
+
+    @pytest.mark.asyncio
+    async def test_time_weight_meta_is_the_effective_value(self):
+        # UI の time xN は「score に掛かった倍率」なので floor 後。生の 0.0005 は出さない。
+        kw = _make_keyword_strategy({"hello": [(_mem_days_ago("old", 400), 0.9)]})
+        judge = _StubJudge(JudgeVerdict(verdicts={"old": 0.9}, sufficiency=0.3))
+        engine = SearchEngine(keyword_search=kw, decision_judge=judge)
+        await engine.search(SearchQuery(text="hello", mode="keyword", decision_enabled=True, decision_time_weight=1.0))
+        ev = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "decision_pass"][0]
+        assert ev["meta"]["time_weight"] == 0.5
+
+    @pytest.mark.asyncio
+    async def test_meta_carries_query_encoder_model_name(self):
+        # sim 行の帰属はクエリ側 encoder の名前（埋め込み移行窓の観察用）。
+        class _Enc:
+            model_name = "ruri-v3-70m"
+
+            async def async_encode_batch(self, texts, *, is_query=False):
+                raise AssertionError("keyword mode must not encode")
+
+        kw = _make_keyword_strategy({"hello": [(_mem_days_ago("k1", 0), 0.9)]})
+        judge = _StubJudge(JudgeVerdict(verdicts={"k1": 0.7}, sufficiency=0.3))
+        engine = SearchEngine(keyword_search=kw, decision_judge=judge, embedding_provider=lambda: _Enc())
+        await engine.search(SearchQuery(text="hello", mode="keyword", decision_enabled=True))
+        ev = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "decision_pass"][0]
+        assert ev["meta"]["sim_model"] == "ruri-v3-70m"
+
+    @pytest.mark.asyncio
     async def test_hop_meta_carries_turn_id(self):
         kw = _make_keyword_strategy({"start": [(_mem("k1", "a"), 0.9)]})
         judge = _StubJudge(JudgeVerdict(verdicts={"k1": 1.0}, sufficiency=0.9))

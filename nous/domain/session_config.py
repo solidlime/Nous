@@ -127,7 +127,10 @@ class SessionConfig(BaseModel):
     brain_decision_max_hops: int = Field(default=1, description="multi-hop 検索の最大ホップ数（1〜5）。")
     brain_decision_time_weight: float = Field(
         default=0.0,
-        description="判定ゲート通過後の並べ替えに時間減衰を掛ける重み（0〜1）。0 で無効（採否は変えない）。",
+        description=(
+            "判定ゲート通過後の並べ替えに時間減衰を掛けます。0 より大きければ値に依らず全て同じ強さ"
+            "（=有効）で、0 で無効。採否は変えません（表示される倍率は floor 適用後の実効値）。"
+        ),
     )
     brain_link_separation_threshold: float = Field(default=0.75, description="記憶リンクを分離する類似度しきい値。")
     brain_graph_flash_enabled: bool = Field(default=True, description="記憶グラフのシナプス発火を可視化します。")

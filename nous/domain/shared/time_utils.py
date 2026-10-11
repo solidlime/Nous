@@ -30,7 +30,8 @@ def compute_recency_decay(created_at: datetime | None) -> float:
 
 # 判定ゲート後の順位付け専用の緩やかな減衰率（exp(-λ*days)、λ≈0.019/day = 19日で 0.70）。
 # RECENCY_LAMBDA（λ=0.5/day = 19日で 0.00007）とは曲線が別物なので、
-# compute_recency_decay を流用してはならない（流用すると UI に「時間 x0.0000」と出る）。
+# compute_recency_decay を流用してはならない（19日で 0.70 対 0.00007。UI に出す実効値は
+# floor で 0.5 に張り付くが、並べ替えの分解能が失われる）。
 DECISION_TIME_LAMBDA = 0.019
 
 

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -73,6 +74,14 @@ class TestEmitBuffer:
         events = wiring_events.snapshot_after(0)
         assert len(events) == cap
         assert events[0]["source"] == "s10"
+
+    def test_buffer_overflow_is_counted_and_warned(self, caplog) -> None:
+        # 溢れると頭（=連鎖の先頭）から黙って消える。計器が無いと欠損を実測できない。
+        with caplog.at_level(logging.WARNING):
+            for i in range(wiring_events.WIRING_BUFFER_SIZE + 3):
+                wiring_events.emit("hop_start", source=f"k{i}")
+        assert wiring_events._dropped_from_head == 3
+        assert any("dropped from the head" in r.message for r in caplog.records)
 
 
 class TestHooks:

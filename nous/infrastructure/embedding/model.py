@@ -51,6 +51,11 @@ class EmbeddingModel(OnnxBaseModel):
     # ------------------------------------------------------------------
 
     @property
+    def model_name(self) -> str:
+        """クエリ埋め込みに使うモデル名（graph.js の sim_model / 移行観察用）。"""
+        return self.config.model
+
+    @property
     def dimension(self) -> int:
         """Return embedding dimension, loading the model if needed."""
         if self._dimension is None:

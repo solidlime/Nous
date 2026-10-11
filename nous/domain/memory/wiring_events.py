@@ -70,7 +70,10 @@ WIRING_KINDS = frozenset(
 # （5 hop × 30 候補 = 150 件）うえ、enrich_service の replay_fire / novelty_gate が
 # 同一 deque に常時流入する。200 では 1 リクエストで連鎖の頭が消える。
 # TODO(drive-by): 根本対策は per-candidate → per-hop サマリへの集約（契約変更を伴う別件）。
-WIRING_BUFFER_SIZE = 1024
+WIRING_BUFFER_SIZE = 4096
+# リングバッファ溢れで頭から消えた累計。連鎖の頭が欠けている事実を実測するための計器
+# （100 件ごとに warn を出す。per-hop 集約は実測で欠損が観測されてから立案する）。
+_dropped_from_head = 0
 
 
 @dataclass(frozen=True)
@@ -125,7 +128,18 @@ def emit(
             meta=event.meta,
             ts=event.ts,
         )
+        # 既に満杯なら append で最古が落ちる（満杯にした append 自身は落とさない）。
+        full = len(_buffer) == _buffer.maxlen
         _buffer.append(event)
+        if full:
+            global _dropped_from_head
+            _dropped_from_head += 1
+            if _dropped_from_head == 1 or _dropped_from_head % 100 == 0:
+                logger.warning(
+                    "wiring buffer full (%d): %d events dropped from the head — chain heads will be missing",
+                    _buffer.maxlen,
+                    _dropped_from_head,
+                )
     return True
 
 
@@ -153,5 +167,7 @@ def repo_persona(repo: Any) -> str | None:
 
 def clear() -> None:
     """Drop all buffered events (tests / persona switch)."""
+    global _dropped_from_head
     with _lock:
         _buffer.clear()
+        _dropped_from_head = 0

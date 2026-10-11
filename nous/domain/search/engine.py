@@ -56,6 +56,10 @@ if TYPE_CHECKING:
 
         async def async_encode_batch(self, texts: list[str], *, is_query: bool = False) -> np.ndarray: ...
 
+        # 判定 meta の sim_model（どの encoder のベクトルで測った cosine か）に使う。
+        # 偽 encoder / fail-open 経路では生えないので getattr で取る。
+        model_name: str
+
 
 from nous.infrastructure.logging.structured import get_logger
 
@@ -74,6 +78,11 @@ _DECISION_TIME_FLOOR = 0.5
 # FTS OR fallback（設計書 or_fallback_design.md §2d）: AND プールがこの件数未満なら
 # OR で 1 回だけ追加探する。config 化は YAGNI。
 FTS_OR_FALLBACK_MIN = 3
+
+
+def _effective_time_weight(created_at: datetime | None) -> float:
+    """表示と順位付けで同じ実効値を返す（floor の二重管理を避ける）。"""
+    return max(_DECISION_TIME_FLOOR, compute_decision_time_decay(created_at))
 
 
 def _merge_fts_groups(
@@ -382,7 +391,7 @@ class SearchEngine:
             # threshold ÷ 時間重みになり、閾値の意味が二重化する。
             if query.decision_time_weight > 0.0 and filtered:
                 for r in filtered:
-                    r.time_weight = max(_DECISION_TIME_FLOOR, compute_decision_time_decay(r.memory.created_at))
+                    r.time_weight = _effective_time_weight(r.memory.created_at)
                 filtered.sort(key=lambda r: r.score * (r.time_weight or 1.0), reverse=True)
         return filtered[: query.top_k], sufficiency
 
@@ -411,6 +420,9 @@ class SearchEngine:
         kept: list[SearchResult] = []
         for r in candidates:
             prob = verdict.probability(r.memory.key)
+            # 観測 carry は gate 内で可（ルアン・メェイ裁定 10b で許容）。gate 内で許されるのは
+            # (1) 観測値 carry (2) emit 呼び出し の 2 種のみ。kept の選別基準・しきい値比較・
+            # fail-open 分岐には触らない。削除すると生値併記が消えるので残すこと。
             r.jev = prob  # 生値併記用（表示のみ。採否は prob >= threshold で決まる）
             self._emit_decision(prob >= query.decision_threshold, r.memory.key, prob, query, hop, result=r)
             if prob >= query.decision_threshold:
@@ -456,9 +468,13 @@ class SearchEngine:
             if result is not None:
                 # keyword/fts 由来の cosine は None（未計測）。0 と混同させない。
                 meta["cosine"] = result.cosine
+                # cosine は Qdrant の Distance.COSINE。保証できるのはクエリ側 encoder 名だけ
+                # （移行中に stored vector が旧 encoder なら真の作成モデルは混合）。
+                enc = self._embedding_provider() if self._embedding_provider is not None else None
+                meta["sim_model"] = getattr(enc, "model_name", None)
                 if query.decision_time_weight > 0.0:
-                    # sort は floor を掛けるが、表示は生の減衰値を出す。
-                    meta["time_weight"] = compute_decision_time_decay(result.memory.created_at)
+                    # UI の time xN は「score に掛かった倍率」なので floor 後の実効値を出す。
+                    meta["time_weight"] = _effective_time_weight(result.memory.created_at)
             wiring_events.emit(
                 "decision_pass" if passed else "decision_reject",
                 source=key,

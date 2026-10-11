@@ -279,6 +279,27 @@ describe('fail-open contract (decision_bypass)', () => {
 });
 
 describe('results panel', () => {
+  it('prints raw values and attributes the sim token to the query encoder only', async () => {
+    startRun();
+    const rid = F._state().session.requestId;
+    emitWiring(instances[0], {
+      kind: 'decision_pass', source: 'm1', weight: 0.9,
+      meta: { request_id: rid, hop: 1, jev: 0.74, cosine: 0.753, time_weight: 0.5, sim_model: 'ruri-v3-70m' },
+    });
+    // 結果パネルは hop_stop で描画される
+    emitWiring(instances[0], {
+      kind: 'hop_stop', source: '', target: '', weight: 0,
+      meta: { request_id: rid, reason: 'sufficiency' },
+    });
+    const row = document.querySelectorAll('#graph-fire-results-list li')[0];
+    expect(row.textContent).toContain('sim 0.753 (ruri-v3-70m)');
+    expect(row.textContent).toContain('jev 0.74');
+    // 表示の time は rank に実際に掛かった倍率（floor 適用後の実効値）
+    expect(row.textContent).toContain('time x0.50');
+    // 帰属はクエリ側 encoder 名に限定する（stored が旧 encoder なら真の作成モデルは混合）
+    expect(row.querySelector('.nfire-vals').getAttribute('title')).toBe('クエリ埋め込み: ruri-v3-70m');
+  });
+
   it('accumulates across hops into a top-20 panel built with textContent only (XSS-safe)', async () => {
     startRun({ results: [{ memory: { key: 'x1', content: '<img src=x onerror=alert(1)>', tags: ['t1'] }, score: 0.5 }] });
     await flushAsync();

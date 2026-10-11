@@ -912,7 +912,7 @@ function accumulateResult(key, patch) {
     if (!r) {
         var m = _memoryFor(key) || {};
         r = { key: key, content: m.content || '', tags: (m.tags || []).slice(), score: 0, pass: null, prob: null,
-              sim: null, jev: null, time: null };
+              sim: null, jev: null, time: null, simModel: null };
         s.results.set(key, r);
     }
     if (patch.score && patch.score > r.score) r.score = patch.score;
@@ -920,6 +920,7 @@ function accumulateResult(key, patch) {
     if (patch.pass === true || patch.pass === false) r.pass = patch.pass;
     /* 生値は 0 と「未計測(null)」を区別して保持する */
     if (patch.sim != null) r.sim = patch.sim;
+    if (patch.simModel != null) r.simModel = patch.simModel;
     if (patch.jev != null) r.jev = patch.jev;
     if (patch.time != null) r.time = patch.time;
     return r;
@@ -1014,12 +1015,14 @@ function onDecision(ev, meta, pass) {
     if (!key) return false;
     ensureFireNode(key);
     /* 生値併記（Q3）: 積だけでは「なぜ差が出たか」を復元できない。
-       jev = 判定確率 / sim = cosine（keyword/fts 由来は未計測 = null）/ time = 時間重み */
+       jev = 判定確率 / sim = cosine（keyword/fts 由来は未計測 = null）/ time = 順位付けに
+       実際に掛かった倍率（floor 適用後の実効値）/ simModel = クエリ側 encoder 名 */
     accumulateResult(key, {
         pass: pass,
         weight: pass ? (Number(ev.weight) || null) : null,
         jev: meta.jev == null ? null : Number(meta.jev),
         sim: meta.cosine == null ? null : Number(meta.cosine),
+        simModel: meta.sim_model == null ? null : String(meta.sim_model),
         time: meta.time_weight == null ? null : Number(meta.time_weight)
     });
     if (pass) {
@@ -1203,9 +1206,17 @@ function renderResults() {
         li.appendChild(head);
         if (r.pass === true || r.pass === false) {
             /* 生値併記（Q3）: 3 つの生値を並べる。積（.nfire-score）と視覚的に区別する。
-               未計測は「—」— 0 と混同させない（keyword/fts 由来の cosine は null）。 */
-            li.appendChild(_el('div', { 'class': 'nfire-vals' }, [
-                'sim ' + _numText(r.sim, 3),
+               未計測は「—」— 0 と混同させない（keyword/fts 由来の cosine は null）。
+               time は順位付けに実際に掛かった倍率（floor 適用後）。 */
+            var simModel = r.simModel ? String(r.simModel) : '';
+            var valsAttrs = { 'class': 'nfire-vals' };
+            if (simModel) {
+                /* cosine は Qdrant stored vector との積。保証できるのはクエリ側 encoder 名だけ
+                   （移行中に stored が旧 encoder なら真の類似度の作成モデルは混合）。 */
+                valsAttrs.title = 'クエリ埋め込み: ' + simModel;
+            }
+            li.appendChild(_el('div', valsAttrs, [
+                'sim ' + _numText(r.sim, 3) + (simModel ? ' (' + simModel + ')' : ''),
                 'jev ' + _numText(r.jev, 2),
                 'time ' + (r.time == null ? '\u2014' : 'x' + Number(r.time).toFixed(2))
             ].join(' \u30fb ')));
