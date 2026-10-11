@@ -130,6 +130,7 @@ class SessionConfig(BaseModel):
         description=(
             "判定ゲート通過後の並べ替えに時間減衰を掛けます。0 より大きければ値に依らず全て同じ強さ"
             "（=有効）で、0 で無効。採否は変えません（表示される倍率は floor 適用後の実効値）。"
+            "判定ゲートと Judge が有効な場合のみ作用します。"
         ),
     )
     brain_link_separation_threshold: float = Field(default=0.75, description="記憶リンクを分離する類似度しきい値。")
