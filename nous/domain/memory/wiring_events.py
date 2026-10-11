@@ -68,7 +68,8 @@ WIRING_KINDS = frozenset(
 )
 # 1 リクエストの消費量（実測見積）: decision_pass/reject が候補数 × hops で発火する
 # （5 hop × 30 候補 = 150 件）うえ、enrich_service の replay_fire / novelty_gate が
-# 同一 deque に常時流入する。200 では 1 リクエストで連鎖の頭が消える。
+# 同一 deque に常時流入する。10d(1025c762) で 200 → 1024 に増設（200 では 1 リクエストで
+# 連鎖の頭が消える）。Phase 10(d67c4f17) で溢れ計器 _dropped_from_head を追加し 1024 → 4096。
 # TODO(drive-by): 根本対策は per-candidate → per-hop サマリへの集約（契約変更を伴う別件）。
 WIRING_BUFFER_SIZE = 4096
 # リングバッファ溢れで頭から消えた累計。連鎖の頭が欠けている事実を実測するための計器

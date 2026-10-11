@@ -313,6 +313,11 @@ function applyBrainForgettingSection(cfg, set, setChecked) {
       cfg.brain_decision_threshold ?? 0.55,
     );
     set("chat-brain-decision-max-hops", cfg.brain_decision_max_hops ?? 1);
+    // 値に意味は無い（0 より大きければ有効）。表示の真実はチェックボックス。
+    setChecked(
+      "chat-brain-decision-time-weight",
+      (cfg.brain_decision_time_weight ?? 0) > 0,
+    );
     // === Brain dedicated LLM (fields show/hide tracks the toggle; the
     //     change-side wiring lives in core/delegation.js brain-llm-toggle) ===
     setChecked("chat-brain-llm-dedicated", cfg.brain_llm_dedicated === true);

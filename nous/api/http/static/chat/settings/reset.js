@@ -191,6 +191,7 @@
     ["chat-brain-decision-model", "brain_decision_model"],
     ["chat-brain-decision-threshold", "brain_decision_threshold"],
     ["chat-brain-decision-max-hops", "brain_decision_max_hops"],
+    ["chat-brain-decision-time-weight", "brain_decision_time_weight"],
     ["chat-brain-llm-dedicated", "brain_llm_dedicated"],
     ["chat-brain-llm-provider", "brain_llm_provider"],
     ["chat-brain-llm-model", "brain_llm_model"],

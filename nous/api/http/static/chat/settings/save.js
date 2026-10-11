@@ -238,6 +238,10 @@
       brain_decision_max_hops: parseInt(
         document.getElementById("chat-brain-decision-max-hops")?.value || "1",
       ),
+      // 0 より大きければ有効（値自体に意味は無い）。bool ではなく float で送る。
+      brain_decision_time_weight: getChecked("chat-brain-decision-time-weight")
+        ? 1.0
+        : 0.0,
       // === Brain dedicated LLM: toggle is always sent; dedicated fields
       //     only when ON (OFF = reuse chat LLM, keep stored values) ===
       brain_llm_dedicated: getChecked("chat-brain-llm-dedicated"),

@@ -83,6 +83,7 @@ function buildForm() {
     + '<option value="1">1</option><option value="2">2</option>'
     + '<option value="3">3</option><option value="4">4</option>'
     + '<option value="5">5</option></select>'
+    + '<input type="checkbox" id="chat-brain-decision-time-weight" />'
     + '<div id="chat-brain-llm-fields" class="settings-body-hidden">'
     + '<input type="text" id="chat-brain-llm-provider" value="" />'
     + '<input type="text" id="chat-brain-llm-model" value="" />'
@@ -314,6 +315,36 @@ describe('brain simulation settings', () => {
     expect(document.getElementById('chat-brain-decision-max-hops').value).toBe('3');
   });
 
+  it('decision time weight: 0.0 → unchecked → 0.0(float) / 1.0 → checked → 1.0(float)', async () => {
+    // 0.0 (既定) は unchecked。保存は bool ではなく float 0.0 を送る
+    window.Nous.Chat.settings.apply({});
+    expect(document.getElementById('chat-brain-decision-time-weight').checked).toBe(false);
+
+    const postBodies = () => apiStub.mock.calls
+      .filter((c) => c[1] && c[1].body)
+      .map((c) => JSON.parse(c[1].body));
+
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    apiStub.mockResolvedValueOnce({});
+    await window.Nous.Chat.settings.save();
+    let body = postBodies()[0];
+    expect(body.brain_decision_time_weight).toBe(0.0);
+    expect(typeof body.brain_decision_time_weight).toBe('number');
+
+    // 1.0 → checked。保存値は float 1.0 (bool を送らない)
+    document.getElementById('chat-base-url').value = 'https://api.example.com';
+    document.getElementById('chat-brain-decision-time-weight').checked = true;
+    apiStub.mockResolvedValueOnce({});
+    await window.Nous.Chat.settings.save();
+    body = postBodies().pop();
+    expect(body.brain_decision_time_weight).toBe(1.0);
+    expect(typeof body.brain_decision_time_weight).toBe('number');
+
+    // API で 0.5 が入っていても「値に依らず有効」= checked
+    window.Nous.Chat.settings.apply({ brain_decision_time_weight: 0.5 });
+    expect(document.getElementById('chat-brain-decision-time-weight').checked).toBe(true);
+  });
+
   it('voice_streaming: apply reflects it and save round-trips true/false', async () => {
     window.Nous.Chat.settings.apply({ voice_streaming: false });
     expect(document.getElementById('chat-voice-streaming').checked).toBe(false);
@@ -395,6 +426,7 @@ const BRAIN_IDS = [
   'chat-brain-decision-model',
   'chat-brain-decision-threshold',
   'chat-brain-decision-max-hops',
+  'chat-brain-decision-time-weight',
 ];
 
 const BRAIN_SUBSECTION_ORDER = [

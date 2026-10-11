@@ -160,6 +160,7 @@ _BRAIN_HELP = {
     "decision_model": "判定に使うモデル名。空欄なら脳シミュレーターのデフォルト LLM を使います。",
     "decision_threshold": "候補を採用する確率のしきい値。値が高いほど厳しく絞り込まれます。",
     "decision_max_hops": "1 で単発検索。2 以上で採用候補からクエリを合成して再検索します（multi-hop）。",
+    "decision_time_weight": "判定ゲート通過後の並べ替えに時間減衰を掛けます。0 より大きければ値に依らず全て同じ強さ（=有効）で、0 で無効。採否は変えません（表示される倍率は floor 適用後の実効値）。",
 }
 
 
@@ -357,6 +358,10 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                                 <option value="4">4</option>
                                                 <option value="5">5</option>
                                             </select>
+                                        </div>
+                                        <div class="chat-check-row">
+                                            <input type="checkbox" id="chat-brain-decision-time-weight" />
+                                            <label for="chat-brain-decision-time-weight">時間減衰を有効 {help_("decision_time_weight")}</label>
                                         </div>
                                     </div>
                                 </details>
