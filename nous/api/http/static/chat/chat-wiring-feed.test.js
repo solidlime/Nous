@@ -187,6 +187,17 @@ describe('wiring feed trim + render', () => {
     expect(item.querySelector('.wiring-kind-badge').textContent).toBe('新規性');
   });
 
+  it('renders the prompt_inject kind with the プロンプト挿入 badge and a non-PPR bar color', () => {
+    // prompt_inject = そのターンで system プロンプトへ挿入された記憶（挿入の確定）。
+    // request_id を持たず turn_id 相関なので、フィード側の fallback に沈めない。
+    expect(MP.pushWiringEvent(fire(1, 'prompt_inject', 'm1', '', 0))).toBe(true);
+    const item = wiringList().querySelector('.wiring-fire-item');
+    expect(item.classList.contains('wiring-kind-prompt_inject')).toBe(true);
+    expect(item.querySelector('.wiring-kind-badge').textContent).toBe('プロンプト挿入');
+    const fill = item.querySelector('.mem-bar-fill');
+    expect(fill.getAttribute('data-color')).not.toContain('accent-blue'); // ppr_hit と混同させない
+  });
+
   it('renders decision_bypass with its own label and a non-PPR bar color (fail-open)', () => {
     // fail-open = 「判定を適用しなかった」事実（却下ではない）。
     // フォールバックの青は ppr_hit の色なので、そのままだと PPR と混同する。

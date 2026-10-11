@@ -33,6 +33,9 @@ var WIRING_KINDS = {
   // fail-open で「判定を適用しなかった」事実（却下ではない）。
   // Graph タブの発火モードではステータス注記、通常タブではこの行が出る。
   decision_bypass: "判定不通過",
+  // そのターンで system プロンプトへ挿入された記憶（挿入の確定）。
+  // request_id を持たず turn_id 相関（wiring_events.py 契約）。
+  prompt_inject: "プロンプト挿入",
 };
 // フィードに出さない kind の明示除外リスト（理由必須）。未知 kind は
 // 落とさず _renderWiringItem のフォールバック（ラベル = kind 文字列 /
@@ -52,6 +55,8 @@ var WIRING_BAR_COLORS = {
   // フォールバックの青（ppr_hit）は PPR の色なので誤伝達する。判定不通過は
   // 無彩色寄り（グレー）で「光っていない」ことを視覚的に区別する。
   decision_bypass: "linear-gradient(90deg,#4b5563,#9ca3af)",
+  // 挿入の確定はピンク系（ppr_hit の青フォールバックと混同させない）。
+  prompt_inject: "linear-gradient(90deg,var(--accent-pink),var(--accent-orange))",
 };
 var _wiringEvents = []; // newest-first
 var _wiringMaxSeq = 0;

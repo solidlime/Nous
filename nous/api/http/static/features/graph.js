@@ -64,7 +64,10 @@ var FLASH_COLORS = {
        しないよう、明るい無彩色で「判定していない」を表す */
     decision_bypass: '#8e8e93',
     hop_start: '#ff9f0a',
-    hop_stop: '#64d2ff'
+    hop_stop: '#64d2ff',
+    /* prompt_inject（Phase 12/13）: system プロンプトへの記憶挿入の確定。
+       pink は「話に使った」バッジの枠色としても使う。 */
+    prompt_inject: '#ff375f'
 };
 
 /* 未知 kind の縮退方針（graph.js / wiring.js / resonance.js で統一）:
@@ -590,7 +593,8 @@ var FIRE_DEFAULT_HOPS = 2; /* 既定ホップ数（送信時 1..5 に clamp） *
 var fireUI = null;   /* 注入した DOM 参照（なければ UI 関連は何もしない） */
 var fireState = {
     mode: false,
-    session: null,     /* { requestId, hops, decision, results: Map, memories: {}, hop, done } */
+    turnMode: false,  /* chat 由来の発火を turn_id で束ねる表示モード */
+    session: null,     /* { requestId, turnId, hops, decision, results: Map, memories: {}, hop, done } */
     dataSet: null,     /* { nodes, edges } vis DataSets（テストフックで差し替え可） */
     network: null,
     edgeIndex: {},     /* "a|b" → { id, type }（辞書順 a<b に正規化） */
@@ -912,9 +916,10 @@ function accumulateResult(key, patch) {
     if (!r) {
         var m = _memoryFor(key) || {};
         r = { key: key, content: m.content || '', tags: (m.tags || []).slice(), score: 0, pass: null, prob: null,
-              sim: null, jev: null, time: null, simModel: null };
+              sim: null, jev: null, time: null, simModel: null, used: false };
         s.results.set(key, r);
     }
+    if (patch.used) r.used = true;
     if (patch.score && patch.score > r.score) r.score = patch.score;
     if (patch.weight != null) r.prob = patch.weight;
     if (patch.pass === true || patch.pass === false) r.pass = patch.pass;
@@ -947,11 +952,19 @@ function ingestResults(data) {
 
 function handleFireEvent(ev) {
     if (!fireState.mode || !ev || typeof ev !== 'object') return false;
-    var s = fireState.session;
-    var meta = ev.meta || {};
-    /* meta.request_id が自分の UUID のイベントのみ消費する */
-    if (!s || !meta.request_id || meta.request_id !== s.requestId) return false;
     var kind = String(ev.kind || '').toLowerCase();
+    var meta = ev.meta || {};
+    var s = fireState.session;
+    if (fireState.turnMode) {
+        /* chat 由来は turn_id 相関。1 発話は複数の request_id に跨るため、
+           request_id ではなく turn_id の一致で束ね、変わり目を連鎖の境界にする
+           （prompt_inject は request_id を持たない — wiring_events.py 契約）。 */
+        if (meta.turn_id == null) return false;
+        if (!s || s.turnId !== meta.turn_id) s = fireState.session = openTurnSession(meta.turn_id);
+    } else {
+        /* 手動 FIRE: meta.request_id が自分の UUID のイベントのみ消費する（不変） */
+        if (!s || !meta.request_id || meta.request_id !== s.requestId) return false;
+    }
     switch (kind) {
         case 'hop_start':       return onHopStart(ev, meta);
         case 'ppr_hit':         return onPprHit(ev, meta);
@@ -961,8 +974,20 @@ function handleFireEvent(ev) {
         case 'decision_reject': return onDecision(ev, meta, false);
         case 'hop_stop':        return onHopStop(ev, meta);
         case 'decision_bypass': return onDecisionBypass(ev, meta);
+        case 'prompt_inject':   return onPromptInject(ev, meta);
         default: return false; /* 未知 kind: エラー扱いしない */
     }
+}
+
+/* 発話(turn)単位の連鎖を新規に開く。1 発話 = 1 turn_id が連鎖の単位。 */
+function openTurnSession(turnId) {
+    resetFireScene();
+    ensureFireDataSet();
+    buildGraphEdgeMap();
+    return {
+        requestId: null, turnId: turnId, hops: FIRE_DEFAULT_HOPS, decision: false,
+        results: new Map(), memories: {}, hop: 0, done: false, bypassReason: ''
+    };
 }
 
 function onHopStart(ev, meta) {
@@ -1053,6 +1078,34 @@ function onDecisionBypass(ev, meta) {
     s.bypassReason = String(meta.reason || '');
     setStatus('HOP ' + s.hop + '/' + s.hops + ' \u30fb ' + _bypassText(s.bypassReason));
     return true;
+}
+
+/* prompt_inject: そのターンで system プロンプトへ挿入された記憶（挿入の確定）。
+   LLM が実際にその記憶を使った証明ではないため「使用」ではなく「話に使った」
+   バッジ相当の pink 枠 + _used フラグで示す（wiring_events.py 契約）。 */
+function onPromptInject(ev, meta) {
+    var key = ev.source || ev.target;
+    if (!key) return false;
+    ensureFireNode(key, null, true);
+    accumulateResult(key, { used: true });
+    markUsedInReply(key);
+    return queueLight(key, 'prompt_inject', { scale: 1.4, duration: 620 });
+}
+
+/* 挿入された記憶のノードをピンク枠で保持する（パルス復帰後もバッジは残す） */
+function markUsedInReply(key) {
+    var nodes = fireState.dataSet && fireState.dataSet.nodes;
+    if (!nodes) return;
+    var node = nodes.get(key);
+    if (!node) return;
+    var base = fireBases[key] || { size: node.size || 10, color: node.color };
+    var pink = G.FLASH_COLORS.prompt_inject;
+    var held = {
+        background: base.color.background, border: pink,
+        highlight: base.color.highlight, hover: base.color.hover
+    };
+    nodes.update({ id: key, color: held, borderWidth: 4, _used: true });
+    fireBases[key] = { size: base.size, color: held };
 }
 
 function dimNode(key) {
@@ -1203,6 +1256,10 @@ function renderResults() {
         } else if (r.pass === false) {
             head.appendChild(_el('span', { 'class': 'nfire-badge nfire-reject' }, 'REJECT'));
         }
+        if (r.used) {
+            /* prompt_inject: プロンプト挿入の確定（使用の証明ではない） */
+            head.appendChild(_el('span', { 'class': 'nfire-badge nfire-used' }, '\u8a71\u306b\u4f7f\u3063\u305f'));
+        }
         li.appendChild(head);
         if (r.pass === true || r.pass === false) {
             /* 生値併記（Q3）: 3 つの生値を並べる。積（.nfire-score）と視覚的に区別する。
@@ -1300,6 +1357,18 @@ function disconnectFireStream() {
     N.Core.disconnectStream(FIRE_CHANNEL);
 }
 
+/* ---- turn モード ---- */
+
+function setTurnMode(on) {
+    fireState.turnMode = !!on;
+    if (fireUI && fireUI.turnMode) fireUI.turnMode.checked = fireState.turnMode;
+    if (fireState.turnMode) {
+        fireState.session = null; /* 手動 FIRE のセッションは持ち越さない */
+        if (fireState.mode) connectFireStream();
+    }
+    return fireState.turnMode;
+}
+
 /* ---- モードトグル（全体グラフビューとの共存） ---- */
 
 function setMode(on) {
@@ -1311,6 +1380,8 @@ function setMode(on) {
         fireUI.root.style.display = '';
         fireUI.toggle.checked = true;
         setStatus('\u30af\u30a8\u30ea\u3092\u5165\u308c\u3066\u300c\u767a\u706b\u300d\u3092\u62bc\u3057\u3066\u306d');
+        /* turn モードは手動 FIRE を待たず chat 発火を passive に受ける。 */
+        if (fireState.turnMode) connectFireStream();
     } else {
         if (anchor) anchor.style.display = '';
         fireUI.root.style.display = 'none';
@@ -1337,6 +1408,7 @@ var FIRE_CSS = [
     '.nfire-badge { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 999px; }',
     '.nfire-pass { color: #30d158; border: 1px solid rgba(48,209,88,0.45); background: rgba(48,209,88,0.12); }',
     '.nfire-reject { color: #a9a9b0; border: 1px solid rgba(72,72,74,0.6); background: rgba(72,72,74,0.25); }',
+    '.nfire-used { color: #ff375f; border: 1px solid rgba(255,55,95,0.5); background: rgba(255,55,95,0.12); }',
     '.nfire-tags { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 2px; }',
     '.nfire-content { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; word-break: break-word; }',
     '.nfire-empty { color: var(--text-muted); font-size: 0.85rem; padding: 8px 4px; }'
@@ -1377,6 +1449,13 @@ function buildFireUI(tab) {
     decLabel.appendChild(decision);
     decLabel.appendChild(_el('span', null, 'decision'));
     row.appendChild(decLabel);
+    /* turn モード: chat 由来の発火を turn_id で束ねる（手動 FIRE と共存）。 */
+    var turnLabel = _el('label', { style: 'display:flex;align-items:center;gap:6px;color:var(--text-secondary);font-size:0.85rem;cursor:pointer;user-select:none' });
+    var turnMode = _el('input', { type: 'checkbox', id: 'graph-fire-turn-mode', 'aria-label': 'turn' });
+    turnMode.style.accentColor = 'var(--accent-pink)';
+    turnLabel.appendChild(turnMode);
+    turnLabel.appendChild(_el('span', null, 'turn'));
+    row.appendChild(turnLabel);
     /* 1..5 に clamp する契約。select は範囲外の値を保持できず
        （value='9' が value='' に化ける）clamp が働かないので number 入力。 */
     var hops = _el('input', { type: 'number', id: 'graph-fire-hops', min: '1', max: '5', step: '1', value: String(FIRE_DEFAULT_HOPS), 'class': 'glass-input', 'aria-label': 'hops', title: '\u6700\u5927\u30db\u30c3\u30d7\u6570 (1-5)', style: 'min-width:70px' });
@@ -1398,7 +1477,7 @@ function buildFireUI(tab) {
 
     return {
         panel: panel, root: root, toggle: toggle, query: query,
-        decision: decision, hops: hops,
+        decision: decision, hops: hops, turnMode: turnMode,
         run: root.querySelector('#graph-fire-run'),
         status: root.querySelector('#graph-fire-status'),
         container: root.querySelector('#graph-fire-container'),
@@ -1415,6 +1494,7 @@ function buildFireUI(tab) {
     fireUI = buildFireUI(tab);
     fireUI.toggle.addEventListener('change', function () { setMode(this.checked); });
     fireUI.run.addEventListener('click', runFire);
+    fireUI.turnMode.addEventListener('change', function () { setTurnMode(this.checked); });
     fireUI.query.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') runFire();
     });
@@ -1423,6 +1503,7 @@ function buildFireUI(tab) {
 /* Namespace 登録 */
 N.Features.GraphFire = {
     setMode: setMode,
+    setTurnMode: setTurnMode,
     isMode: function () { return fireState.mode; },
     run: runFire,
     handleFireEvent: handleFireEvent,

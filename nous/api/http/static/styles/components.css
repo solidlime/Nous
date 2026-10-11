@@ -928,6 +928,13 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
     color: #9ca3af;
     border-color: rgba(75, 85, 99, 0.4);
 }
+/* prompt_inject = system プロンプトへの記憶挿入の確定。pink は Graph タブの
+   「話に使った」バッジ枠（graph.js FLASH_COLORS.prompt_inject #ff375f）と同系。 */
+.wiring-kind-prompt_inject .wiring-kind-badge {
+    background: rgba(var(--accent-pink-rgb), 0.15);
+    color: var(--accent-pink, #ff375f);
+    border-color: rgba(var(--accent-pink-rgb), 0.3);
+}
 .chat-help-tip {
     display: inline-block;
     margin-left: 4px;
