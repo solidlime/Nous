@@ -7,7 +7,8 @@ stability update), ``novelty_gate`` (novelty-gated stability boost from
 the EnrichmentWorker), ``decision_pass`` / ``decision_reject`` (Jev 型判定
 ゲートの per-candidate 判定), ``hop_start`` / ``hop_stop`` (multi-hop 検索の
 hop 境界。meta 契約: ``{persona, hop, request_id}``、decision 系は更に
-``threshold``、hop_stop は ``reason``)。
+``threshold``、hop_stop は ``reason``)。``decision_bypass`` は fail-open で
+judge を適用しなかった事実（meta 契約: ``{persona, reason, request_id, hop}``）。
 
 Emitters must never break main flows: wrap :func:`emit` in try/except
 at call sites (debug log, always continue).
@@ -36,6 +37,7 @@ WIRING_KINDS = frozenset(
         "monologue",
         "decision_pass",
         "decision_reject",
+        "decision_bypass",
         "hop_start",
         "hop_stop",
     ]

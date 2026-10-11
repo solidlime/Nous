@@ -117,7 +117,29 @@ class TestDecisionGate:
         result = await engine.search(SearchQuery(text="hello", mode="keyword", decision_enabled=True))
         assert result.is_ok
         assert [r.memory.key for r in result.value] == ["k1", "k2"]
-        assert wiring_events.snapshot_after(0) == []
+        # fail-open は沈黙しない: decision_bypass(parse_failed) が観測できること。
+        bypass = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "decision_bypass"]
+        assert [e["meta"]["reason"] for e in bypass] == ["parse_failed"]
+
+    @pytest.mark.asyncio
+    async def test_judge_unavailable_emits_bypass(self):
+        kw = _make_keyword_strategy({"hello": [(_mem("k1"), 0.9)]})
+        engine = SearchEngine(keyword_search=kw, decision_judge=None)
+        result = await engine.search(SearchQuery(text="hello", mode="keyword", decision_enabled=True))
+        assert result.is_ok
+        bypass = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "decision_bypass"]
+        assert [e["meta"]["reason"] for e in bypass] == ["judge_unavailable"]
+
+    @pytest.mark.asyncio
+    async def test_no_candidates_emits_bypass(self):
+        kw = _make_keyword_strategy()
+        judge = _StubJudge(JudgeVerdict(verdicts={"k1": 1.0}, sufficiency=1.0))
+        engine = SearchEngine(keyword_search=kw, decision_judge=judge)
+        result = await engine.search(SearchQuery(text="hello", mode="keyword", decision_enabled=True))
+        assert result.is_ok
+        assert result.value == []
+        bypass = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "decision_bypass"]
+        assert [e["meta"]["reason"] for e in bypass] == ["no_candidates"]
 
     @pytest.mark.asyncio
     async def test_disabled_is_noop_and_judge_not_called(self):
@@ -183,10 +205,12 @@ class TestMultiHop:
 
     @pytest.mark.asyncio
     async def test_max_hops_stop_and_dedup(self):
-        # hop 1 = "start", hop 2 = synthesized text; both return the same memory key.
+        # hop 1 = "start" → k1, hop 2 = synthesized text → 新規 k2（max_hops 到達で停止）。
         strat = MagicMock()
-        strat.search.side_effect = lambda text, **kw: Success([(_mem("k1", "a"), 0.9)])
-        judge = _StubJudge(JudgeVerdict(verdicts={"k1": 1.0}, sufficiency=0.1))
+        strat.search.side_effect = lambda text, **kw: Success(
+            [(_mem("k1", "a"), 0.9)] if text == "start" else [(_mem("k1", "a"), 0.9), (_mem("k2", "b"), 0.8)]
+        )
+        judge = _StubJudge(JudgeVerdict(verdicts={"k1": 1.0, "k2": 1.0}, sufficiency=0.1))
         engine = SearchEngine(keyword_search=strat, decision_judge=judge)
         query = SearchQuery(text="start", mode="keyword", decision_enabled=True, max_hops=2, decision_threshold=0.55)
         result = await engine.search(query)
@@ -196,7 +220,27 @@ class TestMultiHop:
         assert [e["meta"]["hop"] for e in starts] == [1, 2]
         stops = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "hop_stop"]
         assert stops[-1]["meta"]["reason"] == "max_hops"
-        # キー重複排除により k1 は 1 件だけ。
+        assert len(judge.calls) == 2
+        # キー重複排除により k2 は追加分の 1 件、k1 は 1 件だけ。
+        assert [r.memory.key for r in result.value] == ["k1", "k2"]
+
+    @pytest.mark.asyncio
+    async def test_no_progress_stops_before_judge(self):
+        # 直前 hop までと同じ候補しか返らない hop で judge を再課金せずに停止する。
+        strat = MagicMock()
+        strat.search.side_effect = lambda text, **kw: Success([(_mem("k1", "a"), 0.9)])
+        judge = _StubJudge(JudgeVerdict(verdicts={"k1": 1.0}, sufficiency=0.1))
+        engine = SearchEngine(keyword_search=strat, decision_judge=judge)
+        query = SearchQuery(text="start", mode="keyword", decision_enabled=True, max_hops=3, decision_threshold=0.55)
+        result = await engine.search(query)
+        assert result.is_ok
+        assert strat.search.call_count == 2
+        starts = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "hop_start"]
+        assert [e["meta"]["hop"] for e in starts] == [1, 2]
+        stops = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "hop_stop"]
+        assert stops[-1]["meta"]["reason"] == "no_progress"
+        # hop 2 は judge を呼ばない（同一プロンプトの再課金をしない）。
+        assert len(judge.calls) == 1
         assert [r.memory.key for r in result.value] == ["k1"]
 
     @pytest.mark.asyncio
@@ -224,7 +268,9 @@ class TestMultiHop:
 
 class TestWiringKinds:
     def test_new_kinds_registered(self):
-        assert {"decision_pass", "decision_reject", "hop_start", "hop_stop"} <= set(wiring_events.WIRING_KINDS)
+        assert {"decision_pass", "decision_reject", "decision_bypass", "hop_start", "hop_stop"} <= set(
+            wiring_events.WIRING_KINDS
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +287,19 @@ class TestDecisionJudgeParse:
         assert verdict is not None
         assert verdict.verdicts == {"a": 0.9}
         assert verdict.sufficiency == 0.4
+
+    def test_parse_missing_sufficiency_fails_open(self):
+        # verdict 全採用時は sufficiency も 1.0 とみなす（欠落で hop が空回りしない）。
+        verdict = DecisionJudge._parse(json.dumps({"decisions": [{"index": 0, "probability": 0.9}]}), [{"key": "a"}])
+        assert verdict is not None
+        assert verdict.sufficiency == 1.0
+
+    def test_parse_bad_sufficiency_fails_open(self):
+        verdict = DecisionJudge._parse(
+            json.dumps({"decisions": [{"index": 0, "probability": 0.9}], "sufficiency": "high"}), [{"key": "a"}]
+        )
+        assert verdict is not None
+        assert verdict.sufficiency == 1.0
 
     def test_parse_code_fence(self):
         text = '```json\n{"decisions": [{"index": 0, "probability": 0.2}], "sufficiency": 0.1}\n```'
@@ -360,3 +419,14 @@ class TestResolveDecisionJudge:
         from nous.infrastructure.llm.decision_judge import resolve_decision_judge
 
         assert resolve_decision_judge(object()) is None
+
+    def test_no_api_key_emits_bypass(self):
+        from nous.infrastructure.llm.decision_judge import resolve_decision_judge
+
+        repo = SimpleNamespace(_conn=SimpleNamespace(data_dir="/tmp", persona="p1"))
+        cfg = SimpleNamespace(provider_config=SimpleNamespace(get_effective_api_key=lambda: ""))
+        with patch("nous.domain.chat_config.ChatConfigFileRepository") as repo_cls:
+            repo_cls.return_value.get.return_value = cfg
+            assert resolve_decision_judge(repo) is None
+        bypass = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "decision_bypass"]
+        assert [e["meta"]["reason"] for e in bypass] == ["no_api_key"]

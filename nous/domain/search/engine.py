@@ -372,11 +372,16 @@ class SearchEngine:
         judge 不在 / 失敗（None）は全採用で続行（fail-open、never blocks the
         caller）。decision_pass / decision_reject を emit（try/except 折り）。
         """
-        if not candidates or self._decision_judge is None:
+        if not candidates:
+            self._emit_decision_bypass("no_candidates", query, hop)
+            return candidates, 1.0
+        if self._decision_judge is None:
+            self._emit_decision_bypass("judge_unavailable", query, hop)
             return candidates, 1.0
         payload = [{"key": r.memory.key, "content": r.memory.content or ""} for r in candidates]
         verdict = await self._decision_judge.judge(query.text, payload, model=query.decision_model)
         if verdict is None:
+            self._emit_decision_bypass("parse_failed", query, hop)
             return candidates, 1.0
         kept: list[SearchResult] = []
         for r in candidates:
@@ -385,6 +390,22 @@ class SearchEngine:
             if prob >= query.decision_threshold:
                 kept.append(r)
         return kept, verdict.sufficiency
+
+    def _emit_decision_bypass(self, reason: str, query: SearchQuery, hop: int) -> None:
+        """fail-open で judge を通さなかった事実を残す（沈黙する事故の防止）。"""
+        logger.warning("decision gate bypassed (%s): %s", reason, query.text[:80])
+        try:
+            wiring_events.emit(
+                "decision_bypass",
+                meta={
+                    "persona": self._persona_name(),
+                    "reason": reason,
+                    "hop": hop,
+                    "request_id": query.request_id,
+                },
+            )
+        except Exception:
+            logger.debug("wiring decision bypass emit failed", exc_info=True)
 
     def _emit_decision(self, passed: bool, key: str, prob: float, query: SearchQuery, hop: int) -> None:
         try:
@@ -465,7 +486,8 @@ class SearchEngine:
         """decision gate + multi-hop 検索（``decision_enabled and max_hops > 1`` 専用）。
 
         hop 毎に採用候補を累積し、sufficiency >= threshold / max_hops 到達 /
-        候補ゼロで停止する。キー重複は排除。RIF は適用しない（新経路のため）。
+        新規候補ゼロ（no_progress）/ 候補ゼロで停止する。キー重複は排除。
+        RIF は適用しない（新経路のため）。
         hop_start を各 hop 開始時、hop_stop を停止時に reason 付きで emit。
         """
         date_from, date_to = parse_date_range(query.date_range)
@@ -484,10 +506,15 @@ class SearchEngine:
                     return result
                 reason = "no_candidates"
                 break
+            before = len(accumulated)
             for r in result.value or []:
                 accumulated.setdefault(r.memory.key, r)
             if not accumulated:
                 reason = "no_candidates"
+                break
+            # 新規候補ゼロの hop は judge に同一プロンプトを再課金するだけなので打ち切る。
+            if len(accumulated) == before:
+                reason = "no_progress"
                 break
             finalized, sufficiency = await self._finalize_with_meta(list(accumulated.values()), query, hop)
             if sufficiency >= query.decision_threshold:

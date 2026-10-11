@@ -159,9 +159,9 @@ class DecisionJudge:
         if not verdicts:
             return None
 
-        suff = data.get("sufficiency", 0.0)
+        suff = data.get("sufficiency", 1.0)
         if isinstance(suff, bool) or not isinstance(suff, (int, float)):
-            suff = 0.0
+            suff = 1.0
         return JudgeVerdict(verdicts=verdicts, sufficiency=max(0.0, min(1.0, float(suff))))
 
 
@@ -183,6 +183,13 @@ def resolve_decision_judge(repo: object) -> DecisionJudge | None:
         p = cfg.provider_config
         api_key = p.get_effective_api_key()
         if not api_key:
+            logger.warning("decision judge unavailable (no_api_key): gate is a no-op")
+            try:
+                from nous.domain.memory import wiring_events
+
+                wiring_events.emit("decision_bypass", meta={"persona": conn.persona, "reason": "no_api_key"})
+            except Exception:
+                logger.debug("decision bypass emit failed", exc_info=True)
             return None
         return DecisionJudge(
             provider_name=p.provider,
