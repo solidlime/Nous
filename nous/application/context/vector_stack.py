@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from nous.config.settings import Settings
     from nous.domain.memory.graph import EntityService
     from nous.domain.memory.service import MemoryService
+    from nous.domain.search.judge import DecisionJudge
     from nous.infrastructure.embedding.reranker import RerankerModel
     from nous.infrastructure.qdrant.adapter import QdrantVectorStore
     from nous.infrastructure.sqlite.entity_repo import SQLiteEntityRepository
@@ -211,7 +212,7 @@ class VectorStackMixin:
                     return (result.value.strength, result.value.stability)
                 return None
 
-            def _resolve_decision_judge():
+            def _resolve_decision_judge() -> DecisionJudge | None:
                 """per-persona ChatConfig から Jev 型判定ゲート用 judge を生成（未設定時 None）。"""
                 from nous.infrastructure.llm.decision_judge import resolve_decision_judge
 

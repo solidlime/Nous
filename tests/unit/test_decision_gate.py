@@ -19,7 +19,8 @@ from nous.domain.search.engine import (
 )
 from nous.domain.shared.result import Success
 from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
-from nous.infrastructure.llm.decision_judge import DecisionJudge, JudgeVerdict
+from nous.infrastructure.llm.decision_judge import JudgeVerdict
+from nous.infrastructure.llm.decision_judge import LLMDecisionJudge as DecisionJudge
 
 
 def _mem(key: str, content: str = "content", tags: list[str] | None = None) -> Memory:
@@ -412,6 +413,15 @@ class TestDecisionJudgeParse:
 
         judge._provider = _boom  # type: ignore[method-assign]
         assert await judge.judge("q", [{"key": "a", "content": "x"}]) is None
+
+
+class TestDecisionJudgeProtocol:
+    def test_llm_decision_judge_satisfies_protocol(self):
+        from nous.domain.search.judge import DecisionJudge as DecisionJudgeProtocol
+        from nous.infrastructure.llm.decision_judge import LLMDecisionJudge
+
+        judge = LLMDecisionJudge("openai", "key", "m")
+        assert isinstance(judge, DecisionJudgeProtocol), "LLMDecisionJudge が DecisionJudge Protocol を満たしていません"
 
 
 class TestResolveDecisionJudge:

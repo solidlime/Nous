@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     import numpy as np
 
     from nous.domain.memory.entities import Memory
+    from nous.domain.search.judge import DecisionJudge
     from nous.domain.search.policy import RankPolicy
     from nous.domain.search.ranker import ResultRanker
     from nous.domain.search.strategies import (
@@ -43,7 +44,6 @@ if TYPE_CHECKING:
         SemanticSearchStrategy,
     )
     from nous.domain.shared.errors import SearchError
-    from nous.infrastructure.llm.decision_judge import DecisionJudge
     from nous.infrastructure.sqlite.mot_thoughts import MotThought
 
     class ContentEncoder(Protocol):

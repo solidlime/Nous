@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from nous.domain.search.judge import DecisionJudge, JudgeVerdict
 from nous.domain.shared.text_utils import strip_code_fence
 from nous.infrastructure.llm.factory import get_provider
 from nous.infrastructure.llm.text_utils import collect_text_with_usage
@@ -42,20 +42,8 @@ _SYSTEM_PROMPT = """あなたは記憶検索の判定器です。検索クエリ
 decisions には入力候補の全 index を含めてください。"""
 
 
-@dataclass(frozen=True)
-class JudgeVerdict:
-    """判定結果。verdicts は候補 key → 0-1 確率。JSON 欠落 key は 1.0（fail-open 採用）。"""
-
-    verdicts: dict[str, float] = field(default_factory=dict)
-    sufficiency: float = 0.0
-
-    def probability(self, key: str) -> float:
-        """key の採択確率。判定が無い key は 1.0（全採用フォールバック）。"""
-        return self.verdicts.get(key, 1.0)
-
-
-class DecisionJudge:
-    """1 回の LLM 呼び出しで query に対する候補群を個別判定する。"""
+class LLMDecisionJudge:
+    """1 回の LLM 呼び出しで query に対する候補群を個別判定する（契約は DecisionJudge）。"""
 
     def __init__(
         self,
@@ -174,12 +162,14 @@ def resolve_decision_judge(repo: object) -> DecisionJudge | None:
     （``provider_config`` の effective 値）、``decision_model`` は呼び出し毎に上書き。
     """
     try:
-        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.domain.chat_config import resolve_persona_chat_config
 
+        cfg = resolve_persona_chat_config(repo)
+        if cfg is None:
+            return None
         conn = getattr(repo, "_conn", None)
         if conn is None:
             return None
-        cfg = ChatConfigFileRepository(conn.data_dir).get(conn.persona)
         p = cfg.provider_config
         api_key = p.get_effective_api_key()
         if not api_key:
@@ -191,7 +181,7 @@ def resolve_decision_judge(repo: object) -> DecisionJudge | None:
             except Exception:
                 logger.debug("decision bypass emit failed", exc_info=True)
             return None
-        return DecisionJudge(
+        return LLMDecisionJudge(
             provider_name=p.provider,
             api_key=api_key,
             model=p.get_effective_model(),
