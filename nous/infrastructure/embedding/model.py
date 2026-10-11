@@ -42,7 +42,9 @@ class EmbeddingModel(OnnxBaseModel):
         self.config = config or EmbeddingConfig()
         self._tokenizer: Tokenizer | None = None
         self._dimension: int | None = None
-        self._tok_name: str = "cl-nagoya/ruri-v3-30m"
+        # トークナイザはモデルファミリごとに設定で明示する（ruri-v3 系は
+        # tokenizer.json が共通なので 30m/70m で同一）。
+        self._tok_name: str = self.config.tokenizer
 
     # ------------------------------------------------------------------
     # Public sync API
@@ -218,6 +220,7 @@ class EmbeddingModel(OnnxBaseModel):
     def _load_model(self) -> None:
         """Download ONNX model + tokenizer, create InferenceSession."""
         logger.info("Loading embedding model: %s (device=%s)", self.config.model, self.config.device)
+        self._tok_name = self.config.tokenizer
 
         # 1. Download ONNX model (revision pinned via NOUS_EMBEDDING__REVISION when set)
         model_dir = snapshot_download(self.config.model, revision=_hf_revision("NOUS_EMBEDDING__REVISION"))  # nosec B615
@@ -239,11 +242,21 @@ class EmbeddingModel(OnnxBaseModel):
             sess_options=sess_options,
         )
 
-        # 4. Detect dimension from output shape
-        self._dimension = self._session.get_outputs()[0].shape[2]
+        # 4. Detect dimension from output shape, then apply MRL truncation.
+        #    Misconfigured dimensions must fail loudly here: a wrong size would
+        #    silently create a Qdrant collection of the wrong dimension.
+        graph_dim = int(self._session.get_outputs()[0].shape[2])
+        dims = self.config.dimensions
+        if dims is not None and dims > graph_dim:
+            raise ValueError(
+                f"embedding.dimensions={dims} exceeds model output dim {graph_dim} for {self.config.model}"
+            )
+        self._dimension = graph_dim if dims is None else dims
         logger.info(
-            "Embedding model loaded: dim=%d, model=%s",
+            "Embedding model loaded: dim=%d (graph=%d, dimensions=%s), model=%s",
             self._dimension,
+            graph_dim,
+            dims,
             self.config.model,
         )
 
@@ -271,6 +284,11 @@ class EmbeddingModel(OnnxBaseModel):
         counts = mask_3d.sum(axis=1).clip(min=1e-9)  # (batch, 1)
 
         pooled = summed / counts  # (batch, dim)
+
+        # MRL truncation: keep the leading N dims, then L2 re-normalise below.
+        dims = self.config.dimensions
+        if dims is not None:
+            pooled = pooled[:, :dims]
 
         # L2 normalise
         norms = np.maximum(np.linalg.norm(pooled, axis=1, keepdims=True), 1e-12)

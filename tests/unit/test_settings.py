@@ -24,7 +24,9 @@ class TestDefaultValues:
 
     def test_embedding_defaults(self):
         cfg = EmbeddingConfig()
-        assert cfg.model == "onnx-community/ruri-v3-30m-ONNX"
+        assert cfg.model == "mochiya98/ruri-v3-70m-onnx"
+        assert cfg.tokenizer == "cl-nagoya/ruri-v3-70m"
+        assert cfg.dimensions == 256
         assert cfg.device == "cpu"
 
     def test_reranker_defaults(self):

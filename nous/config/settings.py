@@ -19,9 +19,17 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingConfig(BaseModel):
-    """Embedding model configuration."""
+    """Embedding model configuration.
 
-    model: str = "onnx-community/ruri-v3-30m-ONNX"
+    ``dimensions``: MRL (Matryoshka) 切り詰め次元。ruri-v3 系は先頭 N 次元だけで
+    も有効な埋め込みになるよう学習されているため、切り詰め後に L2 再正規化して使う。
+    ``None`` なら graph 出力の全次元（ruri-v3-70m は 384）。既定 256 は
+    既存 Qdrant コレクションの次元と一致させるための確定値。
+    """
+
+    model: str = "mochiya98/ruri-v3-70m-onnx"
+    tokenizer: str = "cl-nagoya/ruri-v3-70m"
+    dimensions: int | None = Field(default=256, gt=0)
     device: str = "cpu"
     batch_size: int = 32
 

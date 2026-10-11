@@ -88,7 +88,7 @@ def test_get_effective_value_default(tmp_data_dir: Path):
 
     value, source = mgr.get_effective_value("embedding", "model")
     assert source == "default"
-    assert value == "onnx-community/ruri-v3-30m-ONNX"
+    assert value == "mochiya98/ruri-v3-70m-onnx"
 
 
 def test_update_hot_reloadable(tmp_data_dir: Path):
