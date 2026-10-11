@@ -147,8 +147,6 @@ nous/domain/memory/write_service.py:0: error: Argument 16 to "Memory" has incomp
 nous/domain/memory/write_service.py:0: error: Argument 16 to "Memory" has incompatible type "**dict[str, object]"; expected "int"  [arg-type]
 nous/domain/memory/write_service.py:0: error: Argument 16 to "Memory" has incompatible type "**dict[str, object]"; expected "datetime | None"  [arg-type]
 nous/domain/memory/write_service.py:0: error: Argument 16 to "Memory" has incompatible type "**dict[str, object]"; expected "str"  [arg-type]
-nous/domain/memory/query_service.py:0: error: Item "None" of "Any | None" has no attribute "data_dir"  [union-attr]
-nous/domain/memory/query_service.py:0: error: Item "None" of "Any | None" has no attribute "persona"  [union-attr]
 nous/domain/memory/query_service.py:0: error: "MemoryRepository" has no attribute "get_strength"  [attr-defined]
 nous/domain/memory/query_service.py:0: error: "MemoryRepository" has no attribute "save_strength"  [attr-defined]
 nous/domain/memory/query_service.py:0: error: Returning Any from function declared to return "Success[list[Memory]] | Failure[DomainError]"  [no-any-return]
