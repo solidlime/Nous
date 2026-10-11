@@ -921,6 +921,13 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
     color: var(--accent-yellow);
     border-color: rgba(var(--accent-yellow-rgb), 0.35);
 }
+/* decision_bypass は「光っていない」事実なので無彩色（bar は wiring.js の
+   #4b5563→#9ca3af と同系）。色付き pill を与えると発火系と誤認させる。 */
+.wiring-kind-decision_bypass .wiring-kind-badge {
+    background: rgba(75, 85, 99, 0.15);
+    color: #9ca3af;
+    border-color: rgba(75, 85, 99, 0.4);
+}
 .chat-help-tip {
     display: inline-block;
     margin-left: 4px;
