@@ -14,6 +14,10 @@ from nous.infrastructure.sqlite.base_repo import SQLiteRepository
 
 logger = get_logger(__name__)
 
+# typing provenance の信頼順序: llm > sudachi > regex > unknown(不在)。
+# 上位の信頼源だけが下位を上書きできる。
+_TRUST_RANK = {"regex": 1, "sudachi": 2, "llm": 3}
+
 
 class SQLiteEntityRepository(SQLiteRepository):
     """SQLite-backed entity graph repository."""
@@ -78,6 +82,101 @@ class SQLiteEntityRepository(SQLiteRepository):
         except Exception as e:
             logger.error("Failed to find entities for '%s': %s", query, e)
             return Failure(RepositoryError(str(e)))
+
+    def update_entity_type(
+        self,
+        entity_id: str,
+        entity_type: str,
+        typed_by: str,
+    ) -> Result[bool, RepositoryError]:
+        """Trust-gated type update; returns True iff the update was applied.
+
+        Trust order ``llm > sudachi > regex > unknown``: an update lands only
+        when *typed_by* strictly outranks the entity's current
+        ``metadata.typed_by`` (absent = unknown = lowest). Read-modify-write
+        keeps other metadata keys intact and runs in one transaction so a
+        concurrent writer cannot interleave. ``last_seen`` is deliberately
+        left untouched (backfill must not bump recency).
+        """
+        import contextlib
+
+        rank = _TRUST_RANK.get(typed_by)
+        if rank is None:
+            return Failure(RepositoryError(f"unknown typed_by: {typed_by!r}"))
+        try:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._db.execute("SELECT metadata FROM entities WHERE id = ?", (entity_id,)).fetchone()
+                if row is None:
+                    self._db.execute("ROLLBACK")
+                    return Success(False)
+                meta: dict = {}
+                if row["metadata"]:
+                    with contextlib.suppress(json.JSONDecodeError, TypeError):
+                        parsed = json.loads(row["metadata"])
+                        if isinstance(parsed, dict):
+                            meta = parsed
+                if _TRUST_RANK.get(str(meta.get("typed_by")), 0) >= rank:
+                    self._db.execute("ROLLBACK")
+                    return Success(False)
+                meta["typed_by"] = typed_by
+                self._db.execute(
+                    "UPDATE entities SET entity_type = ?, metadata = ? WHERE id = ?",
+                    (entity_type, json.dumps(meta, ensure_ascii=False), entity_id),
+                )
+                self._db.execute("COMMIT")
+                return Success(True)
+            except Exception:
+                with contextlib.suppress(Exception):
+                    self._db.execute("ROLLBACK")
+                raise
+        except Exception as e:
+            logger.error("Failed to update entity type %s: %s", entity_id, e)
+            return Failure(RepositoryError(str(e)))
+
+    def list_entities_without_typed_by(self, limit: int = 500) -> list[dict]:
+        """Return the typist worklist: entities with no ``metadata.typed_by``.
+
+        Includes regex-typed rows (untrusted provenance) and ``unknown`` rows.
+        Ordered by mention_count desc so hubs are typed first.
+        """
+        try:
+            rows = self._db.execute(
+                "SELECT id, entity_type, metadata FROM entities "
+                "WHERE metadata IS NULL OR metadata NOT LIKE '%\"typed_by\"%' "
+                "ORDER BY mention_count DESC, id LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        except Exception as e:
+            logger.error("Failed to list untyped entities: %s", e)
+            return []
+
+    def get_representative_snippets(self, entity_ids: list[str], per_entity: int = 2) -> dict[str, list[str]]:
+        """Return up to *per_entity* top-importance memory excerpts per entity."""
+        if not entity_ids:
+            return {}
+        try:
+            placeholders = ", ".join("?" for _ in entity_ids)
+            rows = self._db.execute(
+                "SELECT me.entity_id, m.content FROM memory_entities me "  # nosec B608 -- IN-list is "?" placeholders; values bound via sqlite params
+                "JOIN memories m ON m.key = me.memory_key "
+                f"WHERE me.entity_id IN ({placeholders}) "
+                "ORDER BY me.entity_id, m.importance DESC, m.key",
+                (*entity_ids,),
+            ).fetchall()
+        except Exception as e:
+            logger.error("Failed to get snippets for %d entities: %s", len(entity_ids), e)
+            return {}
+        out: dict[str, list[str]] = {}
+        for r in rows:
+            bucket = out.setdefault(r["entity_id"], [])
+            if len(bucket) >= per_entity:
+                continue
+            content = (r["content"] or "").strip().replace("\n", " ")
+            if content:
+                bucket.append(content)
+        return out
 
     # ------------------------------------------------------------------
     # Relations

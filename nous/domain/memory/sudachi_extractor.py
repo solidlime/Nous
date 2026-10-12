@@ -112,7 +112,7 @@ class SudachiExtractor:
             if subtype in ("人名", "姓", "名"):
                 return "person"
             if subtype in ("地名",):
-                return "location"
+                return "place"
             if subtype in ("組織",):
                 return "organization"
         return "entity"
