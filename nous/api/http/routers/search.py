@@ -201,6 +201,13 @@ def register_search_routes(mcp) -> None:
             result = await ctx.search_engine.search(query)
             if not result.is_ok:
                 return error_from_result(result)
+            # 発火可視化 (#011 Phase 15): 記憶に紐づく entity 層を返す。形は
+            # /api/graph と同一（_merge_entity_layer を共有）ので、フロントは
+            # 同じ entity 分岐で描ける。上限は既存の /api/graph 経路と同じ 50 件
+            # （find_recent 依存は使わない — 類似度発火は古い記憶も当たるため）。
+            entity_nodes: list = []
+            entity_edges: list = []
+            _merge_entity_layer(ctx, [r.memory for r in result.value], entity_nodes, entity_edges, set())
             return JSONResponse(
                 {
                     "persona": persona,
@@ -214,6 +221,8 @@ def register_search_routes(mcp) -> None:
                         }
                         for r in result.value
                     ],
+                    "nodes": entity_nodes,
+                    "edges": entity_edges,
                 }
             )
         # 最終防衛線
