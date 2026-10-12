@@ -64,8 +64,17 @@ def main() -> None:
         help="Directory to scan for .zip files",
     )
 
+    # -- type-entities (entity typist backfill) -------------------------
+    type_entities_parser = subparsers.add_parser(
+        "type-entities",
+        help="Backfill entity types via the LLM typist (manual, never auto-run)",
+    )
+    type_entities_parser.add_argument("--persona", required=True)
+    type_entities_parser.add_argument("--limit", type=int, default=500)
+    type_entities_parser.add_argument("--batch-size", type=int, default=20)
+
     # keep linters happy — parsers are used via subparsers
-    _ = (import_parser, export_parser, stats_parser, auto_import_parser)
+    _ = (import_parser, export_parser, stats_parser, auto_import_parser, type_entities_parser)
 
     args = parser.parse_args()
     if not args.command:
@@ -79,6 +88,7 @@ def main() -> None:
         "export": _handle_export,
         "stats": _handle_stats,
         "auto-import": _handle_auto_import,
+        "type-entities": _handle_type_entities,
     }
     handlers[args.command](args, settings)
 
@@ -170,6 +180,31 @@ def _handle_auto_import(args: argparse.Namespace, settings: Settings) -> None:
         print(f"Imported persona '{persona}':")
         for table, count in counts.items():
             print(f"  {table}: {count} records")
+
+
+def _handle_type_entities(args: argparse.Namespace, settings: Settings) -> None:
+    """Backfill entity types via the LLM typist (manual only, never auto-run)."""
+    import asyncio
+
+    from nous.application.entity_typist import run_entity_typist
+    from nous.infrastructure.llm.entity_typist import resolve_entity_typist
+    from nous.infrastructure.sqlite.entity_repo import SQLiteEntityRepository
+
+    conn = SQLiteConnection(settings.persona_dir, args.persona)
+    conn.initialize_schema()
+    repo = SQLiteEntityRepository(conn)
+    typist = resolve_entity_typist(repo)
+    if typist is None:
+        print("Entity typist unavailable (no provider / api_key). Nothing written.")
+        conn.close()
+        sys.exit(1)
+
+    report = asyncio.run(run_entity_typist(repo, typist, limit=args.limit, batch_size=args.batch_size))
+    print(f"=== type-entities: {args.persona} ===")
+    print(f"examined: {report.examined}  typed: {report.typed}  skipped: {report.skipped}  batches: {report.batches}")
+    for eid, etype in sorted(report.applied.items()):
+        print(f"  {eid} -> {etype}")
+    conn.close()
 
 
 _COUNTABLE_TABLES = frozenset(
