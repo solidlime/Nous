@@ -61,7 +61,10 @@ def _merge_entity_layer(ctx, memories: list, nodes: list, edges: list, edge_set:
     and enrich runs async, so relations may be missing within the 30s cache window.
     """
     # getattr guard keeps the endpoint backward-compatible until Lane B lands.
-    get_entities = getattr(ctx.entity_repo, "get_entities_for_memories", None)
+    repo = getattr(ctx, "entity_repo", None)
+    if repo is None:
+        return
+    get_entities = getattr(repo, "get_entities_for_memories", None)
     if get_entities is None:
         return
     try:
@@ -103,7 +106,7 @@ def _merge_entity_layer(ctx, memories: list, nodes: list, edges: list, edge_set:
             edge_set.add(marker)
             edges.append({"source": source, "target": f"ent:{target_id}", "type": "mentions"})
 
-    get_relations = getattr(ctx.entity_repo, "get_relations_between_entities", None)
+    get_relations = getattr(repo, "get_relations_between_entities", None)
     if get_relations is None:
         return
     try:
