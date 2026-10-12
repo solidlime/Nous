@@ -1007,6 +1007,10 @@ function handleFireEvent(ev) {
         /* 手動 FIRE: meta.request_id が自分の UUID のイベントのみ消費する（不変） */
         if (!s || !meta.request_id || meta.request_id !== s.requestId) return false;
     }
+    /* hop_stop は終端 — サーバは停止後に converge 群 (engine.py: hop_stop → _emit_converge)
+       を同時刻に後発させるため、ガードが無いと「収束中…」が終端表示を上書きする。
+       hop_start だけは turn モードの同ターン次連鎖の再始動として通す。 */
+    if (s.done && kind !== 'hop_start') return false;
     switch (kind) {
         case 'hop_start':       return onHopStart(ev, meta);
         case 'ppr_hit':         return onPprHit(ev, meta);
@@ -1035,6 +1039,7 @@ function openTurnSession(turnId) {
 function onHopStart(ev, meta) {
     var s = fireState.session;
     var hop = parseInt(meta.hop, 10);
+    s.done = false; /* turn モードの同ターン次 request の連鎖を再始動 */
     s.hop = isNaN(hop) ? s.hop + 1 : hop;
     setStatus('HOP ' + s.hop + '/' + s.hops + ' \u30fb 探索中\u2026');
     s.bypassReason = ''; /* この hop の fail-open 注記は hop 単位で持ち越さない */
