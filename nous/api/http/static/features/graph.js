@@ -72,9 +72,9 @@ var BUCKET_FILL = {
 var ENTITY_FILL_DEFAULT = '#94a3b8';
 
 /* 型付け経路が信頼できるものだけ着色する。typed_by が無い/未知なら無色。
-   regex 抽出はカタカナを person と断定できない（entity として保存される）
-   ため、typist（LLM 型付け）実装前は全 entity が灰のまま = 正しい状態。
-   typist が metadata.typed_by を書けば自動的に点灯する。 */
+   typed_by は llm | sudachi | regex の3種（entity_repo の _TRUST_RANK と一致）。
+   typed_by を持たない entity（例: entity_extractor が未分類 "entity" として
+   保存したカタカナ）は灰のまま = 「型が分からない」事実を色で塗り潰さない。 */
 var TRUSTED_TYPED_BY = { llm: true, sudachi: true, regex: true };
 function entityFillColor(entityType, typedBy) {
     if (!TRUSTED_TYPED_BY[typedBy]) return ENTITY_FILL_DEFAULT;
@@ -84,6 +84,9 @@ function entityFillColor(entityType, typedBy) {
 
 /* memory のピンク枠（=きもち）。neutral は感情なしなので枠は塗り同色。 */
 var EMOTION_BORDER_COLOR = '#ff375f';
+/* #011 Phase 15: memory 塗りは感情色を降りて neutral 固定（entity 塗り
+   #ffd60a との衝突回避）。感情は枠 EMOTION_BORDER_COLOR だけが担う。 */
+var MEMORY_FILL_NEUTRAL = '#64748b';
 
 /* ---- Wiring flash (brain simulation visualization) ---- */
 
@@ -282,51 +285,57 @@ function populateGraphFilters(nodes) {
 
 /* ---- Build vis-network DataSet arrays ---- */
 
+/* Entity node の外見（色・サイズ・ツールチップ）。buildVisData（全体グラフ）と
+   GraphFire._nodeVisual（発火シーン）で共有する — 重複実装を作らない。 */
+function entityVisNode(n) {
+    var entColor = entityFillColor(n.entity_type, n.typed_by);
+    return {
+        id: n.key,
+        label: truncate(n.label, 20) || n.key,
+        title: buildEntityTooltip(n),
+        shape: 'dot',
+        size: 8 + Math.min(n.mention_count || 1, 10) * 2,
+        color: {
+            background: entColor,
+            border: entColor,
+            highlight: { background: entColor, border: '#fff' },
+            hover:     { background: entColor, border: '#fff' }
+        },
+        font: { color: _graphFontColor(), size: 11, face: 'system-ui' },
+        borderWidth: 2,
+        shadow: { enabled: true, color: entColor, size: 8, x: 0, y: 0 },
+        _data: n
+    };
+}
+
+/* memory の枠色: neutral 以外は感情ピンク、それ以外は塗り同色。 */
+function memoryBorderColor(emotion) {
+    return (emotion && emotion !== 'neutral') ? EMOTION_BORDER_COLOR : MEMORY_FILL_NEUTRAL;
+}
+
 function buildVisData(nodes, edges) {
     var fontColor = _graphFontColor();
 
     var visNodes = nodes.map(function(n) {
-        /* Entity node: fixed-color dot sized by mention count */
-        if (n.kind === 'entity') {
-            var entColor = entityFillColor(n.entity_type, n.typed_by);
-            return {
-                id: n.key,
-                label: truncate(n.label, 20) || n.key,
-                title: buildEntityTooltip(n),
-                shape: 'dot',
-                size: 8 + Math.min(n.mention_count || 1, 10) * 2,
-                color: {
-                    background: entColor,
-                    border: entColor,
-                    highlight: { background: entColor, border: '#fff' },
-                    hover:     { background: entColor, border: '#fff' }
-                },
-                font: { color: fontColor, size: 11, face: 'system-ui' },
-                borderWidth: 2,
-                shadow: { enabled: true, color: entColor, size: 8, x: 0, y: 0 },
-                _data: n
-            };
-        }
-        var emoColor = N.Core.EMOTION_COLORS[n.emotion] || '#94a3b8';
+        if (n.kind === 'entity') return entityVisNode(n);
         var sz = 10 + (n.importance || 0.5) * 30;
         var nodeLabel = truncate(n.content, 20) || n.key || 'Unknown';
-        /* 塗りは従来どおり emotion 色。neutral 以外は枠をピンクにして
-           「きもち」を表現する（枠/塗りは別チャネル。発火後もこの色へ復帰） */
-        var borderColor = (n.emotion && n.emotion !== 'neutral') ? EMOTION_BORDER_COLOR : emoColor;
+        /* #011 Phase 15: 塗りは neutral 固定、感情は枠（ピンク=きもち）のみ。
+           発火フラッシュ後もこの色へ復帰する。 */
         return {
             id: n.key,
             label: nodeLabel,
             title: buildTooltip(n),
             size: sz,
             color: {
-                background: emoColor,
-                border: borderColor,
-                highlight: { background: emoColor, border: '#fff' },
-                hover:     { background: emoColor, border: '#fff' }
+                background: MEMORY_FILL_NEUTRAL,
+                border: memoryBorderColor(n.emotion),
+                highlight: { background: MEMORY_FILL_NEUTRAL, border: '#fff' },
+                hover:     { background: MEMORY_FILL_NEUTRAL, border: '#fff' }
             },
             font: { color: fontColor, size: 11, face: 'system-ui' },
             borderWidth: 2,
-            shadow: { enabled: true, color: emoColor, size: 8, x: 0, y: 0 },
+            shadow: { enabled: true, color: MEMORY_FILL_NEUTRAL, size: 8, x: 0, y: 0 },
             _data: n
         };
     });
@@ -594,6 +603,10 @@ Object.assign(N.Features.Graph, {
     loadGraph: loadGraph,
     populateGraphFilters: populateGraphFilters,
     buildVisData: buildVisData,
+    entityVisNode: entityVisNode,
+    memoryBorderColor: memoryBorderColor,
+    MEMORY_FILL_NEUTRAL: MEMORY_FILL_NEUTRAL,
+    EMOTION_BORDER_COLOR: EMOTION_BORDER_COLOR,
     buildTooltip: buildTooltip,
     buildEntityTooltip: buildEntityTooltip,
     applyGraphFilters: applyGraphFilters,
@@ -816,11 +829,19 @@ function _nodeTitle(text) {
 }
 
 function _nodeVisual(m, isSeed) {
-    var emo = N.Core.EMOTION_COLORS[m.emotion] || (m.content ? '#64748b' : '#475569');
+    /* entity ノードは全体グラフと同じ外見（共有 entityVisNode）。 */
+    if (m.kind === 'entity') {
+        var ev = G.entityVisNode(m);
+        ev._mem = m;
+        ev._memContent = false;
+        return ev;
+    }
     var baseSize = isSeed ? 14 + (m.score || 0.5) * 22 : 10 + (m.importance || 0.5) * 14;
     /* シナプス風: ノードサイズにも不揃いさを持たせる */
     var size = baseSize * (0.9 + Math.random() * 0.25);
     var content = m.content || m.key || 'Unknown';
+    /* #011 Phase 15: 塗りは neutral、感情は枠へ（buildVisData と同一規約）。 */
+    var fill = G.MEMORY_FILL_NEUTRAL;
     return {
         id: m.key,
         label: truncate(String(content), 20) || String(m.key || 'Unknown'),
@@ -828,9 +849,9 @@ function _nodeVisual(m, isSeed) {
         shape: 'dot',
         size: size,
         color: {
-            background: emo, border: emo,
-            highlight: { background: emo, border: '#fff' },
-            hover: { background: emo, border: '#fff' }
+            background: fill, border: G.memoryBorderColor(m.emotion),
+            highlight: { background: fill, border: '#fff' },
+            hover: { background: fill, border: '#fff' }
         },
         font: { color: _fontColor(), size: 10, face: 'system-ui' },
         borderWidth: 2,
@@ -883,7 +904,7 @@ function absorbGraphEdges(key) {
     if (!nodes) return;
     for (var i = 0; i < all.length; i++) {
         var e = all[i];
-        if (e.type !== 'tag' && e.type !== 'related') continue;
+        if (e.type !== 'tag' && e.type !== 'related' && e.type !== 'mentions') continue;
         var other = e.source === key ? e.target : (e.target === key ? e.source : null);
         if (!other || other === key) continue;
         if (nodes.get(other)) ensureFireEdge(key, other, e.type);
@@ -893,6 +914,7 @@ function absorbGraphEdges(key) {
 function _fireEdgeColor(type) {
     if (type === 'related') return 'rgba(0,122,255,0.55)';
     if (type === 'tag') return 'rgba(167,139,250,0.55)';
+    if (type === 'mentions') return 'rgba(148,163,184,0.5)';
     return 'rgba(100,200,255,0.4)'; /* 仮設エッジ: 伝播を見せるための連結線 */
 }
 
@@ -946,7 +968,7 @@ function _memoryFor(key) {
     var g = G.getGraphData ? G.getGraphData() : null;
     var nodes = (g && g.nodes) || [];
     for (var i = 0; i < nodes.length; i++) {
-        if (nodes[i].key === key && nodes[i].kind !== 'entity') return nodes[i];
+        if (nodes[i].key === key) return nodes[i];
     }
     return null;
 }
@@ -984,7 +1006,23 @@ function ingestResults(data) {
         accumulateResult(m.key, { score: Number(r.score) || 0 });
         ensureFireNode(m.key, s.memories[m.key], true); /* シードノード: 先に配置し順次点灯を待つ */
     });
+    ingestEntityLayer(data);
     renderResults();
+}
+
+/* /api/search が返す entity 層（形は /api/graph と同一）を発火シーンへ取り込む。
+   memory ノード配置後に entity を置くことで、mentions エッジが実ノード間を結ぶ。 */
+function ingestEntityLayer(data) {
+    var s = fireState.session;
+    if (!s) return;
+    ((data && data.nodes) || []).forEach(function (n) {
+        if (!n || n.kind !== 'entity' || !n.key) return;
+        s.memories[n.key] = Object.assign(s.memories[n.key] || {}, n);
+        ensureFireNode(n.key, s.memories[n.key], false);
+    });
+    ((data && data.edges) || []).forEach(function (e) {
+        if (e && e.type === 'mentions' && e.source && e.target) ensureFireEdge(e.source, e.target, 'mentions');
+    });
 }
 
 /* ---- イベント契約ハンドラ ----

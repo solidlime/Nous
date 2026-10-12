@@ -87,15 +87,16 @@ describe('memory border (ピンク枠=emotion)', () => {
     [],
   ).visNodes[0];
 
-  it('neutral 以外の emotion は枠がピンク', () => {
+  it('neutral 以外の emotion は枠がピンク・塗りは neutral', () => {
     const n = build('joy');
     expect(n.color.border).toBe('#ff375f');
-    expect(n.color.background).toBe(N.Core.EMOTION_COLORS.joy); // 塗りは不変
+    // #011 Phase 15: 塗りは感情色を降りて neutral（entity 黄 #ffd60a との衝突回避）。
+    expect(n.color.background).toBe('#64748b');
   });
 
   it('neutral / emotion 無しは枠は塗りと同色', () => {
-    expect(build('neutral').color.border).toBe(N.Core.EMOTION_COLORS.neutral);
-    expect(build(undefined).color.border).toBe('#94a3b8');
+    expect(build('neutral').color.border).toBe('#64748b');
+    expect(build(undefined).color.border).toBe('#64748b');
   });
 
   it('枠ピンクでも重要度→サイズは不変', () => {
@@ -138,7 +139,7 @@ describe('発火フラッシュは意味色へ復帰する', () => {
     G.flashNodeOn(nodes, 'm1', 'recall_boost');
     vi.advanceTimersByTime(500);
     expect(store.m1.color.border).toBe('#ff375f');
-    expect(store.m1.color.background).toBe(N.Core.EMOTION_COLORS.joy);
+    expect(store.m1.color.background).toBe('#64748b');
     G.setGraphFlashDataSet(null);
     vi.useRealTimers();
   });

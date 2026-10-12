@@ -380,3 +380,41 @@ describe('mode toggle', () => {
     expect(F.handleFireEvent({ kind: 'ppr_hit', source: 'm1', meta: { request_id: 'x' } })).toBe(false);
   });
 });
+
+describe('entity layer in firing scene (#011 Phase 15)', () => {
+  it('ingests entity nodes + mentions edges from /api/search and paints by type/typed_by', async () => {
+    startRun({
+      results: [{ memory: { key: 'm1', content: 'memory one', tags: [] }, score: 0.9 }],
+      nodes: [
+        { key: 'ent:ヘルタ', kind: 'entity', label: 'ヘルタ', entity_type: 'person', typed_by: 'llm', mention_count: 3 },
+        { key: 'ent:x', kind: 'entity', label: 'x', entity_type: 'person', typed_by: null, mention_count: 1 },
+        { key: 'ent:y', kind: 'entity', label: 'y', entity_type: 'thing', typed_by: 'llm', mention_count: 1 },
+      ],
+      edges: [{ source: 'm1', target: 'ent:ヘルタ', type: 'mentions' }],
+    });
+    await flushAsync();
+    const ds = F._state().dataSet;
+    // person + llm → 緑 / thing + llm → 黄 / typed_by 未付与 → 灰（嘘の緑を出さない）
+    expect(ds.nodeStore['ent:ヘルタ'].color.background).toBe('#30d158');
+    expect(ds.nodeStore['ent:y'].color.background).toBe('#ffd60a');
+    expect(ds.nodeStore['ent:x'].color.background).toBe('#94a3b8');
+    // mentions エッジが実ノード間を結ぶ
+    expect(ds.edgeStore['fe:ent:ヘルタ|m1']).toBeTruthy();
+    // entity は結果パネル（記憶のみ）に出ない
+    expect(F._state().session.results.has('ent:ヘルタ')).toBe(false);
+  });
+
+  it('absorbs mentions edges from the whole-graph data as a cluster base', () => {
+    const orig = G.getGraphData;
+    G.getGraphData = () => ({ nodes: [], edges: [{ source: 'a1', target: 'a2', type: 'mentions' }] });
+    try {
+      startRun();
+      const rid = F._state().session.requestId;
+      emitWiring(instances[0], { kind: 'ppr_hit', source: 'a1', weight: 0.5, meta: { request_id: rid } });
+      emitWiring(instances[0], { kind: 'ppr_hit', source: 'a2', weight: 0.4, meta: { request_id: rid } });
+      expect(F._state().dataSet.edgeStore['fe:a1|a2']).toBeTruthy();
+    } finally {
+      G.getGraphData = orig;
+    }
+  });
+});
