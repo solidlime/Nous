@@ -44,6 +44,9 @@ def mock_app_context():
     ctx.persona_service = MagicMock()
     ctx.entity_service = MagicMock()
     ctx.event_bus = AsyncMock()
+    # update_context は末尾で get_context を読む（状態行の付加用）。MagicMock のままだと
+    # _format_state_block が __format__ で落ちるため、既定の PersonaState を返しておく。
+    ctx.persona_service.get_context.return_value = Success(PersonaState(persona="test_persona"))
     ctx.vector_store = None  # no Qdrant by default
     ctx.settings = MagicMock()
     ctx.settings.contradiction_threshold = 0.85
@@ -258,6 +261,30 @@ class TestUpdateContext:
             mock_reg_cls.get.return_value = ctx
             result = await update_context(user_info={"name": "Alice", "nickname": "Ali"})
         assert "user_info updated" in result
+
+    @pytest.mark.asyncio
+    async def test_update_context_appends_state_block(self, registered_tools):
+        """戻り値に get_context と同じ書式の現在状態行（Body/Mind）を含む。"""
+        tools, ctx, _ = registered_tools
+        ctx.persona_service.update_emotion.return_value = Success(None)
+        ctx.persona_service.update_physical_state.return_value = Success(None)
+        ctx.persona_service.get_context.return_value = Success(
+            PersonaState(
+                persona="test_persona",
+                emotion="curious",
+                emotion_intensity=0.7,
+                fatigue=0.4,
+            )
+        )
+        update_context = tools["update_context"]
+        with (
+            patch("nous.api.mcp.tools.AppContextRegistry") as mock_reg_cls,
+            patch("nous.api.mcp.tools.get_current_persona", return_value="test_persona"),
+        ):
+            mock_reg_cls.get.return_value = ctx
+            result = await update_context(emotion="curious", emotion_intensity=0.7, body_state={"fatigue": 0.4})
+        assert "Mind  : curious:0.70" in result
+        assert "fatigue:40%" in result
 
 
 # ---------------------------------------------------------------------------

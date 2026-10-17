@@ -23,6 +23,7 @@ from nous.api.mcp._tools_helpers import (  # noqa: E402
     _apply_emotion_decay,
     _dedupe_memories,
     _format_lightweight_response,
+    _format_state_block,
     tool_called_audited,
 )
 
@@ -311,7 +312,10 @@ async def _tool_update_context(
             "context_note": context_note,
         },
     )
-    return {"ok": True, "result": f"Context updated: {', '.join(updated)}"}
+    state_result = ctx.persona_service.get_context(persona)
+    state_block = _format_state_block(state_result.value) if state_result.is_ok else ""
+    summary = f"Context updated: {', '.join(updated)}"
+    return {"ok": True, "result": f"{summary}\n{state_block}" if state_block else summary}
 
 
 # --- Profile tools (B-5) ---
