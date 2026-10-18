@@ -39,10 +39,18 @@
 //     体調・感情も「毎ターン取得」はしない: `_tool_get_context` の `if session_effects:` ブロックが
 //     record_conversation_time と get_and_consume_one_shot（physical_state / mental_state /
 //     期限リマインダ）を行うため、毎ターン叩くと状態メモリを食い潰す。開始時のスナップショットを使い回す。
-//   - 外部ランタイム依存ゼロ（Node グローバル fetch / fs / Intl のみ）。
+//   - 外部ランタイム依存ゼロ（Node 標準の node:http / node:https / node:fs / Intl のみ）。
+//     nous RPC は fetch ではなく node:http を使う: fetch は Host ヘッダを落とし、nous の
+//     DNS-rebinding 保護（許可リスト）で 421 Invalid Host header になる（実測）。
 //
-// 無効化: このファイルを ~/.pi/agent/extensions/ から削除すれば自動探索されない。
+// nous 直叩き: 旧実装の MCP hub（execute_tool + server:"nous"）経由をやめ、nous の
+//   MCP エンドポイントを直接叩く。必要なのは Host ヘッダ（許可リスト名）と X-Persona。
+//
+// 無効化: settings.json の packages からこの拡張（リポジトリ）の行を外す。
+//   移行後は実体がこのリポジトリ側にあるため、extensions ディレクトリからの削除では止まらない。
 import { readFileSync } from "node:fs";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ContextEventResult, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -94,7 +102,7 @@ export const STATE_LINE_PREFIXES = [
 // ---------------------------------------------------------------------------
 
 const CLASSIFY_URL = "http://nas:4000/v1/chat/completions";
-const CLASSIFY_MODEL = "Classifier"; // deepseek-v4.1-flash（実測 1.5-2.1s。General=glm-5.3-flash は 3.4s）
+const CLASSIFY_MODEL = "Classifier"; // deepseek-v4.1-flash（実測 1.5-2.1s）
 const CLASSIFY_TIMEOUT_MS = 20_000;
 const CLASSIFY_MAX_CHARS = 600; // 入力の切り詰め（user / reply それぞれ）
 // 実測: General は reasoning を completion_tokens に含める。120 では content が切れ、200 では
@@ -210,35 +218,6 @@ export function makeStateMessage(lines: readonly string[], now: number): Visible
 }
 
 // ---------------------------------------------------------------------------
-// ハブ設定（SSoT: mcp.json の mcp-hub エントリ = dev,herta 面）
-// ---------------------------------------------------------------------------
-
-interface HubConfig {
-  url: string;
-  headers: Record<string, string>;
-}
-
-const FALLBACK_CONFIG: HubConfig = {
-  url: "http://nas:26263/mcp",
-  headers: { "X-MCP-Hub-Tags": "dev,herta" },
-};
-
-/** mcp.json から mcp-hub 面の url/headers を読む。読めなければフォールバック。 */
-function loadHubConfig(): HubConfig {
-  try {
-    const agentDir = process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
-    const raw = JSON.parse(readFileSync(join(agentDir, "mcp.json"), "utf8"));
-    const entry = raw?.mcpServers?.["mcp-hub"];
-    if (entry && typeof entry.url === "string" && entry.url.length > 0) {
-      return { url: entry.url, headers: entry.headers ?? {} };
-    }
-  } catch {
-    // mcp.json が無い・壊れている場合はフォールバックに従う
-  }
-  return FALLBACK_CONFIG;
-}
-
-// ---------------------------------------------------------------------------
 // 設定（SSoT: <agentDir>/nous.json。フィールド単位で部分マージする）
 // ---------------------------------------------------------------------------
 
@@ -327,7 +306,7 @@ let initPromise: Promise<void> | null = null; // 並発時の二重 initialize �
 let nextRequestId = 1;
 
 /**
- * init/セッション状態を破棄する。hub 再起動やセッション ID 失効で一度失敗しても、
+ * init/セッション状態を破棄する。nous 再起動やセッション ID 失効で一度失敗しても、
  * 次の呼び出しで再初期化できるようにする（module スコープを永久故障させない）。
  */
 function resetSession(): void {
@@ -376,35 +355,89 @@ async function rpcOnce(method: string, params: unknown, timeoutMs: number): Prom
   }
 }
 
+/**
+ * POST して生の応答を返す。fetch ではなく node:http/https を使う理由は Host ヘッダ:
+ * fetch は禁止ヘッダとして Host を落とし、nous が 421 Invalid Host header を返す（実測）。
+ * 接続先は url のホスト名（例 nas:26262）のまま、Host ヘッダだけ差し替えられる。
+ * url は <agentDir>/nous.json（ローカル設定）由来。リクエスト入力からは組み立てない。
+ */
+function postJson(
+  url: string,
+  headers: Record<string, string | number>,
+  body: string,
+  timeoutMs: number,
+): Promise<{ status: number; contentType: string; sid: string | null; text: string }> {
+  return new Promise((resolve, reject) => {
+    let target: URL;
+    try {
+      target = new URL(url);
+    } catch {
+      reject(new Error(`URL が不正: ${url}`));
+      return;
+    }
+    const send = target.protocol === "https:" ? httpsRequest : httpRequest;
+    const req = send(
+      {
+        hostname: target.hostname,
+        port: target.port,
+        path: `${target.pathname}${target.search}`,
+        method: "POST",
+        headers: { ...headers, "Content-Length": Buffer.byteLength(body) },
+      },
+      (res) => {
+        let text = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk: string) => {
+          text += chunk;
+        });
+        res.on("end", () => {
+          const rawSid = res.headers["mcp-session-id"];
+          resolve({
+            status: res.statusCode ?? 0,
+            contentType: String(res.headers["content-type"] ?? ""),
+            sid: typeof rawSid === "string" && rawSid.length > 0 ? rawSid : null,
+            text,
+          });
+        });
+      },
+    );
+    const timer = setTimeout(() => {
+      req.destroy(new Error(`タイムアウト (${timeoutMs}ms)`));
+    }, timeoutMs);
+    req.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    req.on("close", () => clearTimeout(timer));
+    req.end(body);
+  });
+}
+
+
 /** 単発の JSON-RPC リクエスト本体（非 2xx は即エラー）。 */
 async function rpcOnceInner(method: string, params: unknown, timeoutMs: number): Promise<any> {
-  const cfg = loadHubConfig();
+  const cfg = loadNousConfig().nous;
   const requestId = nextRequestId++;
-  const headers: Record<string, string> = {
-    ...cfg.headers,
+  const headers: Record<string, string | number> = {
+    Host: cfg.hostHeader,
+    "X-Persona": cfg.persona,
     "Content-Type": "application/json",
     // 実測: Accept は application/json と text/event-stream の両方が必須
     Accept: "application/json, text/event-stream",
   };
   if (sessionId) headers["mcp-session-id"] = sessionId;
-
-  const res = await fetch(cfg.url, {
-    method: "POST",
+  const res = await postJson(
+    cfg.url,
     headers,
-    body: JSON.stringify({ jsonrpc: "2.0", id: requestId, method, params }),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+    JSON.stringify({ jsonrpc: "2.0", id: requestId, method, params }),
+    timeoutMs,
+  );
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(`HTTP ${res.status}: ${res.text.slice(0, 200)}`);
   }
-
-  const sid = res.headers.get("mcp-session-id");
-  if (sid) sessionId = sid; // 実測: mcp-session-id の継承が必須
-
-  const contentType = res.headers.get("content-type") ?? "";
-  const text = await res.text();
-  return extractResponse(text, contentType, requestId);
+  // 実測では stateless（mcp-session-id 無し）。返る実装に備えて継承だけ残す。
+  if (res.sid) sessionId = res.sid;
+  return extractResponse(res.text, res.contentType, requestId);
 }
 
 /**
@@ -438,17 +471,13 @@ async function ensureSession(): Promise<void> {
 }
 
 /**
- * nous ツールを hub 経由で呼び、`content[0].text` の JSON を検査して `data` を返す。
+ * nous ツールを直叩きで呼び、`content[0].text` の JSON を検査して `data` を返す。
  * HTTP 200 / isError:false でも `{"error":...}` / `{"ok":false}` があり得るため、
  * 必ず parse して失敗を検出する（黙って空を返さない）。
  */
 async function callNous(toolName: string, args: Record<string, unknown>): Promise<string> {
   await ensureSession();
-  const result = await rpcOnce(
-    "tools/call",
-    { name: "execute_tool", arguments: { server: "nous", tool_name: toolName, arguments: args } },
-    CALL_TIMEOUT_MS,
-  );
+  const result = await rpcOnce("tools/call", { name: toolName, arguments: args }, CALL_TIMEOUT_MS);
   const content = result?.content;
   const text =
     Array.isArray(content) && content.length > 0
@@ -521,7 +550,7 @@ export function parseEmotion(content: string): { emotion: string; intensity: num
   return { emotion, intensity: Number.isNaN(n) ? 0.1 : Math.min(1, Math.max(0, n)) };
 }
 
-/** litellm の API キー（auth.json。mcp.json と同じ流儀で PI_CODING_AGENT_DIR を尊重）。 */
+/** litellm の API キー（auth.json。nous.json と同じ流儀で PI_CODING_AGENT_DIR を尊重）。 */
 function loadAuthKey(): string | null {
   if (authKeyCache !== null) return authKeyCache;
   try {
