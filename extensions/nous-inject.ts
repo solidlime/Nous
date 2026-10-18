@@ -101,9 +101,8 @@ export const STATE_LINE_PREFIXES = [
 // 感情の自動判定（turn_end で小型モデルに推定させ、nous へ自動送信する）
 // ---------------------------------------------------------------------------
 
-const CLASSIFY_URL = "http://nas:4000/v1/chat/completions";
-const CLASSIFY_MODEL = "Classifier"; // deepseek-v4.1-flash（実測 1.5-2.1s）
-const CLASSIFY_TIMEOUT_MS = 20_000;
+// url / model / timeoutMs は <agentDir>/nous.json の classify 節で上書きできる
+// （既定値は DEFAULT_NOUS_CONFIG）。ここは入力長とトークン上限だけ。
 const CLASSIFY_MAX_CHARS = 600; // 入力の切り詰め（user / reply それぞれ）
 // 実測: General は reasoning を completion_tokens に含める。120 では content が切れ、200 では
 // content が空になる。300 で reasoning 最大 205 でも 3/3 正常 JSON が返る。
@@ -577,20 +576,21 @@ async function classifyEmotion(user: string, reply: string): Promise<{ emotion: 
 [user] ${user}
 [assistant] ${reply.slice(0, 900)}`;
 
+  const cfg = loadNousConfig().classify;
   try {
-    const res = await fetch(CLASSIFY_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: CLASSIFY_MODEL,
+    const res = await postJson(
+      cfg.url,
+      { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      JSON.stringify({
+        model: cfg.model,
         messages: [{ role: "user", content: prompt }],
         max_tokens: CLASSIFY_MAX_TOKENS,
         temperature: 0,
       }),
-      signal: AbortSignal.timeout(CLASSIFY_TIMEOUT_MS),
-    });
-    if (!res.ok) return null;
-    const json: any = await res.json();
+      cfg.timeoutMs,
+    );
+    if (res.status < 200 || res.status >= 300) return null;
+    const json: any = JSON.parse(res.text);
     return parseEmotion(String(json?.choices?.[0]?.message?.content ?? ""));
   } catch {
     return null;
