@@ -239,6 +239,82 @@ function loadHubConfig(): HubConfig {
 }
 
 // ---------------------------------------------------------------------------
+// 設定（SSoT: <agentDir>/nous.json。フィールド単位で部分マージする）
+// ---------------------------------------------------------------------------
+
+export interface NousRpcConfig {
+  url: string;
+  /** Host ヘッダ。nous の DNS-rebinding 許可リスト名（実測: "nous:26262" のみ通る）。 */
+  hostHeader: string;
+  /** X-Persona。無いと PERSONA_REQUIRED（実測）。 */
+  persona: string;
+}
+
+export interface ClassifyConfig {
+  url: string;
+  model: string;
+  timeoutMs: number;
+}
+
+export interface NousConfig {
+  nous: NousRpcConfig;
+  classify: ClassifyConfig;
+}
+
+/** 既定値は移行前のハードコード値と同一。 */
+export const DEFAULT_NOUS_CONFIG: NousConfig = {
+  nous: { url: "http://nas:26262/mcp", hostHeader: "nous:26262", persona: "herta" },
+  classify: {
+    url: "http://nas:4000/v1/chat/completions",
+    model: "Classifier", // deepseek-v4.1-flash（実測 1.5-2.1s）
+    timeoutMs: 20_000,
+  },
+};
+
+const isNonEmptyString = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
+const isPositiveNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v > 0;
+
+/**
+ * 生 JSON（何でもよい）を設定へ落とす純関数。**フィールド単位**で検証し、
+ * 無い / 型違い / 空文字のフィールドだけ既定値へ落とす（半端なファイルで他が既定に戻る事故を防ぐ）。
+ */
+export function mergeNousConfig(raw: unknown): NousConfig {
+  const d = DEFAULT_NOUS_CONFIG;
+  const root = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const nous = (root.nous && typeof root.nous === "object" ? root.nous : {}) as Record<string, unknown>;
+  const classify = (root.classify && typeof root.classify === "object" ? root.classify : {}) as Record<
+    string,
+    unknown
+  >;
+  return {
+    nous: {
+      url: isNonEmptyString(nous.url) ? nous.url : d.nous.url,
+      hostHeader: isNonEmptyString(nous.hostHeader) ? nous.hostHeader : d.nous.hostHeader,
+      persona: isNonEmptyString(nous.persona) ? nous.persona : d.nous.persona,
+    },
+    classify: {
+      url: isNonEmptyString(classify.url) ? classify.url : d.classify.url,
+      model: isNonEmptyString(classify.model) ? classify.model : d.classify.model,
+      timeoutMs: isPositiveNumber(classify.timeoutMs) ? classify.timeoutMs : d.classify.timeoutMs,
+    },
+  };
+}
+
+/**
+ * <agentDir>/nous.json を読む。**呼び出し毎に読む**（モジュールスコープにキャッシュしない）。
+ * ファイル無し / パース失敗は全既定。
+ */
+export function loadNousConfig(
+  agentDir = process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"),
+): NousConfig {
+  try {
+    return mergeNousConfig(JSON.parse(readFileSync(join(agentDir, "nous.json"), "utf8")));
+  } catch {
+    return mergeNousConfig(null);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // HTTP JSON-RPC クライアント（initialize はこのプロセスで1回だけ）
 // ---------------------------------------------------------------------------
 
