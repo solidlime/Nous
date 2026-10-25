@@ -7,8 +7,5 @@
   },
   "scripts": {
     "test": "vitest run"
-  },
-  "pi": {
-    "extensions": ["extensions/nous-inject.ts"]
   }
 }
