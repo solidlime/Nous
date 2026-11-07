@@ -319,7 +319,7 @@ async def _tool_update_context(
         },
     )
     state_result = ctx.persona_service.get_context(persona)
-    state_block = _format_state_block(state_result.value) if state_result.is_ok else ""
+    state_block = _format_state_block(state_result.value) if isinstance(state_result, Success) else ""
     summary = f"Context updated: {', '.join(updated)}"
     return {"ok": True, "result": f"{summary}\n{state_block}" if state_block else summary}
 

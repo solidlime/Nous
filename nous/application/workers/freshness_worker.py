@@ -145,7 +145,9 @@ class FreshnessWorker:
             # (a) 期限切れ近い記憶（7日以内に有効期限を迎える）
             near_expiry = valid_until is not None and valid_until <= probe_end
             # (b) 無期限 prospective が stale_days 以上未更新
-            stale_prospective = getattr(m, "kind", "") == "prospective" and valid_until is None and updated_at < stale_cutoff
+            stale_prospective = (
+                getattr(m, "kind", "") == "prospective" and valid_until is None and updated_at < stale_cutoff
+            )
             # (c) stale_days 以上未アクセス（last_accessed が無ければ updated_at で判定）
             last_activity = max((t for t in (last_accessed, updated_at) if t is not None), default=updated_at)
             not_accessed = last_activity < stale_cutoff

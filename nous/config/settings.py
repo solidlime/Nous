@@ -367,7 +367,7 @@ class FreshnessConfig(BaseModel):
         key_name = f"{self.provider}_api_key"
         value, _ = RuntimeConfigManager().get_effective_value("api_keys", key_name)
         if value:
-            return value
+            return str(value)
 
         _legacy_env_keys = {
             "openrouter": "OPENROUTER_API_KEY",
