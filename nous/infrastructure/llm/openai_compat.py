@@ -121,8 +121,7 @@ class OpenAICompatProvider(LLMProvider):
             self._client = AsyncOpenAI(
                 api_key=api_key,
                 base_url=self.base_url,
-                # shortcut: openai の型は httpx v2 由来で互換表示が崩れるため cast で封じる。openai 更新で自然解消するなら削除。
-                http_client=httpx.AsyncClient(timeout=httpx.Timeout(60.0)),  # type: ignore[arg-type]
+                http_client=httpx.AsyncClient(timeout=httpx.Timeout(60.0)),
                 default_headers=headers,
             )
         except ImportError as e:

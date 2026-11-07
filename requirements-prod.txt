@@ -37,8 +37,9 @@ qdrant-client>=1.8.2,<2
 numpy>=1.24.0,<3
 
 # LLM Providers (Chat feature — all connections via OpenAI-compatible API)
+# openai 2.x と 3.x は http_client 引数周りの型定義が異なる。全文検証済み統一版は 2.54.0 (mypy-baseline もこれで生成)。
 openai>=1.50.0,<3
-
+httpx>=0.28,<0.29  # openai SDK 依存。2.54.0 と共に型検証済。
 
 # Japanese NER (entity extraction)
 # sudachidict_core is no longer installed via pip — downloaded at runtime to NOUS_DATA_ROOT/sudachi/
