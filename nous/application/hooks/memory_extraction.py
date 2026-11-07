@@ -46,8 +46,11 @@ HOOK_EXTRACTION_EVENT_TYPES = frozenset({"turn.completed"})
 #: facts の重複判定しきい値（chat pipeline の run_memory_llm と同一規約）。
 DUPLICATE_SCORE_THRESHOLD = 0.85
 
-#: 抽出 LLM の max_tokens（ChatConfig.extract_max_tokens の既定値と同値）。
-HOOK_EXTRACT_MAX_TOKENS = 512
+#: 抽出 LLM の max_tokens。
+#: reasoning を前提としない旧 ChatConfig 既定値（512)では、reasoning LLM が
+#: reasoning token を max_tokens に含めて消費するため content が空になる
+#: (freshness_worker.py の 16000 と同じ教訓)。hook 抽出は短文なので 8192 で 十分。
+HOOK_EXTRACT_MAX_TOKENS = 8192
 
 FAILED_EVENT_TYPE = "hook_extraction.failed"
 
