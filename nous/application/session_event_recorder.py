@@ -107,7 +107,8 @@ class SessionEventRecorder:
                 return f"{tool_name}: {status} {_compact_tool_called_result(str(result))}"
             return f"{tool_name}: {status}"
         elif event_type == "events.ingested":
-            count = len(data.get("events", []))
+            # events.py は {persona, session_id, count, skipped} を publish する — "events" key は存在しない
+            count = data.get("count", 0)
             return f"Plugin ingested {count} events"
         elif event_type == CHAT_MESSAGE:
             content = data.get("content", "")

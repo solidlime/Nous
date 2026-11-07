@@ -263,6 +263,10 @@ def register_events_routes(mcp) -> None:
 
             detail = ev.get("detail")
             metadata = ev.get("metadata")
+            # 境界の正規化: SessionEvent 契約は detail: str | None。外部 Plugin (pi nous-events) は
+            # dict を送り得るため JSON 文字列に落とし込む (sqlite binding error 対策)。
+            if detail is not None and not isinstance(detail, str):
+                detail = json.dumps(detail, ensure_ascii=False) if isinstance(detail, (dict, list)) else str(detail)
 
             event = SessionEvent(
                 session_id=session_id,

@@ -99,7 +99,7 @@ class TestSessionEventRecorder:
         data = {
             "session_id": "sess_002",
             "persona": "test_persona",
-            "events": [{"type": "chat"}, {"type": "tool"}],
+            "count": 2,
         }
 
         await recorder._on_event("events.ingested", data)
@@ -224,17 +224,18 @@ class TestSessionEventRecorder:
         assert "\n" not in summary2
 
     def test_build_summary_events_ingested(self, recorder):
-        """Verify _build_summary for events.ingested."""
+        """Verify _build_summary for events.ingested.
+
+        events.py は {persona, session_id, count, skipped} を publish する — "events" key は存在しない。
+        """
         summary = recorder._build_summary(
             "events.ingested",
-            {
-                "events": [{"type": "a"}, {"type": "b"}, {"type": "c"}],
-            },
+            {"persona": "herta", "session_id": "s", "count": 3, "skipped": 1},
         )
         assert summary == "Plugin ingested 3 events"
 
-        # Empty events list
-        summary = recorder._build_summary("events.ingested", {"events": []})
+        # Zero inserted
+        summary = recorder._build_summary("events.ingested", {"count": 0})
         assert summary == "Plugin ingested 0 events"
 
     def test_build_summary_unknown(self, recorder):

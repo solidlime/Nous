@@ -198,7 +198,11 @@ class TestPluginAuthSettings:
         assert cfg.api_key == ""
 
     def test_settings_plugin_defaults(self):
-        """Settings().plugin defaults to disabled."""
-        s = Settings()
+        """Settings().plugin defaults to disabled。
+
+        cwd/.env の有無に依存させない (_env_file=None) — repo .env に NOUS_PLUGIN__API_KEY が
+        あっても (pi nous-events 用)、コード既定は無効のまま。
+        """
+        s = Settings(_env_file=None)
         assert s.plugin.enabled is False
         assert s.plugin.api_key == ""
