@@ -240,6 +240,7 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
                 ToolParam("kind", "string", required=False),
                 ToolParam("defer_vector", "boolean", required=False),
                 ToolParam("skip_duplicate_check", "boolean", required=False),
+                ToolParam("project", "string|null", required=False),
             ),
             BUILTIN: (
                 ToolParam("content", "string", required=True),
@@ -254,7 +255,7 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
                 ToolParam("skip_duplicate_check", "boolean", required=False),
             ),
         },
-        divergence="builtin 面は content 必須の LLM 向け DSL。MCP 面は v3.x 互換のため content 既定 '' で、defer_vector / kind / privacy_level / source_context を追加で持つ。",
+        divergence="builtin 面は content 必須の LLM 向け DSL。MCP 面は v3.x 互換のため content 既定 '' で、defer_vector / kind / privacy_level / source_context / project を追加で持つ。",
     ),
     "memory_delete": ToolSpec(
         name="memory_delete",

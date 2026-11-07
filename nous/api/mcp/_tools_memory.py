@@ -13,7 +13,7 @@ from nous.domain.search.policy import RankPolicy
 from nous.domain.shared.errors import DuplicateMemoryError
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import format_iso, get_now, relative_time_str
-from nous.domain.value_objects import _VALID_EMOTIONS, normalize_importance
+from nous.domain.value_objects import _VALID_EMOTIONS, ensure_project_tag, normalize_importance
 
 # Default recency boost for memory_search (RRF recency bonus multiplier).
 # Single source of truth — tools.py schema default references this.
@@ -60,11 +60,14 @@ async def _tool_memory_create(
     kind: str = "semantic",
     defer_vector: bool = False,
     skip_duplicate_check: bool = False,
+    project: str | None = None,
 ) -> str:
     """Create a memory. Current persona state (emotion, body_state) is automatically
     snapshotted at creation time. Always call context_update/update_context *before*
     memory_create if your emotional/physical state has changed, so the snapshot
-    captures your latest state."""
+    captures your latest state.
+    project: セッションの project:<slug> タグ（AGENTS.md の project: 行）。指定時は
+    tags に project:<slug> を必ず含める（既存 project:* があれば尊重）。"""
     if not content:
         return _err("content is required")
     if importance is not None and not (0.0 <= importance <= 1.0):
@@ -73,6 +76,9 @@ async def _tool_memory_create(
 
     # Auto-snapshot current persona state
     emotion_snap, intensity_snap, body_snap, snapped_at = ctx.persona_service.get_state_snapshot(persona)
+
+    if project:
+        tags = ensure_project_tag(tags, project)
 
     result = await ctx.memory_service.create_memory(
         content=content,

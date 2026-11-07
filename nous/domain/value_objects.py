@@ -220,3 +220,47 @@ def importance_to_label(importance: float) -> str:
         return "normal"
     else:
         return "low"
+
+
+# ----------------------------------------------------------------------------
+# project slug / project tag (canonical 規約は write_service._validate_tags と同一)
+# ----------------------------------------------------------------------------
+
+import re  # noqa: E402  (lockstep: single canonical definition, used by write_service + gates)
+
+PROJECT_SLUG_RE = re.compile(r"[a-z0-9][a-z0-9-]*")
+
+
+def normalize_project_slug(value: str | None) -> str:
+    """AGENTS.md 等由来の project 名を canonical 規約該当 slug に正規化する。
+
+    lowercase 化し _ / 空白を - に置換する。canonical pattern
+    ([a-z0-9][a-z0-9-]* — write_service._validate_tags と同一 charset) に一致しな
+    slug（空 / 先頭記号 / 活字混在等）は空文字を返す。"""
+    if not value:
+        return ""
+    slug = re.sub(r"[\s_]+", "-", value.strip().lower())
+    if not PROJECT_SLUG_RE.fullmatch(slug):
+        return ""
+    return slug
+
+
+def ensure_project_tag(tags: list[str] | None, project: str | None) -> list[str] | None:
+    """tags に project:<slug> を強制する。既存 project:* があれば尊重（何も追加しない）。
+
+    returns: project 追加後の tags (project 不正/空時は tags をそのまま返す — 記憶保存は継続).
+    tags が None の場合は project タグのみ list を返す。新しい list を返す（in-place 変異なし）。
+    slug が tag maxlength (50字) を超える場合も無音で脱落（write_service 拒否の事故防止）。
+    """
+    base = list(tags) if tags is not None else None
+    if not project:
+        return base
+    if any(t.startswith("project:") for t in (base or [])):
+        return base
+    slug = normalize_project_slug(project)
+    if not slug:
+        return base
+    tag = f"project:{slug}"
+    if len(tag) > 50:  # write_service._validate_tags の tag maxlength
+        return base
+    return [tag, *base] if base is not None else [tag]

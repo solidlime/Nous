@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -13,7 +12,7 @@ from nous.domain.memory.entities import Memory
 from nous.domain.shared.errors import DuplicateMemoryError, MemoryValidationError
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import generate_memory_key, get_now
-from nous.domain.value_objects import normalize_emotion, normalize_importance
+from nous.domain.value_objects import PROJECT_SLUG_RE, normalize_emotion, normalize_importance
 
 # 重複検知の閾値（意味的類似）。意図して定数：
 # - 設定ノブにはしない（v4.0 で未配線の Settings.duplicate_threshold を削除した）。
@@ -99,7 +98,7 @@ class MemoryWriteService:
             if len(str(tag)) > 50:
                 return MemoryValidationError(f"Tag too long: '{str(tag)[:20]}...' (max 50 chars)")
             tag_str = str(tag)
-            if tag_str.startswith("project:") and not re.fullmatch(r"[a-z0-9][a-z0-9-]*", tag_str[len("project:") :]):
+            if tag_str.startswith("project:") and not PROJECT_SLUG_RE.fullmatch(tag_str[len("project:") :]):
                 return MemoryValidationError(
                     f"Invalid project tag: '{tag_str}' (expected 'project:<slug>' with slug matching [a-z0-9][a-z0-9-]*)"
                 )

@@ -163,10 +163,15 @@ def register_tools(mcp: MCPServer) -> None:
         kind: str = "semantic",
         defer_vector: bool = False,
         skip_duplicate_check: bool = False,
+        project: str | None = None,
     ) -> str:
         """記憶を作成する。あなたやユーザーに関する重要な事実・好み・出来事を記録せよ。
         content は必須（空文字列は拒否される）。importance は None かつエンリッチメント有効時に LLM が自動評価。
-        tags: 分類タグ。kind: 記憶の種類 — episodic（具体的な出来事）、
+        tags: 分類タグ。project: 現在のプロジェクトの project:<slug> タグ（例: "nous" —
+        AGENTS.md の project: 行と同じ値）。指定時は tags に project:<slug> を必ず含めて保存する
+        （セッション開始時に project を把握しているなら、あなたに常時付けて記録せよ）。
+        なお 50 字超・記法違反の slug はタグ化されず、内容だけ保存される。
+        kind: 記憶の種類 — episodic（具体的な出来事）、
         semantic（一般的事実）、procedural（手順・パターン）、prospective（将来の予定・意図）。
         defer_vector: 即時ベクターインデックスをスキップ。
         skip_duplicate_check: 意味的重複チェックをスキップ（既定 False = 重複チェック有効、監査 M5）。
@@ -190,6 +195,7 @@ def register_tools(mcp: MCPServer) -> None:
                 kind=kind,
                 defer_vector=defer_vector,
                 skip_duplicate_check=skip_duplicate_check,
+                project=project,
             )
         )
 

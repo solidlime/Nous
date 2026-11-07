@@ -288,9 +288,11 @@ async def _search_episodes(
                     content = getattr(mem, "content", str(mem))[:200]
                     tags = getattr(mem, "tags", [])
                     source = getattr(mem, "source_context", "")
+                    # project:* は純タグなので topic（＝内容タグ先頭）からは除外する
+                    topic_tags = [t for t in tags if not str(t).startswith("project:")]
                     episodes.append(
                         {
-                            "topic": tags[0] if tags else "episode",
+                            "topic": topic_tags[0] if topic_tags else "episode",
                             "summary": content[:100],
                             "content": content,
                             "episode_id": source,
