@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
@@ -204,6 +205,33 @@ class MemoryQueryService:
     def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], DomainError]:
         """Get memories that contain ALL specified tags."""
         return self._repo.get_by_tags(tags, include_consumed=include_consumed)
+
+    def get_pending_prospective(self, days: int = 7, limit: int = 5) -> Result[list[Memory], DomainError]:
+        """期限が近い（または既に切れた）prospective 記憶を期限順で返す。
+
+        session_begin（get_context）の overview で「期限が近い予定・約束」を先出しする
+        ための軽量読み出し。valid_until が過去のもの（expired_but_active）も含め、
+        期限の近い／切れた順に並べる。gist（source_type=consolidated）と
+        lifecycle != active は対象外。
+        """
+        all_result = self._repo.find_all()
+        if isinstance(all_result, Failure):
+            return Failure(all_result.error)
+        deadline = get_now() + timedelta(days=days)
+        # shortcut: 全件読み出し後に Python 側で絞る（SQL に prospective 専用クエリが無い）。
+        # 記憶が数万件規模になったら repo 側に valid_until 絞り込みクエリを追加する。
+        pending = [
+            m
+            for m in all_result.value
+            if m.kind == "prospective"
+            and getattr(m, "lifecycle_status", "active") == "active"
+            and m.valid_until is not None
+            and m.valid_until <= deadline
+            and getattr(m, "source_type", "") != "consolidated"
+        ]
+        # 期限順（切れた順 → 近い順）。同時刻は key で安定化する。
+        pending.sort(key=lambda m: (m.valid_until, m.key))
+        return Success(pending[:limit])
 
     def get_memory_history(self, key: str) -> Result[list[dict], DomainError]:
         """Get version history for a memory."""

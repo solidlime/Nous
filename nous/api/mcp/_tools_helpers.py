@@ -11,7 +11,7 @@ import unicodedata
 from typing import TYPE_CHECKING, ParamSpec, TypeVar, cast
 
 from nous.domain.persona.emotion_trend import clean_context
-from nous.domain.shared.time_utils import relative_time_str
+from nous.domain.shared.time_utils import get_now, relative_time_str
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -390,6 +390,7 @@ def _format_lightweight_response(
     project_memories: list | None = None,
     project_name: str | None = None,
     due_labels: dict[str, str] | None = None,
+    pending_freshness: list | None = None,
 ) -> str:
     """Lightweight context: persona + conversation continuity + body state.
 
@@ -491,6 +492,23 @@ def _format_lightweight_response(
             due_str = f" ⏰ {due}" if due else ""
             snippet = _truncate_snippet(g.content, _MAX_COMMITMENT_CHARS, getattr(g, "key", ""))
             lines.append(f"  🎯 {snippet}{ts_str}{due_str}")
+
+    # 期限が近い／既に切れた予定・約束 — freshness_worker が archive する前に LLM へ先出しする
+    if pending_freshness:
+        lines.append("\n【期限が近い予定・約束】")
+        now = get_now()
+        for m in pending_freshness:
+            snippet = m.content.replace("\n", " ")
+            if len(snippet) > 100:
+                snippet = snippet[:97] + "..."
+            days = (m.valid_until - now).days
+            if days < 0:
+                note = f"期限切れに見える（{-days}日超過）"
+            elif days == 0:
+                note = "期限は今日"
+            else:
+                note = f"期限まであと{days}日"
+            lines.append(f"  ⏳ [{note}] {snippet}")
 
     # Recent memories — conversation continuity across sessions
     if recent:

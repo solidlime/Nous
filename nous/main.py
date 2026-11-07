@@ -275,6 +275,7 @@ def create_app() -> MemoryFastMCP:
 
     # Start background workers (references kept for graceful shutdown in main())
     from nous.application.workers.consolidation_worker import ConsolidationWorker
+    from nous.application.workers.freshness_worker import FreshnessWorker
 
     consolidation_worker = ConsolidationWorker(settings)
     consolidation_worker.start()
@@ -289,6 +290,10 @@ def create_app() -> MemoryFastMCP:
         _workers.append(curation_worker)
     else:
         logger.info("CurationWorker disabled (NOUS_CURATION__ENABLED=false)")
+
+    freshness_worker = FreshnessWorker(settings)
+    freshness_worker.start()
+    _workers.append(freshness_worker)
 
     return mcp
 

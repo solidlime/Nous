@@ -94,8 +94,9 @@ async def _tool_get_context(
     equipment = equip_result.value if equip_result.is_ok else {}
     # Recent memories (last 5) for conversation continuity across sessions
     recent_result = ctx.memory_service.get_recent(5)
-    recent = recent_result.value if recent_result.is_ok else []
-    # top_memories と重複する recent は除外（重要度表示側を優先）
+    recent = (
+        recent_result.value if recent_result.is_ok else []
+    )  # top_memories と重複する recent は除外（重要度表示側を優先）
     recent = [m for m in recent if not any(m.key == t.key for t in top_memories)]
 
     # Project memories — project:<slug> タグ付き記憶を updated_at 降順・内容 dedupe・上位5件で表示
@@ -120,6 +121,10 @@ async def _tool_get_context(
         project_memories = _dedupe_memories(list(project_memories), set())[:5]
         if not project_memories:
             project_memories = None
+
+    # 期限が近い／切れた予定・約束（先出し）。未対応 stub では Success 以外が返るので空扱い。
+    pending_result = ctx.memory_service.get_pending_prospective()
+    pending_freshness = pending_result.value if isinstance(pending_result, Success) else []
     time_since = ""
     if state.last_conversation_time:
         time_since = relative_time_str(state.last_conversation_time)
@@ -164,6 +169,7 @@ async def _tool_get_context(
         project_memories=project_memories,
         project_name=project or None,
         due_labels=due_labels or None,
+        pending_freshness=pending_freshness,
     )
     await ctx.event_bus.publish(
         "tool.called",

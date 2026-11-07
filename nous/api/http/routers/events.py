@@ -302,5 +302,18 @@ def register_events_routes(mcp) -> None:
             task = asyncio.create_task(_summarize_session_end(ctx, persona, session_id))
             task.add_done_callback(_on_session_summary_done)
 
+        # 8.5 turn.completed hook extraction（Task B）: pi 対話ターンの記憶化。
+        #     認証ガードを通過した後段でのみ発火する。session.stopped は既存 path 専用（二重保存防止）。
+        #     循環 import を避けるため関数内 import（_summarize_session_end と同パターン）
+        from nous.application.hooks.memory_extraction import (
+            HOOK_EXTRACTION_EVENT_TYPES,
+            run_hook_extraction,
+        )
+        from nous.domain.memory.service import _track_background_task
+
+        for ev in raw_events:
+            if isinstance(ev, dict) and ev.get("type") in HOOK_EXTRACTION_EVENT_TYPES:
+                _track_background_task(run_hook_extraction(ctx, persona, ev, session_id))
+
         # 9. Return success response
         return JSONResponse({"status": "ok", "count": inserted, "skipped": skipped})
