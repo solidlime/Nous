@@ -240,7 +240,7 @@ class FreshnessWorker:
                 system="",
                 tools=None,
                 temperature=0.0,
-                max_tokens=2048,
+                max_tokens=16000,  # reasoning LLM は reasoning token が max_tokens を消費するため大き目に取る
             )
         )
 
