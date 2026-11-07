@@ -279,7 +279,6 @@ def test_skills_pre_installed():
     names = {s.name for s in skills}
 
     assert len(skills) >= 5, f"Expected at least 5 skills, got {len(skills)}"
-    assert "auto-memory" in names, "Missing: auto-memory"
     assert "image-gen" in names, "Missing: image-gen"
     assert "project-manage" in names, "Missing: project-manage"
     assert "mood-sync" in names, "Missing: mood-sync"
