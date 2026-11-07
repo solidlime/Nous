@@ -124,9 +124,7 @@ class TestPendingProspectiveSelect:
             [_rec("soon", kind="prospective", valid_until=now + timedelta(days=7))],
         )
         assert _pending_keys(repo) == ["soon"]
-        assert "soon のテスト記憶内容。" in _render(
-            MemoryQueryService(repo).get_pending_prospective().value
-        )
+        assert "soon のテスト記憶内容。" in _render(MemoryQueryService(repo).get_pending_prospective().value)
 
     def test_beyond_seven_days_not_listed(self, tmp_path) -> None:
         """期限が 7 日を超える prospective は一覧に出ない。"""
@@ -153,10 +151,7 @@ class TestPendingProspectiveSelect:
         """gist（consolidated 派生）は除外し、一覧は max 5 件。"""
         now = get_now()
         records = [_rec("gist", kind="prospective", valid_until=now + timedelta(days=1), source_type="consolidated")]
-        records += [
-            _rec(f"p{i}", kind="prospective", valid_until=now + timedelta(days=1, hours=i))
-            for i in range(6)
-        ]
+        records += [_rec(f"p{i}", kind="prospective", valid_until=now + timedelta(days=1, hours=i)) for i in range(6)]
         repo = _setup_db(tmp_path, records)
         keys = _pending_keys(repo)
         assert "gist" not in keys
