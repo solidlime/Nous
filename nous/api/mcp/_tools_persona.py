@@ -135,9 +135,7 @@ async def _tool_get_context(
             logger.debug("_tool_get_context: wiki count failed: %s", e)
             wiki_page_count = None
 
-    # 期限が近い／切れた予定・約束（先出し）。未対応 stub では Success 以外が返るので空扱い。
-    pending_result = ctx.memory_service.get_pending_prospective()
-    pending_freshness = pending_result.value if isinstance(pending_result, Success) else []
+    # 期限が近い／切れた予定・約束は due_cues（goal 行の ⏰）と DUE_REMINDER_TAG の one-shot で出る。
     time_since = ""
     if state.last_conversation_time:
         time_since = relative_time_str(state.last_conversation_time)
@@ -183,7 +181,6 @@ async def _tool_get_context(
         project_name=project or None,
         wiki_page_count=wiki_page_count,
         due_labels=due_labels or None,
-        pending_freshness=pending_freshness,
     )
     await ctx.event_bus.publish(
         "tool.called",

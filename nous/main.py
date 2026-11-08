@@ -275,26 +275,11 @@ def create_app() -> MemoryFastMCP:
 
     # Start background workers (references kept for graceful shutdown in main())
     from nous.application.workers.consolidation_worker import ConsolidationWorker
-    from nous.application.workers.freshness_worker import FreshnessWorker
     from nous.application.workers.wiki_worker import WikiWorker
 
     consolidation_worker = ConsolidationWorker(settings)
     consolidation_worker.start()
     _workers.append(consolidation_worker)
-
-    # B-6/B-7 日次 curation（既定無効。NOUS_CURATION__ENABLED=true で有効化）
-    if settings.curation.enabled:
-        from nous.application.workers.curation_worker import CurationWorker
-
-        curation_worker = CurationWorker(settings)
-        curation_worker.start()
-        _workers.append(curation_worker)
-    else:
-        logger.info("CurationWorker disabled (NOUS_CURATION__ENABLED=false)")
-
-    freshness_worker = FreshnessWorker(settings)
-    freshness_worker.start()
-    _workers.append(freshness_worker)
 
     # ドリーミング（wiki 編纂）。既定無効: NOUS_WIKI__ENABLED=true で有効化。
     wiki_worker = WikiWorker(settings)

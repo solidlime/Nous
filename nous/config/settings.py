@@ -195,27 +195,6 @@ class ConsolidationConfig(BaseModel):
     base_url: str = Field(default="", description="空なら memory_enrichment.base_url")
 
 
-class CurationConfig(BaseModel):
-    """日次 curation 設定（B-6/B-7、設計書 §2-1）.
-
-    provider/key/model は空なら ``memory_enrichment`` を再利用する。
-    既定無効。有効化は ``NOUS_CURATION__ENABLED=true``。
-    """
-
-    enabled: bool = Field(default=False, description="日次 curation worker を起動する")
-    check_interval_seconds: int = Field(default=60, ge=5, description="due 判定ポーリング間隔")
-    max_backlog_days: int = Field(default=7, ge=1, description="追いかける未整理日の上限（超過分は放棄）")
-    max_consecutive_failures: int = Field(default=7, ge=1, description="連続失敗で halted")
-    journal_max_tokens: int = Field(default=1500, ge=100, description="journal 全文の推定トークン上限")
-    profile_max_tokens: int = Field(default=3000, ge=100, description="profile ブロックの推定トークン上限")
-    llm_max_tokens: int = Field(default=4096, ge=256, description="curation LLM の max_tokens")
-    llm_temperature: float = Field(default=0.3, ge=0.0, le=2.0)
-    provider: str = Field(default="", description="空なら memory_enrichment.provider")
-    api_key: str | None = None
-    model: str = Field(default="", description="空なら memory_enrichment.model")
-    base_url: str = Field(default="", description="空なら memory_enrichment.base_url")
-
-
 class IrodoriAdvancedParams(BaseModel):
     """Irodori-TTS top-level irodori options (num_steps / cfg_* / chunking / caption / seed)."""
 
@@ -386,56 +365,6 @@ class WikiConfig(BaseModel):
         return os.environ.get(env_var, "")
 
 
-class FreshnessConfig(BaseModel):
-    """LLM 鮮度評価 worker の設定（freshness_worker.py）。
-
-    機械的 FSRS decay を代替せず、lifecycle_status / valid_until / importance のみ
-    更新する「意見を層に足す」評価（計画書 §5）。
-    """
-
-    enabled: bool = True
-    interval_seconds: int = 86400  # 24h cycle
-    batch_size: int = 20  # 1 cycle の最大評価件数
-    stale_days: int = 30  # 未アクセス判定
-    expiry_probe_days: int = 7  # valid_until 近接評価ウィンドウ
-    provider: str = "openrouter"
-    api_key: str | None = None
-    model: str = "openai/gpt-4o-mini"
-    base_url: str = "https://openrouter.ai/api/v1"
-
-    def get_effective_api_key(self, settings: Settings) -> str:
-        """API key 解決（MemoryEnrichmentConfig.get_effective_api_key と同型）。"""
-        if self.api_key:
-            return self.api_key
-        if self.provider == "openrouter" and settings.openrouter_api_key:
-            return settings.openrouter_api_key
-        if self.provider == "anthropic" and settings.anthropic_api_key:
-            return settings.anthropic_api_key
-        if self.provider == "openai" and settings.openai_api_key:
-            return settings.openai_api_key
-        if self.provider == "google" and settings.google_api_key:
-            return settings.google_api_key
-        if self.provider == "opencode_go" and settings.opencode_go_api_key:
-            return settings.opencode_go_api_key
-
-        from nous.config.runtime_config import RuntimeConfigManager
-
-        key_name = f"{self.provider}_api_key"
-        value, _ = RuntimeConfigManager().get_effective_value("api_keys", key_name)
-        if value:
-            return str(value)
-
-        _legacy_env_keys = {
-            "openrouter": "OPENROUTER_API_KEY",
-            "anthropic": "ANTHROPIC_API_KEY",
-            "openai": "OPENAI_API_KEY",
-            "google": "GEMINI_API_KEY",
-            "opencode_go": "OPENCODE_GO_API_KEY",
-        }
-        env_var = _legacy_env_keys.get(self.provider, "")
-        return os.environ.get(env_var, "")
-
-
 class PluginConfig(BaseModel):
     """Plugin API configuration — default OFF for security.
 
@@ -511,8 +440,6 @@ class Settings(BaseSettings):
     forgetting: ForgettingConfig = ForgettingConfig()
     memory_enrichment: MemoryEnrichmentConfig = MemoryEnrichmentConfig()
     consolidation: ConsolidationConfig = ConsolidationConfig()
-    curation: CurationConfig = Field(default_factory=CurationConfig)
-    freshness: FreshnessConfig = Field(default_factory=FreshnessConfig)
     wiki: WikiConfig = Field(default_factory=WikiConfig)
     explorer: ExplorerConfig = Field(default_factory=ExplorerConfig)
     cors: CorsConfig = CorsConfig()

@@ -354,10 +354,6 @@ class MemoryService:
         """Get memories that contain ALL specified tags."""
         return self._query_service.get_by_tags(tags, include_consumed=include_consumed)
 
-    def get_pending_prospective(self, days: int = 7, limit: int = 5) -> Result[list[Memory], DomainError]:
-        """期限が近い／既に切れた prospective 記憶を期限順で返す（session_begin 先出し用）。"""
-        return self._query_service.get_pending_prospective(days=days, limit=limit)
-
     def get_memory_history(self, key: str) -> Result[list[dict], DomainError]:
         """Get version history for a memory."""
         return self._query_service.get_memory_history(key)
