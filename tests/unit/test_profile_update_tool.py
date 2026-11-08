@@ -78,8 +78,8 @@ async def test_upsert_failure_reported():
     assert "db down" in r["error"]
 
 
-def test_registered_tool_count_is_15():
-    """B-5: 既存 14 ツール + profile_update = 15（既存ツール構成は不変）."""
+def test_registered_tool_count_is_18():
+    """B-5: 既存 15 ツール + wiki_read/wiki_write/wiki_ls = 18（既存ツール構成は不変）."""
     tools: dict[str, object] = {}
 
     def mock_tool_decorator():
@@ -96,5 +96,6 @@ def test_registered_tool_count_is_15():
 
     register_tools(mock_mcp)
 
-    assert len(tools) == 15
+    assert len(tools) == 18
     assert "profile_update" in tools
+    assert {"wiki_read", "wiki_write", "wiki_ls"} <= set(tools)
