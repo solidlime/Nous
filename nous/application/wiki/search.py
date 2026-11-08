@@ -16,7 +16,7 @@ from nous.domain.shared.result import Success
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
-    from nous.application.context import AppContext
+    from nous.application.use_cases import AppContext
 
 logger = get_logger(__name__)
 

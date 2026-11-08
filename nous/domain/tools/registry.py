@@ -457,6 +457,39 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
             ),
         },
     ),
+    "wiki_ls": ToolSpec(
+        name="wiki_ls",
+        summary="まとめ wiki のページ一覧（slug/title/project/更新日時）を返す",
+        surfaces=frozenset({MCP}),
+        params={
+            MCP: (
+                ToolParam("project", "string|null", required=False),
+                ToolParam("limit", "integer", required=False),
+            ),
+        },
+    ),
+    "wiki_read": ToolSpec(
+        name="wiki_read",
+        summary="まとめ wiki のページを slug で読む（本文 + title/project/links）",
+        surfaces=frozenset({MCP}),
+        params={
+            MCP: (ToolParam("slug", "string", required=True),),
+        },
+    ),
+    "wiki_write": ToolSpec(
+        name="wiki_write",
+        summary="まとめ wiki のページを書く（slug 規約: project-<slug>-<topic> / <persona>-<topic>）",
+        surfaces=frozenset({MCP}),
+        params={
+            MCP: (
+                ToolParam("slug", "string", required=True),
+                ToolParam("title", "string", required=True),
+                ToolParam("body", "string", required=True),
+                ToolParam("project", "string|null", required=False),
+                ToolParam("sources", "array<string>|null", required=False),
+            ),
+        },
+    ),
 }
 
 

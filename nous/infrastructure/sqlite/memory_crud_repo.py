@@ -228,11 +228,11 @@ class MemoryCrudMixin:
         the raw row stays, degrading to the pre-tokenizer behavior.
         """
         try:
-            self._db.execute(  # type: ignore[attr-defined]  # mixin accessor (baseline)
+            self._db.execute(
                 "UPDATE memories_fts SET content = ? WHERE memories_key = ?",
                 (fts_tokenize.tokenize_for_fts(content), key),
             )
-            self._db.commit()  # type: ignore[attr-defined]  # mixin accessor (baseline)
+            self._db.commit()
         except Exception as e:
             logger.debug("FTS retokenize skipped for %s: %s", key, e)
 

@@ -6,7 +6,7 @@
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { loadCore, loadFile } from '../core/load-core.js';
+import { loadCore } from '../core/load-core.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -29,8 +29,18 @@ function setPersona(p) {
 
 beforeAll(() => {
   loadCore();
+  // 実ブラウザでは DOMPurify が居る。未定義だと safeSetHTML が textContent に
+  // フォールバックし、data-* 要素や <a> を検証できないので素通しスタブを置く。
+  globalThis.DOMPurify = { sanitize: (html) => html };
+  // 実ブラウザでは marked が同梱されている。テストでは markdown リンクだけを
+  // <a> に起こす最小スタブで [[slug]] 書き換えとクリック配線を検証する。
+  globalThis.marked = {
+    parse: (md) => md.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>'),
+  };
   document.body.innerHTML =
     '<div id="wiki-list"></div><div id="wiki-article-head"></div><div id="wiki-article-body"></div>';
+  // base.js と同じ順序を再現する: 機能スクリプトは読み込み時点の window.S を保持する
+  window.S = { persona: 'herta', tab: 'wiki' };
   globalThis.N = window.Nous;
   const code = readFileSync(resolve(__dirname, 'wiki.js'), 'utf-8');
   new Function(code)();
