@@ -77,7 +77,9 @@ class MemoryWriteService:
         # 2. Exact match check (sync, via repository)
         try:
             exact = self._repo.find_by_content_exact(content)
-            if isinstance(exact, Success) and exact.value is not None:
+            # archived は「忘却済み」。重複として弾くと、同じ話を二度と言われても
+            # 想起も再学習もできない自己修復不能な知識喪失になる。
+            if isinstance(exact, Success) and exact.value is not None and exact.value.lifecycle_status == "active":
                 return DuplicateMemoryError(
                     f"Identical content already exists (key: {exact.value.key}). Skipped.",
                     duplicate_key=exact.value.key,

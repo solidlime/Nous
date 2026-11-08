@@ -49,7 +49,14 @@ def _settings(tmp_path) -> MagicMock:
     return s
 
 
-def _setup(tmp_path, memories: list[Memory], *, llm: str | None, raise_exc: Exception | None = None):
+def _setup(
+    tmp_path,
+    memories: list[Memory],
+    *,
+    llm: str | None,
+    raise_exc: Exception | None = None,
+    cfg_update: dict | None = None,
+):
     """DB + worker を用意し、_compile_persona を 1 回実行する。"""
     conn = SQLiteConnection(data_dir=str(tmp_path), persona="test_ww")
     conn.initialize_schema()
@@ -58,6 +65,8 @@ def _setup(tmp_path, memories: list[Memory], *, llm: str | None, raise_exc: Exce
         repo.save(m)
     ctx = SimpleNamespace(memory_repo=repo, connection=conn)
     worker = WikiWorker(_settings(tmp_path))
+    if cfg_update:
+        worker._cfg = worker._cfg.model_copy(update=cfg_update)
     worker.vector_enabled = False
     worker._ask_llm_for_test = llm  # type: ignore[attr-defined]
     worker._ask_llm_raise = raise_exc  # type: ignore[attr-defined]
@@ -274,15 +283,15 @@ class TestIndexMaintenance:
         assert "[[project-nous-b]]" in body
 
     def test_stale_topic_is_prioritized(self, tmp_path) -> None:
-        """source 記憶が archived になった topic は記憶数に関わらず先頭に来る。"""
+        """source 記憶が tombstoned になった topic は記憶数に関わらず先頭に来る。"""
         memories = [_mem(f"big{i}", tags=["project:big"]) for i in range(6)]
         memories += [_mem(f"small{i}", tags=["project:small"]) for i in range(3)]
-        memories += [_mem("small-arch", tags=["project:small"], lifecycle="archived")]
+        memories += [_mem("small-dead", tags=["project:small"], lifecycle="tombstoned")]
 
         store = _store(tmp_path)
-        # small 側のページが archived 記憶を source に持つ → stale
+        # small 側のページが tombstoned 記憶を source に持つ → stale
         store.write_page(
-            "project-small-page", "Small", "archived を根拠にしている。", project="small", sources=("small-arch",)
+            "project-small-page", "Small", "tombstoned を根拠にしている。", project="small", sources=("small-dead",)
         )
 
         worker = WikiWorker(_settings(tmp_path))
@@ -352,3 +361,180 @@ class TestManualPages:
             assert any("kept project-nous-notes: manual page" in s for s in summaries), summaries
         finally:
             conn.close()
+
+
+class TestSourceArchiving:
+    """編纂済みの源記憶を archived へ沈める（削除はしない）。"""
+
+    def test_compile_archives_sources(self, tmp_path) -> None:
+        """編纂に使われた source は archived になり、監査行に件数が入る。"""
+        memories = [_mem(f"a{i}", tags=["project:nous"]) for i in range(3)]
+        page = {
+            "slug": "project-nous-memory",
+            "title": "NOUS の記憶設計",
+            "body": "本文",
+            "sources": ["a0", "a1"],
+        }
+        conn, _ = _setup(tmp_path, memories, llm=_pages_json(page))
+        try:
+            repo = SQLiteMemoryRepository(conn)
+            statuses = {k: repo.find_by_key(k).value.lifecycle_status for k in ("a0", "a1", "a2")}
+            assert statuses["a0"] == "archived"
+            assert statuses["a1"] == "archived"
+            assert statuses["a2"] == "active", "編纂に使っていない記憶まで沈めてはいけない"
+            detail = (
+                conn.get_memory_db()
+                .execute("SELECT detail FROM session_events WHERE event_type='wiki.compiled' ORDER BY id DESC LIMIT 1")
+                .fetchone()["detail"]
+            )
+            assert json.loads(detail)["archived"] == 2
+        finally:
+            conn.close()
+
+    def test_archive_sources_can_be_disabled(self, tmp_path) -> None:
+        """設定で無効にしたら source は active のまま。"""
+        memories = [_mem(f"a{i}", tags=["project:nous"]) for i in range(3)]
+        page = {"slug": "project-nous-memory", "title": "T", "body": "本文", "sources": ["a0"]}
+        conn, _ = _setup(tmp_path, memories, llm=_pages_json(page), cfg_update={"archive_sources": False})
+        try:
+            repo = SQLiteMemoryRepository(conn)
+            assert repo.find_by_key("a0").value.lifecycle_status == "active"
+        finally:
+            conn.close()
+
+
+class TestStaleDetection:
+    def test_archived_source_does_not_make_topic_stale(self, tmp_path) -> None:
+        """archived は意図的に沈めた状態。stale にすると毎サイクル再編纂の無限ループになる。"""
+        memories = [
+            _mem("a0", tags=["project:nous"], lifecycle="archived"),
+            _mem("a1", tags=["project:nous"]),
+            _mem("a2", tags=["project:nous"]),
+        ]
+        store = _store(tmp_path)
+        store.write_page("project-nous-page", "T", "本文", project="nous", sources=("a0",))
+        worker = WikiWorker(_settings(tmp_path))
+        assert worker._stale_topics(store, memories, "test_ww") == set()
+
+    def test_missing_or_tombstoned_source_is_stale(self, tmp_path) -> None:
+        """source が消えた / tombstoned なら stale（ページが古い情報を持つ）。"""
+        memories = [
+            _mem("a0", tags=["project:nous"], lifecycle="tombstoned"),
+            _mem("a1", tags=["project:nous"]),
+        ]
+        store = _store(tmp_path)
+        store.write_page("project-nous-page", "T", "本文", project="nous", sources=("a0",))
+        store.write_page("project-gone-page", "T", "本文", project="gone", sources=("zzz",))
+        worker = WikiWorker(_settings(tmp_path))
+        assert worker._stale_topics(store, memories, "test_ww") == {"project-nous", "project-gone"}
+
+
+class TestTopicRotation:
+    def test_never_compiled_topic_wins_over_big_cluster(self, tmp_path) -> None:
+        """未編纂 topic は巨大クラスタより優先される（巡回ローテーション）。"""
+        memories = [_mem(f"big{i}", tags=["project:big"]) for i in range(10)]
+        memories += [_mem(f"small{i}", tags=["project:small"]) for i in range(3)]
+        store = _store(tmp_path)
+        # big は編纂済み、small は未編纂
+        store.write_page("project-big-page", "Big", "本文", project="big", sources=("big0",))
+        worker = WikiWorker(_settings(tmp_path))
+        worker._cfg = worker._cfg.model_copy(update={"topics_per_cycle": 1})
+        slugs = [s for s, _ in worker._select_topics(memories, get_now(), store, "test_ww")]
+        assert slugs == ["project-small"]
+
+    def test_oldest_compiled_goes_before_newer(self, tmp_path) -> None:
+        """同条件なら最後に編纂されたのが古い topic から回る（frontmatter updated で順序を作る）。"""
+        import re
+
+        memories = [_mem(f"a{i}", tags=["project:a"]) for i in range(3)]
+        memories += [_mem(f"b{i}", tags=["project:b"]) for i in range(3)]
+        store = _store(tmp_path)
+        store.write_page("project-a-page", "A", "本文", project="a", sources=("a0",))
+        store.write_page("project-b-page", "B", "本文", project="b", sources=("b0",))
+        # write_page は毎回 now を刻むので、frontmatter の updated を直接書き換えて順序を固定する
+        for slug, stamp in (
+            ("project-a-page", "2026-01-01T00:00:00+00:00"),
+            ("project-b-page", "2026-01-02T00:00:00+00:00"),
+        ):
+            path = store.root / f"{slug}.md"
+            path.write_text(
+                re.sub(r"^updated:.*$", f"updated: {stamp}", path.read_text(encoding="utf-8"), count=1, flags=re.M),
+                encoding="utf-8",
+            )
+        worker = WikiWorker(_settings(tmp_path))
+        worker._cfg = worker._cfg.model_copy(update={"topics_per_cycle": 1})
+        slugs = [s for s, _ in worker._select_topics(memories, get_now(), store, "test_ww")]
+        assert slugs == ["project-a"]
+
+
+class TestSchedule:
+    def test_next_delay_targets_configured_hour(self, tmp_path) -> None:
+        """run_at_hour 指定時は 0 < delay <= 24h（次の定刻まで）。"""
+        worker = WikiWorker(_settings(tmp_path))
+        worker._cfg = worker._cfg.model_copy(update={"run_at_hour": 3})
+        delay = worker._next_delay()
+        assert 0 < delay <= 86400
+
+    def test_negative_hour_falls_back_to_interval(self, tmp_path) -> None:
+        """run_at_hour<0 は旧来の interval 方式。"""
+        worker = WikiWorker(_settings(tmp_path))
+        worker._cfg = worker._cfg.model_copy(update={"run_at_hour": -1, "interval_seconds": 3600})
+        assert worker._next_delay() == 3600
+
+
+class TestCycleScopedArchive:
+    """同じ source を 2 ページが引用しても、archive の計上は cycle 内で 1 回。"""
+
+    def test_duplicate_source_counted_once(self, tmp_path) -> None:
+        memories = [_mem(f"a{i}", tags=["project:nous"]) for i in range(3)]
+        pages = _pages_json(
+            {"slug": "project-nous-one", "title": "1", "body": "本文 1", "sources": ["a0"]},
+            {"slug": "project-nous-two", "title": "2", "body": "本文 2", "sources": ["a0"]},
+        )
+        conn, _ = _setup(tmp_path, memories, llm=pages)
+        try:
+            details = [
+                json.loads(r["detail"])
+                for r in conn.get_memory_db()
+                .execute("SELECT detail FROM session_events WHERE event_type='wiki.compiled' ORDER BY id")
+                .fetchall()
+            ]
+            assert sum(d.get("archived", 0) for d in details) == 1
+        finally:
+            conn.close()
+
+
+class TestIndexMaintenanceManual:
+    def test_repair_links_preserves_manual_flag(self, tmp_path) -> None:
+        """dangling link の修復で手書きページが編纂対象に戻ってはいけない。"""
+        store = _store(tmp_path)
+        store.write_page(
+            "project-nous-manual",
+            "手書き",
+            "[[project-nous-ghost]] を見よ。",
+            project="nous",
+            manual=True,
+        )
+        worker = WikiWorker(_settings(tmp_path))
+        assert worker._repair_links(store) == 1
+        read = store.read_page("project-nous-manual")
+        assert read.is_ok
+        assert read.value.manual is True
+        assert "[[project-nous-ghost]]" not in read.value.body
+
+
+class TestTopicSelectionAfterArchive:
+    def test_topic_with_page_survives_archive_below_min_memories(self, tmp_path) -> None:
+        """源を archive して active が 1 件になっても、ページのある topic は巡回対象に残る。"""
+        memories = [_mem("a0", tags=["project:nous"]), _mem("a1", tags=["project:nous"])]
+        store = _store(tmp_path)
+        store.write_page("project-nous-page", "既存", "本文", project="nous", sources=("a0", "a1"))
+        # 1 件だけ active に戻す（archive 相当）
+        memories[1] = _mem("a1", tags=["project:nous"], lifecycle="archived")
+
+        worker = WikiWorker(_settings(tmp_path))
+        slugs = [s for s, _ in worker._select_topics(memories, get_now(), store, "test_ww")]
+        assert "project-nous" in slugs
+        # ページの無い topic は従来どおり下限で弾く
+        lonely = [_mem("b0", tags=["project:lonely"])]
+        assert worker._select_topics(lonely, get_now(), store, "test_ww") == []

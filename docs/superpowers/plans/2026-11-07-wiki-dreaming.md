@@ -116,7 +116,17 @@ FreshnessWorker と同じ thread + `run_cycle()` パターン。1 cycle:
 
 **source 腐敗検出（freshness との責任分担）**: freshness が記憶を `archived`/`superseded` にしても wiki ページの主張は古いまま残る。wiki_worker の選択段に「`sources` のいずれかが active でない、または `memory.updated_at > page.updated` のページ」を追加し、最優先で再編纂する。
 
-settings: `WikiConfig{ enabled=false, interval_seconds=86400, topics_per_cycle=2, max_memories_per_topic=40, max_sources_per_page=40, max_page_bytes=8192, provider/api_key/model は freshness と同型 }`
+**実行タイミング（kanban #27）**: `run_at_hour>=0`（既定 3）なら毎日その時刻（ローカル TZ）に走る。起動直後に 24h 待って初回が翌日、という無駄を作らない。定刻に persona コンテキストが未生成（初リクエスト前）なら 60 秒 × 30 回まで再試行する。`run_at_hour<0` で旧来の `interval_seconds` 方式（初回即実行 → interval 待ち）。
+
+**巡回（kanban #27）**: 並びは「source 腐敗（stale）先頭 → **最後に編纂された時刻が古い順**（未編纂が最優先）→ 記憶数降順」。記憶数だけで選ぶと巨大クラスタが毎回占有して小クラスタが永久に編纂されないため。編纂実績は wiki ページの `updated`（manual ページは除外）から読む。
+
+**検索面の扱い（kanban #27）**: `SearchQuery.lifecycle_status`（既定 `"active"`）は`SearchEngine._post_filter` で強制する。archived は既定検索から落ち、明示的に `lifecycle_status="archived"` を渡したときだけ引ける（管理・監査用の逃げ道）。`None` は tombstoned 以外を全て通す。
+
+**既知のトレードオフ**: `ConsolidationWorker` は archived を入力に gist を作るので、wiki が沈めた源が gist として active に再物質化しうる。これは二段目の統合として許容し、`llm_gist_max_per_cycle` の上限で費用を抑える。
+
+**源記憶の沈下（kanban #27）**: 編纂に使った sources は `archived`（既定検索対象外）へ遷移させ、wiki と記憶の二重ヒットを消す。削除はしない（`page.sources` の参照が生き続ける必要がある）。`archive_sources=false` で無効化できる。**stale 判定では archived を腐敗と見なさない**（wiki 自身が沈めたものを stale にすると毎サイクル無限再編纂になる）。腐敗は「欠落」「tombstoned」「ページより新しい記憶」のみ。
+
+settings: `WikiConfig{ enabled=false, interval_seconds=86400, run_at_hour=3, topics_per_cycle=2, archive_sources=true, max_memories_per_topic=40, max_sources_per_page=40, max_page_bytes=8192, provider/api_key/model は freshness と同型 }`
 
 LLM はモデルに深さを持たせる（既定 `openrouter/openai/gpt-4o-mini` 相当の軽量 + reasoning モデル互換の max_tokens=8192）。
 

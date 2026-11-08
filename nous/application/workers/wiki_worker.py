@@ -20,14 +20,13 @@ import asyncio
 import json
 import re
 import threading
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from nous.domain.shared.result import Failure, Success
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from nous.config.settings import Settings, WikiConfig
     from nous.domain.memory.entities import Memory
     from nous.infrastructure.llm.base import LLMProvider
@@ -37,6 +36,8 @@ logger = get_logger(__name__)
 
 #: 編纂対象クラスタの最小記憶数（これ未満の topic はページ化しない）。
 MIN_TOPIC_MEMORIES = 3
+#: wiki 側の時刻は秒精度なので、秒未満の差は stale と見なさない。
+_STALE_SLACK = timedelta(seconds=2)
 
 #: LLM に渡す記憶本文の切り詰め長。
 _CONTENT_PREVIEW_CHARS = 300
@@ -79,10 +80,12 @@ class WikiWorker:
         self._settings = settings
         cfg: WikiConfig = settings.wiki
         self._cfg = cfg
-        self.interval_seconds = cfg.interval_seconds
         self._running = False
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        #: 定刻に persona コンテキストが空だった時の再試行回数と間隔（1 日を空振りで捨てない）。
+        self._empty_retries = 30
+        self._retry_seconds = 60.0
         #: テスト用: False にすると Qdrant 索引更新を行わない（既定は有効）。
         self.vector_enabled = True
 
@@ -97,7 +100,14 @@ class WikiWorker:
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True, name="wiki-worker")
         self._thread.start()
-        logger.info("WikiWorker started (interval=%ds topics=%d)", self.interval_seconds, self._cfg.topics_per_cycle)
+        logger.info(
+            "WikiWorker started (at_hour=%d interval=%ds topics=%d)",
+            self._cfg.run_at_hour,
+            self._cfg.interval_seconds,
+            self._cfg.topics_per_cycle,
+        )
+        if self._cfg.run_at_hour >= 0:
+            logger.info("WikiWorker next run in %.0fs", self._next_delay())
 
     def stop(self, timeout: float = 5.0) -> None:
         self._running = False
@@ -107,12 +117,50 @@ class WikiWorker:
         logger.info("WikiWorker stopped")
 
     def _run(self) -> None:
+        first = True
         while not self._stop_event.is_set():
+            scheduled = self._cfg.run_at_hour >= 0
+            # 定刻方式は常に待つ。interval 方式は従来どおり初回だけ即実行する。
+            delay = self._next_delay() if scheduled or not first else 0.0
+            first = False
+            if delay > 0 and self._stop_event.wait(delay):
+                return  # 停止指示
+            if scheduled:
+                # 定刻に persona コンテキストが空（初リクエスト前）なら、1 日捨てずに短間隔で再試行する。
+                for _ in range(self._empty_retries):
+                    if self._stop_event.is_set() or self._has_contexts():
+                        break
+                    if self._stop_event.wait(self._retry_seconds):
+                        return
             try:
                 self.run_cycle()
             except Exception:
                 logger.exception("Wiki cycle failed")
-            self._stop_event.wait(self.interval_seconds)
+
+    def _next_delay(self) -> float:
+        """次サイクルまでの待ち秒数。
+
+        ``run_at_hour >= 0`` なら毎日その時刻（ローカル TZ、既定 03:00）に走らせる。
+        ``-1`` なら旧来の「前サイクル終了から interval_seconds 後」。
+        """
+        if self._cfg.run_at_hour < 0:
+            return float(self._cfg.interval_seconds)
+        now = datetime.now()
+        target = now.replace(hour=self._cfg.run_at_hour, minute=0, second=0, microsecond=0)
+        if target <= now:
+            target += timedelta(days=1)
+        return (target - now).total_seconds()
+
+    @staticmethod
+    def _has_contexts() -> bool:
+        """persona コンテキストが 1 つでも生成済みか（遅延生成なので起動直後は空）。"""
+        from nous.application.use_cases import AppContextRegistry
+
+        try:
+            return bool(AppContextRegistry._contexts)
+        except Exception:
+            logger.debug("WikiWorker: context registry unavailable", exc_info=True)
+            return False
 
     # ------------------------------------------------------------------
     # 1 cycle
@@ -158,28 +206,86 @@ class WikiWorker:
             buckets.setdefault(_topic_of(m), []).append(m)
 
         stale = self._stale_topics(store, memories, persona)
-        topics = [(slug, mems) for slug, mems in buckets.items() if len(mems) >= MIN_TOPIC_MEMORIES]
-        topics.sort(key=lambda item: (item[0] not in stale, -len(item[1])))
+        last_compiled = self._last_compiled(store)
+        last_touched = self._last_compiled(store, include_manual=True)
+        # 既にページのある topic は新着 1 件でも巡回対象にする。源を archive すると
+        # active が減り、MIN_TOPIC_MEMORIES の下限でその topic が永久に選ばれなくなるため。
+        topics = [
+            (slug, mems)
+            for slug, mems in buckets.items()
+            if len(mems) >= (1 if slug in last_compiled else MIN_TOPIC_MEMORIES)
+        ]
+        # 並び順: stale 先頭 → 最後に編纂された時刻が古い順（未編纂は "" で最優先）
+        # → 同順位は記憶数降順。これで小クラスタにも巡回が回る。
+        topics.sort(key=lambda item: (item[0] not in stale, last_touched.get(item[0], ""), -len(item[1])))
         selected = topics[: self._cfg.topics_per_cycle]
         return [(slug, self._most_recent(mems)) for slug, mems in selected]
 
+    def _last_compiled(self, store: WikiStore, *, include_manual: bool = False) -> dict[str, str]:
+        """topic → 最後に編纂された時刻（ページ updated の最大値）。
+
+        手書きページ（manual）は編纂実績ではないので既定では除外する（下限判定用）。
+        ``include_manual=True`` は並び順用: manual だけの topic を毎サイクル先頭に
+        固定して LLM 呼び出しを浪費しないため、触られた時刻としては数える。
+        """
+        latest: dict[str, str] = {}
+        for page in store.list_pages():
+            if (page.manual and not include_manual) or not page.sources or not page.updated:
+                continue
+            topic = _topic_of_page(page)
+            if page.updated > latest.get(topic, ""):
+                latest[topic] = page.updated
+        return latest
+
     def _stale_topics(self, store: WikiStore, memories: list[Memory], persona: str) -> set[str]:
-        """source が非 active・消滅・または記憶がページより新しい topic を返す。"""
+        """source が消滅・tombstoned・またはページより新しい topic を返す。
+
+        archived は「意図的に沈めた」状態（decay の忘却 / wiki への吸収）なので stale にしない。
+        ここで stale にすると毎サイクル同じ topic を編纂し続ける（無限再編纂）。
+        """
         by_key = {m.key: m for m in memories}
         stale: set[str] = set()
         for page in store.list_pages():
             if not page.sources:
                 continue
-            topic = f"project-{page.project}" if page.project else "persona"
+            topic = _topic_of_page(page)
             for key in page.sources:
                 memory = by_key.get(key)
-                if memory is None or memory.lifecycle_status != "active":
+                if memory is None or memory.lifecycle_status == "tombstoned":
                     stale.add(topic)
                     break
+                if memory.lifecycle_status != "active":
+                    continue
                 if _page_is_behind(page.updated, getattr(memory, "updated_at", None) or memory.created_at):
                     stale.add(topic)
                     break
         return stale
+
+    def _archive_sources(self, ctx, sources: list[str], seen: set[str]) -> int:
+        """編纂済みの源記憶を archived へ沈める（decay と同じ lifecycle 遷移）。
+
+        削除はしない: ``page.sources`` は memory key を参照し続けるので、消すと腐敗検出が壊れる。
+        archived は既定の検索対象外（SearchQuery.lifecycle_status="active"）なので、
+        検索面からは実質消える。tombstone は行わない（不可逆なのは decay 側の領分）。
+        ``sources`` は active な記憶からのみ選ばれる（SELECT 段で除外済み）ので、
+        戻り値はそのまま「active → archived に遷移した数」になる。ただし同じ key を
+        複数ページが引用しうるので、``seen`` で cycle 内の二重計上を防ぐ。
+        """
+        if not self._cfg.archive_sources:
+            return 0
+        archived = 0
+        for key in sources:
+            if key in seen:
+                continue
+            try:
+                result = ctx.memory_repo.update(key, lifecycle_status="archived")
+            except Exception:
+                logger.warning("WikiWorker: failed to archive source %s", key, exc_info=True)
+                continue
+            if isinstance(result, Success):
+                seen.add(key)
+                archived += 1
+        return archived
 
     def _repair_links(self, store: WikiStore) -> int:
         """dangling な wikilink をプレーンテキストにする（repoint は意味判断が要るので削除側に倒す）。"""
@@ -193,7 +299,14 @@ class WikiWorker:
             for target in targets:
                 body = body.replace(f"[[{target}]]", target)
             if body != page.body:
-                store.write_page(slug, page.title, body, project=page.project, sources=page.sources)
+                store.write_page(
+                    slug,
+                    page.title,
+                    body,
+                    project=page.project,
+                    sources=page.sources,
+                    manual=page.manual,  # 落とすと手書きページが次サイクルで編纂に食われる
+                )
                 repaired += 1
         return repaired
 
@@ -215,9 +328,10 @@ class WikiWorker:
         store = WikiStore(self._settings.data_root, persona)
         all_result = ctx.memory_repo.find_all()
         memories: list[Memory] = list(all_result.value) if isinstance(all_result, Success) else []
+        archived_seen: set[str] = set()
         for topic, selected in self._select_topics(memories, now, store, persona):
             try:
-                self._compile_topic(ctx, persona, store, topic, selected, now)
+                self._compile_topic(ctx, persona, store, topic, selected, now, archived_seen)
             except Exception:
                 logger.exception("WikiWorker: topic=%s failed", topic)
                 self._record_event(ctx, persona, f"error: topic {topic} failed", None)
@@ -234,6 +348,7 @@ class WikiWorker:
         topic: str,
         memories: list[Memory],
         now: datetime,
+        archived_seen: set[str],
     ) -> None:
         pages = store.list_pages()
         raw = self._ask_llm(topic, memories, pages, now)
@@ -247,12 +362,12 @@ class WikiWorker:
             self._record_event(ctx, persona, f"error: invalid llm response for {topic}: {e}", None)
             return
 
-        candidate_keys = {m.key for m in memories}
+        candidates = {m.key: m for m in memories}
         existing_slugs = {p.slug for p in pages}
         compiled = 0
         for page in payload:
             try:
-                if self._apply_page(ctx, persona, store, topic, page, candidate_keys, existing_slugs):
+                if self._apply_page(ctx, persona, store, topic, page, candidates, existing_slugs, archived_seen):
                     compiled += 1
             except Exception as e:
                 logger.warning("WikiWorker: page apply failed (%s): %s", page.get("slug"), e)
@@ -267,8 +382,9 @@ class WikiWorker:
         store: WikiStore,
         topic: str,
         page: dict,
-        candidate_keys: set[str],
+        candidates: dict[str, Memory],
         existing_slugs: set[str],
+        archived_seen: set[str],
     ) -> bool:
         """1 ページ分を検証 → ファイル書込み → 索引更新 → 監査。適用したら True。"""
         slug = page.get("slug")
@@ -282,7 +398,7 @@ class WikiWorker:
         if len(body.encode()) > self._cfg.max_page_bytes:
             raise ValueError(f"body too large for {slug}: {len(body.encode())} bytes")
 
-        sources = [s for s in page.get("sources", []) if isinstance(s, str) and s in candidate_keys]
+        sources = [s for s in page.get("sources", []) if isinstance(s, str) and s in candidates]
         if not sources:
             raise ValueError(f"page {slug} has no valid sources")
         if len(sources) > self._cfg.max_sources_per_page:
@@ -305,6 +421,7 @@ class WikiWorker:
         )
         if isinstance(written, Failure):
             raise RuntimeError(f"write_page failed: {written.error}")
+        archived = self._archive_sources(ctx, sources, archived_seen)
         if self.vector_enabled:
             self._sync_vector(persona, slug, title, body)
 
@@ -330,6 +447,7 @@ class WikiWorker:
                 "topic": topic,
                 "sources": sources,
                 "deletes": page.get("delete", []),
+                "archived": archived,
                 "page_hash": _hash_of(title, body),
             },
         )
@@ -517,9 +635,11 @@ def _topic_of(memory: Memory) -> str:
 
 
 def _page_is_behind(page_updated: str | None, memory_updated: object) -> bool:
-    """ページの更新時刻が記憶より古いか（パース不能なら False = 触らない）。"""
-    from datetime import datetime
+    """ページの更新時刻が記憶より古いか（パース不能なら False = 触らない）。
 
+    wiki 側の時刻は秒精度で切り捨てて保存するので、秒未満の差は無視する（slack 2 秒）。
+    これを入れないと「同じ秒に書いた記憶」で毎サイクル stale 扱いになる。
+    """
     if not page_updated or memory_updated is None:
         return False
     try:
@@ -536,8 +656,14 @@ def _page_is_behind(page_updated: str | None, memory_updated: object) -> bool:
     else:
         return False
     if page_ts.tzinfo is None or memory_ts.tzinfo is None:
-        return page_ts.replace(tzinfo=None) < memory_ts.replace(tzinfo=None)
-    return page_ts < memory_ts
+        page_ts = page_ts.replace(tzinfo=None)
+        memory_ts = memory_ts.replace(tzinfo=None)
+    return page_ts < memory_ts - _STALE_SLACK
+
+
+def _topic_of_page(page: WikiPage) -> str:
+    """wiki ページ → クラスタ slug（``_topic_of`` と同じ写像）。"""
+    return f"project-{page.project}" if page.project else "persona"
 
 
 def _project_of(page: dict, topic: str) -> str | None:

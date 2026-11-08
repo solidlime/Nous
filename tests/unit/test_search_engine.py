@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
@@ -713,3 +714,43 @@ def _make_engine(memory_repo=None):
     semantic = AsyncMock()
     semantic.search.return_value = Success([(_make_memory("k2"), 0.8)])
     return SearchEngine(keyword, semantic, None, memory_repo=memory_repo)
+
+
+# ---------------------------------------------------------------------------
+# lifecycle post-filter（archived は既定で検索対象外）
+# ---------------------------------------------------------------------------
+
+
+class TestLifecyclePostFilter:
+    """decay / wiki 編纂が archived へ沈めた記憶を既定検索から落とす。"""
+
+    @staticmethod
+    def _engine() -> SearchEngine:
+        return SearchEngine(keyword_search=MagicMock())
+
+    def _results(self) -> list[SearchResult]:
+        active = SearchResult(memory=_mem("k-active"), score=1.0, source="keyword")
+        archived = SearchResult(
+            memory=replace(_mem("k-archived"), lifecycle_status="archived"),
+            score=1.0,
+            source="keyword",
+        )
+        tombstoned = SearchResult(
+            memory=replace(_mem("k-tombstoned"), lifecycle_status="tombstoned"),
+            score=1.0,
+            source="keyword",
+        )
+        return [active, archived, tombstoned]
+
+    def test_archived_dropped_by_default(self) -> None:
+        out = self._engine()._post_filter(self._results(), SearchQuery(text="x"))
+        assert [r.memory.key for r in out] == ["k-active"]
+
+    def test_archived_reachable_when_explicit(self) -> None:
+        out = self._engine()._post_filter(self._results(), SearchQuery(text="x", lifecycle_status="archived"))
+        assert [r.memory.key for r in out] == ["k-archived"]
+
+    def test_none_keeps_archived(self) -> None:
+        """lifecycle_status=None は管理・監査用の逃げ道（tombstoned だけ落とす）。"""
+        out = self._engine()._post_filter(self._results(), SearchQuery(text="x", lifecycle_status=None))
+        assert [r.memory.key for r in out] == ["k-active", "k-archived"]

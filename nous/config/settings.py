@@ -339,7 +339,12 @@ class WikiConfig(BaseModel):
 
     enabled: bool = False
     interval_seconds: int = 86400  # 24h cycle
+    # 毎日この時刻（ローカル TZ）に実行する。負値（-1）で旧来の interval 方式。
+    # 範囲外だと _next_delay の now.replace() が ValueError を投げ、worker が
+    # 無言で永久停止するので pydantic 側で潰す。
+    run_at_hour: int = Field(default=3, ge=-1, le=23)
     topics_per_cycle: int = 2  # 1 cycle で編纂する topic 数
+    archive_sources: bool = True  # 編纂済みの源記憶を archived へ沈める（削除はしない）
     max_memories_per_topic: int = 40
     max_sources_per_page: int = 40  # ページ 1 枚の sources 上限（超過は分割を強制）
     max_page_bytes: int = 8192

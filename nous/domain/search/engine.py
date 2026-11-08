@@ -301,6 +301,8 @@ class SearchEngine:
         with ``valid_at`` defaulting to now.
         """
         filtered = self._filter_out_tombstoned(results)
+        if query.lifecycle_status is not None:
+            filtered = self._filter_by_lifecycle(filtered, query.lifecycle_status)
         filtered = self._filter_by_emotion(filtered, query.emotion)
         filtered = self._filter_by_kind(filtered, query.kind)
         filtered = self._filter_by_tags(filtered, query.tags)
@@ -873,6 +875,17 @@ class SearchEngine:
                 repo.save_strength(strength)
             except Exception:
                 logger.debug("RIF suppression failed for %s", key, exc_info=True)
+
+    @staticmethod
+    def _filter_by_lifecycle(results: list[SearchResult], lifecycle_status: str) -> list[SearchResult]:
+        """lifecycle の完全一致で絞る（既定の検索は ``active`` のみ）。
+
+        archived は decay の忘却や wiki 編纂による吸収で「意図的に沈めた」状態なので、
+        既定（``SearchQuery.lifecycle_status="active"``）からは落とす。内部 API から
+        明示的に ``archived`` を渡せば従来どおり引ける（MCP / REST には導線が無い）。
+        ``"tombstoned"`` は ``_filter_out_tombstoned`` が先に全滅させるため到達しない。
+        """
+        return [r for r in results if getattr(r.memory, "lifecycle_status", "active") == lifecycle_status]
 
     @staticmethod
     def _filter_out_tombstoned(results: list[SearchResult]) -> list[SearchResult]:
