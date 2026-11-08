@@ -310,6 +310,11 @@ class WikiWorker:
 
         for doomed in page.get("delete", []) or []:
             if isinstance(doomed, str) and doomed in existing_slugs and doomed.startswith(f"{topic}-"):
+                victim = store.read_page(doomed)
+                if isinstance(victim, Success) and victim.value.manual:
+                    # ユーザーが手書きしたページは統合の犠牲にしない
+                    self._record_event(ctx, persona, f"kept {doomed}: manual page", {"slug": doomed})
+                    continue
                 store.delete_page(doomed)
                 if self.vector_enabled:
                     self._drop_vector(persona, doomed)

@@ -323,3 +323,32 @@ class TestManualPages:
             assert any("manual page kept" in s for s in summaries), summaries
         finally:
             conn.close()
+
+    def test_manual_page_survives_consolidation_delete(self, tmp_path) -> None:
+        """編纂の delete 指示でも手書きページは消さない（統合の犠牲にしない）。"""
+        memories = [_mem(f"a{i}", tags=["project:nous"]) for i in range(3)]
+        store = _store(tmp_path)
+        store.write_page(
+            "project-nous-notes",
+            "手書きノート",
+            "消えては困る本文",
+            project="nous",
+            sources=("a0",),
+            manual=True,
+        )
+        page = {
+            "slug": "project-nous-overview",
+            "title": "Nous 概要",
+            "body": "統合後の本文",
+            "sources": ["a0", "a1"],
+            "delete": ["project-nous-notes"],
+        }
+        conn, _ = _setup(tmp_path, memories, llm=_pages_json(page))
+        try:
+            kept = _store(tmp_path).read_page("project-nous-notes")
+            assert isinstance(kept, Success), "manual ページが delete 指示で消えた"
+            assert kept.value.body == "消えては困る本文"
+            summaries = [s for t, s in _event_rows(conn)]
+            assert any("kept project-nous-notes: manual page" in s for s in summaries), summaries
+        finally:
+            conn.close()
