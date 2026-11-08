@@ -330,6 +330,57 @@ class CorsConfig(BaseModel):
         return self
 
 
+class WikiConfig(BaseModel):
+    """ドリーミング (wiki 編纂) worker の設定（wiki_worker.py）。
+
+    計画書: docs/superpowers/plans/2026-11-07-wiki-dreaming.md §4.2。
+    既定 disabled — 有効化は NOUS_WIKI__ENABLED=true。
+    """
+
+    enabled: bool = False
+    interval_seconds: int = 86400  # 24h cycle
+    topics_per_cycle: int = 2  # 1 cycle で編纂する topic 数
+    max_memories_per_topic: int = 40
+    max_sources_per_page: int = 40  # ページ 1 枚の sources 上限（超過は分割を強制）
+    max_page_bytes: int = 8192
+    provider: str = "openrouter"
+    api_key: str | None = None
+    model: str = "openai/gpt-4o-mini"
+    base_url: str = "https://openrouter.ai/api/v1"
+
+    def get_effective_api_key(self, settings: Settings) -> str:
+        """API key 解決（FreshnessConfig.get_effective_api_key と同型）。"""
+        if self.api_key:
+            return self.api_key
+        if self.provider == "openrouter" and settings.openrouter_api_key:
+            return settings.openrouter_api_key
+        if self.provider == "anthropic" and settings.anthropic_api_key:
+            return settings.anthropic_api_key
+        if self.provider == "openai" and settings.openai_api_key:
+            return settings.openai_api_key
+        if self.provider == "google" and settings.google_api_key:
+            return settings.google_api_key
+        if self.provider == "opencode_go" and settings.opencode_go_api_key:
+            return settings.opencode_go_api_key
+
+        from nous.config.runtime_config import RuntimeConfigManager
+
+        key_name = f"{self.provider}_api_key"
+        value, _ = RuntimeConfigManager().get_effective_value("api_keys", key_name)
+        if value:
+            return str(value)
+
+        _legacy_env_keys = {
+            "openrouter": "OPENROUTER_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "openai": "OPENAI_API_KEY",
+            "google": "GEMINI_API_KEY",
+            "opencode_go": "OPENCODE_GO_API_KEY",
+        }
+        env_var = _legacy_env_keys.get(self.provider, "")
+        return os.environ.get(env_var, "")
+
+
 class FreshnessConfig(BaseModel):
     """LLM 鮮度評価 worker の設定（freshness_worker.py）。
 
@@ -457,6 +508,7 @@ class Settings(BaseSettings):
     consolidation: ConsolidationConfig = ConsolidationConfig()
     curation: CurationConfig = Field(default_factory=CurationConfig)
     freshness: FreshnessConfig = Field(default_factory=FreshnessConfig)
+    wiki: WikiConfig = Field(default_factory=WikiConfig)
     explorer: ExplorerConfig = Field(default_factory=ExplorerConfig)
     cors: CorsConfig = CorsConfig()
     irodori: IrodoriConfig = Field(default_factory=IrodoriConfig)
