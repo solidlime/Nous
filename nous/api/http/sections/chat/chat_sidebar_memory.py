@@ -1,4 +1,4 @@
-"""Memory settings — extraction, reflection, mental models, weights, forgetting."""
+"""Memory settings — extraction, reflection, mental models, weights."""
 
 
 def _render_memory_section(children: str = "") -> str:
@@ -57,15 +57,6 @@ def _render_reflection_section() -> str:
                                 <details class="chat-subsection" data-category="reflection">
                                     <summary>リフレクション <span class="chat-help-icon" data-category="reflection" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                                     <div class="details-body">
-                                        <div class="chat-check-row">
-                                            <input type="checkbox" id="chat-reflection-enabled" checked />
-                                            <label for="chat-reflection-enabled">リフレクション有効</label>
-                                        </div>
-                                        <div>
-                                            <div class="chat-field-label">実行間隔 (サイクル)</div>
-                                            <input type="number" id="chat-reflection-interval" class="chat-field-input"
-                                                min="1" max="168" step="1" value="24" />
-                                        </div>
                                         <div class="chat-check-row">
                                             <input type="checkbox" id="chat-session-summarize" checked />
                                             <label for="chat-session-summarize">セッション要約</label>
@@ -133,7 +124,6 @@ _BRAIN_HELP = {
     "brain_reasoning": "脳側の呼び出し（内省）で推論（reasoning）を有効化します。OFF でも未設定（null）なら解決済みLLM設定に従います（専用OFFなら会話用LLMの設定。設定ファイル直接編集時のみ null を指定できます）。ON で brain_reasoning_effort を強制使用、OFF（明示の false）で推論なし。OpenRouter 経由で推論だけが予算を使い切る事故対策として、明示 OFF では推論を無効化します。",
     "brain_max_tokens": "脳側呼び出し（内省）のトークン上限。0 で解決済みLLM設定に従います（専用OFFなら会話用の値、ONなら脳側既定）。明示設定時（256〜32768）は全モードで上書きし、reasoning を有効化した場合は推論分を賄うため自動で嵩上げされます（low 4096 / medium 5120 / high 9216 / max 17408）。reasoning 有効時、保存時に実効値へ引き上げる場合があります（0 のまま保存した場合は実行時に解決されます）。手動でそれ以上に設定した場合は引き下げません。",
     "emotion_gain": "感情が強い記憶ほど想起時に強化されやすくなる係数（扁桃体モデル）。上限は内部で固定されます。",
-    "rif_rho": "想起のたびに、手がかりを共有する競合記憶がわずかに抑制されます（検索誘発性忘却）。",
     "reflection_penalty": "リフレクション系の記憶が検索に引っかかりやすすぎないよう、想起スコアを押し下げる強さ。値が大きいほど思い出しにくくなります（思い出しにくさの踏ん張り）。",
     "reflection_injection_sim": "リフレクションを文脈に注入するときの類似度ゲート。この値より似ていない記憶は注入されません（無関係な思い出しの防止）。",
     "reflection_injection_margin": "注入候補の選択を、候補集合内の最良値からの差（マージン）でも許容します。小さいほど最良に近い候補だけが注入されます（0 で類似度ゲートのみ）。",
@@ -158,14 +148,8 @@ def _brain_help(key: str) -> str:
     return f'<span class="chat-help-tip" title="{text}" aria-label="説明" tabindex="0">?</span>'
 
 
-def _render_brain_simulation_section(children: str = "") -> str:
-    """脳シミュレーション設定 — 旧 memory_enrichment セクションの後継。
-
-    children: 忘却機構など、保存済み記憶を「鍛える/減衰させる」系の
-    ネスト subsection を想起と忘却の後に差し込む。
-    関数名は chat_sidebar.py の import 互換のため維持（chat_sidebar.py は
-    lane3 の所有外）。実体は brain_simulation カテゴリの 1 セクション。
-    """
+def _render_brain_simulation_section() -> str:
+    """脳シミュレーション設定 — 旧 memory_enrichment セクションの後継。"""
     help_ = _brain_help
     return f"""
                         <!-- Brain simulation -->
@@ -234,10 +218,6 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                     <summary>想起と忘却</summary>
                                     <div style="padding-top:6px;">
                                         <div>
-                                            <div class="chat-field-label">競合抑制係数 ρ {help_("rif_rho")}</div>
-                                            <input type="number" id="chat-brain-rif-rho" class="chat-field-input" min="0" max="0.5" step="0.01" value="0.05" />
-                                        </div>
-                                        <div>
                                             <div class="chat-field-label">リンク分離しきい値 {help_("separation")}</div>
                                             <!-- 将来実装: upsert_link(similarity=) の類似度ソース未接線のため休止中 -->
                                             <input type="number" id="chat-brain-separation-threshold" class="chat-field-input" min="0.5" max="1" step="0.01" value="0.75" disabled />
@@ -291,7 +271,6 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                         </div>
                                     </div>
                                 </details>
-                                {children}
                                 <details class="chat-subsection">
                                     <summary>可視化</summary>
                                     <div style="padding-top:6px;">
@@ -303,34 +282,3 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                 </details>
                             </div>
                         </details>"""
-
-
-def _render_forgetting_section() -> str:
-    """Forgetting mechanism — nested child of the 脳シミュレーション group.
-
-    時間減衰ベースの忘却ワーカー設定。脳の「想起と忘却」(RIF) と同じ
-    忘却系なので brain_simulation 配下にまとめる。
-    """
-    return """
-                                <!-- Forgetting (child of brain group, moved from Settings) -->
-                                <details class="chat-subsection" data-category="forgetting">
-                                    <summary>忘却機構 <span class="chat-help-icon" data-category="forgetting" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
-                                    <div class="details-body">
-                                        <div class="chat-check-row">
-                                            <input type="checkbox" id="chat-forgetting-enabled" />
-                                            <label for="chat-forgetting-enabled">忘却機構を有効化</label>
-                                        </div>
-                                        <div>
-                                            <div class="chat-field-label">減衰間隔（秒）</div>
-                                            <input type="number" id="chat-forgetting-decay-interval-seconds" class="chat-field-input" min="60" step="1" value="86400" />
-                                        </div>
-                                        <div>
-                                            <div class="chat-field-label chat-field-label-row">
-                                                <span>最小強度</span>
-                                                <span id="chat-forgetting-min-strength-val" class="chat-field-value">0.10</span>
-                                            </div>
-                                            <input type="range" id="chat-forgetting-min-strength" class="chat-field-input" min="0" max="1" step="0.05" value="0.1"
-                                                data-mirror="chat-forgetting-min-strength-val" data-mirror-format="fixed2" />
-                                        </div>
-                                    </div>
-                                </details>"""

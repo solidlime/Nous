@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC
 from typing import TYPE_CHECKING, Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -14,7 +14,7 @@ from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
 
 if TYPE_CHECKING:
-    from nous.domain.memory.entities import Memory, MemoryStrength
+    from nous.domain.memory.entities import Memory
 
 TZ = ZoneInfo("Asia/Tokyo")
 
@@ -29,7 +29,6 @@ class InMemoryMemoryRepository:
 
     def __init__(self) -> None:
         self._store: dict[str, Memory] = {}
-        self._strengths: dict[str, MemoryStrength] = {}
         self._blocks: dict[str, dict] = {}
 
     def save(self, memory: Memory) -> Result[str, RepositoryError]:
@@ -104,18 +103,6 @@ class InMemoryMemoryRepository:
 
     def find_all(self) -> Result[list[Memory], RepositoryError]:
         return Success(list(self._store.values()))
-
-    def get_strength(self, key: str) -> Result[MemoryStrength | None, RepositoryError]:
-        return Success(self._strengths.get(key))
-
-    def save_strength(self, strength: MemoryStrength) -> Result[None, RepositoryError]:
-        self._strengths[strength.memory_key] = strength
-        return Success(None)
-
-    def get_all_strengths(
-        self,
-    ) -> Result[list[MemoryStrength], RepositoryError]:
-        return Success(list(self._strengths.values()))
 
     def get_block(self, block_name: str, persona: str = "default") -> Result[dict | None, RepositoryError]:
         return Success(self._blocks.get(block_name))
@@ -349,68 +336,6 @@ class TestGetStats:
         assert stats["tag_distribution"]["travel"] == 1
         assert stats["emotion_distribution"]["joy"] == 1
         assert stats["emotion_distribution"]["sadness"] == 1
-
-
-class TestBoostRecall:
-    async def test_boost_creates_strength_if_missing(self, service: MemoryService):
-        created = (await service.create_memory(content="remember")).value
-        result = service.boost_recall(created.key)
-        assert result.is_ok
-        strength = result.value
-        assert strength.recall_count == 1
-        assert strength.stability == 1.0  # v4.0 (audit H5): recall no longer inflates stability
-
-    async def test_boost_increments(self, service: MemoryService, repo: InMemoryMemoryRepository):
-        created = (await service.create_memory(content="recall")).value
-        service.boost_recall(created.key)
-        result = service.boost_recall(created.key)
-        assert result.is_ok
-        assert result.value.recall_count == 2
-
-    # --- tests merged from test_boost_recall.py (direct MagicMock approach) ---
-
-    def test_boost_recall_updates_strength(self) -> None:
-        """boost_recall() が呼ばれると strength が更新される"""
-        from nous.domain.memory.entities import MemoryStrength
-
-        repo = MagicMock()
-        existing_strength = MemoryStrength(memory_key="mem_001")
-        repo.get_strength.return_value = MagicMock(is_ok=True, value=existing_strength)
-        repo.save_strength.return_value = MagicMock(is_ok=True)
-
-        from nous.domain.memory.service import MemoryService
-
-        service = MemoryService(repo)
-        result = service.boost_recall("mem_001")
-
-        assert result.is_ok
-        repo.save_strength.assert_called_once()
-
-    def test_boost_recall_creates_new_strength_if_not_exists(self) -> None:
-        """strength が存在しない場合は新規作成する"""
-        repo = MagicMock()
-        repo.get_strength.return_value = MagicMock(is_ok=True, value=None)
-        repo.save_strength.return_value = MagicMock(is_ok=True)
-
-        from nous.domain.memory.service import MemoryService
-
-        service = MemoryService(repo)
-        result = service.boost_recall("mem_new")
-
-        assert result.is_ok
-        repo.save_strength.assert_called_once()
-
-    def test_boost_recall_returns_failure_on_repo_error(self) -> None:
-        """リポジトリエラー時は Failure を返す"""
-        repo = MagicMock()
-        repo.get_strength.return_value = Failure(RepositoryError("DB error"))
-
-        from nous.domain.memory.service import MemoryService
-
-        service = MemoryService(repo)
-        result = service.boost_recall("mem_fail")
-
-        assert not result.is_ok
 
 
 class TestMemoryBlocks:

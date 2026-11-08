@@ -40,7 +40,6 @@ function _sortMemories(arr) {
     if (s === 'date_desc') sorted.sort(function(a,b){ return (b.created_at||'').localeCompare(a.created_at||''); });
     else if (s === 'date_asc') sorted.sort(function(a,b){ return (a.created_at||'').localeCompare(b.created_at||''); });
     else if (s === 'imp_desc') sorted.sort(function(a,b){ return (b.importance||0) - (a.importance||0); });
-    else if (s === 'str_desc') sorted.sort(function(a,b){ return (b.strength||0) - (a.strength||0); });
     else if (s === 'updated_desc') sorted.sort(function(a,b){ return (b.updated_at||'').localeCompare(a.updated_at||''); });
     return sorted;
 }
@@ -85,7 +84,6 @@ async function loadMemories(page) {
     }
     const ds = S.dashCache;
     const stats = ds.stats || {};
-    const str = ds.strengths || {};
 
     // Build stats HTML
     const tagDist = stats.tag_distribution || {};
@@ -144,7 +142,6 @@ async function loadMemories(page) {
     dashboardHtml += '<div class="card-title"><i data-lucide="bar-chart-3"></i> Memory Stats</div>';
     dashboardHtml += '<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">';
     dashboardHtml += '<div><div class="stat-value">' + (stats.total_count ?? '--') + '</div><div class="stat-label">Total Memories</div></div>';
-    dashboardHtml += '<div><div class="stat-value stat-accent-green">' + (str.avg ?? '--') + '</div><div class="stat-label">Avg Strength</div></div>';
     dashboardHtml += '<div><div class="stat-value stat-accent-blue">' + (stats.tagged_ratio != null ? (stats.tagged_ratio*100).toFixed(1)+'%' : '--') + '</div><div class="stat-label">Tagged</div></div>';
     dashboardHtml += '<div><div class="stat-value stat-accent-yellow">' + (stats.linked_ratio != null ? (stats.linked_ratio*100).toFixed(1)+'%' : '--') + '</div><div class="stat-label">Linked</div></div>';
     dashboardHtml += '</div>';

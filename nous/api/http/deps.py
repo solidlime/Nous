@@ -93,15 +93,6 @@ def _memory_to_dict(m) -> dict:
     return d
 
 
-def _strength_to_dict(s) -> dict:
-    """Convert a MemoryStrength dataclass to a JSON-safe dict."""
-    d = asdict(s)
-    for k in ("last_decay", "last_recall", "last_utility"):
-        if k in d and d[k] is not None:
-            d[k] = d[k].isoformat()
-    return d
-
-
 def _resolve_persona_from_request(request: Request, *, default: str | None = None, api_key: str | None = None) -> str:
     """Resolve persona from path params, HTTP headers, query params, or environment.
 

@@ -322,11 +322,6 @@ def _shutdown() -> None:
         _workers.clear()
 
     try:
-        AppContextRegistry.stop_decay_workers(timeout=5)
-    except Exception:
-        logger.exception("Shutdown: decay worker stop failed")
-
-    try:
         asyncio.run(AppContextRegistry.close_all_async())
     except Exception:
         logger.exception("Shutdown: close_all_async failed")

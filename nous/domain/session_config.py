@@ -32,13 +32,6 @@ class SessionConfig(BaseModel):
     session_summarize: bool = Field(default=True, description="セッション終了時に会話を要約して保存します。")
     episode_search_enabled: bool = Field(default=True, description="過去の会話エピソードも検索対象に含めます。")
 
-    # Generative Agents-style reflection
-    reflection_enabled: bool = Field(default=True, description="会話を振り返り、気づきや傾向を自動抽出します。")
-    reflection_min_interval_hours: float = Field(default=1.0, description="リフレクションを実行する最小間隔（時間）。")
-    reflection_interval_cycles: int = Field(
-        default=24, ge=1, description="周期リフレクションの実行間隔（DecayWorker サイクル数）。"
-    )
-
     # Mental Model abstraction
     mental_model_enabled: bool = Field(default=True, description="ユーザーの性格・好みのモデルを自動構築します。")
     mental_model_min_samples: int = Field(default=3, description="モデル更新に必要な最小サンプル数。")
@@ -108,7 +101,6 @@ class SessionConfig(BaseModel):
     # Brain simulation (cross-lane contract: key names / defaults are fixed —
     # lane3 UI consumes them verbatim; see docs/superpowers/plans/2026-09-06-brain-simulation.md)
     brain_emotion_gain_k: float = Field(default=0.5, description="感情による記憶強化の利得係数。")
-    brain_rif_suppression_rho: float = Field(default=0.05, description="検索誘発性忘却の抑制率。")
     # Jev 型判定ゲート / multi-hop 検索 (#011)。REST/MCP 両経路の per-persona 既定値。
     brain_decision_enabled: bool = Field(
         default=False, description="検索結果を LLM で判定し、しきい値未満の候補を除きます。"
@@ -230,20 +222,6 @@ class SessionConfig(BaseModel):
             self.brain_max_tokens = floor
         return self
 
-    # Forgetting
-    forgetting_enabled: bool = Field(
-        default=True,
-        description="重要度の低い記憶を時間経過で減衰・削除します。FSRS 忘却曲線・STM→LTM 昇格・archive を含む SWS 相当のワーカーを起動します。",
-    )
-    forgetting_decay_interval_seconds: int = Field(
-        default=3600, description="重要度を減衰させる処理の実行間隔（秒）。"
-    )  # 1h sweep — 減衰は経過時間依存なので sweep は平滑性にのみ影響
-    forgetting_min_strength: float = Field(default=0.1, description="これを下回った記憶を忘却対象にします。")
-    h5_stability_clamp_enabled: bool = Field(
-        default=False,
-        description="監査 H5 マイグレーション: 感情増幅で膨張した stability を 1 回だけ 1.0 に clamp する。v4.0 移行スクリプトが有効化する。",
-    )
-
     @field_validator("voice_emotion_mode")
     @classmethod
     def _clamp_emotion_mode(cls, v: str) -> str:
@@ -278,11 +256,6 @@ class SessionConfig(BaseModel):
         if math.isnan(f) or math.isinf(f):
             return 1.0
         return max(0.25, min(4.0, f))
-
-    @field_validator("reflection_min_interval_hours")
-    @classmethod
-    def _clamp_reflection_interval(cls, v: float) -> float:
-        return max(0.0, min(168.0, v))
 
     @field_validator(
         "retrieval_recency_weight",

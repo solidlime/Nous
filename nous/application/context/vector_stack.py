@@ -19,7 +19,6 @@ from nous.domain.search.engine import SearchEngine, invalidate_query_cache
 from nous.domain.search.ranker import (
     ChainedRanker,
     EmotionRecallBiasRanker,
-    ForgettingCurveRanker,
     RRFRanker,
     TopicAffinityRanker,
 )
@@ -206,12 +205,6 @@ class VectorStackMixin:
                 result = await vector_store.retrieve_vectors(getattr(semantic, "persona", ""), keys)
                 return result.value if isinstance(result, Success) else {}
 
-            def _strength_lookup(key: str) -> tuple[float, float] | None:
-                result = self.memory_repo.get_strength(key)
-                if isinstance(result, Success) and result.value is not None:
-                    return (result.value.strength, result.value.stability)
-                return None
-
             def _resolve_decision_judge() -> DecisionJudge | None:
                 """per-persona ChatConfig から Jev 型判定ゲート用 judge を生成（未設定時 None）。"""
                 from nous.infrastructure.llm.decision_judge import resolve_decision_judge
@@ -220,7 +213,6 @@ class VectorStackMixin:
 
             ranker = ChainedRanker(
                 RRFRanker(),
-                ForgettingCurveRanker(_strength_lookup),
                 EmotionRecallBiasRanker(),
                 TopicAffinityRanker(),
             )

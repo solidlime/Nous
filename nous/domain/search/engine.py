@@ -21,7 +21,6 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Protocol
 
 from nous.domain.memory import wiring_events
-from nous.domain.memory.query_service import resolve_brain_config
 from nous.domain.search.token_kind_gate import (
     DEFAULT_INJECTION_MAX_BM25,
     bar_for_tokens,
@@ -73,10 +72,6 @@ _CACHE_MAX = 256
 
 # decision_bypass の warn 集約で覚えておく相関 ID の上限（LRU）。
 _BYPASS_WARN_MAX = 256
-# Retrieval-induced forgetting (Anderson 1994, brain-sim design §3.4):
-# suppress the top-K candidates excluded from the final recall result.
-_RIF_TOP_K = 5
-_STRENGTH_FLOOR = 0.005  # min_strength（nous/infrastructure/config/settings.py:91）
 # 判定ゲート**通過後**の時間減衰に持たせる下限。順位付けにだけ効かせるので、
 # 古い記憶が並べ替えだけで top_k から落ちる事故を防ぐ（最大 1/_DECISION_TIME_FLOOR 倍までしか沈めない）。
 _DECISION_TIME_FLOOR = 0.5
@@ -189,10 +184,6 @@ class SearchQuery:
     valid_at: datetime | None = None  # Only return memories valid at this timestamp
     kind: str | None = None  # episodic / semantic / procedural / prospective
     sort: str | None = None  # "updated_at" 指定時は updated_at 降順
-    # Retrieval-induced forgetting gate (#081 REVIEW): only the true recall
-    # path (chat pipeline memory retrieval consumed by the LLM) sets True.
-    # Exploration / dup_check / reflection / admin searches stay False.
-    apply_rif: bool = False
     # 真の recall 経路（chat）専用の最終スコア段。None なら従来の RRF/減衰段で完結。
     # frozen で hashable な RankPolicy をそのままキャッシュキー要素に使う。
     rank_policy: RankPolicy | None = None
@@ -390,9 +381,6 @@ class SearchEngine:
         if cache_key is not None and result.value:
             _cache_put(cache_key, result.value)
         recalled = await self._finalize(result.value, query)
-        # RIF 競合選抜は現行契約どおり「engine 順の上位 top_k」を維持
-        # （rank_policy 段は順位付けのみで競合 membership を変えない）。
-        self._apply_rif(result.value[: query.top_k], recalled, query)
         return Success(recalled)
 
     async def _finalize(
@@ -827,54 +815,6 @@ class SearchEngine:
             )
         ranked.sort(key=lambda r: r.score, reverse=True)
         return ranked
-
-    def _apply_rif(self, candidates: list[SearchResult], recalled: list[SearchResult], query: SearchQuery) -> None:
-        """Retrieval-induced forgetting: suppress top-K non-recalled competitors.
-
-        Fires ONLY when ``query.apply_rif`` is True (true recall path).
-        Competitors = the highest-ranked candidates (excluding tombstoned
-        memories) that did NOT make the final recall result — at most
-        ``_RIF_TOP_K`` per search, ``strength *= (1 - ρ)`` each. Recalled
-        memories are untouched; importance is untouched; no wiring emit.
-        Suppression failures are logged and never break the search.
-
-        Applied on the fresh-search path only: re-applying on cache hits
-        would suppress the same competitors twice within the 30s TTL.
-        """
-        if not query.apply_rif:
-            return
-        repo = self._memory_repo
-        if repo is None or not candidates:
-            return
-        recalled_keys = {r.memory.key for r in recalled}
-        competitors: list[str] = []
-        for r in candidates:
-            if r.memory.key in recalled_keys:
-                continue
-            if getattr(r.memory, "lifecycle_status", "active") == "tombstoned":
-                continue
-            competitors.append(r.memory.key)
-            if len(competitors) >= _RIF_TOP_K:
-                break
-        if not competitors:
-            return
-        # ponytail: ρ=0.05 は文献上の根拠のない arbitrary 値（RIF 機構自体は Anderson 1994）。
-        # ablation テスト（RIF ON/OFF で検索精度が変わるか）が整備されるまで演出扱い。
-        rho = resolve_brain_config(repo)["brain_rif_suppression_rho"]
-        if rho <= 0:
-            return
-        for key in competitors:
-            try:
-                strength_result = repo.get_strength(key)
-                strength = (
-                    strength_result.value if strength_result.is_ok and strength_result.value is not None else None
-                )
-                if strength is None:
-                    continue
-                strength.strength = max(_STRENGTH_FLOOR, strength.strength * (1.0 - rho))
-                repo.save_strength(strength)
-            except Exception:
-                logger.debug("RIF suppression failed for %s", key, exc_info=True)
 
     @staticmethod
     def _filter_by_lifecycle(results: list[SearchResult], lifecycle_status: str) -> list[SearchResult]:

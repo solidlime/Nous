@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-from nous.domain.memory.entities import Memory, MemoryStrength
+from nous.domain.memory.entities import Memory
 from nous.domain.memory.entity_extractor import SimpleEntityExtractor
 from nous.domain.memory.memory_link import LINK_TYPES, MemoryLink
 from nous.domain.memory.recall_annotator import RecallAnnotation, RecallAnnotator
-from nous.domain.memory.repository import (
-    MemoryAuxiliaryRepository,
-    MemoryRepository,
-    MemoryStrengthRepository,
-)
+from nous.domain.memory.repository import MemoryAuxiliaryRepository, MemoryRepository
 from nous.domain.memory.service import MemoryService
 
 # SudachiExtractor / HybridEntityExtractor は __getattr__ で遅延ロード
@@ -35,8 +31,6 @@ __all__ = [
     "MemoryLink",
     "MemoryRepository",
     "MemoryService",
-    "MemoryStrength",
-    "MemoryStrengthRepository",
     "RecallAnnotator",
     "RecallAnnotation",
     "SimpleEntityExtractor",

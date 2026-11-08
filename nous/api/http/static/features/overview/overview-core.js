@@ -61,7 +61,6 @@ async function loadOverview() {
         const ctx = data.context || {};
         const equip = data.equipment || {};
         const items = data.items || [];
-        const str = data.strengths || {};
 
         // --- State memories: prefer state_memories, fallback to context_state ---
         const sm = data.state_memories || {};

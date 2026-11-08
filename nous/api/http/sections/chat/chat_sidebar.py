@@ -6,7 +6,6 @@ from .chat_sidebar_core import _render_context_section, _render_core_section, _r
 from .chat_sidebar_media import _render_image_section, _render_voice_section
 from .chat_sidebar_memory import (
     _render_brain_simulation_section,
-    _render_forgetting_section,
     _render_memory_section,
     _render_mental_section,
     _render_reflection_section,
@@ -50,9 +49,8 @@ def render_chat_sidebar() -> str:
       1. connection & generation (core, context)
       2. memory pipeline (write → consolidate → read):
          記憶・抽出 (intake: mental model, reflection as
-         nested children) → 脳シミュレーション (consolidation/decay:
-         REM, dedicated LLM, learning gates, recall & forgetting,
-         forgetting mechanism as nested children) → 検索重み (retrieval)
+         nested children) → 脳シミュレーション (consolidation:
+         REM, dedicated LLM, learning gates, recall) → 検索重み (retrieval)
       3. external tools (MCP, skills)
       4. media output (image, voice)
       5. everything else (debug) — always last
@@ -63,7 +61,7 @@ def render_chat_sidebar() -> str:
             _render_core_section(),
             _render_context_section(),
             _render_memory_section(_render_mental_section() + _render_reflection_section()),
-            _render_brain_simulation_section(_render_forgetting_section()),
+            _render_brain_simulation_section(),
             _render_weights_section(),
             _render_mcp_section(sys.executable),
             _render_skills_section(),

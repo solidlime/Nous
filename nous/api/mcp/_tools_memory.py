@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import TYPE_CHECKING
 
 from nous.api.mcp._envelope import ToolErrorCode, tool_error, tool_ok
@@ -12,7 +11,7 @@ from nous.domain.search.engine import SearchQuery, SearchResult
 from nous.domain.search.policy import RankPolicy
 from nous.domain.shared.errors import DuplicateMemoryError
 from nous.domain.shared.result import Success
-from nous.domain.shared.time_utils import format_iso, get_now, relative_time_str
+from nous.domain.shared.time_utils import format_iso, relative_time_str
 from nous.domain.value_objects import _VALID_EMOTIONS, ensure_project_tag, normalize_importance
 
 # Default recency boost for memory_search (RRF recency bonus multiplier).
@@ -133,10 +132,6 @@ async def _tool_memory_read(
     if memory_key:
         result = ctx.memory_service.get_memory(memory_key)
         if result.is_ok:
-            try:
-                ctx.memory_service.boost_recall(memory_key)
-            except Exception as e:
-                logger.warning(f"boost_recall failed: {e}")
             m = result.value
             ctx.record_memory_access(m.key)
             emotion_line = f"Emotion: {m.emotion}"
@@ -497,14 +492,9 @@ async def _tool_memory_search(
         )
     ctx.memory_service.log_search(query, "hybrid", len(result.value))
 
-    # Boost the top hits (cap 10) and record co-access (cap 3 — don't churn
-    # the 20-item co-access window).
+    # Record co-access for the top hits (cap 3 — don't churn the 20-item
+    # co-access window).
     hits: list[SearchResult] = result.value if isinstance(result, Success) else []
-    for sr in hits[: min(10, len(hits))]:
-        try:
-            ctx.memory_service.boost_recall(sr.memory.key)
-        except Exception as e:
-            logger.warning(f"boost_recall failed: {e}")
     for sr in hits[: min(3, len(hits))]:
         ctx.record_memory_access(sr.memory.key)
 
@@ -549,56 +539,11 @@ async def _tool_memory_search(
     return tool_ok({"memories": memories, "total_count": total_count})
 
 
-def _compute_retrievability_health(ctx: AppContext) -> dict | None:
-    """audit M3 — metamemory health: how much of the store is retrievable *now*.
-
-    Averages the FSRS R(t) of every stored strength row; the label is the plain
-    operational read of that number (healthy / decaying / critical). None when
-    nothing is stored yet — “no data” is not “healthy”.
-    """
-    try:
-        res = ctx.memory_repo.get_all_strengths()
-        if not res.is_ok or not res.value:  # type: ignore[union-attr]
-            return None
-        now = get_now()
-        # Stored timestamps may be naive or aware depending on when they were
-        # written; compare both sides in the same frame (decay_worker does the same).
-        if now.tzinfo is not None:
-            now = now.replace(tzinfo=None)
-        values: list[float] = []
-        for strength in res.value:  # type: ignore[union-attr]
-            last = getattr(strength, "last_decay", None) or getattr(strength, "last_recall", None)
-            if not isinstance(last, datetime):
-                # Never decayed/recalled: still fully retrievable, and a malformed
-                # stored value must not be mistaken for a real timestamp.
-                values.append(1.0)
-                continue
-            if getattr(last, "tzinfo", None) is not None:
-                last = last.replace(tzinfo=None)
-            elapsed_hours = max(0.0, (now - last).total_seconds() / 3600.0)
-            values.append(float(strength.compute_recall(elapsed_hours)))
-        if not values:
-            return None
-        avg = sum(values) / len(values)
-        label = "healthy" if avg >= 0.7 else "decaying" if avg >= 0.4 else "critical"
-        return {"average_retrievability": round(avg, 3), "label": label, "counted": len(values)}
-    except Exception:
-        logger.debug("retrievability health failed", exc_info=True)
-        return None
-
-
 async def _tool_memory_stats(ctx: AppContext, persona: str, top_n: int = 20) -> str:
     """Get memory statistics."""
     result = ctx.memory_service.get_stats(top_n=top_n)
     if result.is_ok:
-        # audit M3 — metamemory health. Merged only when stats is a mapping so
-        # non-dict payloads keep their shape.
-        health = _compute_retrievability_health(ctx)
-        if health is not None and isinstance(result.value, dict):
-            stats: object = {**result.value, "retrievability_health": health}
-        else:
-            stats = result.value
-        result_text = tool_ok(stats)
+        result_text = tool_ok(result.value)
         await ctx.event_bus.publish(
             "tool.called",
             {

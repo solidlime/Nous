@@ -3,7 +3,6 @@
 「過去の記憶が直近の記憶のように扱われる」問題の対策:
 - memory_search が age/created_at/updated_at を返すこと（LLM が古さを知り得る）
 - recency_weight 既定値（0.05）は相対乗数のタイブレークで順位を壊さないこと
-- 定期 ReflectionEngine のプロンプトに相対時刻が付くこと（per-turn 24h 窓は廃止）
 """
 
 from __future__ import annotations
@@ -206,20 +205,3 @@ class TestRRFRecencyOrdering:
         ]
         ranked = ranker.rank(results, _query(importance_weight=0.3, recency_weight=0.4))
         assert ranked[0].memory.key == "relevant_old"
-
-
-# ---------------------------------------------------------------------------
-# 4. ReflectionEngine._build_system_message の時刻表記
-# ---------------------------------------------------------------------------
-
-
-class TestReflectionEngineSystemMessage:
-    def test_memory_lines_include_relative_time(self):
-        from nous.application.chat.reflection import ReflectionEngine
-
-        engine = ReflectionEngine(schema=[], config=None)
-        memories = [_mem("m1", content="Old fact.", created_days_ago=90)]
-        message = engine._build_system_message("test_char", memories)
-        assert "- Old fact." in message
-        assert "mo ago" in message
-        assert "括弧内の時刻を考慮" in message

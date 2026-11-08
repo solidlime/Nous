@@ -3,9 +3,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-import pytest
-
-from nous.domain.memory.entities import Memory, MemoryStrength
+from nous.domain.memory.entities import Memory
 
 TZ = ZoneInfo("Asia/Tokyo")
 
@@ -51,50 +49,3 @@ class TestMemory:
         m.importance = 0.8
         assert m.content == "updated"
         assert m.importance == 0.8
-
-
-class TestMemoryStrength:
-    def test_defaults(self):
-        s = MemoryStrength(memory_key="memory_20250101120000")
-        assert s.strength == 1.0
-        assert s.stability == 1.0
-        assert s.recall_count == 0
-
-    def test_compute_recall_at_zero_hours(self):
-        s = MemoryStrength(memory_key="k")
-        assert s.compute_recall(0.0) == pytest.approx(1.0)
-
-    def test_compute_recall_decays_over_time(self):
-        s = MemoryStrength(memory_key="k", stability=1.0)
-        r24 = s.compute_recall(24.0)  # 1 day elapsed, stability=1 day => FSRS: 20^(-0.5) ≈ 0.224
-        assert r24 == pytest.approx(20**-0.5, rel=1e-5)
-
-    def test_higher_stability_slower_decay(self):
-        s_low = MemoryStrength(memory_key="k", stability=1.0)
-        s_high = MemoryStrength(memory_key="k", stability=10.0)
-        elapsed = 48.0  # 2 days
-        assert s_high.compute_recall(elapsed) > s_low.compute_recall(elapsed)
-
-    def test_compute_recall_zero_stability(self):
-        s = MemoryStrength(memory_key="k", stability=0.0)
-        assert s.compute_recall(1.0) == 0.0
-
-    def test_boost_on_recall(self):
-        """audit H5: boost_on_recall は stability を変えない（recall メタのみ更新）."""
-        s = MemoryStrength(memory_key="k", stability=1.0, recall_count=0)
-        s.boost_on_recall()
-        assert s.recall_count == 1
-        assert s.stability == 1.0  # unchanged (v4.0: emotion/recall no longer inflates stability)
-        assert s.strength == 1.0
-
-    def test_boost_stability_stable_across_recalls(self):
-        s = MemoryStrength(memory_key="k", stability=300.0)
-        s.boost_on_recall()
-        assert s.stability == 300.0
-
-    def test_multiple_boosts(self):
-        s = MemoryStrength(memory_key="k", stability=1.0)
-        for _ in range(5):
-            s.boost_on_recall()
-        assert s.recall_count == 5
-        assert s.stability == 1.0

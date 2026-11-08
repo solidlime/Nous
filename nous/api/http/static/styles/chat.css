@@ -2483,9 +2483,6 @@ input[type="range"].chat-field-input:focus {
 #settings-panel details[data-category="brain_simulation"] summary::before {
   color: var(--accent-yellow);
 }
-#settings-panel details[data-category="forgetting"] summary::before {
-  color: var(--accent-red);
-}
 
 /* Compact action button (test generation / test playback) */
 .chat-btn-sm {

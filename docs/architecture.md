@@ -61,7 +61,6 @@ nous/
 │   │   ├── tools/             # 組み込みツール定義
 │   │   └── service.py         # チャットサービス
 │   ├── workers/               # バックグラウンドワーカー
-│   │   ├── decay_worker.py    # 感情/体調減衰＋リンク減衰
 │   │   └── consolidation_worker.py  # 記憶統合
 │   └── use_cases.py           # AppContextRegistry
 ├── domain/                    # ドメインモデル
@@ -128,7 +127,7 @@ nous/
     ↓
 [Memory Write] memory_create → vectorize → Qdrant index
     ↓
-[Background] decay_worker / consolidation_worker / snapshot_worker
+[Background] consolidation_worker / snapshot_worker
 ```
 
 ---
@@ -196,7 +195,6 @@ nous/
 | `NOUS_TIMEZONE` | `Asia/Tokyo` | タイムゾーン |
 | `NOUS_SANDBOX__ENABLED` | `true` | コード実行サンドボックス |
 | `NOUS_MEMORY_ENRICHMENT__ENABLED` | `true` | 脳側 LLM の有効化（矛盾判定・内省の共通ゲート）。gist 生成は `NOUS_CONSOLIDATION__LLM_GIST_ENABLED` で別制御。enrichment 自体は 2026-11-08 廃止 |
-| `NOUS_FORGETTING__ENABLED` | `true` | Ebbinghaus 忘却曲線 |
 
 全設定項目は WebUI の**設定画面**から確認・変更できます（WebUI からの変更は `docker-compose.yml` の環境変数より優先されます）。
 

@@ -6,7 +6,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from nous.domain.memory.cue import DUE_REMINDER_TAG, due_cues
+from nous.domain.memory.cue import due_cues
 from nous.domain.profile.tokens import DEFAULT_PROFILE_MAX_TOKENS, estimate_tokens
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now, relative_time_str
@@ -135,7 +135,7 @@ async def _tool_get_context(
             logger.debug("_tool_get_context: wiki count failed: %s", e)
             wiki_page_count = None
 
-    # 期限が近い／切れた予定・約束は due_cues（goal 行の ⏰）と DUE_REMINDER_TAG の one-shot で出る。
+    # 期限が近い／切れた予定・約束は due_cues（goal 行の ⏰）が毎回ライブ計算で出す。
     time_since = ""
     if state.last_conversation_time:
         time_since = relative_time_str(state.last_conversation_time)
@@ -145,7 +145,8 @@ async def _tool_get_context(
         ctx.persona_service.record_conversation_time(persona)
 
     # audit M2 — prospective memory: commitments whose deadline is inside the
-    # window are marked ⏰ on their line (and reminded by the hourly sweep).
+    # window are marked ⏰ on their line. 減衰ワーカー廃止で due_reminder の
+    # one-shot 生産者は無くなったため、時刻表示はこの due_cues 経路のみ。
     due_labels = {m.key: label for m, label in due_cues(goals or [], get_now()) if getattr(m, "key", None)}
 
     # Read one-shot state memories (physical_state/mental_state) via service
@@ -154,8 +155,6 @@ async def _tool_get_context(
         for tag_name, label in [
             ("physical_state", "💪 身体状態"),
             ("mental_state", "🧠 精神状態"),
-            # audit M2 — the hourly cue sweep leaves due commitments here
-            (DUE_REMINDER_TAG, "⏰ 期限が近い約束"),
         ]:
             mems_result = ctx.memory_service.get_and_consume_one_shot(tag_name)
             if mems_result.is_ok and mems_result.value:

@@ -17,7 +17,6 @@ from nous.domain.memory.entities import Memory
 from nous.domain.search.engine import SearchEngine, SearchQuery
 from nous.domain.search.policy import RankPolicy
 from nous.domain.search.ranker import (
-    ForgettingCurveRanker,
     RRFRanker,
     SearchResult,
     TopicAffinityRanker,
@@ -156,12 +155,6 @@ class TestRankersPreserveAuxFields:
     def test_rrf_preserves_fields(self):
         ranker = RRFRanker(k=60)
         query = SearchQuery(text="機能確認テスト")
-        out = ranker.rank(self._candidates(), query)
-        self._assert_preserved(out)
-
-    def test_forgetting_curve_preserves_fields(self):
-        ranker = ForgettingCurveRanker(strength_lookup=lambda key: (0.5, 0.0))
-        query = SearchQuery(text="q")
         out = ranker.rank(self._candidates(), query)
         self._assert_preserved(out)
 

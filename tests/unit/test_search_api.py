@@ -54,7 +54,6 @@ async def client(tmp_data_dir, _reset_singletons, _no_preload):
         "NOUS_SERVER__HOST": "127.0.0.1",
         "NOUS_SERVER__PORT": "19997",
         "NOUS_QDRANT__URL": "http://localhost:1",
-        "NOUS_FORGETTING__ENABLED": "false",
         "NOUS_LOG_LEVEL": "WARNING",
         "NOUS_IMPORT_DIR": "",
     }

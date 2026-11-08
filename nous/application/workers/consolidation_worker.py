@@ -1,9 +1,9 @@
 """Consolidation Worker — CraniMem-inspired two-layer (CLS) consolidation.
 
 Replaces the old date-based extractive summarization worker.
-Operates on archived memories (set by DecayWorker) and entity clusters:
+Operates on archived memories (set by WikiWorker) and entity clusters:
 
-1. Finds archived memories (lifecycle_status='archived', set by DecayWorker)
+1. Finds archived memories (lifecycle_status='archived', set by WikiWorker)
    that are still valid (valid_until IS NULL — F2 bitemporal contract:
    superseded memories are never gistified)
 2. Groups by shared entity relations (entity_relations table)

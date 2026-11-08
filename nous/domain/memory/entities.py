@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
-from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 VALID_KINDS = frozenset(["episodic", "semantic", "procedural", "prospective"])
 VALID_SOURCE_TYPES = frozenset(
@@ -78,131 +80,3 @@ class Memory:
     def modality(self) -> str:
         """Provenance modality (audit C4): observed / inferred / llm_summary / reflection."""
         return MODALITY_BY_SOURCE_TYPE.get(self.source_type, "inferred")
-
-
-def importance_scaled_exponent(
-    base_exponent: float,
-    importance: float,
-    k: float = 0.5,
-    lambda_min: float = 0.0,
-) -> float:
-    """Importance-scaled forgetting exponent (F1/T1).
-
-    ``λ_eff = clamp(base * (1 - k * importance), lambda_min, base)``.
-    Higher importance → smaller exponent → slower decay. Applies to
-    ``memory_strength`` decay only; ``memory_links`` decay is out of scope.
-    """
-    try:
-        imp = max(0.0, min(1.0, float(importance)))
-    except (TypeError, ValueError):
-        imp = 0.5
-    eff = base_exponent * (1.0 - k * imp)
-    return max(lambda_min, min(base_exponent, eff))
-
-
-@dataclass
-class MemoryStrength:
-    """FSRS v6 power-law forgetting curve + 7-factor scoring for a memory."""
-
-    memory_key: str
-    strength: float = 1.0
-    stability: float = 1.0
-    last_decay: datetime | None = None
-    recall_count: int = 0
-    last_recall: datetime | None = None
-    last_utility: datetime | None = None
-    interference_count: int = 0
-    link_count: int = 0
-    emotion_peak: float = 0.0
-    is_ltm: bool = False
-    valence: float = 0.0  # -1.0 (negative) ~ +1.0 (positive)
-
-    def compute_recall(self, elapsed_hours: float, decay_exponent: float = 0.5) -> float:
-        """R(t) = (1 + 19 * t_hours / (S * 24))^(-decay_exponent).
-
-        Canonical FSRS v6 power-law decay. S = stability in days.
-        At t = S*24h (one stability period), R = 20^(-0.5) ≈ 0.224.
-
-        Args:
-            elapsed_hours: Time since last decay in hours.
-            decay_exponent: FSRS decay exponent (default 0.5 = canonical).
-        """
-        if self.stability <= 0:
-            return 0.0
-        return (1 + 19.0 * elapsed_hours / (self.stability * 24)) ** (-decay_exponent)
-
-    def compute_strength_score(
-        self,
-        importance: float = 0.5,
-        now: datetime | None = None,
-    ) -> float:
-        """6-factor composite strength score (0.0-1.0).
-
-        Factors (audit M10, v4.0 — time decay is handled ONLY by the FSRS
-        recall curve in the decay worker, which multiplies this score; the
-        old independent recency factor double-decayed every memory):
-        - frequency: 0.15 * min(1.0, log(1+recall_count)/log(10))
-        - importance: 0.25 * importance
-        - utility: 0.20 * exp(-utility_age_days / 3) if last_utility else 0.0
-        - interference: -0.05 * min(1.0, interference_count / 5)  (penalty)
-        - chain: +0.02 * link_count (max +0.10, linked memories decay slower)
-        - emotion: +0.20 * valence (max +0.10, ranking-time salience)
-
-        ponytail: 旧 9-factor の novelty (0.05*0.5) / confidence (0.10*0.8)
-        は全記憶に毎回加算される定数バイアス（順位に影響せず絶対値のみ
-        +0.105 ずらす死に因子）として 2026-09-19 レビューで除去。
-        """
-        if now is None:
-            now = datetime.now()
-
-        # Normalize timezones: DB round-trips store aware datetimes (format_iso),
-        # while in-memory defaults are naive. Strip tzinfo to keep subtraction valid.
-        now = now.replace(tzinfo=None)
-        last_utility = self.last_utility.replace(tzinfo=None) if self.last_utility is not None else None
-
-        # Frequency: log-scaled recall count
-        frequency = 0.15 * min(1.0, math.log(1 + self.recall_count) / math.log(10))
-
-        # Importance: direct factor
-        importance_score = 0.25 * max(0.0, min(1.0, importance))
-
-        # Utility: 3-day half-life
-        if last_utility is not None:
-            utility_age = (now - last_utility).total_seconds() / 86400
-            utility = 0.20 * math.exp(-utility_age / 3.0)
-        else:
-            utility = 0.0
-
-        # Interference: penalty
-        interference = -0.05 * min(1.0, self.interference_count / 5.0)
-
-        # Chain-aware boost: linked memories decay slower
-        chain = 0.0
-        if self.link_count > 0:
-            chain = min(0.10, 0.02 * self.link_count)  # max +0.10 (5+ links)
-
-        # Emotion salience (audit H5): ranking-time signal only — reads the
-        # intensity observed at the most recent recall (``valence``), NOT a
-        # permanent multiplier. Legacy ``emotion_peak`` is retained in the
-        # schema for compat but no longer fed (see boost_on_recall).
-        emotion = 0.0
-        if self.valence > 0.0:
-            emotion = min(0.10, 0.20 * self.valence)  # max +0.10 (intensity >= 0.5)
-
-        score = frequency + importance_score + utility + interference + chain + emotion
-        return max(0.0, min(1.0, score))
-
-    def boost_on_recall(self, emotion_intensity: float | None = None, gain_k: float = 0.5) -> None:
-        """Update recall metadata; emotion no longer boosts stability (audit H5).
-
-        v4.0: emotional flashbulb-style stability inflation was removed —
-        emotional memories keep vividness/confidence but their factual
-        accuracy decays (Talarico & Rubin 2003), so emotion must not
-        permanently raise FSRS stability. Emotion remains a *ranking-time*
-        salience signal via ``valence`` (fed by callers) + the score factor.
-        ``gain_k``/``emotion_intensity`` are accepted for signature compat
-        and ignored.
-        """
-        self.recall_count += 1
-        self.strength = 1.0
-        self.last_recall = datetime.now()

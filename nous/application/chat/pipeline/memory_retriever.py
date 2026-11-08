@@ -114,7 +114,6 @@ async def _search_memories(
                     text=q,
                     top_k=top_k,
                     valid_at=get_now(),
-                    apply_rif=True,
                     rank_policy=policy,
                     request_id=request_id,
                     turn_id=turn_id,
@@ -278,9 +277,7 @@ async def _search_episodes(
 
         # Use semantic search via search_engine for relevance if available
         if hasattr(ctx, "search_engine") and ctx.search_engine is not None:
-            search_result = await ctx.search_engine.search(
-                SearchQuery(text=query, top_k=top_k, mode="semantic", apply_rif=True)
-            )
+            search_result = await ctx.search_engine.search(SearchQuery(text=query, top_k=top_k, mode="semantic"))
             if search_result.is_ok and search_result.value:
                 episodes = []
                 for hit in search_result.value:

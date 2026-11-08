@@ -5,10 +5,10 @@ import logging
 from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
+    from nous.domain.memory.entities import Memory
     from nous.domain.memory.repository import MemoryRepository
 
 from nous.domain.chat_config import resolve_persona_chat_config
-from nous.domain.memory.entities import Memory, MemoryStrength
 from nous.domain.shared.errors import DomainError, MemoryNotFoundError
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import get_now
@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 # 未定義・読み込み失敗時はこのデフォルトへフォールバックする。
 _BRAIN_DEFAULTS = {
     "brain_emotion_gain_k": 0.5,
-    "brain_rif_suppression_rho": 0.05,
     "brain_link_separation_threshold": 0.75,
 }
 
@@ -151,55 +150,6 @@ class MemoryQueryService:
         if hidden_emotions:
             result["emotion_distribution_note"] = f"+ {hidden_emotions} more emotion types"
         return Success(result)
-
-    def boost_recall(self, key: str, emotion_intensity: float | None = None) -> Result[MemoryStrength, DomainError]:
-        """Boost memory strength on recall.
-
-        Args:
-            key: Memory key to boost.
-            emotion_intensity: Current emotion intensity used as proxy for valence
-                (Bower 1981 emotion-congruent recall). Stored in strength.valence.
-        """
-        strength_result = self._repo.get_strength(key)
-        if isinstance(strength_result, Failure):
-            return Failure(strength_result.error)
-
-        strength = strength_result.value
-        if strength is None:
-            strength = MemoryStrength(memory_key=key)
-
-        # Store current emotion intensity as valence for emotion-congruent recall
-        if emotion_intensity is not None:
-            strength.valence = emotion_intensity
-
-        # 感情情報なし（None）は従来動作（gain 1.5）を維持するためそのまま透過。
-        # 明示的な感情強度のみ brain_emotion_gain_k による式が適用される。
-        strength.boost_on_recall(
-            emotion_intensity=emotion_intensity,
-            gain_k=resolve_brain_config(self._repo)["brain_emotion_gain_k"],
-        )
-        strength.last_recall = get_now()
-
-        save_result = self._repo.save_strength(strength)
-        if isinstance(save_result, Failure):
-            return Failure(save_result.error)
-        try:
-            from nous.domain.memory.wiring_events import emit as _wiring_emit
-            from nous.domain.memory.wiring_events import repo_persona as _repo_persona
-
-            _wiring_emit(
-                "recall_boost",
-                source=key,
-                weight=float(strength.strength),
-                meta={
-                    "recall_count": strength.recall_count,
-                    "stability": strength.stability,
-                    "persona": _repo_persona(self._repo),
-                },
-            )
-        except Exception:
-            logger.debug("wiring emit failed for %s", key, exc_info=True)
-        return Success(strength)
 
     def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], DomainError]:
         """Get memories that contain ALL specified tags."""

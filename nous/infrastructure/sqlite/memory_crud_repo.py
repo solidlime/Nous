@@ -118,8 +118,8 @@ class MemoryCrudMixin:
                 ),
             )
             # T4-A: Insert initial memory_strength record so WebUI shows a
-            # strength value immediately (before Ebbinghaus decay worker runs).
-            # INSERT OR IGNORE preserves any existing record on re-save.
+            # strength value. 減衰ワーカー廃止後は値が更新されないが、テーブルは
+            # 履歴として残す。INSERT OR IGNORE preserves any existing record.
             self._db.execute(
                 """
                 INSERT OR IGNORE INTO memory_strength (memory_key, strength, stability, recall_count)

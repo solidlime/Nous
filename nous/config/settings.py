@@ -110,19 +110,6 @@ class McpSecurityConfig(BaseModel):
         return _parse_str_list(v)
 
 
-class ForgettingConfig(BaseModel):
-    """FSRS v6 forgetting curve configuration."""
-
-    h5_stability_clamp_enabled: bool = Field(
-        default=False,
-        description="監査 H5 マイグレーション: 感情増幅で膨張した stability を 1 回だけ 1.0 に clamp する。v4.0 移行スクリプトが有効化する。",
-    )
-
-    enabled: bool = True
-    decay_interval_seconds: int = 3600
-    min_strength: float = 0.005
-
-
 class LLMConfig(BaseModel):
     """共有 LLM 接続設定（内省 / 矛盾判定 / 記憶抽出が使う）。"""
 
@@ -436,7 +423,6 @@ class Settings(BaseSettings):
     reranker: RerankerConfig = RerankerConfig()
     search: SearchConfig = Field(default_factory=SearchConfig)
     qdrant: QdrantConfig = QdrantConfig()
-    forgetting: ForgettingConfig = ForgettingConfig()
     # env 互換のため名前据え置き: 本番 compose が NOUS_MEMORY_ENRICHMENT__* を設定している。
     # 中身は enrichment 廃止 (2026-11-08) 後も共有 LLM 接続設定として使う。
     memory_enrichment: LLMConfig = Field(default_factory=LLMConfig)

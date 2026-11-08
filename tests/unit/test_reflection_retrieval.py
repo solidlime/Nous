@@ -126,8 +126,7 @@ class TestRetrieverPassesRankPolicy:
         assert q.rank_policy.importance_weight == pytest.approx(0.3)
         assert q.rank_policy.relevance_weight == pytest.approx(0.5)
         assert q.rank_policy.reflection_penalty == pytest.approx(0.7)
-        # 真の recall 経路の契約は維持（RIF + valid_at）
-        assert q.apply_rif is True
+        # 真の recall 経路の契約は維持（valid_at）
         assert q.valid_at is not None
 
 

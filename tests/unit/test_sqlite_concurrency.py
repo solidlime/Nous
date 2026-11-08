@@ -86,7 +86,7 @@ class TestUpdateAllowlist:
         assert result.value.content == "b"
 
     def test_q8_service_fields_pass_through(self, sqlite_conn):
-        """Oracle Q8 BLOCKER: service.update_memory / decay_worker fields must pass."""
+        """Oracle Q8 BLOCKER: service.update_memory fields must pass."""
         from nous.domain.memory.entities import Memory
         from nous.domain.shared.time_utils import format_iso, get_now
 

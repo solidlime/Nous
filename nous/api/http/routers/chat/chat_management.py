@@ -51,7 +51,16 @@ _REMOVED_CONFIG_KEYS_V4: frozenset[str] = frozenset(
         "forgetting_trigger_threshold",
         "forgetting_forget_ratio",
         "forgetting_forget_strength",
+        # 時間減衰ワーカー廃止 (2026-11-08) で落ちたノブ
+        "forgetting_enabled",
+        "forgetting_decay_interval_seconds",
+        "forgetting_min_strength",
+        "h5_stability_clamp_enabled",
+        "brain_rif_suppression_rho",
         "reflection_threshold",
+        "reflection_enabled",
+        "reflection_min_interval_hours",
+        "reflection_interval_cycles",
         "memory_enrichment_auto_run",
         "memory_enrichment_interval",
         "memory_enrichment_model",
@@ -78,7 +87,6 @@ _REMOVED_CONFIG_KEYS_V4: frozenset[str] = frozenset(
 # 一致しないフィールドは "core"。追加フィールドも prefix 一致で自然に追従する。
 _SECTION_PREFIXES: tuple[tuple[str, str], ...] = (
     ("brain_", "brain_simulation"),
-    ("forgetting_", "forgetting"),
     ("voice_", "voice"),
     ("irodori_", "voice"),
     ("image_", "image"),
@@ -132,8 +140,7 @@ _TIER_BASIC: frozenset[str] = frozenset(
         "retrieval_recency_weight",
         "retrieval_importance_weight",
         "retrieval_relevance_weight",
-        # 忘却 ON/OFF・応答トークン上限
-        "forgetting_enabled",
+        # 応答トークン上限
         "max_tokens",
     }
 )
@@ -173,8 +180,7 @@ _TIER_ADVANCED: frozenset[str] = frozenset(
         "image_gen_portrait_prefix",
         "image_gen_selfie_prefix",
         "image_gen_scene_prefix",
-        # リフレクション / メンタルモデル
-        "reflection_enabled",
+        # メンタルモデル
         "mental_model_enabled",
         # brain 系主要 ON/OFF
         "brain_graph_flash_enabled",

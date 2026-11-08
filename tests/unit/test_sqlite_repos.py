@@ -10,11 +10,8 @@ from datetime import timedelta
 import pytest
 
 from nous.domain.equipment.entities import Item
-from nous.domain.memory.entities import Memory, MemoryStrength
-from nous.domain.memory.repository import (
-    MemoryRepository,
-    MemoryStrengthRepository,
-)
+from nous.domain.memory.entities import Memory
+from nous.domain.memory.repository import MemoryRepository
 from nous.domain.persona.entities import EmotionRecord
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.sqlite.equipment_repo import SQLiteEquipmentRepository
@@ -152,18 +149,6 @@ class TestSQLiteMemoryRepo:
         assert result.is_ok
         assert len(result.value) == 1
         assert result.value[0][0].content == "I love ramen"
-
-    def test_save_and_get_strength(self, memory_repo: SQLiteMemoryRepository):
-        m = self._make_memory()
-        memory_repo.save(m)
-        strength = MemoryStrength(memory_key=m.key, stability=2.0, recall_count=3)
-        memory_repo.save_strength(strength)
-        result = memory_repo.get_strength(m.key)
-        assert result.is_ok
-        s = result.value
-        assert s is not None
-        assert s.stability == 2.0
-        assert s.recall_count == 3
 
     def test_save_and_get_block(self, memory_repo: SQLiteMemoryRepository):
         memory_repo.save_block("test_block", "block content", block_type="system")
@@ -305,10 +290,7 @@ class TestSQLiteEquipmentRepo:
 
 
 class TestMemoryRepositoryProtocolSatisfaction:
-    """SQLiteMemoryRepository が 3 つの Protocol をすべて満たすことの確認."""
+    """SQLiteMemoryRepository が Protocol を満たすことの確認."""
 
     def test_satisfies_core_memory_repository(self, memory_repo: SQLiteMemoryRepository):
         assert isinstance(memory_repo, MemoryRepository), "Core MemoryRepository Protocol を満たしていません"
-
-    def test_satisfies_strength_repository(self, memory_repo: SQLiteMemoryRepository):
-        assert isinstance(memory_repo, MemoryStrengthRepository), "MemoryStrengthRepository Protocol を満たしていません"

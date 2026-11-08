@@ -152,13 +152,6 @@
     N.Chat.state.enabledSkills = cfg.enabled_skills || [];
     N.Chat.state.disabledTools = new Set(cfg.disabled_tools || []);
     // Reflection settings
-    setChecked("chat-reflection-enabled", cfg.reflection_enabled !== false);
-    set(
-      "chat-reflection-interval",
-      cfg.reflection_min_interval_hours == null
-        ? 1.0
-        : cfg.reflection_min_interval_hours,
-    );
     setChecked("chat-session-summarize", cfg.session_summarize !== false);
     // Mental model settings
     setChecked("chat-mental-model-enabled", cfg.mental_model_enabled !== false);
@@ -238,7 +231,7 @@
           this.value + "%";
       };
     // Field-group helpers (chunk 3/4): voice/TTS, image gen,
-    // brain/forgetting/emotion decay — same order as the pre-split code.
+    // brain/emotion decay — same order as the pre-split code.
     N.Chat.settings._applyVoice(cfg, set, setChecked);
     N.Chat.settings._applyImage(cfg, set, setChecked);
     N.Chat.settings.updateSliderLabels();

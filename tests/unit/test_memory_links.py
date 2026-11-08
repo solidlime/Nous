@@ -97,8 +97,7 @@ class TestMemoryLinkHebbianUpdate:
 
 
 class TestMemoryLinkDecayRemoved:
-    """MemoryLink.decay() was removed in F2 — decay lives in SQL
-    (EntityRepository.decay_stale_links) with a 0.5 floor invariant."""
+    """MemoryLink.decay() was removed in F2 — time-based link decay is gone (kanban #30)."""
 
     def test_decay_method_removed(self) -> None:
         assert not hasattr(MemoryLink("a", "b"), "decay")

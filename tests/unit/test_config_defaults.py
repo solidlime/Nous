@@ -11,13 +11,11 @@ from nous.api.http.routers.chat.chat_management import _do_get_config_defaults, 
 
 def test_defaults_include_current_values():
     fields = _do_get_config_defaults()["fields"]
-    assert fields["forgetting_decay_interval_seconds"]["default"] == 3600
     assert fields["item_llm_dedicated"]["default"] is False
     assert fields["max_tool_calls"]["default"] == 5
     assert fields["temperature"]["default"] == 0.7
     assert fields["temperature"]["type"] == "float"
     assert fields["api_key"]["type"] == "str"  # Optional[str] は str に正規化
-    assert fields["forgetting_decay_interval_seconds"]["section"] == "forgetting"
     assert fields["voice_streaming"]["default"] is True
     assert fields["voice_streaming"]["section"] == "voice"
     assert fields["voice_streaming"]["type"] == "bool"

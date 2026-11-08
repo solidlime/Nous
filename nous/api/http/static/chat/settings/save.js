@@ -118,10 +118,6 @@
         ),
       ),
       disabled_tools: Array.from(N.Chat.state.disabledTools || []),
-      reflection_enabled: getChecked("chat-reflection-enabled"),
-      reflection_min_interval_hours: parseFloat(
-        document.getElementById("chat-reflection-interval")?.value || "1.0",
-      ),
       session_summarize: getChecked("chat-session-summarize"),
       retrieval_recency_weight: parseFloat(
         document.getElementById("chat-recency-weight")?.value || "0.3",
@@ -150,9 +146,6 @@
         : undefined,
       brain_emotion_gain_k: parseFloat(
         document.getElementById("chat-brain-emotion-gain-k")?.value || "0.5",
-      ),
-      brain_rif_suppression_rho: parseFloat(
-        document.getElementById("chat-brain-rif-rho")?.value || "0.05",
       ),
       // リフレクション降格・注入ゲート: 空なら送らない (merge API keeps the stored value)
       reflection_retrieval_penalty: (() => {
@@ -198,8 +191,6 @@
       // === Brain dedicated LLM: toggle is always sent; dedicated fields
       //     only when ON (OFF = reuse chat LLM, keep stored values) ===
       brain_llm_dedicated: getChecked("chat-brain-llm-dedicated"),
-      // === Forgetting (moved from Settings) ===
-      forgetting_enabled: getChecked("chat-forgetting-enabled"),
       // brain_max_tokens: 空なら送らない (merge API keeps the stored value)
       brain_max_tokens: (() => {
         var v = (
@@ -207,13 +198,6 @@
         ).trim();
         return v ? parseInt(v) : undefined;
       })(),
-      forgetting_decay_interval_seconds: parseInt(
-        document.getElementById("chat-forgetting-decay-interval-seconds")
-          ?.value || "3600",
-      ),
-      forgetting_min_strength: parseFloat(
-        document.getElementById("chat-forgetting-min-strength")?.value || "0.1",
-      ),
       // Emotion decay
       // 空欄なら null を送り保存値を解除 (カテゴリテーブル有効化)
       emotion_decay_half_life_hours: (() => {

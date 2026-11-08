@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
+from typing import Any, Protocol, runtime_checkable
 
 from nous.domain.search.engine import SearchQuery, SearchResult
 
@@ -101,60 +98,6 @@ class RRFRanker:
 
         merged.sort(key=lambda x: x.score, reverse=True)
         return merged
-
-
-class ForgettingCurveRanker:
-    """Adjusts search scores based on FSRS v6 power-law recall probability.
-
-    ``strength_lookup`` returns ``(strength, stability)`` or ``None``.
-    When stability > 0 the ranker computes the full FSRS v6 recall probability::
-
-        R(t) = (1 + 19 * t_hours / (S * 24)) ** -0.5
-
-    Otherwise it falls back to ``strength`` as a flat multiplier.
-    """
-
-    def __init__(
-        self,
-        strength_lookup: Callable[[str], tuple[float, float] | None] | None = None,
-    ) -> None:
-        self._lookup_fn = strength_lookup
-
-    def rank(self, results: list[SearchResult], query: SearchQuery) -> list[SearchResult]:
-        """Multiply scores by FSRS v6 recall probability."""
-        if self._lookup_fn is None:
-            return results
-
-        now = datetime.now(UTC)
-        adjusted: list[SearchResult] = []
-        for r in results:
-            strength_data = self._lookup_fn(r.memory.key)
-            if strength_data is not None:
-                strength_val, stability = strength_data
-                if stability and stability > 0 and r.memory.created_at:
-                    created = r.memory.created_at
-                    if created.tzinfo is None:
-                        created = created.replace(tzinfo=UTC)
-                    elapsed_hours = (now - created).total_seconds() / 3600
-                    recall = (1 + 19 * elapsed_hours / (stability * 24)) ** -0.5
-                    new_score = r.score * (0.3 + 0.7 * recall)
-                else:
-                    new_score = r.score * max(0.1, strength_val)
-                adjusted.append(
-                    SearchResult(
-                        memory=r.memory,
-                        score=new_score,
-                        source=r.source,
-                        similarity_flag=r.similarity_flag,
-                        cosine=r.cosine,
-                        lexical_score=r.lexical_score,
-                    )
-                )
-            else:
-                # No strength data → passthrough
-                adjusted.append(r)
-        adjusted.sort(key=lambda x: x.score, reverse=True)
-        return adjusted
 
 
 class ChainedRanker:

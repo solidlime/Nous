@@ -86,16 +86,6 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
                 d[k] = d[k].isoformat()
         items.append(d)
 
-    strength_result = ctx.memory_repo.get_all_strengths()
-    strengths_raw = strength_result.value if strength_result.is_ok else []
-    strength_values = [s.strength for s in strengths_raw]
-    strengths_summary = {
-        "total": len(strength_values),
-        "avg": round(sum(strength_values) / len(strength_values), 3) if strength_values else None,
-        "min": round(min(strength_values), 3) if strength_values else None,
-        "max": round(max(strength_values), 3) if strength_values else None,
-    }
-
     # Helper: sort goals by status priority (active first), then by recency
     _status_priority = {"active": 0, "fulfilled": 1, "achieved": 1, "cancelled": 2}
     _max_commitments = 30
@@ -235,7 +225,6 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
         "blocks": blocks,
         "equipment": equipment,
         "items": items,
-        "strengths": strengths_summary,
         "goals": goals,
         "relationship_highlights": rel_highlights,
         "state_memories": state_memories,

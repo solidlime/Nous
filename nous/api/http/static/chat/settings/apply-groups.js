@@ -1,7 +1,7 @@
 /* =================================================================
    CHAT SETTINGS APPLY-GROUPS — applyChatConfig field-group helpers
    Chunk 3/4 of chat-settings.js (voice/TTS, image gen,
-   brain/forgetting/emotion decay). Called by settings/apply.js's
+   brain/emotion decay). Called by settings/apply.js's
    applyChatConfig. Namespace: N.Chat.settings._apply* (private).
    Depends on: settings/reset.js (N.Chat.settings._defaultOf)
    ================================================================= */
@@ -232,7 +232,7 @@ function applyImageSection(cfg, set, setChecked) {
 }
 
 // ------------------------------------------------------------------
-// Brain simulation + forgetting + emotion decay field application
+// Brain simulation + emotion decay field application
 // ------------------------------------------------------------------
 function applyBrainForgettingSection(cfg, set, setChecked) {
     // === Brain simulation ===
@@ -240,7 +240,6 @@ function applyBrainForgettingSection(cfg, set, setChecked) {
     set("chat-brain-reasoning-effort", cfg.brain_reasoning_effort || "medium");
     set("chat-brain-max-tokens", cfg.brain_max_tokens ?? 0);
     set("chat-brain-emotion-gain-k", cfg.brain_emotion_gain_k ?? 0.5);
-    set("chat-brain-rif-rho", cfg.brain_rif_suppression_rho ?? 0.05);
     set(
       "chat-brain-separation-threshold",
       cfg.brain_link_separation_threshold ?? 0.75,
@@ -295,20 +294,6 @@ function applyBrainForgettingSection(cfg, set, setChecked) {
     if (N.Features && N.Features.Graph && N.Features.Graph.setFlashEnabled) {
       N.Features.Graph.setFlashEnabled(cfg.brain_graph_flash_enabled !== false);
     }
-    // === Forgetting (moved from Settings) ===
-    setChecked("chat-forgetting-enabled", cfg.forgetting_enabled === true);
-    set(
-      "chat-forgetting-decay-interval-seconds",
-      cfg.forgetting_decay_interval_seconds ??
-        N.Chat.settings._defaultOf("forgetting_decay_interval_seconds") ??
-        3600,
-    );
-    set("chat-forgetting-min-strength", cfg.forgetting_min_strength ?? 0.1);
-    // Sync min-strength display
-    var fs = document.getElementById("chat-forgetting-min-strength");
-    if (fs)
-      document.getElementById("chat-forgetting-min-strength-val").textContent =
-        parseFloat(fs.value).toFixed(2);
     // Emotion decay
     // unset → 空欄 (カテゴリテーブルのデフォルトを使用)
     set(

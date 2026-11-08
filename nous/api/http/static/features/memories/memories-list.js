@@ -99,7 +99,7 @@ function renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSe
     html += '<button id="mem-select-toggle" class="glass-btn" style="font-size:0.82rem">' + (selMode ? '&#9745; Select ON' : '&#9744; Select') + '</button>';
     html += '<div class="mem-toolbar-spacer"></div>';
     html += '<select id="mem-sort" class="glass-input mem-sort-select">';
-    var sortOpts = [['date_desc','Newest First'],['date_asc','Oldest First'],['imp_desc','Importance <i data-lucide="arrow-down"></i>'],['str_desc','Strength <i data-lucide="arrow-down"></i>'],['updated_desc','Recently Updated']];
+    var sortOpts = [['date_desc','Newest First'],['date_asc','Oldest First'],['imp_desc','Importance <i data-lucide="arrow-down"></i>'],['updated_desc','Recently Updated']];
     for (var si = 0; si < sortOpts.length; si++) {
         html += '<option value="' + sortOpts[si][0] + '"' + (S.mem.sort === sortOpts[si][0] ? ' selected' : '') + '>' + sortOpts[si][1] + '</option>';
     }
@@ -157,7 +157,6 @@ function renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSe
             var emoColor = N.Core.EMOTION_COLORS[m.emotion] || '#94a3b8';
             var emoHtml = m.emotion ? '<span class=\"badge\" style=\"background:' + emoColor + '22;color:' + emoColor + ';border:1px solid ' + emoColor + '44\">' + esc(m.emotion) + (m.emotion_intensity != null ? '(' + m.emotion_intensity.toFixed(1) + ')' : '') + '</span>' : '';
             var emotionBadgesHtml = N.Components.memoryCard.renderEmotionBadges(m.emotion, m.emotion_intensity);
-            var strHtml = m.strength != null ? '<span style=\"color:var(--accent-yellow)\"><i data-lucide="zap"></i>' + m.strength.toFixed(2) + '</span>' : '';
             var timeHtml = m.created_at ? '<span>\uD83D\uDCC5 ' + relativeTime(m.created_at) + '</span>' : '';
             var scoreHtml = m._score != null ? '<span class=\"badge badge-green\">Score: ' + m._score.toFixed(3) + '</span>' : '';
             var bodyCardHtml = N.Components.memoryCard.renderBodyStateCompact(m.body_state);
@@ -167,7 +166,7 @@ function renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSe
             html += '<div class=\"memory-key\">' + esc(key) + '</div>';
             html += '</div>';
             html += '<div class=\"memory-content\">' + esc(truncate(m.content || '', 200)) + '</div>';
-            html += '<div class=\"memory-meta\">' + tagsHtml + ' ' + emoHtml + ' ' + emotionBadgesHtml + ' ' + strHtml + ' ' + scoreHtml + ' ' + bodyCardHtml + ' ' + timeHtml + '</div>';
+            html += '<div class=\"memory-meta\">' + tagsHtml + ' ' + emoHtml + ' ' + emotionBadgesHtml + ' ' + scoreHtml + ' ' + bodyCardHtml + ' ' + timeHtml + '</div>';
             html += '</div>';
         });
     }

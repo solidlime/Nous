@@ -248,7 +248,7 @@ class TestPromisesClear:
 # ===========================================================================
 
 
-class TestMemoryStrengthInit:
+class TestStrengthRowInit:
     """memory_repo.save() 後に memory_strength テーブルへ strength=1.0 が挿入される。"""
 
     def test_save_creates_strength_record(

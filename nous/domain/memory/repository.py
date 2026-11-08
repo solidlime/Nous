@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from nous.domain.memory.entities import Memory, MemoryStrength
+    from nous.domain.memory.entities import Memory
     from nous.domain.shared.errors import RepositoryError
     from nous.domain.shared.result import Result
 
@@ -39,19 +39,6 @@ class MemoryRepository(Protocol):
     def consume_memory(self, key: str) -> Result[None, RepositoryError]:
         """Mark a memory as consumed by setting last_consumed_at = now(). Atomic, single-query."""
         ...
-
-
-@runtime_checkable
-class MemoryStrengthRepository(Protocol):
-    """Repository interface for memory strength operations."""
-
-    def get_strength(self, key: str) -> Result[MemoryStrength | None, RepositoryError]: ...
-
-    def save_strength(self, strength: MemoryStrength) -> Result[None, RepositoryError]: ...
-
-    def get_all_strengths(
-        self,
-    ) -> Result[list[MemoryStrength], RepositoryError]: ...
 
 
 @runtime_checkable
@@ -104,10 +91,6 @@ class MemoryAuxiliaryRepository(Protocol):
     def log_search(self, query: str, mode: str, result_count: int) -> Result[None, RepositoryError]: ...
 
     def get_recent_searches(self, limit: int = 5) -> Result[list[dict], RepositoryError]: ...
-
-    def count_decayed_important(
-        self, min_importance: float = 0.7, max_strength: float = 0.3
-    ) -> Result[int, RepositoryError]: ...
 
     # Context Intelligence
     def get_memory_index(self) -> Result[dict, RepositoryError]: ...

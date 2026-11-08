@@ -6,7 +6,6 @@ from pathlib import Path
 
 from nous.config.settings import (
     EmbeddingConfig,
-    ForgettingConfig,
     IrodoriConfig,
     McpSecurityConfig,
     QdrantConfig,
@@ -39,12 +38,6 @@ class TestDefaultValues:
         assert cfg.url == "http://localhost:6333"
         assert cfg.api_key is None
         assert cfg.collection_prefix == "memory_"
-
-    def test_forgetting_defaults(self):
-        cfg = ForgettingConfig()
-        assert cfg.enabled is True
-        assert cfg.decay_interval_seconds == 3600
-        assert cfg.min_strength == 0.005
 
     def test_irodori_defaults(self):
         cfg = IrodoriConfig()

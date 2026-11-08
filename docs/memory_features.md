@@ -4,46 +4,15 @@ This document describes the advanced memory management features.
 
 ---
 
-## FSRS v6 Power-Law Forgetting Curve
+## Forgetting Curve (retired 2026-11-08)
 
-Memories decay over time according to the [FSRS v6 power-law forgetting curve](https://github.com/open-spaced-repetition/awesome-fsrs/wiki/The-Algorithm), validated against real human recall data via Anki benchmarks:
+FSRS v6 power-law decay was removed together with `DecayWorker`. Memories are no longer
+aged out by time: the only ways a memory leaves `active` are wiki compilation and
+consolidation (`lifecycle_status` `active` → `archived`). Search ranking no longer
+reads any strength/recall score.
 
-```
-R(t) = (1 + 19 · t / S)^(-0.5)
-```
-
-| Variable | Description |
-|----------|-------------|
-| `R` | Retention (0.0–1.0) |
-| `t` | Days since last access (in hours internally) |
-| `S` | Stability in days (grows on each recall) |
-| `decay_exponent` | 0.5 (canonical FSRS v6) |
-
-**Effective search score**: `strength = importance × R(t)`
-
-> **Why power-law?** FSRS starts with faster initial decay than Ebbinghaus but maintains a much heavier tail — memories survive far longer in the "barely remembered" zone. This better models human long-term memory.
-
-### How it works
-
-1. When a memory is created, its initial stability is set based on emotional charge:
-   - `emotion_intensity > 0.7` → S = 10 (emotionally vivid, hard to forget)
-   - `emotion_intensity > 0.5` → S = 5
-   - otherwise → S = 1
-
-2. Every 6 hours, a background worker recomputes `strength` for all memories.
-
-3. When a memory is recalled (returned by search), its stability is multiplied by 1.5 (capped at 365 days), effectively resetting the decay clock. This models the "spacing effect."
-
-4. Search ranking uses `strength` instead of raw `importance` when `importance_weight > 0`.
-
-### Key columns
-
-| Table | Column | Description |
-|-------|--------|-------------|
-| `memories` | `importance` | Immutable score set at creation |
-| `memory_strength` | `strength` | Current effective score (decayed) |
-| `memory_strength` | `stability` | Current stability factor |
-| `memory_strength` | `last_decay_at` | Last time the decay worker ran |
+The `memory_strength` table and its rows are kept as history only — nothing writes to
+them any more, so the values are frozen at whatever the last decay cycle computed.
 
 ---
 

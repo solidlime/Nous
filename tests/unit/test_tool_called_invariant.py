@@ -277,14 +277,3 @@ class TestCoAccessWiring:
         asyncio.run(_tool_memory_search(mock_app_context, PERSONA, query="q", top_k=200))
 
         assert len(keys) == 3
-
-    def test_search_boosts_at_most_top_10(self, mock_app_context):
-        _setup_success_ctx(mock_app_context)
-        hits = [SearchResult(memory=_mem(f"m{i:03d}"), score=0.5, source="keyword") for i in range(30)]
-        mock_app_context.search_engine.search.return_value = Success(hits)
-
-        asyncio.run(_tool_memory_search(mock_app_context, PERSONA, query="q", top_k=30))
-
-        boosted = [call.args[0] for call in mock_app_context.memory_service.boost_recall.call_args_list]
-        assert len(boosted) == 10
-        assert boosted[0] == "m000"

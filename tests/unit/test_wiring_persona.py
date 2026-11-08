@@ -16,11 +16,9 @@ import pytest
 
 from nous.domain.memory import wiring_events
 from nous.domain.memory.memory_link import MemoryLink
-from nous.domain.memory.query_service import MemoryQueryService
 from nous.domain.search.spreading_activation import SpreadingActivation
 from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.entity_repo import SQLiteEntityRepository
-from nous.infrastructure.sqlite.memory_repo import SQLiteMemoryRepository
 
 
 @pytest.fixture(autouse=True)
@@ -81,35 +79,6 @@ class TestHookPersona:
             assert len(fires) == 1 and fires[0]["kind"] == "link_fire"
         finally:
             conn.close()
-
-    def test_boost_recall_persona(self, tmp_path) -> None:
-        conn = SQLiteConnection(data_dir=str(tmp_path), persona="p2")
-        conn.initialize_schema()
-        try:
-            from nous.domain.memory.entities import Memory
-            from nous.domain.shared.time_utils import get_now
-
-            now = get_now()
-            repo = SQLiteMemoryRepository(conn)
-            repo.save(Memory(key="k", content="test", created_at=now, updated_at=now))
-            result = MemoryQueryService(repo).boost_recall("k")
-            assert result.is_ok
-            fires = wiring_events.snapshot_after(0, persona="p2")
-            assert len(fires) == 1 and fires[0]["kind"] == "recall_boost"
-        finally:
-            conn.close()
-
-    def test_boost_recall_mock_repo_none(self) -> None:
-        repo = MagicMock()
-        from nous.domain.memory.entities import MemoryStrength
-        from nous.domain.shared.result import Success
-
-        repo.get_strength.return_value = Success(MemoryStrength(memory_key="m"))
-        repo.save_strength.side_effect = lambda s: Success(None)
-        assert MemoryQueryService(repo).boost_recall("m").is_ok
-        fires = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "recall_boost"]
-        assert len(fires) == 1
-        assert fires[0]["meta"].get("persona") is None
 
     def test_propagate_persona_none(self) -> None:
         links = [MemoryLink(source_key="s", target_key="n", weight=1.0)]

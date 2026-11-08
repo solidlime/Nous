@@ -14,11 +14,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from nous.domain.memory import wiring_events
-from nous.domain.memory.entities import MemoryStrength
 from nous.domain.memory.memory_link import MemoryLink
-from nous.domain.memory.query_service import MemoryQueryService
 from nous.domain.search.spreading_activation import SpreadingActivation
-from nous.domain.shared.result import Success
 from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.entity_repo import SQLiteEntityRepository
 
@@ -95,17 +92,6 @@ class TestHooks:
             assert fires[0]["weight"] == 0.6
         finally:
             conn.close()
-
-    def test_boost_recall_fires(self) -> None:
-        repo = MagicMock()
-        repo.get_strength.return_value = Success(MemoryStrength(memory_key="m1"))
-        repo.save_strength.side_effect = lambda s: Success(None)
-        result = MemoryQueryService(repo).boost_recall("m1")
-        assert result.is_ok
-        fires = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "recall_boost"]
-        assert len(fires) == 1
-        assert fires[0]["source"] == "m1"
-        assert fires[0]["weight"] > 0
 
     def test_propagate_fires_top_seeds(self) -> None:
         links = [MemoryLink(source_key=s, target_key="n", weight=1.0) for s in ("s1", "s2")]

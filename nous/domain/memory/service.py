@@ -9,11 +9,10 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from nous.domain.memory.contradiction import ContradictionDetector
-    from nous.domain.memory.entities import Memory, MemoryStrength
+    from nous.domain.memory.entities import Memory
     from nous.domain.memory.repository import (
         MemoryAuxiliaryRepository,
         MemoryRepository,
-        MemoryStrengthRepository,
     )
     from nous.domain.search.engine import SearchEngine
     from nous.infrastructure.llm.memory_enricher import MemoryEnricher
@@ -57,7 +56,6 @@ class MemoryService:
         link_repo: object | None = None,
         search_engine: SearchEngine | None = None,
         contradiction_detector: ContradictionDetector | None = None,
-        strength_repo: MemoryStrengthRepository | None = None,
         aux_repo: MemoryAuxiliaryRepository | None = None,
         coaccess_tracker: list[str] | None = None,
     ) -> None:
@@ -68,7 +66,6 @@ class MemoryService:
         self._entity_service = entity_service
         self._link_repo = link_repo
         self._contradiction_detector = contradiction_detector
-        self._strength_repo = strength_repo
         self._aux_repo = aux_repo
 
         # Sub-services
@@ -330,16 +327,6 @@ class MemoryService:
         """
         return self._query_service.get_stats(top_n=top_n)
 
-    def boost_recall(self, key: str, emotion_intensity: float | None = None) -> Result[MemoryStrength, DomainError]:
-        """Boost memory strength on recall.
-
-        Args:
-            key: Memory key to boost.
-            emotion_intensity: Current emotion intensity used as proxy for valence
-                (Bower 1981 emotion-congruent recall). Stored in strength.valence.
-        """
-        return self._query_service.boost_recall(key, emotion_intensity=emotion_intensity)
-
     def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], DomainError]:
         """Get memories that contain ALL specified tags."""
         return self._query_service.get_by_tags(tags, include_consumed=include_consumed)
@@ -423,10 +410,6 @@ class MemoryService:
     def get_recent_searches(self, limit: int = 5) -> Result[list[dict], DomainError]:
         """Get recent search queries for topic detection."""
         return self._repo.get_recent_searches(limit)
-
-    def count_decayed_important(self) -> Result[int, DomainError]:
-        """Count important memories with low strength."""
-        return self._repo.count_decayed_important()
 
     # ------------------------------------------------------------------
     # Context Intelligence C

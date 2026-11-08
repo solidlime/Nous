@@ -63,7 +63,6 @@ async def client(tmp_data_dir, _auto_persona_dirs):
         "NOUS_SERVER__HOST": "127.0.0.1",
         "NOUS_SERVER__PORT": "19998",
         "NOUS_QDRANT__URL": "http://localhost:1",  # unreachable
-        "NOUS_FORGETTING__ENABLED": "false",
         "NOUS_LOG_LEVEL": "WARNING",
         "NOUS_IMPORT_DIR": "",
     }

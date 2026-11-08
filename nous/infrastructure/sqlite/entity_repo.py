@@ -345,32 +345,6 @@ class SQLiteEntityRepository(SQLiteRepository):
             logger.error("Failed to upsert link %s->%s: %s", source_key, target_key, e)
             return Failure(RepositoryError(str(e)))
 
-    def decay_stale_links(
-        self,
-        cutoff_iso: str,
-        rate: float = 0.005,
-        floor: float = 0.5,
-        # ponytail: floor 0.5 も arbitrary（Hebbian 減衰の下限として慣用的）。
-        # 根拠文献はなし、 tuning knob として設定可能にしてある。
-    ) -> Result[int, RepositoryError]:
-        """Decay weights of links idle since *cutoff_iso* (single UPDATE, no N+1).
-
-        Invariant: persistent weight never drops below *floor* (0.5).  The
-        union read in get_links_for_keys lets persistent weights override the
-        co-occurrence base (0.5) — decaying below it would make decayed links
-        WEAKER than plain co-occurrence, inverting the semantics.  Decay only
-        differentiates within [floor, 1.0].
-        """
-        try:
-            cursor = self._db.execute(
-                "UPDATE memory_links SET weight = MAX(?, weight - ?) WHERE last_activated < ? AND weight > ?",
-                (floor, rate, cutoff_iso, floor),
-            )
-            return Success(cursor.rowcount)
-        except Exception as e:
-            logger.error("Failed to decay stale links: %s", e)
-            return Failure(RepositoryError(str(e)))
-
     def get_links_for_keys(self, keys: list[str], limit: int = 1000) -> list[MemoryLink]:
         """Return associative links for spreading activation.
 

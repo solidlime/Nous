@@ -6,10 +6,10 @@ from unittest.mock import MagicMock
 
 import numpy as np
 
-from nous.domain.memory.entities import Memory, MemoryStrength
+from nous.domain.memory.entities import Memory
 from nous.domain.search.engine import SearchEngine, SearchQuery, SearchResult
 from nous.domain.search.policy import RankPolicy
-from nous.domain.search.ranker import ForgettingCurveRanker, RRFRanker
+from nous.domain.search.ranker import RRFRanker
 from nous.domain.shared.result import Success
 
 
@@ -46,28 +46,9 @@ def test_rrf_ranker_1000(benchmark):
     benchmark(ranker.rank, results, query)
 
 
-def test_forgetting_ranker_100(benchmark):
-    """Benchmark ForgettingCurveRanker with 100 results."""
-    memories = make_memories(100)
-
-    def strengths(key: str) -> tuple[float, float] | None:
-        return (0.5 + (int(key.split("_")[1]) % 10) * 0.05, 0.0)
-
-    ranker = ForgettingCurveRanker(strength_lookup=strengths)
-    results = [SearchResult(m, score=0.9, source="hybrid") for m in memories]
-    query = SearchQuery(text="test", top_k=10)
-    benchmark(ranker.rank, results, query)
-
-
 def test_memory_entity_creation_batch(benchmark):
     """Benchmark creating 100 Memory entities."""
     benchmark(make_memories, 100)
-
-
-def test_fsrs_compute_recall(benchmark):
-    """Benchmark FSRS power-law recall computation."""
-    ms = MemoryStrength(memory_key="test", strength=0.8, stability=7.0)
-    benchmark(ms.compute_recall, 24.0)
 
 
 class _FakeEncoder:

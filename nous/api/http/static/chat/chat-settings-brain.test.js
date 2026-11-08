@@ -32,7 +32,6 @@ const REQUIRED_SAVE_IDS = [
 
 const BRAIN_NUM_IDS = [
   'chat-brain-emotion-gain-k',
-  'chat-brain-rif-rho',
   'chat-brain-separation-threshold',
   'chat-brain-reflection-retrieval-penalty',
   'chat-brain-reflection-injection-min-similarity',
@@ -116,7 +115,6 @@ describe('brain simulation settings', () => {
   it('load applies contract defaults when config has no brain keys', () => {
     window.Nous.Chat.settings.apply({});
     expect(document.getElementById('chat-brain-emotion-gain-k').value).toBe('0.5');
-    expect(document.getElementById('chat-brain-rif-rho').value).toBe('0.05');
     expect(document.getElementById('chat-brain-separation-threshold').value).toBe('0.75');
     expect(document.getElementById('chat-brain-graph-flash').checked).toBe(true);
   });
@@ -124,7 +122,6 @@ describe('brain simulation settings', () => {
   it('collect sends the brain_* keys that remain after the enrichment removal', async () => {
     const set = (id, v) => { document.getElementById(id).value = v; };
     set('chat-brain-emotion-gain-k', '0.4');
-    set('chat-brain-rif-rho', '0.1');
     set('chat-brain-separation-threshold', '0.8');
     document.getElementById('chat-brain-graph-flash').checked = false;
 
@@ -135,7 +132,6 @@ describe('brain simulation settings', () => {
     expect(url).toBe('/api/chat/p1/config');
     const body = JSON.parse(opts.body);
     expect(body.brain_emotion_gain_k).toBe(0.4);
-    expect(body.brain_rif_suppression_rho).toBe(0.1);
     expect(body.brain_graph_flash_enabled).toBe(false);
     // dormant knob: not collected (merge API keeps the stored value)
     expect(body.brain_link_separation_threshold).toBeUndefined();
@@ -149,16 +145,14 @@ describe('brain simulation settings', () => {
   it('save→load round-trip preserves the brain values', async () => {
     const set = (id, v) => { document.getElementById(id).value = v; };
     set('chat-brain-emotion-gain-k', '0.3');
-    set('chat-brain-rif-rho', '0.2');
     document.getElementById('chat-brain-graph-flash').checked = false;
 
-    const savedCfg = { brain_emotion_gain_k: 0.3, brain_rif_suppression_rho: 0.2,
+    const savedCfg = { brain_emotion_gain_k: 0.3,
       brain_graph_flash_enabled: false };
     apiStub.mockResolvedValueOnce(savedCfg);
     await window.Nous.Chat.settings.save();
     window.Nous.Chat.settings.apply(savedCfg);
     expect(document.getElementById('chat-brain-emotion-gain-k').value).toBe('0.3');
-    expect(document.getElementById('chat-brain-rif-rho').value).toBe('0.2');
     expect(document.getElementById('chat-brain-graph-flash').checked).toBe(false);
   });
 
@@ -352,7 +346,6 @@ const BRAIN_IDS = [
   'chat-brain-llm-base-url',
   'chat-brain-llm-api-key',
   'chat-brain-emotion-gain-k',
-  'chat-brain-rif-rho',
   'chat-brain-separation-threshold',
   'chat-brain-reflection-retrieval-penalty',
   'chat-brain-reflection-injection-min-similarity',

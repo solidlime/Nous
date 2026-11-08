@@ -131,16 +131,6 @@ class MemoryStatsMixin:
         ).fetchall()
         return Success([dict(r) for r in rows])
 
-    def count_decayed_important(
-        self, min_importance: float = 0.7, max_strength: float = 0.3
-    ) -> Result[int, RepositoryError]:
-        """Count important memories that have decayed below strength threshold."""
-        row = self._db.execute(
-            "SELECT COUNT(*) as cnt FROM memories m INNER JOIN memory_strength ms ON m.key = ms.memory_key WHERE m.importance >= ? AND ms.strength <= ?",
-            (min_importance, max_strength),
-        ).fetchone()
-        return Success(row["cnt"] if row else 0)
-
     def get_memory_index(self) -> Result[dict, RepositoryError]:
         """Get compressed memory index for context snapshot."""
         total = self._db.execute(
