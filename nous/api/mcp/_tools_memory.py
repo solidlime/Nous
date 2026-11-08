@@ -494,11 +494,13 @@ async def _tool_memory_search(
         )
         count_result = ctx.memory_service.count_memories()
         total_count = count_result.value if count_result.is_ok else 0
+        wiki_empty = await _search_wiki(ctx, persona, query)
         # audit M3 — metamemory: an empty hit is “I don't find this”, which is
         # distinct from returning something irrelevant. stored_total lets the
         # caller tell “nothing stored at all” from “not in what I know”.
         return tool_ok(
-            {"memories": [], "total_count": total_count}, meta={"unknown": True, "stored_total": total_count}
+            {"memories": [], "total_count": total_count, "wiki": wiki_empty},
+            meta={"unknown": True, "stored_total": total_count},
         )
     ctx.memory_service.log_search(query, "hybrid", len(result.value))
 
@@ -557,7 +559,18 @@ async def _tool_memory_search(
     )
     count_result = ctx.memory_service.count_memories()
     total_count = count_result.value if count_result.is_ok else len(result.value)
-    return tool_ok({"memories": memories, "total_count": total_count})
+    wiki_hits = await _search_wiki(ctx, persona, query)
+    return tool_ok({"memories": memories, "total_count": total_count, "wiki": wiki_hits})
+
+
+async def _search_wiki(ctx, persona: str, query: str) -> list:
+    """wiki 上位層（#16）を別枠で返す。失敗しても memory 検索自体は壊さない。"""
+    try:
+        from nous.application.wiki.search import search_wiki_pages
+
+        return await search_wiki_pages(ctx, persona, query, limit=3)
+    except Exception:
+        return []
 
 
 def _compute_retrievability_health(ctx: AppContext) -> dict | None:

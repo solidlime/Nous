@@ -391,6 +391,7 @@ def _format_lightweight_response(
     project_name: str | None = None,
     due_labels: dict[str, str] | None = None,
     pending_freshness: list | None = None,
+    wiki_page_count: int | None = None,
 ) -> str:
     """Lightweight context: persona + conversation continuity + body state.
 
@@ -604,6 +605,10 @@ def _format_lightweight_response(
             ts = relative_time_str(m.created_at) if getattr(m, "created_at", None) else ""
             ts_str = f" ({ts})" if ts else ""
             lines.append(f"- {snippet}{ts_str}")
+
+    # ── wiki 上位層（#18）: ページ数のみ。本文は wiki_read() で引く ──
+    if wiki_page_count and project_name:
+        lines.append(f"\n📚 wiki: {wiki_page_count} pages (project:{project_name}) — wiki_ls() / wiki_read()")
 
     trailer = "💡 Use memory_search() for deeper context on specific topics."
     return _enforce_total_budget("\n".join(lines), trailer)

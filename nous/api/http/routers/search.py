@@ -211,6 +211,14 @@ def register_search_routes(mcp) -> None:
             entity_nodes: list = []
             entity_edges: list = []
             _merge_entity_layer(ctx, [r.memory for r in result.value], entity_nodes, entity_edges, set())
+            # wiki は別枠（#16）: results[] の形は不変。失敗しても本文検索自体は返す。
+            try:
+                from nous.application.wiki.search import search_wiki_pages
+
+                wiki_hits = await search_wiki_pages(ctx, persona, q, limit=3)
+            except Exception as wiki_exc:
+                logger.debug("wiki search unavailable: %s", wiki_exc)
+                wiki_hits = []
             return JSONResponse(
                 {
                     "persona": persona,
@@ -224,6 +232,7 @@ def register_search_routes(mcp) -> None:
                         }
                         for r in result.value
                     ],
+                    "wiki": wiki_hits,
                     "nodes": entity_nodes,
                     "edges": entity_edges,
                 }

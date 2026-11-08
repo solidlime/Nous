@@ -122,6 +122,19 @@ async def _tool_get_context(
         if not project_memories:
             project_memories = None
 
+    # wiki 上位層（#18）: ページ本文は入れず、件数だけ 1 行で知らせる。
+    wiki_page_count: int | None = None
+    if project:
+        try:
+            from nous.infrastructure.wiki.store import WikiStore
+
+            wiki_store = WikiStore(ctx.settings.data_root, persona)
+            prefix = f"project-{project.lower()}-"
+            wiki_page_count = len([s for s in wiki_store.list_slugs() if s.startswith(prefix)]) or None
+        except Exception as e:
+            logger.debug("_tool_get_context: wiki count failed: %s", e)
+            wiki_page_count = None
+
     # 期限が近い／切れた予定・約束（先出し）。未対応 stub では Success 以外が返るので空扱い。
     pending_result = ctx.memory_service.get_pending_prospective()
     pending_freshness = pending_result.value if isinstance(pending_result, Success) else []
@@ -168,6 +181,7 @@ async def _tool_get_context(
         one_shot_context=one_shot_context or None,
         project_memories=project_memories,
         project_name=project or None,
+        wiki_page_count=wiki_page_count,
         due_labels=due_labels or None,
         pending_freshness=pending_freshness,
     )
