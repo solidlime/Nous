@@ -23,13 +23,10 @@ class EventHandlersMixin:
         # ホスト（AppContext）が提供する属性の型宣言（mixin 公式パターン）。
         persona: str
         persona_service: PersonaService
-        _introspection_tool_active: bool
         _coaccess_keys: list[str]
 
     def _init_volatile_state(self) -> None:
-        """セッション内 volatile 状態の初期化（curiosity フラグと co-access 追跡）。"""
-        # 内省 curiosity サイクル中フラグ（hub 経由の自サーバー tool.called 抑制用）
-        self._introspection_tool_active = False
+        """セッション内 volatile 状態の初期化（co-access 追跡）。"""
         # In-memory Hebbian co-access tracker: keys of memories read/created
         # in this session (rolling window, most recent last).  Volatile by
         # design — Hebbian links rebuild progressively, so nothing is lost.
@@ -56,10 +53,9 @@ class EventHandlersMixin:
         """Forward ``tool.called`` to this persona's chat SSE hub (best-effort).
 
         The chat log listens on ``/api/chat/{persona}/events`` (a TurnHub, fed
-        by turn-scoped events) — event_bus events never reach it. 内省 curiosity
-        探索の tool.called を live 表示するため hub へ名前付きイベントで転送する
-        (spec C)。persona はイベントが持つ値を優先し、無ければこのコンテキストの
-        persona を使う（EventBus は persona 毎に1つ）。
+        by turn-scoped events) — event_bus events never reach it. hub へ名前付き
+        イベントで転送する。persona はイベントが持つ値を優先し、無ければこの
+        コンテキストの persona を使う（EventBus は persona 毎に1つ）。
         """
         try:
             persona = data.get("persona") or getattr(self, "persona", None)
@@ -74,18 +70,8 @@ class EventHandlersMixin:
             _logging.getLogger("nous").debug("tool.called→hub forward failed", exc_info=True)
 
     async def _on_tool_called_record_conversation(self, event_type: str, data: dict) -> None:
-        """tool.called をユーザー由来の対話活動として last_conversation_time に記録する。
-
-        内省由来は除外: (1) _emit_tool_called の source="introspection" タグ、
-        (2) curiosity サイクル中フラグ — hub 経由で自サーバーのツールを叩いた場合は
-        サーバー側 publish に source が付かないためフラグで握り潰す。
-        内省は一人で動くサイクルでユーザーの介入が無い前提の製品方針。
-        """
+        """tool.called をユーザー由来の対話活動として last_conversation_time に記録する。"""
         try:
-            if data.get("source") == "introspection":
-                return
-            if getattr(self, "_introspection_tool_active", False):
-                return
             persona = data.get("persona")
             if not isinstance(persona, str) or not persona:
                 return

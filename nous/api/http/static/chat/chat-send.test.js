@@ -61,7 +61,7 @@ beforeAll(() => {
   };
   // chat-send.js split into send/*.js — load chunks in order
   // (reader path only; test logic unchanged).
-  for (const f of ['send/render.js', 'send/turn.js', 'send/pending.js', 'send/turn-events.js', 'send/monologue.js']) {
+  for (const f of ['send/render.js', 'send/turn.js', 'send/pending.js', 'send/turn-events.js']) {
     loadFile('../chat/' + f);
   }
 });

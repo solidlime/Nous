@@ -159,7 +159,7 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
         self.entity_service = EntityService(self.entity_repo)
 
     def _init_brain_llm(self) -> None:
-        """Resolve the shared brain LLM → MemoryEnricher (矛盾判定) + IntrospectionEngine.
+        """Resolve the shared brain LLM → MemoryEnricher (矛盾判定).
 
         Resolution chain (single point for the brain-simulator LLM):
         - cfg is None (e.g. MCP-only startup): settings.memory_enrichment only
@@ -171,13 +171,13 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
           matches the chat provider (no key mixing across providers).
 
         Depends on: _init_storage (self._config, self.settings).
-        Best-effort; failure results in both being None (logged as debug).
+        Best-effort; failure results in None (logged as debug).
 
         旧 _init_enricher。enrichment（importance/関係抽出）廃止 2026-11-08 後も
-        矛盾判定用 enricher と内省エンジンは同じ解決鎖を共有する。
+        矛盾判定用 enricher は同じ解決鎖を使う。内省エンジンは 2026-11-09
+        (kanban #35) に削除済（パラメータ解決鎖だけ enricher と共有）。
         """
         enricher: MemoryEnricher | None = None
-        introspection_engine: IntrospectionEngine | None = None
         cfg = self._config
         if self.settings.memory_enrichment.enabled:
             if cfg is None:
@@ -202,15 +202,9 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
                 if not api_key and provider == cfg.provider_config.provider:
                     api_key = cfg.provider_config.get_effective_api_key()
                 if not api_key:
-                    logger.debug(
-                        "brain LLM: no api_key for provider '%s'; contradiction/introspection disabled", provider
-                    )
+                    logger.debug("brain LLM: no api_key for provider '%s'; contradiction check disabled", provider)
             if api_key:
-                from nous.application.chat.introspection import (
-                    IntrospectionEngine,
-                    _resolve_brain_llm_params,
-                )
-                from nous.infrastructure.llm.factory import get_provider
+                from nous.application.chat.introspection import _resolve_brain_llm_params
                 from nous.infrastructure.llm.memory_enricher import MemoryEnricher
 
                 # params は脳側LLMパラメータ（max_tokens/temperature/reasoning_effort）の
@@ -237,23 +231,9 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
                     **brain_kwargs,  # type: ignore[arg-type]
                     session_id=brain_session,
                 )
-                # IntrospectionEngine shares the SAME resolved provider chain.
-                introspection_engine = IntrospectionEngine(
-                    get_provider(
-                        provider=provider,
-                        api_key=api_key,
-                        model=model,
-                        base_url=base_url,
-                        session_id=brain_session,
-                    ),
-                    reasoning_effort=params.reasoning_effort,
-                    **brain_kwargs,  # type: ignore[arg-type]
-                    session_id=brain_session,
-                )
         else:
-            logger.warning("memory_enrichment.enabled=false: 脳側 LLM を無効化（矛盾判定と内省は動かない）")
+            logger.warning("memory_enrichment.enabled=false: 脳側 LLM を無効化（矛盾判定は動かない）")
         self._enricher = enricher
-        self.introspection_engine = introspection_engine
 
     def _provider_api_key(self, provider: str) -> str:
         """Legacy api_key chain for an arbitrary provider.
@@ -347,7 +327,7 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
             self._session_event_repo = None
             self._session_event_recorder = None
 
-        # tool.called を chat SSE hub へ転送（内省 curiosity チップのライブ表示, spec C）
+        # tool.called を chat SSE hub へ転送（UI の live ツール表示用）
         try:
             self.event_bus.subscribe("tool.called", self._on_tool_called_to_hub)
         except Exception as e:
@@ -355,7 +335,7 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
 
             _logging.getLogger("nous").warning("tool.called→hub bridge init failed: %s", e)
 
-        # tool.called をユーザー由来の対話活動として last_conversation_time に記録（内省は除外）
+        # tool.called をユーザー由来の対話活動として last_conversation_time に記録
         try:
             self.event_bus.subscribe("tool.called", self._on_tool_called_record_conversation)
         except Exception as e:

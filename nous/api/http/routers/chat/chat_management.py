@@ -79,6 +79,10 @@ _REMOVED_CONFIG_KEYS_V4: frozenset[str] = frozenset(
         "brain_spontaneous_enabled",
         "brain_spontaneous_interval_hours",
         "brain_spontaneous_prompt",
+        # 自発的内省 / 独り言 (2026-11-09 kanban #35) で落ちたノブ
+        "brain_monologue_enabled",
+        "brain_introspection_enabled",
+        "brain_introspection_prompt",
     }
 )
 
@@ -184,10 +188,8 @@ _TIER_ADVANCED: frozenset[str] = frozenset(
         "mental_model_enabled",
         # brain 系主要 ON/OFF
         "brain_graph_flash_enabled",
-        "brain_introspection_enabled",
         "brain_reasoning_enabled",
         "brain_llm_dedicated",
-        "brain_introspection_prompt",
         # Jev 型判定ゲート / multi-hop 検索 (#011)
         "brain_decision_enabled",
         "brain_decision_model",

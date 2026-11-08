@@ -47,9 +47,16 @@ def test_endpoint_returns_fields(monkeypatch):
     monkeypatch.setattr(chat_management, "_resolve_request", lambda req: ("p", object()))
     resp = asyncio.run(get_config_defaults(object()))
     body = json.loads(resp.body)
-    assert body["fields"]["brain_introspection_enabled"]["type"] == "bool"
-    # enrichment / spontaneous ノブは 2026-11-08 に廃止
-    for gone in ("brain_spontaneous_interval_hours", "memory_enrichment_enabled", "brain_enrich_auto_run"):
+    assert body["fields"]["brain_llm_dedicated"]["type"] == "bool"
+    # enrichment / spontaneous / monologue / introspection ノブは廃止
+    for gone in (
+        "brain_spontaneous_interval_hours",
+        "memory_enrichment_enabled",
+        "brain_enrich_auto_run",
+        "brain_monologue_enabled",
+        "brain_introspection_enabled",
+        "brain_introspection_prompt",
+    ):
         assert gone not in body["fields"]
 
 

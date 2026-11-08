@@ -453,45 +453,7 @@ _TIME_OF_DAY: list[tuple[int, str]] = [
     (24, "深夜"),
 ]
 
-REUNION_GAP_SECONDS = 900  # 再会判定の閾値（time_context 表示と monologue 注入の共通条件）
-
-
-def _fetch_monologue_entries(ctx, state, config) -> list[str]:
-    """ギャップ中に生成された独り言（直近3件・古い順）を返す (spec §4.3)。
-
-    注入条件をすべてここで判定する（enabled / repo / 最終会話時刻 /
-    経過 > REUNION_GAP_SECONDS / ギャップ中のエントリ）。失敗は静かに空。
-    """
-    if not getattr(config, "brain_monologue_enabled", False):
-        return []
-    repo = getattr(ctx, "_session_event_repo", None)
-    lct = getattr(state, "last_conversation_time", None)
-    if repo is None or lct is None:
-        return []
-    try:
-        from zoneinfo import ZoneInfo
-
-        from nous.config.settings import get_settings
-
-        tz = get_settings().timezone
-        now = get_now(tz=tz)
-        if lct.tzinfo is None:
-            lct = lct.replace(tzinfo=ZoneInfo(tz))
-        if (now - lct).total_seconds() <= REUNION_GAP_SECONDS:
-            return []
-        events = repo.get_by_persona(getattr(state, "persona", ""), "brain.monologue", 10)
-        lct_naive = lct.replace(tzinfo=None)
-        recent = [
-            e.summary
-            for e in sorted(
-                events, key=lambda e: e.timestamp.replace(tzinfo=None) if e.timestamp.tzinfo else e.timestamp
-            )
-            if e.summary and (e.timestamp.replace(tzinfo=None) if e.timestamp.tzinfo else e.timestamp) > lct_naive
-        ]
-        return recent[-3:]
-    except Exception as exc:
-        logger.debug("monologue fetch failed: %s", exc)
-        return []
+REUNION_GAP_SECONDS = 900  # 再会判定の閾値（time_context 表示用）
 
 
 def _build_time_context(state) -> str:

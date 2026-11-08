@@ -131,15 +131,7 @@ class SessionConfig(BaseModel):
     item_llm_model: str = Field(default="", description="アイテム抽出専用LLMのモデル名。")
     item_llm_base_url: str = Field(default="", description="アイテム抽出専用LLMの接続先URL。")
     item_llm_api_key: str = Field(default="", description="アイテム抽出専用LLMのAPIキー。")
-    # REM 独り言 (drain バッチ完走時に LLM 1 call で生成・session_events 保存)
-    brain_monologue_enabled: bool = Field(
-        default=True,
-        description="独り言を文脈に注入するか（生成トリガは 2026-11-08 の enrichment 廃止で無くなり、既存の独り言のみ注入される）。",
-    )
     # 内省エンジン (ターン駆動の単一 LLM 呼び出し: 独り言＋逸脱判定＋反省＋感情/身体)
-    brain_introspection_enabled: bool = Field(
-        default=True, description="独り言・反省・感情をまとめて内省する機能を有効にします。"
-    )
     # 脳専用 reasoning トグル (chat の reasoning_enabled/effort とは独立)。
     # None で解決済みLLM設定に従う（専用OFFなら会話用）。True で brain_reasoning_effort を
     # 強制使用、False で推論なし (openai_compat が openrouter + effort=None で reasoning を無効化する)。
@@ -152,15 +144,11 @@ class SessionConfig(BaseModel):
     )
     # 脳側呼び出しの共通 max_tokens。0 = 継承（専用OFFなら会話用の値、ONなら脳側既定）。
     # reasoning 有効時（明示 True かつ明示 max_tokens>0）は model_validator が
-    # max(max_tokens, max(4096, budget+1024)) に嵩上げ。openai_compat の式と同一。enricher / introspection で共有。
+    # max(max_tokens, max(4096, budget+1024)) に嵩上げ。openai_compat の式と同一。enricher と共有。
     brain_max_tokens: int = Field(
         default=0,
-        description="脳側呼び出しの最大トークン数。0 で解決済みLLM設定に従う（専用OFFなら会話用の値、ONなら脳側既定）。明示値（256〜32768）は全モードで上書き。",
+        description="脇側呼び出しの最大トークン数。0 で解決済み LLM 設定に従う（専用 OFF なら会話用の値、ON なら脳側既定）。明示値（256〜32768）は全モードで上書き。",
     )
-    # 内省プロンプト上書き (空文字 = コード内デフォルトを使用)。
-    # プレースホルダ: {persona} {current_state} {memory_texts} {persona_identity}
-    #   + {recent_turns}。欠落があるとデフォルトへ自動フォールバック。
-    brain_introspection_prompt: str = Field(default="", description="内省プロンプトの上書き。空欄で既定を使います。")
 
     @field_validator("brain_reasoning_effort")
     @classmethod

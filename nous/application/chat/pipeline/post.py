@@ -174,7 +174,7 @@ class PostProcessStep:
             assistant_msg_id=turn_ctx.assistant_msg_id,
         )
 
-        # MemoryLLM: キャラ判定は idle 内省 (introspection.py) に移行 (spec §2)
+        # MemoryLLM: キャラ判定は MemoryLLM 側で行う（旧・自発的内省は 2026-11-09 に廃止）
         memory_result: dict = {}
         if turn_ctx.full_response:
             payload = {"user": turn_ctx.user_message, "assistant": turn_ctx.full_response}

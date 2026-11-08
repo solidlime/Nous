@@ -4,7 +4,6 @@ Covers: ON/OFF × cfg None/present × provider match/mismatch × empty-field
 fallback × reload_brain_llm swap.
 
 2026-11-08: 記憶 enrichment 廃止に伴い _init_brain_llm → _init_brain_llm、
-reload_brain_llm → reload_brain_llm。enricher(矛盾判定) と introspection_engine は
 従来どおり同じ解決鎖を共有する。
 """
 
@@ -146,45 +145,6 @@ class TestToggleOn:
         assert any("no api_key" in r.message for r in caplog.records)
 
 
-def test_introspection_enabled_default_true():
-    cfg = ChatConfig()
-    assert cfg.brain_introspection_enabled is True
-
-
-def test_introspection_config_persisted(tmp_path):
-    from nous.domain.chat_config import ChatConfigFileRepository
-
-    repo = ChatConfigFileRepository(str(tmp_path))
-    cfg = repo.get("p1")
-    cfg.brain_introspection_enabled = False
-    repo.save(cfg)
-    assert repo.get("p1").brain_introspection_enabled is False
-
-
-class TestIntrospectionEngineWiring:
-    def test_engine_none_when_resolution_fails(self):
-        """解決失敗（api_key 無し）→ introspection_engine None。"""
-        ctx = _ctx(_cfg(brain_llm_dedicated=True, brain_llm_provider="google"))
-        ctx._init_brain_llm()
-        assert ctx._enricher is None
-        assert ctx.introspection_engine is None
-
-    def test_reload_rebuilds_engine(self):
-        """reload_brain_llm() で introspection_engine も再構築される。"""
-        ctx = _ctx(_cfg())
-        ctx._init_brain_llm()
-        first = ctx.introspection_engine
-        assert first is not None
-
-        ctx._config.session_config.brain_llm_dedicated = True
-        ctx._config.session_config.brain_llm_provider = "anthropic"
-        ctx._config.session_config.brain_llm_api_key = "anthropic-key"
-        ctx.reload_brain_llm()
-        second = ctx.introspection_engine
-        assert second is not None
-        assert second is not first
-
-
 class TestReloadEnricher:
     def test_reload_brain_llm_swaps_enricher(self):
         """reload_brain_llm() re-runs the resolution chain with current config."""
@@ -237,16 +197,12 @@ class TestBrainReasoningWiring:
         ctx._init_brain_llm()
         assert ctx._enricher is not None
         assert ctx._enricher._reasoning_effort == "high"
-        assert ctx.introspection_engine is not None
-        assert ctx.introspection_engine._reasoning_effort == "high"
 
     def test_disabled_passes_none(self):
         ctx = _ctx(_cfg())
         ctx._init_brain_llm()
         assert ctx._enricher is not None
         assert ctx._enricher._reasoning_effort is None
-        assert ctx.introspection_engine is not None
-        assert ctx.introspection_engine._reasoning_effort is None
 
     def test_cfg_none_passes_none(self):
         ctx = _ctx(None)
@@ -411,8 +367,6 @@ class TestBrainMaxTokensWiring:
         ctx._init_brain_llm()
         assert ctx._enricher is not None
         assert ctx._enricher._max_tokens == 4096
-        assert ctx.introspection_engine is not None
-        assert ctx.introspection_engine._max_tokens == 4096
 
     def test_cfg_present_default_inherits_chat(self):
         """cfg あり・明示なし（brain_max_tokens=0）→ 会話用 provider_config に従う。"""
@@ -420,16 +374,12 @@ class TestBrainMaxTokensWiring:
         ctx._init_brain_llm()
         assert ctx._enricher is not None
         assert ctx._enricher._max_tokens == 8192  # ProviderConfig.max_tokens 既定
-        assert ctx.introspection_engine is not None
-        assert ctx.introspection_engine._max_tokens == 8192
 
     def test_cfg_none_uses_ctor_defaults(self):
         ctx = _ctx(None)
         ctx._init_brain_llm()
         assert ctx._enricher is not None
         assert ctx._enricher._max_tokens == 512
-        assert ctx.introspection_engine is not None
-        assert ctx.introspection_engine._max_tokens == 4096
 
 
 def _rich_provider_config() -> ProviderConfig:
@@ -509,16 +459,12 @@ class TestBrainLLMParamsResolver:
         ctx._init_brain_llm()
         assert ctx._enricher is not None
         assert ctx._enricher._temperature == 0.7
-        assert ctx.introspection_engine is not None
-        assert ctx.introspection_engine._temperature == 0.7
 
     def test_temperature_wiring_cfg_none_uses_ctor_defaults(self):
         ctx = _ctx(None)
         ctx._init_brain_llm()
         assert ctx._enricher is not None
         assert ctx._enricher._temperature == 0.3
-        assert ctx.introspection_engine is not None
-        assert ctx.introspection_engine._temperature == 0.7
 
 
 class TestBrainSessionIdWiring:
@@ -530,8 +476,6 @@ class TestBrainSessionIdWiring:
         ctx._init_brain_llm()
         assert ctx._enricher is not None
         assert ctx._enricher._session_id == "nous-brain-herta"
-        assert ctx.introspection_engine is not None
-        assert ctx.introspection_engine._session_id == "nous-brain-herta"
 
     def test_no_persona_falls_back_to_none(self):
         ctx = _ctx(_cfg())  # persona 未設定 (空文字)

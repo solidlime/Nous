@@ -328,23 +328,7 @@ class TestEntityService:
         assert result.is_ok
         assert set(result.value) == {"mem_001", "mem_002"}
 
-    def test_add_relation(self, entity_service: EntityService, entity_repo: SQLiteEntityRepository):
-        """エンティティ間の関係を追加"""
-        result = entity_service.add_relation("ヘルタ", "カフカ", "knows")
+    def test_extract_and_link_creates_missing_entities(self, entity_service: EntityService):
+        """抽出→保存の経路がエンティティを作る（relation 書き込みは enrichment 廃止で無くなった）"""
+        result = entity_service.extract_and_link("mem_009", "ヘルタとカフカ")
         assert result.is_ok
-
-        # Both entities should be auto-created
-        assert entity_repo.get_entity("ヘルタ").value is not None
-        assert entity_repo.get_entity("カフカ").value is not None
-
-        rels = entity_repo.get_relations("ヘルタ")
-        assert rels.is_ok
-        assert any(r.relation_type == "knows" for r in rels.value)
-
-    def test_add_relation_with_memory_key(self, entity_service: EntityService, entity_repo: SQLiteEntityRepository):
-        """memory_key付きの関係を追加"""
-        result = entity_service.add_relation("ヘルタ", "カフカ", "likes", memory_key="mem_001")
-        assert result.is_ok
-        rels = entity_repo.get_relations("ヘルタ")
-        assert rels.is_ok
-        assert any(r.memory_key == "mem_001" for r in rels.value)

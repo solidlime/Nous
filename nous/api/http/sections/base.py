@@ -74,7 +74,6 @@ def render_head() -> str:
     <script src="/static/chat/send/turn.js" defer></script>
     <script src="/static/chat/send/pending.js" defer></script>
     <script src="/static/chat/send/turn-events.js" defer></script>
-    <script src="/static/chat/send/monologue.js" defer></script>
     <script src="/static/chat/chat-history.js" defer></script>
     <script src="/static/chat/history/render.js" defer></script>
     <script src="/static/chat/history/session.js" defer></script>

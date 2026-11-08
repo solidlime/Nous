@@ -437,10 +437,6 @@ async function deleteChatMessage(msgId) {
 }
 
 // ------------------------------------------------------------------
-// REM monologue bubbles — display-only restore from session events.
-// Fetched after each history render; persona switches re-fetch because
-// restoreChatHistory wipes the container first. Never touches
-// ------------------------------------------------------------------
 // Expose on N.Chat (chunk 2/3 — session ops)
 // ------------------------------------------------------------------
 N.Chat.history = N.Chat.history || {};

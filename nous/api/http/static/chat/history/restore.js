@@ -1,10 +1,9 @@
 /* =================================================================
    CHAT HISTORY RESTORE — page-load restore, lazy older-load, export,
-   monologue restore, lazy-load triggers + CSP welcome delegation
+   lazy-load triggers + CSP welcome delegation
    Chunk 3/3 of chat-history.js. Namespace: N.Chat.history.restore /
    export. Depends on: history/render.js (N.Chat._history.renderMessages),
-   history/session.js (N.Chat.history.reset/getSessionId),
-   send/monologue.js (N.Chat.monologue).
+   history/session.js (N.Chat.history.reset/getSessionId).
    ================================================================= */
 ;(function(N) {
 var C = N.Core;
@@ -81,8 +80,6 @@ async function restoreChatHistory(showSkeleton) {
       CHAT.messages = [];
       _historyComplete = true;
       N.Chat.history.reset();
-      // No chat history either way — monologue whispers still restore
-      restoreMonologueBubbles();
       return;
     }
     // Successful fetch — now safe to reset DOM (Bug B3 fix: only reset after fetch succeeds)
@@ -90,10 +87,6 @@ async function restoreChatHistory(showSkeleton) {
     container.textContent = "";
     N.Chat._history.renderMessages(data.messages, { prepend: false });
     N.Core.refreshIcons();
-    // REM monologue bubbles ride on top of the restored history
-    // (display-only; every restore re-fetches, so persona switches
-    // get a fresh set after the container wipe).
-    restoreMonologueBubbles();
   } catch (e) {
     console.error("[restoreChatHistory] failed:", e);
     toast("チャット履歴復元失敗: " + e.message, "error");
@@ -148,11 +141,6 @@ async function loadOlderMessages() {
     _loadedCount += data.messages.length;
     if (typeof data.total === "number" && data.total <= _loadedCount) {
       _historyComplete = true;
-    }
-    // 追加ロードで古いメッセージが先頭に来たので、既存の独り言バブルを
-    // 正しい時系列位置へ再挿入（スロット決め直し）
-    if (N.Chat.monologue && typeof N.Chat.monologue.reslot === "function") {
-      N.Chat.monologue.reslot();
     }
     // 挿入差分ぶんスクロール位置を補正して表示位置を維持
     if (container) {
@@ -209,37 +197,6 @@ function exportChatHistory() {
 }
 
 // ------------------------------------------------------------------
-async function restoreMonologueBubbles() {
-  if (!S.persona) return;
-  var monologue = N.Chat.monologue;
-  if (!monologue || typeof monologue.append !== "function") return;
-  var personaAtRequest = S.persona;
-  try {
-    var data = await api(
-      "/api/session-events/" + encodeURIComponent(personaAtRequest) +
-      "?event_type=brain.monologue&limit=100&order=desc",
-    );
-    // A response that lands after the persona moved on is stale — drop it
-    if (S.persona !== personaAtRequest) return;
-    var events = (data && data.events) || [];
-    // API returns newest-first; render chronologically so the whisper
-    // trail reads the way it happened. Each whisper slots between the
-    // messages by its full ISO timestamp (epoch comparison inside
-    // monologue.append). limit=100: page load shows only 50 messages,
-    // but whispers older than the visible window still belong on screen.
-    for (var i = events.length - 1; i >= 0; i--) {
-      var ev = events[i];
-      if (ev && ev.summary) {
-        // metadata.kind="exploration" の探索要約は 🔍 ラベルで復元 (spec C/G)。
-        monologue.append(ev.summary, String(ev.timestamp || ""), ev.metadata && ev.metadata.kind);
-      }
-    }
-  } catch (e) {
-    console.warn("[monologue restore]:", e.message);
-  }
-}
-
-// ------------------------------------------------------------------
 // Lazy-load triggers — registered once at init
 var _historyListenersBound = false;
 function bindHistoryLazyLoadListeners() {
@@ -282,7 +239,4 @@ if (typeof document !== "undefined" && !N.Chat.history.reset._delegated) {
 N.Chat.history = N.Chat.history || {};
 N.Chat.history.restore = restoreChatHistory;
 N.Chat.history.export = exportChatHistory;
-// Wire the restore hook into the monologue API (send/monologue.js owns
-// the bubble renderer; the fetch-and-replay flow lives here).
-if (N.Chat.monologue) N.Chat.monologue.restore = restoreMonologueBubbles;
 })(window.Nous);

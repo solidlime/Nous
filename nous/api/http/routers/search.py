@@ -58,8 +58,9 @@ def _merge_entity_layer(ctx, memories: list, nodes: list, edges: list, edge_set:
             -> [{source_id, target_id, relation, confidence}]
 
     FYI(accepted): tags also surface as concept entities (see domain/memory/graph.py).
-    enrichment 廃止（2026-11-08）で relation の書き手が無くなったため、既存の関係は
-    描画されるが新しい関係は増えない（エッジ経路の去就は未決）。
+    enrichment 廃止（2026-11-08）で relation の書き手が無くなった。既存の
+    entity_relations 行は凍結データとして描画のみ続ける（新規には増えない）。
+    書き込み経路 (EntityService.add_relation) は削除済み（kanban #35）。
     """
     # getattr guard keeps the endpoint backward-compatible until Lane B lands.
     repo = getattr(ctx, "entity_repo", None)

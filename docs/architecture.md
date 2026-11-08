@@ -194,7 +194,7 @@ nous/
 | `NOUS_DEFAULT_PERSONA` | `default` | デフォルト Persona 名 |
 | `NOUS_TIMEZONE` | `Asia/Tokyo` | タイムゾーン |
 | `NOUS_SANDBOX__ENABLED` | `true` | コード実行サンドボックス |
-| `NOUS_MEMORY_ENRICHMENT__ENABLED` | `true` | 脳側 LLM の有効化（矛盾判定・内省の共通ゲート）。gist 生成は `NOUS_CONSOLIDATION__LLM_GIST_ENABLED` で別制御。enrichment 自体は 2026-11-08 廃止 |
+| `NOUS_MEMORY_ENRICHMENT__ENABLED` | `true` | 脳側 LLM（矛盾判定）の有効化。gist 生成は `NOUS_CONSOLIDATION__LLM_GIST_ENABLED` で別制御。enrichment 自体は 2026-11-08 廃止、自発的内省・独り言は 2026-11-09 廃止 |
 
 全設定項目は WebUI の**設定画面**から確認・変更できます（WebUI からの変更は `docker-compose.yml` の環境変数より優先されます）。
 

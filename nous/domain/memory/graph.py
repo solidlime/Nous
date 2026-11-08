@@ -149,44 +149,9 @@ class EntityService:
         except Exception as exc:
             return Failure(RepositoryError(str(exc)))
 
-    def add_relation(
-        self,
-        source: str,
-        target: str,
-        relation_type: str,
-        memory_key: str | None = None,
-        confidence: float = 1.0,
-    ) -> Result[None, DomainError]:
-        """Explicitly add a relation between two entities."""
-        from nous.domain.shared.errors import RepositoryError
-        from nous.domain.shared.result import Failure
-        from nous.domain.shared.time_utils import format_iso, get_now
-
-        try:
-            now_str = format_iso(get_now())
-            # Ensure both entities exist
-            for eid in (source.lower().strip(), target.lower().strip()):
-                existing = self.repo.get_entity(eid)
-                if existing.is_ok and existing.value is None:
-                    self.repo.save_entity(
-                        Entity(
-                            id=eid,
-                            first_seen=now_str,
-                            last_seen=now_str,
-                        )
-                    )
-
-            relation = EntityRelation(
-                source_entity=source.lower().strip(),
-                target_entity=target.lower().strip(),
-                relation_type=relation_type,
-                memory_key=memory_key,
-                confidence=confidence,
-                created_at=now_str,
-            )
-            return self.repo.save_relation(relation)
-        except Exception as exc:
-            return Failure(RepositoryError(str(exc)))
+    # relation の書き込み経路は enrichment 廃止 (2026-11-08) で消えた。
+    # entity_relations の既存行はグラフ描画 (search.py の relation エッジ) が読むだけ。
+    # repo.save_relation はテストの seed 用に残している。
 
     # -- read operations ---------------------------------------------------
 

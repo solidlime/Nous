@@ -1,13 +1,11 @@
 /* =================================================================
    CHAT SEND TURN — turn hub engine: session state, SSE chat-events
    stream, hub dispatch, connectSSE persona funnel
-   Chunk 3/5 of chat-send.js. Namespace: N.Chat._send.* (internal) +
-   N.Chat.introspectionTool. Per-event rendering (_handleChatEvent /
-   _finalizeTurn) lives in send/turn-events.js and is reached via
-   N.Chat._send.handleEvent.
+   Chunk 3/5 of chat-send.js. Namespace: N.Chat._send.* (internal).
+   Per-event rendering (_handleChatEvent / _finalizeTurn) lives in
+   send/turn-events.js and is reached via N.Chat._send.handleEvent.
    Depends on: send/render.js (N.Chat.ui + N.Chat._send),
-   send/pending.js (N.Chat._send.clearPending/flushPending),
-   send/monologue.js (N.Chat.monologue.connect).
+   send/pending.js (N.Chat._send.clearPending/flushPending).
    ================================================================= */
 ;(function(N) {
 var C = N.Core;
@@ -201,19 +199,6 @@ function _handleHubMessage(e) {
   N.Chat._send.handleEvent(evt);
 }
 
-// tool.called (source="introspection"): 内省 curiosity 探索のツール実行を
-// チャットログに流す (spec C)。メイン対話の tool_call SSE と二重表示しない
-// よう introspection 由来のみ描画する。data は JSON 文字列/オブジェクト両対応。
-function handleToolCalledEvent(data) {
-  try {
-    var d = typeof data === "string" ? JSON.parse(data || "{}") : (data || {});
-    if (d && d.tool_name && d.source === "introspection" &&
-        N.Chat.tools && typeof N.Chat.tools.appendIntrospectionCall === "function") {
-      N.Chat.tools.appendIntrospectionCall(d);
-    }
-  } catch (_e) { /* best-effort */ }
-}
-
 function connectChatEvents(persona) {
   _chatEventsPersona = persona || (window.S && window.S.persona) || null;
   // Persona switch voids any in-flight rendering (the container is
@@ -231,7 +216,6 @@ function connectChatEvents(persona) {
     },
     handlers: {
       message: function (e) { _handleHubMessage(e); },
-      tool_called: function (e) { handleToolCalledEvent(e.data); },
     },
     onOpen: function () {
       // Connect-time snapshot burst (the endpoint replays its whole ring
@@ -244,21 +228,15 @@ function connectChatEvents(persona) {
 }
 
 // ------------------------------------------------------------------
-// REM monologue — display-only whisper fed by the wiring stream
-// (kind=monologue, meta={persona,text}). Lives in the DOM only: no
-// chat history array, no session-save call, vanishes on reload.
-// Class is deliberately separate from .chat-thinking-bubble —
-// thinking belongs to the chat stream, this to the wiring stream.
 // Persona select (init + change) funnels through N.Core.connectSSE —
-// mirror it so the monologue AND chat-events streams always follow the
-// active persona (wraps once, even under script double-load).
-if (typeof N.Core.connectSSE === "function" && !N.Core._monologueConnectWrapped) {
-  N.Core._monologueConnectWrapped = true;
+// mirror it so the chat-events stream follows the active persona
+// (wraps once, even under script double-load).
+if (typeof N.Core.connectSSE === "function" && !N.Core._chatEventsConnectWrapped) {
+  N.Core._chatEventsConnectWrapped = true;
   (function () {
     var _origConnect = N.Core.connectSSE;
     N.Core.connectSSE = function (persona) {
       var r = _origConnect.apply(this, arguments);
-      try { N.Chat.monologue.connect(persona); } catch (_e) {}
       try { connectChatEvents(persona); } catch (_e) {}
       return r;
     };
@@ -266,8 +244,7 @@ if (typeof N.Core.connectSSE === "function" && !N.Core._monologueConnectWrapped)
 }
 
 // ------------------------------------------------------------------
-// ------------------------------------------------------------------
-// Expose on N.Chat (chunk 3/5 — turn session hooks + introspection)
+// Expose on N.Chat (chunk 3/5 — turn session hooks)
 // ------------------------------------------------------------------
 N.Chat._send = N.Chat._send || {};
 N.Chat._send.els = _els;
@@ -276,7 +253,4 @@ N.Chat._send.beginTurnSession = _beginTurnSession;
 N.Chat._send.endTurnSession = _endTurnSession;
 N.Chat._send.closeTextBubble = _closeTextBubble;
 N.Chat._send.emitChatSSE = _emitChatSSE;
-// tool.called (source=introspection) ハンドラ — connectChatEvents が参照し、
-// テストからも直接検証できるよう公開する。
-N.Chat.introspectionTool = { handle: handleToolCalledEvent };
 })(window.Nous);

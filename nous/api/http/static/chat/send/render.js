@@ -1,8 +1,8 @@
 /* =================================================================
    CHAT SEND RENDER — message DOM rendering, typing indicator, scroll,
    assistant div/bubble helpers, clipboard
-   Chunk 1/5 of chat-send.js (split: render / pending / turn /
-   turn-events / monologue). Namespace: N.Chat.ui + N.Chat._send.*
+   Chunk 1/4 of chat-send.js (split: render / pending / turn /
+   turn-events). Namespace: N.Chat.ui + N.Chat._send.*
    Depends on: chat-core.js (N.Chat.state), chat-markdown.js,
    chat-tts.js (play), chat-attachments.js (openViewer).
    ================================================================= */
@@ -36,7 +36,7 @@ function appendChatMessage(role, content, timeStr, isMarkdown, msgId, ts) {
   div.className = "chat-msg " + role;
   div.dataset.msgIndex = msgIndex;
   div.dataset.msgId = msgId || "";
-  // ISO anchor for monologue chronological slotting (restore + live alike)
+  // ISO anchor for chronological ordering (restore + live alike)
   div.dataset.ts = ts || new Date().toISOString();
   const bubble = document.createElement("div");
   bubble.className = "chat-bubble";
