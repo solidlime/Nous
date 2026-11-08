@@ -58,11 +58,19 @@ def _get_json(url: str, timeout: float) -> dict[str, Any]:
         return data
 
 
-def measure(base_url: str, persona: str, queries: list[str], limit: int, timeout: float) -> dict:
+def measure(
+    base_url: str,
+    persona: str,
+    queries: list[str],
+    limit: int,
+    timeout: float,
+    extra_params: dict[str, str] | None = None,
+) -> dict:
     rows: list[dict[str, Any]] = []
     for query in queries:
         words = _words(query)
-        url = f"{base_url.rstrip('/')}/api/search/{persona}?" + urllib.parse.urlencode({"q": query, "limit": limit})
+        params = {"q": query, "limit": limit, **(extra_params or {})}
+        url = f"{base_url.rstrip('/')}/api/search/{persona}?" + urllib.parse.urlencode(params)
         started = time.perf_counter()
         try:
             payload = _get_json(url, timeout)
@@ -114,6 +122,7 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--max-queries", type=int, default=60)
     parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument("--param", action="append", default=[], metavar="KEY=VALUE", help="追加クエリパラメータ")
     parser.add_argument("--out", default=None)
     args = parser.parse_args()
 
@@ -131,7 +140,13 @@ def main() -> int:
         if len(queries) >= args.max_queries:
             break
 
-    report = measure(_validate_base_url(args.base_url), args.persona, queries, args.limit, args.timeout)
+    extra: dict[str, str] = {}
+    for item in args.param:
+        key, _, value = item.partition("=")
+        if not key:
+            raise SystemExit(f"invalid --param: {item!r}")
+        extra[key] = value
+    report = measure(_validate_base_url(args.base_url), args.persona, queries, args.limit, args.timeout, extra)
     summary = {k: v for k, v in report.items() if k != "rows"}
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     if args.out:
