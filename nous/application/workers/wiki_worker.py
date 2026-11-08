@@ -23,6 +23,7 @@ import threading
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
+from nous.application.wiki import vector_index
 from nous.domain.shared.result import Failure, Success
 from nous.infrastructure.logging.structured import get_logger
 
@@ -207,7 +208,6 @@ class WikiWorker:
 
         stale = self._stale_topics(store, memories, persona)
         last_compiled = self._last_compiled(store)
-        last_touched = self._last_compiled(store, include_manual=True)
         # 既にページのある topic は新着 1 件でも巡回対象にする。源を archive すると
         # active が減り、MIN_TOPIC_MEMORIES の下限でその topic が永久に選ばれなくなるため。
         topics = [
@@ -217,20 +217,15 @@ class WikiWorker:
         ]
         # 並び順: stale 先頭 → 最後に編纂された時刻が古い順（未編纂は "" で最優先）
         # → 同順位は記憶数降順。これで小クラスタにも巡回が回る。
-        topics.sort(key=lambda item: (item[0] not in stale, last_touched.get(item[0], ""), -len(item[1])))
+        topics.sort(key=lambda item: (item[0] not in stale, last_compiled.get(item[0], ""), -len(item[1])))
         selected = topics[: self._cfg.topics_per_cycle]
         return [(slug, self._most_recent(mems)) for slug, mems in selected]
 
-    def _last_compiled(self, store: WikiStore, *, include_manual: bool = False) -> dict[str, str]:
-        """topic → 最後に編纂された時刻（ページ updated の最大値）。
-
-        手書きページ（manual）は編纂実績ではないので既定では除外する（下限判定用）。
-        ``include_manual=True`` は並び順用: manual だけの topic を毎サイクル先頭に
-        固定して LLM 呼び出しを浪費しないため、触られた時刻としては数える。
-        """
+    def _last_compiled(self, store: WikiStore) -> dict[str, str]:
+        """topic → 最後に編纂された時刻（ページ updated の最大値）。"""
         latest: dict[str, str] = {}
         for page in store.list_pages():
-            if (page.manual and not include_manual) or not page.sources or not page.updated:
+            if not page.sources or not page.updated:
                 continue
             topic = _topic_of_page(page)
             if page.updated > latest.get(topic, ""):
@@ -305,7 +300,6 @@ class WikiWorker:
                     body,
                     project=page.project,
                     sources=page.sources,
-                    manual=page.manual,  # 落とすと手書きページが次サイクルで編纂に食われる
                 )
                 repaired += 1
         return repaired
@@ -405,11 +399,6 @@ class WikiWorker:
             raise ValueError(f"page {slug} has too many sources ({len(sources)})")
 
         existing = store.read_page(slug)
-        if isinstance(existing, Success) and existing.value.manual:
-            # ユーザーがダッシュボードで書いたページは編纂で上書きしない
-            # （上書きすると編集が 24h 以内に消える）。監査だけ残して飛ばす。
-            self._record_event(ctx, persona, f"skipped {slug}: manual page kept", {"slug": slug, "topic": topic})
-            return False
 
         existed = existing.is_ok
         written = store.write_page(
@@ -423,18 +412,13 @@ class WikiWorker:
             raise RuntimeError(f"write_page failed: {written.error}")
         archived = self._archive_sources(ctx, sources, archived_seen)
         if self.vector_enabled:
-            self._sync_vector(persona, slug, title, body)
+            vector_index.sync_page(self._settings, persona, slug, title, body)
 
         for doomed in page.get("delete", []) or []:
             if isinstance(doomed, str) and doomed in existing_slugs and doomed.startswith(f"{topic}-"):
-                victim = store.read_page(doomed)
-                if isinstance(victim, Success) and victim.value.manual:
-                    # ユーザーが手書きしたページは統合の犠牲にしない
-                    self._record_event(ctx, persona, f"kept {doomed}: manual page", {"slug": doomed})
-                    continue
                 store.delete_page(doomed)
                 if self.vector_enabled:
-                    self._drop_vector(persona, doomed)
+                    vector_index.drop_page(self._settings, persona, doomed)
 
         action = "updated" if existed else "created"
         self._record_event(
@@ -543,61 +527,6 @@ class WikiWorker:
         return [p for p in pages if isinstance(p, dict)]
 
     # ------------------------------------------------------------------
-    # Qdrant 索引（collection prefix "wiki_"。失敗してもファイル層は正）
-    # ------------------------------------------------------------------
-
-    def _sync_vector(self, persona: str, slug: str, title: str, body: str) -> None:
-        from nous.application import use_cases
-
-        cfg = self._settings
-
-        async def _run() -> None:
-            mgr = use_cases.QdrantClientManager(cfg.qdrant.url, cfg.qdrant.api_key)
-            try:
-                await mgr.connect()
-                if not await mgr.health_check():
-                    return
-                store = use_cases.QdrantVectorStore(mgr, _embedding(self._settings), "wiki_")
-                await store.ensure_collection(persona)
-                await store.upsert(persona, slug, f"{title}\n\n{body}")
-            finally:
-                close = getattr(mgr, "close", None)
-                if close is not None:
-                    result = close()
-                    if asyncio.iscoroutine(result):
-                        await result
-
-        try:
-            asyncio.run(_run())
-        except Exception as e:
-            logger.warning("WikiWorker: vector upsert failed for %s: %s", slug, e)
-
-    def _drop_vector(self, persona: str, slug: str) -> None:
-        from nous.application import use_cases
-
-        cfg = self._settings
-
-        async def _run() -> None:
-            mgr = use_cases.QdrantClientManager(cfg.qdrant.url, cfg.qdrant.api_key)
-            try:
-                await mgr.connect()
-                if not await mgr.health_check():
-                    return
-                store = use_cases.QdrantVectorStore(mgr, _embedding(self._settings), "wiki_")
-                await store.delete(persona, slug)
-            finally:
-                close = getattr(mgr, "close", None)
-                if close is not None:
-                    result = close()
-                    if asyncio.iscoroutine(result):
-                        await result
-
-        try:
-            asyncio.run(_run())
-        except Exception as e:
-            logger.warning("WikiWorker: vector delete failed for %s: %s", slug, e)
-
-    # ------------------------------------------------------------------
     # session_events 監査
     # ------------------------------------------------------------------
 
@@ -680,15 +609,3 @@ def _hash_of(title: str, body: str) -> str:
     from nous.infrastructure.wiki.store import page_hash
 
     return page_hash(title, body)
-
-
-def _embedding(settings: Settings):
-    """共有 EmbeddingModel（AppContext と同じ resolution を使う）。"""
-    from nous.application.use_cases import AppContextRegistry
-
-    for persona in list(AppContextRegistry._contexts.keys()):
-        ctx = AppContextRegistry.get(persona)
-        model = getattr(ctx, "embedding_model", None)
-        if model is not None:
-            return model
-    raise RuntimeError("no embedding model available")

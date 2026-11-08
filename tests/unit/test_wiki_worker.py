@@ -302,19 +302,24 @@ class TestIndexMaintenance:
         assert "project-big" in slugs
 
 
-class TestManualPages:
-    def test_manual_page_is_not_overwritten(self, tmp_path) -> None:
-        """ダッシュボードで手書きされたページ（manual: true）は編纂で上書きしない。"""
-        memories = [_mem(f"a{i}", tags=["project:nous"]) for i in range(3)]
+class TestPagesAreUniform:
+    """編集保護は廃止。旧 ``manual: true`` のページも編纂の通常対象になる。"""
+
+    def _write_legacy_manual(self, tmp_path, slug: str, body: str, project: str = "nous") -> None:
+        """手書き判定があった時代のファイルを再現する（旧 frontmatter 付き）。"""
         store = _store(tmp_path)
-        store.write_page(
-            "project-nous-memory",
-            "ユーザーが書いた題名",
-            "手書き本文（編纂に潰されないこと）",
-            project="nous",
-            sources=("a0",),
-            manual=True,
+        path = store.wiki_dir() / f"{slug}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            f"---\ntitle: ユーザーが書いた題名\nproject: {project}\nsources: a0\nmanual: true\n---\n\n{body}\n",
+            encoding="utf-8",
         )
+        store.rebuild_index()
+
+    def test_legacy_manual_page_is_overwritten(self, tmp_path) -> None:
+        """誤字修正のために手で書いたページも、編纂は普通に上書きする。"""
+        memories = [_mem(f"a{i}", tags=["project:nous"]) for i in range(3)]
+        self._write_legacy_manual(tmp_path, "project-nous-memory", "手で書いた本文")
         page = {
             "slug": "project-nous-memory",
             "title": "LLM が書き直した題名",
@@ -325,26 +330,17 @@ class TestManualPages:
         try:
             stored = _store(tmp_path).read_page("project-nous-memory")
             assert isinstance(stored, Success)
-            assert stored.value.manual is True
-            assert stored.value.title == "ユーザーが書いた題名"
-            assert stored.value.body == "手書き本文（編纂に潰されないこと）"
+            assert stored.value.title == "LLM が書き直した題名"
+            assert stored.value.body == "LLM の本文"
             summaries = [s for t, s in _event_rows(conn)]
-            assert any("manual page kept" in s for s in summaries), summaries
+            assert not any("manual" in s for s in summaries), summaries
         finally:
             conn.close()
 
-    def test_manual_page_survives_consolidation_delete(self, tmp_path) -> None:
-        """編纂の delete 指示でも手書きページは消さない（統合の犠牲にしない）。"""
+    def test_legacy_manual_page_is_deleted_by_consolidation(self, tmp_path) -> None:
+        """統合の delete 指示は手書きだったページにも普通に効く。"""
         memories = [_mem(f"a{i}", tags=["project:nous"]) for i in range(3)]
-        store = _store(tmp_path)
-        store.write_page(
-            "project-nous-notes",
-            "手書きノート",
-            "消えては困る本文",
-            project="nous",
-            sources=("a0",),
-            manual=True,
-        )
+        self._write_legacy_manual(tmp_path, "project-nous-notes", "消えてしまう本文")
         page = {
             "slug": "project-nous-overview",
             "title": "Nous 概要",
@@ -354,11 +350,10 @@ class TestManualPages:
         }
         conn, _ = _setup(tmp_path, memories, llm=_pages_json(page))
         try:
-            kept = _store(tmp_path).read_page("project-nous-notes")
-            assert isinstance(kept, Success), "manual ページが delete 指示で消えた"
-            assert kept.value.body == "消えては困る本文"
+            gone = _store(tmp_path).read_page("project-nous-notes")
+            assert not gone.is_ok, "manual ページが編集保護で残ってしまった"
             summaries = [s for t, s in _event_rows(conn)]
-            assert any("kept project-nous-notes: manual page" in s for s in summaries), summaries
+            assert not any("manual" in s for s in summaries), summaries
         finally:
             conn.close()
 
@@ -504,22 +499,23 @@ class TestCycleScopedArchive:
             conn.close()
 
 
-class TestIndexMaintenanceManual:
-    def test_repair_links_preserves_manual_flag(self, tmp_path) -> None:
-        """dangling link の修復で手書きページが編纂対象に戻ってはいけない。"""
+class TestRepairLinks:
+    def test_repair_links_rewrites_page(self, tmp_path) -> None:
+        """dangling link はプレーンテキスト化され、他の frontmatter は保たれる。"""
         store = _store(tmp_path)
         store.write_page(
-            "project-nous-manual",
-            "手書き",
+            "project-nous-notes",
+            "ノート",
             "[[project-nous-ghost]] を見よ。",
             project="nous",
-            manual=True,
+            sources=("a0",),
         )
         worker = WikiWorker(_settings(tmp_path))
         assert worker._repair_links(store) == 1
-        read = store.read_page("project-nous-manual")
+        read = store.read_page("project-nous-notes")
         assert read.is_ok
-        assert read.value.manual is True
+        assert read.value.project == "nous"
+        assert read.value.sources == ("a0",)
         assert "[[project-nous-ghost]]" not in read.value.body
 
 

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import secrets
 import threading
 from typing import TYPE_CHECKING
@@ -14,6 +15,7 @@ from typing import TYPE_CHECKING
 from starlette.responses import JSONResponse
 
 from nous.api.http.deps import _safe_get_context
+from nous.application.wiki.vector_index import async_sync_page
 from nous.domain.shared.result import Failure, Success
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.wiki.store import WikiStore, WikiStoreError
@@ -60,7 +62,6 @@ def register_wiki_routes(mcp) -> None:
                 "sources": list(p.sources),
                 "links": list(p.links),
                 "updated": p.updated,
-                "manual": p.manual,
             }
             for p in sorted(pages, key=lambda p: p.updated or "", reverse=True)
         ]
@@ -70,7 +71,7 @@ def register_wiki_routes(mcp) -> None:
     # PUT 側で request.json() が空になり "Invalid JSON body" になる（実測）。
     @mcp.custom_route("/api/wiki/{persona}/{slug:path}", methods=["GET", "PUT"])
     async def wiki_page(request: Request) -> JSONResponse:
-        """GET: 本文（markdown 生）を返す。PUT: 手書き保存（manual 固定）。"""
+        """GET: 本文（markdown 生）を返す。PUT: ダッシュボードから保存。"""
         if request.method == "PUT":
             return await _save_page(request)
         persona = request.path_params["persona"]
@@ -94,16 +95,15 @@ def register_wiki_routes(mcp) -> None:
                 "sources": list(page.sources),
                 "links": list(page.links),
                 "updated": page.updated,
-                "manual": page.manual,
                 "body": page.body,
             }
         )
 
     async def _save_page(request: Request) -> JSONResponse:
-        """ダッシュボードからの手書き保存（manual ページとして固定）。
+        """ダッシュボードからの保存。
 
-        既存ページなら sources / project を引き継ぎ、編纂 worker が上書きしない
-        ように ``manual: true`` を立てる。新規 slug なら空 sources で作る。
+        既存ページなら sources / project を引き継ぐ。新規 slug なら空 sources で作る。
+        保存後はベクトル索引へ best-effort で反映する（失敗しても保存は成り立つ）。
         """
         persona = request.path_params["persona"]
         slug = request.path_params["slug"]
@@ -140,11 +140,16 @@ def register_wiki_routes(mcp) -> None:
             body,
             project=project,
             sources=prior.sources if prior else (),
-            manual=True,
         )
         if isinstance(written, Failure):
             return JSONResponse({"error": str(written.error)}, status_code=400)
         page = written.value
+        # 索引更新は PUT の成否に影響させない（ファイル層が正）。
+        # async_sync_page は内部で失敗を warning にするので、ここは起動失敗だけ拾う。
+        try:
+            asyncio.create_task(async_sync_page(ctx.settings, persona, page.slug, page.title, page.body))
+        except Exception as e:
+            logger.warning("wiki save: vector sync not scheduled for %s: %s", slug, e)
         logger.info("wiki page saved from dashboard: persona=%s slug=%s", persona, slug)
         return JSONResponse(
             {
@@ -154,7 +159,6 @@ def register_wiki_routes(mcp) -> None:
                 "sources": list(page.sources),
                 "links": list(page.links),
                 "updated": page.updated,
-                "manual": page.manual,
                 "body": page.body,
             }
         )
@@ -182,5 +186,5 @@ def register_wiki_routes(mcp) -> None:
                 logger.exception("wiki manual run failed for persona=%s", persona)
 
         threading.Thread(target=_run, daemon=True, name=f"wiki-manual-{persona}").start()
-        logger.info("wiki manual run accepted for persona=%s", persona)
+        logger.info("wiki run accepted for persona=%s", persona)
         return JSONResponse({"accepted": True, "persona": persona}, status_code=202)

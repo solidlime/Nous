@@ -38,8 +38,7 @@ function renderList() {
     const active = WIKI.current === p.slug ? " active" : "";
     html +=
       '<button class="wiki-item' + active + '" data-wiki-slug="' + esc(p.slug) + '">' +
-      '<span class="wiki-item-title">' + esc(p.title || p.slug) +
-      (p.manual ? ' <span class="wiki-manual-badge">手書き</span>' : "") + "</span>" +
+      '<span class="wiki-item-title">' + esc(p.title || p.slug) + "</span>" +
       '<span class="wiki-item-meta">' + nSrc + " sources · " + esc((p.updated || "").slice(0, 10)) + "</span>" +
       "</button>";
   }
@@ -73,7 +72,7 @@ function renderPage(page) {
   ].filter(Boolean).join(" · ");
   safeSetHTML(head,
     '<h2 style="font-size:1.15rem;font-weight:700;color:var(--text-primary);">' + esc(page.title || page.slug) +
-    (page.manual ? ' <span class="wiki-manual-badge">手書き</span>' : "") + "</h2>" +
+    "</h2>" +
     '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">' + esc(meta) + "</div>");
   safeSetHTML(body, toHtml(page.body));
   body.querySelectorAll('a[href^="#wiki:"]').forEach(function(a) {
@@ -134,7 +133,7 @@ async function loadWiki() {
 }
 
 /* -----------------------------------------------------------------
-   編集（手書き＝ manual: true で固定し、編纂 worker に上書きさせない）
+   編集（保存後のページは編纂の対象になる）
    ----------------------------------------------------------------- */
 function enterEdit() {
   const page = WIKI.page;

@@ -58,8 +58,6 @@ class WikiPage:
     sources: tuple[str, ...] = ()
     updated: str | None = None
     links: tuple[str, ...] = field(default_factory=tuple)
-    #: ユーザーがダッシュボードから手で書いたページ。編纂 worker は上書きしない。
-    manual: bool = False
 
     @property
     def is_index(self) -> bool:
@@ -103,7 +101,7 @@ def parse_page(slug: str, raw: str) -> WikiPage:
         sources=_parse_sources(meta.get("sources", "")),
         updated=meta.get("updated") or None,
         links=extract_links(body),
-        manual=meta.get("manual", "").strip().lower() in ("true", "1", "yes"),
+        # 旧 frontmatter の ``manual: true`` は読み捨てる（編集保護は廃止）。
     )
 
 
@@ -114,8 +112,6 @@ def render_page(page: WikiPage) -> str:
         lines.append(f"project: {page.project}")
     if page.sources:
         lines.append(f"sources: {', '.join(page.sources)}")
-    if page.manual:
-        lines.append("manual: true")
     lines.append(f"updated: {page.updated or _now_iso()}")
     lines.append("---")
     lines.append("")
@@ -225,7 +221,6 @@ class WikiStore:
         body: str,
         project: str | None = None,
         sources: tuple[str, ...] = (),
-        manual: bool = False,
     ) -> Result[WikiPage, WikiStoreError]:
         """ページを原子的に書き込み、``index.md`` を更新する。
 
@@ -245,7 +240,6 @@ class WikiStore:
             sources=tuple(sources),
             updated=_now_iso(),
             links=extract_links(body),
-            manual=manual,
         )
         rendered = render_page(page)
         size = len(rendered.encode("utf-8"))

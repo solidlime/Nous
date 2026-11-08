@@ -28,7 +28,6 @@ def render_wiki_tab() -> str:
         #wiki-edit-body { width:100%; min-height:320px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.82rem; line-height:1.6; padding:10px 12px; border-radius:10px; border:1px solid var(--glass-border); background:rgba(15,23,42,0.45); color:var(--text-primary); resize:vertical; }
         #wiki-edit-title { width:100%; font-size:1rem; font-weight:600; padding:8px 10px; border-radius:10px; border:1px solid var(--glass-border); background:rgba(15,23,42,0.45); color:var(--text-primary); }
         .wiki-edit-actions { display:flex; gap:8px; margin-top:10px; }
-        .wiki-manual-badge { font-size:0.68rem; padding:1px 6px; border-radius:6px; background:rgba(167,139,250,0.18); color:var(--accent-purple, #a78bfa); }
         </style>
         <!-- ========== WIKI TAB ========== -->
         <section id="tab-wiki" class="tab-panel" role="tabpanel">

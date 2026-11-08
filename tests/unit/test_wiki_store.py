@@ -113,6 +113,15 @@ def test_parse_render_roundtrip():
     assert parse_page("s", rendered).body == page.body
 
 
+def test_parse_ignores_legacy_manual_flag():
+    """旧 frontmatter の ``manual: true`` は読めても無視する（後方互換）。"""
+    page = parse_page("s", "---\ntitle: T\nmanual: true\n---\nbody\n")
+    assert page.title == "T"
+    assert page.body == "body"
+    assert not hasattr(page, "manual")
+    assert "manual" not in render_page(page)
+
+
 def test_persona_validation(tmp_path):
     for bad in ("../x", "a/b", "", "."):
         with pytest.raises(WikiStoreError):

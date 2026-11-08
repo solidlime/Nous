@@ -231,29 +231,44 @@ class TestWikiSaveApi:
         assert resp.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_creates_manual_page_and_preserves_sources(self, read_routes):
+    async def test_saves_page_and_schedules_vector_sync(self, read_routes):
+        import asyncio as _asyncio
         import json as _json
 
         mcp, ctx = read_routes
         _write_page(tmp_path=ctx.settings.data_root, sources=("m1", "m2"))
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        calls = []
+
+        async def _fake_sync(settings, persona, slug, title, body):
+            calls.append((persona, slug, title, body))
+
+        with (
+            patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx),
+            patch("nous.api.http.routers.wiki.async_sync_page", _fake_sync),
+        ):
             resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "PUT")(
-                _put_request(payload={"title": "手書き題名", "body": "手で書いた本文"})
+                _put_request(payload={"title": "直した題名", "body": "誤字を直した本文"})
             )
-        assert resp.status_code == 200
+            assert resp.status_code == 200
+            await _asyncio.sleep(0)  # create_task を 1 周回す
+
         page = _json.loads(bytes(resp.body))
-        assert page["manual"] is True
-        assert page["title"] == "手書き題名"
+        assert "manual" not in page
+        assert page["title"] == "直した題名"
         assert page["sources"] == ["m1", "m2"]
 
         from nous.infrastructure.wiki.store import WikiStore
 
         stored = WikiStore(ctx.settings.data_root, "herta").read_page("project-nous").value
-        assert stored.manual is True
-        assert stored.body == "手で書いた本文"
-        assert "manual: true" in WikiStore(ctx.settings.data_root, "herta").wiki_dir().joinpath(
-            "project-nous.md"
-        ).read_text(encoding="utf-8")
+        assert stored.body == "誤字を直した本文"
+        raw = (
+            WikiStore(ctx.settings.data_root, "herta")
+            .wiki_dir()
+            .joinpath("project-nous.md")
+            .read_text(encoding="utf-8")
+        )
+        assert "manual" not in raw
+        assert calls == [("herta", "project-nous", "直した題名", "誤字を直した本文")]
 
     @pytest.mark.asyncio
     async def test_traversal_rejected(self, read_routes):
