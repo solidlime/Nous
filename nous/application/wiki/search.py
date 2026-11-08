@@ -23,6 +23,10 @@ logger = get_logger(__name__)
 #: 応答に含める本文抜粋の長さ。
 EXCERPT_CHARS = 200
 
+#: これ未満のページ数ならベクトル索引を使わない。ファイル TF が全ページを走査するので
+#: 結果は同一のまま、検索 1 回ごとの追加 embedding + Qdrant 往復（実測 100-250ms）を削れる。
+_VECTOR_MIN_PAGES = 8
+
 _WORD_RE = re.compile(r"[a-z0-9]+")
 
 
@@ -46,20 +50,22 @@ async def search_wiki_pages(ctx: AppContext, persona: str, query: str, limit: in
         return []
 
     scores: dict[str, float] = {}
-    # 1) ベクトル索引（ミラー）。失敗は fallback で吸収する。
-    try:
-        from nous.application import use_cases
+    # 1) ベクトル索引（ミラー）。小規模 wiki はどのみち TF が全ページを見るので
+    #    省略する（検索 1 回ごとの追加 embedding + Qdrant 往復を削る）。失敗は TF が吸収する。
+    if pages_by_slug and len(pages_by_slug) >= _VECTOR_MIN_PAGES:
+        try:
+            from nous.application import use_cases
 
-        vector_store = getattr(ctx, "vector_store", None)
-        if vector_store is not None and pages_by_slug:
-            wiki_vs = use_cases.QdrantVectorStore(vector_store.client_manager, vector_store.embedding, "wiki_")
-            result = await wiki_vs.search(persona, query, limit=max(limit * 2, 6))
-            if isinstance(result, Success):
-                for slug, score in result.value:
-                    if slug in pages_by_slug:
-                        scores[slug] = max(scores.get(slug, 0.0), float(score))
-    except Exception as e:
-        logger.debug("wiki vector search failed for %s: %s", persona, e)
+            vector_store = getattr(ctx, "vector_store", None)
+            if vector_store is not None:
+                wiki_vs = use_cases.QdrantVectorStore(vector_store.client_manager, vector_store.embedding, "wiki_")
+                result = await wiki_vs.search(persona, query, limit=max(limit * 2, 6))
+                if isinstance(result, Success):
+                    for slug, score in result.value:
+                        if slug in pages_by_slug:
+                            scores[slug] = max(scores.get(slug, 0.0), float(score))
+        except Exception as e:
+            logger.debug("wiki vector search failed for %s: %s", persona, e)
 
     # 2) ファイル TF（索引未作成・未ヒット分の底上げ）
     terms = _query_terms(query)

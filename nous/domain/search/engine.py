@@ -12,6 +12,7 @@ reflection / admin 検索など）は従来の RRF/減衰段で完結し、polic
 
 from __future__ import annotations
 
+import asyncio
 import re
 import threading
 import time
@@ -965,38 +966,18 @@ class SearchEngine:
             return self._keyword_search(query, date_from, date_to)
         return Success(self._to_search_results(result.value, "semantic"))
 
-    async def _hybrid_search(
-        self, query: SearchQuery, date_from=None, date_to=None
-    ) -> Result[list[SearchResult], SearchError]:
-        """Execute hybrid search combining FTS5, plain keyword, and semantic results with RRF fusion.
+    def _keyword_fts_candidates(
+        self, query: SearchQuery, fetch_k: int, date_from=None, date_to=None
+    ) -> tuple[Result[list[tuple[Memory, float]], SearchError], list[tuple[Memory, float]]]:
+        """同期 SQLite を要する 1 (+2b) の LIKE / FTS5 取得をまとめて実行する。
 
-        rank_policy 指定時のみ取得プールを拡大する
-        （``fetch_k = min(max(top_k * 3, 15), 60)``、keyword/semantic は limit=fetch_k、
-        FTS は top_k=2*fetch_k）。truncation は廃止し、deduped された全候補を返す
-        （件数は ``_finalize`` の post-filter → top_k で決まる）。
+        ``asyncio.to_thread`` から呼ぶ前提（スレッドローカル接続）。セマンティック検索と
+        並行に走らせることで、embedding/Qdrant の待ち時間に SQLite の走査を重ねる。
         """
-        # Empty query + tags: keyword/FTS return nothing, so fall back to tag-only retrieval
-        if not query.text.strip() and query.tags and self._memory_repo is not None:
-            return self._keyword_search(query, date_from, date_to)
-
-        if query.decision_enabled and query.max_hops > 1:
-            # decision + multi-hop は「広げてから判定」: 除かれる対象も候補に含める。
-            fetch_k = min(max(query.top_k * 6, 30), 120)
-        elif query.rank_policy is not None:
-            fetch_k = min(max(query.top_k * 3, 15), 60)
-        else:
-            fetch_k = query.top_k
-
-        all_results: list[SearchResult] = []
-
-        # 1. Plain LIKE keyword search (existing)
         kw_result = self._keyword.search(
             query.text, limit=fetch_k, date_from=date_from, date_to=date_to, tags=query.tags
         )
-        if isinstance(kw_result, Success):
-            all_results.extend(self._to_search_results(kw_result.value, "keyword"))
 
-        # 2. FTS5 full-text search (BM25 ranked)
         fts_pairs: list[tuple[Memory, float]] = []
         if self._memory_repo is not None and hasattr(self._memory_repo, "search_fts"):
             fts_result = self._memory_repo.search_fts(
@@ -1027,12 +1008,50 @@ class SearchEngine:
                     if bar is not None:
                         boosted = [(m, s) for (m, s) in boosted if passes_bm25_bar(s, bar)]
                     fts_pairs = _merge_fts_groups(fts_pairs, boosted)
+        return kw_result, fts_pairs
 
+    async def _hybrid_search(
+        self, query: SearchQuery, date_from=None, date_to=None
+    ) -> Result[list[SearchResult], SearchError]:
+        """Execute hybrid search combining FTS5, plain keyword, and semantic results with RRF fusion.
+
+        rank_policy 指定時のみ取得プールを拡大する
+        （``fetch_k = min(max(top_k * 3, 15), 60)``、keyword/semantic は limit=fetch_k、
+        FTS は top_k=2*fetch_k）。truncation は廃止し、deduped された全候補を返す
+        （件数は ``_finalize`` の post-filter → top_k で決まる）。
+        """
+        # Empty query + tags: keyword/FTS return nothing, so fall back to tag-only retrieval
+        if not query.text.strip() and query.tags and self._memory_repo is not None:
+            return self._keyword_search(query, date_from, date_to)
+
+        if query.decision_enabled and query.max_hops > 1:
+            # decision + multi-hop は「広げてから判定」: 除かれる対象も候補に含める。
+            fetch_k = min(max(query.top_k * 6, 30), 120)
+        elif query.rank_policy is not None:
+            fetch_k = min(max(query.top_k * 3, 15), 60)
+        else:
+            fetch_k = query.top_k
+
+        all_results: list[SearchResult] = []
+
+        # 1+2 (同期 SQLite: LIKE + FTS5) と 3 (async: Qdrant + embedding) は独立なので
+        # 並行に走らせる。SQLite はスレッドローカル接続（connection.py）なので to_thread 可。
+        sem_task = (
+            asyncio.ensure_future(
+                self._semantic.search(query.text, limit=fetch_k, date_from=date_from, date_to=date_to)
+            )
+            if self._semantic is not None
+            else None
+        )
+        kw_result, fts_pairs = await asyncio.to_thread(self._keyword_fts_candidates, query, fetch_k, date_from, date_to)
+        if isinstance(kw_result, Success):
+            all_results.extend(self._to_search_results(kw_result.value, "keyword"))
+        if fts_pairs:
             all_results.extend(self._to_search_results(fts_pairs, "fts"))
 
         # 3. Semantic vector search (Qdrant)
-        if self._semantic is not None:
-            sem_result = await self._semantic.search(query.text, limit=fetch_k, date_from=date_from, date_to=date_to)
+        if sem_task is not None:
+            sem_result = await sem_task
             if isinstance(sem_result, Success):
                 sem_results = self._to_search_results(sem_result.value, "semantic")
                 # Apply similarity_flag for high-confidence matches
