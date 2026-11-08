@@ -75,6 +75,11 @@ from nous.api.mcp._tools_persona import (  # noqa: E402, F401
     _tool_session_begin,
     _tool_update_context,
 )
+from nous.api.mcp._tools_wiki import (  # noqa: E402, F401
+    _tool_wiki_ls,
+    _tool_wiki_read,
+    _tool_wiki_write,
+)
 
 # =============================================================================
 # Dispatch table — maps tool name → (core_function, docstring)
@@ -96,6 +101,9 @@ TOOL_DISPATCH: dict[str, Any] = {
     "item_search": _tool_item_search,
     "item_unequip": _tool_item_unequip,
     "goal_manage": _tool_goal_manage,
+    "wiki_read": _tool_wiki_read,
+    "wiki_write": _tool_wiki_write,
+    "wiki_ls": _tool_wiki_ls,
 }
 
 
@@ -468,6 +476,38 @@ def register_tools(mcp: MCPServer) -> None:
                 return _envelope_wrap(r["result"])
             return _envelope_wrap("Goal done")
         return _envelope_wrap(r)
+
+    # wiki_read
+    @_tool("wiki_read")
+    async def wiki_read(slug: str) -> str:
+        """wiki ページを slug で読む（本文 + title/project/links）。記憶の整理先のまとめ wiki。"""
+        p = _resolve_persona()
+        return _envelope_wrap(await _tool_wiki_read(AppContextRegistry.get(p), p, slug=slug))
+
+    # wiki_ls
+    @_tool("wiki_ls")
+    async def wiki_ls(project: str | None = None, limit: int = 50) -> str:
+        """wiki ページの一覧（slug/title/project/updated）。project 指定で絞り込み。"""
+        p = _resolve_persona()
+        return _envelope_wrap(await _tool_wiki_ls(AppContextRegistry.get(p), p, project=project, limit=limit))
+
+    # wiki_write
+    @_tool("wiki_write")
+    async def wiki_write(
+        slug: str,
+        title: str,
+        body: str,
+        project: str | None = None,
+        sources: list[str] | None = None,
+    ) -> str:
+        """wiki ページを書く。slug 規約: ``project-<slug>-<topic>`` / ``<persona>-<topic>``。
+        sources: 根拠にした記憶の key 一覧（追跡用）。"""
+        p = _resolve_persona()
+        return _envelope_wrap(
+            await _tool_wiki_write(
+                AppContextRegistry.get(p), p, slug=slug, title=title, body=body, project=project, sources=sources
+            )
+        )
 
 
 def _resolve_persona() -> str:
