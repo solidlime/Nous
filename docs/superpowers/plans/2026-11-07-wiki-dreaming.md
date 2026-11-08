@@ -173,3 +173,41 @@ LLM はモデルに深さを持たせる（既定 `openrouter/openai/gpt-4o-mini
 - 統合: 本番 Data で wiki_worker を手動実行 → ページ生成 → `memory_search` の応答に `wiki[]` が出る
 - 回帰: 既存 pytest 一式 + **`scripts/eval_real_queries.py` / `tests/unit/test_http_api.py`**（API 形の破壊検出）+ ruff + mypy-baseline
 - 事前実測: 本番 DB の `project:*` タグ付与率（#12 は新規書込みのみ。既存記憶の付与率が低ければ #15 のクラスタ設計が成立しない）
+
+## 8. 既存の記憶整理 worker との層分担（kanban #20 切り捨て検討の結論）
+
+結論: **どれも切り捨てない。** wiki は「人が読める編纂層」を足しただけで、既存 worker は
+別の軸・別の消費者を持っている。置換できるかを軸で判定した結果が下表。
+
+| worker | 何をする | wiki で置換できるか | 判断 |
+| --- | --- | --- | --- |
+| `DecayWorker` | FSRS v6 べき則で強度を減衰（active→archived）+ 周期 reflection | 不可。wiki ページは強度・順位を持たない | 維持 |
+| `ConsolidationWorker` | archived 記憶を entity クラスタで gist 記憶に統合（時間軸ダイジェスト、MoT slot、減衰耐性） | 不可。**軸が違う**（時間 × トピック）。gist は memory 層に住み自動注入・検索対象 | 維持 |
+| `FreshnessWorker` | 記憶 1 件ずつ「まだ有効か」を LLM 判定（`valid_until`/`lifecycle_status`） | 不可。判定は記憶単位、wiki はページ単位 | 維持 |
+| `EnrichmentWorker` | メタデータ付与・新規性/矛盾検出 | 不可。wiki の入力を作る側 | 維持 |
+| `CurationWorker` | 日次 journal + profile 書き戻し | 部分（profile ≈ `persona-*` ページ） | 既定無効のまま維持 |
+
+### 実測（2026-11-08、本番 herta）
+
+- memories 4,811 = active 3,997 / archived 493 / tombstoned 321
+- `source_type=consolidated` **1,366 件（28.4%）**、最新 gist は 2026-11-05（稼働中）
+- gist は検索に出る: `q="Consolidated Gist merged"` の上位 10 件が全て `consolidated`（score 1.1）
+- wiki ページは 2 件（立ち上げ直後）
+- curation は journal 記憶 **0 件**（`NOUS_CURATION__ENABLED` 既定 false のため本番未稼働）
+
+### 切り捨てない理由
+
+1. gist は memory 層の契約に組み込まれている（検索対象・減衰耐性・freshness 対象外・MoT slot）。消すと文脈注入の質量 28% が空洞になる
+2. 時系列ダイジェスト（「9/15 に何があった」）はトピックページでは代替できない
+3. wiki 側のカバレッジはまだ 2 ページで、置換を主張できる水準にない
+
+### 再検討トリガ（この条件を満たしたら縮退 → 廃止を検討）
+
+- wiki ページの `sources` が gist クラスタを概ね覆い、かつ
+- `scripts/eval_real_queries.py` の検索評価で **wiki 併用時、gist 無しでも同点以上**になった時点
+- 縮退の第一段は `NOUS_MEMORY_ENRICHMENT__*` 従来の連結 gist へ（`llm_gist_enabled=false`）、同点が続けば廃止
+
+### コストの重複
+
+consolidation と wiki は同じ記憶群に LLM をかけるため二重課金になり得る。
+上限で抑えている: `llm_gist_max_per_cycle=5` / `wiki.topics_per_cycle=2`。
