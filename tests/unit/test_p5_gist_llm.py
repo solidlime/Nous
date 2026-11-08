@@ -226,7 +226,7 @@ class TestConsolidationProvenance:
         assert "ep0" not in json.loads(service.calls[0]["derived_from"])
 
     def test_consolidate_persona_uses_llm_gist(self):
-        memories = _group(3)
+        memories = _group(5)
         ctx = self._ctx(memories)
         service = _Service()
         ctx.memory_service = service

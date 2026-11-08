@@ -73,7 +73,7 @@ def _consolidate(tmp_path, broken_link: bool = False):
     try:
         repo = SQLiteMemoryRepository(conn)
         service = _FakeService(repo)
-        for i in range(3):
+        for i in range(5):
             repo.save(_mem(f"src{i}"))
         # 全記憶が共有エンティティ e1 を持つ（クラスタリング成立条件）
         db = conn.get_memory_db()
@@ -82,7 +82,7 @@ def _consolidate(tmp_path, broken_link: bool = False):
         )
         db.executemany(
             "INSERT OR IGNORE INTO memory_entities (memory_key, entity_id, role) VALUES (?, 'e1', 'mentioned')",
-            [(f"src{i}",) for i in range(3)],
+            [(f"src{i}",) for i in range(5)],
         )
         db.commit()
         entity_repo = _BrokenEntityRepo() if broken_link else SQLiteEntityRepository(conn)
@@ -119,7 +119,7 @@ class TestSummarizesRelation:
                 .execute("SELECT source_key, target_key FROM memory_links WHERE link_type = 'summarizes'")
                 .fetchall()
             )
-            assert {(r["source_key"], r["target_key"]) for r in rows} == {(f"src{i}", gist_key) for i in range(3)}
+            assert {(r["source_key"], r["target_key"]) for r in rows} == {(f"src{i}", gist_key) for i in range(5)}
         finally:
             conn.close()
 
@@ -130,5 +130,65 @@ class TestSummarizesRelation:
             assert len(service.calls) == 1
             got = repo.find_by_key("gist_1")
             assert isinstance(got, Success) and got.value is not None
+        finally:
+            conn.close()
+
+
+class TestAlreadySummarizedExcluded:
+    def test_archived_with_summarizes_link_is_skipped(self, tmp_path) -> None:
+        """既に gist に食われた archived は次サイクルの入力から外れる（累積 gist の再生産防止）。"""
+        conn = SQLiteConnection(data_dir=str(tmp_path), persona="test_cw")
+        conn.initialize_schema()
+        try:
+            repo = SQLiteMemoryRepository(conn)
+            service = _FakeService(repo)
+            entity_repo = SQLiteEntityRepository(conn)
+            for i in range(5):
+                repo.save(_mem(f"src{i}"))
+            db = conn.get_memory_db()
+            db.execute(
+                "INSERT OR IGNORE INTO entities (id, entity_type, first_seen, last_seen) VALUES ('e1','test','','')"
+            )
+            db.executemany(
+                "INSERT OR IGNORE INTO memory_entities (memory_key, entity_id, role) VALUES (?, 'e1', 'mentioned')",
+                [(f"src{i}",) for i in range(5)],
+            )
+            db.commit()
+            ctx = SimpleNamespace(memory_repo=repo, memory_service=service, entity_repo=entity_repo)
+
+            worker = ConsolidationWorker(settings=MagicMock())
+            worker._consolidate_persona(ctx, "test")
+            assert len(service.calls) == 1
+
+            # 2 サイクル目: sources は archived のまま + summarizes リンクあり → 何もしない
+            worker._consolidate_persona(ctx, "test")
+            assert len(service.calls) == 1, "already-summarised archived must not be re-gistified"
+
+            # 3 件だけ新しい archived を足すと、その 3 件は min(5) 未満なので単独では gist 化されない
+            for i in range(3):
+                repo.save(_mem(f"new{i}"))
+            repo._conn.get_memory_db().executemany(
+                "INSERT OR IGNORE INTO memory_entities (memory_key, entity_id, role) VALUES (?, 'e1', 'mentioned')",
+                [(f"new{i}",) for i in range(3)],
+            )
+            repo._conn.get_memory_db().commit()
+            worker._consolidate_persona(ctx, "test")
+            assert len(service.calls) == 1
+        finally:
+            conn.close()
+
+    def test_summarized_source_keys_reads_links(self, tmp_path) -> None:
+        """get_summarized_source_keys は summarizes リンクの source_key だけを返す。"""
+        conn = SQLiteConnection(data_dir=str(tmp_path), persona="test_cw")
+        conn.initialize_schema()
+        try:
+            repo = SQLiteMemoryRepository(conn)
+            for k in ("a", "b"):
+                repo.save(_mem(k))
+            entity_repo = SQLiteEntityRepository(conn)
+            entity_repo.upsert_link("a", "gist_x", link_type="summarizes")
+            entity_repo.upsert_link("b", "c", link_type="related")
+            assert entity_repo.get_summarized_source_keys(["a", "b", "c"]) == {"a"}
+            assert entity_repo.get_summarized_source_keys([]) == set()
         finally:
             conn.close()

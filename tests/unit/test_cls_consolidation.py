@@ -90,11 +90,11 @@ class TestCLSConsolidation:
         """episodic のみ群 → gist なし・生残存"""
         conn, repo, service = _setup(tmp_path)
         try:
-            for i in range(3):
+            for i in range(5):
                 repo.save(_mem(f"ep{i}", kind="episodic"))
             ConsolidationWorker(settings=MagicMock())._consolidate_persona(_ctx(repo, service), "test")
             assert service.calls == []
-            for i in range(3):
+            for i in range(5):
                 got = _get(repo, f"ep{i}")
                 assert got.lifecycle_status == "archived"
                 assert got.valid_until is None
@@ -105,15 +105,15 @@ class TestCLSConsolidation:
         """semantic 3 件 → gist 1 件（kind/source_type/derived_from 付与、元は残る）"""
         conn, repo, service = _setup(tmp_path)
         try:
-            for i in range(3):
+            for i in range(5):
                 repo.save(_mem(f"sem{i}"))
             ConsolidationWorker(settings=MagicMock())._consolidate_persona(_ctx(repo, service), "test")
             assert len(service.calls) == 1
             call = service.calls[0]
             assert call["kind"] == "semantic"
             assert call["source_type"] == "consolidated"
-            assert sorted(json.loads(call["derived_from"])) == ["sem0", "sem1", "sem2"]
-            for i in range(3):
+            assert sorted(json.loads(call["derived_from"])) == [f"sem{i}" for i in range(5)]
+            for i in range(5):
                 assert _get(repo, f"sem{i}") is not None
         finally:
             conn.close()
@@ -122,13 +122,13 @@ class TestCLSConsolidation:
         """valid_until 済みは gist 対象外（derived_from にも入らない）"""
         conn, repo, service = _setup(tmp_path)
         try:
-            for i in range(3):
+            for i in range(5):
                 repo.save(_mem(f"ok{i}"))
             for i in range(2):
                 repo.save(_mem(f"old{i}", invalid=True))
             ConsolidationWorker(settings=MagicMock())._consolidate_persona(_ctx(repo, service), "test")
             assert len(service.calls) == 1
-            assert sorted(json.loads(service.calls[0]["derived_from"])) == ["ok0", "ok1", "ok2"]
+            assert sorted(json.loads(service.calls[0]["derived_from"])) == [f"ok{i}" for i in range(5)]
         finally:
             conn.close()
 
@@ -136,11 +136,11 @@ class TestCLSConsolidation:
         """derived_from と related_keys が源泉を示す"""
         conn, repo, service = _setup(tmp_path)
         try:
-            for i in range(3):
+            for i in range(5):
                 repo.save(_mem(f"src{i}"))
             ConsolidationWorker(settings=MagicMock())._consolidate_persona(_ctx(repo, service), "test")
             call = service.calls[0]
-            assert sorted(call["related_keys"]) == ["src0", "src1", "src2"]
+            assert sorted(call["related_keys"]) == [f"src{i}" for i in range(5)]
             assert sorted(json.loads(call["derived_from"])) == sorted(call["related_keys"])
         finally:
             conn.close()

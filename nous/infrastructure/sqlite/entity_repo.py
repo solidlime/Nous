@@ -394,6 +394,30 @@ class SQLiteEntityRepository(SQLiteRepository):
             logger.error("Failed to get links for %d keys: %s", len(keys), e)
             return []
 
+    def get_summarized_source_keys(self, keys: list[str]) -> set[str]:
+        """Return the subset of *keys* already summarised by a gist.
+
+        ``memory_links`` rows written by consolidation are
+        ``source memory -> gist`` with ``link_type='summarizes'``. The
+        consolidation worker uses this to stop re-gistifying the same
+        archived memory every cycle (cumulative gists otherwise pile up).
+        """
+        if not keys:
+            return set()
+        try:
+            placeholders = ", ".join("?" for _ in keys)
+            rows = self._db.execute(
+                "SELECT DISTINCT source_key FROM memory_links "  # nosec B608 -- IN-list is "?" placeholders; values bound via sqlite params
+                f"WHERE link_type = 'summarizes' AND source_key IN ({placeholders})",
+                tuple(keys),
+            ).fetchall()
+            return {str(r["source_key"]) for r in rows}
+        except Exception as e:
+            # Best-effort: a failure must not stop consolidation (the worst case
+            # is the pre-filter behaviour, which is merely wasteful).
+            logger.error("Failed to read summarized source keys: %s", e)
+            return set()
+
     def count_linked_memory_keys(self) -> Result[int, RepositoryError]:
         """memory_entities に紐づく DISTINCT memory_key 数を返す（linked_ratio算出用）。"""
         try:

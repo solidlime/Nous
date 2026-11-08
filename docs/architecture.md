@@ -210,7 +210,10 @@ nous/
 - **注入済み記憶排除**（item 1）: チャット経路で同一 turn 内に注入済みの記憶を検索結果から除外。
 - **再 encode 排除（fingerprint）**（item 6）: Qdrant アダプタが embedding fingerprint を payload に記録し、同一 fingerprint の upsert は再 encode をスキップ。
 - **常載プロフィールドキュメント**（item 3）: `profile_update` ツールで persona_blocks に常載ブロックを登録、検索とは別に毎ターン注入。
-- **日次 curation**（item 4）: CurationWorker が日次で transcript 圧縮→journal 化（FSRS 強度更新）→内省統合。
+- **日次 consolidation（item 4）**: `ConsolidationWorker` が archived 記憶（既に gist 化済みのものは除外）をクラスタリングし gist を生成。
+- **日次 wiki 編纂（item 5）**: `WikiWorker` が定刻（既定 03:00）に起動し、未編纂の記憶をトピックページへまとめ、源記憶を `archived` に落とす。
+
+残る常駐 worker は `ConsolidationWorker` と `WikiWorker` の 2 つ（Curation / Freshness / Enrichment / Decay は 2026-11-08 に廃止）。
 
 ### 評価ハーネス
 - `scripts/eval_search_quality.py`（gold コーパス: `tests/benchmark/data/verify_corpus_v1.json`）

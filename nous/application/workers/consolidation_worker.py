@@ -202,8 +202,8 @@ class ConsolidationWorker:
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self.interval_seconds = 86400  # 24 hours
-        self.min_memories_per_group = 3
-        self.max_consolidated = 10
+        self.min_memories_per_group = 5
+        self.max_consolidated = 3
         # audit H1 — LLM gist generation (integration/generalization) with a
         # per-cycle call cap and content-hash reuse of identical clusters.
         self._gist_llm = gist_llm if gist_llm is not None else default_gist_llm
@@ -283,6 +283,17 @@ class ConsolidationWorker:
         archived = [
             m for m in all_result.value if m.lifecycle_status == "archived" and getattr(m, "valid_until", None) is None
         ]
+        # Only memories that no gist covers yet. Sources stay archived after
+        # consolidation, so without this every cycle re-summarises the whole
+        # backlog and cumulative gists pile up generation after generation.
+        summarized = (
+            ctx.entity_repo.get_summarized_source_keys([m.key for m in archived])
+            if hasattr(ctx.entity_repo, "get_summarized_source_keys")
+            else set()
+        )
+        if summarized:
+            archived = [m for m in archived if m.key not in summarized]
+            logger.debug("ConsolidationWorker: %s %d archived already summarised", persona, len(summarized))
         if len(archived) < self.min_memories_per_group:
             logger.debug(
                 "ConsolidationWorker: %s has %d archived (< %d)", persona, len(archived), self.min_memories_per_group

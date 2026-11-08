@@ -319,7 +319,7 @@ class WikiConfig(BaseModel):
     base_url: str = "https://openrouter.ai/api/v1"
 
     def get_effective_api_key(self, settings: Settings) -> str:
-        """API key 解決（FreshnessConfig.get_effective_api_key と同型）。"""
+        """API key 解決（LLMConfig.get_effective_api_key と同型）。"""
         if self.api_key:
             return self.api_key
         if self.provider == "openrouter" and settings.openrouter_api_key:

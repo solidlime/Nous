@@ -2,7 +2,7 @@
 
 計画書: ``docs/superpowers/plans/2026-11-07-wiki-dreaming.md`` §4.2。
 
-既存の FreshnessWorker（記憶の鮮度評価）を置き換えず、**別レイヤ**として動く:
+記憶の整理は **consolidation（時間軸 gist）→ wiki（トピック編纂）** の 2 段で動く:
 
 - SELECT: persona の active 記憶を ``project:*`` タグでクラスタに分ける
   （タグ無しは ``persona`` クラスタ）。cycle ごとに上位 ``topics_per_cycle`` 件。
@@ -75,7 +75,7 @@ wiki ページ（Markdown 本文）を作成または改訂してください。
 
 
 class WikiWorker:
-    """wiki 編纂 worker（FreshnessWorker と同じ thread + graceful shutdown パターン）。"""
+    """wiki 編纂 worker（常駐 thread + graceful shutdown）。"""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -91,7 +91,7 @@ class WikiWorker:
         self.vector_enabled = True
 
     # ------------------------------------------------------------------
-    # lifecycle（FreshnessWorker と同型）
+    # lifecycle
     # ------------------------------------------------------------------
 
     def start(self) -> None:
@@ -438,7 +438,7 @@ class WikiWorker:
         return True
 
     # ------------------------------------------------------------------
-    # LLM（FreshnessWorker と同じ provider 解決 + テストフック）
+    # LLM（provider 解決 + テストフック）
     # ------------------------------------------------------------------
 
     _ask_llm_for_test: str | None = None

@@ -92,7 +92,7 @@ class TestMotThoughts:
         """高確信 gist → thoughts 行ができる"""
         conn, repo = _setup(tmp_path)
         try:
-            for i in range(3):
+            for i in range(5):
                 repo.save(_mem(f"hi{i}", 0.9))
             service = _FakeService(repo)
             ctx = SimpleNamespace(memory_repo=repo, memory_service=service, entity_repo=_FakeEntityRepo())
@@ -108,7 +108,7 @@ class TestMotThoughts:
         """低確信は破棄（gist 自体は作られる）"""
         conn, repo = _setup(tmp_path)
         try:
-            for i in range(3):
+            for i in range(5):
                 repo.save(_mem(f"lo{i}", 0.6))
             service = _FakeService(repo)
             ctx = SimpleNamespace(memory_repo=repo, memory_service=service, entity_repo=_FakeEntityRepo())
