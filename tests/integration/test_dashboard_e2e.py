@@ -113,19 +113,6 @@ def _seed_memories(persona: str = "testpersona", n: int = 6) -> list[str]:
                 "internal",
             ),
         )
-        db.execute(
-            """INSERT OR REPLACE INTO memory_strength
-               (memory_key, strength, stability, last_decay, recall_count, last_recall)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (
-                key,
-                round(0.5 + 0.08 * i, 3),
-                round(1.0 + 0.5 * i, 2),
-                now_str,
-                i,
-                now_str,
-            ),
-        )
         keys.append(key)
     db.commit()
     return keys
@@ -256,11 +243,12 @@ async def test_dashboard_data_empty(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["persona"] == "testpersona"
-    for key in ("stats", "context", "recent", "blocks", "equipment", "strengths", "goals"):
+    for key in ("stats", "context", "recent", "blocks", "equipment", "goals"):
         assert key in data, f"Missing key '{key}' in dashboard data"
     # Empty DB → no memories
     assert data["recent"] == []
-    assert data["strengths"]["total"] == 0
+    # 2026-11-08: Decay 廃止で strengths 集計は応答から消えた（再追加しないための番人）
+    assert "strengths" not in data
 
 
 # ===================================================================
@@ -278,9 +266,6 @@ async def test_dashboard_data_with_memories(seeded_client):
     # recent returns up to 50 (dashboard fetches limit=50)
     assert len(data["recent"]) <= 50
     assert len(data["recent"]) > 0
-    # strengths summary
-    assert data["strengths"]["total"] == 6
-    assert data["strengths"]["avg"] > 0
     # goals and promises
     assert len(data["goals"]) >= 1
 
@@ -369,10 +354,10 @@ async def test_observations_pagination(seeded_client):
 
 @pytest.mark.asyncio
 async def test_strengths_endpoint(seeded_client):
-    """E9削除: 直叩き廃止。dashboard集約data.strengthsで代替確認。"""
+    """E9削除: 直叩き廃止 → 2026-11-08 に dashboards の strengths 集計も廃止。"""
     resp = await seeded_client.get("/api/dashboard/testpersona")
     assert resp.status_code == 200
-    assert resp.json()["strengths"]["total"] == 6
+    assert "strengths" not in resp.json()
 
 
 @pytest.mark.asyncio
@@ -483,7 +468,6 @@ async def test_full_dogfooding_flow(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["recent"] == []
-    assert data["strengths"]["total"] == 0
 
     # 5. Create memories via raw SQL
     import json as _json
@@ -511,12 +495,6 @@ async def test_full_dogfooding_flow(client):
                 "internal",
             ),
         )
-        db.execute(
-            """INSERT OR REPLACE INTO memory_strength
-               (memory_key, strength, stability, last_decay, recall_count, last_recall)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (key, 0.8, 2.0, format_iso(now), 0, format_iso(now)),
-        )
         keys.append(key)
     db.commit()
 
@@ -525,7 +503,6 @@ async def test_full_dogfooding_flow(client):
     assert resp.status_code == 200
     data = resp.json()
     assert len(data["recent"]) == 3
-    assert data["strengths"]["total"] == 3
 
     # 7. Search (keyword)
     resp = await client.get(f"/api/search/{persona}?q=宇宙ステーション")
@@ -555,7 +532,6 @@ async def test_full_dogfooding_flow(client):
 
     # 11. Delete a memory via raw SQL
     delete_key = keys[0]
-    db.execute("DELETE FROM memory_strength WHERE memory_key = ?", (delete_key,))
     db.execute("DELETE FROM memories WHERE key = ?", (delete_key,))
     db.commit()
 
