@@ -147,6 +147,10 @@ class TestDecayWorkerBrain:
         """感情強度が高い記憶ほど減衰が緩やか（1/(1 + 0.5*i) の緩和係数）。"""
         s0 = _make_strength("e0", strength=0.8)
         s1 = _make_strength("e1", strength=0.8)
+        # last_decay=now だと elapsed≈0 で減衰量が 0 になり差が出ない（flaky）。
+        # 固定の過去時刻にして減衰を決定的にする。
+        for strength in (s0, s1):
+            strength.last_decay = get_now() - timedelta(days=5)
         ctx = _make_ctx([s0, s1])
         ctx.memory_repo.find_all.return_value = MagicMock(
             is_ok=True,
