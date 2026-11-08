@@ -65,9 +65,13 @@ def register_wiki_routes(mcp) -> None:
         ]
         return JSONResponse({"persona": persona, "pages": items})
 
-    @mcp.custom_route("/api/wiki/{persona}/{slug:path}", methods=["GET"])
+    # GET と PUT を 1 つの Route に載せる: 同一 path を 2 回 custom_route すると
+    # PUT 側で request.json() が空になり "Invalid JSON body" になる（実測）。
+    @mcp.custom_route("/api/wiki/{persona}/{slug:path}", methods=["GET", "PUT"])
     async def wiki_page(request: Request) -> JSONResponse:
-        """wiki ページ 1 枚の本文（markdown 生）を返す。"""
+        """GET: 本文（markdown 生）を返す。PUT: 手書き保存（manual 固定）。"""
+        if request.method == "PUT":
+            return await _save_page(request)
         persona = request.path_params["persona"]
         slug = request.path_params["slug"]
         ctx = _safe_get_context(persona)
@@ -94,8 +98,7 @@ def register_wiki_routes(mcp) -> None:
             }
         )
 
-    @mcp.custom_route("/api/wiki/{persona}/{slug:path}", methods=["PUT"])
-    async def wiki_save(request: Request) -> JSONResponse:
+    async def _save_page(request: Request) -> JSONResponse:
         """ダッシュボードからの手書き保存（manual ページとして固定）。
 
         既存ページなら sources / project を引き継ぎ、編纂 worker が上書きしない
@@ -108,7 +111,8 @@ def register_wiki_routes(mcp) -> None:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
         try:
             raw = await request.json()
-        except Exception:
+        except Exception as exc:
+            logger.warning("wiki save: invalid json body: %s", exc)
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         if not isinstance(raw, dict):
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)

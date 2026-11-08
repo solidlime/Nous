@@ -16,10 +16,11 @@ class _FakeMcp:
         self.routes: dict[tuple[str, str], object] = {}
 
     def custom_route(self, path, methods=None):
-        method = (methods or ["GET"])[0].upper()
+        methods = [m.upper() for m in (methods or ["GET"])]
 
         def deco(fn):
-            self.routes[(path, method)] = fn
+            for method in methods:
+                self.routes[(path, method)] = fn
             return fn
 
         return deco
@@ -205,6 +206,7 @@ def _put_request(persona="herta", slug="project-nous", payload=None):
     req = MagicMock()
     req.path_params = {"persona": persona, "slug": slug}
     req.headers = {}
+    req.method = "PUT"
 
     async def _json():
         return payload if payload is not None else {}
