@@ -9,6 +9,7 @@ from nous.api.http.routers.search import register_search_routes
 from nous.api.http.routers.session_events import register_session_events_routes
 from nous.api.http.routers.skills import register_skills_routes
 from nous.api.http.routers.tts import register_tts_routes
+from nous.api.http.routers.wiki import register_wiki_routes
 
 __all__ = [
     "register_admin_routes",
@@ -22,4 +23,5 @@ __all__ = [
     "register_session_events_routes",
     "register_skills_routes",
     "register_tts_routes",
+    "register_wiki_routes",
 ]

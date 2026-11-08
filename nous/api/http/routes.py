@@ -12,6 +12,7 @@ from nous.api.http.routers import (
     register_session_events_routes,
     register_skills_routes,
     register_tts_routes,
+    register_wiki_routes,
 )
 
 
@@ -28,3 +29,4 @@ def register_http_routes(mcp) -> None:
     register_events_routes(mcp)
     register_session_events_routes(mcp)
     register_image_gen_routes(mcp)
+    register_wiki_routes(mcp)
