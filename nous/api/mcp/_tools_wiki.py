@@ -18,6 +18,10 @@ if TYPE_CHECKING:
 #: wiki_ls の既定件数上限。
 LS_DEFAULT_LIMIT = 50
 
+#: wiki_grep の既定件数上限（行単位ヒット）。
+GREP_DEFAULT_LIMIT = 50
+GREP_MAX_LIMIT = 200
+
 
 def _store(ctx: AppContext, persona: str) -> WikiStore:
     return WikiStore(ctx.settings.data_root, persona)
@@ -79,4 +83,21 @@ async def _tool_wiki_write(
     return tool_ok({"slug": page.slug, "title": page.title, "project": page.project}, **{})
 
 
-__all__ = ["_tool_wiki_ls", "_tool_wiki_read", "_tool_wiki_write"]
+async def _tool_wiki_grep(ctx: AppContext, persona: str, pattern: str, limit: int = GREP_DEFAULT_LIMIT) -> str:
+    """wiki 本文を行単位の正規表現で grep する（slug・行番号・行テキストを返す）。
+
+    意味検索では取り逃がす「字面が一致しないと嘘になる」照合用。
+    目次（index.md）は本文の写しなので対象外。
+    """
+    if not pattern.strip():
+        return tool_error(ToolErrorCode.VALIDATION_ERROR, "pattern must not be empty")
+    capped = max(1, min(limit, GREP_MAX_LIMIT))
+    try:
+        hits = _store(ctx, persona).grep(pattern, limit=capped)
+    except Exception as exc:  # invalid regex は WikiStoreError
+        return tool_error(ToolErrorCode.VALIDATION_ERROR, f"{exc}")
+    items = [{"slug": slug, "line": line_no, "text": text} for slug, line_no, text in hits]
+    return tool_ok(items, total=len(items), pattern=pattern)
+
+
+__all__ = ["_tool_wiki_grep", "_tool_wiki_ls", "_tool_wiki_read", "_tool_wiki_write"]

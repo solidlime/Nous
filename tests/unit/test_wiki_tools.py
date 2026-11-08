@@ -6,7 +6,12 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
-from nous.api.mcp._tools_wiki import _tool_wiki_ls, _tool_wiki_read, _tool_wiki_write
+from nous.api.mcp._tools_wiki import (
+    _tool_wiki_grep,
+    _tool_wiki_ls,
+    _tool_wiki_read,
+    _tool_wiki_write,
+)
 
 
 def _ctx(tmp_path) -> Any:
@@ -61,3 +66,34 @@ async def test_ls_filters_by_project(tmp_path):
     nous_pages = _payload(await _tool_wiki_ls(ctx, "herta", project="NOUS"))
     assert nous_pages["total"] == 1
     assert nous_pages["data"][0]["slug"] == "project-nous-a"
+
+
+async def test_grep_hits_slug_line_and_text(tmp_path):
+    ctx = _ctx(tmp_path)
+    await _tool_wiki_write(ctx, "herta", "herta-a", "A", "coffee は好物" + chr(10) + "ビールも好き")
+    await _tool_wiki_write(ctx, "herta", "herta-b", "B", "Coffee 派と紅茶派")
+
+    result = _payload(await _tool_wiki_grep(ctx, "herta", "coffee"))
+    assert result["ok"] is True
+    assert result["total"] == 2
+    slugs = {hit["slug"] for hit in result["data"]}
+    assert slugs == {"herta-a", "herta-b"}
+    assert all(hit["line"] >= 1 and "offee" in hit["text"] for hit in result["data"])
+
+
+async def test_grep_rejects_empty_pattern_and_bad_regex(tmp_path):
+    ctx = _ctx(tmp_path)
+    await _tool_wiki_write(ctx, "herta", "herta-a", "A", "body")
+
+    empty = _payload(await _tool_wiki_grep(ctx, "herta", "   "))
+    assert empty["ok"] is False and empty["error"]["code"] == "VALIDATION_ERROR"
+
+    bad = _payload(await _tool_wiki_grep(ctx, "herta", "(["))
+    assert bad["ok"] is False and bad["error"]["code"] == "VALIDATION_ERROR"
+
+
+async def test_grep_respects_limit(tmp_path):
+    ctx = _ctx(tmp_path)
+    await _tool_wiki_write(ctx, "herta", "herta-a", "A", "派 派 派" + chr(10) + "派 派")
+    result = _payload(await _tool_wiki_grep(ctx, "herta", "派", limit=2))
+    assert result["total"] == 2

@@ -490,6 +490,17 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
             ),
         },
     ),
+    "wiki_grep": ToolSpec(
+        name="wiki_grep",
+        summary="まとめ wiki の本文を行単位の正規表現で grep する（意味検索で取り逃す字面一致の照合用）",
+        surfaces=frozenset({MCP}),
+        params={
+            MCP: (
+                ToolParam("pattern", "string", required=True),
+                ToolParam("limit", "integer", required=False),
+            ),
+        },
+    ),
 }
 
 

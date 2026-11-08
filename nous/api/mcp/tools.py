@@ -76,6 +76,7 @@ from nous.api.mcp._tools_persona import (  # noqa: E402, F401
     _tool_update_context,
 )
 from nous.api.mcp._tools_wiki import (  # noqa: E402, F401
+    _tool_wiki_grep,
     _tool_wiki_ls,
     _tool_wiki_read,
     _tool_wiki_write,
@@ -104,6 +105,7 @@ TOOL_DISPATCH: dict[str, Any] = {
     "wiki_read": _tool_wiki_read,
     "wiki_write": _tool_wiki_write,
     "wiki_ls": _tool_wiki_ls,
+    "wiki_grep": _tool_wiki_grep,
 }
 
 
@@ -508,6 +510,13 @@ def register_tools(mcp: MCPServer) -> None:
                 AppContextRegistry.get(p), p, slug=slug, title=title, body=body, project=project, sources=sources
             )
         )
+
+    # wiki_grep
+    @_tool("wiki_grep")
+    async def wiki_grep(pattern: str, limit: int = 50) -> str:
+        """wiki 本文を行単位の正規表現で grep する。意味検索で取り逃す字面一致の照合用。"""
+        p = _resolve_persona()
+        return _envelope_wrap(await _tool_wiki_grep(AppContextRegistry.get(p), p, pattern=pattern, limit=limit))
 
 
 def _resolve_persona() -> str:
