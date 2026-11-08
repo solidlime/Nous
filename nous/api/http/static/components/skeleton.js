@@ -51,6 +51,7 @@ var _selfManaged = new Set([
   "chat",
   "timeline",
   "activity",
+  "wiki",
 ]);
 
 /* ── Register a custom skeleton config for a tab ── */
