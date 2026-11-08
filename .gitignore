@@ -103,3 +103,4 @@ data/hub.db
 tmp/
 .vitest/
 .venv-ci/
+.ci_log.txt

@@ -5,22 +5,30 @@ from __future__ import annotations
 import pytest
 
 
-@pytest.mark.slow
-def test_sudachi_extracts_person() -> None:
+@pytest.fixture(scope="module")
+def sudachi_extractor():
+    """辞書が無ければ初回だけダウンロードする。取得できない環境は skip。
+
+    辞書の取得はネットワーク越しなので、CDN 障害でユニットテストを赤にしない。
+    """
     from nous.domain.memory.sudachi_extractor import SudachiExtractor
 
-    extractor = SudachiExtractor()
-    entities = extractor.extract("田中さんが東京で会議に参加した")
+    try:
+        return SudachiExtractor()
+    except Exception as exc:  # noqa: BLE001 - 取得失敗の種類は問わず skip
+        pytest.skip(f"Sudachi dictionary unavailable: {exc}")
+
+
+@pytest.mark.slow
+def test_sudachi_extracts_person(sudachi_extractor) -> None:
+    entities = sudachi_extractor.extract("田中さんが東京で会議に参加した")
     names = [e["name"] for e in entities]
     assert any("田中" in n for n in names)
 
 
 @pytest.mark.slow
-def test_sudachi_extracts_location() -> None:
-    from nous.domain.memory.sudachi_extractor import SudachiExtractor
-
-    extractor = SudachiExtractor()
-    entities = extractor.extract("田中さんが東京で会議に参加した")
+def test_sudachi_extracts_location(sudachi_extractor) -> None:
+    entities = sudachi_extractor.extract("田中さんが東京で会議に参加した")
     names = [e["name"] for e in entities]
     assert any("東京" in n for n in names)
 
