@@ -60,6 +60,7 @@ def register_wiki_routes(mcp) -> None:
                 "sources": list(p.sources),
                 "links": list(p.links),
                 "updated": p.updated,
+                "manual": p.manual,
             }
             for p in sorted(pages, key=lambda p: p.updated or "", reverse=True)
         ]

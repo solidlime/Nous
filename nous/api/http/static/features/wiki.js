@@ -38,7 +38,8 @@ function renderList() {
     const active = WIKI.current === p.slug ? " active" : "";
     html +=
       '<button class="wiki-item' + active + '" data-wiki-slug="' + esc(p.slug) + '">' +
-      '<span class="wiki-item-title">' + esc(p.title || p.slug) + "</span>" +
+      '<span class="wiki-item-title">' + esc(p.title || p.slug) +
+      (p.manual ? ' <span class="wiki-manual-badge">手書き</span>' : "") + "</span>" +
       '<span class="wiki-item-meta">' + nSrc + " sources · " + esc((p.updated || "").slice(0, 10)) + "</span>" +
       "</button>";
   }
