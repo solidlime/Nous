@@ -102,3 +102,4 @@ data/hub.db
 .playwright-mcp/
 tmp/
 .vitest/
+.venv-ci/
