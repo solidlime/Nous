@@ -197,6 +197,16 @@ def register_search_routes(mcp) -> None:
                 vector_weight=1.0,
                 keyword_weight=1.0,
             )
+            # 被覆率項の重みは測定用に query param で上書きできる（既定は RankPolicy 既定）。
+            # shortcut: 調整用の口を API に置いている（運用で固定したら Settings 化して閉じる）
+            coverage_raw = request.query_params.get("coverage")
+            if coverage_raw is not None:
+                with __import__("contextlib").suppress(ValueError):
+                    import dataclasses
+
+                    query_kwargs["rank_policy"] = dataclasses.replace(
+                        query_kwargs["rank_policy"], coverage_weight=max(0.0, float(coverage_raw))
+                    )
             query = SearchQuery(**query_kwargs)
             if hasattr(ctx.search_engine, "_semantic") and ctx.search_engine._semantic is not None:
                 ctx.search_engine._semantic.persona = persona  # noqa: SLF001
