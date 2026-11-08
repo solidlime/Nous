@@ -85,6 +85,33 @@ _DECISION_TIME_FLOOR = 0.5
 FTS_OR_FALLBACK_MIN = 3
 
 
+def _query_terms(text: str, limit: int = 8) -> list[str]:
+    """クエリの実質語（2 文字以上、重複除去、最大 limit 件）を返す。
+
+    rank_policy の被覆率項用。日本語は空白区切りが無いので、記号区切りで
+    分割できた語だけで評価する（無理な分解はしない）。
+    """
+    raw: list[str] = []
+    buf: list[str] = []
+    for ch in text:
+        if ch.isalnum():
+            buf.append(ch)
+        else:
+            if buf:
+                raw.append("".join(buf))
+                buf = []
+    if buf:
+        raw.append("".join(buf))
+    terms: list[str] = []
+    for word in raw:
+        lowered = word.lower()
+        if len(lowered) >= 2 and lowered not in terms:
+            terms.append(lowered)
+        if len(terms) >= limit:
+            break
+    return terms
+
+
 def _effective_time_weight(created_at: datetime | None) -> float:
     """表示と順位付けで同じ実効値を返す（floor の二重管理を避ける）。"""
     return max(_DECISION_TIME_FLOOR, compute_decision_time_decay(created_at))
@@ -763,18 +790,24 @@ class SearchEngine:
             graph_signal = self._compute_graph_signal(query, candidates)
 
         ranked: list[SearchResult] = []
+        # クエリ語の被覆率: 複数のクエリ語を含む記憶を上位に寄せる（精度の実測改善）。
+        query_terms = _query_terms(query.text) if policy.coverage_weight != 0.0 else []
         for i, orig in enumerate(candidates):
             rel = rel_by_index.get(i, 0.0)
             base = policy.recency_weight * compute_recency_decay(
                 orig.memory.created_at
             ) + policy.importance_weight * float(getattr(orig.memory, "importance", 0.5))
             graph_boost = policy.graph_boost_weight * graph_signal.get(orig.memory.key, 0.0)
-            composite = (
-                base
-                + policy.relevance_weight * rel
-                + graph_boost
-                + policy.lexical_weight * float(orig.lexical_score or 0.0)
+            coverage = 0.0
+            if query_terms:
+                haystack = f"{orig.memory.content or ''} {' '.join(orig.memory.tags or [])}".lower()
+                coverage = sum(1 for t in query_terms if t in haystack) / len(query_terms)
+            # lexical_weight=0 は従来どおり「語一致が順位に無関係」を保証する契約なので、
+            # 被覆率による底上げも lexical_weight でゲートする（後方互換維持）。
+            lexical_boost = policy.lexical_weight * (
+                float(orig.lexical_score or 0.0) + (policy.coverage_weight * coverage if policy.lexical_weight else 0.0)
             )
+            composite = base + policy.relevance_weight * rel + graph_boost + lexical_boost
             if policy.reflection_penalty != 1.0 and "reflection" in (orig.memory.tags or []):
                 composite *= policy.reflection_penalty
             ranked.append(

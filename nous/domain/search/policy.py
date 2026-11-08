@@ -41,6 +41,7 @@ class RankPolicy:
     reflection_penalty: float = 1.0
     graph_boost_weight: float = 0.1  # entity/PPR graph 信号の composite 加算上限
     lexical_weight: float = 0.25  # keyword/fts 語一致信号の composite 加算上限
+    coverage_weight: float = 0.2  # クエリ語の被覆率（multi-term のほうを上に）
 
     @classmethod
     def from_weight_args(
