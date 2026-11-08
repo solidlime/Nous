@@ -56,6 +56,20 @@ _REMOVED_CONFIG_KEYS_V4: frozenset[str] = frozenset(
         "memory_enrichment_interval",
         "memory_enrichment_model",
         "memory_enrichment_prompt_template",
+        # enrichment 廃止 (2026-11-08) で落ちたノブ
+        "memory_enrichment_enabled",
+        "brain_enrich_auto_run",
+        "brain_enrich_interval_seconds",
+        "brain_enrich_batch_limit",
+        "brain_novelty_sim_threshold",
+        "brain_novelty_importance_threshold",
+        "brain_novelty_stability_multiplier",
+        "brain_idle_after_seconds",
+        "brain_min_batch_size",
+        "brain_max_defer_seconds",
+        "brain_spontaneous_enabled",
+        "brain_spontaneous_interval_hours",
+        "brain_spontaneous_prompt",
     }
 )
 
@@ -118,9 +132,8 @@ _TIER_BASIC: frozenset[str] = frozenset(
         "retrieval_recency_weight",
         "retrieval_importance_weight",
         "retrieval_relevance_weight",
-        # 忘却 / 記憶強化 ON/OFF・応答トークン上限
+        # 忘却 ON/OFF・応答トークン上限
         "forgetting_enabled",
-        "memory_enrichment_enabled",
         "max_tokens",
     }
 )
@@ -163,17 +176,12 @@ _TIER_ADVANCED: frozenset[str] = frozenset(
         # リフレクション / メンタルモデル
         "reflection_enabled",
         "mental_model_enabled",
-        # brain 系主要 ON/OFF とアイドル秒数
-        "brain_enrich_auto_run",
+        # brain 系主要 ON/OFF
         "brain_graph_flash_enabled",
-        "brain_monologue_enabled",
         "brain_introspection_enabled",
         "brain_reasoning_enabled",
-        "brain_spontaneous_enabled",
         "brain_llm_dedicated",
-        "brain_idle_after_seconds",
         "brain_introspection_prompt",
-        "brain_spontaneous_prompt",
         # Jev 型判定ゲート / multi-hop 検索 (#011)
         "brain_decision_enabled",
         "brain_decision_model",
@@ -463,11 +471,11 @@ async def save_chat_config(request: Request) -> JSONResponse:
     except Exception:  # 最終防衛線: Pydantic/domain validation
         logger.exception("save_chat_config: config validation failed")
         return JSONResponse({"error": "Invalid config"}, status_code=400)
-    # Re-resolve the enricher so brain_llm_* toggles apply immediately (B1).
+    # Re-resolve the brain LLM so brain_llm_* toggles apply immediately (B1).
     try:
-        ctx.reload_enricher()
+        ctx.reload_brain_llm()
     except Exception:
-        logger.debug("save_chat_config: reload_enricher failed", exc_info=True)
+        logger.debug("save_chat_config: reload_brain_llm failed", exc_info=True)
     # 複数 WebUI クライアントの設定同期（E3）。publish 失敗は保存に影響させない。
     try:
         await ctx.event_bus.publish("config.updated", {"persona": persona})

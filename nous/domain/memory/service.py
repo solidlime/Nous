@@ -17,7 +17,6 @@ if TYPE_CHECKING:
     )
     from nous.domain.search.engine import SearchEngine
     from nous.infrastructure.llm.memory_enricher import MemoryEnricher
-    from nous.infrastructure.sqlite.enrichment_queue_repo import EnrichmentQueueRepository
 
 from nous.domain.memory.evolution_service import MemoryEvolutionService
 from nous.domain.memory.link_service import MemoryLinkService
@@ -61,7 +60,6 @@ class MemoryService:
         strength_repo: MemoryStrengthRepository | None = None,
         aux_repo: MemoryAuxiliaryRepository | None = None,
         coaccess_tracker: list[str] | None = None,
-        enrichment_queue: EnrichmentQueueRepository | None = None,
     ) -> None:
         self._repo = repo
         # Mutable wrapper for late search_engine injection (see use_cases.py:362)
@@ -72,7 +70,6 @@ class MemoryService:
         self._contradiction_detector = contradiction_detector
         self._strength_repo = strength_repo
         self._aux_repo = aux_repo
-        self._enrichment_queue = enrichment_queue
 
         # Sub-services
         self._write_service = MemoryWriteService(repo, self._search_engine_ref)
@@ -202,19 +199,12 @@ class MemoryService:
                     tags=tags,
                 )
 
-        # ── 8. Enrichment queue (idle worker drains; no immediate LLM call) ──
-        if self._enrichment_queue is not None:
-            try:
-                self._enrichment_queue.enqueue(key)
-            except Exception:
-                logger.debug("enrichment enqueue failed for %s", key, exc_info=True)
-
-        # ── 9. Hebbian co-activation links ──
+        # ── 8. Hebbian co-activation links ──
         if self._link_repo is not None:
             with contextlib.suppress(Exception):
                 self._link_service._create_hebbian_links(memory)
 
-        # ── 10. Background evolution ──
+        # ── 9. Background evolution ──
         _track_background_task(
             self._evolution_service._run_background_evolution(
                 content=content,

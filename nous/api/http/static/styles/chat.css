@@ -2480,7 +2480,7 @@ input[type="range"].chat-field-input:focus {
 #settings-panel details[data-category="image"] summary::before {
   color: var(--accent-pink);
 }
-#settings-panel details[data-category="memory_enrichment"] summary::before {
+#settings-panel details[data-category="brain_simulation"] summary::before {
   color: var(--accent-yellow);
 }
 #settings-panel details[data-category="forgetting"] summary::before {

@@ -1,8 +1,7 @@
 """Entity typist backfill runner.
 
-DISTINCT entities のバッチ型付け。enrich 相乗りではなく entities を主軸にする
-理由: enrich ゲート（importance == 0.5）に覆蓋されず、対象が memory 数ではなく
-entity 数で頭打ちになり、新規対応と既存データ backfill が同じコードで済む。
+DISTINCT entities のバッチ型付け。entities を主軸にする理由: 対象が memory 数では
+なく entity 数で頭打ちになり、新規対応と既存データ backfill が同じコードで済む。
 
 LLM は fail-open。型を書けなかった entity は metadata.typed_by を持たず、
 次回の実行対象として残る（推測で型を書かない）。

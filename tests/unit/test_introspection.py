@@ -18,7 +18,6 @@ from nous.application.chat.introspection import (
     IntrospectionEngine,
     fetch_recent_turns,
     run_introspection,
-    run_spontaneous,
 )
 from nous.domain.memory import wiring_events
 from nous.domain.memory.service import MemoryService
@@ -614,7 +613,6 @@ class TestBrainMaxTokens:
         from nous.domain.provider_config import ProviderConfig
 
         cfg = ChatConfig(
-            memory_enrichment_enabled=True,
             provider_config=ProviderConfig(
                 provider="openai",
                 model="chat-model",
@@ -634,7 +632,6 @@ class TestBrainMaxTokens:
         from nous.domain.provider_config import ProviderConfig
 
         cfg = ChatConfig(
-            memory_enrichment_enabled=True,
             provider_config=ProviderConfig(
                 provider="openai",
                 model="chat-model",
@@ -657,7 +654,6 @@ class TestBrainMaxTokens:
         from nous.domain.provider_config import ProviderConfig
 
         cfg = ChatConfig(
-            memory_enrichment_enabled=True,
             provider_config=ProviderConfig(
                 provider="openai",
                 model="chat-model",
@@ -755,144 +751,8 @@ class TestStateMaterial:
         assert "elapsed" in state
 
 
-class TestGenerateSpontaneous:
-    """自発的内省エンジン: 静かな時間に記憶＋現在状態から独り言を産出。"""
-
-    def _engine(self, captured: dict) -> IntrospectionEngine:
-        async def stream(messages, system, temperature, max_tokens, reasoning_effort=None):
-            captured["user_message"] = messages[0].content
-            from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent
-
-            yield TextDeltaEvent(content=_JSON_OK)
-            yield DoneEvent(full_content=_JSON_OK, tool_calls=[])
-
-        provider = MagicMock()
-        provider.stream = stream
-        return IntrospectionEngine(provider)
-
-    def test_prompt_content_and_memories(self) -> None:
-        import asyncio
-
-        captured: dict = {}
-        engine = self._engine(captured)
-        result = asyncio.new_event_loop().run_until_complete(
-            engine.generate_spontaneous(
-                "test",
-                "あなたはテスト人格である。",
-                ["思い出その1", "思い出その2"],
-                {"emotion": "calm", "emotion_intensity": 0.3, "body_state": None, "elapsed": "7時間"},
-            )
-        )
-        assert result is not None
-        assert result.monologue == "ふふ、ちゃんと返せた。"
-        msg = captured["user_message"]
-        assert "静かな時間" in msg
-        assert "思い出その1" in msg
-        assert "感情: calm（強度 0.3）" in msg
-        assert "7時間" in msg
-        assert "monologue は必ず書くこと" in msg
-
-    def test_elapsed_label_override(self) -> None:
-        """elapsed_label がある state はラベルを差し替える（spontaneous 経路: 対話なし時間）。"""
-        import asyncio
-
-        captured: dict = {}
-        engine = self._engine(captured)
-        state = {
-            "emotion": "calm",
-            "emotion_intensity": 0.3,
-            "body_state": None,
-            "elapsed": "7時間",
-            "elapsed_label": "誰も話しかけてこない時間",
-        }
-        asyncio.new_event_loop().run_until_complete(engine.generate_spontaneous("test", "sp", [], state))
-        assert "誰も話しかけてこない時間 7時間" in captured["user_message"]
-        assert "前回の内省から" not in captured["user_message"]
-
-    def test_broken_json_returns_none(self) -> None:
-        import asyncio
-
-        async def stream(messages, system, temperature, max_tokens, reasoning_effort=None):
-            from nous.infrastructure.llm.base import DoneEvent
-
-            yield DoneEvent(full_content="not json", tool_calls=[])
-
-        provider = MagicMock()
-        provider.stream = stream
-        engine = IntrospectionEngine(provider)
-        assert asyncio.new_event_loop().run_until_complete(engine.generate_spontaneous("t", "sp", [], None)) is None
-
-
-class TestRunSpontaneous:
-    """自発モード実行: 記憶取得→generate→適用、イベント種別は brain.introspection_spontaneous。"""
-
-    def _ctx_with_memories(self, ctx, memories: list[str]) -> None:
-        items = [SimpleNamespace(content=m) for m in memories]
-        ctx.memory_service.get_recent = MagicMock(return_value=SimpleNamespace(is_ok=True, value=items))
-
-    def _engine(self, result_or_none, captured: dict | None = None) -> MagicMock:
-        engine = MagicMock()
-
-        async def fake_generate_spontaneous(
-            persona, system_prompt, memory_texts, current_state=None, prompt_override=""
-        ):
-            if captured is not None:
-                captured["memory_texts"] = memory_texts
-                captured["current_state"] = current_state
-            return result_or_none
-
-        engine.generate_spontaneous = AsyncMock(side_effect=fake_generate_spontaneous)
-        return engine
-
-    def test_applies_and_records_spontaneous_event(self, ctx) -> None:
-        import asyncio
-
-        self._ctx_with_memories(ctx, ["思い出1", "思い出2"])
-        engine = self._engine(_result())
-        asyncio.new_event_loop().run_until_complete(run_spontaneous(ctx, _config(), engine, idle_seconds=25200.0))
-
-        repo = ctx._session_event_repo
-        mono = repo.get_by_persona("test", "brain.monologue", 10)
-        assert len(mono) == 1
-        events = repo.get_by_persona("test", "brain.introspection_spontaneous", 10)
-        assert len(events) == 1
-        # ターン駆動の前回内省時刻を壊さない（種別分離）
-        assert repo.get_by_persona("test", "brain.introspection", 10) == []
-        fires = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "monologue"]
-        assert len(fires) == 1
-
-    def test_engine_receives_memories_and_state(self, ctx) -> None:
-        import asyncio
-
-        self._ctx_with_memories(ctx, ["思い出1"])
-        captured: dict = {}
-        engine = self._engine(_result(), captured)
-        asyncio.new_event_loop().run_until_complete(run_spontaneous(ctx, _config(), engine, idle_seconds=25200.0))
-        assert captured["memory_texts"] == ["思い出1"]
-        assert captured["current_state"] is not None
-        assert captured["current_state"]["emotion"] == "neutral"
-        assert captured["current_state"]["elapsed"] == "7時間"
-
-    def test_generate_none_does_not_record_event(self, ctx) -> None:
-        """失敗時は spontaneous イベントを書かずクロックを消費しない (spec A5)。"""
-        import asyncio
-
-        self._ctx_with_memories(ctx, [])
-        engine = self._engine(None)
-        asyncio.new_event_loop().run_until_complete(run_spontaneous(ctx, _config(), engine, None))
-        repo = ctx._session_event_repo
-        assert repo.get_by_persona("test", "brain.introspection_spontaneous", 10) == []
-        assert repo.get_by_persona("test", "brain.monologue", 10) == []
-
-    def test_disabled_config_skips(self, ctx) -> None:
-        import asyncio
-
-        engine = self._engine(_result())
-        asyncio.new_event_loop().run_until_complete(
-            run_spontaneous(ctx, _config(brain_spontaneous_enabled=False), engine, None)
-        )
-        assert not engine.generate_spontaneous.called
-        assert ctx._session_event_repo.get_by_persona("test", "brain.introspection_spontaneous", 10) == []
+class TestTurnModeIsolation:
+    """ターン駆動の前回内省時刻判定は brain.introspection のみを読む（種別分離）。"""
 
     def test_turn_mode_not_polluted_by_spontaneous_state(self, ctx, sqlite_conn) -> None:
         """ターン駆動の前回内省時刻判定は brain.introspection のみを読む（種別分離）。"""
@@ -951,11 +811,11 @@ class TestPromptLanguage:
     """独り言・反省・逸脱報告の言語固定（モデル言語揺れ対策）。"""
 
     def test_prompts_require_japanese(self) -> None:
-        from nous.application.chat.introspection import _INTROSPECTION_PROMPT, _SPONTANEOUS_PROMPT
+        from nous.application.chat.introspection import _INTROSPECTION_PROMPT
 
-        for prompt in (_INTROSPECTION_PROMPT, _SPONTANEOUS_PROMPT):
-            assert "日本語" in prompt
-            assert "必ず日本語で書く" in prompt
+        # 自発的内省 (spontaneous) は 2026-11-08 に廃止。turn 駆動のプロンプトのみ固定する。
+        assert "日本語" in _INTROSPECTION_PROMPT
+        assert "必ず日本語で書く" in _INTROSPECTION_PROMPT
 
 
 class TestIntrospectionMemories:
@@ -1007,11 +867,10 @@ class TestIntrospectionMemories:
         assert ev.metadata["stored"] == 0
 
     def test_prompts_have_memories_guide(self) -> None:
-        from nous.application.chat.introspection import _INTROSPECTION_PROMPT, _SPONTANEOUS_PROMPT
+        from nous.application.chat.introspection import _INTROSPECTION_PROMPT
 
-        for prompt in (_INTROSPECTION_PROMPT, _SPONTANEOUS_PROMPT):
-            assert '"memories"' in prompt
-            assert "最大2件" in prompt
+        assert '"memories"' in _INTROSPECTION_PROMPT
+        assert "最大2件" in _INTROSPECTION_PROMPT
 
 
 # --- 好奇心探索（Task 3）: アイドル時に気になったことを MCP ツールで調べる ---
@@ -1128,7 +987,6 @@ def _patch_env(monkeypatch, enabled=True, servers=None, max_tool_calls=1):
         mcp_servers=servers if servers is not None else [{"name": "srv", "transport": "http", "url": "http://x"}],
         disabled_tools=["srv__disabled"],
         brain_monologue_enabled=True,
-        brain_spontaneous_enabled=True,
     )
 
 
@@ -2021,55 +1879,6 @@ def test_curiosity_search_result_compacted(monkeypatch):
     assert step_result.startswith("Exa__web_search_exa_0")
     assert not step_result.startswith("{")  # 生 JSON でなく compact 化済み
     assert len(step_result) <= _curiosity_mod._CURIOSITY_STEP_RESULT_MAX_CHARS
-
-
-class FakeSpontEngine(FakeLLMEngine):
-    """run_spontaneous 用: generate_spontaneous が固定結果を返す。"""
-
-    def __init__(self, result, turns=None, replies=None):
-        super().__init__(turns, replies)
-        self._result = result
-
-    async def generate_spontaneous(self, persona, system_prompt, memory_texts, current_state, prompt_override=""):
-        return self._result
-
-
-def test_spontaneous_monologue_survives_pool_crash(monkeypatch):
-    """プール構築が死んでも本体独り言の emit とイベント記録は生きる。"""
-    from nous.application.chat.introspection import run_spontaneous
-
-    config = _patch_env(monkeypatch, enabled=True)
-
-    class BoomPool(FakePool):
-        def __init__(self, *a, **kw):
-            raise RuntimeError("boom")
-
-    monkeypatch.setattr("nous.infrastructure.mcp_client.MCPClientPool", BoomPool)
-
-    class FakeRepo:
-        def __init__(self):
-            self.inserted = []
-
-        def insert(self, ev):
-            self.inserted.append(ev)
-
-    mem = FakeMemoryService()
-    ctx = _explorer_ctx(mem=mem)
-    ctx._session_event_repo = FakeRepo()
-    ctx.persona_service = SimpleNamespace(
-        update_emotion=lambda *a, **kw: None,
-        update_physical_state=lambda *a, **kw: None,
-        record_body_state=lambda *a, **kw: None,
-    )
-    ctx.memory_service.get_recent = lambda **kw: SimpleNamespace(is_ok=False, value=None)
-    wiring_events.clear()
-    import asyncio
-
-    eng = FakeSpontEngine(_spont_result(curiosity="雲の重さ"), [json.dumps({"monologue": "独り言だよ"})])
-    asyncio.run(run_spontaneous(ctx, config, eng, 300.0))
-    events = wiring_events.snapshot_after(0)
-    assert len(events) == 1  # 本体独り言のみ。探索は BoomPool で静かに死ぬ
-    assert "静かね" in events[0]["meta"]["text"]
 
 
 class TestCompactSearchResultShapeGate:

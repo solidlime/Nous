@@ -21,9 +21,9 @@ const DEFAULTS = {
     context_compression_threshold: { default: 0.8, help: '閾値', type: 'float', section: 'context' },
     context_max_tokens: { default: null, help: '上限', type: 'int', section: 'context' },
     show_message_timestamps: { default: false, help: '時刻', type: 'bool', section: 'core' },
-    brain_enrich_interval_seconds: { default: 60, help: '間隔', type: 'int', section: 'brain_simulation' },
-    brain_spontaneous_interval_hours: { default: 1, help: '間隔', type: 'int', section: 'brain_simulation' },
-    forgetting_decay_interval_seconds: { default: 3600, help: '間隔', type: 'int', section: 'forgetting' },
+    brain_max_tokens: { default: 0, help: '上限', type: 'int', section: 'brain_simulation' },
+    brain_decision_max_hops: { default: 1, help: 'ホップ数', type: 'int', section: 'brain_simulation' },
+    brain_decision_threshold: { default: 0.55, help: 'しきい値', type: 'float', section: 'brain_simulation' },
     voice_emotion_mode: { default: 'anchor', help: 'モード', type: 'str', section: 'voice' },
     voice_enabled: { default: false, help: '音声', type: 'bool', section: 'voice' },
     voice_streaming: { default: true, help: '逐次再生', type: 'bool', section: 'voice' },
@@ -52,9 +52,9 @@ function buildForm() {
       </div>
       <div class="chat-check-row"><input type="checkbox" id="chat-show-timestamps" /><label for="chat-show-timestamps">ts</label></div>
       <div class="chat-check-row"><input type="checkbox" id="chat-voice-streaming" checked /><label for="chat-voice-streaming">stream</label></div>
-      <div><input type="number" id="chat-brain-enrich-interval" value="" /></div>
-      <div><input type="number" id="chat-brain-spontaneous-interval" value="" /></div>
-      <div><input type="number" id="chat-forgetting-decay-interval-seconds" value="" /></div>
+      <div><input type="number" id="chat-brain-max-tokens" value="" /></div>
+      <div><input type="number" id="chat-brain-decision-max-hops" value="" /></div>
+      <div><input type="number" id="chat-brain-decision-threshold" value="" /></div>
       <div>
         <label class="chat-inline-check"><input type="radio" name="chat-voice-emotion-mode" value="off" />off</label>
         <label class="chat-inline-check"><input type="radio" name="chat-voice-emotion-mode" value="anchor" checked />anchor</label>
@@ -107,7 +107,7 @@ describe('reset to default', () => {
   it('injects a reset button per mapped field and wraps the input', async () => {
     await setup();
     expect(btn('chat-model')).not.toBeNull();
-    expect(btn('chat-brain-enrich-interval')).not.toBeNull();
+    expect(btn('chat-brain-max-tokens')).not.toBeNull();
     expect(btn('chat-voice-emotion-mode')).not.toBeNull();
     expect(document.getElementById('chat-model').closest('.chat-reset-wrap')).not.toBeNull();
     // field help is surfaced from the defaults API, not hardcoded in JS
@@ -129,10 +129,10 @@ describe('reset to default', () => {
 
   it('resets a number to the API default without saving', async () => {
     await setup();
-    const el = document.getElementById('chat-brain-enrich-interval');
+    const el = document.getElementById('chat-brain-max-tokens');
     el.value = '999';
-    window.Nous.Chat.settings.resetField('chat-brain-enrich-interval');
-    expect(el.value).toBe('60');
+    window.Nous.Chat.settings.resetField('chat-brain-max-tokens');
+    expect(el.value).toBe('0');
     expect(apiStub.mock.calls.every((c) => !(c[1] && c[1].method === 'POST'))).toBe(true);
   });
 
@@ -200,7 +200,7 @@ describe('reset to default', () => {
       model: '',
       base_url: 'https://api.example.com',
       temperature: 0.7,
-      brain_enrich_interval_seconds: 60,
+      brain_max_tokens: 0,
     });
     expect(btn('chat-model').classList.contains('is-dirty')).toBe(false);
   });

@@ -235,51 +235,10 @@ function applyImageSection(cfg, set, setChecked) {
 // Brain simulation + forgetting + emotion decay field application
 // ------------------------------------------------------------------
 function applyBrainForgettingSection(cfg, set, setChecked) {
-    // === Memory enrichment (enabled toggle lives in the brain section) ===
-    setChecked(
-      "chat-memory-enrichment-enabled",
-      cfg.memory_enrichment_enabled === true,
-    );
     // === Brain simulation ===
-    setChecked("chat-brain-auto-run", cfg.brain_enrich_auto_run === true);
-    set(
-      "chat-brain-enrich-interval",
-      cfg.brain_enrich_interval_seconds ??
-        N.Chat.settings._defaultOf("brain_enrich_interval_seconds") ??
-        60,
-    );
-    set("chat-brain-batch-limit", cfg.brain_enrich_batch_limit ?? 5);
-    set("chat-brain-idle-after-seconds", cfg.brain_idle_after_seconds ?? 120);
-    set("chat-brain-min-batch-size", cfg.brain_min_batch_size ?? 3);
-    set(
-      "chat-brain-max-defer-seconds",
-      cfg.brain_max_defer_seconds ??
-        N.Chat.settings._defaultOf("brain_max_defer_seconds") ??
-        3600,
-    );
-    setChecked("chat-brain-monologue", cfg.brain_monologue_enabled === true);
     setChecked("chat-brain-reasoning", cfg.brain_reasoning_enabled === true);
     set("chat-brain-reasoning-effort", cfg.brain_reasoning_effort || "medium");
-    setChecked(
-      "chat-brain-spontaneous",
-      cfg.brain_spontaneous_enabled === true,
-    );
-    set(
-      "chat-brain-spontaneous-interval",
-      cfg.brain_spontaneous_interval_hours ??
-        N.Chat.settings._defaultOf("brain_spontaneous_interval_hours") ??
-        1,
-    );
     set("chat-brain-max-tokens", cfg.brain_max_tokens ?? 0);
-    set("chat-brain-novelty-sim", cfg.brain_novelty_sim_threshold ?? 0.75);
-    set(
-      "chat-brain-novelty-importance",
-      cfg.brain_novelty_importance_threshold ?? 0.6,
-    );
-    set(
-      "chat-brain-novelty-multiplier",
-      cfg.brain_novelty_stability_multiplier ?? 2.0,
-    );
     set("chat-brain-emotion-gain-k", cfg.brain_emotion_gain_k ?? 0.5);
     set("chat-brain-rif-rho", cfg.brain_rif_suppression_rho ?? 0.05);
     set(

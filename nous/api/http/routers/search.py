@@ -57,8 +57,9 @@ def _merge_entity_layer(ctx, memories: list, nodes: list, edges: list, edge_set:
         get_relations_between_entities(entity_ids)
             -> [{source_id, target_id, relation, confidence}]
 
-    FYI(accepted): tags also surface as concept entities (see domain/memory/graph.py),
-    and enrich runs async, so relations may be missing within the 30s cache window.
+    FYI(accepted): tags also surface as concept entities (see domain/memory/graph.py).
+    enrichment 廃止（2026-11-08）で relation の書き手が無くなったため、既存の関係は
+    描画されるが新しい関係は増えない（エッジ経路の去就は未決）。
     """
     # getattr guard keeps the endpoint backward-compatible until Lane B lands.
     repo = getattr(ctx, "entity_repo", None)

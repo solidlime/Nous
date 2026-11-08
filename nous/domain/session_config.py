@@ -105,17 +105,8 @@ class SessionConfig(BaseModel):
     # 旧設定ファイルには本キーが無いので before-validator で旧値から導出する。
     voice_emotion_mode: str = Field(default="anchor", description="感情の声への反映方法（off / anchor / llm）。")
 
-    # Memory enrichment
-    memory_enrichment_enabled: bool = Field(default=False, description="記憶の重要度・関係性を自動で強化します。")
-
     # Brain simulation (cross-lane contract: key names / defaults are fixed —
     # lane3 UI consumes them verbatim; see docs/superpowers/plans/2026-09-06-brain-simulation.md)
-    brain_enrich_auto_run: bool = Field(default=False, description="脳シミュレーションによる記憶強化を自動実行します。")
-    brain_enrich_interval_seconds: int = Field(default=60, description="記憶強化の実行間隔（秒）。")
-    brain_enrich_batch_limit: int = Field(default=5, description="1回の記憶強化で処理する最大件数。")
-    brain_novelty_sim_threshold: float = Field(default=0.75, description="新規性判定に使う類似度しきい値。")
-    brain_novelty_importance_threshold: float = Field(default=0.6, description="新規性判定に使う重要度しきい値。")
-    brain_novelty_stability_multiplier: float = Field(default=2.0, description="新規記憶の安定度に掛ける倍率。")
     brain_emotion_gain_k: float = Field(default=0.5, description="感情による記憶強化の利得係数。")
     brain_rif_suppression_rho: float = Field(default=0.05, description="検索誘発性忘却の抑制率。")
     # Jev 型判定ゲート / multi-hop 検索 (#011)。REST/MCP 両経路の per-persona 既定値。
@@ -135,10 +126,6 @@ class SessionConfig(BaseModel):
     )
     brain_link_separation_threshold: float = Field(default=0.75, description="記憶リンクを分離する類似度しきい値。")
     brain_graph_flash_enabled: bool = Field(default=True, description="記憶グラフのシナプス発火を可視化します。")
-    # Idle-gated REM drain (persistent enrichment queue)
-    brain_idle_after_seconds: int = Field(default=120, description="無操作がこの秒数続いたら記憶強化を開始します。")
-    brain_min_batch_size: int = Field(default=3, description="記憶強化を開始する最小たまり件数。")
-    brain_max_defer_seconds: int = Field(default=3600, description="記憶強化を遅延できる最大秒数。")
     # Dedicated LLM for the brain simulator (OFF = reuse the chat 4-piece set)
     brain_llm_dedicated: bool = Field(default=False, description="脳シミュレーション専用のLLMを使います。")
     brain_llm_provider: str = Field(default="", description="脳専用LLMのプロバイダー。")
@@ -153,8 +140,11 @@ class SessionConfig(BaseModel):
     item_llm_base_url: str = Field(default="", description="アイテム抽出専用LLMの接続先URL。")
     item_llm_api_key: str = Field(default="", description="アイテム抽出専用LLMのAPIキー。")
     # REM 独り言 (drain バッチ完走時に LLM 1 call で生成・session_events 保存)
-    brain_monologue_enabled: bool = Field(default=True, description="記憶強化の完了時に独り言を生成します。")
-    # 内省エンジン (drain 後の単一 LLM 呼び出し: 独り言＋逸脱判定＋反省＋感情/身体)
+    brain_monologue_enabled: bool = Field(
+        default=True,
+        description="独り言を文脈に注入するか（生成トリガは 2026-11-08 の enrichment 廃止で無くなり、既存の独り言のみ注入される）。",
+    )
+    # 内省エンジン (ターン駆動の単一 LLM 呼び出し: 独り言＋逸脱判定＋反省＋感情/身体)
     brain_introspection_enabled: bool = Field(
         default=True, description="独り言・反省・感情をまとめて内省する機能を有効にします。"
     )
@@ -175,20 +165,10 @@ class SessionConfig(BaseModel):
         default=0,
         description="脳側呼び出しの最大トークン数。0 で解決済みLLM設定に従う（専用OFFなら会話用の値、ONなら脳側既定）。明示値（256〜32768）は全モードで上書き。",
     )
-    # 自発的内省: 誰も話しかけてこない静かな時間に記憶と現在状態から独り言を産出。
-    # 発火間隔は brain.introspection / brain.introspection_spontaneous 両種別の
-    # 最新タイムスタンプから interval_hours 以上経過で判定（worker 側ガード）。
-    brain_spontaneous_enabled: bool = Field(
-        default=True, description="誰も話しかけない時間に自発的な内省を生成します。"
-    )
-    brain_spontaneous_interval_hours: int = Field(default=1, description="自発的内省を実行する間隔（時間）。")
     # 内省プロンプト上書き (空文字 = コード内デフォルトを使用)。
     # プレースホルダ: {persona} {current_state} {memory_texts} {persona_identity}
-    #   + ターン駆動のみ {recent_turns}。欠落があるとデフォルトへ自動フォールバック。
+    #   + {recent_turns}。欠落があるとデフォルトへ自動フォールバック。
     brain_introspection_prompt: str = Field(default="", description="内省プロンプトの上書き。空欄で既定を使います。")
-    brain_spontaneous_prompt: str = Field(
-        default="", description="自発的内省プロンプトの上書き。空欄で既定を使います。"
-    )
 
     @field_validator("brain_reasoning_effort")
     @classmethod
@@ -249,11 +229,6 @@ class SessionConfig(BaseModel):
             )
             self.brain_max_tokens = floor
         return self
-
-    @field_validator("brain_spontaneous_interval_hours")
-    @classmethod
-    def _clamp_brain_spontaneous_interval(cls, v: int) -> int:
-        return max(1, min(72, v))
 
     # Forgetting
     forgetting_enabled: bool = Field(

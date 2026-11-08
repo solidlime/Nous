@@ -2,7 +2,7 @@
 
 chat pipeline を通らない pi 対話ターンを nous 側で記憶化する経路。
 `run_memory_llm` は ChatConfig を要求するため使わず、`MemoryLLM.process` を
-`MemoryEnrichmentConfig` 由来の薄い設定アダプタ経由で呼ぶ（既存 pipeline 無改変）。
+`LLMConfig` 由来の薄い設定アダプタ経由で呼ぶ（既存 pipeline 無改変）。
 プロンプト（`_CONTEXT_LLM_PROMPT`）・JSON パース・正規化ヘルパは memory_extractor を再利用する。
 """
 
@@ -78,7 +78,7 @@ class _HookLLMConfig:
 
 
 def _llm_config(settings: Settings, user_text: str) -> _HookLLMConfig:
-    """MemoryEnrichmentConfig から抽出 LLM 設定を組み立てる（既存の鍵解決経路を流用）。"""
+    """LLMConfig から抽出 LLM 設定を組み立てる（既存の鍵解決経路を流用）。"""
     enrich = settings.memory_enrichment
     detected = detect_language(user_text) or ""
     return _HookLLMConfig(

@@ -328,7 +328,6 @@ class TestAppContextMigration:
                 "provider": "openai",
                 "model": "gpt-4o",
                 "base_url": "https://api.openai.com",
-                "min_chars": 100,
             },
         )
 

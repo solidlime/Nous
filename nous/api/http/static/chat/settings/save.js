@@ -142,59 +142,12 @@
       ),
       debug_mode: getChecked("chat-debug-mode"),
 
-      // === Memory enrichment (enabled toggle lives in the brain section) ===
-      memory_enrichment_enabled: getChecked("chat-memory-enrichment-enabled"),
       // === Brain simulation ===
-      brain_enrich_auto_run: getChecked("chat-brain-auto-run"),
-      brain_enrich_interval_seconds: parseInt(
-        document.getElementById("chat-brain-enrich-interval")?.value || "60",
-      ),
-      brain_enrich_batch_limit: parseInt(
-        document.getElementById("chat-brain-batch-limit")?.value || "5",
-      ),
-      // REM scheduling knobs: 空なら送らない (merge API keeps the stored value)
-      brain_idle_after_seconds: (() => {
-        var v = (
-          document.getElementById("chat-brain-idle-after-seconds")?.value || ""
-        ).trim();
-        return v ? parseInt(v) : undefined;
-      })(),
-      brain_min_batch_size: (() => {
-        var v = (
-          document.getElementById("chat-brain-min-batch-size")?.value || ""
-        ).trim();
-        return v ? parseInt(v) : undefined;
-      })(),
-      brain_max_defer_seconds: (() => {
-        var v = (
-          document.getElementById("chat-brain-max-defer-seconds")?.value || ""
-        ).trim();
-        return v ? parseInt(v) : undefined;
-      })(),
-      brain_monologue_enabled: getChecked("chat-brain-monologue"),
       brain_reasoning_enabled: getChecked("chat-brain-reasoning"),
       brain_reasoning_effort: getChecked("chat-brain-reasoning")
         ? document.getElementById("chat-brain-reasoning-effort")?.value ||
           "medium"
         : undefined,
-      brain_spontaneous_enabled: getChecked("chat-brain-spontaneous"),
-      brain_spontaneous_interval_hours: getChecked("chat-brain-spontaneous")
-        ? parseInt(
-            document.getElementById("chat-brain-spontaneous-interval")?.value ||
-              "6",
-          )
-        : undefined,
-      brain_novelty_sim_threshold: parseFloat(
-        document.getElementById("chat-brain-novelty-sim")?.value || "0.75",
-      ),
-      brain_novelty_importance_threshold: parseFloat(
-        document.getElementById("chat-brain-novelty-importance")?.value ||
-          "0.6",
-      ),
-      brain_novelty_stability_multiplier: parseFloat(
-        document.getElementById("chat-brain-novelty-multiplier")?.value ||
-          "2.0",
-      ),
       brain_emotion_gain_k: parseFloat(
         document.getElementById("chat-brain-emotion-gain-k")?.value || "0.5",
       ),

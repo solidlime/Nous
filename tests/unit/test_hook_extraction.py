@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from starlette.testclient import TestClient
 
-from nous.config.settings import MemoryEnrichmentConfig, PluginConfig, Settings
+from nous.config.settings import LLMConfig, PluginConfig, Settings
 from nous.domain.shared.result import Success
 from nous.main import MemoryFastMCP
 
@@ -32,7 +32,7 @@ pytestmark = pytest.mark.unit
 def _settings(plugin: PluginConfig | None = None) -> Settings:
     s = Settings(
         plugin=plugin or PluginConfig(enabled=True, api_key="secr3t"),
-        memory_enrichment=MemoryEnrichmentConfig(api_key="test-key", model="test-model"),
+        memory_enrichment=LLMConfig(api_key="test-key", model="test-model"),
     )
     s.cors.allowed_origins = ["*"]
     return s

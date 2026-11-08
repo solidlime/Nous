@@ -123,15 +123,14 @@ class ForgettingConfig(BaseModel):
     min_strength: float = 0.005
 
 
-class MemoryEnrichmentConfig(BaseModel):
-    """Memory enrichment (importance + relations) via LLM."""
+class LLMConfig(BaseModel):
+    """共有 LLM 接続設定（内省 / 矛盾判定 / 記憶抽出が使う）。"""
 
     enabled: bool = True
     provider: str = "openrouter"
     api_key: str | None = None
     model: str = "openai/gpt-4o-mini"
     base_url: str = "https://openrouter.ai/api/v1"
-    min_chars: int = 10  # skip enrichment for very short memories
 
     def get_effective_api_key(self, settings: Settings) -> str:
         """Return API key, falling back to global Settings keys."""
@@ -438,7 +437,9 @@ class Settings(BaseSettings):
     search: SearchConfig = Field(default_factory=SearchConfig)
     qdrant: QdrantConfig = QdrantConfig()
     forgetting: ForgettingConfig = ForgettingConfig()
-    memory_enrichment: MemoryEnrichmentConfig = MemoryEnrichmentConfig()
+    # env 互換のため名前据え置き: 本番 compose が NOUS_MEMORY_ENRICHMENT__* を設定している。
+    # 中身は enrichment 廃止 (2026-11-08) 後も共有 LLM 接続設定として使う。
+    memory_enrichment: LLMConfig = Field(default_factory=LLMConfig)
     consolidation: ConsolidationConfig = ConsolidationConfig()
     wiki: WikiConfig = Field(default_factory=WikiConfig)
     explorer: ExplorerConfig = Field(default_factory=ExplorerConfig)

@@ -1,19 +1,4 @@
 from nous.application.chat.curiosity import _parse_json_object
-from nous.application.chat.introspection import _MAX_CHARS_PER_MEMORY, _cap_memory_texts
-
-
-class _M:
-    def __init__(self, content, tags):
-        self.content = content
-        self.tags = tags
-
-
-def test_exploration_memories_get_500_cap():
-    long_expl = "x" * 400
-    long_norm = "y" * 200
-    got = _cap_memory_texts([_M(long_expl, ["exploration", "introspection"]), _M(long_norm, ["preference"])])
-    assert got[0] == long_expl  # 探索要約は切断されない (spec G)
-    assert got[1] == "y" * _MAX_CHARS_PER_MEMORY
 
 
 def test_parse_json_object_code_fence():

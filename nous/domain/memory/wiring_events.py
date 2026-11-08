@@ -2,9 +2,8 @@
 
 Kinds: ``link_fire`` (Hebbian co-activation), ``recall_boost``
 (strength boost on recall), ``ppr_hit`` (PPR top seeds with scores),
-``replay_fire`` (offline reactivation / memory enrichment / decay-cycle
-stability update), ``novelty_gate`` (novelty-gated stability boost from
-the EnrichmentWorker), ``decision_pass`` / ``decision_reject`` (Jev 型判定
+``replay_fire`` (offline reactivation / decay-cycle
+stability update), ``decision_pass`` / ``decision_reject`` (Jev 型判定
 ゲートの per-candidate 判定), ``hop_start`` / ``hop_stop`` (multi-hop 検索の
 hop 境界)、``propagate`` / ``converge`` (multi-hop の拡散 / 収束)。
 ``decision_bypass`` は fail-open で judge を適用しなかった事実。
@@ -65,6 +64,9 @@ from nous.domain.shared.time_utils import format_iso, get_now
 
 logger = logging.getLogger(__name__)
 
+# novelty_gate は旧 EnrichmentWorker（2026-11-08 廃止）だけが発行していた。
+# 受信側 UI（memory-panel/wiring.js, features/graph.js）と過去イベントの再表示のため
+# kind は残す。新規に emit するコードは無い。
 WIRING_KINDS = frozenset(
     [
         "link_fire",
@@ -85,7 +87,7 @@ WIRING_KINDS = frozenset(
     ]
 )
 # 1 リクエストの消費量（実測見積）: decision_pass/reject が候補数 × hops で発火する
-# （5 hop × 30 候補 = 150 件）うえ、enrich_service の replay_fire / novelty_gate が
+# （5 hop × 30 候補 = 150 件）うえ、replay_fire が
 # 同一 deque に常時流入する。10d(1025c762) で 200 → 1024 に増設（200 では 1 リクエストで
 # 連鎖の頭が消える）。Phase 10(d67c4f17) で溢れ計器 _dropped_from_head を追加し 1024 → 4096。
 # （Phase 13 で集約を実装済み: 溢れる前に _compact_locked が古い decision 系を decision_hop へ畳む）。

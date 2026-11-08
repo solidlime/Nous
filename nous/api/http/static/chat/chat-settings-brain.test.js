@@ -1,8 +1,8 @@
 /* =================================================================
    brain simulation settings tests — 脳シミュレーションセクション
-   Covers: load applies brain keys with contract defaults, collect
-   sends the 10 brain_* keys, save→load round-trip, legacy
-   memory_enrichment_auto_run/interval UI items are gone.
+   Covers: load applies brain keys with contract defaults, parallel
+   sends the brain_* keys, save→load round-trip. Removed 2026-11-08:
+   enrichment / spontaneous / novelty knobs (memory Enrichment 廃止).
    ================================================================= */
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
@@ -31,24 +31,15 @@ const REQUIRED_SAVE_IDS = [
 ];
 
 const BRAIN_NUM_IDS = [
-  'chat-brain-enrich-interval',
-  'chat-brain-batch-limit',
-  'chat-brain-idle-after-seconds',
-  'chat-brain-min-batch-size',
-  'chat-brain-max-defer-seconds',
-  'chat-brain-novelty-sim',
-  'chat-brain-novelty-importance',
-  'chat-brain-novelty-multiplier',
   'chat-brain-emotion-gain-k',
   'chat-brain-rif-rho',
   'chat-brain-separation-threshold',
   'chat-brain-reflection-retrieval-penalty',
   'chat-brain-reflection-injection-min-similarity',
   'chat-brain-reflection-injection-margin',
-  'chat-brain-graph-flash',
 ];
 
-const BRAIN_CHECK_IDS = ['chat-brain-auto-run', 'chat-brain-graph-flash'];
+const BRAIN_CHECK_IDS = ['chat-brain-graph-flash'];
 
 let apiStub;
 let S;
@@ -65,12 +56,8 @@ function buildForm() {
   }).join('');
   const brains = BRAIN_NUM_IDS.map((id) => `<input type="number" id="${id}" value="" />`).join('')
     + BRAIN_CHECK_IDS.map((id) => `<input type="checkbox" id="${id}" />`).join('')
-    + '<input type="checkbox" id="chat-memory-enrichment-enabled" />'
     + '<input type="checkbox" id="chat-brain-llm-dedicated" />'
-    + '<input type="checkbox" id="chat-brain-monologue" />'
     + '<input type="checkbox" id="chat-brain-reasoning" />'
-    + '<input type="checkbox" id="chat-brain-spontaneous" />'
-    + '<input type="number" id="chat-brain-spontaneous-interval" value="" />'
     + '<select id="chat-brain-reasoning-effort">'
     + '<option value="low">low</option><option value="medium">medium</option>'
     + '<option value="high">high</option><option value="max">max</option>'
@@ -128,26 +115,14 @@ beforeEach(() => {
 describe('brain simulation settings', () => {
   it('load applies contract defaults when config has no brain keys', () => {
     window.Nous.Chat.settings.apply({});
-    expect(document.getElementById('chat-brain-enrich-interval').value).toBe('60');
-    expect(document.getElementById('chat-brain-batch-limit').value).toBe('5');
-    expect(document.getElementById('chat-brain-novelty-sim').value).toBe('0.75');
-    expect(document.getElementById('chat-brain-novelty-importance').value).toBe('0.6');
-    expect(document.getElementById('chat-brain-novelty-multiplier').value).toBe('2');
     expect(document.getElementById('chat-brain-emotion-gain-k').value).toBe('0.5');
     expect(document.getElementById('chat-brain-rif-rho').value).toBe('0.05');
     expect(document.getElementById('chat-brain-separation-threshold').value).toBe('0.75');
-    expect(document.getElementById('chat-brain-auto-run').checked).toBe(false);
     expect(document.getElementById('chat-brain-graph-flash').checked).toBe(true);
   });
 
-  it('collect sends the brain_* keys and drops the legacy enrichment auto/interval items', async () => {
-    document.getElementById('chat-brain-auto-run').checked = true;
+  it('collect sends the brain_* keys that remain after the enrichment removal', async () => {
     const set = (id, v) => { document.getElementById(id).value = v; };
-    set('chat-brain-enrich-interval', '90');
-    set('chat-brain-batch-limit', '3');
-    set('chat-brain-novelty-sim', '0.8');
-    set('chat-brain-novelty-importance', '0.55');
-    set('chat-brain-novelty-multiplier', '2.5');
     set('chat-brain-emotion-gain-k', '0.4');
     set('chat-brain-rif-rho', '0.1');
     set('chat-brain-separation-threshold', '0.8');
@@ -159,40 +134,31 @@ describe('brain simulation settings', () => {
     const [url, opts] = apiStub.mock.calls[0];
     expect(url).toBe('/api/chat/p1/config');
     const body = JSON.parse(opts.body);
-    expect(body.brain_enrich_auto_run).toBe(true);
-    expect(body.brain_enrich_interval_seconds).toBe(90);
-    expect(body.brain_enrich_batch_limit).toBe(3);
-    expect(body.brain_novelty_sim_threshold).toBe(0.8);
-    expect(body.brain_novelty_importance_threshold).toBe(0.55);
-    expect(body.brain_novelty_stability_multiplier).toBe(2.5);
     expect(body.brain_emotion_gain_k).toBe(0.4);
     expect(body.brain_rif_suppression_rho).toBe(0.1);
     expect(body.brain_graph_flash_enabled).toBe(false);
     // dormant knob: not collected (merge API keeps the stored value)
     expect(body.brain_link_separation_threshold).toBeUndefined();
-    // legacy auto-run/interval keys are replaced by the brain_* keys
-    expect(body.memory_enrichment_auto_run).toBeUndefined();
-    expect(body.memory_enrichment_interval).toBeUndefined();
-    // the legacy UI inputs are gone from the section
-    expect(document.getElementById('chat-memory-enrichment-auto-run')).toBeNull();
-    expect(document.getElementById('chat-memory-enrichment-interval')).toBeNull();
+    // enrichment knobs are gone from the save payload
+    expect(body.memory_enrichment_enabled).toBeUndefined();
+    expect(body.brain_enrich_auto_run).toBeUndefined();
+    expect(body.brain_spontaneous_enabled).toBeUndefined();
+    expect(body.brain_novelty_sim_threshold).toBeUndefined();
   });
 
   it('save→load round-trip preserves the brain values', async () => {
     const set = (id, v) => { document.getElementById(id).value = v; };
-    set('chat-brain-enrich-interval', '120');
-    set('chat-brain-novelty-sim', '0.9');
-    document.getElementById('chat-brain-auto-run').checked = true;
+    set('chat-brain-emotion-gain-k', '0.3');
+    set('chat-brain-rif-rho', '0.2');
     document.getElementById('chat-brain-graph-flash').checked = false;
 
-    const savedCfg = { brain_enrich_auto_run: true, brain_enrich_interval_seconds: 120,
-      brain_novelty_sim_threshold: 0.9, brain_graph_flash_enabled: false };
+    const savedCfg = { brain_emotion_gain_k: 0.3, brain_rif_suppression_rho: 0.2,
+      brain_graph_flash_enabled: false };
     apiStub.mockResolvedValueOnce(savedCfg);
     await window.Nous.Chat.settings.save();
     window.Nous.Chat.settings.apply(savedCfg);
-    expect(document.getElementById('chat-brain-enrich-interval').value).toBe('120');
-    expect(document.getElementById('chat-brain-novelty-sim').value).toBe('0.9');
-    expect(document.getElementById('chat-brain-auto-run').checked).toBe(true);
+    expect(document.getElementById('chat-brain-emotion-gain-k').value).toBe('0.3');
+    expect(document.getElementById('chat-brain-rif-rho').value).toBe('0.2');
     expect(document.getElementById('chat-brain-graph-flash').checked).toBe(false);
   });
 
@@ -241,23 +207,6 @@ describe('brain simulation settings', () => {
     expect(document.getElementById('chat-brain-llm-model').value).toBe('deepseek-v4');
     expect(document.getElementById('chat-brain-llm-base-url').value).toBe('https://api.deepseek.example/v1');
     expect(document.getElementById('chat-brain-llm-api-key').value).toBe('sk-brain');
-  });
-
-  it('REM monologue: round-trips brain_monologue_enabled through the checkbox', async () => {
-    window.Nous.Chat.settings.apply({});
-    expect(document.getElementById('chat-brain-monologue').checked).toBe(false);
-
-    document.getElementById('chat-base-url').value = 'https://api.example.com';
-    document.getElementById('chat-brain-monologue').checked = true;
-    apiStub.mockResolvedValueOnce({});
-    await window.Nous.Chat.settings.save();
-    const body = JSON.parse(apiStub.mock.calls[0][1].body);
-    expect(body.brain_monologue_enabled).toBe(true);
-
-    const savedCfg = { brain_monologue_enabled: true };
-    apiStub.mockResolvedValueOnce(savedCfg);
-    window.Nous.Chat.settings.apply(savedCfg);
-    expect(document.getElementById('chat-brain-monologue').checked).toBe(true);
   });
 
   it('reflection injection margin: load applies contract default 0.08 and save round-trips it', async () => {
@@ -389,21 +338,11 @@ describe('brain simulation settings', () => {
 // ------------------------------------------------------------------
 // Structural verification — the Python-rendered sidebar markup must
 // keep every setting id (save/load contract) and the pipeline order:
-// timing → monologue/introspection → LLM → gates → recall → visualize.
+// LLM → gates → recall → visualize.
 // ------------------------------------------------------------------
 const BRAIN_PY = resolve(__dirname, '../../sections/chat/chat_sidebar_memory.py');
 
 const BRAIN_IDS = [
-  'chat-memory-enrichment-enabled',
-  'chat-brain-auto-run',
-  'chat-brain-enrich-interval',
-  'chat-brain-batch-limit',
-  'chat-brain-idle-after-seconds',
-  'chat-brain-min-batch-size',
-  'chat-brain-max-defer-seconds',
-  'chat-brain-monologue',
-  'chat-brain-spontaneous',
-  'chat-brain-spontaneous-interval',
   'chat-brain-reasoning',
   'chat-brain-reasoning-effort',
   'chat-brain-max-tokens',
@@ -412,9 +351,6 @@ const BRAIN_IDS = [
   'chat-brain-llm-model',
   'chat-brain-llm-base-url',
   'chat-brain-llm-api-key',
-  'chat-brain-novelty-sim',
-  'chat-brain-novelty-importance',
-  'chat-brain-novelty-multiplier',
   'chat-brain-emotion-gain-k',
   'chat-brain-rif-rho',
   'chat-brain-separation-threshold',
@@ -430,8 +366,6 @@ const BRAIN_IDS = [
 ];
 
 const BRAIN_SUBSECTION_ORDER = [
-  '実行タイミング（REM）',
-  '独り言・内省',
   'LLM',
   '学習ゲート',
   '想起と忘却',
@@ -457,7 +391,7 @@ describe('brain section structure (chat_sidebar_memory.py)', () => {
     expect(src).toContain('data-category="brain_simulation" tabindex="0"');
   });
 
-  it('groups subsections in pipeline order (timing → monologue → llm → gates → recall → visualize)', () => {
+  it('groups subsections in pipeline order (llm → gates → recall → visualize)', () => {
     const block = src.slice(src.indexOf('<details data-category="brain_simulation">'));
     let pos = -1;
     for (const label of BRAIN_SUBSECTION_ORDER) {
@@ -470,59 +404,13 @@ describe('brain section structure (chat_sidebar_memory.py)', () => {
     expect(block).not.toContain('<summary>専用 LLM</summary>');
   });
 
-  it('REM scheduling knobs round-trip and stay silent when blank', async () => {
-    window.Nous.Chat.settings.apply({
-      brain_idle_after_seconds: 300,
-      brain_min_batch_size: 4,
-      brain_max_defer_seconds: 7200,
-    });
-    expect(document.getElementById('chat-brain-idle-after-seconds').value).toBe('300');
-    expect(document.getElementById('chat-brain-min-batch-size').value).toBe('4');
-    expect(document.getElementById('chat-brain-max-defer-seconds').value).toBe('7200');
-    // defaults when the config omits them
-    window.Nous.Chat.settings.apply({});
-    expect(document.getElementById('chat-brain-idle-after-seconds').value).toBe('120');
-    expect(document.getElementById('chat-brain-min-batch-size').value).toBe('3');
-    expect(document.getElementById('chat-brain-max-defer-seconds').value).toBe('3600');
-
-    document.getElementById('chat-base-url').value = 'https://api.example.com';
-    document.getElementById('chat-brain-idle-after-seconds').value = '90';
-    document.getElementById('chat-brain-min-batch-size').value = '2';
-    document.getElementById('chat-brain-max-defer-seconds').value = '5400';
-    apiStub.mockResolvedValue({});
-    // a save also fires a refresh GET — collect POST bodies only
-    const postBodies = () => apiStub.mock.calls
-      .filter((c) => c[1] && c[1].body)
-      .map((c) => JSON.parse(c[1].body));
-    await window.Nous.Chat.settings.save();
-    let body = postBodies()[0];
-    expect(body.brain_idle_after_seconds).toBe(90);
-    expect(body.brain_min_batch_size).toBe(2);
-    expect(body.brain_max_defer_seconds).toBe(5400);
-
-    // blank → omitted (merge API keeps the stored value).
-    // (save#1's apply({}) reset the form — base-url must be set again or
-    // save short-circuits before the POST.)
-    document.getElementById('chat-base-url').value = 'https://api.example.com';
-    document.getElementById('chat-brain-idle-after-seconds').value = '';
-    document.getElementById('chat-brain-min-batch-size').value = '';
-    document.getElementById('chat-brain-max-defer-seconds').value = '';
-    apiStub.mockResolvedValue({});
-    await window.Nous.Chat.settings.save();
-    body = postBodies().pop();
-    expect(body).not.toHaveProperty('brain_idle_after_seconds');
-    expect(body).not.toHaveProperty('brain_min_batch_size');
-    expect(body).not.toHaveProperty('brain_max_defer_seconds');
-  });
-
-  it('keeps the dedicated-llm toggle contract and the monologue toggle', () => {
+  it('keeps the dedicated-llm toggle contract', () => {
     expect(src).toContain('id="chat-brain-llm-fields" class="settings-body-hidden"');
     expect(src).toContain('data-action="brain-llm-toggle"');
-    expect(src).toContain('id="chat-brain-monologue"');
-    expect(src).toContain('id="chat-brain-spontaneous"');
   });
 });
 
+describe('brain simulation apply/save', () => {
   it('brain reasoning: OFF (default) does not send effort, sends enabled=false', async () => {
     window.Nous.Chat.settings.apply({});
     expect(document.getElementById('chat-brain-reasoning').checked).toBe(false);
@@ -578,32 +466,4 @@ describe('brain section structure (chat_sidebar_memory.py)', () => {
     const body = JSON.parse(apiStub.mock.calls[0][1].body);
     expect(body.brain_max_tokens).toBeUndefined();
   });
-
-  it('spontaneous introspection: OFF does not send interval, sends enabled=false', async () => {
-    window.Nous.Chat.settings.apply({});
-    expect(document.getElementById('chat-brain-spontaneous').checked).toBe(false);
-    expect(document.getElementById('chat-brain-spontaneous-interval').value).toBe('1');
-
-    document.getElementById('chat-base-url').value = 'https://api.example.com';
-    apiStub.mockResolvedValueOnce({});
-    await window.Nous.Chat.settings.save();
-    const body = JSON.parse(apiStub.mock.calls[0][1].body);
-    expect(body.brain_spontaneous_enabled).toBe(false);
-    expect(body.brain_spontaneous_interval_hours).toBeUndefined();
-  });
-
-  it('spontaneous introspection: ON round-trips the 2 keys', async () => {
-    document.getElementById('chat-base-url').value = 'https://api.example.com';
-    document.getElementById('chat-brain-spontaneous').checked = true;
-    document.getElementById('chat-brain-spontaneous-interval').value = '12';
-    const savedCfg = { brain_spontaneous_enabled: true, brain_spontaneous_interval_hours: 12 };
-    apiStub.mockResolvedValueOnce(savedCfg);
-    await window.Nous.Chat.settings.save();
-    const body = JSON.parse(apiStub.mock.calls[0][1].body);
-    expect(body.brain_spontaneous_enabled).toBe(true);
-    expect(body.brain_spontaneous_interval_hours).toBe(12);
-
-    window.Nous.Chat.settings.apply(savedCfg);
-    expect(document.getElementById('chat-brain-spontaneous').checked).toBe(true);
-    expect(document.getElementById('chat-brain-spontaneous-interval').value).toBe('12');
-  });
+});

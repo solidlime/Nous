@@ -11,15 +11,12 @@ from nous.api.http.routers.chat.chat_management import _do_get_config_defaults, 
 
 def test_defaults_include_current_values():
     fields = _do_get_config_defaults()["fields"]
-    assert fields["brain_spontaneous_interval_hours"]["default"] == 1
     assert fields["forgetting_decay_interval_seconds"]["default"] == 3600
     assert fields["item_llm_dedicated"]["default"] is False
     assert fields["max_tool_calls"]["default"] == 5
     assert fields["temperature"]["default"] == 0.7
     assert fields["temperature"]["type"] == "float"
-    assert fields["brain_spontaneous_interval_hours"]["type"] == "int"
     assert fields["api_key"]["type"] == "str"  # Optional[str] は str に正規化
-    assert fields["brain_spontaneous_interval_hours"]["section"] == "brain_simulation"
     assert fields["forgetting_decay_interval_seconds"]["section"] == "forgetting"
     assert fields["voice_streaming"]["default"] is True
     assert fields["voice_streaming"]["section"] == "voice"
@@ -52,7 +49,10 @@ def test_endpoint_returns_fields(monkeypatch):
     monkeypatch.setattr(chat_management, "_resolve_request", lambda req: ("p", object()))
     resp = asyncio.run(get_config_defaults(object()))
     body = json.loads(resp.body)
-    assert body["fields"]["brain_spontaneous_interval_hours"]["default"] == 1
+    assert body["fields"]["brain_introspection_enabled"]["type"] == "bool"
+    # enrichment / spontaneous ノブは 2026-11-08 に廃止
+    for gone in ("brain_spontaneous_interval_hours", "memory_enrichment_enabled", "brain_enrich_auto_run"):
+        assert gone not in body["fields"]
 
 
 def test_irodori_chunk_min_chars_is_single_valued():

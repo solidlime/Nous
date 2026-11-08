@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC
 from typing import TYPE_CHECKING, Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -215,8 +215,8 @@ def service(repo):
 def service_factory():
     """Factory fixture to create MemoryService with optional enricher and entity_service."""
 
-    def _create(repo, enricher=None, entity_service=None, enrichment_queue=None):
-        return MemoryService(repo, entity_service=entity_service, enricher=enricher, enrichment_queue=enrichment_queue)
+    def _create(repo, enricher=None, entity_service=None):
+        return MemoryService(repo, entity_service=entity_service, enricher=enricher)
 
     return _create
 
@@ -554,57 +554,4 @@ class TestTagValidation:
     async def test_create_plain_project_tag_ok(self, service):
         """'project' 単体（プレフィックス無し）は検証対象外。"""
         result = await service.create_memory(content="proj tag", tags=["project"])
-        assert result.is_ok
-
-
-class TestCreateEnrichmentQueue:
-    """create_memory must not enrich immediately — it enqueues for the idle worker."""
-
-    @staticmethod
-    def _make_queue():
-        queue = MagicMock()
-        queue.has_processed.return_value = False
-        return queue
-
-    async def test_create_does_not_call_enricher(self, repo, service_factory):
-        """LLM enrichment is never triggered from create (deferred to worker)."""
-        mock_enricher = MagicMock()
-        mock_enricher.enrich_async = AsyncMock()
-        svc = service_factory(repo, enricher=mock_enricher)
-
-        result = await svc.create_memory(content="This is a meaningful memory about John.")
-        assert result.is_ok
-
-        mock_enricher.enrich_async.assert_not_called()
-
-    async def test_create_enqueues_new_memory(self, repo, service_factory):
-        queue = self._make_queue()
-        svc = service_factory(repo, enrichment_queue=queue)
-
-        result = await svc.create_memory(content="queued memory")
-        assert result.is_ok
-
-        queue.enqueue.assert_called_once_with(result.value.key)
-
-    async def test_create_enqueues_regardless_of_importance(self, repo, service_factory):
-        queue = self._make_queue()
-        svc = service_factory(repo, enrichment_queue=queue)
-
-        result = await svc.create_memory(content="explicit importance", importance=0.9)
-        assert result.is_ok
-
-        queue.enqueue.assert_called_once_with(result.value.key)
-
-    async def test_create_without_queue_still_succeeds(self, repo, service_factory):
-        svc = service_factory(repo, enricher=MagicMock())
-
-        result = await svc.create_memory(content="no queue wired")
-        assert result.is_ok
-
-    async def test_enqueue_failure_does_not_block_create(self, repo, service_factory):
-        queue = self._make_queue()
-        queue.enqueue.side_effect = RuntimeError("db down")
-        svc = service_factory(repo, enrichment_queue=queue)
-
-        result = await svc.create_memory(content="enqueue raises")
         assert result.is_ok

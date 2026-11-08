@@ -77,7 +77,7 @@ def _noop_preload(self) -> None:  # noqa: ANN001
     pass
 
 
-def _noop_init_enricher(self) -> None:  # noqa: ANN001
+def _noop_init_brain_llm(self) -> None:  # noqa: ANN001
     self._enricher = None
     self.introspection_engine = None
 
@@ -93,7 +93,7 @@ async def build_context(data_root: str) -> object:
     with (
         patch.object(AppContext, "_init_vector", _noop_init_vector),
         patch.object(AppContext, "_preload_background", _noop_preload),
-        patch.object(AppContext, "_init_enricher", _noop_init_enricher),
+        patch.object(AppContext, "_init_brain_llm", _noop_init_brain_llm),
     ):
         ctx = AppContext(settings, "measure_persona")
     return ctx

@@ -10,8 +10,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
-
 from nous.application.workers.consolidation_worker import ConsolidationWorker
 from nous.domain.memory.entities import Memory
 from nous.domain.shared.result import Success
@@ -134,11 +132,3 @@ class TestSummarizesRelation:
             assert isinstance(got, Success) and got.value is not None
         finally:
             conn.close()
-
-
-@pytest.mark.parametrize("rel_type", ["summarizes"])
-def test_relation_type_validation(rel_type: str) -> None:
-    """enricher が summarizes を有効 relation 型として受け付ける。"""
-    from nous.infrastructure.llm.memory_enricher import _VALID_RELATION_TYPES
-
-    assert rel_type in _VALID_RELATION_TYPES

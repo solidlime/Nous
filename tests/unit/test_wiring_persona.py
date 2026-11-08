@@ -111,27 +111,6 @@ class TestHookPersona:
         assert len(fires) == 1
         assert fires[0]["meta"].get("persona") is None
 
-    @pytest.mark.asyncio
-    async def test_replay_fire_persona_attributed(self) -> None:
-        from types import SimpleNamespace
-        from unittest.mock import AsyncMock
-
-        from nous.domain.memory.enrich_service import MemoryEnrichService
-
-        repo = MagicMock()
-        repo._conn.persona = "p2"
-        rel = SimpleNamespace(source_entity="s1", target_entity="s2", relation_type="related", confidence=0.8)
-        enricher = SimpleNamespace(
-            enrich_async=AsyncMock(return_value=SimpleNamespace(importance=0.5, relations=[rel]))
-        )
-        svc = MemoryEnrichService(enricher, MagicMock(), repo)
-        with patch("nous.domain.memory.sudachi_extractor.SudachiExtractor") as ner:
-            ner.return_value.extract.return_value = []
-            await svc.enrich_memory(MagicMock(importance=0.5), "内容", None, "k", 0.5)
-        fires = wiring_events.snapshot_after(0, persona="p2")
-        assert len(fires) == 1 and fires[0]["kind"] == "replay_fire"
-        assert fires[0]["meta"]["persona"] == "p2" and fires[0]["meta"]["memory_key"] == "k"
-
     def test_propagate_persona_none(self) -> None:
         links = [MemoryLink(source_key="s", target_key="n", weight=1.0)]
         SpreadingActivation().propagate(["s"], links)

@@ -20,9 +20,9 @@ const DEFAULTS = {
   fields: {
     model: { default: '', help: 'モデル名', tier: 'basic' },
     top_p: { default: null, help: 'Top P の上限', tier: 'advanced' },
-    brain_novelty_sim_threshold: {
+    brain_link_separation_threshold: {
       default: 0.75,
-      help: '新規性ゲート（効く条件: 新規記憶の定着判定のみ）',
+      help: 'リンク分離しきい値（シナプス結合の類似度）',
       tier: 'expert',
     },
     brain_emotion_gain_k: { default: 0.5, help: '感情 gain', tier: 'wizard' },
@@ -44,7 +44,7 @@ function buildForm() {
         <div><div class="chat-field-label">モデル</div><input type="text" id="chat-model" value="" /></div>
         <div><div class="chat-field-label">Top P</div><input type="range" id="chat-top-p" value="1" /></div>
         <div class="chat-check-row"><input type="checkbox" id="chat-top-p-enabled" /><label for="chat-top-p-enabled">Top P を指定する</label></div>
-        <div><div class="chat-field-label">新規性 類似度しきい値</div><input type="number" id="chat-brain-novelty-sim" value="0.75" /></div>
+        <div><div class="chat-field-label">SEP 分離しきい値</div><input type="number" id="chat-brain-separation-threshold" value="0.75" /></div>
         <div><div class="chat-field-label">感情 gain 係数 k</div><input type="number" id="chat-brain-emotion-gain-k" value="0.5" /></div>
         <div><div class="chat-field-label">最小サンプル数</div><input type="number" id="chat-mental-model-min-samples" value="3" /></div>
         <div>
@@ -101,8 +101,8 @@ async function setup() {
 describe('3-tier settings visibility', () => {
   it('hides the expert layer by default and keeps basic/advanced visible', async () => {
     await setup();
-    expect(window.Nous.Chat.settings.tierOf('brain_novelty_sim_threshold')).toBe('expert');
-    expect(isHidden('chat-brain-novelty-sim')).toBe(true);
+    expect(window.Nous.Chat.settings.tierOf('brain_link_separation_threshold')).toBe('expert');
+    expect(isHidden('chat-brain-separation-threshold')).toBe(true);
     expect(isHidden('chat-model')).toBe(false);
     expect(isHidden('chat-top-p')).toBe(false);
     expect(toggle().checked).toBe(false);
@@ -114,19 +114,19 @@ describe('3-tier settings visibility', () => {
     t.checked = true;
     t.dispatchEvent(new Event('change', { bubbles: true }));
 
-    expect(isHidden('chat-brain-novelty-sim')).toBe(false);
+    expect(isHidden('chat-brain-separation-threshold')).toBe(false);
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe('1');
 
     // fresh init (reload) honours the stored state
     buildForm();
     window.Nous.Chat.settings.applyFieldTiers();
     expect(toggle().checked).toBe(true);
-    expect(isHidden('chat-brain-novelty-sim')).toBe(false);
+    expect(isHidden('chat-brain-separation-threshold')).toBe(false);
 
     // turning it off hides again (expert layer stays off by default)
     toggle().checked = false;
     toggle().dispatchEvent(new Event('change', { bubbles: true }));
-    expect(isHidden('chat-brain-novelty-sim')).toBe(true);
+    expect(isHidden('chat-brain-separation-threshold')).toBe(true);
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe('0');
   });
 
@@ -154,8 +154,8 @@ describe('3-tier settings visibility', () => {
 
   it('exposes fields[name].help on the control as a title', async () => {
     await setup();
-    expect(document.getElementById('chat-brain-novelty-sim').getAttribute('title')).toBe(
-      '新規性ゲート（効く条件: 新規記憶の定着判定のみ）',
+    expect(document.getElementById('chat-brain-separation-threshold').getAttribute('title')).toBe(
+      'リンク分離しきい値（シナプス結合の類似度）',
     );
     expect(document.getElementById('chat-model').getAttribute('title')).toBe('モデル名');
   });

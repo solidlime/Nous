@@ -244,7 +244,7 @@ class TestToolCalledAudit:
 
 
 # ---------------------------------------------------------------------------
-# (d) enrichment queue wiring: read/search enqueue only unprocessed hits
+# (d) co-access / boost caps on read/search (旧 enrichment queue の後継)
 # ---------------------------------------------------------------------------
 
 
@@ -265,7 +265,7 @@ def _record_memory_access_fn(keys: list[str]):
     return record
 
 
-class TestEnrichmentQueueWiring:
+class TestCoAccessWiring:
     def test_search_coaccess_window_grows_at_most_3(self, mock_app_context):
         """top_k=200 search must record co-access for at most the top 3 hits."""
         _setup_success_ctx(mock_app_context)
@@ -277,34 +277,6 @@ class TestEnrichmentQueueWiring:
         asyncio.run(_tool_memory_search(mock_app_context, PERSONA, query="q", top_k=200))
 
         assert len(keys) == 3
-
-    def test_read_enqueues_unprocessed_memory(self, mock_app_context):
-        _setup_success_ctx(mock_app_context)
-        mock_app_context.enrichment_queue.has_processed.return_value = False
-
-        asyncio.run(_tool_memory_read(mock_app_context, PERSONA, memory_key="mem_001"))
-
-        mock_app_context.enrichment_queue.enqueue.assert_called_once_with("mem_001")
-
-    def test_read_skips_enqueue_when_already_processed(self, mock_app_context):
-        _setup_success_ctx(mock_app_context)
-        mock_app_context.enrichment_queue.has_processed.return_value = True
-
-        asyncio.run(_tool_memory_read(mock_app_context, PERSONA, memory_key="mem_001"))
-
-        mock_app_context.enrichment_queue.enqueue.assert_not_called()
-
-    def test_search_enqueues_only_unprocessed_hits(self, mock_app_context):
-        _setup_success_ctx(mock_app_context)
-        processed = {"m1"}
-        mock_app_context.enrichment_queue.has_processed.side_effect = lambda key: key in processed
-        hits = [SearchResult(memory=_mem(f"m{i}"), score=0.5, source="keyword") for i in range(3)]
-        mock_app_context.search_engine.search.return_value = Success(hits)
-
-        asyncio.run(_tool_memory_search(mock_app_context, PERSONA, query="q"))
-
-        enqueued = [call.args[0] for call in mock_app_context.enrichment_queue.enqueue.call_args_list]
-        assert enqueued == ["m0", "m2"]
 
     def test_search_boosts_at_most_top_10(self, mock_app_context):
         _setup_success_ctx(mock_app_context)

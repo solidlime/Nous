@@ -1,4 +1,4 @@
-"""Memory settings — extraction, reflection, mental models, weights, enrichment, forgetting."""
+"""Memory settings — extraction, reflection, mental models, weights, forgetting."""
 
 
 def _render_memory_section(children: str = "") -> str:
@@ -130,20 +130,8 @@ def _render_weights_section() -> str:
 
 
 _BRAIN_HELP = {
-    "enabled": "LLM による記憶エンリッチメントを有効化します。オフにすると自動評価も新規性ゲートも実行されません。",
-    "auto_run": "定期実行（REM 相当）のオン/オフ。睡眠中の記憶再生のように、新しい記憶をバックグラウンドで再処理します。",
-    "interval": "記憶強化ループの実行間隔（秒）。REM 睡眠の短い周期に相当します。",
-    "batch_limit": "1 周で処理する記憶の上限。一度に大量に再処理すると記憶が乱れるため、小分けにします。",
-    "idle_after": "会話がこの秒数静かなら脳をアイドル状態とみなし、REM 処理を起こします。眠りに入るまでの寝返りのような猶予です。",
-    "min_batch": "REM を起こすのに必要な未処理記憶の最少件数。わずかな揺らぎで眠らないための起床閾値です。",
-    "max_defer": "未処理記憶が残っていても、REM の開始を最大ここまで遅らせます。深い睡眠を妨げないための上限です。",
-    "monologue": "REM 処理（drain）の後に、処理した記憶をもとに一人称の独り言を生成して保存します。再会時に自然に触れるための記録です。",
-    "brain_reasoning": "脳側の呼び出し（内省・記憶強化）で推論（reasoning）を有効化します。OFF でも未設定（null）なら解決済みLLM設定に従います（専用OFFなら会話用LLMの設定。設定ファイル直接編集時のみ null を指定できます）。ON で brain_reasoning_effort を強制使用、OFF（明示の false）で推論なし。OpenRouter 経由で推論だけが予算を使い切る事故対策として、明示 OFF では推論を無効化します。",
-    "brain_max_tokens": "脳側呼び出し（内省・記憶強化）のトークン上限。0 で解決済みLLM設定に従います（専用OFFなら会話用の値、ONなら脳側既定）。明示設定時（256〜32768）は全モードで上書きし、reasoning を有効化した場合は推論分を賄うため自動で嵩上げされます（low 4096 / medium 5120 / high 9216 / max 17408）。reasoning 有効時、保存時に実効値へ引き上げる場合があります（0 のまま保存した場合は実行時に解決されます）。手動でそれ以上に設定した場合は引き下げません。",
-    "spontaneous": "誰も話しかけてこない静かな時間に、最近の記憶と現在の状態から一人称の独り言を自発的に生成します。間隔は前回の内省（会話駆動・自発とも）からの経過時間で判定されます。",
-    "novelty_sim": "海馬-VTA ループのドーパミンゲート。既存記憶との類似がこの値より低いほど「新規」と判定され、長期記憶への定着が強まります。",
-    "novelty_importance": "新規性判定の対象になる重要度のしきい値。重要な記憶だけを新規性ゲートに通します。",
-    "novelty_multiplier": "新規と判定された記憶の初期安定度の倍率。新規性ブーストは作成後 1 回だけ与えられます（長期増強）。",
+    "brain_reasoning": "脳側の呼び出し（内省）で推論（reasoning）を有効化します。OFF でも未設定（null）なら解決済みLLM設定に従います（専用OFFなら会話用LLMの設定。設定ファイル直接編集時のみ null を指定できます）。ON で brain_reasoning_effort を強制使用、OFF（明示の false）で推論なし。OpenRouter 経由で推論だけが予算を使い切る事故対策として、明示 OFF では推論を無効化します。",
+    "brain_max_tokens": "脳側呼び出し（内省）のトークン上限。0 で解決済みLLM設定に従います（専用OFFなら会話用の値、ONなら脳側既定）。明示設定時（256〜32768）は全モードで上書きし、reasoning を有効化した場合は推論分を賄うため自動で嵩上げされます（low 4096 / medium 5120 / high 9216 / max 17408）。reasoning 有効時、保存時に実効値へ引き上げる場合があります（0 のまま保存した場合は実行時に解決されます）。手動でそれ以上に設定した場合は引き下げません。",
     "emotion_gain": "感情が強い記憶ほど想起時に強化されやすくなる係数（扁桃体モデル）。上限は内部で固定されます。",
     "rif_rho": "想起のたびに、手がかりを共有する競合記憶がわずかに抑制されます（検索誘発性忘却）。",
     "reflection_penalty": "リフレクション系の記憶が検索に引っかかりやすすぎないよう、想起スコアを押し下げる強さ。値が大きいほど思い出しにくくなります（思い出しにくさの踏ん張り）。",
@@ -171,7 +159,7 @@ def _brain_help(key: str) -> str:
 
 
 def _render_brain_simulation_section(children: str = "") -> str:
-    """脳シミュレーション設定 — 旧 memory_enrichment セクションを吸収・置換。
+    """脳シミュレーション設定 — 旧 memory_enrichment セクションの後継。
 
     children: 忘却機構など、保存済み記憶を「鍛える/減衰させる」系の
     ネスト subsection を想起と忘却の後に差し込む。
@@ -180,60 +168,10 @@ def _render_brain_simulation_section(children: str = "") -> str:
     """
     help_ = _brain_help
     return f"""
-                        <!-- Brain simulation (absorbs memory enrichment) -->
+                        <!-- Brain simulation -->
                         <details data-category="brain_simulation">
                             <summary><i data-lucide="brain-circuit"></i> 脳シミュレーション <span class="chat-help-icon" data-category="brain_simulation" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body">
-                                <details class="chat-subsection">
-                                    <summary>実行タイミング（REM）</summary>
-                                    <div style="padding-top:6px;">
-                                        <div class="chat-check-row">
-                                            <input type="checkbox" id="chat-memory-enrichment-enabled" />
-                                            <label for="chat-memory-enrichment-enabled">記憶エンリッチメント有効 {help_("enabled")}</label>
-                                        </div>
-                                        <div class="chat-check-row">
-                                            <input type="checkbox" id="chat-brain-auto-run" />
-                                            <label for="chat-brain-auto-run">自動実行 {help_("auto_run")}</label>
-                                        </div>
-                                        <div>
-                                            <div class="chat-field-label">実行間隔（秒）{help_("interval")}</div>
-                                            <input type="number" id="chat-brain-enrich-interval" class="chat-field-input" min="10" step="10" value="60" />
-                                        </div>
-                                        <div>
-                                            <div class="chat-field-label">1 周あたり上限件数 {help_("batch_limit")}</div>
-                                            <input type="number" id="chat-brain-batch-limit" class="chat-field-input" min="1" max="50" step="1" value="5" />
-                                        </div>
-                                        <div>
-                                            <div class="chat-field-label">アイドル判定（秒）{help_("idle_after")}</div>
-                                            <input type="number" id="chat-brain-idle-after-seconds" class="chat-field-input" min="30" max="3600" step="10" value="120" />
-                                        </div>
-                                        <div>
-                                            <div class="chat-field-label">最小バッチ件数 {help_("min_batch")}</div>
-                                            <input type="number" id="chat-brain-min-batch-size" class="chat-field-input" min="1" max="50" step="1" value="3" />
-                                        </div>
-                                        <div>
-                                            <div class="chat-field-label">最大延期（秒）{help_("max_defer")}</div>
-                                            <input type="number" id="chat-brain-max-defer-seconds" class="chat-field-input" min="60" max="86400" step="60" value="3600" />
-                                        </div>
-                                    </div>
-                                </details>
-                                <details class="chat-subsection">
-                                    <summary>独り言・内省</summary>
-                                    <div style="padding-top:6px;">
-                                        <div class="chat-check-row">
-                                            <input type="checkbox" id="chat-brain-monologue" />
-                                            <label for="chat-brain-monologue">REM 独り言 {help_("monologue")}</label>
-                                        </div>
-                                        <div class="chat-check-row">
-                                            <input type="checkbox" id="chat-brain-spontaneous" />
-                                            <label for="chat-brain-spontaneous">自発的内省 {help_("spontaneous")}</label>
-                                        </div>
-                                        <div>
-                                            <div class="chat-field-label">自発間隔（時間）{help_("spontaneous")}</div>
-                                            <input type="number" id="chat-brain-spontaneous-interval" class="chat-field-input" min="1" max="72" step="1" value="6" />
-                                        </div>
-                                    </div>
-                                </details>
                                 <details class="chat-subsection">
                                     <summary>LLM</summary>
                                     <div style="padding-top:6px;">
@@ -286,18 +224,6 @@ def _render_brain_simulation_section(children: str = "") -> str:
                                 <details class="chat-subsection">
                                     <summary>学習ゲート</summary>
                                     <div style="padding-top:6px;">
-                                        <div>
-                                            <div class="chat-field-label">新規性 類似度しきい値 {help_("novelty_sim")}</div>
-                                            <input type="number" id="chat-brain-novelty-sim" class="chat-field-input" min="0" max="1" step="0.01" value="0.75" />
-                                        </div>
-                                        <div>
-                                            <div class="chat-field-label">新規性 重要度しきい値 {help_("novelty_importance")}</div>
-                                            <input type="number" id="chat-brain-novelty-importance" class="chat-field-input" min="0" max="1" step="0.01" value="0.6" />
-                                        </div>
-                                        <div>
-                                            <div class="chat-field-label">新規性 ブースト倍率 {help_("novelty_multiplier")}</div>
-                                            <input type="number" id="chat-brain-novelty-multiplier" class="chat-field-input" min="1" max="5" step="0.1" value="2.0" />
-                                        </div>
                                         <div>
                                             <div class="chat-field-label">感情 gain 係数 k {help_("emotion_gain")}</div>
                                             <input type="number" id="chat-brain-emotion-gain-k" class="chat-field-input" min="0" max="1" step="0.05" value="0.5" />

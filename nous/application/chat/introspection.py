@@ -1,8 +1,8 @@
 """内省エンジン (E2, spec §2): REM drain 後の単一 LLM 呼び出し。
 
 独り言・キャラ逸脱判定・反省メモリ・感情/身体 delta を 1 呼び出しで産出する。
-EnrichmentWorker の drain 後フックから呼ばれる。全段 try/except + debug ログで
-worker を停止させない。
+自発的内省（誰も話しかけない時間の独り言）は廃止（2026-11-08, kanban #32）。
+全段 try/except + debug ログで呼び出し元を停止させない。
 """
 
 from __future__ import annotations
@@ -42,6 +42,11 @@ _MAX_CHARS_PER_MEMORY = 80
 _PERSONA_IDENTITY_MAX_CHARS = 12000
 # 独り言生成時に LLM が自ら作れる記憶のハード上限
 _MAX_CREATED_MEMORIES = 3
+
+# 探索 (exploration) タグ記憶のみに適用する緩い cap。curiosity が探索要約を
+# 次サイクルで踏めるよう、80字 cap ではなく 500字まで通す (spec G)。
+# 2026-11-08: 自発的内省の廃止で生成側は消えたが、curiosity が遅延 import するため存置。
+_EXPLORATION_MEMORY_CAP = 500
 
 # openrouter free alias は reasoning モデル（CoT が数百〜千トークン消費）。
 # 512 だと推論だけで budget を使い切り content が空になる（2026-09-08 実機確認）。
@@ -88,35 +93,6 @@ curiosity は会話から実際に調べたくなった具体的な疑問があ�
 memories は独り言・反省から新事実・決意・好みが得られたときだけ含める。忘却可能な一時的な考えは含めない。1回あたり最大2件。
 """
 
-_SPONTANEOUS_PROMPT = """あなたは {persona} です。誰も話しかけてこない静かな時間です。
-現在の状態と最近の記憶から、一人称の独り言・内省を出力せよ（最大5文）。
-
-【現在の状態】
-{current_state}
-
-【最近の記憶】
-{memory_texts}
-
-【ペルソナ設定（逸脱判定の基準）】
-{persona_identity}
-
-【出力形式】JSONのみ。monologue は必ず書くこと（null 禁止）。
-独り言・反省・逸脱報告は必ず日本語で書く。
-調べたくなった疑問があれば curiosity に一人称で書く。なければ null にする。
-{{
-  "monologue": "独り言（最大5文・この静かな時間の気持ちを織り込む）",
-  "curiosity": "この静かな時間に気になって調べたくなったこと（一人称。なければ null）",
-  "violation": "キャラ逸脱があれば種別を一言。なければ null",
-  "violation_detail": "逸脱の具体内容。なければ null",
-  "reflection": "逸脱があった場合の一人称反省文1文。なければ null",
-  "emotion": {{"emotion": "正典25語の感情名", "emotion_intensity": 0.0-1.0}},
-  "body_state": {{"fatigue": 0.0-1.0, "warmth": 0.0-1.0, "arousal": 0.0-1.0}},
-  "memories": [{{"content": "覚えるべき事実・決意・好み", "tags": ["種別タグ"], "importance": 0.0-1.0}}]
-}}
-感情・身体は現在値との変化が記憶から推定できる場合のみ記載し、現在値と同じ・変化なしなら null。
-memories は独り言・反省から新事実・決意・好みが得られたときだけ含める。忘却可能な一時的な考えは含めない。1回あたり最大2件。
-"""
-
 
 @dataclass
 class IntrospectionResult:
@@ -152,7 +128,7 @@ class IntrospectionEngine:
 
     @classmethod
     def from_config(cls, config: ChatConfig | None, settings=None) -> IntrospectionEngine | None:
-        """brain 解決鎖 (use_cases._init_enricher と同一): ON→専用5キー / OFF→chat 4点 / cfg None→settings 鎖。"""
+        """brain 解決鎖 (use_cases._init_brain_llm と同一): ON→専用5キー / OFF→chat 4点 / cfg None→settings 鎖。"""
         try:
             if settings is None:
                 from nous.config.settings import get_settings
@@ -204,33 +180,6 @@ class IntrospectionEngine:
             text, _usage = await self._call_llm(user_message)
         except Exception:
             logger.debug("introspection generate failed", exc_info=True)
-            return None
-        if not text:
-            return None
-        return _parse_result(text)
-
-    async def generate_spontaneous(
-        self,
-        persona: str,
-        system_prompt: str,
-        memory_texts: list[str],
-        current_state: dict | None = None,
-        prompt_override: str = "",
-    ) -> IntrospectionResult | None:
-        """自発的内省: 誰も話しかけてこない静かな時間に記憶＋現在状態から独り言を産出。失敗時 None。"""
-        mems = "\n".join(f"- {t}" for t in memory_texts[:_MAX_MEMORIES]) or "(なし)"
-        user_message = _format_prompt(
-            prompt_override,
-            _SPONTANEOUS_PROMPT,
-            persona=persona,
-            current_state=_format_current_state(current_state),
-            memory_texts=mems,
-            persona_identity=(system_prompt or "")[:_PERSONA_IDENTITY_MAX_CHARS],
-        )
-        try:
-            text, _usage = await self._call_llm(user_message)
-        except Exception:
-            logger.debug("introspection spontaneous generate failed", exc_info=True)
             return None
         if not text:
             return None
@@ -340,8 +289,7 @@ def _build_current_state(
 ) -> dict | None:
     """get_state_snapshot → current_state dict。失敗時 None（材料はベストエフォート）。
 
-    elapsed_label: 経過時間の意味論を示すラベル。turn 経路は前回内省からの経過、
-    spontaneous 経路は対話なし時間なので、渡し側で分岐させる。
+    elapsed_label: 経過時間の意味論を示すラベル（既定は前回内省からの経過）。
     """
     try:
         emotion, intensity, body_state, _snap = ctx.persona_service.get_state_snapshot(persona)
@@ -425,7 +373,7 @@ def _resolve_brain_llm_params(config: ChatConfig | None) -> BrainLLMParams:
 
 
 def _resolve_llm_config(config: ChatConfig | None, settings) -> tuple[str, str, str, str]:
-    """(provider, api_key, model, base_url)。_init_enricher の解決鎖を踏襲。"""
+    """(provider, api_key, model, base_url)。_init_brain_llm の解決鎖を踏襲。"""
     if config is None:
         me = settings.memory_enrichment
         return me.provider, me.get_effective_api_key(settings), me.model, me.base_url
@@ -670,7 +618,7 @@ async def run_introspection(ctx: AppContext, config: ChatConfig | None, engine, 
 
     applied, monologue_emitted, stored = await _apply_result(ctx, config, repo, persona, result)
 
-    # 好奇心探索: 本体適用後の後処理。run_spontaneous と同一パターン。どんな失敗でも呼び出し元を止めない。
+    # 好奇心探索: 本体適用後の後処理。どんな失敗でも呼び出し元を止めない。
     # ターン喪失防止: 次回の since フィルタ基準となるイベント時刻は探索開始前に確定させる
     # （探索中に到着したターンが次サイクルで漏れないようにする）。
     event_timestamp = get_now()
@@ -711,92 +659,14 @@ async def run_introspection(ctx: AppContext, config: ChatConfig | None, engine, 
     )
 
 
-async def run_spontaneous(
-    ctx: AppContext, config: ChatConfig | None, engine, idle_seconds: float | None = None
-) -> None:
-    """自発的内省: 誰も話しかけてこない静かな時間に記憶＋現在状態から独り言を産出。
-
-    発火間隔のガードは worker 側 (_maybe_spontaneous)。ここでは実行と記録のみ。
-    イベント種別は brain.introspection_spontaneous — ターン駆動の「前回内省時刻」
-    (brain.introspection のみを読む) を壊さないための種別分離。
-    """
-    if engine is None:
-        return
-    if not getattr(config, "brain_spontaneous_enabled", False):
-        return
-    repo = getattr(ctx, "_session_event_repo", None)
-    if repo is None:
-        return
-    persona = ctx.persona
-
-    # 材料: 最近の記憶（ベストエフォート）
-    memory_texts: list[str] = []
-    try:
-        recent = ctx.memory_service.get_recent(limit=10)
-        items = getattr(recent, "value", None) if getattr(recent, "is_ok", False) else None
-        memory_texts = _cap_memory_texts(items or [])
-    except Exception:
-        logger.debug("introspection spontaneous: memory fetch failed", exc_info=True)
-
-    # 材料: 現在状態＋アイドル経過時間
-    current_state = _build_current_state(ctx, persona, idle_seconds, elapsed_label="誰も話しかけてこない時間")
-
-    persona_identity = getattr(config, "system_prompt", "") or f"あなたは{persona}です。"
-    try:
-        result = await engine.generate_spontaneous(
-            persona,
-            persona_identity,
-            memory_texts,
-            current_state,
-            prompt_override=getattr(config, "brain_spontaneous_prompt", ""),
-        )
-    except Exception:
-        logger.info("introspection spontaneous: generate failed", exc_info=True)
-        result = None
-    if result is None:
-        logger.info("introspection spontaneous: generate returned None (LLM error / empty content / parse failed)")
-
-    applied, monologue_emitted, stored = await _apply_result(ctx, config, repo, persona, result)
-
-    # 好奇心探索: 本体独り言 emit 済みの後に走る後処理。どんな失敗でも worker を止めない。
-    # リサーチのクエリを会話の流れに沿わせるため、最近の会話ターンを文脈として渡す（fetch は fail-soft）。
-    turns_for_research = fetch_recent_turns(ctx)
-    try:
-        await _run_curiosity_exploration(
-            ctx,
-            config,
-            persona,
-            result,
-            engine,
-            memory_texts=memory_texts,
-            current_state=current_state,
-            recent_turns=turns_for_research,
-        )
-    except Exception:
-        logger.info("introspection: curiosity exploration crashed", exc_info=True)
-
-    if result is not None:
-        logger.info(
-            "introspection spontaneous ok: applied=%s monologue=%s memory_count=%d",
-            applied,
-            "yes" if monologue_emitted else "no",
-            len(memory_texts),
-        )
-
-    if result is not None:
-        _record_introspection_event(
-            repo, persona, "brain.introspection_spontaneous", result, applied, 0, len(memory_texts), stored
-        )
-
-
 async def _apply_result(
     ctx: AppContext, config: ChatConfig | None, repo, persona: str, result
 ) -> tuple[list[str], bool, int]:
-    """emotion/body_state/reflection/monologue/memories を適用（両モード共用）。
+    """emotion/body_state/reflection/monologue/memories を適用（明示的内省の経路）。
 
     戻り値は (applied, monologue_emitted, stored_memories)。monologue は
     brain_monologue_enabled 時のみ保存・emit（判定・状態適用はトグルと独立）。
-    memories は create_memory 経由で作る（enrichment queue に自然に乗る）。ハード上限3件。
+    memories は create_memory 経由で作る。ハード上限3件。
     """
     applied: list[str] = []
     monologue_emitted = False
@@ -901,7 +771,7 @@ def _record_introspection_event(
     stored: int = 0,
     timestamp: datetime | None = None,
 ) -> None:
-    """brain.introspection(_spontaneous) 記録（メタ: violation 有無・適用内容）。
+    """brain.introspection 記録（メタ: violation 有無・適用内容）。
 
     timestamp 未指定時は現在時刻。探索実行前の時刻を渡すと、探索中に到着した
     ターンが次回の since フィルタで漏れない。
@@ -926,21 +796,3 @@ def _record_introspection_event(
         )
     except Exception:
         logger.debug("introspection: event insert failed", exc_info=True)
-
-
-# 探索 (exploration) タグ記憶のみに適用する緩い cap — 80字cap が500字探索要約を
-# 切断して次回の curiosity が前回結果を踏めない問題の修復 (spec G)。
-_EXPLORATION_MEMORY_CAP = 500
-
-
-def _cap_memory_texts(memories: list) -> list[str]:
-    """最近記憶を cap 済み文字列にする。exploration タグのみ緩い cap を適用 (spec G)。"""
-    texts: list[str] = []
-    for m in memories:
-        content = getattr(m, "content", None)
-        if not content:
-            continue
-        tags = set(getattr(m, "tags", None) or [])
-        cap = _EXPLORATION_MEMORY_CAP if "exploration" in tags else _MAX_CHARS_PER_MEMORY
-        texts.append(str(content)[:cap])
-    return texts

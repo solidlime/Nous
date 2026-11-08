@@ -32,7 +32,7 @@ async def test_save_config_publishes_config_updated(_ctx):
     with (
         patch("nous.api.http.routers.chat.chat_management._resolve_request", return_value=("herta", _ctx)),
         patch("nous.api.http.routers.chat.chat_management.ChatConfigFileRepository") as repo_cls,
-        patch.object(_ctx, "reload_enricher", MagicMock()),
+        patch.object(_ctx, "reload_brain_llm", MagicMock()),
     ):
         repo_cls.return_value.get.return_value = ChatConfig(persona="herta")
         repo_cls.return_value.save = MagicMock()

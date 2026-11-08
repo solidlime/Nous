@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from nous.application.workers.decay_worker import DecayWorker
-    from nous.application.workers.enrichment_worker import EnrichmentWorker
     from nous.config.settings import Settings
     from nous.domain.chat_config import ChatConfig
     from nous.domain.memory.entities import Memory
@@ -117,7 +116,7 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
         self._init_volatile_state()
         self._init_lifecycle_state()
         self._init_storage()
-        self._init_enricher()
+        self._init_brain_llm()
         self._init_services()
         self._init_vector()
         self._preload_background()
@@ -154,22 +153,18 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
         self.equipment_repo = SQLiteEquipmentRepository(self.connection)
         self.entity_repo = SQLiteEntityRepository(self.connection)
 
-        # Persistent enrichment queue (drained by EnrichmentWorker when idle)
-        from nous.infrastructure.sqlite.enrichment_queue_repo import EnrichmentQueueRepository
-
-        self.enrichment_queue = EnrichmentQueueRepository(self.connection)
-
         # Entity graph (optional — never blocks core memory operations)
         # Must be initialized before MemoryService so it can be injected
         from nous.domain.memory.graph import EntityService
 
         self.entity_service = EntityService(self.entity_repo)
 
-    def _init_enricher(self) -> None:
-        """Resolve LLM provider settings and create MemoryEnricher if configured.
+    def _init_brain_llm(self) -> None:
+        """Resolve the shared brain LLM → MemoryEnricher (矛盾判定) + IntrospectionEngine.
 
         Resolution chain (single point for the brain-simulator LLM):
-        - cfg is None (e.g. MCP-only startup): legacy settings.memory_enrichment chain.
+        - cfg is None (e.g. MCP-only startup): settings.memory_enrichment only
+          (no chat config to reuse).
         - brain_llm_dedicated OFF: reuse the chat provider/model/base_url/api_key
           4-piece set verbatim (no mixed provider).
         - brain_llm_dedicated ON: brain_llm_* with the legacy fallback chain;
@@ -177,14 +172,15 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
           matches the chat provider (no key mixing across providers).
 
         Depends on: _init_storage (self._config, self.settings).
-        Best-effort; failure results in enricher=None (logged as debug).
+        Best-effort; failure results in both being None (logged as debug).
+
+        旧 _init_enricher。enrichment（importance/関係抽出）廃止 2026-11-08 後も
+        矛盾判定用 enricher と内省エンジンは同じ解決鎖を共有する。
         """
         enricher: MemoryEnricher | None = None
         introspection_engine: IntrospectionEngine | None = None
         cfg = self._config
-        mem_enrich_enabled = cfg.memory_enrichment_enabled if cfg else self.settings.memory_enrichment.enabled
-        if mem_enrich_enabled:
-            min_chars = self.settings.memory_enrichment.min_chars
+        if self.settings.memory_enrichment.enabled:
             if cfg is None:
                 provider = self.settings.memory_enrichment.provider
                 model = self.settings.memory_enrichment.model
@@ -207,7 +203,9 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
                 if not api_key and provider == cfg.provider_config.provider:
                     api_key = cfg.provider_config.get_effective_api_key()
                 if not api_key:
-                    logger.debug("brain LLM: no api_key for provider '%s'; enrichment disabled", provider)
+                    logger.debug(
+                        "brain LLM: no api_key for provider '%s'; contradiction/introspection disabled", provider
+                    )
             if api_key:
                 from nous.application.chat.introspection import (
                     IntrospectionEngine,
@@ -236,7 +234,6 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
                     api_key=api_key,
                     model=model,
                     base_url=base_url,
-                    min_chars=min_chars,
                     reasoning_effort=params.reasoning_effort,
                     **brain_kwargs,  # type: ignore[arg-type]
                     session_id=brain_session,
@@ -254,6 +251,8 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
                     **brain_kwargs,  # type: ignore[arg-type]
                     session_id=brain_session,
                 )
+        else:
+            logger.warning("memory_enrichment.enabled=false: 脳側 LLM を無効化（矛盾判定と内省は動かない）")
         self._enricher = enricher
         self.introspection_engine = introspection_engine
 
@@ -286,14 +285,14 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
             return os.environ.get(legacy_env, "")
         return ""
 
-    def reload_enricher(self) -> None:
-        """Re-resolve the enricher after a config save (chat settings route hook)."""
-        self._init_enricher()
+    def reload_brain_llm(self) -> None:
+        """Re-resolve the brain LLM after a config save (chat settings route hook)."""
+        self._init_brain_llm()
 
     def _init_services(self) -> None:
         """Create EventBus and all domain services.
 
-        Depends on: _init_storage (repos, entity_service), _init_enricher (self._enricher).
+        Depends on: _init_storage (repos, entity_service), _init_brain_llm (self._enricher).
         """
         # EventBus (must be created before services)
         from nous.application.event_bus import EventBus
@@ -319,7 +318,6 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
             enricher=self._enricher,
             link_repo=self.entity_repo,
             coaccess_tracker=self._coaccess_keys,
-            enrichment_queue=self.enrichment_queue,
         )
         self.persona_service = PersonaService(
             self.persona_repo, event_bus=self.event_bus, memory_service=self.memory_service
@@ -379,7 +377,6 @@ class AppContextRegistry:
 
     _contexts: dict[str, AppContext] = {}
     _decay_workers: dict[str, DecayWorker] = {}
-    _enrichment_workers: dict[str, EnrichmentWorker] = {}
     _settings: Settings | None = None
     _lock = threading.Lock()
 
@@ -458,34 +455,14 @@ class AppContextRegistry:
                 decay_worker.start()
                 cls._decay_workers[persona] = decay_worker
 
-            # EnrichmentWorker (REM-equivalent): strict `is True` guards so
-            # mock settings/configs in tests never start real threads.
-            enrichment_enabled = (
-                config.memory_enrichment_enabled
-                if config
-                else getattr(cls._settings.memory_enrichment, "enabled", False)
-            ) is True
-            brain_auto_run = (
-                config.brain_enrich_auto_run if config else getattr(cls._settings.memory_enrichment, "auto_run", False)
-            ) is True
-            if enrichment_enabled and brain_auto_run:
-                from nous.application.workers.enrichment_worker import EnrichmentWorker
-
-                enrichment_worker = EnrichmentWorker(ctx, config)
-                enrichment_worker.start()
-                cls._enrichment_workers[persona] = enrichment_worker
-
         return ctx
 
     @classmethod
     def stop_decay_workers(cls, timeout: float = 5.0) -> None:
-        """Stop all decay and enrichment workers (graceful shutdown)."""
+        """Stop all decay workers (graceful shutdown)."""
         for worker in cls._decay_workers.values():
             worker.stop(timeout=timeout)
         cls._decay_workers.clear()
-        for worker in cls._enrichment_workers.values():
-            worker.stop(timeout=timeout)
-        cls._enrichment_workers.clear()
 
     @classmethod
     def close_all(cls) -> None:
