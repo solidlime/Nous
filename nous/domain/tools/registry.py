@@ -284,7 +284,7 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
     ),
     "memory_search": ToolSpec(
         name="memory_search",
-        summary="記憶をハイブリッド検索する（意味検索 + キーワード検索）",
+        summary="記憶（事実・発話単位）をハイブリッド検索する（意味検索 + キーワード検索）。編集済みトピックは wiki_ls/wiki_read/wiki_grep 側の責務。",
         surfaces=frozenset({MCP, BUILTIN, HTTP}),
         params={
             MCP: (
@@ -459,7 +459,7 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
     ),
     "wiki_ls": ToolSpec(
         name="wiki_ls",
-        summary="まとめ wiki のページ一覧（slug/title/project/更新日時）を返す",
+        summary="まとめ wiki のページ一覧（slug/title/project/更新日時）を返す。記憶単位の検索は memory_search。",
         surfaces=frozenset({MCP}),
         params={
             MCP: (
@@ -492,7 +492,7 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
     ),
     "wiki_grep": ToolSpec(
         name="wiki_grep",
-        summary="まとめ wiki の本文を行単位の正規表現で grep する（意味検索で取り逃す字面一致の照合用）",
+        summary="まとめ wiki の本文を行単位の正規表現で grep する（意味検索で取り逃す字面一致の照合用。意味検索は memory_search）",
         surfaces=frozenset({MCP}),
         params={
             MCP: (

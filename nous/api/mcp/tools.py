@@ -295,6 +295,7 @@ def register_tools(mcp: MCPServer) -> None:
         request_id: str | None = None,
     ) -> str:
         """ハイブリッド検索で記憶を検索。会話が過去の出来事に言及したとき、またはあなたやユーザーについての文脈が必要なときに使用せよ。
+        返るのは記憶（事実・発話単位）だけ。編集済みトピック（まとめ wiki）は wiki_ls / wiki_read / wiki_grep を使い分けよ。
         date_range: "7d","30d","昨日"。
         profile: 重みプリセット — "recent"（最新優先）/ "deep"（関連度優先）。指定時は個別重みを上書き（監査 M7）。
         importance_weight/recency_weight: RRF スコアリングのブースト値 (0.0-1.0)。通常は指定せず profile を使え。

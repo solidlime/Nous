@@ -557,6 +557,8 @@ class TestMemorySearch:
         assert data["data"]["memories"][0]["key"] == "mem_abc"
         assert data["data"]["memories"][0]["score"] == 1.0  # normalized to max score
         assert data["data"]["total_count"] == 42
+        # ファミリ分離: 記憶検索に wiki の別枠は混ぜない（wiki_* 側の責務）
+        assert "wiki" not in data["data"]
 
     @pytest.mark.asyncio
     async def test_search_no_results(self, registered_tools):
