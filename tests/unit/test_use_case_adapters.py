@@ -140,6 +140,23 @@ class TestQdrantSemanticSearch:
         assert result.is_ok
         assert result.value == []
 
+    @pytest.mark.asyncio
+    async def test_search_batches_memory_fetch(self):
+        """N+1 回避: find_by_keys があれば hit 数に関係なく 1 回だけ呼ぶ。"""
+        vs = AsyncMock()
+        vs.search.return_value = Success([("mem_a", 0.9), ("mem_b", 0.8), ("mem_c", 0.7)])
+        mem_a, mem_b, mem_c = (_make_memory(k) for k in ("mem_a", "mem_b", "mem_c"))
+
+        repo = MagicMock()
+        repo.find_by_keys.return_value = Success({"mem_a": mem_a, "mem_b": mem_b, "mem_c": mem_c})
+
+        adapter = QdrantSemanticSearch(vs, repo)
+        result = await adapter.search("query", limit=3)
+        assert result.is_ok
+        assert [m.key for m, _ in result.value] == ["mem_a", "mem_b", "mem_c"]
+        repo.find_by_keys.assert_called_once_with(["mem_a", "mem_b", "mem_c"])
+        repo.find_by_key.assert_not_called()
+
 
 class TestQdrantSemanticSearchDateFiltering:
     """Tests for date-based post-filtering in QdrantSemanticSearch.search()."""

@@ -17,6 +17,9 @@ logger = get_logger(__name__)
 class MemoryCrudMixin:
     """Mixin providing CRUD operations for SQLiteMemoryRepository."""
 
+    # 合成先 (SQLiteRepository) が提供する属性の型宣言。mypy の混入先誤検知を消す。
+    _db: Any
+
     ALLOWED_FIELDS = frozenset(
         {
             "content",
@@ -139,6 +142,17 @@ class MemoryCrudMixin:
         if row is None:
             return Success(None)
         return Success(self._row_to_memory(row))
+
+    def find_by_keys(self, keys: list[str]) -> Result[dict[str, Memory], RepositoryError]:
+        """複数 key を 1 クエリで取得する（ベクトル検索の N+1 回避用）。"""
+        if not keys:
+            return Success({})
+        placeholders = ",".join("?" for _ in keys)
+        rows = self._db.execute(
+            f"SELECT * FROM memories WHERE key IN ({placeholders})",  # 値は全てバインド; 識別子なし  # nosec B608
+            tuple(keys),
+        ).fetchall()
+        return Success({row["key"]: self._row_to_memory(row) for row in rows})
 
     def find_by_content_exact(self, content: str) -> Result[Memory | None, RepositoryError]:
         """Find a memory by exact content match (case-insensitive, excludes tombstoned)."""

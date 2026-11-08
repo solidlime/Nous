@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from nous.application.workers.enrichment_worker import EnrichmentWorker
     from nous.config.settings import Settings
     from nous.domain.chat_config import ChatConfig
+    from nous.domain.memory.entities import Memory
 
 
 class SQLiteKeywordSearch:
@@ -62,10 +63,23 @@ class QdrantSemanticSearch:
             return Failure(SearchError(str(result.error)))
 
         search_results: list[tuple] = []
-        for key, score in result.value:
-            mem_result = self.memory_repo.find_by_key(key)
-            if mem_result.is_ok and mem_result.value:
-                memory = mem_result.value
+        vector_hits = [(key, score) for key, score in result.value]
+        # 1 クエリでまとめて読む（以前は hit ごとに find_by_key で N+1 になっていた）。
+        batch = getattr(self.memory_repo, "find_by_keys", None)
+        memory_map: dict[str, Memory] = {}
+        if batch is not None:
+            fetched = batch([key for key, _ in vector_hits])
+            if getattr(fetched, "is_ok", False) is True and isinstance(getattr(fetched, "value", None), dict):
+                memory_map = fetched.value
+        if not memory_map:  # 旧 fake repos（find_by_keys 未実装）への後方互換
+            for key, _ in vector_hits:
+                single = self.memory_repo.find_by_key(key)
+                if single.is_ok and single.value:
+                    memory_map[key] = single.value
+
+        for key, score in vector_hits:
+            memory = memory_map.get(key)
+            if memory is not None:
                 # Exclude tombstoned memories (vector points may linger)
                 if getattr(memory, "lifecycle_status", "active") == "tombstoned":
                     continue
