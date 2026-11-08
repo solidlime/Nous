@@ -1,0 +1,337 @@
+"""WikiStore — wiki ページのファイル層（正）を読み書きする。
+
+計画書: ``docs/superpowers/plans/2026-11-07-wiki-dreaming.md`` §3.1 / §4.1。
+
+- ページ実体: ``{data_root}/persona/{persona}/wiki/{slug}.md``
+- frontmatter: ``---`` で挟んだ ``key: value`` 行（YAML パーサは使わない）
+- ``index.md`` は全ページの目次。書き込みは ``rebuild_index()`` 専用（read-only 扱い）
+- slug は Windows でも安全な文字だけを使う（``:`` は使わない。記憶側の
+  ``project:nous`` タグとは別名前空間で、ページ slug は ``project-nous``）
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import re
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+
+from nous.domain.shared.result import Failure, Result, Success
+from nous.infrastructure.logging.structured import get_logger
+
+logger = get_logger(__name__)
+
+#: index page slug (auto maintained, never written through write_page).
+INDEX_SLUG = "index"
+
+#: hard cap for a single page body (plan §3.1: Borges map avoidance).
+MAX_PAGE_BYTES = 8192
+
+#: max path depth for nested topic pages (``project-nous/memory``).
+MAX_SLUG_DEPTH = 3
+
+_SLUG_SEGMENT_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+_WIKILINK_RE = re.compile(r"\[\[([^\]\n]+)\]\]")
+_FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.DOTALL)
+
+#: first N chars of body used as the one-line summary in index.md.
+_INDEX_SUMMARY_CHARS = 80
+
+#: index.md の最大行数（上位層を小さく保つ契約。超分は 「… +N more」に畳む）。
+MAX_INDEX_LINES = 120
+
+
+class WikiStoreError(Exception):
+    """Wiki ファイル層の失敗（slug 不正・サイズ超過・読み書き失敗）。"""
+
+
+@dataclass(frozen=True)
+class WikiPage:
+    """1 つの wiki ページ。"""
+
+    slug: str
+    title: str
+    body: str
+    project: str | None = None
+    sources: tuple[str, ...] = ()
+    updated: str | None = None
+    links: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def is_index(self) -> bool:
+        return self.slug == INDEX_SLUG
+
+
+def _split_frontmatter(raw: str) -> tuple[dict[str, str], str]:
+    match = _FRONTMATTER_RE.match(raw)
+    if match is None:
+        return {}, raw
+    meta: dict[str, str] = {}
+    for line in match.group(1).splitlines():
+        key, _, value = line.partition(":")
+        if key.strip():
+            meta[key.strip().lower()] = value.strip()
+    return meta, match.group(2)
+
+
+def _parse_sources(raw: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
+def extract_links(body: str) -> tuple[str, ...]:
+    """本文の ``[[slug]]`` / ``[[slug|表示名]]`` からリンク先 slug を抽出する。"""
+    links: list[str] = []
+    for match in _WIKILINK_RE.finditer(body):
+        target = match.group(1).split("|", 1)[0].strip().strip("/")
+        if target and target not in links:
+            links.append(target)
+    return tuple(links)
+
+
+def parse_page(slug: str, raw: str) -> WikiPage:
+    """Markdown 文字列を :class:`WikiPage` にする（frontmatter は任意）。"""
+    meta, body = _split_frontmatter(raw)
+    return WikiPage(
+        slug=slug,
+        title=meta.get("title", slug),
+        body=body.strip("\n"),
+        project=meta.get("project") or None,
+        sources=_parse_sources(meta.get("sources", "")),
+        updated=meta.get("updated") or None,
+        links=extract_links(body),
+    )
+
+
+def render_page(page: WikiPage) -> str:
+    """:class:`WikiPage` を Markdown 文字列にする（保存形式）。"""
+    lines = ["---", f"title: {page.title}"]
+    if page.project:
+        lines.append(f"project: {page.project}")
+    if page.sources:
+        lines.append(f"sources: {', '.join(page.sources)}")
+    lines.append(f"updated: {page.updated or _now_iso()}")
+    lines.append("---")
+    lines.append("")
+    lines.append(page.body.rstrip("\n"))
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _now_iso() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def page_hash(title: str, body: str) -> str:
+    """ページ内容の安定ハッシュ（embedding 再計算の判断に使う）。
+
+    ``updated`` を含む render 後の全文ではなく title+body から取る —
+    render は毎回 ``updated`` を書き換えるため、全文ハッシュでは毎 cycle 再 embed になる。
+    """
+    digest = hashlib.sha256(f"{title}\x00{body}".encode())
+    return digest.hexdigest()[:32]
+
+
+def _validate_slug(slug: str) -> None:
+    if slug != slug.strip() or not slug:
+        raise WikiStoreError(f"invalid slug: {slug!r}")
+    parts = slug.split("/")
+    if len(parts) > MAX_SLUG_DEPTH:
+        raise WikiStoreError(f"slug too deep (max {MAX_SLUG_DEPTH}): {slug!r}")
+    for part in parts:
+        if not _SLUG_SEGMENT_RE.match(part):
+            raise WikiStoreError(f"invalid slug segment {part!r} in {slug!r}")
+
+
+class WikiStore:
+    """persona ごとの wiki ディレクトリを操作する（ファイル層のみ）。"""
+
+    def __init__(self, data_root: str | Path, persona: str) -> None:
+        if not persona or "/" in persona or "\\" in persona or persona in (".", ".."):
+            raise WikiStoreError(f"invalid persona: {persona!r}")
+        self.persona = persona
+        self.root = Path(data_root) / "persona" / persona / "wiki"
+
+    # ------------------------------------------------------------------
+    # paths
+    # ------------------------------------------------------------------
+
+    def _path_for(self, slug: str) -> Path:
+        _validate_slug(slug)
+        path = self.root.joinpath(*slug.split("/")).with_suffix(".md")
+        # 親ディレクトリ経由の symlink 脱出を防ぐ（resolve 後に root 配下を強制）
+        resolved_root = self.root.resolve()
+        if not path.parent.resolve().is_relative_to(resolved_root):
+            raise WikiStoreError(f"slug escapes wiki root: {slug!r}")
+        return path
+
+    def wiki_dir(self) -> Path:
+        return self.root
+
+    # ------------------------------------------------------------------
+    # read
+    # ------------------------------------------------------------------
+
+    def list_slugs(self) -> list[str]:
+        if not self.root.is_dir():
+            return []
+        slugs: list[str] = []
+        for path in sorted(self.root.rglob("*.md")):
+            rel = path.relative_to(self.root).with_suffix("")
+            slug = "/".join(rel.parts)
+            if slug == INDEX_SLUG or all(_SLUG_SEGMENT_RE.match(part) for part in rel.parts):
+                slugs.append(slug)
+            else:
+                logger.warning("Skipping invalid wiki file name: %s", path)
+        return slugs
+
+    def read_page(self, slug: str) -> Result[WikiPage, WikiStoreError]:
+        try:
+            path = self._path_for(slug)
+        except WikiStoreError as exc:
+            return Failure(exc)
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return Failure(WikiStoreError(f"wiki page not found: {slug}"))
+        except OSError as exc:
+            return Failure(WikiStoreError(f"cannot read {slug}: {exc}"))
+        return Success(parse_page(slug, raw))
+
+    def list_pages(self, include_index: bool = False) -> list[WikiPage]:
+        pages: list[WikiPage] = []
+        for slug in self.list_slugs():
+            if slug == INDEX_SLUG and not include_index:
+                continue
+            result = self.read_page(slug)
+            if isinstance(result, Success):
+                pages.append(result.value)
+        return pages
+
+    # ------------------------------------------------------------------
+    # write
+    # ------------------------------------------------------------------
+
+    def write_page(
+        self,
+        slug: str,
+        title: str,
+        body: str,
+        project: str | None = None,
+        sources: tuple[str, ...] = (),
+    ) -> Result[WikiPage, WikiStoreError]:
+        """ページを原子的に書き込み、``index.md`` を更新する。
+
+        ``index`` slug への書き込みは拒否する（rebuild_index 専用）。
+        """
+        if slug == INDEX_SLUG:
+            return Failure(WikiStoreError("index page is generated; use rebuild_index()"))
+        try:
+            path = self._path_for(slug)
+        except WikiStoreError as exc:
+            return Failure(exc)
+        page = WikiPage(
+            slug=slug,
+            title=title.strip() or slug,
+            body=body.strip("\n"),
+            project=project,
+            sources=tuple(sources),
+            updated=_now_iso(),
+            links=extract_links(body),
+        )
+        rendered = render_page(page)
+        size = len(rendered.encode("utf-8"))
+        if size > MAX_PAGE_BYTES:
+            return Failure(WikiStoreError(f"page too large: {size} bytes > {MAX_PAGE_BYTES}"))
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_name(f".{path.name}.tmp")
+            tmp.write_text(rendered, encoding="utf-8")
+            os.replace(tmp, path)
+        except OSError as exc:
+            logger.error("Wiki write failed for %s: %s", slug, exc)
+            return Failure(WikiStoreError(f"cannot write {slug}: {exc}"))
+        self.rebuild_index()
+        return Success(page)
+
+    def delete_page(self, slug: str) -> Result[None, WikiStoreError]:
+        if slug == INDEX_SLUG:
+            return Failure(WikiStoreError("index page cannot be deleted"))
+        try:
+            path = self._path_for(slug)
+        except WikiStoreError as exc:
+            return Failure(exc)
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            return Failure(WikiStoreError(f"wiki page not found: {slug}"))
+        except OSError as exc:
+            return Failure(WikiStoreError(f"cannot delete {slug}: {exc}"))
+        self.rebuild_index()
+        return Success(None)
+
+    # ------------------------------------------------------------------
+    # search / links
+    # ------------------------------------------------------------------
+
+    def grep(self, pattern: str, limit: int = 50) -> list[tuple[str, int, str]]:
+        """本文を行単位で regex 検索する（index.md を含む）。"""
+        hits: list[tuple[str, int, str]] = []
+        try:
+            regex = re.compile(pattern, re.IGNORECASE)
+        except re.error as exc:
+            raise WikiStoreError(f"invalid pattern: {exc}") from exc
+        for slug in self.list_slugs():
+            if slug == INDEX_SLUG:
+                continue  # 目次は本文の要約の写しなので grep 対象外
+            result = self.read_page(slug)
+            if not isinstance(result, Success):
+                continue
+            for line_no, line in enumerate(result.value.body.splitlines(), start=1):
+                if regex.search(line):
+                    hits.append((slug, line_no, line.strip()))
+                    if len(hits) >= limit:
+                        return hits
+        return hits
+
+    def dangling_links(self) -> dict[str, list[str]]:
+        """``{slug: [dangling_target, ...]}``（self link と index は除外）。"""
+        existing = set(self.list_slugs())
+        dangling: dict[str, list[str]] = {}
+        for page in self.list_pages():
+            missing = [link for link in page.links if link not in existing and link != page.slug]
+            if missing:
+                dangling[page.slug] = missing
+        return dangling
+
+    # ------------------------------------------------------------------
+    # index.md
+    # ------------------------------------------------------------------
+
+    def rebuild_index(self) -> Result[None, WikiStoreError]:
+        """``index.md`` を全ページから再生成する（小さい目次を保つ）。
+
+        目次は上位 :data:`MAX_INDEX_LINES` 行まで。超過分は ``… +N more`` 行に
+        畳む（計画 §4.4 の「上位層は小さく保つ」契約）。
+        """
+        pages = sorted(self.list_pages(), key=lambda p: (p.project or "~", p.slug))
+        rows: list[str] = ["# Wiki index", ""]
+        shown = pages[:MAX_INDEX_LINES]
+        for page in shown:
+            summary = " ".join(page.body.split())[:_INDEX_SUMMARY_CHARS]
+            label = f"{page.title}" + (f" ({page.project})" if page.project else "")
+            rows.append(f"- [[{page.slug}]] — {label}: {summary}")
+        if len(pages) > len(shown):
+            rows.append(f"- … +{len(pages) - len(shown)} more pages (wiki_ls で全件)")
+        rows.append("")
+        try:
+            self.root.mkdir(parents=True, exist_ok=True)
+            path = self.root / f"{INDEX_SLUG}.md"
+            tmp = path.with_name(f".{path.name}.tmp")
+            tmp.write_text("\n".join(rows), encoding="utf-8")
+            os.replace(tmp, path)
+        except OSError as exc:
+            logger.error("Wiki index rebuild failed: %s", exc)
+            return Failure(WikiStoreError(f"cannot write index: {exc}"))
+        return Success(None)
