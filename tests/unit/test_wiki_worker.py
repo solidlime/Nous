@@ -96,8 +96,7 @@ class TestSelectTopics:
         ]
         conn, worker = _setup(tmp_path, memories, llm=None)
         try:
-            ctx = SimpleNamespace(memory_repo=SimpleNamespace(find_all=lambda: _ok(memories)), connection=conn)
-            topics = dict(worker._select_topics(ctx, get_now()))
+            topics = dict(worker._select_topics(memories, get_now(), _store(tmp_path), "test_ww"))
             assert set(topics) == {"project-nous", "persona"}
             assert {m.key for m in topics["project-nous"]} == {"a1", "a2", "a3"}
             assert {m.key for m in topics["persona"]} == {"b1", "b2", "b3"}
@@ -110,8 +109,7 @@ class TestSelectTopics:
         memories += [_mem("arch", tags=["project:dotfiles"], lifecycle="archived") for _ in range(3)]
         conn, worker = _setup(tmp_path, memories, llm=None)
         try:
-            ctx = SimpleNamespace(memory_repo=SimpleNamespace(find_all=lambda: _ok(memories)), connection=conn)
-            assert worker._select_topics(ctx, get_now()) == []
+            assert worker._select_topics(memories, get_now(), _store(tmp_path), "test_ww") == []
         finally:
             conn.close()
 
@@ -123,8 +121,7 @@ class TestSelectTopics:
         conn, worker = _setup(tmp_path, memories, llm=None)
         worker._cfg = worker._cfg.model_copy(update={"topics_per_cycle": 2})
         try:
-            ctx = SimpleNamespace(memory_repo=SimpleNamespace(find_all=lambda: _ok(memories)), connection=conn)
-            slugs = [slug for slug, _ in worker._select_topics(ctx, get_now())]
+            slugs = [s for s, _ in worker._select_topics(memories, get_now(), _store(tmp_path), "test_ww")]
             assert slugs == ["project-p1", "project-p2"]
         finally:
             conn.close()
@@ -253,3 +250,44 @@ def _ok(value):
     from nous.domain.shared.result import Success
 
     return Success(value)
+
+
+class TestIndexMaintenance:
+    """§4.6-6: 索引維持 — dangling link の修復と stale topic の優先。"""
+
+    def test_repairs_dangling_links(self, tmp_path) -> None:
+        """存在しないページへの [[link]] はプレーンテキストへ落ちる。"""
+        store = _store(tmp_path)
+        store.write_page("project-nous-a", "A", "[[project-nous-ghost]] と [[project-nous-b]] を見よ。", project="nous")
+        store.write_page("project-nous-b", "B", "本文 B。", project="nous")
+
+        worker = WikiWorker(_settings(tmp_path))
+        repaired = worker._repair_links(store)
+
+        assert repaired == 1
+        read = store.read_page("project-nous-a")
+        assert read.is_ok
+        body = read.value.body
+        assert "[[project-nous-ghost]]" not in body
+        assert "project-nous-ghost" in body
+        # 実在リンクは残る
+        assert "[[project-nous-b]]" in body
+
+    def test_stale_topic_is_prioritized(self, tmp_path) -> None:
+        """source 記憶が archived になった topic は記憶数に関わらず先頭に来る。"""
+        memories = [_mem(f"big{i}", tags=["project:big"]) for i in range(6)]
+        memories += [_mem(f"small{i}", tags=["project:small"]) for i in range(3)]
+        memories += [_mem("small-arch", tags=["project:small"], lifecycle="archived")]
+
+        store = _store(tmp_path)
+        # small 側のページが archived 記憶を source に持つ → stale
+        store.write_page(
+            "project-small-page", "Small", "archived を根拠にしている。", project="small", sources=("small-arch",)
+        )
+
+        worker = WikiWorker(_settings(tmp_path))
+        worker._cfg = worker._cfg.model_copy(update={"topics_per_cycle": 2})
+        slugs = [s for s, _ in worker._select_topics(memories, get_now(), store, "test_ww")]
+
+        assert slugs[0] == "project-small"
+        assert "project-big" in slugs

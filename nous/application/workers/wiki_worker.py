@@ -22,7 +22,7 @@ import re
 import threading
 from typing import TYPE_CHECKING
 
-from nous.domain.shared.result import Failure
+from nous.domain.shared.result import Failure, Success
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -142,24 +142,60 @@ class WikiWorker:
     # SELECT
     # ------------------------------------------------------------------
 
-    def _select_topics(self, ctx, now: datetime) -> list[tuple[str, list[Memory]]]:
-        """クラスタ（topic slug, 記憶リスト）を返す。cycle 上限 topics_per_cycle 件。"""
-        all_result = ctx.memory_repo.find_all()
-        if not all_result.is_ok or not all_result.value:
-            return []
+    def _select_topics(
+        self, memories: list[Memory], now: datetime, store: WikiStore, persona: str
+    ) -> list[tuple[str, list[Memory]]]:
+        """クラスタ（topic slug, 記憶リスト）を返す。cycle 上限 topics_per_cycle 件。
 
+        優先度: source 腐敗/更新のある topic（§4.6 腐敗検出）→ 記憶数降順。
+        """
         buckets: dict[str, list[Memory]] = {}
-        for m in all_result.value:
+        for m in memories:
             if m.lifecycle_status != "active":
                 continue
             if getattr(m, "source_type", "") == "consolidated":
                 continue
             buckets.setdefault(_topic_of(m), []).append(m)
 
+        stale = self._stale_topics(store, memories, persona)
         topics = [(slug, mems) for slug, mems in buckets.items() if len(mems) >= MIN_TOPIC_MEMORIES]
-        topics.sort(key=lambda item: len(item[1]), reverse=True)
+        topics.sort(key=lambda item: (item[0] not in stale, -len(item[1])))
         selected = topics[: self._cfg.topics_per_cycle]
         return [(slug, self._most_recent(mems)) for slug, mems in selected]
+
+    def _stale_topics(self, store: WikiStore, memories: list[Memory], persona: str) -> set[str]:
+        """source が非 active・消滅・または記憶がページより新しい topic を返す。"""
+        by_key = {m.key: m for m in memories}
+        stale: set[str] = set()
+        for page in store.list_pages():
+            if not page.sources:
+                continue
+            topic = f"project-{page.project}" if page.project else "persona"
+            for key in page.sources:
+                memory = by_key.get(key)
+                if memory is None or memory.lifecycle_status != "active":
+                    stale.add(topic)
+                    break
+                if _page_is_behind(page.updated, getattr(memory, "updated_at", None) or memory.created_at):
+                    stale.add(topic)
+                    break
+        return stale
+
+    def _repair_links(self, store: WikiStore) -> int:
+        """dangling な wikilink をプレーンテキストにする（repoint は意味判断が要るので削除側に倒す）。"""
+        repaired = 0
+        for slug, targets in store.dangling_links().items():
+            page_result = store.read_page(slug)
+            if not isinstance(page_result, Success):
+                continue
+            page = page_result.value
+            body = page.body
+            for target in targets:
+                body = body.replace(f"[[{target}]]", target)
+            if body != page.body:
+                store.write_page(slug, page.title, body, project=page.project, sources=page.sources)
+                repaired += 1
+        return repaired
 
     def _most_recent(self, memories: list[Memory]) -> list[Memory]:
         def _ts(m: Memory):
@@ -177,12 +213,18 @@ class WikiWorker:
 
         now = get_now()
         store = WikiStore(self._settings.data_root, persona)
-        for topic, memories in self._select_topics(ctx, now):
+        all_result = ctx.memory_repo.find_all()
+        memories: list[Memory] = list(all_result.value) if isinstance(all_result, Success) else []
+        for topic, selected in self._select_topics(memories, now, store, persona):
             try:
-                self._compile_topic(ctx, persona, store, topic, memories, now)
+                self._compile_topic(ctx, persona, store, topic, selected, now)
             except Exception:
                 logger.exception("WikiWorker: topic=%s failed", topic)
                 self._record_event(ctx, persona, f"error: topic {topic} failed", None)
+        # 索引維持（§4.6-6）: 外部リンクの dangling をプレーンテキストに落とす。
+        repaired = self._repair_links(store)
+        if repaired:
+            logger.info("WikiWorker: persona=%s repaired %d pages with dangling links", persona, repaired)
 
     def _compile_topic(
         self,
@@ -362,6 +404,8 @@ class WikiWorker:
         start, end = stripped.find("{"), stripped.rfind("}")
         if start < 0 or end <= start:
             raise ValueError("no JSON object found in response")
+        # 呼び出し側（_compile_topic）が ValueError/JSONDecodeError を捕捉して
+        # 監査に error 行を書きファイルを変えない契約。ここで握り潰さない。
         data = json.loads(stripped[start : end + 1])
         pages = data.get("pages") if isinstance(data, dict) else None
         if not isinstance(pages, list):
@@ -458,6 +502,30 @@ def _topic_of(memory: Memory) -> str:
             if slug:
                 return f"project-{slug}"
     return "persona"
+
+
+def _page_is_behind(page_updated: str | None, memory_updated: object) -> bool:
+    """ページの更新時刻が記憶より古いか（パース不能なら False = 触らない）。"""
+    from datetime import datetime
+
+    if not page_updated or memory_updated is None:
+        return False
+    try:
+        page_ts = datetime.fromisoformat(page_updated.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if isinstance(memory_updated, str):
+        try:
+            memory_ts = datetime.fromisoformat(memory_updated.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+    elif isinstance(memory_updated, datetime):
+        memory_ts = memory_updated
+    else:
+        return False
+    if page_ts.tzinfo is None or memory_ts.tzinfo is None:
+        return page_ts.replace(tzinfo=None) < memory_ts.replace(tzinfo=None)
+    return page_ts < memory_ts
 
 
 def _project_of(page: dict, topic: str) -> str | None:
