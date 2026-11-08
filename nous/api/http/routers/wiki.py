@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from starlette.responses import JSONResponse
 
 from nous.api.http.deps import _safe_get_context
-from nous.domain.shared.result import Failure
+from nous.domain.shared.result import Failure, Success
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.wiki.store import WikiStore, WikiStoreError
 
@@ -89,6 +89,67 @@ def register_wiki_routes(mcp) -> None:
                 "sources": list(page.sources),
                 "links": list(page.links),
                 "updated": page.updated,
+                "manual": page.manual,
+                "body": page.body,
+            }
+        )
+
+    @mcp.custom_route("/api/wiki/{persona}/{slug:path}", methods=["PUT"])
+    async def wiki_save(request: Request) -> JSONResponse:
+        """ダッシュボードからの手書き保存（manual ページとして固定）。
+
+        既存ページなら sources / project を引き継ぎ、編纂 worker が上書きしない
+        ように ``manual: true`` を立てる。新規 slug なら空 sources で作る。
+        """
+        persona = request.path_params["persona"]
+        slug = request.path_params["slug"]
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return JSONResponse({"error": "Persona not found"}, status_code=404)
+        try:
+            raw = await request.json()
+        except Exception:
+            return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+        if not isinstance(raw, dict):
+            return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+        body = raw.get("body")
+        if not isinstance(body, str) or not body.strip():
+            return JSONResponse({"error": "body is required"}, status_code=400)
+        try:
+            store = WikiStore(ctx.settings.data_root, persona)
+        except WikiStoreError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+        existing = store.read_page(slug)
+        prior = existing.value if isinstance(existing, Success) else None
+        title = raw.get("title")
+        if not isinstance(title, str) or not title.strip():
+            title = prior.title if prior else slug
+        project = raw.get("project")
+        if not isinstance(project, str):
+            project = prior.project if prior else None
+
+        written = store.write_page(
+            slug,
+            title,
+            body,
+            project=project,
+            sources=prior.sources if prior else (),
+            manual=True,
+        )
+        if isinstance(written, Failure):
+            return JSONResponse({"error": str(written.error)}, status_code=400)
+        page = written.value
+        logger.info("wiki page saved from dashboard: persona=%s slug=%s", persona, slug)
+        return JSONResponse(
+            {
+                "slug": page.slug,
+                "title": page.title,
+                "project": page.project,
+                "sources": list(page.sources),
+                "links": list(page.links),
+                "updated": page.updated,
+                "manual": page.manual,
                 "body": page.body,
             }
         )

@@ -10,7 +10,7 @@ N.Features.Wiki = N.Features.Wiki || {};
 var S = window.S;
 var { esc, api, safeSetHTML } = window.Nous.Core;
 
-var WIKI = { pages: [], current: null };
+var WIKI = { pages: [], current: null, page: null };
 
 function persona() { return (S && S.persona) || ""; }
 
@@ -71,7 +71,8 @@ function renderPage(page) {
     page.updated ? "updated " + String(page.updated).slice(0, 10) : "",
   ].filter(Boolean).join(" · ");
   safeSetHTML(head,
-    '<h2 style="font-size:1.15rem;font-weight:700;color:var(--text-primary);">' + esc(page.title || page.slug) + "</h2>" +
+    '<h2 style="font-size:1.15rem;font-weight:700;color:var(--text-primary);">' + esc(page.title || page.slug) +
+    (page.manual ? ' <span class="wiki-manual-badge">手書き</span>' : "") + "</h2>" +
     '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">' + esc(meta) + "</div>");
   safeSetHTML(body, toHtml(page.body));
   body.querySelectorAll('a[href^="#wiki:"]').forEach(function(a) {
@@ -101,6 +102,7 @@ async function loadPage(slug) {
   try {
     const page = await api(pageUrl(slug));
     WIKI.current = page.slug || slug;
+    WIKI.page = page;
     renderPage(page);
     renderList();
   } catch (e) {
@@ -130,14 +132,80 @@ async function loadWiki() {
   }
 }
 
+/* -----------------------------------------------------------------
+   編集（手書き＝ manual: true で固定し、編纂 worker に上書きさせない）
+   ----------------------------------------------------------------- */
+function enterEdit() {
+  const page = WIKI.page;
+  if (!page || !page.slug) return;
+  const head = document.getElementById("wiki-article-head");
+  const body = document.getElementById("wiki-article-body");
+  if (!head || !body) return;
+
+  const titleEl = document.createElement("input");
+  titleEl.id = "wiki-edit-title";
+  titleEl.value = page.title || page.slug;
+  head.replaceChildren(titleEl);
+
+  const textarea = document.createElement("textarea");
+  textarea.id = "wiki-edit-body";
+  textarea.value = page.body || "";
+
+  const actions = document.createElement("div");
+  actions.className = "wiki-edit-actions";
+  const save = document.createElement("button");
+  save.className = "glass-btn";
+  save.id = "wiki-save";
+  save.textContent = "保存";
+  const cancel = document.createElement("button");
+  cancel.className = "glass-btn";
+  cancel.id = "wiki-cancel";
+  cancel.textContent = "やめる";
+  actions.append(save, cancel);
+
+  body.replaceChildren(textarea, actions);
+  save.addEventListener("click", function() { saveEdit(page.slug); });
+  cancel.addEventListener("click", function() { renderPage(page); });
+  textarea.focus();
+}
+
+async function saveEdit(slug) {
+  const titleEl = document.getElementById("wiki-edit-title");
+  const bodyEl = document.getElementById("wiki-edit-body");
+  if (!bodyEl) return;
+  const saveBtn = document.getElementById("wiki-save");
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "保存中…"; }
+  try {
+    await api(pageUrl(slug), {
+      method: "PUT",
+      body: JSON.stringify({
+        title: titleEl ? titleEl.value : slug,
+        body: bodyEl.value,
+      }),
+    });
+    await loadWiki();
+    await loadPage(slug);
+  } catch (e) {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "保存"; }
+    const body = document.getElementById("wiki-article-body");
+    if (body && body.querySelector("#wiki-edit-body")) return; // 編集中は潰さない
+    renderPage(WIKI.page || { slug: slug, title: slug, body: "" });
+    console.warn("[wiki] save failed:", e);
+  }
+}
+
 function refreshWiki() {
   const btn = document.getElementById("wiki-btn-refresh");
   if (btn) btn.addEventListener("click", function() { loadWiki(); });
+  const edit = document.getElementById("wiki-btn-edit");
+  if (edit) edit.addEventListener("click", enterEdit);
 }
 
 N.Features.Wiki = {
   loadWiki: loadWiki,
   loadPage: loadPage,
+  enterEdit: enterEdit,
+  saveEdit: saveEdit,
   _state: WIKI,
 };
 

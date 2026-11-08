@@ -291,3 +291,35 @@ class TestIndexMaintenance:
 
         assert slugs[0] == "project-small"
         assert "project-big" in slugs
+
+
+class TestManualPages:
+    def test_manual_page_is_not_overwritten(self, tmp_path) -> None:
+        """ダッシュボードで手書きされたページ（manual: true）は編纂で上書きしない。"""
+        memories = [_mem(f"a{i}", tags=["project:nous"]) for i in range(3)]
+        store = _store(tmp_path)
+        store.write_page(
+            "project-nous-memory",
+            "ユーザーが書いた題名",
+            "手書き本文（編纂に潰されないこと）",
+            project="nous",
+            sources=("a0",),
+            manual=True,
+        )
+        page = {
+            "slug": "project-nous-memory",
+            "title": "LLM が書き直した題名",
+            "body": "LLM の本文",
+            "sources": ["a0", "a1"],
+        }
+        conn, _ = _setup(tmp_path, memories, llm=_pages_json(page))
+        try:
+            stored = _store(tmp_path).read_page("project-nous-memory")
+            assert isinstance(stored, Success)
+            assert stored.value.manual is True
+            assert stored.value.title == "ユーザーが書いた題名"
+            assert stored.value.body == "手書き本文（編纂に潰されないこと）"
+            summaries = [s for t, s in _event_rows(conn)]
+            assert any("manual page kept" in s for s in summaries), summaries
+        finally:
+            conn.close()

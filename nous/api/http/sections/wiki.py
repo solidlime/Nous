@@ -25,12 +25,19 @@ def render_wiki_tab() -> str:
         #wiki-article-body pre { padding:10px 12px; border-radius:10px; overflow-x:auto; background:rgba(15,23,42,0.5); }
         #wiki-article-body a { color:var(--accent-blue); text-decoration:underline; text-underline-offset:2px; }
         #wiki-article-body blockquote { border-left:3px solid var(--glass-border); padding-left:10px; color:var(--text-muted); }
+        #wiki-edit-body { width:100%; min-height:320px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.82rem; line-height:1.6; padding:10px 12px; border-radius:10px; border:1px solid var(--glass-border); background:rgba(15,23,42,0.45); color:var(--text-primary); resize:vertical; }
+        #wiki-edit-title { width:100%; font-size:1rem; font-weight:600; padding:8px 10px; border-radius:10px; border:1px solid var(--glass-border); background:rgba(15,23,42,0.45); color:var(--text-primary); }
+        .wiki-edit-actions { display:flex; gap:8px; margin-top:10px; }
+        .wiki-manual-badge { font-size:0.68rem; padding:1px 6px; border-radius:6px; background:rgba(167,139,250,0.18); color:var(--accent-purple, #a78bfa); }
         </style>
         <!-- ========== WIKI TAB ========== -->
         <section id="tab-wiki" class="tab-panel" role="tabpanel">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
                 <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="book-open"></i></span> Wiki</h2>
+                <div style="display:flex;align-items:center;gap:8px;">
+                <button id="wiki-btn-edit" class="glass-btn" title="このページを手で編集する"><i data-lucide="pencil"></i></button>
                 <button id="wiki-btn-refresh" class="glass-btn" title="Reload wiki pages"><i data-lucide="refresh-cw"></i></button>
+            </div>
             </div>
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <aside class="glass p-3" style="align-self:start;">

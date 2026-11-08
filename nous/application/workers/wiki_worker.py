@@ -288,7 +288,14 @@ class WikiWorker:
         if len(sources) > self._cfg.max_sources_per_page:
             raise ValueError(f"page {slug} has too many sources ({len(sources)})")
 
-        existed = store.read_page(slug).is_ok
+        existing = store.read_page(slug)
+        if isinstance(existing, Success) and existing.value.manual:
+            # ユーザーがダッシュボードで書いたページは編纂で上書きしない
+            # （上書きすると編集が 24h 以内に消える）。監査だけ残して飛ばす。
+            self._record_event(ctx, persona, f"skipped {slug}: manual page kept", {"slug": slug, "topic": topic})
+            return False
+
+        existed = existing.is_ok
         written = store.write_page(
             slug,
             title,
