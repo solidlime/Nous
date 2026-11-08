@@ -14,7 +14,9 @@ from typing import TYPE_CHECKING
 from starlette.responses import JSONResponse
 
 from nous.api.http.deps import _safe_get_context
+from nous.domain.shared.result import Failure
 from nous.infrastructure.logging.structured import get_logger
+from nous.infrastructure.wiki.store import WikiStore, WikiStoreError
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -39,6 +41,58 @@ def _plugin_key_gate(request: Request, ctx) -> JSONResponse | None:
 
 
 def register_wiki_routes(mcp) -> None:
+    @mcp.custom_route("/api/wiki/{persona}", methods=["GET"])
+    async def wiki_pages(request: Request) -> JSONResponse:
+        """wiki ページの一覧（ダッシュボード閲覧用・読み取り専用）。"""
+        persona = request.path_params["persona"]
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return JSONResponse({"error": "Persona not found"}, status_code=404)
+        try:
+            pages = WikiStore(ctx.settings.data_root, persona).list_pages()
+        except WikiStoreError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        items = [
+            {
+                "slug": p.slug,
+                "title": p.title,
+                "project": p.project,
+                "sources": list(p.sources),
+                "links": list(p.links),
+                "updated": p.updated,
+            }
+            for p in sorted(pages, key=lambda p: p.updated or "", reverse=True)
+        ]
+        return JSONResponse({"persona": persona, "pages": items})
+
+    @mcp.custom_route("/api/wiki/{persona}/{slug:path}", methods=["GET"])
+    async def wiki_page(request: Request) -> JSONResponse:
+        """wiki ページ 1 枚の本文（markdown 生）を返す。"""
+        persona = request.path_params["persona"]
+        slug = request.path_params["slug"]
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return JSONResponse({"error": "Persona not found"}, status_code=404)
+        try:
+            result = WikiStore(ctx.settings.data_root, persona).read_page(slug)
+        except WikiStoreError as exc:
+            # 不正 slug / traversal 試行もここに落ちる（存在を漏らさない 404）。
+            return JSONResponse({"error": str(exc)}, status_code=404)
+        if isinstance(result, Failure):
+            return JSONResponse({"error": str(result.error)}, status_code=404)
+        page = result.value
+        return JSONResponse(
+            {
+                "slug": page.slug,
+                "title": page.title,
+                "project": page.project,
+                "sources": list(page.sources),
+                "links": list(page.links),
+                "updated": page.updated,
+                "body": page.body,
+            }
+        )
+
     @mcp.custom_route("/api/wiki/run/{persona}", methods=["POST"])
     async def wiki_run(request: Request) -> JSONResponse:
         """1 cycle を即時実行する（非同期・202 で受付だけ返す）。"""

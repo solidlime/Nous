@@ -76,6 +76,7 @@ var TAB_LOADERS = {
   overview:  function() { return N.Features.Overview.loadOverview(); },
   analytics: null,
   memories:  function() { return N.Features.Memories.loadMemories(); },
+  wiki:      function() { return N.Features.Wiki.loadWiki(); },
   timeline:  function() { return N.Features.Timeline.loadTimeline(); },
   graph:     function() { return N.Features.Graph.loadGraph(); },
   'import-export': null,

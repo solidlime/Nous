@@ -86,3 +86,104 @@ class TestWikiRunAuth:
         assert resp.status_code == 202
         assert thr.call_args.kwargs["daemon"] is True
         thread.start.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# GET /api/wiki/{persona}  と /api/wiki/{persona}/{slug:path}（ダッシュボード閲覧）
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def read_routes(tmp_path):
+    mcp = _FakeMcp()
+    register_wiki_routes(mcp)
+    ctx = _ctx()
+    ctx.settings.data_root = str(tmp_path)
+    return mcp, ctx
+
+
+def _write_page(tmp_path, persona="herta", slug="project-nous", title="Nous", body="本文", sources=("m1",)):
+    from nous.infrastructure.wiki.store import WikiStore
+
+    store = WikiStore(tmp_path, persona)
+    result = store.write_page(slug=slug, title=title, body=body, project="nous", sources=sources)
+    assert result.is_ok, result
+    return store
+
+
+def _get_request(persona="herta", slug=None):
+    req = MagicMock()
+    req.path_params = {"persona": persona} if slug is None else {"persona": persona, "slug": slug}
+    req.headers = {}
+    return req
+
+
+class TestWikiReadApi:
+    @pytest.mark.asyncio
+    async def test_list_unknown_persona_404(self, read_routes):
+        mcp, _ = read_routes
+        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=None):
+            resp = await mcp.routes["/api/wiki/{persona}"](_get_request())
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_list_empty(self, read_routes):
+        mcp, ctx = read_routes
+        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+            resp = await mcp.routes["/api/wiki/{persona}"](_get_request())
+        assert resp.status_code == 200
+        import json
+
+        payload = json.loads(bytes(resp.body))
+        assert payload == {"persona": "herta", "pages": []}
+
+    @pytest.mark.asyncio
+    async def test_list_returns_page_meta(self, read_routes):
+        mcp, ctx = read_routes
+        _write_page(tmp_path=ctx.settings.data_root)
+        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+            resp = await mcp.routes["/api/wiki/{persona}"](_get_request())
+        import json
+
+        page = json.loads(bytes(resp.body))["pages"][0]
+        assert page["slug"] == "project-nous"
+        assert page["title"] == "Nous"
+        assert page["sources"] == ["m1"]
+        assert "updated" in page
+
+    @pytest.mark.asyncio
+    async def test_page_returns_body(self, read_routes):
+        mcp, ctx = read_routes
+        _write_page(tmp_path=ctx.settings.data_root)
+        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+            resp = await mcp.routes["/api/wiki/{persona}/{slug:path}"](_get_request(slug="project-nous"))
+        assert resp.status_code == 200
+        import json
+
+        payload = json.loads(bytes(resp.body))
+        assert payload["slug"] == "project-nous"
+        assert "本文" in payload["body"]
+
+    @pytest.mark.asyncio
+    async def test_page_missing_404(self, read_routes):
+        mcp, ctx = read_routes
+        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+            resp = await mcp.routes["/api/wiki/{persona}/{slug:path}"](_get_request(slug="nope"))
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_page_traversal_404(self, read_routes):
+        mcp, ctx = read_routes
+        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+            resp = await mcp.routes["/api/wiki/{persona}/{slug:path}"](_get_request(slug="../secrets"))
+        assert resp.status_code == 404
+
+
+def test_dashboard_renders_wiki_tab():
+    """SPA に Wiki タブ・パネル・JS が配線されている（回帰ガード）。"""
+    from nous.api.http.dashboard import render_dashboard
+
+    html = render_dashboard("herta")
+    assert 'data-tab="wiki"' in html
+    assert 'id="tab-wiki"' in html
+    assert "/static/features/wiki.js" in html
