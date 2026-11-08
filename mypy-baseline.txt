@@ -39,7 +39,6 @@ nous/infrastructure/sqlite/block_repo.py:0: error: "SQLiteBlockMixin" has no att
 nous/infrastructure/sqlite/block_repo.py:0: error: "SQLiteBlockMixin" has no attribute "_db"  [attr-defined]
 nous/infrastructure/sqlite/block_repo.py:0: error: "SQLiteBlockMixin" has no attribute "_db"  [attr-defined]
 nous/infrastructure/sqlite/block_repo.py:0: error: "SQLiteBlockMixin" has no attribute "_db"  [attr-defined]
-nous/domain/memory/graph.py:0: error: Item "Failure[DomainError]" of "Success[Entity | None] | Failure[DomainError]" has no attribute "value"  [union-attr]
 nous/infrastructure/sqlite/memory_aux_repo.py:0: error: "MemoryAuxMixin" has no attribute "_db"  [attr-defined]
 nous/infrastructure/sqlite/memory_aux_repo.py:0: error: "MemoryAuxMixin" has no attribute "_db"  [attr-defined]
 nous/infrastructure/sqlite/session_event_repo.py:0: error: Returning Any from function declared to return "int"  [no-any-return]
