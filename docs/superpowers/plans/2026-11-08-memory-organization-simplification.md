@@ -10,7 +10,7 @@
 
 | 機能 | 実体 | 行数 | 本番実績 |
 |---|---|---|---|
-| Decay（FSRS 忘却曲線） | `nous/application/workers/decay_worker.py` | 425 | 強度 < 0.005 で archived。監査イベント無し＝観測不能 |
+| Decay（FSRS 忘却曲線） | `nous/application/workers/decay_worker.py` | 426 | `strength<0.2` かつ 30 日無活動で archived（0.005 は保存スキップの閾値）。監査イベント無し＝観測不能 |
 | Consolidation（gist） | `consolidation_worker.py` | 543 | consolidated 1,366 件（全体 28.4%）、最終 2026-11-05 |
 | Freshness（LLM 有効性判定） | `freshness_worker.py` | 382 | verdict 22 件のみ、最終 2026-11-07 |
 | Enrichment（importance/関係） | `enrichment_worker.py` + `enrich_service.py` | 370 + 128 | memory_links summarizes 2,338 / semantic 2,498 |
@@ -54,9 +54,17 @@
 - 起動: `nous/application/use_cases.py:472-474`（`_enrichment_workers` dict 含む）
 - queue: enrichment queue のテーブル・リポジトリ・`wiring_events.py` のエンキュー
 - 相乗り削除: `nous/application/chat/introspection.py` の drain 後フック経路（自発的内省）
-- テスト: `test_enrichment_worker.py`, `test_memory_enricher.py`, `test_memory_enricher_usage.py`,
-  `test_enrichment_queue_repo.py`, `test_memory_enrichment_config.py`, `test_introspection.py`
+- テスト: `test_enrichment_worker.py`, `test_enrichment_queue_repo.py`,
+  `test_memory_enricher_usage.py`, `test_memory_enrichment_config.py`, `test_introspection.py`,
+  `test_introspection_prompt_override.py`, `test_spontaneous_clock.py`
 - **残す**: `importance` 列（書き込み時 0.5 固定）、`min_importance` 引数、MCP/ダッシュボードの表示
+- **残す（重要・Explore 実測 2026-11-08）**: `MemoryEnrichmentConfig` クラス。
+  `nous/application/hooks/memory_extraction.py:82-89`（本番 pi hook の抽出 LLM 鍵解決）と
+  `nous/application/workers/consolidation_worker.py:83-95`（gist LLM のフォールバック）が借りている。
+  消すと本番の記憶抽出が静かに止まる。クラス名を `LLMConfig` に改めるのは可（`Settings.memory_enrichment`
+  のフィールド名は env 互換のため据え置き）。
+- **残す**: `MemoryEnricher.classify_contradiction`（`nous/domain/memory/evolution_service.py:121` が使う別機能）。
+  `enrich_async` / `_parse_response` は削除する。
 
 ### 2.4 D: Decay + FSRS + Reflection（kanban #30）
 
@@ -65,7 +73,13 @@
 - 起動: `nous/application/use_cases.py:437-459`、`nous/application/workers/__init__.py:4,6`
 - ドメイン: `nous/domain/memory/entities.py` の stability / difficulty / strength /
   emotion_amplify / `importance_scaled_exponent`
-- テーブル: `memory_strength`（読み手: `entity_repo.py:316-402`, `mot_thoughts.py`）
+- テーブル: `memory_strength`（**残す**。履歴・DROP は別判断）。読み手は
+  `nous/infrastructure/sqlite/strength_repo.py:17,28,70`（唯一の SQL 実装）、
+  `nous/domain/memory/query_service.py:156-195` ←`service.py:343-351`← MCP `_tools_memory.py:137,512`、
+  `nous/domain/search/engine.py:868-875`、`ranker.py:109-140`、`vector_stack.py:210`,
+  `evolution_service.py:240-247`、`persona_dashboard.py:89-98`、`_tools_memory.py:573-592`。
+  `entity_repo.py:316-402` と `mot_thoughts.py` が読むのは `memory_links` であって
+  `memory_strength` ではない（当初の記載は誤り）。
 - 相乗り: 周期 Reflection（`nous/application/chat/reflection.py`, `ReflectionEngine`,
   `session_config.REFLECTION_INTERVAL=24` サイクル）、due cue の実体化（`decay_worker.py:126`）
 - テスト: `test_decay_worker.py`, `test_emotion_decay.py`
@@ -76,6 +90,9 @@
   `context_loader.py:212`（チャット）が直接呼んでいる。DecayWorker は「期限記憶を実体化する」
   だけで、表示経路は Decay と無関係 → **Decay を消しても期限表示は残る**。
 - `memory_blocks`（Curation の profile 書き込み先）は `block_repo.py` の独立基盤。
+- **ただし due_reminder 記憶を実体化するのは `decay_worker.py:87-124` だけ**。Decay を消すと
+  「⏰ 期限が近い約束」の one-shot 節（`_tools_persona.py:159-160` / `_tools_helpers.py`）に
+  供給元が無くなる。wiki_worker か consolidation_worker へ移すか、機能ごと落とすかを #30 で決める。
 
 ## 3. 決定的な依存: consolidation の入力
 
