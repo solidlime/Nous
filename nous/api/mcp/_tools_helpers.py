@@ -410,6 +410,11 @@ def _format_lightweight_response(
     # Current state block — compact body/mind/action/speech overview
     lines.append(_format_state_block(state))
 
+    # ── wiki 上位層（#18）: ページ数のみ。本文は wiki_read() で引く ──
+    # 予算超過時は末尾から切り捨てられるため、必ず先頭側に置く。
+    if wiki_page_count and project_name:
+        lines.append(f"📚 wiki: {wiki_page_count} pages (project:{project_name}) — wiki_ls() / wiki_read()")
+
     # Emotion decay notification — before/after change visible
     if decay_note:
         lines.append(f"  Emotion: {decay_note}")
@@ -605,10 +610,6 @@ def _format_lightweight_response(
             ts = relative_time_str(m.created_at) if getattr(m, "created_at", None) else ""
             ts_str = f" ({ts})" if ts else ""
             lines.append(f"- {snippet}{ts_str}")
-
-    # ── wiki 上位層（#18）: ページ数のみ。本文は wiki_read() で引く ──
-    if wiki_page_count and project_name:
-        lines.append(f"\n📚 wiki: {wiki_page_count} pages (project:{project_name}) — wiki_ls() / wiki_read()")
 
     trailer = "💡 Use memory_search() for deeper context on specific topics."
     return _enforce_total_budget("\n".join(lines), trailer)

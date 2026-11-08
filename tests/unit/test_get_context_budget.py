@@ -46,6 +46,7 @@ def _state() -> PersonaState:
 
 def _render(
     *,
+    wiki_page_count: int | None = None,
     goals: list[Memory] | None = None,
     top_memories: list[Memory] | None = None,
     reflections: list[Memory] | None = None,
@@ -64,7 +65,8 @@ def _render(
         mental_models=mental_models or [],
         session_summaries=session_summaries or [],
         project_memories=project_memories,
-        project_name="demo" if project_memories else None,
+        project_name="demo" if (project_memories or wiki_page_count) else None,
+        wiki_page_count=wiki_page_count,
     )
 
 
@@ -190,3 +192,16 @@ def test_extreme_case_stays_under_total_budget():
         len([row for row in _section_lines(text, "--- PROJECT MEMORIES") if row.startswith("- ")])
         <= _MAX_PROJECT_MEMORIES
     )
+
+
+def test_wiki_line_survives_total_budget_truncation():
+    """予算超過で末尾が切られても wiki 行は先頭側に残る（回帰: 実機で消えた）。"""
+    goals = [_mem(f"g{i}", "あ" * 300, tags=["goal", "active"]) for i in range(40)]
+    text = _render(goals=goals, wiki_page_count=3)
+    assert len(text) <= _MAX_TOTAL_CHARS
+    assert "📚 wiki: 3 pages (project:demo)" in text
+
+
+def test_wiki_line_absent_without_pages():
+    text = _render(wiki_page_count=None)
+    assert "📚 wiki" not in text
