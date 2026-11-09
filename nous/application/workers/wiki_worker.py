@@ -20,7 +20,7 @@ import asyncio
 import json
 import re
 import threading
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from nous.application.wiki import vector_index
@@ -87,12 +87,23 @@ class WikiWorker:
         #: 定刻に persona コンテキストが空だった時の再試行回数と間隔（1 日を空振りで捨てない）。
         self._empty_retries = 30
         self._retry_seconds = 60.0
+        #: サイクル内で error イベントが出た件数。0 より大きければ定刻を待たず短くリトライする。
+        self._cycle_errors = 0
+        #: 直近の LLM 呼び出しの計器（attempt/max_tokens/text_len/stream_error）。監査イベントに載せる。
+        self._last_llm: dict | None = None
         #: テスト用: False にすると Qdrant 索引更新を行わない（既定は有効）。
         self.vector_enabled = True
 
     # ------------------------------------------------------------------
     # lifecycle
     # ------------------------------------------------------------------
+
+    #: 1 サイクルで LLM を呼ぶ最大回数（2 回目は予算 2 倍）。
+    _llm_attempts = 2
+    #: 1 回目の max_tokens。reasoning モデルでも本文を書き切れる余裕を取る。
+    _max_tokens = 16000
+    #: サイクルが失敗したときの再試行間隔（秒）。1 回の一時障害で 24h 空くのを防ぐ。
+    _error_retry_seconds = 1800.0
 
     def start(self) -> None:
         if self._running:
@@ -102,8 +113,9 @@ class WikiWorker:
         self._thread = threading.Thread(target=self._run, daemon=True, name="wiki-worker")
         self._thread.start()
         logger.info(
-            "WikiWorker started (at_hour=%d interval=%ds topics=%d)",
+            "WikiWorker started (at_hour=%d %s interval=%ds topics=%d)",
             self._cfg.run_at_hour,
+            self._cfg.run_at_tz,
             self._cfg.interval_seconds,
             self._cfg.topics_per_cycle,
         )
@@ -134,19 +146,39 @@ class WikiWorker:
                     if self._stop_event.wait(self._retry_seconds):
                         return
             try:
+                self._cycle_errors = 0
                 self.run_cycle()
             except Exception:
                 logger.exception("Wiki cycle failed")
+            if scheduled and self._cycle_errors:
+                # 一時障害で丸 1 日空くのを防ぐ。失敗があれば 30 分後に再挑戦する。
+                logger.warning(
+                    "WikiWorker: %d topic(s) failed — retrying in %.0fs instead of a full day",
+                    self._cycle_errors,
+                    self._error_retry_seconds,
+                )
+                if self._stop_event.wait(self._error_retry_seconds):
+                    return
 
     def _next_delay(self) -> float:
         """次サイクルまでの待ち秒数。
 
-        ``run_at_hour >= 0`` なら毎日その時刻（ローカル TZ、既定 03:00）に走らせる。
-        ``-1`` なら旧来の「前サイクル終了から interval_seconds 後」。
+        ``run_at_hour >= 0`` なら毎日その時刻（``run_at_tz``、既定 Asia/Tokyo の 03:00）に
+        走らせる。``-1`` なら旧来の「前サイクル終了から interval_seconds 後」。
+        コンテナの TZ には依存しない（UTC 運用でも 03:00 JST になる）。
         """
         if self._cfg.run_at_hour < 0:
             return float(self._cfg.interval_seconds)
-        now = datetime.now()
+        from nous.domain.shared.time_utils import get_now
+
+        try:
+            now = get_now(self._cfg.run_at_tz)
+        except Exception:
+            logger.warning(
+                "WikiWorker: unknown run_at_tz %r — falling back to UTC",
+                self._cfg.run_at_tz,
+            )
+            now = datetime.now(UTC)  # ZoneInfo を再参照しない（tzdata 不在時に同じ例外を踏む）
         target = now.replace(hour=self._cfg.run_at_hour, minute=0, second=0, microsecond=0)
         if target <= now:
             target += timedelta(days=1)
@@ -318,7 +350,7 @@ class WikiWorker:
         from nous.domain.shared.time_utils import get_now
         from nous.infrastructure.wiki.store import WikiStore
 
-        now = get_now()
+        now = get_now(self._cfg.run_at_tz)
         store = WikiStore(self._settings.data_root, persona)
         all_result = ctx.memory_repo.find_all()
         memories: list[Memory] = list(all_result.value) if isinstance(all_result, Success) else []
@@ -345,16 +377,18 @@ class WikiWorker:
         archived_seen: set[str],
     ) -> None:
         pages = store.list_pages()
-        raw = self._ask_llm(topic, memories, pages, now)
-        if not raw:
-            self._record_event(ctx, persona, f"error: llm returned no text for {topic}", None)
+        payload, error, attempt = self._ask_and_parse(topic, memories, pages, now)
+        if payload is None:
+            self._record_event(
+                ctx,
+                persona,
+                f"error: {error}",
+                {"topic": topic, "attempt": attempt, **(self._last_llm or {})},
+            )
             return
-        try:
-            payload = self._parse_response(raw)
-        except Exception as e:
-            logger.warning("WikiWorker: invalid LLM response for %s: %s", topic, e)
-            self._record_event(ctx, persona, f"error: invalid llm response for {topic}: {e}", None)
-            return
+        if not payload:
+            # 成功扱いで無言で抜けると「動いているのに更新されない」がログに残らない。
+            self._record_event(ctx, persona, f"skipped: no pages returned for {topic}", {"topic": topic})
 
         candidates = {m.key: m for m in memories}
         existing_slugs = {p.slug for p in pages}
@@ -444,7 +478,38 @@ class WikiWorker:
     _ask_llm_for_test: str | None = None
     _ask_llm_raise: Exception | None = None
 
-    def _ask_llm(self, topic: str, memories: list[Memory], pages: list[WikiPage], now: datetime) -> str | None:
+    def _ask_and_parse(
+        self, topic: str, memories: list[Memory], pages: list[WikiPage], now: datetime
+    ) -> tuple[list[dict] | None, str, int]:
+        """LLM 呼び出し + パース。空応答/切れ JSON は 1 回だけ予算を倍にして再試行。
+
+        reasoning モデルは思考トークンも max_tokens を食うため、長い応答が途中で切れて
+        JSON が閉じないことがある（2026-11-09 の本番障害: char 4153 で Unterminated）。
+        成功時は (pages, "", 成功した attempt 番号)、失敗時は (None, 監査用メッセージ, 最後の attempt)。
+        """
+        error = ""
+        for attempt in range(self._llm_attempts):
+            raw = self._ask_llm(topic, memories, pages, now, boost=attempt)
+            if raw is None:
+                # collect_text は ErrorEvent で None、本文が無ければ "" を返す（区別できる）。
+                error = f"llm stream error for {topic} (attempt {attempt + 1})"
+            elif not raw:
+                error = f"llm returned no text for {topic} (attempt {attempt + 1})"
+            else:
+                try:
+                    return self._parse_response(raw), "", attempt
+                except Exception as e:
+                    error = f"invalid llm response for {topic}: {e} (attempt {attempt + 1})"
+                    logger.warning("WikiWorker: %s", error)
+            if attempt + 1 < self._llm_attempts:
+                logger.warning("WikiWorker: retrying %s with a larger budget", topic)
+            else:
+                return None, error, attempt
+        return None, error, self._llm_attempts - 1
+
+    def _ask_llm(
+        self, topic: str, memories: list[Memory], pages: list[WikiPage], now: datetime, boost: int = 0
+    ) -> str | None:
         if self._ask_llm_raise is not None:
             raise self._ask_llm_raise
         if self._ask_llm_for_test is not None:
@@ -461,16 +526,24 @@ class WikiWorker:
 
         provider: LLMProvider = get_provider(cfg.provider, api_key, cfg.model, cfg.base_url)
         prompt = self._build_prompt(topic, memories, pages, now)
-        return asyncio.run(
+        max_tokens = self._max_tokens * (2**boost)
+        text = asyncio.run(
             collect_text(
                 provider,
                 messages=[LLMMessage(role="user", content=prompt)],
                 system="",
                 tools=None,
                 temperature=0.0,
-                max_tokens=16000,
+                max_tokens=max_tokens,
             )
         )
+        # 監査用の計器（attempt / 実際の予算 / 返ってきた本文長 / stream エラーか）。
+        self._last_llm = {
+            "max_tokens": max_tokens,
+            "text_len": len(text or ""),
+            "stream_error": text is None,
+        }
+        return text
 
     def _build_prompt(self, topic: str, memories: list[Memory], pages: list[WikiPage], now: datetime) -> str:
         page_lines = [
@@ -531,6 +604,8 @@ class WikiWorker:
     # ------------------------------------------------------------------
 
     def _record_event(self, ctx, persona: str, summary: str, detail: dict | None) -> None:
+        if summary.startswith("error:"):
+            self._cycle_errors += 1
         try:
             from nous.domain.memory.session_event import SessionEvent
             from nous.domain.shared.time_utils import get_now

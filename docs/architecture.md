@@ -211,7 +211,7 @@ nous/
 - **再 encode 排除（fingerprint）**（item 6）: Qdrant アダプタが embedding fingerprint を payload に記録し、同一 fingerprint の upsert は再 encode をスキップ。
 - **常載プロフィールドキュメント**（item 3）: `profile_update` ツールで persona_blocks に常載ブロックを登録、検索とは別に毎ターン注入。
 - **日次 consolidation（item 4）**: `ConsolidationWorker` が archived 記憶（既に gist 化済みのものは除外）をクラスタリングし gist を生成。
-- **日次 wiki 編纂（item 5）**: `WikiWorker` が定刻（既定 03:00）に起動し、未編纂の記憶をトピックページへまとめ、源記憶を `archived` に落とす。
+- **日次 wiki 編纂（item 5）**: `WikiWorker` が定刻（既定 03:00 JST = `NOUS_WIKI__RUN_AT_TZ`、`--hour` は `NOUS_WIKI__RUN_AT_HOUR`）に起動し、未編纂の記憶をトピックページへまとめ、源記憶を `archived` に落とす。LLM が空応答/切れ JSON を返した場合は max_tokens を 2 倍にして 1 回だけ再試行し、サイクル内に error が残ったら 30 分後に再挑戦する（丸 1 日空けない）。
 
 残る常駐 worker は `ConsolidationWorker` と `WikiWorker` の 2 つ（Curation / Freshness / Enrichment / Decay は 2026-11-08 に廃止）。
 

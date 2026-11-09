@@ -308,6 +308,23 @@ class WikiConfig(BaseModel):
     # 範囲外だと _next_delay の now.replace() が ValueError を投げ、worker が
     # 無言で永久停止するので pydantic 側で潰す。
     run_at_hour: int = Field(default=3, ge=-1, le=23)
+    # run_at_hour を解釈するタイムゾーン。コンテナが UTC で動いていても「03:00 JST」の
+    # 意味を保つため既定は Asia/Tokyo（time_utils._DEFAULT_TZ と同じ）。UTC 運用したい
+    # 場合は NOUS_WIKI__RUN_AT_TZ=UTC を明示する。
+    run_at_tz: str = "Asia/Tokyo"
+
+    @field_validator("run_at_tz")
+    @classmethod
+    def _validate_run_at_tz(cls, value: str) -> str:
+        """未知の TZ 名は起動時に落とす（worker が無言で永久停止するのを防ぐ）。"""
+        from zoneinfo import ZoneInfo
+
+        try:
+            ZoneInfo(value)
+        except Exception as e:
+            raise ValueError(f"unknown timezone {value!r}: {e}") from e
+        return value
+
     topics_per_cycle: int = 2  # 1 cycle で編纂する topic 数
     archive_sources: bool = True  # 編纂済みの源記憶を archived へ沈める（削除はしない）
     max_memories_per_topic: int = 40

@@ -82,9 +82,10 @@ def _store(tmp_path) -> WikiStore:
     return WikiStore(tmp_path, "test_ww")
 
 
-def _event_rows(conn) -> list[tuple[str, str]]:
-    rows = conn.get_memory_db().execute("SELECT event_type, summary FROM session_events ORDER BY id").fetchall()
-    return [(r["event_type"], r["summary"]) for r in rows]
+def _event_rows(conn) -> list[tuple[str, str, dict]]:
+    """(event_type, summary, detail) を古い順に返す。detail は JSON を dict 化したもの。"""
+    rows = conn.get_memory_db().execute("SELECT event_type, summary, detail FROM session_events ORDER BY id").fetchall()
+    return [(r["event_type"], r["summary"], json.loads(r["detail"]) if r["detail"] else {}) for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +176,7 @@ class TestApplyPages:
             store = _store(tmp_path)
             assert not store.read_page("other-page").is_ok
             assert not store.read_page("project-nous-ok").is_ok
-            summaries = [s for t, s in _event_rows(conn) if t == "wiki.compiled"]
+            summaries = [s for t, s, _d in _event_rows(conn) if t == "wiki.compiled"]
             assert all(s.startswith("error:") for s in summaries)
         finally:
             conn.close()
@@ -229,7 +230,7 @@ class TestFailSafe:
         conn, _ = _setup(tmp_path, memories, llm=None, raise_exc=RuntimeError("boom"))
         try:
             assert _store(tmp_path).list_pages() == []
-            summaries = [s for t, s in _event_rows(conn) if t == "wiki.compiled"]
+            summaries = [s for t, s, _d in _event_rows(conn) if t == "wiki.compiled"]
             assert any(s.startswith("error:") for s in summaries)
         finally:
             conn.close()
@@ -240,7 +241,7 @@ class TestFailSafe:
         conn, _ = _setup(tmp_path, memories, llm="これは JSON ではない")
         try:
             assert _store(tmp_path).list_pages() == []
-            summaries = [s for t, s in _event_rows(conn) if t == "wiki.compiled"]
+            summaries = [s for t, s, _d in _event_rows(conn) if t == "wiki.compiled"]
             assert any("invalid llm response" in s for s in summaries)
         finally:
             conn.close()
@@ -332,7 +333,7 @@ class TestPagesAreUniform:
             assert isinstance(stored, Success)
             assert stored.value.title == "LLM が書き直した題名"
             assert stored.value.body == "LLM の本文"
-            summaries = [s for t, s in _event_rows(conn)]
+            summaries = [s for t, s, _d in _event_rows(conn)]
             assert not any("manual" in s for s in summaries), summaries
         finally:
             conn.close()
@@ -352,7 +353,7 @@ class TestPagesAreUniform:
         try:
             gone = _store(tmp_path).read_page("project-nous-notes")
             assert not gone.is_ok, "manual ページが編集保護で残ってしまった"
-            summaries = [s for t, s in _event_rows(conn)]
+            summaries = [s for t, s, _d in _event_rows(conn)]
             assert not any("manual" in s for s in summaries), summaries
         finally:
             conn.close()
@@ -463,12 +464,68 @@ class TestTopicRotation:
 
 
 class TestSchedule:
+    def test_default_tz_is_asia_tokyo(self) -> None:
+        """既定が UTC に戻ったら落ちる（03:00 JST の意味を守る番人）。"""
+        from nous.config.settings import WikiConfig
+
+        assert WikiConfig().run_at_tz == "Asia/Tokyo"
+        assert WikiConfig().run_at_hour == 3
+
+    def test_unknown_tz_is_rejected_at_config_load(self) -> None:
+        """未知の TZ 名は起動時に落ちる（無言の永久停止を防ぐ）。"""
+        import pytest
+        from pydantic import ValidationError
+
+        from nous.config.settings import WikiConfig
+
+        with pytest.raises(ValidationError):
+            WikiConfig(run_at_tz="Mars/Olympus")
+
     def test_next_delay_targets_configured_hour(self, tmp_path) -> None:
         """run_at_hour 指定時は 0 < delay <= 24h（次の定刻まで）。"""
         worker = WikiWorker(_settings(tmp_path))
         worker._cfg = worker._cfg.model_copy(update={"run_at_hour": 3})
         delay = worker._next_delay()
         assert 0 < delay <= 86400
+
+    def test_next_delay_uses_run_at_tz_not_container_tz(self, tmp_path, monkeypatch) -> None:
+        """定刻は run_at_tz で解釈する（コンテナ TZ=UTC でも 03:00 JST が基準）。"""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        import nous.domain.shared.time_utils as time_utils
+
+        frozen = datetime(2026, 11, 9, 1, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
+        seen_tz: list[str | None] = []
+
+        def _fake_get_now(tz: str | None = None) -> datetime:
+            seen_tz.append(tz)
+            return frozen.astimezone(ZoneInfo(tz or "Asia/Tokyo"))
+
+        monkeypatch.setattr(time_utils, "get_now", _fake_get_now)
+        worker = WikiWorker(_settings(tmp_path))
+        worker._cfg = worker._cfg.model_copy(update={"run_at_hour": 3, "run_at_tz": "Asia/Tokyo"})
+        assert worker._next_delay() == 2 * 3600  # 01:00 JST → 03:00 JST
+        assert seen_tz == ["Asia/Tokyo"]
+
+    def test_next_delay_wraps_to_next_day(self, tmp_path, monkeypatch) -> None:
+        """定刻を過ぎていれば翌日（+86400）へ回る。"""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        import nous.domain.shared.time_utils as time_utils
+
+        frozen = datetime(2026, 11, 9, 4, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
+        monkeypatch.setattr(time_utils, "get_now", lambda tz=None: frozen)
+        worker = WikiWorker(_settings(tmp_path))
+        worker._cfg = worker._cfg.model_copy(update={"run_at_hour": 3, "run_at_tz": "Asia/Tokyo"})
+        assert worker._next_delay() == 23 * 3600
+
+    def test_unknown_tz_falls_back_without_raising(self, tmp_path) -> None:
+        """設定検証をすり抜けた不正 TZ でも落ちず、UTC フォールバックで待ち時間を返す。"""
+        worker = WikiWorker(_settings(tmp_path))
+        worker._cfg = worker._cfg.model_copy(update={"run_at_hour": 3, "run_at_tz": "Mars/Olympus"})
+        assert 0 < worker._next_delay() <= 86400
 
     def test_negative_hour_falls_back_to_interval(self, tmp_path) -> None:
         """run_at_hour<0 は旧来の interval 方式。"""
@@ -534,3 +591,152 @@ class TestTopicSelectionAfterArchive:
         # ページの無い topic は従来どおり下限で弾く
         lonely = [_mem("b0", tags=["project:lonely"])]
         assert worker._select_topics(lonely, get_now(), store, "test_ww") == []
+
+
+class TestLlmRetry:
+    """空応答・切れ JSON は 1 回だけ予算を倍にして再試行する（2026-11-09 の本番障害）。"""
+
+    _PAGE = {
+        "slug": "project-nous-memory",
+        "title": "NOUS の記憶設計",
+        "body": "## 概要 記憶は SQLite が正。",
+        "sources": ["a0", "a1"],
+    }
+
+    @staticmethod
+    def _run(tmp_path, responses: list[str | None]):
+        """_ask_llm を差し替えて _compile_persona を 1 回実行する。"""
+        conn = SQLiteConnection(data_dir=str(tmp_path), persona="test_ww")
+        conn.initialize_schema()
+        repo = SQLiteMemoryRepository(conn)
+        for i in range(3):
+            repo.save(_mem(f"a{i}", tags=["project:nous"]))
+        worker = WikiWorker(_settings(tmp_path))
+        worker.vector_enabled = False
+        seen: list[int] = []
+
+        def _fake_ask_llm(*_args, **kwargs):
+            boost = kwargs.get("boost", 0)
+            seen.append(boost)
+            resp = responses[len(seen) - 1]
+            # 本番の _ask_llm と同じ計器を埋める（監査 detail の検証用）。
+            worker._last_llm = {
+                "max_tokens": 16000 * (2**boost),
+                "text_len": len(resp or ""),
+                "stream_error": resp is None,
+            }
+            return resp
+
+        worker._ask_llm = _fake_ask_llm  # type: ignore[method-assign]
+        worker._compile_persona(SimpleNamespace(memory_repo=repo, connection=conn), "test_ww")
+        return conn, worker, seen
+
+    def test_empty_response_retries_and_succeeds(self, tmp_path) -> None:
+        conn, _w, seen = self._run(tmp_path, ["", _pages_json(self._PAGE)])
+        try:
+            assert seen == [0, 1]  # 2 回目は予算 2 倍（boost=1）
+            assert _store(tmp_path).read_page("project-nous-memory").is_ok
+            assert not [s for _t, s, _d in _event_rows(conn) if s.startswith("error:")]
+        finally:
+            conn.close()
+
+    def test_truncated_json_retries_and_succeeds(self, tmp_path) -> None:
+        """本番と同じ「文字列の途中で切れた JSON」で再試行する。"""
+        # 本文文字列の中に閉じ括弧を入れ、rfind("}") が文字列内を指す形にする
+        # （本番の `Unterminated string starting at ... char 4153` と同じ経路）。
+        truncated = (
+            '{"pages": [{"slug": "project-nous-memory", "title": "NOUS の記憶設計", '
+            '"body": "閉じ括弧 } を含む本文の途中'
+        )
+        conn, _w, seen = self._run(tmp_path, [truncated, _pages_json(self._PAGE)])
+        try:
+            assert seen == [0, 1]
+            assert _store(tmp_path).read_page("project-nous-memory").is_ok
+            assert not [s for _t, s, _d in _event_rows(conn) if s.startswith("error:")]
+        finally:
+            conn.close()
+
+    def test_two_failures_record_single_error_event(self, tmp_path) -> None:
+        conn, _w, seen = self._run(tmp_path, [None, None])
+        try:
+            assert seen == [0, 1]
+            errors = [(s, d) for _t, s, d in _event_rows(conn) if s.startswith("error:")]
+            assert len(errors) == 1
+            msg, detail = errors[0]
+            assert "llm stream error" in msg  # None は stream エラーとして区別
+            # 監査 detail に「どの attempt で、いくつの予算で、何文字返ったか」が残る
+            assert detail["attempt"] == 1
+            assert detail["max_tokens"] == 32000
+            assert detail["stream_error"] is True
+            assert _store(tmp_path).list_pages() == []
+        finally:
+            conn.close()
+
+    def test_stream_error_and_empty_text_are_distinguished(self, tmp_path) -> None:
+        """collect_text の None（stream エラー）と ""（本文なし）を別の文言で残す。"""
+        conn_none, _w1, _s1 = self._run(tmp_path / "a", [None, None])
+        try:
+            msg_none = [s for _t, s, _d in _event_rows(conn_none) if s.startswith("error:")][0]
+        finally:
+            conn_none.close()
+        conn_empty, _w2, _s2 = self._run(tmp_path / "b", ["", ""])
+        try:
+            msg_empty = [s for _t, s, _d in _event_rows(conn_empty) if s.startswith("error:")][0]
+        finally:
+            conn_empty.close()
+        assert "stream error" in msg_none
+        assert "returned no text" in msg_empty
+        assert "attempt 2" in msg_none and "attempt 2" in msg_empty
+
+    def test_empty_payload_records_skip_event(self, tmp_path) -> None:
+        """{"pages": []} で無言で抜けない（「動いているのに更新されない」を可視化する）。"""
+        conn, _w, seen = self._run(tmp_path, ['{"pages": []}'])
+        try:
+            assert seen == [0]  # 成功扱いなので再試行しない
+            skips = [s for _t, s, _d in _event_rows(conn) if s.startswith("skipped:")]
+            assert skips == ["skipped: no pages returned for project-nous"]
+        finally:
+            conn.close()
+
+    def test_bytes_budget_doubles_on_retry(self, tmp_path, monkeypatch) -> None:
+        """retry の boost が実際の max_tokens（16000→32000）まで届くことを固定する。"""
+        budgets: list[int] = []
+        responses = ["", _pages_json(self._PAGE)]
+
+        async def _fake_collect_text(_provider, **kwargs):
+            budgets.append(kwargs["max_tokens"])
+            return responses[len(budgets) - 1]
+
+        import nous.infrastructure.llm.text_utils as text_utils
+
+        monkeypatch.setattr(text_utils, "collect_text", _fake_collect_text)
+        conn = SQLiteConnection(data_dir=str(tmp_path), persona="test_ww")
+        conn.initialize_schema()
+        repo = SQLiteMemoryRepository(conn)
+        for i in range(3):
+            repo.save(_mem(f"a{i}", tags=["project:nous"]))
+        worker = WikiWorker(_settings(tmp_path))
+        worker.vector_enabled = False
+        worker._cfg = worker._cfg.model_copy(update={"api_key": "test-key"})
+        try:
+            worker._compile_persona(SimpleNamespace(memory_repo=repo, connection=conn), "test_ww")
+            assert budgets == [16000, 32000]
+            assert _store(tmp_path).read_page("project-nous-memory").is_ok
+        finally:
+            conn.close()
+
+
+class TestErrorRetry:
+    """失敗したサイクルは定刻を待たず短くリトライする（24h 空白の防止）。"""
+
+    def test_error_event_increments_cycle_errors(self, tmp_path) -> None:
+        conn = SQLiteConnection(data_dir=str(tmp_path), persona="test_ww")
+        conn.initialize_schema()
+        try:
+            ctx = SimpleNamespace(connection=conn)
+            worker = WikiWorker(_settings(tmp_path))
+            worker._record_event(ctx, "test_ww", "error: llm returned no text for persona", None)
+            worker._record_event(ctx, "test_ww", "created project-x from 5 memories", None)
+            assert worker._cycle_errors == 1
+        finally:
+            conn.close()
