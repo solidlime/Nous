@@ -637,6 +637,11 @@ class TestLlmRetry:
             assert seen == [0, 1]  # 2 回目は予算 2 倍（boost=1）
             assert _store(tmp_path).read_page("project-nous-memory").is_ok
             assert not [s for _t, s, _d in _event_rows(conn) if s.startswith("error:")]
+            # 再試行で救ったことが監査に残る（無言の回復を作らない）
+            recovered = [(s, d) for _t, s, d in _event_rows(conn) if s.startswith("recovered:")]
+            assert len(recovered) == 1
+            assert recovered[0][0] == "recovered: project-nous on attempt 2"
+            assert recovered[0][1]["max_tokens"] == 32000
         finally:
             conn.close()
 

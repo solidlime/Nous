@@ -389,6 +389,14 @@ class WikiWorker:
         if not payload:
             # 成功扱いで無言で抜けると「動いているのに更新されない」がログに残らない。
             self._record_event(ctx, persona, f"skipped: no pages returned for {topic}", {"topic": topic})
+        elif attempt:
+            # 再試行で救ったことを残す（「効いたのかモデルを替えるべきか」を後から判定する）。
+            self._record_event(
+                ctx,
+                persona,
+                f"recovered: {topic} on attempt {attempt + 1}",
+                {"topic": topic, "attempt": attempt, **(self._last_llm or {})},
+            )
 
         candidates = {m.key: m for m in memories}
         existing_slugs = {p.slug for p in pages}
