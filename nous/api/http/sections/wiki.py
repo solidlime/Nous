@@ -15,6 +15,10 @@ def render_wiki_tab() -> str:
         .wiki-item.active { border-color:rgba(var(--accent-blue-rgb), 0.5); background:rgba(var(--accent-blue-rgb), 0.12); }
         .wiki-item-title { font-size:0.88rem; font-weight:600; color:var(--text-primary); }
         .wiki-item-meta { font-size:0.7rem; color:var(--text-muted); }
+        .wiki-cat { margin-bottom:10px; }
+        .wiki-cat > summary { cursor:pointer; list-style:none; padding:4px 2px 6px; font-size:0.72rem; font-weight:700; letter-spacing:0.06em; color:var(--text-muted); text-transform:uppercase; }
+        .wiki-cat > summary::-webkit-details-marker { display:none; }
+        .wiki-cat-count { font-weight:400; opacity:0.7; }
         #wiki-article-body { font-size:0.9rem; line-height:1.75; color:var(--text-primary); }
         #wiki-article-body h1, #wiki-article-body h2 { font-size:1.05rem; font-weight:700; margin:16px 0 8px; }
         #wiki-article-body h3 { font-size:0.95rem; font-weight:600; margin:12px 0 6px; }
@@ -42,6 +46,7 @@ def render_wiki_tab() -> str:
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <aside class="glass p-3" style="align-self:start;">
                     <div style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); padding:4px 8px 8px;">Pages</div>
+                    <input id="wiki-search" type="search" placeholder="検索（題名 / 本文）" autocomplete="off" style="width:100%; margin-bottom:8px; padding:7px 10px; border-radius:10px; border:1px solid var(--glass-border); background:rgba(15,23,42,0.45); color:var(--text-primary); font-size:0.82rem;" />
                     <div id="wiki-list">
                         <div class="skeleton skeleton-text" style="width:80%;"></div>
                         <div class="skeleton skeleton-text" style="width:60%;"></div>

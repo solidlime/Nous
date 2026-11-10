@@ -139,3 +139,57 @@ test('no persona → no fetch', async () => {
   await W.loadWiki();
   expect(fetchMock).not.toHaveBeenCalled();
 });
+
+test('list groups pages by category with counts', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url) => {
+    if (url === '/api/wiki/herta') {
+      return jsonResponse({ pages: [
+        { slug: 'journal-2026-11-09', title: '日記', category: 'journal', sources: [] },
+        { slug: 'project-nous', title: 'Nous', category: 'project', project: 'nous', sources: ['m1'] },
+        { slug: 'herta', title: 'ヘルタ', category: 'persona', sources: [] },
+      ]});
+    }
+    return jsonResponse({ slug: 'x', title: 'x', body: '' });
+  }));
+  await W.loadWiki();
+  const list = document.getElementById('wiki-list');
+  const summaries = [...list.querySelectorAll('details > summary')].map((s) => s.textContent);
+  expect(summaries.length).toBe(3);
+  expect(summaries[0]).toContain('日記');
+  expect(summaries[1]).toContain('プロジェクト');
+  const projectGroup = list.querySelectorAll('details')[1];
+  expect(projectGroup.textContent).toContain('nous');   // project 名は項目のメタに出す
+  expect(summaries[2]).toContain('人柄');
+});
+
+test('search box debounces into ?q= requests', async () => {
+  vi.useFakeTimers();
+  const fetchMock = vi.fn(async () => jsonResponse({ pages: [] }));
+  vi.stubGlobal('fetch', fetchMock);
+  document.body.insertAdjacentHTML('beforeend', '<input id="wiki-search" />');
+  W._state.q = '';
+  // 配線は DOMContentLoaded で走るので、同じ入力要素に直接バインドし直す
+  const { loadWiki } = W;
+  const input = document.getElementById('wiki-search');
+  input.addEventListener('input', () => {
+    if (W._state.timer) clearTimeout(W._state.timer);
+    W._state.timer = setTimeout(() => loadWiki(input.value.trim()), 250);
+  });
+  input.value = '索引';
+  input.dispatchEvent(new Event('input'));
+  expect(fetchMock).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(300);
+  await Promise.resolve();
+  expect(fetchMock).toHaveBeenCalled();
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/wiki/herta?q=' + encodeURIComponent('索引'));
+  vi.useRealTimers();
+  document.getElementById('wiki-search').remove();
+});
+
+test('empty search result says no match instead of the empty-wiki placeholder', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ pages: [] })));
+  await W.loadWiki('存在しない語');
+  const text = document.getElementById('wiki-list').textContent;
+  expect(text).toContain('一致するページは無い');
+  expect(text).not.toContain('ページがまだない');
+});

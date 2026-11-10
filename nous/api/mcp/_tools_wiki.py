@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from nous.api.mcp._envelope import ToolErrorCode, tool_error, tool_ok
+from nous.application.wiki.categories import categorize
 from nous.domain.shared.result import Failure, Success
 from nous.infrastructure.wiki.store import WikiStore
 
@@ -28,8 +29,8 @@ def _store(ctx: AppContext, persona: str) -> WikiStore:
     return WikiStore(ctx.settings.data_root, persona)
 
 
-def _page_dict(page: Any) -> dict[str, Any]:
-    return {
+def _page_dict(page: Any, persona: str | None = None) -> dict[str, Any]:
+    data: dict[str, Any] = {
         "slug": page.slug,
         "title": page.title,
         "project": page.project,
@@ -38,6 +39,9 @@ def _page_dict(page: Any) -> dict[str, Any]:
         "updated": page.updated,
         "links": list(page.links),
     }
+    if persona is not None:
+        data["category"] = categorize(page, persona)
+    return data
 
 
 async def _tool_wiki_read(ctx: AppContext, persona: str, slug: str) -> str:
@@ -54,11 +58,13 @@ async def _tool_wiki_ls(
     persona: str,
     project: str | None = None,
     tag: str | None = None,
+    category: str | None = None,
     limit: int = LS_DEFAULT_LIMIT,
 ) -> str:
-    """wiki ページの一覧（slug / title / project / tags / 更新日時）。
+    """wiki ページの一覧（slug / title / project / tags / category / 更新日時）。
 
-    ``tag`` を渡すとそのタグを持つページだけに絞る（``tag="journal"`` で日記をまとめて引く）。
+    ``tag`` はそのタグを持つページ、``category`` は導出カテゴリ
+    （``journal`` / ``project`` / ``persona`` / ``other``）で絞る。
     """
     pages = _store(ctx, persona).list_pages()
     if project:
@@ -66,8 +72,11 @@ async def _tool_wiki_ls(
         pages = [p for p in pages if (p.project or "").lower() == wanted]
     if tag:
         pages = [p for p in pages if tag in p.tags]
+    if category:
+        wanted_cat = category.strip().lower()
+        pages = [p for p in pages if categorize(p, persona) == wanted_cat]
     pages = sorted(pages, key=lambda p: p.updated or "", reverse=True)
-    items = [_page_dict(p) for p in pages[: max(1, limit)]]
+    items = [_page_dict(p, persona) for p in pages[: max(1, limit)]]
     return tool_ok(items, total=len(pages))
 
 

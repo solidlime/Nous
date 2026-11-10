@@ -119,10 +119,11 @@ def _write_page(tmp_path, persona="herta", slug="project-nous", title="Nous", bo
     return store
 
 
-def _get_request(persona="herta", slug=None):
+def _get_request(persona="herta", slug=None, q=None):
     req = MagicMock()
     req.path_params = {"persona": persona} if slug is None else {"persona": persona, "slug": slug}
     req.headers = {}
+    req.query_params = {"q": q} if q is not None else {}
     return req
 
 
@@ -143,7 +144,7 @@ class TestWikiReadApi:
         import json
 
         payload = json.loads(bytes(resp.body))
-        assert payload == {"persona": "herta", "pages": []}
+        assert payload == {"persona": "herta", "q": "", "pages": []}
 
     @pytest.mark.asyncio
     async def test_list_returns_page_meta(self, read_routes):
@@ -157,6 +158,7 @@ class TestWikiReadApi:
         assert page["slug"] == "project-nous"
         assert page["title"] == "Nous"
         assert page["sources"] == ["m1"]
+        assert page["category"] == "project"
         assert "updated" in page
 
     @pytest.mark.asyncio
@@ -382,3 +384,69 @@ def test_dashboard_renders_delete_button():
 
     html = render_wiki_tab()
     assert 'id="wiki-btn-delete"' in html
+
+
+# ---------------------------------------------------------------------------
+# GET /api/wiki/{persona}?q= — ダッシュボードの検索
+# ---------------------------------------------------------------------------
+
+
+class TestWikiSearchApi:
+    @pytest.mark.asyncio
+    async def test_q_matches_title_and_body(self, read_routes):
+        import json
+
+        mcp, ctx = read_routes
+        _write_page(tmp_path=ctx.settings.data_root, slug="project-nous", title="Nous 概要", body="索引の話")
+        _write_page(
+            tmp_path=ctx.settings.data_root,
+            slug="journal-2026-11-09",
+            title="日記",
+            body="今日は索引を直した",
+            tags=("journal",),
+        )
+        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+            resp = await mcp.route("/api/wiki/{persona}", "GET")(_get_request(q="索引"))
+        payload = json.loads(bytes(resp.body))
+        slugs = {p["slug"] for p in payload["pages"]}
+        assert slugs == {"project-nous", "journal-2026-11-09"}
+        assert payload["q"] == "索引"
+        by_slug = {p["slug"]: p for p in payload["pages"]}
+        assert by_slug["journal-2026-11-09"]["body_hits"] == 1
+        assert by_slug["journal-2026-11-09"]["category"] == "journal"
+
+    @pytest.mark.asyncio
+    async def test_q_without_match_returns_empty(self, read_routes):
+        import json
+
+        mcp, ctx = read_routes
+        _write_page(tmp_path=ctx.settings.data_root)
+        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+            resp = await mcp.route("/api/wiki/{persona}", "GET")(_get_request(q="存在しない語"))
+        assert resp.status_code == 200
+        assert json.loads(bytes(resp.body))["pages"] == []
+
+    @pytest.mark.asyncio
+    async def test_regex_metachars_do_not_500(self, read_routes):
+        """ユーザー入力を正規表現として解釈しない（'(' だけで 500 にならない）。"""
+        mcp, ctx = read_routes
+        _write_page(tmp_path=ctx.settings.data_root, body="正規表現の ( を本文に入れた")
+        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+            resp = await mcp.route("/api/wiki/{persona}", "GET")(_get_request(q="("))
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_blank_q_returns_all(self, read_routes):
+        import json
+
+        mcp, ctx = read_routes
+        _write_page(tmp_path=ctx.settings.data_root)
+        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+            resp = await mcp.route("/api/wiki/{persona}", "GET")(_get_request(q="   "))
+        assert len(json.loads(bytes(resp.body))["pages"]) == 1
+
+
+def test_dashboard_renders_search_box():
+    from nous.api.http.sections.wiki import render_wiki_tab
+
+    assert 'id="wiki-search"' in render_wiki_tab()

@@ -10,11 +10,17 @@ N.Features.Wiki = N.Features.Wiki || {};
 var S = window.S;
 var { esc, api, safeSetHTML } = window.Nous.Core;
 
-var WIKI = { pages: [], current: null, page: null };
+var WIKI = { pages: [], current: null, page: null, q: "", timer: null };
+
+var CATEGORY_ORDER = ["journal", "project", "persona", "other"];
+var CATEGORY_LABELS = { journal: "日記", project: "プロジェクト", persona: "人柄", other: "その他" };
 
 function persona() { return (S && S.persona) || ""; }
 
-function listUrl() { return "/api/wiki/" + encodeURIComponent(persona()); }
+function listUrl(q) {
+  var base = "/api/wiki/" + encodeURIComponent(persona());
+  return q ? base + "?q=" + encodeURIComponent(q) : base;
+}
 
 function pageUrl(slug) {
   return listUrl() + "/" + String(slug).split("/").map(encodeURIComponent).join("/");
@@ -29,18 +35,33 @@ function renderList() {
   if (!WIKI.pages.length) {
     safeSetHTML(list,
       '<div style="padding:12px;font-size:0.85rem;color:var(--text-muted);">' +
-      'ページがまだない。編纂が走ると生まれる。</div>');
+      (WIKI.q ? "「" + esc(WIKI.q) + "」に一致するページは無い。" : "ページがまだない。編纂が走ると生まれる。") +
+      "</div>");
     return;
   }
-  let html = "";
+  const groups = {};
   for (const p of WIKI.pages) {
-    const nSrc = (p.sources || []).length;
-    const active = WIKI.current === p.slug ? " active" : "";
-    html +=
-      '<button class="wiki-item' + active + '" data-wiki-slug="' + esc(p.slug) + '">' +
-      '<span class="wiki-item-title">' + esc(p.title || p.slug) + "</span>" +
-      '<span class="wiki-item-meta">' + nSrc + " sources · " + esc((p.updated || "").slice(0, 10)) + "</span>" +
-      "</button>";
+    const cat = p.category || "other";
+    (groups[cat] = groups[cat] || []).push(p);
+  }
+  let html = "";
+  for (const cat of CATEGORY_ORDER) {
+    const items = groups[cat];
+    if (!items) continue;
+    html += '<details class="wiki-cat" open><summary>' + esc(CATEGORY_LABELS[cat] || cat) +
+      ' <span class="wiki-cat-count">(' + items.length + ')</span></summary>';
+    for (const p of items) {
+      const nSrc = (p.sources || []).length;
+      const active = WIKI.current === p.slug ? " active" : "";
+      const hits = p.body_hits ? " · 本文" + p.body_hits + "行" : "";
+      const proj = (cat === "project" && p.project) ? esc(p.project) + " · " : "";
+      html +=
+        '<button class="wiki-item' + active + '" data-wiki-slug="' + esc(p.slug) + '">' +
+        '<span class="wiki-item-title">' + esc(p.title || p.slug) + "</span>" +
+        '<span class="wiki-item-meta">' + proj + nSrc + " sources · " + esc((p.updated || "").slice(0, 10)) + hits + "</span>" +
+        "</button>";
+    }
+    html += "</details>";
   }
   safeSetHTML(list, html);
   list.querySelectorAll("[data-wiki-slug]").forEach(function(btn) {
@@ -114,13 +135,14 @@ async function loadPage(slug) {
   }
 }
 
-async function loadWiki() {
+async function loadWiki(q) {
   if (!persona()) return;
+  if (q !== undefined) WIKI.q = q;
   try {
-    const data = await api(listUrl());
+    const data = await api(listUrl(WIKI.q));
     WIKI.pages = (data && data.pages) || [];
     renderList();
-    if (!WIKI.pages.length) { renderEmpty(); return; }
+    if (!WIKI.pages.length) { if (!WIKI.q) renderEmpty(); return; }
     const stillThere = WIKI.pages.some(function(p) { return p.slug === WIKI.current; });
     await loadPage(stillThere ? WIKI.current : WIKI.pages[0].slug);
   } catch (e) {
@@ -222,6 +244,12 @@ function refreshWiki() {
   const del = document.getElementById("wiki-btn-delete");
   if (del) del.addEventListener("click", function() {
     if (WIKI.page && WIKI.page.slug) deletePage(WIKI.page.slug);
+  });
+  const search = document.getElementById("wiki-search");
+  if (search) search.addEventListener("input", function() {
+    if (WIKI.timer) clearTimeout(WIKI.timer);
+    // 1 文字ごとにサーバーを叩かない（本文 grep はファイル全体を読む）。
+    WIKI.timer = setTimeout(function() { loadWiki(search.value.trim()); }, 250);
   });
 }
 

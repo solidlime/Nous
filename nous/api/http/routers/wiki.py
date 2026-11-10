@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import secrets
 import threading
 from typing import TYPE_CHECKING
@@ -15,6 +16,7 @@ from typing import TYPE_CHECKING
 from starlette.responses import JSONResponse
 
 from nous.api.http.deps import _safe_get_context
+from nous.application.wiki.categories import categorize
 from nous.application.wiki.vector_index import async_drop_page, async_sync_page
 from nous.domain.shared.result import Failure, Success
 from nous.infrastructure.logging.structured import get_logger
@@ -45,15 +47,25 @@ def _plugin_key_gate(request: Request, ctx) -> JSONResponse | None:
 def register_wiki_routes(mcp) -> None:
     @mcp.custom_route("/api/wiki/{persona}", methods=["GET"])
     async def wiki_pages(request: Request) -> JSONResponse:
-        """wiki ページの一覧（ダッシュボード閲覧用・読み取り専用）。"""
+        """wiki ページの一覧（ダッシュボード閲覧用・読み取り専用）。
+
+        ``q`` を渡すと slug / title / 本文のどれかに部分一致するページだけを返す
+        （大文字小文字無視。本文一致は一致行数も返す）。
+        """
         persona = request.path_params["persona"]
         ctx = _safe_get_context(persona)
         if ctx is None:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
+        query = (request.query_params.get("q") or "").strip()
         try:
-            pages = WikiStore(ctx.settings.data_root, persona).list_pages()
+            store = WikiStore(ctx.settings.data_root, persona)
+            pages = store.list_pages()
         except WikiStoreError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
+
+        body_hits: dict[str, int] = {}
+        if query:
+            pages, body_hits = _filter_by_query(store, pages, query)
         items = [
             {
                 "slug": p.slug,
@@ -63,10 +75,31 @@ def register_wiki_routes(mcp) -> None:
                 "sources": list(p.sources),
                 "links": list(p.links),
                 "updated": p.updated,
+                "category": categorize(p, persona),
+                "body_hits": body_hits.get(p.slug, 0),
             }
             for p in sorted(pages, key=lambda p: p.updated or "", reverse=True)
         ]
-        return JSONResponse({"persona": persona, "pages": items})
+        return JSONResponse({"persona": persona, "q": query, "pages": items})
+
+    def _filter_by_query(store: WikiStore, pages: list, query: str) -> tuple[list, dict[str, int]]:
+        """slug / title / 本文の部分一致で絞る。
+
+        本文は ``WikiStore.grep``（regex をエスケープしてから渡す）で探す。
+        ユーザーの入力をそのまま正規表現にしない（``(`` だけで 500 になる）。
+        """
+        needle = query.lower()
+        hits: dict[str, int] = {}
+        try:
+            for slug, _line, _text in store.grep(re.escape(query), limit=1000):
+                hits[slug] = hits.get(slug, 0) + 1
+        except WikiStoreError:
+            hits = {}
+        kept = []
+        for page in pages:
+            if needle in page.slug.lower() or needle in page.title.lower() or page.slug in hits:
+                kept.append(page)
+        return kept, hits
 
     # GET / PUT / DELETE を 1 つの Route に載せる: 同一 path を複数回 custom_route すると
     # PUT 側で request.json() が空になり "Invalid JSON body" になる（実測）。

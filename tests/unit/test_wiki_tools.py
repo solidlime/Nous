@@ -176,3 +176,19 @@ async def test_delete_index_is_rejected(tmp_path, monkeypatch):
     result = _payload(await _tool_wiki_delete(ctx, "herta", "index"))
     assert result["ok"] is False
     assert result["error"]["code"] == "VALIDATION_ERROR"
+
+
+async def test_wiki_ls_filters_by_category(tmp_path):
+    """category で導出カテゴリを絞れる（agent 側もダッシュボードと同じ分類）。"""
+    ctx = _ctx(tmp_path)
+    store = WikiStore(tmp_path, "herta")
+    store.write_page("project-nous-a", "A", "body", project="nous")
+    store.write_page("journal-2026-11-09", "d", "body", tags=("journal",))
+    store.write_page("herta-notes", "n", "body")
+
+    payload = _payload(await _tool_wiki_ls(ctx, "herta", category="journal"))
+    assert [p["slug"] for p in payload["data"]] == ["journal-2026-11-09"]
+    assert payload["data"][0]["category"] == "journal"
+
+    assert len(_payload(await _tool_wiki_ls(ctx, "herta", category="other"))["data"]) == 1
+    assert len(_payload(await _tool_wiki_ls(ctx, "herta"))["data"]) == 3
