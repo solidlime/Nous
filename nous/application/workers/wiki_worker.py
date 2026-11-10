@@ -20,11 +20,12 @@ import asyncio
 import json
 import re
 import threading
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING
 
 from nous.application.wiki import vector_index
 from nous.domain.shared.result import Failure, Success
+from nous.domain.value_objects import normalize_emotion, normalize_importance
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -39,6 +40,9 @@ logger = get_logger(__name__)
 MIN_TOPIC_MEMORIES = 3
 #: wiki 側の時刻は秒精度なので、秒未満の差は stale と見なさない。
 _STALE_SLACK = timedelta(seconds=2)
+
+#: 日記ページの slug 接頭辞（``journal-YYYY-MM-DD``）。topic 編纂の巡回対象外。
+_JOURNAL_SLUG_PREFIX = "journal-"
 
 #: LLM に渡す記憶本文の切り詰め長。
 _CONTENT_PREVIEW_CHARS = 300
@@ -71,6 +75,43 @@ wiki ページ（Markdown 本文）を作成または改訂してください。
 
 以下の JSON のみを返してください（説明文は不要）:
 {{"pages": [{{"slug": "...", "title": "...", "body": "Markdown本文", "sources": ["<memory key>", ...], "delete": ["<slug>", ...]}}]}}
+"""
+
+
+_JOURNAL_PROMPT = """あなたは日記を書く記録係です。{day} の記憶だけを材料に、その日の記録を Markdown で書いてください。
+
+現在時刻: {now}
+
+書き方:
+- 見出しは必ず次の 5 つだけを、この順・この表記で使う:
+  ## やったこと
+  ## 感想
+  ## 決めたこと
+  ## 引っかかったこと
+  ## 未解決
+- ## 感想 は「その日に起きたことに対して何を感じたか・どう思ったか」を本人の口調で書く。事実の列挙にはしない。
+- 材料に無い事実は書かない（推測・脚色・一般論での補完は禁止）。材料が無い見出しは省略してよい。
+- {length_hint}
+- 既存ページへは [[slug]] 形式でリンクしてよい（存在しない slug はプレーンテキストに落ちる）:
+{pages}
+- 本文は {max_bytes} バイト以内。
+
+材料（{day} の記憶）:
+{memories}
+
+JSON ではなく Markdown 本文だけを返してください（説明文は不要）。
+"""
+
+_STATE_PROMPT = """以下はある人物の今日の日記とその材料です。この日の出来事を経て、いまの感情・体調・精神状態を推定してください。
+
+日記:
+{body}
+
+材料:
+{memories}
+
+以下の JSON のみを返してください（説明文は不要。推定できない項目は省略）:
+{{"emotion": "喜/怒/哀/楽 などの一語", "emotion_intensity": 0.0〜1.0, "physical_state": "体の状態の短文", "mental_state": "精神状態の短文", "body_state": {{"fatigue": 0.0〜1.0}}}}
 """
 
 
@@ -131,10 +172,13 @@ class WikiWorker:
 
     def _run(self) -> None:
         first = True
+        retry_now = False
         while not self._stop_event.is_set():
             scheduled = self._cfg.run_at_hour >= 0
             # 定刻方式は常に待つ。interval 方式は従来どおり初回だけ即実行する。
-            delay = self._next_delay() if scheduled or not first else 0.0
+            # 失敗直後は「翌日」ではなく短間隔（_error_retry_seconds）だけ待って回し直す。
+            delay = self._error_retry_seconds if retry_now else self._next_delay() if scheduled or not first else 0.0
+            retry_now = False
             first = False
             if delay > 0 and self._stop_event.wait(delay):
                 return  # 停止指示
@@ -157,8 +201,7 @@ class WikiWorker:
                     self._cycle_errors,
                     self._error_retry_seconds,
                 )
-                if self._stop_event.wait(self._error_retry_seconds):
-                    return
+                retry_now = True
 
     def _next_delay(self) -> float:
         """次サイクルまでの待ち秒数。
@@ -257,7 +300,7 @@ class WikiWorker:
         """topic → 最後に編纂された時刻（ページ updated の最大値）。"""
         latest: dict[str, str] = {}
         for page in store.list_pages():
-            if not page.sources or not page.updated:
+            if page.slug.startswith(_JOURNAL_SLUG_PREFIX) or not page.sources or not page.updated:
                 continue
             topic = _topic_of_page(page)
             if page.updated > latest.get(topic, ""):
@@ -273,7 +316,7 @@ class WikiWorker:
         by_key = {m.key: m for m in memories}
         stale: set[str] = set()
         for page in store.list_pages():
-            if not page.sources:
+            if page.slug.startswith(_JOURNAL_SLUG_PREFIX) or not page.sources:
                 continue
             topic = _topic_of_page(page)
             for key in page.sources:
@@ -332,6 +375,7 @@ class WikiWorker:
                     body,
                     project=page.project,
                     sources=page.sources,
+                    tags=page.tags,
                 )
                 repaired += 1
         return repaired
@@ -355,6 +399,7 @@ class WikiWorker:
         all_result = ctx.memory_repo.find_all()
         memories: list[Memory] = list(all_result.value) if isinstance(all_result, Success) else []
         archived_seen: set[str] = set()
+        self._compile_journal(ctx, persona, store, now)
         for topic, selected in self._select_topics(memories, now, store, persona):
             try:
                 self._compile_topic(ctx, persona, store, topic, selected, now, archived_seen)
@@ -365,6 +410,177 @@ class WikiWorker:
         repaired = self._repair_links(store)
         if repaired:
             logger.info("WikiWorker: persona=%s repaired %d pages with dangling links", persona, repaired)
+
+    # ------------------------------------------------------------------
+    # 日記（前日 JST の記憶 → 1 ページ）
+    # ------------------------------------------------------------------
+
+    def _compile_journal(self, ctx, persona: str, store: WikiStore, now: datetime) -> None:
+        """前日（JST）の記憶を 1 ページの日記にまとめる。0 件なら何もしない。
+
+        同じ日に 2 回走っても ``journal-YYYY-MM-DD`` の上書きで 1 ページのまま。
+        失敗は監査に残してサイクルは続ける（日記は編纂の前提条件ではない）。
+        """
+        if not self._cfg.journal_enabled:
+            return
+        day = (now - timedelta(days=1)).date()
+        try:
+            memories = self._journal_memories(ctx, day, now)
+            if not memories:
+                return
+            slug = f"{_JOURNAL_SLUG_PREFIX}{day.isoformat()}"
+            title = f"{day.isoformat()} の記録"
+            existed = store.read_page(slug).is_ok
+            # sources は候補（その日の記憶）からだけ作る。LLM に選ばせない。
+            sources = tuple(m.key for m in memories)
+            tag = day.strftime("%Y-%m")
+            # 本文予算は「frontmatter を引いた残り」。write_page は frontmatter 込みで
+            # max_page_bytes を見るので、sources が多い日は本文を減らさないと必ず落ちる。
+            budget = self._cfg.max_page_bytes - _frontmatter_bytes(slug, title, sources, tag)
+            raw = self._ask_text(self._build_journal_prompt(day, memories, store.list_pages(), now, max_bytes=budget))
+            body = _strip_code_fence(raw or "")
+            if not body:
+                raise ValueError("llm returned no journal body")
+            written = store.write_page(slug, title, body, sources=sources, tags=("journal", tag))
+            if isinstance(written, Failure):
+                raise RuntimeError(f"write_page failed: {written.error}")
+            if self.vector_enabled:
+                vector_index.sync_page(self._settings, persona, slug, title, body)
+            action = "updated" if existed else "created"
+            self._record_event(
+                ctx,
+                persona,
+                f"{action} {slug} from {len(sources)} memories",
+                {
+                    "slug": slug,
+                    "action": action,
+                    "day": day.isoformat(),
+                    "sources": list(sources),
+                    "page_hash": _hash_of(title, body),
+                    **(self._last_llm or {}),
+                },
+            )
+            self._apply_journal_state(ctx, persona, slug, memories, body)
+        except Exception as e:
+            logger.warning("WikiWorker: journal %s failed: %s", day, e)
+            self._record_event(ctx, persona, f"error: journal {day}: {e}", None)
+
+    def _apply_journal_state(self, ctx, persona: str, slug: str, memories: list[Memory], body: str) -> None:
+        """日記から感情・体調を 1 回だけ推定して persona 状態へ反映する。
+
+        値が取れない（JSON でない・空）なら何もしない。失敗は 1 行残して続行（日記自体は正）。
+        """
+        if not self._cfg.journal_apply_state:
+            return
+        service = getattr(ctx, "persona_service", None)
+        if service is None:
+            self._record_event(ctx, persona, "skipped: journal state (no persona_service)", {"slug": slug})
+            return
+        try:
+            raw = self._ask_text(self._build_state_prompt(memories, body)) or ""
+            try:
+                state = _parse_json_object(raw)
+            except ValueError:
+                logger.warning("WikiWorker: journal state is not JSON (%s)", slug)
+                return
+
+            applied: dict[str, object] = {}
+            emotion = state.get("emotion")
+            intensity = state.get("emotion_intensity")
+            if isinstance(emotion, str) and emotion and isinstance(intensity, (int, float)):
+                result = service.update_emotion(persona, emotion, float(intensity), context=f"journal:{slug}")
+                if isinstance(result, Failure):
+                    raise RuntimeError(f"update_emotion failed: {result.error}")
+                # 保存された値を残す（正規化・クランプ後に何が入ったかが監査の事実）。
+                applied["emotion"] = normalize_emotion(emotion)
+                applied["emotion_intensity"] = normalize_importance(float(intensity))
+
+            physical = state.get("physical_state")
+            mental = state.get("mental_state")
+            body_state = state.get("body_state")
+            states: dict[str, object] = {}
+            if isinstance(physical, str) and physical:
+                states["physical_state"] = physical
+            if isinstance(mental, str) and mental:
+                states["mental_state"] = mental
+            if isinstance(body_state, dict) and isinstance(body_state.get("fatigue"), (int, float)):
+                states["fatigue"] = float(body_state["fatigue"])
+            if states:
+                result = service.update_physical_state(persona, **states)
+                if isinstance(result, Failure):
+                    raise RuntimeError(f"update_physical_state failed: {result.error}")
+                applied.update(states)
+
+            if not applied:
+                return
+            self._record_event(
+                ctx,
+                persona,
+                f"applied state emotion={applied.get('emotion', '-')}"
+                f" intensity={applied.get('emotion_intensity', '-')}",
+                {"slug": slug, **applied},
+            )
+        except Exception as e:
+            # "error:" を付けると cycle 失敗として数えられ 30 分後の再挑戦を誘発する。
+            # 日記本体は書けているので、状態反映の失敗は warning 扱いにする。
+            logger.warning("WikiWorker: journal state %s failed: %s", slug, e)
+            self._record_event(ctx, persona, f"warning: journal state {slug}: {e}", None)
+
+    def _build_state_prompt(self, memories: list[Memory], body: str) -> str:
+        material = "\n".join(m.content[:_CONTENT_PREVIEW_CHARS] for m in memories)
+        return _STATE_PROMPT.format(body=body, memories=material)
+
+    def _journal_memories(self, ctx, day: date, now: datetime) -> list[Memory]:
+        """``day``（JST）に作られた記憶を created_at 昇順で最大 journal_max_sources 件。
+
+        archived も拾う。同日 2 回目のサイクルでは 1 回目が sources を archived に沈めて
+        いるので、active に絞ると再実行のたびに痩せた日記で上書きしてしまう。
+        """
+        result = ctx.memory_repo.find_all()
+        memories: list[Memory] = list(result.value) if isinstance(result, Success) else []
+        tz = now.tzinfo
+        picked = [m for m in memories if m.lifecycle_status != "tombstoned" and _local_day(m.created_at, tz) == day]
+        picked.sort(key=lambda m: m.created_at)
+        return picked[: self._cfg.journal_max_sources]
+
+    def _build_journal_prompt(
+        self,
+        day: date,
+        memories: list[Memory],
+        pages: list[WikiPage],
+        now: datetime,
+        *,
+        max_bytes: int | None = None,
+    ) -> str:
+        page_lines = [
+            json.dumps({"slug": p.slug, "title": p.title}, ensure_ascii=False)
+            for p in pages
+            if p.slug != "index" and not p.slug.startswith(_JOURNAL_SLUG_PREFIX)
+        ]
+        memory_lines = [
+            json.dumps(
+                {
+                    "key": m.key,
+                    "created_at": m.created_at.isoformat(),
+                    "content": m.content[:_CONTENT_PREVIEW_CHARS],
+                },
+                ensure_ascii=False,
+            )
+            for m in memories
+        ]
+        length_hint = (
+            "材料が 5 件未満なので短く書く（各見出し 1〜3 行、水増し禁止）"
+            if len(memories) < 5
+            else "材料が多い日は列挙せず、要点を統合して書く"
+        )
+        return _JOURNAL_PROMPT.format(
+            day=day.isoformat(),
+            now=now.isoformat(),
+            length_hint=length_hint,
+            max_bytes=self._cfg.max_page_bytes if max_bytes is None else max_bytes,
+            pages="\n".join(page_lines) or "(なし)",
+            memories="\n".join(memory_lines),
+        )
 
     def _compile_topic(
         self,
@@ -518,6 +734,10 @@ class WikiWorker:
     def _ask_llm(
         self, topic: str, memories: list[Memory], pages: list[WikiPage], now: datetime, boost: int = 0
     ) -> str | None:
+        return self._ask_text(self._build_prompt(topic, memories, pages, now), boost)
+
+    def _ask_text(self, prompt: str, boost: int = 0) -> str | None:
+        """プロンプト 1 本を LLM に渡す（テストフックはここで受ける）。"""
         if self._ask_llm_raise is not None:
             raise self._ask_llm_raise
         if self._ask_llm_for_test is not None:
@@ -533,7 +753,6 @@ class WikiWorker:
         from nous.infrastructure.llm.text_utils import collect_text
 
         provider: LLMProvider = get_provider(cfg.provider, api_key, cfg.model, cfg.base_url)
-        prompt = self._build_prompt(topic, memories, pages, now)
         max_tokens = self._max_tokens * (2**boost)
         text = asyncio.run(
             collect_text(
@@ -566,7 +785,7 @@ class WikiWorker:
                 ensure_ascii=False,
             )
             for p in pages
-            if p.slug != "index"
+            if p.slug != "index" and not p.slug.startswith(_JOURNAL_SLUG_PREFIX)
         ]
         memory_lines = [
             json.dumps(
@@ -591,18 +810,10 @@ class WikiWorker:
 
     def _parse_response(self, text: str) -> list[dict]:
         """LLM 応答 → ページ dict のリスト（コードフェンス・前後説明文を許容）。"""
-        stripped = text.strip()
-        if stripped.startswith("```"):
-            stripped = stripped.strip("`")
-            if stripped.startswith("json"):
-                stripped = stripped[4:]
-        start, end = stripped.find("{"), stripped.rfind("}")
-        if start < 0 or end <= start:
-            raise ValueError("no JSON object found in response")
         # 呼び出し側（_compile_topic）が ValueError/JSONDecodeError を捕捉して
         # 監査に error 行を書きファイルを変えない契約。ここで握り潰さない。
-        data = json.loads(stripped[start : end + 1])
-        pages = data.get("pages") if isinstance(data, dict) else None
+        data = _parse_json_object(text)
+        pages = data.get("pages")
         if not isinstance(pages, list):
             raise ValueError("missing 'pages' array")
         return [p for p in pages if isinstance(p, dict)]
@@ -632,6 +843,64 @@ class WikiWorker:
             )
         except Exception:
             logger.exception("WikiWorker: failed to record event")
+
+
+def _local_day(ts: datetime, tz: tzinfo | None) -> date:
+    """datetime を ``tz`` の日付にする（naive は tz 付きとみなす）。"""
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=tz)
+    if tz is None:
+        return ts.date()
+    return ts.astimezone(tz).date()
+
+
+def _parse_json_object(text: str) -> dict:
+    """LLM 応答から最初の JSON オブジェクトを取り出す（コードフェンス・前後説明文を許容）。"""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = stripped.strip("`")
+        if stripped.startswith("json"):
+            stripped = stripped[4:]
+    start, end = stripped.find("{"), stripped.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("no JSON object found in response")
+    data = json.loads(stripped[start : end + 1])
+    if not isinstance(data, dict):
+        raise ValueError("response is not a JSON object")
+    return data
+
+
+def _strip_code_fence(text: str) -> str:
+    """LLM 本文のコードフェンス（markdown の 3 連バックティック）を剥がす。
+
+    閉じフェンスより後ろ（説明文など）は捨てる。閉じフェンスが無ければ全部本文。
+    """
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    lines = stripped.splitlines()[1:]
+    for i, line in enumerate(lines):
+        if line.strip() == "```":
+            lines = lines[:i]
+            break
+    return "\n".join(lines).strip()
+
+
+def _frontmatter_bytes(slug: str, title: str, sources: tuple[str, ...], tag: str) -> int:
+    """frontmatter の実測バイト数（本文予算 = max_page_bytes - これ）。"""
+    from nous.infrastructure.wiki.store import WikiPage, render_page
+
+    page = WikiPage(
+        slug=slug,
+        title=title,
+        body="",
+        project=None,
+        sources=tuple(sources),
+        tags=("journal", tag),
+        updated="",
+        links=(),
+    )
+    return len(render_page(page).encode("utf-8"))
 
 
 def _topic_of(memory: Memory) -> str:

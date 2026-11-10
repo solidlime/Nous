@@ -97,3 +97,15 @@ async def test_grep_respects_limit(tmp_path):
     await _tool_wiki_write(ctx, "herta", "herta-a", "A", "派 派 派" + chr(10) + "派 派")
     result = _payload(await _tool_wiki_grep(ctx, "herta", "派", limit=2))
     assert result["total"] == 2
+
+
+async def test_write_preserves_existing_tags(tmp_path):
+    """既存ページを書いてもタグは消えない（journal タグの一括参照を守る）。"""
+    from nous.infrastructure.wiki.store import WikiStore
+
+    ctx = _ctx(tmp_path)
+    store = WikiStore(str(tmp_path), "herta")
+    assert store.write_page("journal-2026-11-09", "d", "本文", tags=("journal", "2026-11")).is_ok
+
+    assert _payload(await _tool_wiki_write(ctx, "herta", "journal-2026-11-09", "d", "書き直し"))["ok"] is True
+    assert store.read_page("journal-2026-11-09").value.tags == ("journal", "2026-11")

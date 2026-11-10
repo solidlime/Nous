@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from nous.api.mcp._envelope import ToolErrorCode, tool_error, tool_ok
-from nous.domain.shared.result import Failure
+from nous.domain.shared.result import Failure, Success
 from nous.infrastructure.wiki.store import WikiStore
 
 if TYPE_CHECKING:
@@ -69,13 +69,20 @@ async def _tool_wiki_write(
     project: str | None = None,
     sources: list[str] | None = None,
 ) -> str:
-    """wiki ページを書く（slug は ``project-<slug>-<topic>`` か ``<persona>-<topic>``）。"""
-    result = _store(ctx, persona).write_page(
+    """wiki ページを書く（slug は ``project-<slug>-<topic>`` か ``<persona>-<topic>``）。
+
+    既存ページの ``tags`` は引き継ぐ（書いたことでタグが消えない）。
+    """
+    store = _store(ctx, persona)
+    prior = store.read_page(slug)
+    prior_page = prior.value if isinstance(prior, Success) else None
+    result = store.write_page(
         slug,
         title,
         body,
         project=project,
         sources=tuple(sources or ()),
+        tags=prior_page.tags if prior_page else (),
     )
     if isinstance(result, Failure):
         return tool_error(ToolErrorCode.VALIDATION_ERROR, str(result.error))

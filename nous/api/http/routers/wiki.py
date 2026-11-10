@@ -140,6 +140,7 @@ def register_wiki_routes(mcp) -> None:
             body,
             project=project,
             sources=prior.sources if prior else (),
+            tags=prior.tags if prior else (),
         )
         if isinstance(written, Failure):
             return JSONResponse({"error": str(written.error)}, status_code=400)

@@ -126,3 +126,54 @@ def test_persona_validation(tmp_path):
     for bad in ("../x", "a/b", "", "."):
         with pytest.raises(WikiStoreError):
             WikiStore(tmp_path, bad)
+
+
+def test_tags_roundtrip(store):
+    """tags は書いた値のまま読み戻せる（render → parse も同値）。"""
+    assert store.write_page(
+        "journal-2026-11-09", title="記録", body="x", sources=("m1",), tags=("journal", "2026-11")
+    ).is_ok
+    page = store.read_page("journal-2026-11-09").value
+    assert page.tags == ("journal", "2026-11")
+    assert parse_page("s", render_page(page)).tags == page.tags
+
+
+def test_invalid_tags_are_dropped(store):
+    """strip + lower してから検証。大文字は正規化、記号・長すぎ・9 個目・重複は捨てる。"""
+    long_tag = "a" * 25
+    too_many = tuple(f"t{i}" for i in range(9))
+    assert store.write_page(
+        "p-tags", title="t", body="b", tags=("Journal", "bad tag!", long_tag, "ok_tag", *too_many)
+    ).is_ok
+    assert store.read_page("p-tags").value.tags == (
+        "journal",
+        "ok_tag",
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t4",
+        "t5",
+    )
+
+
+def test_empty_tags_emit_no_frontmatter_line(store):
+    """tags 空なら ``tags:`` 行は出さない（既存ページの形を変えない）。"""
+    assert store.write_page("p-plain", title="t", body="b").is_ok
+    raw = (store.root / "p-plain.md").read_text(encoding="utf-8")
+    assert "tags:" not in raw
+    assert store.read_page("p-plain").value.tags == ()
+
+
+def test_index_keeps_recent_journals_in_own_section(store):
+    """日記は通常ページの枠を食い潰さず、専用節に直近分だけ並ぶ。"""
+    store.write_page("project-nous", title="NOUS", body="x", project="nous")
+    for day in range(1, 12):
+        store.write_page(f"journal-2026-11-{day:02d}", title=f"2026-11-{day:02d} の記録", body="y")
+
+    index = store.read_page(INDEX_SLUG).value.body
+    assert "## 日記" in index
+    assert "[[journal-2026-11-11]]" in index  # 新しい順に載る
+    assert "[[journal-2026-11-01]]" not in index  # 7 件を超えた分は畳む
+    assert "他 4 日分" in index
+    assert "[[project-nous]]" in index

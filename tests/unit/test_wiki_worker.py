@@ -12,8 +12,10 @@ Qdrant 索引は worker.vector_enabled=False で無効化（LLM 同様、外部�
 from __future__ import annotations
 
 import json
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+from zoneinfo import ZoneInfo
 
 from nous.application.workers.wiki_worker import MIN_TOPIC_MEMORIES, WikiWorker
 from nous.domain.memory.entities import Memory
@@ -745,3 +747,422 @@ class TestErrorRetry:
             assert worker._cycle_errors == 1
         finally:
             conn.close()
+
+
+# ---------------------------------------------------------------------------
+# 日記（#38）
+# ---------------------------------------------------------------------------
+
+_JST = ZoneInfo("Asia/Tokyo")
+_DAY = "2026-11-09"
+
+
+def _mem_at(key: str, ts: datetime, *, lifecycle: str = "active") -> Memory:
+    return Memory(
+        key=key,
+        content=f"{key} の記憶内容。日記の材料になる本文。",
+        created_at=ts,
+        updated_at=ts,
+        importance=0.6,
+        kind="semantic",
+        source_type="user_stated",
+        lifecycle_status=lifecycle,
+        tags=[],
+    )
+
+
+def _journal_setup(
+    tmp_path, memories: list[Memory], llm: str | None, raise_exc: Exception | None = None, cfg_update=None
+):
+    conn = SQLiteConnection(data_dir=str(tmp_path), persona="test_ww")
+    conn.initialize_schema()
+    repo = SQLiteMemoryRepository(conn)
+    for m in memories:
+        repo.save(m)
+    ctx = SimpleNamespace(memory_repo=repo, connection=conn)
+    worker = WikiWorker(_settings(tmp_path))
+    if cfg_update:
+        worker._cfg = worker._cfg.model_copy(update=cfg_update)
+    worker.vector_enabled = False
+    worker._ask_llm_for_test = llm  # type: ignore[attr-defined]
+    worker._ask_llm_raise = raise_exc  # type: ignore[attr-defined]
+    return conn, worker, ctx
+
+
+class TestJournal:
+    _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+    _body = "## やったこと\n\n- 日記のテストを書いた\n\n## 決めたこと\n\n- なし"
+
+    def test_only_previous_jst_day_is_collected(self, tmp_path) -> None:
+        """前日 JST の 00:01 と 23:59 だけ拾い、当日 00:01 と一昨日は落とす。"""
+        memories = [
+            _mem_at("old", datetime(2026, 11, 8, 23, 0, tzinfo=_JST)),
+            _mem_at("late", datetime(2026, 11, 9, 23, 59, tzinfo=_JST)),
+            _mem_at("early", datetime(2026, 11, 9, 0, 1, tzinfo=_JST)),
+            _mem_at("today", datetime(2026, 11, 10, 0, 1, tzinfo=_JST)),
+        ]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            page = _store(tmp_path).read_page(f"journal-{_DAY}").value
+            assert page.sources == ("early", "late")  # created_at 昇順
+            assert page.title == f"{_DAY} の記録"
+            assert page.tags == ("journal", "2026-11")
+            assert page.body.startswith("## やったこと")
+            summaries = [s for _t, s, _d in _event_rows(conn)]
+            assert f"created journal-{_DAY} from 2 memories" in summaries
+        finally:
+            conn.close()
+
+    def test_no_memories_writes_nothing(self, tmp_path) -> None:
+        """前日に記憶が無ければページも監査イベントも作らない。"""
+        memories = [_mem_at("today", datetime(2026, 11, 10, 0, 1, tzinfo=_JST))]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert _store(tmp_path).list_slugs() == []
+            assert [s for _t, s, _d in _event_rows(conn) if "journal" in s] == []
+        finally:
+            conn.close()
+
+    def test_same_day_twice_keeps_one_page(self, tmp_path) -> None:
+        """同日 2 回走っても slug は 1 つ（2 回目は updated）。"""
+        memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
+        store = _store(tmp_path)
+        try:
+            worker._compile_journal(ctx, "test_ww", store, self._now)
+            worker._compile_journal(ctx, "test_ww", store, self._now)
+            assert [s for s in store.list_slugs() if s.startswith("journal-")] == [f"journal-{_DAY}"]
+            actions = [s.split()[0] for _t, s, _d in _event_rows(conn) if "journal-" in s]
+            assert actions == ["created", "updated"]
+        finally:
+            conn.close()
+
+    def test_sources_capped_by_config(self, tmp_path) -> None:
+        """材料は journal_max_sources 件まで（created_at 昇順で先勝ち）。"""
+        base = datetime(2026, 11, 9, 0, 0, tzinfo=_JST)
+        memories = [_mem_at(f"m{i:02d}", base + timedelta(minutes=i)) for i in range(61)]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            page = _store(tmp_path).read_page(f"journal-{_DAY}").value
+            assert len(page.sources) == 60
+            assert page.sources[0] == "m00" and page.sources[-1] == "m59"
+        finally:
+            conn.close()
+
+    def test_llm_failure_records_error_and_keeps_cycle_alive(self, tmp_path) -> None:
+        """LLM 失敗は error 行を残し、ページは作らない（例外は外に漏らさない）。"""
+        memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, None, raise_exc=RuntimeError("boom"))
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert _store(tmp_path).list_slugs() == []
+            assert f"error: journal {_DAY}: boom" in [s for _t, s, _d in _event_rows(conn)]
+        finally:
+            conn.close()
+
+    def test_prompt_has_fixed_headings_and_short_hint(self, tmp_path) -> None:
+        memories = [_mem_at(f"m{i}", datetime(2026, 11, 9, 10, 0, tzinfo=_JST)) for i in range(2)]
+        conn, worker, _ctx = _journal_setup(tmp_path, memories, self._body)
+        try:
+            prompt = worker._build_journal_prompt(date(2026, 11, 9), memories, [], self._now)
+            for heading in (
+                "## やったこと",
+                "## 感想",
+                "## 決めたこと",
+                "## 引っかかったこと",
+                "## 未解決",
+            ):
+                assert heading in prompt
+            assert "材料に無い事実は書かない" in prompt
+            assert "短く書く" in prompt
+            six = memories * 3
+            assert "短く書く" not in worker._build_journal_prompt(date(2026, 11, 9), six, [], self._now)
+        finally:
+            conn.close()
+
+    def test_state_applied_to_persona(self, tmp_path) -> None:
+        """2 回目の呼び出しの JSON で感情・体調を 1 回だけ反映する。"""
+        memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, None)
+        service = _fake_service()
+        ctx.persona_service = service
+        worker._ask_text = _fake_llm([self._body, _STATE_JSON])  # type: ignore[method-assign]
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert _store(tmp_path).read_page(f"journal-{_DAY}").is_ok
+            service.update_emotion.assert_called_once_with("test_ww", "happy", 0.8, context=f"journal:journal-{_DAY}")
+            assert service.update_physical_state.call_args.kwargs == {
+                "physical_state": "落ち着いている",
+                "mental_state": "集中している",
+                "fatigue": 0.3,
+            }
+            # 監査は「保存された値」を書く（happy は normalize_emotion で joy になる）
+            assert "applied state emotion=joy intensity=0.8" in [s for _t, s, _d in _event_rows(conn)]
+        finally:
+            conn.close()
+
+    def test_state_can_be_disabled(self, tmp_path) -> None:
+        """journal_apply_state=False なら状態反映も LLM 呼び出しもしない。"""
+        memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, None, cfg_update={"journal_apply_state": False})
+        service = _fake_service()
+        ctx.persona_service = service
+        worker._ask_text = _fake_llm([self._body, _STATE_JSON])  # type: ignore[method-assign]
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            service.update_emotion.assert_not_called()
+            service.update_physical_state.assert_not_called()
+            assert [s for _t, s, _d in _event_rows(conn) if "applied state" in s] == []
+        finally:
+            conn.close()
+
+    def test_state_empty_response_updates_nothing(self, tmp_path) -> None:
+        """状態推定が空/非 JSON なら何もしない（error 行も出さない）。"""
+        memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, None)
+        service = _fake_service()
+        ctx.persona_service = service
+        worker._ask_text = _fake_llm([self._body, ""])  # type: ignore[method-assign]
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            service.update_emotion.assert_not_called()
+            assert [s for _t, s, _d in _event_rows(conn) if "journal state" in s] == []
+        finally:
+            conn.close()
+
+    def test_state_failure_does_not_stop_cycle(self, tmp_path) -> None:
+        """状態反映が落ちても日記は残り、error 行だけが増える。"""
+        memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, None)
+        service = _fake_service()
+        service.update_emotion.side_effect = RuntimeError("db down")
+        ctx.persona_service = service
+        worker._ask_text = _fake_llm([self._body, _STATE_JSON])  # type: ignore[method-assign]
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert _store(tmp_path).read_page(f"journal-{_DAY}").is_ok
+            summaries = [s for _t, s, _d in _event_rows(conn)]
+            # 日記本体は成功しているので cycle 失敗には数えない（warning 扱い）
+            assert f"warning: journal state journal-{_DAY}: db down" in summaries
+        finally:
+            conn.close()
+
+
+_STATE_JSON = json.dumps(
+    {
+        "emotion": "happy",
+        "emotion_intensity": 0.8,
+        "physical_state": "落ち着いている",
+        "mental_state": "集中している",
+        "body_state": {"fatigue": 0.3},
+    },
+    ensure_ascii=False,
+)
+
+
+def _fake_service() -> MagicMock:
+    service = MagicMock()
+    service.update_emotion.return_value = Success(None)
+    service.update_physical_state.return_value = Success(None)
+    return service
+
+
+def _fake_llm(responses: list[str]):
+    seq = list(responses)
+
+    def ask(prompt: str, boost: int = 0) -> str:
+        return seq.pop(0) if seq else ""
+
+    return ask
+
+
+class TestJournalIsolation:
+    """日記が topic 編纂の巡回・プロンプト・削除に混ざらないこと（静かに壊れる箇所の番人）。"""
+
+    _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+
+    def _seed_journal(self, tmp_path) -> WikiStore:
+        store = _store(tmp_path)
+        store.write_page(
+            "journal-2026-11-09",
+            "2026-11-09 の記録",
+            "## やったこと\n\n- 日記",
+            sources=("a",),
+            tags=("journal", "2026-11"),
+        )
+        return store
+
+    def test_last_compiled_ignores_journal(self, tmp_path) -> None:
+        """日記は topic の「編纂済み」判定に入らない（入ると topic が巡回から落ちる）。"""
+        store = self._seed_journal(tmp_path)
+        store.write_page("project-nous-x", "x", "body", project="nous", sources=("m1",))
+        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
+        try:
+            assert "journal-2026-11-09" not in worker._last_compiled(store)
+            assert set(worker._last_compiled(store)) == {"project-nous"}
+        finally:
+            conn.close()
+
+    def test_stale_topics_ignores_journal(self, tmp_path) -> None:
+        """日記の sources が消えても stale 扱いにしない。"""
+        store = self._seed_journal(tmp_path)
+        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
+        try:
+            assert worker._stale_topics(store, [], "test_ww") == set()
+        finally:
+            conn.close()
+
+    def test_build_prompt_excludes_journal_pages(self, tmp_path) -> None:
+        """topic 編纂プロンプトに日記の slug が載らない（token が日数分だけ膨らむ）。"""
+        store = self._seed_journal(tmp_path)
+        store.write_page("project-nous-x", "x", "body", project="nous", sources=("m1",))
+        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
+        try:
+            prompt = worker._build_prompt("project-nous", [], store.list_pages(), self._now)
+            assert "journal-2026-11-09" not in prompt
+            assert "project-nous-x" in prompt
+        finally:
+            conn.close()
+
+    def test_delete_ignores_journal_slug(self, tmp_path) -> None:
+        """LLM が delete に日記を入れても消えない（slug 接頭辞ガード）。"""
+        store = self._seed_journal(tmp_path)
+        conn, worker, ctx = _journal_setup(tmp_path, [], None)
+        candidate = _mem("src", tags=["project:nous"])
+        page = {
+            "slug": "project-nous-x",
+            "title": "x",
+            "body": "body",
+            "sources": ["src"],
+            "delete": ["journal-2026-11-09"],
+        }
+        try:
+            worker._apply_page(
+                ctx,
+                "test_ww",
+                store,
+                "project-nous",
+                page,
+                {"src": candidate},
+                {"journal-2026-11-09", "project-nous-x"},
+                set(),
+            )
+            assert store.read_page("journal-2026-11-09").is_ok
+        finally:
+            conn.close()
+
+    def test_compile_persona_runs_journal_first(self, tmp_path) -> None:
+        """日記 → topic の順（逆だと topic が sources を archived に沈めて日記が痩せる）。"""
+        memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
+        memory_topic = [_mem_at(f"p{i}", datetime(2026, 11, 9, 11, 0, tzinfo=_JST)) for i in range(3)]
+        for m in memory_topic:
+            m.tags = ["project:zzz"]
+        conn, worker, ctx = _journal_setup(tmp_path, memories + memory_topic, None)
+        order: list[str] = []
+        worker._compile_journal = lambda *a, **k: order.append("journal")  # type: ignore[method-assign]
+        worker._compile_topic = lambda *a, **k: order.append("topic")  # type: ignore[method-assign]
+        worker._repair_links = lambda *a, **k: order.append("repair") or 0  # type: ignore[method-assign]
+        worker._cfg = worker._cfg.model_copy(update={"journal_enabled": True})
+        try:
+            worker._cfg = worker._cfg.model_copy(update={"min_memories_per_topic": 3})
+            worker._compile_persona(ctx, "test_ww")
+            assert order and order[0] == "journal" and order[-1] == "repair"
+        finally:
+            conn.close()
+
+    def test_body_budget_leaves_room_for_frontmatter(self, tmp_path) -> None:
+        """sources が多くてもページが書ける（本文予算 = max_page_bytes - frontmatter 実測）。"""
+        base = datetime(2026, 11, 9, 0, 0, tzinfo=_JST)
+        memories = [_mem_at(f"memory_key_{i:03d}", base + timedelta(minutes=i)) for i in range(60)]
+        body = "x" * 7000
+        conn, worker, ctx = _journal_setup(tmp_path, memories, body)
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            page = _store(tmp_path).read_page("journal-2026-11-09")
+            assert page.is_ok, page.error if hasattr(page, "error") else "write failed"
+        finally:
+            conn.close()
+
+
+class TestStripCodeFence:
+    def test_text_after_closing_fence_is_dropped(self) -> None:
+        """閉じフェンスの後ろの説明文は本文に混ぜない。"""
+        from nous.application.workers.wiki_worker import _strip_code_fence
+
+        raw = "```markdown\n## やったこと\n\n- x\n```\n以上の通りです。"
+        assert _strip_code_fence(raw) == "## やったこと\n\n- x"
+
+    def test_unclosed_fence_keeps_body(self) -> None:
+        """閉じフェンスが無ければ全部本文（途中で切れた応答でも書ける）。"""
+        from nous.application.workers.wiki_worker import _strip_code_fence
+
+        assert _strip_code_fence("```markdown\n## やったこと\n- x") == "## やったこと\n- x"
+
+    def test_no_fence_is_returned_stripped(self) -> None:
+        from nous.application.workers.wiki_worker import _strip_code_fence
+
+        assert _strip_code_fence("  ## やったこと\n- x \n") == "## やったこと\n- x"
+
+
+class TestJournalStateInstrumentation:
+    _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+    _body = "## やったこと\n\n- 日記"
+
+    def test_no_persona_service_records_skip(self, tmp_path) -> None:
+        """persona_service が無いときは黙って何もしないのではなく 1 行残す。"""
+        memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
+        worker._ask_text = _fake_llm([self._body])  # type: ignore[method-assign]
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            summaries = [s for _t, s, _d in _event_rows(conn)]
+            assert "skipped: journal state (no persona_service)" in summaries
+        finally:
+            conn.close()
+
+    def test_state_failure_is_not_a_cycle_error(self, tmp_path) -> None:
+        """状態反映の失敗で cycle を失敗扱いにしない（30 分後の無駄な再挑戦を避ける）。"""
+        memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, None)
+        service = _fake_service()
+        service.update_emotion.side_effect = RuntimeError("db down")
+        ctx.persona_service = service
+        worker._ask_text = _fake_llm([self._body, _STATE_JSON])  # type: ignore[method-assign]
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert worker._cycle_errors == 0
+        finally:
+            conn.close()
+
+
+class TestRetryScheduling:
+    def test_failed_cycle_retries_soon_instead_of_next_day(self, tmp_path) -> None:
+        """失敗があったら翌日まで待たず、短い再挑戦間隔で回し直す（例外で日を捨てない）。"""
+        worker = WikiWorker(_settings(tmp_path))
+        worker._cfg = worker._cfg.model_copy(update={"run_at_hour": 3})
+        worker._error_retry_seconds = 0.01
+        worker._empty_retries = 0
+        planned: list[float] = []
+
+        def fake_next_delay() -> float:
+            # 1 回目は即実行、2 回目以降は「翌日」を返す（再挑戦がこれを無視することを見る）。
+            planned.append(1.0 if planned else 0.0)
+            return 86400.0 if len(planned) > 1 else 0.0
+
+        worker._next_delay = fake_next_delay  # type: ignore[method-assign]
+        calls: list[int] = []
+
+        def run_cycle() -> None:
+            calls.append(len(calls))
+            if len(calls) == 1:
+                worker._cycle_errors = 1  # 1 周目は失敗したことにする
+            else:
+                worker._stop_event.set()  # 2 周目で止める
+
+        worker.run_cycle = run_cycle  # type: ignore[method-assign]
+        worker._run()
+        assert len(calls) == 2
+        assert len(planned) == 1  # 再挑戦では定刻を引き直さない

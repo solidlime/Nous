@@ -25,7 +25,6 @@ logger = get_logger(__name__)
 
 #: index page slug (auto maintained, never written through write_page).
 INDEX_SLUG = "index"
-
 #: hard cap for a single page body (plan §3.1: Borges map avoidance).
 MAX_PAGE_BYTES = 8192
 
@@ -36,11 +35,22 @@ _SLUG_SEGMENT_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _WIKILINK_RE = re.compile(r"\[\[([^\]\n]+)\]\]")
 _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.DOTALL)
 
+#: ページタグの形（frontmatter ``tags:``）。不正値は捨てる。
+_TAG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,23}$")
+#: 1 ページが持てるタグ数。超過分は捨てる（順序は先勝ち）。
+MAX_TAGS = 8
+
 #: first N chars of body used as the one-line summary in index.md.
 _INDEX_SUMMARY_CHARS = 80
 
 #: index.md の最大行数（上位層を小さく保つ契約。超分は 「… +N more」に畳む）。
 MAX_INDEX_LINES = 120
+
+#: index.md に並べる日記の最大件数（古い日記は件数表示に畳む）。
+MAX_INDEX_JOURNALS = 7
+
+#: 日記ページの slug 接頭辞（``journal-YYYY-MM-DD``）。index では別節にする。
+JOURNAL_SLUG_PREFIX = "journal-"
 
 
 class WikiStoreError(Exception):
@@ -56,6 +66,7 @@ class WikiPage:
     body: str
     project: str | None = None
     sources: tuple[str, ...] = ()
+    tags: tuple[str, ...] = ()
     updated: str | None = None
     links: tuple[str, ...] = field(default_factory=tuple)
 
@@ -80,6 +91,21 @@ def _parse_sources(raw: str) -> tuple[str, ...]:
     return tuple(item.strip() for item in raw.split(",") if item.strip())
 
 
+def _parse_tags(raw: str) -> tuple[str, ...]:
+    """カンマ区切りのタグを正規化する（strip + lower、不正値と 9 個目以降は捨てる）。
+
+    壊れた frontmatter でページ全体を落とさないため、例外にはしない。
+    """
+    tags: list[str] = []
+    for item in raw.split(","):
+        tag = item.strip().lower()
+        if _TAG_RE.match(tag) and tag not in tags:
+            tags.append(tag)
+            if len(tags) >= MAX_TAGS:
+                break
+    return tuple(tags)
+
+
 def extract_links(body: str) -> tuple[str, ...]:
     """本文の ``[[slug]]`` / ``[[slug|表示名]]`` からリンク先 slug を抽出する。"""
     links: list[str] = []
@@ -99,6 +125,7 @@ def parse_page(slug: str, raw: str) -> WikiPage:
         body=body.strip("\n"),
         project=meta.get("project") or None,
         sources=_parse_sources(meta.get("sources", "")),
+        tags=_parse_tags(meta.get("tags", "")),
         updated=meta.get("updated") or None,
         links=extract_links(body),
         # 旧 frontmatter の ``manual: true`` は読み捨てる（編集保護は廃止）。
@@ -112,6 +139,9 @@ def render_page(page: WikiPage) -> str:
         lines.append(f"project: {page.project}")
     if page.sources:
         lines.append(f"sources: {', '.join(page.sources)}")
+    tags = _parse_tags(",".join(page.tags))
+    if tags:
+        lines.append(f"tags: {', '.join(tags)}")
     lines.append(f"updated: {page.updated or _now_iso()}")
     lines.append("---")
     lines.append("")
@@ -221,6 +251,7 @@ class WikiStore:
         body: str,
         project: str | None = None,
         sources: tuple[str, ...] = (),
+        tags: tuple[str, ...] = (),
     ) -> Result[WikiPage, WikiStoreError]:
         """ページを原子的に書き込み、``index.md`` を更新する。
 
@@ -238,6 +269,7 @@ class WikiStore:
             body=body.strip("\n"),
             project=project,
             sources=tuple(sources),
+            tags=_parse_tags(",".join(tags)),
             updated=_now_iso(),
             links=extract_links(body),
         )
@@ -317,6 +349,11 @@ class WikiStore:
         畳む（計画 §4.4 の「上位層は小さく保つ」契約）。
         """
         pages = sorted(self.list_pages(), key=lambda p: (p.project or "~", p.slug))
+        # 日記は 1 枚/日で無期限に増えるので、通常ページと同じ枠で並べると
+        # 古い順に切り飛ばされていく（project=None は末尾に並ぶため）。
+        # 直近の数枚だけを専用節に置き、残りは件数で見せる。
+        journals = [p for p in pages if p.slug.startswith(JOURNAL_SLUG_PREFIX)]
+        pages = [p for p in pages if not p.slug.startswith(JOURNAL_SLUG_PREFIX)]
         rows: list[str] = ["# Wiki index", ""]
         shown = pages[:MAX_INDEX_LINES]
         for page in shown:
@@ -325,6 +362,13 @@ class WikiStore:
             rows.append(f"- [[{page.slug}]] — {label}: {summary}")
         if len(pages) > len(shown):
             rows.append(f"- … +{len(pages) - len(shown)} more pages (wiki_ls で全件)")
+        if journals:
+            rows += ["", "## 日記", ""]
+            for page in sorted(journals, key=lambda p: p.slug, reverse=True)[:MAX_INDEX_JOURNALS]:
+                rows.append(f"- [[{page.slug}]] — {page.title}")
+            rest = len(journals) - MAX_INDEX_JOURNALS
+            if rest > 0:
+                rows.append(f"- … 他 {rest} 日分（wiki_ls で全件）")
         rows.append("")
         try:
             self.root.mkdir(parents=True, exist_ok=True)

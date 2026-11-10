@@ -110,11 +110,11 @@ def read_routes(tmp_path):
     return mcp, ctx
 
 
-def _write_page(tmp_path, persona="herta", slug="project-nous", title="Nous", body="本文", sources=("m1",)):
+def _write_page(tmp_path, persona="herta", slug="project-nous", title="Nous", body="本文", sources=("m1",), tags=()):
     from nous.infrastructure.wiki.store import WikiStore
 
     store = WikiStore(tmp_path, persona)
-    result = store.write_page(slug=slug, title=title, body=body, project="nous", sources=sources)
+    result = store.write_page(slug=slug, title=title, body=body, project="nous", sources=sources, tags=tags)
     assert result.is_ok, result
     return store
 
@@ -269,6 +269,28 @@ class TestWikiSaveApi:
         )
         assert "manual" not in raw
         assert calls == [("herta", "project-nous", "直した題名", "誤字を直した本文")]
+
+    async def test_put_preserves_tags(self, read_routes):
+        """GUI 保存で tags が消えない（journal タグで一括参照できる前提を守る）。"""
+        mcp, ctx = read_routes
+        _write_page(tmp_path=ctx.settings.data_root, tags=("journal", "2026-11"))
+
+        async def _fake_sync(*_a, **_k):
+            return None
+
+        with (
+            patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx),
+            patch("nous.api.http.routers.wiki.async_sync_page", _fake_sync),
+        ):
+            resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "PUT")(
+                _put_request(payload={"body": "編集した本文"})
+            )
+        assert resp.status_code == 200
+
+        from nous.infrastructure.wiki.store import WikiStore
+
+        stored = WikiStore(ctx.settings.data_root, "herta").read_page("project-nous").value
+        assert stored.tags == ("journal", "2026-11")
 
     @pytest.mark.asyncio
     async def test_traversal_rejected(self, read_routes):

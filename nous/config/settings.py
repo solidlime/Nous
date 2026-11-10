@@ -326,6 +326,11 @@ class WikiConfig(BaseModel):
         return value
 
     topics_per_cycle: int = 2  # 1 cycle で編纂する topic 数
+    # 日記（前日 JST の記憶を 1 ページに）。専用ストレージは作らない（wiki ページ）。
+    journal_enabled: bool = True
+    journal_max_sources: int = 60  # 日記 1 ページの材料上限
+    # 日記生成後に感情・体調を 1 回反映する（LLM 呼び出し +1）。
+    journal_apply_state: bool = True
     archive_sources: bool = True  # 編纂済みの源記憶を archived へ沈める（削除はしない）
     max_memories_per_topic: int = 40
     max_sources_per_page: int = 40  # ページ 1 枚の sources 上限（超過は分割を強制）
