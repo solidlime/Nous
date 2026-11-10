@@ -958,9 +958,9 @@ class WikiWorker:
             page = store.read_page(slug)
         except Exception:  # noqa: BLE001 — タグが付かないだけで害は無い
             return None
-        if not getattr(page, "is_ok", False):
+        if isinstance(page, Failure):
             return None
-        project = getattr(page.value, "project", None)  # type: ignore[union-attr]
+        project = getattr(page.value, "project", None)
         return str(project) if project else None
 
     def _record_open_question(
