@@ -212,6 +212,8 @@ nous/
 - **常載プロフィールドキュメント**（item 3）: `profile_update` ツールで persona_blocks に常載ブロックを登録、検索とは別に毎ターン注入。
 - **日次 consolidation（item 4）**: `ConsolidationWorker` が archived 記憶（既に gist 化済みのものは除外）をクラスタリングし gist を生成。
 - **日次 wiki 編纂（item 5）**: `WikiWorker` が定刻（既定 03:00 JST = `NOUS_WIKI__RUN_AT_TZ`、`--hour` は `NOUS_WIKI__RUN_AT_HOUR`）に起動し、未編纂の記憶をトピックページへまとめ、源記憶を `archived` に落とす。LLM が空応答/切れ JSON を返した場合は max_tokens を 2 倍にして 1 回だけ再試行し、サイクル内に error が残ったら 30 分後に再挑戦する（丸 1 日空けない）。
+  1 サイクルは 3 段: (1) 前日（JST）の記憶から `journal-YYYY-MM-DD` 日記ページを作る、(2) トピックページを編纂する、(3) 編纂応答の `conflicts` / `questions` を監査イベントと `open-question` 記憶に落とす（追加 LLM 呼び出しなし）。続いて `questions` を**persona に登録済みの MCP ツールだけ**で調べ（`research_enabled`）、URL が取れたものだけページ末尾の `## 外部情報` に追記する。ツール 0 件なら何もしない（`skipped: no mcp tool` の 1 行）。
+  記憶層の矛盾掃除は週 1 回（`memory_conflict_interval_hours`=168）別建てで走る: 同 project タグ + 本文 Jaccard + 数値の食い違いで候補を純関数抽出し（LLM 0 回）、`classify_contradiction` を `memory_conflict_max_pairs`=10 件まで適用、矛盾なら古い側の `valid_until` を閉じて `superseded_by` で繋ぐ（削除しない）。全件判定不能な回は `warning:` で記録し、週次ゲートを再武装しない。
 
 残る常駐 worker は `ConsolidationWorker` と `WikiWorker` の 2 つ（Curation / Freshness / Enrichment / Decay は 2026-11-08 に廃止）。
 

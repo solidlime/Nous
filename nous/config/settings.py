@@ -331,6 +331,17 @@ class WikiConfig(BaseModel):
     journal_max_sources: int = 60  # 日記 1 ページの材料上限
     # 日記生成後に感情・体調を 1 回反映する（LLM 呼び出し +1）。
     journal_apply_state: bool = True
+    # 矛盾整理（#39）。wiki 層は編纂プロンプトの conflicts で拾い（追加呼び出しなし）、
+    # 記憶層は週次掃除で classify_contradiction を回す（LLM は max_pairs でハードストップ）。
+    conflict_sweep_enabled: bool = True
+    conflict_check_enabled: bool = True  # wiki 編纂プロンプトに conflicts/questions を要求するか
+    memory_conflict_max_pairs: int = 10  # 1 回の掃除で LLM に渡す候補ペア上限
+    memory_conflict_interval_hours: int = 168  # 掃除の間隔（7 日）
+    memory_conflict_min_jaccard: float = 0.5  # 候補抽出の本文類似度しきい値
+    # 自走調査（#40）。登録済み MCP ツールがある時だけ動く（無ければ何もしない）。
+    research_enabled: bool = True
+    max_research_per_cycle: int = 3  # 1 サイクルで調べる質問数
+    research_max_tool_calls: int = 3  # 1 質問あたりのツール実行上限
     archive_sources: bool = True  # 編纂済みの源記憶を archived へ沈める（削除はしない）
     max_memories_per_topic: int = 40
     max_sources_per_page: int = 40  # ページ 1 枚の sources 上限（超過は分割を強制）

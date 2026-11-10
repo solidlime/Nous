@@ -17,16 +17,20 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import threading
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING
 
 from nous.application.wiki import vector_index
+from nous.application.wiki.research import research
 from nous.domain.shared.result import Failure, Success
 from nous.domain.value_objects import normalize_emotion, normalize_importance
 from nous.infrastructure.logging.structured import get_logger
+from nous.infrastructure.wiki.store import INDEX_SLUG, render_page
 
 if TYPE_CHECKING:
     from nous.config.settings import Settings, WikiConfig
@@ -66,6 +70,7 @@ wiki ページ（Markdown 本文）を作成または改訂してください。
   既存 slug をそのまま使う。新規トピックを分けたい場合のみ新しい slug を提案する。
 - **sources には必ず上記記憶リストの key だけを入れる**（存在しない key は捨てられる）。
 - 旧ページを統合して不要になった場合のみ delete にその slug を入れる。
+{conflict_instructions}
 
 既存 wiki ページ:
 {pages}
@@ -74,8 +79,20 @@ wiki ページ（Markdown 本文）を作成または改訂してください。
 {memories}
 
 以下の JSON のみを返してください（説明文は不要）:
-{{"pages": [{{"slug": "...", "title": "...", "body": "Markdown本文", "sources": ["<memory key>", ...], "delete": ["<slug>", ...]}}]}}
+{{"pages": [{{"slug": "...", "title": "...", "body": "Markdown本文", "sources": ["<memory key>", ...], "delete": ["<slug>", ...]}}],
+ "conflicts": [{{"a": "<slug>", "b": "<slug>", "kind": "value|fact|scope", "detail": "何がどう食い違うか", "resolved": true}}],
+ "questions": [{{"query": "外部で確かめたいこと", "why": "なぜ必要か", "topic": "<slug>"}}]}}
+（conflicts / questions が無い場合は空配列）
 """
+
+
+_CONFLICT_ON = """- 既存ページ同士で内容が食い違っている箇所を見つけたら conflicts に書く。
+  本文で「以前は X、現在は Y」と経緯を書いて解消したものは resolved=true、
+  決められなかったものは resolved=false（後で外部で確かめる候補になる）。
+- 外部で確かめないと決められない事項は questions に書く（推測で埋めない）。"""
+
+#: ``conflict_check_enabled=false`` のとき。schema は残す（JSON の形を変えない）。
+_CONFLICT_OFF = """- conflicts / questions は今回使わない。どちらも空配列で返す。"""
 
 
 _JOURNAL_PROMPT = """あなたは日記を書く記録係です。{day} の記憶だけを材料に、その日の記録を Markdown で書いてください。
@@ -400,16 +417,21 @@ class WikiWorker:
         memories: list[Memory] = list(all_result.value) if isinstance(all_result, Success) else []
         archived_seen: set[str] = set()
         self._compile_journal(ctx, persona, store, now)
+        questions: list[dict] = []
         for topic, selected in self._select_topics(memories, now, store, persona):
             try:
-                self._compile_topic(ctx, persona, store, topic, selected, now, archived_seen)
+                questions.extend(self._compile_topic(ctx, persona, store, topic, selected, now, archived_seen) or [])
             except Exception:
                 logger.exception("WikiWorker: topic=%s failed", topic)
                 self._record_event(ctx, persona, f"error: topic {topic} failed", None)
+        # 自走調査（#40）: 編纂で出た問いを登録 MCP ツールで確かめ、本文に根拠を足す。
+        self._resolve_questions(ctx, persona, store, questions)
         # 索引維持（§4.6-6）: 外部リンクの dangling をプレーンテキストに落とす。
         repaired = self._repair_links(store)
         if repaired:
             logger.info("WikiWorker: persona=%s repaired %d pages with dangling links", persona, repaired)
+        # 記憶層の矛盾掃除（#39）: 週 1 回だけ。候補抽出は LLM 0 回、判定は上限付き。
+        self._sweep_memory_conflicts(ctx, persona, memories, now)
 
     # ------------------------------------------------------------------
     # 日記（前日 JST の記憶 → 1 ページ）
@@ -591,7 +613,8 @@ class WikiWorker:
         memories: list[Memory],
         now: datetime,
         archived_seen: set[str],
-    ) -> None:
+    ) -> list[dict]:
+        """1 topic 分を編纂する。戻り値は調査に回す問い（``topic`` を埋めたもの）。"""
         pages = store.list_pages()
         payload, error, attempt = self._ask_and_parse(topic, memories, pages, now)
         if payload is None:
@@ -601,8 +624,9 @@ class WikiWorker:
                 f"error: {error}",
                 {"topic": topic, "attempt": attempt, **(self._last_llm or {})},
             )
-            return
-        if not payload:
+            return []
+        page_dicts = payload["pages"]
+        if not page_dicts:
             # 成功扱いで無言で抜けると「動いているのに更新されない」がログに残らない。
             self._record_event(ctx, persona, f"skipped: no pages returned for {topic}", {"topic": topic})
         elif attempt:
@@ -617,15 +641,166 @@ class WikiWorker:
         candidates = {m.key: m for m in memories}
         existing_slugs = {p.slug for p in pages}
         compiled = 0
-        for page in payload:
+        written_slugs: set[str] = set()
+        deleted_slugs: set[str] = set()
+        for page in page_dicts:
             try:
                 if self._apply_page(ctx, persona, store, topic, page, candidates, existing_slugs, archived_seen):
                     compiled += 1
+                    written_slugs.add(str(page.get("slug")))
+                    deleted_slugs.update(str(d) for d in page.get("delete", []) or [] if isinstance(d, str))
             except Exception as e:
                 logger.warning("WikiWorker: page apply failed (%s): %s", page.get("slug"), e)
                 self._record_event(ctx, persona, f"error: page {page.get('slug')} failed: {e}", None)
 
+        # 幻覚 slug ガードは「実際に書けた slug ∪ 既存から今サイクルで消したものを除いたもの」。
+        # 目次と日記は矛盾の当事者にならないので外す。
+        known = (existing_slugs - deleted_slugs) | written_slugs
+        known_slugs = {s for s in known if s and s != INDEX_SLUG and not s.startswith(_JOURNAL_SLUG_PREFIX)}
+
+        if self._cfg.conflict_check_enabled:
+            self._apply_conflicts(
+                ctx,
+                persona,
+                payload["conflicts"],
+                payload["questions"],
+                store=store,
+                topic=topic,
+                known_slugs=known_slugs,
+            )
+
         logger.info("WikiWorker: persona=%s topic=%s compiled %d pages", persona, topic, compiled)
+        return [
+            {**item, "topic": str(item.get("topic") or topic)}
+            for item in payload["questions"]
+            if str(item.get("query") or "").strip()
+        ]
+
+    # ------------------------------------------------------------------
+    # 自走調査（#40）— 登録済み MCP ツールだけを使う。無ければ何もしない
+    # ------------------------------------------------------------------
+
+    def _resolve_questions(self, ctx, persona: str, store: WikiStore, questions: list[dict]) -> None:
+        """問いを調査してページ末尾に根拠を足す。書込みは slug ごとに 1 回だけ。
+
+        調査の前にページの存在を確かめる（存在しない slug に LLM を焼かない）。
+        失敗・ツール無しは監査 1 行に留め、編纂結果には触らない（fail-safe）。
+        """
+        cfg = self._cfg
+        if not cfg.research_enabled or not questions:
+            return
+        found: dict[str, dict] = {}
+        no_tools = False
+        for item in questions[: max(0, cfg.max_research_per_cycle)]:
+            query = str(item.get("query") or "").strip()
+            if not query:
+                continue
+            slug = str(item.get("topic") or "persona")
+            page_result = store.read_page(slug)
+            if isinstance(page_result, Failure):
+                self._record_event(
+                    ctx,
+                    persona,
+                    f"skipped: research target {slug} not found",
+                    {"slug": slug, "question": query[:200]},
+                    event_type="wiki.research",
+                )
+                continue
+            try:
+                result = asyncio.run(research(ctx, persona, query, max_calls=cfg.research_max_tool_calls))
+            except Exception as e:  # noqa: BLE001 — worker を落とさない
+                logger.warning("WikiWorker: research failed: %s", e)
+                result = {"reason": "failed"}
+            reason = str(result.get("reason") or "")
+            if reason == "no_tools":
+                no_tools = True
+                continue
+            if reason:
+                # 「ツールが無い」と「調べたが失敗した」を混ぜない（監査が嘘をつく）。
+                self._record_event(
+                    ctx,
+                    persona,
+                    f"warning: research failed for {query[:60]}: {reason}",
+                    {"question": query, "topic": slug, "reason": reason},
+                    event_type="wiki.research",
+                )
+                continue
+            entry = found.setdefault(slug, {"page": page_result.value, "hits": []})
+            entry["hits"].extend(result["hits"])
+            self._record_event(
+                ctx,
+                persona,
+                f"research {len(result['hits'])} hits for {query[:60]}",
+                {
+                    "question": query,
+                    "topic": slug,
+                    "tool": result["tools"][-1] if result["tools"] else "",
+                    "tools": result["tools"],
+                    "calls": result["calls"],
+                    "hits": [h["url"] for h in result["hits"]],
+                    "answer": result["answer"][:1000],
+                },
+                event_type="wiki.research",
+            )
+        if no_tools:
+            self._record_event(
+                ctx, persona, "skipped: no mcp tool", {"questions": len(questions)}, event_type="wiki.research"
+            )
+        self._write_research(ctx, persona, store, found)
+
+    def _write_research(self, ctx, persona: str, store: WikiStore, found: dict[str, dict]) -> None:
+        """slug ごとに 1 回だけ ``## 外部情報`` を追記する（ループ内で書かない）。"""
+        for slug, entry in found.items():
+            page: WikiPage = entry["page"]
+            body = self._with_research_section(page, entry["hits"])
+            if body == page.body:
+                continue  # 同じ URL は二度書かない（ページの updated を無駄に進めない）
+            written = store.write_page(
+                slug, page.title, body, project=page.project, sources=page.sources, tags=page.tags
+            )
+            if isinstance(written, Failure):
+                # 書込み失敗は編纂全体の失敗ではない（30 分後の再挑戦を誘発しない）。
+                self._record_event(
+                    ctx,
+                    persona,
+                    f"warning: research write {slug} failed: {written.error}",
+                    {"slug": slug},
+                    event_type="wiki.research",
+                )
+                continue
+            if self.vector_enabled:
+                vector_index.sync_page(self._settings, persona, slug, page.title, body)
+            self._record_event(
+                ctx,
+                persona,
+                f"updated {slug} with {len(entry['hits'])} external sources",
+                {"slug": slug, "hits": [h["url"] for h in entry["hits"]]},
+                event_type="wiki.research",
+            )
+
+    def _with_research_section(self, page: WikiPage, hits: list[dict]) -> str:
+        """本文末尾に ``## 外部情報`` 節を足した本文（入らなければ本文のまま）。
+
+        上限判定は frontmatter 込みで行う（``write_page`` と同じ物差し。本文だけで
+        測ると必ず書込みに失敗するページを作る）。
+
+        shortcut: 節は 1 つだけ（2 回目以降の調査結果は同じ節に足さない）。
+        増やすなら URL 単位の差分追記に変える。
+        """
+        if "## 外部情報" in page.body:
+            return page.body
+        lines = [f"- [{h['title']}]({h['url']})" for h in hits if h.get("url")]
+        if not lines:
+            return page.body
+        merged = page.body.rstrip() + "\n\n## 外部情報\n" + "\n".join(lines)
+        # write_pageと同じ物差し（frontmatter 込みのレンダリング結果）で測る。
+        size = len(render_page(replace(page, body=merged)).encode("utf-8"))
+        if size > self._cfg.max_page_bytes:
+            logger.warning(
+                "WikiWorker: research section does not fit in %d bytes (needs %d)", self._cfg.max_page_bytes, size
+            )
+            return page.body
+        return merged
 
     def _apply_page(
         self,
@@ -701,10 +876,276 @@ class WikiWorker:
 
     _ask_llm_for_test: str | None = None
     _ask_llm_raise: Exception | None = None
+    #: 矛盾判定の provider 差し替え（テスト用。未設定なら factory から作る）。
+    _provider_for_test: object | None = None
+
+    # ------------------------------------------------------------------
+    # 矛盾整理（#39）— wiki 層は編纂応答の conflicts、記憶層は週次掃除
+    # ------------------------------------------------------------------
+
+    def _apply_conflicts(
+        self,
+        ctx,
+        persona: str,
+        conflicts: list[dict],
+        questions: list[dict],
+        *,
+        store: WikiStore,
+        topic: str,
+        known_slugs: set[str],
+    ) -> None:
+        """編纂応答の ``conflicts`` / ``questions`` を処理する（追加 LLM 呼び出しなし）。
+
+        resolved=true は本文で経緯を書き直し済みなので監査だけ残す。false は
+        ``open-question`` として記憶に置き、日記の「未解決」から拾えるようにする。
+        """
+        for item in conflicts:
+            a = str(item.get("a") or "").strip()
+            b = str(item.get("b") or "").strip()
+            detail = str(item.get("detail") or "").strip()
+            if not (a and b and detail):
+                continue
+            unknown = [slug for slug in (a, b) if slug not in known_slugs]
+            if unknown:
+                # 幻覚 slug を記憶に落とさない（存在しないページの矛盾は存在しない）。
+                self._record_event(
+                    ctx,
+                    persona,
+                    f"skipped: conflict references unknown page {unknown[0]}",
+                    {"topic": topic, "a": a, "b": b},
+                    event_type="wiki.conflict",
+                )
+                continue
+            resolved = bool(item.get("resolved"))
+            self._record_event(
+                ctx,
+                persona,
+                f"conflict {'resolved' if resolved else 'open'}: {a} / {b}",
+                {"topic": topic, "a": a, "b": b, "kind": str(item.get("kind") or ""), "detail": detail[:300]},
+                event_type="wiki.conflict",
+            )
+            if not resolved:
+                self._record_open_question(
+                    ctx,
+                    persona,
+                    f"{a} と {b}: {detail}",
+                    topic=topic,
+                    project=self._page_project(store, a),
+                )
+
+        for item in questions:
+            query = str(item.get("query") or "").strip()
+            if not query:
+                continue
+            why = str(item.get("why") or "").strip()
+            target = str(item.get("topic") or topic).strip() or topic
+            self._record_open_question(
+                ctx,
+                persona,
+                f"{query}（理由: {why}）" if why else query,
+                topic=target,
+                project=self._page_project(store, target),
+            )
+
+    @staticmethod
+    def _page_project(store: WikiStore, slug: str) -> str | None:
+        """ページの frontmatter から project を引く（引けなければ None）。
+
+        topic 文字列から逆算すると ``project:nous-arch`` のような幻の project タグが
+        生まれ、そのタグの群が永遠に孤立する。
+        """
+        try:
+            page = store.read_page(slug)
+        except Exception:  # noqa: BLE001 — タグが付かないだけで害は無い
+            return None
+        if not getattr(page, "is_ok", False):
+            return None
+        project = getattr(page.value, "project", None)  # type: ignore[union-attr]
+        return str(project) if project else None
+
+    def _record_open_question(
+        self, ctx, persona: str, question: str, *, topic: str, project: str | None = None
+    ) -> None:
+        """未解決の問いを記憶に 1 件置く（本文ハッシュで重複を抑止）。
+
+        失敗を無言で潰さない: ``create_memory`` は意味的重複（>=0.75）で
+        ``DuplicateMemoryError`` を返すので、監査に理由を残す。
+        """
+        digest = hashlib.sha256(question.encode("utf-8")).hexdigest()[:16]
+        try:
+            for memory in self._open_questions(ctx):
+                if getattr(memory, "source_context", "") == f"open-question:{digest}":
+                    return  # 同じ問いは一度だけ（毎サイクル増やさない）
+        except Exception:
+            logger.debug("WikiWorker: open-question dedupe lookup failed", exc_info=True)
+
+        tags = ["open-question"] if project is None else [f"project:{project}", "open-question"]
+        try:
+            result = asyncio.run(
+                ctx.memory_service.create_memory(
+                    content=question[:1200],
+                    importance=0.5,
+                    emotion="neutral",
+                    emotion_intensity=0.0,
+                    tags=tags,
+                    privacy_level="private",
+                    source_context=f"open-question:{digest}",
+                    kind="semantic",
+                    source_type="llm_inferred",
+                )
+            )
+        except Exception as e:  # noqa: BLE001 — worker を落とさない
+            logger.warning("WikiWorker: failed to record open question: %s", e)
+            self._record_event(
+                ctx,
+                persona,
+                f"warning: open question not recorded: {e}",
+                {"topic": topic, "reason": str(e)[:200]},
+                event_type="wiki.conflict",
+            )
+            return
+        if isinstance(result, Failure):
+            self._record_event(
+                ctx,
+                persona,
+                f"warning: open question not recorded: {result.error}",
+                {"topic": topic, "reason": str(result.error)[:200]},
+                event_type="wiki.conflict",
+            )
+            return
+        self._record_event(
+            ctx,
+            persona,
+            f"question recorded: {question[:60]}",
+            {"topic": topic, "project": project, "digest": digest},
+            event_type="wiki.conflict",
+        )
+
+    @staticmethod
+    def _open_questions(ctx) -> list:
+        from nous.domain.shared.result import Success
+
+        result = ctx.memory_repo.find_all()
+        if not isinstance(result, Success):
+            return []
+        return [
+            m
+            for m in result.value
+            if "open-question" in (getattr(m, "tags", ()) or ())
+            and str(getattr(m, "source_context", "")).startswith("open-question:")
+        ]
+
+    def _last_sweep_at(self, ctx, persona: str) -> datetime | None:
+        """直近の**成功した**記憶層掃除の時刻（session_events から取る）。
+
+        ``error:`` / ``warning:`` 行は掃除済みと数えない（1 回の失敗で 168 時間ゲートが
+        閉じて週次掃除が丸ごと飛ぶのを防ぐ）。
+        """
+        try:
+            from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
+
+            events = SessionEventRepository(ctx.connection).get_by_persona(
+                persona, event_type="wiki.conflict_sweep", limit=10
+            )
+        except Exception:
+            return None
+        for event in events or ():
+            summary = str(getattr(event, "summary", "") or "")
+            if summary.startswith(("error:", "warning:")):
+                continue
+            ts = event.timestamp
+            return ts if ts.tzinfo else ts.replace(tzinfo=UTC)
+        return None
+
+    def _sweep_memory_conflicts(self, ctx, persona: str, memories: list[Memory], now: datetime) -> None:
+        """記憶層の矛盾掃除（週 1 回）。候補抽出は LLM 0 回、判定は上限付き。"""
+        cfg = self._cfg
+        if not cfg.conflict_sweep_enabled:
+            return
+        last = self._last_sweep_at(ctx, persona)
+        if last is not None and (now - last) < timedelta(hours=cfg.memory_conflict_interval_hours):
+            return
+
+        from nous.application.wiki.conflict_sweep import find_candidate_pairs, sweep
+
+        pairs = find_candidate_pairs(
+            memories, min_jaccard=cfg.memory_conflict_min_jaccard, limit=cfg.memory_conflict_max_pairs * 5
+        )
+        if not pairs:
+            self._record_event(
+                ctx, persona, "conflict sweep: no candidates", {"candidates": 0}, event_type="wiki.conflict_sweep"
+            )
+            return
+
+        api_key = cfg.get_effective_api_key(self._settings)
+        if not api_key and self._provider_for_test is None:
+            self._record_event(
+                ctx,
+                persona,
+                "skipped: conflict sweep has no api_key",
+                {"candidates": len(pairs)},
+                event_type="wiki.conflict_sweep",
+            )
+            return
+
+        from nous.infrastructure.llm.factory import get_provider
+
+        try:
+            provider = self._provider_for_test or get_provider(cfg.provider, api_key, cfg.model, cfg.base_url)
+            stats = asyncio.run(
+                sweep(
+                    pairs,
+                    provider=provider,
+                    close=lambda old_key, new_key: self._close_contradicted(ctx, old_key, new_key),
+                    max_pairs=cfg.memory_conflict_max_pairs,
+                )
+            )
+        except Exception as e:
+            # ``error:`` を付けると cycle 失敗として数えられ 30 分後の再挑戦を誘発する
+            # （編纂本体の失敗とは別物）。掃除の失敗は warning に留める。
+            logger.warning("WikiWorker: conflict sweep failed: %s", e)
+            self._record_event(
+                ctx,
+                persona,
+                f"warning: conflict sweep failed: {e}",
+                {"candidates": len(pairs)},
+                event_type="wiki.conflict_sweep",
+            )
+            return
+        # 全件失敗（判定不能＋ close 失敗）なら成功を名乗らない（数字が成功に見えると
+        # 168h ゲートが閉じ、実質 0 件のまま 1 週間止まる）。
+        all_failed = bool(stats["checked"]) and stats["failed"] >= stats["checked"]
+        prefix = "warning: " if all_failed else ""
+        self._record_event(
+            ctx,
+            persona,
+            f"{prefix}conflict sweep: checked {stats['checked']} failed {stats['failed']} closed {stats['closed']}",
+            stats,
+            event_type="wiki.conflict_sweep",
+        )
+
+    def _close_contradicted(self, ctx, old_key: str, new_key: str) -> None:
+        """古い記憶の validity window を閉じ、新しい記憶へ鎖で繋ぐ（削除はしない）。
+
+        失敗は握り潰さずに投げる（``sweep`` が closed 件数を数えているので、
+        ここで黙ると監査の数字が嘘になる）。
+        """
+        from nous.domain.shared.time_utils import get_now
+
+        repo = ctx.memory_repo
+        new_result = repo.find_by_key(new_key)
+        valid_until = None
+        if getattr(new_result, "is_ok", False) and new_result.value is not None:
+            valid_until = getattr(new_result.value, "valid_from", None)
+        result = repo.update_validity_window(
+            memory_key=old_key, valid_until=valid_until or get_now(), superseded_by=new_key
+        )
+        if isinstance(result, Failure):
+            raise RuntimeError(f"update_validity_window failed for {old_key}: {result.error}")
 
     def _ask_and_parse(
         self, topic: str, memories: list[Memory], pages: list[WikiPage], now: datetime
-    ) -> tuple[list[dict] | None, str, int]:
+    ) -> tuple[dict[str, list[dict]] | None, str, int]:
         """LLM 呼び出し + パース。空応答/切れ JSON は 1 回だけ予算を倍にして再試行。
 
         reasoning モデルは思考トークンも max_tokens を食うため、長い応答が途中で切れて
@@ -804,25 +1245,37 @@ class WikiWorker:
             topic=topic,
             slug_prefix=f"{topic}-",
             max_bytes=self._cfg.max_page_bytes,
+            conflict_instructions=_CONFLICT_ON if self._cfg.conflict_check_enabled else _CONFLICT_OFF,
             pages="\n".join(page_lines) or "(なし)",
             memories="\n".join(memory_lines),
         )
 
-    def _parse_response(self, text: str) -> list[dict]:
-        """LLM 応答 → ページ dict のリスト（コードフェンス・前後説明文を許容）。"""
-        # 呼び出し側（_compile_topic）が ValueError/JSONDecodeError を捕捉して
-        # 監査に error 行を書きファイルを変えない契約。ここで握り潰さない。
+    def _parse_response(self, text: str) -> dict[str, list[dict]]:
+        """LLM 応答 → ``{"pages": [...], "conflicts": [...], "questions": [...]}``。
+
+        コードフェンス・前後説明文は ``_parse_json_object`` が吸収する。呼び出し側
+        （_compile_topic）が ValueError/JSONDecodeError を捕捉して監査に error 行を
+        書きファイルを変えない契約。ここで握り潰さない。
+
+        ``conflicts`` / ``questions`` は後方互換のため欠落を空リストとして扱う（§3.3）。
+        """
         data = _parse_json_object(text)
         pages = data.get("pages")
         if not isinstance(pages, list):
             raise ValueError("missing 'pages' array")
-        return [p for p in pages if isinstance(p, dict)]
+        return {
+            "pages": [p for p in pages if isinstance(p, dict)],
+            "conflicts": [c for c in data.get("conflicts") or [] if isinstance(c, dict)],
+            "questions": [q for q in data.get("questions") or [] if isinstance(q, dict)],
+        }
 
     # ------------------------------------------------------------------
     # session_events 監査
     # ------------------------------------------------------------------
 
-    def _record_event(self, ctx, persona: str, summary: str, detail: dict | None) -> None:
+    def _record_event(
+        self, ctx, persona: str, summary: str, detail: dict | None, *, event_type: str = "wiki.compiled"
+    ) -> None:
         if summary.startswith("error:"):
             self._cycle_errors += 1
         try:
@@ -834,7 +1287,7 @@ class WikiWorker:
                 SessionEvent(
                     session_id="wiki_worker",
                     persona=persona,
-                    event_type="wiki.compiled",
+                    event_type=event_type,
                     timestamp=get_now(),
                     summary=summary[:200],
                     detail=json.dumps(detail, ensure_ascii=False) if detail else None,
