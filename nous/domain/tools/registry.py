@@ -459,11 +459,12 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
     ),
     "wiki_ls": ToolSpec(
         name="wiki_ls",
-        summary="まとめ wiki のページ一覧（slug/title/project/更新日時）を返す。記憶単位の検索は memory_search。",
+        summary="まとめ wiki のページ一覧（slug/title/project/tags/更新日時）を返す。tag=journal で日記一覧。記憶単位の検索は memory_search。",
         surfaces=frozenset({MCP}),
         params={
             MCP: (
                 ToolParam("project", "string|null", required=False),
+                ToolParam("tag", "string|null", required=False),
                 ToolParam("limit", "integer", required=False),
             ),
         },

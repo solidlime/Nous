@@ -32,6 +32,7 @@ def _page_dict(page: Any) -> dict[str, Any]:
         "slug": page.slug,
         "title": page.title,
         "project": page.project,
+        "tags": list(page.tags),
         "sources": list(page.sources),
         "updated": page.updated,
         "links": list(page.links),
@@ -48,13 +49,22 @@ async def _tool_wiki_read(ctx: AppContext, persona: str, slug: str) -> str:
 
 
 async def _tool_wiki_ls(
-    ctx: AppContext, persona: str, project: str | None = None, limit: int = LS_DEFAULT_LIMIT
+    ctx: AppContext,
+    persona: str,
+    project: str | None = None,
+    tag: str | None = None,
+    limit: int = LS_DEFAULT_LIMIT,
 ) -> str:
-    """wiki ページの一覧（slug / title / project / 更新日時）。"""
+    """wiki ページの一覧（slug / title / project / tags / 更新日時）。
+
+    ``tag`` を渡すとそのタグを持つページだけに絞る（``tag="journal"`` で日記をまとめて引く）。
+    """
     pages = _store(ctx, persona).list_pages()
     if project:
         wanted = project.lower()
         pages = [p for p in pages if (p.project or "").lower() == wanted]
+    if tag:
+        pages = [p for p in pages if tag in p.tags]
     pages = sorted(pages, key=lambda p: p.updated or "", reverse=True)
     items = [_page_dict(p) for p in pages[: max(1, limit)]]
     return tool_ok(items, total=len(pages))

@@ -12,6 +12,7 @@ from nous.api.mcp._tools_wiki import (
     _tool_wiki_read,
     _tool_wiki_write,
 )
+from nous.infrastructure.wiki.store import WikiStore
 
 
 def _ctx(tmp_path) -> Any:
@@ -66,6 +67,23 @@ async def test_ls_filters_by_project(tmp_path):
     nous_pages = _payload(await _tool_wiki_ls(ctx, "herta", project="NOUS"))
     assert nous_pages["total"] == 1
     assert nous_pages["data"][0]["slug"] == "project-nous-a"
+
+
+async def test_ls_exposes_tags_and_filters_by_tag(tmp_path):
+    """`tag="journal"` で日記だけ引ける（計画書 §3.1 の一括参照）。"""
+    store = WikiStore(str(tmp_path), "herta")
+    store.write_page("journal-2026-11-09", "9日の記録", "本文", tags=("journal", "2026-11"))
+    store.write_page("project-nous-a", "A", "本文", project="nous")
+
+    ctx = _ctx(tmp_path)
+    all_pages = _payload(await _tool_wiki_ls(ctx, "herta"))
+    by_slug = {p["slug"]: p for p in all_pages["data"]}
+    assert by_slug["journal-2026-11-09"]["tags"] == ["journal", "2026-11"]
+    assert by_slug["project-nous-a"]["tags"] == []
+
+    journals = _payload(await _tool_wiki_ls(ctx, "herta", tag="journal"))
+    assert journals["total"] == 1
+    assert journals["data"][0]["slug"] == "journal-2026-11-09"
 
 
 async def test_grep_hits_slug_line_and_text(tmp_path):

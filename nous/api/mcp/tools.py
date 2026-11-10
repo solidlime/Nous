@@ -489,10 +489,10 @@ def register_tools(mcp: MCPServer) -> None:
 
     # wiki_ls
     @_tool("wiki_ls")
-    async def wiki_ls(project: str | None = None, limit: int = 50) -> str:
-        """wiki ページの一覧（slug/title/project/updated）。project 指定で絞り込み。"""
+    async def wiki_ls(project: str | None = None, tag: str | None = None, limit: int = 50) -> str:
+        """wiki ページの一覧（slug/title/project/tags/updated）。project / tag で絞り込み（tag="journal" で日記一覧）。"""
         p = _resolve_persona()
-        return _envelope_wrap(await _tool_wiki_ls(AppContextRegistry.get(p), p, project=project, limit=limit))
+        return _envelope_wrap(await _tool_wiki_ls(AppContextRegistry.get(p), p, project=project, tag=tag, limit=limit))
 
     # wiki_write
     @_tool("wiki_write")
