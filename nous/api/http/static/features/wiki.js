@@ -194,11 +194,35 @@ async function saveEdit(slug) {
   }
 }
 
+/* -----------------------------------------------------------------
+   削除（取り消せないので、必ず確認をとおす）
+   ----------------------------------------------------------------- */
+async function deletePage(slug) {
+  if (!slug) return;
+  if (!window.confirm("「" + slug + "」を削除する？ 元に戻せないよ。")) return;
+  const btn = document.getElementById("wiki-btn-delete");
+  if (btn) btn.disabled = true;
+  try {
+    await api(pageUrl(slug), { method: "DELETE" });
+    WIKI.current = null;
+    WIKI.page = null;
+    renderEmpty();
+    await loadWiki();
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    console.warn("[wiki] delete failed:", e);
+  }
+}
+
 function refreshWiki() {
   const btn = document.getElementById("wiki-btn-refresh");
   if (btn) btn.addEventListener("click", function() { loadWiki(); });
   const edit = document.getElementById("wiki-btn-edit");
   if (edit) edit.addEventListener("click", enterEdit);
+  const del = document.getElementById("wiki-btn-delete");
+  if (del) del.addEventListener("click", function() {
+    if (WIKI.page && WIKI.page.slug) deletePage(WIKI.page.slug);
+  });
 }
 
 N.Features.Wiki = {
@@ -206,6 +230,7 @@ N.Features.Wiki = {
   loadPage: loadPage,
   enterEdit: enterEdit,
   saveEdit: saveEdit,
+  deletePage: deletePage,
   _state: WIKI,
 };
 

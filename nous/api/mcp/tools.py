@@ -76,6 +76,7 @@ from nous.api.mcp._tools_persona import (  # noqa: E402, F401
     _tool_update_context,
 )
 from nous.api.mcp._tools_wiki import (  # noqa: E402, F401
+    _tool_wiki_delete,
     _tool_wiki_grep,
     _tool_wiki_ls,
     _tool_wiki_read,
@@ -106,6 +107,7 @@ TOOL_DISPATCH: dict[str, Any] = {
     "wiki_write": _tool_wiki_write,
     "wiki_ls": _tool_wiki_ls,
     "wiki_grep": _tool_wiki_grep,
+    "wiki_delete": _tool_wiki_delete,
 }
 
 
@@ -518,6 +520,13 @@ def register_tools(mcp: MCPServer) -> None:
         """wiki 本文を行単位の正規表現で grep する。意味検索で取り逃す字面一致の照合用。"""
         p = _resolve_persona()
         return _envelope_wrap(await _tool_wiki_grep(AppContextRegistry.get(p), p, pattern=pattern, limit=limit))
+
+    # wiki_delete
+    @_tool("wiki_delete")
+    async def wiki_delete(slug: str) -> str:
+        """wiki ページを削除する（``index`` は拒否、検索索引からも落とす）。取り消せない。"""
+        p = _resolve_persona()
+        return _envelope_wrap(await _tool_wiki_delete(AppContextRegistry.get(p), p, slug=slug))
 
 
 def _resolve_persona() -> str:

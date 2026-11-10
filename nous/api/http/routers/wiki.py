@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from starlette.responses import JSONResponse
 
 from nous.api.http.deps import _safe_get_context
-from nous.application.wiki.vector_index import async_sync_page
+from nous.application.wiki.vector_index import async_drop_page, async_sync_page
 from nous.domain.shared.result import Failure, Success
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.wiki.store import WikiStore, WikiStoreError
@@ -68,13 +68,15 @@ def register_wiki_routes(mcp) -> None:
         ]
         return JSONResponse({"persona": persona, "pages": items})
 
-    # GET と PUT を 1 つの Route に載せる: 同一 path を 2 回 custom_route すると
+    # GET / PUT / DELETE を 1 つの Route に載せる: 同一 path を複数回 custom_route すると
     # PUT 側で request.json() が空になり "Invalid JSON body" になる（実測）。
-    @mcp.custom_route("/api/wiki/{persona}/{slug:path}", methods=["GET", "PUT"])
+    @mcp.custom_route("/api/wiki/{persona}/{slug:path}", methods=["GET", "PUT", "DELETE"])
     async def wiki_page(request: Request) -> JSONResponse:
-        """GET: 本文（markdown 生）を返す。PUT: ダッシュボードから保存。"""
+        """GET: 本文（markdown 生）を返す。PUT: ダッシュボードから保存。DELETE: 削除。"""
         if request.method == "PUT":
             return await _save_page(request)
+        if request.method == "DELETE":
+            return await _delete_page(request)
         persona = request.path_params["persona"]
         slug = request.path_params["slug"]
         ctx = _safe_get_context(persona)
@@ -166,6 +168,34 @@ def register_wiki_routes(mcp) -> None:
                 "body": page.body,
             }
         )
+
+    async def _delete_page(request: Request) -> JSONResponse:
+        """ダッシュボードからの削除。
+
+        存在しない slug は 404（「消した」と言い切らない）。削除後の索引落としは
+        best-effort（ファイル層が正。索引は次サイクルの再同期で追いつく）。
+        """
+        persona = request.path_params["persona"]
+        slug = request.path_params["slug"]
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return JSONResponse({"error": "Persona not found"}, status_code=404)
+        try:
+            store = WikiStore(ctx.settings.data_root, persona)
+        except WikiStoreError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+        existing = store.read_page(slug)
+        if isinstance(existing, Failure):
+            return JSONResponse({"error": f"wiki page not found: {slug}"}, status_code=404)
+        result = store.delete_page(slug)
+        if isinstance(result, Failure):
+            return JSONResponse({"error": str(result.error)}, status_code=400)
+        try:
+            asyncio.create_task(async_drop_page(ctx.settings, persona, slug))
+        except Exception as e:
+            logger.warning("wiki delete: vector drop not scheduled for %s: %s", slug, e)
+        logger.info("wiki page deleted from dashboard: persona=%s slug=%s", persona, slug)
+        return JSONResponse({"slug": slug, "deleted": True, "title": existing.value.title})
 
     @mcp.custom_route("/api/wiki/run/{persona}", methods=["POST"])
     async def wiki_run(request: Request) -> JSONResponse:

@@ -35,6 +35,7 @@ def render_wiki_tab() -> str:
                 <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="book-open"></i></span> Wiki</h2>
                 <div style="display:flex;align-items:center;gap:8px;">
                 <button id="wiki-btn-edit" class="glass-btn" title="このページを手で編集する"><i data-lucide="pencil"></i></button>
+                <button id="wiki-btn-delete" class="glass-btn" title="このページを削除する（取り消せない）"><i data-lucide="trash-2"></i></button>
                 <button id="wiki-btn-refresh" class="glass-btn" title="Reload wiki pages"><i data-lucide="refresh-cw"></i></button>
             </div>
             </div>

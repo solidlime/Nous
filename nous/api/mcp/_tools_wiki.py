@@ -1,7 +1,8 @@
 """wiki ツールの中核実装（MCP / builtin 共用）— 計画書 §4.5.
 
-読む・書く・一覧 の 3 面だけ。削除は持たない（誤削除より退屈な解決を選ぶ:
-未使用ページは index で沈黙するだけで、害にならない）。
+読む・書く・一覧・grep・削除の 5 面。削除は取り消せないので、``index`` を拒む
+（store 側で拒否）のと、存在確認を先に行って「消した」と言い切れる時だけ成功を
+返すのを守る。索引（Qdrant）も同時に落とす。
 """
 
 from __future__ import annotations
@@ -68,6 +69,26 @@ async def _tool_wiki_ls(
     pages = sorted(pages, key=lambda p: p.updated or "", reverse=True)
     items = [_page_dict(p) for p in pages[: max(1, limit)]]
     return tool_ok(items, total=len(pages))
+
+
+async def _tool_wiki_delete(ctx: AppContext, persona: str, slug: str) -> str:
+    """wiki ページを削除する（``index`` は拒否、索引も落とす）。
+
+    存在確認を先に行う: 無い slug を「消した」と返すと、呼び出し側は消えたつも
+    りで次の判断をする。
+    """
+    from nous.application.wiki.vector_index import async_drop_page
+
+    store = _store(ctx, persona)
+    prior = store.read_page(slug)
+    if isinstance(prior, Failure):
+        return tool_error(ToolErrorCode.NOT_FOUND, f"wiki page not found: {slug}")
+    result = store.delete_page(slug)
+    if isinstance(result, Failure):
+        return tool_error(ToolErrorCode.VALIDATION_ERROR, str(result.error))
+    # 索引はミラー。落とせなくても削除は成立する（毎サイクルの再同期で直る）。
+    await async_drop_page(ctx.settings, persona, slug)
+    return tool_ok({"slug": slug, "deleted": True, "title": prior.value.title})
 
 
 async def _tool_wiki_write(

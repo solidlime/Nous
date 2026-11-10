@@ -300,3 +300,85 @@ class TestWikiSaveApi:
                 _put_request(slug="../evil", payload={"body": "x"})
             )
         assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/wiki/{persona}/{slug:path} — ダッシュボードからの削除
+# ---------------------------------------------------------------------------
+
+
+def _delete_request(persona="herta", slug="project-nous"):
+    req = MagicMock()
+    req.path_params = {"persona": persona, "slug": slug}
+    req.headers = {}
+    req.method = "DELETE"
+    return req
+
+
+class TestWikiDeleteApi:
+    @pytest.mark.asyncio
+    async def test_missing_persona_404(self, read_routes):
+        mcp, _ = read_routes
+        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=None):
+            resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "DELETE")(_delete_request())
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_missing_page_404(self, read_routes):
+        """無い slug を 200 で返さない（呼び出し側が「消えた」と誤認する）。"""
+        mcp, ctx = read_routes
+        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+            resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "DELETE")(_delete_request(slug="no-such-page"))
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_deletes_page_and_drops_vector(self, read_routes):
+        import asyncio as _asyncio
+        import json as _json
+
+        mcp, ctx = read_routes
+        _write_page(tmp_path=ctx.settings.data_root)
+        dropped = []
+
+        async def _fake_drop(settings, persona, slug):
+            dropped.append((persona, slug))
+
+        with (
+            patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx),
+            patch("nous.api.http.routers.wiki.async_drop_page", _fake_drop),
+        ):
+            resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "DELETE")(_delete_request())
+            assert resp.status_code == 200
+            await _asyncio.sleep(0)
+
+        payload = _json.loads(bytes(resp.body))
+        assert payload == {"slug": "project-nous", "deleted": True, "title": "Nous"}
+        assert dropped == [("herta", "project-nous")]
+
+        from nous.infrastructure.wiki.store import WikiStore
+
+        assert WikiStore(ctx.settings.data_root, "herta").read_page("project-nous").is_ok is False
+
+    @pytest.mark.asyncio
+    async def test_delete_index_is_rejected(self, read_routes):
+        """index は生成物。消させない。"""
+        mcp, ctx = read_routes
+        _write_page(tmp_path=ctx.settings.data_root)
+        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+            resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "DELETE")(_delete_request(slug="index"))
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_traversal_rejected(self, read_routes):
+        mcp, ctx = read_routes
+        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+            resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "DELETE")(_delete_request(slug="../evil"))
+        assert resp.status_code == 404
+
+
+def test_dashboard_renders_delete_button():
+    """削除ボタンが Wiki タブに描画される（配線の回帰ガード）。"""
+    from nous.api.http.sections.wiki import render_wiki_tab
+
+    html = render_wiki_tab()
+    assert 'id="wiki-btn-delete"' in html

@@ -502,6 +502,14 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
             ),
         },
     ),
+    "wiki_delete": ToolSpec(
+        name="wiki_delete",
+        summary="まとめ wiki のページを削除する（取り消せない。index と検索索引も落とす。削除より更新で済むなら wiki_write を使う）",
+        surfaces=frozenset({MCP}),
+        params={
+            MCP: (ToolParam("slug", "string", required=True),),
+        },
+    ),
 }
 
 

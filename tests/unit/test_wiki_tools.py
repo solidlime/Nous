@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from nous.api.mcp._tools_wiki import (
+    _tool_wiki_delete,
     _tool_wiki_grep,
     _tool_wiki_ls,
     _tool_wiki_read,
@@ -127,3 +128,51 @@ async def test_write_preserves_existing_tags(tmp_path):
 
     assert _payload(await _tool_wiki_write(ctx, "herta", "journal-2026-11-09", "d", "書き直し"))["ok"] is True
     assert store.read_page("journal-2026-11-09").value.tags == ("journal", "2026-11")
+
+
+async def test_delete_removes_page_and_drops_vector(tmp_path, monkeypatch):
+    """削除はファイルを消し、索引も落とす（残すと検索が死んだページを返す）。"""
+    dropped: list[tuple[str, str]] = []
+
+    async def _fake_drop(settings, persona, slug):
+        dropped.append((persona, slug))
+
+    monkeypatch.setattr("nous.application.wiki.vector_index.async_drop_page", _fake_drop)
+
+    ctx = _ctx(tmp_path)
+    await _tool_wiki_write(ctx, "herta", "project-nous-temp", "temp", "body")
+    result = _payload(await _tool_wiki_delete(ctx, "herta", "project-nous-temp"))
+
+    assert result["ok"] is True
+    assert result["data"] == {"slug": "project-nous-temp", "deleted": True, "title": "temp"}
+    assert dropped == [("herta", "project-nous-temp")]
+    # index.md は rebuild_index が作り直すので残る。本文ページが 0 件なら良い。
+    assert WikiStore(tmp_path, "herta").list_pages() == []
+
+
+async def test_delete_missing_page_is_not_found(tmp_path, monkeypatch):
+    """無い slug を「消した」と返さない（呼び出し側が消えたつもりで判断する）。"""
+    dropped: list[str] = []
+
+    async def _fake_drop(settings, persona, slug):
+        dropped.append(slug)
+
+    monkeypatch.setattr("nous.application.wiki.vector_index.async_drop_page", _fake_drop)
+    result = _payload(await _tool_wiki_delete(_ctx(tmp_path), "herta", "no-such-page"))
+    assert result["ok"] is False
+    assert result["error"]["code"] == "NOT_FOUND"
+    assert dropped == []
+
+
+async def test_delete_index_is_rejected(tmp_path, monkeypatch):
+    """index は生成物。消すと次の rebuild まで wiki が空に見えるので拒否する。"""
+
+    async def _fake_drop(settings, persona, slug):
+        raise AssertionError("must not drop vector for rejected delete")
+
+    monkeypatch.setattr("nous.application.wiki.vector_index.async_drop_page", _fake_drop)
+    ctx = _ctx(tmp_path)
+    await _tool_wiki_write(ctx, "herta", "project-nous-a", "A", "body")
+    result = _payload(await _tool_wiki_delete(ctx, "herta", "index"))
+    assert result["ok"] is False
+    assert result["error"]["code"] == "VALIDATION_ERROR"
