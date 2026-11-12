@@ -270,8 +270,6 @@ async def _tool_update_context(
         physical_updates["physical_state"] = physical_state
     if mental_state is not None:
         physical_updates["mental_state"] = mental_state
-    if environment is not None:
-        physical_updates["environment"] = environment
     if body_state is not None:
         for key in ("fatigue", "warmth", "arousal", "heart_rate", "pain"):
             if key in body_state and body_state[key] is not None:
@@ -280,6 +278,19 @@ async def _tool_update_context(
         result = ctx.persona_service.update_physical_state(persona, **physical_updates)
         if result.is_ok:
             updated.extend(f"{k}={v}" for k, v in physical_updates.items())
+
+    if environment is not None:
+        # 場所の変更は move と同じ経路（生理コスト + ``place.moved``）を通す。
+        # ここで直接 ``environment`` を書くと滞在時間の起点が残らず、ダッシュボードが
+        # 「新しい場所 + 古い到着時刻」を表示してしまう（kanban #49）。
+        from nous.application.movement import apply_move
+
+        moved = await apply_move(ctx, persona, environment, environment_text=environment)
+        if moved.ok:
+            moved_note = f"(+{moved.minutes}min)" if moved.minutes else ""
+            updated.append(f"environment={environment}{moved_note}")
+        else:
+            logger.warning("update_context: environment not applied: %s", moved.error)
 
     # context_note: lightweight session continuity marker
     if context_note is not None:

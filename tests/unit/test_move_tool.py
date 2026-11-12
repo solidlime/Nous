@@ -25,7 +25,7 @@ def _ctx(state: PersonaState | None = None) -> MagicMock:
 @pytest.fixture(name="rec")
 def _record_patch():
     """``place.moved`` の書き込みは別テストで検証する（ここでは実 DB を作らない）。"""
-    with patch("nous.application.chat.tools.builtin._record_place_event") as rec:
+    with patch("nous.application.movement.record_place_event") as rec:
         yield rec
 
 
@@ -71,7 +71,7 @@ class TestCost:
     async def test_long_travel_caps_fatigue_and_arousal(self):
         """200 分の移動でも疲労 +0.15 / 覚醒 +0.03 で頭打ち（上限はデッド枝にしない）。"""
         ctx = _ctx(PersonaState(persona="herta", environment="自室", fatigue=0.0, arousal=0.0))
-        with patch("nous.domain.persona.places.travel_minutes", return_value=200):
+        with patch("nous.application.movement.travel_minutes", return_value=200):
             r = await _handle_move(ctx, MagicMock(), {"place": "ドック"})
 
         assert r["fatigue_delta"] == pytest.approx(0.15)
@@ -183,15 +183,15 @@ class TestAudit:
         assert detail["fatigue"] == pytest.approx(0.23)
 
     def test_record_place_event_inserts_row(self):
-        """``_record_place_event`` が session_events に 1 行入れる（DB はモック）。"""
-        from nous.application.chat.tools.builtin import _record_place_event
+        """``record_place_event`` が session_events に 1 行入れる（DB はモック）。"""
+        from nous.application.movement import record_place_event
 
         ctx = MagicMock()
         ctx.persona = "herta"
         ctx.session_id = "s1"
         with patch("nous.infrastructure.sqlite.session_event_repo.SessionEventRepository") as repo:
             repo.return_value.insert = MagicMock(return_value=1)
-            _record_place_event(ctx, {"from": "自室", "to": "ラウンジ", "minutes": 5})
+            record_place_event(ctx, {"from": "自室", "to": "ラウンジ", "minutes": 5})
         repo.assert_called_once()
         event = repo.return_value.insert.call_args.args[0]
         assert event.event_type == "place.moved"
@@ -199,11 +199,11 @@ class TestAudit:
 
     def test_record_place_event_swallows_errors(self):
         """監査の失敗で会話を壊さない。"""
-        from nous.application.chat.tools.builtin import _record_place_event
+        from nous.application.movement import record_place_event
 
         ctx = MagicMock()
         type(ctx).connection = property(lambda self: (_ for _ in ()).throw(RuntimeError("boom")))
-        _record_place_event(ctx, {"from": "a", "to": "b"})  # 例外を投げない
+        record_place_event(ctx, {"from": "a", "to": "b"})  # 例外を投げない
 
 
 class TestPlaceSince:
