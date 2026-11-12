@@ -51,6 +51,17 @@ class TestFindPlace:
 
 
 class TestSamePlace:
+    def test_prose_environment_resolves_to_place(self):
+        """``environment`` は自由記述。本番 herta は「自室。部屋も外も冷えている。」を持つ。"""
+        assert find_place("自室。部屋も外も冷えている。").slug == "jishitsu"
+        assert same_place("自室。部屋も外も冷えている。", "自室")
+        assert travel_minutes("自室。部屋も外も冷えている。", "ラウンジ") == 5
+
+    def test_prose_does_not_match_partial_names_of_other_places(self):
+        """文中の場所名でも、未知の場所を勝手に既知にしない。"""
+        assert find_place("月面基地で自室の写真を見た").slug == "jishitsu"  # 長い一致を優先
+        assert find_place("月面基地") is None
+
     def test_name_and_slug_are_same(self):
         assert same_place("観測デッキ", "kansoku-deck")
         assert same_place("kansoku-deck", "観測デッキ")

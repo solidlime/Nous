@@ -59,6 +59,12 @@ def find_place(text: str) -> Place | None:
     for place in DEFAULT_PLACES:
         if key in (normalize_place(place.slug), normalize_place(place.name)):
             return place
+    # ``environment`` は自由記述なので「自室。部屋も外も冷えている。」のように
+    # 場所名が文中に埋もれる。長い名前から先に見て、部分一致でも引く。
+    by_length = sorted(DEFAULT_PLACES, key=lambda p: len(p.name), reverse=True)
+    for place in by_length:
+        if normalize_place(place.name) in key:
+            return place
     return None
 
 
@@ -67,7 +73,7 @@ def same_place(a: str | None, b: str | None) -> bool:
     left = find_place(a or "")
     right = find_place(b or "")
     if left is not None or right is not None:
-        # 片方だけ解決することはない（find_place は正規化キーだけを見る）が、念のため不一致扱い。
+        # 部分一致で片方だけ解決することはある（「自室。寒い」→自室 vs 未知の場所）。
         return left is not None and right is not None and left.slug == right.slug
     left_key = normalize_place(a or "")
     return bool(left_key) and left_key == normalize_place(b or "")

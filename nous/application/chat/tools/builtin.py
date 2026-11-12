@@ -385,6 +385,10 @@ async def _handle_move(ctx: AppContext, config: ChatConfig, tool_input: dict) ->
     # 表示名はカタログの正式名が引けたらそれ（「ラウンジ 」等の揺れを潰す）、無ければ入力どおり。
     known = find_place(place)
     target = known.name if known is not None else place
+    # 出発地も同じ規則で揃える。``environment`` は自由記述なので
+    # 「自室。部屋も外も冷えている。」がそのままイベントに残らないようにする。
+    origin_known = find_place(origin or "")
+    origin_label = origin_known.name if origin_known is not None else origin
     updated = ctx.persona_service.update_physical_state(
         ctx.persona, environment=target, fatigue=new_fatigue, arousal=new_arousal
     )
@@ -395,7 +399,7 @@ async def _handle_move(ctx: AppContext, config: ChatConfig, tool_input: dict) ->
         _record_place_event(
             ctx,
             {
-                "from": origin,
+                "from": origin_label,
                 "to": target,
                 "minutes": minutes,
                 "known": known is not None,
@@ -408,7 +412,7 @@ async def _handle_move(ctx: AppContext, config: ChatConfig, tool_input: dict) ->
     result: dict[str, Any] = {
         "status": "ok",
         "place": target,
-        "from": origin,
+        "from": origin_label,
         "minutes": minutes,
         "fatigue": round(new_fatigue, 3),
         "fatigue_delta": round(new_fatigue - old_fatigue, 4),

@@ -47,6 +47,18 @@ class TestCost:
         assert kwargs["arousal"] == pytest.approx(0.303)
 
     @pytest.mark.asyncio
+    async def test_prose_origin_is_labelled_and_costs_zone_distance(self, rec):
+        """本番の ``environment`` は自由記述。イベントに文章をそのまま残さない。"""
+        ctx = _ctx(PersonaState(persona="herta", environment="自室。部屋も外も冷えている。", fatigue=0.7, arousal=0.0))
+        r = await _handle_move(ctx, MagicMock(), {"place": "ラウンジ"})
+
+        assert r["from"] == "自室"
+        assert r["minutes"] == 5  # 自室(0)→ラウンジ(1)
+        event = rec.call_args.args[1]
+        assert event["from"] == "自室"
+        assert event["to"] == "ラウンジ"
+
+    @pytest.mark.asyncio
     async def test_unknown_place_uses_default_ten_minutes(self):
         """カタログ外の場所は既定 10 分。"""
         ctx = _ctx(PersonaState(persona="herta", environment=None, fatigue=0.0, arousal=0.0))
