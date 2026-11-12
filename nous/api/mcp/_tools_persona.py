@@ -285,12 +285,14 @@ async def _tool_update_context(
         # 「新しい場所 + 古い到着時刻」を表示してしまう（kanban #49）。
         from nous.application.movement import apply_move
 
-        moved = await apply_move(ctx, persona, environment, environment_text=environment)
+        moved = apply_move(ctx, persona, environment, environment_text=environment)
         if moved.ok:
             moved_note = f"(+{moved.minutes}min)" if moved.minutes else ""
             updated.append(f"environment={environment}{moved_note}")
         else:
+            # 失敗を黙って飲むと呼び出し側が「場所が変わった」と誤解する（監査にも残らない）。
             logger.warning("update_context: environment not applied: %s", moved.error)
+            updated.append(f"environment_skipped={moved.error or 'unknown'}")
 
     # context_note: lightweight session continuity marker
     if context_note is not None:

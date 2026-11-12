@@ -355,7 +355,7 @@ async def _handle_move(ctx: AppContext, config: ChatConfig, tool_input: dict) ->
     """現在地を変える。実体は :func:`nous.application.movement.apply_move`（``update_context`` と共有）。"""
     from nous.application.movement import apply_move
 
-    result = await apply_move(
+    result = apply_move(
         ctx,
         ctx.persona,
         str(tool_input.get("place") or ""),

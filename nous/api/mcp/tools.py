@@ -360,7 +360,10 @@ def register_tools(mcp: MCPServer) -> None:
         emotion + emotion_intensity: emotional state override.
         valence/arousal: direct emotion rating in [-1, 1] (both required, together with emotion);
         stored in the emotion history record's context. Priority: direct > derived.
-        physical_state / mental_state / environment: free-text descriptions.
+        physical_state / mental_state: free-text descriptions.
+        environment: free-text current place. Writing it is treated as a MOVE: the travel
+        cost (fatigue, from the place distance; unknown places count as 10 min) applies and a
+        place.moved event is recorded. Prefer the move tool when you are changing location.
         relationship_status / relationship_type: interpersonal context.
         user_info: {name, nickname, preferred_address}. persona_info: {nickname, ...}.
         appearance: free-text description of current appearance (clothing, hair, accessories)."""

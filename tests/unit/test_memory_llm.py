@@ -809,11 +809,12 @@ class TestRunMemoryLLM:
             _, kwargs = call
             content = kwargs.get("content", "")
             assert not content.startswith("physical_state:"), f"Memory should not be created: {content}"
-        mock_ctx.persona_service.update_physical_state.assert_called_once_with(
-            "test_persona",
-            physical_state="疲れている",
-            environment="自宅",
-        )
+        # 場所は移動経路（apply_move）を通るので update_physical_state は 2 回に分かれる。
+        written = {}
+        for call in mock_ctx.persona_service.update_physical_state.call_args_list:
+            written.update(call.kwargs)
+        assert written["physical_state"] == "疲れている"
+        assert written["environment"] == "自宅"
         mock_ctx.persona_service.update_persona_info.assert_not_called()
 
     @pytest.mark.asyncio

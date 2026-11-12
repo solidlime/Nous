@@ -1,9 +1,10 @@
 """現在地の変更を 1 経路に集約する。
 
-``move``（chat ツール）と ``update_context(environment=...)``（MCP / chat 共有）は
-どちらも場所を変える。書き手が 2 つあると ``place.moved`` が片方だけに残り、
-ダッシュボードの滞在時間（直近の ``place.moved``）が嘘になる。ここを通せば
-必ず「移動 = 生理コスト + ``place.moved`` 1 行」になる。
+場所を書く経路は ``move``（chat ツール）、``update_context(environment=...)``
+（chat / MCP 共有）、記憶抽出の state 適用（``chat/memory_extractor.py`` と
+``hooks/memory_extraction.py``）の 3 つ。書き手が分かれると ``place.moved`` が
+一部にしか残らず、ダッシュボードの滞在時間（直近の ``place.moved``）が嘘になる。
+**これらの経路は必ずここを通す**（移動 = 生理コスト + ``place.moved`` 1 行）。
 """
 
 from __future__ import annotations
@@ -47,7 +48,7 @@ class MoveResult:
     extra: dict = field(default_factory=dict)
 
 
-async def apply_move(
+def apply_move(
     ctx: AppContext,
     persona: str,
     target: str,
@@ -60,6 +61,9 @@ async def apply_move(
 
     ``environment_text`` を渡すと、状態の ``environment`` にはその文字列を書く
     （``update_context`` の自由記述を保つため）。省略時はカタログの正式名。
+    ``minutes`` は所要分の上書き（テスト・外部見積り用）。省略時は場所から計算する。
+
+    同期関数: 呼び出し元はすべて async 文脈だが、内部に await は無い（sqlite は同期）。
     """
     place = (target or "").strip()
     if not place:
@@ -86,7 +90,8 @@ async def apply_move(
     origin_known = find_place(origin or "")
     origin_label = origin_known.name if origin_known is not None else origin
     # 同じ場所なら状態の自由記述を保ち、動いた時だけ正式名に揃える。
-    write_environment = environment_text or (label if not same_place(origin, place) else (origin or label))
+    moved = not same_place(origin, place)
+    write_environment = environment_text or (label if moved else (origin or label))
 
     updates: dict[str, object] = {"environment": write_environment}
     if cost > 0:

@@ -73,13 +73,27 @@ class TestEnvironmentMovesTheCharacter:
         ctx.persona_service.get_context.return_value = Failure(MagicMock())
         ctx.persona_service.update_emotion.return_value = Success(None)
 
-        r = await _tool_update_context(ctx, "herta", emotion="joy", environment="ラウンジ")
+        r = await _tool_update_context(ctx, "herta", emotion="joy", environment="ラウンジ", context_note="移動の途中")
 
         assert r["ok"] is True
         assert "emotion=joy" in r["result"]
         assert "environment=" not in r["result"]
+        # 移動の後に来るフィールドも適用される（早期 return が入っていないことの証明）
+        ctx.persona_service.update_persona_info.assert_called_once_with("herta", {"context_note": "移動の途中"})
         rec.assert_not_called()
         ctx.persona_service.update_physical_state.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_failed_move_is_visible_to_the_caller(self, rec):
+        """失敗を黙って飲むと「場所が変わった」と誤解される。目印を返す。"""
+        ctx = _ctx()
+        ctx.persona_service.get_context.return_value = Failure(MagicMock())
+        ctx.persona_service.update_emotion.return_value = Success(None)
+
+        r = await _tool_update_context(ctx, "herta", environment="ラウンジ")
+
+        assert "environment_skipped=" in r["result"]
+        assert "environment=ラウンジ" not in r["result"]
 
     @pytest.mark.asyncio
     async def test_no_environment_keeps_physical_updates_only(self, rec):
@@ -89,3 +103,57 @@ class TestEnvironmentMovesTheCharacter:
         kwargs = ctx.persona_service.update_physical_state.call_args.kwargs
         assert kwargs == {"physical_state": "眠い"}
         rec.assert_not_called()
+
+
+class TestExtractionPathsAlsoGoThroughMovement:
+    """記憶抽出（run_memory_llm / hook）の environment 適用も同じ経路を通る。"""
+
+    @pytest.fixture(name="rec")
+    def _record_patch(self):
+        with patch("nous.application.movement.record_place_event") as rec:
+            yield rec
+
+    @pytest.mark.asyncio
+    async def test_memory_llm_environment_records_place_moved(self, rec):
+        from nous.application.chat.memory_extractor import _apply_context_update
+
+        ctx = _ctx()
+
+        await _apply_context_update(ctx, "herta", {"environment": "ラウンジ"}, False, False, False, False)
+
+        rec.assert_called_once()
+        assert rec.call_args.args[1]["to"] == "ラウンジ"
+        assert rec.call_args.args[1]["minutes"] == 5
+        assert ctx.persona_service.update_physical_state.call_args.kwargs["fatigue"] == pytest.approx(0.2075)
+
+    @pytest.mark.asyncio
+    async def test_memory_llm_same_place_is_free(self, rec):
+        from nous.application.chat.memory_extractor import _apply_context_update
+
+        ctx = _ctx()
+
+        await _apply_context_update(ctx, "herta", {"environment": "自室。外は雨。"}, False, False, False, False)
+
+        rec.assert_not_called()
+        assert ctx.persona_service.update_physical_state.call_args.kwargs["environment"] == "自室。外は雨。"
+
+    def test_hook_environment_records_place_moved(self, rec):
+        from nous.application.hooks.memory_extraction import _apply_context_update as hook_apply
+
+        ctx = _ctx()
+
+        hook_apply(ctx, "herta", {"environment": "観測デッキ"}, [])
+
+        rec.assert_called_once()
+        assert rec.call_args.args[1]["to"] == "観測デッキ"
+
+    def test_hook_unresolved_state_still_applies_other_fields(self, rec):
+        from nous.application.hooks.memory_extraction import _apply_context_update as hook_apply
+
+        ctx = _ctx()
+        ctx.persona_service.get_context.return_value = Failure(MagicMock())
+
+        hook_apply(ctx, "herta", {"environment": "ラウンジ", "context_note": "移動中"}, [])
+
+        rec.assert_not_called()
+        ctx.persona_service.update_persona_info.assert_called_once_with("herta", {"context_note": "移動中"})

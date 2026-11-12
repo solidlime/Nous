@@ -22,9 +22,11 @@ logger = get_logger(__name__)
 def _place_since(ctx, persona: str, environment: str | None) -> str | None:
     """現在地に着いた時刻（直近の ``place.moved``）を ISO で返す。無ければ None。
 
-    ``update_context`` は ``environment`` だけを書き、``place.moved`` を残さない。
-    その場合の直近イベントは**別の場所**を指すので、現在地と一致しないなら None
-    （「3 日前からこの場所にいる」という嘘を出さない）。
+    直近イベントの行き先が現在の ``environment`` と一致しないなら None
+    （「3 日前からこの場所にいる」という嘘を出さない）。移動は
+    :func:`nous.application.movement.apply_move` に集約済みなので通常は一致するが、
+    この防波堤は (a) 集約前の本番 DB に残る食い違う行、(b) ``place.moved`` の記録に
+    失敗した移動（例外を握り潰す設計）、のために残す。
     """
     try:
         from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository

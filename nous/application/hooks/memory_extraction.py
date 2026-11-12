@@ -315,12 +315,23 @@ def _apply_context_update(ctx: AppContext, persona: str, ctx_update: dict, tool_
     if not skip_state_text:
         state_fields: dict[str, object] = {
             key: val
-            for key in ("physical_state", "mental_state", "environment")
+            for key in ("physical_state", "mental_state")
             if isinstance(val := ctx_update.get(key), str) and val.strip()
         }
         state_fields.update(_body_delta_state(ctx, persona, ctx_update, skip_body=skip_body))
         if state_fields:
             ctx.persona_service.update_physical_state(persona, **state_fields)
+        # 場所は移動と同じ経路（生理コスト + ``place.moved``）。直接書くと滞在時間の
+        # 起点が残らず、ダッシュボードが「新しい場所 + 古い到着時刻」を出す。
+        env_raw = ctx_update.pop("environment", None)
+        if isinstance(env_raw, str) and env_raw.strip():
+            from nous.application.movement import apply_move
+
+            moved = apply_move(ctx, persona, env_raw, environment_text=env_raw)
+            if moved.ok:
+                ctx_update["environment"] = env_raw
+            else:
+                logger.warning("hook_extraction: environment not applied: %s", moved.error)
 
     if not skip_user_info:
         user_info = {

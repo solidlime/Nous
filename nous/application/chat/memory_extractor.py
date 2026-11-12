@@ -682,6 +682,7 @@ async def _apply_context_update(
         ctx_update.pop("emotion_intensity", None)
 
     state_fields: dict[str, object] = {}
+    env_val: str | None = None
     # physical_state/mental_state → persona state（恒久メモリを汚さず
     # state フィールドとして永続化する）。値は SSE に流さない（従来契約）
     if skip_state_text:
@@ -693,11 +694,9 @@ async def _apply_context_update(
             if val is not None and str(val).strip():
                 state_fields[key] = val
             ctx_update.pop(key, None)
-        env_val = ctx_update.get("environment")
-        if isinstance(env_val, str):
-            state_fields["environment"] = env_val
-        else:
-            ctx_update.pop("environment", None)  # 非 str は適用されない → SSE にも流さない
+        env_raw = ctx_update.pop("environment", None)  # 非 str は適用されない → SSE にも流さない
+        if isinstance(env_raw, str) and env_raw.strip():
+            env_val = env_raw
     body_applied = _body_delta_state(ctx, persona, ctx_update, skip_body=skip_body)
     state_fields.update(body_applied)
     # 適用値（delta 変換後）で生の絶対値を置換 — post.py の ContextUpdateSSE が
@@ -710,6 +709,16 @@ async def _apply_context_update(
                 ctx_update.pop(key, None)
     if state_fields:
         ctx.persona_service.update_physical_state(persona, **state_fields)
+    if env_val is not None:
+        # 場所は移動と同じ経路（生理コスト + ``place.moved``）。ここで直接 state に
+        # 書くと滞在時間の起点が残らず、ダッシュボードが「新しい場所 + 古い到着時刻」を出す。
+        from nous.application.movement import apply_move
+
+        moved = apply_move(ctx, persona, env_val, environment_text=env_val)
+        if moved.ok:
+            ctx_update["environment"] = env_val
+        else:
+            logger.warning("MemoryLLM: environment not applied: %s", moved.error)
 
     # user_info fields → update_user_info
     # 不変条件: ctx_update は適用値のみ保持（post.py の ContextUpdateSSE が

@@ -90,7 +90,13 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 "emotion_intensity": {"type": "number", "description": "感情強度 0.0〜1.0"},
                 "physical_state": {"type": "string", "description": "身体状態の自由記述"},
                 "mental_state": {"type": "string", "description": "精神状態の自由記述"},
-                "environment": {"type": "string", "description": "現在の環境・場所"},
+                "environment": {
+                    "type": "string",
+                    "description": (
+                        "現在の環境・場所。**移動は move を使え**。ここで場所を変えても移動として"
+                        "扱われ、所要分の疲労が増える（既知の場所なら実際の所要分、未知の記述は 10 分）"
+                    ),
+                },
                 "body_state": {
                     "type": "object",
                     "description": "身体数値 {fatigue, warmth, arousal, heart_rate, pain} — 各0.0-1.0",
