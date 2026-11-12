@@ -22,7 +22,7 @@ import json
 import re
 import threading
 from dataclasses import replace
-from datetime import UTC, date, datetime, timedelta, tzinfo
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import TYPE_CHECKING
 
 from nous.application.wiki import vector_index
@@ -95,19 +95,25 @@ _CONFLICT_ON = """- 既存ページ同士で内容が食い違っている箇所
 _CONFLICT_OFF = """- conflicts / questions は今回使わない。どちらも空配列で返す。"""
 
 
-_JOURNAL_PROMPT = """あなたは日記を書く記録係です。{day} の記憶だけを材料に、その日の記録を Markdown で書いてください。
+_JOURNAL_PROMPT = """あなたは日記を書く記録係です。{day} の記憶と営みを材料に、その日の記録を Markdown で書いてください。
 
 現在時刻: {now}
 
 書き方:
-- 見出しは必ず次の 5 つだけを、この順・この表記で使う:
+- 見出しは必ず次の 6 つだけを、この順・この表記で使う:
+  ## 活動
   ## やったこと
   ## 感想
   ## 決めたこと
   ## 引っかかったこと
   ## 未解決
+- ## 活動 は「その日の本人が何をしていたか」の記録。営みの材料にある時刻を使い、3〜8 行。
+  仕事の中身より生活の動き（作りもの・片づけ・移動・休憩・雑談）を優先して拾う。
+- 場所・天気・相手など、材料に書かれていない設定は書かない（推測で補わない）。
+- ## 活動 は営みの材料が無い日だけ省略してよい。他の見出しは材料が無い日だけ省略してよい。
+- ## やったこと は作業・作業の成果を書く。
 - ## 感想 は「その日に起きたことに対して何を感じたか・どう思ったか」を本人の口調で書く。事実の列挙にはしない。
-- 材料に無い事実は書かない（推測・脚色・一般論での補完は禁止）。材料が無い見出しは省略してよい。
+- 材料に無い事実は書かない（推測・脚色・一般論での補完は禁止）。
 - {length_hint}
 - 既存ページへは [[slug]] 形式でリンクしてよい（存在しない slug はプレーンテキストに落ちる）:
 {pages}
@@ -115,6 +121,9 @@ _JOURNAL_PROMPT = """あなたは日記を書く記録係です。{day} の記�
 
 材料（{day} の記憶）:
 {memories}
+
+材料（{day} の営み・時刻昇順）:
+{activity}
 
 JSON ではなく Markdown 本文だけを返してください（説明文は不要）。
 """
@@ -418,7 +427,19 @@ class WikiWorker:
         archived_seen: set[str] = set()
         self._compile_journal(ctx, persona, store, now)
         questions: list[dict] = []
-        for topic, selected in self._select_topics(memories, now, store, persona):
+        topics = self._select_topics(memories, now, store, persona)
+        if not topics:
+            # 「起動して何もしなかった」と「壊れて何もできなかった」を後から区別する（#45）。
+            excluded = sum(
+                1 for m in memories if m.lifecycle_status != "active" or getattr(m, "source_type", "") == "consolidated"
+            )
+            self._record_event(
+                ctx,
+                persona,
+                f"skipped: no topic (memories={len(memories)}, excluded={excluded})",
+                {"memories": len(memories), "excluded": excluded},
+            )
+        for topic, selected in topics:
             try:
                 questions.extend(self._compile_topic(ctx, persona, store, topic, selected, now, archived_seen) or [])
             except Exception:
@@ -448,18 +469,23 @@ class WikiWorker:
         day = (now - timedelta(days=1)).date()
         try:
             memories = self._journal_memories(ctx, day, now)
-            if not memories:
+            activity = self._journal_activity(ctx, persona, day, now)
+            # 記憶が 0 件でも、その日の営みが読めれば日記は作る（活動だけの日がある）。
+            if not memories and not activity:
                 return
             slug = f"{_JOURNAL_SLUG_PREFIX}{day.isoformat()}"
             title = f"{day.isoformat()} の記録"
             existed = store.read_page(slug).is_ok
             # sources は候補（その日の記憶）からだけ作る。LLM に選ばせない。
+            # 営み（session_events）は記憶ではないので sources には入れない。
             sources = tuple(m.key for m in memories)
             tag = day.strftime("%Y-%m")
             # 本文予算は「frontmatter を引いた残り」。write_page は frontmatter 込みで
             # max_page_bytes を見るので、sources が多い日は本文を減らさないと必ず落ちる。
             budget = self._cfg.max_page_bytes - _frontmatter_bytes(slug, title, sources, tag)
-            raw = self._ask_text(self._build_journal_prompt(day, memories, store.list_pages(), now, max_bytes=budget))
+            raw = self._ask_text(
+                self._build_journal_prompt(day, memories, store.list_pages(), now, activity=activity, max_bytes=budget)
+            )
             body = _strip_code_fence(raw or "")
             if not body:
                 raise ValueError("llm returned no journal body")
@@ -478,6 +504,7 @@ class WikiWorker:
                     "action": action,
                     "day": day.isoformat(),
                     "sources": list(sources),
+                    "activity_lines": activity.count("\n") + 1 if activity else 0,
                     "page_hash": _hash_of(title, body),
                     **(self._last_llm or {}),
                 },
@@ -565,6 +592,53 @@ class WikiWorker:
         picked.sort(key=lambda m: m.created_at)
         return picked[: self._cfg.journal_max_sources]
 
+    def _journal_activity(self, ctx, persona: str, day: date, now: datetime) -> str:
+        """``day``（JST）の営みをプロンプト用の 1 行/件の文字列にする。
+
+        材料は pi hook が残した ``session_events``（``turn.completed`` の発話と
+        ``session.started`` のプロジェクト名）。記憶は要点抽出後なので、「何をしていたか」
+        が落ちる。日記に生活の営みを残すには生ログを読むしかない。
+
+        ``timestamp`` は offset 混在の ISO 文字列（hook は UTC の ``Z``、worker は JST）
+        なので文字列比較では日を切れない。``julianday()`` で引数側も同じ形式に変換して
+        範囲にする。失敗は空文字で返し、日記は記憶だけで書く。
+        """
+        if not self._cfg.journal_include_activity:
+            return ""
+        tz = now.tzinfo
+        start = datetime.combine(day, time.min, tzinfo=tz)
+        end = start + timedelta(days=1)
+        try:
+            from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
+
+            repo = SessionEventRepository(ctx.connection)
+            limit = self._cfg.journal_activity_max_events
+            window = {"since": start.isoformat(), "until": end.isoformat()}
+            events = list(repo.get_by_persona(persona, event_type="turn.completed", limit=limit, **window))
+            events += list(repo.get_by_persona(persona, event_type="session.started", limit=limit, **window))
+        except Exception:
+            logger.warning("WikiWorker: journal activity query failed", exc_info=True)
+            return ""
+        picked = sorted((e for e in events if e.timestamp is not None), key=lambda e: e.timestamp)
+        lines = [line for line in (_activity_line(e, tz) for e in picked) if line]
+        if not lines:
+            return ""
+        # 1 件あたりの予算は件数で割る。それでも溢れる日は**等間隔に抜く**
+        # （先頭から詰めて末尾を切ると、朝の「起きていた」だけ残って夜が消える）。
+        cap = self._cfg.journal_activity_chars
+        per_line = max(20, cap // len(lines))
+        texts = [_clip(line, per_line) for line in lines]
+        total = sum(len(t) + 1 for t in texts)
+        if total > cap:
+            keep = min(max(1, cap // (per_line + 1)), len(texts))
+            if keep == 1:
+                texts = [texts[0]]
+            else:
+                # 両端を必ず含める（朝と夜が抜けないように等間隔で写す）。
+                idx = [round(i * (len(texts) - 1) / (keep - 1)) for i in range(keep)]
+                texts = [texts[i] for i in idx]
+        return "\n".join(texts)
+
     def _build_journal_prompt(
         self,
         day: date,
@@ -572,6 +646,7 @@ class WikiWorker:
         pages: list[WikiPage],
         now: datetime,
         *,
+        activity: str = "",
         max_bytes: int | None = None,
     ) -> str:
         page_lines = [
@@ -601,7 +676,8 @@ class WikiWorker:
             length_hint=length_hint,
             max_bytes=self._cfg.max_page_bytes if max_bytes is None else max_bytes,
             pages="\n".join(page_lines) or "(なし)",
-            memories="\n".join(memory_lines),
+            memories="\n".join(memory_lines) or "(なし)",
+            activity=activity or "(なし)",
         )
 
     def _compile_topic(
@@ -1305,6 +1381,36 @@ def _local_day(ts: datetime, tz: tzinfo | None) -> date:
     if tz is None:
         return ts.date()
     return ts.astimezone(tz).date()
+
+
+def _clip(text: str, limit: int) -> str:
+    """空白を潰して 1 行にする。``limit`` を超えたら末尾を切る（材料の膨張を防ぐ）。"""
+    flat = " ".join(text.split())
+    return flat if len(flat) <= limit else flat[: max(0, limit - 1)] + "…"
+
+
+def _activity_line(event, tz: tzinfo | None) -> str:
+    """session_event 1 件を「HH:MM 何をしていたか」の 1 行にする（取れなければ空）。"""
+    detail = event.detail
+    if isinstance(detail, str):
+        try:
+            detail = json.loads(detail)
+        except ValueError:
+            detail = None
+    if not isinstance(detail, dict):
+        detail = {}
+    ts = event.timestamp
+    if ts is None:
+        return ""
+    clock = (ts.astimezone(tz) if tz is not None and ts.tzinfo is not None else ts).strftime("%H:%M")
+    if event.event_type == "turn.completed":
+        parts = [str(detail.get(k) or "").strip() for k in ("user_text", "assistant_text")]
+        body = " / ".join(p for p in parts if p)
+    else:
+        name = str(detail.get("name") or "").strip()
+        project = str(detail.get("project") or "").strip()
+        body = "セッション開始" + (f"（{name}{'/' + project if project else ''}）" if name or project else "")
+    return f"- {clock} {body}" if body else ""
 
 
 def _parse_json_object(text: str) -> dict:

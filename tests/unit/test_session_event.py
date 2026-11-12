@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -124,6 +124,46 @@ class TestSessionEventRepository:
         msgs = repo.get_by_persona("p", event_type="chat_message")
         assert len(msgs) == 1
         assert msgs[0].event_type == "chat_message"
+
+    def test_get_by_persona_time_window_handles_mixed_offsets(self, repo: SessionEventRepository):
+        """since/until は offset 混在でも正しく切る（hook は Z、worker は +09:00）。"""
+        from datetime import UTC, timezone
+
+        jst = timezone(timedelta(hours=9))
+        repo.insert(
+            SessionEvent(
+                "s",
+                "p",
+                "turn.completed",
+                "before",
+                timestamp=datetime(2026, 11, 8, 23, 0, tzinfo=jst),
+            )
+        )
+        repo.insert(
+            SessionEvent(
+                "s",
+                "p",
+                "turn.completed",
+                "inside (UTC Z)",
+                timestamp=datetime(2026, 11, 9, 4, 0, tzinfo=UTC),
+            )
+        )
+        repo.insert(
+            SessionEvent(
+                "s",
+                "p",
+                "turn.completed",
+                "after",
+                timestamp=datetime(2026, 11, 10, 0, 10, tzinfo=jst),
+            )
+        )
+        events = repo.get_by_persona(
+            "p",
+            event_type="turn.completed",
+            since=datetime(2026, 11, 9, tzinfo=jst).isoformat(),
+            until=datetime(2026, 11, 10, tzinfo=jst).isoformat(),
+        )
+        assert [e.summary for e in events] == ["inside (UTC Z)"]
 
     def test_metadata_json_serialization(self, repo: SessionEventRepository):
         metadata = {"key": "value", "nested": {"a": 1}, "list": [1, 2, 3]}

@@ -329,6 +329,11 @@ class WikiConfig(BaseModel):
     # 日記（前日 JST の記憶を 1 ページに）。専用ストレージは作らない（wiki ページ）。
     journal_enabled: bool = True
     journal_max_sources: int = 60  # 日記 1 ページの材料上限
+    # その日の営み（pi の turn.completed / session.started）も日記の材料にする。
+    # 記憶は要点抽出後なので「何をしていたか」が落ちる。生ログから活動を拾う。
+    journal_include_activity: bool = True
+    journal_activity_max_events: int = 400  # 1 日あたりに読む session_events の上限（型ごと）
+    journal_activity_chars: int = 12000  # 営みの材料に使う合計文字数の上限
     # 日記生成後に感情・体調を 1 回反映する（LLM 呼び出し +1）。
     journal_apply_state: bool = True
     # 矛盾整理（#39）。wiki 層は編纂プロンプトの conflicts で拾い（追加呼び出しなし）、

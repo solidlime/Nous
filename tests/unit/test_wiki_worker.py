@@ -1166,3 +1166,149 @@ class TestRetryScheduling:
         worker._run()
         assert len(calls) == 2
         assert len(planned) == 1  # 再挑戦では定刻を引き直さない
+
+
+# ---------------------------------------------------------------------------
+# 日記の営み（#46: その日の会話ログを材料に足す）
+# ---------------------------------------------------------------------------
+
+
+def _sess_event(conn, event_type: str, ts: datetime, detail: dict, persona: str = "test_ww") -> None:
+    """session_events に 1 行入れる（pi hook と同じ形）。"""
+    from nous.domain.memory.session_event import SessionEvent
+    from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
+
+    SessionEventRepository(conn).insert(
+        SessionEvent(
+            session_id="s1",
+            persona=persona,
+            event_type=event_type,
+            timestamp=ts,
+            summary="x",
+            detail=json.dumps(detail, ensure_ascii=False),
+        )
+    )
+
+
+class TestJournalActivity:
+    _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+    _day = date(2026, 11, 9)
+    _body = "## 活動\n\n- 11:36 起きた\n\n## やったこと\n\n- 直した"
+
+    def test_collects_only_that_jst_day_in_time_order(self, tmp_path) -> None:
+        """前日 JST の 2 件だけを時刻昇順で。前日 23:00・当日 00:10 は落とす。"""
+        conn, worker, ctx = _journal_setup(tmp_path, [], self._body)
+        try:
+            _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 15, 20, tzinfo=_JST), {"user_text": "お菓子作り"})
+            _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 11, 36, tzinfo=_JST), {"user_text": "起きた"})
+            _sess_event(conn, "turn.completed", datetime(2026, 11, 8, 23, 0, tzinfo=_JST), {"user_text": "前の日"})
+            _sess_event(conn, "turn.completed", datetime(2026, 11, 10, 0, 10, tzinfo=_JST), {"user_text": "翌日"})
+            activity = worker._journal_activity(ctx, "test_ww", self._day, self._now)
+            lines = activity.splitlines()
+            assert [line[:6] for line in lines] == ["- 11:3", "- 15:2"]
+            assert "お菓子作り" in activity
+            assert "前の日" not in activity and "翌日" not in activity
+        finally:
+            conn.close()
+
+    def test_session_started_becomes_activity_line(self, tmp_path) -> None:
+        conn, worker, ctx = _journal_setup(tmp_path, [], self._body)
+        try:
+            _sess_event(
+                conn,
+                "session.started",
+                datetime(2026, 11, 9, 9, 5, tzinfo=_JST),
+                {"name": "Nous開発", "project": "nous"},
+            )
+            activity = worker._journal_activity(ctx, "test_ww", self._day, self._now)
+            assert "09:05" in activity and "Nous開発" in activity
+        finally:
+            conn.close()
+
+    def test_activity_only_day_still_writes_journal(self, tmp_path) -> None:
+        """記憶 0 件でも営みがあれば日記を作る（sources は空）。"""
+        conn, worker, ctx = _journal_setup(tmp_path, [], self._body)
+        try:
+            _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 15, 20, tzinfo=_JST), {"user_text": "お菓子作り"})
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            page = _store(tmp_path).read_page(f"journal-{_DAY}").value
+            assert page.sources == ()
+            assert [s for _t, s, _d in _event_rows(conn) if "journal-" in s] == [
+                f"created journal-{_DAY} from 0 memories"
+            ]
+        finally:
+            conn.close()
+
+    def test_no_memories_and_no_activity_writes_nothing(self, tmp_path) -> None:
+        conn, worker, ctx = _journal_setup(tmp_path, [], self._body)
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert not _store(tmp_path).read_page(f"journal-{_DAY}").is_ok
+            assert [s for _t, s, _d in _event_rows(conn) if "journal" in s] == []
+        finally:
+            conn.close()
+
+    def test_activity_chars_cap_is_respected(self, tmp_path) -> None:
+        """材料は合計 journal_activity_chars を超えない。溢れる日は等間隔に抜く。"""
+        conn, worker, ctx = _journal_setup(tmp_path, [], self._body, cfg_update={"journal_activity_chars": 400})
+        try:
+            for i in range(10):
+                _sess_event(
+                    conn,
+                    "turn.completed",
+                    datetime(2026, 11, 9, 10, i, tzinfo=_JST),
+                    {"user_text": "あ" * 200},
+                )
+            activity = worker._journal_activity(ctx, "test_ww", self._day, self._now)
+            lines = activity.splitlines()
+            assert len(activity) <= 400 + len(lines)  # 改行分の余裕だけ許す
+            # 等間隔に抜くので、先頭と末尾（朝と夜）は残る。
+            assert lines[0].startswith("- 10:00 ")
+            assert lines[-1].startswith("- 10:09 ")
+        finally:
+            conn.close()
+
+    def test_disabled_returns_empty(self, tmp_path) -> None:
+        conn, worker, ctx = _journal_setup(tmp_path, [], self._body, cfg_update={"journal_include_activity": False})
+        try:
+            _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 11, 36, tzinfo=_JST), {"user_text": "起きた"})
+            assert worker._journal_activity(ctx, "test_ww", self._day, self._now) == ""
+        finally:
+            conn.close()
+
+    def test_prompt_has_activity_first_and_forbids_invented_places(self, tmp_path) -> None:
+        conn, worker, _ctx = _journal_setup(tmp_path, [], self._body)
+        try:
+            prompt = worker._build_journal_prompt(self._day, [], [], self._now, activity="- 11:36 起きた")
+            assert prompt.index("## 活動") < prompt.index("## やったこと")
+            assert "材料に書かれていない設定は書かない" in prompt
+            assert "- 11:36 起きた" in prompt
+            # 営みが無い日は「(なし)」を渡す（見出しの省略をプロンプトが許す）。
+            assert "(なし)" in worker._build_journal_prompt(self._day, [], [], self._now, activity="")
+        finally:
+            conn.close()
+
+
+class TestNoTopicSilence:
+    """#45: 編纂対象 0 件のときに「何もしなかった」を 1 行残す。"""
+
+    def test_records_skipped_and_never_calls_llm(self, tmp_path) -> None:
+        conn, worker = _setup(tmp_path, [], llm=None, raise_exc=RuntimeError("llm must not be called"))
+        try:
+            summaries = [s for _t, s, _d in _event_rows(conn)]
+            skips = [s for s in summaries if s.startswith("skipped: no topic")]
+            assert len(skips) == 1, summaries
+            assert "memories=0" in skips[0]
+        finally:
+            conn.close()
+
+    def test_counts_excluded_memories(self, tmp_path) -> None:
+        """全部 archived なら excluded に数える（区別のため）。"""
+        memories = [_mem(f"a{i}", tags=["project:nous"], lifecycle="archived") for i in range(3)]
+        conn, _worker = _setup(tmp_path, memories, llm=None)
+        try:
+            skips = [s for _t, s, _d in _event_rows(conn) if s.startswith("skipped: no topic")]
+            assert len(skips) == 1
+            assert "memories=3" in skips[0] and "excluded=3" in skips[0]
+        finally:
+            conn.close()

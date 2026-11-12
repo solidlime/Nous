@@ -74,18 +74,31 @@ class SessionEventRepository:
         persona: str,
         event_type: str | None = None,
         limit: int = 50,
+        since: str | None = None,
+        until: str | None = None,
     ) -> list[SessionEvent]:
-        """Get events for a persona, optionally filtered by event_type."""
+        """Get events for a persona, optionally filtered by event_type and time window.
+
+        ``since``/``until`` are ISO-8601 strings in any offset. Comparison uses
+        ``julianday()`` because ``timestamp`` mixes offsets (UTC ``Z`` from the pi
+        hook, local ``+09:00`` from the workers), so string comparison is wrong.
+        """
+        clauses = ["persona = ?"]
+        params: list[object] = [persona]
         if event_type:
-            rows = self._db.execute(
-                "SELECT * FROM session_events WHERE persona = ? AND event_type = ? ORDER BY timestamp DESC LIMIT ?",
-                (persona, event_type, limit),
-            ).fetchall()
-        else:
-            rows = self._db.execute(
-                "SELECT * FROM session_events WHERE persona = ? ORDER BY timestamp DESC LIMIT ?",
-                (persona, limit),
-            ).fetchall()
+            clauses.append("event_type = ?")
+            params.append(event_type)
+        if since:
+            clauses.append("julianday(timestamp) >= julianday(?)")
+            params.append(since)
+        if until:
+            clauses.append("julianday(timestamp) < julianday(?)")
+            params.append(until)
+        where = " AND ".join(clauses)  # nosec B608: clause strings are literals
+        rows = self._db.execute(
+            f"SELECT * FROM session_events WHERE {where} ORDER BY timestamp DESC LIMIT ?",  # nosec B608
+            (*params, limit),
+        ).fetchall()
         return [self._row_to_event(r) for r in rows]
 
     # ------------------------------------------------------------------
