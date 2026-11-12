@@ -200,11 +200,11 @@ class PrepareStep:
                 else {}
             )
 
-            # TIME_CONTEXT ブロック（システムプロンプト先頭注入用）
-            if getattr(config, "show_message_timestamps", False):
-                turn_ctx.time_context = _build_time_context(state)
-            else:
-                turn_ctx.time_context = ""
+            # TIME_CONTEXT ブロック（システムプロンプト先頭注入用）。
+            # ``show_message_timestamps`` は UI のタイムスタンプ表示設定であり、
+            # LLM の時計を止める設定ではない（ここで止めると「今が何時か」を知らないまま
+            # 会話する。以前はこれで ``<time_context>`` が丸ごと消えていた）。
+            turn_ctx.time_context = _build_time_context(state)
 
             # context_section 構築
             context_task = asyncio.create_task(

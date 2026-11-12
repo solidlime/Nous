@@ -161,6 +161,13 @@ async def _build_context_section(
     if getattr(state, "environment", None):
         t2.append(f"場所: {state.environment}")
 
+    # 自由記述の身体・精神状態（update_context / 抽出が書く）。数値だけでは
+    # 「だるさ」「気分の説明」が次ターンに戻らず、同じことを書き直す圧力になる。
+    for _key, _label in (("physical_state", "体の様子"), ("mental_state", "心の様子")):
+        _val = getattr(state, _key, None)
+        if isinstance(_val, str) and _val.strip():
+            t2.append(f"{_label}: {_val.strip()}")
+
     # 数値から導いた行動の傾向（制約ではない。虚弱時だけ 1〜2 文）
     body_hint = body_action_hint(state)
     if body_hint:

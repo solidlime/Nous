@@ -694,6 +694,44 @@ class TestPrepareStepBodyDecayNote:
         assert "上昇" not in section and "40%→" not in section
 
 
+class TestPrepareStepTimeContext:
+    """``show_message_timestamps`` は UI の表示設定であって LLM の時計を止めない."""
+
+    @pytest.mark.asyncio
+    async def test_time_context_present_even_when_timestamps_hidden(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from nous.application.chat.pipeline.context import ChatTurnContext
+        from nous.application.chat.pipeline.prepare import PrepareStep
+        from nous.domain.persona.entities import PersonaState
+        from nous.domain.shared.result import Success
+        from nous.domain.shared.time_utils import get_now
+
+        state = PersonaState(persona="t", last_conversation_time=get_now() - timedelta(hours=3))
+        ctx = MagicMock()
+        ctx.persona = "t"
+        ctx.persona_service.get_context.return_value = Success(state)
+        session = SimpleNamespace(pending_memory_task=None, _messages=[])
+        turn_ctx = ChatTurnContext(session_id="s", user_message="hi")
+        config = SimpleNamespace(
+            context_compression_mode="light",
+            memory_preload_count=0,
+            episode_search_enabled=False,
+            show_message_timestamps=False,  # ← 表示はオフでも…
+            memory_digest_count=0,
+        )
+        with (
+            patch("nous.api.mcp._tools_helpers._apply_emotion_decay", AsyncMock(return_value=(state, ""))),
+            patch("nous.api.mcp._tools_helpers._apply_body_decay", AsyncMock(return_value=state)),
+            patch("nous.api.mcp._tools_helpers._apply_relationship_decay", AsyncMock(return_value="")),
+            patch("nous.application.chat.pipeline.prepare._search_memories", AsyncMock(return_value=("", {}, []))),
+        ):
+            await PrepareStep().run(ctx, session, turn_ctx, config)
+
+        assert turn_ctx.time_context.startswith("<time_context>")  # ← 時計は渡す
+
+
 # ──────────────────────────────────────────────
 # TA03: Dynamic Temperature — EmotionDrivenSampler integration
 # ──────────────────────────────────────────────

@@ -187,3 +187,27 @@ class TestBodyActionHint:
         result = await _build(_make_ctx(), state)
         assert "場所: ラウンジ" in result
         assert "身体の傾向:" in result
+
+
+class TestFreeTextBodyState:
+    """物理・精神の自由記述も次ターンの文脈に戻る（数値だけでは書き直しの圧力になる）."""
+
+    async def test_physical_and_mental_state_are_injected(self):
+        state = _make_state()
+        state.physical_state = "肩が重い"
+        state.mental_state = "昨日の会話を引きずっている"
+
+        section = await _build(_make_ctx(), state)
+
+        assert "体の様子: 肩が重い" in section
+        assert "心の様子: 昨日の会話を引きずっている" in section
+
+    async def test_empty_strings_are_skipped(self):
+        state = _make_state()
+        state.physical_state = "   "
+        state.mental_state = None
+
+        section = await _build(_make_ctx(), state)
+
+        assert "体の様子" not in section
+        assert "心の様子" not in section
