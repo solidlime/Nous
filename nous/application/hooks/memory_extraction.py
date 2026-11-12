@@ -327,11 +327,13 @@ def _apply_context_update(ctx: AppContext, persona: str, ctx_update: dict, tool_
         if isinstance(env_raw, str) and env_raw.strip():
             from nous.application.movement import apply_move
 
-            moved = apply_move(ctx, persona, env_raw, environment_text=env_raw)
+            moved = apply_move(ctx, persona, env_raw, environment_text=env_raw, charge_if_unknown=False)
             if moved.ok:
                 ctx_update["environment"] = env_raw
             else:
                 logger.warning("hook_extraction: environment not applied: %s", moved.error)
+    else:
+        ctx_update.pop("environment", None)  # 適用されない値は SSE に流さない
 
     if not skip_user_info:
         user_info = {

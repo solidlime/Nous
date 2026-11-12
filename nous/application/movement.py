@@ -40,6 +40,7 @@ class MoveResult:
     origin: str | None = None
     minutes: int = 0
     fatigue: float | None = None
+    arousal: float | None = None
     fatigue_delta: float = 0.0
     arousal_delta: float = 0.0
     known: bool = True
@@ -56,12 +57,16 @@ def apply_move(
     minutes: int | None = None,
     reason: str | None = None,
     environment_text: str | None = None,
+    charge_if_unknown: bool = True,
 ) -> MoveResult:
     """``target`` へ移動する。コストを課し、``place.moved`` を 1 行残す。
 
     ``environment_text`` を渡すと、状態の ``environment`` にはその文字列を書く
     （``update_context`` の自由記述を保つため）。省略時はカタログの正式名。
     ``minutes`` は所要分の上書き（テスト・外部見積り用）。省略時は場所から計算する。
+
+    ``charge_if_unknown=False`` は「カタログに解決できない記述は移動とみなさない」
+    （記憶抽出のように、同じ場所を散文で書き直すだけの経路が 10 分を払い続けるのを防ぐ）。
 
     同期関数: 呼び出し元はすべて async 文脈だが、内部に await は無い（sqlite は同期）。
     """
@@ -76,7 +81,11 @@ def apply_move(
     state = state_result.value
     origin = getattr(state, "environment", None)
 
-    cost = travel_minutes(origin, place) if minutes is None else max(0, int(minutes))
+    known = find_place(place)
+    if known is None and not charge_if_unknown and minutes is None:
+        cost = 0
+    else:
+        cost = travel_minutes(origin, place) if minutes is None else max(0, int(minutes))
     old_fatigue = _as_float(getattr(state, "fatigue", None), 0.0)
     old_arousal = _as_float(getattr(state, "arousal", None), 0.0)
     if cost > 0:
@@ -85,7 +94,6 @@ def apply_move(
     else:
         new_fatigue, new_arousal = old_fatigue, old_arousal
 
-    known = find_place(place)
     label = known.name if known is not None else place
     origin_known = find_place(origin or "")
     origin_label = origin_known.name if origin_known is not None else origin
@@ -127,7 +135,7 @@ def apply_move(
         )
     )
     extra = {}
-    if known is None:
+    if known is None and cost > 0:
         extra["note"] = f"「{label}」は新しい場所として記録した（以後の語彙になる）。"
     return MoveResult(
         ok=True,
@@ -135,6 +143,7 @@ def apply_move(
         origin=origin_label,
         minutes=cost,
         fatigue=round(new_fatigue, 3),
+        arousal=round(new_arousal, 3),
         fatigue_delta=round(new_fatigue - old_fatigue, 4),
         arousal_delta=round(new_arousal - old_arousal, 4),
         known=known is not None,

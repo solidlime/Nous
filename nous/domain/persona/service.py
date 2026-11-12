@@ -276,6 +276,8 @@ class PersonaService:
         """Update an arbitrary persona state key-value pair.
 
         Low-level access for fields not covered by dedicated methods.
+        ``environment`` はここではなく :func:`nous.application.movement.apply_move` を通すこと
+        （通さないと ``place.moved`` が残らず、滞在時間が嘘になる）。
         """
         return self._repo.update_state(persona, key, value)
 

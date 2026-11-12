@@ -278,6 +278,7 @@ async def _tool_update_context(
         result = ctx.persona_service.update_physical_state(persona, **physical_updates)
         if result.is_ok:
             updated.extend(f"{k}={v}" for k, v in physical_updates.items())
+    reported = dict(physical_updates)
 
     if environment is not None:
         # 場所の変更は move と同じ経路（生理コスト + ``place.moved``）を通す。
@@ -287,6 +288,9 @@ async def _tool_update_context(
 
         moved = apply_move(ctx, persona, environment, environment_text=environment)
         if moved.ok:
+            # 移動コストは state に上乗せされる。返り値（と報告）も移動後の実値に揃える。
+            if moved.fatigue is not None and "fatigue" in reported:
+                updated = [f"fatigue={moved.fatigue}" if u.startswith("fatigue=") else u for u in updated]
             moved_note = f"(+{moved.minutes}min)" if moved.minutes else ""
             updated.append(f"environment={environment}{moved_note}")
         else:

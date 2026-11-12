@@ -46,20 +46,6 @@ class UpdateMemoryRequest(BaseModel):
     privacy_level: str | None = None
 
 
-class UpdateContextRequest(BaseModel):
-    emotion: str | None = None
-    emotion_intensity: float | None = None
-    physical_state: str | None = None
-    mental_state: str | None = None
-    environment: str | None = None
-    relationship_status: str | None = None
-    user_info: dict | None = None
-    persona_info: dict | None = None
-    fatigue: float | None = None
-    warmth: float | None = None
-    arousal: float | None = None
-
-
 def _safe_get_context(persona: str):
     """Get AppContext for persona, returning None if init fails."""
     try:

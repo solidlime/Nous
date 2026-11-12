@@ -95,6 +95,7 @@ JSONのみ。コメント不要。不要なフィールドは省略可。
     - emotion_intensity は 0.0〜1.0
   - 身体数値: fatigue, warmth, arousal は現在値からの絶対値 0.0〜1.0 で書く（範囲外の値はシステム側で丸められ、ターンあたりの変化幅も制限される）。心拍・疼痛は書かない。
   - 状態: mental_state, physical_state, environment（自由記述）
+  - environment は**現在地が実際に変わった時だけ**書く。同じ場所の描写の書き直し（「自室。静かだ」→「自室。少し寒い」）は書かない。
   - ユーザー情報: user_name, user_nickname, user_preferred_address（ユーザーが自ら名乗ったり呼び方を変えた時のみ記録）
 - 何も抽出すべきものがなければ {{"facts": [], "goals": [], "promises": [], "context_update": {{}}}} を出力。
 """

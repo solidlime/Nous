@@ -714,9 +714,14 @@ async def _apply_context_update(
         # 書くと滞在時間の起点が残らず、ダッシュボードが「新しい場所 + 古い到着時刻」を出す。
         from nous.application.movement import apply_move
 
-        moved = apply_move(ctx, persona, env_val, environment_text=env_val)
+        moved = apply_move(ctx, persona, env_val, environment_text=env_val, charge_if_unknown=False)
         if moved.ok:
             ctx_update["environment"] = env_val
+            # SSE に流す身体値は移動後の実値に揃える（移動前の値を出すと嘘になる）。
+            if ctx_update.get("fatigue") is not None and moved.fatigue is not None:
+                ctx_update["fatigue"] = moved.fatigue
+            if ctx_update.get("arousal") is not None and moved.arousal is not None:
+                ctx_update["arousal"] = moved.arousal
         else:
             logger.warning("MemoryLLM: environment not applied: %s", moved.error)
 
