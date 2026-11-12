@@ -155,7 +155,7 @@ async def _tool_get_context(
     if session_effects:
         for tag_name, label in ONE_SHOT_STATE_TAGS.items():
             mems_result = ctx.memory_service.get_by_tags([tag_name], include_consumed=True)
-            if mems_result.is_ok and mems_result.value:
+            if isinstance(mems_result, Success) and mems_result.value:
                 latest = mems_result.value[0]
                 cleaned = latest.content.replace(f"{tag_name}: ", "", 1)
                 one_shot_context[label] = cleaned
