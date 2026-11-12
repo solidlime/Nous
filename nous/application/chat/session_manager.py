@@ -65,22 +65,22 @@ class SessionManager:
         if len(self._sessions) >= self._max:
             self._sessions.popitem(last=False)
 
-        window: TreeSessionWindow | None = None
+        created: TreeSessionWindow | None = None
         if db is not None:
             try:
                 db.execute(_CHAT_SESSIONS_SCHEMA)
             except Exception as _e:
                 logger.warning("SessionStore: failed to init DB schema: %s", _e)
-            window = TreeSessionWindow.from_db(db, persona, session_id, max_messages)
-            if window is None:
-                window = TreeSessionWindow(max_messages=max_messages)
-                window.attach_db(db, persona, session_id)
+            created = TreeSessionWindow.from_db(db, persona, session_id, max_messages)
+            if created is None:
+                created = TreeSessionWindow(max_messages=max_messages)
+                created.attach_db(db, persona, session_id)
                 _cleanup_expired_sessions(db, persona)
         else:
-            window = TreeSessionWindow(max_messages=max_messages)
+            created = TreeSessionWindow(max_messages=max_messages)
 
-        self._sessions[key] = window
-        return window
+        self._sessions[key] = created
+        return created
 
     def clear(self, persona: str, session_id: str) -> None:
         from nous.application.chat.skills_state import clear_session

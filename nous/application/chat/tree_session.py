@@ -295,8 +295,8 @@ class TreeSessionWindow:
                 window._root_id = data.get("root_id")
                 window._active_leaf_id = data.get("active_leaf_id")
                 window._version = data.get("version", 0)
-                for node in data.get("nodes", []):
-                    window._nodes[node["id"]] = node
+                for raw_node in data.get("nodes", []):
+                    window._nodes[raw_node["id"]] = raw_node
             elif isinstance(data, list):
                 # 旧形式: list[dict] — 自動マイグレーション
                 timestamps_raw: list[str] = json.loads(row["timestamps"] if hasattr(row, "keys") else row[1])
