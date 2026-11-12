@@ -211,3 +211,12 @@ class TestFreeTextBodyState:
 
         assert "体の様子" not in section
         assert "心の様子" not in section
+
+    async def test_appearance_is_injected_and_truncated(self):
+        state = _make_state()
+        state.appearance = "A" * 400
+
+        section = await _build(_make_ctx(), state)
+
+        line = next(ln for ln in section.splitlines() if ln.startswith("見た目: "))
+        assert line.endswith("…") and len(line) <= len("見た目: ") + 200

@@ -161,6 +161,12 @@ async def _build_context_section(
     if getattr(state, "environment", None):
         t2.append(f"場所: {state.environment}")
 
+    # 見た目（装備から合成される）。system prompt に一切入っておらず、自分の姿を
+    # 会話で参照できなかった（TTS と自画像だけが読んでいた）。
+    appearance = getattr(state, "appearance", None)
+    if isinstance(appearance, str) and appearance.strip():
+        t2.append(f"見た目: {_truncate(appearance.strip(), 200)}")
+
     # 自由記述の身体・精神状態（update_context / 抽出が書く）。数値だけでは
     # 「だるさ」「気分の説明」が次ターンに戻らず、同じことを書き直す圧力になる。
     for _key, _label in (("physical_state", "体の様子"), ("mental_state", "心の様子")):
@@ -467,6 +473,11 @@ _TIME_OF_DAY: list[tuple[int, str]] = [
 ]
 
 REUNION_GAP_SECONDS = 900  # 再会判定の閾値（time_context 表示用）
+
+
+def _truncate(text: str, limit: int) -> str:
+    """長すぎる自由記述を 1 行に収める（末尾は省略記号）."""
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 def _build_time_context(state) -> str:
