@@ -332,7 +332,7 @@ class WikiConfig(BaseModel):
     # その日の営み（pi の turn.completed / session.started）も日記の材料にする。
     # 記憶は要点抽出後なので「何をしていたか」が落ちる。生ログから活動を拾う。
     journal_include_activity: bool = True
-    journal_activity_max_events: int = 400  # 1 日あたりに読む session_events の上限（型ごと）
+    journal_activity_max_events: int = 400  # session_events を型ごとに何件まで読むか（日で絞った後の上限）
     journal_activity_chars: int = 12000  # 営みの材料に使う合計文字数の上限
     # 日記生成後に感情・体調を 1 回反映する（LLM 呼び出し +1）。
     journal_apply_state: bool = True

@@ -1283,8 +1283,31 @@ class TestJournalActivity:
             assert prompt.index("## 活動") < prompt.index("## やったこと")
             assert "材料に書かれていない設定は書かない" in prompt
             assert "- 11:36 起きた" in prompt
+            # 省略条件は見出し単位（日単位にすると材料が少ない日に空見出しを並べる）。
+            assert "各見出しは、その見出しに書ける材料が無ければ省略してよい" in prompt
             # 営みが無い日は「(なし)」を渡す（見出しの省略をプロンプトが許す）。
             assert "(なし)" in worker._build_journal_prompt(self._day, [], [], self._now, activity="")
+        finally:
+            conn.close()
+
+    def test_naive_and_aware_timestamps_do_not_crash(self, tmp_path) -> None:
+        """naive（API が timestamp 省略時に datetime.now() で書く）と aware の混在で落ちない。"""
+        conn, worker, ctx = _journal_setup(tmp_path, [], self._body)
+        try:
+            # 2026-11-09 15:20 JST = 06:20 UTC。naive は JST ローカルとして扱う想定。
+            _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 15, 20, tzinfo=_JST), {"user_text": "お菓子作り"})
+            _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 11, 36), {"user_text": "起きた"})
+            activity = worker._journal_activity(ctx, "test_ww", self._day, self._now)
+            assert "お菓子作り" in activity and "起きた" in activity
+        finally:
+            conn.close()
+
+    def test_session_started_without_detail_is_dropped(self, tmp_path) -> None:
+        """情報ゼロの「セッション開始」行で営みの枠を埋めない。"""
+        conn, worker, ctx = _journal_setup(tmp_path, [], self._body)
+        try:
+            _sess_event(conn, "session.started", datetime(2026, 11, 9, 9, 5, tzinfo=_JST), {})
+            assert worker._journal_activity(ctx, "test_ww", self._day, self._now) == ""
         finally:
             conn.close()
 

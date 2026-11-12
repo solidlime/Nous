@@ -107,11 +107,12 @@ _JOURNAL_PROMPT = """あなたは日記を書く記録係です。{day} の記�
   ## 決めたこと
   ## 引っかかったこと
   ## 未解決
-- ## 活動 は「その日の本人が何をしていたか」の記録。営みの材料にある時刻を使い、3〜8 行。
+- ## 活動 は「その日の本人が何をしていたか」の記録。営みの材料にある時刻を使う。
   仕事の中身より生活の動き（作りもの・片づけ・移動・休憩・雑談）を優先して拾う。
+- **各見出しは、その見出しに書ける材料が無ければ省略してよい**（空見出しを並べない）。
+  行数は材料にある事実の数まで。材料が少ない日に埋め草を書かない。
 - 場所・天気・相手など、材料に書かれていない設定は書かない（推測で補わない）。
-- ## 活動 は営みの材料が無い日だけ省略してよい。他の見出しは材料が無い日だけ省略してよい。
-- ## やったこと は作業・作業の成果を書く。
+- ## やったこと は作業とその成果を書く。
 - ## 感想 は「その日に起きたことに対して何を感じたか・どう思ったか」を本人の口調で書く。事実の列挙にはしない。
 - 材料に無い事実は書かない（推測・脚色・一般論での補完は禁止）。
 - {length_hint}
@@ -430,14 +431,15 @@ class WikiWorker:
         topics = self._select_topics(memories, now, store, persona)
         if not topics:
             # 「起動して何もしなかった」と「壊れて何もできなかった」を後から区別する（#45）。
+            # buckets も出す: memories があってもクラスタが小さければ topic 0 件になる。
             excluded = sum(
                 1 for m in memories if m.lifecycle_status != "active" or getattr(m, "source_type", "") == "consolidated"
             )
             self._record_event(
                 ctx,
                 persona,
-                f"skipped: no topic (memories={len(memories)}, excluded={excluded})",
-                {"memories": len(memories), "excluded": excluded},
+                f"skipped: no topic (memories={len(memories)}, excluded={excluded}, buckets=0)",
+                {"memories": len(memories), "excluded": excluded, "buckets": 0},
             )
         for topic, selected in topics:
             try:
@@ -616,11 +618,11 @@ class WikiWorker:
             window = {"since": start.isoformat(), "until": end.isoformat()}
             events = list(repo.get_by_persona(persona, event_type="turn.completed", limit=limit, **window))
             events += list(repo.get_by_persona(persona, event_type="session.started", limit=limit, **window))
+            picked = sorted((e for e in events if e.timestamp is not None), key=lambda e: _aware(e.timestamp, tz))
+            lines = [line for line in (_activity_line(e, tz) for e in picked) if line]
         except Exception:
             logger.warning("WikiWorker: journal activity query failed", exc_info=True)
             return ""
-        picked = sorted((e for e in events if e.timestamp is not None), key=lambda e: e.timestamp)
-        lines = [line for line in (_activity_line(e, tz) for e in picked) if line]
         if not lines:
             return ""
         # 1 件あたりの予算は件数で割る。それでも溢れる日は**等間隔に抜く**
@@ -1389,6 +1391,18 @@ def _clip(text: str, limit: int) -> str:
     return flat if len(flat) <= limit else flat[: max(0, limit - 1)] + "…"
 
 
+def _aware(ts: datetime, tz: tzinfo | None) -> datetime:
+    """naive な timestamp にも tz を当てて比較可能にする。
+
+    ``session_events.timestamp`` は hook が UTC の ``Z``、``nous/api/http/routers/events.py``
+    がクライアント省略時に ``datetime.now()``（naive・ローカル）を書くため混在する。
+    naive と aware を混ぜて ``sorted`` すると ``TypeError`` で日記が丸ごと落ちる。
+    """
+    if ts.tzinfo is None and tz is not None:
+        return ts.replace(tzinfo=tz)
+    return ts
+
+
 def _activity_line(event, tz: tzinfo | None) -> str:
     """session_event 1 件を「HH:MM 何をしていたか」の 1 行にする（取れなければ空）。"""
     detail = event.detail
@@ -1402,14 +1416,16 @@ def _activity_line(event, tz: tzinfo | None) -> str:
     ts = event.timestamp
     if ts is None:
         return ""
-    clock = (ts.astimezone(tz) if tz is not None and ts.tzinfo is not None else ts).strftime("%H:%M")
+    clock = _aware(ts, tz).astimezone(tz).strftime("%H:%M") if tz is not None else ts.strftime("%H:%M")
     if event.event_type == "turn.completed":
         parts = [str(detail.get(k) or "").strip() for k in ("user_text", "assistant_text")]
         body = " / ".join(p for p in parts if p)
     else:
         name = str(detail.get("name") or "").strip()
         project = str(detail.get("project") or "").strip()
-        body = "セッション開始" + (f"（{name}{'/' + project if project else ''}）" if name or project else "")
+        if not name and not project:
+            return ""  # 情報ゼロの行で営みの枠を埋めない
+        body = "セッション開始" + f"（{name}{'/' + project if project else ''}）"
     return f"- {clock} {body}" if body else ""
 
 
