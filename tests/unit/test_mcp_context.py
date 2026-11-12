@@ -338,7 +338,9 @@ class TestGetContext:
         ctx.persona_service.get_context.return_value = Success(state)
         ctx.memory_service.get_stats.return_value = Success({})
         ctx.memory_service.list_blocks.return_value = Success([])
-        ctx.memory_service.get_by_tags.side_effect = lambda tags: Success([goal_mem]) if "goal" in tags else Success([])
+        ctx.memory_service.get_by_tags.side_effect = lambda tags, include_consumed=False: (
+            Success([goal_mem]) if "goal" in tags else Success([])
+        )
         ctx.memory_service.get_recent_searches.return_value = Success([])
         ctx.memory_service.count_decayed_important.return_value = Success(0)
         ctx.memory_service.get_memory_index.return_value = Success(None)
@@ -361,7 +363,7 @@ class TestGetContext:
         ctx.memory_service.get_top_by_importance.return_value = Success([])
         ctx.memory_service.get_by_tags.return_value = Success([])
         ctx.memory_service.get_recent.return_value = Success([])
-        ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+        ctx.memory_service.get_by_tags.return_value = Success([])
         ctx.memory_service.get_equipment.return_value = Success({})
         ctx.persona_service.get_emotion_history.return_value = Success([])
         ctx.persona_service.record_conversation_time.return_value = Success(None)
@@ -384,11 +386,11 @@ class TestGetContext:
         proj_mem.tags = ["project:testslug"]
         ctx.persona_service.get_context.return_value = Success(state)
         ctx.memory_service.get_top_by_importance.return_value = Success([])
-        ctx.memory_service.get_by_tags.side_effect = lambda tags: (
+        ctx.memory_service.get_by_tags.side_effect = lambda tags, include_consumed=False: (
             Success([proj_mem]) if tags == ["project:testslug"] else Success([])
         )
         ctx.memory_service.get_recent.return_value = Success([])
-        ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+        ctx.memory_service.get_by_tags.return_value = Success([])
         ctx.memory_service.get_equipment.return_value = Success({})
         ctx.persona_service.get_emotion_history.return_value = Success([])
         ctx.persona_service.record_conversation_time.return_value = Success(None)

@@ -33,11 +33,6 @@ QUERY_RESOLVE_MIN_SCORE = 0.3
 logger = logging.getLogger(__name__)
 
 
-def _ok(payload: dict) -> str:
-    """Success wrapper: dict → common envelope JSON (audit C1)."""
-    return tool_ok(payload)
-
-
 def _err(msg: str) -> str:
     """Error wrapper: message → common envelope JSON, VALIDATION_ERROR (audit C1)."""
     return tool_error(ToolErrorCode.VALIDATION_ERROR, msg)

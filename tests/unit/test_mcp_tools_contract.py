@@ -58,9 +58,11 @@ async def test_update_search_read_error_paths_return_envelope(mock_app_context):
     assert _is_error_envelope(_as_json_str(r))
 
 
-def test_ok_err_wrappers():
-    assert isinstance(m._ok({"ok": True}), str)
-    d = json.loads(m._ok({"ok": True}))
-    assert d["ok"] is True and d["data"] == {"ok": True} and d["error"] is None
+def test_err_wrapper():
+    # _ok は削除（#52 デッドコード掃除）。成功側は tool_ok が正本。
+    from nous.api.mcp._envelope import tool_ok
+
+    d = json.loads(tool_ok({"a": 1}))
+    assert d["ok"] is True and d["data"] == {"a": 1} and d["error"] is None
     d = json.loads(m._err("oops"))
     assert _is_error_envelope(d)

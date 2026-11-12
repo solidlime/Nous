@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 from nous.domain.chat_config import resolve_persona_chat_config
 from nous.domain.shared.errors import DomainError, MemoryNotFoundError
 from nous.domain.shared.result import Failure, Result, Success
-from nous.domain.shared.time_utils import get_now
 
 logger = logging.getLogger(__name__)
 
@@ -162,18 +161,3 @@ class MemoryQueryService:
     def get_memory_index(self) -> Result[dict, DomainError]:
         """Get compressed memory index."""
         return self._repo.get_memory_index()
-
-    def get_and_consume_one_shot(self, tag: str) -> Result[list[Memory], DomainError]:
-        """Get the latest memory with the given tag and mark it as consumed.
-
-        Used for one-shot state memories (e.g., physical_state, mental_state).
-        Returns a list with the latest memory if found, else empty list.
-        """
-        result = self._repo.get_by_tags([tag])
-        if isinstance(result, Failure) or not result.value:
-            return Success([])
-        memories = sorted(result.value, key=lambda m: m.created_at or get_now(), reverse=True)
-        latest = memories[0]
-        with contextlib.suppress(Exception):
-            self._repo.consume_memory(latest.key)
-        return Success([latest])

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
@@ -65,14 +64,6 @@ class InMemoryMemoryRepository:
         if key not in self._store:
             return Failure(RepositoryError(f"Not found: {key}"))
         self._store[key].lifecycle_status = "tombstoned"
-        return Success(None)
-
-    def consume_memory(self, key: str) -> Result[None, RepositoryError]:
-        mem = self._store.get(key)
-        if mem is not None:
-            from datetime import datetime
-
-            mem.last_consumed_at = datetime.now(UTC)
         return Success(None)
 
     def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], RepositoryError]:
@@ -480,3 +471,28 @@ class TestTagValidation:
         """'project' 単体（プレフィックス無し）は検証対象外。"""
         result = await service.create_memory(content="proj tag", tags=["project"])
         assert result.is_ok
+
+
+class TestStateMemoryIsNotConsumed:
+    """#52 回帰: 状態記憶は読んでも消費されない（次ターンも同じ状態が戻る）。
+
+    旧実装は ``get_and_consume_one_shot`` が ``last_consumed_at`` を立てていたため、
+    ``update_context`` が書いた状態は 1 ターンで消え、LLM が毎ターン書き直していた。
+    """
+
+    async def test_two_reads_return_same_state(self, service):
+        created = await service.create_memory(content="physical_state: 眠い", tags=["physical_state"])
+        assert created.is_ok
+
+        first = service.get_by_tags(["physical_state"], include_consumed=True)
+        second = service.get_by_tags(["physical_state"], include_consumed=True)
+
+        assert first.is_ok and second.is_ok
+        assert [m.key for m in first.value] == [m.key for m in second.value]
+        assert len(first.value) == 1
+
+    async def test_read_leaves_last_consumed_at_none(self, service):
+        await service.create_memory(content="mental_state: 集中", tags=["mental_state"])
+        read = service.get_by_tags(["mental_state"], include_consumed=True)
+        assert read.is_ok
+        assert read.value[0].last_consumed_at is None

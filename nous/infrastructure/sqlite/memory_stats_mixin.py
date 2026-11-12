@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from nous.domain.shared.errors import RepositoryError
@@ -59,19 +58,6 @@ class MemoryStatsMixin:
         ).fetchall()
 
         return Success(([self._row_to_memory(r) for r in rows], total_count))
-
-    def consume_memory(self, key: str) -> Result[None, RepositoryError]:
-        """Mark a memory as consumed by setting last_consumed_at = now()."""  # noqa: D401
-        try:
-            now = datetime.now(UTC).isoformat()
-            self._db.execute(
-                "UPDATE memories SET last_consumed_at = ? WHERE key = ?",
-                (now, key),
-            )
-            return Success(None)
-        except Exception as e:
-            logger.error("Failed to consume memory %s: %s", key, e)
-            return Failure(RepositoryError(str(e)))
 
     def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], RepositoryError]:
         """Get memories that contain ALL specified tags."""

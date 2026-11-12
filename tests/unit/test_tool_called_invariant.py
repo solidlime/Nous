@@ -76,7 +76,7 @@ def _setup_success_ctx(ctx) -> None:
     ctx.memory_service.get_top_by_importance.return_value = Success([])
     ctx.memory_service.get_by_tags.return_value = Success([])
     ctx.memory_service.get_recent.return_value = Success([])
-    ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    ctx.memory_service.get_by_tags.return_value = Success([])
     ctx.memory_service.get_memory.return_value = Success(_mem())
     ctx.memory_service.create_memory.return_value = Success(_mem("mem_new"))
     ctx.memory_service.update_memory.return_value = Success(_mem())

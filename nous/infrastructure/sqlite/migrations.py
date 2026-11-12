@@ -130,25 +130,6 @@ def _migrate_fts_backfill(
         logger.info("FTS5 index backfilled: %d documents", existing)
 
 
-def _migrate_context_state_to_memories(db_conn: sqlite3.Connection, persona: str) -> None:
-    """One-shot migration: transfer ``context_state`` records into ``memories``.
-
-    This is a best-effort migration that silenty ignores failures so that it
-    can be safely shipped inside the regular init path.
-    """
-    try:
-        from nous.infrastructure.sqlite.migration_one_shot import (  # noqa: PLC0415
-            migrate_context_state_to_memories,
-        )
-
-        migrated = migrate_context_state_to_memories(db_conn, persona)
-        if migrated:
-            db_conn.commit()
-            logger.info("One-shot migration: %d state records -> memories", migrated)
-    except Exception:  # noqa: S110
-        logger.debug("one-shot migration to memories skipped/failed", exc_info=True)
-
-
 def _migrate_cleanup_orphan_strengths_v4(
     db_conn: sqlite3.Connection,
     persona: str,  # noqa: ARG001
@@ -375,7 +356,6 @@ def _migrate_curation_runs_v12(
 MIGRATIONS = [
     (1, "Add last_consumed_at column to memories", _migrate_add_last_consumed_at),
     (2, "Backfill FTS5 index", _migrate_fts_backfill),
-    (3, "Transfer context_state records into memories", _migrate_context_state_to_memories),
     (4, "cleanup_orphan_strengths", _migrate_cleanup_orphan_strengths_v4),
     (5, "Add persona column to emotion_history", _migrate_add_persona_to_emotion_history_v5),
     (6, "Replace kind='chat' with 'semantic'", _migrate_remove_chat_kind_v6),

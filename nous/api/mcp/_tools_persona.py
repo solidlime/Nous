@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from nous.domain.memory.cue import due_cues
+from nous.domain.memory.service import ONE_SHOT_STATE_TAGS
 from nous.domain.profile.tokens import DEFAULT_PROFILE_MAX_TOKENS, estimate_tokens
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now, relative_time_str
@@ -149,14 +150,11 @@ async def _tool_get_context(
     # one-shot 生産者は無くなったため、時刻表示はこの due_cues 経路のみ。
     due_labels = {m.key: label for m, label in due_cues(goals or [], get_now()) if getattr(m, "key", None)}
 
-    # Read one-shot state memories (physical_state/mental_state) via service
+    # 状態記憶（physical_state/mental_state）を読む。消費はしない（#52）。
     one_shot_context: dict[str, str] = {}
     if session_effects:
-        for tag_name, label in [
-            ("physical_state", "💪 身体状態"),
-            ("mental_state", "🧠 精神状態"),
-        ]:
-            mems_result = ctx.memory_service.get_and_consume_one_shot(tag_name)
+        for tag_name, label in ONE_SHOT_STATE_TAGS.items():
+            mems_result = ctx.memory_service.get_by_tags([tag_name], include_consumed=True)
             if mems_result.is_ok and mems_result.value:
                 latest = mems_result.value[0]
                 cleaned = latest.content.replace(f"{tag_name}: ", "", 1)

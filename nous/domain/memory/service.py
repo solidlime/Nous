@@ -31,6 +31,13 @@ from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import get_now
 from nous.domain.value_objects import normalize_emotion
 
+# 状態の生タグ -> 表示ラベル。one-shot 消費は廃止（#52: 消費すると次ターンに戻らず、
+# LLM が同じ状態を毎ターン書き直す圧力になっていた）。
+ONE_SHOT_STATE_TAGS: dict[str, str] = {
+    "physical_state": "💪 身体状態",
+    "mental_state": "🧠 精神状態",
+}
+
 # Strong references to background tasks so they aren't garbage-collected mid-flight.
 _background_tasks: set[asyncio.Task] = set()
 
@@ -334,14 +341,6 @@ class MemoryService:
     def get_memory_history(self, key: str) -> Result[list[dict], DomainError]:
         """Get version history for a memory."""
         return self._query_service.get_memory_history(key)
-
-    def get_and_consume_one_shot(self, tag: str) -> Result[list[Memory], DomainError]:
-        """Get the latest memory with the given tag and mark it as consumed.
-
-        Used for one-shot state memories (e.g., physical_state, mental_state).
-        Returns a list with the latest memory if found, else empty list.
-        """
-        return self._query_service.get_and_consume_one_shot(tag)
 
     def get_memory_index(self) -> Result[dict, DomainError]:
         """Get compressed memory index."""

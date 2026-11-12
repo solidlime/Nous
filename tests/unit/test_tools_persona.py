@@ -54,7 +54,7 @@ async def test_get_context_skips_consumed_memories(mock_ctx):
     state = PersonaState(persona="test_persona")
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])  # consumed = empty
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])  # consumed = empty
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success([])
@@ -79,11 +79,11 @@ async def test_get_context_includes_one_shot_memories(mock_ctx):
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
     mock_ctx.memory_service.get_by_tags.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.side_effect = [
-        Success([_make_memory("m1", content="physical_state: 元気", tags=["physical_state"])]),
-        Success([]),  # mental_state: consumed
-        Success([]),  # audit M2 — due_reminder: no commitment due
-    ]
+    mock_ctx.memory_service.get_by_tags.side_effect = lambda tags, include_consumed=False: (
+        Success([_make_memory("m1", content="physical_state: 元気", tags=["physical_state"])])
+        if tags == ["physical_state"]
+        else Success([])
+    )
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success([])
@@ -94,8 +94,16 @@ async def test_get_context_includes_one_shot_memories(mock_ctx):
     assert result["ok"] is True
     assert "💪 身体状態" in result["result"]
     assert "元気" in result["result"]
-    # mental_state consumed → not shown
+    # mental_state が無い → 行ごと出さない
     assert "🧠 精神状態" not in result["result"]
+    # #52: 消費しない。旧行（last_consumed_at 有り）も拾うため include_consumed=True で読む
+    state_calls = [
+        c
+        for c in mock_ctx.memory_service.get_by_tags.call_args_list
+        if c.args and c.args[0] in (["physical_state"], ["mental_state"])
+    ]
+    assert len(state_calls) == 2
+    assert all(c.kwargs.get("include_consumed") is True for c in state_calls)
 
 
 @pytest.mark.asyncio
@@ -108,11 +116,13 @@ async def test_get_context_both_one_shot_present(mock_ctx):
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
     mock_ctx.memory_service.get_by_tags.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.side_effect = [
-        Success([_make_memory("m1", content="physical_state: 元気", tags=["physical_state"])]),
-        Success([_make_memory("m2", content="mental_state: 集中", tags=["mental_state"])]),
-        Success([]),  # audit M2 — due_reminder: no commitment due
-    ]
+    by_tag = {
+        "physical_state": [_make_memory("m1", content="physical_state: 元気", tags=["physical_state"])],
+        "mental_state": [_make_memory("m2", content="mental_state: 集中", tags=["mental_state"])],
+    }
+    mock_ctx.memory_service.get_by_tags.side_effect = lambda tags, include_consumed=False: Success(
+        by_tag.get(tags[0], [])
+    )
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success([])
@@ -138,7 +148,7 @@ async def test_get_context_dedup_recent_vs_top_memories(mock_ctx):
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_top_by_importance.return_value = Success([shared])
     mock_ctx.memory_service.get_by_tags.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success([shared])
@@ -184,7 +194,7 @@ async def test_get_context_summaries_sorted_by_updated_at(mock_ctx):
 
     mock_ctx.memory_service.get_by_tags.side_effect = get_by_tags_side_effect
     mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success([])
@@ -246,7 +256,7 @@ async def test_get_context_with_project_memories(mock_ctx):
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_by_tags.side_effect = get_by_tags_side_effect
     mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success([])
@@ -284,7 +294,7 @@ async def test_get_context_project_no_tag_matches(mock_ctx):
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
     mock_ctx.memory_service.get_by_tags.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success([])
@@ -307,7 +317,7 @@ async def test_get_context_without_project_backward_compat(mock_ctx):
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
     mock_ctx.memory_service.get_by_tags.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success([])
@@ -339,7 +349,7 @@ async def test_get_context_essential_story_dedupes_normalized_content(mock_ctx):
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_top_by_importance.return_value = Success([m1, m2])
     mock_ctx.memory_service.get_by_tags.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success([])
@@ -379,7 +389,7 @@ async def test_get_context_recent_near_duplicates_collapse(mock_ctx):
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
     mock_ctx.memory_service.get_by_tags.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success(recent_mems)
@@ -416,7 +426,7 @@ async def test_get_context_distinct_memories_not_collapsed(mock_ctx):
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
     mock_ctx.memory_service.get_by_tags.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success(recent_mems)
@@ -444,7 +454,7 @@ async def test_get_context_cross_section_dedupe(mock_ctx):
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_top_by_importance.return_value = Success([m_top])
     mock_ctx.memory_service.get_by_tags.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success([m_recent])
@@ -476,7 +486,7 @@ async def test_get_context_inline_datetime_not_deduplicated(mock_ctx):
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_top_by_importance.return_value = Success(top_mems)
     mock_ctx.memory_service.get_by_tags.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success([])
@@ -512,7 +522,7 @@ async def test_get_context_empty_section_header_suppressed(mock_ctx):
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_by_tags.side_effect = get_by_tags_side_effect
     mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success(recent_mems)
@@ -547,7 +557,7 @@ async def test_get_context_collapsed_norm_blocks_later_section(mock_ctx):
     mock_ctx.persona_service.get_context.return_value = Success(state)
     mock_ctx.memory_service.get_top_by_importance.return_value = Success(top_mems)
     mock_ctx.memory_service.get_by_tags.return_value = Success([])
-    mock_ctx.memory_service.get_and_consume_one_shot.return_value = Success([])
+    mock_ctx.memory_service.get_by_tags.return_value = Success([])
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success(recent_mems)

@@ -36,12 +36,7 @@ class MemoryRepository(Protocol):
         self, query: str, limit: int = 10, date_from: datetime | None = None, date_to: datetime | None = None
     ) -> Result[list[tuple[Memory, float]], RepositoryError]: ...
 
-    def consume_memory(self, key: str) -> Result[None, RepositoryError]:
-        """Mark a memory as consumed by setting last_consumed_at = now(). Atomic, single-query."""
-        ...
 
-
-@runtime_checkable
 class MemoryAuxiliaryRepository(Protocol):
     """Extended repository interface for blocks, versions, goals, pagination, etc."""
 
