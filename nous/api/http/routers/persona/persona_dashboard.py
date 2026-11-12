@@ -19,6 +19,36 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _place_since(ctx, persona: str, environment: str | None) -> str | None:
+    """現在地に着いた時刻（直近の ``place.moved``）を ISO で返す。無ければ None。
+
+    ``update_context`` は ``environment`` だけを書き、``place.moved`` を残さない。
+    その場合の直近イベントは**別の場所**を指すので、現在地と一致しないなら None
+    （「3 日前からこの場所にいる」という嘘を出さない）。
+    """
+    try:
+        from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
+
+        events = SessionEventRepository(ctx.connection).get_by_persona(persona, event_type="place.moved", limit=1)
+    except Exception:
+        logger.debug("_place_since: lookup failed", exc_info=True)
+        return None
+    if not events or events[0].timestamp is None:
+        return None
+    detail = events[0].detail
+    if isinstance(detail, str):
+        try:
+            detail = json.loads(detail)
+        except ValueError:
+            detail = None
+    to = str(detail.get("to") or "") if isinstance(detail, dict) else ""
+    from nous.domain.persona.places import same_place
+
+    if not same_place(to, environment):
+        return None
+    return events[0].timestamp.isoformat()
+
+
 async def _do_dashboard_page(persona: str | None = None) -> str:
     """Return rendered dashboard HTML for persona, or setup page if no personas exist."""
     if persona is None:
@@ -67,6 +97,8 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
     ):
         stats[_f] = context.get(_f)
 
+    # 現在地の滞在時間 — 直近の ``place.moved`` から（履歴が無ければ None を返さない）。
+    stats["place_since"] = _place_since(ctx, persona, stats.get("environment"))
     recent_result = ctx.memory_service.get_recent(limit=50)
     recent = [_memory_to_dict(m) for m in recent_result.value] if recent_result.is_ok else []
 

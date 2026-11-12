@@ -26,6 +26,8 @@ CORE_ALWAYS_TOOLS: set[str] = {
     "item_search",
     # ツール発見 — LLM が deferred ツールを検索するために常時必要
     "search_tools",
+    # 場所の移動 — 身体に連動する（疲労・覚醒）ので常に揃えておく
+    "move",
 }
 
 MEMORY_TOOLS: list[ToolDefinition] = [
@@ -286,6 +288,23 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         },
     ),
     ToolDefinition(
+        name="move",
+        description=(
+            "現在地を変える（移動する）。場所は「自室」「ラウンジ」「食堂」「観測デッキ」"
+            "「研究区画」「格納庫」「ドック」など。カタログに無い場所名でもよい。"
+            "移動には時間がかかり、距離に応じて疲労が増え覚醒が上がる。"
+            "会話の流れで実際にその場所へ行く時に使え。"
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "place": {"type": "string", "description": "移動先の場所名"},
+                "reason": {"type": "string", "description": "なぜそこへ行くのか（1行・任意）"},
+            },
+            "required": ["place"],
+        },
+    ),
+    ToolDefinition(
         name="list_skills",
         defer_loading=False,
         description="登録済みスキルの一覧を取得する。利用可能なスキルを把握したい時に使え。スキルの発動自体には invoke_skill を使うこと。引数不要。",
@@ -372,5 +391,6 @@ _NOUS_TOOL_NAMES: frozenset[str] = frozenset(
         "image_generate",
         "list_skills",
         "search_tools",
+        "move",
     }
 )

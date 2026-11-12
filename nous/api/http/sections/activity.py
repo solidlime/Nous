@@ -141,6 +141,7 @@ def render_activity_tab() -> str:
                         <option value="session.started">Session Starts</option>
                         <option value="session.compact">Compressions</option>
                         <option value="events.ingested">External Events</option>
+                        <option value="place.moved">Place Moves</option>
                     </select>
                 </label>
                 <label>Order

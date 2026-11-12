@@ -597,9 +597,9 @@ class WikiWorker:
     def _journal_activity(self, ctx, persona: str, day: date, now: datetime) -> str:
         """``day``（JST）の営みをプロンプト用の 1 行/件の文字列にする。
 
-        材料は pi hook が残した ``session_events``（``turn.completed`` の発話と
-        ``session.started`` のプロジェクト名）。記憶は要点抽出後なので、「何をしていたか」
-        が落ちる。日記に生活の営みを残すには生ログを読むしかない。
+        材料は pi hook が残した ``session_events``（``turn.completed`` の発話、
+        ``session.started`` のプロジェクト名、``place.moved`` の移動）。記憶は要点抽出後なので、
+        「何をしていたか」が落ちる。日記に生活の営みを残すには生ログを読むしかない。
 
         ``timestamp`` は offset 混在の ISO 文字列（hook は UTC の ``Z``、worker は JST）
         なので文字列比較では日を切れない。``julianday()`` で引数側も同じ形式に変換して
@@ -618,6 +618,8 @@ class WikiWorker:
             window = {"since": start.isoformat(), "until": end.isoformat()}
             events = list(repo.get_by_persona(persona, event_type="turn.completed", limit=limit, **window))
             events += list(repo.get_by_persona(persona, event_type="session.started", limit=limit, **window))
+            # 移動は行数が読みにくいので独立の小さい上限（会話行の予算を食い潰さない）
+            events += list(repo.get_by_persona(persona, event_type="place.moved", limit=min(limit, 50), **window))
             picked = sorted((e for e in events if e.timestamp is not None), key=lambda e: _aware(e.timestamp, tz))
             lines = [line for line in (_activity_line(e, tz) for e in picked) if line]
         except Exception:
@@ -1420,6 +1422,9 @@ def _activity_line(event, tz: tzinfo | None) -> str:
     if event.event_type == "turn.completed":
         parts = [str(detail.get(k) or "").strip() for k in ("user_text", "assistant_text")]
         body = " / ".join(p for p in parts if p)
+    elif event.event_type == "place.moved":
+        to = str(detail.get("to") or "").strip()
+        body = f"{to} へ移動" if to else ""
     else:
         name = str(detail.get("name") or "").strip()
         project = str(detail.get("project") or "").strip()

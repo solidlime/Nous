@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from nous.domain.memory.cue import due_cues, event_cued_memories
+from nous.domain.persona.body import body_action_hint
 from nous.domain.persona.emotion_trend import build_emotion_trend_narrative
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now, relative_time_str
@@ -159,6 +160,11 @@ async def _build_context_section(
 
     if getattr(state, "environment", None):
         t2.append(f"場所: {state.environment}")
+
+    # 数値から導いた行動の傾向（制約ではない。虚弱時だけ 1〜2 文）
+    body_hint = body_action_hint(state)
+    if body_hint:
+        t2.append(f"身体の傾向: {body_hint}")
 
     if getattr(state, "relationship_status", None):
         t2.append(f"関係: {state.relationship_status}")

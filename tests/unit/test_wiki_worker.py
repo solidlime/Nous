@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
 from nous.application.workers.wiki_worker import MIN_TOPIC_MEMORIES, WikiWorker
@@ -1208,6 +1208,37 @@ class TestJournalActivity:
             assert [line[:6] for line in lines] == ["- 11:3", "- 15:2"]
             assert "お菓子作り" in activity
             assert "前の日" not in activity and "翌日" not in activity
+        finally:
+            conn.close()
+
+    def test_place_moved_query_uses_small_limit(self, tmp_path) -> None:
+        """移動の取得は独立の上限（会話行の予算を食い潰さない）。"""
+        conn, worker, ctx = _journal_setup(tmp_path, [], self._body)
+        try:
+            worker._cfg = worker._cfg.model_copy(update={"journal_activity_max_events": 400})
+            with patch(
+                "nous.infrastructure.sqlite.session_event_repo.SessionEventRepository.get_by_persona",
+                return_value=[],
+            ) as get:
+                worker._journal_activity(ctx, "test_ww", self._day, self._now)
+            limits = {c.kwargs["event_type"]: c.kwargs["limit"] for c in get.call_args_list if "event_type" in c.kwargs}
+            assert limits["place.moved"] == 50
+            assert limits["turn.completed"] == 400
+        finally:
+            conn.close()
+
+    def test_place_moved_becomes_activity_line(self, tmp_path) -> None:
+        """移動は日記の材料になる（`place.moved` を無視すると移動が全部消える）。"""
+        conn, worker, ctx = _journal_setup(tmp_path, [], self._body)
+        try:
+            _sess_event(
+                conn,
+                "place.moved",
+                datetime(2026, 11, 9, 9, 5, tzinfo=_JST),
+                {"from": "自室", "to": "観測デッキ", "minutes": 10},
+            )
+            activity = worker._journal_activity(ctx, "test_ww", self._day, self._now)
+            assert "09:05" in activity and "観測デッキ へ移動" in activity
         finally:
             conn.close()
 

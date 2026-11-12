@@ -27,6 +27,7 @@ const ACT_ICONS = {
     'session.started':    '<i data-lucide="play"></i>',
     'session.compact':    '<i data-lucide="shrink"></i>',
     'events.ingested':    '<i data-lucide="upload"></i>',
+    'place.moved':        '<i data-lucide="map-pin"></i>',
 };
 
 const ACT_LABELS = {
@@ -36,6 +37,7 @@ const ACT_LABELS = {
     'session.started':    'Start',
     'session.compact':    'Compress',
     'events.ingested':    'External',
+    'place.moved':        'Move',
 };
 
 const ACT_PLATFORM_ICONS = {

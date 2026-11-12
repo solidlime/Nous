@@ -157,3 +157,33 @@ class TestCharacterAdherenceConsistency:
 
         rendered = CHARACTER_ADHERENCE_BLOCK.format(persona="ヘルタ")
         assert "ヘルタ" in rendered
+
+
+class TestBodyActionHint:
+    """身体の数値から導いた「身体の傾向」行（助言のみ・虚弱時だけ）。"""
+
+    @pytest.mark.asyncio
+    async def test_hint_rendered_when_fatigued(self):
+        state = _make_state()
+        state.fatigue = 0.8
+        result = await _build(_make_ctx(), state)
+        assert "身体の傾向:" in result
+        assert "強い疲労" in result
+
+    @pytest.mark.asyncio
+    async def test_no_hint_when_healthy(self):
+        state = _make_state()
+        state.fatigue = 0.1
+        state.arousal = 0.2
+        result = await _build(_make_ctx(), state)
+        assert "身体の傾向:" not in result
+
+    @pytest.mark.asyncio
+    async def test_place_line_still_present(self):
+        """場所の行は従来どおり出る（助言行の追加で消えない）。"""
+        state = _make_state()
+        state.environment = "ラウンジ"
+        state.fatigue = 0.9
+        result = await _build(_make_ctx(), state)
+        assert "場所: ラウンジ" in result
+        assert "身体の傾向:" in result

@@ -131,7 +131,7 @@ async function loadOverview() {
                     ${ctx.last_conversation_time ? '<div class="ov-quick-row"><span class="ov-quick-label"><i data-lucide="clock"></i> Last</span><span class="ov-quick-value">' + relativeTime(ctx.last_conversation_time) + '</span></div>' : ''}
                     <div class="ov-quick-row"><span class="ov-quick-label">Physical</span><span class="ov-quick-value">${esc(physicalContent || '--')}</span></div>
                     <div class="ov-quick-row"><span class="ov-quick-label">Mental</span><span class="ov-quick-value">${esc(mentalContent || '--')}</span></div>
-                    ${stats.environment ? '<div class="ov-quick-row"><span class="ov-quick-label">Environment</span><span class="ov-quick-value"><span class="badge badge-blue">' + esc(stats.environment) + '</span></span></div>' : ''}
+                    ${stats.environment ? '<div class="ov-quick-row"><span class="ov-quick-label"><i data-lucide="map-pin"></i> Place</span><span class="ov-quick-value"><span class="badge badge-blue">' + esc(stats.environment) + '</span>' + (stats.place_since ? ' <span class="ov-muted">' + esc(relativeTime(stats.place_since)) + ' から</span>' : '') + '</span></div>' : ''}
                 </div>
 
                 <!-- 2. Status (Emotion + Body) -->

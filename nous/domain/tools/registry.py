@@ -366,6 +366,21 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
         },
         divergence="builtin 面は query + new_content の LLM 向け DSL。MCP 面は memory_key / key / content と感情・プライバシー項目を持つ API 形状。",
     ),
+    "move": ToolSpec(
+        name="move",
+        summary="現在地を移動し、移動の生理コストを身体状態に反映する",
+        surfaces=frozenset({BUILTIN, HTTP}),
+        params={
+            BUILTIN: (
+                ToolParam("place", "string", required=True),
+                ToolParam("reason", "string", required=False),
+            ),
+            HTTP: (
+                ToolParam("place", "string", required=True),
+                ToolParam("reason", "string", required=False),
+            ),
+        },
+    ),
     "search_tools": ToolSpec(
         name="search_tools",
         summary="遅延ロードされたツールを検索して発見する",

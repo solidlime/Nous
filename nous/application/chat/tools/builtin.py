@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -351,6 +352,116 @@ async def _handle_list_skills(ctx: AppContext, config: ChatConfig, tool_input: d
         return {"status": "error", "message": str(e)}
 
 
+async def _handle_move(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
+    """現在地を変える。移動の生理コスト（疲労・覚醒）を自動で課す。
+
+    拒否しない（強制力は入れないとユーザー決定）。代わりに身体の傾向を ``note`` で返し、
+    重い時は本人が「休む」判断をしやすいようにする。
+    """
+    from nous.domain.persona.body import body_action_hint
+    from nous.domain.persona.entities import PersonaState
+    from nous.domain.persona.places import find_place, travel_minutes
+    from nous.domain.shared.result import Failure, Success
+
+    place = str(tool_input.get("place") or "").strip()
+    if not place:
+        return {"status": "error", "message": "place is required"}
+
+    state_result = ctx.persona_service.get_context(ctx.persona)
+    if not isinstance(state_result, Success):
+        # 読めない状態を 0.0 として書き込むと、実値（疲労・痛み）を静かに消す。
+        return {"status": "error", "message": "現在の状態を読めないため移動を記録できない"}
+    state = state_result.value
+    origin = getattr(state, "environment", None)
+
+    minutes = travel_minutes(origin, place)
+    fatigue_delta = min(0.15, minutes * 0.0015)
+    arousal_delta = min(0.03, minutes * 0.0006)
+    old_fatigue = _as_float(getattr(state, "fatigue", None), 0.0)
+    old_arousal = _as_float(getattr(state, "arousal", None), 0.0)
+    new_fatigue = min(1.0, old_fatigue + fatigue_delta)
+    new_arousal = min(1.0, old_arousal + arousal_delta)
+
+    # 表示名はカタログの正式名が引けたらそれ（「ラウンジ 」等の揺れを潰す）、無ければ入力どおり。
+    known = find_place(place)
+    target = known.name if known is not None else place
+    updated = ctx.persona_service.update_physical_state(
+        ctx.persona, environment=target, fatigue=new_fatigue, arousal=new_arousal
+    )
+    if isinstance(updated, Failure):
+        return {"status": "error", "message": str(updated.error)}
+
+    if minutes > 0:
+        _record_place_event(
+            ctx,
+            {
+                "from": origin,
+                "to": target,
+                "minutes": minutes,
+                "known": known is not None,
+                "reason": tool_input.get("reason") or None,
+                "fatigue": round(new_fatigue, 3),
+                "arousal": round(new_arousal, 3),
+            },
+        )
+
+    result: dict[str, Any] = {
+        "status": "ok",
+        "place": target,
+        "from": origin,
+        "minutes": minutes,
+        "fatigue": round(new_fatigue, 3),
+        "fatigue_delta": round(new_fatigue - old_fatigue, 4),
+        "arousal_delta": round(new_arousal - old_arousal, 4),
+    }
+    if known is None:
+        result["note"] = f"「{target}」は新しい場所として記録した（以後の語彙になる）。"
+    hint = body_action_hint(
+        PersonaState(
+            persona=ctx.persona,
+            fatigue=new_fatigue,
+            arousal=new_arousal,
+            pain=getattr(state, "pain", None),
+            warmth=getattr(state, "warmth", None),
+        )
+    )
+    if hint:
+        result["body"] = hint
+    return result
+
+
+def _as_float(value: object, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        number = float(str(value))
+    except (TypeError, ValueError):
+        return default
+    return number if math.isfinite(number) else default
+
+
+def _record_place_event(ctx: AppContext, detail: dict) -> None:
+    """``place.moved`` を session_events に残す（テーブルは増やさない）。"""
+    try:
+        from nous.domain.memory.session_event import SessionEvent
+        from nous.domain.shared.time_utils import get_now
+        from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
+
+        SessionEventRepository(ctx.connection).insert(
+            SessionEvent(
+                session_id=getattr(ctx, "session_id", None) or "chat",
+                persona=ctx.persona,
+                event_type="place.moved",
+                timestamp=get_now(),
+                summary=f"moved to {detail.get('to')} from {detail.get('from')}"[:200],
+                detail=json.dumps(detail, ensure_ascii=False),
+                metadata=None,
+            )
+        )
+    except Exception:
+        logger.exception("failed to record place.moved")
+
+
 async def _handle_invoke_skill(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
     """スキルの内容をDBから取得して返す。別LLM呼び出しは行わない。
 
@@ -381,6 +492,7 @@ _BUILTIN_DISPATCH: dict[str, Any] = {
     "list_skills": _handle_list_skills,
     "image_generate": _handle_image_generate,
     "invoke_skill": _handle_invoke_skill,
+    "move": _handle_move,
 }
 
 _MCP_SHARED_TOOLS = frozenset(
