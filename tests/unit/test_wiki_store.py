@@ -177,3 +177,39 @@ def test_index_keeps_recent_journals_in_own_section(store):
     assert "[[journal-2026-11-01]]" not in index  # 7 件を超えた分は畳む
     assert "他 4 日分" in index
     assert "[[project-nous]]" in index
+
+
+def test_history_records_each_write_and_delete(store):
+    """書込み・削除の前版が履歴に残り、新しい順にメタだけ返る（本文は含めない）。"""
+    store.write_page("p-hist", title="v1", body="one")
+    store.write_page("p-hist", title="v2", body="two")
+    store.write_page("p-hist", title="v3", body="three")
+
+    revisions = store.history("p-hist")
+    assert [r["title"] for r in revisions] == ["v2", "v1"]  # 現在版(v3)の前版から
+    assert revisions[0]["action"] == "write"
+    assert revisions[1]["action"] == "create"  # 初版も戻せる
+    assert "body" not in revisions[0]
+
+    assert store.delete_page("p-hist").is_ok
+    assert store.history("p-hist")[0]["action"] == "delete"
+
+
+def test_restore_revision_writes_back_and_keeps_new_entry(store):
+    """過去の版に戻すと本文が戻り、戻した操作自体も履歴に残る（1 段戻しではなく追記型）。"""
+    store.write_page("p-restore", title="v1", body="old body", sources=("k1",))
+    rev = store.history("p-restore")[0]["rev"]  # 初版(create)
+    store.write_page("p-restore", title="v2", body="new body")
+
+    restored = store.restore_revision("p-restore", rev)
+    assert restored.is_ok
+    current = store.read_page("p-restore").value
+    assert current.body == "old body"
+    assert current.sources == ("k1",)
+    # 戻し先の版 + 直前版(v2) が履歴に並ぶ
+    assert [r["title"] for r in store.history("p-restore")] == ["v2", "v1"]
+
+
+def test_restore_missing_revision_is_failure(store):
+    store.write_page("p-miss", title="v1", body="b")
+    assert not store.restore_revision("p-miss", 999).is_ok

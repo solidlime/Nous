@@ -105,7 +105,9 @@ def _settings(tmp_path, **wiki_update) -> SimpleNamespace:
     ``research_enabled`` は既定 False（#53）なので、wiki 層のテストから
     外部 MCP へ出る経路は踏まない。
     """
-    params = {"enabled": True, **wiki_update}
+    # 日記は既定で止める。窓が run_at_hour 基準なので、有効なままだと実行時刻
+    # （00:00〜03:00）で材料が日記に食われ、topic 編纂のテストが時刻依存で落ちる。
+    params = {"enabled": True, "journal_enabled": False, **wiki_update}
     wiki = WikiConfig(**params)
     s = SimpleNamespace(
         wiki=wiki,

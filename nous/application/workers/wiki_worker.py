@@ -497,26 +497,46 @@ class WikiWorker(JournalMixin, ConflictsMixin):
         """1 topic 分を編纂する。戻り値は調査に回す問い（``topic`` を埋めたもの）。"""
         pages = store.list_pages()
         memories = self._topic_memories(memories)
+        candidate_keys = [m.key for m in memories]  # 監査イベントの入力根拠
         payload, error, attempt = self._ask_and_parse(topic, memories, pages, now)
         if payload is None:
             self._record_event(
                 ctx,
                 persona,
                 f"error: {error}",
-                {"topic": topic, "attempt": attempt, **(self._last_llm or {})},
+                {
+                    "topic": topic,
+                    "attempt": attempt,
+                    "input_count": len(memories),
+                    "input_keys": candidate_keys[:_EVENT_KEY_SAMPLE],
+                    **(self._last_llm or {}),
+                },
             )
             return []
         page_dicts = payload["pages"]
         if not page_dicts:
             # 成功扱いで無言で抜けると「動いているのに更新されない」がログに残らない。
-            self._record_event(ctx, persona, f"skipped: no pages returned for {topic}", {"topic": topic})
+            self._record_event(
+                ctx,
+                persona,
+                f"skipped: no pages returned for {topic}",
+                {"topic": topic, "input_count": len(memories), "input_keys": candidate_keys[:_EVENT_KEY_SAMPLE]},
+                event_type="wiki.compile",
+            )
         elif attempt:
             # 再試行で救ったことを残す（「効いたのかモデルを替えるべきか」を後から判定する）。
             self._record_event(
                 ctx,
                 persona,
                 f"recovered: {topic} on attempt {attempt + 1}",
-                {"topic": topic, "attempt": attempt, **(self._last_llm or {})},
+                {
+                    "topic": topic,
+                    "attempt": attempt,
+                    "input_count": len(memories),
+                    "input_keys": candidate_keys[:_EVENT_KEY_SAMPLE],
+                    **(self._last_llm or {}),
+                },
+                event_type="wiki.compile",
             )
 
         candidates = {m.key: m for m in memories}
@@ -532,7 +552,12 @@ class WikiWorker(JournalMixin, ConflictsMixin):
                     deleted_slugs.update(str(d) for d in page.get("delete", []) or [] if isinstance(d, str))
             except Exception as e:
                 logger.warning("WikiWorker: page apply failed (%s): %s", page.get("slug"), e)
-                self._record_event(ctx, persona, f"error: page {page.get('slug')} failed: {e}", None)
+                self._record_event(
+                    ctx,
+                    persona,
+                    f"error: page {page.get('slug')} failed: {e}",
+                    {"topic": topic, "slug": page.get("slug")},
+                )
 
         # 幻覚 slug ガードは「実際に書けた slug ∪ 既存から今サイクルで消したものを除いたもの」。
         # 目次と日記は矛盾の当事者にならないので外す。
@@ -646,7 +671,9 @@ class WikiWorker(JournalMixin, ConflictsMixin):
 
         existing = store.read_page(slug)
         existed = isinstance(existing, Success)
+        previous_hash = None
         if isinstance(existing, Success):
+            previous_hash = _hash_of(existing.value.title, existing.value.body)
             # 源は減らさない。消えた記憶のキーは「そのページを支えた履歴」で、
             # 改訂で落とすと本文の根拠がどこからも読めなくなる。
             sources = list(dict.fromkeys([*sources, *existing.value.sources]))
@@ -671,8 +698,26 @@ class WikiWorker(JournalMixin, ConflictsMixin):
                 store.delete_page(doomed)
                 if self.vector_enabled:
                     vector_index.drop_page(self._settings, persona, doomed)
+                # 削除も監査に残す（「いつ何が消えたか」を後から追えるように）。
+                self._record_event(
+                    ctx,
+                    persona,
+                    f"deleted {doomed} (merged into {slug})",
+                    {
+                        "slug": doomed,
+                        "reason": "merged",
+                        "into": slug,
+                        "topic": topic,
+                        "source_count": len(sources),
+                        "input_count": len(candidates),
+                    },
+                    event_type="wiki.deleted",
+                )
 
         action = "updated" if existed else "created"
+        new_hash = _hash_of(title, body)
+        # 「なぜこの版になったか」を後から読めるように入力の根拠を残す。
+        reason = "created" if not existed else "unchanged-body" if previous_hash == new_hash else "revised"
         self._record_event(
             ctx,
             persona,
@@ -680,11 +725,19 @@ class WikiWorker(JournalMixin, ConflictsMixin):
             {
                 "slug": slug,
                 "action": action,
+                "reason": reason,
                 "topic": topic,
                 "sources": sources,
+                "source_count": len(sources),
+                "input_count": len(candidates),
+                "input_keys": list(candidates.keys())[:_EVENT_KEY_SAMPLE],
+                "input_truncated": len(candidates) > _EVENT_KEY_SAMPLE,
+                "unused_sources": [k for k in candidates if k not in sources][:_EVENT_KEY_SAMPLE],
                 "deletes": page.get("delete", []),
                 "deleted": deleted,
-                "page_hash": _hash_of(title, body),
+                "previous_hash": previous_hash,
+                "page_hash": new_hash,
+                "body_bytes": len(body.encode()),
             },
         )
         return True

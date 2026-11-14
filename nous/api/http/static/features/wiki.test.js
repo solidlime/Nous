@@ -50,6 +50,7 @@ beforeAll(() => {
 beforeEach(() => {
   W._state.pages = [];
   W._state.current = null;
+  W._state.q = '';
   setPersona('herta');
   vi.restoreAllMocks();
 });
@@ -192,4 +193,168 @@ test('empty search result says no match instead of the empty-wiki placeholder', 
   const text = document.getElementById('wiki-list').textContent;
   expect(text).toContain('一致するページは無い');
   expect(text).not.toContain('ページがまだない');
+});
+
+/* -----------------------------------------------------------------
+   編集 / 削除 — the write paths the read-only list tests never touch.
+   ----------------------------------------------------------------- */
+function listAndPageFetch(page, onPut) {
+  const state = { body: page.body, title: page.title };
+  const fetchMock = vi.fn(async (url, opts = {}) => {
+    if (opts.method === 'PUT') {
+      const posted = JSON.parse(opts.body);
+      state.title = posted.title;
+      state.body = posted.body;
+      if (onPut) await onPut(posted, fetchMock);
+      return jsonResponse({ slug: page.slug, title: state.title, body: state.body, sources: [] });
+    }
+    if (url === '/api/wiki/herta') {
+      return jsonResponse({ pages: [{ slug: page.slug, title: state.title, sources: [] }] });
+    }
+    return jsonResponse({ slug: page.slug, title: state.title, body: state.body, sources: [] });
+  });
+  return { fetchMock, state };
+}
+
+test('edit shows title/body inputs and cancel restores the rendered page', async () => {
+  const { fetchMock } = listAndPageFetch({ slug: 'a', title: 'A', body: 'old body' });
+  vi.stubGlobal('fetch', fetchMock);
+  await W.loadWiki();
+
+  W.enterEdit();
+  expect(document.getElementById('wiki-edit-title').value).toBe('A');
+  expect(document.getElementById('wiki-edit-body').value).toBe('old body');
+
+  document.getElementById('wiki-cancel').click();
+  expect(document.getElementById('wiki-edit-body')).toBeNull();
+  expect(document.getElementById('wiki-article-body').textContent).toContain('old body');
+  expect(fetchMock.mock.calls.some((c) => c[1] && c[1].method === 'PUT')).toBe(false);
+});
+
+test('save PUTs title/body to the page URL and re-renders the saved page', async () => {
+  const { fetchMock } = listAndPageFetch({ slug: 'a', title: 'A', body: 'old body' });
+  vi.stubGlobal('fetch', fetchMock);
+  await W.loadWiki();
+
+  W.enterEdit();
+  document.getElementById('wiki-edit-title').value = 'New title';
+  document.getElementById('wiki-edit-body').value = 'new body';
+  document.getElementById('wiki-save').click();
+
+  await vi.waitFor(() => {
+    expect(document.getElementById('wiki-article-body').textContent).toContain('new body');
+  });
+  const put = fetchMock.mock.calls.find((c) => c[1] && c[1].method === 'PUT');
+  expect(put[0]).toBe('/api/wiki/herta/a');
+  expect(JSON.parse(put[1].body)).toEqual({ title: 'New title', body: 'new body' });
+  expect(document.getElementById('wiki-article-head').textContent).toContain('New title');
+});
+
+test('save failure keeps the editor open and re-enables the save button', async () => {
+  const fetchMock = vi.fn(async (url, opts = {}) => {
+    if (opts.method === 'PUT') {
+      return { ok: false, status: 500, statusText: 'Server Error', headers: { get: () => 'application/json' }, json: async () => ({ error: 'nope' }) };
+    }
+    if (url === '/api/wiki/herta') return jsonResponse({ pages: [{ slug: 'a', title: 'A' }] });
+    return jsonResponse({ slug: 'a', title: 'A', body: 'old body' });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  await W.loadWiki();
+
+  W.enterEdit();
+  document.getElementById('wiki-save').click();
+
+  await vi.waitFor(() => {
+    const btn = document.getElementById('wiki-save');
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent).toBe('保存');
+  });
+  const editor = document.getElementById('wiki-edit-body');
+  expect(editor).not.toBeNull();
+  expect(editor.value).toBe('old body');
+});
+
+test('delete asks for confirmation and does nothing when cancelled', async () => {
+  const fetchMock = listAndPageFetch({ slug: 'a', title: 'A', body: 'x' }).fetchMock;
+  vi.stubGlobal('fetch', fetchMock);
+  vi.spyOn(window, 'confirm').mockReturnValue(false);
+  await W.loadWiki();
+
+  await W.deletePage('a');
+  expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('a'));
+  expect(fetchMock.mock.calls.some((c) => c[1] && c[1].method === 'DELETE')).toBe(false);
+  expect(document.getElementById('wiki-article-body').textContent).toContain('x');
+});
+
+test('confirmed delete DELETEs the page and falls back to the empty view', async () => {
+  let deleted = false;
+  const fetchMock = vi.fn(async (url, opts = {}) => {
+    if (opts.method === 'DELETE') {
+      deleted = true;
+      return jsonResponse({ ok: true });
+    }
+    if (url === '/api/wiki/herta') {
+      return jsonResponse({ pages: deleted ? [] : [{ slug: 'a', title: 'A' }] });
+    }
+    return jsonResponse({ slug: 'a', title: 'A', body: 'x' });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  await W.loadWiki();
+
+  await W.deletePage('a');
+  const del = fetchMock.mock.calls.find((c) => c[1] && c[1].method === 'DELETE');
+  expect(del[0]).toBe('/api/wiki/herta/a');
+  expect(W._state.current).toBeNull();
+  expect(W._state.page).toBeNull();
+  expect(document.getElementById('wiki-article-body').textContent).toContain('左の一覧からページを選ぶ');
+});
+
+test('page headline exposes project/sources/updated metadata', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url) => {
+    if (url === '/api/wiki/herta') {
+      return jsonResponse({ pages: [{ slug: 'project-nous', title: 'Nous', category: 'project', project: 'nous', sources: ['m1', 'm2'], updated: '2026-11-08T10:00:00+09:00' }] });
+    }
+    return jsonResponse({ slug: 'project-nous', title: 'Nous', project: 'nous', sources: ['m1', 'm2'], updated: '2026-11-08T10:00:00+09:00', body: '' });
+  }));
+  await W.loadWiki();
+  expect(document.getElementById('wiki-article-head').textContent).toContain('project: nous · 2 sources · updated 2026-11-08');
+});
+
+test('a page load failure is reported in the article pane', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url) => {
+    if (url === '/api/wiki/herta') return jsonResponse({ pages: [{ slug: 'a', title: 'A' }] });
+    throw new Error('gone');
+  }));
+  await W.loadWiki();
+  expect(document.getElementById('wiki-article-body').textContent).toContain('読み込めない: a');
+});
+
+test('reloading the list keeps the current page when it is still listed', async () => {
+  const fetchMock = vi.fn(async (url) => {
+    if (url === '/api/wiki/herta') {
+      return jsonResponse({ pages: [{ slug: 'a', title: 'A' }, { slug: 'b', title: 'B' }] });
+    }
+    return jsonResponse({ slug: url.slice(-1), title: url.slice(-1), body: 'body ' + url.slice(-1) });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  await W.loadWiki();
+  await W.loadPage('b');
+
+  await W.loadWiki();
+  expect(fetchMock.mock.calls.at(-1)[0]).toBe('/api/wiki/herta/b');
+  expect(document.querySelector('[data-wiki-slug="b"]').classList.contains('active')).toBe(true);
+});
+
+test('titles from the API are escaped, not injected as markup', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url) => {
+    if (url === '/api/wiki/herta') {
+      return jsonResponse({ pages: [{ slug: 'x', title: '<img src=x onerror=alert(1)>' }] });
+    }
+    return jsonResponse({ slug: 'x', title: '<img src=x onerror=alert(1)>', body: '' });
+  }));
+  await W.loadWiki();
+  expect(document.querySelector('#wiki-list img')).toBeNull();
+  expect(document.querySelector('#wiki-article-head img')).toBeNull();
+  expect(document.getElementById('wiki-list').textContent).toContain('<img src=x onerror=alert(1)>');
 });

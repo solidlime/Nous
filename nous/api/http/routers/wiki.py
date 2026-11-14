@@ -20,12 +20,40 @@ from nous.application.wiki.categories import categorize
 from nous.application.wiki.vector_index import async_drop_page, async_sync_page
 from nous.domain.shared.result import Failure, Success
 from nous.infrastructure.logging.structured import get_logger
-from nous.infrastructure.wiki.store import WikiStore, WikiStoreError
+from nous.infrastructure.wiki.store import WikiStore, WikiStoreError, page_hash
 
 if TYPE_CHECKING:
     from starlette.requests import Request
 
 logger = get_logger(__name__)
+
+#: 手動再編纂のクールダウン（persona → monotonic 秒）。連打で LLM 費用を焼かないため。
+_RECOMPILE_COOLDOWN = 60.0
+_last_recompile: dict[str, float] = {}
+
+
+def _audit(ctx, persona: str, summary: str, detail: dict, *, event_type: str = "wiki.compiled") -> None:
+    """ダッシュボード発の書込みを session_events に残す（best-effort）。"""
+    try:
+        import json
+
+        from nous.domain.memory.session_event import SessionEvent
+        from nous.domain.shared.time_utils import get_now
+        from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
+
+        SessionEventRepository(ctx.connection).insert(
+            SessionEvent(
+                session_id="wiki_worker",
+                persona=persona,
+                event_type=event_type,
+                timestamp=get_now(),
+                summary=summary[:200],
+                detail=json.dumps(detail, ensure_ascii=False),
+                metadata=None,
+            )
+        )
+    except Exception:
+        logger.warning("wiki audit event failed: %s", summary, exc_info=True)
 
 
 def _plugin_key_gate(request: Request, ctx) -> JSONResponse | None:
@@ -42,6 +70,27 @@ def _plugin_key_gate(request: Request, ctx) -> JSONResponse | None:
     if not secrets.compare_digest(token, plugin_cfg.api_key):
         return JSONResponse({"error": "Invalid API key"}, status_code=401)
     return None
+
+
+def _match_lines(body: str, query: str, limit: int = 50) -> list[dict]:
+    """本文中の一致行（検索ハイライト用）。``query`` が空なら空リスト。"""
+    if not query:
+        return []
+    regex = re.compile(re.escape(query), re.IGNORECASE)
+    return [
+        {"line": line_no, "text": line.strip()[:300]}
+        for line_no, line in enumerate(body.splitlines(), start=1)
+        if regex.search(line)
+    ][:limit]
+
+
+def _backlinks(store: WikiStore, slug: str) -> list[str]:
+    """``slug`` を ``[[..]]`` で指しているページ（逆リンク）。"""
+    try:
+        return sorted(page.slug for page in store.list_pages() if slug in page.links)
+    except Exception:
+        logger.warning("wiki backlinks failed for %s", slug, exc_info=True)
+        return []
 
 
 def register_wiki_routes(mcp) -> None:
@@ -101,6 +150,115 @@ def register_wiki_routes(mcp) -> None:
                 kept.append(page)
         return kept, hits
 
+    # 履歴系は ``{slug:path}`` より先に登録する（path 変換が貪欲に食うため）。
+    # ``_history`` / ``_restore`` / ``_recompile`` は slug に使えない文字で始まる予約名。
+    @mcp.custom_route("/api/wiki/{persona}/_history/{rev:int}/{slug:path}", methods=["GET"])
+    async def wiki_revision(request: Request) -> JSONResponse:
+        """過去の版 1 つ（本文込み）を返す。"""
+        persona = request.path_params["persona"]
+        slug = request.path_params["slug"]
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return JSONResponse({"error": "Persona not found"}, status_code=404)
+        try:
+            store = WikiStore(ctx.settings.data_root, persona)
+            found = store.read_revision(slug, int(request.path_params["rev"]))
+        except WikiStoreError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+        if isinstance(found, Failure):
+            return JSONResponse({"error": str(found.error)}, status_code=404)
+        page = found.value
+        current = store.read_page(slug)
+        return JSONResponse(
+            {
+                "slug": slug,
+                "rev": int(request.path_params["rev"]),
+                "title": page.title,
+                "updated": page.updated,
+                "sources": list(page.sources),
+                "links": list(page.links),
+                "body": page.body,
+                "current_body": current.value.body if isinstance(current, Success) else "",
+            }
+        )
+
+    @mcp.custom_route("/api/wiki/{persona}/_history/{slug:path}", methods=["GET"])
+    async def wiki_history(request: Request) -> JSONResponse:
+        """改訂履歴（新しい順・本文なし）。"""
+        persona = request.path_params["persona"]
+        slug = request.path_params["slug"]
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return JSONResponse({"error": "Persona not found"}, status_code=404)
+        try:
+            revisions = WikiStore(ctx.settings.data_root, persona).history(slug)
+        except WikiStoreError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+        return JSONResponse({"slug": slug, "revisions": revisions})
+
+    @mcp.custom_route("/api/wiki/{persona}/_restore/{rev:int}/{slug:path}", methods=["POST"])
+    async def wiki_restore(request: Request) -> JSONResponse:
+        """過去の版を書き戻す（書き戻し自体も 1 リビジョンとして残る）。"""
+        persona = request.path_params["persona"]
+        slug = request.path_params["slug"]
+        rev = int(request.path_params["rev"])
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return JSONResponse({"error": "Persona not found"}, status_code=404)
+        try:
+            store = WikiStore(ctx.settings.data_root, persona)
+            restored = store.restore_revision(slug, rev)
+        except WikiStoreError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        if isinstance(restored, Failure):
+            return JSONResponse({"error": str(restored.error)}, status_code=404)
+        page = restored.value
+        try:
+            asyncio.create_task(async_sync_page(ctx.settings, persona, page.slug, page.title, page.body))
+        except Exception as e:
+            logger.warning("wiki restore: vector sync not scheduled for %s: %s", slug, e)
+        _audit(ctx, persona, f"restored {slug} to rev {rev}", {"slug": slug, "rev": rev, "via": "dashboard"})
+        logger.info("wiki page restored from dashboard: persona=%s slug=%s rev=%s", persona, slug, rev)
+        return JSONResponse({"slug": page.slug, "rev": rev, "restored": True, "body": page.body})
+
+    @mcp.custom_route("/api/wiki/{persona}/_recompile", methods=["POST"])
+    async def wiki_recompile(request: Request) -> JSONResponse:
+        """ダッシュボードからの手動再編纂（プラグイン鍵なし・クールダウン付き）。
+
+        ``POST /api/wiki/run/{persona}`` は plugin API key 前提なのでブラウザからは
+        叩けない。ダッシュボード自体が無認証なので別の鍵は持たせられない代わりに、
+        persona 単位のクールダウンで連打を防ぐ（逆向きプロキシで認証をかける前提）。
+        """
+        import time
+
+        persona = request.path_params["persona"]
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return JSONResponse({"error": "Persona not found"}, status_code=404)
+        if not ctx.settings.wiki.enabled:
+            return JSONResponse({"error": "wiki worker is disabled (NOUS_WIKI__ENABLED=false)"}, status_code=409)
+        now = time.monotonic()
+        last = _last_recompile.get(persona, 0.0)
+        if now - last < _RECOMPILE_COOLDOWN:
+            wait = int(_RECOMPILE_COOLDOWN - (now - last)) + 1
+            return JSONResponse(
+                {"error": f"recompile already requested; retry in {wait}s", "retry_after": wait}, status_code=429
+            )
+        _last_recompile[persona] = now
+
+        def _run() -> None:
+            try:
+                from nous.application.workers.wiki_worker import WikiWorker
+
+                WikiWorker(ctx.settings)._compile_persona(ctx, persona)
+            except Exception:
+                logger.exception("wiki dashboard recompile failed for persona=%s", persona)
+
+        threading.Thread(target=_run, daemon=True, name=f"wiki-dashboard-{persona}").start()
+        _audit(ctx, persona, "recompile requested from dashboard", {"via": "dashboard"}, event_type="wiki.run")
+        logger.info("wiki recompile accepted from dashboard for persona=%s", persona)
+        return JSONResponse({"accepted": True, "persona": persona}, status_code=202)
+
     # GET / PUT / DELETE を 1 つの Route に載せる: 同一 path を複数回 custom_route すると
     # PUT 側で request.json() が空になり "Invalid JSON body" になる（実測）。
     @mcp.custom_route("/api/wiki/{persona}/{slug:path}", methods=["GET", "PUT", "DELETE"])
@@ -116,13 +274,15 @@ def register_wiki_routes(mcp) -> None:
         if ctx is None:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
         try:
-            result = WikiStore(ctx.settings.data_root, persona).read_page(slug)
+            store = WikiStore(ctx.settings.data_root, persona)
+            result = store.read_page(slug)
         except WikiStoreError as exc:
             # 不正 slug / traversal 試行もここに落ちる（存在を漏らさない 404）。
             return JSONResponse({"error": str(exc)}, status_code=404)
         if isinstance(result, Failure):
             return JSONResponse({"error": str(result.error)}, status_code=404)
         page = result.value
+        query = (request.query_params.get("q") or "").strip()
         return JSONResponse(
             {
                 "slug": page.slug,
@@ -131,6 +291,9 @@ def register_wiki_routes(mcp) -> None:
                 "tags": list(page.tags),
                 "sources": list(page.sources),
                 "links": list(page.links),
+                "backlinks": _backlinks(store, page.slug),
+                "matches": _match_lines(page.body, query),
+                "q": query,
                 "updated": page.updated,
                 "body": page.body,
             }
@@ -188,6 +351,24 @@ def register_wiki_routes(mcp) -> None:
             asyncio.create_task(async_sync_page(ctx.settings, persona, page.slug, page.title, page.body))
         except Exception as e:
             logger.warning("wiki save: vector sync not scheduled for %s: %s", slug, e)
+        previous = None
+        if prior is not None:
+            previous = page_hash(prior.title, prior.body)
+        _audit(
+            ctx,
+            persona,
+            f"saved {slug} from dashboard",
+            {
+                "slug": slug,
+                "via": "dashboard",
+                "action": "updated" if prior is not None else "created",
+                "previous_hash": previous,
+                "page_hash": page_hash(page.title, page.body),
+                "sources": list(page.sources),
+                "source_count": len(page.sources),
+            },
+            event_type="wiki.saved",
+        )
         logger.info("wiki page saved from dashboard: persona=%s slug=%s", persona, slug)
         return JSONResponse(
             {
@@ -228,6 +409,13 @@ def register_wiki_routes(mcp) -> None:
         except Exception as e:
             logger.warning("wiki delete: vector drop not scheduled for %s: %s", slug, e)
         logger.info("wiki page deleted from dashboard: persona=%s slug=%s", persona, slug)
+        _audit(
+            ctx,
+            persona,
+            f"deleted {slug} from dashboard",
+            {"slug": slug, "title": existing.value.title, "via": "dashboard"},
+            event_type="wiki.deleted",
+        )
         return JSONResponse({"slug": slug, "deleted": True, "title": existing.value.title})
 
     @mcp.custom_route("/api/wiki/run/{persona}", methods=["POST"])

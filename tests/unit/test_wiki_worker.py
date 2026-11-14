@@ -67,8 +67,10 @@ def _setup(
         repo.save(m)
     ctx = SimpleNamespace(memory_repo=repo, connection=conn)
     worker = WikiWorker(_settings(tmp_path))
-    if cfg_update:
-        worker._cfg = worker._cfg.model_copy(update=cfg_update)
+    # topic 編纂のテストは日記を止める。日記の窓は run_at_hour 基準で「いま」に依存する
+    # ため、有効なままだと実行時刻（00:00〜03:00）で材料が日記に食われて結果が変わる。
+    # 日記は TestJournal 側（_journal_setup）が固定時刻で見る。
+    worker._cfg = worker._cfg.model_copy(update={"journal_enabled": False, **(cfg_update or {})})
     worker.vector_enabled = False
     worker._ask_llm_for_test = llm  # type: ignore[attr-defined]
     worker._ask_llm_raise = raise_exc  # type: ignore[attr-defined]
@@ -163,6 +165,13 @@ class TestApplyPages:
             events = _event_rows(conn)
             assert events and events[0][0] == "wiki.compiled"
             assert "created project-nous-memory" in events[0][1]
+            # 入力根拠が監査から読める（どの記憶を材料に何を書いたか）
+            detail = events[0][2]
+            assert detail["reason"] == "created"
+            assert detail["input_keys"] == ["a2", "a1", "a0"]  # 新しい順
+            assert detail["source_count"] == 2
+            assert detail["input_truncated"] is False
+            assert detail["previous_hash"] is None
         finally:
             conn.close()
 
@@ -557,6 +566,7 @@ class TestLlmRetry:
         for i in range(3):
             repo.save(_mem(f"a{i}", tags=["project:nous"]))
         worker = WikiWorker(_settings(tmp_path))
+        worker._cfg = worker._cfg.model_copy(update={"journal_enabled": False})
         worker.vector_enabled = False
         seen: list[int] = []
 
@@ -667,7 +677,7 @@ class TestLlmRetry:
             repo.save(_mem(f"a{i}", tags=["project:nous"]))
         worker = WikiWorker(_settings(tmp_path))
         worker.vector_enabled = False
-        worker._cfg = worker._cfg.model_copy(update={"api_key": "test-key"})
+        worker._cfg = worker._cfg.model_copy(update={"api_key": "test-key", "journal_enabled": False})
         try:
             worker._compile_persona(SimpleNamespace(memory_repo=repo, connection=conn), "test_ww")
             assert budgets == [16000, 32000]
@@ -1397,7 +1407,7 @@ class TestPromptRevisionContext:
     _now = datetime(2026, 11, 13, 3, 0, tzinfo=_JST)
 
     def test_topic_page_gets_full_body_and_other_topic_gets_preview(self, tmp_path) -> None:
-        """編纂対象 topic のページだけ全文（page_body_chars まで）を渡す。"""
+        """編纂対象 topic のページだけ本文を切らずに渡す（他 topic はプレビュー）。"""
         from nous.infrastructure.wiki.store import WikiStore
 
         store = WikiStore(tmp_path, "test_ww")

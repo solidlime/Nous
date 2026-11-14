@@ -32,12 +32,28 @@ def render_wiki_tab() -> str:
         #wiki-edit-body { width:100%; min-height:320px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.82rem; line-height:1.6; padding:10px 12px; border-radius:10px; border:1px solid var(--glass-border); background:rgba(15,23,42,0.45); color:var(--text-primary); resize:vertical; }
         #wiki-edit-title { width:100%; font-size:1rem; font-weight:600; padding:8px 10px; border-radius:10px; border:1px solid var(--glass-border); background:rgba(15,23,42,0.45); color:var(--text-primary); }
         .wiki-edit-actions { display:flex; gap:8px; margin-top:10px; }
+        #wiki-sub { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; margin-top:8px; font-size:0.72rem; color:var(--text-muted); }
+        #wiki-sub:empty { display:none; }
+        .wiki-chip { padding:1px 8px; border-radius:999px; font-size:0.7rem; border:1px solid var(--glass-border); background:transparent; color:var(--text-muted); cursor:pointer; }
+        .wiki-chip:hover { border-color:rgba(var(--accent-blue-rgb), 0.5); color:var(--text-primary); }
+        #wiki-history { margin-top:12px; }
+        #wiki-history:empty { display:none; }
+        .wiki-rev { display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:8px; font-size:0.76rem; border:1px solid transparent; }
+        .wiki-rev:hover { border-color:var(--glass-border); }
+        .wiki-rev-meta { flex:1; color:var(--text-muted); font-size:0.72rem; }
+        .wiki-panel-head { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); margin-bottom:6px; }
+        .wiki-diff { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.76rem; line-height:1.5; padding:10px 12px; border-radius:10px; background:rgba(15,23,42,0.45); max-height:340px; overflow:auto; white-space:pre-wrap; margin-top:8px; }
+        .wiki-diff .add { color:#86efac; }
+        .wiki-diff .del { color:#fca5a5; }
+        mark.wiki-hit { background:rgba(250,204,21,0.35); color:inherit; border-radius:3px; padding:0 1px; }
         </style>
         <!-- ========== WIKI TAB ========== -->
         <section id="tab-wiki" class="tab-panel" role="tabpanel">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
                 <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="book-open"></i></span> Wiki</h2>
                 <div style="display:flex;align-items:center;gap:8px;">
+                <button id="wiki-btn-history" class="glass-btn" title="更新履歴と差分を見る"><i data-lucide="history"></i></button>
+                <button id="wiki-btn-recompile" class="glass-btn" title="いま編纂を走らせる（手動トリガ）"><i data-lucide="sparkles"></i></button>
                 <button id="wiki-btn-edit" class="glass-btn" title="このページを手で編集する"><i data-lucide="pencil"></i></button>
                 <button id="wiki-btn-delete" class="glass-btn" title="このページを削除する（取り消せない）"><i data-lucide="trash-2"></i></button>
                 <button id="wiki-btn-refresh" class="glass-btn" title="Reload wiki pages"><i data-lucide="refresh-cw"></i></button>
@@ -54,6 +70,8 @@ def render_wiki_tab() -> str:
                 </aside>
                 <article class="glass p-6 lg:col-span-2" style="align-self:start;">
                     <div id="wiki-article-head"></div>
+                    <div id="wiki-sub"></div>
+                    <div id="wiki-history"></div>
                     <div id="wiki-article-body" style="margin-top:12px;">
                         <div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div><div class="skeleton skeleton-text" style="width:80%;"></div>
                     </div>

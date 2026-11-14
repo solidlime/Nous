@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -52,9 +53,22 @@ MAX_INDEX_JOURNALS = 7
 #: 日記ページの slug 接頭辞（``journal-YYYY-MM-DD``）。index では別節にする。
 JOURNAL_SLUG_PREFIX = "journal-"
 
+#: リビジョン履歴の置き場（wiki ルート配下。``.jsonl`` なので slug 走査に拾われない）。
+HISTORY_DIRNAME = "_history"
+#: 1 ページにつき保持するリビジョン数（古いものから捨てる）。
+MAX_REVISIONS = 20
+
 
 class WikiStoreError(Exception):
     """Wiki ファイル層の失敗（slug 不正・サイズ超過・読み書き失敗）。"""
+
+
+def _rev_of(entry: dict) -> int:
+    """履歴エントリの rev（壊れた値は 0 扱い。履歴で例外を投げない）。"""
+    try:
+        return int(entry.get("rev") or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 @dataclass(frozen=True)
@@ -277,6 +291,14 @@ class WikiStore:
         size = len(rendered.encode("utf-8"))
         if size > MAX_PAGE_BYTES:
             return Failure(WikiStoreError(f"page too large: {size} bytes > {MAX_PAGE_BYTES}"))
+        # 上書き前の内容を履歴に退避する（失敗しても書込みは止めない）。
+        created = False
+        try:
+            self._push_history(slug, path.read_text(encoding="utf-8"), "write")
+        except FileNotFoundError:
+            created = True  # 新規ページ: 後で作成版を積む（v1 も戻せるように）
+        except (OSError, WikiStoreError) as exc:
+            logger.warning("Wiki history push failed for %s: %s", slug, exc)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_name(f".{path.name}.tmp")
@@ -285,6 +307,11 @@ class WikiStore:
         except OSError as exc:
             logger.error("Wiki write failed for %s: %s", slug, exc)
             return Failure(WikiStoreError(f"cannot write {slug}: {exc}"))
+        if created:
+            try:
+                self._push_history(slug, rendered, "create")
+            except (OSError, WikiStoreError) as exc:
+                logger.warning("Wiki history push failed for %s: %s", slug, exc)
         self.rebuild_index()
         return Success(page)
 
@@ -295,6 +322,16 @@ class WikiStore:
             path = self._path_for(slug)
         except WikiStoreError as exc:
             return Failure(exc)
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except OSError:
+            raw = None
+        if raw is not None:
+            # 削除も履歴に残す（「消した」を後から戻せるようにする）。
+            try:
+                self._push_history(slug, raw, "delete")
+            except (OSError, WikiStoreError) as exc:
+                logger.warning("Wiki history push failed for %s: %s", slug, exc)
         try:
             path.unlink()
         except FileNotFoundError:
@@ -337,6 +374,89 @@ class WikiStore:
             if missing:
                 dangling[page.slug] = missing
         return dangling
+
+    # ------------------------------------------------------------------
+    # history（版管理 / ロールバック）
+    # ------------------------------------------------------------------
+
+    def _history_path(self, slug: str) -> Path:
+        _validate_slug(slug)
+        return self.root / HISTORY_DIRNAME / Path(*slug.split("/")).with_suffix(".jsonl")
+
+    def _history_entries(self, slug: str) -> list[dict]:
+        path = self._history_path(slug)
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except FileNotFoundError:
+            return []
+        except OSError as exc:
+            raise WikiStoreError(f"cannot read history for {slug}: {exc}") from exc
+        entries: list[dict] = []
+        for line in lines:
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue  # 壊れた行は捨てる（履歴でページを落とさない）
+            if isinstance(entry, dict) and isinstance(entry.get("raw"), str):
+                entries.append(entry)
+        return entries
+
+    def _push_history(self, slug: str, raw: str, action: str) -> None:
+        """旧本文（または削除された本文）を履歴に 1 行追記し、古い版を切り捨てる。"""
+        entries = self._history_entries(slug)
+        # 同じ内容を二度積まない（改訂時は前版、新規時は作成版を積むため重なりうる）。
+        # shortcut: 同一本文の作り直しは版として数えない（updated だけ進む）、問題になったら時刻も比べる。
+        if entries and entries[-1].get("raw") == raw:
+            return
+        rev = max((_rev_of(e) for e in entries), default=0) + 1
+        entries.append({"rev": rev, "at": _now_iso(), "action": action, "raw": raw})
+        path = self._history_path(slug)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f".{path.name}.tmp")
+        tmp.write_text(
+            "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in entries[-MAX_REVISIONS:]),
+            encoding="utf-8",
+        )
+        os.replace(tmp, path)
+
+    def history(self, slug: str) -> list[dict]:
+        """``{rev, action, at, title, updated, bytes, hash}`` を新しい順に返す（本文は含めない）。"""
+        out: list[dict] = []
+        for entry in reversed(self._history_entries(slug)):
+            page = parse_page(slug, entry["raw"])
+            out.append(
+                {
+                    "rev": _rev_of(entry),
+                    "action": entry.get("action") or "write",
+                    "at": entry.get("at"),
+                    "title": page.title,
+                    "updated": page.updated,
+                    "bytes": len(entry["raw"].encode("utf-8")),
+                    "hash": page_hash(page.title, page.body),
+                }
+            )
+        return out
+
+    def read_revision(self, slug: str, rev: int) -> Result[WikiPage, WikiStoreError]:
+        for entry in self._history_entries(slug):
+            if _rev_of(entry) == rev:
+                return Success(parse_page(slug, entry["raw"]))
+        return Failure(WikiStoreError(f"revision {rev} not found for {slug}"))
+
+    def restore_revision(self, slug: str, rev: int) -> Result[WikiPage, WikiStoreError]:
+        """過去の版の本文でページを書き戻す（書き戻し自体も履歴に残る）。"""
+        found = self.read_revision(slug, rev)
+        if isinstance(found, Failure):
+            return found
+        page = found.value
+        return self.write_page(
+            slug,
+            page.title,
+            page.body,
+            project=page.project,
+            sources=page.sources,
+            tags=page.tags,
+        )
 
     # ------------------------------------------------------------------
     # index.md
