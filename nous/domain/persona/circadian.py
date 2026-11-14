@@ -56,6 +56,9 @@ def decide_drift(
 
     ``place`` は現在地（自由記述でもよい）。``fatigue`` は 0.0-1.0。
     同じ場所に落ちたときは ``None`` を返す（無意味な ``place.moved`` を増やさない）。
+
+    昼も夜も、疲労が ``TIRED`` 以上なら自室へ帰す（本番で疲労 0.85 の個体を
+    ラウンジへ「休憩」に送る事故があったので、帯より疲労を先に見る）。
     """
     if hours_since_activity < MIN_SILENCE_HOURS:
         return None
@@ -70,7 +73,7 @@ def decide_drift(
     elif band == "day":
         target, reason = ("自室", "休息") if tired else ("研究区画", "作業")
     else:
-        target, reason = "ラウンジ", "休憩"
+        target, reason = ("自室", "休息") if tired else ("ラウンジ", "休憩")
 
     known = find_place(target)
     if known is not None and same_place(place, known.name):

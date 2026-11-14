@@ -97,6 +97,14 @@ def test_evening_goes_to_lounge():
     assert (d.place, d.reason) == ("ラウンジ", "休憩")
 
 
+def test_exhausted_evening_goes_home_instead_of_lounge():
+    """本番で観測した事故（疲労 0.85 をラウンジへ休憩送り）の回帰テスト。"""
+    d = decide_drift(
+        now=datetime(2026, 11, 14, 20, 6, tzinfo=JST), hours_since_activity=48, place="観測デッキ", fatigue=0.85
+    )
+    assert (d.place, d.reason) == ("自室", "休息")
+
+
 # ----------------------------------------------------------------------
 # 適用（session_events の経過時間で門を作る）
 # ----------------------------------------------------------------------
