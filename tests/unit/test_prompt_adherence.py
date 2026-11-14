@@ -1,6 +1,6 @@
 """Tests for CHARACTER_ADHERENCE_BLOCK and its injection in PromptBuildStep.
 
-仕様: docs/superpowers/specs/2026-09-06-prompt-assembly-redesign-design.md §4.1/§4.4/§4.5
+仕様: docs/archive/superpowers/specs/2026-09-06-prompt-assembly-redesign-design.md §4.1/§4.4/§4.5
 - CHARACTER_ADHERENCE_BLOCK は <character_adherence> タグ化・ペルソナ汎用（固定反論例は削除）
 - TOOL_USAGE_GUIDELINES は汎用化、空 skill_list 時は短縮版
 - system プロンプト内の構造化タグはすべて <xx></xx> 対

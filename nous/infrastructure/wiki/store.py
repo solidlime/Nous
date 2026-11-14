@@ -1,6 +1,6 @@
 """WikiStore — wiki ページのファイル層（正）を読み書きする。
 
-計画書: ``docs/superpowers/plans/2026-11-07-wiki-dreaming.md`` §3.1 / §4.1。
+計画書: ``docs/archive/superpowers/plans/2026-11-07-wiki-dreaming.md`` §3.1 / §4.1。
 
 - ページ実体: ``{data_root}/persona/{persona}/wiki/{slug}.md``
 - frontmatter: ``---`` で挟んだ ``key: value`` 行（YAML パーサは使わない）

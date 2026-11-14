@@ -1,6 +1,6 @@
 """矛盾整理・未解決の問い（conflicts）— WikiWorker から移設した mixin。
 
-計画書: ``docs/superpowers/plans/2026-11-07-wiki-dreaming.md`` の矛盾整理パート。
+計画書: ``docs/archive/superpowers/plans/2026-11-07-wiki-dreaming.md`` の矛盾整理パート。
 
 ``WikiWorker`` が継承する。``_cfg`` と ``_record_event`` / ``_write_research`` はホスト
 （``WikiWorker``）側が提供する。移設のみでロジックは変えていない。

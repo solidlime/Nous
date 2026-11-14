@@ -1,6 +1,6 @@
 """日記（journal）編纂 — WikiWorker から移設した日記担当の mixin。
 
-計画書: ``docs/superpowers/plans/2026-11-07-wiki-dreaming.md`` §4.2 の日記パート。
+計画書: ``docs/archive/superpowers/plans/2026-11-07-wiki-dreaming.md`` §4.2 の日記パート。
 
 ``WikiWorker`` が継承する。``_cfg`` / ``_settings`` / ``vector_enabled`` / ``_last_llm`` と
 ``_record_event`` / ``_ask_text`` はホスト（``WikiWorker``）側が提供する。

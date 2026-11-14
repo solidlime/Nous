@@ -221,7 +221,7 @@
 ### TDOC: ドキュメント更新
 - [ ] TDOCa: `docs/llm_usage_guide.md` — 新ツール (DynaTemp, portrait, voice) 追加
 - [ ] TDOCb: `README.md` — Phase A-E の概要追加
-- [ ] TDOCc: プロポーザル `docs/research/` に調査結果アーカイブ
+- [ ] TDOCc: プロポーザル `docs/archive/research/` に調査結果アーカイブ
 - **依存**: 全 Phase 完了後
 - **担当**: @fixer
 

@@ -186,7 +186,7 @@ class IrodoriAdvancedParams(BaseModel):
     にのみ作用し、chat TTS は persona 設定値を使う。
 
     参考: 40（改行の間を保つための小さめチャンク）は SSE ストリーミング
-    （docs/superpowers/specs/2026-09-05-tts-sse-unification-design.md）で
+    （docs/archive/superpowers/specs/2026-09-05-tts-sse-unification-design.md）で
     検討された値だが、既定として採用はしていない。変更する場合は chat 層・
     engine 層・UI 表示を同時に動かすこと。
     """
@@ -274,7 +274,7 @@ class CorsConfig(BaseModel):
 class WikiConfig(BaseModel):
     """ドリーミング (wiki 編纂) worker の設定（wiki_worker.py）。
 
-    計画書: docs/superpowers/plans/2026-11-07-wiki-dreaming.md §4.2。
+    計画書: docs/archive/superpowers/plans/2026-11-07-wiki-dreaming.md §4.2。
     既定 disabled — 有効化は NOUS_WIKI__ENABLED=true。
     """
 

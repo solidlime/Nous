@@ -1,6 +1,6 @@
 """Wiki persistence layer (filesystem is the source of truth).
 
-計画書: ``docs/superpowers/plans/2026-11-07-wiki-dreaming.md`` §3.1。
+計画書: ``docs/archive/superpowers/plans/2026-11-07-wiki-dreaming.md`` §3.1。
 
 Wiki pages live at ``{data_root}/persona/{persona}/wiki/{slug}.md`` as
 Markdown with a tiny ``---`` frontmatter block (``title`` / ``project`` /

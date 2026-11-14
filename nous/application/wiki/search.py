@@ -1,6 +1,6 @@
 """wiki ページ検索 — Qdrant 索引（collection ``wiki_<persona>``）+ ファイル TF フォールバック。
 
-計画書 ``docs/superpowers/plans/2026-11-07-wiki-dreaming.md`` §4.4:
+計画書 ``docs/archive/superpowers/plans/2026-11-07-wiki-dreaming.md`` §4.4:
 既存の memory 検索結果（``results[]`` / ``memories``）は一切変えない。wiki は別枠の
 ``wiki[]`` として返す（既存ハーネスが ``memory.key`` 前提で読むため、混ぜると壊れる）。
 

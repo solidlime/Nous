@@ -1,6 +1,6 @@
 """自走調査（#40）のテスト。
 
-計画書 ``docs/superpowers/plans/2026-11-10-journal-conflicts-and-research.md`` §4.3:
+計画書 ``docs/archive/superpowers/plans/2026-11-10-journal-conflicts-and-research.md`` §4.3:
 
 - 登録 MCP サーバーが 0 件 / ツールが 0 件なら**何もしない**（プールを張らない）
 - ``max_calls`` でツール呼び出しを打ち切る

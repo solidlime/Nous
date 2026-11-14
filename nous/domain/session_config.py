@@ -99,7 +99,7 @@ class SessionConfig(BaseModel):
     voice_emotion_mode: str = Field(default="anchor", description="感情の声への反映方法（off / anchor / llm）。")
 
     # Brain simulation (cross-lane contract: key names / defaults are fixed —
-    # lane3 UI consumes them verbatim; see docs/superpowers/plans/2026-09-06-brain-simulation.md)
+    # lane3 UI consumes them verbatim; see docs/archive/superpowers/plans/2026-09-06-brain-simulation.md)
     brain_emotion_gain_k: float = Field(default=0.5, description="感情による記憶強化の利得係数。")
     # Jev 型判定ゲート / multi-hop 検索 (#011)。REST/MCP 両経路の per-persona 既定値。
     brain_decision_enabled: bool = Field(

@@ -42,6 +42,6 @@ Author's Note 常時注入 + PNG メタデータ Persona Card。Lorebook は Qdr
 MIT ライセンス、日本語専用、OpenAI 互換 API。絵文字+キャプションで感情制御可能。
 
 ## 調査ドキュメント
-- `docs/research/sillytavern-features-2026-07-01.md` — SillyTavern 機能調査 (32件)
-- `docs/research/comfyui-local-image-gen-2026-07-01.md` — ComfyUI 調査 (22件)
-- `docs/research/irodori-tts-2026-07-01.md` — Irodori-TTS 調査 (40+件)
+- `docs/archive/research/sillytavern-features-2026-07-01.md` — SillyTavern 機能調査 (32件)
+- `docs/archive/research/comfyui-local-image-gen-2026-07-01.md` — ComfyUI 調査 (22件)
+- `docs/archive/research/irodori-tts-2026-07-01.md` — Irodori-TTS 調査 (40+件)

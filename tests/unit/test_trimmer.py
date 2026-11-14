@@ -1,6 +1,6 @@
 """TrimmerMixin._build_truncation_highlights / _truncate_old_messages のテスト。
 
-仕様: docs/superpowers/specs/2026-09-06-prompt-assembly-redesign-design.md §4.2
+仕様: docs/archive/superpowers/specs/2026-09-06-prompt-assembly-redesign-design.md §4.2
 - ハイライトは user/assistant 両方・`[N] role: snippet` 形式
 - 先頭3 + 末尾3、snippet 80 字、改行は空白に置換
 - fake assistant note（[システム: …] 偽装文）は廃止。ハイライトは戻り値で伝播

@@ -269,7 +269,7 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 
 トゥーン調は `AmbientLight(0xffffff, Math.PI * 0.9)` のみ（指向性ライトを置かず法線依存の直接光項を消す）→ 陰影はテクスチャに描き込まれた階調がそのまま出る。キャラ領域（x 540-634, y 238-450）の平均輝度は **58.1/255（≈23%）・白飛び（輝度≥0.94）0.34%**（画面全体が白く飛ぶ状態ではない）。
 
-![既定状態（テクスチャ＋トゥーン＋アウトライン）](../../evidence/character-avatar-2026-09-14/01-default-toon-outline.png)
+![既定状態（テクスチャ＋トゥーン＋アウトライン）](../../../evidence/character-avatar-2026-09-14/01-default-toon-outline.png)
 
 ### (3) アウトライン（レビュー指摘 3）
 
@@ -289,10 +289,10 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 
 → 同一条件の再描画は **0px（完全一致）**でノイズ床が存在しないのに対し、幅 0→0.012 では 1,338px が変化し、**変化した画素は 100% が暗色**（＝描き足された輪郭線そのもの）。幅 0.03 では変化量が 4,336px に増える（＝太くなる）。
 
-![幅0](../../evidence/character-avatar-2026-09-14/04-outline-w-0.png)
-![幅0.012](../../evidence/character-avatar-2026-09-14/05-outline-w-0.012-default.png)
-![幅0.012 対照](../../evidence/character-avatar-2026-09-14/06-outline-w-0.012-control.png)
-![幅0.03](../../evidence/character-avatar-2026-09-14/07-outline-w-0.03.png)
+![幅0](../../../evidence/character-avatar-2026-09-14/04-outline-w-0.png)
+![幅0.012](../../../evidence/character-avatar-2026-09-14/05-outline-w-0.012-default.png)
+![幅0.012 対照](../../../evidence/character-avatar-2026-09-14/06-outline-w-0.012-control.png)
+![幅0.03](../../../evidence/character-avatar-2026-09-14/07-outline-w-0.03.png)
 
 ### (2) 待機モーション（VRMA）と自作フォールバック
 
@@ -317,10 +317,10 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 - idle が動いていることの画素実測（同 `pixdiff.py`）: 1.5 秒間隔の 2 フレームで **2,787px（非背景 171,172px の 1.63%）が変化**。［訂正: 当時の「変化画素は 100% 暗色」は計測器の `int16` 乗算オーバーフローによる誤表示（下の「計測器のバグ修正」参照）。修正後の同ペアの `dark_ratio` は **0.410**（定義: 変化画素のうち輝度 < 26。しきい値と `--box` に依存するため単一の「正解値」ではない）］。シーンを凍結した対照 2 枚は **0px（完全一致）** だが、これは**凍結中は再描画が止まること**を示すだけで、照明非依存の根拠にはならない（下の「第3輪」の訂正を参照）。
 - 自作フォールバック（`animations/idle_loop.vrma` を一時退避して実測）: `motion: "procedural"`, `vrmaBones: 0`, `idle.breath` 0.0665→0.0612（動作中）, `armDropDeg` 63.0/61.9→62.8/62.8, `framing.fits: true` → **VRMA 不在でも呼吸・重心移動・腕の揺れ・瞬きのみで自然に動作**。実測後にファイルは復帰済み（サイズ一致）。
 
-![idle フレーム0](../../evidence/character-avatar-2026-09-14/08-idle-frame-0.png)
-![idle フレーム1](../../evidence/character-avatar-2026-09-14/09-idle-frame-1.png)
-![凍結対照](../../evidence/character-avatar-2026-09-14/10-idle-frozen-control-a.png)
-![VRMAなし](../../evidence/character-avatar-2026-09-14/12-no-vrma-procedural-fallback.png)
+![idle フレーム0](../../../evidence/character-avatar-2026-09-14/08-idle-frame-0.png)
+![idle フレーム1](../../../evidence/character-avatar-2026-09-14/09-idle-frame-1.png)
+![凍結対照](../../../evidence/character-avatar-2026-09-14/10-idle-frozen-control-a.png)
+![VRMAなし](../../../evidence/character-avatar-2026-09-14/12-no-vrma-procedural-fallback.png)
 
 ### (3) 表情・モーフ・ポーズ
 
@@ -339,8 +339,8 @@ VRMA 乗算が毎フレーム累積していないことを実ブラウザで確
 
 ポーズ選択 UI（レビュー指摘 2）: `#chat-avatar-stage-ui` に `ポーズ` セレクト（`#chat-avatar-pose`、4 択: 立ち/手を振る/考え中/お辞儀）を追加（`chat-mode.js`）。選択 → `avatarHandle.setPose()`（wave は `playGesture('wave')` を重ねる）。**`probe().pose` への反映は上表のとおり実ブラウザで実測済み**。
 
-![ポーズ選択=お辞儀](../../evidence/character-avatar-2026-09-14/02-pose-select-bow.png)
-![ポーズ選択=手を振る](../../evidence/character-avatar-2026-09-14/03-pose-select-wave.png)
+![ポーズ選択=お辞儀](../../../evidence/character-avatar-2026-09-14/02-pose-select-bow.png)
+![ポーズ選択=手を振る](../../../evidence/character-avatar-2026-09-14/03-pose-select-wave.png)
 
 ### 証跡ファイル
 

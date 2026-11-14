@@ -1,6 +1,6 @@
 """矛盾整理（#39）のテスト。
 
-計画書 ``docs/superpowers/plans/2026-11-10-journal-conflicts-and-research.md`` §3.3 / §4.2:
+計画書 ``docs/archive/superpowers/plans/2026-11-10-journal-conflicts-and-research.md`` §3.3 / §4.2:
 
 - 編纂応答の ``conflicts`` / ``questions`` は追加 LLM 呼び出しなしで処理する
 - ``resolved=false`` と ``questions`` は ``open-question`` タグの記憶になる（重複は 1 件）

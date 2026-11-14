@@ -1,6 +1,6 @@
 """get_context 出力予算の強制（audit C3）。
 
-P0 実測（docs/reviews/2026-09-19-parity-baseline.md §2）では、節ごとに全文を
+P0 実測（docs/archive/reviews/2026-09-19-parity-baseline.md §2）では、節ごとに全文を
 出していたため最悪 1,231 tok（3,078 字）と docstring の ~500-800 tok 主張を
 大きく上回っていた。ここでは `_format_lightweight_response` を直接駆動し、
 節ごとの件数+文字数上限（_MAX_* 定数）と合計上限 _MAX_TOTAL_CHARS が

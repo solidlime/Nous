@@ -11,7 +11,7 @@ for 3 fixtures:
 Prints total chars, estimated tokens (chars/2.5) and a per-section breakdown.
 Run:  uv run --with pytest --with pydantic-settings --with mcp --with fastembed \
              python tests/parity/measure_get_context.py
-Results are recorded in docs/reviews/2026-09-19-p0-measurements.md (C3 input
+Results are recorded in docs/archive/reviews/2026-09-19-parity-baseline.md §2 (C3 input
 for P7 upper-bound decisions).
 """
 

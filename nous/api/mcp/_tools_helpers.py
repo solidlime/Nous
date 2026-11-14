@@ -44,7 +44,7 @@ _NEAR_DUP_THRESHOLD = 0.85
 
 
 # ── get_context 予算（audit C3）──
-# P0 実測（docs/reviews/2026-09-19-parity-baseline.md §2, est tokens = chars/2.5）では
+# P0 実測（docs/archive/reviews/2026-09-19-parity-baseline.md §2, est tokens = chars/2.5）では
 # ケース B = 2,873 字 / 1,149 tok、ケース C = 3,078 字 / 1,231 tok と、docstring の
 # 「~500-800 tok」を大きく上回っていた。以下を節ごとの件数+文字数上限として固定し、
 # 最悪ケースを ≤ 800 tok（≤ 2,000 字）へ引き戻す。

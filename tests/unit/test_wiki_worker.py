@@ -1,6 +1,6 @@
 """WikiWorker tests — ドリーミング（wiki 編纂）の topic 選択・ページ適用・監査記録。
 
-計画書 ``docs/superpowers/plans/2026-11-07-wiki-dreaming.md`` §4.2:
+計画書 ``docs/archive/superpowers/plans/2026-11-07-wiki-dreaming.md`` §4.2:
 - SELECT: active のみ、project:* タグでクラスタ化、無タグは persona、MIN_TOPIC_MEMORIES 未満は除外
 - 適用: slug は topic 配下のみ、sources は候補 key 以外を捨て、空なら拒否、body 上限で拒否
 - LLM 失敗・不正 JSON → 例外が外に漏れずファイル無変化、session_events に error 行

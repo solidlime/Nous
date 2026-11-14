@@ -2,7 +2,7 @@
 
 Hermetic: the Sudachi tokenizer is replaced by a deterministic fake
 (char-split for CJK runs) so tests never depend on the 207MB dictionary.
-The real-dictionary path is verified live (docs/reviews/2026-09-19 §8).
+The real-dictionary path is verified live (docs/archive/reviews/2026-09-19-full-feature-review.md §8).
 """
 
 from __future__ import annotations

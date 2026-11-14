@@ -3,7 +3,7 @@
 - 日付: 2026-09-28
 - 状態: 採用
 - 関連コミット: `d6c45cd7`（実装）、`2e77da88`（依存修正）
-- 関連: `docs/search-quality-2026-09-28.md`、`docs/memory-time-context-2026-09-15.md`
+- 関連: `docs/archive/research/search-quality-2026-09-28.md`、`docs/archive/research/memory-time-context-2026-09-15.md`
 
 ## 背景
 

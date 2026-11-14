@@ -1,6 +1,6 @@
 """登録済み MCP ツールだけを使った自走調査（#40）。
 
-計画書: ``docs/superpowers/plans/2026-11-10-journal-conflicts-and-research.md`` §4.3。
+計画書: ``docs/archive/superpowers/plans/2026-11-10-journal-conflicts-and-research.md`` §4.3。
 
 編纂中に出た「外部で確かめないと決められない問い」を、persona に**登録済みの MCP
 サーバーのツール**だけで調べる。検索 API（ddgs 等）を直接は叩かない:

@@ -6,6 +6,10 @@
 1. MCP ツール: `nous/api/mcp/tools.py` の `@_tool("...")` ↔ `docs/architecture.md` の「MCP ツール一覧」
 2. HTTP エンドポイント: `mcp.custom_route("...", methods=[...])` ↔ `docs/http_api_reference.md` の `### \\`METHOD /path\\``
 3. 設定 env キー: `Settings`（pydantic）から導出 ↔ `docs/architecture.md` / `.env.example` の `NOUS_*`
+4. live 文書のパス:行 参照と相対リンク: `docs/archive/` `docs/releases/` `docs/evidence/`
+   配下（frozen）は対象外。live 文書の `` `path:line` `` がリポジトリ内で解決できない、
+   行番号が実ファイルの行数を超える、相対リンクが存在しない → error
+   複数行は `` `path:a-b` `` のみ対応（`` `path:a-b,c` `` は非マッチ）
 
 ルール:
 - ドキュメントにあるが実装に無い（幽霊エンドポイント/ツール/env）→ error
@@ -36,6 +40,9 @@ HTTP_SRC_DIR = REPO_ROOT / "nous" / "api" / "http"
 ARCH_DOC = REPO_ROOT / "docs" / "architecture.md"
 HTTP_DOC = REPO_ROOT / "docs" / "http_api_reference.md"
 ENV_DOCS = [ARCH_DOC, REPO_ROOT / ".env.example"]
+DOCS_DIR = REPO_ROOT / "docs"
+# docs 直下のこの名前のディレクトリ配下は「凍結された記録」なので検査しない。
+FROZEN_TOP = {"archive", "releases", "evidence"}
 
 # Settings を持たないがコードが直接読む env と、docs に残す運用上の名前。
 ENV_ONLY = {
@@ -143,6 +150,89 @@ def _fmt_endpoints(items: set[tuple[str, str]] | set[str]) -> list[str]:
     return sorted(item if isinstance(item, str) else f"{item[0]} {item[1]}" for item in items)
 
 
+def live_docs() -> list[Path]:
+    """実装と同期させる義務のある文書（frozen を除く）。"""
+    docs = [REPO_ROOT / "README.md"] if (REPO_ROOT / "README.md").exists() else []
+    for path in DOCS_DIR.rglob("*.md"):
+        if path.relative_to(DOCS_DIR).parts[0] not in FROZEN_TOP:
+            docs.append(path)
+    return sorted(docs)
+
+
+_DOC_REF_RE = re.compile(
+    r"`((?:[A-Za-z0-9_./-]+/)?[A-Za-z0-9_.-]+\.(?:py|ts|js|sh|json|yml|yaml|md|toml|css|html|sql)):(\d+)(?:-(\d+))?`"
+)
+_DOC_LINK_RE = re.compile(r"\]\(([^)\s]+)\)")
+_SKIP_LINK_PREFIXES = ("http://", "https://", "mailto:", "#", "/")
+
+
+def _repo_index() -> dict[str, list[Path]]:
+    """basename -> パス一覧（スラッシュ無しの bare `mod.py` 参照を解決するため）。"""
+    index: dict[str, list[Path]] = {}
+    skip = {".git", "node_modules", ".venv", ".mypy_cache", "output"}
+    for path in REPO_ROOT.rglob("*"):
+        if not path.is_file() or skip & set(path.parts):
+            continue
+        index.setdefault(path.name, []).append(path)
+    return index
+
+
+def _line_count(path: Path) -> int | None:
+    try:
+        return len(path.read_text(encoding="utf-8").splitlines())
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def check_doc_references() -> tuple[list[str], int, int]:
+    """live 文書の `path:line` 参照と相対リンクを検証する.
+
+    戻り値: (errors, 検査した参照数, 検査したリンク数)
+    """
+    errors: list[str] = []
+    index: dict[str, list[Path]] | None = None  # 最初の未解決参照まで構築しない
+    checked_refs = 0
+    checked_links = 0
+    for doc in live_docs():
+        doc_rel = doc.relative_to(REPO_ROOT).as_posix()
+        for lineno, line in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
+            for match in _DOC_REF_RE.finditer(line):
+                checked_refs += 1
+                rel = match.group(1)
+                target = REPO_ROOT / rel
+                if not target.exists():
+                    # スラッシュ付きは移動・削除の検出が目的。basename で救済すると偽陰性になる。
+                    if "/" in rel:
+                        errors.append(f"doc ref not found: {doc_rel}:{lineno} {rel}")
+                        continue
+                    if index is None:
+                        index = _repo_index()
+                    candidates = index.get(Path(rel).name, [])
+                    if len(candidates) != 1:
+                        kind = "ambiguous" if candidates else "not found"
+                        errors.append(f"doc ref {kind}: {doc_rel}:{lineno} {rel}")
+                        continue
+                    target = candidates[0]
+                n = _line_count(target)
+                if n is None:
+                    continue
+                start = int(match.group(2))
+                end = int(match.group(3) or start)
+                if not 1 <= start <= end or end > n:
+                    # 逆順は end が範囲内でも error なので、書かれた範囲をそのまま出す
+                    shown = f"{rel}:{end}" if start <= end else f"{rel}:{start}-{end}"
+                    errors.append(f"doc ref line out of range: {doc_rel}:{lineno} {shown} (file has {n} lines)")
+            for match in _DOC_LINK_RE.finditer(line):
+                link = match.group(1)
+                if link.startswith(_SKIP_LINK_PREFIXES):
+                    continue
+                checked_links += 1
+                link_path = link.split("#")[0]
+                if link_path and not (doc.parent / link_path).resolve().exists():
+                    errors.append(f"doc link broken: {doc_rel}:{lineno} {link}")
+    return errors, checked_refs, checked_links
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Docs / 実装ドリフト検知")
     ap.add_argument("--verbose", action="store_true", help="既知の未記載エンドポイントも表示")
@@ -188,7 +278,15 @@ def main() -> None:
     if phantom_env := sorted(env_doc - env_code):
         errors.append(f"env vars documented but not in Settings/ENV_ONLY: {', '.join(phantom_env)}")
 
+    # 4. live 文書のパス:行 参照と相対リンク（frozen は対象外）
+    docs = live_docs()
+    doc_errors, doc_refs, doc_links = check_doc_references()
+    errors.extend(doc_errors)
+
     if args.verbose:
+        print(f"live docs: {len(docs)}")
+        for doc in docs:
+            print(f"  {doc.relative_to(REPO_ROOT).as_posix()}")
         print(f"known undocumented HTTP endpoints: {len(undocumented_str)}")
         for endpoint in sorted(undocumented_str):
             print(f"  {endpoint}")
@@ -198,7 +296,10 @@ def main() -> None:
         for error in errors:
             print(f"DRIFT: {error}", file=sys.stderr)
         raise SystemExit(1)
-    print(f"docs drift: OK (mcp_tools={len(tools_code)}, http_routes={len(http_code)}, env_docs={len(env_doc)})")
+    print(
+        f"docs drift: OK (mcp_tools={len(tools_code)}, http_routes={len(http_code)}, env_docs={len(env_doc)}, "
+        f"live_docs={len(docs)}, doc_refs={doc_refs}, doc_links={doc_links})"
+    )
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 """WikiWorker — ドリーミング（wiki 編纂）worker。
 
-計画書: ``docs/superpowers/plans/2026-11-07-wiki-dreaming.md`` §4.2。
+計画書: ``docs/archive/superpowers/plans/2026-11-07-wiki-dreaming.md`` §4.2。
 
 記憶の整理は **consolidation（時間軸 gist）→ wiki（トピック編纂）** の 2 段で動く:
 

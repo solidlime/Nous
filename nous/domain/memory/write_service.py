@@ -17,7 +17,7 @@ from nous.domain.value_objects import PROJECT_SLUG_RE, normalize_emotion, normal
 # 重複検知の閾値（意味的類似）。意図して定数：
 # - 設定ノブにはしない（v4.0 で未配線の Settings.duplicate_threshold を削除した）。
 # - 0.75 は意味的類似の実測（fixture で明確な空白がある）に基づく値で、上げ下げは
-#   `docs/superpowers/plans/2026-09-19-v4-release.md` の検証手順を伴う。
+#   `docs/archive/superpowers/plans/2026-09-19-v4-release.md` の検証手順を伴う。
 _SEMANTIC_DUPLICATE_THRESHOLD = 0.75
 
 
