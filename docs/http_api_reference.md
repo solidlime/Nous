@@ -81,11 +81,6 @@ Update persona profile fields.
 }
 ```
 
-### `GET /api/stats/{persona}`
-Get memory and vector statistics for a persona.
-
----
-
 ## Dashboard
 
 ### `GET /`
@@ -143,13 +138,6 @@ Paginated list of memories, sorted chronologically.
 ```
 
 `memories[]` は Memory レコード全体（`content` はプレビューではなく本文）。
-
-### `GET /api/recent/{persona}`
-Get the most recent memories for a persona.
-
-**Query params:** `limit` (int, default 10)
-
-**Response:** `{ "memories": [ { memory object... } ] }`
 
 ### `GET /api/search/{persona}`
 Search memories for a persona.
@@ -270,25 +258,66 @@ Serve the persona chat dashboard UI (HTML).
 
 ---
 
+## Project Context (kanban #8)
+### `GET /api/project/{persona}/{slug}/context`
+`project:<slug>` 単位の集約ビュー。サーバ側で既存の規約を読むだけで、新しい集計テーブルは持たない:
+
+| Section | Source |
+|---|---|
+| `decisions` | 記憶の `decision` type タグ（タグ欠けは本文分類にフォールバック） |
+| `open_questions` | 記憶の `open-question` タグ（`nous/application/wiki/questions.py`） |
+| `wiki` | `WikiStore` ページの `project` が slug と一致するもの |
+| `timeline` | slug の `project:` タグ付き記憶（新しい順） |
+
+各セクション最大 30 件。本文は 400 字で切る。ダッシュボードの **Projects** タブがこれを描画する。
+
+---
+
+### `GET /api/metrics/{persona}`
+観測値を返す（kanban #10）。
+
+- `search`: `count` / `zero_result` / `zero_result_rate` / `p50_ms` / `p95_ms` — **プロセス内**（再起動で 0 に戻る、直近 500 サンプル）
+- `tools`: MCP ツール名別の呼び出し回数（同上）
+- `wiki` / `events`: `session_events` の集計（恒久記録側）
+
+Activity タブの上部に 1 行で出る。
+
+---
+
+## Wiki（編纂知識の手動保守・kanban #2/#7）
+
+ファイル層（`data/wiki/<persona>/`）が正本。索引（Qdrant）はミラーで、更新失敗は保存を止めない。
+
+### `GET /api/wiki/{persona}`
+ページ一覧。`?q=` で slug / title / 本文の部分一致に絞る（本文一致は `body_hits` 件数付き）。
+
+### `GET /api/wiki/{persona}/{slug}`
+本文（markdown 生）。`?q=` を渡すと一致行（`matches`）と逆リンク（`backlinks`）を返す。
+
+### `PUT /api/wiki/{persona}/{slug}`
+ダッシュボードからの保存。既存ページなら `sources` / `project` / `tags` を引き継ぐ。
+
+### `DELETE /api/wiki/{persona}/{slug}`
+削除（索引落としは best-effort）。削除前の本文は履歴に残る。
+
+### `GET /api/wiki/{persona}/_history/{slug}`
+改訂履歴（新しい順・本文なし）。
+
+### `GET /api/wiki/{persona}/_history/{rev}/{slug}`
+過去の版 1 つ（本文込み、`current_body` 付き）。
+
+### `POST /api/wiki/{persona}/_restore/{rev}/{slug}`
+過去の版を書き戻す。書き戻し自体も 1 リビジョンとして残る（追記型）。
+
+### `POST /api/wiki/{persona}/_recompile`
+手動再編纂（202）。ダッシュボードからはプラグイン鍵なしで呼べる代わりに persona 単位 60 秒の
+クールダウンがある。外部からの `POST /api/wiki/run/{persona}` は plugin API key 必須。
+
+---
+
+---
+
 ## Chat Persona
-
-### `POST /api/chat/{persona}/persona/expressions/generate`
-Generate expression images for all supported emotions via ComfyUI, using the persona's
-image generation config (`image_gen_*` fields in the persona chat config). Existing
-images are skipped. Requires `image_gen_enabled: true`.
-
-**Response:**
-```json
-{
-  "generated": ["joy", "sadness"],
-  "skipped": ["neutral"],
-  "failed": []
-}
-```
-
-- `generated` — emotions for which a new PNG was created
-- `skipped` — emotions with an existing image or generation disabled
-- `failed` — emotions whose generation errored
 
 ### `GET /api/chat/{persona}/persona/images/{file}`
 Serve a persona image (self portraits and expression images such as `expr_joy.png`).
@@ -408,6 +437,20 @@ stripped from the URL) and attaches it to every same-origin `fetch` and `EventSo
 
 ### `GET /api/settings/status`
 Get reload status for runtime settings.
+
+### `GET /api/settings/diagnostics`
+Public-deployment security diagnostics (kanban #6). Returns warnings for
+configurations that are unsafe once the server is reachable from outside:
+public bind without an API key, CORS `*`, plugin enabled with a weak/empty key,
+and MCP security open to every Host/Origin.
+
+```json
+{"warnings": [{"code": "public_bind_without_api_key", "severity": "error",
+                "message": "...", "hint": "..."}]}
+```
+
+The dashboard shows them as a banner at the top of the Settings tab. Only codes,
+messages and hints are returned — never the configuration values themselves.
 
 ---
 

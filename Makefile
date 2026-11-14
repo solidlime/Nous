@@ -1,4 +1,4 @@
-.PHONY: lint test test-all typecheck coverage coverage-fail bandit ci
+.PHONY: lint test test-all typecheck coverage coverage-fail bandit ci docs-drift search-quality-smoke
 
 lint:
 	ruff check . && ruff format --check .
@@ -15,6 +15,12 @@ contract:
 docs-sync:
 	! grep -rn "run_tests\.py" CLAUDE.md README.md docs/http_api_reference.md docs/architecture.md
 
+docs-drift:
+	python scripts/check_docs_drift.py
+
+search-quality-smoke:
+	python scripts/search_quality_smoke.py --out output/search_quality_smoke
+
 typecheck:
 	mypy nous/
 
@@ -27,4 +33,4 @@ coverage-fail:
 bandit:
 	bandit -r nous/ -ll
 
-ci: lint typecheck test-all contract bandit coverage-fail docs-sync
+ci: lint typecheck test-all contract bandit coverage-fail docs-sync docs-drift search-quality-smoke

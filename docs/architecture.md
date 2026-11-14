@@ -155,16 +155,22 @@ nous/
 | | `memory_delete` | 論理削除（tombstone） |
 | | `memory_search` | ハイブリッド検索（ベクトル+キーワード+RRFスコアリング） |
 | | `memory_stats` | 統計（総数/タグ分布/感情分布） |
-| **コンテキスト** | `session_begin` | ペルソナ状態＋記憶概要（セッション開始時に第一呼出推奨。`get_context` は v4.0 で互換別名） |
+| **コンテキスト** | `session_begin` | ペルソナ状態＋記憶概要（セッション開始時に第一呼出推奨） |
+| | `get_context` | `session_begin` の互換別名（旧名） |
 | | `update_context` | 感情・体調・環境・関係性を更新 |
+| | `profile_update` | 自己像（`me`）/ ユーザー像（`user`）ブロックを全文置換 |
 | **アイテム** | `item_add` | インベントリに物理アイテムを追加 |
 | | `item_equip` | 装備スロットにセット |
+| | `item_unequip` | 装備スロットを外す（外見は自動再構築） |
 | | `item_search` | インベントリ検索 |
+| **Wiki** | `wiki_read` | slug 指定でページ本文＋メタを読む |
+| | `wiki_ls` | ページ一覧（project / tag / category 絞り込み） |
+| | `wiki_grep` | 本文を行単位の正規表現で grep |
+| | `wiki_write` | ページを書く（slug 規約 `project-<slug>-<topic>` / `<persona>-<topic>`、`sources` に根拠記憶 key） |
+| | `wiki_delete` | ページ削除（`index` は拒否、検索索引からも削除） |
 | **目標** | `goal_manage` | 目標の作成/一覧/達成/取消 |
-| **スキル** | `invoke_skill` | 内蔵スキルの自律呼び出し |
-| | `list_skills` | 登録済みスキル一覧 |
-| **発見** | `search_tools` | ベクトルベースのツール検索 |
-| **画像生成** | `image_generate` | ComfyUI連携 AI画像生成（Danbooruタグ形式） |
+
+MCP として公開しないチャット組み込みツール（`move` / `invoke_skill` / `list_skills` / `search_tools` / `image_generate`）は `nous/application/chat/tools/` にあり、チャット経路でのみ使う。
 
 ---
 
@@ -193,7 +199,6 @@ nous/
 | `NOUS_EMBEDDING__MODEL` | `cl-nagoya/ruri-v3-30m` | 埋め込みモデル（日本語特化） |
 | `NOUS_DEFAULT_PERSONA` | `default` | デフォルト Persona 名 |
 | `NOUS_TIMEZONE` | `Asia/Tokyo` | タイムゾーン |
-| `NOUS_SANDBOX__ENABLED` | `true` | コード実行サンドボックス |
 | `NOUS_MEMORY_ENRICHMENT__ENABLED` | `true` | 脳側 LLM（矛盾判定）の有効化。enrichment 自体は 2026-11-08 廃止、自発的内省・独り言は 2026-11-09 廃止 |
 
 全設定項目は WebUI の**設定画面**から確認・変更できます（WebUI からの変更は `docker-compose.yml` の環境変数より優先されます）。
@@ -219,4 +224,8 @@ nous/
 ### 評価ハーネス
 - `scripts/eval_search_quality.py`（gold コーパス: `tests/benchmark/data/verify_corpus_v1.json`）
 - `scripts/eval_real_queries.py`（実クエリ A/B）
+- `scripts/search_quality_smoke.py`（CI 用スモーク: 固定小コーパス `tests/benchmark/data/search_quality_smoke.json`、オフライン keyword 経路、`recall@5 ≥ 0.8` / `MRR ≥ 0.7` / zero-result 0。`make search-quality-smoke`、artifact は `output/search_quality_smoke.{json,md}`）
 - 合格ライン（案C）: zero-result 0 / recall@5 ≥ 0.75 / MRR ≥ 0.80 / p95 ≤ 1.5s
+
+### ドリフト検知
+- `scripts/check_docs_drift.py`（`make docs-drift`）: `@_tool("...")` ↔ `docs/architecture.md` の MCP ツール表、`custom_route(...)` ↔ `docs/http_api_reference.md` のエンドポイント、`Settings` ↔ ドキュメントの `NOUS_*` を突き合わせる。ドキュメントにあるが実装に無いものは error、実装にあるが未記載の HTTP は `scripts/docs_drift_baseline.json` に既知分を記録し新規だけ error。

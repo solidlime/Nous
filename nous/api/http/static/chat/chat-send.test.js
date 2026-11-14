@@ -342,4 +342,21 @@ describe('chat hub — send flow', () => {
     es.emit('message', JSON.stringify({ type: 'done', message: 'completed' }), '25');
     expect(N.Chat.history.restore).toHaveBeenCalledTimes(2);
   });
+
+  it('cancel stops local rendering without a server call and re-arms the composer', async () => {
+    chatStream();
+    await sendTurn('途中でやめる');
+    expect(N.Chat.state.streaming).toBe(true);
+    expect(document.getElementById('chat-cancel-btn').style.display).toBe('');
+    expect(document.getElementById('chat-send-btn').style.display).toBe('none');
+
+    N.Chat.cancel();
+
+    expect(N.Chat.state.streaming).toBe(false);
+    expect(document.getElementById('chat-status').textContent).toBe('中断しました');
+    expect(document.getElementById('chat-cancel-btn').style.display).toBe('none');
+    expect(document.getElementById('chat-send-btn').style.display).toBe('');
+    expect(document.getElementById('chat-input').value).toBe('');
+    expect(N.Core.api).toHaveBeenCalledTimes(1); // POST only — no cancel endpoint
+  });
 });

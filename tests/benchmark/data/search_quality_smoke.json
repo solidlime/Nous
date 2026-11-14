@@ -1,0 +1,203 @@
+{
+  "version": 1,
+  "persona": "smoke",
+  "note": "検索品質スモーク用の固定コーパス/クエリ。gold は eval_search_quality.py の any-term/all-term 規則で自動導出。",
+  "corpus": [
+    {
+      "payload": {
+        "key": "mem_001",
+        "content": "金沢で焼肉の食べ放題に行った。肉の質が高くて満足。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_002",
+        "content": "駅前の焼肉屋は予約が必要らしい。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_003",
+        "content": "回転寿司で寿司を食べた。ネタが新鮮だった。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_004",
+        "content": "寿司の食べ放題は時間制限がある。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_005",
+        "content": "ピソリーノが閉店したらしい。イタリアンの店だった。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_006",
+        "content": "保護猫の里親募集を見かけた。猫は可愛い。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_007",
+        "content": "猫の餌の好みをメモしておく。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_008",
+        "content": "箱根の温泉旅行を計画している。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_009",
+        "content": "温泉は冬が一番気持ちいい。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_010",
+        "content": "Docker のデプロイ手順をまとめた。コンテナの再起動が必要。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_011",
+        "content": "Docker Compose の設定を見直した。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_012",
+        "content": "検索のベクトル精度を評価した。埋め込みモデルを変更した。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_013",
+        "content": "ベクトル検索の閾値を調整した。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_014",
+        "content": "カレーのレシピを試した。スパイスを増やした。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_015",
+        "content": "カレーは翌日のほうが美味しい。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_016",
+        "content": "夕方に公園を散歩した。天気が良かった。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_017",
+        "content": "散歩の途中で本屋に寄った。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_018",
+        "content": "明日の会議の資料を作る。締切は午前中。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_019",
+        "content": "会議の議事録を共有した。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_020",
+        "content": "締切が迫っているので作業を優先する。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_021",
+        "content": "焼肉のタレのレシピを調べた。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_022",
+        "content": "金沢の食べ放題はコスパが良い。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_023",
+        "content": "寿司屋の予約を取った。"
+      }
+    },
+    {
+      "payload": {
+        "key": "mem_024",
+        "content": "犬の散歩コースを開拓した。"
+      }
+    }
+  ],
+  "queries": [
+    {
+      "id": "smoke_001",
+      "cat": "ja",
+      "q": "焼肉"
+    },
+    {
+      "id": "smoke_002",
+      "cat": "ja",
+      "q": "寿司"
+    },
+    {
+      "id": "smoke_003",
+      "cat": "ja",
+      "q": "ピソリーノ"
+    },
+    {
+      "id": "smoke_004",
+      "cat": "ja",
+      "q": "保護猫"
+    },
+    {
+      "id": "smoke_005",
+      "cat": "ja",
+      "q": "温泉"
+    },
+    {
+      "id": "smoke_006",
+      "cat": "lat",
+      "q": "Docker"
+    },
+    {
+      "id": "smoke_007",
+      "cat": "ja",
+      "q": "ベクトル"
+    },
+    {
+      "id": "smoke_008",
+      "cat": "ja",
+      "q": "カレー"
+    },
+    {
+      "id": "smoke_009",
+      "cat": "ja",
+      "q": "散歩"
+    },
+    {
+      "id": "smoke_010",
+      "cat": "ja",
+      "q": "締切"
+    }
+  ]
+}

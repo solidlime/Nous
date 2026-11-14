@@ -93,6 +93,10 @@ bandit_report.json
 mypy-baseline.yaml
 CHANGELOG.md
 
+# Local backups / portable exports (scripts/backup_restore.py)
+backups/
+nous-portable*.zip
+
 # Worktrees
 .worktrees/
 data/hub.db

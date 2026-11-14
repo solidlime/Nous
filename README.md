@@ -27,6 +27,7 @@
 - **リアルタイムチャット**: SSE ストリーミングで快適な会話
 - **記憶管理**: 記憶の一覧表示・編集・削除・検索
 - **知識グラフ**: エンティティ間の関係性を可視化
+- **Wiki / Projects**: 編纂された知識の閲覧（履歴・復元・逆リンク付き）と、`project:<slug>` 単位の文脈ビュー（決定事項・未解決の問い・タイムライン）
 - **設定画面**: ブラウザから全ての設定を変更可能
 
 ### 🎨 オプション機能
@@ -152,6 +153,21 @@ DATA_ROOT=./data
 
 ---
 
+## 開発・品質チェック
+
+ローカルでも CI と同じゲートを回せます（Python 3.12 + `pip install -r requirements-prod.txt -r requirements-dev.txt`）。
+
+| コマンド | CI ジョブ | 内容 |
+|----------|-----------|------|
+| `make lint` | `lint` | ruff check + format check |
+| `make typecheck` | `typecheck` | mypy（`mypy-baseline.txt` との差分ゲート） |
+| `make test-all` | `test` / `integration` | pytest |
+| `make search-quality-smoke` | `search-quality` | 固定小コーパス（`tests/benchmark/data/search_quality_smoke.json`）で検索品質を回帰チェック。オフライン keyword 経路のみで Qdrant / 埋め込みモデル不要。閾値は `recall@5 ≥ 0.8` / `MRR ≥ 0.7` / zero-result `0`（`scripts/search_quality_smoke.py`）。`output/search_quality_smoke.{json,md}` を書き出し、CI は artifact として保存する |
+| `make docs-drift` | `docs-drift` | 実装とドキュメントのドリフト検知（MCP ツール一覧・HTTP エンドポイント・設定 env キー）。幽霊項目 / 新規未記載を検出すると exit 1。既知の未記載 HTTP は `scripts/docs_drift_baseline.json` 管理（更新は `python scripts/check_docs_drift.py --write-baseline`） |
+| `make ci` | 上記相当 | lint / typecheck / test / contract / bandit / coverage / docs チェックを一括実行 |
+
+---
+
 ## ドキュメント
 
 | ドキュメント | 内容 |
@@ -162,6 +178,7 @@ DATA_ROOT=./data
 | [HTTP API リファレンス](docs/http_api_reference.md) | REST API の詳細 |
 | [記憶機能](docs/memory_features.md) | 忘却曲線・検索・エンリッチメントの詳細 |
 | [サンドボックス](docs/sandbox.md) | Docker コード実行の設定とアーキテクチャ |
+| [バックアップ / リストア](docs/backup_restore.md) | SQLite・wiki・Qdrant の整合バックアップ、復元手順、ポータブルエクスポート方針 |
 | [検索品質の改善記録](docs/search-quality-2026-09-28.md) | 日本語 OR 検索・semantic 死亡・recency 逆転の修正とベンチ before/after |
 | [ADR-003](docs/decisions/ADR-003-recency-tiebreak-ranking.md) | 検索スコア統合の recency/importance 相対（乗数）方式 |
 

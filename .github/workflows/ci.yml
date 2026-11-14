@@ -228,3 +228,63 @@ jobs:
 
       - name: Run bandit
         run: bandit -r nous/ -ll
+
+  # ------------------------------------------------------------------
+  # Search quality smoke: fixed small corpus + threshold gate on the
+  # offline keyword path (no Qdrant / embedding model). Artifacts are
+  # kept so a regression can be diffed against the previous run.
+  # ------------------------------------------------------------------
+  search-quality:
+    needs: [lint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-prod.txt -r requirements-dev.txt
+
+      - name: Run search quality smoke (offline keyword path)
+        run: python scripts/search_quality_smoke.py --out output/search_quality_smoke
+
+      - name: Upload search quality artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: search-quality-smoke
+          path: output/search_quality_smoke.*
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ------------------------------------------------------------------
+  # Docs drift: MCP tool list / HTTP endpoints / settings env keys must
+  # match the implementation. Known-undocumented endpoints live in
+  # scripts/docs_drift_baseline.json; regenerate with --write-baseline.
+  # ------------------------------------------------------------------
+  docs-drift:
+    needs: [lint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies (Settings import)
+        run: pip install -r requirements-prod.txt
+
+      - name: Check docs/implementation drift
+        run: python scripts/check_docs_drift.py
