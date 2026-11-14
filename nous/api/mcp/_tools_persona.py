@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 from nous.api.mcp._tools_helpers import (  # noqa: E402
     _apply_body_decay,
+    _apply_circadian_drift,
     _apply_emotion_decay,
     _dedupe_memories,
     _format_lightweight_response,
@@ -57,6 +58,7 @@ async def _tool_get_context(
     state, decay_note = await _apply_emotion_decay(ctx, persona, state)
 
     state = await _apply_body_decay(ctx, persona, state)
+    state = _apply_circadian_drift(ctx, persona, state)
 
     # Top memories for ESSENTIAL STORY (reduced from 15 to 8 for leaner context)
     top_result = ctx.memory_service.get_top_by_importance(8)

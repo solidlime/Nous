@@ -175,7 +175,12 @@ class PrepareStep:
         state_result = ctx.persona_service.get_context(persona)
         if state_result.is_ok:
             state = state_result.value
-            from nous.api.mcp._tools_helpers import _apply_body_decay, _apply_emotion_decay, _apply_relationship_decay
+            from nous.api.mcp._tools_helpers import (
+                _apply_body_decay,
+                _apply_circadian_drift,
+                _apply_emotion_decay,
+                _apply_relationship_decay,
+            )
 
             state, decay_note = await _apply_emotion_decay(ctx, persona, state)
             from nous.domain.persona.body_state import extract_body_metrics
@@ -184,6 +189,8 @@ class PrepareStep:
             body_before_last_conv = getattr(state, "last_conversation_time", None)
             state = await _apply_body_decay(ctx, persona, state)
             body_note = _build_body_decay_note(body_before, extract_body_metrics(state), body_before_last_conv)
+            # 時間帯 × 空白で場所を移す（移動コストの分だけ身体も動く。body_note は減衰の話だけに保つ）
+            state = _apply_circadian_drift(ctx, persona, state)
             if body_note:
                 decay_note = f"{decay_note}\n{body_note}" if decay_note else body_note
             relationship_note = await _apply_relationship_decay(ctx, persona, state)

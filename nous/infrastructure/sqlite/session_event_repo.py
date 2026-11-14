@@ -141,6 +141,16 @@ class SessionEventRepository:
 
         return [self._row_to_event(r) for r in rows], total
 
+    def last_event_at(self, persona: str, event_type: str) -> datetime | None:
+        """指定イベント種別の最終時刻（None なら記録なし）。"""
+        row = self._db.execute(
+            "SELECT MAX(timestamp) FROM session_events WHERE persona = ? AND event_type = ?",
+            (persona, event_type),
+        ).fetchone()
+        if row is None or row[0] is None:
+            return None
+        return datetime.fromisoformat(row[0])
+
     def last_activity_at(self, persona: str) -> datetime | None:
         """Most recent chat turn timestamp for the persona (None if none)."""
         placeholders = ", ".join("?" for _ in _IDLE_ACTIVITY_EVENT_TYPES)

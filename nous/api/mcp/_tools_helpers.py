@@ -11,6 +11,7 @@ import unicodedata
 from typing import TYPE_CHECKING, ParamSpec, TypeVar, cast
 
 from nous.domain.persona.emotion_trend import clean_context
+from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import relative_time_str
 
 if TYPE_CHECKING:
@@ -662,6 +663,25 @@ async def _apply_relationship_decay(ctx: AppContext, persona: str, state: Person
         return f"長時間の放置（{elapsed_hours / 720:.0f}ヶ月）により、関係性がほぼ消失している"
     except Exception:
         return ""
+
+
+def _apply_circadian_drift(ctx: AppContext, persona: str, state: PersonaState) -> PersonaState:
+    """時間帯 × 無会話経過で場所を移す（ベストエフォート・失敗時は元のstate）。"""
+    try:
+        from nous.application.circadian_drift import maybe_drift
+
+        if maybe_drift(ctx, persona) is None:
+            return state
+        state_result = ctx.persona_service.get_context(persona)
+        if isinstance(state_result, Success) and state_result.value:
+            state = state_result.value
+    except Exception:
+        logger.warning(
+            "_apply_circadian_drift: drift failed for persona '%s', keeping current state",
+            persona,
+            exc_info=True,
+        )  # best-effort
+    return state
 
 
 async def _apply_body_decay(ctx: AppContext, persona: str, state: PersonaState) -> PersonaState:
