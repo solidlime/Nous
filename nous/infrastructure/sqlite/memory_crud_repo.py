@@ -265,23 +265,16 @@ class MemoryCrudMixin:
                 chunk = unique[start : start + self._KEY_BATCH]
                 marks = ",".join("?" for _ in chunk)
                 self._db.execute("BEGIN IMMEDIATE")
-                self._db.execute(
-                    f"DELETE FROM memory_strength WHERE memory_key IN ({marks})",
-                    chunk,  # nosec B608
-                )
-                self._db.execute(
-                    f"DELETE FROM memory_entities WHERE memory_key IN ({marks})",
-                    chunk,  # nosec B608
-                )
-                self._db.execute(
-                    f"DELETE FROM memory_versions WHERE memory_key IN ({marks})",
-                    chunk,  # nosec B608
-                )
-                self._db.execute(
-                    f"DELETE FROM memory_links WHERE source_key IN ({marks}) OR target_key IN ({marks})",  # nosec B608
-                    [*chunk, *chunk],
-                )
-                cursor = self._db.execute(f"DELETE FROM memories WHERE key IN ({marks})", chunk)  # nosec B608
+                sql = f"DELETE FROM memory_strength WHERE memory_key IN ({marks})"  # nosec B608
+                self._db.execute(sql, chunk)
+                sql = f"DELETE FROM memory_entities WHERE memory_key IN ({marks})"  # nosec B608
+                self._db.execute(sql, chunk)
+                sql = f"DELETE FROM memory_versions WHERE memory_key IN ({marks})"  # nosec B608
+                self._db.execute(sql, chunk)
+                sql = f"DELETE FROM memory_links WHERE source_key IN ({marks}) OR target_key IN ({marks})"  # nosec B608
+                self._db.execute(sql, [*chunk, *chunk])
+                sql = f"DELETE FROM memories WHERE key IN ({marks})"  # nosec B608
+                cursor = self._db.execute(sql, chunk)
                 deleted += max(0, cursor.rowcount)
                 self._db.commit()
         except Exception as e:
