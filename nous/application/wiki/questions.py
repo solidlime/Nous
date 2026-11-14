@@ -40,7 +40,7 @@ def normalize_question_text(text: str) -> str:
 
 
 def _digest(text: str, size: int = 12) -> str:
-    return hashlib.sha1(normalize_question_text(text).encode("utf-8")).hexdigest()[:size]
+    return hashlib.sha1(normalize_question_text(text).encode("utf-8"), usedforsecurity=False).hexdigest()[:size]
 
 
 def question_pair_key(a: str, b: str, kind: str | None = None) -> str:

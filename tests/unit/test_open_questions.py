@@ -98,9 +98,7 @@ class FakeMemoryService:
 
 
 def _ctx(conn, repo, service, vector_store=None):
-    return SimpleNamespace(
-        memory_repo=repo, connection=conn, memory_service=service, vector_store=vector_store
-    )
+    return SimpleNamespace(memory_repo=repo, connection=conn, memory_service=service, vector_store=vector_store)
 
 
 def _mem(key: str, content: str, *, tags: list[str] | None = None, lifecycle: str = "active") -> Memory:
@@ -329,13 +327,13 @@ async def test_memory_update_resolved_closes_question(tmp_path):
     assert payload["data"]["closed"] == 2
     assert find_open_questions(ctx) == []
     # tombstone ではなく行ごと消えていること（find_all は tombstone も隠すので直接見る）
-    rows = conn.get_memory_db().execute(
-        "SELECT COUNT(*) AS c FROM memories WHERE key IN ('oq1', 'oq2')"
-    ).fetchone()
+    rows = conn.get_memory_db().execute("SELECT COUNT(*) AS c FROM memories WHERE key IN ('oq1', 'oq2')").fetchone()
     assert rows["c"] == 0
-    versions = conn.get_memory_db().execute(
-        "SELECT COUNT(*) AS c FROM memory_versions WHERE memory_key IN ('oq1', 'oq2')"
-    ).fetchone()
+    versions = (
+        conn.get_memory_db()
+        .execute("SELECT COUNT(*) AS c FROM memory_versions WHERE memory_key IN ('oq1', 'oq2')")
+        .fetchone()
+    )
     assert versions["c"] == 0
     assert sorted(vector_store.deleted) == ["oq1", "oq2"]
     assert question_key_of(first) == "qkey:pair:a|b:value"
