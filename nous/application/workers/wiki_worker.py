@@ -1354,19 +1354,23 @@ class WikiWorker:
                 for m in all_by_key.values()
                 if m.lifecycle_status == "archived" and m.key not in cited_any and _topic_of(m) == topic
             ]
-            # 拾う順番は「ページ本文に語が重なるもの」優先。新しい順だけで埋めると、
-            # 直近の archived 10 件が席を食い、6 日前に沈んだ事実には届かない（実測）。
+            # 拾う順番は「ページ本文の珍しい語と重なるもの」優先。新しい順だけで埋めると
+            # 直近の archived 20 件が席を食い、6 日前に沈んだ事実には届かない（実測:
+            # manual 廃止の 3 記憶は新しい順で 15/16/18 位）。
             cap = max(0, self._cfg.orphan_archive_memories)
-            warehouse = list(self._recall_by_text(text, orphans, topic))
-            seen = {m.key for m in warehouse}
-            for m in _by_recency(orphans):
-                if len(seen) >= cap:
-                    break
-                if m.key not in seen:
-                    warehouse.append(m)
-                    seen.add(m.key)
-            for m in warehouse[:cap]:
-                restored.setdefault(m.key, m)
+            ordered = _by_recency(orphans)
+            if cap and ordered:
+                bodies = {m.key: (m.content or "").lower() for m in ordered}
+                rare = {
+                    t
+                    for t in _TOKEN_RE.findall(text.lower())
+                    if len(t) >= 3 and 0 < sum(1 for b in bodies.values() if t in b) <= 5
+                }
+                hit = [m for m in ordered if any(t in bodies[m.key] for t in rare)]
+                hit_keys = {m.key for m in hit}
+                miss = [m for m in ordered if m.key not in hit_keys]
+                for m in (hit + miss)[:cap]:
+                    restored.setdefault(m.key, m)
             slots = max(0, self._cfg.max_memories_per_topic - len(restored))
             for m in _by_recency(memories)[:slots]:
                 restored.setdefault(m.key, m)
