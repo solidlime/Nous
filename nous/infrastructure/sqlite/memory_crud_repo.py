@@ -265,14 +265,23 @@ class MemoryCrudMixin:
                 chunk = unique[start : start + self._KEY_BATCH]
                 marks = ",".join("?" for _ in chunk)
                 self._db.execute("BEGIN IMMEDIATE")
-                self._db.execute(f"DELETE FROM memory_strength WHERE memory_key IN ({marks})", chunk)
-                self._db.execute(f"DELETE FROM memory_entities WHERE memory_key IN ({marks})", chunk)
-                self._db.execute(f"DELETE FROM memory_versions WHERE memory_key IN ({marks})", chunk)
                 self._db.execute(
-                    f"DELETE FROM memory_links WHERE source_key IN ({marks}) OR target_key IN ({marks})",
+                    f"DELETE FROM memory_strength WHERE memory_key IN ({marks})",
+                    chunk,  # nosec B608
+                )
+                self._db.execute(
+                    f"DELETE FROM memory_entities WHERE memory_key IN ({marks})",
+                    chunk,  # nosec B608
+                )
+                self._db.execute(
+                    f"DELETE FROM memory_versions WHERE memory_key IN ({marks})",
+                    chunk,  # nosec B608
+                )
+                self._db.execute(
+                    f"DELETE FROM memory_links WHERE source_key IN ({marks}) OR target_key IN ({marks})",  # nosec B608
                     [*chunk, *chunk],
                 )
-                cursor = self._db.execute(f"DELETE FROM memories WHERE key IN ({marks})", chunk)
+                cursor = self._db.execute(f"DELETE FROM memories WHERE key IN ({marks})", chunk)  # nosec B608
                 deleted += max(0, cursor.rowcount)
                 self._db.commit()
         except Exception as e:
@@ -315,7 +324,7 @@ class MemoryCrudMixin:
                 rows = self._db.execute(
                     "SELECT key, content, tags, kind, lifecycle_status, source_type, created_at,"
                     " updated_at, importance, source_context FROM memories"
-                    f" WHERE key IN ({marks})",  # marks are placeholders; values bound  # nosec B608
+                    f" WHERE key IN ({marks})",  # nosec B608 -- marks are "?" placeholders
                     chunk,
                 ).fetchall()
                 out.extend(dict(row) for row in rows)
