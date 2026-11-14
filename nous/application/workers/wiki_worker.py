@@ -934,8 +934,8 @@ class WikiWorker:
 
         existing = store.read_page(slug)
 
-        existed = existing.is_ok
-        if existed:
+        existed = isinstance(existing, Success)
+        if isinstance(existing, Success):
             # 源は減らさない。改訂で sources から落ちた記憶は「どのページも引用していない
             # archived」になり、後から訂正を引っぱれなくなる（#44 で manual 廃止がこれで
             # 6 日間見えなかった）。
