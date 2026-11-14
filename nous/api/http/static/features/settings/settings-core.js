@@ -9,7 +9,7 @@ N.Features.Settings = N.Features.Settings || {};
 
 ;(function() {
 var S = window.S;
-var { api, safeSetHTML } = window.Nous.Core;
+var { api, esc, safeSetHTML } = window.Nous.Core;
 
 /* ═══════════════════════════════════════════════════════════════════
    LOAD SETTINGS
@@ -31,6 +31,30 @@ async function loadSettings() {
     } catch (e) {
         console.error('settings load failed:', e);
         safeSetHTML(el, N.Components.skeleton.errorCard('Failed to load settings', function(){ loadSettings(); }));
+    }
+    loadSecurityDiagnostics();
+}
+
+/* 公開運用の危険な設定（公開 bind + 鍵なし / CORS '*' / plugin 鍵不足）を上部に出す。
+   診断はサーバの 1 箇所（security_diagnostics）で判定済み。ここは表示だけ。 */
+async function loadSecurityDiagnostics() {
+    const el = document.getElementById('settings-diagnostics');
+    if (!el) return;
+    try {
+        const data = await api('/api/settings/diagnostics');
+        const warnings = (data && data.warnings) || [];
+        if (!warnings.length) { safeSetHTML(el, ''); return; }
+        const rows = warnings.map(function(w) {
+            return '<div style="margin-top:6px;"><strong>' + esc(w.message) + '</strong>' +
+                '<div style="color:var(--text-muted); font-size:0.78rem; margin-top:2px;">' + esc(w.hint) + '</div></div>';
+        }).join('');
+        safeSetHTML(el,
+            '<div class="glass p-4" style="margin-bottom:16px; border-left:3px solid var(--accent-orange, #f59e0b);">' +
+            '<div style="font-weight:600; color:var(--accent-orange, #f59e0b);">' +
+            '公開運用の警告（' + warnings.length + ' 件）</div>' + rows + '</div>');
+    } catch (e) {
+        console.warn('security diagnostics failed:', e);
+        safeSetHTML(el, '');
     }
 }
 /* N.Features.Settings.loadSettings registered below */

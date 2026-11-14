@@ -154,6 +154,8 @@ def render_activity_tab() -> str:
                     <i data-lucide="refresh-cw"></i> Refresh
                 </button>
             </div>
+            <!-- Metrics strip (kanban #10) -->
+            <div id="act-metrics" style="display:flex; gap:16px; flex-wrap:wrap; font-size:0.78rem; padding:8px 0; color:var(--text-secondary);"></div>
             <!-- Feed container -->
             <div id="act-feed"></div>
             <!-- Load more button (inserted dynamically) -->

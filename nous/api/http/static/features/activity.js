@@ -47,8 +47,31 @@ const ACT_PLATFORM_ICONS = {
     'plugin':   '<i data-lucide="puzzle"></i>',
 };
 
+async function loadMetrics() {
+    const el = document.getElementById('act-metrics');
+    if (!el || !S.persona) return;
+    try {
+        const m = await api('/api/metrics/' + encodeURIComponent(S.persona));
+        const s = m.search || {};
+        const w = m.wiki || {};
+        const tools = Object.keys(m.tools || {}).length;
+        const parts = [
+            '検索 ' + (s.count || 0) + ' 回 / p50 ' + (s.p50_ms || 0) + 'ms / p95 ' + (s.p95_ms || 0) + 'ms',
+            'zero-result ' + Math.round((s.zero_result_rate || 0) * 100) + '%',
+            'ツール ' + tools + ' 種',
+            '編纂 ' + ((w['wiki.compiled'] || 0)) + ' / 保存 ' + ((w['wiki.saved'] || 0))
+        ];
+        el.textContent = parts.join('　·　');
+    } catch (e) {
+        console.warn('metrics load failed:', e);
+        el.textContent = '';
+    }
+}
+
 async function loadActivity(reset = false) {
     if (reset) { ACT.offset = 0; ACT.sessions = {}; }
+
+    loadMetrics();
 
     const feed = document.getElementById('act-feed');
     if (!feed) return;
@@ -256,6 +279,7 @@ document.addEventListener("keydown", function(e) {
 // Register in namespace
 Object.assign(N.Features.Activity, {
     loadActivity: loadActivity,
+    loadMetrics: loadMetrics,
     toggleActivitySession: toggleActivitySession,
     toggleActivityDetail: toggleActivityDetail,
     renderActivityFeed: renderActivityFeed,

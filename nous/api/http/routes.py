@@ -7,7 +7,9 @@ from nous.api.http.routers import (
     register_image_gen_routes,
     register_item_routes,
     register_memory_routes,
+    register_metrics_routes,
     register_persona_routes,
+    register_project_context_routes,
     register_search_routes,
     register_session_events_routes,
     register_skills_routes,
@@ -30,3 +32,5 @@ def register_http_routes(mcp) -> None:
     register_session_events_routes(mcp)
     register_image_gen_routes(mcp)
     register_wiki_routes(mcp)
+    register_project_context_routes(mcp)
+    register_metrics_routes(mcp)

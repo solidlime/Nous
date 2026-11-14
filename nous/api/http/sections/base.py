@@ -111,6 +111,7 @@ def render_head() -> str:
     <script src="/static/features/graph.js" defer></script>
     <script src="/static/features/timeline.js" defer></script>
     <script src="/static/features/wiki.js" defer></script>
+    <script src="/static/features/projects.js" defer></script>
     <script src="/static/features/activity.js" defer></script>
     <!-- CSP delegation receivers (data-* + addEventListener) — load last -->
     <script src="/static/core/delegation.js" defer></script>

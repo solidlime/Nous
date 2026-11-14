@@ -18,10 +18,10 @@ async def _do_health() -> dict:
     """Return health check dict."""
     from nous import __version__  # noqa: PLC0415  — avoids circular import
 
+    settings = Settings()
     try:
         from qdrant_client import QdrantClient
 
-        settings = Settings()
         client = QdrantClient(url=settings.qdrant.url, api_key=settings.qdrant.api_key)
         client.get_collections()
         qdrant_ok = True
@@ -30,10 +30,13 @@ async def _do_health() -> dict:
         logger.warning("Health check: Qdrant unreachable")
         qdrant_ok = False
 
+    from nous.config.security_diagnostics import security_summary
+
     return {
         "status": "ok",
         "version": __version__,
         "qdrant": "connected" if qdrant_ok else "unavailable",
+        "security": security_summary(settings),
     }
 
 

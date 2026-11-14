@@ -11,6 +11,7 @@ from .sections.chat import render_chat_tab
 from .sections.knowledge_graph import render_graph_js, render_graph_tab
 from .sections.memories import render_memories_js, render_memories_tab
 from .sections.overview import render_overview_js, render_overview_tab
+from .sections.projects import render_project_tab
 from .sections.settings import render_settings_js, render_settings_tab
 from .sections.timeline import render_timeline_js, render_timeline_tab
 from .sections.wiki import render_wiki_tab
@@ -22,6 +23,7 @@ def render_dashboard(persona: str | None = None) -> str:
         {"id": "overview", "lucide": "layout-dashboard", "label": "Overview"},
         {"id": "memories", "lucide": "brain", "label": "Memories"},
         {"id": "wiki", "lucide": "book-open", "label": "Wiki"},
+        {"id": "projects", "lucide": "folder-kanban", "label": "Projects"},
         {"id": "chat", "lucide": "message-circle", "label": "Chat"},
         {"id": "activity", "lucide": "activity", "label": "Activity"},
         {"id": "settings", "lucide": "settings", "label": "Settings"},
@@ -36,6 +38,7 @@ def render_dashboard(persona: str | None = None) -> str:
             render_overview_tab(),
             render_memories_tab(),
             render_wiki_tab(),
+            render_project_tab(),
             render_timeline_tab(),
             render_graph_tab(),
             render_chat_tab(persona or ""),

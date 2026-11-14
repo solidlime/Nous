@@ -188,6 +188,12 @@ def create_app() -> MemoryFastMCP:
 
     logger.info("Starting Nous v%s on %s:%s", __version__, settings.server.host, settings.server.port)
 
+    # 公開運用の危険な組み合わせは起動時に 1 度だけ警告する（既定の dev 構成は許容）。
+    from nous.config.security_diagnostics import diagnose_security
+
+    for warning in diagnose_security(settings):
+        logger.warning("security[%s]: %s %s", warning.code, warning.message, warning.hint)
+
     AppContextRegistry.configure(settings)
 
     # ディレクトリ構造を確保

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
@@ -196,6 +197,7 @@ def register_search_routes(mcp) -> None:
         if ctx is None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
+            _t0 = time.perf_counter()
             from nous.api.mcp._tools_memory import MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT
             from nous.domain.search.policy import RankPolicy
 
@@ -260,6 +262,14 @@ def register_search_routes(mcp) -> None:
             result = await ctx.search_engine.search(query)
             if not result.is_ok:
                 return error_from_result(result)
+            # 観測性（kanban #10）: レイテンシと zero-result をプロセス内に残す。
+            # 記録失敗で検索を落とさない。
+            try:
+                from nous.infrastructure.metrics import registry as _metrics
+
+                _metrics.observe_search(persona, (time.perf_counter() - _t0) * 1000.0, len(result.value))
+            except Exception:
+                logger.debug("search metrics failed", exc_info=True)
             # 発火可視化 (#011 Phase 15): 記憶に紐づく entity 層を返す。形は
             # /api/graph と同一（_merge_entity_layer を共有）ので、フロントは
             # 同じ entity 分岐で描ける。上限は既存の /api/graph 経路と同じ 50 件

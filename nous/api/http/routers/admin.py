@@ -130,6 +130,25 @@ def register_admin_routes(mcp) -> None:
             logger.exception("Unexpected error: %s", exc)
             return JSONResponse({"error": "Internal server error"}, status_code=500)
 
+    @mcp.custom_route("/api/settings/diagnostics", methods=["GET"])
+    async def settings_diagnostics(request: Request) -> JSONResponse:  # noqa: ARG001
+        """公開運用セキュリティ診断（kanban #6）。読み取り専用・値は返さない。"""
+        try:
+            from nous.config.security_diagnostics import diagnose_security
+            from nous.config.settings import get_settings
+
+            warnings = diagnose_security(get_settings())
+            return JSONResponse(
+                {
+                    "ok": not warnings,
+                    "warnings": [w.to_dict() for w in warnings],
+                }
+            )
+        # 最終防衛線
+        except Exception as exc:
+            logger.exception("Unexpected error: %s", exc)
+            return JSONResponse({"error": "Internal server error"}, status_code=500)
+
     @mcp.custom_route("/api/settings/status", methods=["GET"])
     async def settings_status(request: Request) -> JSONResponse:
         try:
