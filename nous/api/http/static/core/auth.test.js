@@ -145,4 +145,21 @@ describe('core/auth', () => {
     const auth = await load();
     expect(auth.sign('http://other.example/stream')).toBe('http://other.example/stream');
   });
+
+  it('401 が返ったら保存済みの鍵を捨てる（ローテート後の自壊を防ぐ）', async () => {
+    window.localStorage.setItem('nousApiKey', 'stale');
+    window.fetch = vi.fn(() => Promise.resolve({ status: 401 }));
+    await load();
+    const res = await window.fetch('/api/x');
+    expect(res.status).toBe(401);
+    expect(window.localStorage.getItem('nousApiKey')).toBeNull();
+  });
+
+  it('200 では鍵を捨てない', async () => {
+    window.localStorage.setItem('nousApiKey', 'good');
+    window.fetch = vi.fn(() => Promise.resolve({ status: 200 }));
+    await load();
+    await window.fetch('/api/x');
+    expect(window.localStorage.getItem('nousApiKey')).toBe('good');
+  });
 });

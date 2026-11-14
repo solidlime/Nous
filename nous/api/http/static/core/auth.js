@@ -113,7 +113,11 @@ if (!window.fetch || !window.fetch._nousAuthWrapped) {
       }
       init.headers = N.Core.auth.headers(base);
     }
-    return _origFetch.call(window, input, init);
+    return _origFetch.call(window, input, init).then(function(res) {
+      /* 鍵がローテートされた場合、間違った鍵を送り続けない（次の ?token= で復帰）。 */
+      if (res && res.status === 401 && N.Core.auth.token()) N.Core.auth.clear();
+      return res;
+    });
   };
   _wrappedFetch._nousAuthWrapped = true;
   window.fetch = _wrappedFetch;
