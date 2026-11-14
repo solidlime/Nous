@@ -204,13 +204,49 @@ class ChatConfig(BaseModel):
     def is_configured(self) -> bool:
         return self.provider_config.is_configured()
 
+    @staticmethod
+    def is_secret_field(name: str) -> bool:
+        """Return True if *name* is an API key field that must be masked."""
+        return name == "api_key" or name.endswith("_api_key")
+
+    @staticmethod
+    def is_secret_header_name(header_name: str) -> bool:
+        """Return True if *header_name* carries a credential in ``mcp_servers[].headers``."""
+        low = header_name.lower()
+        return low in ("authorization", "proxy-authorization", "x-api-key", "cookie", "set-cookie") or any(
+            tok in low for tok in ("api-key", "api_key", "apikey", "token", "secret", "auth", "credential")
+        )
+
+    @staticmethod
+    def _mask_secret_str(value: str) -> str:
+        if not value:
+            return value
+        visible = value[:4] if len(value) > 4 else ""
+        return visible + "****"
+
     def to_safe_dict(self) -> dict:
-        """Return config as dict with API key masked."""
+        """Return config as dict with all API keys and MCP credential headers masked."""
         d = self.model_dump()
-        raw_key = d.get("api_key", "")
-        if raw_key:
-            visible = raw_key[:4] if len(raw_key) > 4 else ""
-            d["api_key"] = visible + "****"
+        for key, value in list(d.items()):
+            if self.is_secret_field(key) and isinstance(value, str) and value:
+                d[key] = self._mask_secret_str(value)
+        if isinstance(d.get("mcp_servers"), list):
+            masked_servers: list[dict] = []
+            for srv in d["mcp_servers"]:
+                if isinstance(srv, dict) and isinstance(srv.get("headers"), dict):
+                    srv_copy = dict(srv)
+                    srv_copy["headers"] = {
+                        hk: (
+                            self._mask_secret_str(hv)
+                            if isinstance(hv, str) and hv and self.is_secret_header_name(str(hk))
+                            else hv
+                        )
+                        for hk, hv in srv["headers"].items()
+                    }
+                    masked_servers.append(srv_copy)
+                else:
+                    masked_servers.append(srv)
+            d["mcp_servers"] = masked_servers
         d["is_configured"] = self.is_configured()
         d["effective_model"] = self.get_effective_model()
         d["effective_base_url"] = self.get_effective_base_url()

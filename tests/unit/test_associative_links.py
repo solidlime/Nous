@@ -97,6 +97,56 @@ class TestGetLinksForKeys:
         _insert_memory_entities(sqlite_conn, rows)
         assert len(entity_repo.get_links_for_keys(["hub"], limit=5)) == 5
 
+    def test_summarizes_links_do_not_drop_semantic_links(self, sqlite_conn, entity_repo):
+        assert entity_repo.upsert_link("m1", "m2", strength=0.3, link_type="semantic").is_ok
+        assert entity_repo.upsert_link("m1", "gist1", strength=0.5, link_type="summarizes").is_ok
+        links = entity_repo.get_links_for_keys(["m1"])
+        by_pair = {(lnk.source_key, lnk.target_key): lnk for lnk in links}
+        assert ("m1", "m2") in by_pair
+        assert by_pair[("m1", "m2")].link_type == "semantic"
+        assert ("m1", "gist1") in by_pair
+        assert by_pair[("m1", "gist1")].link_type == "summarizes"
+
+    def test_corrupted_link_type_row_is_skipped_without_dropping_valid_links(self, sqlite_conn, entity_repo):
+        db = sqlite_conn.get_memory_db()
+        db.execute(
+            "INSERT INTO memory_links (source_key, target_key, weight, link_type, co_activation_count, last_activated) "
+            "VALUES ('m1', 'm2', 0.7, 'semantic', 1, '2026-11-10T00:00:00Z')"
+        )
+        db.execute(
+            "INSERT INTO memory_links (source_key, target_key, weight, link_type, co_activation_count, last_activated) "
+            "VALUES ('m1', 'm_bad', 0.5, 'unknown_corrupt_type', 1, '2026-11-10T00:00:00Z')"
+        )
+        links = entity_repo.get_links_for_keys(["m1"])
+        by_pair = {(lnk.source_key, lnk.target_key): lnk for lnk in links}
+        assert ("m1", "m2") in by_pair
+        assert ("m1", "m_bad") not in by_pair
+
+    def test_strongest_link_wins_for_same_pair(self, sqlite_conn, entity_repo):
+        assert entity_repo.upsert_link("m1", "m2", strength=0.4, link_type="semantic").is_ok
+        assert entity_repo.upsert_link("m1", "m2", strength=0.1, link_type="contextual").is_ok
+        links = entity_repo.get_links_for_keys(["m1"])
+        by_pair = {(lnk.source_key, lnk.target_key): lnk for lnk in links}
+        assert by_pair[("m1", "m2")].weight == pytest.approx(0.9)
+        assert by_pair[("m1", "m2")].link_type == "semantic"
+
+    def test_upsert_link_rejects_invalid_link_type(self, entity_repo):
+        res = entity_repo.upsert_link("m1", "m2", link_type="invalid_type")
+        assert not res.is_ok
+
+    def test_corrupt_high_weight_row_does_not_hide_valid_link(self, sqlite_conn, entity_repo):
+        db = sqlite_conn.get_memory_db()
+        db.execute(
+            "INSERT INTO memory_links (source_key, target_key, weight, link_type, co_activation_count, last_activated) "
+            "VALUES ('m1', 'm2', 0.9, 'unknown_corrupt_type', 1, '2026-11-10T00:00:00Z')"
+        )
+        db.execute(
+            "INSERT INTO memory_links (source_key, target_key, weight, link_type, co_activation_count, last_activated) "
+            "VALUES ('m1', 'm2', 0.5, 'semantic', 1, '2026-11-10T00:00:00Z')"
+        )
+        by_pair = {(lnk.source_key, lnk.target_key): lnk for lnk in entity_repo.get_links_for_keys(["m1"])}
+        assert by_pair[("m1", "m2")].link_type == "semantic"
+
 
 # ---------------------------------------------------------------------------
 # SearchEngine spreading activation wiring

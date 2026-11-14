@@ -344,7 +344,8 @@ class WikiConfig(BaseModel):
     memory_conflict_interval_hours: int = 168  # 掃除の間隔（7 日）
     memory_conflict_min_jaccard: float = 0.5  # 候補抽出の本文類似度しきい値
     # 自走調査（#40）。登録済み MCP ツールがある時だけ動く（無ければ何もしない）。
-    research_enabled: bool = True
+    # mcp-hub の 3 段メタ呼び出しに未対応のため既定は無効（#53）。
+    research_enabled: bool = False
     max_research_per_cycle: int = 3  # 1 サイクルで調べる質問数
     research_max_tool_calls: int = 3  # 1 質問あたりのツール実行上限
     archive_sources: bool = True  # 編纂済みの源記憶を archived へ沈める（削除はしない）

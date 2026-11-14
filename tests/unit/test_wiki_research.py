@@ -198,7 +198,7 @@ def _worker_setup(tmp_path, memories: list[Memory]):
         repo.save(memory)
     from nous.domain.memory.service import MemoryService
 
-    settings = SimpleNamespace(data_root=str(tmp_path), wiki=WikiConfig(enabled=True))
+    settings = SimpleNamespace(data_root=str(tmp_path), wiki=WikiConfig(enabled=True, research_enabled=True))
     ctx = SimpleNamespace(
         memory_repo=repo,
         connection=conn,
@@ -328,6 +328,10 @@ class TestWorkerResearch:
         assert len(rows) == 1
         assert rows[0][0].startswith("warning: research failed for q")
         assert rows[0][1]["reason"] == "failed"
+
+    def test_research_disabled_by_default_in_wiki_config(self) -> None:
+        """WikiConfig.research_enabled の既定は False（#53）。"""
+        assert WikiConfig().research_enabled is False
 
     def test_research_disabled_does_nothing(self, tmp_path, monkeypatch) -> None:
         """research_enabled=False なら research を呼ばない（監査も出さない）。"""

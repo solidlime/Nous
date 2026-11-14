@@ -480,6 +480,135 @@ class TestChatConfig:
         assert d["api_key"] == ""
         assert d["is_configured"] is False
 
+    def test_to_safe_dict_masks_all_subconfig_api_keys(self):
+        cfg = ChatConfig(
+            persona="test",
+            api_key="sk-main-secret-1234",
+            brain_llm_api_key="sk-brain-secret-5678",
+            item_llm_api_key="sk-item-secret-9012",
+            image_caption_api_key="sk-caption-secret-3456",
+        )
+        d = cfg.to_safe_dict()
+        for key in ("api_key", "brain_llm_api_key", "item_llm_api_key", "image_caption_api_key"):
+            assert "secret" not in d[key], f"{key} leaked secret in to_safe_dict()"
+            assert d[key].endswith("****"), f"{key} was not masked"
+
+    @pytest.mark.asyncio
+    async def test_do_save_chat_config_ignores_masked_subconfig_api_keys(self, tmp_path, monkeypatch):
+        from types import SimpleNamespace
+
+        from nous.api.http.routers.chat import chat_management
+        from nous.domain.chat_config import ChatConfigFileRepository
+
+        monkeypatch.setattr(chat_management, "get_settings", lambda: SimpleNamespace(data_root=str(tmp_path)))
+        repo = ChatConfigFileRepository(str(tmp_path))
+        repo.save(
+            ChatConfig(
+                persona="test",
+                api_key="sk-main-real-key",
+                brain_llm_api_key="sk-brain-real-key",
+                item_llm_api_key="sk-item-real-key",
+                image_caption_api_key="sk-caption-real-key",
+            )
+        )
+        # UI が to_safe_dict() のマスク値 ("sk-b****") をそのまま送り返しても実キーを上書きしない
+        saved = await chat_management._do_save_chat_config(
+            "test",
+            None,
+            {
+                "api_key": "sk-m****",
+                "brain_llm_api_key": "sk-b****",
+                "item_llm_api_key": "sk-i****",
+                "image_caption_api_key": "sk-c****",
+            },
+        )
+        reloaded = repo.get("test")
+        assert reloaded.api_key == "sk-main-real-key"
+        assert reloaded.brain_llm_api_key == "sk-brain-real-key"
+        assert reloaded.item_llm_api_key == "sk-item-real-key"
+        assert reloaded.image_caption_api_key == "sk-caption-real-key"
+        assert saved["brain_llm_api_key"] == "sk-b****"
+
+        # フィールド未指定（dedicated OFF 等）でも既存値は保持される
+        await chat_management._do_save_chat_config("test", None, {"model": "gpt-4o"})
+        reloaded2 = repo.get("test")
+        assert reloaded2.brain_llm_api_key == "sk-brain-real-key"
+
+        # 空文字 "" を明示送信した場合はクリアされ、api_key は env 既定へフォールバックする
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-env-fallback-key")
+        cleared = await chat_management._do_save_chat_config(
+            "test",
+            None,
+            {
+                "api_key": "",
+                "brain_llm_api_key": "",
+                "item_llm_api_key": "",
+                "image_caption_api_key": "",
+            },
+        )
+        reloaded3 = repo.get("test")
+        assert reloaded3.api_key is None
+        assert reloaded3.get_effective_api_key() == "sk-env-fallback-key"
+        assert reloaded3.brain_llm_api_key == ""
+        assert reloaded3.item_llm_api_key == ""
+        assert reloaded3.image_caption_api_key == ""
+        assert cleared["brain_llm_api_key"] == ""
+
+    @pytest.mark.asyncio
+    async def test_mcp_servers_headers_masked_and_preserved_on_save(self, tmp_path, monkeypatch):
+        from types import SimpleNamespace
+
+        from nous.api.http.routers.chat import chat_management
+        from nous.domain.chat_config import ChatConfigFileRepository
+
+        monkeypatch.setattr(chat_management, "get_settings", lambda: SimpleNamespace(data_root=str(tmp_path)))
+        repo = ChatConfigFileRepository(str(tmp_path))
+        repo.save(
+            ChatConfig(
+                persona="test",
+                mcp_servers=[
+                    {
+                        "name": "hub",
+                        "url": "http://hub/mcp",
+                        "headers": {
+                            "Authorization": "Bearer secret-hub-token-999",
+                            "X-Custom": "public-value",
+                        },
+                    }
+                ],
+            )
+        )
+        safe = await chat_management._do_get_chat_config("test", None)
+        hdrs = safe["mcp_servers"][0]["headers"]
+        assert "secret-hub-token" not in hdrs["Authorization"]
+        assert hdrs["Authorization"].endswith("****")
+        assert hdrs["X-Custom"] == "public-value"
+
+        # UI がマスク済みの mcp_servers をそのまま送り返しても実トークンは維持される（ヘッダ名の大文字小文字が変わっても復元）
+        mutated = [
+            {
+                "name": "hub",
+                "url": "http://hub/mcp",
+                "headers": {"authorization": hdrs["Authorization"], "X-Custom": "public-value"},
+            }
+        ]
+        await chat_management._do_save_chat_config("test", None, {"mcp_servers": mutated})
+        reloaded = repo.get("test")
+        assert reloaded.mcp_servers[0]["headers"]["authorization"] == "Bearer secret-hub-token-999"
+
+        # サーバ名を改名して保存しても url 一致でトークンが復元される
+        renamed = [
+            {
+                "name": "myhub",
+                "url": "http://hub/mcp",
+                "headers": {"Authorization": hdrs["Authorization"], "X-Custom": "public-value"},
+            }
+        ]
+        await chat_management._do_save_chat_config("test", None, {"mcp_servers": renamed})
+        reloaded2 = repo.get("test")
+        assert reloaded2.mcp_servers[0]["name"] == "myhub"
+        assert reloaded2.mcp_servers[0]["headers"]["Authorization"] == "Bearer secret-hub-token-999"
+
     # ── Dynamic temperature + top_p (TA02) ──
 
     def test_dynamic_temperature_default(self):

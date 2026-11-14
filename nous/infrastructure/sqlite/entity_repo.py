@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from nous.domain.memory.graph import Entity, EntityGraph, EntityRelation
-from nous.domain.memory.memory_link import MemoryLink
+from nous.domain.memory.memory_link import LINK_TYPES, MemoryLink
 from nous.domain.shared.errors import RepositoryError
 from nous.domain.shared.result import Failure, Result, Success
 from nous.domain.shared.time_utils import format_iso, get_now
@@ -296,6 +296,8 @@ class SQLiteEntityRepository(SQLiteRepository):
         and last_activated refreshes. Read-modify-write is forbidden by
         design — the ON CONFLICT clause makes the update atomic.
         """
+        if link_type not in LINK_TYPES:
+            return Failure(RepositoryError(f"Invalid link_type: {link_type!r}. Must be one of {sorted(LINK_TYPES)}"))
         if similarity is not None:
             from nous.domain.memory.query_service import resolve_brain_config
 
@@ -349,9 +351,11 @@ class SQLiteEntityRepository(SQLiteRepository):
         """Return associative links for spreading activation.
 
         Union read: entity co-occurrence edges (weight=0.5) form the base
-        graph; persistent memory_links edges (Hebbian) override same-pair
-        co-occurrence weights and add pairs that share no entity.  Persistent
-        edges are expanded in both directions (SA reads outgoing only).
+        graph; persistent memory_links edges (Hebbian, including ``summarizes``
+        edges from source memory to gist) override same-pair co-occurrence
+        weights and add pairs that share no entity. When multiple link_types
+        exist for the same ``(src, dst)`` pair, the strongest weight wins.
+        Persistent edges are expanded in both directions (SA reads outgoing only).
         Day-1 behaviour is unchanged when memory_links is empty.
         """
         if not keys:
@@ -375,19 +379,36 @@ class SQLiteEntityRepository(SQLiteRepository):
             link_rows = self._db.execute(
                 "SELECT * FROM memory_links "  # nosec B608 -- IN-list is "?" placeholders; values bound via sqlite params
                 f"WHERE source_key IN ({placeholders}) OR target_key IN ({placeholders}) "
-                "LIMIT ?",
+                "ORDER BY weight DESC, source_key, target_key LIMIT ?",
                 (*keys, *keys, limit),
             ).fetchall()
+            best_persistent: dict[tuple[str, str], float] = {}
             for r in link_rows:
-                for src, dst in ((r["source_key"], r["target_key"]), (r["target_key"], r["source_key"])):
-                    # Persistent weight wins over the co-occurrence base
-                    links[(src, dst)] = MemoryLink(
-                        source_key=src,
-                        target_key=dst,
-                        weight=r["weight"],
-                        link_type=r["link_type"],
-                        co_activation_count=r["co_activation_count"],
-                        last_activated=r["last_activated"],
+                try:
+                    w = float(r["weight"])
+                    for src, dst in ((r["source_key"], r["target_key"]), (r["target_key"], r["source_key"])):
+                        if best_persistent.get((src, dst), -1.0) >= w:
+                            continue
+                        # Build first so a corrupt row cannot poison best_persistent for this pair
+                        link = MemoryLink(
+                            source_key=src,
+                            target_key=dst,
+                            weight=w,
+                            link_type=r["link_type"],
+                            co_activation_count=(
+                                1 if r["co_activation_count"] is None else int(r["co_activation_count"])
+                            ),
+                            last_activated=r["last_activated"],
+                        )
+                        best_persistent[(src, dst)] = w
+                        links[(src, dst)] = link
+                except (ValueError, TypeError) as e:
+                    logger.warning(
+                        "Skipping invalid memory_link %s->%s (type=%r): %s",
+                        r["source_key"],
+                        r["target_key"],
+                        r["link_type"],
+                        e,
                     )
             return list(links.values())[:limit]
         except Exception as e:

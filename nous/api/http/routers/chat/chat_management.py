@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from starlette.responses import JSONResponse, Response
 
@@ -35,12 +35,10 @@ async def _do_get_chat_config(persona: str, ctx) -> dict:
 # 「デフォルト値に戻す」ボタン向け。モデルの model_fields から自動取得するため、
 # 設定フィールド追加時にバックエンド側の定数メンテは不要。
 
-# 秘匿項目: 値を返さず常に空文字。
-_SECRET_FIELD_NAMES = frozenset({"api_key"})
 
-
+# 秘匿項目: 値を返さず常に空文字（単一定義は ChatConfig.is_secret_field）。
 def _is_secret_field(name: str) -> bool:
-    return name in _SECRET_FIELD_NAMES or name.endswith("_api_key")
+    return ChatConfig.is_secret_field(name)
 
 
 # v4.0 で削除された死にノブ。旧クライアント/旧 config.json が送ってきても
@@ -251,6 +249,44 @@ def _do_get_config_defaults() -> dict:
     return {"fields": fields}
 
 
+def _preserve_masked_mcp_headers(incoming_servers: Any, existing_servers: list[dict]) -> Any:
+    """Restore masked ``****`` header values in ``mcp_servers`` from *existing_servers* by name or url."""
+    if not isinstance(incoming_servers, list):
+        return incoming_servers
+    by_name: dict[str, dict[str, Any]] = {}
+    by_url: dict[str, dict[str, Any]] = {}
+    for s in existing_servers:
+        if not isinstance(s, dict) or not isinstance(s.get("headers"), dict):
+            continue
+        low = {str(k).lower(): v for k, v in s["headers"].items()}
+        if s.get("name"):
+            by_name[str(s["name"])] = low
+        if s.get("url"):
+            by_url[str(s["url"])] = low
+    out: list[Any] = []
+    for srv in incoming_servers:
+        if not isinstance(srv, dict) or not isinstance(srv.get("headers"), dict):
+            out.append(srv)
+            continue
+        sname = str(srv.get("name"))
+        prev_headers = by_name[sname] if sname in by_name else by_url.get(str(srv.get("url") or ""))
+        if not prev_headers:
+            if any(isinstance(v, str) and v.endswith("****") for v in srv["headers"].values()):
+                logger.warning(
+                    "mcp_servers: masked header for %r cannot be restored; token would be lost", srv.get("name")
+                )
+            out.append(srv)
+            continue
+        merged_headers = dict(srv["headers"])
+        for hk, hv in list(merged_headers.items()):
+            if isinstance(hv, str) and hv.endswith("****") and str(hk).lower() in prev_headers:
+                merged_headers[hk] = prev_headers[str(hk).lower()]
+        srv_copy = dict(srv)
+        srv_copy["headers"] = merged_headers
+        out.append(srv_copy)
+    return out
+
+
 async def _do_save_chat_config(persona: str, ctx, body: dict) -> dict:
     """Save and return updated chat config safe dict."""
     # v4.0: 削除済みキーは無視する。送られてきた場合のみ 1 リクエスト 1 回 warning。
@@ -266,12 +302,23 @@ async def _do_save_chat_config(persona: str, ctx, body: dict) -> dict:
 
     update_data = current.model_dump()
     for field_name in ChatConfig._all_flat_fields():
-        if field_name in ("persona", "updated_at", "api_key"):
+        if field_name in ("persona", "updated_at") or field_name not in body:
             continue
-        if field_name in body:
-            update_data[field_name] = body[field_name]
-    if "api_key" in body and body["api_key"] and not str(body["api_key"]).endswith("****"):
-        update_data["api_key"] = body["api_key"]
+        raw_val = body[field_name]
+        if _is_secret_field(field_name):
+            # マスク済み値 ("sk-x****") は既存キーの据え置きを意味するためスキップ。
+            # 空文字 "" や None はユーザーの「クリア（環境変数フォールバックへ戻す）」意図を反映する:
+            # ProviderConfig.api_key は None で env へフォールバックし、他の *_api_key (str) は "" でフォールバックする。
+            if raw_val is not None and str(raw_val).endswith("****"):
+                continue
+            if not raw_val:
+                update_data[field_name] = None if field_name == "api_key" else ""
+            else:
+                update_data[field_name] = raw_val
+            continue
+        if field_name == "mcp_servers":
+            raw_val = _preserve_masked_mcp_headers(raw_val, current.mcp_servers)
+        update_data[field_name] = raw_val
 
     new_config = ChatConfig(**update_data)
     repo.save(new_config)

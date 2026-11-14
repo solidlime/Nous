@@ -173,7 +173,7 @@ async def research(ctx, persona: str, question: str, *, max_calls: int = 3) -> d
 | `conflict_check_enabled` | `true` | 編纂時の矛盾検出を頼むか（プロンプトに節を足す） |
 | `memory_conflict_max_pairs` | `10` | 週次掃除の LLM 上限 |
 | `memory_conflict_interval_hours` | `168` | 週次掃除の間隔 |
-| `research_enabled` | `true` | 自走調査（登録 MCP ツールがある場合のみ動く） |
+| `research_enabled` | `false` | 自走調査（登録 MCP ツールがある場合のみ動く。mcp-hub 3 段呼び出し未対応のため既定 off） |
 | `max_research_per_cycle` | `3` | 1 サイクルで調べる質問数 |
 | `research_max_tool_calls` | `3` | 1 質問あたりのツール実行上限 |
 
