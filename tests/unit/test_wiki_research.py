@@ -18,7 +18,6 @@ from types import SimpleNamespace
 import pytest
 
 from nous.application.wiki import research as research_mod
-from nous.application.workers import wiki_worker as wiki_worker_mod
 from nous.application.workers.wiki_worker import WikiWorker
 from nous.config.settings import WikiConfig
 from nous.domain.memory.entities import Memory
@@ -241,7 +240,7 @@ class TestWorkerResearch:
             calls.append(question)
             return _hits()
 
-        monkeypatch.setattr(wiki_worker_mod, "research", _research)
+        monkeypatch.setattr("nous.application.wiki.conflicts.research", _research)
         questions = [{"query": "Blender 4.2 の API は?", "topic": "project-nous-x"}]
         try:
             worker._resolve_questions(ctx, _PERSONA, store, questions)
@@ -266,7 +265,7 @@ class TestWorkerResearch:
         async def _research(context, persona, question, *, max_calls=3):
             return _hits()
 
-        monkeypatch.setattr(wiki_worker_mod, "research", _research)
+        monkeypatch.setattr("nous.application.wiki.conflicts.research", _research)
         try:
             worker._resolve_questions(ctx, _PERSONA, store, [{"query": "q", "topic": "project-nous-x"}])
             rows = _event_rows(conn, "wiki.research")
@@ -290,7 +289,7 @@ class TestWorkerResearch:
         async def _research(context, persona, question, *, max_calls=3):
             return {"reason": "no_tools"}
 
-        monkeypatch.setattr(wiki_worker_mod, "research", _research)
+        monkeypatch.setattr("nous.application.wiki.conflicts.research", _research)
         try:
             worker._resolve_questions(
                 ctx, _PERSONA, store, [{"query": "a", "topic": "project-nous-x"}, {"query": "b", "topic": "x"}]
@@ -314,7 +313,7 @@ class TestWorkerResearch:
         async def _research(context, persona, question, *, max_calls=3):
             raise RuntimeError("mcp down")
 
-        monkeypatch.setattr(wiki_worker_mod, "research", _research)
+        monkeypatch.setattr("nous.application.wiki.conflicts.research", _research)
         try:
             worker._resolve_questions(ctx, _PERSONA, store, [{"query": "q", "topic": "project-nous-x"}])
             body = store.read_page("project-nous-x").value.body
@@ -344,7 +343,7 @@ class TestWorkerResearch:
             called.append(question)
             return _hits()
 
-        monkeypatch.setattr(wiki_worker_mod, "research", _research)
+        monkeypatch.setattr("nous.application.wiki.conflicts.research", _research)
         try:
             worker._resolve_questions(ctx, _PERSONA, store, [{"query": "q", "topic": "project-nous-x"}])
             rows = _event_rows(conn, "wiki.research")
@@ -380,7 +379,7 @@ class TestWorkerResearch:
             seen.append(question)
             return _hits()
 
-        monkeypatch.setattr(wiki_worker_mod, "research", _research)
+        monkeypatch.setattr("nous.application.wiki.conflicts.research", _research)
         try:
             worker._compile_persona(ctx, _PERSONA)
             page = WikiStore(tmp_path, _PERSONA).read_page("project-nous-x")
@@ -420,7 +419,7 @@ class TestResearchWriteContract:
             written.append(slug)
             return original(slug, *args, **kwargs)
 
-        monkeypatch.setattr(wiki_worker_mod, "research", _research)
+        monkeypatch.setattr("nous.application.wiki.conflicts.research", _research)
         monkeypatch.setattr(store, "write_page", _spy)
         try:
             worker._resolve_questions(
@@ -453,7 +452,7 @@ class TestResearchWriteContract:
         async def _research(context, persona, question, *, max_calls=3):
             return {"answer": "a", "calls": 1, "tools": ["t"], "hits": [{"title": "n", "url": _URL_A}]}
 
-        monkeypatch.setattr(wiki_worker_mod, "research", _research)
+        monkeypatch.setattr("nous.application.wiki.conflicts.research", _research)
         try:
             worker._resolve_questions(ctx, _PERSONA, store, [{"query": "q", "topic": "project-nous-x"}])
             after = store.read_page("project-nous-x").value
@@ -476,7 +475,7 @@ class TestResearchWriteContract:
             asked.append(question)
             return {"reason": "no_tools"}
 
-        monkeypatch.setattr(wiki_worker_mod, "research", _research)
+        monkeypatch.setattr("nous.application.wiki.conflicts.research", _research)
         try:
             worker._resolve_questions(
                 ctx,

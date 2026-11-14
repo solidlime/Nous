@@ -1028,19 +1028,19 @@ class TestJournalIsolation:
 class TestStripCodeFence:
     def test_text_after_closing_fence_is_dropped(self) -> None:
         """閉じフェンスの後ろの説明文は本文に混ぜない。"""
-        from nous.application.workers.wiki_worker import _strip_code_fence
+        from nous.application.wiki.journal import _strip_code_fence
 
         raw = "```markdown\n## やったこと\n\n- x\n```\n以上の通りです。"
         assert _strip_code_fence(raw) == "## やったこと\n\n- x"
 
     def test_unclosed_fence_keeps_body(self) -> None:
         """閉じフェンスが無ければ全部本文（途中で切れた応答でも書ける）。"""
-        from nous.application.workers.wiki_worker import _strip_code_fence
+        from nous.application.wiki.journal import _strip_code_fence
 
         assert _strip_code_fence("```markdown\n## やったこと\n- x") == "## やったこと\n- x"
 
     def test_no_fence_is_returned_stripped(self) -> None:
-        from nous.application.workers.wiki_worker import _strip_code_fence
+        from nous.application.wiki.journal import _strip_code_fence
 
         assert _strip_code_fence("  ## やったこと\n- x \n") == "## やったこと\n- x"
 
