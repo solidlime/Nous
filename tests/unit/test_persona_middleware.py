@@ -335,6 +335,26 @@ class TestQueryTokenAuth:
         assert captured["persona"] == "alice"
         assert messages[0]["status"] == 200
 
+    async def test_static_assets_bypass_strict_mode(self, _strict_key):
+        """鍵設定下でも /static/* は素通し（<script src> はヘッダを送れない）"""
+        called: dict = {}
+
+        async def app(scope, receive, send):  # noqa: ARG001
+            called["ok"] = True
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"js"})
+
+        scope = {"type": "http", "headers": [], "query_string": b"", "path": "/static/core/auth.js"}
+        messages = await self._run(app, scope)
+        assert called.get("ok") is True
+        assert messages[0]["status"] == 200
+
+    async def test_api_still_401_without_token(self, _strict_key):
+        """一方で /api/* は 401 のまま（素通しは /static/ だけ）"""
+        scope = {"type": "http", "headers": [], "query_string": b"", "path": "/api/settings"}
+        messages = await self._run(self._capture_app({}), scope)
+        assert messages[0]["status"] == 401
+
 
 # =========================================================================
 # E. _resolve_persona() in tools.py

@@ -237,6 +237,12 @@ class PersonaMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http":
+            # 静的画面（JS/CSS）は鍵を要求しない。<script src> はヘッダを送れないので、
+            # 鍵を設定した瞬間に JS が 401 JSON になり dashboard が起動できなくなる。
+            # 静的画面に秘密は無い（秘密は $DATA_ROOT 側）。
+            if str(scope.get("path", "")).startswith("/static/"):
+                await self.app(scope, receive, send)
+                return
             authorization: str | None = None
             x_persona: str | None = None
 

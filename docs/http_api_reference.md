@@ -389,16 +389,22 @@ Update a runtime setting.
 
 **Request body:** `{ "category": "general", "key": "log_level", "value": "DEBUG" }`
 
-**Auth:** once `general.api_key` is set, these keys require `Authorization: Bearer <key>`
-and answer `401 {"error": "Valid API key required"}` without it — they move where
-the server listens, where embeddings are stored, or which Host/Origin are trusted:
+**Auth:** once `general.api_key` is set, **every** `/api/*` route requires
+`Authorization: Bearer <key>` (or `?token=<key>` for `EventSource`) and answers
+`401 {"detail":"Invalid API key"}` without it. That includes the routes below that
+move where the server listens, where embeddings are stored, or which Host/Origin
+are trusted — they are the ones that would be catastrophic if the middleware were
+bypassed, so `PUT /api/settings` also checks the key itself:
 
 - `server.*`, `mcp_security.*`, `qdrant.*`, `general.persona_dir`
 - `general.api_key` itself (old key required to change or clear; minimum 16 chars)
 
-Empty `general.api_key` = bootstrap: nothing is gated until a key exists.
-The dashboard picks the key up from `?token=<key>` (stored in `localStorage`)
-and attaches it to every same-origin `fetch` and `EventSource`.
+`/static/*` is deliberately exempt: `<script src>` cannot send headers, so gating it
+would replace the dashboard's JS with a 401 body and the page could never bootstrap.
+
+Empty `general.api_key` = bootstrap: nothing is gated until a key exists. The
+dashboard picks the key up from `?token=<key>` (stored in `localStorage`, then
+stripped from the URL) and attaches it to every same-origin `fetch` and `EventSource`.
 
 ### `GET /api/settings/status`
 Get reload status for runtime settings.
