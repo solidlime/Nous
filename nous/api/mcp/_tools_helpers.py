@@ -421,6 +421,10 @@ def _format_lightweight_response(
     if open_question:
         lines.append(f"❓ 未確認の矛盾: {open_question}")
 
+    # ── 前回の引き継ぎ（#58）: 先頭側に置く（末尾だと予算超過で真っ先に切られる）──
+    if project_name and handover:
+        lines.append(f"🔖 前回の引き継ぎ (project:{project_name}): {handover}")
+
     # Emotion decay notification — before/after change visible
     if decay_note:
         lines.append(f"  Emotion: {decay_note}")
@@ -599,10 +603,6 @@ def _format_lightweight_response(
             ts = relative_time_str(m.created_at) if getattr(m, "created_at", None) else ""
             ts_str = f" ({ts})" if ts else ""
             lines.append(f"- {snippet}{ts_str}")
-
-    # ── 前回の引き継ぎ（#58）: project 節の直後に 1 行だけ ──
-    if project_name and handover:
-        lines.append(f"🔖 前回の引き継ぎ (project:{project_name}): {handover}")
 
     trailer = "💡 Use memory_search() for deeper context on specific topics."
     return _enforce_total_budget("\n".join(lines), trailer)

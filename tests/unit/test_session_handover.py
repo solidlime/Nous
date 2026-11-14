@@ -163,6 +163,17 @@ async def test_session_begin_injects_handover_line(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_handover_sits_in_head_above_project_section(tmp_path):
+    """栞は先頭側に置く：末尾だと _enforce_total_budget の切り捨てで真っ先に消える（#58 本番事故）。"""
+    ctx = _ctx(tmp_path)
+    ctx.memory_service.save_memory(_mem("m1", "栞に残るべき作業ログ", minutes_ago=5))
+
+    text = await _begin(ctx, PROJECT)
+
+    assert 0 <= text.find("🔖") < 200
+
+
+@pytest.mark.asyncio
 async def test_handover_line_is_kept_out_of_project_memories(tmp_path):
     """栞の記憶そのものを PROJECT MEMORIES 節に二重表示しない。"""
     ctx = _ctx(tmp_path)
