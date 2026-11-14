@@ -1550,3 +1550,25 @@ class TestPromptRevisionContext:
             assert got and got[0].key == "p"
         finally:
             conn.close()
+
+    def test_orphan_archived_memories_are_recovered(self, tmp_path) -> None:
+        """どのページも引用していない archived 記憶を拾い直す（編纂漏れで消えた事実）。"""
+        from nous.infrastructure.wiki.store import WikiStore
+
+        store = WikiStore(tmp_path, "test_ww")
+        store.write_page("project-nous-x", "x", "本文", project="nous", sources=("cited",))
+        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
+        try:
+            cycle = [_mem("new1", tags=["project:nous"])]
+            by_key = {
+                "new1": cycle[0],
+                "cited": _mem("cited", tags=["project:nous"], lifecycle="archived"),
+                "orphan": _mem("orphan", tags=["project:nous"], lifecycle="archived", content="manual を廃止した。"),
+                "dead": _mem("dead", tags=["project:nous"], lifecycle="tombstoned"),
+            }
+            merged = worker._topic_memories(cycle, store.list_pages(), "project-nous", by_key)
+            keys = {m.key for m in merged}
+            assert "orphan" in keys  # 引用されていない archived
+            assert "dead" not in keys
+        finally:
+            conn.close()

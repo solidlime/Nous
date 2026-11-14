@@ -360,6 +360,8 @@ class WikiConfig(BaseModel):
     revision_recall_memories: int = 8
     # この日数以上更新されていないページは編纂で必ず改訂させる（放置ページ対策）。
     stale_days: int = 7
+    # どのページも引用していない archived 記憶を編纂文脈に戻す件数（編纂漏れの救済）。
+    orphan_archive_memories: int = 10
     max_page_bytes: int = 8192
     provider: str = "openrouter"
     api_key: str | None = None

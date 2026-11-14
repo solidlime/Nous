@@ -1337,6 +1337,17 @@ class WikiWorker:
             text = " ".join(p.title + "\n" + p.body for p in pages if _topic_of_page(p) == topic)
             for m in self._recall_by_text(text, all_by_key.values(), topic):
                 restored.setdefault(m.key, m)
+            # どのページも引用していない archived 記憶を拾い直す。編纂が源を沈めたあと
+            # 引用に漏れると、その事実はどこからも読めなくなる（manual 廃止がこれで
+            # 消えていた）。既に別ページが引用しているものは二重に読ませない。
+            cited_any = {k for p in pages for k in p.sources}
+            orphans = [
+                m
+                for m in all_by_key.values()
+                if m.lifecycle_status == "archived" and m.key not in cited_any and _topic_of(m) == topic
+            ]
+            for m in _by_recency(orphans)[: max(0, self._cfg.orphan_archive_memories)]:
+                restored.setdefault(m.key, m)
             slots = max(0, self._cfg.max_memories_per_topic - len(restored))
             for m in _by_recency(memories)[:slots]:
                 restored.setdefault(m.key, m)
