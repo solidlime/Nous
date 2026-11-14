@@ -75,3 +75,19 @@ class TestToolsCache:
         async with MCPClientPool(cfgs) as pool:
             assert pool.list_all_tools() == []
         assert fetch_counter == []
+
+    @pytest.mark.asyncio
+    async def test_empty_result_is_not_cached(self, monkeypatch):
+        """空のツール一覧はキャッシュしない（起動直後の hub を TTL 分固定しない）"""
+        calls: list[str] = []
+
+        async def empty_fetch(self, config):  # noqa: ARG001
+            calls.append(config.name)
+            return []
+
+        monkeypatch.setattr(MCPClientPool, "_fetch_tools", empty_fetch)
+        async with MCPClientPool(CONFIGS) as first:
+            assert first.list_all_tools() == []
+        async with MCPClientPool(CONFIGS) as second:
+            assert second.list_all_tools() == []
+        assert calls == ["hub", "hub"]

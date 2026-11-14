@@ -43,15 +43,13 @@ N.Core.auth = {
     try { t = (window.localStorage.getItem(KEY) || "").trim(); } catch (_) {}
     if (t) return t;
     t = _fromLocation();
-    if (t) {
-      this.store(t);
-      _stripTokenFromUrl();
-    }
+    /* 保存できなかったら URL は消さない（そこが唯一のキーの所在になる）。 */
+    if (t && this.store(t)) _stripTokenFromUrl();
     return t;
   },
 
   store: function(t) {
-    try { window.localStorage.setItem(KEY, t); } catch (_) {}
+    try { window.localStorage.setItem(KEY, t); return true; } catch (_) { return false; }
   },
 
   clear: function() {
@@ -79,7 +77,10 @@ N.Core.auth = {
       return hasAuth ? h : h.concat([["Authorization", value]]);
     }
     var out = Object.assign({}, h || {});
-    if (!out.Authorization && !out.authorization) out.Authorization = value;
+    var hasAuth = Object.keys(out).some(function(k) {
+      return String(k).toLowerCase() === "authorization";
+    });
+    if (!hasAuth) out.Authorization = value;
     return out;
   },
 

@@ -162,4 +162,38 @@ describe('core/auth', () => {
     await window.fetch('/api/x');
     expect(window.localStorage.getItem('nousApiKey')).toBe('good');
   });
+
+  it('保存できなければ URL から token を消さない（鍵の所在を失わない）', async () => {
+    setSearch('?token=onlyhere');
+    // localStorage が使えない環境（旧 Safari プライベート等）を再現する
+    const real = window.localStorage;
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      writable: true,
+      value: {
+        getItem: () => null,
+        setItem: () => {
+          throw new Error('denied');
+        },
+        removeItem: () => {},
+      },
+    });
+    try {
+      const auth = await load();
+      expect(auth.token()).toBe('onlyhere');
+      expect(auth.token()).toBe('onlyhere');
+      expect(window.location.search).toBe('?token=onlyhere');
+    } finally {
+      Object.defineProperty(window, 'localStorage', { configurable: true, writable: true, value: real });
+    }
+  });
+
+  it('AUTHORIZATION が既にあれば大文字小文字を問わず二重にしない', async () => {
+    window.localStorage.setItem('nousApiKey', 'abc123');
+    const auth = await load();
+    const got = auth.headers({ AUTHORIZATION: 'Bearer other' });
+    expect(Object.keys(got).filter((k) => k.toLowerCase() === 'authorization')).toEqual([
+      'AUTHORIZATION',
+    ]);
+  });
 });
