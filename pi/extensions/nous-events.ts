@@ -111,8 +111,13 @@ export function readEnvValue(path: string, keys: string[]): string {
 // project slug: cwd の AGENTS.md から `project: <slug>` 1行を検出する
 // ---------------------------------------------------------------------------
 
-/** AGENTS.md の `project: <slug>` 1 行から slug を抽出（無ければ空文字 + 不正字始末で空に落とす）。 */
-const PROJECT_SLUG_RE = /^[A-Za-z0-9._-]{1,24}$/;
+/**
+ * AGENTS.md の `project: <slug>` 1 行から slug を抽出する。
+ * canonical 規約はサーバ側 `nous/domain/value_objects.py:normalize_project_slug` と同一
+ * （lowercase 化 → `_`/空白を `-` に → `[a-z0-9][a-z0-9-]*` でなければ空）。
+ * 緩い検証だとサーバで正規化されて効く slug が拡張側で捨てられ、ブーストが丸ごと消える。
+ */
+const PROJECT_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 export function resolveProject(cwd: string): string {
   try {
@@ -120,13 +125,18 @@ export function resolveProject(cwd: string): string {
     for (const line of text.split(/\r?\n/)) {
       const m = /^[ \t]*-?[ \t]*project:[ \t]*(\S*)[ \t]*(?:#.*)?$/.exec(line);
       if (!m) continue;
-      const slug = m[1];
-      return PROJECT_SLUG_RE.test(slug) ? slug : ""; // 不正文字は ⇒ 空に落とす
+      return normalizeProjectSlug(m[1]);
     }
     return "";
   } catch {
     return "";
   }
+}
+
+/** サーバ側 normalize_project_slug と同じ規則（差があるとブーストが無言で消える）。 */
+export function normalizeProjectSlug(value: string): string {
+  const slug = value.trim().toLowerCase().replace(/[\s_]+/g, "-");
+  return PROJECT_SLUG_RE.test(slug) ? slug : "";
 }
 
 // ---------------------------------------------------------------------------

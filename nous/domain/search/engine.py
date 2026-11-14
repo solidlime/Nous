@@ -112,6 +112,15 @@ def _effective_time_weight(created_at: datetime | None) -> float:
     return max(_DECISION_TIME_FLOOR, compute_decision_time_decay(created_at))
 
 
+def final_rank_key(score: float, time_weight: float | None) -> float:
+    """engine の最終順位キー（``score * time_weight``）。
+
+    順位式をここ一箇所に置く。呼び手（engine のソート、``/api/search`` の
+    project ブースト後の並べ替え）が式を写すと、片方だけ直して無言で乖離する。
+    """
+    return score * (time_weight or 1.0)
+
+
 def _merge_fts_groups(
     and_results: list[tuple[Memory, float]],
     or_results: list[tuple[Memory, float]],
@@ -421,7 +430,7 @@ class SearchEngine:
             if query.decision_time_weight > 0.0 and filtered:
                 for r in filtered:
                     r.time_weight = _effective_time_weight(r.memory.created_at)
-                filtered.sort(key=lambda r: r.score * (r.time_weight or 1.0), reverse=True)
+                filtered.sort(key=lambda r: final_rank_key(r.score, r.time_weight), reverse=True)
         return filtered[: query.top_k], sufficiency
 
     async def _apply_decision_gate(

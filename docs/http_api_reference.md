@@ -157,10 +157,42 @@ Search memories for a persona.
 **Query params:**
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
-| `q` | str | `""` | Search text (required) |
+| `q` | str | `""` | Search text |
 | `limit` | int | 20 | Max results |
 | `mode` | str | `hybrid` | Search mode: `semantic`, `keyword`, `hybrid`, `smart` |
-| `project` | str | なし | プロジェクト slug（canonical 規約 `[a-z0-9][a-z0-9-]*`、大文字・`_` は正規化）。指定時は `project:<slug>` タグの記憶と同 project の wiki ページを優先する。不正値は無視（`project: null`） |
+| `project` | str | なし | プロジェクト slug（canonical 規約 `[a-z0-9][a-z0-9-]*`、大文字・`_` は正規化）。指定時は `project:<slug>` タグの記憶と同 project の wiki ページを優先する。不正値は無視（`project: null` になる） |
+| `date_range` | str | なし | 期間フィルタ |
+| `min_importance` | float | なし | 重要度の下限 |
+| `emotion` | str | なし | 感情で絞る |
+| `decision` | str | なし | `1`/`true`/`on`/`yes` で decision gate を有効化 |
+| `hops` | int | なし | multi-hop 数（上限あり） |
+| `coverage` | float | なし | 被覆率重みの上書き |
+| `request_id` | str | なし | 監査相関 ID |
+
+**Response:**
+```json
+{
+  "persona": "herta",
+  "query": "...",
+  "limit": 3,
+  "project": "nous",
+  "results": [
+    { "memory": { "key": "memory_...", "content": "...", "tags": ["project:nous"] },
+      "score": 1.125, "source": "hybrid", "time_weight": 0.5 }
+  ],
+  "wiki": [
+    { "slug": "project-nous-arch", "title": "...", "project": "nous",
+      "excerpt": "...", "score": 1.0 }
+  ],
+  "nodes": [], "edges": []
+}
+```
+- `project` は正規化後の slug（未指定・不正値は `null`）。
+- `time_weight` は decision gate の時間減衰（未使用時は `null`）。
+- `project` 指定時は **候補プールを広げてから** ブーストし、最後に `limit` で切る（`limit*3`、engine 側の pool 上限は 60）。
+  `limit < 20` で decision gate が有効なときは gate の採否も変わり得る（順位だけの変更ではない）。
+- `wiki[]` も同じ `project` でブーストされる（加算 0.3、切り詰め前）。`score` は従来どおり 0-1。
+- `wiki[]` はページファイルを読むので、`WikiConfig.enabled=false` でも既存ページは返る。
 
 ---
 

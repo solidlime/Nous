@@ -20,7 +20,7 @@ const jiti = createJiti(pathToFileURL(nousEventsTs).href, {
   },
 });
 const mod = await jiti.import(pathToFileURL(nousEventsTs).href);
-const { resolveProject, formatRecall, parseWikiPayload, buildRecallQuery } = mod;
+const { resolveProject, formatRecall, parseWikiPayload, buildRecallQuery, normalizeProjectSlug } = mod;
 
 const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), "nousproj-"));
 const cases = [
@@ -28,6 +28,10 @@ const cases = [
   { proj: "editorial-journal", expect: "editorial-journal" },
   { proj: "nous/evil", expect: "" },
   { proj: "bad slug!", expect: "" },
+  // 緩い検証（[A-Za-z0-9._-]{1,24}）なら通ってしまうケース＝canonical の証拠
+  { proj: "Nous", expect: "nous" },
+  { proj: "nous.core", expect: "" },
+  { proj: "my_project", expect: "my-project" },
 ];
 let fail = 0;
 for (const c of cases) {
@@ -77,4 +81,11 @@ for (const c of shortCases) {
 const cfg = mod.resolveConfig ? mod.resolveConfig() : null;
 if (cfg && typeof cfg.recall?.enabled !== "boolean") { console.error("FAIL config shape"); fail++; }
 fs.rmSync(tmpBase, { recursive: true, force: true });
+
+// 正規化はサーバの normalize_project_slug と同一規則（差があるとブーストが無言で消える）
+for (const [raw, expect] of [["Nous", "nous"], ["my_project", "my-project"], ["nous.core", ""], ["  ", ""], ["NOUS--X", "nous--x"]]) {
+  const got = normalizeProjectSlug(raw);
+  if (got !== expect) { console.error(`FAIL normalizeProjectSlug ${JSON.stringify(raw)} got=${JSON.stringify(got)}`); fail++; }
+}
 console.log(fail === 0 ? "SELF-CHECK OK" : `SELF-CHECK FAILED ${fail}`);
+if (fail > 0) process.exitCode = 1;

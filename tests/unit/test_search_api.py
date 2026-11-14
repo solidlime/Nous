@@ -219,6 +219,41 @@ async def test_search_project_widens_candidate_pool(client, monkeypatch):
     assert [row["memory"]["key"] for row in plain["results"]] == ["a", "b"]
 
     boosted = (await client.get("/api/search/search_api_test?q=x&limit=2&project=nous")).json()
-    assert captured["top_k"] == 6  # 候補プールを広げてから切る
+    assert captured["top_k"] == 6  # プール拡張（本命は下の順序 assert。ここは仕様の目印）
     assert len(boosted["results"]) == 2
     assert [row["memory"]["key"] for row in boosted["results"]] == ["proj", "a"]
+
+
+async def test_project_boost_sorts_by_final_rank_key(client, monkeypatch):
+    """並べ替えは engine と同じ ``score * time_weight``。score だけのソートなら落ちる。"""
+    from datetime import timedelta
+
+    from nous.domain.memory.entities import Memory
+    from nous.domain.search.engine import SearchEngine, SearchResult
+    from nous.domain.shared.result import Success
+    from nous.domain.shared.time_utils import get_now
+
+    today = get_now()
+    old = today - timedelta(days=30)
+
+    def _hit(key: str, tags: list[str], score: float, *, created_at, time_weight: float) -> SearchResult:
+        mem = Memory(key=key, content=key, kind="semantic", created_at=created_at, updated_at=created_at, tags=tags)
+        return SearchResult(memory=mem, score=score, source="keyword", time_weight=time_weight)
+
+    rows = [
+        # project 記憶。ブースト後スコアは 1.125 だが、時間減衰で実効 0.5625
+        _hit("proj-old", ["project:nous"], 0.9, created_at=old, time_weight=0.5),
+        # project なし。スコア 1.0 のまま、実効 1.0
+        _hit("plain-fresh", ["misc"], 1.0, created_at=today, time_weight=1.0),
+    ]
+
+    async def _fake_search(self, query):
+        return Success(rows[: query.top_k])
+
+    monkeypatch.setattr(SearchEngine, "search", _fake_search)
+
+    body = (await client.get("/api/search/search_api_test?q=x&limit=2&project=nous")).json()
+    # score だけなら proj-old(1.125) が先。実効キーなら plain-fresh(1.0) が先。
+    assert [row["memory"]["key"] for row in body["results"]] == ["plain-fresh", "proj-old"]
+    assert body["results"][1]["score"] == 1.125  # 表示スコアはブースト後のまま
+    assert body["results"][1]["time_weight"] == 0.5

@@ -12,6 +12,7 @@ from nous.api.http.deps import (
     _safe_get_context,
 )
 from nous.api.http.routers._error_handlers import error_from_result
+from nous.domain.search.engine import SearchQuery, final_rank_key
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -53,7 +54,7 @@ def apply_project_boost(rows: list[dict], project: str) -> list[dict]:
         return rows
     return sorted(
         boosted,
-        key=lambda r: float(r.get("score") or 0.0) * float(r.get("time_weight") or 1.0),
+        key=lambda r: final_rank_key(float(r.get("score") or 0.0), r.get("time_weight")),
         reverse=True,
     )
 
@@ -196,11 +197,13 @@ def register_search_routes(mcp) -> None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
             from nous.api.mcp._tools_memory import MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT
-            from nous.domain.search.engine import SearchQuery
             from nous.domain.search.policy import RankPolicy
 
             # project 指定時は候補プールを広げる。ブーストは top_k で切った後では順位を変えられない
-            # （4 位以下の project 記憶が永久に昇格できない）ので、広く取ってから改めて切る。
+            # （4 位以下の project 記憶が永久に昇格できない）ので広く取ってから改めて切る。
+            # 実効の pool は engine 側 `min(max(top_k*3, 15), 60)` で頭打ち（limit>=20 では元々 60）。
+            # limit<20 の経路（拡張の既定 limit=3）では 15→27 に増えるので、decision gate が
+            # 有効な設定では**採否も変わり得る**（順位だけの変更ではない）。
             query_kwargs: dict = {"text": q, "mode": mode, "top_k": min(100, limit * 3) if project else limit}
             if date_range:
                 query_kwargs["date_range"] = date_range

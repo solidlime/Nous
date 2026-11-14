@@ -13,6 +13,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from nous.domain.shared.result import Success
+from nous.domain.value_objects import normalize_project_slug
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -88,8 +89,9 @@ async def search_wiki_pages(
         # 並べ替えの前にブーストする（表示だけでなく順位に効かせる）。上限は掛けない —
         # TF フォールバックは完全一致で 1.0 に飽和するので、上限を掛けると同点のまま並ばない。
         # 表示値は下で 0-1 に丸める。
+        # ページ側も canonical に正規化して比べる（frontmatter が `project: Nous` でも拾う）。
         for slug, page in pages_by_slug.items():
-            if slug in scores and page.project == project:
+            if slug in scores and normalize_project_slug(page.project) == project:
                 scores[slug] += PROJECT_PAGE_BOOST
 
     ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)[:limit]
