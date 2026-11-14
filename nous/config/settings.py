@@ -358,6 +358,8 @@ class WikiConfig(BaseModel):
     # ページ本文の語彙で掘り起こす記憶の件数（0 で無効）。project 単位のバケツしか無いので、
     # ページ固有の事実はこれで拾う（#44）。
     revision_recall_memories: int = 8
+    # この日数以上更新されていないページは編纂で必ず改訂させる（放置ページ対策）。
+    stale_days: int = 7
     max_page_bytes: int = 8192
     provider: str = "openrouter"
     api_key: str | None = None

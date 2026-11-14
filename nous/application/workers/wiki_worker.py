@@ -75,6 +75,7 @@ wiki ページ（Markdown 本文）を作成または改訂してください。
   参照先は作成され次第リンクになる）。
 - slug は `{slug_prefix}` で始まる小文字英数とハイフンのみ。既存ページを改訂する場合は
   既存 slug をそのまま使う。新規トピックを分けたい場合のみ新しい slug を提案する。
+- `days_since_update` が {stale_days} 以上のページは**今回必ず改訂する**（古いまま残さない）。
 - 既存ページを改訂する場合は**``body`` の全文が渡されている**。古い記述を残したまま
   追記しない。記憶のほうが新しいのに現在形で残っている記述は書き直す。
 - 記憶には ``when``（その記憶が書かれた日）が付いている。同じ事柄の記憶が複数あるときは
@@ -1372,6 +1373,7 @@ class WikiWorker:
                     "title": p.title,
                     "project": p.project,
                     "updated": p.updated,
+                    "days_since_update": _days_since(p.updated, now),
                     "sources": list(p.sources),
                     **(
                         {"body": p.body[:body_chars]}
@@ -1402,6 +1404,7 @@ class WikiWorker:
             topic=topic,
             slug_prefix=f"{topic}-",
             max_bytes=self._cfg.max_page_bytes,
+            stale_days=self._cfg.stale_days,
             conflict_instructions=_CONFLICT_ON if self._cfg.conflict_check_enabled else _CONFLICT_OFF,
             pages="\n".join(page_lines) or "(なし)",
             memories="\n".join(memory_lines),
@@ -1567,6 +1570,20 @@ def _by_recency(memories: list[Memory]) -> list[Memory]:
         return getattr(m, "updated_at", None) or m.created_at
 
     return sorted(memories, key=_ts, reverse=True)
+
+
+def _days_since(page_updated: str | None, now: datetime) -> int | None:
+    """``updated`` からの経過日数（パース不能なら None）。放置ページを名指しするため。"""
+    if not page_updated:
+        return None
+    try:
+        stamp = datetime.fromisoformat(page_updated.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    try:
+        return max(0, (now - stamp).days)
+    except TypeError:
+        return None
 
 
 def _day_of(memory: Memory) -> str:

@@ -1523,3 +1523,18 @@ class TestPromptRevisionContext:
             assert got == []
         finally:
             conn.close()
+
+    def test_stale_pages_are_named_with_their_age(self, tmp_path) -> None:
+        """放置ページを `days_since_update` + ルールで必ず改訂させる（#44 案3）。"""
+        from nous.infrastructure.wiki.store import WikiStore
+
+        store = WikiStore(tmp_path, "test_ww")
+        store.write_page("project-nous-old", "old", "本文", project="nous", sources=("m1",))
+        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
+        try:
+            later = self._now + timedelta(days=30)
+            prompt = worker._build_prompt("project-nous", [], store.list_pages(), later)
+        finally:
+            conn.close()
+        assert '"days_since_update": ' in prompt
+        assert "以上のページは**今回必ず改訂する**" in prompt
