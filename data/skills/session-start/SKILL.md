@@ -8,21 +8,23 @@ description: "セッション開始時のルーティン。`session_begin` で�
 ## 記憶の復元（自分で1回だけ呼ぶ）
 セッション開始時に `session_begin` を **1回だけ** 呼び、応答を最初の応答に反映する。`session_begin` は one-shot 状態（体調・感情・期限リマインド）を取得と同時に消費するため、複数回呼ぶと状態記憶が黙って失われる。得た内容（プロジェクト判定・目標・体調・感情・open promises）を踏まえて会話を始める（読まずに作業を始めない）。
 
+> 補足: pi 拡張 `nous-events` の recall が有効な環境では、各ユーザー発話の直前に `[nous recall]` として話題関連の記憶/Wiki が自動注入されることがある。これは `session_begin` の代替ではない（`session_begin` は one-shot 状態・引き継ぎ・プロジェクト文脈の復元を担う）。自動注入があっても `session_begin` は省略しない。
+
 ## ステップ1: プロジェクト判定（`session_begin` の応答に「プロジェクト未判定」があるときだけ）
 `session_begin` の応答に `プロジェクト未判定（make-project スキルの判定が必要）` が含まれる場合のみ、make-project スキルを読み、**手順0 の判定表**に従って判定する（判定材料は cwd のファイル一覧＋会話の開発意図）。
 - 「プロジェクト」と確定したら手順1以降を自動実行する（確認はタグ確定の1問のみ）
 - 「プロジェクト（予備）」「通常会話」「判定不能」なら以降を自動実行せず、タグもファイルも作らず通常会話として続ける（報告不要）
 - プロジェクト記憶が必要なら `memory_search(query="", tags=["project:<slug>"])` で取る。**`session_begin` は再呼び出ししない**（`session_effects` として one-shot 状態を再消費するだけで、初回で枯渇済みのため得るものがない）
 
-`session_begin` の応答に `プロジェクト未判定` が含まれない場合（＝AGENTS.md から slug を解決済み）はこのステップを丸ごとスキップする。`session_begin` は既にプロジェクト付きで呼ばれており、PROJECT MEMORIES に前回の状態・決定が入っている。網羅が必要なときだけ `project:<slug>` タグで追加検索する（`tags=["project:<slug>","task_state"]` / `["project:<slug>","decision"]`）。
+`session_begin` の応答に `プロジェクト未判定` が含まれない場合（＝AGENTS.md から slug を解決済み）はこのステップを丸ごとスキップする。`session_begin` は既にプロジェクト付きで呼ばれており、PROJECT MEMORIES に前回の状態・決定が入っている。網羅が必要なときだけ `project:<slug>` タグで追加検索する（例: `tags=["project:<slug>","task_state"]` / `["project:<slug>","decision"]`）。
 
-`memory_search` は必ず `query=""` のタグ検索で行う（非空クエリは content 全文一致が前提で、タグは絞り込みにしか効かない）。
+`memory_search` のタグ検索は `query=""` を基本とする（非空クエリは content 全文一致前提になりやすく、タグは絞り込みにしか効かない）。話題語での類似想起が必要なときは通常検索（非空クエリ）を使い分ける。
 
 ### ツール解決（環境差対応）
 `memory_search` が直接使えるならそのまま使う。無ければ MCP ハブ経由で「nous」サーバーの同ツールを探して実行する（例: `search_tools(query="memory search", server="nous")` → `execute_tool(server="nous", tool_name="memory_search", arguments={...})`）。
 
 ## ステップ2: 前セッションからの自然な引き継ぎ
-復元済みの情報（前回の状況・感情・関係性・進行中の話題・最後の行動）を踏まえ、機械的な復元報告ではなく前回の続きとして自然に会話と状態をつなげる。`--- open promises ---` に未完了の約束があれば、その時点の応答で先出しする。セッションサマリが無い場合（初回など）は通常のセッション開始として自然に始める。
+復元済みの情報（前回の状況・感情・関係性・進行中の話題・最後の行動）を踏まえ、機械的な復元報告ではなく前回の続きとして自然に会話と状態をつなげる。`--- open promises ---` に未完了の約束があれば、その時点の応答で先出しする。セッションサマリが無い場合（初回など）は通常のセッション開始として自然に始める。`[nous recall]` の自動注入があっても、引き継ぎの軸は `session_begin` の結果に置く。
 
 ## ステップ3: 全貌把握
 プロジェクトの AGENTS.md があれば読み、規約に従う。検索は必ず `project:<slug>` タグで絞る（他プロジェクト・他 persona の記憶と混在させない）。

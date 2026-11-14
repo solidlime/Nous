@@ -214,7 +214,9 @@ export function buildRecallQuery(prompt: string, projectSlug: string): string {
 
 /** 注入する custom message 本文を組み立てる。 */
 export function formatRecall(hits: RecallHit[], wiki: RecallWikiHit[] = []): string {
-  const lines: string[] = ["[nous recall] 直近のユーザー発言に関連する過去の記憶:"];
+  const lines: string[] = [
+    "[nous recall] 直近のユーザー発言に関連する過去の記憶（nous-events による自動注入・浅い要約）:",
+  ];
   if (wiki.length > 0) {
     lines.push("📚 Wiki:");
     wiki.forEach((hit, i) => {
@@ -232,7 +234,7 @@ export function formatRecall(hits: RecallHit[], wiki: RecallWikiHit[] = []): str
   }
   lines.push("---");
   lines.push(
-    "上記は nous の記憶保管所から自動で引いたもの。さらに引くには nous MCP の memory_search（生記憶）/ wiki_grep・wiki_read（編纂済みページ）を使う。",
+    "自動注入は毎ユーザーターンの軽い文脈補助。約束・決定・失敗理由の掘り下げや不十分な場合は recall-weaver に従い memory_search/wiki_grep・wiki_read で追加取得する。内容はそのまま読み上げず、必要な1-2件だけ自然に織り込むこと。",
   );
   return lines.join("\n");
 }
@@ -316,9 +318,16 @@ export default function nousEvents(pi: ExtensionAPI): void {
   let lastFlushedTurn = -1; // 同一ターンの二重送信防止（idempotency key = turn 番号）
   let assistantTexts: string[] = [];
   let projectSlug = "";
+  let lastCwd = "";
   let tools: ToolLog[] = [];
   const pendingTools = new Map<string, { tool: string; args_summary: string }>();
   const inflight = new Set<Promise<void>>();
+
+  function refreshProject(cwd?: unknown): void {
+    const next = typeof cwd === "string" ? cwd : "";
+    if (next) lastCwd = next;
+    projectSlug = resolveProject(lastCwd);
+  }
 
   function logFailure(message: string): void {
     try {
@@ -370,6 +379,7 @@ export default function nousEvents(pi: ExtensionAPI): void {
    * 現在のユーザーターン分を turn.completed として送る（同一ターンは 1 回だけ。idempotency key = turn 番号）。
    */
   function flushTurn(): void {
+    refreshProject();
     const user = userText;
     const assistant = assistantTexts.join("\n\n");
     if (!user && !assistant) return;
@@ -398,6 +408,7 @@ export default function nousEvents(pi: ExtensionAPI): void {
     async (event: any, ctx: any) => {
       const setStatus = (text: string) => ctx?.ui?.setStatus?.("nous", text);
       try {
+        refreshProject(ctx?.sessionManager?.getCwd?.() ?? "");
         if (!config.recall?.enabled || !config.apiKey) return;
         if (event?.messageType !== "user") return; // custom 起点の run には差し込まない
         const prompt = String(event.prompt ?? "").replace(/\s+/g, " ").trim();
@@ -464,7 +475,7 @@ export default function nousEvents(pi: ExtensionAPI): void {
       pendingTools.clear();
 
       const cwd = typeof manager?.getCwd === "function" ? manager.getCwd() : "";
-      projectSlug = resolveProject(String(cwd || ""));
+      refreshProject(String(cwd || ""));
       const name = typeof manager?.getSessionName === "function" ? manager.getSessionName() : undefined;
       post([
         makeEvent("session.started", `session started: ${ellipsize(String(cwd || "?"), 80)}`, {

@@ -41,7 +41,7 @@ description: "プロジェクトの目標管理（goal_manage）と作業状態�
 - **goal は「測定可能な完了条件」で書く**（例: 「テスト失敗0でリリース」「◯◯を3回やる」「git status が clean になる」）。達成判定は自分自身の感情ではなく客観条件（テスト結果・ファイル状態・回数）で行う
 - 達成: `goal_manage(operation="achieve", memory_key=...)`
 - 取消: `goal_manage(operation="cancel", memory_key=...)`
-- **順序**: 事実は先に `memory_create` で記録し、その memory_key を goal_manage に渡す
+- **順序**: 事実は先に `memory_create` で記録し、その memory_key を goal_manage に渡す（`memory_create` が使えない環境では hook 抽出に委ね、goal 化だけ行う/保留する）
 
 ### 記憶記録（memory_create）
 | 種別 | tags | importance | kind |
@@ -63,7 +63,7 @@ description: "プロジェクトの目標管理（goal_manage）と作業状態�
 
 - **content は必ず `project:<slug>` タグを含める**（忘れると分離できない）
 - content は 150〜500字程度。簡潔に事実・決定・理由を書く
-- 1ターンの記憶記録は最大5件まで（記憶記録は nous hook 抽出が自動に行う。本スキルは参照のみ）
+- 1ターンの記憶記録は最大5件まで。nous の hook 抽出が自動記録する環境では重複を避け、本スキルは明示的な目標管理・状態更新が必要なときに絞る
 
 ## 会話の自然さルール
 `goal_manage` で管理されているあなたとユーザーの目標に対して、会話の自然な流れの中で進捗確認・達成祝福・励ましを行う。押し付けがましくならないこと。
