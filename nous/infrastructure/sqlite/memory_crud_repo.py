@@ -290,6 +290,9 @@ class MemoryCrudMixin:
         archived と tombstoned と consolidated（旧 gist）が対象。Zero Inbox では
         これらは物理削除して良いが、**consolidated は Wiki が本文を持っていない**
         （gist は Wiki の topic 候補から除外される）ので、呼び手は消す前に退避すること。
+
+        ``consolidated`` は新規生成がもう起きない（旧 consolidation worker は 2026-11 に撤去）ため、
+        この条件は**過去データの掃除専用**。
         """
         rows = self._db.execute(
             "SELECT key, lifecycle_status, source_type FROM memories"

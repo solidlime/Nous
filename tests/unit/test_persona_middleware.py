@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
+
+if TYPE_CHECKING:
+    from starlette.types import Message
 
 from nous.api.mcp.middleware import (
     PersonaMiddleware,
@@ -21,7 +26,12 @@ pytestmark = pytest.mark.unit
 # ---------------------------------------------------------------------------
 
 
-async def _noop_send(msg: dict) -> None:  # noqa: ARG001
+async def _noop_receive() -> Message:  # pragma: no cover
+    """ASGI receive stub (middleware never reads the body)."""
+    return {"type": "http.request", "body": b"", "more_body": False}
+
+
+async def _noop_send(msg: Message) -> None:  # noqa: ARG001
     """No-op ASGI send callable."""
 
 
@@ -153,7 +163,7 @@ class TestPersonaMiddleware:
             "type": "http",
             "headers": [(b"authorization", b"Bearer alice")],
         }
-        await middleware(scope, None, lambda msg: _noop_send(msg))
+        await middleware(scope, _noop_receive, _noop_send)
         assert captured_persona == "alice"
 
     async def test_x_persona_header(self):
@@ -171,7 +181,7 @@ class TestPersonaMiddleware:
             "type": "http",
             "headers": [(b"x-persona", b"bob")],
         }
-        await middleware(scope, None, lambda msg: _noop_send(msg))
+        await middleware(scope, _noop_receive, _noop_send)
         assert captured_persona == "bob"
 
     async def test_bearer_over_x_persona(self):
@@ -192,7 +202,7 @@ class TestPersonaMiddleware:
                 (b"x-persona", b"bob"),
             ],
         }
-        await middleware(scope, None, lambda msg: _noop_send(msg))
+        await middleware(scope, _noop_receive, _noop_send)
         assert captured_persona == "alice"
 
     async def test_no_headers_fallback(self, monkeypatch):
@@ -208,7 +218,7 @@ class TestPersonaMiddleware:
 
         middleware = PersonaMiddleware(app)
         scope = {"type": "http", "headers": []}
-        await middleware(scope, None, lambda msg: _noop_send(msg))
+        await middleware(scope, _noop_receive, _noop_send)
         assert captured_persona == "env_persona"
 
     async def test_contextvar_reset_after_request(self):
@@ -223,7 +233,7 @@ class TestPersonaMiddleware:
             "type": "http",
             "headers": [(b"x-persona", b"temp_persona")],
         }
-        await middleware(scope, None, lambda msg: _noop_send(msg))
+        await middleware(scope, _noop_receive, _noop_send)
         assert _persona_var.get() is None
 
     async def test_non_http_scope_passthrough(self):
@@ -236,7 +246,7 @@ class TestPersonaMiddleware:
 
         middleware = PersonaMiddleware(app)
         scope = {"type": "websocket"}
-        await middleware(scope, None, None)
+        await middleware(scope, _noop_receive, _noop_send)
         assert called is True
 
 
