@@ -279,7 +279,9 @@ async def test_get_context_with_project_memories(mock_ctx):
     assert "… (full via memory_read:" in r
     assert "メモ" * 300 not in r  # 全文は表示されない
     # 実効キャップ: _MAX_PROJECT_CHARS 字で切り詰められ、それ以降の文字は表示されない
-    assert r.count("メモ") <= _MAX_PROJECT_CHARS // len("メモ")
+    # （引き継ぎ栞 (#58) も同じ記憶から独立に切り出すので、節の中だけを見る）
+    project_section = r.split("--- PROJECT MEMORIES")[1].split("🔖")[0]
+    assert project_section.count("メモ") <= _MAX_PROJECT_CHARS // len("メモ")
     # get_by_tags は project:testslug タグで呼ばれる
     assert (["project:testslug"],) in [c.args for c in mock_ctx.memory_service.get_by_tags.call_args_list]
 

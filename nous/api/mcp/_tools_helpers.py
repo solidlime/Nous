@@ -393,6 +393,7 @@ def _format_lightweight_response(
     due_labels: dict[str, str] | None = None,
     wiki_page_count: int | None = None,
     open_question: str | None = None,
+    handover: str | None = None,
 ) -> str:
     """Lightweight context: persona + conversation continuity + body state.
 
@@ -598,6 +599,10 @@ def _format_lightweight_response(
             ts = relative_time_str(m.created_at) if getattr(m, "created_at", None) else ""
             ts_str = f" ({ts})" if ts else ""
             lines.append(f"- {snippet}{ts_str}")
+
+    # ── 前回の引き継ぎ（#58）: project 節の直後に 1 行だけ ──
+    if project_name and handover:
+        lines.append(f"🔖 前回の引き継ぎ (project:{project_name}): {handover}")
 
     trailer = "💡 Use memory_search() for deeper context on specific topics."
     return _enforce_total_budget("\n".join(lines), trailer)
