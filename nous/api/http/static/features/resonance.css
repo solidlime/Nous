@@ -1,0 +1,249 @@
+/* ================================================================
+ *  Memory Resonance — dashboard layout for resonance.html
+ *  Colors ride the shared tokens from /static/styles/variables.css
+ * ================================================================ */
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-grouped);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif;
+}
+
+#resonance-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+#resonance-ui {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+#resonance-ui > * { pointer-events: auto; }
+
+/* ---- Header ---- */
+#resonance-header {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  max-width: min(92vw, 640px);
+}
+#resonance-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+#resonance-persona {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+/* ---- Status chip ---- */
+#resonance-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 0.5px solid var(--glass-border);
+  white-space: nowrap;
+}
+.resonance-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+#resonance-status.live {
+  color: var(--accent-green);
+  background: rgba(48, 209, 88, 0.12);
+}
+#resonance-status.live .resonance-status-dot {
+  background: var(--accent-green);
+  box-shadow: 0 0 6px rgba(48, 209, 88, 0.8);
+}
+#resonance-status.standby {
+  color: var(--text-muted);
+  background: var(--glass-bg-faint);
+}
+#resonance-status.standby .resonance-status-dot {
+  background: var(--text-muted);
+}
+
+/* ---- Search form + phase ---- */
+#resonance-main {
+  position: absolute;
+  top: 84px;
+  left: 16px;
+  width: min(92vw, 420px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#resonance-form {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+}
+#resonance-query {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 10px;
+  font-size: 1rem;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+}
+#resonance-query:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+#resonance-search-btn {
+  height: 44px;
+  padding: 0 14px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent-blue);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+#resonance-search-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+#resonance-search-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.visually-hidden-free {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.resonance-phase {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--accent-blue);
+  padding-left: 4px;
+  min-height: 1.2em;
+}
+.resonance-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding-left: 4px;
+}
+
+/* ---- Results panel ---- */
+#resonance-results {
+  position: absolute;
+  top: 84px;
+  right: 16px;
+  width: min(92vw, 380px);
+  max-height: calc(100% - 120px);
+  overflow-y: auto;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+}
+.resonance-result {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg-subtle);
+  border: 0.5px solid var(--glass-border);
+  margin-bottom: 10px;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 300ms ease-out, transform 300ms ease-out;
+}
+.resonance-result.shown {
+  opacity: 1;
+  transform: none;
+}
+.resonance-result-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.resonance-rank {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.resonance-score {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.resonance-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.resonance-tag {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 122, 255, 0.12);
+  color: var(--accent-blue);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.resonance-content {
+  color: var(--text-secondary);
+  line-height: 1.5;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Mobile / narrow ---- */
+@media (max-width: 767px) {
+  #resonance-main {
+    top: auto;
+    bottom: 16px;
+    width: calc(100vw - 32px);
+  }
+  #resonance-results {
+    top: 84px;
+    width: calc(100vw - 32px);
+    max-height: calc(100% - 260px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .resonance-result {
+    transition: none;
+  }
+}

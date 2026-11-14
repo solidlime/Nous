@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Memory Resonance — 記憶のリアルタイム発火と収束の可視化">
+  <title>Memory Resonance — nous</title>
+  <link rel="stylesheet" href="/static/styles/reset.css">
+  <link rel="stylesheet" href="/static/styles/variables.css">
+  <link rel="stylesheet" href="/static/styles/theme.css">
+  <link rel="stylesheet" href="/static/styles/components.css">
+  <link rel="stylesheet" href="/static/styles/layout.css">
+  <link rel="stylesheet" href="/static/features/resonance.css">
+</head>
+<body>
+  <canvas id="resonance-canvas" aria-hidden="true"></canvas>
+
+  <div id="resonance-ui">
+    <header id="resonance-header" class="glass">
+      <h1 id="resonance-title">Memory Resonance</h1>
+      <p id="resonance-persona">persona: <span id="resonance-persona-name">—</span></p>
+      <div id="resonance-status" class="resonance-status standby" role="status" aria-live="polite">
+        <span class="resonance-status-dot" aria-hidden="true"></span>
+        <span id="resonance-status-text">STANDBY</span>
+      </div>
+    </header>
+
+    <main id="resonance-main">
+      <form id="resonance-form" class="glass" role="search">
+        <label for="resonance-query" class="visually-hidden-free">検索クエリ</label>
+        <input id="resonance-query" type="search" name="q" placeholder="記憶を検索…" autocomplete="off">
+        <button id="resonance-search-btn" type="submit">発火</button>
+      </form>
+      <p id="resonance-phase" class="resonance-phase">IDLE</p>
+      <p id="resonance-hint" class="resonance-hint">クエリを入力して Enter。SSE で Hebbian 発火がリアルタイムに流れる。</p>
+    </main>
+
+    <aside id="resonance-results" class="glass" aria-live="polite" aria-label="検索結果"></aside>
+  </div>
+
+  <script src="/static/features/resonance.js" defer></script>
+</body>
+</html>
