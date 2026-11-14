@@ -1366,3 +1366,160 @@ class TestNoTopicSilence:
             assert "memories=3" in skips[0] and "excluded=3" in skips[0]
         finally:
             conn.close()
+
+
+class TestPromptRevisionContext:
+    """#44: ページ本文と源記憶を文脈に戻さないと「現在形の嘘」が残る。"""
+
+    _now = datetime(2026, 11, 13, 3, 0, tzinfo=_JST)
+
+    def test_topic_page_gets_full_body_and_other_topic_gets_preview(self, tmp_path) -> None:
+        """編纂対象 topic のページだけ全文（page_body_chars まで）を渡す。"""
+        from nous.infrastructure.wiki.store import WikiStore
+
+        store = WikiStore(tmp_path, "test_ww")
+        long_body = "冒頭の説明。" + ("埋め草" * 400) + "末尾の古い記述。"
+        store.write_page("project-nous-x", "x", long_body, project="nous", sources=("m1",))
+        store.write_page("project-other-y", "y", long_body, project="other", sources=("m2",))
+        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
+        try:
+            prompt = worker._build_prompt("project-nous", [], store.list_pages(), self._now)
+        finally:
+            conn.close()
+        assert "末尾の古い記述" in prompt  # 400 字プレビューでは落ちる位置
+        assert '"slug": "project-other-y"' in prompt
+        assert "preview" in prompt  # 別 topic はプレビューのまま
+
+    def test_memories_carry_their_day(self, tmp_path) -> None:
+        """記憶に when（書かれた日）を付ける。無いと LLM は新旧を判断できない。"""
+        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
+        try:
+            prompt = worker._build_prompt("project-nous", [_mem("m1")], [], self._now)
+        finally:
+            conn.close()
+        assert '"when": "' in prompt
+
+    def test_cited_archived_memories_come_back(self, tmp_path) -> None:
+        """ページが引用している archived 記憶を文脈に戻す（バケツ対応）。"""
+        from nous.infrastructure.wiki.store import WikiStore
+
+        store = WikiStore(tmp_path, "test_ww")
+        store.write_page("project-nous-x", "x", "body", project="nous", sources=("old1", "old2", "gone"))
+        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
+        try:
+            cycle = [_mem("new1", tags=["project:nous"])]
+            by_key = {
+                "new1": cycle[0],
+                "old1": _mem("old1", lifecycle="archived", content="manual を廃止した。"),
+                "old2": _mem("old2", lifecycle="archived", content="タグを足した。"),
+            }
+            merged = worker._topic_memories(cycle, store.list_pages(), "project-nous", by_key)
+            keys = {m.key for m in merged}
+            assert keys == {"new1", "old1", "old2"}  # gone は存在しないので落ちる
+        finally:
+            conn.close()
+
+    def test_tombstoned_and_other_topic_memories_stay_out(self, tmp_path) -> None:
+        """tombstoned は戻さない。別 topic のページが引用する記憶も戻さない。"""
+        from nous.infrastructure.wiki.store import WikiStore
+
+        store = WikiStore(tmp_path, "test_ww")
+        store.write_page("project-nous-x", "x", "body", project="nous", sources=("dead",))
+        store.write_page("project-other-y", "y", "body", project="other", sources=("foreign",))
+        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
+        try:
+            cycle = [_mem("new1", tags=["project:nous"])]
+            by_key = {
+                "new1": cycle[0],
+                "dead": _mem("dead", lifecycle="tombstoned"),
+                "foreign": _mem("foreign", lifecycle="archived"),
+            }
+            merged = worker._topic_memories(cycle, store.list_pages(), "project-nous", by_key)
+            assert {m.key for m in merged} == {"new1"}
+        finally:
+            conn.close()
+
+    def test_revision_budget_caps_restored_memories(self, tmp_path) -> None:
+        """revision_source_memories を超えて戻さない（プロンプト膨張の歯止め）。"""
+        from nous.infrastructure.wiki.store import WikiStore
+
+        store = WikiStore(tmp_path, "test_ww")
+        store.write_page("project-nous-x", "x", "body", project="nous", sources=tuple(f"old{i}" for i in range(10)))
+        conn, worker, _ctx = _journal_setup(tmp_path, [], None, cfg_update={"revision_source_memories": 2})
+        try:
+            cycle = [_mem("new1", tags=["project:nous"])]
+            by_key = {"new1": cycle[0], **{f"old{i}": _mem(f"old{i}", lifecycle="archived") for i in range(10)}}
+            merged = worker._topic_memories(cycle, store.list_pages(), "project-nous", by_key)
+            assert len(merged) == 3  # new1 + 2
+        finally:
+            conn.close()
+
+    def test_restored_memories_survive_the_topic_cap(self, tmp_path) -> None:
+        """cycle 記憶が上限を埋めていても、戻した源記憶は落ちない（#44 の本丸）。"""
+        from nous.infrastructure.wiki.store import WikiStore
+
+        store = WikiStore(tmp_path, "test_ww")
+        store.write_page("project-nous-x", "x", "body", project="nous", sources=("old1",))
+        conn, worker, _ctx = _journal_setup(
+            tmp_path, [], None, cfg_update={"max_memories_per_topic": 3, "revision_source_memories": 1}
+        )
+        try:
+            cycle = [_mem(f"new{i}", tags=["project:nous"]) for i in range(5)]
+            by_key = {"old1": _mem("old1", lifecycle="archived"), **{m.key: m for m in cycle}}
+            merged = worker._topic_memories(cycle, store.list_pages(), "project-nous", by_key)
+            keys = {m.key for m in merged}
+            assert "old1" in keys
+            assert len(merged) == 3
+        finally:
+            conn.close()
+
+    def test_archiving_already_archived_sources_is_not_counted(self, tmp_path) -> None:
+        """戻した archived 源を「新たに沈めた」と数えない（監査が嘘をつく）。"""
+        conn, worker, ctx = _journal_setup(tmp_path, [], None)
+        try:
+            ctx.memory_repo.save(_mem("old1", lifecycle="archived"))
+            known = {"old1": _mem("old1", lifecycle="archived")}
+            assert worker._archive_sources(ctx, ["old1"], set(), known) == 0
+            ctx.memory_repo.save(_mem("fresh", lifecycle="active"))
+            assert worker._archive_sources(ctx, ["fresh"], set(), {"fresh": _mem("fresh")}) == 1
+        finally:
+            conn.close()
+
+    def test_page_words_pull_back_old_uncited_memory(self, tmp_path) -> None:
+        """本文にしか無い語（manual など）で、引用されていない古い記憶を掘り起こす。
+
+        実例（#44, 2026-11-13 本番）: `project-nous-wiki-compilation` は
+        「巡回順は…（manual 含む）」と書いたままだが、manual 廃止の記憶は
+        どのページの sources にも無く、cycle の直近 40 件からも外れていた。
+        """
+        from nous.infrastructure.wiki.store import WikiStore
+
+        store = WikiStore(tmp_path, "test_ww")
+        store.write_page(
+            "project-nous-wiki-compilation",
+            "Wiki 編纂",
+            "巡回順は stale → 最終接触が古い順（manual 含む）→ 記憶数。",
+            project="nous",
+            sources=(),
+        )
+        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
+        try:
+            old = _mem("old_manual", lifecycle="archived", content="手書き判定 manual は廃止した。")
+            older = _mem("old_manual", tags=["project:nous"], lifecycle="archived", content=old.content)
+            cycle = [_mem(f"new{i}", tags=["project:nous"], content=f"別件の開発メモ{i}") for i in range(40)]
+            by_key = {"old_manual": older, **{m.key: m for m in cycle}}
+            merged = worker._topic_memories(cycle, store.list_pages(), "project-nous", by_key)
+            assert "old_manual" in {m.key for m in merged}
+        finally:
+            conn.close()
+
+    def test_recall_ignores_other_topics_and_tombstones(self, tmp_path) -> None:
+        """掘り起こしは同じ topic の生きた記憶だけ。"""
+        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
+        try:
+            foreign = _mem("foreign", tags=["project:other"], content="manual の話。")
+            dead = _mem("dead", tags=["project:nous"], content="manual の話。", lifecycle="tombstoned")
+            got = worker._recall_by_text("manual を含む巡回", {"foreign": foreign, "dead": dead}, "project-nous")
+            assert got == []
+        finally:
+            conn.close()

@@ -350,6 +350,14 @@ class WikiConfig(BaseModel):
     archive_sources: bool = True  # 編纂済みの源記憶を archived へ沈める（削除はしない）
     max_memories_per_topic: int = 40
     max_sources_per_page: int = 40  # ページ 1 枚の sources 上限（超過は分割を強制）
+    # ページ本文を改訂プロンプトに何字まで載せるか。プレビュー（400 字）だけだと
+    # ページ外の古い記述を書き直せず「現在形の嘘」が残る（#44）。
+    page_body_chars: int = 3000
+    # topic のページが引用している（多くは archived 済みの）源記憶を何件まで文脈に戻すか（#44）。
+    revision_source_memories: int = 20
+    # ページ本文の語彙で掘り起こす記憶の件数（0 で無効）。project 単位のバケツしか無いので、
+    # ページ固有の事実はこれで拾う（#44）。
+    revision_recall_memories: int = 8
     max_page_bytes: int = 8192
     provider: str = "openrouter"
     api_key: str | None = None

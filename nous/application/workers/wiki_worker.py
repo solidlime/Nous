@@ -33,6 +33,8 @@ from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.wiki.store import INDEX_SLUG, render_page
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from nous.config.settings import Settings, WikiConfig
     from nous.domain.memory.entities import Memory
     from nous.infrastructure.llm.base import LLMProvider
@@ -51,8 +53,13 @@ _JOURNAL_SLUG_PREFIX = "journal-"
 #: LLM に渡す記憶本文の切り詰め長。
 _CONTENT_PREVIEW_CHARS = 300
 
-#: 既存ページ目次で LLM に渡す本文プレビュー長。
+#: 既存ページ目次で LLM に渡す本文プレビュー長（編纂対象外のページ）。
 _PAGE_PREVIEW_CHARS = 400
+#: 編纂対象 topic のページに渡す本文長。全文を渡さないと、プレビュー外の古い文を
+#: 書き直せず「現在形の嘘」が残る（#44）。
+
+#: ページ本文の語彙で記憶を掘り起こすときのトークン（英数 3 字以上 / カタカナ / 漢字連）。
+_TOKEN_RE = re.compile(r"[a-z][a-z0-9_-]{2,}|[ァ-ヶー]{2,}|[一-龥]{2,}")
 
 _WIKI_PROMPT = """あなたは長期記憶を編纂する司書です。以下の記憶クラスタと既存 wiki ページを読み、
 wiki ページ（Markdown 本文）を作成または改訂してください。
@@ -68,6 +75,10 @@ wiki ページ（Markdown 本文）を作成または改訂してください。
   参照先は作成され次第リンクになる）。
 - slug は `{slug_prefix}` で始まる小文字英数とハイフンのみ。既存ページを改訂する場合は
   既存 slug をそのまま使う。新規トピックを分けたい場合のみ新しい slug を提案する。
+- 既存ページを改訂する場合は**``body`` の全文が渡されている**。古い記述を残したまま
+  追記しない。記憶のほうが新しいのに現在形で残っている記述は書き直す。
+- 記憶には ``when``（その記憶が書かれた日）が付いている。同じ事柄の記憶が複数あるときは
+  ``when`` の新しいほうが現在の状態。
 - **sources には必ず上記記憶リストの key だけを入れる**（存在しない key は捨てられる）。
 - 旧ページを統合して不要になった場合のみ delete にその slug を入れる。
 {conflict_instructions}
@@ -358,7 +369,7 @@ class WikiWorker:
                     break
         return stale
 
-    def _archive_sources(self, ctx, sources: list[str], seen: set[str]) -> int:
+    def _archive_sources(self, ctx, sources: list[str], seen: set[str], known: dict[str, Memory] | None = None) -> int:
         """編纂済みの源記憶を archived へ沈める（decay と同じ lifecycle 遷移）。
 
         削除はしない: ``page.sources`` は memory key を参照し続けるので、消すと腐敗検出が壊れる。
@@ -374,6 +385,12 @@ class WikiWorker:
         for key in sources:
             if key in seen:
                 continue
+            # 既に archived の記憶（#44 でページの源として引き戻したもの）を再び「沈めた」と
+            # 数えない。監査の数が実態とずれる。
+            if known is not None:
+                current = known.get(key)
+                if current is not None and current.lifecycle_status != "active":
+                    continue
             try:
                 result = ctx.memory_repo.update(key, lifecycle_status="archived")
             except Exception:
@@ -408,10 +425,7 @@ class WikiWorker:
         return repaired
 
     def _most_recent(self, memories: list[Memory]) -> list[Memory]:
-        def _ts(m: Memory):
-            return getattr(m, "updated_at", None) or m.created_at
-
-        return sorted(memories, key=_ts, reverse=True)[: self._cfg.max_memories_per_topic]
+        return _by_recency(memories)[: self._cfg.max_memories_per_topic]
 
     # ------------------------------------------------------------------
     # 編纂
@@ -426,6 +440,7 @@ class WikiWorker:
         all_result = ctx.memory_repo.find_all()
         memories: list[Memory] = list(all_result.value) if isinstance(all_result, Success) else []
         archived_seen: set[str] = set()
+        by_key = {m.key: m for m in memories}
         self._compile_journal(ctx, persona, store, now)
         questions: list[dict] = []
         topics = self._select_topics(memories, now, store, persona)
@@ -443,7 +458,10 @@ class WikiWorker:
             )
         for topic, selected in topics:
             try:
-                questions.extend(self._compile_topic(ctx, persona, store, topic, selected, now, archived_seen) or [])
+                questions.extend(
+                    self._compile_topic(ctx, persona, store, topic, selected, now, archived_seen, all_by_key=by_key)
+                    or []
+                )
             except Exception:
                 logger.exception("WikiWorker: topic=%s failed", topic)
                 self._record_event(ctx, persona, f"error: topic {topic} failed", None)
@@ -693,9 +711,11 @@ class WikiWorker:
         memories: list[Memory],
         now: datetime,
         archived_seen: set[str],
+        all_by_key: dict[str, Memory] | None = None,
     ) -> list[dict]:
         """1 topic 分を編纂する。戻り値は調査に回す問い（``topic`` を埋めたもの）。"""
         pages = store.list_pages()
+        memories = self._topic_memories(memories, pages, topic, all_by_key or {})
         payload, error, attempt = self._ask_and_parse(topic, memories, pages, now)
         if payload is None:
             self._record_event(
@@ -923,7 +943,7 @@ class WikiWorker:
         )
         if isinstance(written, Failure):
             raise RuntimeError(f"write_page failed: {written.error}")
-        archived = self._archive_sources(ctx, sources, archived_seen)
+        archived = self._archive_sources(ctx, sources, archived_seen, candidates)
         if self.vector_enabled:
             vector_index.sync_page(self._settings, persona, slug, title, body)
 
@@ -1293,15 +1313,71 @@ class WikiWorker:
         }
         return text
 
+    def _topic_memories(
+        self, memories: list[Memory], pages: list[WikiPage], topic: str, all_by_key: dict[str, Memory]
+    ) -> list[Memory]:
+        """cycle の記憶 + その topic のページが引用している記憶を合わせる（#44）。
+
+        源記憶は編纂後に archived へ沈むため、``_select_topics`` の候補から永久に消える。
+        ページが引用している記憶をここで引き戻さないと「ページの根拠」が文脈に無くなり、
+        後から出た訂正を反映できないまま現在形の記述が残る。
+        """
+        budget = max(0, self._cfg.revision_source_memories)
+        if budget:
+            keys = [k for p in pages if _topic_of_page(p) == topic for k in p.sources]
+            cited = [all_by_key[k] for k in dict.fromkeys(keys) if k in all_by_key]
+            cited = [m for m in cited if m.lifecycle_status != "tombstoned"]
+            # 戻した記憶は上限に数えられる前に確保する。新しい cycle 記憶で押し出されると
+            # 「ページの根拠が文脈に無い」という元の穴に戻ってしまう（#44）。
+            restored = {m.key: m for m in _by_recency(cited)[:budget]}
+            # 巡回順・関数名のような「本文にしか書かれていない語」で過去の記憶を掘り起こす。
+            # project タグ 1 バケツに 4 ページが同居するので、引用元を戻すだけでは
+            # ページ固有の事実（例: manual 廃止）に届かない（#44）。
+            text = " ".join(p.title + "\n" + p.body for p in pages if _topic_of_page(p) == topic)
+            for m in self._recall_by_text(text, all_by_key.values(), topic):
+                restored.setdefault(m.key, m)
+            slots = max(0, self._cfg.max_memories_per_topic - len(restored))
+            for m in _by_recency(memories)[:slots]:
+                restored.setdefault(m.key, m)
+            return list(restored.values())
+        return _by_recency(memories)[: self._cfg.max_memories_per_topic]
+
+    def _recall_by_text(self, text: str, candidates: Iterable[Memory], topic: str) -> list[Memory]:
+        """ページ本文の語を含む同じ topic の記憶を拾う（LLM 0 回・決定的）。"""
+        limit = max(0, self._cfg.revision_recall_memories)
+        if not limit or not text:
+            return []
+        tokens = {t for t in _TOKEN_RE.findall(text.lower()) if len(t) >= 3}
+        if not tokens:
+            return []
+        scored: list[tuple[int, float, Memory]] = []
+        for memory in candidates:
+            if getattr(memory, "lifecycle_status", "tombstoned") == "tombstoned":
+                continue
+            if _topic_of(memory) != topic:
+                continue
+            body = memory.content.lower()
+            hits = sum(1 for t in tokens if t in body)
+            if hits:
+                scored.append((hits, -(memory.importance or 0.0), memory))
+        scored.sort(key=lambda row: (-row[0], row[1]))
+        return [row[2] for row in scored[:limit]]
+
     def _build_prompt(self, topic: str, memories: list[Memory], pages: list[WikiPage], now: datetime) -> str:
+        body_chars = max(_PAGE_PREVIEW_CHARS, self._cfg.page_body_chars)
         page_lines = [
             json.dumps(
                 {
                     "slug": p.slug,
                     "title": p.title,
                     "project": p.project,
+                    "updated": p.updated,
                     "sources": list(p.sources),
-                    "preview": p.body[:_PAGE_PREVIEW_CHARS],
+                    **(
+                        {"body": p.body[:body_chars]}
+                        if _topic_of_page(p) == topic
+                        else {"preview": p.body[:_PAGE_PREVIEW_CHARS]}
+                    ),
                 },
                 ensure_ascii=False,
             )
@@ -1312,6 +1388,7 @@ class WikiWorker:
             json.dumps(
                 {
                     "key": m.key,
+                    "when": _day_of(m),
                     "kind": getattr(m, "kind", "semantic"),
                     "importance": round(float(m.importance), 2),
                     "content": m.content[:_CONTENT_PREVIEW_CHARS],
@@ -1481,6 +1558,25 @@ def _frontmatter_bytes(slug: str, title: str, sources: tuple[str, ...], tag: str
         links=(),
     )
     return len(render_page(page).encode("utf-8"))
+
+
+def _by_recency(memories: list[Memory]) -> list[Memory]:
+    """新しい順（``updated_at`` 優先、無ければ ``created_at``）。"""
+
+    def _ts(m: Memory):
+        return getattr(m, "updated_at", None) or m.created_at
+
+    return sorted(memories, key=_ts, reverse=True)
+
+
+def _day_of(memory: Memory) -> str:
+    """記憶が書かれた日（``YYYY-MM-DD``）。LLM に新旧を判断させるための最小のヒント。"""
+    stamp = getattr(memory, "updated_at", None) or memory.created_at
+    if isinstance(stamp, datetime):
+        return stamp.strftime("%Y-%m-%d")
+    if isinstance(stamp, str) and len(stamp) >= 10:
+        return stamp[:10]
+    return ""
 
 
 def _topic_of(memory: Memory) -> str:
