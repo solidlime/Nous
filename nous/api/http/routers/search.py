@@ -22,6 +22,41 @@ logger = get_logger(__name__)
 # decision クエリパラメータ（0/1/true/false）の真値集合（最小パース）。
 _TRUTHY_VALUES = frozenset({"1", "true", "on", "yes"})
 
+#: project タグ保持の記憶への相対ブースト。合成スコアは非正規化（実測 1.0-2.6 程度）なので
+#: 加算ではなく乗算 1.25 倍。同点付近の並びを入れ替えるが、スコア差 25% を覆さない。
+PROJECT_MEMORY_BOOST = 1.25
+
+
+def apply_project_boost(rows: list[dict], project: str) -> list[dict]:
+    """``project:<slug>`` タグ保持の行をブーストしてスコア降順に並べ直す。
+
+    rows は ``{memory, score, source, time_weight}`` の辞書（``/api/search`` の応答単位）。
+    ``memory.tags`` を見るのでドメイン型に依存しない。
+
+    並べ替えキーは engine の最終順位と同じ ``score * time_weight`` を使う。
+    engine は判定ゲート後のソートにだけ時間重みを掛けるので、ここで落とすと
+    「project を付けただけで同クエリの順序が変わる」ことになる。
+    ブーストが 1 件も当たらなければ engine の順序をそのまま返す。
+    """
+    if not project:
+        return rows
+    tag = f"project:{project}"
+    boosted: list[dict] = []
+    hit = False
+    for row in rows:
+        tags = (row.get("memory") or {}).get("tags") or []
+        if isinstance(tags, list) and tag in tags:
+            row = {**row, "score": round(float(row.get("score") or 0.0) * PROJECT_MEMORY_BOOST, 4)}
+            hit = True
+        boosted.append(row)
+    if not hit:
+        return rows
+    return sorted(
+        boosted,
+        key=lambda r: float(r.get("score") or 0.0) * float(r.get("time_weight") or 1.0),
+        reverse=True,
+    )
+
 
 def _parse_decision_flag(value: str | None) -> bool:
     """decision query param を bool 化する（未知値は False）。"""
@@ -150,6 +185,10 @@ def register_search_routes(mcp) -> None:
         date_range = request.query_params.get("date_range")
         min_importance_str = request.query_params.get("min_importance")
         emotion = request.query_params.get("emotion")
+        # project スコープ: wiki ページと生記憶の両方で「同じプロジェクト」を優先する。
+        from nous.domain.value_objects import normalize_project_slug
+
+        project = normalize_project_slug(request.query_params.get("project"))
         if not q:
             return JSONResponse({"error": "Query parameter 'q' is required"}, status_code=400)
         ctx = _safe_get_context(persona)
@@ -160,7 +199,9 @@ def register_search_routes(mcp) -> None:
             from nous.domain.search.engine import SearchQuery
             from nous.domain.search.policy import RankPolicy
 
-            query_kwargs: dict = {"text": q, "mode": mode, "top_k": limit}
+            # project 指定時は候補プールを広げる。ブーストは top_k で切った後では順位を変えられない
+            # （4 位以下の project 記憶が永久に昇格できない）ので、広く取ってから改めて切る。
+            query_kwargs: dict = {"text": q, "mode": mode, "top_k": min(100, limit * 3) if project else limit}
             if date_range:
                 query_kwargs["date_range"] = date_range
             if min_importance_str:
@@ -227,23 +268,27 @@ def register_search_routes(mcp) -> None:
             try:
                 from nous.application.wiki.search import search_wiki_pages
 
-                wiki_hits = await search_wiki_pages(ctx, persona, q, limit=3)
+                wiki_hits = await search_wiki_pages(ctx, persona, q, limit=3, project=project or None)
             except Exception as wiki_exc:
                 logger.debug("wiki search unavailable: %s", wiki_exc)
                 wiki_hits = []
+            results = [
+                {
+                    "memory": _memory_to_dict(r.memory),
+                    "score": round(r.score, 4),
+                    "source": r.source,
+                    # engine の最終順位（score * time_weight）を再現できるように運ぶ。
+                    "time_weight": r.time_weight,
+                }
+                for r in result.value
+            ]
             return JSONResponse(
                 {
                     "persona": persona,
                     "query": q,
                     "limit": limit,
-                    "results": [
-                        {
-                            "memory": _memory_to_dict(r.memory),
-                            "score": round(r.score, 4),
-                            "source": r.source,
-                        }
-                        for r in result.value
-                    ],
+                    "project": project or None,
+                    "results": apply_project_boost(results, project)[:limit],
                     "wiki": wiki_hits,
                     "nodes": entity_nodes,
                     "edges": entity_edges,

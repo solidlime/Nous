@@ -26,6 +26,10 @@ const MAX_SUMMARY = 160;
 const MAX_TOOL_LOG = 50; // 1 turn で送る tool_calls_log の上限
 const TIMEOUT_MS = 8000;
 const RECALL_TIMEOUT_MS = 6000;
+// 短すぎる発話（「進めて」等）は語彙が足りず無関係な記憶を引くので、projectSlug を足して検索する。
+const MIN_QUERY_CHARS = 20;
+// 注入する wiki ページの上限（生記憶より少なくする — ページは本文が長い）。
+const WIKI_TOP_K = 2;
 const MAX_QUERY = 300; // recall クエリとして nous に送る上限字数
 const MAX_RECALL_CONTENT = 400; // 注入する各記憶本文の上限字数
 
@@ -137,6 +141,37 @@ export interface RecallHit {
   created: string;
 }
 
+/** 編纂済み wiki ページのヒット（``payload.wiki``）。 */
+export interface RecallWikiHit {
+  slug: string;
+  title: string;
+  excerpt: string;
+  score: number;
+}
+
+/** /api/search/{persona} の応答から wiki ヒットを抽出（壊れていれば空配列）。 */
+export function parseWikiPayload(payload: unknown, topK: number): RecallWikiHit[] {
+  const rows = (payload as any)?.wiki;
+  if (!Array.isArray(rows)) return [];
+  const hits: RecallWikiHit[] = [];
+  for (const row of rows) {
+    const slug = typeof (row as any)?.slug === "string" ? (row as any).slug : "";
+    if (!slug) continue;
+    const raw = (row as any)?.score;
+    const score = typeof raw === "number" ? raw : Number(raw);
+    const title = typeof (row as any)?.title === "string" && (row as any).title ? (row as any).title : slug;
+    const excerpt = typeof (row as any)?.excerpt === "string" ? (row as any).excerpt : "";
+    hits.push({
+      slug,
+      title,
+      excerpt: ellipsize(excerpt.replace(/\s+/g, " ").trim(), MAX_RECALL_CONTENT),
+      score: Number.isFinite(score) ? Math.round(score * 100) / 100 : 0,
+    });
+    if (hits.length >= topK) break;
+  }
+  return hits;
+}
+
 /** /api/search/{persona} の応答から注入対象を抽出（壊れていれば空配列）。 */
 export function parseRecallPayload(payload: unknown, minScore: number, topK: number): RecallHit[] {
   const rows = (payload as any)?.results;
@@ -159,20 +194,37 @@ export function parseRecallPayload(payload: unknown, minScore: number, topK: num
   return hits;
 }
 
+/** recall に送るクエリを組み立てる。短い発話は projectSlug を語彙として足す。 */
+export function buildRecallQuery(prompt: string, projectSlug: string): string {
+  const text = prompt.replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  if (text.length < MIN_QUERY_CHARS && projectSlug) return `${text} ${projectSlug}`;
+  return text;
+}
+
 /** 注入する custom message 本文を組み立てる。 */
-export function formatRecall(hits: RecallHit[]): string {
-  const lines = hits.map((hit, i) => {
-    const bits: string[] = [`(${hit.score})`];
-    if (hit.kind) bits.push(hit.kind);
-    if (hit.created) bits.push(hit.created);
-    return `${i + 1}. ${bits.join(" ")} ${hit.content}`;
-  });
-  return [
-    "[nous recall] 直近のユーザー発言に関連する過去の記憶:",
-    ...lines,
-    "---",
-    "上記は nous の記憶保管所から自動で引いたもの。さらに引くには nous MCP の memory_search ツールを使う。",
-  ].join("\n");
+export function formatRecall(hits: RecallHit[], wiki: RecallWikiHit[] = []): string {
+  const lines: string[] = ["[nous recall] 直近のユーザー発言に関連する過去の記憶:"];
+  if (wiki.length > 0) {
+    lines.push("📚 Wiki:");
+    wiki.forEach((hit, i) => {
+      lines.push(`${i + 1}. (${hit.score}) ${hit.title} [${hit.slug}] ${hit.excerpt}`);
+    });
+  }
+  if (hits.length > 0) {
+    lines.push("💭 記憶:");
+    hits.forEach((hit, i) => {
+      const bits: string[] = [`(${hit.score})`];
+      if (hit.kind) bits.push(hit.kind);
+      if (hit.created) bits.push(hit.created);
+      lines.push(`${i + 1}. ${bits.join(" ")} ${hit.content}`);
+    });
+  }
+  lines.push("---");
+  lines.push(
+    "上記は nous の記憶保管所から自動で引いたもの。さらに引くには nous MCP の memory_search（生記憶）/ wiki_grep・wiki_read（編纂済みページ）を使う。",
+  );
+  return lines.join("\n");
 }
 
 interface RecallConfig {
@@ -291,10 +343,11 @@ export default function nousEvents(pi: ExtensionAPI): void {
     return { type, timestamp: new Date().toISOString(), summary, detail, metadata: null };
   }
 
-  /** nous の関連記憶検索（GET /api/search/{persona}）。失敗は throw（呼び出し元で握る）。 */
-  async function fetchRecall(query: string, limit: number): Promise<unknown> {
+/** nous の関連記憶検索（GET /api/search/{persona}）。失敗は throw（呼び出し元で握る）。 */
+  async function fetchRecall(query: string, limit: number, project: string): Promise<unknown> {
     const base = new URL(config.endpoint).origin;
-    const url = `${base}/api/search/${encodeURIComponent(config.persona)}?q=${encodeURIComponent(query)}&limit=${limit}`;
+    const suffix = project ? `&project=${encodeURIComponent(project)}` : "";
+    const url = `${base}/api/search/${encodeURIComponent(config.persona)}?q=${encodeURIComponent(query)}&limit=${limit}${suffix}`;
     const res = await fetch(url, {
       headers: { authorization: `Bearer ${config.apiKey}` },
       signal: AbortSignal.timeout(RECALL_TIMEOUT_MS),
@@ -337,30 +390,42 @@ export default function nousEvents(pi: ExtensionAPI): void {
       try {
         if (!config.recall?.enabled || !config.apiKey) return;
         if (event?.messageType !== "user") return; // custom 起点の run には差し込まない
-        const query = String(event.prompt ?? "").replace(/\s+/g, " ").trim();
+        const prompt = String(event.prompt ?? "").replace(/\s+/g, " ").trim();
+        if (!prompt) return;
+        const query = buildRecallQuery(prompt, projectSlug);
         if (!query) return;
         const started = Date.now();
-        const payload = await fetchRecall(ellipsize(query, MAX_QUERY), config.recall.topK);
+        const payload = await fetchRecall(ellipsize(query, MAX_QUERY), config.recall.topK, projectSlug);
         const hits = parseRecallPayload(payload, config.recall.minScore, config.recall.topK);
+        const wikiHits = parseWikiPayload(payload, WIKI_TOP_K);
         const ms = Date.now() - started;
-        if (hits.length === 0) {
+        if (hits.length === 0 && wikiHits.length === 0) {
           setStatus(`nous recall: none · ${ms}ms`);
           return;
         }
         post([
-          makeEvent("recall.injected", `recall: ${hits.length} memories for "${ellipsize(query, 60)}"`, {
-            query: ellipsize(query, MAX_QUERY),
-            hits: hits.length,
-            min_score: config.recall.minScore,
-            ms,
-          }),
+          makeEvent(
+            "recall.injected",
+            `recall: ${hits.length} memories + ${wikiHits.length} wiki for "${ellipsize(query, 60)}"`,
+            {
+              query: ellipsize(query, MAX_QUERY),
+              hits: hits.length,
+              wiki_hits: wikiHits.length,
+              wiki_slugs: wikiHits.map((w) => w.slug),
+              project: projectSlug || null,
+              min_score: config.recall.minScore,
+              ms,
+            },
+          ),
         ]);
-        console.error(`[nous-events] recall: injected ${hits.length} memories (${ms}ms)`);
-        setStatus(`nous recall: ${hits.length} · top ${(hits[0]?.score ?? 0).toFixed(2)} · ${ms}ms`);
+        console.error(`[nous-events] recall: injected ${hits.length} memories + ${wikiHits.length} wiki (${ms}ms)`);
+        setStatus(
+          `nous recall: ${hits.length}💭 ${wikiHits.length}📚 · top ${(wikiHits[0]?.score ?? hits[0]?.score ?? 0).toFixed(2)} · ${ms}ms`,
+        );
         return {
           message: {
             customType: "nous-recall",
-            content: formatRecall(hits),
+            content: formatRecall(hits, wikiHits),
             display: false,
           },
         };

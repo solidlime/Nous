@@ -160,6 +160,7 @@ Search memories for a persona.
 | `q` | str | `""` | Search text (required) |
 | `limit` | int | 20 | Max results |
 | `mode` | str | `hybrid` | Search mode: `semantic`, `keyword`, `hybrid`, `smart` |
+| `project` | str | なし | プロジェクト slug（canonical 規約 `[a-z0-9][a-z0-9-]*`、大文字・`_` は正規化）。指定時は `project:<slug>` タグの記憶と同 project の wiki ページを優先する。不正値は無視（`project: null`） |
 
 ---
 

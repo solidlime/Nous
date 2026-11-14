@@ -27,14 +27,22 @@ EXCERPT_CHARS = 200
 #: 結果は同一のまま、検索 1 回ごとの追加 embedding + Qdrant 往復（実測 100-250ms）を削れる。
 _VECTOR_MIN_PAGES = 8
 
+#: project 一致ページへの加算ブースト（0-1 尺度）。0.3 は「0.4 の page が 0.7 相当まで
+#: 上がる」強さで、同点付近の並びを入れ替えるが無関係なページを先頭に持ち上げない。
+PROJECT_PAGE_BOOST = 0.3
+
 _WORD_RE = re.compile(r"[a-z0-9]+")
 
 
-async def search_wiki_pages(ctx: AppContext, persona: str, query: str, limit: int = 3) -> list[dict[str, Any]]:
+async def search_wiki_pages(
+    ctx: AppContext, persona: str, query: str, limit: int = 3, project: str | None = None
+) -> list[dict[str, Any]]:
     """wiki ページを検索し ``[{slug, title, project, excerpt, score}]`` を返す。
 
     スコアは Qdrant cosine（0-1 相当）を優先し、索引ミス／未作成分は
     ファイル TF（クエリ語の出現率）を 0-1 に正規化して使う。
+    ``project`` を渡すと、そのプロジェクトのページに ``PROJECT_PAGE_BOOST`` を加算する
+    （プロジェクト作業中の recall で他プロジェクトのページが先頭に来るのを抑える）。
     """
     if not query.strip() or limit < 1:
         return []
@@ -75,6 +83,14 @@ async def search_wiki_pages(ctx: AppContext, persona: str, query: str, limit: in
         tf = _tf_score(page.title, page.body, query, terms)
         if tf > 0:
             scores[slug] = tf
+
+    if project:
+        # 並べ替えの前にブーストする（表示だけでなく順位に効かせる）。上限は掛けない —
+        # TF フォールバックは完全一致で 1.0 に飽和するので、上限を掛けると同点のまま並ばない。
+        # 表示値は下で 0-1 に丸める。
+        for slug, page in pages_by_slug.items():
+            if slug in scores and page.project == project:
+                scores[slug] += PROJECT_PAGE_BOOST
 
     ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)[:limit]
     return [

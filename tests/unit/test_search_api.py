@@ -130,3 +130,95 @@ async def test_search_decision_default_off(client, monkeypatch):
     assert q.decision_enabled is False
     assert q.max_hops == 1
     assert q.request_id is None
+
+
+async def test_search_project_param_boosts_tagged_memory(client, monkeypatch):
+    """``project`` 指定で ``project:<slug>`` タグ保持の記憶が持ち上がり、応答に project が返る。"""
+    from datetime import datetime
+
+    from nous.domain.memory.entities import Memory
+    from nous.domain.search.engine import SearchEngine, SearchResult
+    from nous.domain.shared.result import Success
+
+    now = datetime.now()
+
+    def _hit(key: str, tags: list[str], score: float) -> SearchResult:
+        mem = Memory(key=key, content=key, kind="semantic", created_at=now, updated_at=now, tags=tags)
+        return SearchResult(memory=mem, score=score, source="keyword")
+
+    async def _fake_search(self, query):
+        return Success([_hit("other", ["misc"], 1.0), _hit("proj", ["project:nous"], 0.9)])
+
+    monkeypatch.setattr(SearchEngine, "search", _fake_search)
+
+    plain = (await client.get("/api/search/search_api_test?q=x")).json()
+    assert plain["project"] is None
+    assert [row["memory"]["key"] for row in plain["results"]] == ["other", "proj"]
+
+    r = await client.get("/api/search/search_api_test?q=x&project=NOUS")
+    body = r.json()
+    assert body["project"] == "nous"
+    assert [row["memory"]["key"] for row in body["results"]] == ["proj", "other"]
+    assert body["results"][0]["score"] == pytest.approx(1.125)
+
+
+async def test_search_project_param_invalid_is_ignored(client, monkeypatch):
+    """canonical slug 規約に合わない project は None として扱う（400 にしない）。"""
+    from nous.domain.search.engine import SearchEngine
+    from nous.domain.shared.result import Success
+
+    async def _fake_search(self, query):
+        return Success([])
+
+    monkeypatch.setattr(SearchEngine, "search", _fake_search)
+    r = await client.get("/api/search/search_api_test?q=x&project=%%%")
+    assert r.status_code == 200
+    assert r.json()["project"] is None
+
+
+def test_apply_project_boost_is_pure_for_rows_without_project_tag():
+    """タグ無し行は素通り（順序も値も変えない）。"""
+    from nous.api.http.routers.search import apply_project_boost
+
+    rows = [{"memory": {"key": "a", "tags": ["misc"]}, "score": 1.0, "source": "keyword"}]
+    assert apply_project_boost(rows, "") == rows
+    assert apply_project_boost(rows, "nous") == rows
+
+
+async def test_search_project_widens_candidate_pool(client, monkeypatch):
+    """``project`` 指定時は top_k を広げてからブーストする（4 位以下の記憶も昇格できる）。"""
+    from datetime import datetime
+
+    from nous.domain.memory.entities import Memory
+    from nous.domain.search.engine import SearchEngine, SearchResult
+    from nous.domain.shared.result import Success
+
+    now = datetime.now()
+    captured: dict = {}
+
+    def _hit(key: str, tags: list[str], score: float) -> SearchResult:
+        mem = Memory(key=key, content=key, kind="semantic", created_at=now, updated_at=now, tags=tags)
+        return SearchResult(memory=mem, score=score, source="keyword")
+
+    # engine 側は top_k で切るので、テストでも top_k を尊重して返す
+    rows = [
+        _hit("a", ["misc"], 1.0),
+        _hit("b", ["misc"], 0.95),
+        _hit("c", ["misc"], 0.9),
+        _hit("proj", ["project:nous"], 0.85),
+    ]
+
+    async def _fake_search(self, query):
+        captured["top_k"] = query.top_k
+        return Success(rows[: query.top_k])
+
+    monkeypatch.setattr(SearchEngine, "search", _fake_search)
+
+    plain = (await client.get("/api/search/search_api_test?q=x&limit=2")).json()
+    assert captured["top_k"] == 2
+    assert [row["memory"]["key"] for row in plain["results"]] == ["a", "b"]
+
+    boosted = (await client.get("/api/search/search_api_test?q=x&limit=2&project=nous")).json()
+    assert captured["top_k"] == 6  # 候補プールを広げてから切る
+    assert len(boosted["results"]) == 2
+    assert [row["memory"]["key"] for row in boosted["results"]] == ["proj", "a"]
