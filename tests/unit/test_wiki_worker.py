@@ -1572,3 +1572,22 @@ class TestPromptRevisionContext:
             assert "dead" not in keys
         finally:
             conn.close()
+
+    def test_revision_keeps_previous_sources(self, tmp_path) -> None:
+        """改訂で sources から落ちた記憶が orphan 化しないよう、源は減らさない。"""
+        from nous.infrastructure.wiki.store import WikiStore
+
+        store = WikiStore(tmp_path, "test_ww")
+        store.write_page("project-nous-x", "x", "本文", project="nous", sources=("old1", "old2"))
+        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
+        try:
+            cands = {
+                "old1": _mem("old1", tags=["project:nous"]),
+                "old2": _mem("old2", tags=["project:nous"]),
+                "new1": _mem("new1", tags=["project:nous"]),
+            }
+            page = {"slug": "project-nous-x", "title": "x", "body": "新しい本文", "sources": ["new1"]}
+            assert worker._apply_page(_ctx, "test_ww", store, "project-nous", page, cands, {"project-nous-x"}, set())
+            assert set(store.read_page("project-nous-x").value.sources) == {"new1", "old1", "old2"}
+        finally:
+            conn.close()

@@ -935,6 +935,14 @@ class WikiWorker:
         existing = store.read_page(slug)
 
         existed = existing.is_ok
+        if existed:
+            # 源は減らさない。改訂で sources から落ちた記憶は「どのページも引用していない
+            # archived」になり、後から訂正を引っぱれなくなる（#44 で manual 廃止がこれで
+            # 6 日間見えなかった）。
+            kept = [k for k in existing.value.sources if k in candidates]
+            sources = list(dict.fromkeys([*sources, *kept]))
+            if len(sources) > self._cfg.max_sources_per_page:
+                sources = sources[: self._cfg.max_sources_per_page]
         written = store.write_page(
             slug,
             title,
