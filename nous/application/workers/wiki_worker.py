@@ -1339,13 +1339,15 @@ class WikiWorker:
             keys = [k for p in pages if _topic_of_page(p) == topic for k in p.sources]
             cited = [all_by_key[k] for k in dict.fromkeys(keys) if k in all_by_key]
             cited = [m for m in cited if m.lifecycle_status != "tombstoned"]
-            # 戻した記憶は上限に数えられる前に確保する。新しい cycle 記憶で押し出されると
+            text = " ".join(p.title + "\n" + p.body for p in pages if _topic_of_page(p) == topic)
+            # 上限に数えられる前に確保する。新しい cycle 記憶で押し出されると
             # 「ページの根拠が文脈に無い」という元の穴に戻ってしまう（#44）。
-            restored = {m.key: m for m in _by_recency(cited)[:budget]}
+            # 選び方は「ページ本文の珍しい語と重なる順」。新しい順で切ると、ページが今も
+            # 語っている主題（manual）の記憶が古いというだけで落ちる（#44 実測）。
+            restored = {m.key: m for m in _order_by_page_text(cited, text)[:budget]}
             # 巡回順・関数名のような「本文にしか書かれていない語」で過去の記憶を掘り起こす。
             # project タグ 1 バケツに 4 ページが同居するので、引用元を戻すだけでは
             # ページ固有の事実（例: manual 廃止）に届かない（#44）。
-            text = " ".join(p.title + "\n" + p.body for p in pages if _topic_of_page(p) == topic)
             for m in self._recall_by_text(text, all_by_key.values(), topic):
                 restored.setdefault(m.key, m)
             # どのページも引用していない archived 記憶を拾い直す。編纂が源を沈めたあと
@@ -1361,18 +1363,8 @@ class WikiWorker:
             # 直近の archived 20 件が席を食い、6 日前に沈んだ事実には届かない（実測:
             # manual 廃止の 3 記憶は新しい順で 15/16/18 位）。
             cap = max(0, self._cfg.orphan_archive_memories)
-            ordered = _by_recency(orphans)
-            if cap and ordered:
-                bodies = {m.key: (m.content or "").lower() for m in ordered}
-                rare = {
-                    t
-                    for t in _TOKEN_RE.findall(text.lower())
-                    if len(t) >= 3 and 0 < sum(1 for b in bodies.values() if t in b) <= 5
-                }
-                hit = [m for m in ordered if any(t in bodies[m.key] for t in rare)]
-                hit_keys = {m.key for m in hit}
-                miss = [m for m in ordered if m.key not in hit_keys]
-                for m in (hit + miss)[:cap]:
+            if cap and orphans:
+                for m in _order_by_page_text(orphans, text)[:cap]:
                     restored.setdefault(m.key, m)
             slots = max(0, self._cfg.max_memories_per_topic - len(restored))
             for m in _by_recency(memories)[:slots]:
@@ -1604,6 +1596,26 @@ def _frontmatter_bytes(slug: str, title: str, sources: tuple[str, ...], tag: str
         links=(),
     )
     return len(render_page(page).encode("utf-8"))
+
+
+def _order_by_page_text(memories: list[Memory], text: str) -> list[Memory]:
+    """ページ本文の「珍しい語」と重なる記憶を先に、残りを新しい順に並べる（#44）。
+
+    ページ本文の語は数百あり、"active" のような共通語と "manual" のような固有語が混じる。
+    固有語（渡した記憶のうち 5 件以下にしか出ない語）で当たった記憶を優先しないと、
+    直近の記憶が席を食って古い訂正に届かない（実測: manual 廃止の 3 記憶は新しい順で 15 位）。
+    """
+    ordered = _by_recency(memories)
+    tokens = {t for t in _TOKEN_RE.findall(text.lower()) if len(t) >= 3}
+    if not tokens:
+        return ordered
+    bodies = {m.key: (m.content or "").lower() for m in ordered}
+    rare = {t for t in tokens if 0 < sum(1 for b in bodies.values() if t in b) <= 5}
+    if not rare:
+        return ordered
+    hit = [m for m in ordered if any(t in bodies[m.key] for t in rare)]
+    hit_keys = {m.key for m in hit}
+    return hit + [m for m in ordered if m.key not in hit_keys]
 
 
 def _by_recency(memories: list[Memory]) -> list[Memory]:
