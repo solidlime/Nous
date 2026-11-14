@@ -1351,18 +1351,24 @@ class WikiWorker:
         tokens = {t for t in _TOKEN_RE.findall(text.lower()) if len(t) >= 3}
         if not tokens:
             return []
-        scored: list[tuple[int, float, Memory]] = []
-        for memory in candidates:
-            if getattr(memory, "lifecycle_status", "tombstoned") == "tombstoned":
-                continue
-            if _topic_of(memory) != topic:
-                continue
-            body = memory.content.lower()
-            hits = sum(1 for t in tokens if t in body)
-            if hits:
-                scored.append((hits, -(memory.importance or 0.0), memory))
-        scored.sort(key=lambda row: (-row[0], row[1]))
-        return [row[2] for row in scored[:limit]]
+        pool = [
+            m
+            for m in candidates
+            if getattr(m, "lifecycle_status", "tombstoned") != "tombstoned" and _topic_of(m) == topic
+        ]
+        if not pool:
+            return []
+        bodies = [(m, m.content.lower()) for m in pool]
+        # 珍しい語ほど重い（IDF 相当）。「active」「archived」のような全ページ共通語で
+        # 埋もれると、`manual` のようなページ固有の語が拾えない。
+        weight = {t: 1.0 / max(1, sum(1 for _, body in bodies if t in body)) for t in tokens}
+        scored: list[tuple[float, Memory]] = []
+        for memory, body in bodies:
+            score = sum(w for t, w in weight.items() if t in body)
+            if score > 0:
+                scored.append((score, memory))
+        scored.sort(key=lambda row: (-row[0], -(row[1].importance or 0.0)))
+        return [row[1] for row in scored[:limit]]
 
     def _build_prompt(self, topic: str, memories: list[Memory], pages: list[WikiPage], now: datetime) -> str:
         body_chars = max(_PAGE_PREVIEW_CHARS, self._cfg.page_body_chars)

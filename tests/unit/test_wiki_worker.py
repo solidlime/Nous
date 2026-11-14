@@ -1538,3 +1538,15 @@ class TestPromptRevisionContext:
             conn.close()
         assert '"days_since_update": ' in prompt
         assert "以上のページは**今回必ず改訂する**" in prompt
+
+    def test_rare_words_beat_common_words(self, tmp_path) -> None:
+        """共通語（active/archived）で埋もれず、ページ固有の語（manual）を拾う。"""
+        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
+        try:
+            text = "巡回順は manual 含む。active も archived も書く。"
+            page_specific = _mem("p", tags=["project:nous"], content="手書き判定 manual を廃止した。")
+            noise = [_mem(f"n{i}", tags=["project:nous"], content="active と archived の話。") for i in range(5)]
+            got = worker._recall_by_text(text, [*noise, page_specific], "project-nous")
+            assert got and got[0].key == "p"
+        finally:
+            conn.close()
