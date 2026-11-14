@@ -6,9 +6,8 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from nous.application.handover import AUTO_TAG, build_handover, handover_key
+from nous.application.handover import build_handover, read_handover
 from nous.domain.memory.cue import due_cues
-from nous.domain.memory.entities import Memory
 from nous.domain.memory.service import ONE_SHOT_STATE_TAGS
 from nous.domain.profile.tokens import DEFAULT_PROFILE_MAX_TOKENS, estimate_tokens
 from nous.domain.shared.result import Success
@@ -158,19 +157,16 @@ async def _tool_get_context(
         logger.debug("_tool_get_context: open question lookup failed: %s", e)
         open_question = None
 
-    # 前回の引き継ぎ（#58）: key ``handover:<slug>`` があればそれを最優先（明示更新）。
+    # 前回の引き継ぎ（#58）: persona_info の ``handover:<slug>`` があればそれを最優先（明示更新）。
     handover: str | None = None
     if project:
-        handover_mem: Memory | None = None
-        hv_result = ctx.memory_service.get_memory(handover_key(project))
-        if isinstance(hv_result, Success):
-            handover_mem = hv_result.value
         handover = (
             build_handover(
                 project,
-                ([handover_mem] if handover_mem is not None else []) + list(project_memories or []),
+                list(project_memories or []),
                 handover_questions,
                 get_now(),
+                explicit=read_handover(state, project),
             )
             or None
         )
@@ -220,10 +216,6 @@ async def _tool_get_context(
         open_question=open_question,
         handover=handover,
     )
-    # 次回以降の安定化（#58）: 表示した文字列を key ``handover:<slug>`` に上書き保存する。
-    # これで 2 回目以降は明示更新と同じ経路（エージェントが書いた内容が勝つ）に乗る。
-    if session_effects and project and handover:
-        _upsert_handover(ctx, project, handover)
     await ctx.event_bus.publish(
         "tool.called",
         {
@@ -244,31 +236,6 @@ async def _tool_session_begin(ctx: AppContext, persona: str, project: str | None
     one-shot state consumption). get_context retains those effects for v4.x
     compatibility only."""
     return await _tool_get_context(ctx, persona, project=project, session_effects=True)
-
-
-def _upsert_handover(ctx: AppContext, project: str, text: str) -> None:
-    """引き継ぎ栞を key ``handover:<slug>`` の記憶として upsert する（新しい機構は作らない）。"""
-    key = handover_key(project)
-    try:
-        existing = ctx.memory_service.get_memory(key)
-        if isinstance(existing, Success) and existing.value is not None:
-            ctx.memory_service.update_memory(key, content=text)
-            return
-        now = get_now()
-        ctx.memory_service.save_memory(
-            Memory(
-                key=key,
-                content=text,
-                created_at=now,
-                updated_at=now,
-                importance=0.6,
-                tags=["handover", AUTO_TAG],
-                kind="semantic",
-                source_type="system",
-            )
-        )
-    except Exception as e:  # noqa: BLE001 — 栞の保存失敗でセッション開始を落とさない
-        logger.debug("_upsert_handover failed: %s", e)
 
 
 @tool_called_audited("update_context")

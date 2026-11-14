@@ -521,13 +521,19 @@ class TestBuildContextSectionTierContent:
         state.environment = None
         state.relationship_status = None
         state.user_info = {"name": "Taro", "age": "30"}
-        state.persona_info = {"role": "assistant", "goals": "hidden_goal"}
+        state.persona_info = {
+            "role": "assistant",
+            "goals": "hidden_goal",
+            "handover:nous": "前回の栞",
+        }
 
         result = await _build_context_section(ctx, state)
         assert "ユーザー情報:" in result
         assert "Taro" in result
         assert "ペルソナ情報:" in result
         assert "assistant" in result
+        # handover: は session_begin 専用（毎ターンの system prompt には出さない）
+        assert "前回の栞" not in result
         # goals should be filtered out (in _hidden set)
         assert "hidden_goal" not in result
 

@@ -200,7 +200,8 @@ async def _build_context_section(
 
     _hidden = {"goals", "promises", "active_promises", "current_goals"}
     persona_info = getattr(state, "persona_info", None) or {}
-    filtered_pi = {k: v for k, v in persona_info.items() if k not in _hidden}
+    # handover: は session_begin 専用（毎ターンの system prompt に古い栞を混ぜない）
+    filtered_pi = {k: v for k, v in persona_info.items() if k not in _hidden and not k.startswith("handover:")}
     if filtered_pi:
         pi_lines = "\n".join(f"  {k}: {v}" for k, v in filtered_pi.items())
         t2.append(f"ペルソナ情報:\n{pi_lines}")

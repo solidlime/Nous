@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from nous.api.mcp import _tools_persona
-from nous.application.handover import AUTO_TAG, build_handover, handover_key
+from nous.application.handover import build_handover, handover_key, read_handover
 from nous.domain.memory.entities import Memory
 from nous.domain.memory.service import MemoryService
 from nous.domain.persona.entities import PersonaState
@@ -76,30 +76,35 @@ def test_limit_is_never_exceeded():
         assert text.endswith("…")
 
 
-def test_explicit_handover_memory_wins():
-    explicit = _mem(handover_key(PROJECT), "エージェントが自分で書いた引き継ぎ", minutes_ago=0)
-    memories = [explicit, _mem("m1", "自動生成に使われる作業ログ", minutes_ago=5)]
+def test_explicit_handover_wins_over_auto():
+    memories = [_mem("m1", "自動生成に使われる作業ログ", minutes_ago=5)]
 
-    assert build_handover(PROJECT, memories, ["論点"], NOW) == "エージェントが自分で書いた引き継ぎ"
+    text = build_handover(PROJECT, memories, ["論点"], NOW, explicit="エージェントが自分で書いた引き継ぎ")
+
+    assert text == "エージェントが自分で書いた引き継ぎ"
 
 
 def test_auto_generated_handover_is_regenerated():
-    """自動生成した栞（handover-auto タグ）には固定しない。"""
-    auto = _mem(handover_key(PROJECT), "完了: 古い自動生成", minutes_ago=0, tags=["handover", AUTO_TAG])
-    memories = [auto, _mem("m1", "新しい作業ログ", minutes_ago=5)]
-
-    text = build_handover(PROJECT, memories, [], NOW)
+    """明示更新が無ければ毎回作り直す（固定されない）。"""
+    text = build_handover(PROJECT, [_mem("m1", "新しい作業ログ", minutes_ago=5)], [], NOW)
 
     assert text == "完了: 新しい作業ログ"
 
 
 def test_explicit_handover_is_also_cut_to_limit():
-    explicit = _mem(handover_key(PROJECT), "長い" * 100, minutes_ago=0)
-
-    text = build_handover(PROJECT, [explicit], [], NOW, limit=50)
+    text = build_handover(PROJECT, [], [], NOW, limit=50, explicit="長い" * 100)
 
     assert len(text) == 50
     assert text.endswith("…")
+
+
+def test_read_handover_reads_persona_info():
+    state = MagicMock()
+    state.persona_info = {handover_key(PROJECT): "手書きの栞"}
+
+    assert read_handover(state, PROJECT) == "手書きの栞"
+    assert read_handover(state, None) is None
+    assert read_handover(MagicMock(persona_info={}), PROJECT) is None
 
 
 def test_open_question_never_shows_up_as_done():
@@ -135,7 +140,12 @@ def _ctx(tmp_path) -> MagicMock:
     ctx._config = None
     ctx.settings = MagicMock(data_root=str(tmp_path))
     ctx.event_bus.publish = AsyncMock()
-    ctx.persona_service.get_context.return_value = Success(PersonaState(persona=PERSONA))
+    info: dict = {}
+    ctx.persona_service.get_context.side_effect = lambda _p: Success(
+        PersonaState(persona=PERSONA, persona_info=dict(info))
+    )
+    ctx.persona_service.update_persona_info.side_effect = lambda _p, d: info.update(d) or Success(None)
+    ctx.persona_info = info
     ctx.persona_service.get_emotion_history.return_value = Success([])
     ctx.equipment_service.get_equipment.return_value = Success({})
     ctx.memory_service = MemoryService(repo)
@@ -195,35 +205,26 @@ async def test_no_project_means_no_handover_line(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_session_effects_upsert_the_handover_memory(tmp_path):
+async def test_auto_handover_is_recomputed_and_not_persisted(tmp_path):
+    """自動生成は保存しない：固定されず毎回作り直され、memories も persona_info も汚さない。"""
     ctx = _ctx(tmp_path)
     ctx.memory_service.save_memory(_mem("m1", "一回目の作業", minutes_ago=5))
 
     await _begin(ctx, PROJECT)
-    first = ctx.memory_service.get_memory(handover_key(PROJECT))
-    assert isinstance(first, Success)
-    assert first.value is not None
-    assert "一回目の作業" in first.value.content
-    created_at = first.value.created_at
+    assert ctx.persona_info == {}
 
     ctx.memory_service.save_memory(_mem("m2", "二回目の作業", minutes_ago=1))
     text = await _begin(ctx, PROJECT)
 
-    second = ctx.memory_service.get_memory(handover_key(PROJECT))
-    assert isinstance(second, Success)
-    assert second.value is not None
-    assert second.value.key == first.value.key  # 同じ key を上書き（増殖しない）
-    assert second.value.created_at == created_at
-    assert "二回目の作業" in second.value.content
-    # 自動生成側は毎回作り直す（handover-auto タグ付き）ので、次回以降も内容が進む
-    assert second.value.tags == ["handover", AUTO_TAG]
-    assert "二回目の作業" in text
+    assert "二回目の作業" in text  # 固定されない
+    assert ctx.persona_info == {}
+    assert not isinstance(ctx.memory_service.get_memory(handover_key(PROJECT)), Success)
 
 
 @pytest.mark.asyncio
 async def test_explicit_handover_survives_session_effects(tmp_path):
     ctx = _ctx(tmp_path)
-    ctx.memory_service.save_memory(_mem(handover_key(PROJECT), "エージェントの手書き引き継ぎ", minutes_ago=0))
+    ctx.persona_info[handover_key(PROJECT)] = "エージェントの手書き引き継ぎ"
     ctx.memory_service.save_memory(_mem("m1", "自動生成の材料", minutes_ago=5))
 
     text = await _begin(ctx, PROJECT)
