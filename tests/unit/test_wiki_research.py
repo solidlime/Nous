@@ -208,7 +208,6 @@ def _worker_setup(tmp_path, memories: list[Memory]):
     worker = WikiWorker(settings)  # type: ignore[arg-type]
     worker.vector_enabled = False
     # 記憶層の掃除（#39）は別テストの担当。ここでは回さない（API key 解決を避ける）。
-    worker._cfg = worker._cfg.model_copy(update={"conflict_sweep_enabled": False})
     return conn, ctx, worker
 
 

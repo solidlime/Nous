@@ -239,10 +239,13 @@ def register_tools(mcp: MCPServer) -> None:
         tags: list[str] | None = None,
         privacy_level: str | None = None,
         key: str = "",
+        resolved: bool = False,
     ) -> str:
         """Update a memory. Only provided fields are changed.
         importance must be 0.0-1.0. Invalid emotion silently falls back to neutral.
-        key は memory_key のエイリアス。"""
+        key は memory_key のエイリアス。
+        resolved: その記憶が未解決の問い（open-question）なら「解消済み」として閉じる
+        （同じ問いの重複も一緒に消える。閉じる = 削除なので内容は戻らない）。"""
         if key and not memory_key:
             memory_key = key
         p = _resolve_persona()
@@ -257,6 +260,7 @@ def register_tools(mcp: MCPServer) -> None:
                 emotion_intensity=emotion_intensity,
                 tags=tags,
                 privacy_level=privacy_level,
+                resolved=resolved,
             )
         )
 

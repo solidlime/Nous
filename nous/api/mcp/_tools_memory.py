@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING
 
 from nous.api.mcp._envelope import ToolErrorCode, tool_error, tool_ok
 from nous.api.mcp._tools_helpers import tool_called_audited
+from nous.application.wiki.questions import close_open_questions, delete_memories, is_open_question, question_key_of
 from nous.domain.search.engine import SearchQuery, SearchResult
 from nous.domain.search.policy import RankPolicy
 from nous.domain.shared.errors import DuplicateMemoryError
-from nous.domain.shared.result import Success
+from nous.domain.shared.result import Failure, Success
 from nous.domain.shared.time_utils import format_iso, relative_time_str
 from nous.domain.value_objects import _VALID_EMOTIONS, ensure_project_tag, normalize_importance
 
@@ -213,10 +214,13 @@ async def _tool_memory_update(
     tags: list[str] | None = None,
     privacy_level: str | None = None,
     new_content: str | None = None,
+    resolved: bool = False,
 ) -> str:
     """Update a memory. Only provided fields are changed.
     importance must be 0.0-1.0. Invalid emotion returns error.
-    query: search query to resolve memory_key (alternative to direct memory_key)."""
+    query: search query to resolve memory_key (alternative to direct memory_key).
+    resolved: その記憶が未解決の問い（open-question）なら「解消済み」として閉じる
+    （同じ問いの重複も一緒に消す）。閉じる = 削除なので内容は戻らない。"""
     # query から key を解決（builtin互換・audit:M6: threshold-guarded）
     if query and not memory_key:
         search_result = await ctx.search_engine.search(SearchQuery(text=query, top_k=1))
@@ -240,6 +244,22 @@ async def _tool_memory_update(
 
     if not memory_key:
         return _err("memory_key is required for update")
+
+    # ── 解消（#55）: 未解決の問いは「更新」ではなく閉じる。Zero Inbox なので閉じる = 消す ──
+    if resolved:
+        target = ctx.memory_service.get_memory(memory_key)
+        if isinstance(target, Failure):
+            return _err(f"memory not found: {memory_key}")
+        memory = target.value
+        if not is_open_question(memory):
+            return _err(f"not an open question: {memory_key}")
+        key = question_key_of(memory)
+        closed = await close_open_questions(ctx, persona, key) if key else await delete_memories(ctx, persona, [memory])
+        await ctx.event_bus.publish(
+            "memory.updated",
+            {"key": memory_key, "persona": persona, "changes": ["resolved"], "closed": closed},
+        )
+        return tool_ok({"key": memory_key, "resolved": True, "closed": closed})
 
     # ── Input validation ──
     if content is not None and len(content) > 50000:

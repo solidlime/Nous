@@ -61,6 +61,33 @@ async def async_drop_page(settings: Settings, persona: str, slug: str) -> None:
                 await result
 
 
+async def async_drop_memories(settings: Settings, persona: str, keys: list[str]) -> None:
+    """記憶のベクトル（collection prefix ``""``）をキーごとに削除する（失敗は warning）。"""
+    if not keys:
+        return
+    from nous.application import use_cases
+
+    mgr = use_cases.QdrantClientManager(settings.qdrant.url, settings.qdrant.api_key)
+    try:
+        await mgr.connect()
+        if not await mgr.health_check():
+            return
+        store = use_cases.QdrantVectorStore(mgr, _embedding(settings), "")
+        for key in keys:
+            try:
+                await store.delete(persona, key)
+            except Exception as e:
+                logger.warning("memory vector delete failed for %s: %s", key, e)
+    except Exception as e:
+        logger.warning("memory vector delete failed for %s: %s", persona, e)
+    finally:
+        close = getattr(mgr, "close", None)
+        if close is not None:
+            result = close()
+            if asyncio.iscoroutine(result):
+                await result
+
+
 def sync_page(settings: Settings, persona: str, slug: str, title: str, body: str) -> None:
     """同期ラッパ（編纂 worker の thread から呼ぶ）。"""
     try:
@@ -75,6 +102,14 @@ def drop_page(settings: Settings, persona: str, slug: str) -> None:
         asyncio.run(async_drop_page(settings, persona, slug))
     except Exception as e:
         logger.warning("wiki vector delete failed for %s: %s", slug, e)
+
+
+def drop_memories(settings: Settings, persona: str, keys: list[str]) -> None:
+    """同期ラッパ（編纂 worker の thread から呼ぶ）。"""
+    try:
+        asyncio.run(async_drop_memories(settings, persona, keys))
+    except Exception as e:
+        logger.warning("memory vector delete failed for %s: %s", persona, e)
 
 
 def _embedding(settings: Settings):

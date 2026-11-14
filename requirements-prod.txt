@@ -21,7 +21,6 @@ fastapi>=0.139.0,<1
 uvicorn>=0.51.0,<1
 
 # Async SQLite
-aiosqlite>=0.22.1,<1
 
 # Data Validation & Settings
 pydantic>=2.0.0,<3.0.0
@@ -46,6 +45,3 @@ httpx>=0.28,<0.29  # openai SDK 依存。2.54.0 と共に型検証済。
 sudachipy>=0.6.0,<0.7.0
 
 # PDF/Document Parsing (read_pdf tool)
-PyMuPDF>=1.24.0,<2
-pdfplumber>=0.11.0,<1
-pytesseract>=0.3.10,<1

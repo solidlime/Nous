@@ -136,6 +136,21 @@ async def _tool_get_context(
             logger.debug("_tool_get_context: wiki count failed: %s", e)
             wiki_page_count = None
 
+    # 未解決の問い（#55）: 1 件だけ。project 指定時は同じ project を優先する。
+    open_question: str | None = None
+    try:
+        oq_result = ctx.memory_service.get_by_tags(["open-question"])
+        if isinstance(oq_result, Success) and oq_result.value:
+            candidates = list(oq_result.value)
+            if project:
+                scoped = [m for m in candidates if f"project:{project}" in (getattr(m, "tags", ()) or ())]
+                candidates = scoped or candidates
+            newest = max(candidates, key=lambda m: m.created_at or m.updated_at or get_now())
+            open_question = " ".join(str(newest.content).split())[:120]
+    except Exception as e:  # noqa: BLE001 — 表示は落とさない
+        logger.debug("_tool_get_context: open question lookup failed: %s", e)
+        open_question = None
+
     # 期限が近い／切れた予定・約束は due_cues（goal 行の ⏰）が毎回ライブ計算で出す。
     time_since = ""
     if state.last_conversation_time:
@@ -178,6 +193,7 @@ async def _tool_get_context(
         project_name=project or None,
         wiki_page_count=wiki_page_count,
         due_labels=due_labels or None,
+        open_question=open_question,
     )
     await ctx.event_bus.publish(
         "tool.called",

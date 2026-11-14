@@ -159,6 +159,72 @@ class TestSQLiteMemoryRepo:
         assert block["content"] == "block content"
         assert block["block_type"] == "system"
 
+    def test_delete_many_is_physical(self, memory_repo: SQLiteMemoryRepository, sqlite_conn):
+        """memories / 補助行 / 両方向のリンクを消し、戻り値は memories の行数。"""
+        for i in range(3):
+            memory_repo.save(self._make_memory(f"memory_2025010100000{i}", f"ramen{i}"))
+        db = sqlite_conn.get_memory_db()
+        db.execute(
+            "INSERT INTO memory_links (source_key, target_key) VALUES (?, ?)",
+            ("memory_20250101000000", "memory_20250101000002"),
+        )
+        db.execute(
+            "INSERT INTO memory_links (source_key, target_key) VALUES (?, ?)",
+            ("memory_20250101000002", "memory_20250101000000"),
+        )
+        db.commit()
+
+        result = memory_repo.delete_many(["memory_20250101000000", "memory_20250101000001"])
+
+        assert result.is_ok
+        assert result.value == 2
+        assert memory_repo.find_by_key("memory_20250101000000").value is None
+        assert memory_repo.find_by_key("memory_20250101000001").value is None
+        assert memory_repo.find_by_key("memory_20250101000002").value is not None
+        # save が作る memory_strength も道連れ（残るのは消していないキーだけ）
+        rows = db.execute("SELECT memory_key FROM memory_strength").fetchall()
+        assert [r["memory_key"] for r in rows] == ["memory_20250101000002"]
+        # 両方向（source 側 / target 側）のリンクが消える
+        assert db.execute("SELECT COUNT(*) AS n FROM memory_links").fetchone()["n"] == 0
+        # memories_fts は memories_ad トリガに任せる（明示削除しない）
+        assert memory_repo.search_keyword("ramen0").value == []
+
+    def test_find_obsolete(self, memory_repo: SQLiteMemoryRepository):
+        """archived / tombstoned / consolidated（旧 gist）を種別つきで返す。
+
+        種別が要るのは、gist だけは Wiki 側に本文のコピーが無いので
+        消す前に退避する必要があるため（#54 レビュー指摘 1）。
+        """
+        memory_repo.save(self._make_memory("k_active", "active"))
+        for key in ("k_archived", "k_tombstoned"):
+            mem = self._make_memory(key, key)
+            mem.lifecycle_status = key.removeprefix("k_")
+            memory_repo.save(mem)
+        gist = self._make_memory("k_gist", "gist")
+        gist.source_type = "consolidated"
+        memory_repo.save(gist)
+
+        result = memory_repo.find_obsolete()
+
+        assert result.is_ok
+        rows = {r["key"]: r for r in result.value}
+        assert sorted(rows) == ["k_archived", "k_gist", "k_tombstoned"]
+        assert rows["k_gist"]["source_type"] == "consolidated"
+        assert rows["k_archived"]["lifecycle_status"] == "archived"
+
+    def test_dump_rows_returns_full_content_before_delete(self, memory_repo: SQLiteMemoryRepository):
+        """退避用の読み出しは本文・タグ・日時まで返す（消す前に書ける形）。"""
+        mem = self._make_memory("k_gist", "要約された本文")
+        mem.tags = ["project:x"]
+        memory_repo.save(mem)
+
+        dumped = memory_repo.dump_rows(["k_gist", "k_missing"])
+
+        assert dumped.is_ok
+        assert len(dumped.value) == 1
+        assert dumped.value[0]["content"] == "要約された本文"
+        assert dumped.value[0]["created_at"]
+
     def test_list_and_delete_blocks(self, memory_repo: SQLiteMemoryRepository):
         memory_repo.save_block("b1", "c1")
         memory_repo.save_block("b2", "c2")

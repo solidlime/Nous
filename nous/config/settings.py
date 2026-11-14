@@ -167,6 +167,7 @@ class ConsolidationConfig(BaseModel):
     Provider/key/model default to ``memory_enrichment`` unless overridden here.
     """
 
+    enabled: bool = Field(default=False, description="起動時に ConsolidationWorker を回すか（Zero Inbox で既定無効）")
     llm_gist_enabled: bool = Field(
         default=True, description="LLM による gist 統合を有効化（False なら従来の連結 gist）"
     )
@@ -336,33 +337,19 @@ class WikiConfig(BaseModel):
     journal_activity_chars: int = 12000  # 営みの材料に使う合計文字数の上限
     # 日記生成後に感情・体調を 1 回反映する（LLM 呼び出し +1）。
     journal_apply_state: bool = True
-    # 矛盾整理（#39）。wiki 層は編纂プロンプトの conflicts で拾い（追加呼び出しなし）、
-    # 記憶層は週次掃除で classify_contradiction を回す（LLM は max_pairs でハードストップ）。
-    conflict_sweep_enabled: bool = True
+    # 矛盾整理（#39/#55）。編纂プロンプトの conflicts で拾い（追加呼び出しなし）、
+    # 解消は resolved:true で質問を閉じる。記憶層の週次掃除は Zero Inbox で退役（#54）。
     conflict_check_enabled: bool = True  # wiki 編纂プロンプトに conflicts/questions を要求するか
-    memory_conflict_max_pairs: int = 10  # 1 回の掃除で LLM に渡す候補ペア上限
-    memory_conflict_interval_hours: int = 168  # 掃除の間隔（7 日）
-    memory_conflict_min_jaccard: float = 0.5  # 候補抽出の本文類似度しきい値
+    max_open_questions: int = 20  # 未解決の問いの上限（正規化キーで重複は 1 件、#55）
     # 自走調査（#40）。登録済み MCP ツールがある時だけ動く（無ければ何もしない）。
     # mcp-hub の 3 段メタ呼び出しに未対応のため既定は無効（#53）。
     research_enabled: bool = False
     max_research_per_cycle: int = 3  # 1 サイクルで調べる質問数
     research_max_tool_calls: int = 3  # 1 質問あたりのツール実行上限
-    archive_sources: bool = True  # 編纂済みの源記憶を archived へ沈める（削除はしない）
     max_memories_per_topic: int = 40
     max_sources_per_page: int = 40  # ページ 1 枚の sources 上限（超過は分割を強制）
-    # ページ本文を改訂プロンプトに何字まで載せるか。プレビュー（400 字）だけだと
-    # ページ外の古い記述を書き直せず「現在形の嘘」が残る（#44）。
-    page_body_chars: int = 3000
-    # topic のページが引用している（多くは archived 済みの）源記憶を何件まで文脈に戻すか（#44）。
-    revision_source_memories: int = 20
-    # ページ本文の語彙で掘り起こす記憶の件数（0 で無効）。project 単位のバケツしか無いので、
-    # ページ固有の事実はこれで拾う（#44）。
-    revision_recall_memories: int = 8
     # この日数以上更新されていないページは編纂で必ず改訂させる（放置ページ対策）。
     stale_days: int = 7
-    # どのページも引用していない archived 記憶を編纂文脈に戻す件数（編纂漏れの救済）。
-    orphan_archive_memories: int = 20
     max_page_bytes: int = 8192
     provider: str = "openrouter"
     api_key: str | None = None

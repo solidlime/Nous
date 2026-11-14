@@ -17,15 +17,24 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import re
 import threading
 from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nous.application.wiki import vector_index
+from nous.application.wiki.questions import (
+    close_open_questions,
+    dedupe_open_questions,
+    find_open_questions,
+    question_key_of,
+    question_pair_key,
+    question_query_key,
+    source_context_for,
+)
 from nous.application.wiki.research import research
 from nous.domain.shared.result import Failure, Success
 from nous.domain.value_objects import normalize_emotion, normalize_importance
@@ -44,22 +53,17 @@ logger = get_logger(__name__)
 
 #: 編纂対象クラスタの最小記憶数（これ未満の topic はページ化しない）。
 MIN_TOPIC_MEMORIES = 3
-#: wiki 側の時刻は秒精度なので、秒未満の差は stale と見なさない。
-_STALE_SLACK = timedelta(seconds=2)
 
 #: 日記ページの slug 接頭辞（``journal-YYYY-MM-DD``）。topic 編纂の巡回対象外。
 _JOURNAL_SLUG_PREFIX = "journal-"
+_GIST_DUMP_SUBDIR = "_purged"  # 旧 gist を消す前の退避先（<persona>/wiki/_purged/）
+_EVENT_KEY_SAMPLE = 50  # 監査イベントに載せるキーの見本数（全件は DB を膨らませる）
 
 #: LLM に渡す記憶本文の切り詰め長。
 _CONTENT_PREVIEW_CHARS = 300
 
 #: 既存ページ目次で LLM に渡す本文プレビュー長（編纂対象外のページ）。
 _PAGE_PREVIEW_CHARS = 400
-#: 編纂対象 topic のページに渡す本文長。全文を渡さないと、プレビュー外の古い文を
-#: 書き直せず「現在形の嘘」が残る（#44）。
-
-#: ページ本文の語彙で記憶を掘り起こすときのトークン（英数 3 字以上 / カタカナ / 漢字連）。
-_TOKEN_RE = re.compile(r"[a-z][a-z0-9_-]{2,}|[ァ-ヶー]{2,}|[一-龥]{2,}")
 
 _WIKI_PROMPT = """あなたは長期記憶を編纂する司書です。以下の記憶クラスタと既存 wiki ページを読み、
 wiki ページ（Markdown 本文）を作成または改訂してください。
@@ -313,7 +317,7 @@ class WikiWorker:
     ) -> list[tuple[str, list[Memory]]]:
         """クラスタ（topic slug, 記憶リスト）を返す。cycle 上限 topics_per_cycle 件。
 
-        優先度: source 腐敗/更新のある topic（§4.6 腐敗検出）→ 記憶数降順。
+        優先度: 最後に編纂された時刻が古い順（未編纂は最優先）→ 記憶数降順。
         """
         buckets: dict[str, list[Memory]] = {}
         for m in memories:
@@ -323,18 +327,17 @@ class WikiWorker:
                 continue
             buckets.setdefault(_topic_of(m), []).append(m)
 
-        stale = self._stale_topics(store, memories, persona)
         last_compiled = self._last_compiled(store)
-        # 既にページのある topic は新着 1 件でも巡回対象にする。源を archive すると
+        # 既にページのある topic は新着 1 件でも巡回対象にする。編纂で源を物理削除すると
         # active が減り、MIN_TOPIC_MEMORIES の下限でその topic が永久に選ばれなくなるため。
         topics = [
             (slug, mems)
             for slug, mems in buckets.items()
             if len(mems) >= (1 if slug in last_compiled else MIN_TOPIC_MEMORIES)
         ]
-        # 並び順: stale 先頭 → 最後に編纂された時刻が古い順（未編纂は "" で最優先）
+        # 並び順: 最後に編纂された時刻が古い順（未編纂は "" で最優先）
         # → 同順位は記憶数降順。これで小クラスタにも巡回が回る。
-        topics.sort(key=lambda item: (item[0] not in stale, last_compiled.get(item[0], ""), -len(item[1])))
+        topics.sort(key=lambda item: (last_compiled.get(item[0], ""), -len(item[1])))
         selected = topics[: self._cfg.topics_per_cycle]
         return [(slug, self._most_recent(mems)) for slug, mems in selected]
 
@@ -349,61 +352,43 @@ class WikiWorker:
                 latest[topic] = page.updated
         return latest
 
-    def _stale_topics(self, store: WikiStore, memories: list[Memory], persona: str) -> set[str]:
-        """source が消滅・tombstoned・またはページより新しい topic を返す。
+    def _delete_sources(self, ctx, persona: str, sources: Iterable[str], seen: set[str]) -> int:
+        """編纂に消化された源記憶を物理削除する（Wiki が正本。inbox には残さない）。
 
-        archived は「意図的に沈めた」状態（decay の忘却 / wiki への吸収）なので stale にしない。
-        ここで stale にすると毎サイクル同じ topic を編纂し続ける（無限再編纂）。
+        同じ key を複数ページ／日記が引用しうるので ``seen`` で cycle 内の二重計上を防ぐ。
+        失敗したキーは ``seen`` に入れない（次サイクルで再挑戦させる）。
         """
-        by_key = {m.key: m for m in memories}
-        stale: set[str] = set()
-        for page in store.list_pages():
-            if page.slug.startswith(_JOURNAL_SLUG_PREFIX) or not page.sources:
-                continue
-            topic = _topic_of_page(page)
-            for key in page.sources:
-                memory = by_key.get(key)
-                if memory is None or memory.lifecycle_status == "tombstoned":
-                    stale.add(topic)
-                    break
-                if memory.lifecycle_status != "active":
-                    continue
-                if _page_is_behind(page.updated, getattr(memory, "updated_at", None) or memory.created_at):
-                    stale.add(topic)
-                    break
-        return stale
-
-    def _archive_sources(self, ctx, sources: list[str], seen: set[str], known: dict[str, Memory] | None = None) -> int:
-        """編纂済みの源記憶を archived へ沈める（decay と同じ lifecycle 遷移）。
-
-        削除はしない: ``page.sources`` は memory key を参照し続けるので、消すと腐敗検出が壊れる。
-        archived は既定の検索対象外（SearchQuery.lifecycle_status="active"）なので、
-        検索面からは実質消える。tombstone は行わない（不可逆なのは decay 側の領分）。
-        ``sources`` は active な記憶からのみ選ばれる（SELECT 段で除外済み）ので、
-        戻り値はそのまま「active → archived に遷移した数」になる。ただし同じ key を
-        複数ページが引用しうるので、``seen`` で cycle 内の二重計上を防ぐ。
-        """
-        if not self._cfg.archive_sources:
+        keys = [key for key in dict.fromkeys(sources) if key not in seen]
+        if not keys:
             return 0
-        archived = 0
-        for key in sources:
-            if key in seen:
-                continue
-            # 既に archived の記憶（#44 でページの源として引き戻したもの）を再び「沈めた」と
-            # 数えない。監査の数が実態とずれる。
-            if known is not None:
-                current = known.get(key)
-                if current is not None and current.lifecycle_status != "active":
+        try:
+            result = ctx.memory_repo.delete_many(keys)
+        except Exception:
+            logger.warning("WikiWorker: failed to delete sources for %s", persona, exc_info=True)
+            return 0
+        if not isinstance(result, Success):
+            # delete_many はチャンク単位で all-or-nothing。毒キー 1 件で全部戻ると、
+            # ページは sources を書き終えているので毎サイクル同じ記憶が選ばれ本文が太る。
+            # 1 件ずつ再試行し、なお失敗するキーは tombstone して inbox（active）から外す
+            # （tombstoned は次サイクルの _purge_obsolete が拾う）。
+            logger.warning("WikiWorker: batch delete failed, retrying per key: %s", result.error)
+            deleted = 0
+            for key in keys:
+                one = ctx.memory_repo.delete_many([key])
+                if isinstance(one, Success):
+                    seen.add(key)
+                    deleted += 1
                     continue
-            try:
-                result = ctx.memory_repo.update(key, lifecycle_status="archived")
-            except Exception:
-                logger.warning("WikiWorker: failed to archive source %s", key, exc_info=True)
-                continue
-            if isinstance(result, Success):
+                ctx.memory_repo.tombstone(key)
                 seen.add(key)
-                archived += 1
-        return archived
+                logger.warning("WikiWorker: source %s could not be deleted; tombstoned", key)
+            if deleted and self.vector_enabled:
+                vector_index.drop_memories(self._settings, persona, [k for k in keys if k in seen])
+            return deleted
+        seen.update(keys)
+        if self.vector_enabled:
+            vector_index.drop_memories(self._settings, persona, keys)
+        return int(result.value)
 
     def _repair_links(self, store: WikiStore) -> int:
         """dangling な wikilink をプレーンテキストにする（repoint は意味判断が要るので削除側に倒す）。"""
@@ -441,11 +426,20 @@ class WikiWorker:
 
         now = get_now(self._cfg.run_at_tz)
         store = WikiStore(self._settings.data_root, persona)
+        # Zero Inbox: Wiki/日記が吸収済みの記憶を先に物理削除する（旧 archived の溜まり場を消す）。
+        purged, purged_keys = self._purge_obsolete(ctx, persona)
+        if purged:
+            self._record_event(
+                ctx,
+                persona,
+                f"purged {purged} obsolete memories",
+                {"purged": purged, "keys": purged_keys[:_EVENT_KEY_SAMPLE]},
+            )
+        self._dedupe_open_questions(ctx, persona)
         all_result = ctx.memory_repo.find_all()
         memories: list[Memory] = list(all_result.value) if isinstance(all_result, Success) else []
-        archived_seen: set[str] = set()
-        by_key = {m.key: m for m in memories}
-        self._compile_journal(ctx, persona, store, now)
+        deleted_seen: set[str] = set()
+        journal_sources = self._compile_journal(ctx, persona, store, now)
         questions: list[dict] = []
         topics = self._select_topics(memories, now, store, persona)
         if not topics:
@@ -462,10 +456,7 @@ class WikiWorker:
             )
         for topic, selected in topics:
             try:
-                questions.extend(
-                    self._compile_topic(ctx, persona, store, topic, selected, now, archived_seen, all_by_key=by_key)
-                    or []
-                )
+                questions.extend(self._compile_topic(ctx, persona, store, topic, selected, now, deleted_seen) or [])
             except Exception:
                 logger.exception("WikiWorker: topic=%s failed", topic)
                 self._record_event(ctx, persona, f"error: topic {topic} failed", None)
@@ -475,31 +466,102 @@ class WikiWorker:
         repaired = self._repair_links(store)
         if repaired:
             logger.info("WikiWorker: persona=%s repaired %d pages with dangling links", persona, repaired)
-        # 記憶層の矛盾掃除（#39）: 週 1 回だけ。候補抽出は LLM 0 回、判定は上限付き。
-        self._sweep_memory_conflicts(ctx, persona, memories, now)
+        # 日記が取り込んだ源記憶も物理削除する（ページが正本）。
+        self._delete_sources(ctx, persona, journal_sources, deleted_seen)
+
+    def _purge_obsolete(self, ctx, persona: str) -> tuple[int, list[str]]:
+        """archived / tombstoned / consolidated（旧 gist）を cycle 冒頭で一括物理削除する。
+
+        ``consolidated`` だけは**消す前に JSONL へ退避する**。gist は Wiki の topic 候補から
+        除外されているので、Wiki 側に本文のコピーが無い（消したら二度と戻らない）。
+        退避に失敗したら gist は消さない（fail-closed）。戻り値は (削除件数, 消したキー)。
+        """
+        try:
+            found = ctx.memory_repo.find_obsolete()
+        except Exception:
+            logger.warning("WikiWorker: obsolete key lookup failed for %s", persona, exc_info=True)
+            return 0, []
+        if not isinstance(found, Success) or not found.value:
+            return 0, []
+        rows = found.value
+        gist_keys = [r["key"] for r in rows if r.get("source_type") == "consolidated"]
+        keys = [r["key"] for r in rows if r.get("source_type") != "consolidated"]
+        if gist_keys:
+            if self._dump_gists(ctx, persona, gist_keys):
+                keys.extend(gist_keys)
+            else:
+                self._record_event(
+                    ctx,
+                    persona,
+                    "warning: gist purge skipped (dump failed)",
+                    {"keys": len(gist_keys)},
+                )
+        if not keys:
+            return 0, []
+        try:
+            result = ctx.memory_repo.delete_many(keys)
+        except Exception:
+            logger.warning("WikiWorker: purge failed for %s", persona, exc_info=True)
+            return 0, []
+        if not isinstance(result, Success):
+            logger.warning("WikiWorker: purge failed for %s: %s", persona, result.error)
+            return 0, []
+        if self.vector_enabled:
+            vector_index.drop_memories(self._settings, persona, keys)
+        logger.info("WikiWorker: persona=%s purged %d obsolete memories", persona, result.value)
+        return int(result.value), keys
+
+    def _dump_gists(self, ctx, persona: str, keys: list[str]) -> bool:
+        """旧 gist の本文を ``<persona>/wiki/_purged/gists-YYYYMMDD.jsonl`` に退避する。
+
+        失敗したら False を返し、呼び手は gist を消さない（不可逆な loss を防ぐ）。
+        """
+        from nous.domain.shared.time_utils import get_now
+
+        dumped = ctx.memory_repo.dump_rows(keys)
+        if not isinstance(dumped, Success) or not dumped.value:
+            logger.warning("WikiWorker: gist dump read failed for %s", persona)
+            return False
+        day = get_now(self._cfg.run_at_tz).strftime("%Y%m%d")
+        path = Path(self._settings.data_root) / persona / "wiki" / _GIST_DUMP_SUBDIR / f"gists-{day}.jsonl"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as fh:
+                for row in dumped.value:
+                    fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+        except Exception:
+            logger.warning("WikiWorker: gist dump write failed for %s", persona, exc_info=True)
+            return False
+        logger.info("WikiWorker: persona=%s dumped %d gists to %s", persona, len(dumped.value), path)
+        return True
 
     # ------------------------------------------------------------------
     # 日記（前日 JST の記憶 → 1 ページ）
     # ------------------------------------------------------------------
 
-    def _compile_journal(self, ctx, persona: str, store: WikiStore, now: datetime) -> None:
-        """前日（JST）の記憶を 1 ページの日記にまとめる。0 件なら何もしない。
+    def _compile_journal(self, ctx, persona: str, store: WikiStore, now: datetime) -> list[str]:
+        """前日（JST）の記憶を 1 ページの日記にまとめる。取り込んだ sources を返す。
 
         同じ日に 2 回走っても ``journal-YYYY-MM-DD`` の上書きで 1 ページのまま。
         失敗は監査に残してサイクルは続ける（日記は編纂の前提条件ではない）。
         """
         if not self._cfg.journal_enabled:
-            return
+            return []
         day = (now - timedelta(days=1)).date()
+        start, end = self._journal_window(day, now.tzinfo)
         try:
-            memories = self._journal_memories(ctx, day, now)
-            activity = self._journal_activity(ctx, persona, day, now)
+            memories = self._journal_memories(ctx, start, end, now.tzinfo)
+            activity = self._journal_activity(ctx, persona, start, end, now.tzinfo)
             # 記憶が 0 件でも、その日の営みが読めれば日記は作る（活動だけの日がある）。
             if not memories and not activity:
-                return
+                return []
             slug = f"{_JOURNAL_SLUG_PREFIX}{day.isoformat()}"
             title = f"{day.isoformat()} の記録"
             existed = store.read_page(slug).is_ok
+            # 源記憶は物理削除されるので、2 回目サイクルでは材料が 0 件になる。
+            # その状態で書き直すと痩せた日記で上書きするので、既存ページを残す。
+            if existed and not memories:
+                return []
             # sources は候補（その日の記憶）からだけ作る。LLM に選ばせない。
             # 営み（session_events）は記憶ではないので sources には入れない。
             sources = tuple(m.key for m in memories)
@@ -537,6 +599,8 @@ class WikiWorker:
         except Exception as e:
             logger.warning("WikiWorker: journal %s failed: %s", day, e)
             self._record_event(ctx, persona, f"error: journal {day}: {e}", None)
+            return []
+        return list(sources)
 
     def _apply_journal_state(self, ctx, persona: str, slug: str, memories: list[Memory], body: str) -> None:
         """日記から感情・体調を 1 回だけ推定して persona 状態へ反映する。
@@ -603,20 +667,35 @@ class WikiWorker:
         material = "\n".join(m.content[:_CONTENT_PREVIEW_CHARS] for m in memories)
         return _STATE_PROMPT.format(body=body, memories=material)
 
-    def _journal_memories(self, ctx, day: date, now: datetime) -> list[Memory]:
-        """``day``（JST）に作られた記憶を created_at 昇順で最大 journal_max_sources 件。
+    def _journal_window(self, day: date, tz: tzinfo | None) -> tuple[datetime, datetime]:
+        """日記 1 日分の窓 ``[start, end)``。日界は ``run_at_hour``（既定 03:00）。
 
-        archived も拾う。同日 2 回目のサイクルでは 1 回目が sources を archived に沈めて
-        いるので、active に絞ると再実行のたびに痩せた日記で上書きしてしまう。
+        カレンダー日で切ると、00:00〜run_at_hour の記憶が「当日の topic 編纂」で先に
+        物理削除され、翌日の日記（同じ記憶を材料にする）から抜け落ちる。
+        """
+        hour = self._cfg.run_at_hour if self._cfg.run_at_hour >= 0 else 0
+        start = datetime.combine(day, time(hour=hour), tzinfo=tz)
+        return start, start + timedelta(days=1)
+
+    def _journal_memories(self, ctx, start: datetime, end: datetime, tz: tzinfo | None) -> list[Memory]:
+        """``[start, end)``（日記の 1 日）に作られた記憶を created_at 昇順で上限まで。
+
+        tombstoned 以外は拾う。同日 2 回目のサイクルでは 1 回目が源記憶を物理削除して
+        いるので、材料 0 件での上書きを呼び出し側が避ける（``existed and not memories``）。
         """
         result = ctx.memory_repo.find_all()
         memories: list[Memory] = list(result.value) if isinstance(result, Success) else []
-        tz = now.tzinfo
-        picked = [m for m in memories if m.lifecycle_status != "tombstoned" and _local_day(m.created_at, tz) == day]
-        picked.sort(key=lambda m: m.created_at)
+        picked = []
+        for memory in memories:
+            if memory.lifecycle_status == "tombstoned":
+                continue
+            at = _aware(memory.created_at, tz)
+            if start <= at < end:
+                picked.append(memory)
+        picked.sort(key=lambda m: _aware(m.created_at, tz))
         return picked[: self._cfg.journal_max_sources]
 
-    def _journal_activity(self, ctx, persona: str, day: date, now: datetime) -> str:
+    def _journal_activity(self, ctx, persona: str, start: datetime, end: datetime, tz: tzinfo | None) -> str:
         """``day``（JST）の営みをプロンプト用の 1 行/件の文字列にする。
 
         材料は pi hook が残した ``session_events``（``turn.completed`` の発話、
@@ -629,9 +708,6 @@ class WikiWorker:
         """
         if not self._cfg.journal_include_activity:
             return ""
-        tz = now.tzinfo
-        start = datetime.combine(day, time.min, tzinfo=tz)
-        end = start + timedelta(days=1)
         try:
             from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
 
@@ -714,12 +790,11 @@ class WikiWorker:
         topic: str,
         memories: list[Memory],
         now: datetime,
-        archived_seen: set[str],
-        all_by_key: dict[str, Memory] | None = None,
+        seen: set[str],
     ) -> list[dict]:
         """1 topic 分を編纂する。戻り値は調査に回す問い（``topic`` を埋めたもの）。"""
         pages = store.list_pages()
-        memories = self._topic_memories(memories, pages, topic, all_by_key or {})
+        memories = self._topic_memories(memories)
         payload, error, attempt = self._ask_and_parse(topic, memories, pages, now)
         if payload is None:
             self._record_event(
@@ -749,7 +824,7 @@ class WikiWorker:
         deleted_slugs: set[str] = set()
         for page in page_dicts:
             try:
-                if self._apply_page(ctx, persona, store, topic, page, candidates, existing_slugs, archived_seen):
+                if self._apply_page(ctx, persona, store, topic, page, candidates, existing_slugs, seen):
                     compiled += 1
                     written_slugs.add(str(page.get("slug")))
                     deleted_slugs.update(str(d) for d in page.get("delete", []) or [] if isinstance(d, str))
@@ -915,7 +990,7 @@ class WikiWorker:
         page: dict,
         candidates: dict[str, Memory],
         existing_slugs: set[str],
-        archived_seen: set[str],
+        seen: set[str],
     ) -> bool:
         """1 ページ分を検証 → ファイル書込み → 索引更新 → 監査。適用したら True。"""
         slug = page.get("slug")
@@ -936,14 +1011,11 @@ class WikiWorker:
             raise ValueError(f"page {slug} has too many sources ({len(sources)})")
 
         existing = store.read_page(slug)
-
         existed = isinstance(existing, Success)
         if isinstance(existing, Success):
-            # 源は減らさない。改訂で sources から落ちた記憶は「どのページも引用していない
-            # archived」になり、後から訂正を引っぱれなくなる（#44 で manual 廃止がこれで
-            # 6 日間見えなかった）。
-            kept = [k for k in existing.value.sources if k in candidates]
-            sources = list(dict.fromkeys([*sources, *kept]))
+            # 源は減らさない。消えた記憶のキーは「そのページを支えた履歴」で、
+            # 改訂で落とすと本文の根拠がどこからも読めなくなる。
+            sources = list(dict.fromkeys([*sources, *existing.value.sources]))
             if len(sources) > self._cfg.max_sources_per_page:
                 sources = sources[: self._cfg.max_sources_per_page]
         written = store.write_page(
@@ -955,7 +1027,8 @@ class WikiWorker:
         )
         if isinstance(written, Failure):
             raise RuntimeError(f"write_page failed: {written.error}")
-        archived = self._archive_sources(ctx, sources, archived_seen, candidates)
+        # ページ本文がディスクに載ってから inbox を消す（先に消すと本文が失われる）。
+        deleted = self._delete_sources(ctx, persona, sources, seen)
         if self.vector_enabled:
             vector_index.sync_page(self._settings, persona, slug, title, body)
 
@@ -976,7 +1049,7 @@ class WikiWorker:
                 "topic": topic,
                 "sources": sources,
                 "deletes": page.get("delete", []),
-                "archived": archived,
+                "deleted": deleted,
                 "page_hash": _hash_of(title, body),
             },
         )
@@ -1029,6 +1102,7 @@ class WikiWorker:
                 )
                 continue
             resolved = bool(item.get("resolved"))
+            key = question_pair_key(a, b, str(item.get("kind") or ""))
             self._record_event(
                 ctx,
                 persona,
@@ -1043,7 +1117,10 @@ class WikiWorker:
                     f"{a} と {b}: {detail}",
                     topic=topic,
                     project=self._page_project(store, a),
+                    key=key,
                 )
+            else:
+                self._close_open_question(ctx, persona, key, topic=topic)
 
         for item in questions:
             query = str(item.get("query") or "").strip()
@@ -1057,6 +1134,7 @@ class WikiWorker:
                 f"{query}（理由: {why}）" if why else query,
                 topic=target,
                 project=self._page_project(store, target),
+                key=question_query_key(target, query),
             )
 
     @staticmethod
@@ -1075,21 +1153,68 @@ class WikiWorker:
         project = getattr(page.value, "project", None)
         return str(project) if project else None
 
-    def _record_open_question(
-        self, ctx, persona: str, question: str, *, topic: str, project: str | None = None
-    ) -> None:
-        """未解決の問いを記憶に 1 件置く（本文ハッシュで重複を抑止）。
+    def _dedupe_open_questions(self, ctx, persona: str) -> None:
+        """溜まった未解決の問いを本文の正規化で畳み、上限まで削る（#55）。"""
+        cap = max(1, int(self._cfg.max_open_questions))
+        try:
+            deleted, remaining = asyncio.run(dedupe_open_questions(ctx, persona, cap=cap))
+        except Exception:
+            logger.warning("WikiWorker: open-question dedupe failed", exc_info=True)
+            return
+        if deleted:
+            self._record_event(
+                ctx,
+                persona,
+                f"open questions deduped: {deleted} removed ({remaining} left)",
+                {"removed": deleted, "remaining": remaining},
+                event_type="wiki.conflict",
+            )
 
+    def _close_open_question(self, ctx, persona: str, key: str, *, topic: str) -> int:
+        """解消した問いを閉じる（Zero Inbox: 消す）。"""
+        try:
+            closed = asyncio.run(close_open_questions(ctx, persona, key))
+        except Exception as e:  # noqa: BLE001 — worker を落とさない
+            logger.warning("WikiWorker: close open question failed: %s", e)
+            closed = 0
+        if closed:
+            self._record_event(
+                ctx,
+                persona,
+                f"question closed: {key}",
+                {"topic": topic, "key": key, "closed": closed},
+                event_type="wiki.conflict",
+            )
+        return closed
+
+    def _record_open_question(
+        self, ctx, persona: str, question: str, *, topic: str, project: str | None = None, key: str
+    ) -> None:
+        """未解決の問いを記憶に 1 件置く（正規化キーで重複を抑止、#55）。
+
+        キーは「何についての問いか」だけで決まる（:mod:`nous.application.wiki.questions`）。
+        上限 ``max_open_questions`` を超えたら新規作成しない。
         失敗を無言で潰さない: ``create_memory`` は意味的重複（>=0.75）で
         ``DuplicateMemoryError`` を返すので、監査に理由を残す。
         """
-        digest = hashlib.sha256(question.encode("utf-8")).hexdigest()[:16]
         try:
-            for memory in self._open_questions(ctx):
-                if getattr(memory, "source_context", "") == f"open-question:{digest}":
-                    return  # 同じ問いは一度だけ（毎サイクル増やさない）
+            existing = self._open_questions(ctx)
         except Exception:
-            logger.debug("WikiWorker: open-question dedupe lookup failed", exc_info=True)
+            logger.debug("WikiWorker: open-question lookup failed", exc_info=True)
+            existing = []
+        for memory in existing:
+            if question_key_of(memory) == key:
+                return  # 同じ問いは一度だけ（毎サイクル増やさない）
+        cap = max(1, int(self._cfg.max_open_questions))
+        if len(existing) >= cap:
+            self._record_event(
+                ctx,
+                persona,
+                f"skipped: open-question cap reached ({cap})",
+                {"topic": topic, "key": key, "open": len(existing)},
+                event_type="wiki.conflict",
+            )
+            return
 
         tags = ["open-question"] if project is None else [f"project:{project}", "open-question"]
         try:
@@ -1101,7 +1226,7 @@ class WikiWorker:
                     emotion_intensity=0.0,
                     tags=tags,
                     privacy_level="private",
-                    source_context=f"open-question:{digest}",
+                    source_context=source_context_for(key),
                     kind="semantic",
                     source_type="llm_inferred",
                 )
@@ -1129,131 +1254,13 @@ class WikiWorker:
             ctx,
             persona,
             f"question recorded: {question[:60]}",
-            {"topic": topic, "project": project, "digest": digest},
+            {"topic": topic, "project": project, "key": key},
             event_type="wiki.conflict",
         )
 
     @staticmethod
     def _open_questions(ctx) -> list:
-        from nous.domain.shared.result import Success
-
-        result = ctx.memory_repo.find_all()
-        if not isinstance(result, Success):
-            return []
-        return [
-            m
-            for m in result.value
-            if "open-question" in (getattr(m, "tags", ()) or ())
-            and str(getattr(m, "source_context", "")).startswith("open-question:")
-        ]
-
-    def _last_sweep_at(self, ctx, persona: str) -> datetime | None:
-        """直近の**成功した**記憶層掃除の時刻（session_events から取る）。
-
-        ``error:`` / ``warning:`` 行は掃除済みと数えない（1 回の失敗で 168 時間ゲートが
-        閉じて週次掃除が丸ごと飛ぶのを防ぐ）。
-        """
-        try:
-            from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
-
-            events = SessionEventRepository(ctx.connection).get_by_persona(
-                persona, event_type="wiki.conflict_sweep", limit=10
-            )
-        except Exception:
-            return None
-        for event in events or ():
-            summary = str(getattr(event, "summary", "") or "")
-            if summary.startswith(("error:", "warning:")):
-                continue
-            ts = event.timestamp
-            return ts if ts.tzinfo else ts.replace(tzinfo=UTC)
-        return None
-
-    def _sweep_memory_conflicts(self, ctx, persona: str, memories: list[Memory], now: datetime) -> None:
-        """記憶層の矛盾掃除（週 1 回）。候補抽出は LLM 0 回、判定は上限付き。"""
-        cfg = self._cfg
-        if not cfg.conflict_sweep_enabled:
-            return
-        last = self._last_sweep_at(ctx, persona)
-        if last is not None and (now - last) < timedelta(hours=cfg.memory_conflict_interval_hours):
-            return
-
-        from nous.application.wiki.conflict_sweep import find_candidate_pairs, sweep
-
-        pairs = find_candidate_pairs(
-            memories, min_jaccard=cfg.memory_conflict_min_jaccard, limit=cfg.memory_conflict_max_pairs * 5
-        )
-        if not pairs:
-            self._record_event(
-                ctx, persona, "conflict sweep: no candidates", {"candidates": 0}, event_type="wiki.conflict_sweep"
-            )
-            return
-
-        api_key = cfg.get_effective_api_key(self._settings)
-        if not api_key and self._provider_for_test is None:
-            self._record_event(
-                ctx,
-                persona,
-                "skipped: conflict sweep has no api_key",
-                {"candidates": len(pairs)},
-                event_type="wiki.conflict_sweep",
-            )
-            return
-
-        from nous.infrastructure.llm.factory import get_provider
-
-        try:
-            provider = self._provider_for_test or get_provider(cfg.provider, api_key, cfg.model, cfg.base_url)
-            stats = asyncio.run(
-                sweep(
-                    pairs,
-                    provider=provider,
-                    close=lambda old_key, new_key: self._close_contradicted(ctx, old_key, new_key),
-                    max_pairs=cfg.memory_conflict_max_pairs,
-                )
-            )
-        except Exception as e:
-            # ``error:`` を付けると cycle 失敗として数えられ 30 分後の再挑戦を誘発する
-            # （編纂本体の失敗とは別物）。掃除の失敗は warning に留める。
-            logger.warning("WikiWorker: conflict sweep failed: %s", e)
-            self._record_event(
-                ctx,
-                persona,
-                f"warning: conflict sweep failed: {e}",
-                {"candidates": len(pairs)},
-                event_type="wiki.conflict_sweep",
-            )
-            return
-        # 全件失敗（判定不能＋ close 失敗）なら成功を名乗らない（数字が成功に見えると
-        # 168h ゲートが閉じ、実質 0 件のまま 1 週間止まる）。
-        all_failed = bool(stats["checked"]) and stats["failed"] >= stats["checked"]
-        prefix = "warning: " if all_failed else ""
-        self._record_event(
-            ctx,
-            persona,
-            f"{prefix}conflict sweep: checked {stats['checked']} failed {stats['failed']} closed {stats['closed']}",
-            stats,
-            event_type="wiki.conflict_sweep",
-        )
-
-    def _close_contradicted(self, ctx, old_key: str, new_key: str) -> None:
-        """古い記憶の validity window を閉じ、新しい記憶へ鎖で繋ぐ（削除はしない）。
-
-        失敗は握り潰さずに投げる（``sweep`` が closed 件数を数えているので、
-        ここで黙ると監査の数字が嘘になる）。
-        """
-        from nous.domain.shared.time_utils import get_now
-
-        repo = ctx.memory_repo
-        new_result = repo.find_by_key(new_key)
-        valid_until = None
-        if getattr(new_result, "is_ok", False) and new_result.value is not None:
-            valid_until = getattr(new_result.value, "valid_from", None)
-        result = repo.update_validity_window(
-            memory_key=old_key, valid_until=valid_until or get_now(), superseded_by=new_key
-        )
-        if isinstance(result, Failure):
-            raise RuntimeError(f"update_validity_window failed for {old_key}: {result.error}")
+        return find_open_questions(ctx)
 
     def _ask_and_parse(
         self, topic: str, memories: list[Memory], pages: list[WikiPage], now: datetime
@@ -1325,82 +1332,10 @@ class WikiWorker:
         }
         return text
 
-    def _topic_memories(
-        self, memories: list[Memory], pages: list[WikiPage], topic: str, all_by_key: dict[str, Memory]
-    ) -> list[Memory]:
-        """cycle の記憶 + その topic のページが引用している記憶を合わせる（#44）。
-
-        源記憶は編纂後に archived へ沈むため、``_select_topics`` の候補から永久に消える。
-        ページが引用している記憶をここで引き戻さないと「ページの根拠」が文脈に無くなり、
-        後から出た訂正を反映できないまま現在形の記述が残る。
-        """
-        budget = max(0, self._cfg.revision_source_memories)
-        if budget:
-            keys = [k for p in pages if _topic_of_page(p) == topic for k in p.sources]
-            cited = [all_by_key[k] for k in dict.fromkeys(keys) if k in all_by_key]
-            cited = [m for m in cited if m.lifecycle_status != "tombstoned"]
-            text = " ".join(p.title + "\n" + p.body for p in pages if _topic_of_page(p) == topic)
-            # 上限に数えられる前に確保する。新しい cycle 記憶で押し出されると
-            # 「ページの根拠が文脈に無い」という元の穴に戻ってしまう（#44）。
-            # 選び方は「ページ本文の珍しい語と重なる順」。新しい順で切ると、ページが今も
-            # 語っている主題（manual）の記憶が古いというだけで落ちる（#44 実測）。
-            restored = {m.key: m for m in _order_by_page_text(cited, text)[:budget]}
-            # 巡回順・関数名のような「本文にしか書かれていない語」で過去の記憶を掘り起こす。
-            # project タグ 1 バケツに 4 ページが同居するので、引用元を戻すだけでは
-            # ページ固有の事実（例: manual 廃止）に届かない（#44）。
-            for m in self._recall_by_text(text, all_by_key.values(), topic):
-                restored.setdefault(m.key, m)
-            # どのページも引用していない archived 記憶を拾い直す。編纂が源を沈めたあと
-            # 引用に漏れると、その事実はどこからも読めなくなる（manual 廃止がこれで
-            # 消えていた）。既に別ページが引用しているものは二重に読ませない。
-            cited_any = {k for p in pages for k in p.sources}
-            orphans = [
-                m
-                for m in all_by_key.values()
-                if m.lifecycle_status == "archived" and m.key not in cited_any and _topic_of(m) == topic
-            ]
-            # 拾う順番は「ページ本文の珍しい語と重なるもの」優先。新しい順だけで埋めると
-            # 直近の archived 20 件が席を食い、6 日前に沈んだ事実には届かない（実測:
-            # manual 廃止の 3 記憶は新しい順で 15/16/18 位）。
-            cap = max(0, self._cfg.orphan_archive_memories)
-            if cap and orphans:
-                for m in _order_by_page_text(orphans, text)[:cap]:
-                    restored.setdefault(m.key, m)
-            slots = max(0, self._cfg.max_memories_per_topic - len(restored))
-            for m in _by_recency(memories)[:slots]:
-                restored.setdefault(m.key, m)
-            return list(restored.values())
+    def _topic_memories(self, memories: list[Memory]) -> list[Memory]:
         return _by_recency(memories)[: self._cfg.max_memories_per_topic]
 
-    def _recall_by_text(self, text: str, candidates: Iterable[Memory], topic: str) -> list[Memory]:
-        """ページ本文の語を含む同じ topic の記憶を拾う（LLM 0 回・決定的）。"""
-        limit = max(0, self._cfg.revision_recall_memories)
-        if not limit or not text:
-            return []
-        tokens = {t for t in _TOKEN_RE.findall(text.lower()) if len(t) >= 3}
-        if not tokens:
-            return []
-        pool = [
-            m
-            for m in candidates
-            if getattr(m, "lifecycle_status", "tombstoned") != "tombstoned" and _topic_of(m) == topic
-        ]
-        if not pool:
-            return []
-        bodies = [(m, m.content.lower()) for m in pool]
-        # 珍しい語ほど重い（IDF 相当）。「active」「archived」のような全ページ共通語で
-        # 埋もれると、`manual` のようなページ固有の語が拾えない。
-        weight = {t: 1.0 / max(1, sum(1 for _, body in bodies if t in body)) for t in tokens}
-        scored: list[tuple[float, Memory]] = []
-        for memory, body in bodies:
-            score = sum(w for t, w in weight.items() if t in body)
-            if score > 0:
-                scored.append((score, memory))
-        scored.sort(key=lambda row: (-row[0], -(row[1].importance or 0.0)))
-        return [row[1] for row in scored[:limit]]
-
     def _build_prompt(self, topic: str, memories: list[Memory], pages: list[WikiPage], now: datetime) -> str:
-        body_chars = max(_PAGE_PREVIEW_CHARS, self._cfg.page_body_chars)
         page_lines = [
             json.dumps(
                 {
@@ -1410,11 +1345,7 @@ class WikiWorker:
                     "updated": p.updated,
                     "days_since_update": _days_since(p.updated, now),
                     "sources": list(p.sources),
-                    **(
-                        {"body": p.body[:body_chars]}
-                        if _topic_of_page(p) == topic
-                        else {"preview": p.body[:_PAGE_PREVIEW_CHARS]}
-                    ),
+                    **({"body": p.body} if _topic_of_page(p) == topic else {"preview": p.body[:_PAGE_PREVIEW_CHARS]}),
                 },
                 ensure_ascii=False,
             )
@@ -1598,26 +1529,6 @@ def _frontmatter_bytes(slug: str, title: str, sources: tuple[str, ...], tag: str
     return len(render_page(page).encode("utf-8"))
 
 
-def _order_by_page_text(memories: list[Memory], text: str) -> list[Memory]:
-    """ページ本文の「珍しい語」と重なる記憶を先に、残りを新しい順に並べる（#44）。
-
-    ページ本文の語は数百あり、"active" のような共通語と "manual" のような固有語が混じる。
-    固有語（渡した記憶のうち 5 件以下にしか出ない語）で当たった記憶を優先しないと、
-    直近の記憶が席を食って古い訂正に届かない（実測: manual 廃止の 3 記憶は新しい順で 15 位）。
-    """
-    ordered = _by_recency(memories)
-    tokens = {t for t in _TOKEN_RE.findall(text.lower()) if len(t) >= 3}
-    if not tokens:
-        return ordered
-    bodies = {m.key: (m.content or "").lower() for m in ordered}
-    rare = {t for t in tokens if 0 < sum(1 for b in bodies.values() if t in b) <= 5}
-    if not rare:
-        return ordered
-    hit = [m for m in ordered if any(t in bodies[m.key] for t in rare)]
-    hit_keys = {m.key for m in hit}
-    return hit + [m for m in ordered if m.key not in hit_keys]
-
-
 def _by_recency(memories: list[Memory]) -> list[Memory]:
     """新しい順（``updated_at`` 優先、無ければ ``created_at``）。"""
 
@@ -1661,33 +1572,6 @@ def _topic_of(memory: Memory) -> str:
             if slug:
                 return f"project-{slug}"
     return "persona"
-
-
-def _page_is_behind(page_updated: str | None, memory_updated: object) -> bool:
-    """ページの更新時刻が記憶より古いか（パース不能なら False = 触らない）。
-
-    wiki 側の時刻は秒精度で切り捨てて保存するので、秒未満の差は無視する（slack 2 秒）。
-    これを入れないと「同じ秒に書いた記憶」で毎サイクル stale 扱いになる。
-    """
-    if not page_updated or memory_updated is None:
-        return False
-    try:
-        page_ts = datetime.fromisoformat(page_updated.replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    if isinstance(memory_updated, str):
-        try:
-            memory_ts = datetime.fromisoformat(memory_updated.replace("Z", "+00:00"))
-        except ValueError:
-            return False
-    elif isinstance(memory_updated, datetime):
-        memory_ts = memory_updated
-    else:
-        return False
-    if page_ts.tzinfo is None or memory_ts.tzinfo is None:
-        page_ts = page_ts.replace(tzinfo=None)
-        memory_ts = memory_ts.replace(tzinfo=None)
-    return page_ts < memory_ts - _STALE_SLACK
 
 
 def _topic_of_page(page: WikiPage) -> str:

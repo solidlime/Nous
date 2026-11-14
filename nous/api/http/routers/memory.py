@@ -313,6 +313,27 @@ def register_memory_routes(mcp) -> None:
             return JSONResponse({"error": "Validation error"}, status_code=422)
         try:
             updates = body.model_dump(exclude_none=True)
+            if updates.pop("resolved", False):
+                # 未解決の問いの解消（#55）。閉じる = 削除なので内容は戻らない。
+                from nous.application.wiki.questions import (
+                    close_open_questions,
+                    delete_memories,
+                    is_open_question,
+                    question_key_of,
+                )
+
+                target = ctx.memory_service.get_memory(key)
+                if not getattr(target, "is_ok", False):
+                    return JSONResponse({"error": "Memory not found"}, status_code=404)
+                question = question_key_of(target.value)
+                if not is_open_question(target.value):
+                    return JSONResponse({"error": "Not an open question"}, status_code=409)
+                closed = (
+                    await close_open_questions(ctx, persona, question)
+                    if question
+                    else await delete_memories(ctx, persona, [target.value])
+                )
+                return JSONResponse({"status": "ok", "resolved": key, "closed": closed})
             if not updates:
                 return JSONResponse({"error": "No valid fields to update"}, status_code=400)
             result = ctx.memory_service.update_memory(key, **updates)

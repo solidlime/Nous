@@ -250,6 +250,79 @@ class MemoryCrudMixin:
             logger.error("Failed to delete memory %s: %s", key, e)
             return Failure(RepositoryError(str(e)))
 
+    _KEY_BATCH = 500  # SQLite の変数上限に収まるチャンク幅
+
+    def delete_many(self, keys: list[str]) -> Result[int, RepositoryError]:
+        """物理削除（不可逆）。memories と、それを参照する行を全部消す。
+
+        memories_fts は memories_ad トリガが消すので明示削除しない。
+        途中で失敗したら rollback して 0 件として返す（半端な削除を残さない）。
+        """
+        unique = list(dict.fromkeys(keys))
+        deleted = 0
+        try:
+            for start in range(0, len(unique), self._KEY_BATCH):
+                chunk = unique[start : start + self._KEY_BATCH]
+                marks = ",".join("?" for _ in chunk)
+                self._db.execute("BEGIN IMMEDIATE")
+                self._db.execute(f"DELETE FROM memory_strength WHERE memory_key IN ({marks})", chunk)
+                self._db.execute(f"DELETE FROM memory_entities WHERE memory_key IN ({marks})", chunk)
+                self._db.execute(f"DELETE FROM memory_versions WHERE memory_key IN ({marks})", chunk)
+                self._db.execute(
+                    f"DELETE FROM memory_links WHERE source_key IN ({marks}) OR target_key IN ({marks})",
+                    [*chunk, *chunk],
+                )
+                cursor = self._db.execute(f"DELETE FROM memories WHERE key IN ({marks})", chunk)
+                deleted += max(0, cursor.rowcount)
+                self._db.commit()
+        except Exception as e:
+            self._db.rollback()
+            logger.error("Failed to delete %d memories: %s", len(unique), e)
+            return Failure(RepositoryError(str(e)))
+        logger.info("Memories deleted: %d", deleted)
+        return Success(deleted)
+
+    def find_obsolete(self) -> Result[list[dict], RepositoryError]:
+        """Wiki が吸収済み / decay が退けた記憶（key と種別）。
+
+        archived と tombstoned と consolidated（旧 gist）が対象。Zero Inbox では
+        これらは物理削除して良いが、**consolidated は Wiki が本文を持っていない**
+        （gist は Wiki の topic 候補から除外される）ので、呼び手は消す前に退避すること。
+        """
+        rows = self._db.execute(
+            "SELECT key, lifecycle_status, source_type FROM memories"
+            " WHERE lifecycle_status IN ('archived', 'tombstoned') OR source_type = 'consolidated'"
+        ).fetchall()
+        return Success(
+            [
+                {
+                    "key": row["key"],
+                    "lifecycle_status": row["lifecycle_status"],
+                    "source_type": row["source_type"],
+                }
+                for row in rows
+            ]
+        )
+
+    def dump_rows(self, keys: list[str]) -> Result[list[dict], RepositoryError]:
+        """削除前の退避用に、記憶の中身を読み出す（読み取り専用）。"""
+        out: list[dict] = []
+        unique = list(dict.fromkeys(keys))
+        try:
+            for start in range(0, len(unique), self._KEY_BATCH):
+                chunk = unique[start : start + self._KEY_BATCH]
+                marks = ",".join("?" for _ in chunk)
+                rows = self._db.execute(
+                    "SELECT key, content, tags, kind, lifecycle_status, source_type, created_at,"
+                    " updated_at, importance, source_context FROM memories"
+                    f" WHERE key IN ({marks})",  # marks are placeholders; values bound  # nosec B608
+                    chunk,
+                ).fetchall()
+                out.extend(dict(row) for row in rows)
+        except Exception as e:
+            return Failure(RepositoryError(str(e)))
+        return Success(out)
+
     def count(self) -> Result[int, RepositoryError]:
         """Count total memories."""
         row = self._db.execute(

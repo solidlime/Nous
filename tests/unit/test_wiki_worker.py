@@ -285,25 +285,6 @@ class TestIndexMaintenance:
         # 実在リンクは残る
         assert "[[project-nous-b]]" in body
 
-    def test_stale_topic_is_prioritized(self, tmp_path) -> None:
-        """source 記憶が tombstoned になった topic は記憶数に関わらず先頭に来る。"""
-        memories = [_mem(f"big{i}", tags=["project:big"]) for i in range(6)]
-        memories += [_mem(f"small{i}", tags=["project:small"]) for i in range(3)]
-        memories += [_mem("small-dead", tags=["project:small"], lifecycle="tombstoned")]
-
-        store = _store(tmp_path)
-        # small 側のページが tombstoned 記憶を source に持つ → stale
-        store.write_page(
-            "project-small-page", "Small", "tombstoned を根拠にしている。", project="small", sources=("small-dead",)
-        )
-
-        worker = WikiWorker(_settings(tmp_path))
-        worker._cfg = worker._cfg.model_copy(update={"topics_per_cycle": 2})
-        slugs = [s for s, _ in worker._select_topics(memories, get_now(), store, "test_ww")]
-
-        assert slugs[0] == "project-small"
-        assert "project-big" in slugs
-
 
 class TestPagesAreUniform:
     """編集保護は廃止。旧 ``manual: true`` のページも編纂の通常対象になる。"""
@@ -361,11 +342,11 @@ class TestPagesAreUniform:
             conn.close()
 
 
-class TestSourceArchiving:
-    """編纂済みの源記憶を archived へ沈める（削除はしない）。"""
+class TestSourceDeletion:
+    """編纂済みの源記憶は物理削除する（Wiki が正本）。"""
 
-    def test_compile_archives_sources(self, tmp_path) -> None:
-        """編纂に使われた source は archived になり、監査行に件数が入る。"""
+    def test_compile_deletes_sources(self, tmp_path) -> None:
+        """編纂に使われた source は消え、監査行に件数が入る。"""
         memories = [_mem(f"a{i}", tags=["project:nous"]) for i in range(3)]
         page = {
             "slug": "project-nous-memory",
@@ -376,55 +357,17 @@ class TestSourceArchiving:
         conn, _ = _setup(tmp_path, memories, llm=_pages_json(page))
         try:
             repo = SQLiteMemoryRepository(conn)
-            statuses = {k: repo.find_by_key(k).value.lifecycle_status for k in ("a0", "a1", "a2")}
-            assert statuses["a0"] == "archived"
-            assert statuses["a1"] == "archived"
-            assert statuses["a2"] == "active", "編纂に使っていない記憶まで沈めてはいけない"
+            assert repo.find_by_key("a0").value is None
+            assert repo.find_by_key("a1").value is None
+            assert repo.find_by_key("a2").value is not None, "編纂に使っていない記憶まで消してはいけない"
             detail = (
                 conn.get_memory_db()
                 .execute("SELECT detail FROM session_events WHERE event_type='wiki.compiled' ORDER BY id DESC LIMIT 1")
                 .fetchone()["detail"]
             )
-            assert json.loads(detail)["archived"] == 2
+            assert json.loads(detail)["deleted"] == 2
         finally:
             conn.close()
-
-    def test_archive_sources_can_be_disabled(self, tmp_path) -> None:
-        """設定で無効にしたら source は active のまま。"""
-        memories = [_mem(f"a{i}", tags=["project:nous"]) for i in range(3)]
-        page = {"slug": "project-nous-memory", "title": "T", "body": "本文", "sources": ["a0"]}
-        conn, _ = _setup(tmp_path, memories, llm=_pages_json(page), cfg_update={"archive_sources": False})
-        try:
-            repo = SQLiteMemoryRepository(conn)
-            assert repo.find_by_key("a0").value.lifecycle_status == "active"
-        finally:
-            conn.close()
-
-
-class TestStaleDetection:
-    def test_archived_source_does_not_make_topic_stale(self, tmp_path) -> None:
-        """archived は意図的に沈めた状態。stale にすると毎サイクル再編纂の無限ループになる。"""
-        memories = [
-            _mem("a0", tags=["project:nous"], lifecycle="archived"),
-            _mem("a1", tags=["project:nous"]),
-            _mem("a2", tags=["project:nous"]),
-        ]
-        store = _store(tmp_path)
-        store.write_page("project-nous-page", "T", "本文", project="nous", sources=("a0",))
-        worker = WikiWorker(_settings(tmp_path))
-        assert worker._stale_topics(store, memories, "test_ww") == set()
-
-    def test_missing_or_tombstoned_source_is_stale(self, tmp_path) -> None:
-        """source が消えた / tombstoned なら stale（ページが古い情報を持つ）。"""
-        memories = [
-            _mem("a0", tags=["project:nous"], lifecycle="tombstoned"),
-            _mem("a1", tags=["project:nous"]),
-        ]
-        store = _store(tmp_path)
-        store.write_page("project-nous-page", "T", "本文", project="nous", sources=("a0",))
-        store.write_page("project-gone-page", "T", "本文", project="gone", sources=("zzz",))
-        worker = WikiWorker(_settings(tmp_path))
-        assert worker._stale_topics(store, memories, "test_ww") == {"project-nous", "project-gone"}
 
 
 class TestTopicRotation:
@@ -536,8 +479,8 @@ class TestSchedule:
         assert worker._next_delay() == 3600
 
 
-class TestCycleScopedArchive:
-    """同じ source を 2 ページが引用しても、archive の計上は cycle 内で 1 回。"""
+class TestCycleScopedDeletion:
+    """同じ source を 2 ページが引用しても、削除の計上は cycle 内で 1 回。"""
 
     def test_duplicate_source_counted_once(self, tmp_path) -> None:
         memories = [_mem(f"a{i}", tags=["project:nous"]) for i in range(3)]
@@ -553,7 +496,7 @@ class TestCycleScopedArchive:
                 .execute("SELECT detail FROM session_events WHERE event_type='wiki.compiled' ORDER BY id")
                 .fetchall()
             ]
-            assert sum(d.get("archived", 0) for d in details) == 1
+            assert sum(d.get("deleted", 0) for d in details) == 1
         finally:
             conn.close()
 
@@ -793,19 +736,23 @@ class TestJournal:
     _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
     _body = "## やったこと\n\n- 日記のテストを書いた\n\n## 決めたこと\n\n- なし"
 
-    def test_only_previous_jst_day_is_collected(self, tmp_path) -> None:
-        """前日 JST の 00:01 と 23:59 だけ拾い、当日 00:01 と一昨日は落とす。"""
+    def test_journal_day_runs_from_run_at_hour(self, tmp_path) -> None:
+        """日記 1 日は [前日 03:00, 当日 03:00)。00:01 の記憶も翌日の日記に入る。
+
+        カレンダー日で切ると 00:00〜03:00 が「当日の topic 編纂」で先に物理削除され、
+        日記から恒常的に抜け落ちる（03:00 実行・日記→topic の順のため）。
+        """
         memories = [
-            _mem_at("old", datetime(2026, 11, 8, 23, 0, tzinfo=_JST)),
-            _mem_at("late", datetime(2026, 11, 9, 23, 59, tzinfo=_JST)),
-            _mem_at("early", datetime(2026, 11, 9, 0, 1, tzinfo=_JST)),
-            _mem_at("today", datetime(2026, 11, 10, 0, 1, tzinfo=_JST)),
+            _mem_at("old", datetime(2026, 11, 8, 23, 0, tzinfo=_JST)),  # 窓の外（さらに前日）
+            _mem_at("late", datetime(2026, 11, 9, 23, 59, tzinfo=_JST)),  # 窓の中
+            _mem_at("early", datetime(2026, 11, 9, 0, 1, tzinfo=_JST)),  # 窓の外（前日の 03:00 より前）
+            _mem_at("today", datetime(2026, 11, 10, 0, 1, tzinfo=_JST)),  # 窓の中（当日 03:00 より前）
         ]
         conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
         try:
-            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now) == ["late", "today"]
             page = _store(tmp_path).read_page(f"journal-{_DAY}").value
-            assert page.sources == ("early", "late")  # created_at 昇順
+            assert page.sources == ("late", "today")  # created_at 昇順
             assert page.title == f"{_DAY} の記録"
             assert page.tags == ("journal", "2026-11")
             assert page.body.startswith("## やったこと")
@@ -816,7 +763,7 @@ class TestJournal:
 
     def test_no_memories_writes_nothing(self, tmp_path) -> None:
         """前日に記憶が無ければページも監査イベントも作らない。"""
-        memories = [_mem_at("today", datetime(2026, 11, 10, 0, 1, tzinfo=_JST))]
+        memories = [_mem_at("today", datetime(2026, 11, 10, 5, 0, tzinfo=_JST))]
         conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
@@ -841,7 +788,7 @@ class TestJournal:
 
     def test_sources_capped_by_config(self, tmp_path) -> None:
         """材料は journal_max_sources 件まで（created_at 昇順で先勝ち）。"""
-        base = datetime(2026, 11, 9, 0, 0, tzinfo=_JST)
+        base = datetime(2026, 11, 9, 3, 0, tzinfo=_JST)  # 日界（run_at_hour=3）ちょうどから
         memories = [_mem_at(f"m{i:02d}", base + timedelta(minutes=i)) for i in range(61)]
         conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
         try:
@@ -1006,15 +953,6 @@ class TestJournalIsolation:
         finally:
             conn.close()
 
-    def test_stale_topics_ignores_journal(self, tmp_path) -> None:
-        """日記の sources が消えても stale 扱いにしない。"""
-        store = self._seed_journal(tmp_path)
-        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
-        try:
-            assert worker._stale_topics(store, [], "test_ww") == set()
-        finally:
-            conn.close()
-
     def test_build_prompt_excludes_journal_pages(self, tmp_path) -> None:
         """topic 編纂プロンプトに日記の slug が載らない（token が日数分だけ膨らむ）。"""
         store = self._seed_journal(tmp_path)
@@ -1062,7 +1000,7 @@ class TestJournalIsolation:
             m.tags = ["project:zzz"]
         conn, worker, ctx = _journal_setup(tmp_path, memories + memory_topic, None)
         order: list[str] = []
-        worker._compile_journal = lambda *a, **k: order.append("journal")  # type: ignore[method-assign]
+        worker._compile_journal = lambda *a, **k: order.append("journal") or []  # type: ignore[method-assign]
         worker._compile_topic = lambda *a, **k: order.append("topic")  # type: ignore[method-assign]
         worker._repair_links = lambda *a, **k: order.append("repair") or 0  # type: ignore[method-assign]
         worker._cfg = worker._cfg.model_copy(update={"journal_enabled": True})
@@ -1075,7 +1013,7 @@ class TestJournalIsolation:
 
     def test_body_budget_leaves_room_for_frontmatter(self, tmp_path) -> None:
         """sources が多くてもページが書ける（本文予算 = max_page_bytes - frontmatter 実測）。"""
-        base = datetime(2026, 11, 9, 0, 0, tzinfo=_JST)
+        base = datetime(2026, 11, 9, 3, 0, tzinfo=_JST)  # 日界（run_at_hour=3）ちょうどから
         memories = [_mem_at(f"memory_key_{i:03d}", base + timedelta(minutes=i)) for i in range(60)]
         body = "x" * 7000
         conn, worker, ctx = _journal_setup(tmp_path, memories, body)
@@ -1193,21 +1131,24 @@ def _sess_event(conn, event_type: str, ts: datetime, detail: dict, persona: str 
 class TestJournalActivity:
     _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
     _day = date(2026, 11, 9)
+    # 日界は run_at_hour（既定 3 時）: [2026-11-09 03:00, 2026-11-10 03:00)
+    _win_start = datetime(2026, 11, 9, 3, 0, tzinfo=_JST)
+    _win_end = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
     _body = "## 活動\n\n- 11:36 起きた\n\n## やったこと\n\n- 直した"
 
     def test_collects_only_that_jst_day_in_time_order(self, tmp_path) -> None:
-        """前日 JST の 2 件だけを時刻昇順で。前日 23:00・当日 00:10 は落とす。"""
+        """窓 [前日 03:00, 当日 03:00) の 3 件を時刻昇順で。前日 23:00 は落とす。"""
         conn, worker, ctx = _journal_setup(tmp_path, [], self._body)
         try:
             _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 15, 20, tzinfo=_JST), {"user_text": "お菓子作り"})
             _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 11, 36, tzinfo=_JST), {"user_text": "起きた"})
             _sess_event(conn, "turn.completed", datetime(2026, 11, 8, 23, 0, tzinfo=_JST), {"user_text": "前の日"})
             _sess_event(conn, "turn.completed", datetime(2026, 11, 10, 0, 10, tzinfo=_JST), {"user_text": "翌日"})
-            activity = worker._journal_activity(ctx, "test_ww", self._day, self._now)
+            activity = worker._journal_activity(ctx, "test_ww", self._win_start, self._win_end, _JST)
             lines = activity.splitlines()
-            assert [line[:6] for line in lines] == ["- 11:3", "- 15:2"]
+            assert [line[:6] for line in lines] == ["- 11:3", "- 15:2", "- 00:1"]
             assert "お菓子作り" in activity
-            assert "前の日" not in activity and "翌日" not in activity
+            assert "前の日" not in activity
         finally:
             conn.close()
 
@@ -1220,7 +1161,7 @@ class TestJournalActivity:
                 "nous.infrastructure.sqlite.session_event_repo.SessionEventRepository.get_by_persona",
                 return_value=[],
             ) as get:
-                worker._journal_activity(ctx, "test_ww", self._day, self._now)
+                worker._journal_activity(ctx, "test_ww", self._win_start, self._win_end, _JST)
             limits = {c.kwargs["event_type"]: c.kwargs["limit"] for c in get.call_args_list if "event_type" in c.kwargs}
             assert limits["place.moved"] == 50
             assert limits["turn.completed"] == 400
@@ -1237,7 +1178,7 @@ class TestJournalActivity:
                 datetime(2026, 11, 9, 9, 5, tzinfo=_JST),
                 {"from": "自室", "to": "観測デッキ", "minutes": 10},
             )
-            activity = worker._journal_activity(ctx, "test_ww", self._day, self._now)
+            activity = worker._journal_activity(ctx, "test_ww", self._win_start, self._win_end, _JST)
             assert "09:05" in activity and "観測デッキ へ移動" in activity
         finally:
             conn.close()
@@ -1251,7 +1192,7 @@ class TestJournalActivity:
                 datetime(2026, 11, 9, 9, 5, tzinfo=_JST),
                 {"name": "Nous開発", "project": "nous"},
             )
-            activity = worker._journal_activity(ctx, "test_ww", self._day, self._now)
+            activity = worker._journal_activity(ctx, "test_ww", self._win_start, self._win_end, _JST)
             assert "09:05" in activity and "Nous開発" in activity
         finally:
             conn.close()
@@ -1290,7 +1231,7 @@ class TestJournalActivity:
                     datetime(2026, 11, 9, 10, i, tzinfo=_JST),
                     {"user_text": "あ" * 200},
                 )
-            activity = worker._journal_activity(ctx, "test_ww", self._day, self._now)
+            activity = worker._journal_activity(ctx, "test_ww", self._win_start, self._win_end, _JST)
             lines = activity.splitlines()
             assert len(activity) <= 400 + len(lines)  # 改行分の余裕だけ許す
             # 等間隔に抜くので、先頭と末尾（朝と夜）は残る。
@@ -1303,7 +1244,7 @@ class TestJournalActivity:
         conn, worker, ctx = _journal_setup(tmp_path, [], self._body, cfg_update={"journal_include_activity": False})
         try:
             _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 11, 36, tzinfo=_JST), {"user_text": "起きた"})
-            assert worker._journal_activity(ctx, "test_ww", self._day, self._now) == ""
+            assert worker._journal_activity(ctx, "test_ww", self._win_start, self._win_end, _JST) == ""
         finally:
             conn.close()
 
@@ -1328,7 +1269,7 @@ class TestJournalActivity:
             # 2026-11-09 15:20 JST = 06:20 UTC。naive は JST ローカルとして扱う想定。
             _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 15, 20, tzinfo=_JST), {"user_text": "お菓子作り"})
             _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 11, 36), {"user_text": "起きた"})
-            activity = worker._journal_activity(ctx, "test_ww", self._day, self._now)
+            activity = worker._journal_activity(ctx, "test_ww", self._win_start, self._win_end, _JST)
             assert "お菓子作り" in activity and "起きた" in activity
         finally:
             conn.close()
@@ -1338,7 +1279,45 @@ class TestJournalActivity:
         conn, worker, ctx = _journal_setup(tmp_path, [], self._body)
         try:
             _sess_event(conn, "session.started", datetime(2026, 11, 9, 9, 5, tzinfo=_JST), {})
-            assert worker._journal_activity(ctx, "test_ww", self._day, self._now) == ""
+            assert worker._journal_activity(ctx, "test_ww", self._win_start, self._win_end, _JST) == ""
+        finally:
+            conn.close()
+
+
+class TestJournalKeepsExistingPage:
+    """源記憶は物理削除されるので、２回目のサイクルは材料 0 件で回ってくる。"""
+
+    _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+
+    def test_existing_page_is_not_overwritten_without_memories(self, tmp_path) -> None:
+        """既存ページがあり、その日の記憶が 0 件なら書かない（瘀せた日記で上書きしない）。"""
+        store = _store(tmp_path)
+        store.write_page(
+            f"journal-{_DAY}",
+            f"{_DAY} の記録",
+            "## やったこと\n\n- 前のサイクルで書いた本文",
+            tags=("journal", "2026-11"),
+        )
+        conn, worker, ctx = _journal_setup(tmp_path, [], None)
+        try:
+            _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 15, 20, tzinfo=_JST), {"user_text": "お菓子作り"})
+            assert worker._compile_journal(ctx, "test_ww", store, self._now) == []
+            page = store.read_page(f"journal-{_DAY}").value
+            assert page.body.startswith("## やったこと\n\n- 前のサイクルで書いた本文")
+        finally:
+            conn.close()
+
+    def test_journal_sources_are_deleted_after_cycle(self, tmp_path, monkeypatch) -> None:
+        """日記が取り込んだ源記憶もサイクル末に物理削除される。"""
+        import nous.domain.shared.time_utils as time_utils
+
+        monkeypatch.setattr(time_utils, "get_now", lambda tz=None: self._now)
+        memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, "## やったこと\n\n- 日記")
+        try:
+            worker._compile_persona(ctx, "test_ww")
+            assert _store(tmp_path).read_page(f"journal-{_DAY}").is_ok
+            assert SQLiteMemoryRepository(conn).find_by_key("a").value is None
         finally:
             conn.close()
 
@@ -1356,14 +1335,58 @@ class TestNoTopicSilence:
         finally:
             conn.close()
 
-    def test_counts_excluded_memories(self, tmp_path) -> None:
-        """全部 archived なら excluded に数える（区別のため）。"""
-        memories = [_mem(f"a{i}", tags=["project:nous"], lifecycle="archived") for i in range(3)]
+    def test_purges_obsolete_memories_before_find_all(self, tmp_path) -> None:
+        """archived / tombstoned / consolidated は cycle 冒頭で物理削除され find_all に残らない。"""
+        memories = [_mem(f"a{i}", tags=["project:nous"], lifecycle="archived") for i in range(2)]
+        memories.append(_mem("t0", tags=["project:nous"], lifecycle="tombstoned"))
+        gist = _mem("g0", tags=["project:nous"])
+        gist.source_type = "consolidated"
+        memories.append(gist)
+        memories += [_mem("live1"), _mem("live2")]  # 未編纂の新着（inbox）
         conn, _worker = _setup(tmp_path, memories, llm=None)
         try:
+            remaining = {m.key for m in SQLiteMemoryRepository(conn).find_all().value}
+            assert remaining == {"live1", "live2"}
+            purged = [s for _t, s, _d in _event_rows(conn) if s.startswith("purged")]
+            assert purged == ["purged 4 obsolete memories"], purged
+            # purge -> find_all の順（残り 2 件で topic 選択が走る）
             skips = [s for _t, s, _d in _event_rows(conn) if s.startswith("skipped: no topic")]
-            assert len(skips) == 1
-            assert "memories=3" in skips[0] and "excluded=3" in skips[0]
+            assert "memories=2" in skips[0] and "excluded=0" in skips[0]
+        finally:
+            conn.close()
+
+    def test_gist_body_is_dumped_before_purge(self, tmp_path) -> None:
+        """旧 gist は Wiki に本文が無いので、消す前に JSONL へ本文を退避する。"""
+        gist = _mem("g0", tags=["project:nous"])
+        gist.source_type = "consolidated"
+        gist.content = "gist の要約本文"
+        conn, _worker = _setup(tmp_path, [gist], llm=None)
+        try:
+            assert SQLiteMemoryRepository(conn).find_all().value == []
+            dumped = list((tmp_path / "test_ww" / "wiki" / "_purged").glob("gists-*.jsonl"))
+            assert len(dumped) == 1
+            rows = [json.loads(line) for line in dumped[0].read_text(encoding="utf-8").splitlines()]
+            assert [r["key"] for r in rows] == ["g0"]
+            assert rows[0]["content"] == "gist の要約本文"
+        finally:
+            conn.close()
+
+    def test_gist_survives_when_dump_fails(self, tmp_path) -> None:
+        """退避できなかったら gist は消さない（不可逆な loss を作らない）。"""
+        gist = _mem("g0", tags=["project:nous"])
+        gist.source_type = "consolidated"
+        archived = _mem("a0", tags=["project:nous"], lifecycle="archived")
+        conn, worker = _setup(tmp_path, [], llm=None)
+        try:
+            repo = SQLiteMemoryRepository(conn)
+            repo.save(gist)
+            repo.save(archived)
+            worker._dump_gists = lambda *a, **k: False  # type: ignore[method-assign]
+            worker._compile_persona(SimpleNamespace(memory_repo=repo, connection=conn), "test_ww")
+            remaining = {m.key for m in SQLiteMemoryRepository(conn).find_all().value}
+            assert remaining == {"g0"}
+            warnings = [s for _t, s, _d in _event_rows(conn) if "gist purge skipped" in s]
+            assert warnings == ["warning: gist purge skipped (dump failed)"]
         finally:
             conn.close()
 
@@ -1399,128 +1422,15 @@ class TestPromptRevisionContext:
             conn.close()
         assert '"when": "' in prompt
 
-    def test_cited_archived_memories_come_back(self, tmp_path) -> None:
-        """ページが引用している archived 記憶を文脈に戻す（バケツ対応）。"""
-        from nous.infrastructure.wiki.store import WikiStore
-
-        store = WikiStore(tmp_path, "test_ww")
-        store.write_page("project-nous-x", "x", "body", project="nous", sources=("old1", "old2", "gone"))
-        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
-        try:
-            cycle = [_mem("new1", tags=["project:nous"])]
-            by_key = {
-                "new1": cycle[0],
-                "old1": _mem("old1", lifecycle="archived", content="manual を廃止した。"),
-                "old2": _mem("old2", lifecycle="archived", content="タグを足した。"),
-            }
-            merged = worker._topic_memories(cycle, store.list_pages(), "project-nous", by_key)
-            keys = {m.key for m in merged}
-            assert keys == {"new1", "old1", "old2"}  # gone は存在しないので落ちる
-        finally:
-            conn.close()
-
-    def test_tombstoned_and_other_topic_memories_stay_out(self, tmp_path) -> None:
-        """tombstoned は戻さない。別 topic のページが引用する記憶も戻さない。"""
-        from nous.infrastructure.wiki.store import WikiStore
-
-        store = WikiStore(tmp_path, "test_ww")
-        store.write_page("project-nous-x", "x", "body", project="nous", sources=("dead",))
-        store.write_page("project-other-y", "y", "body", project="other", sources=("foreign",))
-        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
-        try:
-            cycle = [_mem("new1", tags=["project:nous"])]
-            by_key = {
-                "new1": cycle[0],
-                "dead": _mem("dead", lifecycle="tombstoned"),
-                "foreign": _mem("foreign", lifecycle="archived"),
-            }
-            merged = worker._topic_memories(cycle, store.list_pages(), "project-nous", by_key)
-            assert {m.key for m in merged} == {"new1"}
-        finally:
-            conn.close()
-
-    def test_revision_budget_caps_restored_memories(self, tmp_path) -> None:
-        """revision_source_memories を超えて戻さない（プロンプト膨張の歯止め）。"""
-        from nous.infrastructure.wiki.store import WikiStore
-
-        store = WikiStore(tmp_path, "test_ww")
-        store.write_page("project-nous-x", "x", "body", project="nous", sources=tuple(f"old{i}" for i in range(10)))
-        conn, worker, _ctx = _journal_setup(tmp_path, [], None, cfg_update={"revision_source_memories": 2})
-        try:
-            cycle = [_mem("new1", tags=["project:nous"])]
-            by_key = {"new1": cycle[0], **{f"old{i}": _mem(f"old{i}", lifecycle="archived") for i in range(10)}}
-            merged = worker._topic_memories(cycle, store.list_pages(), "project-nous", by_key)
-            assert len(merged) == 3  # new1 + 2
-        finally:
-            conn.close()
-
-    def test_restored_memories_survive_the_topic_cap(self, tmp_path) -> None:
-        """cycle 記憶が上限を埋めていても、戻した源記憶は落ちない（#44 の本丸）。"""
-        from nous.infrastructure.wiki.store import WikiStore
-
-        store = WikiStore(tmp_path, "test_ww")
-        store.write_page("project-nous-x", "x", "body", project="nous", sources=("old1",))
-        conn, worker, _ctx = _journal_setup(
-            tmp_path, [], None, cfg_update={"max_memories_per_topic": 3, "revision_source_memories": 1}
-        )
-        try:
-            cycle = [_mem(f"new{i}", tags=["project:nous"]) for i in range(5)]
-            by_key = {"old1": _mem("old1", lifecycle="archived"), **{m.key: m for m in cycle}}
-            merged = worker._topic_memories(cycle, store.list_pages(), "project-nous", by_key)
-            keys = {m.key for m in merged}
-            assert "old1" in keys
-            assert len(merged) == 3
-        finally:
-            conn.close()
-
-    def test_archiving_already_archived_sources_is_not_counted(self, tmp_path) -> None:
-        """戻した archived 源を「新たに沈めた」と数えない（監査が嘘をつく）。"""
+    def test_delete_sources_counts_each_key_once(self, tmp_path) -> None:
+        """同じ key を 2 ページが引用しても、削除の計上は cycle 内で 1 回。"""
         conn, worker, ctx = _journal_setup(tmp_path, [], None)
         try:
-            ctx.memory_repo.save(_mem("old1", lifecycle="archived"))
-            known = {"old1": _mem("old1", lifecycle="archived")}
-            assert worker._archive_sources(ctx, ["old1"], set(), known) == 0
-            ctx.memory_repo.save(_mem("fresh", lifecycle="active"))
-            assert worker._archive_sources(ctx, ["fresh"], set(), {"fresh": _mem("fresh")}) == 1
-        finally:
-            conn.close()
-
-    def test_page_words_pull_back_old_uncited_memory(self, tmp_path) -> None:
-        """本文にしか無い語（manual など）で、引用されていない古い記憶を掘り起こす。
-
-        実例（#44, 2026-11-13 本番）: `project-nous-wiki-compilation` は
-        「巡回順は…（manual 含む）」と書いたままだが、manual 廃止の記憶は
-        どのページの sources にも無く、cycle の直近 40 件からも外れていた。
-        """
-        from nous.infrastructure.wiki.store import WikiStore
-
-        store = WikiStore(tmp_path, "test_ww")
-        store.write_page(
-            "project-nous-wiki-compilation",
-            "Wiki 編纂",
-            "巡回順は stale → 最終接触が古い順（manual 含む）→ 記憶数。",
-            project="nous",
-            sources=(),
-        )
-        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
-        try:
-            old = _mem("old_manual", lifecycle="archived", content="手書き判定 manual は廃止した。")
-            older = _mem("old_manual", tags=["project:nous"], lifecycle="archived", content=old.content)
-            cycle = [_mem(f"new{i}", tags=["project:nous"], content=f"別件の開発メモ{i}") for i in range(40)]
-            by_key = {"old_manual": older, **{m.key: m for m in cycle}}
-            merged = worker._topic_memories(cycle, store.list_pages(), "project-nous", by_key)
-            assert "old_manual" in {m.key for m in merged}
-        finally:
-            conn.close()
-
-    def test_recall_ignores_other_topics_and_tombstones(self, tmp_path) -> None:
-        """掘り起こしは同じ topic の生きた記憶だけ。"""
-        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
-        try:
-            foreign = _mem("foreign", tags=["project:other"], content="manual の話。")
-            dead = _mem("dead", tags=["project:nous"], content="manual の話。", lifecycle="tombstoned")
-            got = worker._recall_by_text("manual を含む巡回", {"foreign": foreign, "dead": dead}, "project-nous")
-            assert got == []
+            ctx.memory_repo.save(_mem("a0"))
+            seen: set[str] = set()
+            assert worker._delete_sources(ctx, "test_ww", ["a0"], seen) == 1
+            assert worker._delete_sources(ctx, "test_ww", ["a0"], seen) == 0
+            assert ctx.memory_repo.find_by_key("a0").value is None
         finally:
             conn.close()
 
@@ -1538,40 +1448,6 @@ class TestPromptRevisionContext:
             conn.close()
         assert '"days_since_update": ' in prompt
         assert "以上のページは**今回必ず改訂する**" in prompt
-
-    def test_rare_words_beat_common_words(self, tmp_path) -> None:
-        """共通語（active/archived）で埋もれず、ページ固有の語（manual）を拾う。"""
-        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
-        try:
-            text = "巡回順は manual 含む。active も archived も書く。"
-            page_specific = _mem("p", tags=["project:nous"], content="手書き判定 manual を廃止した。")
-            noise = [_mem(f"n{i}", tags=["project:nous"], content="active と archived の話。") for i in range(5)]
-            got = worker._recall_by_text(text, [*noise, page_specific], "project-nous")
-            assert got and got[0].key == "p"
-        finally:
-            conn.close()
-
-    def test_orphan_archived_memories_are_recovered(self, tmp_path) -> None:
-        """どのページも引用していない archived 記憶を拾い直す（編纂漏れで消えた事実）。"""
-        from nous.infrastructure.wiki.store import WikiStore
-
-        store = WikiStore(tmp_path, "test_ww")
-        store.write_page("project-nous-x", "x", "本文", project="nous", sources=("cited",))
-        conn, worker, _ctx = _journal_setup(tmp_path, [], None)
-        try:
-            cycle = [_mem("new1", tags=["project:nous"])]
-            by_key = {
-                "new1": cycle[0],
-                "cited": _mem("cited", tags=["project:nous"], lifecycle="archived"),
-                "orphan": _mem("orphan", tags=["project:nous"], lifecycle="archived", content="manual を廃止した。"),
-                "dead": _mem("dead", tags=["project:nous"], lifecycle="tombstoned"),
-            }
-            merged = worker._topic_memories(cycle, store.list_pages(), "project-nous", by_key)
-            keys = {m.key for m in merged}
-            assert "orphan" in keys  # 引用されていない archived
-            assert "dead" not in keys
-        finally:
-            conn.close()
 
     def test_revision_keeps_previous_sources(self, tmp_path) -> None:
         """改訂で sources から落ちた記憶が orphan 化しないよう、源は減らさない。"""

@@ -352,6 +352,7 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
                 ToolParam("tags", "array<string>|null", required=False),
                 ToolParam("privacy_level", "string|null", required=False),
                 ToolParam("key", "string", required=False),
+                ToolParam("resolved", "boolean", required=False),
             ),
             BUILTIN: (
                 ToolParam("query", "string", required=True),

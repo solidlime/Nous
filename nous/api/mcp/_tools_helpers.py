@@ -391,6 +391,7 @@ def _format_lightweight_response(
     project_name: str | None = None,
     due_labels: dict[str, str] | None = None,
     wiki_page_count: int | None = None,
+    open_question: str | None = None,
 ) -> str:
     """Lightweight context: persona + conversation continuity + body state.
 
@@ -413,6 +414,10 @@ def _format_lightweight_response(
     # 予算超過時は末尾から切り捨てられるため、必ず先頭側に置く。
     if wiki_page_count and project_name:
         lines.append(f"📚 wiki: {wiki_page_count} pages (project:{project_name}) — wiki_ls() / wiki_read()")
+
+    # ── 未解決の問い（#55）: 最大 1 件。続きは wiki_grep で引く ──
+    if open_question:
+        lines.append(f"❓ 未確認の矛盾: {open_question}")
 
     # Emotion decay notification — before/after change visible
     if decay_note:

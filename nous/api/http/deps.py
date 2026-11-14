@@ -44,6 +44,7 @@ class UpdateMemoryRequest(BaseModel):
     emotion_intensity: float | None = None
     tags: list[str] | None = None
     privacy_level: str | None = None
+    resolved: bool | None = None
 
 
 def _safe_get_context(persona: str):

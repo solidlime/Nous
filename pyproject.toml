@@ -4,22 +4,14 @@ version = "4.0.1"
 description = "Persistent memory server for LLM agents via MCP"
 requires-python = ">=3.12"
 dependencies = [
-    "PyMuPDF>=1.24.0",
-    "pdfplumber>=0.11.0",
-    "pytesseract>=0.3.10",
     "sudachipy>=0.6.0,<0.7.0",
     "sudachidict_core>=20240716",
     "fastapi>=0.139.0",
     "uvicorn>=0.51.0",
-    "aiosqlite>=0.22.1",
     "langdetect>=1.0.9",
 ]
 
 [project.optional-dependencies]
-ocr = [
-    "pytesseract>=0.3.10",
-    "pdfplumber>=0.11.0",
-]
 contract = [
     "pact-python>=3.4.0,<4.0",
     "requests>=2.31.0",
