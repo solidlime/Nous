@@ -61,7 +61,7 @@ nous/
 │   │   ├── tools/             # 組み込みツール定義
 │   │   └── service.py         # チャットサービス
 │   ├── workers/               # バックグラウンドワーカー
-│   │   └── consolidation_worker.py  # 記憶統合
+│   │   └── wiki_worker.py           # 記憶編纂
 │   └── use_cases.py           # AppContextRegistry
 ├── domain/                    # ドメインモデル
 │   ├── memory/                # 記憶エンティティ/サービス/リポジトリ
@@ -127,7 +127,7 @@ nous/
     ↓
 [Memory Write] memory_create → vectorize → Qdrant index
     ↓
-[Background] consolidation_worker / snapshot_worker
+[Background] wiki_worker
 ```
 
 ---
@@ -194,7 +194,7 @@ nous/
 | `NOUS_DEFAULT_PERSONA` | `default` | デフォルト Persona 名 |
 | `NOUS_TIMEZONE` | `Asia/Tokyo` | タイムゾーン |
 | `NOUS_SANDBOX__ENABLED` | `true` | コード実行サンドボックス |
-| `NOUS_MEMORY_ENRICHMENT__ENABLED` | `true` | 脳側 LLM（矛盾判定）の有効化。gist 生成は `NOUS_CONSOLIDATION__LLM_GIST_ENABLED` で別制御。enrichment 自体は 2026-11-08 廃止、自発的内省・独り言は 2026-11-09 廃止 |
+| `NOUS_MEMORY_ENRICHMENT__ENABLED` | `true` | 脳側 LLM（矛盾判定）の有効化。enrichment 自体は 2026-11-08 廃止、自発的内省・独り言は 2026-11-09 廃止 |
 
 全設定項目は WebUI の**設定画面**から確認・変更できます（WebUI からの変更は `docker-compose.yml` の環境変数より優先されます）。
 
@@ -210,12 +210,11 @@ nous/
 - **注入済み記憶排除**（item 1）: チャット経路で同一 turn 内に注入済みの記憶を検索結果から除外。
 - **再 encode 排除（fingerprint）**（item 6）: Qdrant アダプタが embedding fingerprint を payload に記録し、同一 fingerprint の upsert は再 encode をスキップ。
 - **常載プロフィールドキュメント**（item 3）: `profile_update` ツールで persona_blocks に常載ブロックを登録、検索とは別に毎ターン注入。
-- **日次 consolidation（item 4）**: `ConsolidationWorker` が archived 記憶（既に gist 化済みのものは除外）をクラスタリングし gist を生成。
 - **日次 wiki 編纂（item 5）**: `WikiWorker` が定刻（既定 03:00 JST = `NOUS_WIKI__RUN_AT_TZ`、`--hour` は `NOUS_WIKI__RUN_AT_HOUR`）に起動し、未編纂の記憶をトピックページへまとめ、源記憶を `archived` に落とす。LLM が空応答/切れ JSON を返した場合は max_tokens を 2 倍にして 1 回だけ再試行し、サイクル内に error が残ったら 30 分後に再挑戦する（丸 1 日空けない）。
   1 サイクルは 3 段: (1) 前日（JST）の記憶から `journal-YYYY-MM-DD` 日記ページを作る、(2) トピックページを編纂する、(3) 編纂応答の `conflicts` / `questions` を監査イベントと `open-question` 記憶に落とす（追加 LLM 呼び出しなし）。続いて `questions` を**persona に登録済みの MCP ツールだけ**で調べ（`research_enabled`、既定 `false`）、URL が取れたものだけページ末尾の `## 外部情報` に追記する。ツール 0 件なら何もしない（`skipped: no mcp tool` の 1 行）。
   記憶層の矛盾掃除は週 1 回（`memory_conflict_interval_hours`=168）別建てで走る: 同 project タグ + 本文 Jaccard + 数値の食い違いで候補を純関数抽出し（LLM 0 回）、`classify_contradiction` を `memory_conflict_max_pairs`=10 件まで適用、矛盾なら古い側の `valid_until` を閉じて `superseded_by` で繋ぐ（削除しない）。全件判定不能な回は `warning:` で記録し、週次ゲートを再武装しない。
 
-残る常駐 worker は `ConsolidationWorker` と `WikiWorker` の 2 つ（Curation / Freshness / Enrichment / Decay は 2026-11-08 に廃止）。
+残る常駐 worker は `WikiWorker` のみ（ConsolidationWorker は 2026-11 に撤去。Curation / Freshness / Enrichment / Decay は 2026-11-08 に廃止）。
 
 ### 評価ハーネス
 - `scripts/eval_search_quality.py`（gold コーパス: `tests/benchmark/data/verify_corpus_v1.json`）

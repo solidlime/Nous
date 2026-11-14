@@ -8,7 +8,17 @@ if TYPE_CHECKING:
 
 VALID_KINDS = frozenset(["episodic", "semantic", "procedural", "prospective"])
 VALID_SOURCE_TYPES = frozenset(
-    ["user_stated", "user_implied", "llm_inferred", "tool_output", "consolidated", "reflected", "system"]
+    [
+        "user_stated",
+        "user_implied",
+        "llm_inferred",
+        "tool_output",
+        # 旧 consolidation worker は 2026-11 に撤去済み。
+        # 過去データの読み出し・掃除専用に値だけ残す。
+        "consolidated",
+        "reflected",
+        "system",
+    ]
 )
 
 # audit C4 — provenance modality. ``source_type`` is the single stored source of

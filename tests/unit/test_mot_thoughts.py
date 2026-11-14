@@ -8,12 +8,9 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 
-from nous.application.workers.consolidation_worker import ConsolidationWorker
 from nous.domain.memory.entities import Memory
 from nous.domain.search.engine import SearchEngine, SearchQuery
 from nous.domain.shared.result import Success
@@ -33,48 +30,6 @@ def _setup(tmp_path):
     return conn, SQLiteMemoryRepository(conn)
 
 
-def _mem(key: str, importance: float) -> Memory:
-    now = get_now()
-    return Memory(
-        key=key,
-        content=f"{key} のテスト記憶内容です。 entity e1 について述べます。",
-        created_at=now,
-        updated_at=now,
-        importance=importance,
-        kind="semantic",
-        lifecycle_status="archived",
-        valid_from=now - timedelta(days=2),
-    )
-
-
-class _FakeEntityRepo:
-    def get_entities_for_memories(self, memory_keys, limit=50):
-        return [{"memory_key": k, "id": "e1"} for k in memory_keys]
-
-
-class _FakeService:
-    def __init__(self, repo: SQLiteMemoryRepository):
-        self._repo = repo
-        self.keys: list[str] = []
-
-    async def create_memory(self, **kwargs):
-        now = get_now()
-        mem = Memory(
-            key=f"gist_{len(self.keys)}",
-            content=kwargs["content"],
-            created_at=now,
-            updated_at=now,
-            importance=kwargs.get("importance", 0.5),
-            kind=kwargs.get("kind", "semantic"),
-            source_type=kwargs.get("source_type", "user_stated"),
-            derived_from=kwargs.get("derived_from"),
-            tags=kwargs.get("tags", []),
-        )
-        self._repo.save(mem)
-        self.keys.append(mem.key)
-        return Success(mem)
-
-
 class _FakeKeyword:
     def __init__(self, memories: list[Memory]):
         self._memories = memories
@@ -88,34 +43,25 @@ def _thought_rows(conn: SQLiteConnection) -> list:
 
 
 class TestMotThoughts:
-    def test_high_confidence_saved_via_consolidation(self, tmp_path) -> None:
-        """高確信 gist → thoughts 行ができる"""
-        conn, repo = _setup(tmp_path)
+    def test_high_confidence_saved(self, tmp_path) -> None:
+        """高確信 thought は保存される（閾値以上）"""
+        conn, _repo = _setup(tmp_path)
         try:
-            for i in range(5):
-                repo.save(_mem(f"hi{i}", 0.9))
-            service = _FakeService(repo)
-            ctx = SimpleNamespace(memory_repo=repo, memory_service=service, entity_repo=_FakeEntityRepo())
-            ConsolidationWorker(settings=MagicMock())._consolidate_persona(ctx, "test")
+            db = conn.get_memory_db()
+            assert save_thought(db, "hi", "ck", "朝の飲み物についての考察", MOT_CONFIDENCE_THRESHOLD + 0.05) is True
             rows = _thought_rows(conn)
             assert len(rows) == 1
-            assert rows[0]["consolidation_key"] == service.keys[0]
+            assert rows[0]["consolidation_key"] == "ck"
             assert float(rows[0]["confidence"]) >= MOT_CONFIDENCE_THRESHOLD
         finally:
             conn.close()
 
     def test_low_confidence_dropped(self, tmp_path) -> None:
-        """低確信は破棄（gist 自体は作られる）"""
-        conn, repo = _setup(tmp_path)
+        """低確信は保存しない（閾値未満）"""
+        conn, _repo = _setup(tmp_path)
         try:
-            for i in range(5):
-                repo.save(_mem(f"lo{i}", 0.6))
-            service = _FakeService(repo)
-            ctx = SimpleNamespace(memory_repo=repo, memory_service=service, entity_repo=_FakeEntityRepo())
-            ConsolidationWorker(settings=MagicMock())._consolidate_persona(ctx, "test")
-            assert len(service.keys) == 1
+            assert save_thought(conn.get_memory_db(), "lo", "ck", "trace", 0.6) is False
             assert _thought_rows(conn) == []
-            assert save_thought(conn.get_memory_db(), "k", "ck", "trace", 0.6) is False
         finally:
             conn.close()
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-# 書き手は domain 外（consolidation_worker._link_summarizes 等）にも居るため、
+# 書き手は domain 外（entity_repo 経由の link 書き込みなど）にも居るため、
 # 新しい link_type を追加するときは必ずこの集合を更新すること。
 LINK_TYPES = frozenset(["semantic", "temporal", "emotional", "contextual", "causal", "summarizes"])
 

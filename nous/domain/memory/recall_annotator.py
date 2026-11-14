@@ -5,7 +5,9 @@ from typing import Literal, cast
 
 Certainty = Literal["confident", "tentative", "vague", "forgotten"]
 TimeHint = Literal["recent", "days_7", "days_30", "days_90", "years"]
-SourceHint = Literal["user_stated", "llm_inferred", "reflected", "consolidated", "tool_output"]
+SourceHint = Literal[
+    "user_stated", "llm_inferred", "reflected", "consolidated", "tool_output"
+]  # consolidated は表示専用（新規生成なし）
 KindHint = Literal["episodic", "semantic", "procedural", "prospective"]
 
 
