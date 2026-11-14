@@ -47,6 +47,19 @@ class TurnBusyError(Exception):
     """同一 persona のターン実行中に新規ターン要求（router は 409 を返す）。"""
 
 
+#: 実行中ターンの task 強参照。``create_task`` の戻り値を捨てると GC が回収し得て、
+#: ``finally`` の ``end_turn`` が走らないまま persona が 409 で固まる。
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn_turn(coro) -> asyncio.Task:
+    """ターン task を起動し、完了まで強参照を保持する。"""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+
+
 # ── Tool search engine (search_tools) ─────────────────────────────────────────
 
 
@@ -165,7 +178,12 @@ class ChatService:
             finally:
                 _turn_hub.end_turn(ctx.persona)
 
-        asyncio.create_task(_consume())
+        try:
+            _spawn_turn(_consume())
+        except BaseException:
+            # 起動に失敗したらターン枠を返さないと、カードが殺そうとした永久 409 になる。
+            _turn_hub.end_turn(ctx.persona)
+            raise
         return turn_id
 
     async def chat(

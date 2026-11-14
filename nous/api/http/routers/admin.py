@@ -15,6 +15,48 @@ logger = get_logger(__name__)
 #: Minimum length for a non-empty ``general.api_key`` value (oracle Q9).
 _API_KEY_MIN_LENGTH = 16
 
+#: 認証なしで書き換えられると事故になる設定カテゴリ（API キー設定済みのときだけ要求）。
+#: ``qdrant.*`` は埋め込み先の差し替え＝データの持ち出し/破棄、``server.*`` は
+#: バインド先、``mcp_security.*`` は Host/Origin 検証の無効化。
+_DANGEROUS_CATEGORIES = frozenset({"server", "mcp_security", "qdrant"})
+_DANGEROUS_KEYS = frozenset(
+    {
+        ("general", "persona_dir"),
+        # 任意の HF リポジトリをロードさせられる（重い処理の外部起動）。
+        ("embedding", "model"),
+        ("reranker", "model"),
+    }
+)
+
+
+def _is_dangerous(category: str, key: str) -> bool:
+    return category in _DANGEROUS_CATEGORIES or (category, key) in _DANGEROUS_KEYS
+
+
+def _require_admin(request: Request) -> JSONResponse | None:
+    """``general.api_key`` が設定されていれば Bearer 一致を要求する。
+
+    未設定（初回起動・開発）は素通し — そうしないとキーを立てる前に
+    何も設定できなくなる。認証ソースはミドルウェアと同じ（ヘッダ優先、
+    無ければ ``?token=``）に揃える。
+    """
+    from nous.api.mcp.middleware import bearer_from_query, verify_bearer
+    from nous.config.runtime_config import RuntimeConfigManager
+
+    current, _ = RuntimeConfigManager().get_effective_value("general", "api_key")
+    current = current if isinstance(current, str) else ""
+    if not current.strip():
+        return None
+    provided = request.headers.get("authorization")
+    if not provided:
+        query_params = getattr(request, "query_params", None)
+        query_token = bearer_from_query(str(query_params)) if query_params is not None else None
+        if query_token:
+            provided = f"Bearer {query_token}"
+    if verify_bearer(provided, current.strip()):
+        return None
+    return JSONResponse({"error": "Valid API key required"}, status_code=401)
+
 
 def _api_key_gate(request: Request, value: Any) -> JSONResponse | None:
     """Enforce the ``general.api_key`` PUT auth rule (oracle Q9).
@@ -22,15 +64,9 @@ def _api_key_gate(request: Request, value: Any) -> JSONResponse | None:
     Returns a ``JSONResponse`` (401/400) when the request is rejected,
     else None to let the update proceed.
     """
-    from nous.api.mcp.middleware import verify_bearer
-    from nous.config.runtime_config import RuntimeConfigManager
-
-    current, _ = RuntimeConfigManager().get_effective_value("general", "api_key")
-    current = current if isinstance(current, str) else ""
-    if current.strip():
-        authorization = request.headers.get("authorization")
-        if not verify_bearer(authorization, current.strip()):
-            return JSONResponse({"error": "Valid API key required"}, status_code=401)
+    gate = _require_admin(request)
+    if gate is not None:
+        return gate
     if value and (not isinstance(value, str) or len(value) < _API_KEY_MIN_LENGTH):
         return JSONResponse(
             {"error": f"API key must be at least {_API_KEY_MIN_LENGTH} characters"},
@@ -73,6 +109,12 @@ def register_admin_routes(mcp) -> None:
             # Non-empty values shorter than 16 chars are rejected (400).
             gate = _api_key_gate(request, value)
             if gate is not None:
+                return gate
+        elif _is_dangerous(category, key):
+            # 設定済みの API キーを Bearer で出せないなら危険なキーは触らせない。
+            gate = _require_admin(request)
+            if gate is not None:
+                logger.warning("update_settings: unauthenticated attempt on %s.%s", category, key)
                 return gate
         try:
             from nous.config.runtime_config import RuntimeConfigManager

@@ -387,7 +387,18 @@ Get all runtime configuration values with metadata.
 ### `PUT /api/settings`
 Update a runtime setting.
 
-**Request body:** `{ "key": "log_level", "value": "DEBUG" }`
+**Request body:** `{ "category": "general", "key": "log_level", "value": "DEBUG" }`
+
+**Auth:** once `general.api_key` is set, these keys require `Authorization: Bearer <key>`
+and answer `401 {"error": "Valid API key required"}` without it — they move where
+the server listens, where embeddings are stored, or which Host/Origin are trusted:
+
+- `server.*`, `mcp_security.*`, `qdrant.*`, `general.persona_dir`
+- `general.api_key` itself (old key required to change or clear; minimum 16 chars)
+
+Empty `general.api_key` = bootstrap: nothing is gated until a key exists.
+The dashboard picks the key up from `?token=<key>` (stored in `localStorage`)
+and attaches it to every same-origin `fetch` and `EventSource`.
 
 ### `GET /api/settings/status`
 Get reload status for runtime settings.

@@ -54,16 +54,17 @@ def handlers():
 
 
 class _FakeRequest:
-    def __init__(self, body=None, authorization=None):
+    def __init__(self, body=None, authorization=None, query=""):
         self._body = body or {}
         self.headers = {"authorization": authorization} if authorization else {}
+        self.query_params = query
 
     async def json(self):
         return self._body
 
 
-def _put(handlers, body, authorization=None):
-    return handlers[("/api/settings", "PUT")](_FakeRequest(body, authorization))
+def _put(handlers, body, authorization=None, query=""):
+    return handlers[("/api/settings", "PUT")](_FakeRequest(body, authorization, query))
 
 
 def _body(resp):
@@ -157,6 +158,65 @@ class TestGetMasked:
         payload = _body(resp)
         assert payload["settings"]["general"]["api_key"]["value"] == "***"
         assert LONG_KEY not in resp.body.decode()
+
+
+class TestDangerousKeys:
+    """API キー設定時、事故につながる設定は Bearer 無しで書けない。"""
+
+    DANGEROUS = [
+        ("qdrant", "url"),
+        ("qdrant", "api_key"),
+        ("server", "host"),
+        ("server", "port"),
+        ("mcp_security", "allowed_hosts"),
+        ("mcp_security", "allowed_origins"),
+        ("general", "persona_dir"),
+    ]
+
+    @pytest.mark.parametrize(("category", "key"), DANGEROUS)
+    async def test_blocked_without_bearer(self, tmp_data_dir, handlers, category, key):
+        _set_key(LONG_KEY)
+        resp = await _put(handlers, {"category": category, "key": key, "value": "x"})
+        assert resp.status_code == 401
+        assert _body(resp)["error"] == "Valid API key required"
+
+    async def test_wrong_bearer_rejected(self, tmp_data_dir, handlers):
+        _set_key(LONG_KEY)
+        resp = await _put(
+            handlers,
+            {"category": "qdrant", "key": "url", "value": "http://evil"},
+            authorization=f"Bearer {OTHER_KEY}",
+        )
+        assert resp.status_code == 401
+
+    async def test_valid_bearer_allowed(self, tmp_data_dir, handlers):
+        _set_key(LONG_KEY)
+        resp = await _put(
+            handlers,
+            {"category": "server", "key": "port", "value": 9999},
+            authorization=f"Bearer {LONG_KEY}",
+        )
+        assert resp.status_code == 200
+
+    async def test_query_token_accepted(self, tmp_data_dir, handlers):
+        """SSE と同じ認証ソース（?token=）もミドルウェアと同様に受理する。"""
+        _set_key(LONG_KEY)
+        resp = await _put(
+            handlers,
+            {"category": "server", "key": "port", "value": 9999},
+            query=f"token={LONG_KEY}",
+        )
+        assert resp.status_code == 200
+
+    async def test_bootstrap_without_key_configured(self, tmp_data_dir, handlers):
+        """キー未設定なら素通し（そうしないとキーを立てる前に何もできない）。"""
+        resp = await _put(handlers, {"category": "qdrant", "key": "url", "value": "http://q:6333"})
+        assert resp.status_code == 200
+
+    async def test_harmless_key_still_ungated(self, tmp_data_dir, handlers):
+        _set_key(LONG_KEY)
+        resp = await _put(handlers, {"category": "general", "key": "timezone", "value": "UTC"})
+        assert resp.status_code == 200
 
 
 class TestMiddlewareUsesRuntimeValue:

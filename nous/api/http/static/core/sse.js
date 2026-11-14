@@ -50,6 +50,8 @@ function _open(name, reconnect) {
   var rec = _streams()[name], opts = rec.opts;
   var url = reconnect && opts.reconnectUrl ? opts.reconnectUrl() : opts.url();
   if (!url) return;
+  /* EventSource はヘッダを送れないので ?token= で渡す。 */
+  if (N.Core.auth) url = N.Core.auth.sign(url);
   var es = new EventSource(url);
   rec.socket = es;
   rec.handlers = {};

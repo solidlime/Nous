@@ -147,3 +147,48 @@ class TestSynthetic:
         assert received == sse
         # bufferにも積まれる（遅延接続のリプレイ用）
         assert hub.snapshot_after("p1", 0) == [(seq, sse)]
+
+
+class TestTurnTaskLifetime:
+    """``ChatService`` のターン task が GC で消えないこと（409 固着の防止）。"""
+
+    @pytest.mark.asyncio
+    async def test_spawn_turn_holds_reference_until_done(self):
+        import asyncio
+
+        from nous.application.chat.service import _background_tasks, _spawn_turn
+
+        started = asyncio.Event()
+
+        async def work() -> None:
+            started.set()
+            await asyncio.sleep(0.01)
+
+        task = _spawn_turn(work())
+        await started.wait()
+        assert task in _background_tasks, "実行中は強参照を保持する"
+        await task
+        await asyncio.sleep(0)  # done callback は 1 ループ後に走る
+        assert task not in _background_tasks, "完了後は解放される"
+
+    @pytest.mark.asyncio
+    async def test_begin_turn_is_atomic_under_threads(self):
+        """複数スレッドから同時に叩いても 1 つしか通さない。"""
+        import threading
+
+        hub = TurnHub()
+        winners: list[str] = []
+        barrier = threading.Barrier(8)
+
+        def attempt() -> None:
+            barrier.wait()
+            turn_id = hub.begin_turn("p1")
+            if turn_id:
+                winners.append(turn_id)
+
+        threads = [threading.Thread(target=attempt) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert len(winners) == 1

@@ -32,14 +32,16 @@ class TurnHub:
 
     def begin_turn(self, persona: str) -> str | None:
         """turn_id 発行。実行中なら None（409 用）。"""
-        if persona in self._running:
-            return None
-        self._running.add(persona)
+        with self._lock:
+            if persona in self._running:
+                return None
+            self._running.add(persona)
         return uuid.uuid4().hex
 
     def end_turn(self, persona: str) -> None:
         """実行フラグ解除。バッファは残置（遅延接続のリプレイ用）。"""
-        self._running.discard(persona)
+        with self._lock:
+            self._running.discard(persona)
 
     def publish(self, persona: str, sse_str: str) -> None:
         """SSE 文字列（evt.to_sse() の戻り値）をバッファ（seq 付与）＋全 subscriber queue へ。

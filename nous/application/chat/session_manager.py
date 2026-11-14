@@ -46,6 +46,9 @@ class SessionManager:
         max_messages: int = 200,
         db: sqlite3.Connection | None = None,
     ) -> TreeSessionWindow:
+        """同期関数。``await`` を挟むと check-then-set の窓ができるので、ここに
+        ``await`` を入れないこと（呼び出し元は同一イベントループのコルーチンのみ）。
+        """
         key = (persona, session_id)
         if key in self._sessions:
             self._sessions.move_to_end(key)

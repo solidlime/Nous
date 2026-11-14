@@ -44,6 +44,7 @@ def render_head() -> str:
     <script src="/static/core/dom.js" defer></script>
     <script src="/static/core/time.js" defer></script>
     <script src="/static/core/api.js" defer></script>
+    <script src="/static/core/auth.js" defer></script>
     <script src="/static/core/toast.js" defer></script>
     <script src="/static/core/modal.js" defer></script>
     <script src="/static/core/theme.js" defer></script>
