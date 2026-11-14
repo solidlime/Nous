@@ -1363,7 +1363,7 @@ class TestNoTopicSilence:
         conn, _worker = _setup(tmp_path, [gist], llm=None)
         try:
             assert SQLiteMemoryRepository(conn).find_all().value == []
-            dumped = list((tmp_path / "test_ww" / "wiki" / "_purged").glob("gists-*.jsonl"))
+            dumped = list((tmp_path / "persona" / "test_ww" / "wiki" / "_purged").glob("gists-*.jsonl"))
             assert len(dumped) == 1
             rows = [json.loads(line) for line in dumped[0].read_text(encoding="utf-8").splitlines()]
             assert [r["key"] for r in rows] == ["g0"]

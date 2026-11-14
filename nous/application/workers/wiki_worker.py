@@ -22,7 +22,6 @@ import re
 import threading
 from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nous.application.wiki import vector_index
@@ -517,13 +516,14 @@ class WikiWorker:
         失敗したら False を返し、呼び手は gist を消さない（不可逆な loss を防ぐ）。
         """
         from nous.domain.shared.time_utils import get_now
+        from nous.infrastructure.wiki.store import WikiStore
 
         dumped = ctx.memory_repo.dump_rows(keys)
         if not isinstance(dumped, Success) or not dumped.value:
             logger.warning("WikiWorker: gist dump read failed for %s", persona)
             return False
         day = get_now(self._cfg.run_at_tz).strftime("%Y%m%d")
-        path = Path(self._settings.data_root) / persona / "wiki" / _GIST_DUMP_SUBDIR / f"gists-{day}.jsonl"
+        path = WikiStore(self._settings.data_root, persona).root / _GIST_DUMP_SUBDIR / f"gists-{day}.jsonl"
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as fh:
