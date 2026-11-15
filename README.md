@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/icon.png" width="96" height="96" alt="Nous">
+
 # Nous
 
 **LLM エージェントに、忘れない記憶を。**
