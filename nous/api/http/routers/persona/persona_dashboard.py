@@ -288,6 +288,7 @@ def _render_setup_page() -> str:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nous — Setup</title>
+<link rel="icon" type="image/png" href="/static/icon.png">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/lucide@latest"></script>
 <style>
