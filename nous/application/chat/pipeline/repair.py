@@ -131,6 +131,8 @@ class RepairStep:
 
             last_violation = str(judgment.get("violation", "none"))
             last_detail = str(judgment.get("detail", ""))
+            # MemoryLLM に渡す。再判定で none に戻っても「初回に違反した」事実は残す
+            turn_ctx.drift = {"violation": last_violation, "detail": last_detail}
             replaced = False
 
             for _ in range(config.character_repair_max_attempts):

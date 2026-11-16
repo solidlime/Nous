@@ -107,6 +107,7 @@ async def test_no_violation_no_regeneration_no_sse(monkeypatch) -> None:
     assert events == []
     assert calls["collect"] == 0
     assert turn_ctx.full_response == "問題ない応答"
+    assert turn_ctx.drift is None  # 違反なしは MemoryLLM に渡さない
 
 
 async def test_violation_triggers_regeneration_and_replacement(monkeypatch) -> None:
@@ -130,6 +131,8 @@ async def test_violation_triggers_regeneration_and_replacement(monkeypatch) -> N
     assert isinstance(events[0], ResponseReplacedSSE)
     assert events[0].content == "修復済み応答"
     assert events[0].violation == "none"
+    # 再判定で none に戻っても初回判定を MemoryLLM（drift fact 保存）に残す
+    assert turn_ctx.drift == {"violation": "tone", "detail": "口調が崩れている"}
     # 修復プロンプトに元応答・違反詳細・ツール結果が含まれること
     last_user = calls["last_messages"][-1]
     assert last_user.role == "user"

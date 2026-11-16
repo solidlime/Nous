@@ -36,6 +36,8 @@ class ChatTurnContext:
     # InferenceStep が埋める (インタラクティブに追記)
     messages: list[LLMMessage] = field(default_factory=list)
     full_response: str = ""
+    # RepairStep が埋める。違反判定があれば {"violation", "detail"}（MemoryLLM が drift fact を保存する）
+    drift: dict | None = None
     tool_calls_log: list[dict] = field(default_factory=list)
     tool_call_count: int = 0
     # InferenceStep が埋める (インタラクティブに追記)

@@ -51,6 +51,14 @@ def _track_background(task: asyncio.Task) -> None:
     task.add_done_callback(_background_tasks.discard)
 
 
+def _memory_payload(turn_ctx: ChatTurnContext) -> dict:
+    """MemoryLLM に渡す payload。RepairStep が違反判定を残していれば drift を載せる。"""
+    payload: dict = {"user": turn_ctx.user_message, "assistant": turn_ctx.full_response}
+    if turn_ctx.drift:
+        payload["drift"] = turn_ctx.drift
+    return payload
+
+
 async def _do_summarize(ctx: AppContext, config: ChatConfig, turns: list[dict]) -> str | None:
     """Summarization helper. Returns summary if generated."""
     try:
@@ -177,7 +185,7 @@ class PostProcessStep:
         # MemoryLLM: キャラ判定は MemoryLLM 側で行う（旧・自発的内省は 2026-11-09 に廃止）
         memory_result: dict = {}
         if turn_ctx.full_response:
-            payload = {"user": turn_ctx.user_message, "assistant": turn_ctx.full_response}
+            payload = _memory_payload(turn_ctx)
             if config.auto_extract:
                 try:
                     # audit M9-c: item 抽出 LLM は item_* ツール呼出の無いターン（会話由来の装備変更）のみ。

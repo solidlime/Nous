@@ -32,6 +32,19 @@ class TestPerTurnJudgeRemoved:
         source = inspect.getsource(PostProcessStep.run)
         assert "run_memory_llm" in source, "MemoryLLM extraction must remain per-turn"
 
+    def test_drift_reaches_memory_llm_payload(self):
+        """RepairStep の違反判定が MemoryLLM の payload まで届くこと（配線切れの再発防止）。"""
+        from nous.application.chat.pipeline.context import ChatTurnContext
+        from nous.application.chat.pipeline.post import _memory_payload
+
+        turn_ctx = ChatTurnContext(session_id="main", user_message="やあ")
+        turn_ctx.full_response = "おや、あんたか"
+        assert _memory_payload(turn_ctx) == {"user": "やあ", "assistant": "おや、あんたか"}
+
+        turn_ctx.drift = {"violation": "tone", "detail": "一人称が俺だった"}
+        payload = _memory_payload(turn_ctx)
+        assert payload["drift"] == {"violation": "tone", "detail": "一人称が俺だった"}
+
 
 class TestCharacterConsistencyGap:
     """R2: Character contradiction detection gap."""
