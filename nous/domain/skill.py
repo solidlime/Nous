@@ -257,10 +257,15 @@ class SkillRepository:
         if not name or name in {".", ".."} or "/" in name or "\\" in name:
             return
         skill_dir = Path(skills_dir) / name
-        if skill_dir.exists():
+        log = _get_logger()
+        if not skill_dir.exists():
+            return
+        try:
             shutil.rmtree(skill_dir)
-            log = _get_logger()
-            log.info("Skill deleted from filesystem: %s", skill_dir)
+        except OSError:
+            log.warning("Skill delete failed: %s", skill_dir, exc_info=True)
+            return
+        log.info("Skill deleted from filesystem: %s", skill_dir)
 
     def load_from_dir(self, skills_dir: str | None = None, persist: bool = True) -> list[Skill]:
         """Scan <skills_dir>/<name>/SKILL.md files and optionally upsert them into the DB.
