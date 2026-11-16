@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 from pathlib import Path
@@ -11,7 +12,12 @@ from nous.application.context.vector_stack import VectorStackMixin
 from nous.domain.equipment.service import EquipmentService
 from nous.domain.memory.service import MemoryService
 from nous.domain.persona.service import PersonaService
-from nous.domain.shared.errors import PersonaNotFoundError, PersonaValidationError, SearchError
+from nous.domain.shared.errors import (
+    PersonaBusyError,
+    PersonaNotFoundError,
+    PersonaValidationError,
+    SearchError,
+)
 from nous.domain.shared.result import Failure, Success
 from nous.infrastructure.qdrant.adapter import QdrantVectorStore as QdrantVectorStore  # noqa: TC001
 
@@ -27,6 +33,8 @@ from nous.infrastructure.sqlite.persona_repo import SQLitePersonaRepository
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from nous.config.settings import Settings
     from nous.domain.chat_config import ChatConfig
     from nous.domain.memory.entities import Memory
@@ -356,6 +364,9 @@ class AppContextRegistry:
 
     _contexts: dict[str, AppContext] = {}
     _settings: Settings | None = None
+    # 削除中の persona。rmtree が終わるまで get() を拒む（削除中の再構築を防ぐ）。
+    _deleting: set[str] = set()
+    _creating: set[str] = set()
     # RLock: get() は AppContext 構築中もロックを保持するので、構築中に
     # 同スレッドから personas()/snapshot() を呼ばれても再入で死なないようにする。
     _lock = threading.RLock()
@@ -365,12 +376,23 @@ class AppContextRegistry:
         cls._settings = settings
 
     @classmethod
-    def get(cls, persona: str, config: ChatConfig | None = None) -> AppContext:
+    def get(
+        cls,
+        persona: str,
+        config: ChatConfig | None = None,
+        *,
+        for_creation: bool = False,
+    ) -> AppContext:
         ctx = cls._contexts.get(persona)
         if ctx is not None:
             return ctx
 
         with cls._lock:
+            # ディレクトリが残っているうちに get() が来ると AppContext を作り直し、
+            # 直後の rmtree で生きた接続の下の DB が消える。削除/作成区間中は作らせない。
+            if persona in cls._deleting or (persona in cls._creating and not for_creation):
+                raise PersonaNotFoundError(f"Persona '{persona}' is not available")
+
             # 二重チェック: ロック待ち間に他スレッドが生成した場合の重複生成を防ぐ
             ctx = cls._contexts.get(persona)
             if ctx is not None:
@@ -428,12 +450,54 @@ class AppContextRegistry:
             return list(cls._contexts.items())
 
     @classmethod
-    def discard(cls, persona: str) -> None:
-        """registry から外して閉じる（ペルソナ削除用）。close はロック外で行う。"""
+    @contextlib.contextmanager
+    def creating(cls, persona: str) -> Iterator[None]:
+        """作成区間。``mkdir`` から後始末まで ``with`` で囲むこと。
+
+        ``deleting()`` と相互排他（同じロックで判定と登録を行う）なので、区間中に
+        同名の作成/削除は入らず、後始末の ``rmtree`` が他人のディレクトリを消すことはない。
+        区間中に ``get()`` を通すのは作成経路だけ（``get(..., for_creation=True)``）。
+        """
         with cls._lock:
+            if persona in cls._deleting or persona in cls._creating:
+                raise PersonaBusyError(f"Persona '{persona}' operation already in progress")
+            cls._creating.add(persona)
+        try:
+            yield
+        finally:
+            with cls._lock:
+                cls._creating.discard(persona)
+
+    @classmethod
+    @contextlib.contextmanager
+    def deleting(cls, persona: str) -> Iterator[None]:
+        """削除区間。``rmtree`` まで含めて ``with`` で囲むこと。
+
+        区間中は ``get()`` が拒否され、同じ persona の ``AppContext`` が作り直されない。
+        区間は ``finally`` で必ず閉じるので、``get()`` が恒久拒否になることはない。
+        削除中・作成区間中なら ``PersonaBusyError``（判定と登録を同じロックで行う）。
+        """
+        with cls._lock:
+            if persona in cls._deleting or persona in cls._creating:
+                raise PersonaBusyError(f"Persona '{persona}' operation already in progress")
+            cls._deleting.add(persona)
             ctx = cls._contexts.pop(persona, None)
-        if ctx is not None:
-            ctx.close()
+        try:
+            if ctx is not None:
+                try:
+                    ctx.close()
+                except Exception:  # close 失敗で rmtree を止めない（消せない方が困る）
+                    logger.warning("AppContext.close failed during delete: %s", persona, exc_info=True)
+            yield
+        finally:
+            with cls._lock:
+                cls._deleting.discard(persona)
+
+    @classmethod
+    def is_deleting(cls, persona: str) -> bool:
+        """削除区間（``deleting()``）の最中か。"""
+        with cls._lock:
+            return persona in cls._deleting
 
     @classmethod
     def close_all(cls) -> None:

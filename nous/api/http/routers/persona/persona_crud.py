@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 from nous.api.http.deps import _PERSONA_PATTERN, _resolve_persona_from_request, _safe_get_context
 from nous.application.use_cases import AppContextRegistry
 from nous.config.settings import Settings
+from nous.domain.shared.errors import PersonaBusyError
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -19,20 +20,40 @@ logger = get_logger(__name__)
 
 
 async def _do_create_persona(persona_name: str) -> dict:
-    """Create a new persona. Returns status dict or error dict."""
+    """Create a new persona. Returns status dict or error dict (with ``status_code``)."""
     settings = Settings()
     persona_dir = Path(settings.persona_dir) / persona_name
-    if persona_dir.exists():
-        return {"error": f"Persona '{persona_name}' already exists"}
-    # AppContextRegistry.get は既存ペルソナディレクトリを要求するため先に作成する
-    persona_dir.mkdir(parents=True)
-    ctx = AppContextRegistry.get(persona_name)
-    if ctx is None:
-        return {"error": "Failed to initialize persona"}
+    try:
+        # 作成区間: 同名の create/delete と相互排他。後始末の rmtree が他人のディレクトリを消さない
+        with AppContextRegistry.creating(persona_name):
+            if persona_dir.exists():
+                return {"error": f"Persona '{persona_name}' already exists", "status_code": 409}
+            # AppContextRegistry.get は既存ペルソナディレクトリを要求するため先に作成する
+            try:
+                persona_dir.mkdir(parents=True)
+            except FileExistsError:
+                return {"error": f"Persona '{persona_name}' already exists", "status_code": 409}
+            try:
+                AppContextRegistry.get(persona_name, for_creation=True)
+            except Exception:
+                # AppContext 構築失敗。作りかけのディレクトリを残さない
+                logger.warning("create_persona init failed: %s", persona_name, exc_info=True)
+                try:
+                    shutil.rmtree(persona_dir)
+                except OSError:
+                    # 残すと persona_health の一覧にゴーストとして出続ける
+                    logger.warning("failed to clean up %s", persona_dir, exc_info=True)
+                return {
+                    "error": f"Persona '{persona_name}' initialization failed",
+                    "status_code": 500,
+                }
+    except PersonaBusyError as err:
+        return {"error": str(err), "status_code": 409}
     return {
         "status": "ok",
         "persona": persona_name,
         "message": f"Persona '{persona_name}' created",
+        "status_code": 201,
     }
 
 
@@ -52,10 +73,7 @@ async def create_persona(request: Request) -> JSONResponse:
             status_code=400,
         )
     result = await _do_create_persona(persona_name)
-    if "error" in result:
-        status = 409 if "already exists" in result["error"] else 500
-        return JSONResponse(result, status_code=status)
-    return JSONResponse(result, status_code=201)
+    return JSONResponse(result, status_code=result.pop("status_code", 500))
 
 
 async def _do_delete_persona(persona: str) -> dict:
@@ -65,28 +83,30 @@ async def _do_delete_persona(persona: str) -> dict:
     root = Path(settings.persona_dir).resolve()
     # ponytail: strict-subdir check; is_relative_to alone would admit persona_dir == root
     if persona_dir == root or not persona_dir.is_relative_to(root):
-        return {"error": "Invalid persona name"}
+        return {"error": "Invalid persona name", "status_code": 400}
     if not persona_dir.exists():
-        return {"error": f"Persona '{persona}' not found"}
+        return {"error": f"Persona '{persona}' not found", "status_code": 404}
     try:
-        # registry からの読み書きはロック内で行う（dict の直接操作は競合する）
-        AppContextRegistry.discard(persona)
-        shutil.rmtree(persona_dir)
-        return {"status": "ok", "deleted": persona}
+        # 削除区間: rmtree が終わるまで get() に再構築させない（区間への進入自体が原子的）
+        with AppContextRegistry.deleting(persona):
+            shutil.rmtree(persona_dir)
+        return {"status": "ok", "deleted": persona, "status_code": 200}
+    except PersonaBusyError as err:
+        return {"error": str(err), "status_code": 409}
+    except FileNotFoundError:
+        # 先行の削除が完走した（DELETE は冪等）
+        return {"error": f"Persona '{persona}' not found", "status_code": 404}
     # 最終防衛線: 予期せぬ削除エラー
     except Exception:
         logger.exception("delete_persona failure")
-        return {"error": "Internal server error"}
+        return {"error": "Internal server error", "status_code": 500}
 
 
 async def delete_persona(request: Request) -> JSONResponse:
     """DELETE /api/personas/{persona} — delete a persona."""
     persona = _resolve_persona_from_request(request)
     result = await _do_delete_persona(persona)
-    if "error" in result:
-        status_code = 400 if "Invalid" in result["error"] else 404 if "not found" in result["error"] else 500
-        return JSONResponse(result, status_code=status_code)
-    return JSONResponse(result)
+    return JSONResponse(result, status_code=result.pop("status_code", 500))
 
 
 async def _do_update_persona_profile(persona: str, ctx, body: dict) -> dict:

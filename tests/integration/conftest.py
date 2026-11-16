@@ -44,11 +44,11 @@ def _auto_persona_dirs(_reset_singletons):
 
     original_get = AppContextRegistry.get.__func__
 
-    def _get_with_mkdir(cls, persona, config=None):
+    def _get_with_mkdir(cls, persona, config=None, **kwargs):
         settings = AppContextRegistry._settings
         if settings is not None:
             Path(settings.persona_dir).joinpath(persona).mkdir(parents=True, exist_ok=True)
-        return original_get(cls, persona, config)
+        return original_get(cls, persona, config, **kwargs)
 
     AppContextRegistry.get = classmethod(_get_with_mkdir)  # type: ignore[attr-defined]
     yield

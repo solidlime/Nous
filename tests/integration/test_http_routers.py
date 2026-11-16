@@ -16,6 +16,7 @@ import logging
 import os
 import shutil
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import httpx
@@ -23,6 +24,7 @@ import pytest
 
 from nous.application.use_cases import AppContextRegistry
 from nous.config.runtime_config import RuntimeConfigManager
+from nous.config.settings import Settings
 from nous.main import create_app
 
 # ---------------------------------------------------------------------------
@@ -295,6 +297,71 @@ class TestPersonaCRUD:
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
         assert resp.json()["deleted"] == "to_delete"
+
+    async def test_delete_unlocks_registry_when_rmtree_fails(self, client):
+        """rmtree が投げても削除区間は閉じる（残すと以後 get() が恒久拒否になる）。"""
+        await client.post("/api/personas", json={"name": "stuck_delete"})
+        with patch(
+            "nous.api.http.routers.persona.persona_crud.shutil.rmtree",
+            side_effect=OSError("boom"),
+        ):
+            resp = await client.delete("/api/personas/stuck_delete")
+        assert resp.status_code == 500
+        assert AppContextRegistry.is_deleting("stuck_delete") is False
+
+    async def test_create_failure_leaves_no_directory(self, client):
+        """AppContext 構築が落ちたら作りかけのディレクトリを残さない。"""
+        with patch("nous.application.use_cases.AppContext", side_effect=RuntimeError("boom")):
+            resp = await client.post("/api/personas", json={"name": "half_born"})
+        assert resp.status_code == 500
+        assert not (Path(Settings().persona_dir) / "half_born").exists()
+
+    async def test_cleanup_runs_inside_creating_interval(self, client):
+        """後始末の rmtree は作成区間の内側（他要求の get() を締め出したまま消す）。"""
+        seen: list[bool] = []
+        real_rmtree = shutil.rmtree
+
+        def _spy(path, *a, **k):
+            seen.append("half_born" in AppContextRegistry._creating)
+            return real_rmtree(path, *a, **k)
+
+        with (
+            patch("nous.application.use_cases.AppContext", side_effect=RuntimeError("boom")),
+            patch("nous.api.http.routers.persona.persona_crud.shutil.rmtree", side_effect=_spy),
+        ):
+            resp = await client.post("/api/personas", json={"name": "half_born"})
+        assert resp.status_code == 500
+        assert seen == [True]
+
+    async def test_create_during_delete_returns_409(self, client):
+        """削除区間中の create は 409（500 にしない）。"""
+        with AppContextRegistry.deleting("busy_create"):
+            resp = await client.post("/api/personas", json={"name": "busy_create"})
+        assert resp.status_code == 409
+
+    async def test_create_during_create_returns_409(self, client):
+        """同名の作成区間中は作らない（後始末の rmtree が他人のディレクトリを消さない）。"""
+        with AppContextRegistry.creating("busy_create2"):
+            resp = await client.post("/api/personas", json={"name": "busy_create2"})
+        assert resp.status_code == 409
+
+    async def test_delete_during_create_returns_409(self, client):
+        """作成区間中の delete は 409（後始末 rmtree のディレクトリを消させない）。"""
+        persona_dir = Path(Settings().persona_dir) / "busy_create3"
+        persona_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            with AppContextRegistry.creating("busy_create3"):
+                resp = await client.delete("/api/personas/busy_create3")
+            assert resp.status_code == 409
+        finally:
+            persona_dir.rmdir()
+
+    async def test_delete_while_another_delete_in_progress_returns_409(self, client):
+        """別要求の削除区間中は譲る。"""
+        await client.post("/api/personas", json={"name": "busy_delete"})
+        with AppContextRegistry.deleting("busy_delete"):
+            resp = await client.delete("/api/personas/busy_delete")
+        assert resp.status_code == 409
 
 
 # ---------------------------------------------------------------------------

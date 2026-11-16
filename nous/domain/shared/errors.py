@@ -25,6 +25,10 @@ class PersonaValidationError(DomainError, ValueError):
     """Persona validation failed (invalid name or structure). Also a ValueError, see above."""
 
 
+class PersonaBusyError(DomainError):
+    """同じ persona の作成/削除が別の要求で進行中（registry の区間）。"""
+
+
 class ItemNotFoundError(DomainError):
     """Item not found."""
 
