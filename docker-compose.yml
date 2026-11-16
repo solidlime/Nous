@@ -28,7 +28,7 @@ services:
     volumes:
       # Nous アプリデータ永続化（persona, cache, sudachi, config, skills）
       # DATA_ROOT（ホスト） → /data（コンテナ、=NOUS_DATA_ROOT）
-      - ${DATA_ROOT}:/data
+      - ${DATA_ROOT}/data:/data
     restart: unless-stopped
     depends_on:
       qdrant:
@@ -55,8 +55,8 @@ services:
     command: ["python", "-m", "nous.services.sandbox_manager"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      # sandbox の /home/<persona>/workspace はここに置く
-      - ${DATA_ROOT}:/data
+      # sandbox の /home/<persona>/workspace はここに置く（nous の /data と同じ実体）
+      - ${DATA_ROOT}/data:/data
     restart: unless-stopped
     stop_grace_period: 30s
     # sock を持つプロセスなので、nous 本体より権限を絞る
