@@ -163,3 +163,25 @@ async def chat_events(request: Request) -> StreamingResponse:
         media_type="text/event-stream; charset=utf-8",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+async def chat_approval(request: Request) -> JSONResponse:
+    """POST /api/chat/{persona}/approval — 承認待ちの決定を受け取る。
+
+    body: ``{"approval_id": str, "decision": "allow" | "deny"}``。
+    該当が無ければ 404（タイムアウト後に届いた返答など）。
+    """
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"detail": "Persona not found"}, status_code=404)
+    try:
+        body = await request.json()
+    except (json.JSONDecodeError, TypeError):
+        return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
+
+    from nous.application.chat.service import get_turn_hub
+
+    approval_id = str(body.get("approval_id") or "")
+    decision = str(body.get("decision") or "deny")
+    resolved = get_turn_hub().resolve_approval(persona, approval_id, decision)
+    return JSONResponse({"resolved": resolved}, status_code=200 if resolved else 404)

@@ -143,6 +143,23 @@ function _emitChatSSE(evt) {
 }
 
 
+// 承認待ち。サーバー側は 120 秒で deny に落ちるので、返答が遅れても
+// ターンは止まらない。ターン状態に依存させない（別タブでも答える）。
+function _askApproval(evt) {
+  var persona = _chatEventsPersona || (window.S && window.S.persona);
+  if (!persona || !evt.approval_id) return;
+  var who = evt.tool_name === "bash" ? "シェル" : "ファイル操作";
+  var detail = String(evt.detail || "").trim() || "(内容なし)";
+  Promise.resolve(showConfirm(who + "を実行していい？\n\n" + detail)).then(function (ok) {
+    return api("/api/chat/" + encodeURIComponent(persona) + "/approval", {
+      method: "POST",
+      body: JSON.stringify({ approval_id: evt.approval_id, decision: ok ? "allow" : "deny" }),
+    });
+  }).catch(function (err) {
+    if (toast) toast("承認の送信に失敗: " + ((err && err.message) || err), "error");
+  });
+}
+
 function _handleHubMessage(e) {
   var seq = parseInt(e.lastEventId, 10);
   if (isFinite(seq) && seq > 0) {
@@ -157,6 +174,12 @@ function _handleHubMessage(e) {
     return;
   }
   if (!evt || !evt.type) return;
+
+  if (evt.type === "approval_requested") {
+    // 接続直後のリプレイ分は解決済みの可能性があるので出さない
+    if (!_hubSkipMode) _askApproval(evt);
+    return;
+  }
 
   if (evt.type === "turn_started") {
     N.Chat.ui.removeTyping();

@@ -17,6 +17,11 @@ from nous.application.chat.events import (
     ToolCallSSE,
     ToolResultSSE,
 )
+from nous.application.chat.tools.approval import (
+    APPROVAL_TIMEOUT_SECONDS,
+    approval_payload,
+    approval_required,
+)
 from nous.infrastructure.llm.base import (
     DoneEvent,
     ErrorEvent,
@@ -388,6 +393,26 @@ class InferenceStep:
                 )
         return events
 
+    async def _approval_denied(self, ctx: AppContext, config: ChatConfig, tc: ToolCallEvent) -> dict | None:
+        """承認が要るツールで拒否されたら拒否結果を返す（承認不要なら None）。"""
+        if not approval_required(config, tc.tool_name, tc.tool_input):
+            return None
+        from nous.application.chat.service import get_turn_hub
+
+        decision = await get_turn_hub().request_approval(
+            getattr(ctx, "persona", "") or "",
+            tc.tool_use_id or f"approval-{id(tc)}",
+            approval_payload(tc.tool_name, tc.tool_input),
+            APPROVAL_TIMEOUT_SECONDS,
+        )
+        if decision == "allow":
+            return None
+        return {
+            "status": "denied",
+            "tool": tc.tool_name,
+            "message": "ユーザーが実行を承認しなかった。別の手段を考えるか、理由を尋ねること。",
+        }
+
     async def _execute_pending_tools(
         self,
         ctx: AppContext,
@@ -399,7 +424,8 @@ class InferenceStep:
         """pending tool calls を（並列/直列設定に従って）実行し結果を返す。"""
 
         async def _exec_one(tc: ToolCallEvent):
-            result = await registry.execute(ctx, config, tc.tool_name, tc.tool_input)
+            denied = await self._approval_denied(ctx, config, tc)
+            result = denied if denied is not None else await registry.execute(ctx, config, tc.tool_name, tc.tool_input)
             truncated = registry.truncate_result(result, config.tool_result_max_chars)
             return (tc, truncated, result)
 

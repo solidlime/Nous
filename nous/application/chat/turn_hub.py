@@ -26,6 +26,10 @@ class TurnHub:
         # publish された場合に call_soon_threadsafe で安全に配送するため保持。
         self._subscribers: dict[str, list[tuple[asyncio.Queue, asyncio.AbstractEventLoop | None]]] = {}
         self._running: set[str] = set()
+        # 承認待ち: (persona, approval_id) -> 決定待ちの Event。
+        # inference がターン内で待ち、POST /approval が set する。
+        self._approvals: dict[str, dict[str, asyncio.Event]] = {}
+        self._approval_decisions: dict[str, dict[str, str]] = {}
         # seq の read-modify-write と deque append/反復の競合を防ぐ
         # (publish は worker スレッドからも呼ばれ得る)。最小ロック。
         self._lock = threading.Lock()
@@ -110,3 +114,35 @@ class TurnHub:
         subs = self._subscribers.get(persona)
         if subs:
             self._subscribers[persona] = [pair for pair in subs if pair[0] is not queue]
+
+    # ── 承認 ──────────────────────────────────────────────
+
+    async def request_approval(
+        self,
+        persona: str,
+        approval_id: str,
+        payload: dict,
+        timeout: float = 120.0,
+    ) -> str:
+        """``approval_requested`` を流して決定を待つ。タイムアウトは deny。"""
+        event = asyncio.Event()
+        with self._lock:
+            self._approvals.setdefault(persona, {})[approval_id] = event
+            self._approval_decisions.setdefault(persona, {})[approval_id] = "deny"
+        self.publish_event(persona, "approval_requested", {"approval_id": approval_id, **payload})
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(event.wait(), timeout)
+        with self._lock:
+            decision = self._approval_decisions.get(persona, {}).pop(approval_id, "deny")
+            self._approvals.get(persona, {}).pop(approval_id, None)
+        return decision
+
+    def resolve_approval(self, persona: str, approval_id: str, decision: str) -> bool:
+        """承認待ちを解決する。該当が無ければ False。"""
+        with self._lock:
+            event = self._approvals.get(persona, {}).get(approval_id)
+            if event is None:
+                return False
+            self._approval_decisions[persona][approval_id] = "allow" if decision == "allow" else "deny"
+        event.set()
+        return True
