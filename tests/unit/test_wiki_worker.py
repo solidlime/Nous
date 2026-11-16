@@ -1559,9 +1559,7 @@ class TestJournalLife:
             assert "09:12 演算ユニットを検算" in journal_prompt
             assert "14:40 ラウンジで紅茶" in journal_prompt
             assert journal_prompt.index("09:12") < journal_prompt.index("14:40 ラウンジ")
-            assert [s for _t, s, _d in _event_rows(conn) if s.startswith("generated")] == [
-                "generated 2 life lines"
-            ]
+            assert [s for _t, s, _d in _event_rows(conn) if s.startswith("generated")] == ["generated 2 life lines"]
         finally:
             conn.close()
 
