@@ -3,3 +3,10 @@ services:
     volumes:
       - ${DATA_ROOT}:/data
       - ./nous:/app/nous:ro
+
+  # nous と同じソースを見せる。ここを外すと ghcr の古い manager が動く。
+  sandbox-manager:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DATA_ROOT}:/data
+      - ./nous:/app/nous:ro

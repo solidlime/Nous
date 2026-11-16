@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from nous.domain.chat_config import ChatConfig
 
 # 承認が要り得るツール。read_file は読み取りなので常に素通し。
-APPROVAL_REQUIRED_TOOLS = frozenset({"bash", "write_file", "edit_file", "delegate"})
+APPROVAL_REQUIRED_TOOLS = frozenset({"bash", "write_file", "edit_file", "delegate", "sandbox"})
 
 APPROVAL_TIMEOUT_SECONDS = 120.0
 
@@ -37,7 +37,7 @@ def approval_required(config: ChatConfig, tool_name: str, tool_input: dict | Non
 
 
 # 承認ダイアログに出す要約キー。bash はコマンド、delegate はプロンプト、それ以外はパス。
-_PAYLOAD_KEYS = {"bash": "command", "delegate": "prompt"}
+_PAYLOAD_KEYS = {"bash": "command", "delegate": "prompt", "sandbox": "command"}
 
 
 def approval_payload(tool_name: str, tool_input: dict | None) -> dict:

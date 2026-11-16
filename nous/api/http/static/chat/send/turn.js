@@ -9,12 +9,9 @@
    ================================================================= */
 ;(function(N) {
 var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
-var showConfirm = C.showConfirm, showAlert = C.showAlert;
-var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
-var fmtStamp = C.fmtStamp;
+var api = C.api, toast = C.toast;
+var showConfirm = C.showConfirm;
 "use strict";
-var S = window.S;
 
 var CHAT = N.Chat.state;
 
@@ -148,7 +145,8 @@ function _emitChatSSE(evt) {
 function _askApproval(evt) {
   var persona = _chatEventsPersona || (window.S && window.S.persona);
   if (!persona || !evt.approval_id) return;
-  var who = evt.tool_name === "bash" ? "シェル" : "ファイル操作";
+  var toolLabels = { bash: "シェル", sandbox: "隔離シェル" };
+  var who = toolLabels[evt.tool_name] || "ファイル操作";
   var detail = String(evt.detail || "").trim() || "(内容なし)";
   Promise.resolve(showConfirm(who + "を実行していい？\n\n" + detail)).then(function (ok) {
     return api("/api/chat/" + encodeURIComponent(persona) + "/approval", {

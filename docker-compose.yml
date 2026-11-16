@@ -47,3 +47,35 @@ services:
       retries: 3
       start_period: 120s
 
+  # sandbox コンテナの Manager。docker.sock を持つのはこのプロセスだけ。
+  # ペルソナは DB で増減するのでサービスに固定せず、docker run で動的生成する。
+  sandbox-manager:
+    image: ghcr.io/solidlime/nous:latest
+    container_name: nous-sandbox-manager
+    command: ["python", "-m", "nous.services.sandbox_manager"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # sandbox の /home/<persona>/workspace はここに置く
+      - ${DATA_ROOT}:/data
+    restart: unless-stopped
+    # sock を持つプロセスなので、nous 本体より権限を絞る
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    expose:
+      - "8080"
+    # API キーは渡さない（sock を持つ側に秘密を持たせない）。SANDBOX_* だけで足りる。
+    environment:
+      NOUS_DATA_ROOT: /data
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-ubuntu:24.04}
+      SANDBOX_NETWORK: ${SANDBOX_NETWORK:-bridge}
+      SANDBOX_MEMORY: ${SANDBOX_MEMORY:-4g}
+      SANDBOX_IDLE_MINUTES: ${SANDBOX_IDLE_MINUTES:-30}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+

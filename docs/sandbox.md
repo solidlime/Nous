@@ -1,151 +1,169 @@
 # コード実行サンドボックス
 
-Nous のコード実行サンドボックスは **OpenSandbox** を利用する。
-従来の `llm-sandbox[docker]`（Docker SDK 直接制御）およびカスタム `browser` ツールは廃止され、
-OpenSandbox MCP + Playwright MCP に移行した。
+ペルソナがホストと隔離されたコンテナの中でコードを動かすための構成。
+
+旧 OpenSandbox 案（`opensandbox` / `opensandbox-mcp` / `playwright` の3サービス）は破棄した。
+現行は **sandbox-manager 1サービス + 動的生成コンテナ**。git 履歴にだけ残っている。
 
 ---
 
-## アーキテクチャ
+## なぜ manager を挟むか
 
-```
-ホストOS
-│
-├─ [opensandbox]         ← OpenSandbox Server（port 8090）
-│   └─ Docker ソケット経由で sandbox コンテナを管理
-│       ├─ sandbox_001  ── persona A 専用ワークスペース
-│       ├─ sandbox_002  ── persona B 専用ワークスペース
-│       └─ ...
-│
-├─ [opensandbox-mcp]    ← OpenSandbox MCP ゲートウェイ（port 8000）
-│   └─ MCP プロトコルで sandbox 操作を提供（20 ツール）
-│
-└─ [playwright]         ← Playwright MCP（port 8931）
-    └─ headless Chromium + 20+ ブラウザ操作ツール
-```
+`docker.sock` を nous 本体に渡すと、nous が侵害された瞬間にホスト root まで届く。
+manager に閉じれば、触れるのは sandbox の作成・exec・停止だけになる。
 
-### 従来構成からの変更点
+| 案 | 判断 |
+|---|---|
+| nous に sock | 却下。攻撃面が nous の全コードに広がる |
+| ペルソナごとに compose サービス | 却下。ペルソナは DB で増減するので、作るたびに編集と再デプロイが要る |
+| **manager にだけ sock、ペルソナは `docker run` で動的生成** | 採用 |
 
-| 項目 | 変更前 | 変更後 |
-|------|--------|--------|
-| コード実行 | `llm-sandbox[docker]` Docker SDK 直接制御 | OpenSandbox Server + MCP |
-| ブラウザ操作 | カスタム `browser` ツール | Playwright MCP（外部） |
-| ファイル操作 | `sandbox_files` ツール | OpenSandbox `sandbox_files` |
-| ペルソナ分離 | バインドマウント `data/persona/{persona}/sandbox/` | OpenSandbox sandbox 単位のコンテナ分離 |
+副次的に、アイドル停止のタイマーが nous の再起動で消えない。
+`docker compose -p nous-sandbox ps` で sandbox だけを擬似スタックとして一望できる。
 
 ---
 
-## セットアップ
+## 構成
 
-### 1. Docker Compose（推奨）
-
-`docker-compose.yml` に opensandbox / opensandbox-mcp / playwright サービスが定義されている。
-
-```bash
-docker-compose up -d
+```
+docker compose（nous スタック）
+├─ qdrant
+├─ nous              ← sock 持たない。sandbox-manager に HTTP で頼む
+└─ sandbox-manager   ← sock を持つのはこいつだけ（nous と同一イメージ・別プロセス）
+     └─ docker run で <persona>-sandbox（動的生成）
 ```
 
-起動後、各サービスの状態を確認:
+コンテナ名は必ず `<persona>-sandbox`。素の `<persona>` はホストの他コンテナと衝突する。
+`docker exec herta-sandbox bash` で直接入れる。
 
-```bash
-docker-compose ps
-docker-compose logs opensandbox
-docker-compose logs opensandbox-mcp
-docker-compose logs playwright
+manager が付けるラベルで、sandbox は擬似 compose スタックとして扱える:
+
+```
+com.docker.compose.project=nous-sandbox
+com.docker.compose.service=sbx-<persona>
+com.nous.sandbox=1
 ```
 
-### 2. 環境変数
-
-OpenSandbox は `.env` の `DATA_ROOT` 配下にデータを永続化する。追加の環境変数は基本的に不要。
-
-```env
-# OpenSandbox のデータ永続化パス（docker-compose.yml で自動設定）
-# ${DATA_ROOT}/opensandbox/volumes/
-```
+`docker compose -p nous-sandbox ps` / `stop` が効く。
+`com.nous.sandbox=1` は `/reset` の安全確認にも使う（このラベルの無いコンテナは消さない）。
 
 ---
 
-## OpenSandbox MCP ツール一覧
+## sandbox の中身
 
-OpenSandbox MCP は以下のツールを提供する（計 20 ツール）:
+| コンテナ内 | ホスト | モード |
+|---|---|---|
+| `/home/<persona>/workspace` | `${DATA_ROOT}/persona/<persona>/workspace` | rw |
+| `/home/<persona>/.agents/skills` | `${DATA_ROOT}/persona/<persona>/skills` | rw |
+| `/home/<persona>/.agents/global-skills` | `${DATA_ROOT}/skills` | ro |
 
-| ツール | 説明 |
-|--------|------|
-| `sandbox_create` | 新しい sandbox を作成 |
-| `sandbox_execute` | sandbox 内でコード実行 |
-| `sandbox_files` | sandbox 内ファイル操作（list/read/write/append/delete） |
-| `sandbox_install` | sandbox 内にパッケージインストール |
-| `sandbox_reset` | sandbox リセット（files/packages/full） |
-| `sandbox_list` | sandbox 一覧 |
-| `sandbox_info` | sandbox 詳細情報 |
-| 他 13 ツール | ファイルアップロード/ダウンロード等 |
+**渡さないもの**: memory（`memory.sqlite` / `inventory.sqlite` / `config.json`）、wiki。
+記憶化は nous 側の自動抽出が担うので、sandbox に DB を持たせる必要がない。
 
-**ツール命名規則**: MCP クライアントからは `opensandbox__sandbox_create` のように `opensandbox__` プレフィックスでアクセスする。
+スキルはグローバルとペルソナ専用の2本。同名はペルソナ優先（`/api/skills/{persona}` も同じ順で重ねる）。
+sandbox 内のエージェントには AGENTS.md で両方のパスを教える。
 
----
-
-## Playwright MCP ツール一覧
-
-Playwright MCP は以下のツールを提供する:
-
-| ツール | 説明 |
-|--------|------|
-| `browser_navigate` | URL に移動 |
-| `browser_click` | 要素をクリック |
-| `browser_snapshot` | ページのアクセシビリティスナップショット取得 |
-| `browser_fill` | フォームフィールドに入力 |
-| `browser_evaluate` | JavaScript 実行 |
-| `browser_screenshot` | スクリーンショット取得 |
-| 他 15+ ツール | ページ操作全般 |
-
-**ツール命名規則**: MCP クライアントからは `playwright__browser_navigate` のように `playwright__` プレフィックスでアクセスする。
+**注意**: `${DATA_ROOT}/<persona>/` は使わない。既存の `persona_dir` 規約（`${DATA_ROOT}/persona/<persona>`）と二重になる。
 
 ---
 
-## ペルソナ分離
+## manager の API
 
-OpenSandbox は **sandbox 単位のコンテナ分離** でペルソナ分離を実現する:
+`sandbox-manager` は `nous.services.sandbox_manager` を `python -m` で起動する FastAPI アプリ。
+ポート 8080、compose ネットワーク内にだけ公開する。
 
-- ペルソナごとに独立した sandbox コンテナが作成される
-- 各 sandbox は `cap_drop: ALL` + `no-new-privileges` で動作
-- ファイルシステムは sandbox 内に隔離され、他のペルソナからアクセス不可
-- OpenSandbox の設定（`docker-compose.yml` configs セクション）でセキュリティポリシーを一括管理
+| メソッド | パス | 役割 |
+|---|---|---|
+| POST | `/exec` | `{persona, command, cwd?, timeout_seconds?, image?, network?, memory?, idle_minutes?}` → `{status, exit_code, stdout_tail, stderr_tail, truncated, log_path}` |
+| POST | `/reset` | `{persona, image?, network?, memory?, idle_minutes?}` → コンテナ削除 + `${DATA_ROOT}/persona/<p>/workspace` 削除して作り直す。exec の実行中は拒否する（拒否判定と `rmtree` の間に exec が始まる狭い窓は残る）。workspace を消せない・作れないときは `status="error"` |
+| GET | `/list` | 稼働中 sandbox の一覧 |
+| POST | `/touch` | 最終利用時刻の更新（今は nous 側に呼び出し元がない） |
+| GET | `/health` | 死活確認 |
+
+- persona は `[a-z0-9_-]` のみ。外れたら 400
+- exec は `docker exec [-w cwd] <persona>-sandbox bash -lc <command>`。subprocess は `shell=False` のリスト引数で、`command` 文字列は内側の `bash -lc` にだけ渡す
+- 出力は末尾 120 行だけ返し、全文は `{DATA_ROOT}/sandbox/<persona>/logs/` に落とす（`log_path`）
+- アイドル `sandbox_idle_minutes`（既定 30）で `docker stop`。状態は残し、次の exec で `docker start` する
+
+---
+
+## nous 側
+
+ツール名は `sandbox`。`sandbox_enabled` と `sandbox_manager_url` の両方が揃ったときだけ公開する
+（`workspace_root` の有無とは無関係）。既定は無効なので、使うペルソナで明示的に有効化する。
+`bash` / `write_file` / `edit_file` と同じく承認が要る（`shell_approval_mode` に従う）。
+
+| 設定 | 既定 | 意味 |
+|---|---|---|
+| `sandbox_enabled` | `false` | サンドボックスツールのマスタースイッチ |
+| `sandbox_manager_url` | `""` | manager の URL。空なら enabled でもツールを出さない |
+| `sandbox_image` | （空） | 生成するコンテナのイメージ。空なら manager の `SANDBOX_IMAGE`。素の ubuntu なので python も入っていない |
+| `sandbox_network` | （空） | sandbox のネットワーク。空なら manager の `SANDBOX_NETWORK`。**compose ネットワークを指定しないこと** |
+| `sandbox_memory` | （空） | メモリ上限。空なら manager の `SANDBOX_MEMORY` |
+| `sandbox_idle_minutes` | `0` | 停止までのアイドル時間。0 なら manager の `SANDBOX_IDLE_MINUTES` |
+
+manager に届かない・未設定のときは `status="error"` を返す。例外は投げない。
+
+戻り値は manager の `stdout_tail` / `stderr_tail` をそのまま返す（`bash` ツールの
+`stdout` とは別名。manager の契約を優先している）。
+
+### manager 側の環境変数（compose で渡す）
+
+| 変数 | 既定 | 意味 |
+|---|---|---|
+| `NOUS_DATA_ROOT` | `/data` | manager コンテナ内のデータ根。ログと workspace 削除に使う |
+| `SANDBOX_HOST_DATA_ROOT` | （inspect で自動） | bind mount の source。**ホスト絶対パス**で渡す。inspect の結果と違えば拒否する |
+| `SANDBOX_MANAGER_HOST` | `0.0.0.0` | uvicorn の bind。ホストで直接動かすなら `127.0.0.1` |
+| `SANDBOX_IMAGE` | `ubuntu:24.04` | 上の `sandbox_image` の既定 |
+| `SANDBOX_NETWORK` | `bridge` | 上の `sandbox_network` の既定 |
+| `SANDBOX_MEMORY` | `4g` | 上の `sandbox_memory` の既定 |
+| `SANDBOX_IDLE_MINUTES` | `30` | 上の `sandbox_idle_minutes` の既定 |
+
+`SANDBOX_HOST_DATA_ROOT` が相対パスだと docker は source を名前付きボリュームとして扱うので、
+設定するなら絶対パスにする。未設定なら manager が自分の `/data` のマウント元を `docker inspect` で調べる
+（`{{.Id}}` は 64 桁 hex。先頭 12 文字の `HOSTNAME` と突き合わせ、一致しなければ adopt しない）。
+**どちらも解決できないときは bind mount を作らず `status="error"`**（ホスト直下に `/data` を
+作って空の sandbox を動かす事故を防ぐ）。
 
 ---
 
 ## セキュリティ
 
-- **OpenSandbox**: Docker コンテナ単位の分離 + ケーパビリティ制限
-- **Playwright MCP**: headless Chromium sandbox モード + 隔離ユーザーデータディレクトリ
-- **ネットワーク**: 両サービスとも必要最小限のポートのみ公開
-- **データ永続化**: `${DATA_ROOT}` 配下に保存され、コンテナ削除後も保持
+- sock を持つのは `sandbox-manager` だけ。nous は持たない
+- **`SANDBOX_NETWORK` に compose ネットワークを指定しない**。指定すると、1つの sandbox から他の sandbox の manager API（無認証）に届き、他人の sandbox を exec / rm できてしまう
+- sandbox は `no-new-privileges` + `--pids-limit 1024` + メモリ・CPU 上限付き。manager は `cap_drop: ALL`
+- ホストのマウントは workspace とスキルだけ。memory / wiki / config は渡さない
+- exec の引数は `shell=False`。コマンド文字列はコンテナ内の `bash -lc` でのみ解釈する
+- コンテナは `com.nous.sandbox=1` ラベルで識別する。名前だけ一致する他人のコンテナは exec / rm しない
+
+**manager は無認証**。`/exec` は任意コマンド実行、`/reset` は workspace 削除なので、
+ネットワーク分離（`SANDBOX_NETWORK` に compose ネットワークを置かない）が唯一の防壁。
+共有トークンは未実装。
+
+---
+
+## 保留
+
+- 長いコマンドのストリーミングは入れない（末尾 N 行だけ返す）。必要になったら SSE
+- 外側の `subprocess` がタイムアウトしても、コンテナ内のプロセスは残る（孤児）
+- sock のパーミッション（manager を root 以外で動かすなら `group_add`）は実機確認
+- sandbox の `--user`（uid 不一致で書けない問題）は未対応
 
 ---
 
 ## トラブルシューティング
 
-### OpenSandbox が起動しない
-
 ```bash
-docker-compose logs opensandbox
-# Docker ソケットのマウントを確認
-docker-compose exec opensandbox ls -la /var/run/docker.sock
-```
+# manager の状態
+docker compose ps sandbox-manager
+docker compose logs -f sandbox-manager
 
-### OpenSandbox MCP に接続できない
+# sandbox の一覧（manager 経由）
+curl -s http://sandbox-manager:8080/list
 
-```bash
-# opensandbox サービスのヘルスチェック
-curl http://localhost:8090/health
-# opensandbox-mcp のログ
-docker-compose logs opensandbox-mcp
-```
+# 擬似スタックとして見る
+docker compose -p nous-sandbox ps
 
-### Playwright MCP が応答しない
-
-```bash
-# ヘルスチェック
-curl http://localhost:8931/health
-# ログ確認
-docker-compose logs playwright
+# 中に入る
+docker exec -it <persona>-sandbox bash
 ```

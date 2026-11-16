@@ -33,6 +33,19 @@ class ToolConfig(BaseModel):
         default=[], description="allowlist モードで無承認に通すコマンド名（先頭トークン）。"
     )
 
+    # サンドボックス（manager 経由の隔離コンテナ）。sandbox_manager_url が空ならツールを公開しない
+    sandbox_enabled: bool = Field(default=False, description="サンドボックスツールを有効にします。")
+    sandbox_manager_url: str = Field(
+        default="", description="sandbox-manager の URL（例 http://sandbox-manager:8080）。"
+    )
+    # 空 / 0 は「manager の env 既定に従う」。設定した値だけが /exec に上乗せされる。
+    sandbox_image: str = Field(default="", description="sandbox コンテナのイメージ。空なら manager の既定。")
+    sandbox_network: str = Field(default="", description="sandbox コンテナのネットワーク。空なら manager の既定。")
+    sandbox_memory: str = Field(default="", description="sandbox コンテナのメモリ上限。空なら manager の既定。")
+    sandbox_idle_minutes: int = Field(
+        default=0, description="sandbox を停止するアイドル時間（分）。0 で manager の既定。"
+    )
+
     # 画像生成
     image_gen_enabled: bool = Field(default=False, description="画像生成機能を有効にします。")
     image_gen_provider: str = Field(default="comfyui", description="画像生成に使うプロバイダー。")

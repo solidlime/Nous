@@ -356,6 +356,11 @@ def get_filtered_tools(config: ChatConfig) -> list[ToolDefinition]:
         base += WORKSPACE_TOOLS
         base.append(DELEGATE_TOOL)
 
+    # sandbox は workspace_root に依存しない（manager が隔離コンテナを用意する）。
+    # 明示的に有効化し、かつ manager の URL が設定されているときだけ出す。
+    if getattr(config, "sandbox_enabled", False) and getattr(config, "sandbox_manager_url", ""):
+        base.append(SANDBOX_TOOL)
+
     if not config.dynamic_tool_selection:
         return [t for t in base if t.name not in disabled]
 
@@ -447,6 +452,24 @@ WORKSPACE_TOOLS: list[ToolDefinition] = [
         },
     ),
 ]
+
+
+SANDBOX_TOOL: ToolDefinition = ToolDefinition(
+    name="sandbox",
+    description=(
+        "隔離コンテナ内でシェルコマンドを実行する。ホストのワークスペースは触れない。"
+        "出力は末尾120行のみ、全文は log_path。"
+        "sandbox は永続で、アイドルで停止し次回起動時に再開する。"
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "command": {"type": "string", "description": "実行するシェルコマンド"},
+            "cwd": {"type": "string", "description": "コンテナ内の作業ディレクトリ（絶対パス）"},
+        },
+        "required": ["command"],
+    },
+)
 
 
 DELEGATE_TOOL: ToolDefinition = ToolDefinition(

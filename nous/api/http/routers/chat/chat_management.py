@@ -112,6 +112,12 @@ _SECTION_EXACT: dict[str, str] = {
     "shell_timeout_seconds": "tools",
     "shell_approval_mode": "tools",
     "shell_allowed_commands": "tools",
+    "sandbox_enabled": "tools",
+    "sandbox_manager_url": "tools",
+    "sandbox_image": "tools",
+    "sandbox_network": "tools",
+    "sandbox_memory": "tools",
+    "sandbox_idle_minutes": "tools",
 }
 # 設定ではないメタフィールドは除外。
 _META_FIELD_NAMES = frozenset({"persona", "updated_at"})
@@ -178,6 +184,13 @@ _TIER_ADVANCED: frozenset[str] = frozenset(
         "shell_timeout_seconds",
         "shell_approval_mode",
         "shell_allowed_commands",
+        # サンドボックス（manager 経由の隔離コンテナ）
+        "sandbox_enabled",
+        "sandbox_manager_url",
+        "sandbox_image",
+        "sandbox_network",
+        "sandbox_memory",
+        "sandbox_idle_minutes",
         # 抽出
         "auto_extract",
         "extract_model",

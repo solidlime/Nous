@@ -20,7 +20,8 @@ services:
     volumes:
       - ./nous:/app/nous
       # データ永続化（SQLite, HuggingFace cache, Sudachi, Qdrant 設定等）
-      - ./data:/data
+      # manager と同じ木を見る必要があるので、base と同じ ${DATA_ROOT} を使う。
+      - ${DATA_ROOT}:/data
       # 設定ファイル（.env と同じ効果）
       - ./.env:/app/.env:ro
     # command は継承（CMD ["python", "-m", "nous.main"]）
@@ -32,3 +33,16 @@ services:
     # user は継承（nous ユーザー）。マウントした nous/ の owner と一致しない場合は
     # 書き込み権限がない。dev では root で動かしても可。
     user: "0:0"
+
+  # manager も同じソースで動かす。ghcr の古いイメージが動くと、修正が検証できない。
+  sandbox-manager:
+    image: nous:dev
+    user: "0:0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DATA_ROOT}:/data
+      - ./nous:/app/nous
+    environment:
+      PYTHONUNBUFFERED: "1"
+      NOUS_LOG_LEVEL: DEBUG
+      NOUS_DATA_ROOT: /data
