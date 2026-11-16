@@ -73,6 +73,28 @@ def _kill_tree(proc: asyncio.subprocess.Process) -> None:
             proc.kill()
 
 
+async def _communicate_with_timeout(
+    proc: asyncio.subprocess.Process,
+    timeout: float,
+) -> tuple[bytes, bytes, bool]:
+    """出力を集めきるが timeout で殺す。殺してもそれまでの出力は捨てない。
+
+    wait_for(communicate()) はキャンセル時に読んだ分を捨てるので、タスクで待つ。
+    """
+    comm = asyncio.ensure_future(proc.communicate())
+    done, _pending = await asyncio.wait({comm}, timeout=timeout)
+    if comm in done:
+        out_b, err_b = comm.result()
+        return out_b, err_b, False
+    _kill_tree(proc)
+    with contextlib.suppress(TimeoutError):
+        out_b, err_b = await asyncio.wait_for(comm, 5)
+        return out_b, err_b, True
+    if not comm.done():
+        comm.cancel()
+    return b"", b"", True
+
+
 def _save_log(ctx: AppContext, command: str, stdout: str, stderr: str) -> str | None:
     """全文を artifact に落とす。失敗してもツール自体は成功させる。"""
     try:
@@ -108,16 +130,7 @@ async def _handle_bash(ctx: AppContext, config: ChatConfig, tool_input: dict) ->
         stderr=asyncio.subprocess.PIPE,
         start_new_session=True,
     )
-    timed_out = False
-    try:
-        out_b, err_b = await asyncio.wait_for(proc.communicate(), timeout)
-    except TimeoutError:
-        timed_out = True
-        _kill_tree(proc)
-        try:
-            out_b, err_b = await asyncio.wait_for(proc.communicate(), 5)
-        except TimeoutError:
-            out_b, err_b = b"", b""
+    out_b, err_b, timed_out = await _communicate_with_timeout(proc, timeout)
     duration_ms = int((time.monotonic() - started) * 1000)
 
     stdout = out_b.decode("utf-8", "replace")
@@ -136,11 +149,14 @@ async def _handle_bash(ctx: AppContext, config: ChatConfig, tool_input: dict) ->
         # registry が tool.called の payload にマージする監査情報
         "audit": {"command": command[:500], "exit_code": proc.returncode, "duration_ms": duration_ms},
     }
+    notes: list[str] = []
     if timed_out:
         result["timed_out"] = True
-        result["note"] = f"{timeout:.0f} 秒で打ち切った（プロセスは殺した）"
+        notes.append(f"{timeout:.0f} 秒で打ち切った（プロセスは殺した）")
     if stdout_cut or stderr_cut:
-        result["note"] = f"末尾 {TAIL_LINES} 行のみ表示。全文は log_path。"
+        notes.append(f"末尾 {TAIL_LINES} 行のみ表示。全文は log_path。")
+    if notes:
+        result["note"] = " ".join(notes)
     log_path = _save_log(ctx, command, stdout, stderr)
     if log_path:
         result["log_path"] = log_path

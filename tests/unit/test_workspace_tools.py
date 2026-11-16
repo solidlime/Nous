@@ -203,3 +203,15 @@ class TestAudit:
         assert payload["exit_code"] == 0
         assert "duration_ms" in payload
         assert payload["success"] is True
+
+
+class TestShellNotes:
+    async def test_timeout_and_truncation_notes_coexist(self, root, config, ctx):
+        """打ち切りとタイムアウトが同時に起きても note が片方消えない。"""
+        config.shell_timeout_seconds = 1
+        script = "for i in range(600): print('line%d' % i)\nimport time; time.sleep(5)"
+        result = await _handle_bash(ctx, config, {"command": f'python3 -u -c "{script}"'})
+        assert result.get("timed_out") is True
+        assert result["truncated"] is True
+        assert "秒で打ち切った" in result["note"]
+        assert "末尾" in result["note"]
