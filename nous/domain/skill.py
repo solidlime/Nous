@@ -253,11 +253,10 @@ class SkillRepository:
             from nous.config.settings import get_settings
 
             skills_dir = get_settings().skills_dir
-        root = Path(skills_dir).resolve()
-        skill_dir = (root / name).resolve()
         # 名前は 1 セグメントに限る（'..' で skills_dir の外を消させない）
-        if skill_dir == root or not skill_dir.is_relative_to(root):
+        if not name or name in {".", ".."} or "/" in name or "\\" in name:
             return
+        skill_dir = Path(skills_dir) / name
         if skill_dir.exists():
             shutil.rmtree(skill_dir)
             log = _get_logger()
