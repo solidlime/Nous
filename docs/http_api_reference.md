@@ -346,6 +346,28 @@ The chat view swaps the persona avatar image to `url` on receipt.
 
 ---
 
+## Session Begin
+
+### `POST /api/session/{persona}/begin`
+
+1ターン開始時のコンテキスト取得を HTTP から行う（MCP `session_begin` と同一の実装）。
+`get_context()` が持っていた副作用（会話時刻の記録・ワンショット状態の消費）はこの経路に寄せてある。
+
+**Response（既定は envelope）:**
+```json
+{ "ok": true, "data": { "context": "..." }, "error": null }
+```
+
+`?compat=legacy` を付けると v4.0 以前のフラット形式（`{ok, result}`）を返し、
+`compat=legacy used: POST /api/session/{persona}/begin` を WARNING で1行出す。
+`legacy` 以外の値は無視される。v5 で削除予定。
+
+state 取得に失敗したときは、`compat=legacy` でも封筒を返す
+（`500` / `{ok:false, data:null, error:{code:"INTERNAL"}}`）。旧形式で返すと
+`ok:false` は返せても `error` を JSON 化できる保証がないため、失敗の形は新しい封筒に一本化する。
+
+---
+
 ## Core Memory Blocks
 
 Named Memory Blocks（`memory_blocks` テーブル、`block_name` 主キー）を操作する。

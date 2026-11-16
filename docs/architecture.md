@@ -61,7 +61,8 @@ nous/
 │   │   ├── tools/             # 組み込みツール定義
 │   │   └── service.py         # チャットサービス
 │   ├── workers/               # バックグラウンドワーカー
-│   │   └── wiki_worker.py           # 記憶編纂
+│   │   ├── wiki_worker.py           # 記憶編纂
+│   │   └── prospective_worker.py    # 期限が近い約束の 1h sweep
 │   └── use_cases.py           # AppContextRegistry
 ├── domain/                    # ドメインモデル
 │   ├── memory/                # 記憶エンティティ/サービス/リポジトリ
@@ -220,6 +221,10 @@ MCP として公開しないチャット組み込みツール（`move` / `invoke
 - **日次 wiki 編纂（item 5）**: `WikiWorker` が定刻（既定 03:00 JST = `NOUS_WIKI__RUN_AT_TZ`、`--hour` は `NOUS_WIKI__RUN_AT_HOUR`）に起動し、未編纂の記憶をトピックページへまとめ、源記憶を `archived` に落とす。LLM が空応答/切れ JSON を返した場合は max_tokens を 2 倍にして 1 回だけ再試行し、サイクル内に error が残ったら 30 分後に再挑戦する（丸 1 日空けない）。
   1 サイクルは 3 段: (1) 前日（JST）の記憶・`session_events` の営み・人物設定から起こした暮らし（`life_enabled`、記憶には残さない）から `journal-YYYY-MM-DD` 日記ページを作る、(2) トピックページを編纂する、(3) 編纂応答の `conflicts` / `questions` を監査イベントと `open-question` 記憶に落とす（追加 LLM 呼び出しなし）。続いて `questions` を**persona に登録済みの MCP ツールだけ**で調べ（`research_enabled`、既定 `false`）、URL が取れたものだけページ末尾の `## 外部情報` に追記する。ツール 0 件なら何もしない（`skipped: no mcp tool` の 1 行）。
   記憶層の矛盾掃除は週 1 回（`memory_conflict_interval_hours`=168）別建てで走る: 同 project タグ + 本文 Jaccard + 数値の食い違いで候補を純関数抽出し（LLM 0 回）、`classify_contradiction` を `memory_conflict_max_pairs`=10 件まで適用、矛盾なら古い側の `valid_until` を閉じて `superseded_by` で繋ぐ（削除しない）。全件判定不能な回は `warning:` で記録し、週次ゲートを再武装しない。
+
+- **記憶の干渉とマージレビュー（audit M1）**: 記憶書込時の既存エボリューション検索結果を再利用し、類似度 `0.85–0.95` の既存側に `interference_count` を加算する（検索回数は増えない）。同じペアで 3 回に達したら `session_events` に `memory.merge_review`（`session_id=memory_write`、summary `merge review: {key} ~ {other_key}`）を 1 件置く。人手（またはエージェント）がマージを検討するキューで、自動マージはしない。
+- **期限が近い約束（audit M2）**: 各ターンのプロンプト注入は `due_cues(..., allow_overdue=False)` で期限切れを出さない（`context_loader.py`）。`ProspectiveWorker` が 1 時間ごとに全 persona の約束を掃き、キー集合が変わった時だけ `prospective.due` を `session_events` に記録する（記憶は書かない、ライブ注入と二重になるため）。
+- **感情の効き方（audit H4/H5）**: 感情強度は検索時の salience（`RankPolicy.emotion_salience_weight`=0.1）にのみ寄与し、永続 `stability` を膨らませない（`emotion_peak` 列は書込・参照とも廃止、DROP は v5）。過去に膨らんだ行はマイグレーション v13 が 1 回だけ 1.0 に clamp する（LTM は対象外）。
 
 残る常駐 worker は `WikiWorker` のみ（ConsolidationWorker は 2026-11 に撤去。Curation / Freshness / Enrichment / Decay は 2026-11-08 に廃止）。
 
