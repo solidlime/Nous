@@ -22,6 +22,12 @@ CONTRADICTED_CONFIDENCE_FACTOR = 0.5
 CORROBORATION_SIMILARITY_MIN = 0.9
 CORROBORATION_CONFIDENCE_DELTA = 0.1
 
+# audit M1 — interference band。下限 0.85 は _save_extracted_facts の重複スキップ境界
+# （memory_extractor は >0.85 の厳密比較、こちらは >=0.85 の包含）。
+# 上限 0.95 以上は同じ記憶の書き直しとみなす。
+INTERFERENCE_SIMILARITY_MIN = 0.85
+INTERFERENCE_SIMILARITY_MAX = 0.95
+
 
 class MemoryEvolutionService:
     """Handles memory evolution, contradiction detection, and background tasks."""
@@ -48,6 +54,7 @@ class MemoryEvolutionService:
         self,
         content: str,
         new_memory_key: str,
+        persona: str = "default",
         max_related: int = 3,
     ) -> None:
         """After creating a new memory, find semantically similar existing
@@ -86,6 +93,11 @@ class MemoryEvolutionService:
             )
             if not similar.is_ok or not similar.value:
                 return
+
+            # --- audit M1: interference (+1 on the *existing* side) ---
+            # Reuses the search above — no second semantic search per write.
+            similar_items = similar.value  # type: ignore[union-attr]
+            self._note_interference(similar_items, new_memory_key, persona)
 
             # --- HiMem-style 3-op contradiction classification ---
             invalidated_keys: set[str] = set()
@@ -197,6 +209,32 @@ class MemoryEvolutionService:
             # Evolution is best-effort, never blocks the main flow
             logger.debug("Memory evolution failed", exc_info=True)
 
+    def _note_interference(
+        self,
+        similar: list,
+        new_memory_key: str,
+        persona: str,
+    ) -> None:
+        """Best-effort interference counting (audit M1).
+
+        Reuses the evolution search results: each existing memory in the
+        0.85–0.95 band gets ``interference_count += 1``. The repository
+        queues a merge review once the count hits its threshold.
+        """
+        note = getattr(self._repo, "note_interference", None)
+        if note is None:
+            return
+        for result in similar:
+            if result.memory.key == new_memory_key:
+                continue
+            score = float(result.score)
+            if not (INTERFERENCE_SIMILARITY_MIN <= score < INTERFERENCE_SIMILARITY_MAX):
+                continue
+            try:
+                note(result.memory.key, new_memory_key, score, persona)
+            except Exception:
+                logger.debug("Interference note failed for %s", result.memory.key, exc_info=True)
+
     def _adjust_confidence(self, memory_key: str, factor: float = 1.0, delta: float = 0.0) -> None:
         """Best-effort confidence adjustment (audit C4): ``confidence*factor + delta``,
         clamped to [0, 1]. Never blocks the caller and never feeds ranking."""
@@ -290,6 +328,7 @@ class MemoryEvolutionService:
                 await self._evolve_related_memories(
                     content=content,
                     new_memory_key=memory_key,
+                    persona=persona,
                 )
         except Exception:
             import logging

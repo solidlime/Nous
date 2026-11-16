@@ -13,6 +13,12 @@ from nous.infrastructure.sqlite._utils import _parse_json_list
 
 logger = get_logger(__name__)
 
+# audit M1 — interference: 似ているが同一ではない（0.85-0.95）記憶が繰り返し
+# 書かれると既存側の interference_count を +1 し、閾値で統合レビューに載せる。
+# レビューは新テーブルではなく session_events に残す（背景 worker と同じ作法）。
+INTERFERENCE_MERGE_REVIEW_AT = 3
+MERGE_REVIEW_EVENT_TYPE = "memory.merge_review"
+
 
 class MemoryCrudMixin:
     """Mixin providing CRUD operations for SQLiteMemoryRepository."""
@@ -134,6 +140,63 @@ class MemoryCrudMixin:
         except Exception as e:
             self._db.rollback()
             logger.error("Failed to save memory %s: %s", memory.key, e)
+            return Failure(RepositoryError(str(e)))
+
+    def note_interference(
+        self, key: str, other_key: str, similarity: float, persona: str = "default"
+    ) -> Result[int, RepositoryError]:
+        """Bump ``interference_count`` for *key* (audit M1).
+
+        When the count reaches ``INTERFERENCE_MERGE_REVIEW_AT`` the pair
+        (key, other_key) is queued for merge review as a ``session_events``
+        row. One row per pair: summary is deterministic and checked first.
+        Best-effort by contract — callers must not let a failure block a write.
+        """
+        try:
+            self._db.execute(
+                """
+                INSERT INTO memory_strength (memory_key, interference_count)
+                VALUES (?, 1)
+                ON CONFLICT(memory_key) DO UPDATE SET
+                    interference_count = interference_count + 1
+                """,
+                (key,),
+            )
+            row = self._db.execute(
+                "SELECT interference_count FROM memory_strength WHERE memory_key = ?", (key,)
+            ).fetchone()
+            count = int(row["interference_count"]) if row is not None else 0
+            if count >= INTERFERENCE_MERGE_REVIEW_AT:
+                summary = f"merge review: {key} ~ {other_key}"[:200]
+                exists = self._db.execute(
+                    "SELECT 1 FROM session_events WHERE event_type = ? AND summary = ? LIMIT 1",
+                    (MERGE_REVIEW_EVENT_TYPE, summary),
+                ).fetchone()
+                if exists is None:
+                    self._db.execute(
+                        """
+                        INSERT INTO session_events
+                            (session_id, persona, event_type, timestamp, summary, detail, metadata_json)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            "memory_write",
+                            persona,
+                            MERGE_REVIEW_EVENT_TYPE,
+                            format_iso(get_now()),
+                            summary,
+                            None,
+                            json.dumps(
+                                {"keys": [key, other_key], "similarity": similarity, "interference_count": count},
+                                ensure_ascii=False,
+                            ),
+                        ),
+                    )
+            self._db.commit()
+            return Success(count)
+        except Exception as e:
+            self._db.rollback()
+            logger.error("Failed to note interference for %s: %s", key, e)
             return Failure(RepositoryError(str(e)))
 
     def find_by_key(self, key: str) -> Result[Memory | None, RepositoryError]:
