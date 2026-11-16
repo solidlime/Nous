@@ -295,9 +295,12 @@ def _ensure_inner(
         "--network",
         net,
     ]
+    local = _data_root()
     for host, target, read_only in mounts:
+        # mkdir は自分のマウントから見えるパスで行う。host 側の絶対パスは
+        # ホストの名前空間のもので、このコンテナからは触れない。
         try:
-            host.mkdir(parents=True, exist_ok=True)
+            (local / host.relative_to(root)).mkdir(parents=True, exist_ok=True)
         except OSError as e:
             return f"ホスト側ディレクトリを作れない: {host}: {e}"
         args += ["-v", f"{host}:{target}" + (":ro" if read_only else "")]

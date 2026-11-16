@@ -138,7 +138,9 @@ def test_exec_runs_container_when_missing(client, fake, tmp_path: Path) -> None:
     assert f"{tmp_path}/host/persona/alice/skills:/home/alice/.agents/skills" in run
     assert f"{tmp_path}/host/skills:/home/alice/.agents/global-skills:ro" in run
     assert run[-2:] == ("sleep", "infinity")
-    assert (tmp_path / "host" / "persona" / "alice" / "workspace").is_dir()
+    # mkdir は manager から見えるパス（NOUS_DATA_ROOT）に行う。
+    # -v に渡すのはホスト名前空間のパスで、コンテナからは触れない。
+    assert (tmp_path / "container" / "persona" / "alice" / "workspace").is_dir()
 
 
 def test_run_uses_cpu_shares_because_the_kernel_has_no_cfs(client, fake) -> None:
