@@ -32,9 +32,13 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl \
     tzdata \
-    docker.io \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
+
+# Debian 13 split the docker CLI out of the docker.io package and ships no
+# docker-cli, so the sandbox manager gets the static client instead of the daemon.
+RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-26.1.5.tgz \
+    | tar -xz --strip-components=1 -C /usr/local/bin docker/docker
 
 # Copy Python packages from builder
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
