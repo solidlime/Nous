@@ -354,6 +354,7 @@ def get_filtered_tools(config: ChatConfig) -> list[ToolDefinition]:
     base = list(MEMORY_TOOLS)
     if getattr(config, "workspace_root", ""):
         base += WORKSPACE_TOOLS
+        base.append(DELEGATE_TOOL)
 
     if not config.dynamic_tool_selection:
         return [t for t in base if t.name not in disabled]
@@ -446,6 +447,32 @@ WORKSPACE_TOOLS: list[ToolDefinition] = [
         },
     ),
 ]
+
+
+DELEGATE_TOOL: ToolDefinition = ToolDefinition(
+    name="delegate",
+    description=(
+        "別エージェント（pi）にまとまった作業を投げる。prompt がそのエージェントへの指示。"
+        "出力は末尾 120 行のみ返し、全文は log_path に保存される（必要なら read_file で読む）。"
+        "単発のコマンドで足りるなら bash を使え。"
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "agent": {
+                "type": "string",
+                "description": "委譲先のエージェント名（既定 general）",
+                "default": "general",
+            },
+            "prompt": {"type": "string", "description": "委譲先への指示"},
+            "workdir": {
+                "type": "string",
+                "description": "ワークスペース内の作業ディレクトリ（既定はルート）",
+            },
+        },
+        "required": ["prompt"],
+    },
+)
 
 
 # MCPサーバー由来のツール名（MEMORY_TOOLS と重複するため除外対象）

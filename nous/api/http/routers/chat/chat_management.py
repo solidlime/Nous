@@ -210,6 +210,8 @@ _TIER_ADVANCED: frozenset[str] = frozenset(
         "item_llm_model",
         "context_compression_mode",
         "context_use_llm_summary",
+        # 想起スコア閾値（誤爆した低スコア記憶を注入しない）
+        "memory_min_score",
     }
 )
 

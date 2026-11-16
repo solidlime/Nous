@@ -20,6 +20,10 @@ const ACT = {
     sessions: {}  // session_id -> { open: bool, events: [], platform }
 };
 
+// Tool-call timeline (kanban: ツール実行のタイムライン)
+const TOOL_LIMIT = 100;
+const TOOL_COLUMNS = ['Time', 'Tool', 'Duration', 'Exit', 'Command'];
+
 const ACT_ICONS = {
     'tool.called':        '<i data-lucide="wrench"></i>',
     'chat.message':       '<i data-lucide="message-square"></i>',
@@ -68,6 +72,62 @@ async function loadMetrics() {
     }
 }
 
+/* tool.called 1件 → タイムラインの1行。取れない列は "—" にする。
+   duration_ms / exit_code / command は metadata に載っている時だけ表示する
+   (plugin ingest 由来のイベントが主。chat 側 registry 発行分は metadata を持たない)。 */
+function buildToolRow(ev) {
+    const md = (ev.metadata && typeof ev.metadata === 'object') ? ev.metadata : {};
+    let tool = md.tool_name;
+    if (!tool) {
+        const m = String(ev.summary || '').match(/^\s*([A-Za-z0-9_.\-]+)\s*:/);
+        tool = m ? m[1] : String(ev.summary || 'unknown');
+    }
+    const dur = md.duration_ms;
+    const exit = md.exit_code;
+    const cmd = md.command != null && md.command !== '' ? md.command : md.params_summary;
+    const cmdLine = cmd == null || cmd === '' ? '—' : String(cmd).split('\n')[0].slice(0, 120);
+    return {
+        timestamp: ev.timestamp || '',
+        time: fmtDateTime(ev.timestamp),
+        tool: String(tool),
+        duration: (dur === undefined || dur === null || dur === '') ? '—' : dur + ' ms',
+        exit: (exit === undefined || exit === null || exit === '') ? '—' : String(exit),
+        command: cmdLine,
+    };
+}
+
+function buildToolTimelineHTML(events) {
+    const rows = (events || [])              // 新しい順・上限 100 件
+        .slice()
+        .sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))
+        .slice(0, TOOL_LIMIT)
+        .map(buildToolRow);
+
+    if (rows.length === 0) {
+        return '<div class="act-empty">No tool calls recorded yet.</div>';
+    }
+
+    let html = '<div class="act-tool-wrap"><table class="act-tool-table"><thead><tr>';
+    for (const col of TOOL_COLUMNS) html += '<th scope="col">' + esc(col) + '</th>';
+    html += '</tr></thead><tbody>';
+    for (const r of rows) {
+        html += '<tr class="act-tool-row">';
+        html += '<td class="act-tool-time">' + esc(r.time) + '</td>';
+        html += '<td class="act-tool-name">' + esc(r.tool) + '</td>';
+        html += '<td class="act-tool-duration">' + esc(r.duration) + '</td>';
+        html += '<td class="act-tool-exit">' + esc(r.exit) + '</td>';
+        html += '<td class="act-tool-command" title="' + esc(r.command) + '">' + esc(r.command) + '</td>';
+        html += '</tr>';
+    }
+    return html + '</tbody></table></div>';
+}
+
+function renderToolTimeline(events) {
+    const feed = document.getElementById('act-feed');
+    if (!feed) return;
+    safeSetHTML(feed, buildToolTimelineHTML(events));
+}
+
 async function loadActivity(reset = false) {
     if (reset) { ACT.offset = 0; ACT.sessions = {}; }
 
@@ -81,8 +141,11 @@ async function loadActivity(reset = false) {
     ACT.filterType = typeEl ? typeEl.value : '';
     ACT.filterOrder = orderEl ? orderEl.value : 'desc';
 
+    const isToolTimeline = ACT.filterType === 'tool.called';
     let url = '/api/session-events/' + encodeURIComponent(S.persona) +
-        '?limit=' + ACT.limit + '&offset=' + ACT.offset + '&order=' + ACT.filterOrder;
+        '?limit=' + (isToolTimeline ? TOOL_LIMIT : ACT.limit) +
+        '&offset=' + (isToolTimeline ? 0 : ACT.offset) +
+        '&order=' + ACT.filterOrder;
     if (ACT.filterType) url += '&event_type=' + encodeURIComponent(ACT.filterType);
 
     try {
@@ -94,6 +157,14 @@ async function loadActivity(reset = false) {
             ACT.offset = 0;
             ACT.sessions = {};
             feed.textContent = '';
+        }
+
+        // Tool Calls は session 折り畳みではなくフラットな表で出す（100 件固定・ページング無し）
+        if (isToolTimeline) {
+            const old = document.getElementById('act-load-more');
+            if (old) old.remove();
+            renderToolTimeline(events);
+            return;
         }
 
         if (events.length === 0 && ACT.offset === 0) {
@@ -283,5 +354,8 @@ Object.assign(N.Features.Activity, {
     toggleActivitySession: toggleActivitySession,
     toggleActivityDetail: toggleActivityDetail,
     renderActivityFeed: renderActivityFeed,
+    buildToolRow: buildToolRow,
+    buildToolTimelineHTML: buildToolTimelineHTML,
+    renderToolTimeline: renderToolTimeline,
 });
 })();

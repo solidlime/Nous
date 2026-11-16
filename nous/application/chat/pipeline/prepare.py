@@ -26,6 +26,7 @@ from nous.application.chat.pipeline.emotion_decay import (  # noqa: F401
 )
 from nous.application.chat.pipeline.memory_retriever import (  # noqa: F401
     _format_memory_hint,
+    _passes_min_score,
     _search_episodes,
     _search_keyword_fast,
     _search_memories,
@@ -230,6 +231,7 @@ class PrepareStep:
                     top_k=max(preload_count, 1) if preload_count > 0 else 100,
                     injected_keys=getattr(session, "_injected_memory_keys", None),
                     turn_id=getattr(turn_ctx, "turn_id", None) or None,
+                    min_score=getattr(config, "memory_min_score", None),
                 )
             )
             results = await asyncio.gather(context_task, memory_task, return_exceptions=True)
@@ -296,6 +298,7 @@ class PrepareStep:
                     top_k=max(preload_count, 1) if preload_count > 0 else 100,
                     injected_keys=getattr(session, "_injected_memory_keys", None),
                     turn_id=getattr(turn_ctx, "turn_id", None) or None,
+                    min_score=getattr(config, "memory_min_score", None),
                 )
                 turn_ctx.memory_debug = debug
                 turn_ctx.memories_raw = debug.get("results", [])

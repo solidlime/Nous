@@ -49,6 +49,14 @@ def _format_memory_hint(ann) -> str:
     return "（" + "・".join(parts) + "）"
 
 
+def _passes_min_score(item, min_score: float | None) -> bool:
+    """スコアが閾値以上か。スコアを持たない記憶（None / 欠損）は後方互換のため残す。"""
+    if not min_score:
+        return True
+    score = item.get("score") if isinstance(item, dict) else getattr(item, "score", None)
+    return score is None or float(score) >= min_score
+
+
 async def _search_memories(
     ctx: AppContext,
     user_message: str,
@@ -57,6 +65,7 @@ async def _search_memories(
     top_k: int = 8,
     injected_keys: set[str] | None = None,
     turn_id: str | None = None,
+    min_score: float | None = None,
 ) -> tuple[str, dict, list]:
     """2クエリ並行検索 + engine 側 RankPolicy 複合スコアリングのマージ。
 
@@ -148,6 +157,9 @@ async def _search_memories(
     # 注入済み key を除外してから top_k を切る（補充のための2巡検索はしない — 減件でよい）。
     if injected_keys is not None:
         ordered = [r for r in ordered if r.memory.key not in injected_keys]
+    # 低スコアの切り捨て（閾値は呼び出し元 prepare.py が ChatConfig から渡す）。
+    # 無関係な記憶を LLM に渡さないためのゲート。文字列・debug・memories_list が全て揃う。
+    ordered = [r for r in ordered if _passes_min_score(r, min_score)]
     top = ordered[:top_k]
 
     if not top:

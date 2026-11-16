@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from time import perf_counter
 from typing import TYPE_CHECKING
 
 from nous.application.chat.tools.builtin import execute_tool, filter_extra_tools, truncate_tool_result
+from nous.application.chat.tools.workspace import artifact_path
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
@@ -25,6 +27,28 @@ SEARCH_TOOLS_NAME = "search_tools"
 if TYPE_CHECKING:
     # 型エイリアス: search_tools ハンドラ（runtime では使わない）
     SearchHandler = Callable[..., Awaitable[dict]]
+
+# 画像系は truncate_tool_result が参照文字列に潰すので artifact には落とさない
+_IMAGE_KEYS = ("content_base64", "artifacts", "images")
+
+
+def _save_artifact(ctx: AppContext, config: ChatConfig, tool_name: str, result: object) -> str | None:
+    """切り詰めが走る場合だけ原文を artifact に落とす。失敗してもツールは成功させる。"""
+    max_chars = int(getattr(config, "tool_result_max_chars", 0) or 0)
+    if max_chars <= 0 or not isinstance(result, (dict, str)):
+        return None
+    if isinstance(result, dict) and any(k in result for k in _IMAGE_KEYS):
+        return None
+    body = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+    if len(body) <= max_chars:
+        return None
+    try:
+        path = artifact_path(getattr(ctx, "persona", "") or "", getattr(ctx, "session_id", None), tool_name)
+        path.write_text(body, encoding="utf-8")
+    except (OSError, ValueError):
+        logger.warning("artifact write failed: %s", tool_name, exc_info=True)
+        return None
+    return str(path)
 
 
 class ToolRegistry:
@@ -98,6 +122,11 @@ class ToolRegistry:
             else:
                 result = await execute_tool(ctx, config, tool_name, tool_input)
 
+            # 切り詰めで消える原文を残す（builtin / search / MCP 共通）
+            artifact = _save_artifact(ctx, config, tool_name, result)
+            if artifact and isinstance(result, dict):
+                result["artifact_path"] = artifact
+
             # Publish tool.called event on success.
             # Invariant: MCP tools publish their own events (all paths) —
             # registry only publishes for builtin/search_tools.
@@ -114,6 +143,8 @@ class ToolRegistry:
                 audit = result.get("audit") if isinstance(result, dict) else None
                 if isinstance(audit, dict):
                     payload.update(audit)
+                if artifact:
+                    payload["artifact_path"] = artifact
                 if persona:
                     payload["persona"] = persona
                 await ctx.event_bus.publish("tool.called", payload)

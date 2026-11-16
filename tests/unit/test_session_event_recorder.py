@@ -376,3 +376,37 @@ class TestSessionEventRecorder:
         assert event.event_type == "session.compact"
         assert event.summary == "📦 Compressed: 8000→3000 tokens"
         assert event.session_id == "sess_chat_003"
+
+
+class TestMergeMetadata:
+    """tool.called の実行時情報を metadata に畳む。"""
+
+    def test_promotes_execution_keys(self, recorder):
+        data = {
+            "duration_ms": 123,
+            "command": "ls -la",
+            "exit_code": 0,
+            "artifact_path": "/data/out.txt",
+        }
+        assert recorder._merge_metadata("tool.called", data) == {
+            "duration_ms": 123,
+            "command": "ls -la",
+            "exit_code": 0,
+            "artifact_path": "/data/out.txt",
+        }
+
+    def test_keeps_explicit_metadata_first(self, recorder):
+        data = {"duration_ms": 1, "metadata": {"duration_ms": 99}}
+        assert recorder._merge_metadata("tool.called", data) == {"duration_ms": 99}
+
+    def test_ignores_other_event_types(self, recorder):
+        assert recorder._merge_metadata("chat.message", {"command": "ls"}) is None
+
+    @pytest.mark.asyncio
+    async def test_on_event_persists_execution_keys(self, recorder, mock_repo):
+        await recorder._on_event(
+            "tool.called",
+            {"session_id": "s", "persona": "p", "tool_name": "bash", "duration_ms": 42, "exit_code": 0},
+        )
+        event = mock_repo.insert.call_args[0][0]
+        assert event.metadata == {"duration_ms": 42, "exit_code": 0}

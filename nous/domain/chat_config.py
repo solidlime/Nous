@@ -10,7 +10,7 @@ import json
 import logging
 import os
 import typing
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
@@ -46,8 +46,8 @@ def _get_base_type(annotation: object) -> type:
             return list
         if origin is dict:
             return dict
-        return origin
-    return annotation
+        return cast("type", origin)
+    return cast("type", annotation)
 
 
 # Sub-config field name → class mapping
@@ -81,6 +81,9 @@ class ChatConfig(BaseModel):
     character_repair_max_attempts: int = Field(
         default=2, ge=0, description="キャラ一貫性違反を検出した際の応答再生成（修復）の最大試行回数。0で修復を無効化。"
     )
+    memory_min_score: float = Field(
+        default=0.35, description="想起結果を注入する最低スコア。これ未満の記憶は文脈に入れない。"
+    )  # 0.35: 複合スコア（recency/importance/relevance）の下位ノイズを切る実測閾値
     provider_config: ProviderConfig = Field(default_factory=ProviderConfig)
     session_config: SessionConfig = Field(default_factory=SessionConfig)
     compression_config: CompressionConfig = Field(default_factory=CompressionConfig)
@@ -313,7 +316,7 @@ class ChatConfigFileRepository:
                 with open(path, encoding="utf-8") as f:
                     data = json.load(f)
                 return ChatConfig(**data)
-            except (json.JSONDecodeError, ValidationError) as e:
+            except (json.JSONDecodeError, ValidationError, OSError) as e:
                 logger.warning("Corrupted config.json for '%s': %s, falling back", persona, e)
 
         # マイグレーション試行
@@ -334,6 +337,8 @@ class ChatConfigFileRepository:
 
     def save(self, config: ChatConfig) -> None:
         """config.json にアトミック書き込み (write-temp → rename)。"""
+        if not config.persona:
+            raise ValueError("ChatConfig.persona is required to save")
         path = self._config_path(config.persona)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         data = config.model_dump(mode="json")

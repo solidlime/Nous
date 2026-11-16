@@ -81,7 +81,7 @@ class SessionEventRecorder:
                     timestamp = datetime.fromisoformat(timestamp_str)
 
             detail = data.get("detail")
-            metadata = data.get("metadata")
+            metadata = self._merge_metadata(event_type, data)
 
             event = SessionEvent(
                 session_id=session_id,
@@ -95,6 +95,21 @@ class SessionEventRecorder:
             self._repo.insert(event)
         except Exception as e:
             logger.error("SessionEventRecorder: failed to record event %s: %s", event_type, e)
+
+    # tool.called の payload は実行時情報を metadata ではなく直下に置く（registry / shell）。
+    # 表示側は metadata しか読まないので、ここで畳んでおく。
+    _TOOL_META_KEYS = ("duration_ms", "command", "exit_code", "artifact_path")
+
+    @classmethod
+    def _merge_metadata(cls, event_type: str, data: dict) -> dict | None:
+        """metadata を正としつつ、tool.called の直下キーを補う。"""
+        raw = data.get("metadata")
+        merged = dict(raw) if isinstance(raw, dict) else {}
+        if event_type == "tool.called":
+            for key in cls._TOOL_META_KEYS:
+                if key in data and key not in merged:
+                    merged[key] = data[key]
+        return merged or None
 
     def _build_summary(self, event_type: str, data: dict) -> str:
         """Build a human-readable summary from event data."""

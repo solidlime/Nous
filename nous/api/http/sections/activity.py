@@ -116,6 +116,40 @@ def render_activity_tab() -> str:
                     font-size:0.65rem; padding:1px 6px; border-radius:4px;
                     background:rgba(255,255,255,0.08);
                 }
+                /* Tool calls timeline (table) */
+                .act-tool-wrap {
+                    overflow-x:auto; border:1px solid var(--glass-border);
+                    border-radius:10px; background:rgba(255,255,255,0.02);
+                }
+                .act-tool-table {
+                    width:100%; border-collapse:collapse; font-size:0.78rem;
+                }
+                .act-tool-table th {
+                    text-align:left; font-weight:600; font-size:0.68rem;
+                    text-transform:uppercase; letter-spacing:0.04em;
+                    color:var(--text-muted); padding:8px 12px;
+                    border-bottom:1px solid var(--glass-border);
+                    white-space:nowrap;
+                }
+                .act-tool-row:hover { background:rgba(255,255,255,0.04); }
+                .act-tool-table td {
+                    padding:7px 12px; color:var(--text-secondary);
+                    border-bottom:1px solid rgba(255,255,255,0.04);
+                    vertical-align:top;
+                }
+                .act-tool-row:last-child td { border-bottom:none; }
+                .act-tool-time { white-space:nowrap; color:var(--text-muted); font-variant-numeric:tabular-nums; }
+                .act-tool-name { white-space:nowrap; color:var(--text-primary); font-weight:600; }
+                .act-tool-duration, .act-tool-exit {
+                    white-space:nowrap; font-family:monospace; font-variant-numeric:tabular-nums;
+                }
+                .act-tool-command {
+                    font-family:monospace; color:var(--text-muted);
+                    max-width:44ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+                }
+                @media (max-width: 640px) {
+                    .act-tool-command { max-width:22ch; }
+                }
                 /* Empty state */
                 .act-empty {
                     text-align:center; padding:40px 20px; color:var(--text-muted);

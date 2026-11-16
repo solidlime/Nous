@@ -55,6 +55,13 @@ class TestPolicy:
         assert approval_payload("edit_file", {"path": "a/b.txt"})["detail"] == "a/b.txt"
         assert approval_payload("edit_file", None)["detail"] == ""
 
+    def test_payload_for_delegate_uses_prompt(self):
+        payload = approval_payload("delegate", {"prompt": "修正して", "agent": "fixer"})
+        assert payload["detail"] == "修正して"
+
+    def test_payload_for_delegate_truncates(self):
+        assert len(approval_payload("delegate", {"prompt": "x" * 500})["detail"]) == 300
+
 
 # ---------------------------------------------------------------------------
 # TurnHub

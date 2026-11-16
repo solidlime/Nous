@@ -155,6 +155,24 @@ class TrimmerMixin:
             parts.append(f"[{i}] {m.role}: {snippet}")
         return "\n".join(parts)
 
+    # ツール結果に埋まった保存先（workspace artifact / shell log）を拾う正規表現。
+    _ARTIFACT_REF_RE = re.compile(r'"(?:artifact_path|log_path)"\s*:\s*"([^"]+)"')
+
+    @staticmethod
+    def _collect_artifact_refs(removed: list[LLMMessage], limit: int = 20) -> list[str]:
+        """切り捨てるメッセージに含まれる保存先パスを重複なしで集める。
+
+        メッセージを消した後で原文に戻る唯一の手がかりなので、要約に残す。
+        """
+        seen: list[str] = []
+        for message in removed:
+            for path in TrimmerMixin._ARTIFACT_REF_RE.findall(message.content or ""):
+                if path not in seen:
+                    seen.append(path)
+                    if len(seen) >= limit:
+                        return seen
+        return seen
+
     @staticmethod
     def _truncate_old_messages(
         messages: list[LLMMessage],
@@ -188,6 +206,9 @@ class TrimmerMixin:
         removed_count = len(messages) - len(recent)
 
         highlights = TrimmerMixin._build_truncation_highlights(removed, removed_count, keep_recent_turns)
+        refs = TrimmerMixin._collect_artifact_refs(removed)
+        if refs:
+            highlights = "\n".join([highlights, "参照ファイル（原文はここにある）:"] + refs)
 
         logger.debug(
             "CompressStep: removed %d old messages (kept %d recent turns)",

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from nous.api.mcp._tools_skill import _tool_invoke_skill
 from nous.api.mcp.tools import TOOL_DISPATCH
 from nous.application.chat.tools.definitions import _NOUS_TOOL_NAMES
+from nous.application.chat.tools.delegate import _handle_delegate
 from nous.application.chat.tools.shell import (
     _handle_bash,
     _handle_edit_file,
@@ -110,10 +111,14 @@ def truncate_tool_result(result: dict, max_chars: int) -> dict:
         if len(result_str) <= max_chars:
             return dict(result)
         remaining = len(result_str) - max_chars
-        return {
+        truncated = {
             "truncated": True,
             "content": result_str[:max_chars] + f"... [truncated: {remaining} chars remaining]",
         }
+        # 原文の置き場（registry が切り詰め前に落としたもの）
+        if "artifact_path" in result:
+            truncated["artifact_path"] = result["artifact_path"]
+        return truncated
     # Build text-only output (exclude all image keys, replace with summary)
     exclude_keys = set(image_keys)
     text_parts = {k: v for k, v in result.items() if k not in exclude_keys}
@@ -419,6 +424,7 @@ _BUILTIN_DISPATCH: dict[str, Any] = {
     "read_file": _handle_read_file,
     "write_file": _handle_write_file,
     "edit_file": _handle_edit_file,
+    "delegate": _handle_delegate,
 }
 
 _MCP_SHARED_TOOLS = frozenset(
