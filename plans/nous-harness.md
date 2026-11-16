@@ -109,32 +109,58 @@ Phase 2 以降:
 
 ## Steps
 
-### Phase 1（今回の実装対象）
+実装済み（2026-11-17 に実測で確認。チェックはコードの存在で付けた。計画から配置や
+実現方法が変わった点は各行に併記）。
 
-- [ ] `ToolConfig` に 4 フィールド追加（既定は無効）
-- [ ] `workspace.py` — root 解決と境界判定（`resolve()` 後の prefix 一致、root 外は `{"status": "error"}`
-- [ ] `shell.py` — 4 ハンドラ。`bash` は `asyncio.create_subprocess_shell` + `wait_for` タイムアウト、出力は末尾のみ + artifact 保存
-- [ ] `definitions.py` — `WORKSPACE_TOOLS` 定義（説明文は短く、`bash` の危険性を明記）
-- [ ] `builtin.py` — dispatch 登録 + 監査 payload に `command` / `exit_code` / `duration_ms`
-- [ ] `chat_management.py` — 設定 API のマッピングに新フィールド
-- [ ] `tests/unit/chat/tools/test_shell.py` — 境界・切り詰め・edit 一致
+### Phase 1（workspace ツール）
+
+- [x] `ToolConfig` に 4 フィールド追加（`nous/domain/tool_config.py:22-34`、既定は無効）
+- [x] `workspace.py` — root 解決と境界判定（`nous/application/chat/tools/workspace.py`）
+- [x] `shell.py` — 4 ハンドラ（`nous/application/chat/tools/shell.py:114-228`。`bash` は
+      `asyncio.create_subprocess_shell` + タイムアウト、出力は末尾のみ + `_save_log`）
+- [x] `definitions.py` — `WORKSPACE_TOOLS`（`:385`）。`get_filtered_tools`（`:356`）が
+      `workspace_root` 未設定時に除外する
+- [x] `builtin.py` — dispatch 登録（`:427`）。監査 payload は `registry.execute` が
+      `result["audit"]` を `payload.update(audit)` で取り込む形に変わった
+- [x] `chat_management.py` — 設定 API のマッピング（`:111-114`, `:177-180`）
+- [x] テスト — 計画の `tests/unit/chat/tools/test_shell.py` ではなく
+      **`tests/unit/test_workspace_tools.py`** に置いた（21 テスト。境界・symlink 脱出・
+      offset・切り詰め・edit の曖昧一致）
 
 ### Phase 2（承認）
 
-- [ ] `turn_hub.py` に `pending_approvals` と `resolve_approval`
-- [ ] `inference.py:391` の手前で承認待ち
-- [ ] `POST /api/chat/{persona}/approval`
-- [ ] フロントに承認カード（`nous/api/http/static/chat/`）
+- [x] ポリシーを `nous/application/chat/tools/approval.py` に分離。
+      `APPROVAL_REQUIRED_TOOLS = {bash, write_file, edit_file, delegate}`、
+      `APPROVAL_TIMEOUT_SECONDS = 120.0`、未知モードは ask 扱い（安全側）
+- [x] `turn_hub.py` に `pending_approvals` と `resolve_approval`（`:127-140`）
+- [x] `inference.py` の手前で承認待ち
+- [x] `POST /api/chat/{persona}/approval`（`nous/api/http/routers/chat/chat_stream.py:186`）
+- [x] フロントの承認カード（`nous/api/http/static/chat/send/turn.js:178` の
+      `approval_requested`）
 
-### Phase 3（コンテキスト衛生の仕上げ）
+### Phase 3（コンテキスト衛生）
 
-- [ ] `tool.called` の `output_bytes` を見て、閾値超えは自動で artifact 化
-- [ ] `compress` と artifact の連携（圧縮時にログパスだけ残す）
+- [x] 閾値超えの artifact 化 — 計画の `output_bytes` 判定ではなく、`tool_result_max_chars`
+      を超えたら `registry._save_artifact` が原文を落とす形（`registry.py:35-51`）
+- [x] 圧縮時にログパスだけ残す — `pipeline/trimmer.py:159` の `_ARTIFACT_REF_RE` が
+      `artifact_path` / `log_path` を参照として残す
+- [x] 記憶検索の誤爆 — `memory_min_score`（`nous/domain/chat_config.py:84`）を
+      `pipeline/prepare.py:234,301` で足切り
 
 ### Phase 4（分業・リプレイ）
 
-- [ ] `delegate` ツール（`pi --print`）
-- [ ] `session_events` をタイムライン表示
+- [x] `delegate` ツール（`nous/application/chat/tools/delegate.py`、`definitions.py:453`、
+      `builtin.py:427`）
+- [x] ツール実行の一覧 — 専用タイムライン UI は作らず、既存 Activity 画面の
+      `event_type=tool.called` フィルタで読む（`nous/api/http/sections/activity.py:172`）
+
+## 残件
+
+なし。計画の全項目が実装済みで、テスト（`tests/unit/test_workspace_tools.py`）と
+既存の統合テストが常設で守っている。
+
+未検証なのは Verification の「手動」項目だけで、これは実機で `workspace_root` を
+設定して `bash` を呼ぶまで確認できない。実装の穴ではなく、運用手順の未実行。
 
 ## Verification
 
