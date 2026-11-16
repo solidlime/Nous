@@ -68,10 +68,11 @@ class ProspectiveWorker:
         from nous.application.use_cases import AppContextRegistry
 
         for persona in list(AppContextRegistry.personas()):
-            ctx = AppContextRegistry.get(persona)
             try:
+                ctx = AppContextRegistry.get(persona)
                 due = self._due(ctx)
             except Exception:
+                # 削除中の PersonaNotFoundError もここで拾う（他ペルソナの周期を止めない）
                 logger.exception("ProspectiveWorker: persona=%s failed", persona)
                 continue
             keys = frozenset(m.key for m, _ in due)

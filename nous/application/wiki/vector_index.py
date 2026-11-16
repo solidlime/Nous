@@ -117,7 +117,11 @@ def _embedding(settings: Settings):
     from nous.application.use_cases import AppContextRegistry
 
     for persona in AppContextRegistry.personas():
-        ctx = AppContextRegistry.get(persona)
+        try:
+            ctx = AppContextRegistry.get(persona)
+        except Exception as e:  # 削除区間中（PersonaNotFoundError 等）は次へ
+            logger.debug("embedding lookup skipped for %s: %s", persona, e)
+            continue
         model = getattr(ctx, "embedding_model", None)
         if model is not None:
             return model
