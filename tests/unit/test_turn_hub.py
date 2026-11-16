@@ -28,6 +28,16 @@ class TestTurnLifecycle:
         assert hub.begin_turn("p1") is None
 
     @pytest.mark.asyncio
+    async def test_is_running_follows_begin_and_end(self):
+        hub = TurnHub()
+        assert hub.is_running("p1") is False
+        hub.begin_turn("p1")
+        assert hub.is_running("p1") is True
+        assert hub.is_running("p2") is False
+        hub.end_turn("p1")
+        assert hub.is_running("p1") is False
+
+    @pytest.mark.asyncio
     async def test_end_turn_allows_new_begin(self):
         hub = TurnHub()
         hub.begin_turn("p1")

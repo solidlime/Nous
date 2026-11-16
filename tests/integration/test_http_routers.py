@@ -298,6 +298,22 @@ class TestPersonaCRUD:
         assert resp.json()["status"] == "ok"
         assert resp.json()["deleted"] == "to_delete"
 
+    async def test_delete_refuses_while_a_turn_runs(self, client):
+        """進行中ターンは自前の SQLite 接続を持つ。rmtree を跨がせない。"""
+        from nous.application.chat.service import get_turn_hub
+
+        await client.post("/api/personas", json={"name": "busy_delete"})
+        hub = get_turn_hub()
+        assert hub.begin_turn("busy_delete") is not None
+        try:
+            resp = await client.delete("/api/personas/busy_delete")
+            assert resp.status_code == 409
+            assert "busy_delete" in resp.json()["error"]
+        finally:
+            hub.end_turn("busy_delete")
+        # ターンが終われば消せる
+        assert (await client.delete("/api/personas/busy_delete")).status_code == 200
+
     async def test_delete_unlocks_registry_when_rmtree_fails(self, client):
         """rmtree が投げても削除区間は閉じる（残すと以後 get() が恒久拒否になる）。"""
         await client.post("/api/personas", json={"name": "stuck_delete"})

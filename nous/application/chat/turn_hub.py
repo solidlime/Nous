@@ -42,6 +42,11 @@ class TurnHub:
             self._running.add(persona)
         return uuid.uuid4().hex
 
+    def is_running(self, persona: str) -> bool:
+        """このペルソナでターンが走っているか（削除の事前確認用）。"""
+        with self._lock:
+            return persona in self._running
+
     def end_turn(self, persona: str) -> None:
         """実行フラグ解除。バッファは残置（遅延接続のリプレイ用）。"""
         with self._lock:

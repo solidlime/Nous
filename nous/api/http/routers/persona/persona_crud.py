@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from starlette.responses import JSONResponse
 
 from nous.api.http.deps import _PERSONA_PATTERN, _resolve_persona_from_request, _safe_get_context
+from nous.application.chat.service import get_turn_hub
 from nous.application.use_cases import AppContextRegistry
 from nous.config.settings import Settings
 from nous.domain.shared.errors import PersonaBusyError
@@ -86,6 +87,10 @@ async def _do_delete_persona(persona: str) -> dict:
         return {"error": "Invalid persona name", "status_code": 400}
     if not persona_dir.exists():
         return {"error": f"Persona '{persona}' not found", "status_code": 404}
+    # 進行中ターンのスレッドは自前の SQLite 接続を持つ。rmtree を跨ぐと消えた inode に
+    # 書き続けるので、ターンが終わるまで削除しない（終了後の新規ターンとの狭い窓は残る）。
+    if get_turn_hub().is_running(persona):
+        return {"error": f"Persona '{persona}' はターン実行中（終了してから削除する）", "status_code": 409}
     try:
         # 削除区間: rmtree が終わるまで get() に再構築させない（区間への進入自体が原子的）
         with AppContextRegistry.deleting(persona):
