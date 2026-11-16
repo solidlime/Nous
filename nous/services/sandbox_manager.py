@@ -284,8 +284,10 @@ def _ensure_inner(
         "com.nous.sandbox=1",
         "--memory",
         memory or _env("SANDBOX_MEMORY", "4g"),
-        "--cpus",
-        "2",
+        # Synology の 4.4 カーネルには CFS quota が無く、--cpus で run が失敗する。
+        # cpu-shares は重み付け（制限ではない）で旧カーネルでも通る。
+        "--cpu-shares",
+        "512",
         "--pids-limit",
         "1024",
         "--security-opt",

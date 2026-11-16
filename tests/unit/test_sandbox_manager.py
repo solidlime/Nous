@@ -141,6 +141,18 @@ def test_exec_runs_container_when_missing(client, fake, tmp_path: Path) -> None:
     assert (tmp_path / "host" / "persona" / "alice" / "workspace").is_dir()
 
 
+def test_run_uses_cpu_shares_because_the_kernel_has_no_cfs(client, fake) -> None:
+    """Synology の 4.4 カーネルは CFS quota 非対応で --cpus だと run が失敗する。"""
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+
+    assert client.post("/exec", json={"persona": "alice", "command": "id"}).json()["status"] == "ok"
+
+    run = next(c for c in fake.calls if c[0] == "run")
+    assert "--cpus" not in run
+    assert run[run.index("--cpu-shares") + 1] == "512"
+
+
 def test_exec_starts_stopped_container(client, fake) -> None:
     fake.by_subcommand["inspect"] = (0, "false 1\n", "")
 
