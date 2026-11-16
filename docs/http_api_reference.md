@@ -319,6 +319,16 @@ Activity タブの上部に 1 行で出る。
 
 ## Chat Persona
 
+### `POST /api/chat/{persona}/approval`
+
+エージェントが承認待ちで停止しているツール呼び出しに答える（`/api/chat/{persona}` のストリーム中に `approval_required` が届く）。
+
+- body: `{"approval_id": str, "decision": "allow" | "deny"}`
+- 200 `{"resolved": true}` — 該当の承認待ちが見つかり、決定を適用した
+- 404 `{"resolved": false}` — 該当なし（タイムアウト後に届いた返答など）
+
+---
+
 ### `GET /api/chat/{persona}/persona/images/{file}`
 Serve a persona image (self portraits and expression images such as `expr_joy.png`).
 
