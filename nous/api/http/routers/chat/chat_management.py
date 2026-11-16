@@ -54,6 +54,8 @@ _REMOVED_CONFIG_KEYS_V4: frozenset[str] = frozenset(
         "forgetting_decay_interval_seconds",
         "forgetting_min_strength",
         "h5_stability_clamp_enabled",
+        # H4 (2026-11-17): 死にノブ（感情ゲイン係数）を削除
+        "brain_emotion_gain_k",
         "brain_rif_suppression_rho",
         "reflection_threshold",
         "reflection_enabled",

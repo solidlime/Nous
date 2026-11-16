@@ -123,7 +123,6 @@ def _render_weights_section() -> str:
 _BRAIN_HELP = {
     "brain_reasoning": "脳側の呼び出し（内省）で推論（reasoning）を有効化します。OFF でも未設定（null）なら解決済みLLM設定に従います（専用OFFなら会話用LLMの設定。設定ファイル直接編集時のみ null を指定できます）。ON で brain_reasoning_effort を強制使用、OFF（明示の false）で推論なし。OpenRouter 経由で推論だけが予算を使い切る事故対策として、明示 OFF では推論を無効化します。",
     "brain_max_tokens": "脳側呼び出し（内省）のトークン上限。0 で解決済みLLM設定に従います（専用OFFなら会話用の値、ONなら脳側既定）。明示設定時（256〜32768）は全モードで上書きし、reasoning を有効化した場合は推論分を賄うため自動で嵩上げされます（low 4096 / medium 5120 / high 9216 / max 17408）。reasoning 有効時、保存時に実効値へ引き上げる場合があります（0 のまま保存した場合は実行時に解決されます）。手動でそれ以上に設定した場合は引き下げません。",
-    "emotion_gain": "感情が強い記憶ほど想起時に強化されやすくなる係数（扁桃体モデル）。上限は内部で固定されます。",
     "reflection_penalty": "リフレクション系の記憶が検索に引っかかりやすすぎないよう、想起スコアを押し下げる強さ。値が大きいほど思い出しにくくなります（思い出しにくさの踏ん張り）。",
     "reflection_injection_sim": "リフレクションを文脈に注入するときの類似度ゲート。この値より似ていない記憶は注入されません（無関係な思い出しの防止）。",
     "reflection_injection_margin": "注入候補の選択を、候補集合内の最良値からの差（マージン）でも許容します。小さいほど最良に近い候補だけが注入されます（0 で類似度ゲートのみ）。",
@@ -202,15 +201,6 @@ def _render_brain_simulation_section() -> str:
                                                 <input type="password" id="chat-brain-llm-api-key" class="chat-field-input" placeholder="sk-..." autocomplete="off" />
                                                 </form>
                                             </div>
-                                        </div>
-                                    </div>
-                                </details>
-                                <details class="chat-subsection">
-                                    <summary>学習ゲート</summary>
-                                    <div style="padding-top:6px;">
-                                        <div>
-                                            <div class="chat-field-label">感情 gain 係数 k {help_("emotion_gain")}</div>
-                                            <input type="number" id="chat-brain-emotion-gain-k" class="chat-field-input" min="0" max="1" step="0.05" value="0.5" />
                                         </div>
                                     </div>
                                 </details>

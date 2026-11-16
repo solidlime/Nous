@@ -236,9 +236,9 @@ def register_search_routes(mcp) -> None:
                 query_kwargs["max_hops"] = max_hops
                 query_kwargs["decision_time_weight"] = float(decision_cfg["time_weight"])
             # oracle BLOCK F3 + 重み統一: REST 経路にも RankPolicy（複合スコア段）を
-            # 配線する。重みは MCP memory_search の既定と同一（from_weight_args 経由）。
-            # 実利用経路は MCP であり実クエリで高い実績を持つため統一先は MCP 既定。
-            # 引数・戻り値の形式は不変（変わるのは順位のみ）。
+            # 配線する。REST は per-call の重み引数を持たないので、ここで MCP memory_search の
+            # 既定と同値（importance 0 / vector 1 / recency 既定 / keyword 既定）を固定する。
+            # MCP 既定を変える時はこのブロックも合わせる（tests/unit/test_mcp_rest_rank_policy_wiring.py）。
             query_kwargs["rank_policy"] = RankPolicy.from_weight_args(
                 importance_weight=0.0,
                 recency_weight=MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT,
