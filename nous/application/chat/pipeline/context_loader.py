@@ -226,10 +226,11 @@ async def _build_context_section(
 
         # audit M2 — 先見的記憶: 「今この瞬間」が cue になるコミットメントだけを前面に出す。
         # 時間 cue（期限が窓内）とイベント cue（今回の発話にエンティティが登場）の 2 種類。
+        # 期限切れは注入しない（未達成なら「いまの約束」に残る。二重に急かさない）。
         if active_goals:
             cue_lines: list[str] = []
             cued_keys: set[str] = set()
-            for mem, label in due_cues(active_goals, get_now()):
+            for mem, label in due_cues(active_goals, get_now(), allow_overdue=False):
                 cued_keys.add(mem.key)
                 cue_lines.append(f"  ⏰ [期限] {mem.content[:120]} ({label})")
             for mem in event_cued_memories(active_goals, query_text):

@@ -13,6 +13,10 @@ schema change and no migration::
 
 Matching lives here so the write side (memory extractor) and the read side
 (``get_context`` / the hourly sweep) cannot drift apart.
+
+``allow_overdue`` は呼び口ごとに違う（共通の照合器、別の問い）:
+``get_context`` = True（期限切れも概観に出す）、自動注入（context_loader）
+と毎時 sweep = False（過期を毎ターン押し付けない・変わった時だけ記録）。
 """
 
 from __future__ import annotations
@@ -29,8 +33,6 @@ if TYPE_CHECKING:
 
 CUE_TIME_PREFIX = "cue:time:"
 CUE_EVENT_PREFIX = "cue:event:"
-# One-shot reminder tag, read (and consumed) by get_context / session_begin.
-DUE_REMINDER_TAG = "due_reminder"
 # Fire once the deadline is inside this window — and keep firing while overdue
 # (up to the grace below), because a missed commitment is exactly what an
 # agent should notice.
@@ -126,18 +128,24 @@ def due_cues(
     memories: Iterable[Memory],
     now: datetime | None = None,
     window_hours: float = DUE_WINDOW_HOURS,
+    allow_overdue: bool = True,
 ) -> list[tuple[Memory, str]]:
     """Memories whose deadline is inside the window (or overdue within grace).
+
+    ``allow_overdue=False`` keeps only upcoming deadlines — callers that inject
+    upcoming commitments (get_context, the hourly sweep) must not restate an
+    expired one; expiry is surfaced by the goal list instead.
 
     Returns ``[(memory, label), ...]`` sorted by deadline, earliest first.
     """
     if now is None:
         now = get_now()
+    lower = -OVERDUE_GRACE_HOURS if allow_overdue else 0.0
     due: list[tuple[Memory, datetime]] = []
     for memory in memories:
         for deadline in parse_time_cues(memory):
             offset_hours = (_comparable(deadline, now) - now).total_seconds() / 3600.0
-            if -OVERDUE_GRACE_HOURS <= offset_hours <= window_hours:
+            if lower <= offset_hours <= window_hours:
                 due.append((memory, deadline))
                 break
     due.sort(key=lambda pair: pair[1])
@@ -165,7 +173,6 @@ def within_window(deadline: datetime, now: datetime, window_hours: float = DUE_W
 __all__ = [
     "CUE_EVENT_PREFIX",
     "CUE_TIME_PREFIX",
-    "DUE_REMINDER_TAG",
     "DUE_WINDOW_HOURS",
     "OVERDUE_GRACE_HOURS",
     "cue_tags",

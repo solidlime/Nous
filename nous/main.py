@@ -280,7 +280,14 @@ def create_app() -> MemoryFastMCP:
         )
 
     # Start background workers (references kept for graceful shutdown in main())
+    from nous.application.workers.prospective_worker import ProspectiveWorker
     from nous.application.workers.wiki_worker import WikiWorker
+
+    # 先見的記憶（audit M2）。期限の近い約束を 1 時間ごとに照合して監査ログに残す。
+    # 注入は get_context がライブで行う（ここでは何も書き込まない）。
+    prospective_worker = ProspectiveWorker()
+    prospective_worker.start()
+    _workers.append(prospective_worker)
 
     # ドリーミング（wiki 編纂）。既定無効: NOUS_WIKI__ENABLED=true で有効化。
     wiki_worker = WikiWorker(settings)
