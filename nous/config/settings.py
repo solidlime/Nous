@@ -312,6 +312,11 @@ class WikiConfig(BaseModel):
     journal_activity_chars: int = 12000  # 営みの材料に使う合計文字数の上限
     # 日記生成後に感情・体調を 1 回反映する（LLM 呼び出し +1）。
     journal_apply_state: bool = True
+    # 日記の「活動」に、人物設定（chat config の system_prompt + 自己像ブロック）から
+    # 起こした暮らしを混ぜる（研究・料理・手入れなど）。記憶には残さず日記の材料だけ。
+    # 設定が読めない人物は何もしない（生活をでっち上げない）。LLM 呼び出し +1/日。
+    life_enabled: bool = True
+    life_events_per_day: int = 3
     # 矛盾整理（#39/#55）。編纂プロンプトの conflicts で拾い（追加呼び出しなし）、
     # 解消は resolved:true で質問を閉じる。記憶層の週次掃除は Zero Inbox で退役（#54）。
     conflict_check_enabled: bool = True  # wiki 編纂プロンプトに conflicts/questions を要求するか

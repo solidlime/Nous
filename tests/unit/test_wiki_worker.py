@@ -1517,3 +1517,102 @@ class TestPromptRevisionContext:
             assert set(store.read_page("project-nous-x").value.sources) == {"new1", "old1", "old2"}
         finally:
             conn.close()
+
+
+# ---------------------------------------------------------------------------
+# 日記の暮らし（2026-11-16 / kanban #8: 人物設定から活動を起こす）
+# ---------------------------------------------------------------------------
+
+
+class TestJournalLife:
+    _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+
+    def _write_character(self, tmp_path, text: str | None = "ヘルタ。模擬宇宙を作っている。甘い物が好き。") -> None:
+        if text is None:
+            return
+        d = tmp_path / "persona" / "test_ww"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "config.json").write_text(json.dumps({"system_prompt": text}), encoding="utf-8")
+
+    def _off(self, worker) -> None:
+        worker._cfg = worker._cfg.model_copy(update={"life_enabled": True, "journal_apply_state": False})
+
+    def test_life_lines_are_merged_into_activity_in_clock_order(self, tmp_path) -> None:
+        """生成した暮らしが実ログと同じ材料に時刻順で入る（日記本文にも渡る）。"""
+        self._write_character(tmp_path)
+        conn, worker, ctx = _journal_setup(tmp_path, [], None)
+        self._off(worker)
+        # 実ログの営みは session_events から取る。ここでは日記が「材料あり」で進むよう 1 行だけ与える。
+        worker._journal_activity = lambda *a, **k: "- 15:20 お菓子を作った"  # type: ignore[method-assign]
+        prompts: list[str] = []
+
+        def ask(prompt: str, boost: int = 0) -> str:
+            prompts.append(prompt)
+            if "暮らしの記録" in prompt:
+                return "- 14:40 ラウンジで紅茶。砂糖を入れすぎた\n- 09:12 演算ユニットを検算"
+            return "## 活動\n\n- 15:20 お菓子を作った"
+
+        worker._ask_text = ask  # type: ignore[method-assign]
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            journal_prompt = next(p for p in prompts if "日記を書く記録係" in p)
+            assert "09:12 演算ユニットを検算" in journal_prompt
+            assert "14:40 ラウンジで紅茶" in journal_prompt
+            assert journal_prompt.index("09:12") < journal_prompt.index("14:40 ラウンジ")
+            assert [s for _t, s, _d in _event_rows(conn) if s.startswith("generated")] == [
+                "generated 2 life lines"
+            ]
+        finally:
+            conn.close()
+
+    def test_no_character_means_no_life_call(self, tmp_path) -> None:
+        """設定が読めない人物に生活をでっち上げない（LLM も呼ばない）。"""
+        conn, worker, ctx = _journal_setup(tmp_path, [], None)
+        self._off(worker)
+        worker._journal_activity = lambda *a, **k: "- 15:20 お菓子を作った"  # type: ignore[method-assign]
+        prompts: list[str] = []
+
+        def ask(prompt: str, boost: int = 0) -> str:
+            prompts.append(prompt)
+            return "## 活動\n\n- 15:20 お菓子を作った"
+
+        worker._ask_text = ask  # type: ignore[method-assign]
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert not any("暮らしの記録" in p for p in prompts)
+            assert [s for _t, s, _d in _event_rows(conn) if s.startswith("generated")] == []
+        finally:
+            conn.close()
+
+    def test_life_disabled_is_not_called(self, tmp_path) -> None:
+        self._write_character(tmp_path)
+        conn, worker, ctx = _journal_setup(tmp_path, [], None)
+        worker._journal_activity = lambda *a, **k: "- 15:20 お菓子を作った"  # type: ignore[method-assign]
+        worker._cfg = worker._cfg.model_copy(update={"life_enabled": False, "journal_apply_state": False})
+        prompts: list[str] = []
+
+        def ask(prompt: str, boost: int = 0) -> str:
+            prompts.append(prompt)
+            return "## 活動\n\n- 15:20 お菓子を作った"
+
+        worker._ask_text = ask  # type: ignore[method-assign]
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert not any("暮らしの記録" in p for p in prompts)
+        finally:
+            conn.close()
+
+
+def test_parse_life_keeps_only_well_formed_lines() -> None:
+    from nous.application.wiki.journal import _parse_life
+
+    raw = "- 9:12 研究\n- 24:00 無効\n- 9:12 研究\n説明\n- 14:40 紅茶"
+    assert _parse_life(raw, 10) == ["- 09:12 研究", "- 14:40 紅茶"]
+    assert len(_parse_life(raw, 1)) == 1
+
+
+def test_merge_activity_sorts_by_clock_and_keeps_unknown_last() -> None:
+    from nous.application.wiki.journal import _merge_activity
+
+    merged = _merge_activity("- 15:20 会話", "- 09:12 研究\n- 14:40 紅茶\n- 時刻なし")
+    assert merged.splitlines() == ["- 09:12 研究", "- 14:40 紅茶", "- 15:20 会話", "- 時刻なし"]

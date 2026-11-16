@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime, time, timedelta, tzinfo
 from typing import TYPE_CHECKING
 
@@ -45,6 +46,8 @@ _JOURNAL_PROMPT = """あなたは日記を書く記録係です。{day} の記�
   ## 未解決
 - ## 活動 は「その日の本人が何をしていたか」の記録。営みの材料にある時刻を使う。
   仕事の中身より生活の動き（作りもの・片づけ・移動・休憩・雑談）を優先して拾う。
+- 営みの材料には、本人の会話・移動に加えて、人物設定から起こした暮らし（研究・料理・手入れなど）も入る。
+  どちらも本人が実際に過ごしたこととして扱う。
 - **各見出しは、その見出しに書ける材料が無ければ省略してよい**（空見出しを並べない）。
   行数は材料にある事実の数まで。材料が少ない日に埋め草を書かない。
 - 場所・天気・相手など、材料に書かれていない設定は書かない（推測で補わない）。
@@ -79,6 +82,27 @@ _STATE_PROMPT = """以下はある人物の今日の日記とその材料です�
 
 以下の JSON のみを返してください（説明文は不要。推定できない項目は省略）:
 {{"emotion": "喜/怒/哀/楽 などの一語", "emotion_intensity": 0.0〜1.0, "physical_state": "体の状態の短文", "mental_state": "精神状態の短文", "body_state": {{"fatigue": 0.0〜1.0}}}}
+"""
+
+
+#: 日記の暮らし生成に渡す人物設定の上限。system_prompt は会話用に長いことがある。
+_CHARACTER_CHARS = 1500
+
+_LIFE_PROMPT = """あなたは「{persona}」という人物の暮らしの記録を作る。人物設定と、{day} に実際にあった営みを読み、
+この人物がその日に過ごしていた暮らしの営みを {n} 行で書いてください。
+
+人物設定:
+{character}
+
+その日の実際の営み（会話・移動。時刻昇順）:
+{activity}
+
+書き方:
+- 1 行 1 件、`- HH:MM 本文` の形式。時刻は昇順。
+- 本文は 40 文字以内。具体的な物・場所・小さな失敗や感想を 1 つ入れる（抽象語だけにしない）。
+- 人物設定にある仕事・趣味・性格から自然に出る活動を選ぶ（研究、料理、読書、手入れ、散歩、片づけなど）。
+- 実際の営みと同じ時刻に別の場所へ行かない。実際の営みで起きたことを繰り返さない。
+- 出力は行だけ。見出し・説明文・時刻の補足は書かない。
 """
 
 
@@ -122,6 +146,12 @@ class JournalMixin:
             # その状態で書き直すと痩せた日記で上書きするので、既存ページを残す。
             if existed and not memories:
                 return []
+            # 人物設定から起こした暮らしを実ログに混ぜる（記憶にも sources にも入れない）。
+            # 2 回目サイクルの判定より後に置くのは、暮らしの再生成で日記を書き換えないため。
+            life = self._journal_life(ctx, persona, day, activity)
+            activity = _merge_activity(activity, life)
+            if not memories and not activity:
+                return []
             # sources は候補（その日の記憶）からだけ作る。LLM に選ばせない。
             # 営み（session_events）は記憶ではないので sources には入れない。
             sources = tuple(m.key for m in memories)
@@ -159,6 +189,7 @@ class JournalMixin:
                     "day": day.isoformat(),
                     "sources": list(sources),
                     "activity_lines": activity.count("\n") + 1 if activity else 0,
+                    "life_lines": life.count("\n") + 1 if life else 0,
                     "open_questions": len(questions),
                     "page_hash": _hash_of(title, body),
                     **(self._last_llm or {}),
@@ -263,6 +294,67 @@ class JournalMixin:
                 picked.append(memory)
         picked.sort(key=lambda m: _aware(m.created_at, tz))
         return picked[: self._cfg.journal_max_sources]
+
+    def _journal_life(self, ctx, persona: str, day: date, activity: str) -> str:
+        """その日の「暮らし」を人物設定から起こす（記憶には残さず、日記の材料だけ）。
+
+        設定が読めない人物の生活をでっち上げないため、character が空なら何もしない。
+        失敗しても日記は通常どおり書けるよう、例外は warning と監査に閉じる。
+        """
+        if not self._cfg.life_enabled:
+            return ""
+        character = self._persona_character(ctx, persona)
+        if not character:
+            return ""
+        try:
+            raw = self._ask_text(self._build_life_prompt(persona, day, character, activity)) or ""
+            lines = _parse_life(raw, self._cfg.life_events_per_day)
+            if not lines:
+                return ""
+            self._record_event(
+                ctx,
+                persona,
+                f"generated {len(lines)} life lines",
+                {"day": day.isoformat(), "lines": lines},
+                event_type="wiki.life",
+            )
+            return "\n".join(lines)
+        except Exception as e:
+            logger.warning("WikiWorker: life %s failed: %s", day, e)
+            self._record_event(ctx, persona, f"warning: life {day}: {e}", None)
+            return ""
+
+    def _persona_character(self, ctx, persona: str) -> str:
+        """人物設定 = chat config の system_prompt + 記憶から作った自己像。取れた方だけ。"""
+        parts: list[str] = []
+        try:
+            from nous.domain.chat_config import ChatConfigFileRepository
+
+            prompt = ChatConfigFileRepository(self._settings.data_root).get(persona).system_prompt
+            if prompt and prompt.strip():
+                parts.append(prompt.strip())
+        except Exception:
+            logger.debug("WikiWorker: persona system_prompt load failed", exc_info=True)
+        try:
+            service = getattr(ctx, "memory_service", None)
+            if service is not None:
+                result = service.get_profile_blocks(persona)
+                blocks = result.value if isinstance(result, Success) else {}
+                me = (blocks.get("me") or {}).get("content") if isinstance(blocks, dict) else None
+                if me and me.strip():
+                    parts.append(me.strip())
+        except Exception:
+            logger.debug("WikiWorker: persona profile load failed", exc_info=True)
+        return "\n\n".join(parts)[:_CHARACTER_CHARS]
+
+    def _build_life_prompt(self, persona: str, day: date, character: str, activity: str) -> str:
+        return _LIFE_PROMPT.format(
+            persona=persona,
+            day=day.isoformat(),
+            n=self._cfg.life_events_per_day,
+            character=character,
+            activity=activity or "(なし)",
+        )
 
     def _journal_activity(self, ctx, persona: str, start: datetime, end: datetime, tz: tzinfo | None) -> str:
         """``day``（JST）の営みをプロンプト用の 1 行/件の文字列にする。
@@ -403,6 +495,47 @@ def _activity_line(event, tz: tzinfo | None) -> str:
             return ""  # 情報ゼロの行で営みの枠を埋めない
         body = "セッション開始" + f"（{name}{'/' + project if project else ''}）"
     return f"- {clock} {body}" if body else ""
+
+
+def _parse_life(text: str, limit: int) -> list[str]:
+    """LLM が返した暮らしの行から ``- HH:MM 本文`` だけ採用して時刻順に整える。
+
+    壊れた行・範囲外の時刻・空の本文は捨てる（日記の材料を汚さない）。
+    """
+    rows: list[tuple[str, str]] = []
+    for line in text.splitlines():
+        m = re.match(r"^\s*[-・]\s*(\d{1,2}):(\d{2})\s+(.+)$", line)
+        if not m:
+            continue
+        hour, minute, body = int(m.group(1)), int(m.group(2)), " ".join(m.group(3).split())
+        if hour > 23 or minute > 59 or not body:
+            continue
+        rows.append((f"{hour:02d}:{minute:02d}", body[:60]))
+    rows.sort()
+    out: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for clock, body in rows:
+        if (clock, body) in seen:
+            continue
+        seen.add((clock, body))
+        out.append(f"- {clock} {body}")
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _merge_activity(*chunks: str) -> str:
+    """営みの行を時刻昇順に統合する（実ログと生成した暮らしを混ぜる）。
+
+    時刻が読めない行は末尾に回す（捨てない）。
+    """
+    rows: list[tuple[str, str]] = []
+    for line in (part for chunk in chunks for part in chunk.splitlines() if part.strip()):
+        m = re.match(r"^\s*-\s*(\d{1,2}):(\d{2})", line)
+        clock = f"{int(m.group(1)):02d}:{m.group(2)}" if m else "99:99"
+        rows.append((clock, line.strip()))
+    rows.sort(key=lambda r: (r[0], r[1]))
+    return "\n".join(line for _clock, line in rows)
 
 
 def _parse_json_object(text: str) -> dict:
