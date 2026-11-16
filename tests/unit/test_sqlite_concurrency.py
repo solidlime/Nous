@@ -14,6 +14,7 @@ from nous.infrastructure.sqlite.memory_repo import SQLiteMemoryRepository
 from nous.infrastructure.sqlite.migrations import (
     _ensure_version_table,
     _get_current_version,
+    _record_version,
     run_migrations,
 )
 
@@ -130,6 +131,16 @@ class TestMigrationGuards:
         _ensure_version_table(conn)
         assert not conn.in_transaction
         assert _get_current_version(conn) == 0
+        conn.close()
+
+    def test_record_version_twice_is_ignored(self, tmp_path):
+        """同じ version を2回記録しても IntegrityError で落ちない（競合時の保険）。"""
+        conn = sqlite3.connect(str(tmp_path / "m.sqlite"))
+        conn.row_factory = sqlite3.Row
+        _ensure_version_table(conn)
+        _record_version(conn, 7)
+        _record_version(conn, 7)
+        assert _get_current_version(conn) == 7
         conn.close()
 
     def test_run_migrations_idempotent(self, tmp_path):

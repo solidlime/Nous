@@ -24,6 +24,7 @@ class RankPolicy:
               + relevance_weight * raw_cosine(rel)
               + graph_boost_weight * graph_signal
               + lexical_weight * lexical_score
+              + emotion_salience_weight * emotion_intensity
     （reflection タグあり & reflection_penalty != 1.0 のとき composite *= penalty）
 
     ``graph_signal`` は entity match（1.0）と PPR/spreading activation
@@ -42,6 +43,9 @@ class RankPolicy:
     graph_boost_weight: float = 0.1  # entity/PPR graph 信号の composite 加算上限
     lexical_weight: float = 0.25  # keyword/fts 語一致信号の composite 加算上限
     coverage_weight: float = 0.8  # クエリ語の被覆率（multi-term のほうを上に。0.8 で精度が飽和）
+    # shortcut: 固定係数。感情は永続 strength ではなく検索時の順位信号にのみ使う。
+    # ランキング評価で感情が relevance を損なうと分かった時だけ調整する。
+    emotion_salience_weight: float = 0.1
 
     @classmethod
     def from_weight_args(

@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 # lane1 が session_config に定義済みのキーを getattr で安全参照し、
 # 未定義・読み込み失敗時はこのデフォルトへフォールバックする。
 _BRAIN_DEFAULTS = {
-    "brain_emotion_gain_k": 0.5,
     "brain_link_separation_threshold": 0.75,
 }
 

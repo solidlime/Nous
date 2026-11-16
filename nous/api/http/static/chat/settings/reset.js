@@ -162,7 +162,6 @@
     ["chat-brain-reasoning", "brain_reasoning_enabled"],
     ["chat-brain-reasoning-effort", "brain_reasoning_effort"],
     ["chat-brain-max-tokens", "brain_max_tokens"],
-    ["chat-brain-emotion-gain-k", "brain_emotion_gain_k"],
     ["chat-brain-separation-threshold", "brain_link_separation_threshold"],
     ["chat-brain-reflection-retrieval-penalty", "reflection_retrieval_penalty"],
     [

@@ -31,7 +31,6 @@ const REQUIRED_SAVE_IDS = [
 ];
 
 const BRAIN_NUM_IDS = [
-  'chat-brain-emotion-gain-k',
   'chat-brain-separation-threshold',
   'chat-brain-reflection-retrieval-penalty',
   'chat-brain-reflection-injection-min-similarity',
@@ -41,7 +40,6 @@ const BRAIN_NUM_IDS = [
 const BRAIN_CHECK_IDS = ['chat-brain-graph-flash'];
 
 let apiStub;
-let S;
 
 function buildForm() {
   const html = REQUIRED_SAVE_IDS.map(([tag, id, v]) => {
@@ -114,14 +112,12 @@ beforeEach(() => {
 describe('brain simulation settings', () => {
   it('load applies contract defaults when config has no brain keys', () => {
     window.Nous.Chat.settings.apply({});
-    expect(document.getElementById('chat-brain-emotion-gain-k').value).toBe('0.5');
     expect(document.getElementById('chat-brain-separation-threshold').value).toBe('0.75');
     expect(document.getElementById('chat-brain-graph-flash').checked).toBe(true);
   });
 
   it('collect sends the brain_* keys that remain after the enrichment removal', async () => {
     const set = (id, v) => { document.getElementById(id).value = v; };
-    set('chat-brain-emotion-gain-k', '0.4');
     set('chat-brain-separation-threshold', '0.8');
     document.getElementById('chat-brain-graph-flash').checked = false;
 
@@ -131,7 +127,6 @@ describe('brain simulation settings', () => {
     const [url, opts] = apiStub.mock.calls[0];
     expect(url).toBe('/api/chat/p1/config');
     const body = JSON.parse(opts.body);
-    expect(body.brain_emotion_gain_k).toBe(0.4);
     expect(body.brain_graph_flash_enabled).toBe(false);
     // dormant knob: not collected (merge API keeps the stored value)
     expect(body.brain_link_separation_threshold).toBeUndefined();
@@ -143,16 +138,12 @@ describe('brain simulation settings', () => {
   });
 
   it('save→load round-trip preserves the brain values', async () => {
-    const set = (id, v) => { document.getElementById(id).value = v; };
-    set('chat-brain-emotion-gain-k', '0.3');
     document.getElementById('chat-brain-graph-flash').checked = false;
 
-    const savedCfg = { brain_emotion_gain_k: 0.3,
-      brain_graph_flash_enabled: false };
+    const savedCfg = { brain_graph_flash_enabled: false };
     apiStub.mockResolvedValueOnce(savedCfg);
     await window.Nous.Chat.settings.save();
     window.Nous.Chat.settings.apply(savedCfg);
-    expect(document.getElementById('chat-brain-emotion-gain-k').value).toBe('0.3');
     expect(document.getElementById('chat-brain-graph-flash').checked).toBe(false);
   });
 
@@ -345,7 +336,6 @@ const BRAIN_IDS = [
   'chat-brain-llm-model',
   'chat-brain-llm-base-url',
   'chat-brain-llm-api-key',
-  'chat-brain-emotion-gain-k',
   'chat-brain-separation-threshold',
   'chat-brain-reflection-retrieval-penalty',
   'chat-brain-reflection-injection-min-similarity',
@@ -360,7 +350,6 @@ const BRAIN_IDS = [
 
 const BRAIN_SUBSECTION_ORDER = [
   'LLM',
-  '学習ゲート',
   '想起と忘却',
   '判定ゲート（Jev型）',
   '可視化',
@@ -395,6 +384,8 @@ describe('brain section structure (chat_sidebar_memory.py)', () => {
     // legacy flat grouping is gone
     expect(block).not.toContain('<summary>記憶強化（REM）</summary>');
     expect(block).not.toContain('<summary>専用 LLM</summary>');
+    // 感情 gain 係数 k（brain_emotion_gain_k）は H4 で廃止——枠ごと無い
+    expect(block).not.toContain('chat-brain-emotion-gain-k');
   });
 
   it('keeps the dedicated-llm toggle contract', () => {

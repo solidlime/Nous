@@ -144,9 +144,6 @@
         ? document.getElementById("chat-brain-reasoning-effort")?.value ||
           "medium"
         : undefined,
-      brain_emotion_gain_k: parseFloat(
-        document.getElementById("chat-brain-emotion-gain-k")?.value || "0.5",
-      ),
       // リフレクション降格・注入ゲート: 空なら送らない (merge API keeps the stored value)
       reflection_retrieval_penalty: (() => {
         var v = (

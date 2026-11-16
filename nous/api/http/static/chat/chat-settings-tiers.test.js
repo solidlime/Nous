@@ -25,7 +25,7 @@ const DEFAULTS = {
       help: 'リンク分離しきい値（シナプス結合の類似度）',
       tier: 'expert',
     },
-    brain_emotion_gain_k: { default: 0.5, help: '感情 gain', tier: 'wizard' },
+    brain_link_separation_threshold: { default: 0.75, help: 'リンク分離しきい値（シナプス結合の類似度）', tier: 'wizard' },
     voice_emotion_mode: { default: 'anchor', help: '感情の反映モード', tier: 'expert' },
   },
 };
@@ -45,7 +45,7 @@ function buildForm() {
         <div><div class="chat-field-label">Top P</div><input type="range" id="chat-top-p" value="1" /></div>
         <div class="chat-check-row"><input type="checkbox" id="chat-top-p-enabled" /><label for="chat-top-p-enabled">Top P を指定する</label></div>
         <div><div class="chat-field-label">SEP 分離しきい値</div><input type="number" id="chat-brain-separation-threshold" value="0.75" /></div>
-        <div><div class="chat-field-label">感情 gain 係数 k</div><input type="number" id="chat-brain-emotion-gain-k" value="0.5" /></div>
+        <div><div class="chat-field-label">リンク分離しきい値</div><input type="number" id="chat-brain-separation-threshold" value="0.75" /></div>
         <div><div class="chat-field-label">最小サンプル数</div><input type="number" id="chat-mental-model-min-samples" value="3" /></div>
         <div>
           <div class="chat-field-label">感情の反映</div>
@@ -133,11 +133,10 @@ describe('3-tier settings visibility', () => {
   it('treats a missing or unknown tier as expert (fail-safe: hidden)', async () => {
     await setup();
     // unknown tier string
-    expect(window.Nous.Chat.settings.tierOf('brain_emotion_gain_k')).toBe('expert');
-    expect(isHidden('chat-brain-emotion-gain-k')).toBe(true);
-    // key absent from the defaults payload entirely
     expect(window.Nous.Chat.settings.tierOf('mental_model_min_samples')).toBe('expert');
     expect(isHidden('chat-mental-model-min-samples')).toBe(true);
+    // a real expert field stays hidden while the expert layer is off
+    expect(isHidden('chat-brain-separation-threshold')).toBe(true);
   });
 
   it('hides an expert radio group whole and titles its options from help', async () => {

@@ -84,7 +84,7 @@ def _get_current_version(db_conn: sqlite3.Connection) -> int:
 def _record_version(db_conn: sqlite3.Connection, version: int) -> None:
     """Record that *version* was successfully applied."""
     db_conn.execute(
-        "INSERT INTO _migration_version(version, applied_at) VALUES (?, ?)",
+        "INSERT OR IGNORE INTO _migration_version(version, applied_at) VALUES (?, ?)",
         (version, datetime.now(UTC).isoformat()),
     )
     db_conn.commit()
@@ -353,6 +353,29 @@ def _migrate_curation_runs_v12(
     logger.info("Created curation_runs table (migration v12)")
 
 
+def _migrate_h5_stability_clamp_v13(
+    db_conn: sqlite3.Connection,
+    persona: str,  # noqa: ARG001
+) -> None:
+    """audit H5: 感情 gain で膨らんだ旧 stability を 1 回だけ初期値 1.0 に clamp する。
+
+    旧 DecayWorker の `_h5_stability_clamp_once` を decay ワーカー廃止に伴い移設。
+    one-shot 保証は `_migration_version` の v13 行そのもの（新しいフラグ無し）。
+    LTM 行は昇格由来の stability なので対象外。
+    """
+    # 古い/最小のスキーマ（列が未作成）では何もしない。v11 と同じ PRAGMA ガード。
+    columns = {row[1] for row in db_conn.execute("PRAGMA table_info(memory_strength)").fetchall()}
+    if "stability" not in columns or "is_ltm" not in columns:
+        return
+    cursor = db_conn.execute(
+        "UPDATE memory_strength SET stability = 1.0 WHERE stability > 1.0 AND COALESCE(is_ltm, 0) = 0"
+    )
+    clamped = cursor.rowcount
+    db_conn.commit()
+    if clamped:
+        logger.info("H5 migration: clamped emotion-inflated stability on %d rows", clamped)
+
+
 MIGRATIONS = [
     (1, "Add last_consumed_at column to memories", _migrate_add_last_consumed_at),
     (2, "Backfill FTS5 index", _migrate_fts_backfill),
@@ -365,4 +388,5 @@ MIGRATIONS = [
     (10, "Re-tokenize FTS index with Sudachi morphemes", _migrate_fts_sudachi_retokenize),
     (11, "Add persona to memory_blocks and rebuild PK", _migrate_memory_blocks_persona_v11),
     (12, "Create curation_runs table", _migrate_curation_runs_v12),
+    (13, "Clamp emotion-inflated stability once (H5)", _migrate_h5_stability_clamp_v13),
 ]

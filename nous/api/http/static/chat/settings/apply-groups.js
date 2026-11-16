@@ -239,7 +239,6 @@ function applyBrainForgettingSection(cfg, set, setChecked) {
     setChecked("chat-brain-reasoning", cfg.brain_reasoning_enabled === true);
     set("chat-brain-reasoning-effort", cfg.brain_reasoning_effort || "medium");
     set("chat-brain-max-tokens", cfg.brain_max_tokens ?? 0);
-    set("chat-brain-emotion-gain-k", cfg.brain_emotion_gain_k ?? 0.5);
     set(
       "chat-brain-separation-threshold",
       cfg.brain_link_separation_threshold ?? 0.75,

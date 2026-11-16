@@ -806,7 +806,11 @@ class SearchEngine:
             lexical_boost = policy.lexical_weight * (
                 float(orig.lexical_score or 0.0) + (policy.coverage_weight * coverage if policy.lexical_weight else 0.0)
             )
-            composite = base + policy.relevance_weight * rel + graph_boost + lexical_boost
+            # 感情強度は順位付けのみ（永続 strength には反映しない）。
+            emotion_boost = policy.emotion_salience_weight * max(
+                0.0, min(1.0, float(getattr(orig.memory, "emotion_intensity", 0.0) or 0.0))
+            )
+            composite = base + policy.relevance_weight * rel + graph_boost + lexical_boost + emotion_boost
             if policy.reflection_penalty != 1.0 and "reflection" in (orig.memory.tags or []):
                 composite *= policy.reflection_penalty
             ranked.append(
