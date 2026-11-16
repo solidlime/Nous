@@ -14,6 +14,7 @@ from datetime import date, datetime, time, timedelta, tzinfo
 from typing import TYPE_CHECKING
 
 from nous.application.wiki import vector_index
+from nous.application.wiki.questions import find_open_questions
 from nous.domain.shared.result import Failure, Success
 from nous.domain.value_objects import normalize_emotion, normalize_importance
 from nous.infrastructure.logging.structured import get_logger
@@ -47,6 +48,7 @@ _JOURNAL_PROMPT = """あなたは日記を書く記録係です。{day} の記�
 - **各見出しは、その見出しに書ける材料が無ければ省略してよい**（空見出しを並べない）。
   行数は材料にある事実の数まで。材料が少ない日に埋め草を書かない。
 - 場所・天気・相手など、材料に書かれていない設定は書かない（推測で補わない）。
+- ## 未解決 には下の「未解決の問い」をそのまま列挙する（答えを創作しない）。1 件も無ければ見出しごと省略。
 - ## やったこと は作業とその成果を書く。
 - ## 感想 は「その日に起きたことに対して何を感じたか・どう思ったか」を本人の口調で書く。事実の列挙にはしない。
 - 材料に無い事実は書かない（推測・脚色・一般論での補完は禁止）。
@@ -60,6 +62,9 @@ _JOURNAL_PROMPT = """あなたは日記を書く記録係です。{day} の記�
 
 材料（{day} の営み・時刻昇順）:
 {activity}
+
+未解決の問い（{question_count} 件・回答は書かない）:
+{questions}
 
 JSON ではなく Markdown 本文だけを返してください（説明文は不要）。
 """
@@ -106,6 +111,7 @@ class JournalMixin:
         try:
             memories = self._journal_memories(ctx, start, end, now.tzinfo)
             activity = self._journal_activity(ctx, persona, start, end, now.tzinfo)
+            questions = find_open_questions(ctx)[: self._cfg.max_open_questions]
             # 記憶が 0 件でも、その日の営みが読めれば日記は作る（活動だけの日がある）。
             if not memories and not activity:
                 return []
@@ -124,7 +130,15 @@ class JournalMixin:
             # max_page_bytes を見るので、sources が多い日は本文を減らさないと必ず落ちる。
             budget = self._cfg.max_page_bytes - _frontmatter_bytes(slug, title, sources, tag)
             raw = self._ask_text(
-                self._build_journal_prompt(day, memories, store.list_pages(), now, activity=activity, max_bytes=budget)
+                self._build_journal_prompt(
+                    day,
+                    memories,
+                    store.list_pages(),
+                    now,
+                    activity=activity,
+                    max_bytes=budget,
+                    questions=questions,
+                )
             )
             body = _strip_code_fence(raw or "")
             if not body:
@@ -145,6 +159,7 @@ class JournalMixin:
                     "day": day.isoformat(),
                     "sources": list(sources),
                     "activity_lines": activity.count("\n") + 1 if activity else 0,
+                    "open_questions": len(questions),
                     "page_hash": _hash_of(title, body),
                     **(self._last_llm or {}),
                 },
@@ -304,6 +319,7 @@ class JournalMixin:
         *,
         activity: str = "",
         max_bytes: int | None = None,
+        questions: list[Memory] | None = None,
     ) -> str:
         page_lines = [
             json.dumps({"slug": p.slug, "title": p.title}, ensure_ascii=False)
@@ -326,10 +342,15 @@ class JournalMixin:
             if len(memories) < 5
             else "材料が多い日は列挙せず、要点を統合して書く"
         )
+        question_lines = [
+            line for line in (_clip(m.content, _CONTENT_PREVIEW_CHARS) for m in (questions or [])) if line
+        ]
         return _JOURNAL_PROMPT.format(
             day=day.isoformat(),
             now=now.isoformat(),
             length_hint=length_hint,
+            question_count=len(question_lines),
+            questions="\n".join(f"- {q}" for q in question_lines) or "(なし)",
             max_bytes=self._cfg.max_page_bytes if max_bytes is None else max_bytes,
             pages="\n".join(page_lines) or "(なし)",
             memories="\n".join(memory_lines) or "(なし)",

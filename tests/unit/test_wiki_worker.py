@@ -710,7 +710,14 @@ _JST = ZoneInfo("Asia/Tokyo")
 _DAY = "2026-11-09"
 
 
-def _mem_at(key: str, ts: datetime, *, lifecycle: str = "active") -> Memory:
+def _mem_at(
+    key: str,
+    ts: datetime,
+    *,
+    lifecycle: str = "active",
+    tags: list[str] | None = None,
+    source_context: str | None = None,
+) -> Memory:
     return Memory(
         key=key,
         content=f"{key} の記憶内容。日記の材料になる本文。",
@@ -720,7 +727,8 @@ def _mem_at(key: str, ts: datetime, *, lifecycle: str = "active") -> Memory:
         kind="semantic",
         source_type="user_stated",
         lifecycle_status=lifecycle,
-        tags=[],
+        tags=tags or [],
+        source_context=source_context,
     )
 
 
@@ -837,6 +845,38 @@ class TestJournal:
             assert "短く書く" in prompt
             six = memories * 3
             assert "短く書く" not in worker._build_journal_prompt(date(2026, 11, 9), six, [], self._now)
+        finally:
+            conn.close()
+
+    def test_prompt_lists_open_questions(self, tmp_path) -> None:
+        """未解決の問い（open-question 記憶）を ## 未解決 の材料として渡す。"""
+        memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
+        question = _mem_at(
+            "q1",
+            datetime(2026, 11, 9, 12, 0, tzinfo=_JST),
+            tags=["open-question"],
+            source_context="open-question:qkey:q:herta:abc123",
+        )
+        conn, worker, ctx = _journal_setup(tmp_path, memories + [question], self._body)
+        prompts: list[str] = []
+        worker._ask_text = lambda prompt, boost=0: (prompts.append(prompt), self._body)[1]  # type: ignore[method-assign]
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert "未解決の問い（1 件" in prompts[0]
+            assert "- q1 の記憶内容" in prompts[0]
+        finally:
+            conn.close()
+
+    def test_prompt_without_questions_says_none(self, tmp_path) -> None:
+        """問いが無ければ材料は (なし)。"""
+        memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
+        prompts: list[str] = []
+        worker._ask_text = lambda prompt, boost=0: (prompts.append(prompt), self._body)[1]  # type: ignore[method-assign]
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert "未解決の問い（0 件" in prompts[0]
+            assert "(なし)" in prompts[0]
         finally:
             conn.close()
 
