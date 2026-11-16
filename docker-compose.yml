@@ -58,6 +58,7 @@ services:
       # sandbox の /home/<persona>/workspace はここに置く
       - ${DATA_ROOT}:/data
     restart: unless-stopped
+    stop_grace_period: 30s
     # sock を持つプロセスなので、nous 本体より権限を絞る
     cap_drop:
       - ALL

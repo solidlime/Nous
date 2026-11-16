@@ -282,7 +282,8 @@ class SkillRepository:
 
         result: list[Skill] = []
         for entry in sorted(base.iterdir()):
-            if not entry.is_dir():
+            # sandbox は skills を rw で持つ。symlink で外を覗かせない。
+            if not entry.is_dir() or entry.is_symlink():
                 continue
             skill_file = entry / "SKILL.md"
             if not skill_file.exists():

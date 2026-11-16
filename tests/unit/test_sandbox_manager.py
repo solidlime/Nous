@@ -427,3 +427,23 @@ def test_reset_fails_closed_without_host_root(client, fake, monkeypatch) -> None
     assert body["status"] == "error"
     assert "data root" in body["stderr_tail"]
     assert not any(c[0] in {"rm", "run"} for c in fake.calls)
+
+
+def test_named_volume_mount_is_refused(fake, monkeypatch) -> None:
+    """named volume の Source は絶対パスでない。そのまま -v に渡すと別ボリュームになる。"""
+    fake.mount = "0123456789abff nous-data"
+    monkeypatch.setattr(sm, "_host_root", None)
+    monkeypatch.delenv("SANDBOX_HOST_DATA_ROOT", raising=False)
+    assert sm._host_data_root() is None
+
+
+def test_exec_rejects_a_host_network(client, fake) -> None:
+    body = client.post("/exec", json={"persona": "alice", "command": "id", "network": "host"}).json()
+    assert body["status"] == "error" and "network" in body["stderr_tail"]
+    assert not any(call[0] == "run" for call in fake.calls)
+
+
+def test_exec_rejects_a_flag_like_image(client, fake) -> None:
+    body = client.post("/exec", json={"persona": "alice", "command": "id", "image": "--privileged"}).json()
+    assert body["status"] == "error" and "image" in body["stderr_tail"]
+    assert not any(call[0] == "run" for call in fake.calls)

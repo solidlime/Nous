@@ -13,6 +13,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import threading
 import time
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -46,6 +47,9 @@ _idle_override: dict[str, float] = {}
 
 
 TOKEN_HEADER = "X-Sandbox-Token"
+# host / container: に繋ぐと nous の loopback や他コンテナへ抜けられる。専用 bridge は許す
+_FORBIDDEN_NETWORKS = frozenset({"host"})
+_IMAGE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@-]*")
 
 
 def _env(name: str, default: str) -> str:
@@ -101,6 +105,10 @@ def _host_data_root() -> Path | None:
     if env and os.path.isabs(env):
         from_env = Path(env)
     from_inspect = _inspect_data_mount()
+    # named volume の Source は絶対パスでなくボリューム名。そのまま -v に渡すと
+    # デーモンが別の named volume として扱い、空の workspace を作ってしまう。
+    if from_inspect is not None and not from_inspect.is_absolute():
+        from_inspect = None
     if from_env and from_inspect and from_env.resolve() != from_inspect.resolve():
         logger.error(
             "SANDBOX_HOST_DATA_ROOT (%s) と /data のマウント元 (%s) が違う。mount を作らない",
@@ -192,13 +200,39 @@ def _failure(message: str) -> dict:
     }
 
 
+_ensure_locks: dict[str, threading.Lock] = {}
+_ensure_locks_guard = threading.Lock()
+
+
+def _ensure_lock(persona: str) -> threading.Lock:
+    with _ensure_locks_guard:
+        return _ensure_locks.setdefault(persona, threading.Lock())
+
+
 def _ensure(
     persona: str,
     image: str | None = None,
     network: str | None = None,
     memory: str | None = None,
 ) -> str | None:
+    """同じ persona の同時 ensure を直列化する（初回 run の名前衝突を防ぐ）。"""
+    with _ensure_lock(persona):
+        return _ensure_inner(persona, image=image, network=network, memory=memory)
+
+
+def _ensure_inner(
+    persona: str,
+    image: str | None = None,
+    network: str | None = None,
+    memory: str | None = None,
+) -> str | None:
     """コンテナを running にする。失敗理由を返す（成功なら None）。"""
+    net = network or _env("SANDBOX_NETWORK", "bridge")
+    if net in _FORBIDDEN_NETWORKS or net.startswith("container:"):
+        return f"network {net!r} は使えない（host / container: は拒否）"
+    img = image or _env("SANDBOX_IMAGE", "ubuntu:24.04")
+    if not _IMAGE_RE.fullmatch(img):
+        return f"image {img!r} が不正"
     name = _container(persona)
     inspected, err = _call(
         "inspect",
@@ -257,7 +291,7 @@ def _ensure(
         "--security-opt",
         "no-new-privileges",
         "--network",
-        network or _env("SANDBOX_NETWORK", "bridge"),
+        net,
     ]
     for host, target, read_only in mounts:
         try:
@@ -270,7 +304,7 @@ def _ensure(
         f"HOME={home}",
         "--workdir",
         home,
-        image or _env("SANDBOX_IMAGE", "ubuntu:24.04"),
+        img,
         "sleep",
         "infinity",
     ]

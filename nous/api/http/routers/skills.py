@@ -29,7 +29,7 @@ def register_skills_routes(mcp) -> None:
         merged: dict[str, Any] = {}
         for skill in repo.load_from_dir(settings.skills_dir, persist=False):
             merged[skill.name] = skill
-        if persona and _PERSONA_RE.match(persona):
+        if persona and _PERSONA_RE.fullmatch(persona):
             persona_dir = os.path.join(settings.persona_dir, persona, "skills")
             if os.path.isdir(persona_dir):
                 for skill in repo.load_from_dir(persona_dir, persist=False):
