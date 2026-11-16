@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse
 
+from nous.api.http.compat import envelope_error, envelope_ok, legacy_requested
 from nous.api.http.deps import _resolve_persona_from_request, _safe_get_context
 from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
 
@@ -25,7 +26,32 @@ def _parse_int_param(params, name: str, default: int) -> int:
 
 
 def register_session_events_routes(mcp) -> None:
-    """Register ``GET /api/session-events/{persona}``."""
+    """Register ``GET /api/session-events/{persona}`` and ``POST /api/session/{persona}/begin``."""
+
+    @mcp.custom_route("/api/session/{persona}/begin", methods=["POST"])
+    async def session_begin(request: Request):
+        """Session-start entry (audit M8): same core as the MCP ``session_begin`` tool.
+
+        New format is the envelope; ``?compat=legacy`` returns the pre-v4 flat
+        dict (``{ok, result}``) that ``get_context`` used to emit.
+        """
+        from nous.api.mcp._envelope import ToolErrorCode
+        from nous.api.mcp._tools_persona import _tool_session_begin
+
+        persona = _resolve_persona_from_request(request)
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return envelope_error(ToolErrorCode.NOT_FOUND, f"Persona '{persona}' not found", 404)
+        flat = await _tool_session_begin(ctx, persona, project=request.query_params.get("project") or None)
+        # 失敗時にも legacy の非推奨 WARNING を出すため、判定はガードより先に1回だけ評価する。
+        legacy = legacy_requested(request, "POST /api/session/{persona}/begin")
+        # fail-closed: ok が無い/偽なら失敗。MCP 側 tools.py の `if result.get("ok")` と形を揃える。
+        # error は DomainError（Exception）で来るので str() しないと JSONResponse が落ちる（tools.py:39 と同じ）。
+        if not flat.get("ok"):
+            return envelope_error(ToolErrorCode.INTERNAL, str(flat.get("error") or "session begin failed"), 500)
+        if legacy:
+            return JSONResponse(flat)
+        return JSONResponse(envelope_ok({"context": flat.get("result", "")}))
 
     @mcp.custom_route("/api/session-events/{persona}", methods=["GET"])
     async def get_session_events(request: Request):

@@ -177,13 +177,17 @@ async def _tool_get_context(
         time_since = relative_time_str(state.last_conversation_time)
     current_time = get_now().strftime("%Y-%m-%d %H:%M")
     if session_effects:
-        logger.info("DEPRECATED: get_context performs session side effects; use session_begin instead (audit M8)")
+        logger.warning("DEPRECATED: get_context performs session side effects; use session_begin instead (audit M8)")
         ctx.persona_service.record_conversation_time(persona)
 
     # audit M2 — prospective memory: commitments whose deadline is inside the
     # window are marked ⏰ on their line. 減衰ワーカー廃止で due_reminder の
     # one-shot 生産者は無くなったため、時刻表示はこの due_cues 経路のみ。
-    due_labels = {m.key: label for m, label in due_cues(goals or [], get_now()) if getattr(m, "key", None)}
+    # allow_overdue は意図的に True: MCP の概観は「いま期限切れのものも」見せる。
+    # ペルソナへの自動注入（context_loader）は False で過期を出さない——口を揃えない。
+    due_labels = {
+        m.key: label for m, label in due_cues(goals or [], get_now(), allow_overdue=True) if getattr(m, "key", None)
+    }
 
     # 状態記憶（physical_state/mental_state）を読む。消費はしない（#52）。
     one_shot_context: dict[str, str] = {}

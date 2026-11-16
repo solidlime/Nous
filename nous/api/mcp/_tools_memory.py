@@ -400,6 +400,14 @@ async def _tool_memory_search(
         return _err("top_k must be between 1 and 200")
     top_k = min(top_k or 5, 200)
     # audit:M7 — weight presets replace hand-tuned per-call weights
+    # v4.x 互換: 個別重みは v5 で削除。使われたら旧経路として警告する。
+    if profile is None and (
+        importance_weight != 0.0
+        or recency_weight != MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT
+        or vector_weight != 1.0
+        or keyword_weight != 1.0
+    ):
+        logger.warning("compat=legacy used: memory_search per-call weights (use profile=recent|deep)")
     if profile is not None:
         presets: dict[str, dict[str, float]] = {
             "recent": {

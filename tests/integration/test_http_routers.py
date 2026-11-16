@@ -12,6 +12,7 @@ Routes exercised here:
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import tempfile
@@ -911,3 +912,91 @@ class TestFileServePersonaValidation:
         assert resp.status_code == 400
 
     # d7: export削除に伴い traversal テストも削除
+
+
+# ---------------------------------------------------------------------------
+# compat switch — v4 release plan §互換戦略 ("HTTP は ?compat=legacy で旧形式選択可")
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestCompatLegacySwitch:
+    """`?compat=legacy` restores the pre-envelope shape; anything else is new."""
+
+    async def test_session_begin_default_is_envelope(self, client):
+        resp = await client.post(f"/api/session/{PERSONA}/begin")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["error"] is None
+        assert isinstance(body["data"]["context"], str)
+
+    async def test_session_begin_legacy_returns_flat_shape_and_warns(self, client, caplog):
+        with caplog.at_level(logging.WARNING, logger="nous.api.http.compat"):
+            resp = await client.post(f"/api/session/{PERSONA}/begin?compat=legacy")
+        assert resp.status_code == 200
+        body = resp.json()
+        # 旧形式: _tools_persona._tool_get_context が返す平坦 dict をそのまま返す
+        assert body["ok"] is True
+        assert isinstance(body["result"], str)
+        assert "data" not in body
+        assert "compat=legacy used: POST /api/session/{persona}/begin" in caplog.text
+
+    async def test_session_begin_unknown_compat_value_is_ignored(self, client):
+        resp = await client.post(f"/api/session/{PERSONA}/begin?compat=v3")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "data" in body and "result" not in body
+
+    async def test_session_begin_empty_result_gives_empty_context(self, client, monkeypatch):
+        """ok:true で result 欠落 → data.context == ""（MCP tools.py:42 と同じ形）。"""
+        from nous.api.mcp import _tools_persona
+
+        async def _empty(ctx, persona, project=None):
+            return {"ok": True}
+
+        monkeypatch.setattr(_tools_persona, "_tool_session_begin", _empty)
+        resp = await client.post(f"/api/session/{PERSONA}/begin")
+        assert resp.status_code == 200
+        assert resp.json()["data"]["context"] == ""
+
+    async def test_session_begin_failure_still_warns_under_legacy(self, client, monkeypatch, caplog):
+        """失敗時も compat=legacy の非推奨 WARNING を出す（形は封筒に一本化しても警告は出す）。"""
+        from nous.domain.shared.errors import RepositoryError
+        from nous.domain.shared.result import Failure
+
+        ctx = AppContextRegistry.get(PERSONA)
+        monkeypatch.setattr(
+            ctx.persona_service,
+            "get_context",
+            lambda persona: Failure(RepositoryError("state unavailable")),
+        )
+        with caplog.at_level(logging.WARNING, logger="nous.api.http.compat"):
+            resp = await client.post(f"/api/session/{PERSONA}/begin?compat=legacy")
+        assert resp.status_code == 500
+        assert resp.json()["error"]["code"] == "INTERNAL"
+        assert any("compat=legacy used" in r.getMessage() for r in caplog.records)
+
+    async def test_session_begin_state_failure_is_500_not_fake_success(self, client, monkeypatch):
+        """state 取得失敗を ok:true で返さないこと（副作用付き API の偽成功防止）。
+
+        seam は `_tool_session_begin` ではなく実際の失敗点（`ctx.persona_service.get_context`）。
+        error は本番と同じく DomainError の実体で返し、封筒が JSON 化できることも検証する。
+        """
+        from nous.application.use_cases import AppContextRegistry
+        from nous.domain.shared.errors import RepositoryError
+        from nous.domain.shared.result import Failure
+
+        ctx = AppContextRegistry.get(PERSONA)
+        monkeypatch.setattr(
+            ctx.persona_service,
+            "get_context",
+            lambda persona: Failure(RepositoryError("state unavailable")),
+        )
+        resp = await client.post(f"/api/session/{PERSONA}/begin")
+        assert resp.status_code == 500
+        body = resp.json()
+        assert body["ok"] is False
+        assert body["data"] is None
+        assert body["error"]["code"] == "INTERNAL"
+        assert "state unavailable" in body["error"]["message"]
