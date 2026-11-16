@@ -190,6 +190,8 @@ def test_get_filtered_tools_dynamic_off_returns_all():
     mock_config = MagicMock()
     mock_config.dynamic_tool_selection = False
     mock_config.workspace_root = ""
+    mock_config.sandbox_enabled = False
+    mock_config.sandbox_manager_url = ""
 
     result = get_filtered_tools(mock_config)
     assert len(result) == len(MEMORY_TOOLS)
@@ -203,6 +205,8 @@ def test_get_filtered_tools_dynamic_on_returns_all_currently():
     mock_config = MagicMock()
     mock_config.dynamic_tool_selection = True
     mock_config.workspace_root = ""
+    mock_config.sandbox_enabled = False
+    mock_config.sandbox_manager_url = ""
 
     result = get_filtered_tools(mock_config)
     assert len(result) == len(MEMORY_TOOLS)

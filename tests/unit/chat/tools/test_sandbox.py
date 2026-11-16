@@ -10,10 +10,11 @@ import pytest
 
 from nous.application.chat.tools.approval import approval_required
 from nous.application.chat.tools.definitions import SANDBOX_TOOL, get_filtered_tools
-from nous.application.chat.tools.sandbox import handle_sandbox
+from nous.application.chat.tools.sandbox import TOKEN_HEADER, handle_sandbox
 from nous.domain.chat_config import ChatConfig
 
 _URL = "http://sandbox-manager:8080"
+TOKEN = "test-token"
 
 
 def _response(status_code: int = 200, payload: dict | None = None) -> MagicMock:
@@ -35,10 +36,11 @@ def _client_factory(*, response: MagicMock | None = None, exc: Exception | None 
         async def __aexit__(self, *exc_info: object) -> bool:
             return False
 
-        async def post(self, url: str, json: dict | None = None) -> MagicMock:  # noqa: A002
+        async def post(self, url: str, json: dict | None = None, **kwargs: Any) -> MagicMock:  # noqa: A002
             if captured is not None:
                 captured["url"] = url
                 captured["body"] = json
+                captured["headers"] = kwargs.get("headers")
             if exc is not None:
                 raise exc
             assert response is not None
@@ -56,7 +58,7 @@ def ctx() -> MagicMock:
 
 @pytest.fixture
 def config() -> ChatConfig:
-    return ChatConfig(sandbox_manager_url=_URL, shell_timeout_seconds=30)
+    return ChatConfig(sandbox_manager_url=_URL, sandbox_manager_token=TOKEN, shell_timeout_seconds=30)
 
 
 async def _run(ctx: MagicMock, config: ChatConfig, tool_input: dict, **client_kwargs: Any) -> dict:
@@ -103,11 +105,13 @@ class TestSandboxHandler:
             "timeout_seconds": 30.0,
         }
         assert captured["timeout"] == 40.0
+        assert captured["headers"] == {TOKEN_HEADER: TOKEN}
         assert result == payload
 
     async def test_configured_options_are_forwarded(self, ctx: MagicMock) -> None:
         config = ChatConfig(
             sandbox_manager_url=_URL,
+            sandbox_manager_token=TOKEN,
             shell_timeout_seconds=30,
             sandbox_image="ubuntu:22.04",
             sandbox_network="sbx-net",
@@ -126,6 +130,12 @@ class TestSandboxHandler:
         result = await _run(ctx, config, {"command": "seq 200"}, response=_response(200, payload))
         assert len(result["stdout_tail"].splitlines()) == 120
         assert "stderr_tail" not in result
+
+    async def test_missing_token_fails_closed(self, ctx: MagicMock) -> None:
+        config = ChatConfig(sandbox_manager_url=_URL, shell_timeout_seconds=30)
+        result = await _run(ctx, config, {"command": "ls"}, response=_response(200, {"status": "ok"}))
+        assert result["status"] == "error"
+        assert "sandbox_manager_token" in result["error"]
 
     async def test_connect_error_returns_error(self, ctx: MagicMock, config: ChatConfig) -> None:
         result = await _run(ctx, config, {"command": "ls"}, exc=httpx.ConnectError("boom"))

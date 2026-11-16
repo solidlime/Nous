@@ -130,15 +130,16 @@ manager に届かない・未設定のときは `status="error"` を返す。例
 ## セキュリティ
 
 - sock を持つのは `sandbox-manager` だけ。nous は持たない
-- **`SANDBOX_NETWORK` に compose ネットワークを指定しない**。指定すると、1つの sandbox から他の sandbox の manager API（無認証）に届き、他人の sandbox を exec / rm できてしまう
+- **`SANDBOX_NETWORK` に compose ネットワークを指定しない**。指定すると、1つの sandbox から他の sandbox の manager API に届き、トークンを盗めば他人の sandbox を exec / rm できてしまう
 - sandbox は `no-new-privileges` + `--pids-limit 1024` + メモリ・CPU 上限付き。manager は `cap_drop: ALL`
 - ホストのマウントは workspace とスキルだけ。memory / wiki / config は渡さない
 - exec の引数は `shell=False`。コマンド文字列はコンテナ内の `bash -lc` でのみ解釈する
 - コンテナは `com.nous.sandbox=1` ラベルで識別する。名前だけ一致する他人のコンテナは exec / rm しない
 
-**manager は無認証**。`/exec` は任意コマンド実行、`/reset` は workspace 削除なので、
-ネットワーク分離（`SANDBOX_NETWORK` に compose ネットワークを置かない）が唯一の防壁。
-共有トークンは未実装。
+**manager は共有トークン必須**。`/health` を除く全 API が `X-Sandbox-Token` を要求する。
+`NOUS_SANDBOX_MANAGER_TOKEN` が未設定なら 503、不一致は 401。nous は config.json の
+`sandbox_manager_token` を送り、空ならツールが `status="error"` を返す（fail closed）。
+ネットワーク分離（`SANDBOX_NETWORK` に compose ネットワークを置かない）は併用する。
 
 ---
 

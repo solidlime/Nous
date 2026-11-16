@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import time
@@ -18,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from nous.infrastructure.logging.structured import get_logger
@@ -44,8 +45,20 @@ _in_flight: dict[str, int] = {}
 _idle_override: dict[str, float] = {}
 
 
+TOKEN_HEADER = "X-Sandbox-Token"
+
+
 def _env(name: str, default: str) -> str:
     return os.environ.get(name) or default
+
+
+def _auth(x_sandbox_token: str = Header(default="")) -> None:
+    """共有トークンを照合する。未設定なら 503（無認証で動かさない）。"""
+    expected = _env("NOUS_SANDBOX_MANAGER_TOKEN", "")
+    if not expected:
+        raise HTTPException(status_code=503, detail="NOUS_SANDBOX_MANAGER_TOKEN is not set")
+    if not secrets.compare_digest(x_sandbox_token, expected):
+        raise HTTPException(status_code=401, detail="sandbox token mismatch")
 
 
 def _enter(persona: str) -> None:
@@ -386,7 +399,7 @@ class PersonaRequest(BaseModel):
     idle_minutes: float | None = None
 
 
-@app.post("/exec")
+@app.post("/exec", dependencies=[Depends(_auth)])
 def exec_in_sandbox(req: ExecRequest) -> dict:
     persona = _persona(req.persona)
     if not req.command.strip():
@@ -427,7 +440,7 @@ def exec_in_sandbox(req: ExecRequest) -> dict:
     }
 
 
-@app.post("/reset")
+@app.post("/reset", dependencies=[Depends(_auth)])
 def reset_sandbox(req: PersonaRequest) -> dict:
     persona = _persona(req.persona)
     if persona in _in_flight:
@@ -479,7 +492,7 @@ def reset_sandbox(req: PersonaRequest) -> dict:
     return {"status": "ok"}
 
 
-@app.get("/list")
+@app.get("/list", dependencies=[Depends(_auth)])
 def list_sandboxes() -> dict:
     proc, err = _call("ps", "-a", "--filter", "label=com.nous.sandbox=1", "--format", "{{.Names}}\t{{.State}}")
     if proc is None or proc.returncode != 0:
@@ -501,7 +514,7 @@ def list_sandboxes() -> dict:
     return {"sandboxes": sandboxes}
 
 
-@app.post("/touch")
+@app.post("/touch", dependencies=[Depends(_auth)])
 def touch_sandbox(req: PersonaRequest) -> dict:
     _last_used[_persona(req.persona)] = time.time()
     return {"status": "ok"}

@@ -48,6 +48,7 @@ FROZEN_TOP = {"archive", "releases", "evidence"}
 ENV_ONLY = {
     "NOUS_TOOL_DESCRIPTION_OVERRIDE",
     "NOUS_PERSONAS",  # docker-compose で opensandbox-mcp サービス群を定義する時の手動名（Nous は読まない）
+    "NOUS_SANDBOX_MANAGER_TOKEN",  # sandbox-manager が直接読む共有トークン（nous 本体は読まない）
 }
 
 _PATH_PARAM = re.compile(r"\{[^}/]+\}")

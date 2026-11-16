@@ -15,6 +15,8 @@ from fastapi.testclient import TestClient
 
 from nous.services import sandbox_manager as sm
 
+TOKEN = "test-token"
+
 pytestmark = pytest.mark.unit
 
 
@@ -63,6 +65,7 @@ def fake(monkeypatch, tmp_path) -> FakeDocker:
     monkeypatch.setattr(sm, "_host_root", None)
     # HOSTNAME は自分自身のコンテナ ID（短縮形）と一致していなければならない。
     monkeypatch.setenv("HOSTNAME", "0123456789ab")
+    monkeypatch.setenv("NOUS_SANDBOX_MANAGER_TOKEN", TOKEN)
     docker = FakeDocker(mount=f"0123456789abff {tmp_path / 'host'}", inspect=(0, "true 1\n", ""), exec=(0, "ok\n", ""))
     monkeypatch.setattr(sm, "_docker", docker)
     return docker
@@ -71,7 +74,27 @@ def fake(monkeypatch, tmp_path) -> FakeDocker:
 @pytest.fixture
 def client(fake) -> TestClient:
     # with を使わない = lifespan（起動時 docker ps）を走らせない
-    return TestClient(sm.app)
+    return TestClient(sm.app, headers={sm.TOKEN_HEADER: TOKEN})
+
+
+def test_auth_requires_the_shared_token(fake) -> None:
+    anonymous = TestClient(sm.app)
+    assert anonymous.post("/exec", json={"persona": "alice", "command": "id"}).status_code == 401
+    assert anonymous.get("/list").status_code == 401
+    assert anonymous.post("/reset", json={"persona": "alice"}).status_code == 401
+
+
+def test_auth_refuses_a_wrong_token(fake) -> None:
+    wrong = TestClient(sm.app, headers={sm.TOKEN_HEADER: "nope"})
+    assert wrong.get("/list").status_code == 401
+
+
+def test_auth_fails_closed_without_configured_token(fake, monkeypatch) -> None:
+    monkeypatch.delenv("NOUS_SANDBOX_MANAGER_TOKEN")
+    anonymous = TestClient(sm.app)
+    assert anonymous.get("/list").status_code == 503
+    # health は compose の healthcheck 用に開けておく
+    assert anonymous.get("/health").status_code == 200
 
 
 @pytest.mark.parametrize("persona", ["Alice", "a b", "../x", ""])

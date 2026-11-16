@@ -68,6 +68,7 @@ services:
     # API キーは渡さない（sock を持つ側に秘密を持たせない）。SANDBOX_* だけで足りる。
     environment:
       NOUS_DATA_ROOT: /data
+      NOUS_SANDBOX_MANAGER_TOKEN: ${NOUS_SANDBOX_MANAGER_TOKEN:?set NOUS_SANDBOX_MANAGER_TOKEN}
       SANDBOX_IMAGE: ${SANDBOX_IMAGE:-ubuntu:24.04}
       SANDBOX_NETWORK: ${SANDBOX_NETWORK:-bridge}
       SANDBOX_MEMORY: ${SANDBOX_MEMORY:-4g}

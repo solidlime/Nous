@@ -38,6 +38,9 @@ class ToolConfig(BaseModel):
     sandbox_manager_url: str = Field(
         default="", description="sandbox-manager の URL（例 http://sandbox-manager:8080）。"
     )
+    sandbox_manager_token: str = Field(
+        default="", description="sandbox-manager の共有トークン。X-Sandbox-Token で送る。"
+    )
     # 空 / 0 は「manager の env 既定に従う」。設定した値だけが /exec に上乗せされる。
     sandbox_image: str = Field(default="", description="sandbox コンテナのイメージ。空なら manager の既定。")
     sandbox_network: str = Field(default="", description="sandbox コンテナのネットワーク。空なら manager の既定。")

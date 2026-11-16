@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from nous.domain.chat_config import ChatConfig
 
 TAIL_LINES = 120
+TOKEN_HEADER = "X-Sandbox-Token"
 # manager 側の exec がタイムアウトを処理する間、こちらは少し長く待つ
 TIMEOUT_GRACE_SECONDS = 10.0
 
@@ -48,6 +49,9 @@ async def handle_sandbox(ctx: AppContext, config: ChatConfig, tool_input: dict) 
     persona = getattr(ctx, "persona", None)
     if not persona:
         return {"status": "error", "error": "persona is not set"}
+    token = str(getattr(config, "sandbox_manager_token", "") or "")
+    if not token:
+        return {"status": "error", "error": "sandbox_manager_token is not configured"}
     command = str(tool_input.get("command") or "").strip()
     if not command:
         return {"status": "error", "error": "command is required"}
@@ -57,7 +61,7 @@ async def handle_sandbox(ctx: AppContext, config: ChatConfig, tool_input: dict) 
 
     try:
         async with httpx.AsyncClient(timeout=timeout + TIMEOUT_GRACE_SECONDS) as client:
-            response = await client.post(f"{url}/exec", json=body)
+            response = await client.post(f"{url}/exec", json=body, headers={TOKEN_HEADER: token})
             if response.status_code != 200:
                 detail = response.text[:500]
                 return {"status": "error", "error": f"sandbox-manager: HTTP {response.status_code} {detail}".strip()}
