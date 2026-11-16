@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from time import perf_counter
 from typing import TYPE_CHECKING
 
 from nous.application.chat.tools.builtin import execute_tool, filter_extra_tools, truncate_tool_result
@@ -83,6 +84,7 @@ class ToolRegistry:
         persona = getattr(ctx, "persona", None)
         if not isinstance(persona, str):
             persona = ""
+        started = perf_counter()
         try:
             if tool_name == SEARCH_TOOLS_NAME:
                 if self._search_handler is None:
@@ -106,7 +108,12 @@ class ToolRegistry:
                     "success": True,
                     "session_id": getattr(ctx, "session_id", None),
                     "timestamp": get_now().isoformat(),
+                    "duration_ms": round((perf_counter() - started) * 1000, 1),
                 }
+                # workspace ツールは result["audit"] に command/exit_code を載せてくる
+                audit = result.get("audit") if isinstance(result, dict) else None
+                if isinstance(audit, dict):
+                    payload.update(audit)
                 if persona:
                     payload["persona"] = persona
                 await ctx.event_bus.publish("tool.called", payload)
@@ -122,6 +129,7 @@ class ToolRegistry:
                     "error": str(e),
                     "session_id": getattr(ctx, "session_id", None),
                     "timestamp": get_now().isoformat(),
+                    "duration_ms": round((perf_counter() - started) * 1000, 1),
                 }
                 if persona:
                     payload["persona"] = persona

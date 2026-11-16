@@ -189,6 +189,7 @@ def test_get_filtered_tools_dynamic_off_returns_all():
     """dynamic_tool_selection=False で全ツールが返る。"""
     mock_config = MagicMock()
     mock_config.dynamic_tool_selection = False
+    mock_config.workspace_root = ""
 
     result = get_filtered_tools(mock_config)
     assert len(result) == len(MEMORY_TOOLS)
@@ -201,6 +202,7 @@ def test_get_filtered_tools_dynamic_on_returns_all_currently():
     """dynamic_tool_selection=True でも現状は全ツールが返る（将来の制限基盤）。"""
     mock_config = MagicMock()
     mock_config.dynamic_tool_selection = True
+    mock_config.workspace_root = ""
 
     result = get_filtered_tools(mock_config)
     assert len(result) == len(MEMORY_TOOLS)

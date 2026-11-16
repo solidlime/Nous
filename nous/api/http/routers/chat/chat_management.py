@@ -106,6 +106,10 @@ _SECTION_EXACT: dict[str, str] = {
     "enable_parallel_tools": "tools",
     "dynamic_tool_selection": "tools",
     "enable_memory_tools": "tools",
+    "workspace_root": "tools",
+    "shell_timeout_seconds": "tools",
+    "shell_approval_mode": "tools",
+    "shell_allowed_commands": "tools",
 }
 # 設定ではないメタフィールドは除外。
 _META_FIELD_NAMES = frozenset({"persona", "updated_at"})
@@ -167,6 +171,11 @@ _TIER_ADVANCED: frozenset[str] = frozenset(
         "enable_parallel_tools",
         "dynamic_tool_selection",
         "enable_memory_tools",
+        # ワークスペース（シェル・ファイル操作）
+        "workspace_root",
+        "shell_timeout_seconds",
+        "shell_approval_mode",
+        "shell_allowed_commands",
         # 抽出
         "auto_extract",
         "extract_model",

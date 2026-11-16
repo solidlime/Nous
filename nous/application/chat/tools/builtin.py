@@ -10,6 +10,12 @@ from typing import TYPE_CHECKING, Any
 from nous.api.mcp._tools_skill import _tool_invoke_skill
 from nous.api.mcp.tools import TOOL_DISPATCH
 from nous.application.chat.tools.definitions import _NOUS_TOOL_NAMES
+from nous.application.chat.tools.shell import (
+    _handle_bash,
+    _handle_edit_file,
+    _handle_read_file,
+    _handle_write_file,
+)
 from nous.config.settings import get_settings
 from nous.domain.skill import SkillRepository
 from nous.infrastructure.logging.structured import get_logger
@@ -409,6 +415,10 @@ _BUILTIN_DISPATCH: dict[str, Any] = {
     "image_generate": _handle_image_generate,
     "invoke_skill": _handle_invoke_skill,
     "move": _handle_move,
+    "bash": _handle_bash,
+    "read_file": _handle_read_file,
+    "write_file": _handle_write_file,
+    "edit_file": _handle_edit_file,
 }
 
 _MCP_SHARED_TOOLS = frozenset(

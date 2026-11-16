@@ -172,6 +172,8 @@ nous/
 
 MCP として公開しないチャット組み込みツール（`move` / `invoke_skill` / `list_skills` / `search_tools` / `image_generate`）は `nous/application/chat/tools/` にあり、チャット経路でのみ使う。
 
+ワークスペースツール（`bash` / `read_file` / `write_file` / `edit_file`）は `nous/application/chat/tools/shell.py` にある。`ToolConfig.workspace_root` が未設定なら公開されない（オプトイン）。境界は `workspace_root` の `resolve()` 前方一致で、symlink も潰れる。`bash` は末尾 120 行だけを返し、全文は `{data_root}/persona/{persona}/artifacts/{session_id}/` に落ちる。実行内容（`command` / `exit_code`）は `tool.called` イベントの payload に載る。
+
 ---
 
 ## 内蔵スキル

@@ -348,17 +348,21 @@ def get_filtered_tools(config: ChatConfig) -> list[ToolDefinition]:
     この関数が CORE_ALWAYS_TOOLS を絶対に除外しないことを保証する。
     dynamic_tool_selection=False の場合は従来通り全ツールを返す。
     disabled_tools に指定されたツールは除外する（コアツールも対象）。
+    workspace_root 未設定ならワークスペースツールは一切公開しない。
     """
     disabled = set(config.disabled_tools or [])
+    base = list(MEMORY_TOOLS)
+    if getattr(config, "workspace_root", ""):
+        base += WORKSPACE_TOOLS
 
     if not config.dynamic_tool_selection:
-        return [t for t in MEMORY_TOOLS if t.name not in disabled]
+        return [t for t in base if t.name not in disabled]
 
     # 常時ツールを収集
-    always_tools = [t for t in MEMORY_TOOLS if t.name in CORE_ALWAYS_TOOLS]
+    always_tools = [t for t in base if t.name in CORE_ALWAYS_TOOLS]
 
     # 条件付きツール（dynamic_tool_selection=True なら全追加 = 現状同じ）
-    conditional_tools = [t for t in MEMORY_TOOLS if t.name not in CORE_ALWAYS_TOOLS]
+    conditional_tools = [t for t in base if t.name not in CORE_ALWAYS_TOOLS]
 
     result = always_tools + conditional_tools
     # disabled_tools でフィルタリング
@@ -375,6 +379,73 @@ def get_filtered_tools(config: ChatConfig) -> list[ToolDefinition]:
         len(disabled),
     )
     return result
+
+
+WORKSPACE_TOOLS: list[ToolDefinition] = [
+    ToolDefinition(
+        name="bash",
+        description=(
+            "ワークスペース内でシェルコマンドを実行する。作業ディレクトリは固定で、外は触れない。"
+            "出力は末尾 120 行のみ返し、全文は log_path に保存される（必要なら read_file で読む）。"
+            "exit_code が 0 以外なら失敗として扱え。"
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "実行するシェルコマンド"},
+                "timeout_seconds": {
+                    "type": "integer",
+                    "description": "タイムアウト秒（既定 120・上限 600）",
+                },
+            },
+            "required": ["command"],
+        },
+    ),
+    ToolDefinition(
+        name="read_file",
+        description=(
+            "ワークスペース内のテキストファイルを読む。既定で先頭 2000 行。"
+            "大きいファイルは offset / limit で部分読みする（続きは next_offset で案内される）。"
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "ワークスペースからの相対パス"},
+                "offset": {"type": "integer", "description": "読み始める行（0 始まり）"},
+                "limit": {"type": "integer", "description": "最大行数（上限 2000）"},
+            },
+            "required": ["path"],
+        },
+    ),
+    ToolDefinition(
+        name="write_file",
+        description="ワークスペース内にファイルを新規作成または上書きする。親ディレクトリは自動作成。",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "ワークスペースからの相対パス"},
+                "content": {"type": "string", "description": "ファイル全文"},
+            },
+            "required": ["path", "content"],
+        },
+    ),
+    ToolDefinition(
+        name="edit_file",
+        description=(
+            "ファイル内の一意な文字列を置換する。old_text が 0 個または 2 個以上一致したら失敗する。"
+            "曖昧なときは read_file で現物を読み、前後を含めて一意にすること。"
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "ワークスペースからの相対パス"},
+                "old_text": {"type": "string", "description": "置換対象（一意に一致すること）"},
+                "new_text": {"type": "string", "description": "置換後（削除なら空文字）"},
+            },
+            "required": ["path", "old_text", "new_text"],
+        },
+    ),
+]
 
 
 # MCPサーバー由来のツール名（MEMORY_TOOLS と重複するため除外対象）

@@ -19,6 +19,20 @@ class ToolConfig(BaseModel):
     dynamic_tool_selection: bool = Field(default=True, description="ターンごとに必要なツールを動的に選択します。")
     enable_memory_tools: bool = Field(default=True, description="AIが記憶を操作するツールを使えるようにします。")
 
+    # ワークスペース（シェル・ファイル操作）— workspace_root が空ならツール自体を公開しない
+    workspace_root: str = Field(
+        default="",
+        description="シェル/ファイル操作ツールが触れる唯一のルート（絶対パス）。空で無効。",
+    )
+    shell_timeout_seconds: int = Field(default=120, description="bash の既定タイムアウト（秒、上限600）。")
+    shell_approval_mode: str = Field(
+        default="ask",
+        description="シェル/書き込みの承認モード（ask / allowlist / auto）。Phase2 で有効化。",
+    )
+    shell_allowed_commands: list[str] = Field(
+        default=[], description="allowlist モードで無承認に通すコマンド名（先頭トークン）。"
+    )
+
     # 画像生成
     image_gen_enabled: bool = Field(default=False, description="画像生成機能を有効にします。")
     image_gen_provider: str = Field(default="comfyui", description="画像生成に使うプロバイダー。")
