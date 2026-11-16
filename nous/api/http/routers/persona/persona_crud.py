@@ -69,9 +69,8 @@ async def _do_delete_persona(persona: str) -> dict:
     if not persona_dir.exists():
         return {"error": f"Persona '{persona}' not found"}
     try:
-        if persona in AppContextRegistry._contexts:
-            AppContextRegistry._contexts[persona].close()
-            del AppContextRegistry._contexts[persona]
+        # registry からの読み書きはロック内で行う（dict の直接操作は競合する）
+        AppContextRegistry.discard(persona)
         shutil.rmtree(persona_dir)
         return {"status": "ok", "deleted": persona}
     # 最終防衛線: 予期せぬ削除エラー

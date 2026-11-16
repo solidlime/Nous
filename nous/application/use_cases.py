@@ -356,7 +356,9 @@ class AppContextRegistry:
 
     _contexts: dict[str, AppContext] = {}
     _settings: Settings | None = None
-    _lock = threading.Lock()
+    # RLock: get() は AppContext 構築中もロックを保持するので、構築中に
+    # 同スレッドから personas()/snapshot() を呼ばれても再入で死なないようにする。
+    _lock = threading.RLock()
 
     @classmethod
     def configure(cls, settings: Settings) -> None:
@@ -409,14 +411,45 @@ class AppContextRegistry:
         return ctx
 
     @classmethod
-    def close_all(cls) -> None:
-        for ctx in cls._contexts.values():
+    def personas(cls) -> list[str]:
+        """既に AppContext が生成済みの persona（遅延生成なので未アクセスは含まない）。"""
+        with cls._lock:
+            return list(cls._contexts)
+
+    @classmethod
+    def snapshot(cls) -> list[tuple[str, AppContext]]:
+        """live context の安定したスナップショット。
+
+        registry は reload worker の反復中にもエントリが増える（並行 persona 作成）。
+        live view を直接反復すると ``RuntimeError: dictionary changed size during iteration``
+        になるため、ロック下で list に写す。
+        """
+        with cls._lock:
+            return list(cls._contexts.items())
+
+    @classmethod
+    def discard(cls, persona: str) -> None:
+        """registry から外して閉じる（ペルソナ削除用）。close はロック外で行う。"""
+        with cls._lock:
+            ctx = cls._contexts.pop(persona, None)
+        if ctx is not None:
             ctx.close()
-        cls._contexts.clear()
+
+    @classmethod
+    def close_all(cls) -> None:
+        # snapshot と clear を同じロック内で行う。別々にすると snapshot 後に作られた ctx が
+        # registry から消えるのに閉じられない（宙に浮いた接続）。
+        with cls._lock:
+            items = list(cls._contexts.values())
+            cls._contexts.clear()
+        for ctx in items:
+            ctx.close()
 
     @classmethod
     async def close_all_async(cls) -> None:
         """Async close: release Qdrant connections and SQLite connections for all contexts."""
-        for ctx in cls._contexts.values():
+        with cls._lock:
+            items = list(cls._contexts.values())
+            cls._contexts.clear()
+        for ctx in items:
             await ctx.close_async()
-        cls._contexts.clear()

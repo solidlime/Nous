@@ -116,7 +116,7 @@ def _embedding(settings: Settings):
     """共有 EmbeddingModel（AppContext と同じ resolution を使う）。"""
     from nous.application.use_cases import AppContextRegistry
 
-    for persona in list(AppContextRegistry._contexts.keys()):
+    for persona in AppContextRegistry.personas():
         ctx = AppContextRegistry.get(persona)
         model = getattr(ctx, "embedding_model", None)
         if model is not None:

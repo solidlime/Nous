@@ -149,3 +149,37 @@ class TestAppContextRegistrySecurity:
             assert len(results) == 8
             assert all(r is mock_ctx for r in results)
             assert mock_app_ctx.call_count == 1
+
+    def test_discard_closes_outside_lock(self, persona_root):
+        """discard() は registry から外してから閉じる（close はロック外）。"""
+        AppContextRegistry.configure(_mock_settings(persona_root))
+        _ensure_persona(persona_root, "goner")
+
+        with patch("nous.application.use_cases.AppContext") as mock_app_ctx:
+            mock_ctx = MagicMock()
+            mock_app_ctx.return_value = mock_ctx
+            AppContextRegistry.get("goner")
+            assert "goner" in AppContextRegistry._contexts
+
+            AppContextRegistry.discard("goner")
+
+            assert "goner" not in AppContextRegistry._contexts
+            mock_ctx.close.assert_called_once()
+
+    def test_close_all_empties_registry_and_closes_every_context(self, persona_root):
+        """close_all() は取得と clear を同時に行い、snapshot 後の取りこぼしを残さない。"""
+        AppContextRegistry.configure(_mock_settings(persona_root))
+        _ensure_persona(persona_root, "a")
+        _ensure_persona(persona_root, "b")
+
+        with patch("nous.application.use_cases.AppContext") as mock_app_ctx:
+            contexts = [MagicMock(), MagicMock()]
+            mock_app_ctx.side_effect = contexts
+            AppContextRegistry.get("a")
+            AppContextRegistry.get("b")
+
+            AppContextRegistry.close_all()
+
+            assert AppContextRegistry._contexts == {}
+            for ctx in contexts:
+                ctx.close.assert_called_once()

@@ -223,7 +223,7 @@ class WikiWorker(JournalMixin, ConflictsMixin):
         from nous.application.use_cases import AppContextRegistry
 
         try:
-            return bool(AppContextRegistry._contexts)
+            return bool(AppContextRegistry.personas())
         except Exception:
             logger.debug("WikiWorker: context registry unavailable", exc_info=True)
             return False
@@ -240,7 +240,7 @@ class WikiWorker(JournalMixin, ConflictsMixin):
         from nous.application.use_cases import AppContextRegistry
 
         try:
-            personas = list(AppContextRegistry._contexts.keys())
+            personas = AppContextRegistry.personas()
         except Exception:
             logger.exception("WikiWorker: failed to list personas")
             return

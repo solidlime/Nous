@@ -92,7 +92,7 @@ def _snapshot_contexts() -> list[tuple[str, Any]]:
     """
     from nous.application.use_cases import AppContextRegistry
 
-    return list(AppContextRegistry._contexts.items())
+    return AppContextRegistry.snapshot()
 
 
 class RuntimeConfigManager:
