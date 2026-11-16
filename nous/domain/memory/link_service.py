@@ -16,6 +16,9 @@ class MemoryLinkService:
     # the usual Oja-normalised Hebbian update takes over.
     TEMPORAL_BONUS_SAME_DAY = 0.15
     TEMPORAL_BONUS_SAME_PLACE = 0.15
+    # リポジトリは新規エッジを 0.5 + strength で作るため、上限 1.0 を超えない
+    # よう strength 側でクランプする。
+    MAX_INITIAL_STRENGTH = 0.5
 
     def __init__(
         self,
@@ -82,8 +85,11 @@ class MemoryLinkService:
         day1, day2 = cls._day_key(m1), cls._day_key(m2)
         if day1 and day1 == day2:
             bonus += cls.TEMPORAL_BONUS_SAME_DAY
-        place1 = getattr(m1, "episodic_place", None)
-        if place1 and place1 == getattr(m2, "episodic_place", None):
+        # 「場所」は記憶に残る場所情報（episodic_place、無ければ作成時の
+        # environment）。PersonaState の現在地ではない。
+        place1 = getattr(m1, "episodic_place", None) or getattr(m1, "environment", None)
+        place2 = getattr(m2, "episodic_place", None) or getattr(m2, "environment", None)
+        if place1 and place1 == place2:
             bonus += cls.TEMPORAL_BONUS_SAME_PLACE
         return bonus
 
@@ -110,5 +116,8 @@ class MemoryLinkService:
         candidates = [m for m in co_accessed if m.key != new_memory.key][-5:]
         for candidate in candidates:
             link_type = self._classify_link_type(new_memory, candidate)
-            strength = 0.1 + self._temporal_bonus(new_memory, candidate)
+            strength = min(
+                self.MAX_INITIAL_STRENGTH,
+                0.1 + self._temporal_bonus(new_memory, candidate),
+            )
             upsert_link(new_memory.key, candidate.key, link_type, strength=strength)
