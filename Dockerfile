@@ -37,7 +37,7 @@ RUN apt-get update && \
 
 # Debian 13 split the docker CLI out of the docker.io package and ships no
 # docker-cli, so the sandbox manager gets the static client instead of the daemon.
-RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-26.1.5.tgz \
+RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-29.10.0.tgz \
     | tar -xz --strip-components=1 -C /usr/local/bin docker/docker
 
 # Copy Python packages from builder
