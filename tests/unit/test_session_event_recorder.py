@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -92,6 +93,17 @@ class TestSessionEventRecorder:
         assert event.timestamp == datetime(2026, 6, 13, 10, 30, 0)
         assert event.detail == "some detail"
         assert event.metadata == {"source": "test"}
+
+    @pytest.mark.asyncio
+    async def test_chat_message_keeps_content_in_detail(self, recorder, mock_repo):
+        """#41: them ブロックは detail.content を読む。発行側は content をトップに置く。"""
+        await recorder._on_event(
+            "chat.message",
+            {"session_id": "s1", "persona": "p", "content": "こんばんは"},
+        )
+
+        event: SessionEvent = mock_repo.insert.call_args[0][0]
+        assert json.loads(event.detail) == {"content": "こんばんは"}
 
     @pytest.mark.asyncio
     async def test_on_event_inserts_events_ingested(self, recorder, mock_repo):

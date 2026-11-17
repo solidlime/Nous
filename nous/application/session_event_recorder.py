@@ -81,6 +81,11 @@ class SessionEventRecorder:
                     timestamp = datetime.fromisoformat(timestamp_str)
 
             detail = data.get("detail")
+            if detail is None and event_type in (CHAT_MESSAGE, CHAT_LLM_RESPONSE):
+                # 本文はトップレベルに来る。読む側（them ブロック）は detail.content を見る。
+                content = data.get("content")
+                if content:
+                    detail = json.dumps({"content": content}, ensure_ascii=False)
             metadata = self._merge_metadata(event_type, data)
 
             event = SessionEvent(
