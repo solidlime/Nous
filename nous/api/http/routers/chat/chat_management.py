@@ -100,6 +100,7 @@ _SECTION_PREFIXES: tuple[tuple[str, str], ...] = (
     ("context_", "context"),
     ("retrieval_", "weights"),
     ("emotion_", "weights"),
+    ("proactive_", "proactive"),
 )
 _SECTION_EXACT: dict[str, str] = {
     "mcp_servers": "tools",
@@ -154,6 +155,8 @@ _TIER_BASIC: frozenset[str] = frozenset(
         "retrieval_recency_weight",
         "retrieval_importance_weight",
         "retrieval_relevance_weight",
+        # 自発発言 ON/OFF（kanban #44）
+        "proactive_enabled",
         # 応答トークン上限
         "max_tokens",
     }
@@ -227,6 +230,11 @@ _TIER_ADVANCED: frozenset[str] = frozenset(
         "context_use_llm_summary",
         # 想起スコア閾値（誤爆した低スコア記憶を注入しない）
         "memory_min_score",
+        # 自発発言の間隔・クールダウン・追加指示
+        "proactive_idle_minutes",
+        "proactive_interval_minutes",
+        "proactive_cooldown_minutes",
+        "proactive_prompt",
     }
 )
 

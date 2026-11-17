@@ -14,6 +14,11 @@ if TYPE_CHECKING:
 # events.ingested は内省・ツール実行でも idle タイマーをリセットさせない。
 _IDLE_ACTIVITY_EVENT_TYPES = ("chat.message", "chat.llm_response")
 
+# ユーザー発話の判定（kanban #44）。worker が内部で回すターン（self: /
+# proactive:）も chat.message を発行するので、これらを数えると自分で idle を
+# リセットする自己ループになる。
+_INTERNAL_SESSION_PREFIXES = ("self:", "proactive:")
+
 
 class SessionEventRepository:
     """SQLite repository for session_event records."""
@@ -141,26 +146,30 @@ class SessionEventRepository:
 
         return [self._row_to_event(r) for r in rows], total
 
-    def last_event_at(self, persona: str, event_type: str) -> datetime | None:
-        """指定イベント種別の最終時刻（None なら記録なし）。"""
-        row = self._db.execute(
-            "SELECT MAX(timestamp) FROM session_events WHERE persona = ? AND event_type = ?",
-            (persona, event_type),
-        ).fetchone()
+    def _max_timestamp(self, where: str, params: tuple[Any, ...]) -> datetime | None:
+        row = self._db.execute(f"SELECT MAX(timestamp) FROM session_events WHERE {where}", params).fetchone()  # nosec B608: where は呼び出し側の定数、値はバインド
         if row is None or row[0] is None:
             return None
         return datetime.fromisoformat(row[0])
 
+    def last_event_at(self, persona: str, event_type: str) -> datetime | None:
+        """指定イベント種別の最終時刻（None なら記録なし）。"""
+        return self._max_timestamp("persona = ? AND event_type = ?", (persona, event_type))
+
+    def last_user_message_at(self, persona: str) -> datetime | None:
+        """ユーザー自身の発言（``chat.message``）の最終時刻。"""
+        prefixes = " AND ".join("session_id NOT LIKE ?" for _ in _INTERNAL_SESSION_PREFIXES)
+        return self._max_timestamp(
+            f"persona = ? AND event_type = 'chat.message' AND {prefixes}",
+            (persona, *(f"{p}%" for p in _INTERNAL_SESSION_PREFIXES)),
+        )
+
     def last_activity_at(self, persona: str) -> datetime | None:
         """Most recent chat turn timestamp for the persona (None if none)."""
         placeholders = ", ".join("?" for _ in _IDLE_ACTIVITY_EVENT_TYPES)
-        row = self._db.execute(
-            f"SELECT MAX(timestamp) FROM session_events WHERE persona = ? AND event_type IN ({placeholders})",  # nosec B608: placeholders are bound '?'
-            (persona, *_IDLE_ACTIVITY_EVENT_TYPES),
-        ).fetchone()
-        if row is None or row[0] is None:
-            return None
-        return datetime.fromisoformat(row[0])
+        return self._max_timestamp(
+            f"persona = ? AND event_type IN ({placeholders})", (persona, *_IDLE_ACTIVITY_EVENT_TYPES)
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers

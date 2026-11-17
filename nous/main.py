@@ -280,6 +280,7 @@ def create_app() -> MemoryFastMCP:
         )
 
     # Start background workers (references kept for graceful shutdown in main())
+    from nous.application.workers.proactive_worker import ProactiveWorker
     from nous.application.workers.prospective_worker import ProspectiveWorker
     from nous.application.workers.wiki_worker import WikiWorker
 
@@ -288,6 +289,12 @@ def create_app() -> MemoryFastMCP:
     prospective_worker = ProspectiveWorker()
     prospective_worker.start()
     _workers.append(prospective_worker)
+
+    # 自発発言（kanban #44）。idle な persona に自分から 1〜2 文を push する。
+    # 既定無効: session_config.proactive_enabled=true で有効化。
+    proactive_worker = ProactiveWorker()
+    proactive_worker.start()
+    _workers.append(proactive_worker)
 
     # ドリーミング（wiki 編纂）。既定無効: NOUS_WIKI__ENABLED=true で有効化。
     wiki_worker = WikiWorker(settings)

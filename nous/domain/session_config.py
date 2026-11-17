@@ -57,6 +57,13 @@ class SessionConfig(BaseModel):
     # (絶対閾値では関連/無関内省のコサイン分布が重なるため、集合内の相対選択で分離)
     reflection_injection_margin: float = Field(default=0.08, description="注入候補を選ぶ相対マージン。")
 
+    # 自発発言（kanban #44）: 話しかけられていない時に自分から1〜2文だけ声をかける。
+    proactive_enabled: bool = Field(default=False, description="一定時間話していない時、自分から声をかけます。")
+    proactive_idle_minutes: int = Field(default=180, description="自発発言までに必要な無会話の分数。")
+    proactive_interval_minutes: int = Field(default=30, description="自発発言を検討する間隔（分）。")
+    proactive_cooldown_minutes: int = Field(default=60, description="連続した自発発言を空ける最小間隔（分）。")
+    proactive_prompt: str = Field(default="", description="自発発言のプロンプトに足す追加指示（空欄で無し）。")
+
     @field_validator("reflection_retrieval_penalty")
     @classmethod
     def _clamp_reflection_penalty(cls, v: float) -> float:

@@ -10,7 +10,8 @@ from nous.domain.persona.places import DEFAULT_PLACES
 from nous.domain.shared.result import Success
 
 
-def _state(emotion=None, intensity=0.5, environment=None):
+def _state(emotion: object = None, intensity: object = 0.5, environment: object = None) -> SimpleNamespace:
+    # 型は object。壊れた値（"x" / None）を渡しても落ちないことを試すのが目的。
     return SimpleNamespace(emotion=emotion, emotion_intensity=intensity, environment=environment)
 
 
