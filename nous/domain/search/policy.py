@@ -25,6 +25,7 @@ class RankPolicy:
               + graph_boost_weight * graph_signal
               + lexical_weight * lexical_score
               + emotion_salience_weight * emotion_intensity
+              + felt_boost * felt_match
     （reflection タグあり & reflection_penalty != 1.0 のとき composite *= penalty）
 
     ``graph_signal`` は entity match（1.0）と PPR/spreading activation
@@ -46,6 +47,9 @@ class RankPolicy:
     # shortcut: 固定係数。感情は永続 strength ではなく検索時の順位信号にのみ使う。
     # ランキング評価で感情が relevance を損なうと分かった時だけ調整する。
     emotion_salience_weight: float = 0.1
+    # 体験記憶の felt（当時の感情1語）がクエリの感情語と一致した時の加算（#40）。
+    # 0.0 で完全に無効化でき、felt 導入前の composite と一致する。
+    felt_boost: float = 0.05
 
     @classmethod
     def from_weight_args(

@@ -15,6 +15,7 @@ from nous.application.chat.memory_prompts import (
 from nous.domain.language import LanguageResolver
 from nous.domain.memory.cue import cue_tags as build_cue_tags
 from nous.domain.memory.entities import VALID_KINDS
+from nous.domain.memory.felt import felt_tag
 from nous.domain.persona.places import find_place
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.result import Success
@@ -527,6 +528,10 @@ async def _save_extracted_facts(ctx: AppContext, persona: str, facts: list, drif
                 continue
         _normalize_drift_fact(fact, drift_violation)
         tags = normalize_tags(fact.get("tags"))
+        # #40: 体験記憶に「その時の感情1語」を残す（検索の felt_boost が拾う）
+        felt = felt_tag(fact.get("felt"))
+        if felt:
+            tags.append(felt)
         save_kwargs: dict = {}
         # audit L3: honor the extractor's kind instead of always defaulting to semantic
         raw_kind = str(fact.get("kind") or "").strip().lower()

@@ -41,7 +41,7 @@ _CONTEXT_LLM_PROMPT = """\
 JSONのみ。コメント不要。不要なフィールドは省略可。
 {{
   "facts": [
-    {{"content": "記憶すべき事実", "importance": 0.7, "tags": ["preference"], "emotion": "neutral", "kind": "semantic"}}
+    {{"content": "記憶すべき事実", "importance": 0.7, "tags": ["preference"], "emotion": "neutral", "felt": "嬉しい", "kind": "semantic"}}
   ],
   "goals": [
     {{"action": "create", "content": "新規目標", "cue_time": "2026-09-20T09:00", "cue_event": "健康診断"}},
@@ -70,6 +70,9 @@ JSONのみ。コメント不要。不要なフィールドは省略可。
     - semantic: 時点に依存しない一般的な事実・好み・人物情報（「〜が好き」「〜は〜である」）
     - procedural: 手順・やり方・パターン（「〜するときは〜する」）
   - kind を省略した場合、および不正な値は semantic として保存される。
+- facts の felt（体験記憶）: その出来事のとき私（{persona_name}）が感じた感情を1語で書く（語彙自由・20字以内）。
+  - 「嬉しい」「恥ずかしい」「もやもや」のような生の語でよい。記号や説明文は付けない。
+  - 感情が動いていない事実では省略する（推測で埋めない）。
 - drift: 上に【キャラ一貫性監査の指摘】がある場合のみ、反省文をfactsに1件だけ作る。
   - contentは{persona_name}自身の一人称独白の反省文とすること。
   - tagsは ["character_drift", 指摘の種別]、importanceは0.8-0.9。

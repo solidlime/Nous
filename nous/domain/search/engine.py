@@ -21,6 +21,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Protocol
 
 from nous.domain.memory import wiring_events
+from nous.domain.memory.felt import felt_match
 from nous.domain.search.token_kind_gate import (
     DEFAULT_INJECTION_MAX_BM25,
     bar_for_tokens,
@@ -791,6 +792,8 @@ class SearchEngine:
         ranked: list[SearchResult] = []
         # クエリ語の被覆率: 複数のクエリ語を含む記憶を上位に寄せる（精度の実測改善）。
         query_terms = _query_terms(query.text) if policy.coverage_weight != 0.0 else []
+        # felt（#40）: felt 語はクエリ本文との部分一致で見るので小文字化は 1 回だけ。
+        query_lower = query.text.lower() if policy.felt_boost else ""
         for i, orig in enumerate(candidates):
             rel = rel_by_index.get(i, 0.0)
             base = policy.recency_weight * compute_recency_decay(
@@ -811,6 +814,8 @@ class SearchEngine:
                 0.0, min(1.0, float(getattr(orig.memory, "emotion_intensity", 0.0) or 0.0))
             )
             composite = base + policy.relevance_weight * rel + graph_boost + lexical_boost + emotion_boost
+            if policy.felt_boost and felt_match(orig.memory.tags, query_lower):
+                composite += policy.felt_boost
             if policy.reflection_penalty != 1.0 and "reflection" in (orig.memory.tags or []):
                 composite *= policy.reflection_penalty
             ranked.append(
