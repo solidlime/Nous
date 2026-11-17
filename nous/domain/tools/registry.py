@@ -410,12 +410,42 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
             ),
         },
     ),
+    "fetch_content": ToolSpec(
+        name="fetch_content",
+        summary="URL を 1 本取得し、本文テキストに落として返す（#48）",
+        surfaces=frozenset({BUILTIN, HTTP}),
+        params={
+            BUILTIN: (
+                ToolParam("url", "string", required=True),
+                ToolParam("max_chars", "integer", required=False),
+            ),
+            HTTP: (
+                ToolParam("url", "string", required=True),
+                ToolParam("max_chars", "integer", required=False),
+            ),
+        },
+    ),
     "session_begin": ToolSpec(
         name="session_begin",
         summary="セッション開始時にペルソナ状態・記憶の概観を返す",
         surfaces=frozenset({MCP}),
         params={
             MCP: (ToolParam("project", "string|null", required=False),),
+        },
+    ),
+    "web_search": ToolSpec(
+        name="web_search",
+        summary="Wikipedia（ja/en）の全文検索で候補を返す（#48）",
+        surfaces=frozenset({BUILTIN, HTTP}),
+        params={
+            BUILTIN: (
+                ToolParam("query", "string", required=True),
+                ToolParam("limit", "integer", required=False),
+            ),
+            HTTP: (
+                ToolParam("query", "string", required=True),
+                ToolParam("limit", "integer", required=False),
+            ),
         },
     ),
     "update_context": ToolSpec(

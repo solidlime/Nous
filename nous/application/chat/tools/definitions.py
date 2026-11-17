@@ -341,6 +341,41 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         },
     ),
     ToolDefinition(
+        name="web_search",
+        description=(
+            "外の世界を調べる。Wikipedia（日本語版・英語版）の全文検索で候補を返す。"
+            "固有名詞や用語の意味を確かめたい時に使え。一般の Web 検索ではないので、"
+            "ブログやニュース記事を探す用途には向かない。URL が分かっているなら fetch_content を使え。"
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "検索語"},
+                "limit": {"type": "integer", "description": "言語ごとの件数（既定 5、最大 10）"},
+            },
+            "required": ["query"],
+        },
+    ),
+    ToolDefinition(
+        name="fetch_content",
+        description=(
+            "URL を 1 本取得して本文テキストを読む。web_search で見つけた項目や、"
+            "会話で出たページの中身を確かめたい時に使え。HTML は本文だけに落として返す。"
+            "内部ネットワーク宛の URL は拒否される。"
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "取得する URL（http/https、スキーム省略可）"},
+                "max_chars": {
+                    "type": "integer",
+                    "description": "返す本文の文字数上限（既定 4000、最大 20000）",
+                },
+            },
+            "required": ["url"],
+        },
+    ),
+    ToolDefinition(
         name="schedule_task",
         description=(
             "自分で決めた予定を登録する。後で1人でこなすタスク（日課・定期チェック・調べもの）に使え。"

@@ -21,6 +21,7 @@ from nous.application.chat.tools.shell import (
     _handle_read_file,
     _handle_write_file,
 )
+from nous.application.chat.tools.web import handle_fetch_content, handle_web_search
 from nous.config.settings import get_settings
 from nous.domain.skill import SkillRepository
 from nous.infrastructure.logging.structured import get_logger
@@ -435,6 +436,8 @@ _BUILTIN_DISPATCH: dict[str, Any] = {
     "write_file": _handle_write_file,
     "edit_file": _handle_edit_file,
     "delegate": _handle_delegate,
+    "web_search": handle_web_search,
+    "fetch_content": handle_fetch_content,
 }
 
 _MCP_SHARED_TOOLS = frozenset(
