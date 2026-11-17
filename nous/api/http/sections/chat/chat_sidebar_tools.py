@@ -8,6 +8,8 @@ def _render_mcp_section(sys_executable: str) -> str:
                         <details data-category="tools">
                             <summary><i data-lucide="battery-charging"></i> MCPサーバー <span class="chat-help-icon" data-category="tools" tabindex="0" role="button" aria-label="ヘルプ"><i data-lucide="help-circle"></i></span></summary>
                             <div class="details-body" id="chat-mcp-section">
+                                <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:4px;">組み込みツール</div>
+                                <div id="chat-builtin-tools-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;"></div>
                                 <div id="chat-mcp-server-list" style="display:flex;flex-direction:column;gap:2px;margin-bottom:8px;"></div>
                                 <div>
                                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">

@@ -186,6 +186,60 @@ function parseMcpJson() {
 }
 
 // ------------------------------------------------------------------
+// 組み込みツールのオンオフ（disabled_tools）
+// ------------------------------------------------------------------
+// definitions.py の MEMORY_TOOLS の静的ミラー。UI 都合で名前と1行説明だけ持つ
+// （MCP ツール一覧は /mcp-tools から来るが、組み込みツールはそこに出ない）。
+const BUILTIN_TOOLS = [
+  { name: "memory_create", desc: "永続的な記憶を作成する" },
+  { name: "memory_search", desc: "記憶を検索する" },
+  { name: "memory_update", desc: "既存の記憶を書き換える" },
+  { name: "update_context", desc: "感情・状態を更新する" },
+  { name: "profile_update", desc: "ユーザーのプロフィールを更新する" },
+  { name: "invoke_skill", desc: "スキルを発動する" },
+  { name: "list_skills", desc: "スキル一覧を取得する" },
+  { name: "search_tools", desc: "ツールを検索する" },
+  { name: "goal_manage", desc: "目標を管理する" },
+  { name: "item_add", desc: "持ち物を追加する" },
+  { name: "item_equip", desc: "持ち物を装備する" },
+  { name: "item_search", desc: "持ち物を検索する" },
+  { name: "image_generate", desc: "画像を生成する" },
+  { name: "move", desc: "現在地を移動する" },
+];
+
+function renderBuiltinTools() {
+  const list = document.getElementById("chat-builtin-tools-list");
+  if (!list) return;
+  const disabled = N.Chat.state.disabledTools || new Set();
+  safeSetHTML(list, "");
+  BUILTIN_TOOLS.forEach(function (tool) {
+    const item = document.createElement("div");
+    item.style.cssText = "display:flex;align-items:center;gap:8px;";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !disabled.has(tool.name);
+    cb.id = "builtin-tool-cb-" + tool.name;
+    cb.style.cssText =
+      "width:14px;height:14px;accent-color:var(--accent-purple);cursor:pointer;";
+    cb.addEventListener("change", function () {
+      if (!N.Chat.state.disabledTools) N.Chat.state.disabledTools = new Set();
+      if (cb.checked) N.Chat.state.disabledTools.delete(tool.name);
+      else N.Chat.state.disabledTools.add(tool.name);
+      N.Chat.settings.save();
+    });
+    const label = document.createElement("label");
+    label.htmlFor = cb.id;
+    label.textContent = tool.name;
+    label.title = tool.desc;
+    label.style.cssText =
+      "font-size:0.78rem;color:var(--text-secondary);cursor:pointer;";
+    item.appendChild(cb);
+    item.appendChild(label);
+    list.appendChild(item);
+  });
+}
+
+// ------------------------------------------------------------------
 // Skills list rendering
 // ------------------------------------------------------------------
 const BUILTIN_SKILLS = ["search"];
@@ -294,6 +348,8 @@ async function formatMcpJson() {
 N.Chat.settings = N.Chat.settings || {};
 Object.assign(N.Chat.settings, {
   BUILTIN_SKILLS: BUILTIN_SKILLS,
+  BUILTIN_TOOLS: BUILTIN_TOOLS,
+  renderBuiltinTools: renderBuiltinTools,
   renderMcpJson: renderMcpJson,
   parseMcpJson: parseMcpJson,
   renderSkills: renderSkillsList,

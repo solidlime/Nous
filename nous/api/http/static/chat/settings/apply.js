@@ -9,15 +9,7 @@
 ((N) => {
   "use strict";
   var C = N.Core;
-  var api = C.api,
-    esc = C.esc,
-    toast = C.toast,
-    safeSetHTML = C.safeSetHTML;
-  var showConfirm = C.showConfirm,
-    showAlert = C.showAlert;
-  var truncate = C.truncate,
-    relativeTime = C.relativeTime,
-    fmtDate = C.fmtDate;
+  var api = C.api;
   var S = window.S;
 
   // ------------------------------------------------------------------
@@ -180,6 +172,7 @@
     }
     N.Chat.state.enabledSkills = cfg.enabled_skills || [];
     N.Chat.state.disabledTools = new Set(cfg.disabled_tools || []);
+    N.Chat.settings.renderBuiltinTools();
     // Reflection settings
     setChecked("chat-session-summarize", cfg.session_summarize !== false);
     // Mental model settings
