@@ -127,8 +127,9 @@ class TestGating:
 
     def test_daily_limit_stops_after_n(self, sqlite_conn, chat, tools, monkeypatch) -> None:
         _insert(sqlite_conn, "chat.message", 300)
+        # 0 分前 = now。30 分前にすると深夜 0 時台に前日扱いになり落ちる（実際に落ちた）。
         for _ in range(2):
-            _insert(sqlite_conn, activity_worker.ACTED_EVENT, 30)
+            _insert(sqlite_conn, activity_worker.ACTED_EVENT, 0)
         chat["text"] = json.dumps({"action": "move", "target": "書斎"})
         _run(monkeypatch, _ctx(sqlite_conn, activity_enabled=True, activity_daily_limit=2))
         assert tools == []

@@ -1,0 +1,403 @@
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import json
+from typing import TYPE_CHECKING
+
+from starlette.responses import JSONResponse, StreamingResponse
+
+from nous.api.http.deps import (
+    CreateMemoryRequest,
+    UpdateMemoryRequest,
+    _memory_to_dict,
+    _resolve_persona_from_request,
+    _safe_get_context,
+)
+from nous.api.http.routers._error_handlers import error_from_result
+from nous.infrastructure.logging.structured import get_logger
+
+if TYPE_CHECKING:
+    from starlette.requests import Request
+
+logger = get_logger(__name__)
+
+
+async def _wiring_stream_gen(request: Request, poll_interval: float = 0.5):
+    """SSE body: immediate buffer flush, then live (no server-side thinning).
+
+    ``?persona=`` filters by event persona; omitted streams everything.
+    """
+    from nous.domain.memory.wiring_events import snapshot_after
+
+    yield "event: connected\ndata: {}\n\n"
+    persona_filter = request.query_params.get("persona") or None
+    last_seq = 0
+    idle = 0.0
+    while True:
+        if await request.is_disconnected():
+            break
+        fresh = snapshot_after(last_seq, persona=persona_filter)
+        for event in fresh:
+            last_seq = max(last_seq, event["seq"])
+            yield f"event: wiring\ndata: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
+        if not fresh:
+            idle += poll_interval
+            if idle >= 15.0:
+                idle = 0.0
+                yield ": keepalive\n\n"
+        else:
+            idle = 0.0
+        await asyncio.sleep(poll_interval)
+
+
+def register_memory_routes(mcp) -> None:
+    @mcp.custom_route("/api/blocks/{persona}", methods=["GET"])
+    async def list_blocks_http(request: Request) -> JSONResponse:
+        persona = _resolve_persona_from_request(request)
+        ctx = _safe_get_context(persona)
+        if not ctx:
+            return JSONResponse({"blocks": []})
+        result = ctx.memory_service.list_blocks()
+        blocks = result.value if result.is_ok else []
+        return JSONResponse({"persona": persona, "blocks": blocks})
+
+    @mcp.custom_route("/api/blocks/{persona}", methods=["POST"])
+    async def create_block_http(request: Request) -> JSONResponse:
+        persona = _resolve_persona_from_request(request)
+        ctx = _safe_get_context(persona)
+        if not ctx:
+            return JSONResponse({"error": "Persona not found"}, status_code=404)
+        body = await request.json()
+        block_name = body.get("block_name", "").strip()
+        content = body.get("content", "").strip()
+        if not block_name or not content:
+            return JSONResponse({"error": "block_name and content required"}, status_code=400)
+        result = ctx.memory_service.write_block(
+            block_name,
+            content,
+            block_type=body.get("block_type", "custom"),
+            max_tokens=body.get("max_tokens") or 500,
+            priority=body.get("priority", 0),
+        )
+        if result.is_ok:
+            return JSONResponse({"ok": True, "block_name": block_name})
+        return error_from_result(result)
+
+    @mcp.custom_route("/api/blocks/{persona}/{block_name:path}", methods=["DELETE"])
+    async def delete_block_http(request: Request) -> JSONResponse:
+        persona = _resolve_persona_from_request(request)
+        ctx = _safe_get_context(persona)
+        if not ctx:
+            return JSONResponse({"error": "Persona not found"}, status_code=404)
+        block_name = request.path_params.get("block_name", "")
+        result = ctx.memory_service.delete_block(block_name)
+        if result.is_ok:
+            return JSONResponse({"ok": True})
+        return error_from_result(result)
+
+    @mcp.custom_route("/api/observations/{persona}", methods=["GET"])
+    async def observations(request: Request) -> JSONResponse:
+        persona = _resolve_persona_from_request(request)
+        try:
+            page = int(request.query_params.get("page", "1"))
+            if page < 1 or page > 10000:
+                return JSONResponse({"error": "page must be between 1 and 10000"}, status_code=400)
+        except ValueError:
+            return JSONResponse({"error": "page must be an integer"}, status_code=400)
+        try:
+            per_page = int(request.query_params.get("per_page", "20"))
+            if per_page < 1 or per_page > 1000:
+                return JSONResponse({"error": "per_page must be between 1 and 1000"}, status_code=400)
+        except ValueError:
+            return JSONResponse({"error": "per_page must be an integer"}, status_code=400)
+        tag = request.query_params.get("tag") or None
+        q = request.query_params.get("q") or None
+        sort_order = request.query_params.get("sort", "desc")
+        mode = request.query_params.get("mode") or None
+        if mode == "recent":
+            try:
+                limit = int(request.query_params.get("per_page", "10"))
+                if limit < 1 or limit > 1000:
+                    return JSONResponse({"error": "per_page must be between 1 and 1000"}, status_code=400)
+            except ValueError:
+                return JSONResponse({"error": "per_page must be an integer"}, status_code=400)
+            ctx = _safe_get_context(persona)
+            if ctx is None:
+                return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
+            result = ctx.memory_service.get_recent(limit=limit)
+            if not result.is_ok:
+                return error_from_result(result)
+            return JSONResponse(
+                {
+                    "persona": persona,
+                    "mode": "recent",
+                    "memories": [_memory_to_dict(m) for m in result.value],
+                }
+            )
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
+        try:
+            result = ctx.memory_repo.find_with_pagination(
+                page=page,
+                per_page=per_page,
+                tag=tag,
+                query=q,
+                sort_order=sort_order,
+            )
+            if not result.is_ok:
+                return error_from_result(result)
+            memories, total_count = result.value
+            total_pages = (total_count + per_page - 1) // per_page
+            return JSONResponse(
+                {
+                    "persona": persona,
+                    "page": page,
+                    "per_page": per_page,
+                    "total_count": total_count,
+                    "total_pages": total_pages,
+                    "memories": [_memory_to_dict(m) for m in memories],
+                }
+            )
+        # 最終防衛線
+        except Exception as exc:
+            logger.exception("Unexpected error: %s", exc)
+            return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+    # d1: GET /api/strengths/{persona} 削除（直叩き廃止。dashboard集約data.strengthsは残す）
+    # 参照は死にanalytics.py＋tests＋docsのみ。liveタブ（dashboard.py）は未使用。
+    @mcp.custom_route("/api/memories/{persona}", methods=["GET"])
+    async def list_memories(request: Request) -> JSONResponse:
+        persona = _resolve_persona_from_request(request)
+        try:
+            limit = int(request.query_params.get("limit", "50"))
+            if limit < 1 or limit > 1000:
+                return JSONResponse({"error": "limit must be between 1 and 1000"}, status_code=400)
+        except ValueError:
+            return JSONResponse({"error": "limit must be an integer"}, status_code=400)
+        try:
+            offset = int(request.query_params.get("offset", "0"))
+            if offset < 0:
+                return JSONResponse({"error": "offset must be non-negative"}, status_code=400)
+        except ValueError:
+            return JSONResponse({"error": "offset must be an integer"}, status_code=400)
+        tag = request.query_params.get("tag") or None
+        q = request.query_params.get("query") or None
+        sort_order = request.query_params.get("sort_order", "desc")
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
+        try:
+            page = offset // limit + 1
+            result = ctx.memory_repo.find_with_pagination(
+                page=page,
+                per_page=limit,
+                tag=tag,
+                query=q,
+                sort_order=sort_order,
+            )
+            if not result.is_ok:
+                return error_from_result(result)
+            memories, total_count = result.value
+            return JSONResponse(
+                {
+                    "persona": persona,
+                    "memories": [_memory_to_dict(m) for m in memories],
+                    "total": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                }
+            )
+        # 最終防衛線
+        except Exception as exc:
+            logger.exception("Unexpected error: %s", exc)
+            return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+    @mcp.custom_route("/api/memories/{persona}/{key}", methods=["GET"])
+    async def get_memory(request: Request) -> JSONResponse:
+        persona = _resolve_persona_from_request(request)
+        key = request.path_params.get("key", "")
+        if not key:
+            return JSONResponse({"error": "Memory key is required"}, status_code=400)
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
+        try:
+            result = ctx.memory_service.get_memory(key)
+            if not result.is_ok:
+                return JSONResponse({"error": str(result.error)}, status_code=404)
+            return JSONResponse({"persona": persona, "memory": _memory_to_dict(result.value)})
+        # 最終防衛線
+        except Exception as exc:
+            logger.exception("Unexpected error: %s", exc)
+            return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+    @mcp.custom_route("/api/memories/{persona}", methods=["POST"])
+    async def create_memory(request: Request) -> JSONResponse:
+        persona = _resolve_persona_from_request(request)
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
+        try:
+            raw = await request.json()
+        except (json.JSONDecodeError, TypeError):
+            return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+        try:
+            body = CreateMemoryRequest(**raw)
+        except ValueError as exc:
+            logger.exception("Validation error: %s", exc)
+            return JSONResponse({"error": "Validation error"}, status_code=422)
+        try:
+            result = await ctx.memory_service.create_memory(
+                content=body.content,
+                importance=body.importance,
+                emotion=body.emotion,
+                emotion_intensity=body.emotion_intensity,
+                tags=body.tags,
+                privacy_level=body.privacy_level,
+                source_context=body.source_context,
+            )
+            if not result.is_ok:
+                return error_from_result(result)
+            mem = result.value
+            if ctx.vector_store is not None:
+                with contextlib.suppress(Exception):
+                    await ctx.vector_store.upsert(persona, mem.key, mem.content)
+            # audit H3 (P3): MCP parity — publish memory.created so the
+            # AppContext subscriptions (vector upsert + query-cache
+            # invalidation) fire for HTTP writes too, then drop the cache.
+            try:
+                await ctx.event_bus.publish(
+                    "memory.created",
+                    {
+                        "key": mem.key,
+                        "persona": persona,
+                        "content_preview": body.content[:100],
+                        "tags": body.tags or [],
+                        "importance": body.importance,
+                    },
+                )
+            except Exception:
+                logger.warning("memory.created publish failed for %s", mem.key, exc_info=True)
+            from nous.domain.search.engine import invalidate_query_cache as _invalidate
+
+            with contextlib.suppress(Exception):
+                _invalidate()
+            return JSONResponse(
+                {"status": "ok", "memory": _memory_to_dict(mem), "cache_invalidated": True},
+                status_code=201,
+            )
+        # 最終防衛線
+        except Exception as exc:
+            logger.exception("Unexpected error: %s", exc)
+            return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+    @mcp.custom_route("/api/memories/{persona}/{key}", methods=["PUT"])
+    async def update_memory(request: Request) -> JSONResponse:
+        persona = _resolve_persona_from_request(request)
+        key = request.path_params.get("key", "")
+        if not key:
+            return JSONResponse({"error": "Memory key is required"}, status_code=400)
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
+        try:
+            raw = await request.json()
+        except (json.JSONDecodeError, TypeError):
+            return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+        try:
+            body = UpdateMemoryRequest(**raw)
+        except ValueError as exc:
+            logger.exception("Validation error: %s", exc)
+            return JSONResponse({"error": "Validation error"}, status_code=422)
+        try:
+            updates = body.model_dump(exclude_none=True)
+            if updates.pop("resolved", False):
+                # 未解決の問いの解消（#55）。閉じる = 削除なので内容は戻らない。
+                from nous.application.wiki.questions import (
+                    close_open_questions,
+                    delete_memories,
+                    is_open_question,
+                    question_key_of,
+                )
+
+                target = ctx.memory_service.get_memory(key)
+                if not getattr(target, "is_ok", False):
+                    return JSONResponse({"error": "Memory not found"}, status_code=404)
+                question = question_key_of(target.value)
+                if not is_open_question(target.value):
+                    return JSONResponse({"error": "Not an open question"}, status_code=409)
+                closed = (
+                    await close_open_questions(ctx, persona, question)
+                    if question
+                    else await delete_memories(ctx, persona, [target.value])
+                )
+                return JSONResponse({"status": "ok", "resolved": key, "closed": closed})
+            if not updates:
+                return JSONResponse({"error": "No valid fields to update"}, status_code=400)
+            result = ctx.memory_service.update_memory(key, **updates)
+            if not result.is_ok:
+                return JSONResponse({"error": str(result.error)}, status_code=404)
+            mem = result.value
+            if "content" in updates and ctx.vector_store is not None:
+                with contextlib.suppress(Exception):
+                    await ctx.vector_store.upsert(persona, mem.key, mem.content)
+            # MCP との対称性: HTTP 経由の更新も SSE / 購読に伝える
+            with contextlib.suppress(Exception):
+                await ctx.event_bus.publish(
+                    "memory.updated",
+                    {"key": mem.key, "persona": persona, "fields": sorted(updates)},
+                )
+            return JSONResponse({"status": "ok", "memory": _memory_to_dict(mem)})
+        # 最終防衛線
+        except Exception as exc:
+            logger.exception("Unexpected error: %s", exc)
+            return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+    @mcp.custom_route("/api/memories/{persona}/{key}", methods=["DELETE"])
+    async def delete_memory(request: Request) -> JSONResponse:
+        persona = _resolve_persona_from_request(request)
+        key = request.path_params.get("key", "")
+        if not key:
+            return JSONResponse({"error": "Memory key is required"}, status_code=400)
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+            return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
+        try:
+            result = ctx.memory_service.delete_memory(key)
+            if not result.is_ok:
+                return JSONResponse({"error": str(result.error)}, status_code=404)
+            if ctx.vector_store is not None:
+                with contextlib.suppress(Exception):
+                    await ctx.vector_store.delete(persona, key)
+            # MCP との対称性: HTTP 経由の削除も SSE / 購読に伝える
+            with contextlib.suppress(Exception):
+                await ctx.event_bus.publish("memory.deleted", {"key": key, "persona": persona})
+            return JSONResponse({"status": "ok", "deleted": key})
+        # 最終防衛線
+        except Exception as exc:
+            logger.exception("Unexpected error: %s", exc)
+            return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+    @mcp.custom_route("/api/memory/wiring/stream", methods=["GET"])
+    async def wiring_stream(request: Request) -> StreamingResponse:
+        """SSE: synapse fire event feed (buffer flush + live, no thinning)."""
+        persona = _resolve_persona_from_request(request)
+        ctx = _safe_get_context(persona)
+        if ctx is None:
+
+            async def not_found():
+                yield f"event: error\ndata: {json.dumps({'message': 'Persona not found'})}\n\n"
+
+            return StreamingResponse(not_found(), media_type="text/event-stream")
+
+        return StreamingResponse(
+            _wiring_stream_gen(request),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
+        )
