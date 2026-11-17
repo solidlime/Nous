@@ -34,6 +34,9 @@ TAIL_LINES = 120
 IDLE_CHECK_SECONDS = 30.0
 EXEC_TIMEOUT_SECONDS = 60.0
 EXEC_TIMEOUT_MAX = 600.0
+# manager 再起動後、既存コンテナを idle 判定に載せるまでの猶予。
+# now で初期化すると再起動のたびに idle が丸ごと延びる。
+RESTART_GRACE_SECONDS = 300.0
 PERSONA_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
 
 # persona -> 最終利用 epoch 秒。idle 判定と /list の材料。
@@ -47,13 +50,21 @@ _idle_override: dict[str, float] = {}
 
 
 TOKEN_HEADER = "X-Sandbox-Token"
-# host / container: に繋ぐと nous の loopback や他コンテナへ抜けられる。専用 bridge は許す
+# host / container: に繋ぐと nous の loopback や他コンテナへ抜けられる。
+# 既定は none / bridge だけ。それ以外は SANDBOX_ALLOWED_NETWORKS に列挙する
+# （カンマ区切り）。sandbox 間通信が要る環境だけ足す。
 _FORBIDDEN_NETWORKS = frozenset({"host"})
+_DEFAULT_NETWORKS = frozenset({"none", "bridge"})
 _IMAGE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@-]*")
 
 
 def _env(name: str, default: str) -> str:
     return os.environ.get(name) or default
+
+
+def _allowed_networks() -> frozenset[str]:
+    extra = {n.strip() for n in _env("SANDBOX_ALLOWED_NETWORKS", "").split(",") if n.strip()}
+    return _DEFAULT_NETWORKS | extra
 
 
 def _auth(x_sandbox_token: str = Header(default="")) -> None:
@@ -230,6 +241,8 @@ def _ensure_inner(
     net = network or _env("SANDBOX_NETWORK", "bridge")
     if net in _FORBIDDEN_NETWORKS or net.startswith("container:"):
         return f"network {net!r} は使えない（host / container: は拒否）"
+    if net not in _allowed_networks():
+        return f"network {net!r} は許可されていない（SANDBOX_ALLOWED_NETWORKS で追加する）"
     img = image or _env("SANDBOX_IMAGE", "ubuntu:24.04")
     if not _IMAGE_RE.fullmatch(img):
         return f"image {img!r} が不正"
@@ -390,9 +403,11 @@ def _load_existing() -> None:
         logger.warning("sandbox initial scan skipped: %s", proc.stderr.strip())
         return
     now = time.time()
+    # 再起動のたびに idle を持ち越さないよう、「grace 秒後に idle 判定へ入る」時刻を入れる。
+    grace = min(RESTART_GRACE_SECONDS, _idle_minutes() * 30.0)
     for name in proc.stdout.split():
         if name.endswith("-sandbox"):
-            _last_used[name[: -len("-sandbox")]] = now
+            _last_used[name[: -len("-sandbox")]] = now - _idle_minutes() * 60.0 + grace
 
 
 async def _idle_loop() -> None:
@@ -457,10 +472,20 @@ def exec_in_sandbox(req: ExecRequest) -> dict:
         args = ["exec"]
         if req.cwd:
             args += ["-w", req.cwd]
-        args += [_container(persona), "bash", "-lc", req.command]
-        proc, err = _call(
-            *args, timeout=_exec_timeout(req.timeout_seconds, _idle_override.get(persona, _idle_minutes()))
-        )
+        limit = _exec_timeout(req.timeout_seconds, _idle_override.get(persona, _idle_minutes()))
+        # 外側の subprocess timeout だけだとコンテナ内のプロセスが残る。
+        # 内側で timeout(1) を噛ませ、打ち切ったら exit 124 で返す。
+        args += [
+            _container(persona),
+            "timeout",
+            "-k",
+            "5",
+            str(max(1, int(limit))),
+            "bash",
+            "-lc",
+            req.command,
+        ]
+        proc, err = _call(*args, timeout=limit + 10.0)
     finally:
         _leave(persona)
     if proc is None:

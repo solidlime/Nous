@@ -116,6 +116,7 @@ manager に届かない・未設定のときは `status="error"` を返す。例
 | `SANDBOX_MANAGER_HOST` | `0.0.0.0` | uvicorn の bind。ホストで直接動かすなら `127.0.0.1` |
 | `SANDBOX_IMAGE` | `ubuntu:24.04` | 上の `sandbox_image` の既定 |
 | `SANDBOX_NETWORK` | `bridge` | 上の `sandbox_network` の既定 |
+| `SANDBOX_ALLOWED_NETWORKS` | （空） | 許すネットワークの追加分（カンマ区切り）。既定で `none` と `bridge` だけ。sandbox 間通信が要る環境だけ足す |
 | `SANDBOX_MEMORY` | `4g` | 上の `sandbox_memory` の既定 |
 | `SANDBOX_IDLE_MINUTES` | `30` | 上の `sandbox_idle_minutes` の既定 |
 
@@ -146,7 +147,8 @@ manager に届かない・未設定のときは `status="error"` を返す。例
 ## 保留
 
 - 長いコマンドのストリーミングは入れない（末尾 N 行だけ返す）。必要になったら SSE
-- 外側の `subprocess` がタイムアウトしても、コンテナ内のプロセスは残る（孤児）
+- `timeout(1)` をコンテナ内で噛ませるので、打ち切りは exit 124（`-k 5` で SIGKILL まで5秒）。外側の `subprocess` が先に切れた場合だけ、コンテナ内のプロセスが残りうる
+- manager を再起動すると、稼働中の sandbox は `RESTART_GRACE_SECONDS`（300秒）後に idle 判定に入る
 - sock のパーミッション（manager を root 以外で動かすなら `group_add`）は実機確認
 - sandbox の `--user`（uid 不一致で書けない問題）は未対応
 

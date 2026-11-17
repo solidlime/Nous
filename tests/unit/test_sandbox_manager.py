@@ -107,7 +107,17 @@ def test_invalid_persona_is_400(client, fake, persona: str) -> None:
 def test_exec_builds_docker_exec_args(client, fake) -> None:
     res = client.post("/exec", json={"persona": "alice", "command": "echo hi; ls -1"})
     assert res.status_code == 200
-    assert ("exec", "alice-sandbox", "bash", "-lc", "echo hi; ls -1") in fake.calls
+    assert (
+        "exec",
+        "alice-sandbox",
+        "timeout",
+        "-k",
+        "5",
+        str(int(sm.EXEC_TIMEOUT_SECONDS)),
+        "bash",
+        "-lc",
+        "echo hi; ls -1",
+    ) in fake.calls
     assert res.json() == {
         "status": "ok",
         "exit_code": 0,
@@ -120,7 +130,19 @@ def test_exec_builds_docker_exec_args(client, fake) -> None:
 
 def test_exec_with_cwd_adds_workdir(client, fake) -> None:
     client.post("/exec", json={"persona": "alice", "command": "pwd", "cwd": "/home/alice/workspace"})
-    assert ("exec", "-w", "/home/alice/workspace", "alice-sandbox", "bash", "-lc", "pwd") in fake.calls
+    assert (
+        "exec",
+        "-w",
+        "/home/alice/workspace",
+        "alice-sandbox",
+        "timeout",
+        "-k",
+        "5",
+        str(int(sm.EXEC_TIMEOUT_SECONDS)),
+        "bash",
+        "-lc",
+        "pwd",
+    ) in fake.calls
 
 
 def test_exec_runs_container_when_missing(client, fake, tmp_path: Path) -> None:
@@ -291,7 +313,7 @@ def test_exec_timeout_is_clamped(client, fake, monkeypatch) -> None:
 
     monkeypatch.setattr(sm, "_docker", spy)
     client.post("/exec", json={"persona": "alice", "command": "id", "timeout_seconds": 9999})
-    assert seen[-1] == sm.EXEC_TIMEOUT_MAX
+    assert seen[-1] == sm.EXEC_TIMEOUT_MAX + 10.0
 
 
 def test_exec_marks_last_used_before_the_command_runs(client, fake, monkeypatch) -> None:
@@ -317,6 +339,7 @@ def test_request_options_override_env_defaults(client, fake, monkeypatch) -> Non
     monkeypatch.setenv("SANDBOX_IMAGE", "debian:12")
     monkeypatch.setenv("SANDBOX_NETWORK", "none")
     monkeypatch.setenv("SANDBOX_MEMORY", "1g")
+    monkeypatch.setenv("SANDBOX_ALLOWED_NETWORKS", "sbx-net")
     fake.by_subcommand["inspect"] = (1, "", "No such object")
     fake.by_subcommand["run"] = (0, "abc123\n", "")
 
@@ -386,7 +409,8 @@ def test_reset_refuses_while_exec_runs(client, fake, monkeypatch) -> None:
     assert not any(c[0] == "rm" for c in fake.calls)
 
 
-def test_reset_uses_request_options(client, fake) -> None:
+def test_reset_uses_request_options(client, fake, monkeypatch) -> None:
+    monkeypatch.setenv("SANDBOX_ALLOWED_NETWORKS", "sbx-net")
     fake.by_subcommand["inspect"] = (1, "", "No such object")
     fake.by_subcommand["run"] = (0, "abc123\n", "")
 
@@ -461,3 +485,30 @@ def test_exec_rejects_a_flag_like_image(client, fake) -> None:
     body = client.post("/exec", json={"persona": "alice", "command": "id", "image": "--privileged"}).json()
     assert body["status"] == "error" and "image" in body["stderr_tail"]
     assert not any(call[0] == "run" for call in fake.calls)
+
+
+def test_exec_rejects_a_network_outside_the_allowlist(client, fake, monkeypatch) -> None:
+    monkeypatch.delenv("SANDBOX_ALLOWED_NETWORKS", raising=False)
+    body = client.post("/exec", json={"persona": "alice", "command": "id", "network": "custom-net"}).json()
+    assert body["status"] == "error" and "network" in body["stderr_tail"]
+    assert not any(call[0] == "run" for call in fake.calls)
+
+
+def test_exec_wraps_the_command_in_timeout(client, fake) -> None:
+    fake.by_subcommand["inspect"] = (0, "true 1", "")
+    client.post("/exec", json={"persona": "alice", "command": "sleep 999", "timeout_seconds": 7})
+    exec_call = next(c for c in fake.calls if c[0] == "exec")
+    assert exec_call[exec_call.index("-k") + 1] == "5"
+    assert tuple(exec_call[exec_call.index("timeout") + 1 :])[:4] == ("-k", "5", "7", "bash")
+
+
+def test_load_existing_starts_the_idle_clock_after_a_grace(fake, monkeypatch) -> None:
+    """再起動直後に idle 30 分が丸ごと戻らないこと。"""
+    monkeypatch.setattr(sm, "_last_used", {})
+    monkeypatch.setenv("SANDBOX_IDLE_MINUTES", "30")
+    fake.by_subcommand["ps"] = (0, "alice-sandbox bob-sandbox\n", "")
+    before = time.time()
+    sm._load_existing()
+    last = sm._last_used["alice"]
+    assert before - sm._idle_minutes() * 60.0 + sm.RESTART_GRACE_SECONDS - 2 <= last
+    assert last <= before - sm._idle_minutes() * 60.0 + sm.RESTART_GRACE_SECONDS + 2
