@@ -169,10 +169,12 @@ class TestSandboxWiring:
         assert SANDBOX_TOOL.name == "sandbox"
         assert SANDBOX_TOOL.input_schema["required"] == ["command"]
 
-    def test_listed_without_workspace_root(self) -> None:
+    def test_workspace_tools_listed_instead_without_workspace_root(self) -> None:
         config = ChatConfig(sandbox_enabled=True, sandbox_manager_url=_URL, workspace_root="")
         names = [t.name for t in get_filtered_tools(config)]
-        assert "sandbox" in names
+        assert {"bash", "read_file", "write_file", "edit_file"} <= set(names)
+        # sandbox は bash に統合したので一覧に出さない
+        assert "sandbox" not in names
 
     def test_not_listed_without_manager_url(self) -> None:
         config = ChatConfig(sandbox_enabled=True, workspace_root="/tmp")

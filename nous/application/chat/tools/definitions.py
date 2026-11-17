@@ -353,15 +353,14 @@ def get_filtered_tools(config: ChatConfig) -> list[ToolDefinition]:
     """
     disabled = set(config.disabled_tools or [])
     base = list(MEMORY_TOOLS)
-    if getattr(config, "workspace_root", ""):
-        base += WORKSPACE_TOOLS
-        base.append(DELEGATE_TOOL)
-
-    # sandbox は workspace_root に依存しない（manager が隔離コンテナを用意する）。
-    # config.json か環境変数で有効になっていて、manager の URL があるときだけ出す。
     sandbox_on, sandbox_url, _token = sandbox_settings(config)
     if sandbox_on and sandbox_url:
-        base.append(SANDBOX_TOOL)
+        # sandbox が使えるならワークスペースツールは中で動かす（workspace_root 不要）。
+        # 別ツール sandbox は出さない — モデルには 1 本のシェルだけ見せる。
+        base += WORKSPACE_TOOLS
+    elif getattr(config, "workspace_root", ""):
+        base += WORKSPACE_TOOLS
+        base.append(DELEGATE_TOOL)
 
     if not config.dynamic_tool_selection:
         return [t for t in base if t.name not in disabled]
@@ -393,7 +392,7 @@ WORKSPACE_TOOLS: list[ToolDefinition] = [
     ToolDefinition(
         name="bash",
         description=(
-            "ワークスペース内でシェルコマンドを実行する。作業ディレクトリは固定で、外は触れない。"
+            "ワークスペース内でシェルコマンドを実行する。作業ディレクトリの既定はワークスペースのルート。"
             "出力は末尾 120 行のみ返し、全文は log_path に保存される（必要なら read_file で読む）。"
             "exit_code が 0 以外なら失敗として扱え。"
         ),

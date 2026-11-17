@@ -89,14 +89,21 @@ sandbox 内のエージェントには AGENTS.md で両方のパスを教える�
 
 ## nous 側
 
-ツール名は `sandbox`。`sandbox_enabled` と `sandbox_manager_url` の両方が揃ったときだけ公開する
-（`workspace_root` の有無とは無関係）。既定は無効なので、使うペルソナで明示的に有効化する。
+ツール名は `sandbox` ではなく、ワークスペースツール（`bash` / `read_file` / `write_file` / `edit_file`）
+そのものが sandbox 内で動く。`sandbox_enabled` と `sandbox_manager_url` の両方が揃ったときだけ
+sandbox 既定になり（`workspace_root` は要らない）、別ツール `sandbox` は一覧に出さない。
+使えないときは従来通り `workspace_root` 配下でローカル実行する。
 `bash` / `write_file` / `edit_file` と同じく承認が要る（`shell_approval_mode` に従う）。
+
+実装は `nous/application/chat/tools/sandbox_shell.py`。manager の `/exec` だけを使う
+（`read_file` は `base64 -w0` をデコード、`write_file` は本文を base64 にして流し込む。
+`edit_file` は読んで nous 側で exact-match 置換してから書き戻すので、コンテナに python/perl は要らない）。
+パスは相対なら `/home/<persona>/workspace` 起点。コマンドもパス（`..` を含む）も制限しない。
 
 | 設定 | 既定 | 意味 |
 |---|---|---|
-| `sandbox_enabled` | `false` | サンドボックスツールのマスタースイッチ |
-| `sandbox_manager_url` | `""` | manager の URL。空なら enabled でもツールを出さない |
+| `sandbox_enabled` | `false` | sandbox を既定のシェルにするスイッチ |
+| `sandbox_manager_url` | `""` | manager の URL。空なら enabled でもローカル実行のまま |
 | `sandbox_image` | （空） | 生成するコンテナのイメージ。空なら manager の `SANDBOX_IMAGE`。素の ubuntu なので python も入っていない |
 | `sandbox_network` | （空） | sandbox のネットワーク。空なら manager の `SANDBOX_NETWORK`。**compose ネットワークを指定しないこと** |
 | `sandbox_memory` | （空） | メモリ上限。空なら manager の `SANDBOX_MEMORY` |

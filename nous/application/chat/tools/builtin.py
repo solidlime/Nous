@@ -12,6 +12,8 @@ from nous.api.mcp.tools import TOOL_DISPATCH
 from nous.application.chat.tools.definitions import _NOUS_TOOL_NAMES
 from nous.application.chat.tools.delegate import _handle_delegate
 from nous.application.chat.tools.sandbox import handle_sandbox
+from nous.application.chat.tools.sandbox_shell import run_tool as _run_sandbox_tool
+from nous.application.chat.tools.sandbox_shell import sandbox_manager
 from nous.application.chat.tools.shell import (
     _handle_bash,
     _handle_edit_file,
@@ -416,6 +418,9 @@ async def _handle_invoke_skill(ctx: AppContext, config: ChatConfig, tool_input: 
 
 # ── Handler dispatch table (replaces if/elif chain) ──
 
+# sandbox が使えるときはコンテナ内の実装（sandbox_shell）に切り替えるツール
+_WORKSPACE_TOOL_NAMES = frozenset({"bash", "read_file", "write_file", "edit_file"})
+
 _BUILTIN_DISPATCH: dict[str, Any] = {
     "list_skills": _handle_list_skills,
     "image_generate": _handle_image_generate,
@@ -468,6 +473,12 @@ async def execute_tool(ctx: AppContext, config: ChatConfig, tool_name: str, tool
             return {"status": "error", "message": str(e)}
 
     try:
+        # ワークスペースツールは sandbox が使えるならコンテナ内で実行する
+        if tool_name in _WORKSPACE_TOOL_NAMES:
+            manager = sandbox_manager(config)
+            if manager is not None:
+                return await _run_sandbox_tool(tool_name, manager, ctx.persona, tool_input)
+
         # Builtin-specific handler
         handler = _BUILTIN_DISPATCH.get(tool_name)
         if handler is not None:
