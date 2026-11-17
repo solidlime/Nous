@@ -25,6 +25,24 @@ def _parse_int_param(params, name: str, default: int) -> int:
         return default
 
 
+async def _begin_notes(ctx, persona: str) -> list[str]:
+    """begin の notes（沈黙の間 #37 / 約束 #43）。失敗しても begin は落とさない。"""
+    from nous.application.session_notes import fill_silence, promise_note
+
+    notes: list[str] = []
+    try:
+        warning = await fill_silence(ctx, persona, getattr(ctx.settings, "silence_hours", None))
+    except Exception as e:  # noqa: BLE001 — begin を守る
+        logger.warning("session_begin: fill_silence failed persona=%s: %s", persona, e)
+        warning = f"warning: silence check failed: {e}"
+    if warning:
+        notes.append(warning)
+    note = promise_note(ctx)
+    if note:
+        notes.append(note)
+    return notes
+
+
 def register_session_events_routes(mcp) -> None:
     """Register ``GET /api/session-events/{persona}`` and ``POST /api/session/{persona}/begin``."""
 
@@ -49,9 +67,10 @@ def register_session_events_routes(mcp) -> None:
         # error は DomainError（Exception）で来るので str() しないと JSONResponse が落ちる（tools.py:39 と同じ）。
         if not flat.get("ok"):
             return envelope_error(ToolErrorCode.INTERNAL, str(flat.get("error") or "session begin failed"), 500)
+        notes = await _begin_notes(ctx, persona)
         if legacy:
-            return JSONResponse(flat)
-        return JSONResponse(envelope_ok({"context": flat.get("result", "")}))
+            return JSONResponse({**flat, "notes": notes})
+        return JSONResponse(envelope_ok({"context": flat.get("result", ""), "notes": notes}))
 
     @mcp.custom_route("/api/session-events/{persona}", methods=["GET"])
     async def get_session_events(request: Request):

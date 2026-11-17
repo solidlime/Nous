@@ -453,6 +453,8 @@ class Settings(BaseSettings):
     cors: CorsConfig = CorsConfig()
     irodori: IrodoriConfig = Field(default_factory=IrodoriConfig)
     timezone: str = "Asia/Tokyo"
+    silence_hours: float = 6.0
+    """``session_begin`` が「沈黙の間」の記憶を作る閾値（時間・kanban #37）。"""
     data_root: str = "./data"
     log_level: str = "INFO"
     default_persona: str | None = None  # 未読。将来のディスパッチ用に残っている
