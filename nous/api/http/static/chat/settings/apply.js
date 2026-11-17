@@ -242,6 +242,9 @@
     );
     _ensureApprovalRow();
     setChecked("chat-shell-approval-mode", cfg.shell_approval_mode === "auto");
+    // UI に出さない allowlist を保存で ask に潰さないため、読んだモードを控える
+    var _approvalCb = document.getElementById("chat-shell-approval-mode");
+    if (_approvalCb) _approvalCb.dataset.mode = cfg.shell_approval_mode || "ask";
     var el;
     el = document.getElementById("chat-compress-system");
     if (el) el.checked = cfg.context_compress_system_prompt !== false;

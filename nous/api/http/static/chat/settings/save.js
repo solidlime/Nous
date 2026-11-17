@@ -92,10 +92,14 @@
       ),
       language: document.getElementById("chat-language")?.value || "ja",
       dynamic_tool_selection: getChecked("chat-dynamic-tool-selection"),
-      // ツール実行の自動承認: ON = "auto" / OFF = "ask"。allowlist は UI に出さない
+      // ツール実行の自動承認: ON = "auto" / OFF = "ask"（UI に出さない
+      // allowlist は、トグルを触っていなければそのまま保つ）
       shell_approval_mode: getChecked("chat-shell-approval-mode")
         ? "auto"
-        : "ask",
+        : document.getElementById("chat-shell-approval-mode")?.dataset.mode ===
+            "allowlist"
+          ? "allowlist"
+          : "ask",
       enable_parallel_tools: document.getElementById("chat-parallel-tools")
         .checked,
       context_use_llm_summary: getChecked("chat-llm-summary"),
