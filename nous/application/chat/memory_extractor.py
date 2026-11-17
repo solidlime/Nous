@@ -734,7 +734,7 @@ async def _apply_context_update(
     if env_val is not None:
         # 場所は移動と同じ経路（生理コスト + ``place.moved``）。ここで直接 state に
         # 書くと滞在時間の起点が残らず、ダッシュボードが「新しい場所 + 古い到着時刻」を出す。
-        from nous.application.movement import apply_move
+        from nous.application.persona.movement import apply_move
 
         moved = apply_move(ctx, persona, env_val, environment_text=env_val, charge_if_unknown=False)
         if moved.ok:

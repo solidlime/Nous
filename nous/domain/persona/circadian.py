@@ -1,6 +1,6 @@
 """サーカディアン（時間帯 × 無会話経過）から現在地を決める純関数。
 
-移動の記録（``place.moved`` と生理コスト）は :mod:`nous.application.movement` が
+移動の記録（``place.moved`` と生理コスト）は :mod:`nous.application.persona.movement` が
 持つ。ここは「どこへ・なぜ動くか」だけを決める。LLM は呼ばない。
 
 冪等性は呼び出し側の門（最後の活動から ``MIN_SILENCE_HOURS`` 以上）と、

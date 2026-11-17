@@ -325,7 +325,7 @@ def _apply_context_update(ctx: AppContext, persona: str, ctx_update: dict, tool_
         # 起点が残らず、ダッシュボードが「新しい場所 + 古い到着時刻」を出す。
         env_raw = ctx_update.pop("environment", None)
         if isinstance(env_raw, str) and env_raw.strip():
-            from nous.application.movement import apply_move
+            from nous.application.persona.movement import apply_move
 
             moved = apply_move(ctx, persona, env_raw, environment_text=env_raw, charge_if_unknown=False)
             if moved.ok:

@@ -25,7 +25,7 @@ def _ctx(state: PersonaState | None = None) -> MagicMock:
 
 @pytest.fixture(name="rec")
 def _record_patch():
-    with patch("nous.application.movement.record_place_event") as rec:
+    with patch("nous.application.persona.movement.record_place_event") as rec:
         yield rec
 
 
@@ -110,7 +110,7 @@ class TestExtractionPathsAlsoGoThroughMovement:
 
     @pytest.fixture(name="rec")
     def _record_patch(self):
-        with patch("nous.application.movement.record_place_event") as rec:
+        with patch("nous.application.persona.movement.record_place_event") as rec:
             yield rec
 
     @pytest.mark.asyncio
@@ -187,7 +187,7 @@ class TestProseRewritesAreNotMoves:
     @pytest.mark.asyncio
     async def test_explicit_move_tool_still_charges_unknown_place(self, rec):
         """``move``（LLM が明示的に移動を宣言する経路）は従来どおり 10 分を課す."""
-        from nous.application.movement import apply_move
+        from nous.application.persona.movement import apply_move
 
         ctx = _ctx()
         result = apply_move(ctx, "herta", "実験室")

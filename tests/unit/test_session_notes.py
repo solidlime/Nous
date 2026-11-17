@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nous.application import session_notes
+from nous.application.session import session_notes
 from nous.domain.memory.cue import PROMISE_TAGS
 from nous.domain.memory.entities import Memory
 from nous.domain.memory.session_event import SessionEvent

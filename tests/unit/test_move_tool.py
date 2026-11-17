@@ -25,7 +25,7 @@ def _ctx(state: PersonaState | None = None) -> MagicMock:
 @pytest.fixture(name="rec")
 def _record_patch():
     """``place.moved`` の書き込みは別テストで検証する（ここでは実 DB を作らない）。"""
-    with patch("nous.application.movement.record_place_event") as rec:
+    with patch("nous.application.persona.movement.record_place_event") as rec:
         yield rec
 
 
@@ -71,7 +71,7 @@ class TestCost:
     async def test_long_travel_caps_fatigue_and_arousal(self):
         """200 分の移動でも疲労 +0.15 / 覚醒 +0.03 で頭打ち（上限はデッド枝にしない）。"""
         ctx = _ctx(PersonaState(persona="herta", environment="自室", fatigue=0.0, arousal=0.0))
-        with patch("nous.application.movement.travel_minutes", return_value=200):
+        with patch("nous.application.persona.movement.travel_minutes", return_value=200):
             r = await _handle_move(ctx, MagicMock(), {"place": "ドック"})
 
         assert r["fatigue_delta"] == pytest.approx(0.15)
@@ -184,7 +184,7 @@ class TestAudit:
 
     def test_record_place_event_inserts_row(self):
         """``record_place_event`` が session_events に 1 行入れる（DB はモック）。"""
-        from nous.application.movement import record_place_event
+        from nous.application.persona.movement import record_place_event
 
         ctx = MagicMock()
         ctx.persona = "herta"
@@ -199,7 +199,7 @@ class TestAudit:
 
     def test_record_place_event_swallows_errors(self):
         """監査の失敗で会話を壊さない。"""
-        from nous.application.movement import record_place_event
+        from nous.application.persona.movement import record_place_event
 
         ctx = MagicMock()
         type(ctx).connection = property(lambda self: (_ for _ in ()).throw(RuntimeError("boom")))

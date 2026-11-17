@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from nous.api.mcp import _tools_persona
-from nous.application.handover import build_handover, handover_key, read_handover
+from nous.application.session.handover import build_handover, handover_key, read_handover
 from nous.domain.memory.entities import Memory
 from nous.domain.memory.service import MemoryService
 from nous.domain.persona.entities import PersonaState

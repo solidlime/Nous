@@ -13,7 +13,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
-from nous.application.movement import MoveResult, apply_move
+from nous.application.persona.movement import MoveResult, apply_move
 from nous.domain.persona.circadian import MIN_SILENCE_HOURS, DriftDecision, decide_drift
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now

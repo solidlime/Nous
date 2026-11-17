@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from nous.application.auto_import import run_auto_import
+from nous.application.memory.auto_import import run_auto_import
 from nous.config.settings import Settings
 
 
@@ -54,7 +54,7 @@ def test_disabled_when_import_dir_empty(tmp_path):
 
     from unittest.mock import patch
 
-    with patch("nous.application.auto_import.LegacyImporter", mock_importer_cls):
+    with patch("nous.application.memory.auto_import.LegacyImporter", mock_importer_cls):
         result = run_auto_import(mock_settings)
 
     assert result == {}

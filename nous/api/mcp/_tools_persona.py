@@ -6,7 +6,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from nous.application.handover import build_handover, read_handover
+from nous.application.session.handover import build_handover, read_handover
 from nous.domain.memory.cue import due_cues
 from nous.domain.memory.service import ONE_SHOT_STATE_TAGS
 from nous.domain.profile.tokens import DEFAULT_PROFILE_MAX_TOKENS, estimate_tokens
@@ -323,7 +323,7 @@ async def _tool_update_context(
         # 場所の変更は move と同じ経路（生理コスト + ``place.moved``）を通す。
         # ここで直接 ``environment`` を書くと滞在時間の起点が残らず、ダッシュボードが
         # 「新しい場所 + 古い到着時刻」を表示してしまう（kanban #49）。
-        from nous.application.movement import apply_move
+        from nous.application.persona.movement import apply_move
 
         moved = apply_move(ctx, persona, environment, environment_text=environment)
         if moved.ok:

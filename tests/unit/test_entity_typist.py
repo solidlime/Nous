@@ -254,7 +254,7 @@ class _FakeTypist:
 
 class TestRunEntityTypist:
     async def test_applies_llm_types(self, sqlite_conn, entity_repo):
-        from nous.application.entity_typist import run_entity_typist
+        from nous.application.memory.entity_typist import run_entity_typist
 
         _save(entity_repo, "ヘルタ", etype="person")
         _save(entity_repo, "プリン", etype="entity")
@@ -267,7 +267,7 @@ class TestRunEntityTypist:
         assert entity_repo.get_entity("プリン").value.metadata["typed_by"] == "llm"
 
     async def test_passes_snippets_to_typist(self, sqlite_conn, entity_repo):
-        from nous.application.entity_typist import run_entity_typist
+        from nous.application.memory.entity_typist import run_entity_typist
 
         db = sqlite_conn.get_memory_db()
         db.execute(
@@ -282,7 +282,7 @@ class TestRunEntityTypist:
         assert "プリンとクッキー" in item["snippets"][0]
 
     async def test_fail_open_when_typist_returns_empty(self, sqlite_conn, entity_repo):
-        from nous.application.entity_typist import run_entity_typist
+        from nous.application.memory.entity_typist import run_entity_typist
 
         _save(entity_repo, "プリン", etype="entity")
         report = await run_entity_typist(entity_repo, _FakeTypist({}))
@@ -291,7 +291,7 @@ class TestRunEntityTypist:
         assert "typed_by" not in entity_repo.get_entity("プリン").value.metadata
 
     async def test_fail_open_when_typist_raises(self, sqlite_conn, entity_repo):
-        from nous.application.entity_typist import run_entity_typist
+        from nous.application.memory.entity_typist import run_entity_typist
 
         class _Boom:
             async def type_many(self, items, batch_size=20):
@@ -302,7 +302,7 @@ class TestRunEntityTypist:
         assert report.typed == 0
 
     async def test_lower_trust_not_clobbered(self, sqlite_conn, entity_repo):
-        from nous.application.entity_typist import run_entity_typist
+        from nous.application.memory.entity_typist import run_entity_typist
 
         _save(entity_repo, "p1")
         entity_repo.update_entity_type("p1", "place", "sudachi")

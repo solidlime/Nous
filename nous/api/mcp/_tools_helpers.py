@@ -673,7 +673,7 @@ async def _apply_relationship_decay(ctx: AppContext, persona: str, state: Person
 def _apply_circadian_drift(ctx: AppContext, persona: str, state: PersonaState) -> PersonaState:
     """時間帯 × 無会話経過で場所を移す（ベストエフォート・失敗時は元のstate）。"""
     try:
-        from nous.application.circadian_drift import maybe_drift
+        from nous.application.persona.circadian_drift import maybe_drift
 
         if maybe_drift(ctx, persona) is None:
             return state

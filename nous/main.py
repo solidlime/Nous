@@ -235,7 +235,7 @@ def create_app() -> MemoryFastMCP:
     # Auto-import on startup
     if settings.import_dir:
         try:
-            from nous.application.auto_import import run_auto_import
+            from nous.application.memory.auto_import import run_auto_import
 
             results = run_auto_import(settings)
             if results:

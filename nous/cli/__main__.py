@@ -169,7 +169,7 @@ def _handle_stats(args: argparse.Namespace, settings: Settings) -> None:
 
 def _handle_auto_import(args: argparse.Namespace, settings: Settings) -> None:
     """Run auto-import for all .zip files found in the given directory."""
-    from nous.application.auto_import import run_auto_import
+    from nous.application.memory.auto_import import run_auto_import
 
     results = run_auto_import(settings, import_dir=args.import_dir)
     if not results:
@@ -186,7 +186,7 @@ def _handle_type_entities(args: argparse.Namespace, settings: Settings) -> None:
     """Backfill entity types via the LLM typist (manual only, never auto-run)."""
     import asyncio
 
-    from nous.application.entity_typist import run_entity_typist
+    from nous.application.memory.entity_typist import run_entity_typist
     from nous.infrastructure.llm.entity_typist import resolve_entity_typist
     from nous.infrastructure.sqlite.entity_repo import SQLiteEntityRepository
 

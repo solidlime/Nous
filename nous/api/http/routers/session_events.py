@@ -27,7 +27,7 @@ def _parse_int_param(params, name: str, default: int) -> int:
 
 async def _begin_notes(ctx, persona: str) -> list[str]:
     """begin の notes（沈黙の間 #37 / 約束 #43）。失敗しても begin は落とさない。"""
-    from nous.application.session_notes import fill_silence, promise_note
+    from nous.application.session.session_notes import fill_silence, promise_note
 
     notes: list[str] = []
     try:

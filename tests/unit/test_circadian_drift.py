@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from nous.api.mcp._tools_helpers import _apply_circadian_drift
-from nous.application.circadian_drift import maybe_drift
+from nous.application.persona.circadian_drift import maybe_drift
 from nous.domain.memory.session_event import SessionEvent
 from nous.domain.persona.circadian import MIN_SILENCE_HOURS, day_band, decide_drift
 from nous.domain.persona.entities import PersonaState
@@ -156,7 +156,7 @@ def _stamp_events_at(monkeypatch, conn: SQLiteConnection, moment: datetime) -> N
             )
         )
 
-    monkeypatch.setattr("nous.application.movement.record_place_event", _record)
+    monkeypatch.setattr("nous.application.persona.movement.record_place_event", _record)
 
 
 def test_no_history_means_no_drift(tmp_path):
@@ -234,13 +234,13 @@ def test_naive_timestamp_is_treated_as_local(tmp_path):
 
 
 def test_helper_returns_fresh_state_after_drift(tmp_path, monkeypatch):
-    from nous.application.movement import MoveResult
+    from nous.application.persona.movement import MoveResult
 
     ctx, _ = _ctx(tmp_path)
     before = PersonaState(persona=PERSONA, environment="ラウンジ", fatigue=0.3)
     after = PersonaState(persona=PERSONA, environment="自室", fatigue=0.3075)
     monkeypatch.setattr(
-        "nous.application.circadian_drift.maybe_drift", lambda *_a, **_k: MoveResult(ok=True, place="自室")
+        "nous.application.persona.circadian_drift.maybe_drift", lambda *_a, **_k: MoveResult(ok=True, place="自室")
     )
     ctx.persona_service.get_context.return_value = Success(after)
 

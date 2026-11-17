@@ -25,7 +25,7 @@ def _place_since(ctx, persona: str, environment: str | None) -> str | None:
 
     直近イベントの行き先が現在の ``environment`` と一致しないなら None
     （「3 日前からこの場所にいる」という嘘を出さない）。移動は
-    :func:`nous.application.movement.apply_move` に集約済みなので通常は一致するが、
+    :func:`nous.application.persona.movement.apply_move` に集約済みなので通常は一致するが、
     この防波堤は (a) 集約前の本番 DB に残る食い違う行、(b) ``place.moved`` の記録に
     失敗した移動（例外を握り潰す設計）、のために残す。
     """
