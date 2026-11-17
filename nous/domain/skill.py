@@ -258,9 +258,9 @@ class SkillRepository:
             return
         skill_dir = Path(skills_dir) / name
         log = _get_logger()
-        if not skill_dir.exists():
-            return
         try:
+            if not skill_dir.exists():
+                return
             shutil.rmtree(skill_dir)
         except OSError:
             log.warning("Skill delete failed: %s", skill_dir, exc_info=True)
