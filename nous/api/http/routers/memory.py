@@ -343,6 +343,12 @@ def register_memory_routes(mcp) -> None:
             if "content" in updates and ctx.vector_store is not None:
                 with contextlib.suppress(Exception):
                     await ctx.vector_store.upsert(persona, mem.key, mem.content)
+            # MCP との対称性: HTTP 経由の更新も SSE / 購読に伝える
+            with contextlib.suppress(Exception):
+                await ctx.event_bus.publish(
+                    "memory.updated",
+                    {"key": mem.key, "persona": persona, "fields": sorted(updates)},
+                )
             return JSONResponse({"status": "ok", "memory": _memory_to_dict(mem)})
         # 最終防衛線
         except Exception as exc:
@@ -365,6 +371,9 @@ def register_memory_routes(mcp) -> None:
             if ctx.vector_store is not None:
                 with contextlib.suppress(Exception):
                     await ctx.vector_store.delete(persona, key)
+            # MCP との対称性: HTTP 経由の削除も SSE / 購読に伝える
+            with contextlib.suppress(Exception):
+                await ctx.event_bus.publish("memory.deleted", {"key": key, "persona": persona})
             return JSONResponse({"status": "ok", "deleted": key})
         # 最終防衛線
         except Exception as exc:

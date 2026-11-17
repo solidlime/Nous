@@ -10,6 +10,10 @@ from nous.api.http.routers.persona.persona_health import health, list_personas
 
 __all__ = ["register_persona_routes"]
 
+# persona_import.import_conversation は登録しない。body の file_path をそのまま
+# open するので、外部に出すとコンテナ内の任意ファイルを記憶に取り込める。
+# 必要になったらアップロード＋パス固定にしてからここに足す。
+
 
 def register_persona_routes(mcp) -> None:
     mcp.custom_route("/health", methods=["GET"])(health)
