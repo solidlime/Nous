@@ -340,6 +340,27 @@ MEMORY_TOOLS: list[ToolDefinition] = [
             "required": ["query"],
         },
     ),
+    ToolDefinition(
+        name="schedule_task",
+        description=(
+            "自分で決めた予定を登録する。後で1人でこなすタスク（日課・定期チェック・調べもの）に使え。"
+            "ユーザーとの約束は memory_create の goal に任せ、ここは「自分がやる」予定専用。"
+            "when は ISO（2026-11-18T09:00）か相対（+2h / +30m / +3d）。recur を付けると daily / weekly で繰り返す。"
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "when": {"type": "string", "description": "実行期限（ISO-8601 か +2h 形式）"},
+                "prompt": {"type": "string", "description": "その時に自分へ渡す指示・やること"},
+                "recur": {
+                    "type": "string",
+                    "enum": ["daily", "weekly"],
+                    "description": "繰り返し（省略可）",
+                },
+            },
+            "required": ["when", "prompt"],
+        },
+    ),
 ]
 
 

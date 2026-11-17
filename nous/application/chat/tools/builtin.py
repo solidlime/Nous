@@ -14,6 +14,7 @@ from nous.application.chat.tools.delegate import _handle_delegate
 from nous.application.chat.tools.sandbox import handle_sandbox
 from nous.application.chat.tools.sandbox_shell import run_tool as _run_sandbox_tool
 from nous.application.chat.tools.sandbox_shell import sandbox_manager
+from nous.application.chat.tools.schedule import handle_schedule_task
 from nous.application.chat.tools.shell import (
     _handle_bash,
     _handle_edit_file,
@@ -428,6 +429,7 @@ _BUILTIN_DISPATCH: dict[str, Any] = {
     "move": _handle_move,
     "bash": _handle_bash,
     "sandbox": handle_sandbox,
+    "schedule_task": handle_schedule_task,
     "read_file": _handle_read_file,
     "write_file": _handle_write_file,
     "edit_file": _handle_edit_file,

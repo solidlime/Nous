@@ -239,3 +239,18 @@ def test_get_filtered_tools_includes_image_gen_when_enabled():
     result_names = {td.name for td in result}
 
     assert "image_generate" in result_names, "image_generate should be included when image_gen_enabled=True"
+
+
+def test_schedule_task_is_offered_and_can_be_disabled():
+    """#36: schedule_task は既定で出て、disabled_tools で切れる。"""
+    mock_config = MagicMock()
+    mock_config.dynamic_tool_selection = True
+    mock_config.disabled_tools = []
+    mock_config.image_gen_enabled = True
+
+    names = {td.name for td in get_filtered_tools(mock_config)}
+    assert "schedule_task" in names
+
+    mock_config.disabled_tools = ["schedule_task"]
+    names = {td.name for td in get_filtered_tools(mock_config)}
+    assert "schedule_task" not in names
