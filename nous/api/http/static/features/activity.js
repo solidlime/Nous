@@ -63,7 +63,7 @@ async function loadMetrics() {
             '検索 ' + (s.count || 0) + ' 回 / p50 ' + (s.p50_ms || 0) + 'ms / p95 ' + (s.p95_ms || 0) + 'ms',
             'zero-result ' + Math.round((s.zero_result_rate || 0) * 100) + '%',
             'ツール ' + tools + ' 種',
-            '編纂 ' + ((w['wiki.compiled'] || 0)) + ' / 保存 ' + ((w['wiki.saved'] || 0))
+            '編纂 ' + ((w['wiki.compiled'] || 0)) + ' / 保存 ' + ((w['wiki.saved'] || 0)) + ' / 暮らし ' + ((w['wiki.life'] || 0))
         ];
         el.textContent = parts.join('　·　');
     } catch (e) {

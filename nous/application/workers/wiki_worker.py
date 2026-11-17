@@ -521,7 +521,7 @@ class WikiWorker(JournalMixin, ConflictsMixin):
                 persona,
                 f"skipped: no pages returned for {topic}",
                 {"topic": topic, "input_count": len(memories), "input_keys": candidate_keys[:_EVENT_KEY_SAMPLE]},
-                event_type="wiki.compile",
+                event_type="wiki.compiled",
             )
         elif attempt:
             # 再試行で救ったことを残す（「効いたのかモデルを替えるべきか」を後から判定する）。
@@ -536,7 +536,7 @@ class WikiWorker(JournalMixin, ConflictsMixin):
                     "input_keys": candidate_keys[:_EVENT_KEY_SAMPLE],
                     **(self._last_llm or {}),
                 },
-                event_type="wiki.compile",
+                event_type="wiki.compiled",
             )
 
         candidates = {m.key: m for m in memories}
