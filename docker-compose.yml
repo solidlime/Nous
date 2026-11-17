@@ -37,6 +37,10 @@ services:
       # Point to the qdrant service (overrides Dockerfile default of localhost:6333)
       NOUS_QDRANT__URL: http://qdrant:6333
       LANG: C.UTF-8
+      # sandbox ツール: manager の URL とトークンは compose から渡す（config.json に書かなくてよい）
+      NOUS_SANDBOX_ENABLED: ${NOUS_SANDBOX_ENABLED:-true}
+      NOUS_SANDBOX_MANAGER_URL: http://nous-sandbox-manager:8080
+      NOUS_SANDBOX_MANAGER_TOKEN: ${NOUS_SANDBOX_MANAGER_TOKEN:?set NOUS_SANDBOX_MANAGER_TOKEN}
     # Load env vars from .env file (ignored by git) so you can override Dockerfile defaults
     env_file:
       - .env

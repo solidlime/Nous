@@ -10,11 +10,27 @@ import pytest
 
 from nous.application.chat.tools.approval import approval_required
 from nous.application.chat.tools.definitions import SANDBOX_TOOL, get_filtered_tools
-from nous.application.chat.tools.sandbox import TOKEN_HEADER, handle_sandbox
+from nous.application.chat.tools.sandbox import TOKEN_HEADER, handle_sandbox, sandbox_settings
 from nous.domain.chat_config import ChatConfig
 
 _URL = "http://sandbox-manager:8080"
 TOKEN = "test-token"
+
+
+class TestEnvFallback:
+    """compose スタックだけで sandbox を有効にできること（config.json を触らせない）。"""
+
+    def test_env_supplies_enabled_url_and_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NOUS_SANDBOX_ENABLED", "true")
+        monkeypatch.setenv("NOUS_SANDBOX_MANAGER_URL", "http://manager:8080/")
+        monkeypatch.setenv("NOUS_SANDBOX_MANAGER_TOKEN", "tok")
+        assert sandbox_settings(ChatConfig()) == (True, "http://manager:8080", "tok")
+
+    def test_config_wins_over_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NOUS_SANDBOX_MANAGER_URL", "http://env:8080")
+        monkeypatch.setenv("NOUS_SANDBOX_MANAGER_TOKEN", "envtok")
+        config = ChatConfig(sandbox_manager_url="http://cfg:1", sandbox_manager_token="cfgtok")
+        assert sandbox_settings(config)[1:] == ("http://cfg:1", "cfgtok")
 
 
 def _response(status_code: int = 200, payload: dict | None = None) -> MagicMock:

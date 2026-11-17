@@ -6,6 +6,7 @@ manager 側の契約で、ここでは末尾行数の上限だけ保険で掛け
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
 import httpx
@@ -20,6 +21,20 @@ TAIL_LINES = 120
 TOKEN_HEADER = "X-Sandbox-Token"
 # manager 側の exec がタイムアウトを処理する間、こちらは少し長く待つ
 TIMEOUT_GRACE_SECONDS = 10.0
+_TRUE = {"1", "true", "yes", "on"}
+
+
+def sandbox_settings(config: ChatConfig) -> tuple[bool, str, str]:
+    """config.json → 環境変数の順で (enabled, url, token) を解決する。
+
+    compose スタックだけで動かせるように、manager の URL とトークンは
+    nous のサービス環境にも渡せる。config.json の値が優先。
+    """
+    raw_enabled = os.environ.get("NOUS_SANDBOX_ENABLED", "").strip().lower()
+    enabled = raw_enabled in _TRUE if raw_enabled else bool(getattr(config, "sandbox_enabled", False))
+    url = str(getattr(config, "sandbox_manager_url", "") or os.environ.get("NOUS_SANDBOX_MANAGER_URL", ""))
+    token = str(getattr(config, "sandbox_manager_token", "") or os.environ.get("NOUS_SANDBOX_MANAGER_TOKEN", ""))
+    return enabled, url.rstrip("/"), token
 
 
 def _exec_body(config: ChatConfig, persona: str, command: str, cwd: str | None) -> dict:
@@ -43,13 +58,12 @@ def _exec_body(config: ChatConfig, persona: str, command: str, cwd: str | None) 
 
 
 async def handle_sandbox(ctx: AppContext, config: ChatConfig, tool_input: dict) -> dict:
-    url = str(getattr(config, "sandbox_manager_url", "") or "").rstrip("/")
+    _enabled, url, token = sandbox_settings(config)
     if not url:
         return {"status": "error", "error": "sandbox_manager_url is not configured"}
     persona = getattr(ctx, "persona", None)
     if not persona:
         return {"status": "error", "error": "persona is not set"}
-    token = str(getattr(config, "sandbox_manager_token", "") or "")
     if not token:
         return {"status": "error", "error": "sandbox_manager_token is not configured"}
     command = str(tool_input.get("command") or "").strip()

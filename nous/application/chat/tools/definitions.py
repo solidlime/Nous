@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from nous.application.chat.tools.sandbox import sandbox_settings
 from nous.infrastructure.llm.base import ToolDefinition
 from nous.infrastructure.logging.structured import get_logger
 
@@ -357,8 +358,9 @@ def get_filtered_tools(config: ChatConfig) -> list[ToolDefinition]:
         base.append(DELEGATE_TOOL)
 
     # sandbox は workspace_root に依存しない（manager が隔離コンテナを用意する）。
-    # 明示的に有効化し、かつ manager の URL が設定されているときだけ出す。
-    if getattr(config, "sandbox_enabled", False) and getattr(config, "sandbox_manager_url", ""):
+    # config.json か環境変数で有効になっていて、manager の URL があるときだけ出す。
+    sandbox_on, sandbox_url, _token = sandbox_settings(config)
+    if sandbox_on and sandbox_url:
         base.append(SANDBOX_TOOL)
 
     if not config.dynamic_tool_selection:
