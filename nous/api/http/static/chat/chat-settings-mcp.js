@@ -205,6 +205,7 @@ const BUILTIN_TOOLS = [
   { name: "item_search", desc: "持ち物を検索する" },
   { name: "image_generate", desc: "画像を生成する" },
   { name: "move", desc: "現在地を移動する" },
+  { name: "schedule_task", desc: "自分の予定を登録する" },
 ];
 
 function renderBuiltinTools() {
