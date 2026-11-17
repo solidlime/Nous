@@ -18,6 +18,7 @@ import shutil
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 from urllib.parse import quote
+from uuid import uuid4
 
 from nous.application.chat.tools.sandbox_shell import resolve_path as sandbox_path
 from nous.application.chat.tools.sandbox_shell import sandbox_manager, workspace_path
@@ -53,6 +54,15 @@ def _unique_path(directory: Path, filename: str) -> Path:
     return dest
 
 
+def _safe_name(raw: str, fallback: str) -> str:
+    """配信ルート（``os.path.basename(...).replace("..", "")``）と同じ規則で名を寝かせる。
+
+    ここで揃えておかないと、``a..b.txt`` のような名前でチップの URL が 404 になる。
+    """
+    name = os.path.basename(raw).replace("..", "").strip()
+    return name or fallback
+
+
 def _sandbox_source(persona: str, path: str) -> str:
     """コンテナ内のパスをワークスペース配下に限る（``resolve_path`` は ``..`` を拒まない）。"""
     base = workspace_path(persona)
@@ -66,27 +76,38 @@ async def _copy_from_sandbox(manager: object, persona: str, path: str, name: str
     source = _sandbox_source(persona, path)
     directory = Path(get_settings().persona_uploads_dir(persona))
     directory.mkdir(parents=True, exist_ok=True)
-    dest = _unique_path(directory, name or PurePosixPath(source).name)
-    # サイズ検査と複製をコンテナ内で 1 回に閉じる（大きいファイルを uploads に置かない）
-    target = shlex.quote(f"{SANDBOX_UPLOADS}/{dest.name}")
-    quoted = shlex.quote(source)
+    dest = _unique_path(directory, name or _safe_name(PurePosixPath(source).name, "file"))
+    base = workspace_path(persona)
+    part_name = f".part-{uuid4().hex[:8]}"
+    # 境界検査・サイズ検査・複製をコンテナ内の 1 コマンドに閉じる。
+    # readlink -f で symlink を解いた実体を見るので、ワークスペース内の
+    # 外差し symlink も抜けない。途中で切れても最終名には書かない（.part 経由）。
     command = (
-        f"size=$(stat -c %s -- {quoted}) || exit 1; "
+        f"src=$(readlink -f -- {shlex.quote(source)}) || exit 1; "
+        f'case "$src" in {base}/?*) ;; *) exit 3 ;; esac; '
+        f'size=$(stat -c %s -- "$src") || exit 1; '
         f'[ "$size" -le {MAX_ATTACHMENT_BYTES} ] || exit 2; '
-        f"cp -- {quoted} {target}"
+        f'cp -- "$src" {shlex.quote(f"{SANDBOX_UPLOADS}/{part_name}")} || exit 1; '
+        f"mv -f -- {shlex.quote(f'{SANDBOX_UPLOADS}/{part_name}')} "
+        f"{shlex.quote(f'{SANDBOX_UPLOADS}/{dest.name}')}"
     )
     try:
         payload = await manager.exec(persona, command)  # type: ignore[attr-defined]
-        if payload.get("status") == "error":
-            raise AttachmentError(str(payload.get("message") or "sandbox でコピーできなかった"))
         code = payload.get("exit_code")
+        if code is None or payload.get("status") == "error":
+            # manager の失敗 payload は message ではなく stderr_tail に理由が入る
+            raise AttachmentError(str(payload.get("stderr_tail") or "sandbox でコピーできなかった"))
+        if code == 3:
+            raise AttachmentError(f"ワークスペース外は触れない: {path}")
         if code == 2:
             raise AttachmentError(f"大きすぎる（上限 {MAX_ATTACHMENT_BYTES // (1024 * 1024)}MB）: {path}")
         if code != 0:
             detail = (payload.get("stderr_tail") or "").strip().splitlines()
             raise AttachmentError(f"コピーできなかった: {detail[0] if detail else 'cp failed'}")
-    except AttachmentError:
+    except BaseException:
+        # タイムアウト切断でも部分ファイルを uploads に残さない
         dest.unlink(missing_ok=True)
+        (directory / part_name).unlink(missing_ok=True)
         raise
     return dest
 
@@ -99,7 +120,7 @@ def _copy_on_host(config: ChatConfig, persona: str, path: str, name: str | None)
         raise AttachmentError(f"大きすぎる（上限 {MAX_ATTACHMENT_BYTES // (1024 * 1024)}MB）: {path}")
     directory = Path(get_settings().persona_uploads_dir(persona))
     directory.mkdir(parents=True, exist_ok=True)
-    dest = _unique_path(directory, name or source.name)
+    dest = _unique_path(directory, name or _safe_name(source.name, "file"))
     shutil.copy2(source, dest)
     return dest
 
@@ -126,7 +147,8 @@ async def _handle_attach_file(ctx: AppContext, config: ChatConfig, tool_input: d
     if not persona:
         return {"status": "error", "message": "persona が未設定"}
     caption = str(tool_input.get("caption") or "").strip()[:200]
-    name = os.path.basename(str(tool_input.get("name") or "")).replace("..", "").strip() or None
+    raw_name = str(tool_input.get("name") or "")
+    name = _safe_name(raw_name, "") or None
 
     manager = sandbox_manager(config)
     try:

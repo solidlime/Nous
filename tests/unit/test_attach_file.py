@@ -53,6 +53,17 @@ def _patch_settings(tmp_path):
 
 class TestHostCopy:
     @pytest.mark.asyncio
+    async def test_dotted_name_still_serves(self, tmp_path, workspace, ctx, config):
+        """``a..b.txt`` は配信ルートのサニタイズで 404 になるので、置く前に揃える。"""
+        (workspace / "a..b.txt").write_text("x", encoding="utf-8")
+        with _patch_settings(tmp_path):
+            result = await _handle_attach_file(ctx, config, {"path": "a..b.txt"})
+
+        assert result["status"] == "ok"
+        assert result["attachments"][0]["filename"] == "ab.txt"
+        assert result["attachments"][0]["url"].endswith("/ab.txt")
+
+    @pytest.mark.asyncio
     async def test_copies_into_uploads(self, tmp_path, workspace, ctx, config):
         (workspace / "report.md").write_text("# hi", encoding="utf-8")
         with _patch_settings(tmp_path):
@@ -148,8 +159,10 @@ class TestSandbox:
 
         async def fake_exec(persona, command, cwd=None, timeout_seconds=None):
             # cp の代わりに uploads 側へ書き出す（ホストからも見えるマウントの再現）
-            assert "cp -- /home/agent/workspace/out.png /home/agent/uploads/out.png" in command
+            assert "readlink -f" in command
+            assert 'case "$src" in /home/agent/workspace/?*)' in command
             assert "stat -c %s" in command
+            assert "/home/agent/uploads/.part-" in command
             uploads.mkdir(parents=True, exist_ok=True)
             (uploads / "out.png").write_bytes(b"png")
             return {"status": "success", "exit_code": 0, "stdout_tail": "", "stderr_tail": ""}
@@ -194,6 +207,41 @@ class TestSandbox:
 
         assert result["status"] == "error"
         assert "大きすぎる" in result["message"]
+
+    @pytest.mark.asyncio
+    async def test_symlink_escape_in_container_is_rejected(self, tmp_path, ctx, config):
+        """パス文字列が内側でも、実体が外ならコンテナ側の case 文で落ちる（exit 3）。"""
+        manager = MagicMock()
+        manager.exec = AsyncMock(return_value={"status": "success", "exit_code": 3, "stderr_tail": ""})
+        with (
+            _patch_settings(tmp_path),
+            patch("nous.application.chat.tools.attachments.sandbox_manager", return_value=manager),
+        ):
+            result = await _handle_attach_file(ctx, self._sandbox_config(config), {"path": "ln"})
+
+        assert result["status"] == "error"
+        assert "ワークスペース外" in result["message"]
+
+    @pytest.mark.asyncio
+    async def test_transport_error_uses_stderr_tail(self, tmp_path, ctx, config):
+        """manager の失敗 payload は exit_code が None で理由が stderr_tail に入る。"""
+        manager = MagicMock()
+        manager.exec = AsyncMock(
+            return_value={
+                "status": "error",
+                "exit_code": None,
+                "stdout_tail": "",
+                "stderr_tail": "sandbox-manager: unreachable",
+            }
+        )
+        with (
+            _patch_settings(tmp_path),
+            patch("nous.application.chat.tools.attachments.sandbox_manager", return_value=manager),
+        ):
+            result = await _handle_attach_file(ctx, self._sandbox_config(config), {"path": "out.png"})
+
+        assert result["status"] == "error"
+        assert "unreachable" in result["message"]
 
     @pytest.mark.asyncio
     async def test_sandbox_cp_failure_is_reported(self, tmp_path, ctx, config):
