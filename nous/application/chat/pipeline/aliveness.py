@@ -110,7 +110,8 @@ _IF_THEN: dict[str, tuple[str, str, str]] = {
 _BAND_DEFAULT: tuple[str, str, str] = _IF_THEN["neutral"]
 
 
-def _band(intensity: float) -> int:
+def emotion_band(intensity: float) -> int:
+    """強度帯 0..2。境界 0.35 / 0.7 は中間帯（状態行のラベルもこれで決める）。"""
     if intensity < _LOW:
         return 0
     return 1 if intensity <= _MID else 2
@@ -126,7 +127,7 @@ def emotion_hint(state: PersonaState | None) -> str:
         intensity = normalize_importance(float(raw) if raw is not None else None)
     except (TypeError, ValueError):
         intensity = 0.5
-    return _IF_THEN.get(normalize_emotion(str(emotion)), _BAND_DEFAULT)[_band(intensity)]
+    return _IF_THEN.get(normalize_emotion(str(emotion)), _BAND_DEFAULT)[emotion_band(intensity)]
 
 
 def place_hint(place: str | None, catalog: Sequence[Place] = DEFAULT_PLACES) -> str:

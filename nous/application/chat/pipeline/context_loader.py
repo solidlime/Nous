@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from nous.application.chat.pipeline.aliveness import emotion_hint, place_hint
+from nous.application.chat.pipeline.aliveness import emotion_band, emotion_hint, place_hint
 from nous.domain.memory.cue import due_cues, event_cued_memories
 from nous.domain.persona.body import body_action_hint
 from nous.domain.persona.emotion_trend import build_emotion_trend_narrative
@@ -140,7 +140,8 @@ async def _build_context_section(
             intensity = normalize_importance(float(_raw_int) if _raw_int is not None else None)
         except (TypeError, ValueError):
             intensity = 0.5
-        intensity_label = "強い" if intensity > 0.6 else "やや強い" if intensity > 0.3 else "弱い"
+        # ラベルと if-then の帯を一致させる（阈値を 2 組持たない）
+        intensity_label = ("弱い", "やや強い", "強い")[emotion_band(intensity)]
         t1.append(f"感情: {state.emotion}（{intensity_label}）")
         # #39: 強度帯に応じた if-then を 1 行（行動に繋ぐ）
         _emotion_hint = emotion_hint(state)
