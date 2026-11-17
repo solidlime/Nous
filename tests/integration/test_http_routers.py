@@ -1013,6 +1013,8 @@ class TestCompatLegacySwitch:
         assert body["ok"] is True
         assert body["error"] is None
         assert isinstance(body["data"]["context"], str)
+        # #37/#43: notes は空でも必ず載る
+        assert isinstance(body["data"]["notes"], list)
 
     async def test_session_begin_legacy_returns_flat_shape_and_warns(self, client, caplog):
         with caplog.at_level(logging.WARNING, logger="nous.api.http.compat"):

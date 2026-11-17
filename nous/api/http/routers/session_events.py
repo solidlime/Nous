@@ -32,14 +32,14 @@ async def _begin_notes(ctx, persona: str) -> list[str]:
     notes: list[str] = []
     try:
         warning = await fill_silence(ctx, persona, getattr(ctx.settings, "silence_hours", None))
+        if warning:
+            notes.append(warning)
+        note = promise_note(ctx)
+        if note:
+            notes.append(note)
     except Exception as e:  # noqa: BLE001 — begin を守る
-        logger.warning("session_begin: fill_silence failed persona=%s: %s", persona, e)
-        warning = f"warning: silence check failed: {e}"
-    if warning:
-        notes.append(warning)
-    note = promise_note(ctx)
-    if note:
-        notes.append(note)
+        logger.warning("session_begin: notes failed persona=%s: %s", persona, e)
+        notes.append(f"warning: notes skipped: {e}")
     return notes
 
 

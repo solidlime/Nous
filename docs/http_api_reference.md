@@ -355,8 +355,10 @@ The chat view swaps the persona avatar image to `url` on receipt.
 
 **Response（既定は envelope）:**
 ```json
-{ "ok": true, "data": { "context": "..." }, "error": null }
+{ "ok": true, "data": { "context": "...", "notes": ["..."] }, "error": null }
 ```
+
+`notes` はターン前に本人へ渡したい一言。今は2種類——長い沈黙を埋めるメモ（#37、`silence_hours` 以上間が空いたときだけ）と、期限付きの約束を自分から切り出す1行（#43）。無ければ空配列。生成に失敗しても `notes` には `warning: ...` が1行入るだけで、begin 自体は成功する。
 
 `?compat=legacy` を付けると v4.0 以前のフラット形式（`{ok, result}`）を返し、
 `compat=legacy used: POST /api/session/{persona}/begin` を WARNING で1行出す。
