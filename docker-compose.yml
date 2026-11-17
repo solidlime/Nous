@@ -1,4 +1,6 @@
-# DATA_ROOT → ホスト側パス（.env.example 参照）。コンテナ側 /opt/nous（= NOUS_DATA_ROOT）にマウントされる。
+# DATA_ROOT → ホスト側パス（.env.example 参照）。コンテナ側 /data（= NOUS_DATA_ROOT）にマウントされる。
+# qdrant と mcp-hub は NAS 上の既存パスを使う（このスタックは NAS 専用の運用）。
+# 構成を変えるときは Portainer のスタックと必ず同時に直すこと（片方だけ直すとデータの在り処がずれる）。
 
 services:
   qdrant:
@@ -8,11 +10,8 @@ services:
       - "6333:6333"
       - "6334:6334"
     volumes:
-      # Persist Qdrant vector data on host (ensures ./storage is always pre-created)
-      - ${DATA_ROOT}/qdrant:/qdrant/storage
+      - /volume1/docker/qdrant:/qdrant/storage
     restart: unless-stopped
-    env_file:
-      - .env
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
       interval: 10s
@@ -27,29 +26,42 @@ services:
       - "26262:26262"
     volumes:
       # Nous アプリデータ永続化（persona, cache, sudachi, config, skills）
-      # DATA_ROOT（ホスト） → /data（コンテナ、=NOUS_DATA_ROOT）
       - ${DATA_ROOT}/data:/data
     restart: unless-stopped
     depends_on:
       qdrant:
         condition: service_healthy
     environment:
-      # Point to the qdrant service (overrides Dockerfile default of localhost:6333)
       NOUS_QDRANT__URL: http://qdrant:6333
       LANG: C.UTF-8
       # sandbox ツール: manager の URL とトークンは compose から渡す（config.json に書かなくてよい）
       NOUS_SANDBOX_ENABLED: ${NOUS_SANDBOX_ENABLED:-true}
       NOUS_SANDBOX_MANAGER_URL: http://nous-sandbox-manager:8080
       NOUS_SANDBOX_MANAGER_TOKEN: ${NOUS_SANDBOX_MANAGER_TOKEN:?set NOUS_SANDBOX_MANAGER_TOKEN}
-    # Load env vars from .env file (ignored by git) so you can override Dockerfile defaults
-    env_file:
-      - .env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:26262/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 120s
+
+  # MCP の集約ハブ。nous と同じスタックに居る（container 名 nous-mcp-hub-1）。
+  mcp-hub:
+    image: ghcr.io/solidlime/mcp-hub:latest
+    restart: unless-stopped
+    ports:
+      - "26263:26263"
+    environment:
+      - MCP_HUB_DATA_DIR=/home/mcp-hub/data
+    volumes:
+      - /volume1/docker/mcp-hub:/home/mcp-hub
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:26263/admin/api/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
 
   # sandbox コンテナの Manager。docker.sock を持つのはこのプロセスだけ。
   # ペルソナは DB で増減するのでサービスに固定せず、docker run で動的生成する。
@@ -59,7 +71,6 @@ services:
     command: ["python", "-m", "nous.services.sandbox_manager"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      # sandbox の /home/<persona>/workspace はここに置く（nous の /data と同じ実体）
       - ${DATA_ROOT}/data:/data
     restart: unless-stopped
     stop_grace_period: 30s
@@ -70,7 +81,6 @@ services:
       - no-new-privileges:true
     expose:
       - "8080"
-    # API キーは渡さない（sock を持つ側に秘密を持たせない）。SANDBOX_* だけで足りる。
     environment:
       NOUS_DATA_ROOT: /data
       NOUS_SANDBOX_MANAGER_TOKEN: ${NOUS_SANDBOX_MANAGER_TOKEN:?set NOUS_SANDBOX_MANAGER_TOKEN}
@@ -84,4 +94,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
-
