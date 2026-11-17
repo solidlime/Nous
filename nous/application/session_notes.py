@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from nous.domain.memory.cue import due_cues
+from nous.domain.memory.cue import PROMISE_TAGS, due_cues
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.llm.base import LLMMessage
@@ -117,7 +117,7 @@ async def _generate(ctx: AppContext, persona: str, gap: float) -> str | None:
 def promise_note(ctx: AppContext) -> str | None:
     """期限付きの約束があれば「自分から切り出す」1行（#43）。無ければ None。"""
     try:
-        result = ctx.memory_service.get_by_tags(["promise"])
+        result = ctx.memory_service.get_by_tags(list(PROMISE_TAGS))
     except Exception:  # noqa: BLE001 — begin は落とさない
         return None
     if not getattr(result, "is_ok", False):

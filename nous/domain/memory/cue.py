@@ -39,6 +39,10 @@ CUE_EVENT_PREFIX = "cue:event:"
 DUE_WINDOW_HOURS = 24.0
 OVERDUE_GRACE_HOURS = 72.0
 
+# 期限付きの約束はこの組でタグ付けする。書き手（memory_extractor）と
+# 読み手（session_notes / context_loader）が同じ定数を見る。
+PROMISE_TAGS: tuple[str, ...] = ("goal", "active", "interpersonal", "promise")
+
 
 def time_cue_tag(deadline: datetime) -> str:
     """Tag for an absolute deadline."""

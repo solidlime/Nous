@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from nous.application import session_notes
+from nous.domain.memory.cue import PROMISE_TAGS
 from nous.domain.memory.entities import Memory
 from nous.domain.memory.session_event import SessionEvent
 from nous.domain.shared.result import Success
@@ -108,6 +109,8 @@ class TestPromiseNote:
         memory = _memory(["promise", f"cue:time:{due.isoformat(timespec='minutes')}"], "健診の結果を聞く")
         ctx = _ctx(sqlite_conn, [memory])
         note = session_notes.promise_note(ctx)
+        # 書き手（memory_extractor）と同じタグ組で引いていること
+        ctx.memory_service.get_by_tags.assert_called_once_with(list(PROMISE_TAGS))
         assert note is not None
         assert note.startswith("⏳ 自分から切り出す: 健診の結果を聞く")
         assert "in 3h" in note

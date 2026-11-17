@@ -13,6 +13,7 @@ from nous.application.chat.memory_prompts import (
     _build_drift_section,
 )
 from nous.domain.language import LanguageResolver
+from nous.domain.memory.cue import PROMISE_TAGS
 from nous.domain.memory.cue import cue_tags as build_cue_tags
 from nous.domain.memory.entities import VALID_KINDS
 from nous.domain.memory.felt import felt_tag
@@ -645,12 +646,7 @@ async def _process_promise_actions(ctx: AppContext, persona: str, promises: list
             mem_result = await ctx.memory_service.create_memory(
                 content=content,
                 importance=0.8,
-                tags=[
-                    "goal",
-                    "active",
-                    "interpersonal",
-                    *build_cue_tags(promise.get("cue_time"), promise.get("cue_event")),
-                ],
+                tags=[*PROMISE_TAGS, *build_cue_tags(promise.get("cue_time"), promise.get("cue_event"))],
                 emotion="neutral",
             )
             if isinstance(mem_result, Success) and ctx.vector_store is not None:
