@@ -82,25 +82,3 @@ def _resolve_brain_llm_params(config: ChatConfig | None) -> BrainLLMParams:
         floor = max(4096, budget + 1024) if budget is not None else 4096
         max_tokens = max(max_tokens or 0, floor)
     return BrainLLMParams(max_tokens=max_tokens, temperature=temperature, reasoning_effort=effort)
-
-
-def _resolve_llm_config(config: ChatConfig | None, settings) -> tuple[str, str, str, str]:
-    """(provider, api_key, model, base_url)。ブレイン解決鎖の旧経路。
-
-    shortcut: 現在の呼び出し元はゼロ（use_cases は同じ鎖を _init_brain_llm 内に
-    直書きしている）。kanban #35 の指示で残置。次の掃除で消してよい。
-    """
-    if config is None:
-        me = settings.memory_enrichment
-        return me.provider, me.get_effective_api_key(settings), me.model, me.base_url
-    if not config.brain_llm_dedicated:
-        p = config.provider_config
-        return p.provider, p.get_effective_api_key(), p.get_effective_model(), p.get_effective_base_url()
-    me = settings.memory_enrichment
-    provider = config.brain_llm_provider or me.provider
-    model = config.brain_llm_model or me.model
-    base_url = config.brain_llm_base_url or me.base_url
-    api_key = config.brain_llm_api_key or me.get_effective_api_key(settings)
-    if not api_key and provider == config.provider_config.provider:
-        api_key = config.provider_config.get_effective_api_key()
-    return provider, api_key, model, base_url

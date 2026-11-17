@@ -47,15 +47,15 @@ CREATE TABLE IF NOT EXISTS memory_strength (
     memory_key TEXT PRIMARY KEY,
     strength REAL DEFAULT 1.0,
     stability REAL DEFAULT 1.0,
-    last_decay TEXT,
+    last_decay TEXT, -- 廃止: 書き手は legacy_importer のみ
     recall_count INTEGER DEFAULT 0,
     last_recall TEXT,
-    last_utility TEXT,
+    last_utility TEXT, -- 廃止: 書き手も読み手も居ない
     interference_count INTEGER DEFAULT 0,
-    link_count INTEGER DEFAULT 0,
+    link_count INTEGER DEFAULT 0, -- 廃止: 書き手も読み手も居ない
     emotion_peak REAL DEFAULT 0.0, -- 廃止: 感情は検索時 salience のみ。列は履歴として残す（DROP は v5）
-    is_ltm INTEGER DEFAULT 0,
-    valence REAL DEFAULT 0.0,
+    is_ltm INTEGER DEFAULT 0, -- 廃止: v13 の除外条件だけが読む
+    valence REAL DEFAULT 0.0, -- 廃止: 書き手が居ない。ranker は Memory 属性を見ており常に 0
     FOREIGN KEY (memory_key) REFERENCES memories(key)
 );
 

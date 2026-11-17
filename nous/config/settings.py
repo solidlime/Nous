@@ -385,8 +385,8 @@ class PluginConfig(BaseModel):
     Set ``NOUS_PLUGIN__API_KEY=<strong_key>``."""
 
 
-# 多段 curiosity の予算上限。ExplorerConfig の clamp と introspection のループが
-# この単一ソースを参照する（二重管理防止）。
+# 多段 curiosity の予算上限。ExplorerConfig の clamp だけが使う。
+# （explorer 本体は 2026-11-09 の #35 で削除済み。設定と上限だけが残っている）
 MAX_TOOL_CALLS_CAP = 10
 
 
@@ -396,7 +396,11 @@ def clamp_max_tool_calls(v: int) -> int:
 
 
 class ExplorerConfig(BaseModel):
-    """アイドル時好奇心探索（NOUS_EXPLORER__ENABLED 等）。"""
+    """アイドル時好奇心探索の設定。**読むコードは無い**（探索は #35 で削除）。
+
+    env 互換（NOUS_EXPLORER__*）と UI の設定画面のために形だけ残している。
+    復活させるなら消費側を先に書く。
+    """
 
     enabled: bool = True
     # 多段リサーチ（mcp-hub の search_tools→execute_tool 等）で使う 1 探索あたりの
@@ -451,8 +455,8 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Tokyo"
     data_root: str = "./data"
     log_level: str = "INFO"
-    default_persona: str | None = None
-    contradiction_threshold: float = 0.85
+    default_persona: str | None = None  # 未読。将来のディスパッチ用に残っている
+    contradiction_threshold: float = 0.85  # 未読。実効値は _check_duplicate の 0.75
 
     # NOTE: 重複検知の閾値は ``MemoryWriteService._check_duplicate`` の内部定数（0.75）が
     # 唯一の実効値。設定ノブは存在しない（v4.0 で未配線の duplicate_threshold を削除）。
