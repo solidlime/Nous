@@ -15,6 +15,7 @@ from nous.application.chat.memory_prompts import (
 from nous.domain.language import LanguageResolver
 from nous.domain.memory.cue import cue_tags as build_cue_tags
 from nous.domain.memory.entities import VALID_KINDS
+from nous.domain.persona.places import find_place
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.result import Success
 from nous.domain.shared.text_utils import strip_code_fence
@@ -220,6 +221,24 @@ def _parse_memory_llm_result(text: str) -> dict:
     except Exception as _e:
         logger.warning("MemoryLLM: failed to parse LLM output: %s", _e)
     return {}
+
+
+def _current_place(ctx: AppContext, persona: str) -> str | None:
+    """作成時の現在地（``PersonaState.environment``）を記憶に残す場所名にする。
+
+    カタログにあれば正規化済みの名前（同じ場所が表記ゆれで別扱いにならないように）、
+    無ければ生の文字列をそのまま使う。
+    """
+    try:
+        state = ctx.persona_service.get_context(persona)
+    except Exception as _e:
+        logger.debug("MemoryLLM: failed to read current place: %s", _e)
+        return None
+    env = getattr(getattr(state, "value", None), "environment", None) if state.is_ok else None
+    if not isinstance(env, str) or not env.strip():
+        return None
+    found = find_place(env)
+    return found.name if found else env.strip()
 
 
 async def _build_memory_llm_context(ctx: AppContext) -> tuple[str, str, str]:
@@ -486,6 +505,7 @@ async def _run_memory_llm_calls(
 
 async def _save_extracted_facts(ctx: AppContext, persona: str, facts: list, drift_violation: str) -> None:
     """facts をスマートアップサート（類似度 > 0.85 ならスキップ）で保存する。"""
+    place = _current_place(ctx, persona)
     for fact in facts:
         content = fact.get("content", "")
         if not content:
@@ -519,6 +539,7 @@ async def _save_extracted_facts(ctx: AppContext, persona: str, facts: list, drif
             importance=normalize_importance(fact.get("importance")),
             tags=tags,
             emotion=fact.get("emotion", "neutral"),
+            place=place,
             **save_kwargs,
         )
         if mem_result.is_ok and ctx.vector_store is not None:

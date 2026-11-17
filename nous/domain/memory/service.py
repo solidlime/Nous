@@ -121,6 +121,7 @@ class MemoryService:
         body_state: dict[str, float] | None = None,
         state_snapped_at: datetime | None = None,
         kind: str = "semantic",
+        place: str | None = None,
         source_type: str = "user_stated",
         confidence: float = 1.0,
         skip_duplicate_check: bool = False,
@@ -137,6 +138,8 @@ class MemoryService:
         the caller should ensure persona-scoped isolation at the DB layer.
 
         skip_duplicate_check: If True, skips semantic + exact duplicate detection.
+
+        place: 作成時の現在地（episodic_place に入る）。None なら未設定。
 
         session_id: If provided, enables session-scoped Hebbian linking via
         the session_event table.
@@ -172,6 +175,7 @@ class MemoryService:
             body_state=body_state,
             state_snapped_at=state_snapped_at,
             kind=kind,
+            episodic_place=place,
             source_type=source_type,
             confidence=confidence,
             **extra_fields,

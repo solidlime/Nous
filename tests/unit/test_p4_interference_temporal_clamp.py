@@ -150,6 +150,33 @@ def test_temporal_bonus_is_clamped_to_initial_weight_cap(monkeypatch) -> None:
     assert strength == pytest.approx(MemoryLinkService.MAX_INITIAL_STRENGTH)
 
 
+@pytest.mark.asyncio
+async def test_create_memory_with_place_writes_episodic_place(repo) -> None:
+    """作成時に渡した場所が episodic_place として永続化される（kanban #23 の書き込み経路）。"""
+    from nous.domain.memory.service import MemoryService
+
+    service = MemoryService(repo)
+    result = await service.create_memory(content="ラウンジで本を読んだ", kind="episodic", place="ラウンジ")
+    assert result.is_ok
+
+    stored = repo.find_by_key(result.value.key).value
+    assert stored.episodic_place == "ラウンジ"
+
+
+@pytest.mark.asyncio
+async def test_same_place_memories_get_place_bonus(repo, monkeypatch) -> None:
+    """同じ場所で作られた 2 件の候補に場所ボーナスが乗る（書き込み→リンク側の読み）。"""
+    from nous.domain.memory.link_service import MemoryLinkService
+    from nous.domain.memory.service import MemoryService
+
+    monkeypatch.setattr(MemoryLinkService, "TEMPORAL_BONUS_SAME_DAY", 0.0)
+    service = MemoryService(repo)
+    m1 = (await service.create_memory(content="ラウンジで本を読んだ", kind="episodic", place="ラウンジ")).value
+    m2 = (await service.create_memory(content="ラウンジで眠った", kind="episodic", place="ラウンジ")).value
+
+    assert MemoryLinkService._temporal_bonus(m1, m2) == pytest.approx(MemoryLinkService.TEMPORAL_BONUS_SAME_PLACE)
+
+
 def test_same_day_and_environment_gets_place_bonus() -> None:
     from nous.domain.memory.link_service import MemoryLinkService
 

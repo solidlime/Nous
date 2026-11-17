@@ -87,6 +87,7 @@ class MemoryLinkService:
             bonus += cls.TEMPORAL_BONUS_SAME_DAY
         # 「場所」は記憶に残る場所情報（episodic_place、無ければ作成時の
         # environment）。PersonaState の現在地ではない。
+        # 新規は episodic_place、既存（旧データ）は environment でフォールバック。
         place1 = getattr(m1, "episodic_place", None) or getattr(m1, "environment", None)
         place2 = getattr(m2, "episodic_place", None) or getattr(m2, "environment", None)
         if place1 and place1 == place2:
