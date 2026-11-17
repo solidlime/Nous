@@ -120,7 +120,7 @@ persona/<p>/
 
 - persona は `[a-z0-9_-]` のみ。外れたら 400
 - exec は `docker exec [-w cwd] <persona>-sandbox bash -lc <command>`。subprocess は `shell=False` のリスト引数で、`command` 文字列は内側の `bash -lc` にだけ渡す
-- 出力は末尾 120 行だけ返し、全文は `{DATA_ROOT}/sandbox/<persona>/logs/` に落とす（`log_path`）
+- 出力は末尾 120 行だけ返し、全文はワークスペース内の `.nous/logs/` に落とす。`log_path` は**コンテナ視点のパス**（`/home/agent/workspace/.nous/logs/<ts>.log`）で返すので、モデルはそのまま `read_file` で読み直せる。ワークスペース外に置くと `resolve_in_workspace` に弾かれて `log_path` が空約束になる
 - アイドル `sandbox_idle_minutes`（既定 30）で `docker stop`。状態は残し、次の exec で `docker start` する
 
 ---

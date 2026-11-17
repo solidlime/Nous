@@ -487,9 +487,18 @@ def _ensure_inner(
     return _post_run(name)
 
 
+CONTAINER_WORKSPACE = "/home/agent/workspace"
+LOG_DIR = ".nous/logs"
+
+
 def _write_log(persona: str, command: str, stdout: str, stderr: str) -> str | None:
+    """全文ログをワークスペース内に落とし、コンテナから読めるパスを返す。
+
+    マウント外（旧 ``{DATA_ROOT}/sandbox/<persona>/logs``）に置くと ``read_file``
+    の境界（``resolve_in_workspace``）の外なので、``log_path`` が空約束になる。
+    """
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
-    path = _data_root() / "sandbox" / persona / "logs" / f"{stamp}.log"
+    path = _data_root() / "persona" / persona / "workspace" / LOG_DIR / f"{stamp}.log"
     body = f"$ {command}\n\n[stdout]\n{stdout}\n\n[stderr]\n{stderr}\n"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -497,7 +506,7 @@ def _write_log(persona: str, command: str, stdout: str, stderr: str) -> str | No
     except OSError:
         logger.warning("sandbox log write failed: %s", path, exc_info=True)
         return None
-    return str(path)
+    return f"{CONTAINER_WORKSPACE}/{LOG_DIR}/{stamp}.log"
 
 
 def _iso(ts: float | None) -> str | None:

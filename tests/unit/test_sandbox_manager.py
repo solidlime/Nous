@@ -10,13 +10,15 @@ import os
 import stat
 import subprocess
 import time
-from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from fastapi.testclient import TestClient
 
 from nous.services import sandbox_manager as sm
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 TOKEN = "test-token"
 
@@ -371,7 +373,7 @@ def test_docker_missing_is_error_not_500(client, fake) -> None:
     assert "docker" in body["stderr_tail"]
 
 
-def test_tail_truncates_to_120_lines_and_full_log_is_saved(client, fake) -> None:
+def test_tail_truncates_to_120_lines_and_full_log_is_saved(client, fake, tmp_path: Path) -> None:
     stdout = "".join(f"line{i}\n" for i in range(200))
     fake.by_subcommand["exec"] = (0, stdout, "")
 
@@ -380,7 +382,10 @@ def test_tail_truncates_to_120_lines_and_full_log_is_saved(client, fake) -> None
     assert len(body["stdout_tail"].splitlines()) == sm.TAIL_LINES
     assert body["stdout_tail"].startswith("line80")
 
-    log_path = Path(body["log_path"])
+    # 返るのはコンテナ内から読めるパス（read_file の境界内）。実体は workspace の下。
+    assert body["log_path"].startswith(f"{sm.CONTAINER_WORKSPACE}/{sm.LOG_DIR}/")
+    rel = body["log_path"].removeprefix(f"{sm.CONTAINER_WORKSPACE}/")
+    log_path = tmp_path / "container" / "persona" / "alice" / "workspace" / rel
     assert log_path.is_file()
     assert "line0" in log_path.read_text(encoding="utf-8")
 
