@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from nous.domain.shared.result import Success
@@ -13,6 +14,86 @@ if TYPE_CHECKING:
     from nous.domain.chat_config import ChatConfig
 
 logger = get_logger(__name__)
+
+# #41 相手モデル: session_events の直近発話を見て、何行に畳むか。
+# プロフィール（me/user）とは別ブロック。予算は 3 行 × 2 発話 × 60 字。
+# 実イベントは chat.message（ユーザー）と chat.llm_response（私）の 2 種。
+THEM_RECENT_EVENTS = 12
+THEM_LINES = 3
+THEM_PART_CHARS = 60
+THEM_EVENT_TYPES = ("chat.message", "chat.llm_response")
+
+
+def _examined_detail(event: object) -> dict:
+    """session_event の detail（JSON 文字列）を dict 化。読めなければ空 dict。"""
+    detail = getattr(event, "detail", None)
+    if isinstance(detail, str):
+        try:
+            detail = json.loads(detail)
+        except ValueError:
+            return {}
+    return detail if isinstance(detail, dict) else {}
+
+
+def _clip(text: str) -> str:
+    return text if len(text) <= THEM_PART_CHARS else text[:THEM_PART_CHARS] + "…"
+
+
+def _utterances(events: list) -> list[tuple[str, str]]:
+    """(role, text) を古い順に。role は user / assistant。"""
+    rows: list[tuple[str, str, str]] = []
+    for event in events:
+        detail = _examined_detail(event)
+        stamp = str(getattr(event, "timestamp", "") or "")
+        event_type = str(getattr(event, "event_type", "") or "")
+        if event_type == "chat.llm_response":
+            rows.append((stamp, "assistant", str(detail.get("content") or "").strip()))
+        elif event_type == "chat.message":
+            rows.append((stamp, "user", str(detail.get("content") or "").strip()))
+        else:  # turn.completed 等は detail に両方持つ
+            rows.append((stamp, "user", str(detail.get("user_text") or "").strip()))
+            rows.append((stamp, "assistant", str(detail.get("assistant_text") or "").strip()))
+    return [(role, text) for _, role, text in sorted(rows, key=lambda row: row[0]) if text]
+
+
+def them_section(events: list) -> str:
+    """直近のやりとりを 3 行の ``【最近のやりとり】`` ブロックに畳む（#41）。
+
+    私（assistant）の発話で 1 行を閉じ、対応する相手の発話を前に置く。
+    材料がなければ空文字（呼び出し側は何も足さない）。
+    """
+    lines: list[str] = []
+    pending = ""
+    for role, text in _utterances(events):
+        if role == "user":
+            if pending:
+                lines.append(f"相手: {_clip(pending)}")
+            pending = text
+        else:
+            partner = f"相手: {_clip(pending)} / " if pending else ""
+            lines.append(f"{partner}私: {_clip(text)}")
+            pending = ""
+    if pending:
+        lines.append(f"相手: {_clip(pending)}")
+    if not lines:
+        return ""
+    return "\n【最近のやりとり】\n" + "\n".join(f"- {line}" for line in lines[-THEM_LINES:])
+
+
+def _them_block(ctx: AppContext, persona: str) -> str:
+    """session_events から them ブロックを組み立てる。失敗は空文字（黙って省略）。"""
+    repo = getattr(ctx, "_session_event_repo", None)
+    if repo is None:
+        return ""
+    try:
+        events: list = []
+        for event_type in THEM_EVENT_TYPES:
+            events += repo.get_by_persona(persona, event_type=event_type, limit=THEM_RECENT_EVENTS)
+        return them_section(events)
+    except Exception:
+        logger.warning("PromptBuildStep: recent exchanges load failed", exc_info=True)
+        return ""
+
 
 # ツール使用ガイドライン（自律性ブートストラップ + スキル呼び出し強化）。
 # 例文はペルソナ非依存（記憶検索は常設ツールなので例として成立する）。
@@ -172,6 +253,11 @@ class PromptBuildStep:
         except Exception:
             # プロフィール取得失敗でチャットを落とさない
             logger.warning("PromptBuildStep: profile blocks load failed", exc_info=True)
+
+        # --- 相手モデル（#41: 最近のやりとり、me/user とは別ブロック）---
+        them = _them_block(ctx, persona)
+        if them:
+            dynamic_parts.append(them)
 
         # --- スキル読み込み ---
         skills_raw: list[dict] = []
