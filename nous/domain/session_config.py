@@ -64,6 +64,13 @@ class SessionConfig(BaseModel):
     proactive_cooldown_minutes: int = Field(default=60, description="連続した自発発言を空ける最小間隔（分）。")
     proactive_prompt: str = Field(default="", description="自発発言のプロンプトに足す追加指示（空欄で無し）。")
 
+    # 自発活動（kanban #47）: 予定が無い時に自分で 1 アクション選んで実行する。
+    # 感情・身体の更新経路とは無関係（状態を読むだけ）。
+    activity_enabled: bool = Field(default=False, description="予定が無い時、自分で行動を 1 つ選んで実行します。")
+    activity_idle_minutes: int = Field(default=120, description="自発活動までに必要な無会話の分数。")
+    activity_daily_limit: int = Field(default=5, description="1 日に自発活動する回数の上限。")
+    activity_prompt: str = Field(default="", description="自発活動のプロンプトに足す追加指示（空欄で無し）。")
+
     @field_validator("reflection_retrieval_penalty")
     @classmethod
     def _clamp_reflection_penalty(cls, v: float) -> float:

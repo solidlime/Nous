@@ -47,6 +47,22 @@ SPOKE_EVENT = "proactive.spoke"
 SILENT_MARK = "<silent>"
 
 
+def idle_minutes(ctx: AppContext, now: datetime, threshold_minutes: int) -> float | None:
+    """最後のユーザー発話からの経過分数。``threshold_minutes`` 未満なら None。
+
+    ``chat.message`` 系のイベントだけを数える（自分の発言で idle がリセットされる
+    自己ループを避ける）。一度も話していない persona は None（相手が居ない）。
+    """
+    repo = SessionEventRepository(ctx.connection)
+    last_user = repo.last_user_message_at(ctx.persona)
+    if last_user is None:
+        return None
+    if last_user.tzinfo is None:  # sqlite に naive で入った古い行を現地時刻とみなす
+        last_user = last_user.replace(tzinfo=now.tzinfo)
+    idle = (now - last_user).total_seconds() / 60
+    return idle if idle >= threshold_minutes else None
+
+
 class ProactiveWorker:
     """Idle な persona に、話すことがある時だけ 1〜2 文を push する。"""
 
@@ -124,18 +140,11 @@ class ProactiveWorker:
     def _idle_minutes(self, ctx: AppContext, now: datetime) -> float | None:
         """idle 分数。話す条件を満たさなければ None。"""
         session_config = ctx.config.session_config  # type: ignore[union-attr]
-        repo = SessionEventRepository(ctx.connection)
-        last_user = repo.last_user_message_at(ctx.persona)
-        if last_user is None:
-            # 一度も話していない persona には声をかけない（相手が居ない）。
-            return None
-        if last_user.tzinfo is None:  # sqlite に naive で入った古い行を現地時刻とみなす
-            last_user = last_user.replace(tzinfo=now.tzinfo)
-        idle = (now - last_user).total_seconds() / 60
-        if idle < session_config.proactive_idle_minutes:
+        idle = idle_minutes(ctx, now, session_config.proactive_idle_minutes)
+        if idle is None:
             return None
 
-        last_spoke = repo.last_event_at(ctx.persona, SPOKE_EVENT)
+        last_spoke = SessionEventRepository(ctx.connection).last_event_at(ctx.persona, SPOKE_EVENT)
         if last_spoke is not None:
             if last_spoke.tzinfo is None:
                 last_spoke = last_spoke.replace(tzinfo=now.tzinfo)
