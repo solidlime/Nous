@@ -709,6 +709,8 @@ if __name__ == "__main__":
 
     # compose ネットワーク内にだけ出す（host 公開はしない）。ホストで直接動かすなら
     # SANDBOX_MANAGER_HOST=127.0.0.1 を渡す。
-    uvicorn.run(  # nosec B104: コンテナ内で待ち受けるので全インターフェース。ホスト公開はしない。
-        app, host=os.environ.get("SANDBOX_MANAGER_HOST", "0.0.0.0"), port=8080
+    uvicorn.run(
+        app,
+        host=os.environ.get("SANDBOX_MANAGER_HOST", "0.0.0.0"),  # nosec B104 - コンテナ内待ち受け。ホスト公開はしない。
+        port=8080,
     )
