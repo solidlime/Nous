@@ -28,6 +28,11 @@ services:
       # Nous アプリデータ永続化（persona, cache, sudachi, config, skills）
       - ${DATA_ROOT}/data:/data
     restart: unless-stopped
+    # ペルソナ設定の base_url は http://nas:4000/v1（LiteLLM）を指す。compose ネットワークの
+    # DNS はコンテナ名しか解かないので、NAS 自身を指すエイリアスを here で供給する。
+    # 無いと LLM 呼び出しが全部「Connection error.」で無言に終わる（2026-11-17）。
+    extra_hosts:
+      - "nas:host-gateway"
     depends_on:
       qdrant:
         condition: service_healthy
