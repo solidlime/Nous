@@ -169,7 +169,7 @@ async def test_stream_miss_relays_and_caches(monkeypatch, tmp_path):
     assert base64.b64decode(events[1]["audio_base64"]) == b2
     assert events[0]["seq"] == 0 and events[1]["seq"] == 1
     # 全文キーでcacheファイルが書かれる
-    cache_dir = tmp_path / "persona" / "herta" / "tts_cache"
+    cache_dir = tmp_path / "persona" / "herta" / "media" / "tts_cache"
     wavs = list(cache_dir.glob("*.wav"))
     assert len(wavs) == 1
     assert events[2]["audio_url"].endswith(wavs[0].name)
@@ -184,7 +184,7 @@ async def test_stream_mid_error_writes_no_cache(monkeypatch, tmp_path):
     events = await _collect_sse(resp)
     assert [e["type"] for e in events] == ["tts_chunk", "tts_error"]
     assert base64.b64decode(events[0]["audio_base64"]) == b1
-    cache_dir = tmp_path / "persona" / "herta" / "tts_cache"
+    cache_dir = tmp_path / "persona" / "herta" / "media" / "tts_cache"
     assert not list(cache_dir.glob("*.wav"))
 
 

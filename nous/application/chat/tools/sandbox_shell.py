@@ -37,8 +37,13 @@ if TYPE_CHECKING:
 
 
 def workspace_path(persona: str) -> str:
-    """コンテナ内のワークスペース（manager のマウント先）。"""
-    return f"/home/{persona}/workspace"
+    """コンテナ内のワークスペース（manager のマウント先）。
+
+    ペルソナごとに分かれるのはホスト側で、コンテナ内の HOME は共通
+    （/home/agent）。sandbox はペルソナ専用の使い捨てコンテナ。
+    """
+    del persona  # 呼び出し側の互換のため引数は残す
+    return "/home/agent/workspace"
 
 
 class SandboxManager:

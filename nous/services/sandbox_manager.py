@@ -359,12 +359,17 @@ def _ensure_inner(
         # sock の権限エラーなど。「無い」と決めつけて run すると原因が隠れる。
         return f"docker inspect 失敗: {detail or 'unknown error'}"
 
-    home = f"/home/{persona}"
+    home = "/home/agent"
     root = _host_data_root()
     if root is None:
         return "host data root が解決できない（SANDBOX_HOST_DATA_ROOT に絶対パスを設定する）"
+    # ペルソナが読める場所だけを見せる。memory.sqlite や config.json は
+    # 見せない（壊されると復旧できない）。media は nous が書く生成物なので ro。
     mounts = [
         (root / "persona" / persona / "workspace", f"{home}/workspace", False),
+        (root / "persona" / persona / "wiki", f"{home}/wiki", False),
+        (root / "persona" / persona / "uploads", f"{home}/uploads", False),
+        (root / "persona" / persona / "media", f"{home}/media", True),
         (root / "persona" / persona / "skills", f"{home}/.agents/skills", False),
         (root / "skills", f"{home}/.agents/global-skills", True),
     ]
@@ -389,6 +394,8 @@ def _ensure_inner(
         "1024",
         "--security-opt",
         "no-new-privileges",
+        "--user",
+        f"{_env('SANDBOX_UID', '1026')}:{_env('SANDBOX_GID', '100')}",
         "--network",
         net,
     ]

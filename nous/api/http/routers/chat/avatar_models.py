@@ -17,6 +17,7 @@ from nous.api.http.deps import _PERSONA_PATTERN
 from nous.api.http.routers.chat.chat_stream import _resolve_request
 from nous.config.settings import get_settings
 from nous.infrastructure.logging.structured import get_logger
+from nous.infrastructure.persona_layout import persona_media_dir
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -30,7 +31,7 @@ _SAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]")
 def _avatar_dir(persona: str) -> Path:
     """Return (and create) the avatar directory for a persona under data_root."""
 
-    return Path(get_settings().data_root) / "persona" / persona / "avatar"
+    return Path(persona_media_dir(get_settings().data_root, persona)) / "avatar"
 
 
 def _sample_model_path() -> Path:

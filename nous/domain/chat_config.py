@@ -281,7 +281,7 @@ class ChatConfigFileRepository:
         """既存の memory.sqlite から chat_settings を読んで dict として返す。失敗時は None。"""
         import sqlite3 as _sqlite3
 
-        db_path = os.path.join(self._data_root, "persona", persona, "memory.sqlite")
+        db_path = os.path.join(self._data_root, "persona", persona, "db", "memory.sqlite")
         if not os.path.exists(db_path):
             return None
         try:

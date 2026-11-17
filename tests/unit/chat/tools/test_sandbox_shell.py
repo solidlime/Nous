@@ -51,12 +51,12 @@ class TestBash:
         manager = FakeManager(_ok("hi\n"))
         result = await run_bash(manager, "p1", "echo hi")
         assert manager.calls == [
-            {"persona": "p1", "command": "echo hi", "cwd": "/home/p1/workspace", "timeout_seconds": None}
+            {"persona": "p1", "command": "echo hi", "cwd": "/home/agent/workspace", "timeout_seconds": None}
         ]
         assert result["status"] == "ok"
         assert result["exit_code"] == 0
         assert result["stdout"] == "hi\n"
-        assert result["cwd"] == "/home/p1/workspace"
+        assert result["cwd"] == "/home/agent/workspace"
 
     async def test_empty_command_is_error(self) -> None:
         from nous.application.chat.tools.sandbox_shell import run_bash
@@ -71,7 +71,7 @@ class TestRead:
         body = base64.b64encode(b"a\nb\nc\n").decode()
         manager = FakeManager(_ok(body))
         result = await read_file(manager, "p1", "notes.txt")
-        assert manager.calls[0]["command"] == "base64 -w0 -- /home/p1/workspace/notes.txt"
+        assert manager.calls[0]["command"] == "base64 -w0 -- /home/agent/workspace/notes.txt"
         assert result == {"status": "ok", "path": "notes.txt", "content": "a\nb\nc", "total_lines": 3, "offset": 0}
 
     async def test_missing_file_message(self) -> None:
@@ -90,7 +90,7 @@ class TestWrite:
         result = await write_file(manager, "p1", "d/x.txt", "hello 'world'")
         b64 = base64.b64encode(b"hello 'world'").decode()
         assert manager.calls[0]["command"] == (
-            f"mkdir -p -- /home/p1/workspace/d && printf %s {b64} | base64 -d > /home/p1/workspace/d/x.txt"
+            f"mkdir -p -- /home/agent/workspace/d && printf %s {b64} | base64 -d > /home/agent/workspace/d/x.txt"
         )
         assert result == {"status": "ok", "path": "d/x.txt", "bytes": 13, "created": True}
 

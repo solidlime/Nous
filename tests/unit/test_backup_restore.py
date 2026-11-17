@@ -53,8 +53,8 @@ def test_backup_verify_restore_roundtrip(tmp_path, data_root):
     assert br.main(["verify", "--backup", str(backup)]) == 0
 
     manifest = json.loads((backup / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["sqlite"]["herta/memory.sqlite"]["rows"]["memories"] == 1
-    assert manifest["sqlite"]["herta/memory.sqlite"]["integrity"] == "ok"
+    assert manifest["sqlite"]["herta/db/memory.sqlite"]["rows"]["memories"] == 1
+    assert manifest["sqlite"]["herta/db/memory.sqlite"]["integrity"] == "ok"
     assert manifest["wiki"]["herta"]["pages"] == 1
     assert manifest["contains_secrets"] is True
 
@@ -83,7 +83,7 @@ def test_backup_verify_restore_roundtrip(tmp_path, data_root):
     # 既存データがある状態の復元は --force 無しでは拒否し、--force では退避する
     assert br.main(["restore", "--backup", str(fresh), "--data-root", str(target)]) == 1
     assert br.main(["restore", "--backup", str(fresh), "--data-root", str(target), "--force"]) == 0
-    assert list((target / "persona" / "herta").glob("_pre_restore_*/memory.sqlite"))
+    assert list((target / "persona" / "herta").glob("_pre_restore_*/db/memory.sqlite"))
 
 
 def test_portable_export_redacts_secrets(tmp_path, data_root):

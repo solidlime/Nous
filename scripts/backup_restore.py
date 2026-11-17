@@ -84,7 +84,7 @@ def discover_personas(data_root: Path) -> list[str]:
     base = data_root / "persona"
     if not base.is_dir():
         return []
-    return sorted(d.name for d in base.iterdir() if d.is_dir() and (d / "memory.sqlite").exists())
+    return sorted(d.name for d in base.iterdir() if d.is_dir() and (d / "db" / "memory.sqlite").exists())
 
 
 def is_secret_key(key: str) -> bool:
@@ -320,7 +320,7 @@ def cmd_backup(args: argparse.Namespace) -> int:
         return 1
     personas = args.persona or discover_personas(data_root)
     if not personas:
-        log(f"ERROR: {data_root}/persona/*/memory.sqlite が無い（バックアップ対象なし）")
+        log(f"ERROR: {data_root}/persona/*/db/memory.sqlite が無い（バックアップ対象なし）")
         return 1
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -346,8 +346,8 @@ def cmd_backup(args: argparse.Namespace) -> int:
     log(f"[1/4] SQLite: {', '.join(personas)}")
     for persona in personas:
         pdir = data_root / "persona" / persona
-        for db in sorted(pdir.glob("*.sqlite")):
-            rel = f"{persona}/{db.name}"
+        for db in sorted(pdir.glob("db/*.sqlite")):
+            rel = f"{persona}/db/{db.name}"
             info = backup_sqlite(db, dest / "sqlite" / rel)
             manifest["sqlite"][rel] = info
             log(f"  sqlite: {rel} ({info['bytes']} bytes, integrity={info['integrity']})")

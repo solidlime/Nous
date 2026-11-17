@@ -33,13 +33,13 @@ def _write(path, content=b"x"):
 class TestResolveDefaultModel:
     def test_repo_root_herta_wins(self, resolution_env):
         _write(resolution_env / "herta.vrm", b"HERTA")
-        _write(resolution_env / "data" / "persona" / PERSONA / "avatar" / "up.vrm")
+        _write(resolution_env / "data" / "persona" / PERSONA / "media" / "avatar" / "up.vrm")
         resolved = _do_resolve_default_model(PERSONA)
         assert resolved["filename"] == "herta.vrm"
         assert resolved["file_path"].endswith("herta.vrm")
 
     def test_uploaded_model_second(self, resolution_env):
-        _write(resolution_env / "data" / "persona" / PERSONA / "avatar" / "up.vrm")
+        _write(resolution_env / "data" / "persona" / PERSONA / "media" / "avatar" / "up.vrm")
         resolved = _do_resolve_default_model(PERSONA)
         assert resolved["filename"] == "up.vrm"
 
@@ -57,7 +57,7 @@ class TestResolveDefaultModel:
 class TestListModels:
     def test_list_includes_served_default(self, resolution_env):
         _write(resolution_env / "herta.vrm")
-        _write(resolution_env / "data" / "persona" / PERSONA / "avatar" / "up.vrm")
+        _write(resolution_env / "data" / "persona" / PERSONA / "media" / "avatar" / "up.vrm")
         result = _do_list_models(PERSONA)
         assert result["models"] == ["up.vrm"]
         assert result["current"] is None
@@ -65,7 +65,7 @@ class TestListModels:
         assert result["default"] == "herta.vrm"
 
     def test_list_default_follows_fallback(self, resolution_env):
-        _write(resolution_env / "data" / "persona" / PERSONA / "avatar" / "up.vrm")
+        _write(resolution_env / "data" / "persona" / PERSONA / "media" / "avatar" / "up.vrm")
         result = _do_list_models(PERSONA)
         assert result["models"] == ["up.vrm"]
         assert result["default"] == "up.vrm"

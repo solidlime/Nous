@@ -12,6 +12,7 @@ from nous.api.http.deps import _memory_to_dict, _resolve_persona_from_request
 from nous.api.http.routers.persona.persona_helpers import _resolve_request
 from nous.config.settings import Settings, get_settings
 from nous.infrastructure.logging.structured import get_logger
+from nous.infrastructure.persona_layout import persona_media_dir
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -58,7 +59,9 @@ async def _do_dashboard_page(persona: str | None = None) -> str:
         data_path = Path(settings.persona_dir)
         persona_count = 0
         if data_path.exists():
-            persona_count = len([d for d in data_path.iterdir() if d.is_dir() and (d / "memory.sqlite").exists()])
+            persona_count = len(
+                [d for d in data_path.iterdir() if d.is_dir() and (d / "db" / "memory.sqlite").exists()]
+            )
         if persona_count == 0:
             return _render_setup_page()
 
@@ -197,7 +200,7 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
     # ── Latest self-portrait image ──
     latest_self_portrait: str | None = None
     try:
-        images_dir = Path(get_settings().data_root) / "persona" / persona / "images"
+        images_dir = Path(persona_media_dir(get_settings().data_root, persona)) / "images"
         if images_dir.is_dir():
             self_files = sorted(images_dir.glob("self_*.png"))
             if self_files:
@@ -210,7 +213,7 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
     # ── Generated images history (max 20, newest first) ──
     generated_images: list[dict] = []
     try:
-        images_dir = Path(get_settings().data_root) / "persona" / persona / "images"
+        images_dir = Path(persona_media_dir(get_settings().data_root, persona)) / "images"
         if images_dir.is_dir():
             all_images = sorted(images_dir.glob("*.png"), key=lambda f: f.stat().st_mtime, reverse=True)
             for img_file in all_images[:20]:

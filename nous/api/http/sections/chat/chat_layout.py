@@ -13,9 +13,10 @@ def _latest_self_portrait_url(persona: str) -> str:
     if not persona or any(sep in persona for sep in ("/", "\\", "..")):
         return ""
     from nous.config.settings import get_settings
+    from nous.infrastructure.persona_layout import persona_media_dir
 
     try:
-        images_dir = Path(get_settings().data_root) / "persona" / persona / "images"
+        images_dir = Path(persona_media_dir(get_settings().data_root, persona)) / "images"
         if images_dir.is_dir():
             self_files = sorted(images_dir.glob("self_*.png"))
             if self_files:

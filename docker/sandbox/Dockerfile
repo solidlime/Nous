@@ -27,6 +27,16 @@ RUN git config --system user.name persona \
     && git config --system user.email persona@nous.local \
     && git config --system init.defaultBranch main
 
-WORKDIR /root
+WORKDIR /home/agent
+
+# 非 root で動かす。UID/GID はホスト（Synology は 1026/users）に合わせる。
+# 合わせないと bind した workspace/wiki に書き込めず、ホスト側でも読めない
+# 所有者のファイルができる。runner が --user でも渡すので、ここは
+# イメージ単体で `docker run` した場合の既定。
+ARG SANDBOX_UID=1026
+ARG SANDBOX_GID=100
+RUN groupadd -g ${SANDBOX_GID} agent \
+    && useradd -u ${SANDBOX_UID} -g ${SANDBOX_GID} -m -d /home/agent -s /bin/bash agent
+USER agent
 
 CMD ["sleep", "infinity"]

@@ -50,7 +50,7 @@ async def _do_list_personas() -> list:
     settings = Settings()
     data_path = Path(settings.persona_dir)
     if data_path.exists():
-        return sorted([d.name for d in data_path.iterdir() if d.is_dir() and (d / "memory.sqlite").exists()])
+        return sorted([d.name for d in data_path.iterdir() if d.is_dir() and (d / "db" / "memory.sqlite").exists()])
     return []
 
 

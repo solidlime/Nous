@@ -10,6 +10,7 @@ from nous.api.http.routers.chat.chat_stream import _resolve_request
 from nous.config.settings import get_settings
 from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository
 from nous.infrastructure.logging.structured import get_logger
+from nous.infrastructure.persona_layout import persona_media_dir, persona_uploads_dir
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -466,7 +467,7 @@ async def _do_attachment_upload(persona: str, ctx, filename: str, file_bytes: by
     from pathlib import Path
 
     settings = get_settings()
-    uploads_dir = Path(settings.data_root) / "uploads" / persona
+    uploads_dir = Path(persona_uploads_dir(settings.data_root, persona))
     uploads_dir.mkdir(parents=True, exist_ok=True)
 
     safe_name = os.path.basename(filename).replace("..", "").strip()
@@ -518,7 +519,7 @@ async def _do_memory_image_serve(persona: str, ctx, filename: str) -> dict | Non
     from pathlib import Path
 
     settings = get_settings()
-    file_path = Path(settings.data_root) / "persona" / persona / "images" / filename
+    file_path = Path(persona_media_dir(settings.data_root, persona)) / "images" / filename
     if not file_path.exists():
         return None
 

@@ -130,11 +130,11 @@ def test_exec_builds_docker_exec_args(client, fake) -> None:
 
 
 def test_exec_with_cwd_adds_workdir(client, fake) -> None:
-    client.post("/exec", json={"persona": "alice", "command": "pwd", "cwd": "/home/alice/workspace"})
+    client.post("/exec", json={"persona": "alice", "command": "pwd", "cwd": "/home/agent/workspace"})
     assert (
         "exec",
         "-w",
-        "/home/alice/workspace",
+        "/home/agent/workspace",
         "alice-sandbox",
         "timeout",
         "-k",
@@ -157,13 +157,21 @@ def test_exec_runs_container_when_missing(client, fake, tmp_path: Path) -> None:
     assert "com.docker.compose.project=nous-sandbox" in run
     assert "com.docker.compose.service=sbx-alice" in run
     assert "com.nous.sandbox=1" in run
-    assert f"{tmp_path}/host/persona/alice/workspace:/home/alice/workspace" in run
-    assert f"{tmp_path}/host/persona/alice/skills:/home/alice/.agents/skills" in run
-    assert f"{tmp_path}/host/skills:/home/alice/.agents/global-skills:ro" in run
+    assert f"{tmp_path}/host/persona/alice/workspace:/home/agent/workspace" in run
+    assert f"{tmp_path}/host/persona/alice/wiki:/home/agent/wiki" in run
+    assert f"{tmp_path}/host/persona/alice/uploads:/home/agent/uploads" in run
+    # media は nous が書く生成物なので読み取り専用。
+    assert f"{tmp_path}/host/persona/alice/media:/home/agent/media:ro" in run
+    assert "--user" in run
+    assert f"{tmp_path}/host/persona/alice/skills:/home/agent/.agents/skills" in run
+    assert f"{tmp_path}/host/skills:/home/agent/.agents/global-skills:ro" in run
     assert run[-2:] == ("sleep", "infinity")
     # mkdir は manager から見えるパス（NOUS_DATA_ROOT）に行う。
     # -v に渡すのはホスト名前空間のパスで、コンテナからは触れない。
     assert (tmp_path / "container" / "persona" / "alice" / "workspace").is_dir()
+    assert (tmp_path / "container" / "persona" / "alice" / "wiki").is_dir()
+    assert (tmp_path / "container" / "persona" / "alice" / "uploads").is_dir()
+    assert (tmp_path / "container" / "persona" / "alice" / "media").is_dir()
 
 
 def test_run_uses_cpu_shares_because_the_kernel_has_no_cfs(client, fake) -> None:

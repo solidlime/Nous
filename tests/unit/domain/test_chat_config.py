@@ -143,11 +143,11 @@ class TestSqliteMigration:
         """Legacy memory.sqlite chat_settings → config.json one-shot upgrade."""
         data_root = tmp_path / "data"
         persona_dir = data_root / "persona" / "legacy"
-        persona_dir.mkdir(parents=True)
+        (persona_dir / "db").mkdir(parents=True)
 
         # Build a legacy memory.sqlite with a chat_settings row (raw SQL —
         # the SQLite repo class no longer exists)
-        conn = sqlite3.connect(persona_dir / "memory.sqlite")
+        conn = sqlite3.connect(persona_dir / "db" / "memory.sqlite")
         conn.row_factory = sqlite3.Row
         conn.execute(
             """

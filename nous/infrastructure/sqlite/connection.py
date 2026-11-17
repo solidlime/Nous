@@ -31,7 +31,7 @@ class SQLiteConnection:
     Args:
         data_dir: Base directory for per-persona data (i.e. persona_dir,
                   typically ``{data_root}/persona``). DB files live at
-                  ``{data_dir}/{persona}/memory.sqlite`` etc.
+                  ``{data_dir}/{persona}/db/memory.sqlite`` etc.
         persona: Persona identifier used to construct the DB path.
     """
 
@@ -42,11 +42,11 @@ class SQLiteConnection:
 
     def get_memory_db(self) -> sqlite3.Connection:
         """Get connection to memory.sqlite for this persona."""
-        return self._get_or_create(f"{self.persona}/memory.sqlite")
+        return self._get_or_create(f"{self.persona}/db/memory.sqlite")
 
     def get_inventory_db(self) -> sqlite3.Connection:
         """Get connection to inventory.sqlite for this persona."""
-        return self._get_or_create(f"{self.persona}/inventory.sqlite")
+        return self._get_or_create(f"{self.persona}/db/inventory.sqlite")
 
     def _thread_conns(self) -> dict[str, sqlite3.Connection]:
         try:

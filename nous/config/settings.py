@@ -528,6 +528,24 @@ class Settings(BaseSettings):
         """特定ペルソナのデータディレクトリパス: {data_root}/persona/{name}"""
         return f"{self.persona_dir}/{persona_name}"
 
+    # ペルソナ配下のサブディレクトリ。sandbox から見えるのは media / wiki /
+    # uploads / workspace だけで、db と config.json は見せない。
+    def persona_db_dir(self, persona_name: str) -> str:
+        """DB の置き場: {data_root}/persona/{name}/db"""
+        return f"{self.persona_path(persona_name)}/db"
+
+    def persona_media_dir(self, persona_name: str) -> str:
+        """生成物の置き場（images / tts_cache / avatar）: .../media"""
+        return f"{self.persona_path(persona_name)}/media"
+
+    def persona_wiki_dir(self, persona_name: str) -> str:
+        """wiki の置き場: .../wiki"""
+        return f"{self.persona_path(persona_name)}/wiki"
+
+    def persona_uploads_dir(self, persona_name: str) -> str:
+        """ユーザーが上げたファイルの置き場: .../uploads"""
+        return f"{self.persona_path(persona_name)}/uploads"
+
     @computed_field
     @property
     def import_dir(self) -> str:
@@ -565,6 +583,11 @@ class Settings(BaseSettings):
         ]
         for d in dirs:
             Path(d).mkdir(parents=True, exist_ok=True)
+        # 旧レイアウト（persona/<p>/memory.sqlite 等）からの移行。DB を開く前
+        # にしか走らないので、冪等でも移動中の WAL を壊す心配はない。
+        from nous.infrastructure.persona_layout import migrate_persona_layout
+
+        migrate_persona_layout(Path(self.data_root))
 
 
 @functools.lru_cache(maxsize=1)

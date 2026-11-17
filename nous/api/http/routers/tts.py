@@ -507,8 +507,9 @@ def _tts_voice_speed(chat_config) -> float:
 def _tts_cache_dir(persona: str) -> Path:
     """personaのTTSキャッシュディレクトリ（無ければ作成）。"""
     from nous.config.settings import get_settings
+    from nous.infrastructure.persona_layout import persona_media_dir
 
-    cache_dir = Path(get_settings().data_root) / "persona" / persona / "tts_cache"
+    cache_dir = Path(persona_media_dir(get_settings().data_root, persona)) / "tts_cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
 

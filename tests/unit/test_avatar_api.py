@@ -37,7 +37,7 @@ def avatar_env(tmp_path, monkeypatch):
         patch("nous.api.http.routers.chat.avatar_models._resolve_request", return_value=(PERSONA, ctx)),
         patch("nous.api.http.routers.chat.avatar_models._PERSONA_PATTERN", __import__("re").compile(r".*")),
     ):
-        yield tmp_path / "persona" / PERSONA / "avatar"
+        yield tmp_path / "persona" / PERSONA / "media" / "avatar"
 
 
 def _upload_request(filename: str, content: bytes, field: str = "file"):
