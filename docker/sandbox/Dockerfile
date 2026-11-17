@@ -35,8 +35,13 @@ WORKDIR /home/agent
 # イメージ単体で `docker run` した場合の既定。
 ARG SANDBOX_UID=1026
 ARG SANDBOX_GID=100
-RUN groupadd -g ${SANDBOX_GID} agent \
-    && useradd -u ${SANDBOX_UID} -g ${SANDBOX_GID} -m -d /home/agent -s /bin/bash agent
+# GID 100 は ubuntu:24.04 の `users` グループとして既にある。既存なら作らずに使う。
+RUN if getent group ${SANDBOX_GID} >/dev/null; then \
+        G=$(getent group ${SANDBOX_GID} | cut -d: -f1); \
+    else \
+        groupadd -g ${SANDBOX_GID} agent; G=agent; \
+    fi \
+    && useradd -u ${SANDBOX_UID} -g "$G" -m -d /home/agent -s /bin/bash agent
 USER agent
 
 CMD ["sleep", "infinity"]
