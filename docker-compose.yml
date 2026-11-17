@@ -120,6 +120,9 @@ services:
 # （127.0.0.11）が無いので、`getent hosts nous` が引けずに静かに壊れる。
 # ここに参加させるのは名前で引かれているサービスだけ（qdrant も http://qdrant:6333 で引く）。
 # 公開ポートはそのまま（ports は network と無関係）。
+# name を明示するのは、スタック名のプレフィックス（nous_nous-net）で作られると
+# sandbox_manager の `docker run --network nous-net` が見つけられないため。
 networks:
   nous-net:
+    name: nous-net
     driver: bridge
