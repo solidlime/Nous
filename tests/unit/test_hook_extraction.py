@@ -174,7 +174,7 @@ class TestRunHookExtraction:
 
 
 def _make_client(settings: Settings) -> TestClient:
-    from nous.api.http.routers.events import register_events_routes
+    from nous.api.http.routers.chat.events import register_events_routes
 
     mcp = MemoryFastMCP("test")
     register_events_routes(mcp)
@@ -195,7 +195,7 @@ class TestIngestTurnCompletedHook:
         client = _make_client(settings)
         ctx = _mock_ctx(settings)
         with (
-            patch("nous.api.http.routers.events._safe_get_context", return_value=ctx),
+            patch("nous.api.http.routers.chat.events._safe_get_context", return_value=ctx),
             patch(
                 "nous.application.hooks.memory_extraction.run_hook_extraction",
                 new=AsyncMock(),
@@ -237,7 +237,7 @@ class TestIngestTurnCompletedHook:
             "events": [{"type": "session.stopped", "summary": "session ended"}],
         }
         with patch(
-            "nous.api.http.routers.events._summarize_session_end",
+            "nous.api.http.routers.chat.events._summarize_session_end",
             new=AsyncMock(),
         ) as mock_summary:
             resp, mock_hook = self._post(body)

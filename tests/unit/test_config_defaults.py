@@ -72,7 +72,7 @@ def test_irodori_chunk_min_chars_is_single_valued():
     あることを機械的に固定する（値変更時はこのテストが赤くなり、UI 表示・
     session_config ・engine 層を同時に動かすことを強制する）。
     """
-    from nous.api.http.routers.tts import _get_irodori_config
+    from nous.api.http.routers.media.tts import _get_irodori_config
     from nous.config.settings import IrodoriAdvancedParams
     from nous.domain.config.session_config import SessionConfig
 

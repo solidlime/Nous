@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from nous.api.http.routers.events import register_events_routes
+from nous.api.http.routers.chat.events import register_events_routes
 
 
 class _FakeMcp:
@@ -46,8 +46,8 @@ def _request(ctx):
 
 def _patched(ctx, req):
     return (
-        patch("nous.api.http.routers.events._resolve_persona_from_request", return_value="test"),
-        patch("nous.api.http.routers.events._safe_get_context", return_value=ctx),
+        patch("nous.api.http.routers.chat.events._resolve_persona_from_request", return_value="test"),
+        patch("nous.api.http.routers.chat.events._safe_get_context", return_value=ctx),
         req,
     )
 

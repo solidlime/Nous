@@ -6,7 +6,7 @@ import wave
 
 import pytest
 
-from nous.api.http.routers import tts as tts_mod
+from nous.api.http.routers.media import tts as tts_mod
 
 pytestmark = pytest.mark.unit
 
@@ -217,7 +217,7 @@ async def test_stream_ignores_parallel_caption_in_non_llm_mode(monkeypatch, tmp_
     # oracle #2: 非llmモードでは並列字幕タスク（llm由来）を採用しない。
     import asyncio
 
-    from nous.api.http.routers.tts import CaptionResult, CaptionSnapshot, build_style_anchor
+    from nous.api.http.routers.media.tts import CaptionResult, CaptionSnapshot, build_style_anchor
 
     blob = _wav_blob(b"\x01\x02" * 800)
     engine = _RecordingEngine([blob])

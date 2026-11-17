@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from nous.api.http.routers.events import _ALL_EVENT_TYPES
+from nous.api.http.routers.chat.events import _ALL_EVENT_TYPES
 from nous.domain.config.chat_config import ChatConfig
 
 

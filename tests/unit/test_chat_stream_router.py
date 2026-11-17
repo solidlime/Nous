@@ -64,7 +64,7 @@ class TestChatPostEndpoint:
             p1,
             p2,
             patch("nous.api.http.routers.chat.chat_stream.ChatConfigFileRepository") as mock_repo_cls,
-            patch("nous.api.http.routers.tts.kickoff_caption_task"),
+            patch("nous.api.http.routers.media.tts.kickoff_caption_task"),
             patch.object(ChatService, "chat", _fake_chat(events)),
         ):
             mock_repo_cls.return_value.get.return_value = ChatConfig(persona="test_persona")
@@ -93,7 +93,7 @@ class TestChatPostEndpoint:
             p1,
             p2,
             patch("nous.api.http.routers.chat.chat_stream.ChatConfigFileRepository") as mock_repo_cls,
-            patch("nous.api.http.routers.tts.kickoff_caption_task"),
+            patch("nous.api.http.routers.media.tts.kickoff_caption_task"),
             patch.object(ChatService, "chat", slow_chat),
         ):
             mock_repo_cls.return_value.get.return_value = ChatConfig(persona="test_persona")

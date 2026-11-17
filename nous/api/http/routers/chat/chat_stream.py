@@ -91,7 +91,7 @@ async def chat_endpoint(request: Request) -> JSONResponse:
         return JSONResponse({"detail": "message is required"}, status_code=400)
 
     try:
-        from nous.api.http.routers.tts import kickoff_caption_task
+        from nous.api.http.routers.media.tts import kickoff_caption_task
 
         kickoff_caption_task(persona, ctx, user_message)
     except Exception:

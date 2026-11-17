@@ -38,7 +38,7 @@ def _make_app(settings: Settings | None = None) -> TestClient:
     if settings is None:
         settings = _make_settings()
 
-    from nous.api.http.routers.events import register_events_routes
+    from nous.api.http.routers.chat.events import register_events_routes
 
     mcp = MemoryFastMCP("test")
 
@@ -96,7 +96,7 @@ class TestPluginAuthCommon:
 
     def _post(self, client: TestClient, headers: dict | None = None):
         with patch(
-            "nous.api.http.routers.events._safe_get_context",
+            "nous.api.http.routers.chat.events._safe_get_context",
             return_value=_mock_context("herta-test", client._settings),  # noqa
         ):
             return client.post(
@@ -115,7 +115,7 @@ class TestPluginAuthDisabled:
         settings = _make_settings()
         client = _make_app(settings)
         with patch(
-            "nous.api.http.routers.events._safe_get_context",
+            "nous.api.http.routers.chat.events._safe_get_context",
             return_value=_mock_context("herta-test", settings),
         ):
             resp = client.post("/api/events/ingest", json=_valid_body())
@@ -134,7 +134,7 @@ class TestPluginAuthEnabledNoKey:
         settings = _make_settings(plugin=self.PLUGIN)
         client = _make_app(settings)
         with patch(
-            "nous.api.http.routers.events._safe_get_context",
+            "nous.api.http.routers.chat.events._safe_get_context",
             return_value=_mock_context("herta-test", settings),
         ):
             resp = client.post("/api/events/ingest", json=_valid_body())
@@ -156,7 +156,7 @@ class TestPluginAuthValidKey:
         settings = _make_settings(plugin=self.PLUGIN)
         client = _make_app(settings)
         with patch(
-            "nous.api.http.routers.events._safe_get_context",
+            "nous.api.http.routers.chat.events._safe_get_context",
             return_value=_mock_context("herta-test", settings),
         ):
             return client.post("/api/events/ingest", json=_valid_body(), headers=headers or {})

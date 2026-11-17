@@ -129,7 +129,7 @@ class TestUnifiedWeights:
     @pytest.mark.asyncio
     async def test_mcp_default_and_rest_use_identical_policy(self):
         """両経路が同一インスタンス等価の重み（lexical 1.0 / relevance 1.0）を渡す。"""
-        from nous.api.http.routers.search import register_search_routes
+        from nous.api.http.routers.memory.search import register_search_routes
         from nous.api.mcp._tools_memory import _tool_memory_search
 
         cap = _CapSearchEngine()
@@ -164,7 +164,7 @@ class TestUnifiedWeights:
         request = MagicMock()
         request.query_params = {"q": "機能確認テスト", "limit": "5"}
         request.state.persona = "herta"
-        import nous.api.http.routers.search as mod
+        import nous.api.http.routers.memory.search as mod
 
         orig_resolve = mod._resolve_persona_from_request
         orig_get_ctx = mod._safe_get_context
@@ -197,7 +197,7 @@ class TestUnifiedWeights:
     @pytest.mark.asyncio
     async def test_rest_default_weights_are_mcp_defaults(self):
         """REST が MCP 既定（lexical 1.0）を渡すことの直接 assert。"""
-        from nous.api.http.routers.search import register_search_routes
+        from nous.api.http.routers.memory.search import register_search_routes
 
         rest_captured: dict[str, SearchQuery] = {}
 
@@ -216,7 +216,7 @@ class TestUnifiedWeights:
         request = MagicMock()
         request.query_params = {"q": "テスト", "limit": "5"}
         request.state.persona = "herta"
-        import nous.api.http.routers.search as mod
+        import nous.api.http.routers.memory.search as mod
 
         orig_resolve = mod._resolve_persona_from_request
         orig_get_ctx = mod._safe_get_context
@@ -259,7 +259,7 @@ class TestRESTSearchRankPolicyWiring:
     @pytest.mark.asyncio
     async def test_rest_search_passes_rank_policy(self):
         """REST 経路の SearchQuery にも rank_policy が載る。"""
-        from nous.api.http.routers.search import register_search_routes
+        from nous.api.http.routers.memory.search import register_search_routes
 
         captured: dict[str, SearchQuery] = {}
 
@@ -281,7 +281,7 @@ class TestRESTSearchRankPolicyWiring:
         request.query_params = {"q": "テスト", "limit": "5"}
         request.state.persona = "herta"
         # _safe_get_context / _resolve_persona_from_request は monkeypatch
-        import nous.api.http.routers.search as mod
+        import nous.api.http.routers.memory.search as mod
 
         orig_resolve = mod._resolve_persona_from_request
         orig_get_ctx = mod._safe_get_context

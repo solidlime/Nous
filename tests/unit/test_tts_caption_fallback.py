@@ -1,6 +1,6 @@
 import pytest
 
-from nous.api.http.routers.tts import _resolve_emotion_mode, build_style_anchor
+from nous.api.http.routers.media.tts import _resolve_emotion_mode, build_style_anchor
 
 pytestmark = pytest.mark.unit
 

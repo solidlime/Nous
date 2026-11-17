@@ -101,7 +101,7 @@ class TestHookPersona:
 class TestSSEPersona:
     @pytest.mark.asyncio
     async def test_query_param_filters(self) -> None:
-        from nous.api.http.routers.memory import _wiring_stream_gen
+        from nous.api.http.routers.memory.memory import _wiring_stream_gen
 
         wiring_events.emit("link_fire", source="a", meta={"persona": "p1"})
         wiring_events.emit("link_fire", source="b", meta={"persona": "p2"})
@@ -113,7 +113,7 @@ class TestSSEPersona:
 
     @pytest.mark.asyncio
     async def test_no_param_streams_all(self) -> None:
-        from nous.api.http.routers.memory import register_memory_routes
+        from nous.api.http.routers.memory.memory import register_memory_routes
 
         seen: dict = {}
 
@@ -129,8 +129,8 @@ class TestSSEPersona:
         wiring_events.emit("link_fire", source="a", meta={"persona": "p1"})
         wiring_events.emit("link_fire", source="legacy")
         with (
-            patch("nous.api.http.routers.memory._resolve_persona_from_request", return_value="test"),
-            patch("nous.api.http.routers.memory._safe_get_context", return_value=MagicMock()),
+            patch("nous.api.http.routers.memory.memory._resolve_persona_from_request", return_value="test"),
+            patch("nous.api.http.routers.memory.memory._safe_get_context", return_value=MagicMock()),
         ):
             response = await seen["/api/memory/wiring/stream"](_FakeRequest(disconnect_after=1))  # type: ignore[arg-type]
         chunks = [c async for c in response.body_iterator]
@@ -157,7 +157,7 @@ class TestSSEAuth:
 
                 return deco
 
-        from nous.api.http.routers.memory import register_memory_routes
+        from nous.api.http.routers.memory.memory import register_memory_routes
 
         register_memory_routes(FakeMCP())
         self.seen = seen
@@ -182,8 +182,8 @@ class TestSSEAuth:
     def _no_context(self):
         """Bypass AppContextRegistry — endpoint auth is what's under test."""
         with (
-            patch("nous.api.http.routers.memory._safe_get_context", return_value=MagicMock()),
-            patch("nous.api.http.routers.memory._wiring_stream_gen"),
+            patch("nous.api.http.routers.memory.memory._safe_get_context", return_value=MagicMock()),
+            patch("nous.api.http.routers.memory.memory._wiring_stream_gen"),
         ):
             yield
 

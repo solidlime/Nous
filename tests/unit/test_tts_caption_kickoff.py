@@ -4,7 +4,7 @@ import types
 
 import pytest
 
-from nous.api.http.routers import tts as tts_mod
+from nous.api.http.routers.media import tts as tts_mod
 
 pytestmark = pytest.mark.unit
 

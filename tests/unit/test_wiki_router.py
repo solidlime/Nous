@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from nous.api.http.routers.wiki import register_wiki_routes
+from nous.api.http.routers.memory.wiki import register_wiki_routes
 
 
 class _FakeMcp:
@@ -54,31 +54,31 @@ def _request(persona="herta", auth="Bearer k"):
 class TestWikiRunAuth:
     @pytest.mark.asyncio
     async def test_missing_context_404(self, route):
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=None):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=None):
             resp = await route(_request())
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
     async def test_plugin_disabled_403(self, route):
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=_ctx(plugin_enabled=False)):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=_ctx(plugin_enabled=False)):
             resp = await route(_request())
         assert resp.status_code == 403
 
     @pytest.mark.asyncio
     async def test_missing_key_401(self, route):
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=_ctx()):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=_ctx()):
             resp = await route(_request(auth=""))
         assert resp.status_code == 401
 
     @pytest.mark.asyncio
     async def test_wrong_key_401(self, route):
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=_ctx()):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=_ctx()):
             resp = await route(_request(auth="Bearer wrong"))
         assert resp.status_code == 401
 
     @pytest.mark.asyncio
     async def test_wiki_disabled_409(self, route):
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=_ctx(wiki_enabled=False)):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=_ctx(wiki_enabled=False)):
             resp = await route(_request())
         assert resp.status_code == 409
 
@@ -87,8 +87,8 @@ class TestWikiRunAuth:
         ctx = _ctx()
         thread = MagicMock()
         with (
-            patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx),
-            patch("nous.api.http.routers.wiki.threading.Thread", return_value=thread) as thr,
+            patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx),
+            patch("nous.api.http.routers.memory.wiki.threading.Thread", return_value=thread) as thr,
         ):
             resp = await route(_request())
         assert resp.status_code == 202
@@ -131,14 +131,14 @@ class TestWikiReadApi:
     @pytest.mark.asyncio
     async def test_list_unknown_persona_404(self, read_routes):
         mcp, _ = read_routes
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=None):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=None):
             resp = await mcp.route("/api/wiki/{persona}", "GET")(_get_request())
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
     async def test_list_empty(self, read_routes):
         mcp, ctx = read_routes
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx):
             resp = await mcp.route("/api/wiki/{persona}", "GET")(_get_request())
         assert resp.status_code == 200
         import json
@@ -150,7 +150,7 @@ class TestWikiReadApi:
     async def test_list_returns_page_meta(self, read_routes):
         mcp, ctx = read_routes
         _write_page(tmp_path=ctx.settings.data_root)
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx):
             resp = await mcp.route("/api/wiki/{persona}", "GET")(_get_request())
         import json
 
@@ -165,7 +165,7 @@ class TestWikiReadApi:
     async def test_page_returns_body(self, read_routes):
         mcp, ctx = read_routes
         _write_page(tmp_path=ctx.settings.data_root)
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx):
             resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "GET")(_get_request(slug="project-nous"))
         assert resp.status_code == 200
         import json
@@ -177,14 +177,14 @@ class TestWikiReadApi:
     @pytest.mark.asyncio
     async def test_page_missing_404(self, read_routes):
         mcp, ctx = read_routes
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx):
             resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "GET")(_get_request(slug="nope"))
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
     async def test_page_traversal_404(self, read_routes):
         mcp, ctx = read_routes
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx):
             resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "GET")(_get_request(slug="../secrets"))
         assert resp.status_code == 404
 
@@ -221,14 +221,14 @@ class TestWikiSaveApi:
     @pytest.mark.asyncio
     async def test_missing_persona_404(self, read_routes):
         mcp, _ = read_routes
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=None):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=None):
             resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "PUT")(_put_request())
         assert resp.status_code in (404, 405)
 
     @pytest.mark.asyncio
     async def test_body_required_400(self, read_routes):
         mcp, ctx = read_routes
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx):
             resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "PUT")(_put_request(payload={"title": "x"}))
         assert resp.status_code == 400
 
@@ -245,8 +245,8 @@ class TestWikiSaveApi:
             calls.append((persona, slug, title, body))
 
         with (
-            patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx),
-            patch("nous.api.http.routers.wiki.async_sync_page", _fake_sync),
+            patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx),
+            patch("nous.api.http.routers.memory.wiki.async_sync_page", _fake_sync),
         ):
             resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "PUT")(
                 _put_request(payload={"title": "直した題名", "body": "誤字を直した本文"})
@@ -281,8 +281,8 @@ class TestWikiSaveApi:
             return None
 
         with (
-            patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx),
-            patch("nous.api.http.routers.wiki.async_sync_page", _fake_sync),
+            patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx),
+            patch("nous.api.http.routers.memory.wiki.async_sync_page", _fake_sync),
         ):
             resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "PUT")(
                 _put_request(payload={"body": "編集した本文"})
@@ -297,7 +297,7 @@ class TestWikiSaveApi:
     @pytest.mark.asyncio
     async def test_traversal_rejected(self, read_routes):
         mcp, ctx = read_routes
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx):
             resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "PUT")(
                 _put_request(slug="../evil", payload={"body": "x"})
             )
@@ -321,7 +321,7 @@ class TestWikiDeleteApi:
     @pytest.mark.asyncio
     async def test_missing_persona_404(self, read_routes):
         mcp, _ = read_routes
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=None):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=None):
             resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "DELETE")(_delete_request())
         assert resp.status_code == 404
 
@@ -329,7 +329,7 @@ class TestWikiDeleteApi:
     async def test_missing_page_404(self, read_routes):
         """無い slug を 200 で返さない（呼び出し側が「消えた」と誤認する）。"""
         mcp, ctx = read_routes
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx):
             resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "DELETE")(_delete_request(slug="no-such-page"))
         assert resp.status_code == 404
 
@@ -346,8 +346,8 @@ class TestWikiDeleteApi:
             dropped.append((persona, slug))
 
         with (
-            patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx),
-            patch("nous.api.http.routers.wiki.async_drop_page", _fake_drop),
+            patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx),
+            patch("nous.api.http.routers.memory.wiki.async_drop_page", _fake_drop),
         ):
             resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "DELETE")(_delete_request())
             assert resp.status_code == 200
@@ -366,14 +366,14 @@ class TestWikiDeleteApi:
         """index は生成物。消させない。"""
         mcp, ctx = read_routes
         _write_page(tmp_path=ctx.settings.data_root)
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx):
             resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "DELETE")(_delete_request(slug="index"))
         assert resp.status_code == 400
 
     @pytest.mark.asyncio
     async def test_traversal_rejected(self, read_routes):
         mcp, ctx = read_routes
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx):
             resp = await mcp.route("/api/wiki/{persona}/{slug:path}", "DELETE")(_delete_request(slug="../evil"))
         assert resp.status_code == 404
 
@@ -405,7 +405,7 @@ class TestWikiSearchApi:
             body="今日は索引を直した",
             tags=("journal",),
         )
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx):
             resp = await mcp.route("/api/wiki/{persona}", "GET")(_get_request(q="索引"))
         payload = json.loads(bytes(resp.body))
         slugs = {p["slug"] for p in payload["pages"]}
@@ -421,7 +421,7 @@ class TestWikiSearchApi:
 
         mcp, ctx = read_routes
         _write_page(tmp_path=ctx.settings.data_root)
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx):
             resp = await mcp.route("/api/wiki/{persona}", "GET")(_get_request(q="存在しない語"))
         assert resp.status_code == 200
         assert json.loads(bytes(resp.body))["pages"] == []
@@ -431,7 +431,7 @@ class TestWikiSearchApi:
         """ユーザー入力を正規表現として解釈しない（'(' だけで 500 にならない）。"""
         mcp, ctx = read_routes
         _write_page(tmp_path=ctx.settings.data_root, body="正規表現の ( を本文に入れた")
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx):
             resp = await mcp.route("/api/wiki/{persona}", "GET")(_get_request(q="("))
         assert resp.status_code == 200
 
@@ -441,7 +441,7 @@ class TestWikiSearchApi:
 
         mcp, ctx = read_routes
         _write_page(tmp_path=ctx.settings.data_root)
-        with patch("nous.api.http.routers.wiki._safe_get_context", return_value=ctx):
+        with patch("nous.api.http.routers.memory.wiki._safe_get_context", return_value=ctx):
             resp = await mcp.route("/api/wiki/{persona}", "GET")(_get_request(q="   "))
         assert len(json.loads(bytes(resp.body))["pages"]) == 1
 

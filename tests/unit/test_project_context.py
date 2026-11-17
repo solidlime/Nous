@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from nous.api.http.routers.project_context import (
+from nous.api.http.routers.chat.project_context import (
     _item,
     _memories_with,
     _project_tag,

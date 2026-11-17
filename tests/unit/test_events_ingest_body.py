@@ -42,10 +42,10 @@ def _post_with_event(env: SimpleNamespace, event: dict) -> tuple[int, dict, Sess
     try:
         with (
             patch(
-                "nous.api.http.routers.events._safe_get_context",
+                "nous.api.http.routers.chat.events._safe_get_context",
                 return_value=env.ctx,
             ),
-            patch("nous.api.http.routers.events.SessionEventRepository") as repo_cls,
+            patch("nous.api.http.routers.chat.events.SessionEventRepository") as repo_cls,
         ):
             resp = env.client.post("/api/events/ingest", json=body, headers={"Authorization": "Bearer k"})
             inserted = None

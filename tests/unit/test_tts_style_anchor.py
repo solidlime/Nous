@@ -2,8 +2,8 @@
 
 import inspect
 
-from nous.api.http.routers import tts as tts_mod
-from nous.api.http.routers.tts import _emotion_bucket, build_style_anchor
+from nous.api.http.routers.media import tts as tts_mod
+from nous.api.http.routers.media.tts import _emotion_bucket, build_style_anchor
 
 
 def test_anchor_contains_consistency_suffix():

@@ -2,7 +2,7 @@
 
 import pytest
 
-from nous.api.http.routers.session_events import _parse_int_param
+from nous.api.http.routers.chat.session_events import _parse_int_param
 
 pytestmark = pytest.mark.unit
 

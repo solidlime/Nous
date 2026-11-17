@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from nous.api.http.routers import search as search_router
+from nous.api.http.routers.memory import search as search_router
 
 
 class _Ok:

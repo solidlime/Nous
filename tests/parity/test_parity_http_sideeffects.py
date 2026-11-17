@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from nous.api.http.routers import memory as memory_router
+from nous.api.http.routers.memory import memory as memory_router
 from nous.domain.shared.result import Success
 from tests.parity.conftest import make_memory
 

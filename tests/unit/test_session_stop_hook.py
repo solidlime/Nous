@@ -21,7 +21,7 @@ pytestmark = pytest.mark.unit
 
 def _make_app(settings: Settings) -> TestClient:
     """Build an app with events routes; get_settings は settings に差し替え."""
-    from nous.api.http.routers.events import register_events_routes
+    from nous.api.http.routers.chat.events import register_events_routes
 
     mcp = MemoryFastMCP("test")
     register_events_routes(mcp)
@@ -61,7 +61,7 @@ async def _add_messages(db, persona: str, session_id: str, *contents: str):
 class TestSummarizeSessionEnd:
     async def test_summarizes_window_messages(self, sqlite_conn):
         """V1: ウィンドウ内メッセージが summarize_and_store に渡される。"""
-        from nous.api.http.routers.events import _summarize_session_end
+        from nous.api.http.routers.chat.events import _summarize_session_end
 
         db = sqlite_conn.get_memory_db()
         await _add_messages(db, "herta", "sess_sum_1", "hello", "hi there")
@@ -89,7 +89,7 @@ class TestSummarizeSessionEnd:
 
     async def test_empty_window_skips(self, sqlite_conn):
         """空ウィンドウはスキップ（Phase A 最小実装）。"""
-        from nous.api.http.routers.events import _summarize_session_end
+        from nous.api.http.routers.chat.events import _summarize_session_end
 
         db = sqlite_conn.get_memory_db()
         ctx = MagicMock()
@@ -108,7 +108,7 @@ class TestSummarizeSessionEnd:
 
     async def test_config_load_failure_is_suppressed(self, sqlite_conn):
         """config 取得失敗は非致命（suppress）でスキップ。"""
-        from nous.api.http.routers.events import _summarize_session_end
+        from nous.api.http.routers.chat.events import _summarize_session_end
 
         db = sqlite_conn.get_memory_db()
         await _add_messages(db, "herta", "sess_sum_3", "hello")
@@ -143,11 +143,11 @@ class TestIngestSessionStopHook:
         client = _make_app(self.SETTINGS)
         with (
             patch(
-                "nous.api.http.routers.events._safe_get_context",
+                "nous.api.http.routers.chat.events._safe_get_context",
                 return_value=_mock_ctx(self.SETTINGS),
             ),
             patch(
-                "nous.api.http.routers.events._summarize_session_end",
+                "nous.api.http.routers.chat.events._summarize_session_end",
                 new=AsyncMock(),
             ) as mock_hook,
             client,

@@ -3,8 +3,8 @@ import types
 
 import pytest
 
-from nous.api.http.routers import tts as tts_mod
-from nous.api.http.routers.tts import _resolve_tts_override
+from nous.api.http.routers.media import tts as tts_mod
+from nous.api.http.routers.media.tts import _resolve_tts_override
 
 pytestmark = pytest.mark.unit
 
@@ -133,7 +133,7 @@ def test_endpoints_share_override_and_mode_helpers():
 
 
 def test_override_cache_key_uses_resolved_values():
-    from nous.api.http.routers.tts import _tts_cache_key
+    from nous.api.http.routers.media.tts import _tts_cache_key
 
     k1 = _tts_cache_key(text="a", emotion="joy", caption="明るく", voice_speed=1.0, voice_override=None)
     k2 = _tts_cache_key(text="a", emotion="joy", caption="暗く", voice_speed=1.0, voice_override=None)

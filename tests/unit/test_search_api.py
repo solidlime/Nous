@@ -178,7 +178,7 @@ async def test_search_project_param_invalid_is_ignored(client, monkeypatch):
 
 def test_apply_project_boost_is_pure_for_rows_without_project_tag():
     """タグ無し行は素通り（順序も値も変えない）。"""
-    from nous.api.http.routers.search import apply_project_boost
+    from nous.api.http.routers.memory.search import apply_project_boost
 
     rows = [{"memory": {"key": "a", "tags": ["misc"]}, "score": 1.0, "source": "keyword"}]
     assert apply_project_boost(rows, "") == rows

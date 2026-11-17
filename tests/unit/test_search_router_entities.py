@@ -21,7 +21,7 @@ from typing import Any
 
 import pytest
 
-from nous.api.http.routers import search as search_router
+from nous.api.http.routers.memory import search as search_router
 from nous.domain.memory.entities import Memory
 from nous.domain.search.engine import SearchResult
 

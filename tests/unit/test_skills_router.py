@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from nous.api.http.routers import skills as skills_router
+from nous.api.http.routers.persona import skills as skills_router
 
 pytestmark = pytest.mark.unit
 

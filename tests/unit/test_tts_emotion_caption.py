@@ -1,6 +1,6 @@
 """tests/unit/test_tts_emotion_caption.py"""
 
-from nous.api.http.routers.tts import EMOTION_TONE_HINTS, build_caption_emotion_directive
+from nous.api.http.routers.media.tts import EMOTION_TONE_HINTS, build_caption_emotion_directive
 
 
 def test_directive_contains_emotion_and_tone():

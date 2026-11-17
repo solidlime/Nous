@@ -116,7 +116,7 @@ class _FakeRequest:
 class TestSSEFlush:
     @pytest.mark.asyncio
     async def test_initial_flush(self) -> None:
-        from nous.api.http.routers.memory import _wiring_stream_gen
+        from nous.api.http.routers.memory.memory import _wiring_stream_gen
 
         wiring_events.emit("link_fire", source="a", target="b", weight=0.6)
         wiring_events.emit("ppr_hit", source="s", weight=0.4)
@@ -129,7 +129,7 @@ class TestSSEFlush:
         assert first["kind"] == "link_fire" and first["source"] == "a"
 
     def test_route_registered(self) -> None:
-        from nous.api.http.routers.memory import register_memory_routes
+        from nous.api.http.routers.memory.memory import register_memory_routes
 
         seen: dict = {}
 
@@ -146,7 +146,7 @@ class TestSSEFlush:
 
     @pytest.mark.asyncio
     async def test_route_handler_flush(self) -> None:
-        from nous.api.http.routers.memory import register_memory_routes
+        from nous.api.http.routers.memory.memory import register_memory_routes
 
         seen: dict = {}
 
@@ -162,8 +162,8 @@ class TestSSEFlush:
         handler = seen["/api/memory/wiring/stream"]
         wiring_events.emit("recall_boost", source="m", weight=0.8)
         with (
-            patch("nous.api.http.routers.memory._resolve_persona_from_request", return_value="test"),
-            patch("nous.api.http.routers.memory._safe_get_context", return_value=MagicMock()),
+            patch("nous.api.http.routers.memory.memory._resolve_persona_from_request", return_value="test"),
+            patch("nous.api.http.routers.memory.memory._safe_get_context", return_value=MagicMock()),
         ):
             response = await handler(_FakeRequest(disconnect_after=1))  # type: ignore[arg-type]
         assert response.media_type == "text/event-stream"

@@ -3,7 +3,7 @@ import types
 
 import pytest
 
-from nous.api.http.routers.tts import CaptionResult, _resolve_caption
+from nous.api.http.routers.media.tts import CaptionResult, _resolve_caption
 
 pytestmark = pytest.mark.unit
 

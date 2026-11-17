@@ -1,6 +1,6 @@
 import pytest
 
-from nous.api.http.routers.tts import (
+from nous.api.http.routers.media.tts import (
     _clamp01,
     _emotion_bucket,
     build_caption_emotion_directive,

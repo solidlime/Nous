@@ -5,7 +5,7 @@ import wave
 
 import pytest
 
-from nous.api.http.routers.tts import _concat_wav
+from nous.api.http.routers.media.tts import _concat_wav
 
 pytestmark = pytest.mark.unit
 

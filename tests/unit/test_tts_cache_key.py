@@ -2,8 +2,8 @@
 
 import pytest
 
-from nous.api.http.routers import tts as tts_mod
-from nous.api.http.routers.tts import _find_cache_file, _tts_cache_key
+from nous.api.http.routers.media import tts as tts_mod
+from nous.api.http.routers.media.tts import _find_cache_file, _tts_cache_key
 
 pytestmark = pytest.mark.unit
 
@@ -33,7 +33,7 @@ def test_same_voice_same_key():
 
 
 def test_full_hash_filename_and_resolved_voice():
-    from nous.api.http.routers.tts import _tts_cache_key
+    from nous.api.http.routers.media.tts import _tts_cache_key
 
     k1 = _tts_cache_key(
         text="a",
@@ -119,7 +119,7 @@ def test_cache_key_version_breaks_old_entries():
 
 
 def test_cache_key_ignores_chunking_params():
-    from nous.api.http.routers.tts import _tts_cache_key
+    from nous.api.http.routers.media.tts import _tts_cache_key
 
     def _call():
         return _tts_cache_key(
