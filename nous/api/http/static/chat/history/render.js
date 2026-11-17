@@ -113,6 +113,11 @@ function _appendSegmentsToBubble(msg, msgDiv) {
         // 画像生成結果があればレンダリング（履歴復元時）
         if (seg.id && msg.tool_calls) {
           var tc = msg.tool_calls.find(function(t) { return t.id === seg.id; });
+          // エージェントが渡したファイルのチップ
+          if (tc && tc.result_raw && tc.result_raw.attachments && tc.result_raw.attachments.length
+              && N.Chat.tools && N.Chat.tools.attachChips) {
+            toolDiv.parentNode.insertBefore(N.Chat.tools.attachChips(tc.result_raw.attachments), toolDiv.nextSibling);
+          }
           if (tc && tc.result_raw && tc.result_raw.images && tc.result_raw.images.length) {
             tc.result_raw.images.forEach(function(img) {
               var card = document.createElement("div");

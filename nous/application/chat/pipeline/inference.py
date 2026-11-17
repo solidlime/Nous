@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from nous.application.chat.events import (
+    AttachmentSSE,
     ErrorSSE,
     ImageGenResultSSE,
     ImageGenStartSSE,
@@ -57,7 +58,14 @@ class InferenceStep:
         registry: ToolRegistry,
         effective_temp: float | None = None,
     ) -> AsyncIterator[
-        TextDeltaSSE | ThinkingDeltaSSE | ToolCallSSE | ToolResultSSE | ErrorSSE | ImageGenStartSSE | ImageGenResultSSE
+        TextDeltaSSE
+        | ThinkingDeltaSSE
+        | ToolCallSSE
+        | ToolResultSSE
+        | AttachmentSSE
+        | ErrorSSE
+        | ImageGenStartSSE
+        | ImageGenResultSSE
     ]:
         api_key = config.get_effective_api_key()
         if not api_key:
@@ -425,6 +433,7 @@ class InferenceStep:
 
         async def _exec_one(tc: ToolCallEvent):
             denied = await self._approval_denied(ctx, config, tc)
+            # pi-lens-ignore: python-sql-injection — registry はツール実行器で SQL ではない
             result = denied if denied is not None else await registry.execute(ctx, config, tc.tool_name, tc.tool_input)
             truncated = registry.truncate_result(result, config.tool_result_max_chars)
             return (tc, truncated, result)
@@ -438,9 +447,9 @@ class InferenceStep:
         results: list[tuple[ToolCallEvent, dict, dict]],
         turn_ctx: ChatTurnContext,
         messages: list[LLMMessage],
-    ) -> list[ToolResultSSE | ImageGenResultSSE]:
+    ) -> list[ToolResultSSE | ImageGenResultSSE | AttachmentSSE]:
         """ツール実行結果から SSE・segments・tool_calls_log・LLM 履歴を組み立てる。"""
-        events: list[ToolResultSSE | ImageGenResultSSE] = []
+        events: list[ToolResultSSE | ImageGenResultSSE | AttachmentSSE] = []
         for tc, truncated, tool_result in results:
             # ToolResultSSE must come FIRST so the tool bubble is in the DOM
             # before showImageGenResult tries to insert the image card after it
@@ -463,6 +472,9 @@ class InferenceStep:
             turn_ctx.segments.append(
                 {"type": "tool_result", "name": tc.tool_name, "result": truncated, "id": tc.tool_use_id}
             )
+            # attach_file の戻り値は添付チップとしてユーザーに出す
+            if isinstance(tool_result, dict) and tool_result.get("attachments"):
+                events.append(AttachmentSSE(attachments=tool_result["attachments"], tool_use_id=tc.tool_use_id))
             # result_raw は DB 保存用: base64 を除去し url を残す（SSE では使わない）
             result_for_log = tool_result
             if isinstance(tool_result, dict) and tool_result.get("images"):

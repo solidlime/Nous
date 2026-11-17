@@ -994,6 +994,80 @@ class TestFileServePersonaValidation:
         resp = await client.get("/api/chat/%2e%2e/persona/images/x.png")
         assert resp.status_code == 400
 
+
+@pytest.mark.integration
+class TestAgentFileAttachment:
+    """attach_file が置いたファイルを、既存の配信ルートで取り出せる。"""
+
+    async def test_attach_then_download(self, client, tmp_path):
+        from types import SimpleNamespace
+        from typing import Any
+
+        from nous.application.chat.tools.attachments import _handle_attach_file
+        from nous.domain.config.chat_config import ChatConfig
+
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "report.md").write_text("# hello", encoding="utf-8")
+
+        ctx: Any = SimpleNamespace(persona=PERSONA, session_id="s1")
+        result = await _handle_attach_file(ctx, ChatConfig(workspace_root=str(ws)), {"path": "report.md"})
+
+        assert result["status"] == "ok"
+        resp = await client.get(result["attachments"][0]["url"])
+        assert resp.status_code == 200
+        assert resp.text == "# hello"
+
+    async def test_attach_rejects_outside_workspace(self, client, tmp_path):
+        from types import SimpleNamespace
+        from typing import Any
+
+        from nous.application.chat.tools.attachments import _handle_attach_file
+        from nous.domain.config.chat_config import ChatConfig
+
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        ctx: Any = SimpleNamespace(persona=PERSONA, session_id="s1")
+        result = await _handle_attach_file(ctx, ChatConfig(workspace_root=str(ws)), {"path": "../secret.txt"})
+
+        assert result["status"] == "error"
+
+    async def test_svg_is_served_as_download(self, client, tmp_path):
+        """svg は同一オリジンで実行され得るので許可リストで落とし、必ずダウンロードにする。"""
+        from types import SimpleNamespace
+        from typing import Any
+
+        from nous.application.chat.tools.attachments import _handle_attach_file
+        from nous.domain.config.chat_config import ChatConfig
+
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "x.svg").write_text("<svg onload='alert(1)'/>", encoding="utf-8")
+        ctx: Any = SimpleNamespace(persona=PERSONA, session_id="s1")
+        result = await _handle_attach_file(ctx, ChatConfig(workspace_root=str(ws)), {"path": "x.svg"})
+
+        resp = await client.get(result["attachments"][0]["url"])
+        assert resp.status_code == 200
+        assert resp.headers["content-disposition"].startswith("attachment")
+        assert resp.headers["x-content-type-options"] == "nosniff"
+
+    async def test_png_stays_inline(self, client, tmp_path):
+        from types import SimpleNamespace
+        from typing import Any
+
+        from nous.application.chat.tools.attachments import _handle_attach_file
+        from nous.domain.config.chat_config import ChatConfig
+
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "x.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        ctx: Any = SimpleNamespace(persona=PERSONA, session_id="s1")
+        result = await _handle_attach_file(ctx, ChatConfig(workspace_root=str(ws)), {"path": "x.png"})
+
+        resp = await client.get(result["attachments"][0]["url"])
+        assert resp.status_code == 200
+        assert "content-disposition" not in resp.headers
+
     # d7: export削除に伴い traversal テストも削除
 
 

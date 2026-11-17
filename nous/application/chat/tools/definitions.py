@@ -508,6 +508,22 @@ WORKSPACE_TOOLS: list[ToolDefinition] = [
             "required": ["path", "old_text", "new_text"],
         },
     ),
+    ToolDefinition(
+        name="attach_file",
+        description=(
+            "ワークスペース内のファイルを会話に添付してユーザーに渡す（チャットにダウンロード用チップが出る）。"
+            "作った成果物を渡すときは、本文でファイル名と中身の要点に触れること。"
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "ワークスペースからの相対パス"},
+                "name": {"type": "string", "description": "ユーザーに見せるファイル名（既定は元の名前）"},
+                "caption": {"type": "string", "description": "チップに添える一言"},
+            },
+            "required": ["path"],
+        },
+    ),
 ]
 
 

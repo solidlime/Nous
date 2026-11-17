@@ -1411,6 +1411,47 @@ input[type="range"].chat-field-input:focus {
 .chat-attachment-badge .attach-remove:hover {
   color: var(--accent-red);
 }
+/* エージェントが渡したファイル（attach_file の結果・ツールバブルの直下に差し込まれる）
+   画像・音声・動画・PDF 以外は配信ルートが Content-Disposition: attachment を付けるので、
+   押すとダウンロードになる（HTML をその場で描画させないため）。 */
+.chat-file-attach {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 10px 8px;
+}
+.chat-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 260px;
+  padding: 6px 10px;
+  background: var(--glass-bg-subtle);
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+.chat-file-chip:hover {
+  border-color: var(--accent-blue);
+  color: var(--text-primary);
+}
+.chat-file-chip .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-file-chip .size {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  flex-shrink: 0;
+}
+.chat-file-caption {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
 #chat-input.dragover {
   border-color: var(--accent-blue);
   background: rgba(0, 122, 255, 0.08);

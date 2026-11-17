@@ -224,3 +224,18 @@ class ImageGenResultSSE:
                 "is_self_portrait": self.self_portrait,
             },
         )
+
+
+@dataclass
+class AttachmentSSE:
+    """エージェントがユーザーに渡したファイル（attach_file ツール結果）。"""
+
+    attachments: list  # [{filename, url, mime_type, size, caption?}]
+    tool_use_id: str = ""
+    type: str = "file_attach"
+
+    def to_sse(self) -> str:
+        return _sse_encode(
+            "file_attach",
+            {"attachments": self.attachments, "tool_use_id": self.tool_use_id},
+        )

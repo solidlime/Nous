@@ -17,6 +17,22 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# その場で描画してよい MIME（許可リスト）。SVG はスクリプトを運べるので含めない。
+_INLINE_MIME = frozenset(
+    {
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "image/avif",
+        "image/bmp",
+        "audio/mpeg",
+        "audio/wav",
+        "video/mp4",
+        "application/pdf",
+    }
+)
+
 
 # ── pure logic layer (_do_*) ───────────────────────────────────────
 
@@ -614,8 +630,13 @@ async def attachment_upload(request: Request) -> JSONResponse:
 
 
 async def attachment_serve(request: Request) -> Response:
-    """GET /api/chat/{persona}/attachment/{filename} — serve uploaded file."""
+    """GET /api/chat/{persona}/attachment/{filename} — serve uploaded file.
+
+    エージェントも uploads に書ける（attach_file）ため、HTML 等を**そのまま描画させない**。
+    表示するのは画像・音声・動画・PDF だけで、それ以外は attachment にする。
+    """
     import os
+    from urllib.parse import quote
 
     from starlette.responses import FileResponse
 
@@ -632,7 +653,11 @@ async def attachment_serve(request: Request) -> Response:
     if result is None:
         return JSONResponse({"error": "File not found"}, status_code=404)
 
-    return FileResponse(result["file_path"], media_type=result["mime_type"])
+    # nosniff は middleware（nous/api/http/middleware.py）が全レスポンスに付ける
+    headers: dict[str, str] = {}
+    if result["mime_type"] not in _INLINE_MIME:
+        headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(safe_name)}"
+    return FileResponse(result["file_path"], media_type=result["mime_type"], headers=headers)
 
 
 async def memory_image_serve(request: Request) -> Response:

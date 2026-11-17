@@ -179,6 +179,8 @@ function _handleChatEvent(evt) {
     N.Chat.tools.showGenSpinner(evt);
   } else if (evt.type === "image_gen_result") {
     N.Chat.tools.showGenResult(evt);
+  } else if (evt.type === "file_attach") {
+    N.Chat.tools.showAttach(evt);
   } else if (evt.type === "debug_info") {
     console.debug("[debug_info received]", Object.keys(evt));
     N.Chat.core.debug(t.assistantDiv, evt);

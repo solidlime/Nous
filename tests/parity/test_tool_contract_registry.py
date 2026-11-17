@@ -38,7 +38,7 @@ from nous.domain.tools.registry import (
 # search_tools は ToolRegistry（チャット経路）専用で HTTP からは解決しない。
 # workspace ツールと delegate は workspace_root を設定したときだけ公開される設定依存ツール。
 # HTTP /tool は設定を持たない経路なので、dispatch に居ても HTTP 面（registry）には現れない。
-_CONDITIONAL_TOOLS = frozenset({"bash", "read_file", "write_file", "edit_file", "delegate", "sandbox"})
+_CONDITIONAL_TOOLS = frozenset({"bash", "read_file", "write_file", "edit_file", "attach_file", "delegate", "sandbox"})
 _HTTP_EXECUTABLE = (frozenset(_BUILTIN_DISPATCH) | frozenset(_MCP_SHARED_TOOLS)) - _CONDITIONAL_TOOLS
 
 

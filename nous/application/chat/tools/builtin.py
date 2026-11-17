@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from nous.api.mcp._tools_skill import _tool_invoke_skill
 from nous.api.mcp.tools import TOOL_DISPATCH
+from nous.application.chat.tools.attachments import _handle_attach_file
 from nous.application.chat.tools.definitions import _NOUS_TOOL_NAMES
 from nous.application.chat.tools.delegate import _handle_delegate
 from nous.application.chat.tools.sandbox import handle_sandbox
@@ -134,7 +135,7 @@ def truncate_tool_result(result: dict, max_chars: int) -> dict:
     text_str = json.dumps(text_parts, ensure_ascii=False)
     if len(text_str) > max_chars:
         text_str = text_str[:max_chars] + "... [truncated]"
-    output = {"content": text_str}
+    output: dict[str, object] = {"content": text_str}
     if "content_base64" in result:
         ct = result.get("content_type", "image/png")
         output["content_base64"] = _image_ref(result["content_base64"], ct)
@@ -435,6 +436,7 @@ _BUILTIN_DISPATCH: dict[str, Any] = {
     "read_file": _handle_read_file,
     "write_file": _handle_write_file,
     "edit_file": _handle_edit_file,
+    "attach_file": _handle_attach_file,
     "delegate": _handle_delegate,
     "web_search": handle_web_search,
     "fetch_content": handle_fetch_content,

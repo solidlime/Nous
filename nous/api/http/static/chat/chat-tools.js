@@ -4,13 +4,11 @@
    Extracted from chat.js (Phase 3, Batch 2)
    ================================================================= */
 ;(function(N) {
+"use strict";
 var C = N.Core;
 var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
-var showConfirm = C.showConfirm, showAlert = C.showAlert;
-var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
 var findChatLogContainer = N.Chat.ui && N.Chat.ui.findLog;
 var scrollToBottom = N.Chat.ui && N.Chat.ui.scrollToBottom;
-"use strict";
 var S = window.S;
 
 var CHAT = N.Chat.state;
@@ -61,7 +59,7 @@ function appendToolEvent(eventType, data, targetDiv) {
     let inputStr;
     try {
       inputStr = JSON.stringify(data.input, null, 2);
-    } catch (e) {
+    } catch {
       inputStr = String(data.input);
     }
     safeSetHTML(div,
@@ -104,7 +102,7 @@ function appendToolEvent(eventType, data, targetDiv) {
         typeof data.result === "object"
           ? JSON.stringify(data.result, null, 2)
           : String(data.result);
-    } catch (e) {
+    } catch {
       resultStr = String(data.result);
     }
 
@@ -162,28 +160,6 @@ function appendToolEvent(eventType, data, targetDiv) {
 // File tool call handler — specialized rendering for file operations
 // ------------------------------------------------------------------
 function handleFileToolCall(evt) {
-  const icons = {
-    edit: '<i data-lucide="pencil"></i>',
-    create: '<i data-lucide="edit-3"></i>',
-    view: '<i data-lucide="eye"></i>',
-    bash: '<i data-lucide="settings"></i>',
-    powershell: '<i data-lucide="settings"></i>',
-    str_replace_editor: '<i data-lucide="pencil"></i>',
-    delete_file: '<i data-lucide="trash-2"></i>',
-    list_files: '<i data-lucide="folder-open"></i>',
-    write_file: '<i data-lucide="edit-3"></i>',
-    read_file: '<i data-lucide="eye"></i>',
-    glob: '<i data-lucide="search"></i>',
-    grep: '<i data-lucide="search"></i>',
-  };
-  const icon = icons[evt.name] || '<i data-lucide="wrench"></i>';
-  const detail =
-    evt.input?.path ||
-    evt.input?.file_path ||
-    evt.input?.command ||
-    evt.input?.pattern ||
-    evt.input?.glob ||
-    "";
   // チャットにもツールバブルを表示（CodingAgent閉時でも見えるように）
   appendToolEvent("tool_call", evt);
 }
@@ -233,6 +209,56 @@ function showImageGenSpinner(evt) {
   // スピナーをチャットログ末尾に追加
   container.appendChild(spinner);
 
+  if (_isNearBottom(container)) scrollToBottom(container);
+}
+
+function _formatBytes(n) {
+  if (!n && n !== 0) return "";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+// エージェントが渡したファイルのチップ（live と履歴復元で共用）
+function buildAttachChips(list) {
+  var wrap = document.createElement("div");
+  wrap.className = "chat-file-attach";
+  list.forEach(function (att) {
+    var chip = document.createElement("a");
+    chip.className = "chat-file-chip";
+    chip.href = att.url || "#";
+    chip.target = "_blank";
+    chip.rel = "noopener";
+    chip.title = att.filename || "";
+    safeSetHTML(chip, '<i data-lucide="paperclip"></i><span class="name"></span><span class="size"></span>');
+    chip.querySelector(".name").textContent = att.filename || "file";
+    chip.querySelector(".size").textContent = _formatBytes(att.size);
+    wrap.appendChild(chip);
+    if (att.caption) {
+      var cap = document.createElement("span");
+      cap.className = "chat-file-caption";
+      cap.textContent = att.caption;
+      wrap.appendChild(cap);
+    }
+  });
+  N.Core.refreshIcons();
+  return wrap;
+}
+
+function showFileAttach(evt) {
+  var container = findChatLogContainer();
+  if (!container || !evt.attachments || !evt.attachments.length) return;
+  var card = buildAttachChips(evt.attachments);
+  var target = evt.tool_use_id
+    ? container.querySelector('.chat-tool-call[data-tool-id="' + CSS.escape(evt.tool_use_id) + '"]')
+    : null;
+  if (!target) target = container.querySelector('.chat-msg.assistant:last-child .chat-tool-call:last-child');
+  if (target) {
+    target.insertAdjacentElement("afterend", card);
+  } else {
+    var last = container.querySelector('.chat-msg.assistant:last-child');
+    (last || container).appendChild(card);
+  }
   if (_isNearBottom(container)) scrollToBottom(container);
 }
 
@@ -412,6 +438,8 @@ N.Chat.tools = {
   execCode: execCodeBlock,
   showGenSpinner: showImageGenSpinner,
   showGenResult: showImageGenResult,
+  attachChips: buildAttachChips,
+  showAttach: showFileAttach,
   fetch: fetchMcpTools,
   toggle: toggleTool,
   label: toolLabel,
