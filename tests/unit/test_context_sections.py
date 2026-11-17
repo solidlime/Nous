@@ -186,6 +186,7 @@ class TestBodyActionHint:
         state.fatigue = 0.9
         result = await _build(_make_ctx(), state)
         assert "場所: ラウンジ" in result
+        assert "ラウンジにいる。" in result  # #42: カタログの行動ヒントが 1 行入る
         assert "身体の傾向:" in result
 
 
