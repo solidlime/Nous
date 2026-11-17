@@ -145,6 +145,13 @@ def _build_tool_only_fallback(tool_calls_log: list[dict]) -> str:
     return "（ツールは使ったけど、うまく言葉にできなかった…もう一度言って？）"
 
 
+def _empty_turn_text(error: str) -> str:
+    """応答が空で終わったターンに残す1行。原因が分かれば添える。"""
+    reason = error.strip()[:200]
+    suffix = f"（{reason}）" if reason else ""
+    return f"⚠ 応答を作れなかった{suffix}。送信は届いているから、もう一度送ってちょうだい。"
+
+
 class ChatService:
     async def chat_turn(
         self,
@@ -349,14 +356,18 @@ class ChatService:
 
                 # Collect and stream LLM response
                 full_response = ""
+                llm_error = ""
                 async for event in InferenceStep().run(
                     ctx, config, messages, turn_ctx, registry, effective_temp=effective_temp
                 ):
                     yield event.to_sse()
                     # Collect text deltas for chat.llm_response event
-                    from nous.application.chat.events import TextDeltaSSE
+                    from nous.application.chat.events import ErrorSSE, TextDeltaSSE
 
-                    if isinstance(event, TextDeltaSSE):
+                    if isinstance(event, ErrorSSE):
+                        # 落ちた原因はここでしか手に入らない（後段は空文字しか見えない）
+                        llm_error = str(event.message or "")
+                    elif isinstance(event, TextDeltaSSE):
                         full_response += event.content
 
                 # RepairStep: 毎ターンキャラ判定 + 違反時の応答再生成（E: RepairStep）。
@@ -365,6 +376,16 @@ class ChatService:
                     yield ev.to_sse()
                 if turn_ctx.full_response:
                     full_response = turn_ctx.full_response
+
+                # 何も残らずに終わったターンは「送信が無視された」ように見える（#31）。
+                # 失敗を1行だけ吹き出しに残す（保存されるのでリロードにも耐える）。
+                if not full_response and not turn_ctx.tool_calls_log:
+                    from nous.application.chat.events import TextDeltaSSE
+
+                    full_response = _empty_turn_text(llm_error)
+                    turn_ctx.full_response = full_response
+                    turn_ctx.segments.append({"type": "text", "content": full_response})
+                    yield TextDeltaSSE(content=full_response).to_sse()
 
                 # Save assistant response BEFORE PostProcessStep
                 if full_response or turn_ctx.tool_calls_log:

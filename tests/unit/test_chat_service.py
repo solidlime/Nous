@@ -739,6 +739,35 @@ class TestChatService:
         assert "APIキー" in payload["message"]
 
     @pytest.mark.asyncio
+    async def test_empty_turn_leaves_a_failure_line(self):
+        """LLM が落ちて何も残らないターンは「無視された」ように見える（#31）。"""
+        import json
+
+        from nous.application.chat_service import ChatService
+        from nous.infrastructure.llm.base import ErrorEvent
+
+        async def mock_stream(*args, **kwargs):
+            yield ErrorEvent(message="Connection error.")
+
+        mock_provider = MagicMock()
+        mock_provider.stream = mock_stream
+
+        ctx = self._make_ctx()
+        cfg = self._make_config(api_key="sk-valid-key")
+        service = ChatService()
+
+        chunks = []
+        with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
+            async for chunk in service.chat(ctx, cfg, "sess1", "hello"):
+                chunks.append(chunk)
+
+        payloads = [json.loads(c[6:].strip()) for c in chunks if c.startswith("data: ")]
+        texts = [p.get("content", "") for p in payloads if p.get("type") == "text_delta"]
+        failure = [t for t in texts if "応答を作れなかった" in t]
+        assert failure, "失敗が1行も残っていない（送信が無視されたように見える）"
+        assert "Connection error." in failure[0]
+
+    @pytest.mark.asyncio
     async def test_top_p_passed_to_provider_stream(self):
         """Verify top_p from ChatConfig is forwarded to provider.stream()."""
         from nous.application.chat_service import ChatService
