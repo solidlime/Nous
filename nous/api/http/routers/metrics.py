@@ -23,7 +23,15 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 #: 集計対象のイベント種別（ダッシュボードで意味のあるものだけ）。
-WIKI_EVENT_TYPES = ("wiki.compiled", "wiki.saved", "wiki.deleted", "wiki.run", "wiki.conflict")
+#: wiki_worker / journal が実際に発行する名前だけを並べる。
+WIKI_EVENT_TYPES = (
+    "wiki.compiled",
+    "wiki.saved",
+    "wiki.deleted",
+    "wiki.conflict",
+    "wiki.research",
+    "wiki.life",
+)
 
 
 def _event_counts(ctx, persona: str, prefix: str) -> dict[str, int]:
