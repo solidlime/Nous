@@ -14,13 +14,13 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
-from nous.domain.compression_config import CompressionConfig
+from nous.domain.config.compression_config import CompressionConfig
 
 # Sub-config imports
-from nous.domain.provider_config import ProviderConfig
-from nous.domain.session_config import SessionConfig
+from nous.domain.config.provider_config import ProviderConfig
+from nous.domain.config.session_config import SessionConfig
+from nous.domain.config.tool_config import ToolConfig
 from nous.domain.shared.time_utils import format_iso, get_now
-from nous.domain.tool_config import ToolConfig
 
 if TYPE_CHECKING:
     from pydantic.fields import FieldInfo

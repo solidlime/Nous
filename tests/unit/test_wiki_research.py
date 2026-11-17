@@ -66,7 +66,7 @@ def mcp_servers_env(monkeypatch):
 
     def _apply(servers: list[dict], tools: list[ToolDefinition], *, fail: bool = False) -> _FakePool:
         monkeypatch.setattr(
-            "nous.domain.chat_config.ChatConfigFileRepository",
+            "nous.domain.config.chat_config.ChatConfigFileRepository",
             lambda _root: SimpleNamespace(get=lambda _persona: SimpleNamespace(mcp_servers=servers)),
         )
         pool = _FakePool(tools, fail=fail)

@@ -13,7 +13,7 @@ from nous.config.settings import get_settings
 from nous.domain.shared.time_utils import get_now
 
 if TYPE_CHECKING:
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
 
 
 class WorkspaceError(ValueError):

@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from nous.api.http.sections.chat import render_chat_tab
+from nous.application.chat import SessionManager
 from nous.application.chat.events import _sse_encode as _sse
 from nous.application.chat.session_store import TreeSessionWindow
-from nous.application.chat_service import SessionManager
-from nous.domain.chat_config import ChatConfig
+from nous.domain.config.chat_config import ChatConfig
 from nous.infrastructure.llm.base import DoneEvent, TextDeltaEvent, ToolCallEvent
 
 _CHAT_JS_PATH = (
@@ -498,7 +498,7 @@ class TestChatConfig:
         from types import SimpleNamespace
 
         from nous.api.http.routers.chat import chat_management
-        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.domain.config.chat_config import ChatConfigFileRepository
 
         monkeypatch.setattr(chat_management, "get_settings", lambda: SimpleNamespace(data_root=str(tmp_path)))
         repo = ChatConfigFileRepository(str(tmp_path))
@@ -559,7 +559,7 @@ class TestChatConfig:
         from types import SimpleNamespace
 
         from nous.api.http.routers.chat import chat_management
-        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.domain.config.chat_config import ChatConfigFileRepository
 
         monkeypatch.setattr(chat_management, "get_settings", lambda: SimpleNamespace(data_root=str(tmp_path)))
         repo = ChatConfigFileRepository(str(tmp_path))
@@ -721,7 +721,7 @@ class TestChatService:
 
     @pytest.mark.asyncio
     async def test_no_api_key_yields_error(self):
-        from nous.application.chat_service import ChatService
+        from nous.application.chat import ChatService
 
         ctx = self._make_ctx()
         cfg = self._make_config(api_key="")
@@ -743,7 +743,7 @@ class TestChatService:
         """LLM が落ちて何も残らないターンは「無視された」ように見える（#31）。"""
         import json
 
-        from nous.application.chat_service import ChatService
+        from nous.application.chat import ChatService
         from nous.infrastructure.llm.base import ErrorEvent
 
         async def mock_stream(*args, **kwargs):
@@ -770,7 +770,7 @@ class TestChatService:
     @pytest.mark.asyncio
     async def test_top_p_passed_to_provider_stream(self):
         """Verify top_p from ChatConfig is forwarded to provider.stream()."""
-        from nous.application.chat_service import ChatService
+        from nous.application.chat import ChatService
 
         captured_kwargs = {}
 
@@ -796,7 +796,7 @@ class TestChatService:
     @pytest.mark.asyncio
     async def test_top_p_none_in_kwargs_when_config_none(self):
         """When top_p is None in ChatConfig, provider.stream() receives top_p=None."""
-        from nous.application.chat_service import ChatService
+        from nous.application.chat import ChatService
 
         captured_kwargs = {}
 
@@ -824,7 +824,7 @@ class TestChatService:
     @pytest.mark.asyncio
     async def test_reasoning_effort_passed_when_enabled(self):
         """reasoning_enabled=True → provider.stream() に reasoning_effort が伝播."""
-        from nous.application.chat_service import ChatService
+        from nous.application.chat import ChatService
 
         captured_kwargs = {}
 
@@ -851,7 +851,7 @@ class TestChatService:
     @pytest.mark.asyncio
     async def test_reasoning_effort_none_when_disabled(self):
         """reasoning_enabled=False → reasoning_effort=None（config に effort 設定があっても）."""
-        from nous.application.chat_service import ChatService
+        from nous.application.chat import ChatService
 
         captured_kwargs = {}
 
@@ -881,7 +881,7 @@ class TestChatService:
         """CoT が full_response（保存される assistant テキスト）に混入しない (SPEC R10d)."""
         import json
 
-        from nous.application.chat_service import ChatService
+        from nous.application.chat import ChatService
         from nous.infrastructure.llm.base import ThinkingDeltaEvent
 
         async def mock_stream(*args, **kwargs):
@@ -927,7 +927,7 @@ class TestChatService:
 
     @pytest.mark.asyncio
     async def test_streams_text_and_done(self):
-        from nous.application.chat_service import ChatService
+        from nous.application.chat import ChatService
 
         async def mock_stream(*args, **kwargs):
             yield TextDeltaEvent(content="Hello ")
@@ -956,7 +956,7 @@ class TestChatService:
 
     @pytest.mark.asyncio
     async def test_tool_call_executed(self):
-        from nous.application.chat_service import ChatService
+        from nous.application.chat import ChatService
 
         tool_evt = ToolCallEvent(
             tool_name="memory_search",
@@ -1053,7 +1053,7 @@ class TestMaxStoredMessagesHighlights:
 
     @pytest.mark.asyncio
     async def test_max_stored_messages_path_injects_highlights(self):
-        from nous.application.chat_service import ChatService
+        from nous.application.chat import ChatService
         from nous.infrastructure.llm.base import LLMMessage
 
         async def mock_stream(*args, **kwargs):
@@ -1179,7 +1179,7 @@ class TestChatTurn:
         import asyncio
 
         from nous.application.chat.service import ChatService, get_turn_hub
-        from nous.domain.chat_config import ChatConfig
+        from nous.domain.config.chat_config import ChatConfig
 
         hub = get_turn_hub()
         q = hub.subscribe("test_persona")
@@ -1213,7 +1213,7 @@ class TestChatTurn:
         import pytest
 
         from nous.application.chat.service import ChatService, TurnBusyError, get_turn_hub
-        from nous.domain.chat_config import ChatConfig
+        from nous.domain.config.chat_config import ChatConfig
 
         hub = get_turn_hub()
         assert hub.begin_turn("test_persona") is not None
@@ -1229,7 +1229,7 @@ class TestChatTurn:
         import asyncio
 
         from nous.application.chat.service import ChatService, get_turn_hub
-        from nous.domain.chat_config import ChatConfig
+        from nous.domain.config.chat_config import ChatConfig
 
         hub = get_turn_hub()
         service = ChatService()
@@ -1257,7 +1257,7 @@ class TestChatTurn:
         import asyncio
 
         from nous.application.chat.service import ChatService, get_turn_hub
-        from nous.domain.chat_config import ChatConfig
+        from nous.domain.config.chat_config import ChatConfig
 
         hub = get_turn_hub()
         service = ChatService()
@@ -1326,7 +1326,7 @@ class TestToolOnlyFallback:
     @pytest.mark.asyncio
     async def test_tool_only_turn_saves_nonempty_fallback(self):
         """空テキスト＋ツール有り → 保存されるassistantテキストが非空になること。"""
-        from nous.application.chat_service import ChatService
+        from nous.application.chat import ChatService
 
         tool_evt = ToolCallEvent(
             tool_name="memory_search",
@@ -1367,7 +1367,7 @@ class TestToolOnlyFallback:
         """画像生成ツールのみターン → ツール結果のmessageがフォールバック文に使われること。"""
         from unittest.mock import AsyncMock
 
-        from nous.application.chat_service import ChatService
+        from nous.application.chat import ChatService
 
         tool_evt = ToolCallEvent(
             tool_name="image_generate",
@@ -1416,7 +1416,7 @@ class TestToolOnlyFallback:
     @pytest.mark.asyncio
     async def test_nonempty_turn_unchanged(self):
         """full_response非空ターンは一切触らないこと。"""
-        from nous.application.chat_service import ChatService
+        from nous.application.chat import ChatService
 
         tool_evt = ToolCallEvent(
             tool_name="memory_search",

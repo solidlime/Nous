@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from nous.api.http.routers.chat.chat_management import _field_section, _field_tier
-from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository, resolve_persona_chat_config
+from nous.domain.config.chat_config import ChatConfig, ChatConfigFileRepository, resolve_persona_chat_config
 from nous.domain.memory.query_service import resolve_decision_config
 
 

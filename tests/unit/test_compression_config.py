@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nous.domain.compression_config import CompressionConfig
+from nous.domain.config.compression_config import CompressionConfig
 
 
 def test_memory_digest_count_default_and_clamp():

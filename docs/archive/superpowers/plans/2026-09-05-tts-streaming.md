@@ -341,7 +341,7 @@ git commit -m "fix(tts): full-hash cache key with resolved voice and params"
 ### Task 4: Backend hardening — voice_speed検証
 
 **Files:**
-- Modify: `nous/domain/session_config.py:42-50`, `nous/api/http/routers/tts.py:274-322`, `nous/infrastructure/voice/irodori.py:35-47`
+- Modify: `nous/domain/config/session_config.py:42-50`, `nous/api/http/routers/tts.py:274-322`, `nous/infrastructure/voice/irodori.py:35-47`
 - Test: `tests/unit/domain/test_chat_config.py`
 
 **Interfaces:**
@@ -352,7 +352,7 @@ git commit -m "fix(tts): full-hash cache key with resolved voice and params"
 
 ```python
 def test_voice_speed_clamped():
-    from nous.domain.session_config import SessionConfig
+    from nous.domain.config.session_config import SessionConfig
     assert SessionConfig(voice_speed=99.0).voice_speed == 4.0
     assert SessionConfig(voice_speed=-1.0).voice_speed == 0.25
 ```
@@ -398,7 +398,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add nous/domain/session_config.py nous/api/http/routers/tts.py tests/unit/domain/test_chat_config.py
+git add nous/domain/config/session_config.py nous/api/http/routers/tts.py tests/unit/domain/test_chat_config.py
 git commit -m "fix(tts): clamp voice_speed 0.25-4.0"
 ```
 
@@ -513,7 +513,7 @@ def _concat_wav(files: list[Path]) -> tuple[bytes, dict]:
         if len(files) > 50:
             return JSONResponse({"ok": False, "error": "too many files"}, status_code=400)
         from nous.config.settings import get_settings
-        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.domain.config.chat_config import ChatConfigFileRepository
 
         settings = get_settings()
         cache_dir = Path(settings.data_root) / "persona" / persona / "tts_cache"
@@ -901,7 +901,7 @@ git commit -m "feat(tts): streaming queue playback and combine"
 
 - [ ] **Step 1: 型チェック**
 
-Run: `mypy nous/api/http/routers/tts.py nous/domain/session_config.py`
+Run: `mypy nous/api/http/routers/tts.py nous/domain/config/session_config.py`
 Expected: 新規エラー0（既存の `openai_compat.py:95,147` は対象外）。
 
 - [ ] **Step 2: 単体テスト**
@@ -911,7 +911,7 @@ Expected: 全PASS。
 
 - [ ] **Step 3: lintとformat**
 
-Run: `ruff check nous/api/http/routers/tts.py nous/domain/session_config.py && ruff format --check nous/api/http/routers/tts.py nous/domain/session_config.py`
+Run: `ruff check nous/api/http/routers/tts.py nous/domain/config/session_config.py && ruff format --check nous/api/http/routers/tts.py nous/domain/config/session_config.py`
 Expected: 0エラー。失敗時は `ruff format` で修正して再実行する。
 
 - [ ] **Step 4: 実ブラウザ確認**

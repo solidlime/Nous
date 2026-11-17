@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from nous.domain.provider_config import ProviderConfig
+from nous.domain.config.provider_config import ProviderConfig
 
 
 class TestProviderConfigReasoning:

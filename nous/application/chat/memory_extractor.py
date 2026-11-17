@@ -31,7 +31,7 @@ from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
 
 logger = get_logger(__name__)
 

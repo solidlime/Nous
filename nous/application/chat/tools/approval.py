@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
 
 # 承認が要り得るツール。read_file は読み取りなので常に素通し。
 APPROVAL_REQUIRED_TOOLS = frozenset({"bash", "write_file", "edit_file", "delegate", "sandbox"})

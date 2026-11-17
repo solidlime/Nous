@@ -8,7 +8,7 @@ from starlette.responses import JSONResponse, Response
 from nous.api.http.deps import _PERSONA_PATTERN
 from nous.api.http.routers.chat.chat_stream import _resolve_request
 from nous.config.settings import get_settings
-from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository
+from nous.domain.config.chat_config import ChatConfig, ChatConfigFileRepository
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.persona_layout import persona_media_dir, persona_uploads_dir
 

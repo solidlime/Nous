@@ -64,7 +64,7 @@ def _fake_ctx(monkeypatch, tmp_path, engine, *, mode="off", state=None, task=Non
         irodori_first_sentence_chunk_min_chars=1,
         irodori_seed=0,
     )
-    import nous.domain.chat_config as chat_config_mod
+    import nous.domain.config.chat_config as chat_config_mod
 
     monkeypatch.setattr(
         chat_config_mod, "ChatConfigFileRepository", lambda root: types.SimpleNamespace(get=lambda persona: chat_cfg)

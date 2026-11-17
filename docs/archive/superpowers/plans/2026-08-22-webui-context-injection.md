@@ -26,7 +26,7 @@
 ### Task 1: compression_config.py — memory_digest_count 新設 + preload 既定値変更（Lane B）
 
 **Files:**
-- Modify: `nous/domain/compression_config.py:21` 付近
+- Modify: `nous/domain/config/compression_config.py:21` 付近
 - Test: `tests/unit/test_compression_config.py`（無ければ新規）
 
 **Interfaces:**
@@ -35,7 +35,7 @@
 - [ ] **Step 1: 失敗テスト**
 
 ```python
-from nous.domain.compression_config import CompressionConfig
+from nous.domain.config.compression_config import CompressionConfig
 
 def test_memory_digest_count_default_and_clamp():
     c = CompressionConfig()
@@ -53,7 +53,7 @@ def test_memory_preload_count_default_is_5():
 ### Task 2: chat_config.py — _infer_default_value pydantic default 対応（§5）（Lane B）
 
 **Files:**
-- Modify: `nous/domain/chat_config.py:266-270`
+- Modify: `nous/domain/config/chat_config.py:266-270`
 - Test: 既存 chat_config リポジトリテストファイルに追加（glob `tests/unit/*chat_config*` で特定、無ければ新規）
 
 **Interfaces:**
@@ -63,7 +63,7 @@ def test_memory_preload_count_default_is_5():
 
 ```python
 def test_infer_default_value_uses_pydantic_default():
-    from nous.domain.chat_config import ChatConfig, ChatConfigRepository
+    from nous.domain.config.chat_config import ChatConfig, ChatConfigRepository
     f = ChatConfig._all_flat_fields()
     # int 既定値がそのまま入る（旧実装だと "0"）
     assert ChatConfigRepository._infer_default_value(f["memory_digest_count"]) == "5"
@@ -105,7 +105,7 @@ import 追加: `from pydantic_core import PydanticUndefined`（pydantic v2）。
 ### Task 3: provider_config.py — reasoning_effort validator clamp 化（§6）（Lane B）
 
 **Files:**
-- Modify: `nous/domain/provider_config.py:102-107`
+- Modify: `nous/domain/config/provider_config.py:102-107`
 - Test: `tests/unit/test_provider_config.py`
 
 - [ ] **Step 1: 失敗テスト**: `ProviderConfig(reasoning_effort="bogus")` が raise せず `"medium"` になること（REASONING_EFFORTS 定義とフィールド既定を確認し既定値を採用）

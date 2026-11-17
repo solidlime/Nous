@@ -11,7 +11,7 @@ import pytest
 from nous.api.http.routers.chat.chat_stream import chat_endpoint, chat_event_stream
 from nous.application.chat.service import get_turn_hub
 from nous.application.chat.turn_hub import TurnHub
-from nous.domain.chat_config import ChatConfig
+from nous.domain.config.chat_config import ChatConfig
 
 
 @pytest.fixture(autouse=True)

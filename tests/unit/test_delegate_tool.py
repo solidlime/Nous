@@ -10,7 +10,7 @@ import pytest
 from nous.application.chat.tools import delegate as delegate_mod
 from nous.application.chat.tools import workspace as workspace_mod
 from nous.application.chat.tools.delegate import _handle_delegate
-from nous.domain.chat_config import ChatConfig
+from nous.domain.config.chat_config import ChatConfig
 
 
 class _FakeProc:

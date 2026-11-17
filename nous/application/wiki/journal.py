@@ -328,7 +328,7 @@ class JournalMixin:
         """人物設定 = chat config の system_prompt + 記憶から作った自己像。取れた方だけ。"""
         parts: list[str] = []
         try:
-            from nous.domain.chat_config import ChatConfigFileRepository
+            from nous.domain.config.chat_config import ChatConfigFileRepository
 
             prompt = ChatConfigFileRepository(self._settings.data_root).get(persona).system_prompt
             if prompt and prompt.strip():

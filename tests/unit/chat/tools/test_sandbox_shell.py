@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from nous.application.chat.tools.definitions import get_filtered_tools
-from nous.domain.chat_config import ChatConfig
+from nous.domain.config.chat_config import ChatConfig
 
 _URL = "http://sandbox-manager:8080"
 TOKEN = "test-token"

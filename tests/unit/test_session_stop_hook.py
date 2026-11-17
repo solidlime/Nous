@@ -70,7 +70,7 @@ class TestSummarizeSessionEnd:
         ctx.connection.get_memory_db.return_value = db
 
         with (
-            patch("nous.domain.chat_config.ChatConfigFileRepository") as mock_repo_cls,
+            patch("nous.domain.config.chat_config.ChatConfigFileRepository") as mock_repo_cls,
             patch(
                 "nous.application.chat.summarizer.summarize_and_store",
                 new=AsyncMock(return_value=None),
@@ -96,7 +96,7 @@ class TestSummarizeSessionEnd:
         ctx.connection.get_memory_db.return_value = db
 
         with (
-            patch("nous.domain.chat_config.ChatConfigFileRepository"),
+            patch("nous.domain.config.chat_config.ChatConfigFileRepository"),
             patch(
                 "nous.application.chat.summarizer.summarize_and_store",
                 new=AsyncMock(),
@@ -118,7 +118,7 @@ class TestSummarizeSessionEnd:
 
         with (
             patch(
-                "nous.domain.chat_config.ChatConfigFileRepository",
+                "nous.domain.config.chat_config.ChatConfigFileRepository",
                 side_effect=RuntimeError("no config dir"),
             ),
             patch(

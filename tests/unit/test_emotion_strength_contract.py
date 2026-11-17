@@ -13,12 +13,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from nous.domain.config.session_config import SessionConfig
 from nous.domain.memory.entities import Memory
 from nous.domain.memory.query_service import resolve_brain_config
 from nous.domain.memory.service import MemoryService
 from nous.domain.search.engine import SearchEngine, SearchQuery, SearchResult
 from nous.domain.search.policy import RankPolicy
-from nous.domain.session_config import SessionConfig
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.memory_repo import SQLiteMemoryRepository

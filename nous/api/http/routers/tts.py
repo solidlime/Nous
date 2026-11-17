@@ -154,7 +154,7 @@ def _body_str(body: object, key: str) -> str:
 
 
 def _resolve_emotion_mode(chat_config) -> str:
-    """感情反映モード解決。正本は SessionConfig._derive_emotion_mode（nous/domain/session_config.py）。
+    """感情反映モード解決。正本は SessionConfig._derive_emotion_mode（nous/domain/config/session_config.py）。
     ここはその条件順をオブジェクト属性向けにミラーしたもの。字幕解決・kickoff共用。"""
     mode = getattr(chat_config, "voice_emotion_mode", "") or ""
     if mode:
@@ -463,7 +463,7 @@ async def _relay_tts_stream(engine, *, text, emotion, caption, speed_arg, cache_
 def _load_chat_config(persona: str):
     """personaのchat設定を読み込む。TTS各EP共用。"""
     from nous.config.settings import get_settings
-    from nous.domain.chat_config import ChatConfigFileRepository
+    from nous.domain.config.chat_config import ChatConfigFileRepository
 
     return ChatConfigFileRepository(get_settings().data_root).get(persona)
 

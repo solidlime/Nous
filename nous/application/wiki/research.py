@@ -83,7 +83,7 @@ async def research(ctx: Any, persona: str, question: str, *, max_calls: int = 3)
 
 async def _research(ctx: Any, persona: str, question: str, *, max_calls: int) -> dict:
     """config → プール → ツール 0 件チェック → 1 手ずつの探索。"""
-    from nous.domain.chat_config import ChatConfigFileRepository
+    from nous.domain.config.chat_config import ChatConfigFileRepository
 
     config = ChatConfigFileRepository(ctx.settings.data_root).get(persona)
     if not config.mcp_servers:

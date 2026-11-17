@@ -1,7 +1,7 @@
 """tests/unit/test_voice_emotion_mode.py"""
 
-from nous.domain.chat_config import ChatConfig
-from nous.domain.session_config import SessionConfig
+from nous.domain.config.chat_config import ChatConfig
+from nous.domain.config.session_config import SessionConfig
 
 
 def test_default_is_anchor():

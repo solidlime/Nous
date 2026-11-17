@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from nous.domain.memory.entities import Memory
     from nous.domain.memory.repository import MemoryRepository
 
-from nous.domain.chat_config import resolve_persona_chat_config
+from nous.domain.config.chat_config import resolve_persona_chat_config
 from nous.domain.shared.errors import DomainError, MemoryNotFoundError
 from nous.domain.shared.result import Failure, Result, Success
 

@@ -247,7 +247,7 @@ grep -n 'browser\|_handle_browser' nous/api/mcp/tools.py nous/api/mcp/_tools_hel
 - [ ] **Step 9: `chat_config.py` に browser 関連フィールドがあれば削除**
 
 ```bash
-grep -n browser nous/domain/chat_config.py
+grep -n browser nous/domain/config/chat_config.py
 ```
 
 ### Task 2.5: コミット
@@ -279,7 +279,7 @@ git commit -m "refactor: remove built-in browser tool (migrated to Playwright MC
 - Modify: `nous/application/chat/tools/__init__.py`
 - Modify: `nous/application/chat/tools/builtin.py`（sandboxハンドラ）
 - Modify: `nous/application/chat/service.py`
-- Modify: `nous/domain/chat_config.py`（モデル + Repository SQL 7箇所）
+- Modify: `nous/domain/config/chat_config.py`（モデル + Repository SQL 7箇所）
 - Modify: `nous/infrastructure/sqlite/connection.py`（テーブル定義 + Repository SQL）
 - Modify: `nous/config/settings.py`
 - Modify: `nous/config/runtime_config.py`
@@ -347,7 +347,7 @@ sandbox_execute/files/reset/context ハンドラ（L115-163相当）と `_is_san
 
 ⚠️ **最も危険な変更**: 1フィールド削除に見えて、Repository の SQL/行マッピング/値タプルに広範な影響がある。
 
-- [ ] **Step 8a: モデルフィールド削除 — `nous/domain/chat_config.py` L79の `sandbox_enabled: bool = True` を削除**
+- [ ] **Step 8a: モデルフィールド削除 — `nous/domain/config/chat_config.py` L79の `sandbox_enabled: bool = True` を削除**
 
 - [ ] **Step 8b: Repository.get() の SELECT カラムリストから `sandbox_enabled` を削除**
 
@@ -421,7 +421,7 @@ grep -rn "sandbox" tests/ --include="*.py" | grep -v __pycache__ | head -20
 
 以下も同時に削除:
 - `from nous.application.sandbox.service import get_sandbox_session` import行
-- `from nous.domain.chat_config import ChatConfig` の sandbox 関連参照
+- `from nous.domain.config.chat_config import ChatConfig` の sandbox 関連参照
 - `chat_cfg.sandbox_enabled` を参照しているコード
 
 - [ ] **Step 13a: `attachment_upload` エンドポイントのパス名を修正**
@@ -614,7 +614,7 @@ L48-93 の tuple に対して:
 "episode_search_enabled",
 ```
 
-同時に `nous/domain/chat_config.py` の `ChatConfig` データクラスにこれらのフィールドが存在するか確認し、なければ追加する。
+同時に `nous/domain/config/chat_config.py` の `ChatConfig` データクラスにこれらのフィールドが存在するか確認し、なければ追加する。
 
 #### 🟡 BUG: `renderMcpServerList()` 未定義
 
@@ -813,7 +813,7 @@ GitHub Actions の結果を確認。失敗時はデバッグして修正。
 | 修正 | `nous/api/mcp/tools.py` |
 | 修正 | `nous/config/settings.py` |
 | 修正 | `nous/config/runtime_config.py` |
-| 修正 | `nous/domain/chat_config.py` |
+| 修正 | `nous/domain/config/chat_config.py` |
 | 修正 | `nous/main.py` |
 | 修正 | `nous/api/http/static/chat.js` |
 | 修正 | `nous/api/http/static/settings.js` |

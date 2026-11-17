@@ -404,14 +404,14 @@ def test_client_timeout_follows_timeout_seconds():
 
 def test_tool_config_comfyui_timeout_default_is_180():
     """ToolConfig の image_gen_comfyui_timeout_seconds デフォルトは 180"""
-    from nous.domain.tool_config import ToolConfig
+    from nous.domain.config.tool_config import ToolConfig
 
     assert ToolConfig().image_gen_comfyui_timeout_seconds == 180
 
 
 def test_tool_config_workflow_source_defaults():
     """新フィールドのデフォルトは local + 空名（後方互換）。"""
-    from nous.domain.tool_config import ToolConfig
+    from nous.domain.config.tool_config import ToolConfig
 
     config = ToolConfig()
     assert config.image_gen_comfyui_workflow_source == "local"
@@ -420,7 +420,7 @@ def test_tool_config_workflow_source_defaults():
 
 def test_tool_config_removed_params_absent():
     """廃止フィールド（checkpoint/loras/steps/cfg/sampler/scheduler/denoise/seed）が無いこと。"""
-    from nous.domain.tool_config import ToolConfig
+    from nous.domain.config.tool_config import ToolConfig
 
     config = ToolConfig()
     for field in (

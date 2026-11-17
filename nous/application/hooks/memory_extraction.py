@@ -36,7 +36,7 @@ from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
     from nous.config.settings import Settings
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
 
 logger = get_logger(__name__)
 

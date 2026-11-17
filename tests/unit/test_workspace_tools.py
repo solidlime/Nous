@@ -17,7 +17,7 @@ from nous.application.chat.tools.shell import (
     _handle_write_file,
 )
 from nous.application.chat.tools.workspace import WorkspaceError, resolve_in_workspace
-from nous.domain.chat_config import ChatConfig
+from nous.domain.config.chat_config import ChatConfig
 
 # ---------------------------------------------------------------------------
 # Fixtures

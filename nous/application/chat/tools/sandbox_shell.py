@@ -33,7 +33,7 @@ from nous.application.chat.tools.shell import (
 from nous.application.chat.tools.workspace import WorkspaceError
 
 if TYPE_CHECKING:
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
 
 
 def workspace_path(persona: str) -> str:

@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock
 import numpy as np
 import pytest
 
-from nous.domain.chat_config import ChatConfig
+from nous.domain.config.chat_config import ChatConfig
 from nous.domain.memory.entities import Memory
 from nous.domain.search.engine import SearchResult
 from nous.domain.shared.result import Success
@@ -74,19 +74,19 @@ def _ctx_with_reflections(reflections: list[Memory], vecs: dict, config) -> Magi
 
 class TestReflectionPenaltyConfig:
     def test_penalty_clamped_01_to_1(self):
-        from nous.domain.session_config import SessionConfig
+        from nous.domain.config.session_config import SessionConfig
 
         assert SessionConfig(reflection_retrieval_penalty=0.05).reflection_retrieval_penalty == 0.1
         assert SessionConfig(reflection_retrieval_penalty=2.0).reflection_retrieval_penalty == 1.0
 
     def test_similarity_threshold_clamped_0_to_1(self):
-        from nous.domain.session_config import SessionConfig
+        from nous.domain.config.session_config import SessionConfig
 
         assert SessionConfig(reflection_injection_min_similarity=-0.1).reflection_injection_min_similarity == 0.0
         assert SessionConfig(reflection_injection_min_similarity=1.5).reflection_injection_min_similarity == 1.0
 
     def test_injection_margin_clamped_0_to_1(self):
-        from nous.domain.session_config import SessionConfig
+        from nous.domain.config.session_config import SessionConfig
 
         assert SessionConfig(reflection_injection_margin=-0.5).reflection_injection_margin == 0.0
         assert SessionConfig(reflection_injection_margin=2.0).reflection_injection_margin == 1.0

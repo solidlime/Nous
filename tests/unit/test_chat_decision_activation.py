@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository
+from nous.domain.config.chat_config import ChatConfig, ChatConfigFileRepository
 from nous.domain.memory import wiring_events
 from nous.domain.memory.entities import Memory
 from nous.domain.search.engine import SearchEngine, SearchQuery, invalidate_query_cache

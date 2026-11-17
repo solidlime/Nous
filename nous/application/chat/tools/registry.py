@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from nous.application.use_cases import AppContext
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
     from nous.infrastructure.llm.base import ToolDefinition
     from nous.infrastructure.mcp_client import MCPClientPool
 

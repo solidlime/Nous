@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from nous.application.use_cases import AppContext
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
     from nous.infrastructure.tools import ToolSearchEngine
 
 logger = get_logger(__name__)

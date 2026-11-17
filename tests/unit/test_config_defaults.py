@@ -74,7 +74,7 @@ def test_irodori_chunk_min_chars_is_single_valued():
     """
     from nous.api.http.routers.tts import _get_irodori_config
     from nous.config.settings import IrodoriAdvancedParams
-    from nous.domain.session_config import SessionConfig
+    from nous.domain.config.session_config import SessionConfig
 
     engine_default = IrodoriAdvancedParams.model_fields["chunk_min_chars"].default
     chat_default = SessionConfig.model_fields["irodori_chunk_min_chars"].default

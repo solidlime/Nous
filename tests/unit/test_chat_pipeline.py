@@ -1975,8 +1975,8 @@ async def test_inference_passes_chat_session_id_to_provider():
     from unittest.mock import MagicMock, patch
 
     from nous.application.chat.pipeline import inference as inf
-    from nous.domain.chat_config import ChatConfig
-    from nous.domain.provider_config import ProviderConfig
+    from nous.domain.config.chat_config import ChatConfig
+    from nous.domain.config.provider_config import ProviderConfig
 
     captured: dict = {}
 

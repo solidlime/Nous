@@ -8,7 +8,7 @@ from starlette.responses import JSONResponse, StreamingResponse
 
 from nous.api.http.deps import _resolve_persona_from_request, _safe_get_context
 from nous.config.settings import get_settings
-from nous.domain.chat_config import ChatConfigFileRepository
+from nous.domain.config.chat_config import ChatConfigFileRepository
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:

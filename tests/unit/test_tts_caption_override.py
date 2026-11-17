@@ -51,7 +51,7 @@ def _fake_ctx(monkeypatch, tmp_path, *, mode="llm", forbid_state=False):
         irodori_chunk_min_chars=85,
         irodori_seed=0,
     )
-    import nous.domain.chat_config as chat_config_mod
+    import nous.domain.config.chat_config as chat_config_mod
 
     monkeypatch.setattr(
         chat_config_mod, "ChatConfigFileRepository", lambda root: types.SimpleNamespace(get=lambda persona: chat_cfg)
@@ -206,7 +206,7 @@ async def test_numeric_voice_coerced_to_string(monkeypatch, tmp_path):
 
 async def test_voice_speed_005_step_passes_through(monkeypatch, tmp_path):
     # 0.05刻みが丸め殺されずengineに届くことのlock-in（validator 0.25-4.0内）。
-    from nous.domain.session_config import SessionConfig
+    from nous.domain.config.session_config import SessionConfig
 
     assert SessionConfig(voice_speed=1.05).voice_speed == 1.05
     chat_cfg = _fake_ctx(monkeypatch, tmp_path, mode="off", forbid_state=True)

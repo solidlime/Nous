@@ -1,4 +1,4 @@
-from nous.domain.session_config import SessionConfig
+from nous.domain.config.session_config import SessionConfig
 
 
 def test_h_spec_defaults():

@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from nous.application.use_cases import AppContext
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
 
 logger = get_logger(__name__)
 

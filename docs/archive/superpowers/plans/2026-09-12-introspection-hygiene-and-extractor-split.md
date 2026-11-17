@@ -459,7 +459,7 @@ git commit -m "fix(b,a5): spontaneousクロックを専用種別のみ参照+失
 ### Task 5: H デフォルト値変更
 
 **Files:**
-- Modify: `nous/domain/session_config.py:131-147,172`
+- Modify: `nous/domain/config/session_config.py:131-147,172`
 
 **Interfaces:**
 - Produces: `brain_monologue_enabled=True`, `brain_spontaneous_enabled=True`, `brain_spontaneous_interval_hours=1`, `forgetting_decay_interval_seconds=3600`（デフォルトのみ。既存 config.json を持つ persona は実効値不変）
@@ -494,7 +494,7 @@ Run: `rg -n "86400|spontaneous_interval|brain_monologue_enabled|brain_spontaneou
 
 ```python
 # tests/unit/test_default_values.py
-from nous.domain.session_config import SessionConfig
+from nous.domain.config.session_config import SessionConfig
 
 
 def test_h_spec_defaults():
@@ -512,7 +512,7 @@ Run: `.venv\Scripts\python -m pytest tests/unit/test_default_values.py -q` → �
 - [ ] **Step 5: コミット**
 
 ```bash
-git add nous/domain/session_config.py tests/
+git add nous/domain/config/session_config.py tests/
 git commit -m "feat(h): デフォルト値変更 — LLM周期1h化(spontaneous)+monologue/spontaneousデフォルトON+忘却sweep 1h"
 ```
 
@@ -521,7 +521,7 @@ git commit -m "feat(h): デフォルト値変更 — LLM周期1h化(spontaneous)
 ### Task 6: D 内省プロンプト設定化 + persona_identity 全文化
 
 **Files:**
-- Modify: `nous/domain/session_config.py`（brain_*_prompt 追加）
+- Modify: `nous/domain/config/session_config.py`（brain_*_prompt 追加）
 - Modify: `nous/application/chat/introspection.py:155-215`（prompt_override 引数+`_format_prompt`）、call site（`run_spontaneous` L591-593、`run_introspection` 内 `engine.generate` 呼び出し）
 - Test: `tests/unit/test_introspection_prompt_override.py`（新規）
 
@@ -654,7 +654,7 @@ Expected: 4 passed
 - [ ] **Step 7: コミット**
 
 ```bash
-git add nous/domain/session_config.py nous/application/chat/introspection.py tests/unit/test_introspection_prompt_override.py
+git add nous/domain/config/session_config.py nous/application/chat/introspection.py tests/unit/test_introspection_prompt_override.py
 git commit -m "feat(d): 内省プロンプトをconfig設定可能化+persona_identity全文化(安全弁12000字)"
 ```
 
@@ -1044,7 +1044,7 @@ git commit -m "feat(c): 内省探索のツールコールをチャットログ�
 ### Task 10: F 抽出LLM 2分割（context / item）
 
 **Files:**
-- Modify: `nous/domain/session_config.py`（item_llm_* 追加）
+- Modify: `nous/domain/config/session_config.py`（item_llm_* 追加）
 - Modify: `nous/application/chat/memory_prompts.py:15-101`（プロンプト分割）
 - Modify: `nous/application/chat/memory_extractor.py:78-143`（MemoryLLM.process mode 引数）、`run_memory_llm` L301-330（2呼び出し+マージ）
 - Test: `tests/unit/test_memory_llm_split.py`（新規）
@@ -1214,7 +1214,7 @@ Expected: passed
 - [ ] **Step 6: コミット**
 
 ```bash
-git add nous/domain/session_config.py nous/application/chat/memory_prompts.py nous/application/chat/memory_extractor.py tests/unit/test_memory_llm_split.py
+git add nous/domain/config/session_config.py nous/application/chat/memory_prompts.py nous/application/chat/memory_extractor.py tests/unit/test_memory_llm_split.py
 git commit -m "feat(f): MemoryLLMをcontext抽出とitem抽出の2呼び出しに分割 (item_llm_* 専用モデル設定)"
 ```
 

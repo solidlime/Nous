@@ -1232,7 +1232,7 @@ git commit -m "feat: run ComfyUI saved workflows via /userdata with UI-to-API co
 ### Task 3: 設定の配線（ToolConfig + builtin.py + routers）
 
 **Files:**
-- Modify: `nous/domain/tool_config.py`（新フィールド追加＋廃止フィールド8個を削除）
+- Modify: `nous/domain/config/tool_config.py`（新フィールド追加＋廃止フィールド8個を削除）
 - Modify: `nous/application/chat/tools/builtin.py:290-306`（Provider 構築のパラメータ削減）
 - Modify: `nous/api/http/routers/image_gen.py`（test ルートの Provider 構築のパラメータ削減）
 - Modify: `nous/api/http/sections/chat/chat_sidebar_media.py`（ワークフロー設定フォーム3つ組化＋廃止フィールドのフォーム削除）
@@ -1251,7 +1251,7 @@ git commit -m "feat: run ComfyUI saved workflows via /userdata with UI-to-API co
 ```python
 def test_tool_config_workflow_source_defaults():
     """新フィールドのデフォルトは local + 空名（後方互換）。"""
-    from nous.domain.tool_config import ToolConfig
+    from nous.domain.config.tool_config import ToolConfig
 
     config = ToolConfig()
     assert config.image_gen_comfyui_workflow_source == "local"
@@ -1260,7 +1260,7 @@ def test_tool_config_workflow_source_defaults():
 
 def test_tool_config_removed_params_absent():
     """廃止フィールド（checkpoint/loras/steps/cfg/sampler/scheduler/denoise/seed）が無いこと。"""
-    from nous.domain.tool_config import ToolConfig
+    from nous.domain.config.tool_config import ToolConfig
 
     config = ToolConfig()
     for field in (
@@ -1286,7 +1286,7 @@ Expected: FAIL — `AttributeError: image_gen_comfyui_workflow_source` / `hasatt
 
 - [ ] **Step 3: 実装**
 
-`nous/domain/tool_config.py` — `image_gen_comfyui_workflow_template` の直後に追加:
+`nous/domain/config/tool_config.py` — `image_gen_comfyui_workflow_template` の直後に追加:
 
 ```python
     image_gen_comfyui_workflow_template: str = "workflows/default_node.json"  # path to API-format JSON workflow template (required only for workflow_source="local")
@@ -1415,7 +1415,7 @@ Expected: 全 PASS（builtin の既存テストは getattr デフォルトで影
 - [ ] **Step 6: コミット**
 
 ```bash
-git add nous/domain/tool_config.py nous/application/chat/tools/builtin.py nous/api/http/routers/image_gen.py nous/api/http/sections/chat/chat_sidebar_media.py nous/api/http/static/chat/chat-settings.js tests/unit/test_comfyui_provider.py
+git add nous/domain/config/tool_config.py nous/application/chat/tools/builtin.py nous/api/http/routers/image_gen.py nous/api/http/sections/chat/chat_sidebar_media.py nous/api/http/static/chat/chat-settings.js tests/unit/test_comfyui_provider.py
 git commit -m "feat: wire workflow_source/workflow_name config through chat, HTTP and WebUI paths"
 ```
 

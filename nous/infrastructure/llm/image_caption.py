@@ -11,7 +11,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from nous.domain.tool_config import ToolConfig
+    from nous.domain.config.tool_config import ToolConfig
     from nous.infrastructure.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)

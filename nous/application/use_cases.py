@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from nous.config.settings import Settings
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
     from nous.domain.memory.entities import Memory
 
 
@@ -419,7 +419,7 @@ class AppContextRegistry:
                     import os
 
                     from nous.config.settings import get_settings
-                    from nous.domain.chat_config import ChatConfigFileRepository
+                    from nous.domain.config.chat_config import ChatConfigFileRepository
 
                     data_root = str(get_settings().data_root)
                     if os.path.exists(os.path.join(data_root, "persona", persona, "config.json")):

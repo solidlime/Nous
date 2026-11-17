@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from nous.api.http.routers.events import _ALL_EVENT_TYPES
-from nous.domain.chat_config import ChatConfig
+from nous.domain.config.chat_config import ChatConfig
 
 
 @pytest.fixture(autouse=True)

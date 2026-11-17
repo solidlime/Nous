@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from nous.application.workers import activity_worker
+from nous.domain.config.session_config import SessionConfig
 from nous.domain.memory.session_event import SessionEvent
-from nous.domain.session_config import SessionConfig
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nous.domain.session_config import SessionConfig
+from nous.domain.config.session_config import SessionConfig
 
 
 class TestSessionConfig:

@@ -11,10 +11,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from nous.domain.provider_config import REASONING_BUDGETS
+from nous.domain.config.provider_config import REASONING_BUDGETS
 
 if TYPE_CHECKING:
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
 
 
 @dataclass(frozen=True)

@@ -14,8 +14,8 @@ import pytest
 
 from nous.application.chat.session_manager import SessionManager
 from nous.application.workers import proactive_worker
+from nous.domain.config.session_config import SessionConfig
 from nous.domain.memory.session_event import SessionEvent
-from nous.domain.session_config import SessionConfig
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
 

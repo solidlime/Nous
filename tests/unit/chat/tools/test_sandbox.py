@@ -11,7 +11,7 @@ import pytest
 from nous.application.chat.tools.approval import approval_required
 from nous.application.chat.tools.definitions import SANDBOX_TOOL, get_filtered_tools
 from nous.application.chat.tools.sandbox import TOKEN_HEADER, handle_sandbox, sandbox_settings
-from nous.domain.chat_config import ChatConfig
+from nous.domain.config.chat_config import ChatConfig
 
 _URL = "http://sandbox-manager:8080"
 TOKEN = "test-token"

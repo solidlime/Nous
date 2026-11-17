@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
     from nous.application.use_cases import AppContext
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
     from nous.domain.memory.entities import Memory
 
 logger = get_logger(__name__)

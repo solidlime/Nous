@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from nous.domain.tool_config import ToolConfig
+from nous.domain.config.tool_config import ToolConfig
 
 
 class _MockProvider:

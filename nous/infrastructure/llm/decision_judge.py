@@ -162,7 +162,7 @@ def resolve_decision_judge(repo: object) -> DecisionJudge | None:
     （``provider_config`` の effective 値）、``decision_model`` は呼び出し毎に上書き。
     """
     try:
-        from nous.domain.chat_config import resolve_persona_chat_config
+        from nous.domain.config.chat_config import resolve_persona_chat_config
 
         cfg = resolve_persona_chat_config(repo)
         if cfg is None:

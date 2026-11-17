@@ -48,7 +48,7 @@ def register_image_gen_routes(mcp) -> None:
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
         from nous.config.settings import get_settings
-        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.domain.config.chat_config import ChatConfigFileRepository
         from nous.infrastructure.image_gen.comfyui import ComfyUIProvider
 
         repo = ChatConfigFileRepository(get_settings().data_root)

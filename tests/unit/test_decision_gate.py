@@ -435,7 +435,7 @@ class TestResolveDecisionJudge:
 
         repo = SimpleNamespace(_conn=SimpleNamespace(data_dir="/tmp", persona="p1"))
         cfg = SimpleNamespace(provider_config=SimpleNamespace(get_effective_api_key=lambda: ""))
-        with patch("nous.domain.chat_config.ChatConfigFileRepository") as repo_cls:
+        with patch("nous.domain.config.chat_config.ChatConfigFileRepository") as repo_cls:
             repo_cls.return_value.get.return_value = cfg
             assert resolve_decision_judge(repo) is None
         bypass = [e for e in wiring_events.snapshot_after(0) if e["kind"] == "decision_bypass"]

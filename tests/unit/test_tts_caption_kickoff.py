@@ -23,7 +23,7 @@ def _chat_cfg(mode):
 
 
 def _patch_config(monkeypatch, tmp_path, mode):
-    import nous.domain.chat_config as chat_config_mod
+    import nous.domain.config.chat_config as chat_config_mod
 
     cfg = _chat_cfg(mode)
     monkeypatch.setattr(

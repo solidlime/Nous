@@ -263,7 +263,7 @@ async def contradiction_check(config: Any, model: str, resp: str, label: str) ->
 
 async def run(persona: str, dry_run: bool, expand: bool) -> int:
     from nous.config.settings import get_settings
-    from nous.domain.chat_config import ChatConfigFileRepository
+    from nous.domain.config.chat_config import ChatConfigFileRepository
 
     settings = get_settings()
     db_path = os.path.join(settings.data_root, "persona", persona, "memory.sqlite")

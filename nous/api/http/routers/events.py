@@ -53,7 +53,7 @@ async def _summarize_session_end(ctx, persona: str, session_id: str) -> None:
     from nous.application.chat.service import _session_manager
     from nous.application.chat.summarizer import summarize_and_store
     from nous.config.settings import get_settings
-    from nous.domain.chat_config import ChatConfigFileRepository
+    from nous.domain.config.chat_config import ChatConfigFileRepository
 
     with contextlib.suppress(Exception):
         db = ctx.connection.get_memory_db()

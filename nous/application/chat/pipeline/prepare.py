@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from nous.application.chat.pipeline.context import ChatTurnContext
     from nous.application.chat.session_store import TreeSessionWindow
     from nous.application.use_cases import AppContext
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
 
 logger = get_logger(__name__)
 
@@ -156,7 +156,7 @@ class PrepareStep:
         3. get_context() + 記憶検索を並行実行
         4. ChatTurnContextに結果を格納
         """
-        from nous.domain.chat_config import ChatConfig as _ChatConfig
+        from nous.domain.config.chat_config import ChatConfig as _ChatConfig
 
         if config is None:
             config = _ChatConfig()

@@ -13,8 +13,8 @@ import logging
 
 from nous.application.chat.introspection import _resolve_brain_llm_params
 from nous.application.use_cases import AppContext
-from nous.domain.chat_config import ChatConfig
-from nous.domain.provider_config import ProviderConfig
+from nous.domain.config.chat_config import ChatConfig
+from nous.domain.config.provider_config import ProviderConfig
 
 
 class _MemoryEnrichmentCfg:
@@ -174,12 +174,12 @@ class TestBrainReasoningKeys:
         assert cfg.brain_reasoning_effort == "medium"
 
     def test_effort_clamped(self):
-        from nous.domain.session_config import SessionConfig
+        from nous.domain.config.session_config import SessionConfig
 
         assert SessionConfig(brain_reasoning_effort="bogus").brain_reasoning_effort == "medium"
 
     def test_config_roundtrip(self, tmp_path):
-        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.domain.config.chat_config import ChatConfigFileRepository
 
         repo = ChatConfigFileRepository(str(tmp_path))
         cfg = repo.get("p1")
@@ -217,13 +217,13 @@ class TestBrainMaxTokensKeys:
         assert cfg.brain_max_tokens == 0  # 0 = 継承センチネル
 
     def test_clamped_256_to_32768(self):
-        from nous.domain.session_config import SessionConfig
+        from nous.domain.config.session_config import SessionConfig
 
         assert SessionConfig(brain_max_tokens=100).brain_max_tokens == 256
         assert SessionConfig(brain_max_tokens=40000).brain_max_tokens == 32768
 
     def test_config_roundtrip(self, tmp_path):
-        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.domain.config.chat_config import ChatConfigFileRepository
 
         repo = ChatConfigFileRepository(str(tmp_path))
         cfg = repo.get("p1")
@@ -236,7 +236,7 @@ class TestBrainMaxTokensReasoningLift:
     """reasoning ON 時の自動嵩上げ: max(max_tokens, max(4096, budget+1024))。"""
 
     def _session(self, **kw):
-        from nous.domain.session_config import SessionConfig
+        from nous.domain.config.session_config import SessionConfig
 
         return SessionConfig(**kw)
 

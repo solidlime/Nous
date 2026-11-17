@@ -29,14 +29,14 @@ from nous.api.http.routers.chat.chat_management import (
     _REMOVED_CONFIG_KEYS_V4,
     _do_get_config_defaults,
 )
-from nous.domain.session_config import SessionConfig
+from nous.domain.config.session_config import SessionConfig
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # 依存・VCS・キャッシュは走査しない（.venv 配下の site-packages を避ける）。
 _EXCLUDE_DIR_NAMES = {"node_modules"}
 _EXCLUDE_RELATIVE_FILES = {
-    "nous/domain/session_config.py",
+    "nous/domain/config/session_config.py",
     "nous/api/http/static/chat/settings/save.js",
     "nous/api/http/static/chat/settings/reset.js",
     "nous/api/http/static/chat/settings/apply.js",
@@ -172,7 +172,7 @@ def test_config_defaults_have_tier() -> None:
 def test_tier_maps_only_name_real_fields() -> None:
     """_field_tier の明示マップに typo / 廃止キーが混ざっていない。"""
     from nous.api.http.routers.chat.chat_management import _TIER_ADVANCED, _TIER_BASIC
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
 
     known = set(ChatConfig._all_flat_fields())
     unknown = (_TIER_BASIC | _TIER_ADVANCED) - known
@@ -186,7 +186,7 @@ def _install_fake_repo(monkeypatch):
     import types
 
     from nous.api.http.routers.chat import chat_management as cm
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
 
     saved: dict[str, object] = {}
 

@@ -226,7 +226,7 @@ def kickoff_caption_task(persona: str, ctx, user_message: str) -> None:
         prev.cancel()
     try:
         from nous.config.settings import get_settings
-        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.domain.config.chat_config import ChatConfigFileRepository
 
         chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
         if _resolve_emotion_mode(chat_config) != "llm":
@@ -559,7 +559,7 @@ async def _relay_tts_stream(engine, *, text, emotion, caption, speed_arg, cache_
             return JSONResponse({"ok": False, "error": "Persona not found"}, status_code=404)
 
         from nous.config.settings import get_settings
-        from nous.domain.chat_config import ChatConfigFileRepository
+        from nous.domain.config.chat_config import ChatConfigFileRepository
 
         chat_config = ChatConfigFileRepository(get_settings().data_root).get(persona)
         irodori_config = _get_irodori_config(ctx, chat_config)

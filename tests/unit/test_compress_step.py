@@ -29,7 +29,7 @@ def _dummy_turn_ctx(system_prompt: str):
 
 def _make_chat_config(**overrides):
     """Create a ChatConfig with defaults suitable for testing."""
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
 
     defaults = {
         "persona": "test",
@@ -801,7 +801,7 @@ class TestDogfooding:
 
     def test_pipeline_chatconfig_roundtrip(self, tmp_path):
         """Verify ChatConfig → repository save/load preserves new fields."""
-        from nous.domain.chat_config import ChatConfig, ChatConfigFileRepository
+        from nous.domain.config.chat_config import ChatConfig, ChatConfigFileRepository
 
         repo = ChatConfigFileRepository(str(tmp_path))
         cfg = ChatConfig(
@@ -857,7 +857,7 @@ class TestDogfooding:
 
     def test_parallel_tools_flag_exists(self):
         """Verify enable_parallel_tools is accessible."""
-        from nous.domain.chat_config import ChatConfig
+        from nous.domain.config.chat_config import ChatConfig
 
         cfg = ChatConfig()
         assert hasattr(cfg, "enable_parallel_tools")

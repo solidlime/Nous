@@ -166,7 +166,7 @@ class SessionConfig(BaseModel):
     @field_validator("brain_reasoning_effort")
     @classmethod
     def _clamp_brain_reasoning_effort(cls, v: str) -> str:
-        from nous.domain.provider_config import REASONING_EFFORTS
+        from nous.domain.config.provider_config import REASONING_EFFORTS
 
         return v if v in REASONING_EFFORTS else "medium"  # 不正値は既存 clamp と同一形式
 
@@ -209,7 +209,7 @@ class SessionConfig(BaseModel):
             # 0 = 継承センチネル。保存値は生のまま保ち、実行時 floor は
             # resolver（introspection._resolve_brain_llm_params）が適用する。
             return self
-        from nous.domain.provider_config import REASONING_BUDGETS
+        from nous.domain.config.provider_config import REASONING_BUDGETS
 
         budget = REASONING_BUDGETS.get(self.brain_reasoning_effort)
         floor = max(4096, (budget + 1024) if budget is not None else 4096)

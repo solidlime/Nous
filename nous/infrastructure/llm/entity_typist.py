@@ -208,7 +208,7 @@ def resolve_entity_typist(repo: object) -> LLMEntityTypist | None:
     None を返し、backfill は起動しない（fail-open）。
     """
     try:
-        from nous.domain.chat_config import resolve_persona_chat_config
+        from nous.domain.config.chat_config import resolve_persona_chat_config
 
         cfg = resolve_persona_chat_config(repo)
         if cfg is None:

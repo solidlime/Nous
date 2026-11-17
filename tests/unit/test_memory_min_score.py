@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from nous.domain.chat_config import ChatConfig
+from nous.domain.config.chat_config import ChatConfig
 from nous.domain.memory.entities import Memory
 from nous.domain.search.engine import SearchResult
 from nous.domain.shared.result import Success

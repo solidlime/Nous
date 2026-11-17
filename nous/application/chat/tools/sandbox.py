@@ -15,7 +15,7 @@ from nous.application.chat.tools.shell import _tail
 
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
 
 TAIL_LINES = 120
 TOKEN_HEADER = "X-Sandbox-Token"

@@ -8,7 +8,7 @@ from nous.domain.language import LanguageResolver
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
-    from nous.domain.chat_config import ChatConfig
+    from nous.domain.config.chat_config import ChatConfig
     from nous.infrastructure.llm.base import LLMMessage
 
 logger = get_logger(__name__)

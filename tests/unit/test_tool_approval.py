@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 from nous.application.chat.pipeline.inference import InferenceStep
 from nous.application.chat.tools.approval import approval_payload, approval_required
 from nous.application.chat.turn_hub import TurnHub
-from nous.domain.chat_config import ChatConfig
+from nous.domain.config.chat_config import ChatConfig
 from nous.infrastructure.llm.base import ToolCallEvent
 
 # ---------------------------------------------------------------------------
