@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from nous.application.chat.pipeline.aliveness import emotion_hint, place_hint
 from nous.domain.memory.cue import due_cues, event_cued_memories
 from nous.domain.persona.body import body_action_hint
 from nous.domain.persona.emotion_trend import build_emotion_trend_narrative
@@ -141,6 +142,10 @@ async def _build_context_section(
             intensity = 0.5
         intensity_label = "強い" if intensity > 0.6 else "やや強い" if intensity > 0.3 else "弱い"
         t1.append(f"感情: {state.emotion}（{intensity_label}）")
+        # #39: 強度帯に応じた if-then を 1 行（行動に繋ぐ）
+        _emotion_hint = emotion_hint(state)
+        if _emotion_hint:
+            t1.append(_emotion_hint)
 
     # === Tier 2: 身体・環境 ===
     # 減衰ノート（感情・身体・関係性、複数行可）
@@ -160,6 +165,10 @@ async def _build_context_section(
 
     if getattr(state, "environment", None):
         t2.append(f"場所: {state.environment}")
+        # #42: 場所カタログの「しがちなこと」を 1 行（未知の場所は空）
+        _place_hint = place_hint(state.environment)
+        if _place_hint:
+            t2.append(_place_hint)
 
     # 見た目（装備から合成される）。system prompt に一切入っておらず、自分の姿を
     # 会話で参照できなかった（TTS と自画像だけが読んでいた）。

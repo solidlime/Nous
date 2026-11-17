@@ -22,17 +22,19 @@ class Place:
     name: str
     slug: str
     zone: int
+    # 「そこでしがちなこと」1 行（プロンプト注入用 #42）。空なら注入しない。
+    hint: str = ""
 
 
 # ヘルタ宇宙ステーションの初期カタログ。ユーザーが増やせる前提の出発点。
 DEFAULT_PLACES: tuple[Place, ...] = (
-    Place("自室", "jishitsu", 0),
-    Place("ラウンジ", "lounge", 1),
-    Place("食堂", "shokudo", 1),
-    Place("観測デッキ", "kansoku-deck", 2),
-    Place("研究区画", "kenkyu-kukaku", 2),
-    Place("格納庫", "kakuno-ko", 3),
-    Place("ドック", "dock", 4),
+    Place("自室", "jishitsu", 0, "自室にいる。落ち着くが、籠りすぎない。"),
+    Place("ラウンジ", "lounge", 1, "ラウンジにいる。誰かに気づけば短く声をかける。"),
+    Place("食堂", "shokudo", 1, "食堂にいる。食べるか、隣の相手の話を聞く。"),
+    Place("観測デッキ", "kansoku-deck", 2, "観測デッキにいる。外を見て、思ったことを1つ言う。"),
+    Place("研究区画", "kenkyu-kukaku", 2, "研究区画にいる。手を動かすか、調べ物を進める。"),
+    Place("格納庫", "kakuno-ko", 3, "格納庫にいる。道具と機体の状態を確かめる。"),
+    Place("ドック", "dock", 4, "ドックにいる。出入りの予定を確認する。"),
 )
 
 DEFAULT_TRAVEL_MINUTES = 10  # カタログに無い場所への既定所要分
