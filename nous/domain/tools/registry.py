@@ -102,8 +102,24 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
         },
         divergence="builtin 面は scope を必須にして LLM に明示させる。MCP 面は既定 'self' で省略可。",
     ),
-    "image_generate": ToolSpec(
-        name="image_generate",
+    "schedule_task": ToolSpec(
+        name="schedule_task",
+        summary="自分で決めた予定を記憶に置く（when / prompt / recur）",
+        surfaces=frozenset({BUILTIN, HTTP}),
+        params={
+            BUILTIN: (
+                ToolParam("when", "string", required=True),
+                ToolParam("prompt", "string", required=True),
+                ToolParam("recur", "string", required=False),
+            ),
+            HTTP: (
+                ToolParam("when", "string", required=True),
+                ToolParam("prompt", "string", required=True),
+                ToolParam("recur", "string", required=False),
+            ),
+        },
+    ),
+    "image_generate": ToolSpec(        name="image_generate",
         summary="ComfyUI で画像を生成する",
         surfaces=frozenset({BUILTIN, HTTP}),
         params={
