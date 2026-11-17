@@ -209,3 +209,58 @@ async def test_judge_invalid_json_returns_none(monkeypatch) -> None:
 
     monkeypatch.setattr(character_judge, "collect_text", _fake_collect)
     assert await character_judge.judge_character(_Config(), "アイデンティティ", "応答テキスト") is None
+
+
+# --- #38: violation 種別ごとの修復規範分岐 -------------------------------------
+
+
+def _instruction(calls: dict[str, Any]) -> str:
+    return calls["last_messages"][-1].content
+
+
+async def test_tone_violation_uses_tone_norms(monkeypatch) -> None:
+    calls = _patch(monkeypatch, judgments=[{"violation": "tone", "detail": "d"}, {"violation": "none", "detail": ""}])
+    [ev async for ev in RepairStep().run(None, _Config(), _messages(), _turn_ctx())]
+    text = _instruction(calls)
+    assert "口調の違反" in text
+    assert "知識の違反" not in text and "関係性の違反" not in text
+
+
+async def test_knowledge_violation_uses_knowledge_norms(monkeypatch) -> None:
+    calls = _patch(
+        monkeypatch, judgments=[{"violation": "knowledge", "detail": "d"}, {"violation": "none", "detail": ""}]
+    )
+    [ev async for ev in RepairStep().run(None, _Config(), _messages(), _turn_ctx())]
+    text = _instruction(calls)
+    assert "知識の違反" in text
+    assert "口調の違反" not in text and "関係性の違反" not in text
+
+
+async def test_relationship_violation_uses_relationship_norms(monkeypatch) -> None:
+    calls = _patch(
+        monkeypatch, judgments=[{"violation": "relationship", "detail": "d"}, {"violation": "none", "detail": ""}]
+    )
+    [ev async for ev in RepairStep().run(None, _Config(), _messages(), _turn_ctx())]
+    text = _instruction(calls)
+    assert "関係性の違反" in text
+    assert "口調の違反" not in text and "知識の違反" not in text
+
+
+async def test_unknown_violation_falls_back_to_default_norms(monkeypatch) -> None:
+    """判定器が返す既知種別（compliance/character）は現行文面にフォールバックする。"""
+    calls = _patch(
+        monkeypatch, judgments=[{"violation": "compliance", "detail": "d"}, {"violation": "none", "detail": ""}]
+    )
+    [ev async for ev in RepairStep().run(None, _Config(), _messages(), _turn_ctx())]
+    text = _instruction(calls)
+    assert "元の応答を、キャラの口調・一人称・価値観に完全に沿うよう書き直せ" in text
+    assert "口調の違反" not in text and "知識の違反" not in text and "関係性の違反" not in text
+
+
+async def test_blank_drift_leaves_context_untouched(monkeypatch) -> None:
+    """違反が無ければ drift は空のまま・再生成もしない。"""
+    calls = _patch(monkeypatch, judgments=[{"violation": "none", "detail": ""}])
+    turn_ctx = _turn_ctx()
+    [ev async for ev in RepairStep().run(None, _Config(), _messages(), turn_ctx)]
+    assert turn_ctx.drift is None
+    assert "last_messages" not in calls

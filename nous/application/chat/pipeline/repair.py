@@ -47,7 +47,28 @@ _REPAIR_INSTRUCTION = """直前の応答にキャラクター一貫性の違反�
 {tool_results}
 
 ## 修復規範
-元の応答を、キャラの口調・一人称・価値観に完全に沿うよう書き直せ。判定で指摘された違反を必ず解消せよ。セッション内の事実・ユーザーの指示を最優先し、注入された記憶・状態と矛盾させない。ツールを新たに呼び出す必要がある内容は書かず、既に得られた情報だけで答えよ。応答本文のみを出力せよ。"""
+{norms}
+セッション内の事実・ユーザーの指示を最優先し、注入された記憶・状態と矛盾させない。ツールを新たに呼び出す必要がある内容は書かず、既に得られた情報だけで答えよ。応答本文のみを出力せよ。"""
+
+# violation 種別ごとの規範。未知の種別（判定器が返す compliance/character 等）は既定文面へ落とす。
+_REPAIR_NORMS: dict[str, str] = {
+    "tone": (
+        "口調の違反。persona 定義の一人称・語尾・常体/敬体・相手の呼び方を最後まで崩さずに書き直せ。"
+        "言い回しだけを直し、内容は変えるな。"
+    ),
+    "knowledge": (
+        "知識の違反。persona が持たない設定外の知識・固有名詞・数値を断定するな。"
+        "セッションで得た事実と persona が知っている範囲だけで答え、知らないことは知らないと言え。"
+    ),
+    "relationship": (
+        "関係性の違反。相手との距離感・呼び方・親しさの度合いをこれまでの履歴に合わせろ。"
+        "初対面のような他人行儀や、根拠のない馴れ馴れしさを消して書き直せ。"
+    ),
+}
+
+_DEFAULT_NORMS = (
+    "元の応答を、キャラの口調・一人称・価値観に完全に沿うよう書き直せ。判定で指摘された違反を必ず解消せよ。"
+)
 
 
 def _tool_results_text(tool_calls_log: list[dict] | None) -> str:
@@ -90,6 +111,7 @@ async def _regenerate(
         detail=detail or "",
         response=turn_ctx.full_response,
         tool_results=_tool_results_text(turn_ctx.tool_calls_log),
+        norms=_REPAIR_NORMS.get(violation, _DEFAULT_NORMS),
     )
     provider = get_provider(
         config.provider, config.get_effective_api_key(), config.get_effective_model(), config.get_effective_base_url()

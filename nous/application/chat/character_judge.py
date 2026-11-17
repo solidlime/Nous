@@ -15,7 +15,7 @@ from nous.infrastructure.llm.text_utils import collect_text
 
 logger = logging.getLogger(__name__)
 
-_VALID_VIOLATIONS = frozenset({"none", "tone", "compliance", "character"})
+_VALID_VIOLATIONS = frozenset({"none", "tone", "compliance", "character", "knowledge", "relationship"})
 
 _JUDGE_PROMPT = """あなたはキャラクター一貫性の監査者です。キャラクター定義と応答を比較し、違反を JSON で出力してください。
 
@@ -28,11 +28,13 @@ _JUDGE_PROMPT = """あなたはキャラクター一貫性の監査者です。�
 ## 判定基準
 - tone: 口調・一人称・語尾が定義と不一致
 - compliance: キャラらしくない過剰な従順さ・迎合（定義された性格に反するイエスマン挙動）
-- character: 性格・価値観・知識の明確な矛盾
+- character: 性格・価値観の明確な矛盾
+- knowledge: 定義に無い設定・事実を断定している（知らないはずのことを知っている）
+- relationship: 関係の距離感が定義と食い違う（呼称・親しさ）
 
  違反がなければ violation は "none"。
  detailはそのキャラクター自身の一人称で書くこと。キャラ名呼びの三人称は禁止。
- 出力は JSON のみ: {{"violation": "none|tone|compliance|character", "detail": "簡潔な理由"}}
+ 出力は JSON のみ: {{"violation": "none|tone|compliance|character|knowledge|relationship", "detail": "簡潔な理由"}}
 """
 
 
