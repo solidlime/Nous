@@ -410,7 +410,7 @@ def _ensure_inner(
             # mkdir しただけだと root 所有になり、ペルソナが書けない。
             # chown は cap_drop: ALL でできないので、書けるように chmod する。
             if not read_only:
-                os.chmod(target_dir, 0o777)
+                os.chmod(target_dir, 0o777)  # nosec B103 - sandbox 専用の隔離ディレクトリ。詳細は上のコメント。
         except OSError as e:
             return f"ホスト側ディレクトリを作れない: {host}: {e}"
         args += ["-v", f"{host}:{target}" + (":ro" if read_only else "")]

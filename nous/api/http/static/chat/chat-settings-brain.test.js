@@ -98,6 +98,7 @@ beforeAll(() => {
   ST.renderMcpJson = () => {};
   ST.parseMcpJson = () => [];
   ST.updateSliderLabels = () => {};
+  ST.renderBuiltinTools = () => {};
   window.Nous.Chat.state = { mcpServers: [], enabledSkills: [], disabledTools: new Set() };
   window.Nous.Chat.tts = { checkConnection: () => {} };
   buildForm();

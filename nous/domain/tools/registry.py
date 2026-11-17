@@ -119,7 +119,8 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
             ),
         },
     ),
-    "image_generate": ToolSpec(        name="image_generate",
+    "image_generate": ToolSpec(
+        name="image_generate",
         summary="ComfyUI で画像を生成する",
         surfaces=frozenset({BUILTIN, HTTP}),
         params={
