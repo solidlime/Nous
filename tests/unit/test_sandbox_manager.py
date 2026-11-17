@@ -6,6 +6,7 @@ docker は実行しない。``_docker`` を FakeDocker に差し替えて引数�
 
 from __future__ import annotations
 
+import os
 import stat
 import subprocess
 import time
@@ -260,6 +261,20 @@ def test_dns_check_can_be_skipped(fake, monkeypatch) -> None:
     fake.by_subcommand["exec"] = (2, "", "getent: nous: Name or service not known\n")
     assert sm._post_start_check("alice-sandbox") is None
     assert fake.calls == []
+
+
+def test_fix_mount_perms_opens_rw_mounts_only(fake, tmp_path: Path) -> None:
+    """既存コンテナの start 経路は run の chmod を通らない。掛け直す。"""
+    rw = tmp_path / "container" / "persona" / "alice" / "wiki"
+    ro = tmp_path / "container" / "persona" / "alice" / "media"
+    for d in (rw, ro):
+        d.mkdir(parents=True)
+        os.chmod(d, 0o755)
+
+    sm._fix_mount_perms("alice")
+
+    assert stat.S_IMODE(rw.stat().st_mode) == 0o777
+    assert stat.S_IMODE(ro.stat().st_mode) == 0o755
 
 
 def test_apt_extra_skips_apt_when_everything_is_installed(client, fake, monkeypatch) -> None:

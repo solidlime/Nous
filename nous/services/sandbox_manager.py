@@ -213,6 +213,46 @@ def _check_dns(container: str, timeout: float = DNS_CHECK_TIMEOUT_SECONDS) -> st
     return f"{container} から nous を名前解決できない（SANDBOX_NETWORK を確認する）: {detail}"
 
 
+def _mount_specs(root: Path, persona: str) -> list[tuple[Path, str, bool]]:
+    """sandbox に見せるディレクトリ。(host, target, read_only)
+
+    ペルソナが読める場所だけを見せる。memory.sqlite や config.json は見せない
+    （壊されると復旧できない）。media は nous が書く生成物なので ro。
+    """
+    home = "/home/agent"
+    return [
+        (root / "persona" / persona / "workspace", f"{home}/workspace", False),
+        (root / "persona" / persona / "wiki", f"{home}/wiki", False),
+        (root / "persona" / persona / "uploads", f"{home}/uploads", False),
+        (root / "persona" / persona / "media", f"{home}/media", True),
+        (root / "persona" / persona / "skills", f"{home}/.agents/skills", False),
+        (root / "skills", f"{home}/.agents/global-skills", True),
+    ]
+
+
+def _fix_mount_perms(persona: str) -> None:
+    """rw マウントを書き込み可能にする。
+
+    sandbox は非 root（既定 1026:100）で走る。manager が mkdir しただけだと
+    root 所有になり書けない。chown は cap_drop: ALL でできないので chmod する。
+    既存コンテナを start するだけの経路では run 時の chmod が済んでいないため、
+    ensure のたびに掛け直す（失败しても exec は続ける）。
+    """
+    root = _host_data_root()
+    if root is None:
+        return
+    local = _data_root()
+    for host, _target, read_only in _mount_specs(root, persona):
+        if read_only:
+            continue
+        try:
+            d = local / host.relative_to(root)
+            if d.is_dir() and (d.stat().st_mode & 0o777) != 0o777:
+                os.chmod(d, 0o777)  # nosec B103 - 隔離ディレクトリ。上の docstring 参照。
+        except (OSError, ValueError):
+            continue
+
+
 def _post_start_check(container: str) -> str | None:
     if _env("SANDBOX_DNS_CHECK", "1") in {"0", "false", "no"}:
         return None
@@ -346,12 +386,14 @@ def _ensure_inner(
         if label.strip() != "1":
             return f"{name} は nous の sandbox ではない（com.nous.sandbox ラベルが無い）"
         if running == "true":
+            _fix_mount_perms(persona)
             return None
         started, err = _call("start", name)
         if started is None:
             return err or "docker start failed"
         if started.returncode != 0:
             return started.stderr.strip() or "docker start failed"
+        _fix_mount_perms(persona)
         return _post_start_check(name)
 
     detail = inspected.stderr.strip()
@@ -365,14 +407,7 @@ def _ensure_inner(
         return "host data root が解決できない（SANDBOX_HOST_DATA_ROOT に絶対パスを設定する）"
     # ペルソナが読める場所だけを見せる。memory.sqlite や config.json は
     # 見せない（壊されると復旧できない）。media は nous が書く生成物なので ro。
-    mounts = [
-        (root / "persona" / persona / "workspace", f"{home}/workspace", False),
-        (root / "persona" / persona / "wiki", f"{home}/wiki", False),
-        (root / "persona" / persona / "uploads", f"{home}/uploads", False),
-        (root / "persona" / persona / "media", f"{home}/media", True),
-        (root / "persona" / persona / "skills", f"{home}/.agents/skills", False),
-        (root / "skills", f"{home}/.agents/global-skills", True),
-    ]
+    mounts = _mount_specs(root, persona)
     args = [
         "run",
         "-d",
