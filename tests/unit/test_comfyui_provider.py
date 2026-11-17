@@ -907,7 +907,7 @@ async def test_builtin_image_generate_skips_non_display_images(tmp_path, monkeyp
     assert len(result["images"]) == 2
     assert result["images"][0]["base64"] == "aGVsbG8="
     assert result["images"][1]["base64"] == "IQ=="
-    saved = sorted(p for p in (tmp_path / "persona" / "test_persona" / "images").glob("*.png"))
+    saved = sorted(p for p in (tmp_path / "persona" / "test_persona" / "media" / "images").glob("*.png"))
     assert len(saved) == 2
     assert saved[0].name.endswith("_00.png")
     assert saved[1].name.endswith("_01.png")

@@ -492,7 +492,8 @@ async def _do_attachment_upload(persona: str, ctx, filename: str, file_bytes: by
     return {
         "filename": safe_name,
         "url": f"/api/chat/{persona}/attachment/{safe_name}",
-        "workspace_path": f"/uploads/{persona}/{safe_name}",
+        # sandbox からは /home/agent/uploads に見える（sandbox_manager のマウント先）。
+        "workspace_path": f"/home/agent/uploads/{safe_name}",
         "mime_type": mime_type,
         "size": size,
     }
@@ -504,7 +505,7 @@ async def _do_attachment_serve(persona: str, ctx, filename: str) -> dict | None:
     from pathlib import Path
 
     settings = get_settings()
-    file_path = Path(settings.data_root) / "uploads" / persona / filename
+    file_path = Path(persona_uploads_dir(settings.data_root, persona)) / filename
     if not file_path.exists():
         return None
 
