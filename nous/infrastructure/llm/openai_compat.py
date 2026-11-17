@@ -312,6 +312,15 @@ class OpenAICompatProvider(LLMProvider):
                                     pending_tool_calls[idx]["args_json"] += tc_chunk.function.arguments
 
             # Emit collected tool calls
+            # モデルがツール呼び出し記法を生テキストで漏らすことがある（DeepSeek の DSML 等）。
+            # ゲートウェイが解釈し損ねた場合の切り分け用に、宣言ツール数と合わせて1行だけ残す。
+            if not tool_calls_collected and "｜DSML｜" in full_text:
+                logger.warning(
+                    "Tool-call markup leaked into content (model=%s, tools_declared=%d): %s",
+                    self.model,
+                    len(openai_tools),
+                    full_text[:200].replace("\n", " "),
+                )
             for idx in sorted(pending_tool_calls.keys()):
                 tc_data = pending_tool_calls[idx]
                 try:

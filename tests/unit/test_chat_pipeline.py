@@ -1992,3 +1992,78 @@ async def test_inference_passes_chat_session_id_to_provider():
         step = inf.InferenceStep()
         _ = [e async for e in step.run(ctx, config, [], turn_ctx, MagicMock())]
     assert captured["session_id"] == "nous-chat-herta-sess9"
+
+
+class TestToolBudgetKeepsToolsDeclared:
+    """予算切れの round でも tools を宣言し続ける。
+
+    宣言をやめるとモデル（DeepSeek 系）はツール呼び出しを独自記法（DSML）で
+    content に吐き、nous はそれを実行せず発言として表示してしまう。
+    実行の可否だけを予算で止める。
+    """
+
+    async def _run(self, max_tool_calls: int):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from nous.application.chat.pipeline import inference as inf
+        from nous.application.chat.pipeline.context import ChatTurnContext
+        from nous.domain.config.chat_config import ChatConfig
+        from nous.domain.config.provider_config import ProviderConfig
+        from nous.domain.config.tool_config import ToolConfig
+        from nous.infrastructure.llm.base import TextDeltaEvent, ToolCallEvent
+
+        rounds: list[dict] = []
+        events: list = []
+
+        async def _mock_stream(**kwargs):
+            rounds.append(kwargs)
+            # 1巡目=実行される呼び出し、2巡目=予算切れで拒否される呼び出し、3巡目=本文
+            if len(rounds) <= 2:
+                yield ToolCallEvent(
+                    tool_name="bash",
+                    tool_input={"command": "id"},
+                    tool_use_id=f"c{len(rounds)}",
+                )
+            else:
+                yield TextDeltaEvent(content="done")
+
+        provider = MagicMock()
+        provider.stream = _mock_stream
+
+        registry = MagicMock()
+        registry.get_visible_tools.return_value = [SimpleNamespace(name="bash")]
+        registry.execute = AsyncMock(return_value={"status": "ok"})
+        registry.truncate_result = lambda result, limit: result
+
+        config = ChatConfig(
+            provider_config=ProviderConfig(api_key="k", model="m", max_tool_calls=max_tool_calls),
+            tool_config=ToolConfig(enable_parallel_tools=False),
+        )
+        turn_ctx = ChatTurnContext(session_id="s", user_message="hi")
+        turn_ctx.system_prompt = "sys"
+
+        with (
+            patch.object(inf, "get_provider", return_value=provider),
+            patch.object(inf, "approval_required", return_value=False),
+        ):
+            async for event in inf.InferenceStep().run(MagicMock(), config, [], turn_ctx, registry):
+                events.append(event)
+
+        return rounds, events, registry
+
+    @pytest.mark.asyncio
+    async def test_tools_still_declared_after_budget_exhausted(self):
+        rounds, _events, _registry = await self._run(max_tool_calls=1)
+
+        assert len(rounds) >= 3, "拒否のあとに本文を出させる round まで進むこと"
+        assert all(round_.get("tools") for round_ in rounds), "予算切れでも tools を宣言する"
+
+    @pytest.mark.asyncio
+    async def test_over_budget_call_is_refused_not_executed(self):
+        rounds, events, registry = await self._run(max_tool_calls=1)
+
+        refused = [e for e in events if type(e).__name__ == "ToolResultSSE" and e.result.get("status") == "error"]
+        assert len(refused) == 1
+        assert refused[0].id == "c2"
+        assert registry.execute.await_count == 1, "予算内の 1 回だけ実行される"

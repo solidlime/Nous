@@ -45,6 +45,9 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# 予算切れで実行しなかったツール呼び出しへの tool 結果（モデルに「締めろ」を伝える）
+_TOOL_BUDGET_MESSAGE = "ツール呼び出しの制限に達したため実行しなかった。今ある情報だけで回答せよ。"
+
 
 class InferenceStep:
     """LLMストリームループ。TextDelta/ToolCall/ToolResult SSEを yield する。"""
@@ -91,6 +94,10 @@ class InferenceStep:
         temperature = effective_temp if effective_temp is not None else config.temperature
         max_continuation_rounds = 3
         _continuation_rounds = 0
+        _budget_refused = False
+        # max_tool_calls=0 は「ツール無効」（宣言もしない）。1 以上なら宣言は続け、
+        # 実行だけを予算で止める（下の予算判定）。
+        _tools_enabled = config.max_tool_calls > 0
         while turn_ctx.tool_call_count <= config.max_tool_calls:
             pending_tool_calls: list[ToolCallEvent] = []
             current_text = ""
@@ -103,8 +110,11 @@ class InferenceStep:
             seen_ids: set[str] = set()
 
             # 各ループ反復で visible tools を再評価（search_tools で新発見を拾う）
-            # max_tool_calls の予算を使い切ったらツールを渡さない（0 設定なら最初から渡さない）
-            visible_tools = registry.get_visible_tools() if turn_ctx.tool_call_count < config.max_tool_calls else []
+            # 予算切れの round でもツール定義は宣言し続ける: 宣言をやめるとモデルは
+            # ツール呼び出しを独自記法（DeepSeek の DSML 等）でテキストに吐き、
+            # nous はそれを実行せず発言として表示・履歴に保存してしまう。
+            # 実行の可否は下の予算判定で制御する。
+            visible_tools = registry.get_visible_tools() if _tools_enabled else []
 
             # タイムスタンプ注入（設定ON時のみ）— debug dumpより先に注入
             self._inject_timestamps(config, messages)
@@ -196,6 +206,30 @@ class InferenceStep:
                     ],
                 )
             )
+
+            # 予算切れ: 実行せず「上限」を tool 結果として返し、テキストで締めさせる。
+            # 二度目の呼び出しは打ち切る（無限ループ防止）。
+            if _tools_enabled and turn_ctx.tool_call_count >= config.max_tool_calls:
+                if _budget_refused:
+                    break
+                _budget_refused = True
+                for tc in pending_tool_calls:
+                    refusal = {"status": "error", "message": _TOOL_BUDGET_MESSAGE}
+                    turn_ctx.segments.append(
+                        {"type": "tool_result", "name": tc.tool_name, "result": refusal, "id": tc.tool_use_id}
+                    )
+                    turn_ctx.tool_calls_log.append(
+                        {"id": tc.tool_use_id, "name": tc.tool_name, "input": tc.tool_input, "result": refusal}
+                    )
+                    yield ToolResultSSE(name=tc.tool_name, result=refusal, id=tc.tool_use_id)
+                    messages.append(
+                        LLMMessage(
+                            role="tool",
+                            content=json.dumps(refusal, ensure_ascii=False),
+                            tool_call_id=tc.tool_use_id,
+                        )
+                    )
+                continue
 
             # 重複排除はストリーム中の ToolCallEvent 処理時に実施済み（executed_ids / seen_ids）
 
@@ -318,21 +352,34 @@ class InferenceStep:
 
         _ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         _debug_dir = os.path.join(tempfile.gettempdir(), "nous_debug")
-        os.makedirs(_debug_dir, exist_ok=True)
         _path = os.path.join(_debug_dir, f"prompt_{_ts}.txt")
-        with open(_path, "w", encoding="utf-8") as _f:
-            _f.write(f"=== SYSTEM PROMPT ({len(turn_ctx.system_prompt)} chars) ===\n")
-            _f.write(turn_ctx.system_prompt)
-            _f.write(f"\n\n=== MESSAGES ({len(messages)} total) ===\n")
-            for _i, _m in enumerate(messages):
-                role = _m.role if hasattr(_m, "role") else "?"
-                content = str(_m.content)[:2000] if hasattr(_m, "content") else str(_m)[:2000]
-                _f.write(f"\n[{_i}] {role}: {content}\n")
-            _f.write(f"\n\n=== TOOLS ({len(visible_tools)} total) ===\n")
-            for _t in visible_tools:
-                name = _t.get("function", {}).get("name", "?") if isinstance(_t, dict) else getattr(_t, "name", "?")
-                _f.write(f"  - {name}\n")
+        try:
+            os.makedirs(_debug_dir, exist_ok=True)
+            with open(_path, "w", encoding="utf-8") as _f:
+                _f.write(self._debug_dump_text(turn_ctx, messages, visible_tools))
+        except OSError:
+            # デバッグ用のダンプで会話を止めない
+            logger.warning("Debug prompt dump failed: %s", _path, exc_info=True)
+            return
         logger.info("Debug prompt saved: %s", _path)
+
+    def _debug_dump_text(
+        self,
+        turn_ctx: ChatTurnContext,
+        messages: list[LLMMessage],
+        visible_tools: list,
+    ) -> str:
+        parts = [f"=== SYSTEM PROMPT ({len(turn_ctx.system_prompt)} chars) ===\n", turn_ctx.system_prompt]
+        parts.append(f"\n\n=== MESSAGES ({len(messages)} total) ===\n")
+        for _i, _m in enumerate(messages):
+            role = _m.role if hasattr(_m, "role") else "?"
+            content = str(_m.content)[:2000] if hasattr(_m, "content") else str(_m)[:2000]
+            parts.append(f"\n[{_i}] {role}: {content}\n")
+        parts.append(f"\n\n=== TOOLS ({len(visible_tools)} total) ===\n")
+        for _t in visible_tools:
+            name = _t.get("function", {}).get("name", "?") if isinstance(_t, dict) else getattr(_t, "name", "?")
+            parts.append(f"  - {name}\n")
+        return "".join(parts)
 
     def _handle_tool_call(
         self,
