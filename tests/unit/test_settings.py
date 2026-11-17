@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from nous.config.settings import (
     EmbeddingConfig,
     IrodoriConfig,
@@ -171,3 +173,27 @@ class TestEnsureDirectories:
             Path(d).mkdir(parents=True, exist_ok=True)
         Path(s.import_dir, "done").mkdir(parents=True, exist_ok=True)
         Path(s.cache_dir, "huggingface").mkdir(parents=True, exist_ok=True)
+
+
+class TestPersonaName:
+    """persona_path はパスの1セグメントとして名前を検証する。
+
+    検証が無いと MagicMock などがそのまま通り、data/persona/<MagicMock ...>/ が
+    実データ領域に作られる（実際に76個できていた）。
+    """
+
+    def test_accepts_plain_names(self):
+        s = Settings()
+        assert s.persona_path("herta").endswith("/persona/herta")
+        assert s.persona_path("http_api_test").endswith("/persona/http_api_test")
+
+    def test_rejects_repr_like_names(self):
+        s = Settings()
+        with pytest.raises(ValueError):
+            s.persona_path("<MagicMock name='mock.persona' id='123'>")
+
+    def test_rejects_path_traversal(self):
+        s = Settings()
+        for bad in ("../etc", "a/b", "", " has space"):
+            with pytest.raises(ValueError):
+                s.persona_path(bad)

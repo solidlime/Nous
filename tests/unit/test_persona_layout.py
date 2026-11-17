@@ -70,3 +70,73 @@ def test_keeps_both_when_target_exists(tmp_path: Path) -> None:
     assert (p / "memory.sqlite").read_text() == "old"
     assert (p / "db" / "memory.sqlite").read_text() == "new"
     assert moved == []
+
+
+def test_named_db_becomes_memory_sqlite(tmp_path: Path) -> None:
+    """旧レイアウトの <persona>.db は db/memory.sqlite へ改名する。
+
+    置き場所を変えるだけではアプリ（db/memory.sqlite を開く）に読まれないため。
+    """
+    data = tmp_path / "data"
+    p = data / "persona" / "herta"
+    _w(p / "herta.db", "body")
+    _w(p / "herta.db-wal")
+
+    migrate_persona_layout(data)
+
+    assert (p / "db" / "memory.sqlite").read_text() == "body"
+    assert (p / "db" / "memory.sqlite-wal").is_file()
+    assert not (p / "herta.db").exists()
+
+
+def test_named_db_does_not_clobber_existing_memory_sqlite(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    p = data / "persona" / "herta"
+    _w(p / "herta.db", "old")
+    _w(p / "db" / "memory.sqlite", "new")
+
+    migrate_persona_layout(data)
+
+    assert (p / "db" / "memory.sqlite").read_text() == "new"
+    assert (p / "herta.db").read_text() == "old"  # 残す（どちらが正か機械では決められない）
+
+
+def test_leftovers_are_quarantined_not_deleted(tmp_path: Path) -> None:
+    """config.json.bak-* と wiki_cleanup_*.json は _legacy/ へ退ける。消さない。"""
+    data = tmp_path / "data"
+    p = data / "persona" / "herta"
+    _w(p / "config.json", "{}")
+    _w(p / "config.json.bak-sandbox", '{"old":1}')
+    _w(p / "wiki_cleanup_20261108.json", "[]")
+
+    moved = migrate_persona_layout(data)
+
+    assert (p / "config.json").is_file()  # 現役の設定は動かさない
+    assert (p / "_legacy" / "config.json.bak-sandbox").read_text() == '{"old":1}'
+    assert (p / "_legacy" / "wiki_cleanup_20261108.json").is_file()
+    assert moved
+
+
+def test_quarantine_is_idempotent(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    p = data / "persona" / "herta"
+    _w(p / "config.json.bak-sandbox", "x")
+
+    assert migrate_persona_layout(data)
+    assert migrate_persona_layout(data) == []
+
+
+def test_each_persona_is_migrated(tmp_path: Path) -> None:
+    """他ペルソナも同じ規則で移る（1つだけ特別扱いしない）。"""
+    data = tmp_path / "data"
+    for name in ("herta", "raurau"):
+        _w(data / "persona" / name / "memory.sqlite")
+        _w(data / "persona" / name / "images" / "a.png")
+
+    moved = migrate_persona_layout(data)
+
+    for name in ("herta", "raurau"):
+        p = data / "persona" / name
+        assert (p / "db" / "memory.sqlite").is_file()
+        assert (p / "media" / "images" / "a.png").is_file()
+    assert len(moved) == 4

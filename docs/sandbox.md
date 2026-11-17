@@ -85,12 +85,23 @@ persona/<p>/
 ├─ wiki/
 ├─ uploads/        ユーザーが投入したファイル
 ├─ skills/
-└─ workspace/      ペルソナの作業場
+├─ workspace/      ペルソナの作業場
+└─ _legacy/        旧レイアウトの残骸（起動時に隔離される。消さない）
 ```
 
 旧レイアウト（`memory.sqlite` 直下、`images/`、`tts_cache/`、`avatar/`、`${DATA_ROOT}/uploads/<p>`）は
 起動時に `nous/infrastructure/persona_layout.py` が新レイアウトへ移す。新旧両方に
 同名ファイルがあるときは上書きしない（片方のデータが消えるため）。
+
+残骸の扱いは次のとおり。**自動では何も消さない。**
+
+| 旧ファイル | 行き先 | 理由 |
+|---|---|---|
+| `<p>.db`（例 `herta.db`）＋ `-wal`/`-shm` | `db/memory.sqlite` | アプリが開くのは `db/memory.sqlite` なので、置き場所を変えるだけでは読まれない。`db/memory.sqlite` が既にある場合は触らず残す |
+| `config.json.bak-*` | `_legacy/` | 移行前の控え。sandbox にも見せる必要が無い |
+| `wiki_cleanup_*.json` | `_legacy/` | 一回限りのレポート |
+
+移行状態の点検は `python scripts/check_persona_layout.py [data_root]`（読み取りのみ）。
 
 ---
 

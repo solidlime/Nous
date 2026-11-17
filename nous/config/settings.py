@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Self
 
@@ -16,6 +17,9 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+# ペルソナ名はディレクトリ1セグメント。実データ領域のパスに使うのでここで絞る。
+_PERSONA_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 
 class EmbeddingConfig(BaseModel):
@@ -525,7 +529,14 @@ class Settings(BaseSettings):
         return f"{self.data_root}/persona"
 
     def persona_path(self, persona_name: str) -> str:
-        """特定ペルソナのデータディレクトリパス: {data_root}/persona/{name}"""
+        """特定ペルソナのデータディレクトリパス: {data_root}/persona/{name}
+
+        名前はパスの1セグメントとして検証する。MagicMock のような非文字列や、
+        区切り文字を含む名前がそのまま通ると、実データ領域にゴミのディレクトリが
+        増える（実際に data/persona/<MagicMock ...>/ が76個できていた）。
+        """
+        if not isinstance(persona_name, str) or not _PERSONA_NAME_RE.match(persona_name):
+            raise ValueError(f"不正なペルソナ名: {persona_name!r}")
         return f"{self.persona_dir}/{persona_name}"
 
     # ペルソナ配下のサブディレクトリ。sandbox から見えるのは media / wiki /
