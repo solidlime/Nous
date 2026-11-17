@@ -194,6 +194,90 @@ def _missing(stderr: str) -> bool:
     return "no such object" in text or "no such container" in text
 
 
+DNS_CHECK_TIMEOUT_SECONDS = 10.0
+
+
+def _check_dns(container: str, timeout: float = DNS_CHECK_TIMEOUT_SECONDS) -> str | None:
+    """コンテナ内から nous を名前解決できるか。できなければ理由を返す。
+
+    既定 bridge では Docker の埋め込み DNS が効かず、nous は引けない。
+    引けないまま exec を返すと「繋がらない」だけの静かな壊れ方になるので、
+    ensure の段階で理由を返す（``SANDBOX_DNS_CHECK=0`` で skip）。
+    """
+    proc, err = _call("exec", container, "getent", "hosts", "nous", timeout=timeout)
+    if proc is None:
+        return err or "docker exec failed"
+    if proc.returncode == 0:
+        return None
+    detail = (proc.stderr.strip() or proc.stdout.strip() or f"exit {proc.returncode}").splitlines()[0]
+    return f"{container} から nous を名前解決できない（SANDBOX_NETWORK を確認する）: {detail}"
+
+
+def _post_start_check(container: str) -> str | None:
+    if _env("SANDBOX_DNS_CHECK", "1") in {"0", "false", "no"}:
+        return None
+    return _check_dns(container)
+
+
+APT_EXTRA_TIMEOUT_SECONDS = 300.0
+_PACKAGE_RE = re.compile(r"[a-z0-9][a-z0-9+.-]{0,63}")
+
+
+def _apt_extra() -> list[str]:
+    """イメージに焼いていないパッケージ（``SANDBOX_APT_EXTRA``、カンマ区切り）。"""
+    raw = os.environ.get("SANDBOX_APT_EXTRA", "")
+    names = [p.strip() for p in raw.split(",") if p.strip()]
+    valid = [p for p in names if _PACKAGE_RE.fullmatch(p)]
+    if len(valid) != len(names):
+        # apt に余計な引数を解釈させない（オプションを紛れ込ませない）。
+        logger.warning("SANDBOX_APT_EXTRA に不正なパッケージ名: %s", [p for p in names if p not in valid])
+    return valid
+
+
+def _install_missing(container: str, packages: list[str]) -> list[str]:
+    """コンテナに無いパッケージだけ apt で足す。失敗は警告に落とす（run は殺さない）。
+
+    全部を焼くとイメージの rebuild が重くなるので、変化の速いものだけ起動時に足す。
+    全部入っていれば dpkg を叩くだけで終わる。
+    """
+    missing: list[str] = []
+    for pkg in packages:
+        proc, err = _call("exec", container, "dpkg", "-s", pkg, timeout=15.0)
+        if proc is not None and proc.returncode == 0:
+            continue
+        if proc is None:
+            logger.warning("dpkg -s %s in %s failed: %s", pkg, container, err)
+        missing.append(pkg)
+    if not missing:
+        return []
+    script = (
+        "export DEBIAN_FRONTEND=noninteractive; "
+        "apt-get update && apt-get install -y --no-install-recommends " + " ".join(missing)
+    )
+    proc, err = _call("exec", container, "bash", "-lc", script, timeout=APT_EXTRA_TIMEOUT_SECONDS)
+    if proc is None:
+        logger.warning("sandbox apt install failed (%s): %s", container, err)
+        return []
+    if proc.returncode != 0:
+        lines = proc.stderr.strip().splitlines()
+        detail = lines[0] if lines else f"exit {proc.returncode}"
+        logger.warning("sandbox apt install failed (%s): %s", container, detail[:300])
+        return []
+    logger.info("sandbox apt install (%s): %s", container, ", ".join(missing))
+    return missing
+
+
+def _post_run(container: str) -> str | None:
+    """run 直後の面倒。戻り値に載るのは DNS の失敗だけ（apt は警告で済ませる）。"""
+    dns_err = _post_start_check(container)
+    if dns_err:
+        return dns_err
+    extra = _apt_extra()
+    if extra:
+        _install_missing(container, extra)
+    return None
+
+
 def _persona(raw: str) -> str:
     if not PERSONA_RE.fullmatch(raw):
         raise HTTPException(status_code=400, detail=f"invalid persona: {raw!r}")
@@ -268,7 +352,7 @@ def _ensure_inner(
             return err or "docker start failed"
         if started.returncode != 0:
             return started.stderr.strip() or "docker start failed"
-        return None
+        return _post_start_check(name)
 
     detail = inspected.stderr.strip()
     if not _missing(detail):
@@ -320,6 +404,26 @@ def _ensure_inner(
     args += [
         "-e",
         f"HOME={home}",
+        "-e",
+        f"TZ={os.environ.get('SANDBOX_TZ') or os.environ.get('TZ') or 'UTC'}",
+        # persona 側は UTF-8 前提。POSIX に落ちると Python が ASCII になる。
+        "-e",
+        "LANG=C.UTF-8",
+        "-e",
+        "LC_ALL=C.UTF-8",
+    ]
+    # イメージの git config --system は persona / persona@nous.local。
+    # commit の author と committer を両方 env で上書きしないと片方だけ残る。
+    for env_name, git_key in (("SANDBOX_GIT_USER_NAME", "NAME"), ("SANDBOX_GIT_USER_EMAIL", "EMAIL")):
+        value = os.environ.get(env_name, "").strip()
+        if value:
+            args += [
+                "-e",
+                f"GIT_AUTHOR_{git_key}={value}",
+                "-e",
+                f"GIT_COMMITTER_{git_key}={value}",
+            ]
+    args += [
         "--workdir",
         home,
         img,
@@ -332,7 +436,7 @@ def _ensure_inner(
         return err or "docker run failed"
     if ran.returncode != 0:
         return ran.stderr.strip() or "docker run failed"
-    return None
+    return _post_run(name)
 
 
 def _write_log(persona: str, command: str, stdout: str, stderr: str) -> str | None:

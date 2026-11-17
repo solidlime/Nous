@@ -104,8 +104,8 @@ sandbox 既定になり（`workspace_root` は要らない）、別ツール `sa
 |---|---|---|
 | `sandbox_enabled` | `false` | sandbox を既定のシェルにするスイッチ |
 | `sandbox_manager_url` | `""` | manager の URL。空なら enabled でもローカル実行のまま |
-| `sandbox_image` | （空） | 生成するコンテナのイメージ。空なら manager の `SANDBOX_IMAGE`。素の ubuntu なので python も入っていない |
-| `sandbox_network` | （空） | sandbox のネットワーク。空なら manager の `SANDBOX_NETWORK`。**compose ネットワークを指定しないこと** |
+| `sandbox_image` | （空） | 生成するコンテナのイメージ。空なら manager の `SANDBOX_IMAGE`（既定 `ghcr.io/solidlime/nous-sandbox:latest` = `docker/sandbox/Dockerfile`） |
+| `sandbox_network` | （空） | sandbox のネットワーク。空なら manager の `SANDBOX_NETWORK`（既定 `nous-net`）。Docker 埋め込み DNS で `nous` を引くために user-defined network に載せている。manager の API にも届くので、トークン管理は前提 |
 | `sandbox_memory` | （空） | メモリ上限。空なら manager の `SANDBOX_MEMORY` |
 | `sandbox_idle_minutes` | `0` | 停止までのアイドル時間。0 なら manager の `SANDBOX_IDLE_MINUTES` |
 
@@ -121,9 +121,13 @@ manager に届かない・未設定のときは `status="error"` を返す。例
 | `NOUS_DATA_ROOT` | `/data` | manager コンテナ内のデータ根。ログと workspace 削除に使う |
 | `SANDBOX_HOST_DATA_ROOT` | （inspect で自動） | bind mount の source。**ホスト絶対パス**で渡す。inspect の結果と違えば拒否する |
 | `SANDBOX_MANAGER_HOST` | `0.0.0.0` | uvicorn の bind。ホストで直接動かすなら `127.0.0.1` |
-| `SANDBOX_IMAGE` | `ubuntu:24.04` | 上の `sandbox_image` の既定 |
-| `SANDBOX_NETWORK` | `bridge` | 上の `sandbox_network` の既定 |
-| `SANDBOX_ALLOWED_NETWORKS` | （空） | 許すネットワークの追加分（カンマ区切り）。既定で `none` と `bridge` だけ。sandbox 間通信が要る環境だけ足す |
+| `SANDBOX_IMAGE` | `ghcr.io/solidlime/nous-sandbox:latest` | 上の `sandbox_image` の既定。`docker/sandbox/Dockerfile` のビルド（python3 + venv / git / curl / 診断系一式） |
+| `SANDBOX_NETWORK` | `nous-net` | 上の `sandbox_network` の既定 |
+| `SANDBOX_ALLOWED_NETWORKS` | （空） | 許すネットワークの追加分（カンマ区切り）。既定で `none` と `bridge` だけ。compose は `nous-net` を足している |
+| `SANDBOX_TZ` | 親の `TZ`（無ければ `UTC`） | sandbox に渡す `TZ`。compose は `TZ: ${TZ:-Asia/Tokyo}` を manager 自体に渡している |
+| `SANDBOX_DNS_CHECK` | `1` | `1` なら起動後に `getent hosts nous` を叩き、失敗したら `status="error"`。`0` で skip |
+| `SANDBOX_APT_EXTRA` | （空） | 起動時に差分インストールする apt パッケージ（カンマ区切り）。`dpkg -s` で不足分だけ `apt-get install`。失敗しても警告だけで run は通す |
+| `SANDBOX_GIT_USER_NAME` / `SANDBOX_GIT_USER_EMAIL` | （空） | 空ならイメージの `git config --system`（persona / persona@nous.local）。設定すると `GIT_AUTHOR_*` / `GIT_COMMITTER_*` で上書きする |
 | `SANDBOX_MEMORY` | `4g` | 上の `sandbox_memory` の既定 |
 | `SANDBOX_IDLE_MINUTES` | `30` | 上の `sandbox_idle_minutes` の既定 |
 
@@ -138,7 +142,7 @@ manager に届かない・未設定のときは `status="error"` を返す。例
 ## セキュリティ
 
 - sock を持つのは `sandbox-manager` だけ。nous は持たない
-- **`SANDBOX_NETWORK` に compose ネットワークを指定しない**。指定すると、1つの sandbox から他の sandbox の manager API に届き、トークンを盗めば他人の sandbox を exec / rm できてしまう
+- sandbox は `nous-net` に載る（`getent hosts nous` が通るため）。**そのぶん manager の API にも届く**ので、`NOUS_SANDBOX_MANAGER_TOKEN` は sandbox に渡さない・ログに出さない。分離を優先するなら `SANDBOX_NETWORK=bridge` + `SANDBOX_DNS_CHECK=0` に戻す（名前解決は諦める）
 - sandbox は `no-new-privileges` + `--pids-limit 1024` + メモリ・CPU 上限付き。manager は `cap_drop: ALL`
 - ホストのマウントは workspace とスキルだけ。memory / wiki / config は渡さない
 - exec の引数は `shell=False`。コマンド文字列はコンテナ内の `bash -lc` でのみ解釈する
@@ -147,7 +151,8 @@ manager に届かない・未設定のときは `status="error"` を返す。例
 **manager は共有トークン必須**。`/health` を除く全 API が `X-Sandbox-Token` を要求する。
 `NOUS_SANDBOX_MANAGER_TOKEN` が未設定なら 503、不一致は 401。nous は config.json の
 `sandbox_manager_token` を送り、空ならツールが `status="error"` を返す（fail closed）。
-ネットワーク分離（`SANDBOX_NETWORK` に compose ネットワークを置かない）は併用する。
+sandbox は名前解決のために `nous-net` に載る。分離を優先する環境では `SANDBOX_NETWORK=bridge` と
+`SANDBOX_DNS_CHECK=0` に戻す（DNS は引けなくなる）。
 
 ---
 

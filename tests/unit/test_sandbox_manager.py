@@ -9,6 +9,7 @@ from __future__ import annotations
 import subprocess
 import time
 from pathlib import Path
+from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -50,7 +51,7 @@ class FakeDocker:
         spec = self.by_subcommand.get(args[0], (0, "", ""))
         if isinstance(spec, BaseException):
             raise spec
-        code, out, err = spec  # type: ignore[misc]
+        code, out, err = cast("tuple[int, str, str]", spec)
         return subprocess.CompletedProcess(["docker", *args], code, out, err)
 
 
@@ -175,6 +176,143 @@ def test_run_uses_cpu_shares_because_the_kernel_has_no_cfs(client, fake) -> None
     run = next(c for c in fake.calls if c[0] == "run")
     assert "--cpus" not in run
     assert run[run.index("--cpu-shares") + 1] == "512"
+
+
+def test_run_inherits_the_parent_tz_and_forces_utf8(client, fake, monkeypatch) -> None:
+    """persona 側は Asia/Tokyo。UTC のままだとログが 9 時間ずれる。"""
+    monkeypatch.setenv("TZ", "Asia/Tokyo")
+    monkeypatch.delenv("SANDBOX_TZ", raising=False)
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+
+    assert client.post("/exec", json={"persona": "alice", "command": "id"}).json()["status"] == "ok"
+
+    run = next(c for c in fake.calls if c[0] == "run")
+    assert "TZ=Asia/Tokyo" in run
+    assert "LANG=C.UTF-8" in run
+    assert "LC_ALL=C.UTF-8" in run
+
+
+def test_sandbox_tz_overrides_the_parent_tz(client, fake, monkeypatch) -> None:
+    monkeypatch.setenv("TZ", "Asia/Tokyo")
+    monkeypatch.setenv("SANDBOX_TZ", "UTC")
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+
+    client.post("/exec", json={"persona": "alice", "command": "id"})
+
+    run = next(c for c in fake.calls if c[0] == "run")
+    assert "TZ=UTC" in run
+
+
+def test_run_lets_env_override_the_git_identity(client, fake, monkeypatch) -> None:
+    monkeypatch.setenv("SANDBOX_GIT_USER_NAME", "herta")
+    monkeypatch.setenv("SANDBOX_GIT_USER_EMAIL", "herta@nous.local")
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+
+    client.post("/exec", json={"persona": "alice", "command": "id"})
+
+    run = next(c for c in fake.calls if c[0] == "run")
+    assert "GIT_AUTHOR_NAME=herta" in run and "GIT_COMMITTER_NAME=herta" in run
+    assert "GIT_AUTHOR_EMAIL=herta@nous.local" in run and "GIT_COMMITTER_EMAIL=herta@nous.local" in run
+
+
+def test_dns_check_is_quiet_when_nous_resolves(fake) -> None:
+    fake.by_subcommand["exec"] = (0, "172.18.0.2\tnous\n", "")
+    assert sm._check_dns("alice-sandbox") is None
+    assert ("exec", "alice-sandbox", "getent", "hosts", "nous") in fake.calls
+
+
+def test_dns_check_reports_the_first_stderr_line(fake) -> None:
+    fake.by_subcommand["exec"] = (2, "", "getent: nous: Name or service not known\nsecond\n")
+    err = sm._check_dns("alice-sandbox")
+    assert err is not None
+    assert "Name or service not known" in err and "second" not in err
+
+
+def test_dns_failure_fails_the_ensure(client, fake) -> None:
+    """名前解決できないコンテナを静かに使い始めない。"""
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+    fake.by_subcommand["exec"] = (2, "", "getent: nous: Name or service not known\n")
+
+    body = client.post("/exec", json={"persona": "alice", "command": "id"}).json()
+    assert body["status"] == "error"
+    assert "名前解決" in body["stderr_tail"]
+
+
+def test_dns_check_can_be_skipped(fake, monkeypatch) -> None:
+    monkeypatch.setenv("SANDBOX_DNS_CHECK", "0")
+    fake.by_subcommand["exec"] = (2, "", "getent: nous: Name or service not known\n")
+    assert sm._post_start_check("alice-sandbox") is None
+    assert fake.calls == []
+
+
+def test_apt_extra_skips_apt_when_everything_is_installed(client, fake, monkeypatch) -> None:
+    monkeypatch.setenv("SANDBOX_APT_EXTRA", "jq,tree")
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+    seen = _docker_spy(fake, installed={"jq", "tree"}, apt=(0, "", ""))
+    monkeypatch.setattr(sm, "_docker", seen.fn)
+
+    assert client.post("/exec", json={"persona": "alice", "command": "id"}).json()["status"] == "ok"
+    assert [c for c in seen.calls if c[:4] == ("exec", "alice-sandbox", "dpkg", "-s")] == [
+        ("exec", "alice-sandbox", "dpkg", "-s", "jq"),
+        ("exec", "alice-sandbox", "dpkg", "-s", "tree"),
+    ]
+    assert not any("apt-get" in " ".join(c) for c in seen.calls)
+
+
+def test_apt_extra_installs_only_the_missing_packages(client, fake, monkeypatch) -> None:
+    monkeypatch.setenv("SANDBOX_APT_EXTRA", "jq, tree ,htop")
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+    seen = _docker_spy(fake, installed={"tree"}, apt=(0, "", ""))
+    monkeypatch.setattr(sm, "_docker", seen.fn)
+
+    client.post("/exec", json={"persona": "alice", "command": "id"})
+
+    installs = [c for c in seen.calls if "apt-get install" in " ".join(c)]
+    assert len(installs) == 1
+    script = installs[0][-1]
+    assert "DEBIAN_FRONTEND=noninteractive" in script
+    assert "--no-install-recommends" in script
+    assert "apt-get update" in script
+    assert script.endswith("jq htop")
+
+
+def test_apt_extra_failure_is_a_warning_not_an_error(client, fake, monkeypatch) -> None:
+    monkeypatch.setenv("SANDBOX_APT_EXTRA", "nope")
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+    seen = _docker_spy(fake, installed=set(), apt=(100, "", "E: Unable to locate package nope\nmore\n"))
+    monkeypatch.setattr(sm, "_docker", seen.fn)
+
+    body = client.post("/exec", json={"persona": "alice", "command": "id"}).json()
+    assert body["status"] == "ok"
+    assert "E: Unable" not in body["stderr_tail"]
+
+
+class _DockerSpy:
+    def __init__(self, fake: FakeDocker, installed: set[str], apt: tuple[int, str, str]) -> None:
+        self.fake = fake
+        self.installed = installed
+        self.apt = apt
+        self.calls: list[tuple[str, ...]] = []
+
+    def fn(self, *args: str, timeout: float = 60.0) -> subprocess.CompletedProcess[str]:
+        self.calls.append(args)
+        if args[:4] == ("exec", "alice-sandbox", "dpkg", "-s"):
+            missing = args[4] not in self.installed
+            return subprocess.CompletedProcess(["docker", *args], 1 if missing else 0, "", "")
+        if args[:4] == ("exec", "alice-sandbox", "bash", "-lc") and "apt-get install" in args[4]:
+            return subprocess.CompletedProcess(["docker", *args], *self.apt)
+        return self.fake(*args, timeout=timeout)
+
+
+def _docker_spy(fake: FakeDocker, installed: set[str], apt: tuple[int, str, str]) -> _DockerSpy:
+    return _DockerSpy(fake, installed, apt)
 
 
 def test_exec_starts_stopped_container(client, fake) -> None:
@@ -309,7 +447,7 @@ def test_exec_timeout_is_clamped(client, fake, monkeypatch) -> None:
 
     def spy(*args: str, timeout: float = 60.0) -> subprocess.CompletedProcess[str]:
         seen.append(timeout)
-        return fake(*args, timeout=timeout)
+        return cast("subprocess.CompletedProcess[str]", fake(*args, timeout=timeout))
 
     monkeypatch.setattr(sm, "_docker", spy)
     client.post("/exec", json={"persona": "alice", "command": "id", "timeout_seconds": 9999})
@@ -322,7 +460,7 @@ def test_exec_marks_last_used_before_the_command_runs(client, fake, monkeypatch)
     def spy(*args: str, timeout: float = 60.0) -> subprocess.CompletedProcess[str]:
         if args[0] == "exec":
             observed.append(sm._last_used.get("alice", 0.0))
-        return fake(*args, timeout=timeout)
+        return cast("subprocess.CompletedProcess[str]", fake(*args, timeout=timeout))
 
     monkeypatch.setattr(sm, "_docker", spy)
     client.post("/exec", json={"persona": "alice", "command": "sleep 60"})

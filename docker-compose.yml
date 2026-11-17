@@ -11,6 +11,8 @@ services:
       - "6334:6334"
     volumes:
       - /volume1/docker/qdrant:/qdrant/storage
+    networks:
+      - nous-net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333'"]
@@ -27,6 +29,8 @@ services:
     volumes:
       # Nous アプリデータ永続化（persona, cache, sudachi, config, skills）
       - ${DATA_ROOT}/data:/data
+    networks:
+      - nous-net
     restart: unless-stopped
     # ペルソナ設定の base_url は http://nas:4000/v1（LiteLLM）を指す。compose ネットワークの
     # DNS はコンテナ名しか解かないので、NAS 自身を指すエイリアスを here で供給する。
@@ -56,6 +60,8 @@ services:
     restart: unless-stopped
     ports:
       - "26263:26263"
+    networks:
+      - nous-net
     environment:
       - MCP_HUB_DATA_DIR=/home/mcp-hub/data
     volumes:
@@ -77,6 +83,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${DATA_ROOT}/data:/data
+    networks:
+      - nous-net
     restart: unless-stopped
     stop_grace_period: 30s
     # sock を持つプロセスなので、nous 本体より権限を絞る
@@ -89,9 +97,17 @@ services:
     environment:
       NOUS_DATA_ROOT: /data
       NOUS_SANDBOX_MANAGER_TOKEN: ${NOUS_SANDBOX_MANAGER_TOKEN:?set NOUS_SANDBOX_MANAGER_TOKEN}
-      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-ubuntu:24.04}
-      SANDBOX_NETWORK: ${SANDBOX_NETWORK:-bridge}
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-ghcr.io/solidlime/nous-sandbox:latest}
+      # sandbox を user-defined network に載せると Docker の埋め込み DNS で nous が引ける。
+      # 既定 bridge では引けない（外部 egress は通るので「静かに壊れる」）。
+      SANDBOX_NETWORK: ${SANDBOX_NETWORK:-nous-net}
+      # 上の SANDBOX_NETWORK を許可リストに足す。_DEFAULT_NETWORKS は none / bridge だけ。
+      SANDBOX_ALLOWED_NETWORKS: ${SANDBOX_ALLOWED_NETWORKS:-nous-net}
+      # sandbox の TZ。既定はこの値（SANDBOX_TZ で個別に上書きできる）。
+      TZ: ${TZ:-Asia/Tokyo}
       SANDBOX_MEMORY: ${SANDBOX_MEMORY:-4g}
+      # 焼かずに起動時に dpkg -s で差分だけ apt install するパッケージ（カンマ区切り）
+      SANDBOX_APT_EXTRA: ${SANDBOX_APT_EXTRA:-}
       SANDBOX_IDLE_MINUTES: ${SANDBOX_IDLE_MINUTES:-30}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -99,3 +115,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+
+# sandbox を載せる user-defined network。既定 bridge には Docker の埋め込み DNS
+# （127.0.0.11）が無いので、`getent hosts nous` が引けずに静かに壊れる。
+# ここに参加させるのは名前で引かれているサービスだけ（qdrant も http://qdrant:6333 で引く）。
+# 公開ポートはそのまま（ports は network と無関係）。
+networks:
+  nous-net:
+    driver: bridge
