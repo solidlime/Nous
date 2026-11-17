@@ -264,7 +264,8 @@ def _do_get_config_defaults() -> dict:
     for name, info in ChatConfig._all_flat_fields().items():
         if name in _META_FIELD_NAMES:
             continue
-        default = "" if _is_secret_field(name) else info.default
+        # default_factory のフィールドは default が PydanticUndefined で JSON 化できない
+        default = "" if _is_secret_field(name) else info.get_default(call_default_factory=True)
         fields[name] = {
             "default": default,
             "help": info.description or "",

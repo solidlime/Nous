@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from nous.application.chat.pipeline.aliveness import emotion_band, emotion_hint, place_hint
+from nous.application.chat.pipeline.aliveness import emotion_band, place_hint, safe_bands
 from nous.domain.memory.cue import due_cues, event_cued_memories
 from nous.domain.persona.body import body_action_hint
 from nous.domain.persona.emotion_trend import build_emotion_trend_narrative
@@ -93,12 +93,16 @@ async def _build_context_section(
     turn_ctx: ChatTurnContext | None = None,
     compress_mode: str = "auto",
     decay_note: str = "",
+    emotion_bands: tuple[float, float] | None = None,
 ) -> str:
     """get_context() 同等の充実したコンテキストサマリーを構築する。
 
     compress_mode が "light"/"normal"/"aggressive" の場合は、
     重いセクション（reflection insight, mental model, session summary, emotion history）をスキップする。
     """
+    # 帯の正規化はここで 1 回だけ。t1 ラベルと trend が同じ正規化済み帯を共有する
+    # （domain の emotion_trend はクランプしないので、生の設定値を直接渡さない）。
+    bands = safe_bands(emotion_bands)
 
     def _sanitize_text(text: str) -> str:
         """LLMのByte-level BPEトークナイザ由来の文字化けを検出・除去する。
@@ -122,6 +126,16 @@ async def _build_context_section(
             return sanitized
         return text
 
+    def _current_intensity() -> float:
+        """現在の強度を境界で正規化（欠損・範囲外・非数値は 0.5）。"""
+        from nous.domain.value_objects import normalize_importance
+
+        try:
+            _raw_int = getattr(state, "emotion_intensity", 0.5)
+            return normalize_importance(float(_raw_int) if _raw_int is not None else None)
+        except (TypeError, ValueError):
+            return 0.5
+
     t1: list[str] = []  # Tier 1: 現在の状態
     t2: list[str] = []  # Tier 2: 身体・環境
     t3: list[str] = []  # Tier 3: 参照情報
@@ -132,21 +146,11 @@ async def _build_context_section(
     # === Tier 1: 現在の状態 ===
     # 時間情報は <TIME_CONTEXT> ブロック（システムプロンプト先頭）を参照
     if getattr(state, "emotion", None):
-        # f2: 欠損・範囲外・非数値を境界で正規化
-        from nous.domain.value_objects import normalize_importance
-
-        try:
-            _raw_int = getattr(state, "emotion_intensity", 0.5)
-            intensity = normalize_importance(float(_raw_int) if _raw_int is not None else None)
-        except (TypeError, ValueError):
-            intensity = 0.5
-        # ラベルと if-then の帯を一致させる（阈値を 2 組持たない）
-        intensity_label = ("弱い", "やや強い", "強い")[emotion_band(intensity)]
+        intensity = _current_intensity()
+        # ラベルと if-then（prompt.py）は同じ設定帯を共有する（阈値を 2 組持たない）
+        intensity_label = ("弱い", "やや強い", "強い")[emotion_band(intensity, bands)]
         t1.append(f"感情: {state.emotion}（{intensity_label}）")
-        # #39: 強度帯に応じた if-then を 1 行（行動に繋ぐ）
-        _emotion_hint = emotion_hint(state)
-        if _emotion_hint:
-            t1.append(_emotion_hint)
+        # #39: if-then の 1 行は prompt.py（system prompt 直下）が持ち、ここには入れない。
 
     # === Tier 2: 身体・環境 ===
     # 減衰ノート（感情・身体・関係性、複数行可）
@@ -292,7 +296,8 @@ async def _build_context_section(
                 narrative = build_emotion_trend_narrative(
                     eh_result.value,
                     state.emotion,
-                    float(state.emotion_intensity or 0.0),
+                    _current_intensity(),
+                    bands=bands,
                 )
                 if narrative:
                     t3.append(narrative)

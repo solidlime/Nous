@@ -217,7 +217,15 @@ class PrepareStep:
             # context_section 構築
             context_task = asyncio.create_task(
                 _build_context_section(
-                    ctx, state, turn_ctx, compress_mode=config.context_compression_mode, decay_note=decay_note
+                    ctx,
+                    state,
+                    turn_ctx,
+                    compress_mode=config.context_compression_mode,
+                    decay_note=decay_note,
+                    emotion_bands=(
+                        getattr(config, "emotion_hint_low", 0.35),
+                        getattr(config, "emotion_hint_high", 0.7),
+                    ),
                 )
             )
             # Progressive disclosure: only preload N memories; LLM searches for more if needed

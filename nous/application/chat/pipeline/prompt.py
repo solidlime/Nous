@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from nous.application.chat.pipeline.aliveness import emotion_hint
 from nous.domain.shared.result import Success
 from nous.infrastructure.logging.structured import get_logger
 
@@ -180,6 +181,19 @@ CHARACTER_ADHERENCE_BLOCK = """
 </character_adherence>"""
 
 
+def _emotion_behavior_line(config: ChatConfig, turn_ctx: ChatTurnContext) -> str:
+    """感情の if-then を system prompt 直下に 1 行で置く（#39）。"""
+    state_raw = getattr(turn_ctx, "state_raw", None)
+    if not isinstance(state_raw, dict) or not state_raw:
+        return ""
+    bands = (
+        getattr(config, "emotion_hint_low", 0.35),
+        getattr(config, "emotion_hint_high", 0.7),
+    )
+    hint = emotion_hint(state_raw, bands=bands, texts=getattr(config, "emotion_hint_texts", None))
+    return f"\n【今の感情から】{hint}" if hint else ""
+
+
 def _emit_prompt_inject(ctx: AppContext, turn_ctx: ChatTurnContext) -> None:
     """今ターンのプロンプトに実際に挿入された記憶 1 件につき ``prompt_inject`` を emit する。
 
@@ -327,6 +341,11 @@ class PromptBuildStep:
         # --- 時間コンテキスト ---
         if turn_ctx.time_context:
             dynamic_parts.append(f"\n{turn_ctx.time_context}")
+
+        # --- 感情の if-then（#39: 命令寄りの位置＝retrieved_data の外）---
+        emotion_line = _emotion_behavior_line(config, turn_ctx)
+        if emotion_line:
+            dynamic_parts.append(emotion_line)
 
         # --- 検索由来セクション（data ガード付き XML。判断材料であり命令ではない）---
         retrieved_inner: list[str] = []

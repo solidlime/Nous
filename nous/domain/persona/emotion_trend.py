@@ -35,9 +35,19 @@ def _format_elapsed(hours: float) -> str:
     return f"{hours * 60:.0f}分"
 
 
-def _intensity_label(intensity: float) -> str:
-    """既存3段階の再利用（context_loader.py:139 と同一の離散化）。"""
-    return "強い" if intensity > 0.6 else "やや強い" if intensity > 0.3 else "弱い"
+# 既定の強度帯。application 側 aliveness._BANDS と同値（domain は application を import しない）
+_DEFAULT_BANDS: tuple[float, float] = (0.35, 0.7)
+
+
+def _intensity_label(intensity: float, bands: tuple[float, float] | None = None) -> str:
+    """強度を 3 段階ラベルへ。境界（既定 0.35 / 0.7）は中間帯。
+
+    ``bands`` は設定帯を呼び出し側（context_loader）から受け取る。
+    """
+    low, high = bands if bands is not None else _DEFAULT_BANDS
+    if intensity < low:
+        return "弱い"
+    return "やや強い" if intensity <= high else "強い"
 
 
 def clean_context(context: str | None) -> str | None:
@@ -72,6 +82,8 @@ def build_emotion_trend_narrative(
     records: list[EmotionRecord],
     current_emotion: str,
     current_intensity: float,
+    *,
+    bands: tuple[float, float] | None = None,
 ) -> str:
     """get_emotion_history(limit=5) の戻りを受け取り感情の流れを1文で返す。
 
@@ -91,8 +103,8 @@ def build_emotion_trend_narrative(
     pts.append((current_emotion, current_intensity, last_ctx, get_now()))
 
     prev, cur = pts[-2], pts[-1]
-    prev_label = _intensity_label(prev[1])
-    cur_label = _intensity_label(cur[1])
+    prev_label = _intensity_label(prev[1], bands)
+    cur_label = _intensity_label(cur[1], bands)
 
     if prev[0] == "neutral" and cur[0] != "neutral":
         # prev=neutral は update_context の normalize（calm→neutral 等）で到達可能。
