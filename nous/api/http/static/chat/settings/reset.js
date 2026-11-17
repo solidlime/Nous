@@ -68,6 +68,8 @@
     ["chat-relevance-weight", "retrieval_relevance_weight"],
     ["chat-debug-mode", "debug_mode"],
     ["chat-dynamic-tool-selection", "dynamic_tool_selection"],
+    // 承認ポリシー（トグルは settings/apply.js が差し込む）: ON = "auto"
+    ["chat-shell-approval-mode", "shell_approval_mode", "auto"],
     ["chat-mcp-json", "mcp_servers", "json"],
     ["chat-voice-enabled", "voice_enabled"],
     ["chat-voice-url", "voice_url"],
@@ -297,6 +299,7 @@
       if (!isNaN(oc) && !isNaN(orf)) return Math.abs(oc - orf) > 1e-9;
       return String(el.value) !== String(def);
     }
+    if (kind === "auto") return el.checked !== (def === "auto");
     if (el.type === "checkbox") return el.checked !== !!def;
     if (def == null) {
       if (el.type === "range") return false;
@@ -397,7 +400,10 @@
     if (!el) return;
     var def = _defaultOf(entry[1]);
     if (def === undefined) return;
-    if (el.type === "checkbox") {
+    if (entry[2] === "auto") {
+      // モード文字列をチェックボックス 1 個に畳む: ON = "auto"
+      el.checked = def === "auto";
+    } else if (el.type === "checkbox") {
       el.checked = !!def;
     } else if (entry[2] === "radio") {
       var val = _defaultToDisplay(def, "radio");
@@ -461,6 +467,9 @@
   var TIER_HIDDEN_CLASS = "chat-tier-hidden";
 
   function _tierOf(key) {
+    // UI を JS が差し込む欄（承認トグル）は Python の defaults API に載らず
+    // unknown → expert となり既定で隠れてしまう。常時表示に固定する。
+    if (key === "shell_approval_mode") return "basic";
     var meta =
       _defaultsCache && _defaultsCache.fields
         ? _defaultsCache.fields[key]

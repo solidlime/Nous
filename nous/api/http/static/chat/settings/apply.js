@@ -49,6 +49,35 @@
     }
   }
 
+  // ------------------------------------------------------------------
+  // 承認ポリシー（shell_approval_mode）— 設定 HTML（Python）に欄が無いので
+  // ツール欄の先頭にトグルを1個だけ差し込む。ON = "auto" / OFF = "ask"。
+  // allowlist は UI に出さない（既存挙動を壊さないため）。
+  // ------------------------------------------------------------------
+  function _ensureApprovalRow() {
+    if (document.getElementById("chat-shell-approval-mode")) return;
+    var host = document.getElementById("chat-mcp-section");
+    if (!host) return;
+    var row = document.createElement("div");
+    var check = document.createElement("div");
+    check.className = "chat-check-row";
+    var cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = "chat-shell-approval-mode";
+    var label = document.createElement("label");
+    label.setAttribute("for", "chat-shell-approval-mode");
+    label.textContent = "ツール実行を自動承認";
+    check.appendChild(cb);
+    check.appendChild(label);
+    var hint = document.createElement("span");
+    hint.className = "setting-hint";
+    hint.textContent =
+      "sandbox の bash など、承認が要るツールを確認なしで実行する";
+    row.appendChild(check);
+    row.appendChild(hint);
+    host.insertBefore(row, host.firstChild);
+  }
+
   function applyChatConfig(cfg) {
     if (!cfg) return;
     const set = (id, v) => {
@@ -211,6 +240,8 @@
       "chat-dynamic-tool-selection",
       cfg.dynamic_tool_selection !== false,
     );
+    _ensureApprovalRow();
+    setChecked("chat-shell-approval-mode", cfg.shell_approval_mode === "auto");
     var el;
     el = document.getElementById("chat-compress-system");
     if (el) el.checked = cfg.context_compress_system_prompt !== false;

@@ -28,6 +28,19 @@ var _turn = null;            // active turn rendering session
 // starts inside the burst window recovers at its done via history
 // reload — transient, never permanent.
 var _hubSkipMode = false;
+// 承認 ID の重複排除。バックログ再生や再送で同じモーダルが二重に出るのを
+// 止める手段はこれだけ（_hubSkipMode で捨てるとライブの承認まで落ちる）。
+// 上限 32 を超えたら最古の ID から捨てる — Set は挿入順を保つ。
+var _seenApprovalIds = new Set();
+
+function _isNewApprovalId(id) {
+  if (!id || _seenApprovalIds.has(id)) return false;
+  _seenApprovalIds.add(id);
+  if (_seenApprovalIds.size > 32) {
+    _seenApprovalIds.delete(_seenApprovalIds.values().next().value);
+  }
+  return true;
+}
 
 function _els() {
   return {
@@ -145,6 +158,7 @@ function _emitChatSSE(evt) {
 function _askApproval(evt) {
   var persona = _chatEventsPersona || (window.S && window.S.persona);
   if (!persona || !evt.approval_id) return;
+  if (!_isNewApprovalId(evt.approval_id)) return; // replay/retransmit
   var toolLabels = { bash: "シェル", sandbox: "隔離シェル" };
   var who = toolLabels[evt.tool_name] || "ファイル操作";
   var detail = String(evt.detail || "").trim() || "(内容なし)";
@@ -152,9 +166,16 @@ function _askApproval(evt) {
     return api("/api/chat/" + encodeURIComponent(persona) + "/approval", {
       method: "POST",
       body: JSON.stringify({ approval_id: evt.approval_id, decision: ok ? "allow" : "deny" }),
+      // 404（期限切れ）は想定内 — 汎用の api:error トーストは出さない
+      suppressErrorToast: true,
     });
   }).catch(function (err) {
-    if (toast) toast("承認の送信に失敗: " + ((err && err.message) || err), "error");
+    if (!toast) return;
+    if (err && err.status === 404) {
+      toast("承認の期限が切れました", "error");
+      return;
+    }
+    toast("承認の送信に失敗: " + ((err && err.message) || err), "error");
   });
 }
 
@@ -174,8 +195,9 @@ function _handleHubMessage(e) {
   if (!evt || !evt.type) return;
 
   if (evt.type === "approval_requested") {
-    // 接続直後のリプレイ分は解決済みの可能性があるので出さない
-    if (!_hubSkipMode) _askApproval(evt);
+    // リプレイ分も出す（既に答えた ID は _askApproval が弾く）。期限切れの
+    // 古い ID を踏んだら POST が 404 になり「期限切れ」で閉じる。
+    _askApproval(evt);
     return;
   }
 

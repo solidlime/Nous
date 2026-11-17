@@ -35,6 +35,12 @@ function collectPythonAttrs() {
   return { ids, names };
 }
 
+// Settings DOM that the JS side injects at runtime (settings/apply.js) — no
+// Python section renders it, so it is excluded from the Python cross-check.
+// The list must not silently grow: the next test proves each id is really
+// created by the settings JS.
+const JS_INJECTED_IDS = ['chat-shell-approval-mode'];
+
 // Parse RESET_FIELDS entries: [..., "chat-id", "config_key", kind?, extra?]
 // Entries may span multiple lines; each entry has no nested brackets.
 function resetFieldEntries() {
@@ -61,9 +67,16 @@ describe('chat settings ID contract (JS ↔ Python sections)', () => {
     for (const e of entries) {
       const id = e[0];
       if (e[2] === 'radio') continue; // checked via name= in the next test
-      if (!py.ids.has(id)) missing.push(id);
+      if (!py.ids.has(id) && !JS_INJECTED_IDS.includes(id)) missing.push(id);
     }
     expect(missing).toEqual([]);
+  });
+
+  it('JS-injected settings ids are created by the settings JS, not by Python', () => {
+    for (const id of JS_INJECTED_IDS) {
+      expect(py.ids.has(id)).toBe(false);
+      expect(settingsSrc).toContain('cb.id = "' + id + '"');
+    }
   });
 
   it('every RESET_FIELDS radio name has matching radio inputs in Python HTML', () => {
@@ -92,7 +105,7 @@ describe('chat settings ID contract (JS ↔ Python sections)', () => {
       // dynamic preset lookup: "chat-image-gen-preset-" + name (full ids come
       // from RESET_FIELDS, already covered above)
       if (id.endsWith('-')) continue;
-      if (!py.ids.has(id)) missing.push(id);
+      if (!py.ids.has(id) && !JS_INJECTED_IDS.includes(id)) missing.push(id);
     }
     expect(missing).toEqual([]);
   });
