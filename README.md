@@ -92,7 +92,7 @@ curl -s http://localhost:26262/health
 | `nous` | `ghcr.io/solidlime/nous:latest` | MCP サーバー + WebUI（ポート 26262） |
 | `qdrant` | `qdrant/qdrant:v1.19.0` | ベクトルストア（ポート 6333/6334） |
 
-データは `${DATA_ROOT}` に永続化されます。既定は `./data` です。
+データは `${DATA_ROOT}/data` に永続化されます（`DATA_ROOT` は親ディレクトリ、既定は `.` なので実体は `./data`）。
 
 ### Compose を使わずに動かす
 

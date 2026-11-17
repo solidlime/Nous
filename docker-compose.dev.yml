@@ -20,8 +20,8 @@ services:
     volumes:
       - ./nous:/app/nous
       # データ永続化（SQLite, HuggingFace cache, Sudachi, Qdrant 設定等）
-      # manager と同じ木を見る必要があるので、base と同じ ${DATA_ROOT} を使う。
-      - ${DATA_ROOT}:/data
+      # base と同じく ${DATA_ROOT}/data を見る。
+      - ${DATA_ROOT}/data:/data
       # 設定ファイル（.env と同じ効果）
       - ./.env:/app/.env:ro
     # command は継承（CMD ["python", "-m", "nous.main"]）
@@ -40,7 +40,7 @@ services:
     user: "0:0"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${DATA_ROOT}:/data
+      - ${DATA_ROOT}/data:/data
       - ./nous:/app/nous
     environment:
       PYTHONUNBUFFERED: "1"
