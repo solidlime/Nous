@@ -6,6 +6,7 @@ docker は実行しない。``_docker`` を FakeDocker に差し替えて引数�
 
 from __future__ import annotations
 
+import stat
 import subprocess
 import time
 from pathlib import Path
@@ -172,6 +173,10 @@ def test_exec_runs_container_when_missing(client, fake, tmp_path: Path) -> None:
     assert (tmp_path / "container" / "persona" / "alice" / "wiki").is_dir()
     assert (tmp_path / "container" / "persona" / "alice" / "uploads").is_dir()
     assert (tmp_path / "container" / "persona" / "alice" / "media").is_dir()
+    # sandbox は非 root（既定 1026:100）で走る。manager は root なので
+    # mkdir しただけだと書けない。rw のマウント先は 777 にしておく。
+    mode = (tmp_path / "container" / "persona" / "alice" / "workspace").stat().st_mode
+    assert stat.S_IMODE(mode) == 0o777
 
 
 def test_run_uses_cpu_shares_because_the_kernel_has_no_cfs(client, fake) -> None:

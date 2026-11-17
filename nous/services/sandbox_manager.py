@@ -404,7 +404,13 @@ def _ensure_inner(
         # mkdir は自分のマウントから見えるパスで行う。host 側の絶対パスは
         # ホストの名前空間のもので、このコンテナからは触れない。
         try:
-            (local / host.relative_to(root)).mkdir(parents=True, exist_ok=True)
+            target_dir = local / host.relative_to(root)
+            target_dir.mkdir(parents=True, exist_ok=True)
+            # sandbox は非 root（既定 1026:100）で走る。manager は root なので
+            # mkdir しただけだと root 所有になり、ペルソナが書けない。
+            # chown は cap_drop: ALL でできないので、書けるように chmod する。
+            if not read_only:
+                os.chmod(target_dir, 0o777)
         except OSError as e:
             return f"ホスト側ディレクトリを作れない: {host}: {e}"
         args += ["-v", f"{host}:{target}" + (":ro" if read_only else "")]
