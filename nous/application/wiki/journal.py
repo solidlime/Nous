@@ -379,6 +379,8 @@ class JournalMixin:
             events += list(repo.get_by_persona(persona, event_type="session.started", limit=limit, **window))
             # 移動は行数が読みにくいので独立の小さい上限（会話行の予算を食い潰さない）
             events += list(repo.get_by_persona(persona, event_type="place.moved", limit=min(limit, 50), **window))
+            # 自発活動（#47）: 自分で選んだ行動。日記に残して後から振り返れるようにする。
+            events += list(repo.get_by_persona(persona, event_type="activity.acted", limit=min(limit, 20), **window))
             picked = sorted((e for e in events if e.timestamp is not None), key=lambda e: _aware(e.timestamp, tz))
             lines = [line for line in (_activity_line(e, tz) for e in picked) if line]
         except Exception:
@@ -488,6 +490,8 @@ def _activity_line(event, tz: tzinfo | None) -> str:
     elif event.event_type == "place.moved":
         to = str(detail.get("to") or "").strip()
         body = f"{to} へ移動" if to else ""
+    elif event.event_type == "activity.acted":
+        body = str(event.summary or "").strip()
     else:
         name = str(detail.get("name") or "").strip()
         project = str(detail.get("project") or "").strip()

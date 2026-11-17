@@ -1161,7 +1161,9 @@ class TestRetryScheduling:
 # ---------------------------------------------------------------------------
 
 
-def _sess_event(conn, event_type: str, ts: datetime, detail: dict, persona: str = "test_ww") -> None:
+def _sess_event(
+    conn, event_type: str, ts: datetime, detail: dict, persona: str = "test_ww", summary: str = "x"
+) -> None:
     """session_events に 1 行入れる（pi hook と同じ形）。"""
     from nous.domain.memory.session_event import SessionEvent
     from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
@@ -1172,7 +1174,7 @@ def _sess_event(conn, event_type: str, ts: datetime, detail: dict, persona: str 
             persona=persona,
             event_type=event_type,
             timestamp=ts,
-            summary="x",
+            summary=summary,
             detail=json.dumps(detail, ensure_ascii=False),
         )
     )
@@ -1230,6 +1232,22 @@ class TestJournalActivity:
             )
             activity = worker._journal_activity(ctx, "test_ww", self._win_start, self._win_end, _JST)
             assert "09:05" in activity and "観測デッキ へ移動" in activity
+        finally:
+            conn.close()
+
+    def test_activity_acted_becomes_activity_line(self, tmp_path) -> None:
+        """自発活動（#47）も日記の材料になる。"""
+        conn, worker, ctx = _journal_setup(tmp_path, [], self._body)
+        try:
+            _sess_event(
+                conn,
+                "activity.acted",
+                datetime(2026, 11, 9, 9, 5, tzinfo=_JST),
+                {},
+                summary="自発活動: move (ok) 書斎",
+            )
+            activity = worker._journal_activity(ctx, "test_ww", self._win_start, self._win_end, _JST)
+            assert "09:05" in activity and "自発活動: move" in activity
         finally:
             conn.close()
 
