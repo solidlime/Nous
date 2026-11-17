@@ -36,10 +36,12 @@ def run_migrations(db_conn: sqlite3.Connection, persona: str) -> None:
         Persona identifier used for logging and one-shot migration scoping.
     """
     _ensure_version_table(db_conn)
-    current = _get_current_version(db_conn)
+    applied = _get_applied_versions(db_conn)
 
+    # 版番号は連番とは限らない（v3 は欠番）。MAX(version) との比較で判定すると、
+    # 欠番を後から埋めたときに既存 DB では永久に走らない。
     for version, desc, func in MIGRATIONS:
-        if version > current:
+        if version not in applied:
             logger.info("Applying v%d: %s (persona='%s')", version, desc, persona)
             func(db_conn, persona)
             _record_version(db_conn, version)
@@ -69,16 +71,13 @@ def _ensure_version_table(db_conn: sqlite3.Connection) -> None:
         db_conn.execute("COMMIT")
 
 
-def _get_current_version(db_conn: sqlite3.Connection) -> int:
-    """Return the highest applied migration version (0 = none)."""
+def _get_applied_versions(db_conn: sqlite3.Connection) -> set[int]:
+    """Return every recorded migration version."""
     try:
-        row = db_conn.execute("SELECT COALESCE(MAX(version), 0) AS v FROM _migration_version").fetchone()
-        if row is None:
-            return 0
-        version = row["v"]
-        return version if version is not None else 0
+        rows = db_conn.execute("SELECT version FROM _migration_version").fetchall()
     except sqlite3.OperationalError:
-        return 0
+        return set()
+    return {row["version"] for row in rows}
 
 
 def _record_version(db_conn: sqlite3.Connection, version: int) -> None:

@@ -13,7 +13,7 @@ from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.memory_repo import SQLiteMemoryRepository
 from nous.infrastructure.sqlite.migrations import (
     _ensure_version_table,
-    _get_current_version,
+    _get_applied_versions,
     _record_version,
     run_migrations,
 )
@@ -118,11 +118,32 @@ class TestUpdateAllowlist:
 
 
 class TestMigrationGuards:
-    def test_get_current_version_empty_table(self, tmp_path):
+    def test_get_applied_versions_empty_table(self, tmp_path):
         conn = sqlite3.connect(str(tmp_path / "m.sqlite"))
         conn.row_factory = sqlite3.Row
         conn.execute("CREATE TABLE _migration_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)")
-        assert _get_current_version(conn) == 0
+        assert _get_applied_versions(conn) == set()
+        conn.close()
+
+    def test_a_backfilled_version_number_still_runs(self, tmp_path, monkeypatch):
+        """MAX(version) で判定すると、欠番を後から埋めても既存 DB で走らない。"""
+        import nous.infrastructure.sqlite.migrations as m
+
+        ran: list[int] = []
+        monkeypatch.setattr(
+            m, "MIGRATIONS", [(1, "one", lambda c, p: ran.append(1)), (2, "two", lambda c, p: ran.append(2))]
+        )
+        conn = sqlite3.connect(str(tmp_path / "m.sqlite"))
+        conn.row_factory = sqlite3.Row
+        m._ensure_version_table(conn)
+        m._record_version(conn, 1)
+        m._record_version(conn, 2)
+        # 既存 DB に後から v3（欠番だった番号）が現れた想定
+        monkeypatch.setattr(
+            m, "MIGRATIONS", [(1, "one", lambda c, p: ran.append(1)), (3, "three", lambda c, p: ran.append(3))]
+        )
+        m.run_migrations(conn, "p")
+        assert ran == [3]
         conn.close()
 
     def test_ensure_version_table_atomic(self, tmp_path):
@@ -130,7 +151,7 @@ class TestMigrationGuards:
         conn.row_factory = sqlite3.Row
         _ensure_version_table(conn)
         assert not conn.in_transaction
-        assert _get_current_version(conn) == 0
+        assert _get_applied_versions(conn) == set()
         conn.close()
 
     def test_record_version_twice_is_ignored(self, tmp_path):
@@ -140,7 +161,7 @@ class TestMigrationGuards:
         _ensure_version_table(conn)
         _record_version(conn, 7)
         _record_version(conn, 7)
-        assert _get_current_version(conn) == 7
+        assert _get_applied_versions(conn) == {7}
         conn.close()
 
     def test_run_migrations_idempotent(self, tmp_path):
@@ -151,9 +172,9 @@ class TestMigrationGuards:
         db.execute("CREATE TABLE IF NOT EXISTS emotion_history (id INTEGER PRIMARY KEY, timestamp TEXT)")
         db.execute("CREATE TABLE IF NOT EXISTS memories_fts (content TEXT, memories_key TEXT)")
         run_migrations(db, "p1")
-        first = _get_current_version(db)
+        first = _get_applied_versions(db)
         run_migrations(db, "p1")
-        assert _get_current_version(db) == first
+        assert _get_applied_versions(db) == first
         mgr.close()
 
 
