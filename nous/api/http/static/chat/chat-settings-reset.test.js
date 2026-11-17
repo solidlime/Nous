@@ -75,6 +75,8 @@ beforeAll(() => {
     const code = readFileSync(resolve(__dirname, f), 'utf-8');
     new Function(code)();
   }
+  // apply.js calls into chat-settings-mcp.js, which this test does not load.
+  window.Nous.Chat.settings.renderBuiltinTools = () => {};
   const ST = window.Nous.Chat.settings;
   ST.renderMcpJson = () => {};
   ST.parseMcpJson = () => [];

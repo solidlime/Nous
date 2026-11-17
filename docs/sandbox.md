@@ -53,17 +53,44 @@ com.nous.sandbox=1
 
 | コンテナ内 | ホスト | モード |
 |---|---|---|
-| `/home/<persona>/workspace` | `${DATA_ROOT}/persona/<persona>/workspace` | rw |
-| `/home/<persona>/.agents/skills` | `${DATA_ROOT}/persona/<persona>/skills` | rw |
-| `/home/<persona>/.agents/global-skills` | `${DATA_ROOT}/skills` | ro |
+| `/home/agent/workspace` | `${DATA_ROOT}/persona/<persona>/workspace` | rw |
+| `/home/agent/wiki` | `${DATA_ROOT}/persona/<persona>/wiki` | rw |
+| `/home/agent/uploads` | `${DATA_ROOT}/persona/<persona>/uploads` | rw |
+| `/home/agent/media` | `${DATA_ROOT}/persona/<persona>/media` | ro |
+| `/home/agent/.agents/skills` | `${DATA_ROOT}/persona/<persona>/skills` | rw |
+| `/home/agent/.agents/global-skills` | `${DATA_ROOT}/skills` | ro |
 
-**渡さないもの**: memory（`memory.sqlite` / `inventory.sqlite` / `config.json`）、wiki。
+**渡さないもの**: `db/`（`memory.sqlite` / `inventory.sqlite`）と `config.json`。
 記憶化は nous 側の自動抽出が担うので、sandbox に DB を持たせる必要がない。
+
+`media` は nous が書く生成物（画像・音声・アバター）なので ro。ペルソナが
+ファイルを読む経路は sandbox に寄せる方針で、wiki / uploads はそこから書ける。
+
+環境変数 `HOME=/home/agent` を固定し、uid/gid は `SANDBOX_UID` / `SANDBOX_GID`（既定 1026:100）。
+manager は root で動くので、mkdir したマウント先は 777 にして書けるようにしてある
+（`cap_drop: ALL` で chown できないため）。
 
 スキルはグローバルとペルソナ専用の2本。同名はペルソナ優先（`/api/skills/{persona}` も同じ順で重ねる）。
 sandbox 内のエージェントには AGENTS.md で両方のパスを教える。
 
 **注意**: `${DATA_ROOT}/<persona>/` は使わない。既存の `persona_dir` 規約（`${DATA_ROOT}/persona/<persona>`）と二重になる。
+
+### ペルソナごとのレイアウト
+
+```
+persona/<p>/
+├─ config.json     ペルソナ設定
+├─ db/             memory.sqlite / inventory.sqlite（WAL/SHM も同居）
+├─ media/          images / tts_cache / avatar（nous が書く生成物）
+├─ wiki/
+├─ uploads/        ユーザーが投入したファイル
+├─ skills/
+└─ workspace/      ペルソナの作業場
+```
+
+旧レイアウト（`memory.sqlite` 直下、`images/`、`tts_cache/`、`avatar/`、`${DATA_ROOT}/uploads/<p>`）は
+起動時に `nous/infrastructure/persona_layout.py` が新レイアウトへ移す。新旧両方に
+同名ファイルがあるときは上書きしない（片方のデータが消えるため）。
 
 ---
 

@@ -19,7 +19,6 @@
     "GET /api/memories/{}/{}",
     "GET /api/memory/wiring/stream",
     "GET /api/session-events/{}",
-    "GET /api/skills",
     "GET /api/tts/{}/cache/{}",
     "GET /api/tts/{}/health",
     "POST /api/chat/{}",

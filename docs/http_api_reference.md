@@ -442,6 +442,18 @@ Delete a Core Memory Block by name.
 
 ---
 
+## Skills
+
+スキルはグローバル（`${DATA_ROOT}/skills`）とペルソナ専用（`persona/<p>/skills`）の2本。
+
+### `GET /api/skills`
+
+全ペルソナ分のスキル一覧。
+
+### `GET /api/skills/{persona}`
+
+グローバルとペルソナ専用を重ねて返す。同名はペルソナ優先。
+
 ## Runtime Settings
 
 ### `GET /api/settings`
