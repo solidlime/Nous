@@ -59,7 +59,7 @@ sequenceDiagram
         S->>P: PromptBuildStep
         S->>P: CompressStep + 切り詰め
         S->>D: session.add("user") で即永続化
-        loop max_tool_calls まで
+        loop max_tool_rounds まで（max_tool_calls は実行数の上限）
             S->>L: stream(messages, system, tools)
             L-->>S: text_delta / thinking_delta / tool_call
             S->>H: 各 delta を publish
@@ -67,12 +67,18 @@ sequenceDiagram
             S->>P: ツール実行
             S->>H: tool_result を publish
         end
-        S->>P: RepairStep（キャラ違反なら再生成）
         S->>D: session.add("assistant") + flush
-        S->>P: PostProcessStep
-        S->>H: done（+ memory_activity など）
+        S->>H: done
         H-->>F: done
         F->>F: typing 解除・確定描画・pending 送信
+        S->>P: RepairStep（キャラ違反なら再生成）
+        opt 違反あり
+            S->>D: replace_response + flush
+            S->>H: response_replaced
+            H-->>F: response_replaced（吹き出しを差し替え）
+        end
+        S->>P: PostProcessStep
+        S->>H: memory_activity など
         S->>D: MemoryLLM の結果を保存
         S->>H: end_turn(persona)
     end
@@ -275,11 +281,30 @@ while True:
 チャンク境界でタグが切れても漏れないよう未閉じタグは保留し、
 閉じが来ないまま上限（20k 字）を超えたら諦める。
 
-### 5.8 `RepairStep` — キャラ判定と再生成
+### 5.8 `RepairStep` — キャラ判定と再生成（done の後）
 
-`repair.py`。毎ターン応答を検証し、逸脱していれば再生成する
-（`character_repair_max_attempts`）。置換したら `ResponseReplacedSSE` を流し、
-`turn_ctx.full_response` を差し替える（履歴に残るのは差し替え後）。
+`repair.py`。**永続化と `done` の後に**毎ターン応答を検証し、逸脱していれば
+再生成する（`character_repair_max_attempts`）。
+
+判定は外部 LLM の往復なので、`done` を待たせると体感の終端がその分遅れる。
+だから先に完了を伝え、修復は後追いにする（#58）:
+
+```python
+yield DoneSSE(...).to_sse()                       # 先に完了
+async for ev in RepairStep().run(...):           # 判定はこの後
+    session.replace_response(turn_ctx.assistant_msg_id, turn_ctx.full_response)
+    session.flush()
+    ev.assistant_msg_id = turn_ctx.assistant_msg_id
+    yield ev.to_sse()                            # response_replaced
+```
+
+`ResponseReplacedSSE` は `assistant_msg_id` を運ぶ。フロントは `done` で turn セッションを
+閉じているので、`turn.js` が `applyReplaceAfterTurn()` で msg_id の吹き出しを直接探して
+差し替える。
+
+`session.replace_response()` は content と **segments の text を 1 本に畳む**。
+`edit_message` は先頭の text セグメントしか更新しないため、text→tool→text の
+ターンでリロードすると修復前の文が混ざる。
 
 ### 5.9 空応答のフォールバック
 
@@ -293,7 +318,7 @@ while True:
 assistant_msg_id = session.add(
     "assistant", full_response, now, tool_calls=..., segments=..., usage=...
 )
-session.flush()   # PostProcessStep が done を出す前に必ずディスクへ
+session.flush()   # done を出す前に必ずディスクへ
 ```
 
 `usage`（トークン消費）は assistant ノードにそのまま保存され、リロード後も履歴に残る。
@@ -315,7 +340,8 @@ session.flush()   # PostProcessStep が done を出す前に必ずディスク�
 1. 退避されたメッセージの要約タスクを待って `SessionSummarizedSSE`
 2. `record_conversation_time`（最終会話時刻。減衰計算の基準）
 3. `validate_response`（応答の品質警告。ログのみ）
-4. **`DoneSSE` を先に流す** — 体感を待たせないため。続きは「後から来る情報」
+4. **`DoneSSE`** — ここではなく `ChatService.chat` が永続化直後に出す（§5.8）。
+   `PostProcessStep().run(..., emit_done=False)` で呼ばれる。続きは「後から来る情報」
 5. `run_memory_llm` — 事実・目標・約束・感情・関係・持ち物を抽出して保存
    （`auto_extract` が有効なとき。`item_*` ツールを使ったターンは持ち物抽出をスキップ）
 6. `MemoryActivitySSE` — **実際にプロンプトへ挿入された記憶**だけを retrieved に載せる
@@ -348,7 +374,7 @@ session.flush()   # PostProcessStep が done を出す前に必ずディスク�
 | `memory_activity` | 後処理（1 ターン 1 回） | 記憶パネル |
 | `context_compressed` | 圧縮発生 | 「圧縮した」バッジ |
 | `session_summarized` | 退避の要約完了 | 履歴の要約表示 |
-| `response_replaced` | 修復で再生成 | 本文の差し替え |
+| `response_replaced` | 修復で再生成（`done` の後） | 本文の差し替え（`assistant_msg_id` で対象を探す） |
 | `context_update` | 状態変化 | 状態パネル更新 |
 | `inventory_update` | 装備変化 | 装備パネル更新 |
 | `debug_info` | `debug=true` のみ | デバッグ表示 |
@@ -356,8 +382,8 @@ session.flush()   # PostProcessStep が done を出す前に必ずディスク�
 | `error` | 失敗 | エラー表示 |
 | `done` | ターン完了（後処理の途中） | typing 解除・履歴確定・保留送信 |
 
-`done` は**ターンの最後ではない**。後処理の記憶抽出は `done` の後に走るので、
-フロントは「本文は揃ったが、記憶パネルは後で更新される」前提で動く。
+`done` は**ターンの最後ではない**。その後にキャラ判定（`response_replaced` の可能性）と
+記憶抽出が続くので、フロントは「本文は揃ったが、あとで差し替え・記憶更新があり得る」前提で動く。
 
 ---
 

@@ -220,6 +220,11 @@ function _handleHubMessage(e) {
     return;
   }
   if (!_turn) {
+    // キャラ修復は done 後に届く。turn はもう閉じているので msg_id で直接差し替える。
+    if (evt.type === "response_replaced") {
+      if (N.Chat._send.applyReplaceAfterTurn) N.Chat._send.applyReplaceAfterTurn(evt);
+      return;
+    }
     if (_hubSkipMode) {
       // Swallow the burst until its first terminal event marks the end.
       if (evt.type === "done" || evt.type === "error") _hubSkipMode = false;

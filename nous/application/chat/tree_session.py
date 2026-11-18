@@ -356,6 +356,35 @@ class TreeSessionWindow:
         self._persist()
         return dict(node)
 
+    def replace_response(self, msg_id: str, new_content: str) -> dict | None:
+        """assistant 応答を丸ごと差し替える（キャラ修復の置換用）。
+
+        `edit_message` と違い text セグメントを 1 本に畳む。本文は全置換なので
+        旧 text セグメントを残すとリロード時に修復前の文が混ざる。
+        ツール呼び出し等の非 text セグメントは順序ごと保持する。
+        """
+        node = self._nodes.get(msg_id)
+        if node is None:
+            return None
+        node["content"] = new_content
+        segments = node.get("segments")
+        if segments:
+            rebuilt: list[dict] = []
+            placed = False
+            for seg in segments:
+                if seg.get("type") == "text":
+                    if not placed:
+                        rebuilt.append({"type": "text", "content": new_content})
+                        placed = True
+                    continue
+                rebuilt.append(seg)
+            if not placed:
+                rebuilt.append({"type": "text", "content": new_content})
+            node["segments"] = rebuilt
+        self._version += 1
+        self._persist()
+        return dict(node)
+
     def delete_message(self, msg_id: str) -> dict | None:
         """ノードを削除し、子ノードを削除対象のparent_idにリペアレンティングする。"""
         node = self._nodes.get(msg_id)

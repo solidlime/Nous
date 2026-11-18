@@ -360,3 +360,31 @@ describe('chat hub — send flow', () => {
     expect(N.Core.api).toHaveBeenCalledTimes(1); // POST only — no cancel endpoint
   });
 });
+
+// ------------------------------------------------------------------
+// #58: キャラ修復は done 後に届く — turn が閉じていても差し替える
+// ------------------------------------------------------------------
+describe('response_replaced after done', () => {
+  it('replaces the bubble of the matching msg_id', () => {
+    document.getElementById('chat-messages').innerHTML =
+      '<div class="chat-msg assistant" data-msg-id="m1"><div class="chat-bubble">元の応答</div></div>';
+    N.Chat._send.applyReplaceAfterTurn({ content: '修復済みの応答', assistant_msg_id: 'm1' });
+    const bubble = document.querySelector('.chat-msg[data-msg-id="m1"] .chat-bubble');
+    expect(bubble.textContent).toBe('修復済みの応答');
+  });
+
+  it('falls back to the last assistant message when msg_id is missing', () => {
+    document.getElementById('chat-messages').innerHTML =
+      '<div class="chat-msg assistant"><div class="chat-bubble">古い</div></div>' +
+      '<div class="chat-msg assistant"><div class="chat-bubble">元の応答</div></div>';
+    N.Chat._send.applyReplaceAfterTurn({ content: '差し替え後' });
+    const nodes = document.querySelectorAll('.chat-msg.assistant .chat-bubble');
+    expect(nodes[0].textContent).toBe('古い');
+    expect(nodes[1].textContent).toBe('差し替え後');
+  });
+
+  it('does nothing when there is no assistant message', () => {
+    document.getElementById('chat-messages').innerHTML = '';
+    expect(() => N.Chat._send.applyReplaceAfterTurn({ content: 'x' })).not.toThrow();
+  });
+});

@@ -142,6 +142,7 @@ class PostProcessStep:
         session: TreeSessionWindow,
         turn_ctx: ChatTurnContext,
         debug: bool = False,
+        emit_done: bool = True,
     ) -> AsyncIterator[
         DebugInfoSSE | DoneSSE | MemoryActivitySSE | SessionSummarizedSSE | ContextUpdateSSE | InventoryUpdateSSE
     ]:
@@ -175,12 +176,14 @@ class PostProcessStep:
             logger.warning("Response validation: %s", w)
 
         # DoneSSE: memory_llmの前に送出（was_truncatedは事前に設定済み）
-        yield DoneSSE(
-            truncated=turn_ctx.was_truncated,
-            usage=turn_ctx.usage,
-            user_msg_id=turn_ctx.user_msg_id,
-            assistant_msg_id=turn_ctx.assistant_msg_id,
-        )
+        # emit_done=False: 呼び出し側（ChatService）が先に done を流す場合（#58）。
+        if emit_done:
+            yield DoneSSE(
+                truncated=turn_ctx.was_truncated,
+                usage=turn_ctx.usage,
+                user_msg_id=turn_ctx.user_msg_id,
+                assistant_msg_id=turn_ctx.assistant_msg_id,
+            )
 
         # MemoryLLM: キャラ判定は MemoryLLM 側で行う（旧・自発的内省は 2026-11-09 に廃止）
         memory_result: dict = {}

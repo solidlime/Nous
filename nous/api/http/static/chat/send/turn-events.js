@@ -9,14 +9,10 @@
    (N.Chat._send.flushPending), chat-core.js (state), chat-tools.js.
    ================================================================= */
 ;(function(N) {
-var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
-var showConfirm = C.showConfirm, showAlert = C.showAlert;
-var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
-var fmtStamp = C.fmtStamp;
-var safeMarkdown = N.Chat.markdown && N.Chat.markdown.render;
 "use strict";
-var S = window.S;
+var C = N.Core;
+var esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
+var safeMarkdown = N.Chat.markdown && N.Chat.markdown.render;
 
 var CHAT = N.Chat.state;
 
@@ -51,7 +47,7 @@ function _handleChatEvent(evt) {
       t.contentParts.push({ type: "text", bubble: t.currentTextBubble, content: "" });
     }
     t.currentTextContent += evt.content;
-    if (window.Nous && Nous.Chat.ttsStream && Nous.Chat.ttsStream.onDelta && document.getElementById("chat-voice-streaming")?.checked) { try { Nous.Chat.ttsStream.onDelta(t.currentTextContent); } catch (_e) {} }
+    if (window.Nous && Nous.Chat.ttsStream && Nous.Chat.ttsStream.onDelta && document.getElementById("chat-voice-streaming")?.checked) { try { Nous.Chat.ttsStream.onDelta(t.currentTextContent); } catch { /* TTS 失敗は配信を止めない */ } }
     t.contentParts[t.contentParts.length - 1].content = t.currentTextContent;
 
     // rAF-batched DOM update
@@ -292,6 +288,29 @@ function _finalizeTurn(evt) {
 // ------------------------------------------------------------------
 // Expose on N.Chat (chunk 4/5 — event renderer hook)
 // ------------------------------------------------------------------
+function _applyReplaceAfterTurn(evt) {
+  // done 後に届いた response_replaced を、保存済みメッセージの DOM に反映する。
+  // turn セッションは done で閉じているので msg_id で探す（無ければ最後の assistant）。
+  var nodes = document.querySelectorAll("#chat-messages .chat-msg.assistant");
+  var target = null;
+  if (evt.assistant_msg_id) {
+    for (var i = nodes.length - 1; i >= 0; i--) {
+      if (nodes[i].dataset.msgId === evt.assistant_msg_id) { target = nodes[i]; break; }
+    }
+  }
+  if (!target && nodes.length) target = nodes[nodes.length - 1];
+  if (!target) return;
+  var bubbles = target.querySelectorAll(".chat-bubble");
+  var bubble = bubbles.length ? bubbles[bubbles.length - 1] : null;
+  if (!bubble) {
+    bubble = document.createElement("div");
+    bubble.className = "chat-bubble";
+    target.appendChild(bubble);
+  }
+  safeSetHTML(bubble, safeMarkdown(evt.content || ""));
+}
+
 N.Chat._send = N.Chat._send || {};
 N.Chat._send.handleEvent = _handleChatEvent;
+N.Chat._send.applyReplaceAfterTurn = _applyReplaceAfterTurn;
 })(window.Nous);

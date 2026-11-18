@@ -336,7 +336,7 @@ class ChatService:
                 if _search_engine:
                     _reg_ref = registry  # closure capture
                     registry.set_search_handler(
-                        lambda ctx, config, ti: _execute_search_tools(_search_engine, _reg_ref, config, ti)  # type:ignore[arg-type]
+                        lambda ctx, config, ti: _execute_search_tools(_search_engine, _reg_ref, config, ti)
                     )
                     logger.info("search_tools handler registered (%d tools visible)", len(registry.get_visible_tools()))
 
@@ -410,13 +410,6 @@ class ChatService:
                     elif isinstance(event, TextDeltaSSE):
                         full_response += event.content
 
-                # RepairStep: 毎ターンキャラ判定 + 違反時の応答再生成（E: RepairStep）。
-                # 置換が起きた場合 turn_ctx.full_response が正となる。
-                async for ev in RepairStep().run(ctx, config, messages, turn_ctx):
-                    yield ev.to_sse()
-                if turn_ctx.full_response:
-                    full_response = turn_ctx.full_response
-
                 # 何も残らずに終わったターンは「送信が無視された」ように見える（#31）。
                 # 失敗を1行だけ吹き出しに残す（保存されるのでリロードにも耐える）。
                 if not full_response and not turn_ctx.tool_calls_log:
@@ -442,24 +435,49 @@ class ChatService:
                     turn_ctx.assistant_msg_id = assistant_msg_id
                     turn_ctx.full_response = full_response
 
-                # Publish chat.llm_response event
-                if full_response:
-                    await ctx.event_bus.publish(
-                        CHAT_LLM_RESPONSE,
-                        {
-                            "persona": persona,
-                            "session_id": session_id,
-                            "content": full_response,
-                            "timestamp": get_now().isoformat(),
-                        },
-                    )
-
-                # Force-persist to SQLite BEFORE PostProcessStep (which sends DoneSSE)
+                # Force-persist to SQLite BEFORE done
                 # so reload-after-response doesn't lose messages
                 session.flush()
 
+            # DoneSSE はキャラ判定（RepairStep）より先に出す（#58）。
+            # 判定は外部 LLM の往復なので、待つと体感の終端がその分遅れる。
+            # 差し替えが起きたら response_replaced で後追いし、保存済みノードも更新する。
+            from nous.application.chat.events import DoneSSE
+
+            yield DoneSSE(
+                truncated=turn_ctx.was_truncated,
+                usage=turn_ctx.usage,
+                user_msg_id=turn_ctx.user_msg_id,
+                assistant_msg_id=turn_ctx.assistant_msg_id,
+            ).to_sse()
+
+            # RepairStep: done の後にキャラ判定 + 違反時の再生成
+            async for ev in RepairStep().run(ctx, config, messages, turn_ctx):
+                if turn_ctx.assistant_msg_id and turn_ctx.full_response:
+                    # 履歴（content + segments）も修復後の本文に揃える。
+                    # これをやらないとリロードで修復前の文が出る。
+                    session.replace_response(turn_ctx.assistant_msg_id, turn_ctx.full_response)
+                    session.flush()
+                    full_response = turn_ctx.full_response
+                ev.assistant_msg_id = turn_ctx.assistant_msg_id
+                yield ev.to_sse()
+
+            if full_response:
+                # キャラ修復の後に出す（先に出すと修復前の本文が記録に残る）
+                await ctx.event_bus.publish(
+                    CHAT_LLM_RESPONSE,
+                    {
+                        "persona": persona,
+                        "session_id": session_id,
+                        "content": full_response,
+                        "timestamp": get_now().isoformat(),
+                    },
+                )
+
             try:
-                async for post_event in PostProcessStep().run(ctx, config, session, turn_ctx, debug=debug):
+                async for post_event in PostProcessStep().run(
+                    ctx, config, session, turn_ctx, debug=debug, emit_done=False
+                ):
                     yield post_event.to_sse()
             except Exception:
                 logger.exception("Chat pipeline crashed")
