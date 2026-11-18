@@ -375,15 +375,15 @@ class WikiWorker(JournalMixin, ConflictsMixin):
         now = get_now(self._cfg.run_at_tz)
         store = WikiStore(self._settings.data_root, persona)
         # wiki 専用の鍵が無ければ、このペルソナのチャット設定（チャットタブの値）を使う。
-        # ctx が config 無しで作られているケース（起動直後の遅延生成）は config.json を読む。
+        # チャットタブの保存は config.json に書くので、ctx.config（起動時の写し）より
+        # config.json を優先する（保存して再起動しなくても次のサイクルから反映される）。
         self._chat_config = getattr(ctx, "config", None)
-        if self._chat_config is None:
-            try:
-                from nous.domain.config.chat_config import ChatConfigFileRepository
+        try:
+            from nous.domain.config.chat_config import ChatConfigFileRepository
 
-                self._chat_config = ChatConfigFileRepository(str(self._settings.data_root)).get(persona)
-            except Exception:
-                logger.debug("WikiWorker: chat config load failed for %s", persona, exc_info=True)
+            self._chat_config = ChatConfigFileRepository(str(self._settings.data_root)).get(persona)
+        except Exception:
+            logger.debug("WikiWorker: chat config load failed for %s", persona, exc_info=True)
         # Zero Inbox: Wiki/日記が吸収済みの記憶を先に物理削除する（旧 archived の溜まり場を消す）。
         purged, purged_keys = self._purge_obsolete(ctx, persona)
         if purged:
