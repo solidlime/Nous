@@ -52,7 +52,7 @@ py -3 scripts\backup_restore.py backup --data-root D:\Code\Nous\data --out E:\No
 
 生成物:
 
-```
+```text
 backups/nous-backup-YYYYMMDD-HHMMSS/
 ├── manifest.json                      # sha256・行数・integrity・qdrant 情報・除外理由
 ├── sqlite/<persona>/{memory,inventory}.sqlite

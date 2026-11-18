@@ -231,7 +231,7 @@ Cross-encoder reranker（`japanese-reranker-xsmall-v2`）も同梱していま�
 
 ## アーキテクチャ
 
-```
+```text
 MCP クライアント / WebUI
         │
         ▼
@@ -262,7 +262,7 @@ domain/            application/    infrastructure/
 
 チャット 1 ターンの流れ:
 
-```
+```text
 ユーザー → SSE ルーター → コンテキスト読込 → 記憶検索（ハイブリッド）
         → プロンプト構築（キャッシュ対応）→ LLM 推論
         → ツール呼び出し（memory_search / update_context / invoke_skill …）

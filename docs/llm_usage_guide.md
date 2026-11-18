@@ -43,15 +43,16 @@ result = session_begin()
 ```
 
 Use the returned context to:
+
 - Address the user by their preferred name (`preferred_address`)
 - Acknowledge the time elapsed since last conversation
 - Continue unfinished goals or promises
 - Reflect the current emotion state in tone
 
 > **Emotion Decay Notification**: If time has passed since the last session, emotions naturally decay.
-> The output includes a before/after line: `  Emotion: anger(0.72) → neutral — faded over 48h`
+> The output includes a before/after line: `Emotion: anger(0.72) → neutral — faded over 48h`
 > This signals "I was angry before, but I've calmed down now" — acknowledge the change naturally.
-
+>
 > **Note (日本語)**: 毎セッション冒頭で必ず呼ぶこと。記憶統計・直近の出来事・約束・目標が一括返却される。
 
 ---
@@ -237,7 +238,7 @@ They appear in the **ACTIVE COMMITMENTS** section of `session_begin()` output.
 > **⚠️ Removed**: `update_context(append_goals/append_promises/remove_goals/remove_promises)` is no longer supported.
 > Use `memory_create(content="...", tags=[...])` / `memory_update(memory_key="...", tags=[...])` directly. See lifecycle example below.
 > Also do **not** use `context_tags=["promise"]` / `context_tags=["goal"]` — these have no effect.
-
+>
 > **Note**: `goal_manage` は状態遷移（create/achieve/cancel）とタグ付与のために使える。
 > `tags` パラメータで追加タグを付与・絞り込みできる（例: `goal_manage(operation="create", content="...", tags=["project:nous"])`）。
 > achieve/cancel 時に importance を 0.9 に引き上げる副作用があるため、プロジェクト別の goal 検索は
@@ -369,7 +370,7 @@ item_search(query="hat")
 
 Copy and paste this at the start of your system prompt to enable autonomous memory usage:
 
-```
+```text
 You have persistent memory via MCP tools. Use them autonomously — never wait to be asked.
 
 **Every session:** call `session_begin()` first, no exceptions.
@@ -400,7 +401,7 @@ Never ask "should I remember this?" — just do it.
 
 ### 日本語版
 
-```
+```text
 あなたはMCPツールで永続的な記憶を持っています。自律的に使ってください — 指示を待つ必要はありません。
 
 **毎セッション開始時:** 例外なく最初に `session_begin()` を呼ぶ。
@@ -449,7 +450,7 @@ top_p: float | None = None              # Optional top_p override (default: None
 
 When `dynamic_temperature` is enabled, the pipeline calculates an emotion-adjusted temperature before each LLM call:
 
-```
+```python
 base_temperature = config.temperature  # e.g. 0.7
 emotion_modulation = emotion_intensity * emotion_temperature_scale  # e.g. 0.6 * 0.2 = 0.12
 effective_temperature = base_temperature + emotion_modulation
@@ -523,8 +524,9 @@ Thinking text is also persisted per turn as a `{"type": "thinking", "content": .
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/tts/{persona}` | テキストを音声合成（body: `{"text": "..."}`） |
-> `GET /api/tts/{persona}/voices` は削除済み（d4）。
 
+> `GET /api/tts/{persona}/voices` は削除済み（d4）。
+>
 > **仕組み**: ペルソナの現在の感情（`emotion`）から話速を自動調整します（joy→1.1x, sadness→0.9x, anger→1.2x）。`speech_style` も反映されます。
 
 ---
@@ -545,7 +547,7 @@ Environment variables (prefix `NOUS__IRODORI__`):
 
 ### Architecture
 
-```
+```text
 Nous ──HTTP──> Irodori-TTS-Server ──GPU──> Audio (WAV/MP3)
 ```
 
@@ -573,6 +575,7 @@ Nous ──HTTP──> Irodori-TTS-Server ──GPU──> Audio (WAV/MP3)
 ### Prompt integration
 
 When enabled, the chat pipeline automatically:
+
 1. Detects suitable turns for voice generation
 2. Sends the assistant's response text to Irodori-TTS
 3. Returns audio alongside the text response
@@ -630,7 +633,7 @@ opensandbox__sandbox_reset(level="full")
 
 **アーキテクチャ**: 単一の `opensandbox` サーバーに対して、persona ごとに独立した `opensandbox-mcp` インスタンスが接続する。
 
-```
+```text
 opensandbox (port 8090)
   ├── opensandbox-mcp-herta (port 8001, 独立 ServerState)
   ├── opensandbox-mcp-alice (port 8002, 独立 ServerState)

@@ -155,10 +155,12 @@ class Memory:
 ### 検索フィルタリング
 
 `SearchQuery.valid_at` を指定することで、特定の時点で有効な記憶のみを取得可能:
+
 ```python
 SearchQuery(text="...", valid_at=datetime(2024, 6, 15))
 # → valid_from <= 2024-06-15 AND (valid_until IS NULL OR valid_until > 2024-06-15)
 ```
+
 `valid_at=None`（デフォルト）では全件返却。後方互換を完全維持。
 
 ### マイグレーション
@@ -205,6 +207,7 @@ v037: `ALTER TABLE memories ADD COLUMN valid_from TEXT; ADD COLUMN valid_until T
 ### Episode Segmentation
 
 `EpisodeSegmenter` が session events を topic shift + surprise scoring で自動分割:
+
 - **Topic shift detection**: LLM が隣接する turn pair を比較し「トピックが変わったか？」を判定
 - **Surprise signal**: 「この発言は予想外か？」を 0.0-1.0 で評価、閾値 > 0.7 で即時セグメンテーション
 - **OR ルール**: topic shift OR surprise > 0.7 → セグメント境界
@@ -213,6 +216,7 @@ v037: `ALTER TABLE memories ADD COLUMN valid_from TEXT; ADD COLUMN valid_until T
 ### Consolidation Pipeline
 
 `EpisodeConsolidation` が各 Episode から以下をLLM抽出 → `memories` に保存:
+
 1. **K_fact**: 事実情報
 2. **K_pref**: ユーザー好み
 3. **K_profile**: プロフィール情報
@@ -220,6 +224,7 @@ v037: `ALTER TABLE memories ADD COLUMN valid_from TEXT; ADD COLUMN valid_until T
 ### 2-tier Retrieval
 
 `PrepareStep` の検索パイプライン:
+
 1. Note Memory（`memories`）を最初に検索
 2. 結果が `memory_preload_count` 未満の場合、Episode Memory（`session_events`）を fallback 検索
 3. 見つかった episode reference を context に追加

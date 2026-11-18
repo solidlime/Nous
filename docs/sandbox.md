@@ -25,7 +25,7 @@ manager に閉じれば、触れるのは sandbox の作成・exec・停止だ�
 
 ## 構成
 
-```
+```text
 docker compose（nous スタック）
 ├─ qdrant
 ├─ nous              ← sock 持たない。sandbox-manager に HTTP で頼む
@@ -38,7 +38,7 @@ docker compose（nous スタック）
 
 manager が付けるラベルで、sandbox は擬似 compose スタックとして扱える:
 
-```
+```text
 com.docker.compose.project=nous-sandbox
 com.docker.compose.service=sbx-<persona>
 com.nous.sandbox=1
@@ -77,7 +77,7 @@ sandbox 内のエージェントには AGENTS.md で両方のパスを教える�
 
 ### ペルソナごとのレイアウト
 
-```
+```text
 persona/<p>/
 ├─ config.json     ペルソナ設定
 ├─ db/             memory.sqlite / inventory.sqlite（WAL/SHM も同居）
@@ -165,7 +165,7 @@ manager に届かない・未設定のときは `status="error"` を返す。例
 | `SANDBOX_TZ` | 親の `TZ`（無ければ `UTC`） | sandbox に渡す `TZ`。compose は `TZ: ${TZ:-Asia/Tokyo}` を manager 自体に渡している |
 | `SANDBOX_DNS_CHECK` | `1` | `1` なら起動後に `getent hosts nous` を叩き、失敗したら `status="error"`。`0` で skip |
 | `SANDBOX_APT_EXTRA` | （空） | 起動時に差分インストールする apt パッケージ（カンマ区切り）。`dpkg -s` で不足分だけ `apt-get install`。失敗しても警告だけで run は通す |
-| `SANDBOX_GIT_USER_NAME` / `SANDBOX_GIT_USER_EMAIL` | （空） | 空ならイメージの `git config --system`（persona / persona@nous.local）。設定すると `GIT_AUTHOR_*` / `GIT_COMMITTER_*` で上書きする |
+| `SANDBOX_GIT_USER_NAME` / `SANDBOX_GIT_USER_EMAIL` | （空） | 空ならイメージの `git config --system`（persona / <persona@nous.local>）。設定すると `GIT_AUTHOR_*` / `GIT_COMMITTER_*` で上書きする |
 | `SANDBOX_MEMORY` | `4g` | 上の `sandbox_memory` の既定 |
 | `SANDBOX_IDLE_MINUTES` | `30` | 上の `sandbox_idle_minutes` の既定 |
 

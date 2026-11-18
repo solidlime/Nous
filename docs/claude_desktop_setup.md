@@ -2,7 +2,7 @@
 
 ## アーキテクチャ概要
 
-```
+```text
 [Claude Desktop] --stdio--> [mcp-proxy / mcp-remote] --HTTP--> [nous サーバ]
 ```
 

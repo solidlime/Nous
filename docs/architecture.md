@@ -26,7 +26,7 @@ Nous の技術スタック、ディレクトリ構造、設計パターンを解
 
 ## ディレクトリ構造
 
-```
+```text
 nous/
 ├── main.py                    # エントリーポイント（FastMCP app生成）
 ├── api/
@@ -114,7 +114,7 @@ nous/
 
 要点だけ:
 
-```
+```text
 POST /api/chat/{persona}            202 {turn_id} / 409（同時1ターン）
     ↓ サーバー内タスクで完遂（クライアント切断に影響されない）
 PrepareStep → PromptBuildStep → CompressStep → InferenceStep → RepairStep
@@ -202,6 +202,7 @@ MCP として公開しないチャット組み込みツール（`move` / `invoke
 ## 検索品質（ASIST 反映、2026-10-04）
 
 ### 検索パイプラインの現状
+
 - ハイブリッド検索 = semantic（Qdrant）+ keyword（SQLite FTS5）+ OR-fallback、RRF スコアリング。
 - **dominantTokenKind 別 bm25 バー**（item 5）: OR-fallback 候補にのみ bm25 バーを適用。
   - 閾値 `INJECTION_MAX_BM25 = { bigram: -2.5, word: -5.0 }`（正規化スコア `bar/(1+bar)` で比較）
@@ -222,10 +223,12 @@ MCP として公開しないチャット組み込みツール（`move` / `invoke
 残る常駐 worker は `WikiWorker` のみ（ConsolidationWorker は 2026-11 に撤去。Curation / Freshness / Enrichment / Decay は 2026-11-08 に廃止）。
 
 ### 評価ハーネス
+
 - `scripts/eval_search_quality.py`（gold コーパス: `tests/benchmark/data/verify_corpus_v1.json`）
 - `scripts/eval_real_queries.py`（実クエリ A/B）
 - `scripts/search_quality_smoke.py`（CI 用スモーク: 固定小コーパス `tests/benchmark/data/search_quality_smoke.json`、オフライン keyword 経路、`recall@5 ≥ 0.8` / `MRR ≥ 0.7` / zero-result 0。`make search-quality-smoke`、artifact は `output/search_quality_smoke.{json,md}`）
 - 合格ライン（案C）: zero-result 0 / recall@5 ≥ 0.75 / MRR ≥ 0.80 / p95 ≤ 1.5s
 
 ### ドリフト検知
+
 - `scripts/check_docs_drift.py`（`make docs-drift`）: `@_tool("...")` ↔ `docs/architecture.md` の MCP ツール表、`custom_route(...)` ↔ `docs/http_api_reference.md` のエンドポイント、`Settings` ↔ ドキュメントの `NOUS_*` を突き合わせる。ドキュメントにあるが実装に無いものは error、実装にあるが未記載の HTTP は `scripts/docs_drift_baseline.json` に既知分を記録し新規だけ error。

@@ -22,11 +22,12 @@ When `NOUS_API_KEY` is set, the Bearer token must equal the key (401 otherwise) 
 
 The FastMCP server exposes the standard MCP protocol at:
 
-```
+```text
 POST /mcp          # MCP Streamable HTTP transport (for MCP clients)
 ```
 
 **Claude Desktop / MCP client config:**
+
 ```json
 {
   "mcpServers": {
@@ -45,9 +46,11 @@ POST /mcp          # MCP Streamable HTTP transport (for MCP clients)
 ## Health & Personas
 
 ### `GET /health`
+
 Health check with Qdrant connectivity status.
 
 **Response:**
+
 ```json
 {
   "status": "ok",
@@ -57,22 +60,27 @@ Health check with Qdrant connectivity status.
 ```
 
 ### `GET /api/personas`
+
 List all available personas (scans data directory).
 
 **Response:** `{ "personas": ["herta", "default", "alice"] }`
 
 ### `POST /api/personas`
+
 Create a new persona with initialized databases.
 
 **Request body:** `{ "persona": "alice" }`
 
 ### `DELETE /api/personas/{persona}`
+
 Delete a persona and all its data. Cannot delete `"default"`.
 
 ### `PUT /api/personas/{persona}/profile`
+
 Update persona profile fields.
 
 **Request body:**
+
 ```json
 {
   "user_info": { "name": "Alice", "preferred_address": "Alice-san" },
@@ -84,12 +92,15 @@ Update persona profile fields.
 ## Dashboard
 
 ### `GET /`
+
 Serve the web dashboard UI (HTML).
 
 ### `GET /api/dashboard/{persona}`
+
 Aggregated dashboard payload for a persona.
 
 **Response fields:**
+
 - `info` — persona context (name, relationship, emotion, equipment, etc.)
 - `metrics` — total memories, content chars, vector count, tagged/linked counts
 - `stats.timeline` — `[{date, count}]` array for the last N days (default 14)
@@ -100,9 +111,11 @@ Aggregated dashboard payload for a persona.
 ## Memory Browsing
 
 ### `GET /api/observations/{persona}`
+
 Paginated list of memories, sorted chronologically.
 
 **Query params:**
+
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `page` | int | 1 | Page number (1-based, max 10000) |
@@ -113,6 +126,7 @@ Paginated list of memories, sorted chronologically.
 | `mode` | str | — | `recent` の時は `per_page` 件を新しい順で返す別モード（`memories` のみ） |
 
 **Response:**
+
 ```json
 {
   "persona": "herta",
@@ -140,9 +154,11 @@ Paginated list of memories, sorted chronologically.
 `memories[]` は Memory レコード全体（`content` はプレビューではなく本文）。
 
 ### `GET /api/search/{persona}`
+
 Search memories for a persona.
 
 **Query params:**
+
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `q` | str | `""` | Search text |
@@ -158,6 +174,7 @@ Search memories for a persona.
 | `request_id` | str | なし | 監査相関 ID |
 
 **Response:**
+
 ```json
 {
   "persona": "herta",
@@ -175,6 +192,7 @@ Search memories for a persona.
   "nodes": [], "edges": []
 }
 ```
+
 - `project` は正規化後の slug（未指定・不正値は `null`）。
 - `time_weight` は decision gate の時間減衰（未使用時は `null`）。
 - `project` 指定時は **候補プールを広げてから** ブーストし、最後に `limit` で切る（`limit*3`、engine 側の pool 上限は 60）。
@@ -187,9 +205,11 @@ Search memories for a persona.
 ## Memory CRUD
 
 ### `POST /api/memories/{persona}`
+
 Create a new memory directly via HTTP.
 
 **Request body:**
+
 ```json
 {
   "content": "User prefers dark mode.",
@@ -208,6 +228,7 @@ Create a new memory directly via HTTP.
 **Response (201):** `{ "status": "ok", "memory": { ...Memory レコード... }, "cache_invalidated": true }`
 
 ### `PUT /api/memories/{persona}/{key}`
+
 Update an existing memory by key.
 
 **Request body:** Same fields as POST (all optional; 空ボディは 400）。
@@ -215,6 +236,7 @@ Update an existing memory by key.
 **Response:** `{ "status": "ok", "memory": { ...Memory レコード... } }`
 
 ### `DELETE /api/memories/{persona}/{key}`
+
 Delete a memory by key.
 
 **Response:** `{ "status": "ok", "deleted": "memory_20250715_103000" }`
@@ -231,11 +253,13 @@ Delete a memory by key.
 ## Knowledge Graph
 
 ### `GET /api/graph/{persona}`
+
 Memory relationship graph for visualization (nodes + edges).
 
 **Query params:** `limit` (int, default 200)
 
 **Response:**
+
 ```json
 {
   "nodes": [ { "id": "memory_...", "label": "preview...", "importance": 0.8 } ],
@@ -254,12 +278,15 @@ Memory relationship graph for visualization (nodes + edges).
 ## Persona Dashboard Pages
 
 ### `GET /dashboard/{persona}`
+
 Serve the persona chat dashboard UI (HTML).
 
 ---
 
 ## Project Context (kanban #8)
+
 ### `GET /api/project/{persona}/{slug}/context`
+
 `project:<slug>` 単位の集約ビュー。サーバ側で既存の規約を読むだけで、新しい集計テーブルは持たない:
 
 | Section | Source |
@@ -274,6 +301,7 @@ Serve the persona chat dashboard UI (HTML).
 ---
 
 ### `GET /api/metrics/{persona}`
+
 観測値を返す（kanban #10）。
 
 - `search`: `count` / `zero_result` / `zero_result_rate` / `p50_ms` / `p95_ms` — **プロセス内**（再起動で 0 に戻る、直近 500 サンプル）
@@ -289,27 +317,35 @@ Activity タブの上部に 1 行で出る。
 ファイル層（`data/wiki/<persona>/`）が正本。索引（Qdrant）はミラーで、更新失敗は保存を止めない。
 
 ### `GET /api/wiki/{persona}`
+
 ページ一覧。`?q=` で slug / title / 本文の部分一致に絞る（本文一致は `body_hits` 件数付き）。
 
 ### `GET /api/wiki/{persona}/{slug}`
+
 本文（markdown 生）。`?q=` を渡すと一致行（`matches`）と逆リンク（`backlinks`）を返す。
 
 ### `PUT /api/wiki/{persona}/{slug}`
+
 ダッシュボードからの保存。既存ページなら `sources` / `project` / `tags` を引き継ぐ。
 
 ### `DELETE /api/wiki/{persona}/{slug}`
+
 削除（索引落としは best-effort）。削除前の本文は履歴に残る。
 
 ### `GET /api/wiki/{persona}/_history/{slug}`
+
 改訂履歴（新しい順・本文なし）。
 
 ### `GET /api/wiki/{persona}/_history/{rev}/{slug}`
+
 過去の版 1 つ（本文込み、`current_body` 付き）。
 
 ### `POST /api/wiki/{persona}/_restore/{rev}/{slug}`
+
 過去の版を書き戻す。書き戻し自体も 1 リビジョンとして残る（追記型）。
 
 ### `POST /api/wiki/{persona}/_recompile`
+
 手動再編纂（202）。ダッシュボードからはプラグイン鍵なしで呼べる代わりに persona 単位 60 秒の
 クールダウンがある。外部からの `POST /api/wiki/run/{persona}` は plugin API key 必須。
 
@@ -330,6 +366,7 @@ Activity タブの上部に 1 行で出る。
 ---
 
 ### `GET /api/chat/{persona}/persona/images/{file}`
+
 Serve a persona image (self portraits and expression images such as `expr_joy.png`).
 
 ---
@@ -354,6 +391,7 @@ The chat view swaps the persona avatar image to `url` on receipt.
 `get_context()` が持っていた副作用（会話時刻の記録・ワンショット状態の消費）はこの経路に寄せてある。
 
 **Response（既定は envelope）:**
+
 ```json
 { "ok": true, "data": { "context": "...", "notes": ["..."] }, "error": null }
 ```
@@ -378,9 +416,11 @@ Named Memory Blocks（`memory_blocks` テーブル、`block_name` 主キー）�
 LLM が扱うペルソナ状態は `update_context()` を使う。
 
 ### `GET /api/blocks/{persona}`
+
 List all Core Memory Blocks for a persona.
 
 **Response:**
+
 ```json
 {
   "persona": "herta",
@@ -410,9 +450,11 @@ List all Core Memory Blocks for a persona.
 Custom block names are also allowed.
 
 ### `POST /api/blocks/{persona}`
+
 Write (create or overwrite) a Core Memory Block.
 
 **Request body:**
+
 ```json
 {
   "block_name": "user_model",
@@ -428,6 +470,7 @@ Write (create or overwrite) a Core Memory Block.
 **Response:** `{ "ok": true, "block_name": "user_model" }`
 
 ### `DELETE /api/blocks/{persona}/{block_name}`
+
 Delete a Core Memory Block by name.
 
 **Path params:** `block_name` — name of the block to delete (supports slashes via `:path`)
@@ -457,9 +500,11 @@ Delete a Core Memory Block by name.
 ## Runtime Settings
 
 ### `GET /api/settings`
+
 Get all runtime configuration values with metadata.
 
 ### `PUT /api/settings`
+
 Update a runtime setting.
 
 **Request body:** `{ "category": "general", "key": "log_level", "value": "DEBUG" }`
@@ -482,9 +527,11 @@ dashboard picks the key up from `?token=<key>` (stored in `localStorage`, then
 stripped from the URL) and attaches it to every same-origin `fetch` and `EventSource`.
 
 ### `GET /api/settings/status`
+
 Get reload status for runtime settings.
 
 ### `GET /api/settings/diagnostics`
+
 Public-deployment security diagnostics (kanban #6). Returns warnings for
 configurations that are unsafe once the server is reachable from outside:
 public bind without an API key, CORS `*`, plugin enabled with a weak/empty key,
