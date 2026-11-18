@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from time import perf_counter
 from typing import TYPE_CHECKING
@@ -109,18 +110,21 @@ class ToolRegistry:
         if not isinstance(persona, str):
             persona = ""
         started = perf_counter()
+        timeout_s = float(getattr(config, "tool_timeout_seconds", 120) or 120)
         try:
-            if tool_name == SEARCH_TOOLS_NAME:
-                if self._search_handler is None:
-                    result = {"status": "error", "message": "Tool search handler not available"}
+            # ハングしたツールでターンが終わらなくなるのを防ぐ（TurnHub が解けず 409 固定になる）
+            async with asyncio.timeout(timeout_s):
+                if tool_name == SEARCH_TOOLS_NAME:
+                    if self._search_handler is None:
+                        result = {"status": "error", "message": "Tool search handler not available"}
+                    else:
+                        result = await self._search_handler(ctx, config, tool_input)
+                elif self.is_mcp_tool(tool_name):
+                    if self._mcp_pool is None:
+                        return {"status": "error", "message": "MCP pool not available"}
+                    result = await self._mcp_pool.call_tool(tool_name, tool_input)
                 else:
-                    result = await self._search_handler(ctx, config, tool_input)
-            elif self.is_mcp_tool(tool_name):
-                if self._mcp_pool is None:
-                    return {"status": "error", "message": "MCP pool not available"}
-                result = await self._mcp_pool.call_tool(tool_name, tool_input)
-            else:
-                result = await execute_tool(ctx, config, tool_name, tool_input)
+                    result = await execute_tool(ctx, config, tool_name, tool_input)
 
             # 切り詰めで消える原文を残す（builtin / search / MCP 共通）
             artifact = _save_artifact(ctx, config, tool_name, result)
@@ -149,23 +153,40 @@ class ToolRegistry:
                     payload["persona"] = persona
                 await ctx.event_bus.publish("tool.called", payload)
             return result
+        except TimeoutError:
+            message = f"ツール実行が{timeout_s:.0f}秒でタイムアウトした"
+            logger.warning("ToolRegistry.execute timeout: %s (%.0fs)", tool_name, timeout_s)
+            await self._publish_failure(ctx, tool_name, tool_input, message, persona, started)
+            return {"status": "error", "message": message}
         except Exception as e:
             logger.exception("ToolRegistry.execute failed: %s", tool_name)
-            # Publish tool.called event on failure (same invariant as above)
-            if hasattr(ctx, "event_bus") and ctx.event_bus is not None and not self.is_mcp_tool(tool_name):
-                payload = {
-                    "tool_name": tool_name,
-                    "params_summary": str(tool_input)[:200],
-                    "success": False,
-                    "error": str(e),
-                    "session_id": getattr(ctx, "session_id", None),
-                    "timestamp": get_now().isoformat(),
-                    "duration_ms": round((perf_counter() - started) * 1000, 1),
-                }
-                if persona:
-                    payload["persona"] = persona
-                await ctx.event_bus.publish("tool.called", payload)
+            await self._publish_failure(ctx, tool_name, tool_input, str(e), persona, started)
             return {"status": "error", "message": str(e)}
+
+    async def _publish_failure(
+        self,
+        ctx: AppContext,
+        tool_name: str,
+        tool_input: dict,
+        error: str,
+        persona: str,
+        started: float,
+    ) -> None:
+        """失敗時の tool.called を publish する（MCP は自前で publish するので除外）。"""
+        if not hasattr(ctx, "event_bus") or ctx.event_bus is None or self.is_mcp_tool(tool_name):
+            return
+        payload = {
+            "tool_name": tool_name,
+            "params_summary": str(tool_input)[:200],
+            "success": False,
+            "error": error,
+            "session_id": getattr(ctx, "session_id", None),
+            "timestamp": get_now().isoformat(),
+            "duration_ms": round((perf_counter() - started) * 1000, 1),
+        }
+        if persona:
+            payload["persona"] = persona
+        await ctx.event_bus.publish("tool.called", payload)
 
     def truncate_result(self, result: dict, max_chars: int) -> dict:
         return truncate_tool_result(result, max_chars)

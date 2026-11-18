@@ -37,6 +37,8 @@ class TreeSessionWindow:
         self._persona: str = ""
         self._session_id: str = ""
         self._persisted_count: int = 0
+        # 直前の永続化内容。同一内容の再書き込み（add 直後の flush 等）を省くため。
+        self._last_payload: str | None = None
         self._batch_size: int = batch_size
         self._max_messages: int = max_messages
         self._version: int = 0
@@ -59,6 +61,7 @@ class TreeSessionWindow:
         ts: datetime | None = None,
         tool_calls: list[dict] | None = None,
         segments: list[dict] | None = None,
+        usage: dict | None = None,
     ) -> str:
         """メッセージをツリーに追加する。戻り値は生成したmsg_id。"""
         node_id = str(_uuid.uuid4())
@@ -74,6 +77,8 @@ class TreeSessionWindow:
             node["tool_calls"] = tool_calls
         if segments:
             node["segments"] = segments
+        if usage:
+            node["usage"] = usage
 
         if self._root_id is None:
             self._root_id = node_id
@@ -251,6 +256,9 @@ class TreeSessionWindow:
                 "nodes": list(self._nodes.values()),
             }
             messages_json = json.dumps(data, ensure_ascii=False)
+            if messages_json == self._last_payload:
+                # 変わっていないなら書き直さない（ターン 1 回に同じ内容を何度も upsert しない）
+                return
             timestamps_json = "[]"
             now_str = get_now().isoformat()
             self._db.execute(
@@ -260,6 +268,7 @@ class TreeSessionWindow:
                 (self._persona, self._session_id, messages_json, timestamps_json, now_str),
             )
             self._persisted_count = len(self._nodes)
+            self._last_payload = messages_json
         except Exception as e:
             logger.warning("TreeSessionWindow._persist failed: %s", e)
 

@@ -28,7 +28,6 @@ from nous.application.chat.pipeline.memory_retriever import (  # noqa: F401
     _format_memory_hint,
     _passes_min_score,
     _search_episodes,
-    _search_keyword_fast,
     _search_memories,
 )
 from nous.domain.shared.result import Success

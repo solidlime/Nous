@@ -271,6 +271,7 @@ class TestTreeSessionWindowNew:
         segments = [{"type": "tool_call", "name": "search", "input": {}}]
         msg_id = win.add("assistant", "result", segments=segments)
         updated = win.edit_message(msg_id, "new result")
+        assert updated is not None
         assert updated["content"] == "new result"
         segs = updated.get("segments", [])
         text_segs = [s for s in segs if s.get("type") == "text"]
@@ -434,8 +435,8 @@ class TestChatConfig:
         assert cfg2.max_tokens == 1
 
     def test_tool_calls_clamped(self):
-        cfg = ChatConfig(persona="test", max_tool_calls=50)
-        assert cfg.max_tool_calls == 20
+        cfg = ChatConfig(persona="test", max_tool_calls=500)
+        assert cfg.max_tool_calls == 100
 
     def test_get_effective_model_default(self):
         cfg = ChatConfig(persona="test", provider="anthropic", model="")

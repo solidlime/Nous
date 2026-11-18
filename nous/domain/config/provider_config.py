@@ -58,7 +58,15 @@ class ProviderConfig(BaseModel):
     base_url: str = Field(default="", description="APIの接続先URL。カスタムエンドポイント利用時に設定します。")
     temperature: float = Field(default=0.7, description="応答の創造性（0〜2）。高いほど多様、低いほど安定します。")
     max_tokens: int = Field(default=8192, description="1回の応答で生成する最大トークン数。")
-    max_tool_calls: int = Field(default=5, description="1ターンで実行できるツール呼び出しの最大回数。")
+    max_tool_calls: int = Field(
+        default=20, description="1ターンで実行できるツール呼び出しの最大回数（並列分も1回ずつ数える）。"
+    )
+    max_tool_rounds: int = Field(
+        default=10, description="1ターンでツール実行を繰り返す最大ラウンド数（無限ループ防止）。"
+    )
+    tool_timeout_seconds: int = Field(
+        default=120, description="1つのツール実行のタイムアウト秒数。超過したらエラー結果を返してターンは続行します。"
+    )
     auto_extract: bool = Field(default=True, description="会話から重要な記憶を自動抽出します。")
     extract_model: str = Field(default="", description="記憶抽出に使うモデル。空欄ならメインのモデルを使います。")
     extract_max_tokens: int = Field(default=512, description="記憶抽出時の最大トークン数。")
@@ -83,7 +91,17 @@ class ProviderConfig(BaseModel):
     @field_validator("max_tool_calls")
     @classmethod
     def _clamp_tool_calls(cls, v: int) -> int:
-        return max(0, min(20, v))
+        return max(0, min(100, v))
+
+    @field_validator("max_tool_rounds")
+    @classmethod
+    def _clamp_tool_rounds(cls, v: int) -> int:
+        return max(1, min(50, v))
+
+    @field_validator("tool_timeout_seconds")
+    @classmethod
+    def _clamp_tool_timeout(cls, v: int) -> int:
+        return max(5, min(1800, v))
 
     @field_validator("extract_max_tokens")
     @classmethod

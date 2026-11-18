@@ -153,16 +153,16 @@ sequenceDiagram
 
 `ChatService.chat()` が順に呼ぶ。`ChatTurnContext` が段をまたぐ状態コンテナ。
 
-### 5.1 即時ハートビート＋速報の記憶
+### 5.1 即時ハートビート
 
 ```python
 yield ": heartbeat\n\n"
-_fast_memories = await _search_keyword_fast(...)   # top_k=5
-yield MemoryActivitySSE(retrieved=_fast_memories, preliminary=True)
 ```
 
 準備段が重い間、フロントのストリーム読み取りがタイムアウトしないようにする。
-速報の記憶は `preliminary=True` 付き（後段の本命と区別できる）。
+**記憶の検索は `PrepareStep` の 1 回だけ**。以前は service 側が速報（`preliminary=True`）を
+流していたが、検索が 2 回走って準備段を遅くしていたので廃止した（`MemoryActivitySSE.preliminary`
+フィールド自体は互換のため残るが、`ChatService` は常に `False` で流す）。
 
 ### 5.2 `PrepareStep` — 文脈の組み立て
 
@@ -217,11 +217,18 @@ yield MemoryActivitySSE(retrieved=_fast_memories, preliminary=True)
 `nous/application/chat/pipeline/inference.py`。ここが本丸。
 
 ```python
-while turn_ctx.tool_call_count <= config.max_tool_calls:
+while True:
+    if _rounds >= max_rounds:   # max_tool_rounds（既定 10）
+        break
     visible_tools = registry.get_visible_tools() if _tools_enabled else []
     async for event in provider.stream(...):
         ...
 ```
+
+- **ラウンド上限**は `max_tool_rounds`（既定 10）。`max_tool_calls` とは別で、
+  「実行できるツール呼び出しの総数」と「推論→実行の往復回数」を分けて縛る。
+  上限に当たったら締めの一言を要求する（`_TOOL_ROUNDS_MESSAGE`）。
+- ツール無効（`max_tool_calls == 0`）のターンは 1 ラウンドで抜ける。
 
 - **ツール宣言は予算切れでも続ける**（`_tools_enabled = config.max_tool_calls > 0`）。
   宣言を止めるとモデルはツール呼び出しを独自記法（DeepSeek の DSML 等）で本文に
@@ -241,6 +248,9 @@ while turn_ctx.tool_call_count <= config.max_tool_calls:
 - ツール実行:
   - `image_generate` は実行前に `ImageGenStartSSE` を流す（フロントがプレースホルダを出せる）
   - `enable_parallel_tools`（既定 true）で並列実行
+  - **1 ツールあたり `tool_timeout_seconds`（既定 120 秒）で打ち切る**。
+    タイムアウトは例外を投げず `{"status": "error", "message": "…タイムアウト…"}` を
+    返す。1 つのツールのハングでターン全体が死ぬのを防ぐため
   - 結果は `ToolResultSSE` と `segments` の両方に積む
   - 画像は `tool` メッセージではなく **user メッセージの `content_parts`** に注入
     （OpenAI 形式の要件。テキスト専用モデルなら画像は落とす）
@@ -281,10 +291,18 @@ while turn_ctx.tool_call_count <= config.max_tool_calls:
 
 ```python
 assistant_msg_id = session.add(
-    "assistant", full_response, now, tool_calls=..., segments=...
+    "assistant", full_response, now, tool_calls=..., segments=..., usage=...
 )
 session.flush()   # PostProcessStep が done を出す前に必ずディスクへ
 ```
+
+`usage`（トークン消費）は assistant ノードにそのまま保存され、リロード後も履歴に残る。
+`flush` は **内容が前回と同一なら書かない**（差分検出）。ジェネレータを二重に閉じた
+ときに同じ行を書き直し続けるのを防ぐため。
+
+ターン途中で落ちた場合（キャンセル / 推論例外）は `_persist_partial` が
+それまでの `segments` を assistant として保存する。既に保存済み（`assistant_msg_id` が
+非 None）なら何もしないので、重複行はできない。
 
 `chat_sessions` に 1 行（persona, session_id, messages JSON, timestamps, updated_at）。
 `done` の後にリロードしても消えないための順序。`flush` は `finally` にもあるので
@@ -327,7 +345,7 @@ session.flush()   # PostProcessStep が done を出す前に必ずディスク�
 | `image_gen_start` | 画像生成の直前 | プレースホルダ |
 | `image_gen_result` | 画像生成の完了 | 画像差し込み |
 | `file_attach` | エージェントがファイルを渡す | 添付チップ（`AttachmentSSE`） |
-| `memory_activity` | 速報（`preliminary`）／後処理 | 記憶パネル |
+| `memory_activity` | 後処理（1 ターン 1 回） | 記憶パネル |
 | `context_compressed` | 圧縮発生 | 「圧縮した」バッジ |
 | `session_summarized` | 退避の要約完了 | 履歴の要約表示 |
 | `response_replaced` | 修復で再生成 | 本文の差し替え |
@@ -383,7 +401,9 @@ session.flush()   # PostProcessStep が done を出す前に必ずディスク�
 
 | キー | 効く場所 | 意味 |
 | --- | --- | --- |
-| `max_tool_calls` | InferenceStep | 0 でツール無効（宣言もしない）。1 以上で宣言し実行を制限 |
+| `max_tool_calls` | InferenceStep | 0 でツール無効（宣言もしない）。既定 20。1 以上で宣言し実行数を制限 |
+| `max_tool_rounds` | InferenceStep | 推論→ツール実行の往復上限（既定 10） |
+| `tool_timeout_seconds` | ToolRegistry | 1 ツール実行の上限秒（既定 120） |
 | `max_stored_messages` | service / CompressStep | 保持する LLM メッセージ数（tool も 1 件） |
 | `context_compression_mode` | CompressStep | 圧縮の方式 |
 | `memory_preload_count` | PrepareStep | 先に注入する記憶の件数（既定 5、0 で無効） |

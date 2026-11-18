@@ -149,8 +149,6 @@ function _handleChatEvent(evt) {
         window.dispatchEvent(new CustomEvent("emotion-changed", { detail: _cu }));
       }
     } catch (_e) { console.warn("[context_update] handle failed:", _e); }
-  } else if (evt.type === "character_flag") {
-    N.Chat.showCharacterFlag(t.assistantDiv, evt.violation, evt.detail);
   } else if (evt.type === "response_replaced") {
     // RepairStep: 応答がキャラ修復で再生成・置換された — 最後のテキストバブルを
     // data.content で差し替え、safeMarkdown で再描画する（_finalizeTurn と同じ描画）。

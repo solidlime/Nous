@@ -47,6 +47,8 @@ logger = get_logger(__name__)
 
 # 予算切れで実行しなかったツール呼び出しへの tool 結果（モデルに「締めろ」を伝える）
 _TOOL_BUDGET_MESSAGE = "ツール呼び出しの制限に達したため実行しなかった。今ある情報だけで回答せよ。"
+# ラウンド上限（ツール実行→再推論 の繰り返し回数）で止めた場合の同じ tool 結果
+_TOOL_ROUNDS_MESSAGE = "ツール実行のラウンド上限に達したため実行しなかった。今ある情報だけで回答せよ。"
 
 
 class InferenceStep:
@@ -94,11 +96,17 @@ class InferenceStep:
         temperature = effective_temp if effective_temp is not None else config.temperature
         max_continuation_rounds = 3
         _continuation_rounds = 0
-        _budget_refused = False
+        _blocked = False
+        _rounds = 0
+        # ラウンド上限: ツール実行→再推論の繰り返しが終わらないモデルを打ち切る
+        # （テストのモック config でも壊れないよう int 以外は既定値に落とす）
+        _rounds_raw = getattr(config, "max_tool_rounds", 10)
+        max_rounds = _rounds_raw if isinstance(_rounds_raw, int) and _rounds_raw > 0 else 10
         # max_tool_calls=0 は「ツール無効」（宣言もしない）。1 以上なら宣言は続け、
-        # 実行だけを予算で止める（下の予算判定）。
+        # 実行だけを予算で止める（下の予算判定）。予算は実際の呼び出し数を数える。
         _tools_enabled = config.max_tool_calls > 0
-        while turn_ctx.tool_call_count <= config.max_tool_calls:
+        while True:
+            _rounds += 1
             pending_tool_calls: list[ToolCallEvent] = []
             current_text = ""
             seg_buf = ["", ""]  # [0]=text accumulator for segment ordering, [1]=thinking accumulator (SPEC R5)
@@ -207,14 +215,17 @@ class InferenceStep:
                 )
             )
 
-            # 予算切れ: 実行せず「上限」を tool 結果として返し、テキストで締めさせる。
+            # 予算切れ / ラウンド上限: 実行せず「上限」を tool 結果として返し、テキストで締めさせる。
             # 二度目の呼び出しは打ち切る（無限ループ防止）。
-            if _tools_enabled and turn_ctx.tool_call_count >= config.max_tool_calls:
-                if _budget_refused:
+            over_budget = _tools_enabled and turn_ctx.tool_call_count + len(pending_tool_calls) > config.max_tool_calls
+            over_rounds = _rounds >= max_rounds
+            if over_budget or over_rounds:
+                if _blocked:
                     break
-                _budget_refused = True
+                _blocked = True
+                message = _TOOL_BUDGET_MESSAGE if over_budget else _TOOL_ROUNDS_MESSAGE
                 for tc in pending_tool_calls:
-                    refusal = {"status": "error", "message": _TOOL_BUDGET_MESSAGE}
+                    refusal = {"status": "error", "message": message}
                     turn_ctx.segments.append(
                         {"type": "tool_result", "name": tc.tool_name, "result": refusal, "id": tc.tool_use_id}
                     )
@@ -244,7 +255,10 @@ class InferenceStep:
             for result_sse in self._handle_tool_results(results, turn_ctx, messages):
                 yield result_sse
 
-            turn_ctx.tool_call_count += 1
+            turn_ctx.tool_call_count += len(pending_tool_calls)
+            if not _tools_enabled:
+                # ツール無効なら追加ラウンドは回さない（旧 while 条件と同じ振る舞い）
+                break
 
             # Inject image data as user message content_parts
             # (OpenAI API requires image_url parts in user messages, not tool messages)

@@ -28,13 +28,15 @@ class TestPreliminaryFlag:
         payload = json.loads(sse.to_sse().split("data: ", 1)[1])
         assert payload["promises"] == [{"content": "p"}]
 
-    def test_service_early_sse_is_preliminary(self):
+    def test_service_has_no_preliminary_sse(self):
+        """速報（preliminary=True）は廃止。検索は PrepareStep の 1 回だけ。"""
         import inspect
 
         from nous.application.chat import service as svc
 
         src = inspect.getsource(svc.ChatService.chat)
-        assert "preliminary=True" in src
+        assert "preliminary=True" not in src
+        assert "_search_keyword_fast" not in src
 
 
 class TestSavedOnlyTracking:

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import uuid
 from typing import TYPE_CHECKING
 
@@ -26,8 +28,10 @@ from nous.infrastructure.mcp_client import MCPClientPool
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from nous.application.chat.tree_session import TreeSessionWindow
     from nous.application.use_cases import AppContext
     from nous.domain.config.chat_config import ChatConfig
+    from nous.infrastructure.llm.base import ToolDefinition
     from nous.infrastructure.tools import ToolSearchEngine
 
 logger = get_logger(__name__)
@@ -62,12 +66,32 @@ def _spawn_turn(coro) -> asyncio.Task:
 
 # ── Tool search engine (search_tools) ─────────────────────────────────────────
 
+#: ツール定義の指紋 → 検索エンジン。定義が変わらない限り再構築しない
+#: （毎ターン Qdrant 接続と埋め込みモデルロードを支払わないため）。
+_tool_index_cache: tuple[str, ToolSearchEngine] | None = None
+
+
+def _tool_fingerprint(tools: list[ToolDefinition]) -> str:
+    """deferred ツール定義の指紋。名前・説明・スキーマが同じなら同じ値。"""
+    body = "\n".join(
+        f"{t.name}\x00{t.description}\x00{json.dumps(t.input_schema, sort_keys=True, ensure_ascii=False)}"
+        for t in tools
+    )
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
 
 async def _ensure_tool_index(registry: ToolRegistry) -> ToolSearchEngine | None:
     """ツール検索エンジンを初期化し、deferred ツールを Qdrant にインデックスする。
 
+    同じツール定義なら前回のエンジンを再利用する。
     失敗時は None を返し、search_tools は無効化される。
     """
+    global _tool_index_cache
+    deferred_tools = [t for t in registry.get_all_tools() if t.defer_loading]
+    fingerprint = _tool_fingerprint(deferred_tools)
+    if _tool_index_cache is not None and _tool_index_cache[0] == fingerprint:
+        return _tool_index_cache[1]
+
     try:
         from qdrant_client import AsyncQdrantClient
 
@@ -81,11 +105,11 @@ async def _ensure_tool_index(registry: ToolRegistry) -> ToolSearchEngine | None:
         vector_store = ToolVectorStore(client, embed)
         await vector_store.ensure_collection()
 
-        deferred_tools = [t for t in registry.get_all_tools() if t.defer_loading]
         if deferred_tools:
             await vector_store.index_tools(deferred_tools)
 
         engine = ToolSearchEngine(vector_store)
+        _tool_index_cache = (fingerprint, engine)
         logger.info("Tool search engine initialized (%d deferred tools indexed)", len(deferred_tools))
         return engine
     except Exception as exc:
@@ -143,6 +167,29 @@ def _build_tool_only_fallback(tool_calls_log: list[dict]) -> str:
                     if isinstance(msg, str) and ("Generated" in msg or "image" in msg.lower()):
                         return msg.strip()
     return "（ツールは使ったけど、うまく言葉にできなかった…もう一度言って？）"
+
+
+def _persist_partial(session: TreeSessionWindow, turn_ctx: ChatTurnContext, full_response: str) -> None:
+    """例外でターンが落ちたとき、生成済みの本文とツール結果を残す（黙って消さない）。
+
+    既に assistant を add 済みなら何もしない（二重保存防止）。
+    """
+    try:
+        if turn_ctx.assistant_msg_id or not (full_response or turn_ctx.tool_calls_log):
+            return
+        text = full_response or _build_tool_only_fallback(turn_ctx.tool_calls_log)
+        turn_ctx.assistant_msg_id = session.add(
+            "assistant",
+            text,
+            get_now(),
+            tool_calls=turn_ctx.tool_calls_log or None,
+            segments=turn_ctx.segments or None,
+            usage=turn_ctx.usage or None,
+        )
+        turn_ctx.full_response = text
+        session.flush()
+    except Exception:
+        logger.exception("_persist_partial failed")
 
 
 def _empty_turn_text(error: str) -> str:
@@ -203,6 +250,9 @@ class ChatService:
         images: list[dict] | None = None,
         turn_id: str | None = None,
     ) -> AsyncIterator[str]:
+        session: TreeSessionWindow | None = None
+        turn_ctx: ChatTurnContext | None = None
+        full_response = ""
         try:
             persona = ctx.persona
             db = ctx.connection.get_memory_db()
@@ -235,16 +285,6 @@ class ChatService:
             # Send SSE heartbeat immediately so the frontend stream reader doesn't time out
             # during the potentially heavy PrepareStep (memory retrieval, context building).
             yield ": heartbeat\n\n"
-
-            # Progressive disclosure: fast keyword search for immediate feedback
-            # Send memory_activity SSE with keyword-matched results before full PrepareStep
-            from nous.application.chat.events import MemoryActivitySSE
-            from nous.application.chat.pipeline.prepare import _search_keyword_fast
-
-            _last_assistant = session.get_last_assistant_content()
-            _fast_memories = await _search_keyword_fast(ctx, turn_ctx.user_message, _last_assistant, top_k=5)
-            if _fast_memories:
-                yield MemoryActivitySSE(retrieved=_fast_memories, saved=[], goals=[], preliminary=True).to_sse()
 
             # PrepareStep: pending_memory_task 待機 + EmotionDecay + コンテキスト取得
             await PrepareStep().run(ctx, session, turn_ctx, config=config)
@@ -397,6 +437,7 @@ class ChatService:
                         get_now(),
                         tool_calls=turn_ctx.tool_calls_log if turn_ctx.tool_calls_log else None,
                         segments=turn_ctx.segments if turn_ctx.segments else None,
+                        usage=turn_ctx.usage or None,
                     )
                     turn_ctx.assistant_msg_id = assistant_msg_id
                     turn_ctx.full_response = full_response
@@ -430,6 +471,9 @@ class ChatService:
                 session.flush()
         except Exception:
             logger.exception("Chat pipeline crashed")
+            # 途中まで生成できていた本文は捨てない
+            if session is not None and turn_ctx is not None:
+                _persist_partial(session, turn_ctx, full_response)
             from nous.application.chat.events import ErrorSSE
 
-            yield ErrorSSE(message="（ごめん、今のうまく処理できなかった…もう一度言って？）").to_sse()
+            yield ErrorSSE(message="（ごめん、今のうまく処理できなかった）").to_sse()
