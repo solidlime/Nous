@@ -21,6 +21,7 @@
 | [README.md](../README.md) | プロジェクト全体の概要・セットアップ |
 | [README.md](./README.md) | この索引（live / frozen の区分と一覧） |
 | [architecture.md](architecture.md) | コンポーネント構成、MCP ツール一覧、設定 env |
+| [chat-flow.md](chat-flow.md) | 1 ターンの会話が送信から記憶の保存までどう流れるか |
 | [http_api_reference.md](http_api_reference.md) | HTTP API のエンドポイントリファレンス |
 | [memory_features.md](memory_features.md) | 記憶機能（忘却曲線・検索・エンリッチメント） |
 | [llm_usage_guide.md](llm_usage_guide.md) | LLM 側からの使い方ガイド |

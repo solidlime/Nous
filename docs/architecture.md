@@ -109,29 +109,20 @@ nous/
 
 ## データフロー（チャット処理）
 
-```
-ユーザーメッセージ
-    ↓
-[HTTP Router] chat_stream.py (SSE)
-    ↓
-[Pipeline] prepare.py → context_loader.py → memory_retriever.py
-    ↓ (ハイブリッド検索: ベクトル+キーワード+RRF)
-[Pipeline] prompt.py → system prompt構築（キャッシュ対応）
-    ↓
-[Inference] LLM API (OpenAI-compatible; Anthropic/Gemini via compat endpoints)
-    ↓ (ツール呼出: memory_search, update_context, invoke_skill...)
-[Tool Execution] builtin.py → MCPツール実行
-    ↓
-[Response] stream text_delta → SSE client
-    ↓
-[Post-processing] summarizer.py → compress.py → trimmer.py
-    ↓
-[Memory Write] memory_create → vectorize → Qdrant index
-    ↓
-[Background] wiki_worker
-```
+送信 → 受付 → 配信 → パイプライン → 後処理の全段は
+[chat-flow.md](chat-flow.md) にまとめてある（図・イベント一覧・異常系・設定ノブ）。
 
----
+要点だけ:
+
+```
+POST /api/chat/{persona}            202 {turn_id} / 409（同時1ターン）
+    ↓ サーバー内タスクで完遂（クライアント切断に影響されない）
+PrepareStep → PromptBuildStep → CompressStep → InferenceStep → RepairStep
+    ↓ 本文 delta は EventBus を通さず TurnHub のリングバッファへ
+GET /api/chat/{persona}/events?last_seq=N   replay + live + keepalive 15s
+    ↓
+PostProcessStep（DoneSSE の後に記憶抽出・状態更新）
+```
 
 ## 設計パターン
 
