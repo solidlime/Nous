@@ -116,7 +116,7 @@ async def _copy_from_sandbox(manager: object, persona: str, path: str, name: str
     # コンテナ内の cp はペルソナ自身の所有になるが、sandbox 無効時に
     # root が作った既存ファイルと同じ扱いに揃えておく。
     with contextlib.suppress(OSError):
-        os.chmod(dest, 0o666)
+        os.chmod(dest, 0o644)
     return dest
 
 
@@ -133,7 +133,7 @@ def _copy_on_host(config: ChatConfig, persona: str, path: str, name: str | None)
     dest = _unique_path(directory, name or _safe_name(source.name, "file"))
     shutil.copy2(source, dest)
     with contextlib.suppress(OSError):
-        os.chmod(dest, 0o666)
+        os.chmod(dest, 0o644)
     return dest
 
 
