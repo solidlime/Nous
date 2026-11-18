@@ -224,7 +224,7 @@ async def _build_context_section(
     query_text = (getattr(turn_ctx, "user_message", "") or "") if turn_ctx else ""
     try:
         goals_result = ctx.memory_service.get_by_tags(["goal"])
-        goals = goals_result.value if goals_result.is_ok else []
+        goals = goals_result.value if isinstance(goals_result, Success) else []
         active_goals = [g for g in goals if "active" in (g.tags or [])]
         if active_goals:
             commit_lines: list[str] = []
@@ -292,7 +292,7 @@ async def _build_context_section(
     if not _is_light:
         try:
             eh_result = ctx.persona_service.get_emotion_history(state.persona, limit=5)
-            if eh_result.is_ok and eh_result.value:
+            if isinstance(eh_result, Success) and eh_result.value:
                 narrative = build_emotion_trend_narrative(
                     eh_result.value,
                     state.emotion,
@@ -308,7 +308,7 @@ async def _build_context_section(
     if not _is_light:
         try:
             reflection_result = ctx.memory_service.get_by_tags(["reflection"])
-            if reflection_result.is_ok and reflection_result.value:
+            if isinstance(reflection_result, Success) and reflection_result.value:
                 # get_by_tags は無 LIMIT・updated_at DESC。全件 encode はレイテンシが単調増加するため直近のみ。
                 # 相対閾値の比較基準もこの「直近N件の候補集合」内で完結する。
                 contents = [r.content for r in reflection_result.value if r.content][:20]
@@ -324,7 +324,7 @@ async def _build_context_section(
     if not _is_light:
         try:
             mm_result = ctx.memory_service.get_by_tags(["mental_model", "abstracted"])
-            if mm_result.is_ok and mm_result.value:
+            if isinstance(mm_result, Success) and mm_result.value:
                 patterns = [m.content for m in mm_result.value[:3] if m.content]
                 if patterns:
                     sanitized = [_sanitize_text(p) for p in patterns if p]
@@ -337,7 +337,7 @@ async def _build_context_section(
     if not _is_light:
         try:
             summary_result = ctx.memory_service.get_by_tags(["session_summary"])
-            if summary_result.is_ok and summary_result.value:
+            if isinstance(summary_result, Success) and summary_result.value:
                 summaries = [s.content for s in summary_result.value[:2] if s.content]
                 if summaries:
                     sanitized = [_sanitize_text(s) for s in summaries if s]
@@ -375,7 +375,7 @@ async def _build_context_section(
 
     try:
         equip_result = ctx.equipment_service.get_equipment()
-        if equip_result.is_ok:
+        if isinstance(equip_result, Success):
             equipment = equip_result.value
             # audit M9-a: 装着済みスロットのみ注入する。未装着行は毎ターンの
             # 固定費（8 行）で情報価値が無いため列挙しない。装着が 1 つも

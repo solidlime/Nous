@@ -636,7 +636,7 @@ async def _apply_emotion_decay(ctx: AppContext, persona: str, state: PersonaStat
         )
         if decay_result is not None:
             refreshed = ctx.persona_service.get_context(persona)
-            if refreshed.is_ok:
+            if isinstance(refreshed, Success):
                 state = refreshed.value
             decay_note = _format_emotion_decay_note(decay_result)
     except Exception as _e:
@@ -696,7 +696,7 @@ async def _apply_body_decay(ctx: AppContext, persona: str, state: PersonaState) 
 
         await apply_body_decay_if_needed(ctx.persona_service, persona, state)
         state_result = ctx.persona_service.get_context(persona)
-        if state_result.is_ok and state_result.value:
+        if isinstance(state_result, Success) and state_result.value:
             state = state_result.value
     except Exception:
         logger.warning(

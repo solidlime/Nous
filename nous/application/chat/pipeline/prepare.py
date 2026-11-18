@@ -31,6 +31,7 @@ from nous.application.chat.pipeline.memory_retriever import (  # noqa: F401
     _search_keyword_fast,
     _search_memories,
 )
+from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import relative_time_str
 from nous.infrastructure.logging.structured import get_logger
 
@@ -89,7 +90,7 @@ def _build_digest(ctx, config) -> str:
         return ""
     try:
         result = ctx.memory_service.get_recent(limit=n)
-        memories = result.value if result.is_ok else []
+        memories = result.value if isinstance(result, Success) else []
         if not memories:
             return ""
         lines = ["[最近のできごと — 他クライアントとの活動を含む]"]
@@ -174,7 +175,7 @@ class PrepareStep:
 
         # 2. PersonaState取得 + EmotionDecay適用 + BodyDecay適用
         state_result = ctx.persona_service.get_context(persona)
-        if state_result.is_ok:
+        if isinstance(state_result, Success):
             state = state_result.value
             from nous.api.mcp._tools_helpers import (
                 _apply_body_decay,
@@ -249,10 +250,10 @@ class PrepareStep:
             # §1 Recency digest（同期 API のため gather 後に構築）
             turn_ctx.recency_digest = _build_digest(ctx, config)
 
-            if isinstance(context_section, Exception):
+            if not isinstance(context_section, str):
                 logger.warning("PrepareStep: context_section build failed: %s", context_section)
                 context_section = ""
-            if isinstance(memory_result, Exception):
+            if not isinstance(memory_result, tuple):
                 logger.warning("PrepareStep: memory search failed: %s", memory_result)
                 turn_ctx.related_memories = ""
                 turn_ctx.memory_debug = {}

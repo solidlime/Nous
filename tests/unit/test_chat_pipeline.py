@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -17,6 +18,10 @@ from nous.application.chat.events import (
 from nous.application.chat.pipeline.context import ChatTurnContext
 from nous.application.chat.pipeline.prepare import _compute_recency_decay
 from nous.domain.shared.result import Success
+
+if TYPE_CHECKING:
+    from nous.application.chat.session_store import TreeSessionWindow
+    from nous.domain.config.chat_config import ChatConfig
 
 # --- Events ---
 
@@ -544,19 +549,16 @@ class TestEmotionTrendNarrative:
     def _make_ctx(self, records):
         from unittest.mock import MagicMock
 
+        from nous.domain.shared.result import Failure, Success
+
         ctx = MagicMock()
         ctx.persona = "test"
         ctx.memory_service = MagicMock()
-        ctx.memory_service.get_by_tags.return_value = MagicMock()
-        ctx.memory_service.get_by_tags.return_value.is_ok = False
+        ctx.memory_service.get_by_tags.return_value = Failure("not found")
         ctx.persona_service = MagicMock()
-        eh = MagicMock()
-        eh.is_ok = True
-        eh.value = records
-        ctx.persona_service.get_emotion_history.return_value = eh
+        ctx.persona_service.get_emotion_history.return_value = Success(records)
         ctx.equipment_service = MagicMock()
-        ctx.equipment_service.get_equipment.return_value = MagicMock()
-        ctx.equipment_service.get_equipment.return_value.is_ok = False
+        ctx.equipment_service.get_equipment.return_value = Failure("not found")
         return ctx
 
     def _make_state(self, emotion):
@@ -669,14 +671,17 @@ class TestPrepareStepBodyDecayNote:
         ctx = MagicMock()
         ctx.persona = "t"
         ctx.persona_service.get_context.return_value = Success(state)
-        session = SimpleNamespace(pending_memory_task=None, _messages=[])
+        session = cast("TreeSessionWindow", SimpleNamespace(pending_memory_task=None, _messages=[]))
         turn_ctx = ChatTurnContext(session_id="s", user_message="hi")
-        config = SimpleNamespace(
-            context_compression_mode="light",
-            memory_preload_count=0,
-            episode_search_enabled=False,
-            show_message_timestamps=False,
-            memory_digest_count=0,
+        config = cast(
+            "ChatConfig",
+            SimpleNamespace(
+                context_compression_mode="light",
+                memory_preload_count=0,
+                episode_search_enabled=False,
+                show_message_timestamps=False,
+                memory_digest_count=0,
+            ),
         )
         note = "2時間の間に、joyの感情は減衰した（現在の強度: 0.4）"
         with (
@@ -718,14 +723,17 @@ class TestPrepareStepTimeContext:
         ctx = MagicMock()
         ctx.persona = "t"
         ctx.persona_service.get_context.return_value = Success(state)
-        session = SimpleNamespace(pending_memory_task=None, _messages=[])
+        session = cast("TreeSessionWindow", SimpleNamespace(pending_memory_task=None, _messages=[]))
         turn_ctx = ChatTurnContext(session_id="s", user_message="hi")
-        config = SimpleNamespace(
-            context_compression_mode="light",
-            memory_preload_count=0,
-            episode_search_enabled=False,
-            show_message_timestamps=False,  # ← 表示はオフでも…
-            memory_digest_count=0,
+        config = cast(
+            "ChatConfig",
+            SimpleNamespace(
+                context_compression_mode="light",
+                memory_preload_count=0,
+                episode_search_enabled=False,
+                show_message_timestamps=False,  # ← 表示はオフでも…
+                memory_digest_count=0,
+            ),
         )
         with (
             patch("nous.api.mcp._tools_helpers._apply_emotion_decay", AsyncMock(return_value=(state, ""))),
@@ -862,7 +870,7 @@ class TestDynamicTemperatureInference:
         from nous.application.chat.pipeline.inference import InferenceStep
         from nous.infrastructure.llm.base import TextDeltaEvent
 
-        captured_kwargs = [None]
+        captured_kwargs: list[dict | None] = [None]
 
         async def _mock_stream(**kwargs):
             captured_kwargs[0] = kwargs
@@ -1616,7 +1624,10 @@ class TestTrimOrderToolResultsBeforeMemorySections:
             messages.append(LLMMessage(role="tool", content=big_json, tool_call_id=f"t{i}"))
 
         memory_lines = "\n".join(f"- 記憶{i}" for i in range(10))
-        turn_ctx = SimpleNamespace(system_prompt=f"base\n<related_memories>\n{memory_lines}\n</related_memories>")
+        turn_ctx = cast(
+            "ChatTurnContext",
+            SimpleNamespace(system_prompt=f"base\n<related_memories>\n{memory_lines}\n</related_memories>"),
+        )
 
         config = MagicMock()
         config.context_keep_recent_turns = 0

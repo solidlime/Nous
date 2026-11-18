@@ -236,7 +236,7 @@ def _current_place(ctx: AppContext, persona: str) -> str | None:
     except Exception as _e:
         logger.debug("MemoryLLM: failed to read current place: %s", _e)
         return None
-    env = getattr(getattr(state, "value", None), "environment", None) if state.is_ok else None
+    env = getattr(getattr(state, "value", None), "environment", None) if isinstance(state, Success) else None
     if not isinstance(env, str) or not env.strip():
         return None
     found = find_place(env)
@@ -253,7 +253,7 @@ async def _build_memory_llm_context(ctx: AppContext) -> tuple[str, str, str]:
     persona = ctx.persona
 
     state_result = ctx.persona_service.get_context(persona)
-    if state_result.is_ok:
+    if isinstance(state_result, Success):
         state = state_result.value
         user_info = getattr(state, "user_info", {}) or {}
         user_name = user_info.get("name") or user_info.get("nickname") or ""
@@ -275,7 +275,7 @@ async def _build_memory_llm_context(ctx: AppContext) -> tuple[str, str, str]:
         (["goal", "active", "interpersonal"], "goal (interpersonal)"),
     ]:
         mem_result = ctx.memory_service.get_by_tags(tag_pair)
-        if mem_result.is_ok and mem_result.value:
+        if isinstance(mem_result, Success) and mem_result.value:
             for m in mem_result.value[:5]:
                 key = getattr(m, "key", None) or getattr(m, "id", "")
                 commit_lines.append(f"  [{label}] key={key} : {m.content[:100]}")
@@ -283,7 +283,7 @@ async def _build_memory_llm_context(ctx: AppContext) -> tuple[str, str, str]:
 
     # 装備品（context に含める）
     equip_result = ctx.equipment_service.get_equipment()
-    if equip_result.is_ok and equip_result.value:
+    if isinstance(equip_result, Success) and equip_result.value:
         equipped = {k: v for k, v in equip_result.value.items() if v}
         if equipped:
             equip_str = ", ".join(f"{k}={v}" for k, v in equipped.items())
@@ -293,7 +293,7 @@ async def _build_memory_llm_context(ctx: AppContext) -> tuple[str, str, str]:
     inv_lines: list[str] = []
     try:
         items_result = ctx.equipment_service.search_items()
-        if items_result.is_ok and items_result.value:
+        if isinstance(items_result, Success) and items_result.value:
             for item in items_result.value[:10]:
                 desc = f" ({item.description})" if getattr(item, "description", None) else ""
                 inv_lines.append(f"  - {item.name}{desc}")
@@ -316,7 +316,7 @@ def _body_delta_state(ctx: AppContext, persona: str, ctx_update: dict, *, skip_b
 
     current: dict[str, float] = {}
     state_result = ctx.persona_service.get_context(persona)
-    if state_result.is_ok:
+    if isinstance(state_result, Success):
         state = state_result.value  # type: ignore[union-attr]
         for key in ("fatigue", "warmth", "arousal"):
             raw = getattr(state, key, None)
@@ -515,7 +515,7 @@ async def _save_extracted_facts(ctx: AppContext, persona: str, facts: list, drif
             fact["_saved"] = False
             continue
         dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
-        if dup_check.is_ok and dup_check.value:
+        if isinstance(dup_check, Success) and dup_check.value:
             top_hit = dup_check.value[0]
             hit_score = top_hit.score if hasattr(top_hit, "score") else 0.0
             if hit_score > 0.85:
@@ -548,10 +548,10 @@ async def _save_extracted_facts(ctx: AppContext, persona: str, facts: list, drif
             place=place,
             **save_kwargs,
         )
-        if mem_result.is_ok and ctx.vector_store is not None:
+        if isinstance(mem_result, Success) and ctx.vector_store is not None:
             with contextlib.suppress(Exception):
                 await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
-        if mem_result.is_ok:
+        if isinstance(mem_result, Success):
             fact["memory_key"] = mem_result.value.key
             fact["_saved"] = True
         else:
@@ -571,7 +571,7 @@ async def _process_goal_actions(ctx: AppContext, persona: str, goals: list) -> N
         if action == "achieve" and memory_key:
             upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "achieved"])
             logger.info("MemoryLLM: goal achieved key=%s", memory_key)
-            if not upd.is_ok:
+            if not isinstance(upd, Success):
                 logger.warning("MemoryLLM: goal achieve failed key=%s: %s", memory_key, upd.error)
                 goal["_saved"] = False
             else:
@@ -579,14 +579,14 @@ async def _process_goal_actions(ctx: AppContext, persona: str, goals: list) -> N
         elif action == "cancel" and memory_key:
             upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "cancelled"])
             logger.info("MemoryLLM: goal cancelled key=%s", memory_key)
-            if not upd.is_ok:
+            if not isinstance(upd, Success):
                 logger.warning("MemoryLLM: goal cancel failed key=%s: %s", memory_key, upd.error)
                 goal["_saved"] = False
             else:
                 goal["_saved"] = True
         elif action == "create" and content:
             dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
-            if dup_check.is_ok and dup_check.value:
+            if isinstance(dup_check, Success) and dup_check.value:
                 top_hit = dup_check.value[0]
                 if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
                     logger.debug("MemoryLLM: skipping duplicate goal: %s", content[:60])
@@ -598,10 +598,10 @@ async def _process_goal_actions(ctx: AppContext, persona: str, goals: list) -> N
                 tags=["goal", "active", *build_cue_tags(goal.get("cue_time"), goal.get("cue_event"))],
                 emotion="neutral",
             )
-            if mem_result.is_ok and ctx.vector_store is not None:
+            if isinstance(mem_result, Success) and ctx.vector_store is not None:
                 with contextlib.suppress(Exception):
                     await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
-            if mem_result.is_ok:
+            if isinstance(mem_result, Success):
                 goal["memory_key"] = mem_result.value.key
                 goal["_saved"] = True
             else:
@@ -622,7 +622,7 @@ async def _process_promise_actions(ctx: AppContext, persona: str, promises: list
         if action in ("fulfill", "achieve") and memory_key:
             upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "achieved", "archived", "interpersonal"])
             logger.info("MemoryLLM: interpersonal goal achieved key=%s", memory_key)
-            if not upd.is_ok:
+            if not isinstance(upd, Success):
                 logger.warning("MemoryLLM: interpersonal goal achieve failed key=%s: %s", memory_key, upd.error)
                 promise["_saved"] = False
             else:
@@ -630,14 +630,14 @@ async def _process_promise_actions(ctx: AppContext, persona: str, promises: list
         elif action == "cancel" and memory_key:
             upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "cancelled", "archived", "interpersonal"])
             logger.info("MemoryLLM: interpersonal goal cancelled key=%s", memory_key)
-            if not upd.is_ok:
+            if not isinstance(upd, Success):
                 logger.warning("MemoryLLM: interpersonal goal cancel failed key=%s: %s", memory_key, upd.error)
                 promise["_saved"] = False
             else:
                 promise["_saved"] = True
         elif action == "create" and content:
             dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
-            if dup_check.is_ok and dup_check.value:
+            if isinstance(dup_check, Success) and dup_check.value:
                 top_hit = dup_check.value[0]
                 if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
                     logger.debug("MemoryLLM: skipping duplicate interpersonal goal: %s", content[:60])

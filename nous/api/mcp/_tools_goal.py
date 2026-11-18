@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from nous.api.mcp._tools_memory import QUERY_RESOLVE_MIN_SCORE
 from nous.domain.search.engine import SearchQuery
+from nous.domain.shared.result import Success
 from nous.domain.value_objects import importance_to_label
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ async def _tool_goal_manage(
         search_tags = base_tags + ["interpersonal"] if scope == "interpersonal" else base_tags
         search_tags = search_tags + (tags or [])
         tag_result = ctx.memory_service.get_by_tags(search_tags)
-        if not tag_result.is_ok:
+        if not isinstance(tag_result, Success):
             await ctx.event_bus.publish(
                 "tool.called",
                 {
@@ -81,7 +82,7 @@ async def _tool_goal_manage(
             tags=create_tags,
             emotion="neutral",
         )
-        if result.is_ok:
+        if isinstance(result, Success):
             await ctx.event_bus.publish(
                 "tool.called",
                 {
@@ -114,7 +115,7 @@ async def _tool_goal_manage(
         search_tags = search_tags + (tags or [])
         if memory_key and memory_key.strip():
             get_result = ctx.memory_service.get_memory(memory_key)
-            if not get_result.is_ok:
+            if not isinstance(get_result, Success):
                 await ctx.event_bus.publish(
                     "tool.called",
                     {
@@ -155,7 +156,7 @@ async def _tool_goal_manage(
             search_result = await ctx.search_engine.search(search_query)
 
             match = None
-            if search_result.is_ok and search_result.value:
+            if isinstance(search_result, Success) and search_result.value:
                 top = search_result.value[0]
                 if isinstance(top.score, (int, float)) and top.score > QUERY_RESOLVE_MIN_SCORE:
                     match = top.memory
@@ -163,7 +164,7 @@ async def _tool_goal_manage(
             # Fallback: exact match by tags + content
             if match is None:
                 tag_result = ctx.memory_service.get_by_tags(search_tags)
-                if not tag_result.is_ok:
+                if not isinstance(tag_result, Success):
                     await ctx.event_bus.publish(
                         "tool.called",
                         {
@@ -195,7 +196,7 @@ async def _tool_goal_manage(
         new_importance = max(match.importance, 0.9)
         new_tags = ["goal", new_status, "archived"]
         update_result = ctx.memory_service.update_memory(match.key, importance=new_importance, tags=new_tags)
-        if update_result.is_ok:
+        if isinstance(update_result, Success):
             await ctx.event_bus.publish(
                 "tool.called",
                 {

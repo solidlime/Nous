@@ -259,6 +259,7 @@ class TestDriftRecall:
         config.retrieval_importance_weight = 0.3
         config.retrieval_relevance_weight = 0.4
         await _search_memories(ctx, "こんにちは", None, config)
+        assert ctx.search_engine.search.await_args is not None
         query = ctx.search_engine.search.await_args[0][0]
         assert isinstance(query, SearchQuery)
         assert query.valid_at is not None
@@ -312,15 +313,17 @@ class TestEquipmentContext:
     """
 
     def _ctx_with_equipment(self, equipment: dict):
+        from nous.domain.shared.result import Success
+
         ctx = _make_drift_ctx([])
-        ctx.equipment_service.get_equipment = MagicMock(return_value=MagicMock(is_ok=True, value=equipment))
+        ctx.equipment_service.get_equipment = MagicMock(return_value=Success(equipment))
         return ctx
 
     @pytest.mark.asyncio
     async def test_only_equipped_slots_shown(self):
         from nous.domain.equipment.entities import VALID_SLOTS
 
-        equipment = {s: None for s in VALID_SLOTS}
+        equipment: dict[str, str | None] = dict.fromkeys(VALID_SLOTS)
         equipment["top"] = "パーカー"
         section = await _build_context_section(self._ctx_with_equipment(equipment), _make_state())
         assert "top: パーカー" in section
@@ -339,7 +342,7 @@ class TestEquipmentContext:
     async def test_every_equipped_slot_listed_exactly_once(self):
         from nous.domain.equipment.entities import VALID_SLOTS
 
-        equipment = {s: ("テスト服" if s == "shoes" else None) for s in VALID_SLOTS}
+        equipment: dict[str, str | None] = {s: ("テスト服" if s == "shoes" else None) for s in VALID_SLOTS}
         section = await _build_context_section(self._ctx_with_equipment(equipment), _make_state())
         assert "shoes: テスト服" in section
         assert section.count("shoes:") == 1

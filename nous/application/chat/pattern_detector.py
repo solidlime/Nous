@@ -6,6 +6,7 @@ import json
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from nous.domain.shared.result import Success
 from nous.domain.shared.text_utils import strip_code_fence
 from nous.infrastructure.llm.base import LLMMessage
 from nous.infrastructure.llm.factory import get_provider
@@ -42,7 +43,7 @@ JSONのみ。コメント不要。
 def _get_last_abstraction_at(ctx: AppContext, type_tag: str) -> datetime | None:
     """メタ記憶から指定タイプの最終抽象化時刻を取得する。"""
     result = ctx.memory_service.get_by_tags([_MENTAL_MODEL_META_TAG])
-    if not result.is_ok or not result.value:
+    if not isinstance(result, Success) or not result.value:
         return None
     prefix = f"last_{type_tag}_abstraction:"
     for mem in result.value:
@@ -59,7 +60,7 @@ async def _store_last_abstraction_at(ctx: AppContext, type_tag: str, ts: datetim
     """指定タイプの抽象化時刻をメタ記憶として保存する（古いものを削除して置き換え）。"""
     prefix = f"last_{type_tag}_abstraction:"
     existing = ctx.memory_service.get_by_tags([_MENTAL_MODEL_META_TAG])
-    if existing.is_ok and existing.value:
+    if isinstance(existing, Success) and existing.value:
         for mem in existing.value:
             if mem.content.startswith(prefix):
                 ctx.memory_service.delete_memory(mem.key)
@@ -142,7 +143,7 @@ async def maybe_run_mental_model(
     for type_tag in _TYPE_TAGS:
         try:
             result = ctx.memory_service.get_by_tags([type_tag])
-            if not result.is_ok or not result.value:
+            if not isinstance(result, Success) or not result.value:
                 continue
 
             memories = result.value
