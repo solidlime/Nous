@@ -38,7 +38,7 @@ def worker(monkeypatch, ctx):
 
     monkeypatch.setattr(AppContextRegistry, "personas", classmethod(lambda cls: [PERSONA]))
     monkeypatch.setattr(AppContextRegistry, "get", classmethod(lambda cls, persona: ctx))
-    turn = AsyncMock(return_value=None)
+    turn = AsyncMock(return_value="")
     monkeypatch.setattr(prospective_worker, "run_self_turn", turn)
     return prospective_worker.ProspectiveWorker(), turn
 
@@ -85,7 +85,9 @@ class TestRunAgentTasks:
         tags = ctx.memory_service.update_memory.call_args.kwargs["tags"]
         assert tags[0] == schedule.AGENT_TASK_TAG
         assert tags[1].startswith("cue:time:")
-        assert schedule.parse_deadline(tags[1][len("cue:time:") :]) > tomorrow - timedelta(minutes=5)
+        deadline = schedule.parse_deadline(tags[1][len("cue:time:") :])
+        assert deadline is not None
+        assert deadline > tomorrow - timedelta(minutes=5)
         assert "cue:recur:daily" in tags
 
     def test_failure_keeps_task_and_counts(self, worker, ctx) -> None:
@@ -120,3 +122,87 @@ class TestRunAgentTasks:
 
         turn.assert_not_awaited()
         ctx.memory_service.update_memory.assert_not_called()
+
+
+class TestSpeakResult:
+    """kanban #65: 実行結果を main チャットへ流す。"""
+
+    def test_result_is_spoken_to_main(self, worker, ctx, monkeypatch) -> None:
+        w, turn = worker
+        turn.return_value = "日記を書いたよ。"
+        spoken: list[str] = []
+        monkeypatch.setattr(prospective_worker, "speak_to_main", lambda _ctx, text, _n, _t: spoken.append(text))
+        ctx.memory_service.get_by_tags.return_value = Success([_memory(_due_tags())])
+
+        w.run_agent_tasks()
+
+        assert spoken == ["日記を書いたよ。"]
+        assert "agent.task.ran" in _events(ctx)
+
+    def test_empty_result_does_not_speak(self, worker, ctx, monkeypatch) -> None:
+        w, _turn = worker
+        spoken: list[str] = []
+        monkeypatch.setattr(prospective_worker, "speak_to_main", lambda _ctx, text, _n, _t: spoken.append(text))
+        ctx.memory_service.get_by_tags.return_value = Success([_memory(_due_tags())])
+
+        w.run_agent_tasks()
+
+        assert spoken == []
+
+    def test_speak_failure_does_not_block_finish(self, worker, ctx, monkeypatch) -> None:
+        w, turn = worker
+        turn.return_value = "やった。"
+
+        def boom(*_args, **_kwargs):
+            raise RuntimeError("hub down")
+
+        monkeypatch.setattr(prospective_worker, "speak_to_main", boom)
+        ctx.memory_service.get_by_tags.return_value = Success([_memory(_due_tags())])
+
+        w.run_agent_tasks()
+
+        assert ctx.memory_service.update_memory.call_args.kwargs["tags"] == []
+
+
+class TestNextWait:
+    """kanban #64: 毎時巡回をやめ、次の期限まで眠る。"""
+
+    def test_nearest_future_deadline_wins(self) -> None:
+        now = get_now()
+        near = _memory([schedule.AGENT_TASK_TAG, time_cue_tag(now + timedelta(minutes=5))])
+        far = _memory([schedule.AGENT_TASK_TAG, time_cue_tag(now + timedelta(hours=3))])
+
+        wait = schedule.next_task_wait_seconds([far, near], now)
+
+        assert wait is not None
+        assert 240 <= wait <= 300
+
+    def test_overdue_or_missing_deadline_returns_none(self) -> None:
+        now = get_now()
+        past = _memory([schedule.AGENT_TASK_TAG, time_cue_tag(now - timedelta(minutes=1))])
+        no_cue = _memory([schedule.AGENT_TASK_TAG])
+        other = _memory([time_cue_tag(now + timedelta(minutes=5))])
+
+        assert schedule.next_task_wait_seconds([past, no_cue, other], now) is None
+
+    def test_worker_wait_is_clamped_to_interval_and_minimum(self, worker, ctx, monkeypatch) -> None:
+        w, _turn = worker
+        w.interval = 3600.0
+        ctx.memory_service.get_by_tags.return_value = Success([_memory([schedule.AGENT_TASK_TAG])])
+
+        monkeypatch.setattr(prospective_worker, "next_task_wait_seconds", lambda *_a: 5.0)
+        assert w._next_wait() == prospective_worker.MIN_WAIT_SECONDS
+
+        monkeypatch.setattr(prospective_worker, "next_task_wait_seconds", lambda *_a: 7200.0)
+        assert w._next_wait() == 3600.0
+
+        monkeypatch.setattr(prospective_worker, "next_task_wait_seconds", lambda *_a: None)
+        assert w._next_wait() == 3600.0
+
+    def test_worker_wakes_before_the_hour_for_near_deadline(self, worker, ctx) -> None:
+        w, _turn = worker
+        w.interval = 3600.0
+        soon = _memory([schedule.AGENT_TASK_TAG, time_cue_tag(get_now() + timedelta(minutes=5))])
+        ctx.memory_service.get_by_tags.return_value = Success([soon])
+
+        assert 200 <= w._next_wait() <= 301

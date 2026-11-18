@@ -26,10 +26,12 @@ from nous.application.chat.tools.schedule import (
     done_tags,
     due_agent_tasks,
     fail_count,
+    next_task_wait_seconds,
     recur_of,
     retry_tags,
     run_self_turn,
 )
+from nous.application.workers.announce import speak_to_main
 from nous.domain.memory.cue import due_cues
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
@@ -42,9 +44,12 @@ logger = get_logger(__name__)
 
 # shortcut: fixed interval, move to Settings if a tuning knob is needed.
 DEFAULT_INTERVAL_SECONDS = 3600
+#: 期限ぴったりに起きるための下限（負荷と精度のトレードオフ）。
+MIN_WAIT_SECONDS = 30.0
 EVENT_TYPE = "prospective.due"
 TASK_DONE_EVENT = "agent.task.ran"
 TASK_FAILED_EVENT = "agent.task.failed"
+TASK_SPOKE_EVENT = "agent.task.spoke"
 SELF_TURN_PREFIX = "[自分で決めた予定] "
 
 
@@ -73,11 +78,39 @@ class ProspectiveWorker:
         logger.info("ProspectiveWorker stopped")
 
     def _run(self) -> None:
-        while not self._stop_event.wait(self.interval):
+        while not self._stop_event.is_set():
+            self._stop_event.wait(self._next_wait())
+            if self._stop_event.is_set():
+                break
             try:
                 self.run_cycle()
             except Exception:
                 logger.exception("ProspectiveWorker cycle failed")
+
+    def _next_wait(self) -> float:
+        """次の ``agent:task`` 期限までの待ち秒数（kanban #64）。
+
+        毎時固定だと 09:00 の予定が最大 60 分遅れるので、最短の期限まで眠る。
+        期限が無い・計算できない時は従来の ``interval``。``MIN_WAIT`` で下限を敷く。
+        """
+        from nous.application.use_cases import AppContextRegistry
+
+        now = get_now()
+        waits: list[float] = []
+        for persona in list(AppContextRegistry.personas()):
+            try:
+                ctx = AppContextRegistry.get(persona)
+                result = ctx.memory_service.get_by_tags([AGENT_TASK_TAG])
+            except Exception:
+                continue
+            if not result.is_ok:
+                continue
+            wait = next_task_wait_seconds(getattr(result, "value", None) or [], now)
+            if wait is not None:
+                waits.append(wait)
+        if not waits:
+            return float(self.interval)
+        return min(float(self.interval), max(MIN_WAIT_SECONDS, min(waits)))
 
     def run_cycle(self) -> None:
         """1 サイクル（手動運転・検証用に public）。"""
@@ -124,11 +157,22 @@ class ProspectiveWorker:
     async def _execute_tasks(self, ctx: AppContext, persona: str, tasks: list[Memory]) -> None:
         for task in tasks:
             try:
-                await run_self_turn(ctx, f"{SELF_TURN_PREFIX}{task.content}")
+                text = await run_self_turn(ctx, f"{SELF_TURN_PREFIX}{task.content}")
             except Exception as e:
                 self._fail(ctx, persona, task, e)
                 continue
+            self._speak(ctx, text)
             self._finish(ctx, persona, task)
+
+    @staticmethod
+    def _speak(ctx: AppContext, text: str) -> None:
+        """実行結果を main チャットへ届ける（kanban #65）。失敗しても実行自体は続ける。"""
+        if not text.strip() or ctx.config is None:
+            return
+        try:
+            speak_to_main(ctx, text.strip(), ctx.config.max_stored_messages, TASK_SPOKE_EVENT)
+        except Exception:
+            logger.warning("ProspectiveWorker: speak failed persona=%s", ctx.persona, exc_info=True)
 
     def _finish(self, ctx: AppContext, persona: str, task: Memory) -> None:
         recur = recur_of(task)

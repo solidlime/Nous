@@ -199,13 +199,38 @@ async def handle_schedule_task(ctx: AppContext, config: ChatConfig | None, tool_
     )
 
 
-async def run_self_turn(ctx: AppContext, prompt: str) -> None:
-    """``session_id="self:<date>`` で1ターン走らせる。失敗は例外で呼び出し側へ。"""
+def next_task_wait_seconds(memories: Iterable[Memory], now: datetime | None = None) -> float | None:
+    """未来の ``agent:task`` 期限のうち最も近いものまでの秒数。無ければ None。
+
+    ``ProspectiveWorker`` はこれで「次の期限まで眠る」ので、毎時巡回による
+    最大 60 分の遅れが出ない（kanban #64）。
+    """
+    now = now or get_now()
+    future = [
+        delta
+        for m in memories
+        if AGENT_TASK_TAG in (getattr(m, "tags", None) or [])
+        for d in parse_time_cues(m)
+        if (delta := (_comparable(d, now) - now).total_seconds()) > 0
+    ]
+    return min(future) if future else None
+
+
+async def run_self_turn(ctx: AppContext, prompt: str) -> str:
+    """``session_id="self:<date>`` で1ターン走らせ、返答テキストを返す。
+
+    失敗は例外で呼び出し側へ。返したテキストは呼び出し側が
+    ``speak_to_main`` でユーザーのチャットへ流す（kanban #65）。
+    """
+    from nous.application.chat.events import TextDeltaSSE
     from nous.application.chat.service import ChatService
 
     config = ctx.config
     if config is None:
         raise RuntimeError("chat config が無い（AppContext.config is None）")
     session_id = f"self:{get_now().strftime('%Y-%m-%d')}"
-    async for _ in ChatService().chat(ctx, config, session_id, prompt):
-        pass
+    parts: list[str] = []
+    async for ev in ChatService().chat(ctx, config, session_id, prompt):
+        if isinstance(ev, TextDeltaSSE):
+            parts.append(ev.content)
+    return "".join(parts)

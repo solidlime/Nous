@@ -27,10 +27,8 @@ import json
 import threading
 from typing import TYPE_CHECKING
 
-from nous.application.chat.events import DoneSSE, TextDeltaSSE
-from nous.application.chat.service import ChatService, get_turn_hub
-from nous.application.chat.session_manager import SessionManager
-from nous.domain.memory.session_event import SessionEvent
+from nous.application.chat.service import ChatService
+from nous.application.workers.announce import SPOKE_EVENT, speak_to_main
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
@@ -43,7 +41,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 DEFAULT_INTERVAL_SECONDS = 1800
-SPOKE_EVENT = "proactive.spoke"
 SILENT_MARK = "<silent>"
 
 
@@ -183,31 +180,4 @@ class ProactiveWorker:
 
     def _speak(self, ctx: AppContext, text: str, max_messages: int) -> None:
         """main 履歴へ追記し、既存 chat() と同じ形の SSE で届ける。"""
-        SessionManager().get_or_create(
-            ctx.persona,
-            "main",
-            max_messages=max_messages,
-            db=ctx.connection.get_memory_db(),
-        ).add("assistant", text)
-
-        hub = get_turn_hub()
-        # フロントは turn_started でターン枠を開き、text_delta を本文として描き、
-        # done で確定してから履歴を取り直す（send/turn.js）。user_message は
-        # 空（自発発言にユーザーの発話は無い）。
-        hub.publish_synthetic(ctx.persona, {"type": "turn_started", "user_message": "", "session_id": "main"})
-        hub.publish(ctx.persona, TextDeltaSSE(content=text).to_sse())
-        hub.publish(ctx.persona, DoneSSE().to_sse())
-
-        try:
-            SessionEventRepository(ctx.connection).insert(
-                SessionEvent(
-                    session_id="main",
-                    persona=ctx.persona,
-                    event_type=SPOKE_EVENT,
-                    timestamp=get_now(),
-                    summary=text[:200],
-                )
-            )
-        except Exception:
-            logger.debug("ProactiveWorker: failed to record %s", SPOKE_EVENT, exc_info=True)
-        logger.info("ProactiveWorker: persona=%s spoke %s", ctx.persona, text[:60])
+        speak_to_main(ctx, text, max_messages, SPOKE_EVENT)

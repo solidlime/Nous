@@ -321,6 +321,10 @@ class WikiConfig(BaseModel):
     # 設定が読めない人物は何もしない（生活をでっち上げない）。LLM 呼び出し +1/日。
     life_enabled: bool = True
     life_events_per_day: int = 3
+    # 日記から「明日やること」を起こし、指定時刻に自分で走る予定（agent:task）として
+    # 登録する（#63）。実行は ProspectiveWorker の毎時照合。
+    journal_tomorrow_tasks: bool = True
+    journal_tomorrow_max: int = 3
     # 矛盾整理（#39/#55）。編纂プロンプトの conflicts で拾い（追加呼び出しなし）、
     # 解消は resolved:true で質問を閉じる。記憶層の週次掃除は Zero Inbox で退役（#54）。
     conflict_check_enabled: bool = True  # wiki 編纂プロンプトに conflicts/questions を要求するか

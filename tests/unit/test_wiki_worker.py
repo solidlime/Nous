@@ -17,8 +17,10 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
+from nous.application.chat.tools.schedule import AGENT_TASK_TAG
 from nous.application.workers.wiki_worker import MIN_TOPIC_MEMORIES, WikiWorker
 from nous.domain.memory.entities import Memory
+from nous.domain.memory.service import MemoryService
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.sqlite.connection import SQLiteConnection
@@ -1615,6 +1617,123 @@ class TestJournalLife:
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             assert not any("暮らしの記録" in p for p in prompts)
+        finally:
+            conn.close()
+
+
+# ---------------------------------------------------------------------------
+# 明日やること（#63）
+# ---------------------------------------------------------------------------
+
+_BODY = "## 未解決\n\n- 論文の続きを書く"
+_TOMORROW_JSON = json.dumps(
+    {"tasks": [{"when": "09:30", "prompt": "論文の下書きを読み返す"}, {"when": "21:00", "prompt": "問いの答えを書く"}]},
+    ensure_ascii=False,
+)
+
+
+class TestJournalTomorrow:
+    """日記 → 明日やること → 既存スケジューラ（agent:task + cue:time）への登録。"""
+
+    _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+
+    def _setup(self, tmp_path, memories=None, *, llm=(), cfg_update=None):
+        if memories is None:
+            memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, None, cfg_update=cfg_update)
+        ctx.memory_service = MemoryService(ctx.memory_repo)
+        worker._ask_text = _fake_llm(list(llm))  # type: ignore[method-assign]
+        return conn, worker, ctx
+
+    @staticmethod
+    def _tasks(ctx) -> list[Memory]:
+        return sorted(ctx.memory_service.get_by_tags([AGENT_TASK_TAG]).value, key=lambda m: m.content)
+
+    def test_tasks_are_scheduled_with_cue_tags(self, tmp_path) -> None:
+        """2 件が agent:task + cue:time + journal:todo 付きで、時刻も正しく登録される。"""
+        conn, worker, ctx = self._setup(tmp_path, llm=[_BODY, _TOMORROW_JSON])
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            tasks = self._tasks(ctx)
+            assert [m.content for m in tasks] == ["問いの答えを書く", "論文の下書きを読み返す"]
+            assert set(tasks[1].tags) >= {"agent:task", "cue:time:2026-11-10T09:30+09:00", "journal:todo"}
+            assert set(tasks[0].tags) >= {"agent:task", "cue:time:2026-11-10T21:00+09:00", "journal:todo"}
+            events = [(t, d) for t, _s, d in _event_rows(conn) if t == "journal.tomorrow"]
+            assert [d["tasks"][0]["when"] for _t, d in events] == ["2026-11-10T09:30+09:00"]
+        finally:
+            conn.close()
+
+    def test_past_clock_rolls_to_next_day(self, tmp_path) -> None:
+        """now より前の時刻は翌日にする（過去の予定を作らない）。"""
+        conn, worker, ctx = self._setup(
+            tmp_path, llm=[_BODY, json.dumps({"tasks": [{"when": "01:00", "prompt": "早朝の続き"}]})]
+        )
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert set(self._tasks(ctx)[0].tags) >= {"cue:time:2026-11-11T01:00+09:00"}
+        finally:
+            conn.close()
+
+    def test_existing_task_with_same_content_is_skipped(self, tmp_path) -> None:
+        """既存の agent:task と同じ本文は登録しない。"""
+        seed = _mem_at(
+            "t1", datetime(2026, 11, 9, 10, 0, tzinfo=_JST), tags=["agent:task", "cue:time:2026-11-10T09:30"]
+        )
+        seed.content = "論文の下書きを読み返す"
+        conn, worker, ctx = self._setup(tmp_path, [seed], llm=[_BODY, _TOMORROW_JSON])
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert [m.content for m in self._tasks(ctx)] == ["問いの答えを書く", "論文の下書きを読み返す"]
+            assert [m.key for m in self._tasks(ctx) if m.content == "論文の下書きを読み返す"] == ["t1"]
+        finally:
+            conn.close()
+
+    def test_invalid_json_registers_nothing(self, tmp_path) -> None:
+        """壊れた JSON でも例外を出さず、登録もしない（日記は成功のまま）。"""
+        conn, worker, ctx = self._setup(tmp_path, llm=[_BODY, "{壊れた"])
+        try:
+            assert worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now) == ["a"]
+            assert _store(tmp_path).read_page(f"journal-{_DAY}").is_ok
+            assert self._tasks(ctx) == []
+            assert [t for t, _s, _d in _event_rows(conn) if t == "journal.tomorrow"] == []
+            assert worker._cycle_errors == 0
+        finally:
+            conn.close()
+
+    def test_empty_tasks_registers_nothing(self, tmp_path) -> None:
+        conn, worker, ctx = self._setup(tmp_path, llm=[_BODY, json.dumps({"tasks": []})])
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert self._tasks(ctx) == []
+            assert [t for t, _s, _d in _event_rows(conn) if t == "journal.tomorrow"] == []
+        finally:
+            conn.close()
+
+    def test_disabled_does_not_call_llm(self, tmp_path) -> None:
+        conn, worker, ctx = self._setup(tmp_path, llm=[_BODY], cfg_update={"journal_tomorrow_tasks": False})
+        prompts: list[str] = []
+
+        def ask(prompt: str, boost: int = 0) -> str:
+            prompts.append(prompt)
+            return _BODY
+
+        worker._ask_text = ask  # type: ignore[method-assign]
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert len(prompts) == 1
+            assert self._tasks(ctx) == []
+        finally:
+            conn.close()
+
+    def test_running_twice_registers_once(self, tmp_path) -> None:
+        """同日 2 回走っても 2 重登録しない（既存予定を読む経路で防ぐ）。"""
+        conn, worker, ctx = self._setup(tmp_path, llm=[_BODY, _TOMORROW_JSON, _BODY, _TOMORROW_JSON])
+        try:
+            store = _store(tmp_path)
+            worker._compile_journal(ctx, "test_ww", store, self._now)
+            worker._compile_journal(ctx, "test_ww", store, self._now)
+            assert len(self._tasks(ctx)) == 2
+            assert [t for t, _s, _d in _event_rows(conn) if t == "journal.tomorrow"] == ["journal.tomorrow"]
         finally:
             conn.close()
 

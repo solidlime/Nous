@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from datetime import date, datetime, time, timedelta, tzinfo
@@ -16,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from nous.application.wiki import vector_index
 from nous.application.wiki.questions import find_open_questions
+from nous.domain.memory.cue import time_cue_tag
 from nous.domain.shared.result import Failure, Success
 from nous.domain.value_objects import normalize_emotion, normalize_importance
 from nous.infrastructure.logging.structured import get_logger
@@ -82,6 +84,26 @@ _STATE_PROMPT = """以下はある人物の今日の日記とその材料です�
 
 以下の JSON のみを返してください（説明文は不要。推定できない項目は省略）:
 {{"emotion": "喜/怒/哀/楽 などの一語", "emotion_intensity": 0.0〜1.0, "physical_state": "体の状態の短文", "mental_state": "精神状態の短文", "body_state": {{"fatigue": 0.0〜1.0}}}}
+"""
+
+#: 明日やること生成に渡す日記本文の切り詰め長（日記は 8KB まであり得る）。
+_TOMORROW_BODY_CHARS = 4000
+
+_TOMORROW_PROMPT = """以下はある人物の今日の日記です。この日記から、明日の自分が実行することを {n} 件まで選び、
+実行する時刻と一緒に JSON で返してください。
+
+日記:
+{body}
+
+既に予定として登録済み（重複させない）:
+{existing}
+
+ルール:
+- 明日中に実行できる具体的な行動だけを選ぶ（未解決の問い・決めたこと・引っかかったことの続き）。
+- 日記に書かれていないことを創作しない。感想の繰り返しや雑務の書き写しは選ばない。
+- 1 件も無ければ tasks は空配列。
+- when は 24 時間表記の "HH:MM"（09:00〜23:00）。prompt は 60 文字以内の日本語。
+{{"tasks": [{{"when": "09:30", "prompt": "..."}}]}}
 """
 
 
@@ -196,6 +218,7 @@ class JournalMixin:
                 },
             )
             self._apply_journal_state(ctx, persona, slug, memories, body)
+            self._schedule_tomorrow(ctx, persona, body, now)
         except Exception as e:
             logger.warning("WikiWorker: journal %s failed: %s", day, e)
             self._record_event(ctx, persona, f"error: journal {day}: {e}", None)
@@ -266,6 +289,85 @@ class JournalMixin:
     def _build_state_prompt(self, memories: list[Memory], body: str) -> str:
         material = "\n".join(m.content[:_CONTENT_PREVIEW_CHARS] for m in memories)
         return _STATE_PROMPT.format(body=body, memories=material)
+
+    def _schedule_tomorrow(self, ctx, persona: str, body: str, now: datetime) -> None:
+        """日記から「明日やること」を起こし、時刻付きの ``agent:task`` として登録する（#63）。
+
+        実行は ``ProspectiveWorker`` の毎時照合（新しい仕組みは作らない）。日記本体は
+        書けているので、失敗は warning 扱いにして cycle エラー（30 分後の再試行）にしない。
+        """
+        if not self._cfg.journal_tomorrow_tasks:
+            return
+        try:
+            # schedule.py の親パッケージ __init__ が builtin/sandbox/mcp を引き込むため遅延 import。
+            from nous.application.chat.tools.schedule import AGENT_TASK_TAG
+
+            service = getattr(ctx, "memory_service", None)
+            if service is None:
+                self._record_event(ctx, persona, "skipped: tomorrow tasks (no memory_service)", None)
+                return
+            existing: set[str] = set()
+            result = service.get_by_tags([AGENT_TASK_TAG])
+            if isinstance(result, Success):
+                existing = {m.content for m in result.value}
+            listing = "\n".join(f"- {c}" for c in existing) or "(なし)"
+            raw = (
+                self._ask_text(
+                    _TOMORROW_PROMPT.format(
+                        n=self._cfg.journal_tomorrow_max,
+                        body=body[:_TOMORROW_BODY_CHARS],
+                        existing=listing,
+                    )
+                )
+                or ""
+            )
+            try:
+                parsed = _parse_json_object(raw)
+            except ValueError:
+                logger.warning("WikiWorker: tomorrow tasks is not JSON")
+                return
+            items = parsed.get("tasks")
+            if not isinstance(items, list):
+                return
+
+            planned: list[tuple[datetime, str, list[str]]] = []
+            seen: set[str] = set()
+            for item in items:
+                if len(planned) >= self._cfg.journal_tomorrow_max:
+                    break
+                if not isinstance(item, dict):
+                    continue
+                when, prompt = item.get("when"), item.get("prompt")
+                if not isinstance(when, str) or not re.fullmatch(r"\d{1,2}:\d{2}", when):
+                    continue
+                hour, minute = (int(v) for v in when.split(":"))
+                if hour > 23 or minute > 59 or not isinstance(prompt, str):
+                    continue
+                text = " ".join(prompt.split())[:60]
+                if not text or text in existing or text in seen:
+                    continue
+                seen.add(text)
+                # 日記は前日ぶん。当日内の時刻は「今日」、過ぎていれば翌日にする。
+                due = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                if due <= now:
+                    due += timedelta(days=1)
+                planned.append((due, text, [AGENT_TASK_TAG, time_cue_tag(due), "journal:todo"]))
+            if not planned:
+                return
+            created = asyncio.run(_create_scheduled(service, planned))
+            if not created:
+                return
+            self._record_event(
+                ctx,
+                persona,
+                f"scheduled {len(created)} tasks for tomorrow",
+                {"tasks": [{"when": d.isoformat(timespec="minutes"), "prompt": p} for d, p in created]},
+                event_type="journal.tomorrow",
+            )
+        except Exception as e:
+            # "error:" を付けると cycle 失敗扱いで 30 分後の再試行を誘発する（日記は書けている）。
+            logger.warning("WikiWorker: tomorrow tasks failed: %s", e)
+            self._record_event(ctx, persona, f"warning: tomorrow {now.date()}: {e}", None)
 
     def _journal_window(self, day: date, tz: tzinfo | None) -> tuple[datetime, datetime]:
         """日記 1 日分の窓 ``[start, end)``。日界は ``run_at_hour``（既定 03:00）。
@@ -450,6 +552,24 @@ class JournalMixin:
             memories="\n".join(memory_lines) or "(なし)",
             activity=activity or "(なし)",
         )
+
+
+async def _create_scheduled(service, planned: list[tuple[datetime, str, list[str]]]) -> list[tuple[datetime, str]]:
+    """予定を 1 ループで登録し、成功した ``(期限, 本文)`` だけ返す（失敗は warning）。"""
+    created: list[tuple[datetime, str]] = []
+    for due, prompt, tags in planned:
+        result = await service.create_memory(
+            content=prompt,
+            importance=0.7,
+            emotion="neutral",
+            tags=tags,
+            skip_duplicate_check=True,
+        )
+        if getattr(result, "is_ok", False):
+            created.append((due, prompt))
+        else:
+            logger.warning("WikiWorker: tomorrow task create failed: %s", getattr(result, "error", None))
+    return created
 
 
 def _clip(text: str, limit: int) -> str:
