@@ -20,6 +20,7 @@ from .base import (
     ToolDefinition,
 )
 from .cache_utils import build_openai_system_messages
+from .tool_markup import ToolMarkupStream, parse_tool_calls
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +261,9 @@ class OpenAICompatProvider(LLMProvider):
             kwargs["stream_options"] = {"include_usage": True}
 
             full_text = ""
+            # ツール記法が本文に漏れるケース（ゲートウェイがパースし損ねた等）に備え、
+            # 記法ブロックはユーザーに見せず、解釈できれば本物の tool call に戻す
+            markup = ToolMarkupStream()
             finish_reason = ""
             tool_calls_collected: list[ToolCallEvent] = []
             # Accumulate tool call chunks by index
@@ -291,8 +295,10 @@ class OpenAICompatProvider(LLMProvider):
                         yield ThinkingDeltaEvent(content=reasoning)
 
                     if delta.content:
-                        full_text += delta.content
-                        yield TextDeltaEvent(content=delta.content)
+                        visible = markup.strip(delta.content)
+                        if visible:
+                            full_text += visible
+                            yield TextDeltaEvent(content=visible)
 
                     if delta.tool_calls:
                         for tc_chunk in delta.tool_calls:
@@ -312,15 +318,34 @@ class OpenAICompatProvider(LLMProvider):
                                     pending_tool_calls[idx]["args_json"] += tc_chunk.function.arguments
 
             # Emit collected tool calls
-            # モデルがツール呼び出し記法を生テキストで漏らすことがある（DeepSeek の DSML 等）。
-            # ゲートウェイが解釈し損ねた場合の切り分け用に、宣言ツール数と合わせて1行だけ残す。
-            if not tool_calls_collected and "｜DSML｜" in full_text:
-                logger.warning(
-                    "Tool-call markup leaked into content (model=%s, tools_declared=%d): %s",
-                    self.model,
-                    len(openai_tools),
-                    full_text[:200].replace("\n", " "),
-                )
+            # 保留していた末尾（タグの途中ではない本文）を先に戻す
+            _tail = markup.flush()
+            if _tail:
+                full_text += _tail
+                yield TextDeltaEvent(content=_tail)
+            if markup.markup and not pending_tool_calls:
+                _recovered = parse_tool_calls(markup.markup)
+                if _recovered:
+                    logger.warning(
+                        "Recovered %d tool call(s) from leaked markup (model=%s, tools_declared=%d)",
+                        len(_recovered),
+                        self.model,
+                        len(openai_tools),
+                    )
+                    for _name, _args in _recovered:
+                        _tc = ToolCallEvent(
+                            tool_name=_name,
+                            tool_input=_args,
+                            tool_use_id=f"recovered_{uuid.uuid4().hex[:12]}",
+                        )
+                        tool_calls_collected.append(_tc)
+                        yield _tc
+                else:
+                    logger.warning(
+                        "Dropped tool markup with no parsable call (model=%s): %s",
+                        self.model,
+                        markup.markup[:200].replace("\n", " "),
+                    )
             for idx in sorted(pending_tool_calls.keys()):
                 tc_data = pending_tool_calls[idx]
                 try:
