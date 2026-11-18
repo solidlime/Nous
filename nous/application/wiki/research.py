@@ -23,6 +23,7 @@ import json
 import re
 from typing import TYPE_CHECKING, Any
 
+from nous.application.wiki.llm_target import resolve_llm
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -140,12 +141,12 @@ async def _explore(ctx: Any, pool: Any, tools: list, question: str, *, max_calls
 async def _ask_step(ctx: Any, tools: list, question: str, history: list[str], *, max_calls: int) -> dict | None:
     """LLM に次の一手を出させる（切れ JSON は 1 回だけ予算 2 倍で再試行）。"""
     cfg: WikiConfig = ctx.settings.wiki
-    api_key = cfg.get_effective_api_key(ctx.settings)
+    provider_name, model, api_key, base_url = resolve_llm(cfg, ctx.settings, getattr(ctx, "config", None))
     if not api_key:
         raise RuntimeError("research LLM api_key is not configured")
     prompt = _build_step_prompt(tools, question, history, max_calls=max_calls)
     for attempt in range(_ATTEMPTS):
-        raw = await _ask(cfg, api_key, prompt, boost=attempt)
+        raw = await _ask(provider_name, model, api_key, base_url, prompt, boost=attempt)
         if not raw:
             logger.warning("research: empty llm response (attempt %d)", attempt + 1)
             continue
@@ -156,13 +157,15 @@ async def _ask_step(ctx: Any, tools: list, question: str, history: list[str], *,
     return None
 
 
-async def _ask(cfg: WikiConfig, api_key: str, prompt: str, *, boost: int = 0) -> str | None:
+async def _ask(
+    provider_name: str, model: str, api_key: str, base_url: str, prompt: str, *, boost: int = 0
+) -> str | None:
     """プロンプト 1 本を LLM に渡す（計器は持たない。監査は呼び出し側）。"""
     from nous.infrastructure.llm.base import LLMMessage
     from nous.infrastructure.llm.factory import get_provider
     from nous.infrastructure.llm.text_utils import collect_text
 
-    provider = get_provider(cfg.provider, api_key, cfg.model, cfg.base_url)
+    provider = get_provider(provider_name, api_key, model, base_url)
     return await collect_text(
         provider,
         messages=[LLMMessage(role="user", content=prompt)],

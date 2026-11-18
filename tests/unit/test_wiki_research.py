@@ -157,7 +157,7 @@ class TestResearchModule:
         mcp_servers_env([{"name": "mcp-hub", "url": "http://x/mcp"}], [_tool()])
         budgets: list[int] = []
 
-        async def _ask(cfg, api_key, prompt, *, boost=0):
+        async def _ask(provider_name, model, api_key, base_url, prompt, *, boost=0):
             budgets.append(research_mod._MAX_TOKENS * (2**boost))
             return '{"tool": "mcp-hub__search", ' if boost == 0 else '{"answer": "' + _URL_A + ' で確定"}'
 

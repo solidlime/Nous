@@ -124,6 +124,8 @@ class WikiWorker(JournalMixin, ConflictsMixin):
         self._cycle_errors = 0
         #: 直近の LLM 呼び出しの計器（attempt/max_tokens/text_len/stream_error）。監査イベントに載せる。
         self._last_llm: dict | None = None
+        #: 編纂中のペルソナのチャット設定（WikiConfig に鍵が無いとき接続先を流用する・#66）。
+        self._chat_config: object | None = None
         #: テスト用: False にすると Qdrant 索引更新を行わない（既定は有効）。
         self.vector_enabled = True
 
@@ -372,6 +374,16 @@ class WikiWorker(JournalMixin, ConflictsMixin):
 
         now = get_now(self._cfg.run_at_tz)
         store = WikiStore(self._settings.data_root, persona)
+        # wiki 専用の鍵が無ければ、このペルソナのチャット設定（チャットタブの値）を使う。
+        # ctx が config 無しで作られているケース（起動直後の遅延生成）は config.json を読む。
+        self._chat_config = getattr(ctx, "config", None)
+        if self._chat_config is None:
+            try:
+                from nous.domain.config.chat_config import ChatConfigFileRepository
+
+                self._chat_config = ChatConfigFileRepository(str(self._settings.data_root)).get(persona)
+            except Exception:
+                logger.debug("WikiWorker: chat config load failed for %s", persona, exc_info=True)
         # Zero Inbox: Wiki/日記が吸収済みの記憶を先に物理削除する（旧 archived の溜まり場を消す）。
         purged, purged_keys = self._purge_obsolete(ctx, persona)
         if purged:
@@ -812,8 +824,9 @@ class WikiWorker(JournalMixin, ConflictsMixin):
         if self._ask_llm_for_test is not None:
             return self._ask_llm_for_test
 
-        cfg = self._cfg
-        api_key = cfg.get_effective_api_key(self._settings)
+        from nous.application.wiki.llm_target import resolve_llm
+
+        provider_name, model, api_key, base_url = resolve_llm(self._cfg, self._settings, self._chat_config)
         if not api_key:
             raise RuntimeError("wiki LLM api_key is not configured")
 
@@ -821,7 +834,7 @@ class WikiWorker(JournalMixin, ConflictsMixin):
         from nous.infrastructure.llm.factory import get_provider
         from nous.infrastructure.llm.text_utils import collect_text
 
-        provider: LLMProvider = get_provider(cfg.provider, api_key, cfg.model, cfg.base_url)
+        provider: LLMProvider = get_provider(provider_name, api_key, model, base_url)
         max_tokens = self._max_tokens * (2**boost)
         text = asyncio.run(
             collect_text(
