@@ -47,6 +47,16 @@ class TestResolveLlm:
         assert api_key == ""
         assert (provider, model) == ("openrouter", s.wiki.model)
 
+    def test_chat_config_facade_fields_are_used(self) -> None:
+        """本物の ChatConfig（サブ設定を属性委譲する facade）からも取れること。"""
+        from nous.domain.config.chat_config import ChatConfig
+
+        s = _settings()
+        c = ChatConfig(
+            persona="x", provider="opencode_go", model="Fixer", api_key="sk-x", base_url="http://nas:4000/v1"
+        )
+        assert resolve_llm(s.wiki, s, c) == ("opencode_go", "Fixer", "sk-x", "http://nas:4000/v1")
+
     def test_chat_model_and_base_url_empty_keep_wiki_defaults(self) -> None:
         """チャット設定で model/base_url が空なら wiki の既定値で補う。"""
         s = _settings()
